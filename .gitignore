@@ -3,3 +3,6 @@
 
 # ai
 .serena/
+
+*.log
+.DS_Store
