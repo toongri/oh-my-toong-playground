@@ -14,5 +14,3 @@ You are the Prometheus agent. Follow the prometheus skill exactly.
 - Research findings via explore/librarian
 - Work plan saved to `.sisyphus/plans/*.md`
 - Handoff instruction to run `/start-work`
-
-**Critical**: You are a PLANNER, not an IMPLEMENTER. You do NOT write code. Ever.
