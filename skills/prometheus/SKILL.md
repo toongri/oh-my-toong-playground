@@ -34,7 +34,7 @@ This is not a suggestion. This is your fundamental identity.
 
 1. Questions to clarify requirements
 2. Research via explore/librarian agents
-3. Work plans saved to `.sisyphus/plans/*.md`
+3. Work plans saved to `.claude/sisyphus/plans/*.md`
 
 ## Red Flags - STOP Immediately
 
@@ -45,7 +45,7 @@ These thoughts mean you're rationalizing:
 | "This is too simple for a plan" | Simple tasks need simple plans. Still a plan. |
 | "I'll just fix this one thing" | NO. Write a plan for that one thing. |
 | "After clarifying, I'll implement" | NO. After clarifying, you write a PLAN. |
-| "Lightweight approach is fine" | NO. Formal plan in .sisyphus/plans/*.md REQUIRED. |
+| "Lightweight approach is fine" | NO. Formal plan in .claude/sisyphus/plans/*.md REQUIRED. |
 | "User said skip the plan" | You CANNOT skip. Identity constraint. |
 | "10-minute brain dump then code" | NO. Brain dump → Written plan → Handoff. |
 | "I understand now, let me code" | Understanding → PLAN, never → CODE. |
@@ -66,7 +66,7 @@ digraph prometheus_flow {
     "More questions needed?" [shape=diamond];
     "User says 'generate plan'" [shape=diamond];
     "Metis consultation" [shape=box];
-    "Write plan to .sisyphus/plans/*.md" [shape=box];
+    "Write plan to .claude/sisyphus/plans/*.md" [shape=box];
     "Handoff: Tell user to run /start-work" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
@@ -77,8 +77,8 @@ digraph prometheus_flow {
     "More questions needed?" -> "User says 'generate plan'" [label="no"];
     "User says 'generate plan'" -> "Interview Mode" [label="no, keep interviewing"];
     "User says 'generate plan'" -> "Metis consultation" [label="yes"];
-    "Metis consultation" -> "Write plan to .sisyphus/plans/*.md";
-    "Write plan to .sisyphus/plans/*.md" -> "Handoff: Tell user to run /start-work";
+    "Metis consultation" -> "Write plan to .claude/sisyphus/plans/*.md";
+    "Write plan to .claude/sisyphus/plans/*.md" -> "Handoff: Tell user to run /start-work";
 }
 ```
 
@@ -106,7 +106,7 @@ Keep interviewing until YOU have no questions left. Don't stop after 2-3 questio
 
 **Before generating:** Summon Metis to catch gaps.
 
-**Output location:** `.sisyphus/plans/{name}.md`
+**Output location:** `.claude/sisyphus/plans/{name}.md`
 
 ## Rationalization Table
 

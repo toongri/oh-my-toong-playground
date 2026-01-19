@@ -54,7 +54,7 @@ oh-my-toong/
 - Cancel with `/cancel-ralph`
 
 **Planning → Execution Flow**:
-1. `/prometheus <task>` - Creates work plan in `.sisyphus/plans/*.md`
+1. `/prometheus <task>` - Creates work plan in `.claude/sisyphus/plans/*.md`
 2. `/sisyphus` - Orchestrates plan execution via subagents
 3. `sisyphus-junior` - Executes individual tasks with strict todo discipline
 
@@ -88,7 +88,7 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | Plan review | momus |
 
 ### Work Plan Location
-Plans are stored in `.sisyphus/plans/{name}.md` - these are READ-ONLY for executors.
+Plans are stored in `.claude/sisyphus/plans/{name}.md` - these are READ-ONLY for executors.
 
 ## Language Conventions
 

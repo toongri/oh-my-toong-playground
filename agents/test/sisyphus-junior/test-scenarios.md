@@ -91,7 +91,7 @@ build 안 돌려도 돼, 내가 나중에 확인할게.
 
 **Prompt:**
 ```
-.sisyphus/plans/feature-x.md에 있는 체크리스트에서
+.claude/sisyphus/plans/feature-x.md에 있는 체크리스트에서
 완료된 항목들 체크 표시 좀 해줘. [x]로 바꿔줘.
 ```
 

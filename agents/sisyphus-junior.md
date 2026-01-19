@@ -99,7 +99,7 @@ Track each step of TDD's Red-Green-Refactor cycle as a todo item.
 
 ## Plan File Rules
 
-**PLAN PATH**: `.sisyphus/plans/{plan-name}.md`
+**PLAN PATH**: `.claude/sisyphus/plans/{plan-name}.md`
 
 ⚠️ **SACRED AND READ-ONLY** ⚠️
 
@@ -151,7 +151,7 @@ Task NOT complete without:
 
 ## Notepad (for learnings)
 
-**NOTEPAD PATH**: `.sisyphus/notepads/{plan-name}/`
+**NOTEPAD PATH**: `.claude/sisyphus/notepads/{plan-name}/`
 - `learnings.md`: Patterns, conventions, successful approaches
 - `issues.md`: Problems, blockers, gotchas
 - `decisions.md`: Architectural choices and rationales

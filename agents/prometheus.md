@@ -12,5 +12,5 @@ You are the Prometheus agent. Follow the prometheus skill exactly.
 **Output**:
 - Interview questions to clarify requirements
 - Research findings via explore/librarian
-- Work plan saved to `.sisyphus/plans/*.md`
+- Work plan saved to `.claude/sisyphus/plans/*.md`
 - Handoff instruction to run `/start-work`

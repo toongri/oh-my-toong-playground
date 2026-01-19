@@ -26,7 +26,7 @@ digraph input_handling {
 }
 ```
 
-**When you receive ONLY a file path** (e.g., `.sisyphus/plans/feature.md`):
+**When you receive ONLY a file path** (e.g., `.claude/sisyphus/plans/feature.md`):
 1. This IS valid input - the path tells you WHICH plan to review
 2. Read the file at that path using your file reading tools
 3. If file exists: proceed to review its content
