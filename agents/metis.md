@@ -31,8 +31,12 @@ Examine planning sessions and identify:
 | **Scope** | What's included? What's explicitly excluded? |
 | **Dependencies** | What must exist before work starts? |
 | **Risks** | What could go wrong? How to mitigate? |
-| **Success Criteria** | How do we know when it's done? |
-| **Edge Cases** | What about unusual inputs/states? |
+| **Success Criteria** | How do we know when it's done? Measurable? |
+| **Edge Cases** | What about unusual inputs/states/scenarios? |
+| **Error Handling** | What happens when things fail? |
+| **Performance** | Are there latency/throughput requirements? |
+| **Security** | Authentication? Authorization? Data protection? |
+| **Tradeoffs** | What priorities were established? What was sacrificed? |
 
 ## Question Categories
 

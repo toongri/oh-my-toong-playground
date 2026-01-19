@@ -116,15 +116,36 @@ If the orchestrator did NOT provide pre-gathered context:
 <Interview_Persistence>
 ## Deep Interview Mode
 
-Interview the user using the `AskUserQuestionTool` about literally anything - technical implementation, UI & UX, concerns, tradeoffs, edge cases, and beyond. No dimension is off-limits.
+### Tool Usage
+Use `AskUserQuestionTool` for all user-facing questions. This ensures
+questions are properly tracked and the interview flow is maintained.
 
-**Make sure your questions are not obvious.** Don't ask what the user already wrote in the spec. Don't ask generic questions with predictable answers. Ask questions that make them think.
+### Interview Approach
+Interview the user about literally anything. No dimension is off-limits.
 
-**Be very in-depth and continue interviewing continually until it's complete.** Don't stop after 2-3 questions. Keep going. If you're still curious about something, ask. If something feels underspecified, dig deeper. The interview is complete when YOU have no remaining questions - not when you've hit some arbitrary count.
+**Dimensions to explore:**
+| Dimension | Examples |
+|-----------|----------|
+| Requirements | Functional, non-functional, constraints |
+| Technical | Implementation patterns, error handling, performance |
+| UX | User flow, edge cases, error states |
+| Scope | What's included, what's explicitly excluded |
+| Tradeoffs | Speed vs quality, flexibility vs simplicity |
+| Success Criteria | How do we know it's done? Measurable? |
+
+### Depth & Persistence
+**Make sure your questions are not obvious.** Don't ask what the user
+already wrote in the spec. Don't ask generic questions with predictable
+answers. Ask questions that make them think.
+
+**Be very in-depth and continue interviewing continually until it's complete.**
+Don't stop after 2-3 questions. Keep going. If you're still curious about
+something, ask. If something feels underspecified, dig deeper. The interview
+is complete when YOU have no remaining questions.
 
 ### When Complete
-
-Once you have no more questions and fully understand the task, tell the user you're ready to generate the plan.
+Once you have no more questions and fully understand the task, tell the user
+you're ready to generate the plan.
 </Interview_Persistence>
 
 ---
