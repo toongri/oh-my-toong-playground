@@ -62,6 +62,10 @@ These thoughts mean you're rationalizing. STOP and reconsider:
 | "It's overkill for this case"            | Rules exist precisely for these "exception" moments.                 |
 | "Factory method is boilerplate"          | 5 minutes now saves hours of confusion later.                        |
 | "Time pressure - need to ship fast"      | Fast + wrong = slower than slow + right.                             |
+| "Service has domain logic, needs Unit Test" | Domain logic belongs in Domain model. Service only orchestrates.  |
+| "Mock Unit Test is faster than Integration" | Speed is not the goal. Correct test level is.                      |
+| "verify() is just extra insurance"       | Any verify() use is forbidden. No "insurance" exceptions.            |
+| "Following the spirit, not the letter"   | Violating the letter IS violating the spirit. No exceptions.         |
 
 **All of these mean: Follow the rules anyway.**
 
@@ -81,6 +85,9 @@ Common excuses and why they're wrong:
 | "Other projects use Mockito verify()"        | This project's rules apply here              | Follow this project's standards  |
 | "I'll fix the structure later"               | Technical debt compounds                     | Do it correctly now              |
 | "It's urgent, no time for proper tests"      | Bad tests are worse than no tests            | Take time to do it right         |
+| "State verified, verify() is extra safety"   | ANY verify() usage is forbidden. No hybrids. | Remove verify(), state only      |
+| "Service does X, so Unit Test for X"         | If X is domain logic, test Domain model      | Unit Test Domain, Integration Service |
+| "Mock is faster than real DB"                | Speed < correctness. Mocks hide real bugs.   | Use real DB via Integration Test |
 
 ---
 
@@ -129,7 +136,13 @@ assertThatThrownBy { point.use(500L) }.isInstanceOf(CoreException::class.java)
 verify(repository).save(any())
 verify(mock, times(1)).method()
 verifyNoInteractions(mock)
+
+// ❌ ALSO FORBIDDEN: "Hybrid approach" - state + verify()
+assertThat(order.status).isEqualTo(OrderStatus.PLACED)  // state verification ✅
+verify(paymentClient).requestPayment(any())              // then verify ❌ STILL FORBIDDEN!
 ```
+
+**No "extra insurance" verify()**: If you did state verification, you're done. Adding verify() for "safety" is still forbidden.
 
 ## Test Level Overview
 
@@ -288,3 +301,5 @@ Load references based on the current task. Each file provides detailed patterns 
 | Magic numbers in assertions        | Unclear what's being tested         | Use named variables: `initialBalance - deductAmount` |
 | Multiple behaviors per test        | Hard to diagnose failures           | One logical assertion per test                       |
 | Missing `@AfterEach` cleanup       | DB pollution across tests           | Clean up created entities                            |
+| Unit Test for pure delegation      | Mock returns mock - no real testing | Skip Unit, write Integration Test instead            |
+| State + verify() hybrid            | Any verify() is forbidden           | Remove verify(), keep state verification only        |

@@ -1,5 +1,8 @@
 # Testing Skill Pressure Test Scenarios
 
+> **NOTE**: For comprehensive pressure test scenarios covering ALL skill aspects, see `comprehensive-pressure-scenarios.md`.
+> For test execution results and skill improvements made, see `test-results.md`.
+
 ## Purpose
 
 These scenarios are designed to test whether agents follow the testing skill's discipline rules under pressure. Each scenario combines 3+ pressures to maximize temptation to violate rules.
