@@ -1,0 +1,7 @@
+# oh-my-toong Sync Tool 설정
+
+# 백업 유효기간 (일 단위, 생략시 삭제 안 함)
+# backup_retention_days: 30
+
+
+backup_retention_days: 3

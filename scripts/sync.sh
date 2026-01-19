@@ -114,6 +114,19 @@ backup_category() {
     log_info "백업 완료: $backup_path"
 }
 
+# 오래된 백업 정리 (비동기 실행)
+cleanup_old_backups() {
+    local retention_days="$1"
+    local backup_dir="$ROOT_DIR/scripts/.bak"
+
+    if [[ ! -d "$backup_dir" ]]; then
+        return 0
+    fi
+
+    # retention_days보다 오래된 백업 디렉토리 삭제
+    find "$backup_dir" -maxdepth 1 -type d -name "20*" -mtime +"$retention_days" -exec rm -rf {} \; 2>/dev/null || true
+}
+
 # =============================================================================
 # Agent Front Matter 업데이트
 # =============================================================================
@@ -338,6 +351,25 @@ update_settings_json() {
     # .claude/settings.json에 저장 (Claude Code 스펙)
     local settings_file="$target_path/.claude/settings.json"
 
+    # 기존 settings.json 백업
+    if [[ -f "$settings_file" ]]; then
+        local backup_base="$ROOT_DIR/scripts/.bak/$CURRENT_BACKUP_SESSION"
+        local backup_path
+        if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+            backup_path="$backup_base/settings.json"
+        else
+            backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/settings.json"
+        fi
+
+        if [[ "$DRY_RUN" == true ]]; then
+            log_dry "백업: $settings_file -> $backup_path"
+        else
+            mkdir -p "$(dirname "$backup_path")"
+            cp "$settings_file" "$backup_path"
+            log_info "백업 완료: $backup_path"
+        fi
+    fi
+
     if [[ "$DRY_RUN" == true ]]; then
         log_dry "settings.json 업데이트: $settings_file"
         log_dry "새 hooks: $hooks_json"
@@ -529,6 +561,19 @@ main() {
         else
             log_info "루트 sync.yaml에 path가 정의되지 않음 (템플릿 상태)"
         fi
+    fi
+
+    # config.yaml에서 백업 유효기간 읽기
+    local config_file="$ROOT_DIR/scripts/config.yaml"
+    local retention_days=""
+    if [[ -f "$config_file" ]]; then
+        retention_days=$(yq '.backup_retention_days // ""' "$config_file")
+    fi
+
+    # 오래된 백업 정리 (비동기, 실패해도 무시)
+    if [[ -n "$retention_days" && "$retention_days" != "null" && "$DRY_RUN" != true ]]; then
+        log_info "백업 유효기간: ${retention_days}일 (오래된 백업 비동기 정리)"
+        cleanup_old_backups "$retention_days" &
     fi
 
     if [[ "$DRY_RUN" == true ]]; then

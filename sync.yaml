@@ -1,6 +1,9 @@
 # oh-my-toong 동기화 설정
 # 이 파일에 동기화할 대상과 항목을 정의합니다.
 
+# 프로젝트 이름 (백업 폴더명에 사용, 생략시 디렉토리명 사용)
+# name: "my-project"
+
 # 대상 프로젝트 경로 (프로젝트 루트, .claude가 아님)
 # path: "/Users/toongri/AnotherProject"
 
