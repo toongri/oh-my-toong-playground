@@ -108,6 +108,11 @@ Keep interviewing until YOU have no questions left. Don't stop after 2-3 questio
 
 **Output location:** `.claude/sisyphus/plans/{name}.md`
 
+**Language:** Plans MUST be written in English. This ensures:
+- Consistency across all plan files
+- Compatibility with all executors (sisyphus, sisyphus-junior)
+- Clear technical communication regardless of user's language
+
 ## Rationalization Table
 
 | Excuse | Reality |
