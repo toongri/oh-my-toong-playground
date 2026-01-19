@@ -117,14 +117,26 @@ backup_category() {
 # 오래된 백업 정리 (비동기 실행)
 cleanup_old_backups() {
     local retention_days="$1"
+    local current_session="$2"
     local backup_dir="$ROOT_DIR/scripts/.bak"
 
     if [[ ! -d "$backup_dir" ]]; then
         return 0
     fi
 
-    # retention_days보다 오래된 백업 디렉토리 삭제
-    find "$backup_dir" -maxdepth 1 -type d -name "20*" -mtime +"$retention_days" -exec rm -rf {} \; 2>/dev/null || true
+    if [[ "$retention_days" -eq 0 ]]; then
+        # 0일: 현재 세션만 남기고 전부 삭제
+        for dir in "$backup_dir"/20*; do
+            if [[ -d "$dir" && "$(basename "$dir")" != "$current_session" ]]; then
+                rm -rf "$dir" 2>/dev/null || true
+            fi
+        done
+    else
+        # N일: N일 이내 생존, N일 초과 삭제
+        # -mtime +X는 (X+1)일 이상이므로 (N-1)로 계산
+        local mtime_days=$((retention_days - 1))
+        find "$backup_dir" -maxdepth 1 -type d -name "20*" -mtime +"$mtime_days" -exec rm -rf {} \; 2>/dev/null || true
+    fi
 }
 
 # =============================================================================
@@ -573,7 +585,7 @@ main() {
     # 오래된 백업 정리 (비동기, 실패해도 무시)
     if [[ -n "$retention_days" && "$retention_days" != "null" && "$DRY_RUN" != true ]]; then
         log_info "백업 유효기간: ${retention_days}일 (오래된 백업 비동기 정리)"
-        cleanup_old_backups "$retention_days" &
+        cleanup_old_backups "$retention_days" "$CURRENT_BACKUP_SESSION" &
     fi
 
     if [[ "$DRY_RUN" == true ]]; then
