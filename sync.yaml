@@ -1,0 +1,24 @@
+# oh-my-toong 동기화 설정
+# 이 파일에 동기화할 대상과 항목을 정의합니다.
+
+# 대상 프로젝트 경로 (프로젝트 루트, .claude가 아님)
+# path: "/Users/toongri/AnotherProject"
+
+# 동기화할 agents (카테고리 전체 덮어쓰기)
+# agents:
+#   - name: "oracle"
+#     add-skills:
+#       - "explore"
+#   - name: "sisyphus-junior"
+
+# 동기화할 commands
+# commands:
+#   - name: "prometheus"
+
+# 동기화할 hooks (settings.json에도 자동 추가)
+# hooks:
+#   - name: "session-start"
+
+# 동기화할 skills (디렉토리 전체 복사)
+# skills:
+#   - name: "prometheus"
