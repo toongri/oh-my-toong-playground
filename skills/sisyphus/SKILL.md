@@ -1,4 +1,5 @@
 ---
+name: sisyphus
 description: Use when orchestrating complex multi-step tasks requiring delegation, parallelization, or systematic completion verification - especially when tempted to do everything yourself or ask user codebase questions
 ---
 
