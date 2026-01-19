@@ -24,4 +24,5 @@
 
 # 동기화할 skills (디렉토리 전체 복사)
 # skills:
-#   - name: "prometheus"
+#   - name: "prometheus"              # 글로벌: skills/prometheus/
+#   - name: "my-project:testing"      # 프로젝트: projects/my-project/skills/testing/

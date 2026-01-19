@@ -198,6 +198,28 @@ update_agent_frontmatter() {
 # 동기화 함수들
 # =============================================================================
 
+# 소스 경로 해석: "name" 또는 "{project}:{name}" 형식 지원
+# 사용법: resolve_source_path "agents" "oracle" ".md"      → agents/oracle.md
+#         resolve_source_path "skills" "my-proj:testing" "" → projects/my-proj/skills/testing/
+# 결과: SOURCE_PATH, DISPLAY_NAME 전역 변수에 설정
+resolve_source_path() {
+    local category="$1"
+    local name="$2"
+    local extension="$3"
+
+    if [[ "$name" == *:* ]]; then
+        # {project}:{item} 형식 → projects/ 아래에서 찾기
+        local project=$(echo "$name" | cut -d: -f1)
+        local item=$(echo "$name" | cut -d: -f2-)
+        SOURCE_PATH="$ROOT_DIR/projects/$project/$category/${item}${extension}"
+        DISPLAY_NAME="$item"
+    else
+        # 글로벌 경로
+        SOURCE_PATH="$ROOT_DIR/$category/${name}${extension}"
+        DISPLAY_NAME="$name"
+    fi
+}
+
 sync_agents() {
     local target_path="$1"
     local yaml_file="$2"
@@ -221,8 +243,9 @@ sync_agents() {
 
     for i in $(seq 0 $((count - 1))); do
         local name=$(yq ".agents[$i].name" "$yaml_file")
-        local source_file="$ROOT_DIR/agents/${name}.md"
-        local target_file="$target_dir/${name}.md"
+        resolve_source_path "agents" "$name" ".md"
+        local source_file="$SOURCE_PATH"
+        local target_file="$target_dir/${DISPLAY_NAME}.md"
 
         if [[ ! -f "$source_file" ]]; then
             log_warn "Agent 파일 없음: $source_file"
@@ -233,7 +256,7 @@ sync_agents() {
             log_dry "복사: $source_file -> $target_file"
         else
             cp "$source_file" "$target_file"
-            log_info "복사 완료: ${name}.md"
+            log_info "복사 완료: ${DISPLAY_NAME}.md"
         fi
 
         # add-skills 처리
@@ -272,8 +295,9 @@ sync_commands() {
 
     for i in $(seq 0 $((count - 1))); do
         local name=$(yq ".commands[$i].name" "$yaml_file")
-        local source_file="$ROOT_DIR/commands/${name}.md"
-        local target_file="$target_dir/${name}.md"
+        resolve_source_path "commands" "$name" ".md"
+        local source_file="$SOURCE_PATH"
+        local target_file="$target_dir/${DISPLAY_NAME}.md"
 
         if [[ ! -f "$source_file" ]]; then
             log_warn "Command 파일 없음: $source_file"
@@ -284,7 +308,7 @@ sync_commands() {
             log_dry "복사: $source_file -> $target_file"
         else
             cp "$source_file" "$target_file"
-            log_info "복사 완료: ${name}.md"
+            log_info "복사 완료: ${DISPLAY_NAME}.md"
         fi
     done
 
@@ -315,8 +339,9 @@ sync_hooks() {
 
     for i in $(seq 0 $((count - 1))); do
         local name=$(yq ".hooks[$i].name" "$yaml_file")
-        local source_file="$ROOT_DIR/hooks/${name}.sh"
-        local target_file="$target_dir/${name}.sh"
+        resolve_source_path "hooks" "$name" ".sh"
+        local source_file="$SOURCE_PATH"
+        local target_file="$target_dir/${DISPLAY_NAME}.sh"
 
         if [[ ! -f "$source_file" ]]; then
             log_warn "Hook 파일 없음: $source_file"
@@ -328,12 +353,12 @@ sync_hooks() {
         else
             cp "$source_file" "$target_file"
             chmod +x "$target_file"
-            log_info "복사 완료: ${name}.sh"
+            log_info "복사 완료: ${DISPLAY_NAME}.sh"
         fi
 
-        # Hook name -> Hook Type 매핑 (Bash 3.2 호환)
+        # Hook name -> Hook Type 매핑 (Bash 3.2 호환, DISPLAY_NAME 사용)
         local hook_type=""
-        case "$name" in
+        case "$DISPLAY_NAME" in
             "session-start") hook_type="SessionStart" ;;
             "keyword-detector") hook_type="UserPromptSubmit" ;;
             "pre-tool-enforcer") hook_type="PreToolUse" ;;
@@ -344,7 +369,7 @@ sync_hooks() {
         # settings.json용 hooks 구성
         if [[ -n "$hook_type" ]]; then
             local hook_entry=$(jq -n \
-                --arg cmd "~/.claude/hooks/${name}.sh" \
+                --arg cmd "~/.claude/hooks/${DISPLAY_NAME}.sh" \
                 '[{"matcher": "*", "hooks": [{"type": "command", "command": $cmd, "timeout": 10}]}]')
             hooks_json=$(echo "$hooks_json" | jq --arg type "$hook_type" --argjson entry "$hook_entry" '.[$type] = $entry')
         fi
@@ -422,8 +447,9 @@ sync_skills() {
 
     for i in $(seq 0 $((count - 1))); do
         local name=$(yq ".skills[$i].name" "$yaml_file")
-        local source_dir="$ROOT_DIR/skills/${name}"
-        local target_skill_dir="$target_dir/${name}"
+        resolve_source_path "skills" "$name" ""
+        local source_dir="$SOURCE_PATH"
+        local target_skill_dir="$target_dir/${DISPLAY_NAME}"
 
         if [[ ! -d "$source_dir" ]]; then
             log_warn "Skill 디렉토리 없음: $source_dir"
@@ -434,7 +460,7 @@ sync_skills() {
             log_dry "복사 (디렉토리): $source_dir -> $target_skill_dir"
         else
             cp -r "$source_dir" "$target_skill_dir"
-            log_info "복사 완료: ${name}/"
+            log_info "복사 완료: ${DISPLAY_NAME}/"
         fi
     done
 
