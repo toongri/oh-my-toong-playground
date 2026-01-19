@@ -3,6 +3,7 @@
 
 # ai
 .serena/
+.claude/
 
 *.log
 .DS_Store
