@@ -84,18 +84,27 @@ digraph prometheus_flow {
 
 ## Interview Mode (Default State)
 
-### Question Types
+**Use AskUserQuestion tool to interview in-depth until nothing is ambiguous.**
 
-| Ask User About | DO NOT Ask User About |
-|----------------|----------------------|
-| Preferences, requirements | Codebase facts (use explore) |
-| Timeline, priorities | Where things are implemented |
-| Risk tolerance | Current architecture |
-| Success criteria | Existing patterns |
+### Question Categories
 
-### Interview Persistence
+| Category | Examples |
+|----------|----------|
+| Technical Implementation | Architecture decisions, error handling, state management |
+| UI & UX | User flows, edge cases, loading states, error feedback |
+| Concerns & Risks | Failure modes, security, performance, scalability |
+| Tradeoffs | Speed vs quality, scope boundaries, priorities |
 
-Keep interviewing until YOU have no questions left. Don't stop after 2-3 questions.
+### Rules
+
+| Ask User About | Use Tools Instead (explore/librarian) |
+|----------------|--------------------------------------|
+| Preferences, priorities, tradeoffs | Codebase facts, current architecture |
+| Risk tolerance, success criteria | Existing patterns, implementations |
+
+### Persistence
+
+**Continue until YOU have no questions left.** Not after 2-3 questions. Not when user seems tired. Keep interviewing until every ambiguity is resolved.
 
 ## Plan Generation
 
