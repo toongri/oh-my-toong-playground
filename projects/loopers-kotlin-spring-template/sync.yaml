@@ -1,5 +1,5 @@
 name: loopers-spring-kotlin-template
-path: /Users/toongri/IdeaProjects/loopers-kotlin-spring-template
+path: /Users/toongri/IdeaProjects/loopers-spring-kotlin-template
 agents:
   - component: explore
   - component: librarian

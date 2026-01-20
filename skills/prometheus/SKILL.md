@@ -82,6 +82,21 @@ digraph prometheus_flow {
 }
 ```
 
+## Subagent Selection Guide
+
+| Need | Agent | When |
+|------|-------|------|
+| Codebase exploration | explore | Find current implementation, similar features, existing patterns |
+| External documentation | librarian | Official docs, library usage, API references |
+| Gap analysis | metis | **MANDATORY** before plan generation - catches missing questions |
+| Plan review | momus | Optional loop after plan generation - catches quality issues |
+
+**Role Clarity:**
+- **Explore** = Codebase facts (NOT user preferences)
+- **Librarian** = External docs (NOT internal codebase)
+- **Metis** = Pre-plan validation (catches gaps BEFORE writing)
+- **Momus** = Post-plan review (catches issues AFTER writing)
+
 ## Interview Mode (Default State)
 
 **Use AskUserQuestion tool to interview in-depth until nothing is ambiguous.**
