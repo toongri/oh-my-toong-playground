@@ -1,4 +1,4 @@
-name: loopers-kotlin-spring-template
+name: loopers-spring-kotlin-template
 path: /Users/toongri/IdeaProjects/loopers-kotlin-spring-template
 agents:
   - component: explore
@@ -13,9 +13,6 @@ agents:
 
 commands:
   - component: cancel-ralph
-  - component: momus
-  - component: prometheus
-  - component: sisyphus
 
 hooks:
   # 공통 hooks

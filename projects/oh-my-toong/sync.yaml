@@ -11,9 +11,6 @@ agents:
 
 commands:
   - component: cancel-ralph
-  - component: momus
-  - component: prometheus
-  - component: sisyphus
 
 hooks:
   - component: keyword-detector.sh
