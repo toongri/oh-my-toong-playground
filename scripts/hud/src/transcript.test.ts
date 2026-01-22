@@ -1,4 +1,4 @@
-import { parseTranscript } from './transcript.js';
+import { parseTranscript, modelToTier } from './transcript.js';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -85,5 +85,180 @@ describe('parseTranscript', () => {
     const result = await parseTranscript(transcriptPath);
 
     expect(result.activeSkill).toBe('oracle');
+  });
+
+  it('should track session start timestamp from first entry', async () => {
+    const transcriptPath = join(testDir, 'session-timestamp.jsonl');
+    const timestamp1 = '2024-01-15T10:30:00.000Z';
+    const timestamp2 = '2024-01-15T10:35:00.000Z';
+    const lines = [
+      JSON.stringify({ type: 'assistant', timestamp: timestamp1 }),
+      JSON.stringify({ type: 'user', timestamp: timestamp2 }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.sessionStartedAt).toEqual(new Date(timestamp1));
+  });
+
+  it('should return null sessionStartedAt when no timestamps exist', async () => {
+    const transcriptPath = join(testDir, 'no-timestamp.jsonl');
+    const lines = [
+      JSON.stringify({ type: 'assistant' }),
+      JSON.stringify({ type: 'user' }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.sessionStartedAt).toBeNull();
+  });
+
+  it('should return earliest timestamp as sessionStartedAt', async () => {
+    const transcriptPath = join(testDir, 'multiple-timestamps.jsonl');
+    const earliest = '2024-01-15T09:00:00.000Z';
+    const middle = '2024-01-15T10:00:00.000Z';
+    const latest = '2024-01-15T11:00:00.000Z';
+    const lines = [
+      JSON.stringify({ type: 'user', timestamp: middle }),
+      JSON.stringify({ type: 'assistant', timestamp: earliest }),
+      JSON.stringify({ type: 'user', timestamp: latest }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.sessionStartedAt).toEqual(new Date(earliest));
+  });
+
+  it('should return empty agents array when file does not exist', async () => {
+    const nonExistentPath = join(testDir, 'nonexistent-agents.jsonl');
+
+    const result = await parseTranscript(nonExistentPath);
+
+    expect(result.agents).toEqual([]);
+  });
+
+  it('should not track assistant messages as agents (only running subagents)', async () => {
+    const transcriptPath = join(testDir, 'main-agent.jsonl');
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-sonnet-4-20250514' },
+        uuid: 'main-123',
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    // Assistant messages are no longer tracked as agents
+    // Only running Task subagents are shown
+    expect(result.agents).toEqual([]);
+  });
+
+  it('should extract subagent info from Task tool calls', async () => {
+    const transcriptPath = join(testDir, 'subagent.jsonl');
+    const lines = [
+      JSON.stringify({
+        tool: 'Task',
+        status: 'started',
+        toolUseId: 'task-456',
+        model: 'claude-opus-4-20250514',
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.agents).toContainEqual({
+      type: 'S',
+      model: 'o',
+      id: 'task-456',
+    });
+  });
+
+  it('should track only running subagents with different models', async () => {
+    const transcriptPath = join(testDir, 'multiple-agents.jsonl');
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        message: { model: 'claude-opus-4-20250514' },
+        uuid: 'main-1',
+      }),
+      JSON.stringify({
+        tool: 'Task',
+        status: 'started',
+        toolUseId: 'sub-1',
+        model: 'claude-sonnet-4-20250514',
+      }),
+      JSON.stringify({
+        tool: 'Task',
+        status: 'started',
+        toolUseId: 'sub-2',
+        model: 'claude-3-5-haiku-20241022',
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    // Only running subagents are tracked (assistant messages are ignored)
+    expect(result.agents).toHaveLength(2);
+    expect(result.agents).toContainEqual({ type: 'S', model: 's', id: 'sub-1' });
+    expect(result.agents).toContainEqual({ type: 'S', model: 'h', id: 'sub-2' });
+  });
+
+  it('should remove agents when they complete', async () => {
+    const transcriptPath = join(testDir, 'agent-completion.jsonl');
+    const lines = [
+      JSON.stringify({
+        tool: 'Task',
+        status: 'started',
+        toolUseId: 'task-1',
+        model: 'claude-sonnet-4-20250514',
+      }),
+      JSON.stringify({
+        tool: 'Task',
+        status: 'started',
+        toolUseId: 'task-2',
+        model: 'claude-haiku-3-20240307',
+      }),
+      JSON.stringify({
+        tool: 'Task',
+        status: 'completed',
+        toolUseId: 'task-1',
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    // task-1 completed, only task-2 should remain
+    expect(result.agents).toHaveLength(1);
+    expect(result.agents).toContainEqual({ type: 'S', model: 'h', id: 'task-2' });
+  });
+});
+
+describe('modelToTier', () => {
+  it('should return "o" for opus models', () => {
+    expect(modelToTier('claude-opus-4-20250514')).toBe('o');
+    expect(modelToTier('claude-opus-4-5-20251101')).toBe('o');
+  });
+
+  it('should return "h" for haiku models', () => {
+    expect(modelToTier('claude-3-5-haiku-20241022')).toBe('h');
+    expect(modelToTier('claude-haiku-3-20240307')).toBe('h');
+  });
+
+  it('should return "s" for sonnet models', () => {
+    expect(modelToTier('claude-sonnet-4-20250514')).toBe('s');
+    expect(modelToTier('claude-3-5-sonnet-20241022')).toBe('s');
+  });
+
+  it('should default to "s" for unknown models', () => {
+    expect(modelToTier('unknown-model')).toBe('s');
+    expect(modelToTier('')).toBe('s');
   });
 });

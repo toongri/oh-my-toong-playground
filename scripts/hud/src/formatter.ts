@@ -1,4 +1,4 @@
-import { ANSI, type HudData } from './types.js';
+import { ANSI, type HudData, type HudDataV2 } from './types.js';
 
 function colorize(text: string, color: string): string {
   return `${color}${text}${ANSI.reset}`;
@@ -20,7 +20,7 @@ export function formatStatusLine(data: HudData): string {
   const parts: string[] = [];
 
   // Always show prefix
-  parts.push(colorize('[OMC]', ANSI.bold));
+  parts.push(colorize('[OMT]', ANSI.bold));
 
   // Ralph status with verification
   if (data.ralph?.active) {
@@ -77,7 +77,7 @@ export function formatStatusLine(data: HudData): string {
 }
 
 export function formatMinimalStatus(contextPercent: number | null): string {
-  const parts = [colorize('[OMC]', ANSI.bold)];
+  const parts = [colorize('[OMT]', ANSI.bold)];
 
   if (contextPercent !== null) {
     const percent = Math.min(100, Math.round(contextPercent));
@@ -88,4 +88,94 @@ export function formatMinimalStatus(contextPercent: number | null): string {
   }
 
   return parts.join(' ');
+}
+
+function getPercentColor(percent: number): string {
+  if (percent > 85) return ANSI.red;
+  if (percent > 70) return ANSI.yellow;
+  return ANSI.green;
+}
+
+export function formatStatusLineV2(data: HudDataV2): string {
+  const line1Parts: string[] = [];
+  const line2Parts: string[] = [];
+
+  // [OMT] - changed from [OMC]
+  line1Parts.push(colorize('[OMT]', ANSI.bold));
+
+  // Rate limits (only if available)
+  if (data.rateLimits) {
+    const parts: string[] = [];
+    if (data.rateLimits.fiveHour) {
+      const { percent, resetIn } = data.rateLimits.fiveHour;
+      const color = getPercentColor(percent);
+      parts.push(colorize(`5h:${percent}%(${resetIn})`, color));
+    }
+    if (data.rateLimits.sevenDay) {
+      const { percent, resetIn } = data.rateLimits.sevenDay;
+      const color = getPercentColor(percent);
+      parts.push(colorize(`wk:${percent}%(${resetIn})`, color));
+    }
+    if (parts.length > 0) {
+      line1Parts.push(parts.join(' '));
+    }
+  }
+
+  // Context percentage
+  if (data.contextPercent !== null) {
+    const percent = Math.min(100, Math.round(data.contextPercent));
+    const color = getContextColor(percent);
+    line1Parts.push(colorize(`ctx:${percent}%`, color));
+  }
+
+  // Agent codes (e.g., agents:MsSh)
+  if (data.agents.length > 0) {
+    const codes = data.agents.map(a => `${a.type}${a.model}`).join('');
+    line1Parts.push(colorize(`agents:${codes}`, ANSI.green));
+  }
+
+  // Ralph (only when active)
+  if (data.ralph?.active) {
+    const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
+    let text = `ralph:${data.ralph.iteration}/${data.ralph.max_iterations}`;
+    if (data.ralphVerification?.pending) {
+      text += ` v${data.ralphVerification.verification_attempts}/${data.ralphVerification.max_verification_attempts}`;
+    }
+    line1Parts.push(colorize(text, color));
+  }
+
+  // Ultrawork (only when active)
+  if (data.ultrawork?.active) {
+    line1Parts.push(colorize('ultrawork', ANSI.green));
+  }
+
+  // Thinking indicator
+  if (data.thinkingActive) {
+    line1Parts.push(colorize('thinking', ANSI.cyan));
+  }
+
+  // Line 2: todos with in-progress task
+  if (data.todos) {
+    const { completed, total } = data.todos;
+    const color = completed === total ? ANSI.green : ANSI.yellow;
+    let todoText = `todos:${completed}/${total}`;
+    if (data.inProgressTodo) {
+      todoText += ` (${data.inProgressTodo})`;
+    }
+    line2Parts.push(colorize(todoText, color));
+  }
+
+  // Session duration
+  if (data.sessionDuration !== null && data.sessionDuration > 0) {
+    const hours = Math.floor(data.sessionDuration / 60);
+    const mins = data.sessionDuration % 60;
+    const formatted = hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
+    line2Parts.push(colorize(`session:${formatted}`, ANSI.dim));
+  }
+
+  // Combine lines
+  const line1 = line1Parts.join(' | ');
+  const line2 = line2Parts.length > 0 ? line2Parts.join(' | ') : '';
+
+  return line2 ? `${line1}\n${line2}` : line1;
 }

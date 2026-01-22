@@ -1,8 +1,9 @@
 import { readStdin } from './stdin.js';
-import { readRalphState, readUltraworkState, readRalphVerification, readTodos, readBackgroundTasks } from './state.js';
+import { readRalphState, readUltraworkState, readRalphVerification, readTodos, readBackgroundTasks, calculateSessionDuration, getInProgressTodo, isThinkingEnabled } from './state.js';
 import { parseTranscript } from './transcript.js';
-import { formatStatusLine, formatMinimalStatus } from './formatter.js';
-import type { HudData } from './types.js';
+import { fetchRateLimits } from './usage-api.js';
+import { formatStatusLineV2, formatMinimalStatus } from './formatter.js';
+import type { HudDataV2 } from './types.js';
 
 export async function main(): Promise<void> {
   try {
@@ -18,16 +19,31 @@ export async function main(): Promise<void> {
     const cwd = input.cwd || process.cwd();
 
     // Gather data from all sources in parallel
-    const [ralph, ultrawork, ralphVerification, todos, backgroundTasks, transcriptData] = await Promise.all([
+    const [
+      ralph,
+      ultrawork,
+      ralphVerification,
+      todos,
+      backgroundTasks,
+      transcriptData,
+      rateLimits,
+      inProgressTodo,
+      thinkingActive,
+    ] = await Promise.all([
       readRalphState(cwd),
       readUltraworkState(cwd),
       readRalphVerification(cwd),
       readTodos(cwd),
       readBackgroundTasks(),
-      input.transcript_path ? parseTranscript(input.transcript_path) : Promise.resolve({ runningAgents: 0, activeSkill: null }),
+      input.transcript_path
+        ? parseTranscript(input.transcript_path)
+        : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null }),
+      fetchRateLimits(),
+      getInProgressTodo(cwd),
+      isThinkingEnabled(),
     ]);
 
-    const hudData: HudData = {
+    const hudData: HudDataV2 = {
       contextPercent: input.context_window?.used_percentage ?? null,
       ralph,
       ultrawork,
@@ -36,10 +52,15 @@ export async function main(): Promise<void> {
       runningAgents: transcriptData.runningAgents,
       backgroundTasks,
       activeSkill: transcriptData.activeSkill,
+      rateLimits,
+      agents: transcriptData.agents,
+      sessionDuration: calculateSessionDuration(transcriptData.sessionStartedAt),
+      thinkingActive,
+      inProgressTodo,
     };
 
     // Format and output
-    console.log(formatStatusLine(hudData));
+    console.log(formatStatusLineV2(hudData));
   } catch (error) {
     // Graceful fallback on any error
     console.log(formatMinimalStatus(null));

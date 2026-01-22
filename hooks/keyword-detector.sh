@@ -8,7 +8,7 @@ INPUT=$(cat)
 # Extract directory from input
 DIRECTORY=""
 if command -v jq &> /dev/null; then
-  DIRECTORY=$(echo "$INPUT" | jq -r '.directory // ""' 2>/dev/null)
+  DIRECTORY=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
 fi
 if [ -z "$DIRECTORY" ] || [ "$DIRECTORY" = "null" ]; then
   DIRECTORY=$(pwd)

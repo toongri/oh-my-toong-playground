@@ -73,6 +73,56 @@ export interface TranscriptData {
   activeSkill: string | null;
 }
 
+// OAuth usage API response
+export interface UsageResponse {
+  five_hour: UsageLimit | null;
+  seven_day: UsageLimit | null;
+  seven_day_oauth_apps: UsageLimit | null;
+  seven_day_opus: UsageLimit | null;
+}
+
+export interface UsageLimit {
+  utilization: number;
+  resets_at: string | null;
+}
+
+// Processed rate limit data for display
+export interface RateLimitData {
+  fiveHour: { percent: number; resetIn: string } | null;
+  sevenDay: { percent: number; resetIn: string } | null;
+}
+
+// Agent information from transcript
+export interface AgentInfo {
+  type: 'M' | 'S';  // Main or Subagent
+  model: 'o' | 's' | 'h';  // opus, sonnet, haiku
+  id: string;
+}
+
+// Todo statistics
+export interface TodoStats {
+  completed: number;
+  total: number;
+}
+
+// Enhanced HUD data (extends existing)
+export interface HudDataV2 {
+  contextPercent: number | null;
+  ralph: RalphState | null;
+  ultrawork: UltraworkState | null;
+  ralphVerification: RalphVerification | null;
+  todos: TodoStats | null;
+  runningAgents: number;
+  backgroundTasks: number;
+  activeSkill: string | null;
+  // New fields
+  rateLimits: RateLimitData | null;
+  agents: AgentInfo[];
+  sessionDuration: number | null;  // in minutes
+  thinkingActive: boolean;
+  inProgressTodo: string | null;
+}
+
 // ANSI color codes
 export const ANSI = {
   reset: '\x1b[0m',
@@ -80,4 +130,6 @@ export const ANSI = {
   yellow: '\x1b[33m',
   red: '\x1b[31m',
   bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
 } as const;

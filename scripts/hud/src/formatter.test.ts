@@ -1,5 +1,5 @@
-import { formatStatusLine, formatMinimalStatus } from './formatter.js';
-import { ANSI, type HudData, type RalphState, type UltraworkState, type RalphVerification } from './types.js';
+import { formatStatusLine, formatMinimalStatus, formatStatusLineV2 } from './formatter.js';
+import { ANSI, type HudData, type HudDataV2, type RalphState, type UltraworkState, type RalphVerification, type AgentInfo } from './types.js';
 
 // Helper to create complete ralph state for tests
 function createRalphState(overrides: Partial<RalphState> & Pick<RalphState, 'active' | 'iteration' | 'max_iterations'>): RalphState {
@@ -46,9 +46,9 @@ describe('formatStatusLine', () => {
   };
 
   describe('always shows prefix', () => {
-    it('shows [OMC] prefix with bold formatting', () => {
+    it('shows [OMT] prefix with bold formatting', () => {
       const result = formatStatusLine(emptyData);
-      expect(result).toContain('[OMC]');
+      expect(result).toContain('[OMT]');
       expect(result).toContain(ANSI.bold);
     });
   });
@@ -304,9 +304,9 @@ describe('formatStatusLine', () => {
 });
 
 describe('formatMinimalStatus', () => {
-  it('shows [OMC] prefix', () => {
+  it('shows [OMT] prefix', () => {
     const result = formatMinimalStatus(null);
-    expect(result).toContain('[OMC]');
+    expect(result).toContain('[OMT]');
   });
 
   it('shows ready when no context percent', () => {
@@ -327,5 +327,444 @@ describe('formatMinimalStatus', () => {
   it('caps context at 100%', () => {
     const result = formatMinimalStatus(150);
     expect(result).toContain('ctx:100%');
+  });
+});
+
+describe('formatStatusLineV2', () => {
+  const emptyDataV2: HudDataV2 = {
+    contextPercent: null,
+    ralph: null,
+    ultrawork: null,
+    ralphVerification: null,
+    todos: null,
+    runningAgents: 0,
+    backgroundTasks: 0,
+    activeSkill: null,
+    rateLimits: null,
+    agents: [],
+    sessionDuration: null,
+    thinkingActive: false,
+    inProgressTodo: null,
+  };
+
+  describe('prefix', () => {
+    it('shows [OMT] prefix with bold formatting', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      expect(result).toContain('[OMT]');
+      expect(result).toContain(ANSI.bold);
+    });
+  });
+
+  describe('rate limits', () => {
+    it('shows 5h rate limit with percentage and reset time', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        rateLimits: {
+          fiveHour: { percent: 45, resetIn: '2h' },
+          sevenDay: null,
+        },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('5h:45%(2h)');
+    });
+
+    it('shows weekly rate limit with percentage and reset time', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        rateLimits: {
+          fiveHour: null,
+          sevenDay: { percent: 30, resetIn: '3d' },
+        },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('wk:30%(3d)');
+    });
+
+    it('shows both rate limits when available', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        rateLimits: {
+          fiveHour: { percent: 45, resetIn: '2h' },
+          sevenDay: { percent: 30, resetIn: '3d' },
+        },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('5h:45%(2h)');
+      expect(result).toContain('wk:30%(3d)');
+    });
+
+    it('applies green color when rate limit is below 70%', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        rateLimits: {
+          fiveHour: { percent: 50, resetIn: '2h' },
+          sevenDay: null,
+        },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.green);
+    });
+
+    it('applies yellow color when rate limit is above 70%', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        rateLimits: {
+          fiveHour: { percent: 75, resetIn: '2h' },
+          sevenDay: null,
+        },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.yellow);
+    });
+
+    it('applies red color when rate limit is above 85%', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        rateLimits: {
+          fiveHour: { percent: 90, resetIn: '1h' },
+          sevenDay: null,
+        },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.red);
+    });
+
+    it('does not show rate limits section when null', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      expect(result).not.toContain('5h:');
+      expect(result).not.toContain('wk:');
+    });
+  });
+
+  describe('context percentage', () => {
+    it('shows context percentage when available', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 42.5,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('ctx:43%');
+    });
+
+    it('applies correct color based on percentage', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 90,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.red);
+    });
+  });
+
+  describe('agent codes', () => {
+    it('shows agent codes when agents present', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        agents: [
+          { type: 'M', model: 's', id: 'main-1' },
+        ],
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('agents:Ms');
+    });
+
+    it('concatenates multiple agent codes', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        agents: [
+          { type: 'M', model: 's', id: 'main-1' },
+          { type: 'S', model: 'h', id: 'sub-1' },
+        ],
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('agents:MsSh');
+    });
+
+    it('applies green color to agents', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        agents: [{ type: 'M', model: 'o', id: 'main-1' }],
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.green);
+    });
+
+    it('does not show agents when array is empty', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      expect(result).not.toContain('agents:');
+    });
+  });
+
+  describe('ralph status', () => {
+    it('shows ralph only when active is true', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10 }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('ralph:2/10');
+    });
+
+    it('does not show ralph when active is false', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: false, iteration: 2, max_iterations: 10 }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).not.toContain('ralph');
+    });
+
+    it('shows verification status when pending', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10 }),
+        ralphVerification: createRalphVerification({
+          pending: true,
+          verification_attempts: 1,
+          max_verification_attempts: 3,
+        }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toMatch(/ralph:3\/10.*v1\/3/);
+    });
+  });
+
+  describe('ultrawork status', () => {
+    it('shows ultrawork only when active is true', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ultrawork: createUltraworkState({ active: true }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('ultrawork');
+    });
+
+    it('does not show ultrawork when active is false', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ultrawork: createUltraworkState({ active: false }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).not.toContain('ultrawork');
+    });
+
+    it('applies green color to ultrawork', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ultrawork: createUltraworkState({ active: true }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.green);
+    });
+  });
+
+  describe('thinking indicator', () => {
+    it('shows thinking when thinkingActive is true', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        thinkingActive: true,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('thinking');
+    });
+
+    it('does not show thinking when thinkingActive is false', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      expect(result).not.toContain('thinking');
+    });
+
+    it('applies cyan color to thinking', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        thinkingActive: true,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.cyan);
+    });
+  });
+
+  describe('line 2 - todos', () => {
+    it('shows todos count on line 2', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 3, total: 5 },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('todos:3/5');
+    });
+
+    it('includes in-progress todo text', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 3, total: 5 },
+        inProgressTodo: 'Working on tests',
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('todos:3/5 (Working on tests)');
+    });
+
+    it('applies green color when all todos completed', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 5, total: 5 },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.green);
+    });
+
+    it('applies yellow color when todos incomplete', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 2, total: 5 },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.yellow);
+    });
+  });
+
+  describe('line 2 - session duration', () => {
+    it('shows session duration in minutes', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        sessionDuration: 45,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('session:45m');
+    });
+
+    it('shows session duration in hours and minutes', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        sessionDuration: 135,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('session:2h15m');
+    });
+
+    it('applies dim color to session duration', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        sessionDuration: 45,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.dim);
+    });
+
+    it('does not show session when duration is 0', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        sessionDuration: 0,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).not.toContain('session:');
+    });
+
+    it('does not show session when duration is null', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      expect(result).not.toContain('session:');
+    });
+  });
+
+  describe('2-line output format', () => {
+    it('returns single line when no line 2 content', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 50,
+      };
+      const result = formatStatusLineV2(data);
+      expect(result.split('\n').length).toBe(1);
+    });
+
+    it('returns 2 lines when line 2 content exists', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 50,
+        todos: { completed: 3, total: 5 },
+      };
+      const result = formatStatusLineV2(data);
+      const lines = result.split('\n');
+      expect(lines.length).toBe(2);
+    });
+
+    it('has line 1 with prefix and main status', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 50,
+        agents: [{ type: 'M', model: 's', id: 'main-1' }],
+        todos: { completed: 3, total: 5 },
+        sessionDuration: 45,
+      };
+      const result = formatStatusLineV2(data);
+      const lines = result.split('\n');
+      expect(lines[0]).toContain('[OMT]');
+      expect(lines[0]).toContain('ctx:50%');
+      expect(lines[0]).toContain('agents:Ms');
+    });
+
+    it('has line 2 with todos and session', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 3, total: 5 },
+        sessionDuration: 45,
+      };
+      const result = formatStatusLineV2(data);
+      const lines = result.split('\n');
+      expect(lines[1]).toContain('todos:3/5');
+      expect(lines[1]).toContain('session:45m');
+    });
+  });
+
+  describe('element order', () => {
+    it('maintains correct order: [OMT] | rateLimits | ctx | agents | ralph | ultrawork | thinking', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 50,
+        rateLimits: { fiveHour: { percent: 30, resetIn: '2h' }, sevenDay: null },
+        agents: [{ type: 'M', model: 's', id: 'main-1' }],
+        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10 }),
+        ultrawork: createUltraworkState({ active: true }),
+        thinkingActive: true,
+      };
+      const result = formatStatusLineV2(data);
+      const line1 = result.split('\n')[0];
+
+      const omtIndex = line1.indexOf('[OMT]');
+      const rateIndex = line1.indexOf('5h:');
+      const ctxIndex = line1.indexOf('ctx:');
+      const agentsIndex = line1.indexOf('agents:');
+      const ralphIndex = line1.indexOf('ralph:');
+      const ultraworkIndex = line1.indexOf('ultrawork');
+      const thinkingIndex = line1.indexOf('thinking');
+
+      expect(omtIndex).toBeLessThan(rateIndex);
+      expect(rateIndex).toBeLessThan(ctxIndex);
+      expect(ctxIndex).toBeLessThan(agentsIndex);
+      expect(agentsIndex).toBeLessThan(ralphIndex);
+      expect(ralphIndex).toBeLessThan(ultraworkIndex);
+      expect(ultraworkIndex).toBeLessThan(thinkingIndex);
+    });
+  });
+
+  describe('separator', () => {
+    it('uses pipe separator between line 1 elements', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        contextPercent: 50,
+        ultrawork: createUltraworkState({ active: true }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(' | ');
+    });
+
+    it('uses pipe separator between line 2 elements', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 3, total: 5 },
+        sessionDuration: 45,
+      };
+      const result = formatStatusLineV2(data);
+      const line2 = result.split('\n')[1];
+      expect(line2).toContain(' | ');
+    });
   });
 });

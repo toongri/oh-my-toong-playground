@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
-import type { StdinInput, RalphState, UltraworkState, RalphVerification, TodosState, TranscriptData } from './types.js';
+import type { StdinInput, RalphState, UltraworkState, RalphVerification, TodosState, RateLimitData } from './types.js';
+import type { TranscriptResult } from './transcript.js';
 
 // Mock modules before imports
 const mockReadStdin = jest.fn<() => Promise<StdinInput | null>>();
@@ -8,8 +9,12 @@ const mockReadUltraworkState = jest.fn<(cwd: string) => Promise<UltraworkState |
 const mockReadRalphVerification = jest.fn<(cwd: string) => Promise<RalphVerification | null>>();
 const mockReadTodos = jest.fn<(cwd: string) => Promise<TodosState | null>>();
 const mockReadBackgroundTasks = jest.fn<() => Promise<number>>();
-const mockParseTranscript = jest.fn<(path: string) => Promise<TranscriptData>>();
-const mockFormatStatusLine = jest.fn<() => string>();
+const mockCalculateSessionDuration = jest.fn<(startedAt: Date | null) => number | null>();
+const mockGetInProgressTodo = jest.fn<(cwd: string) => Promise<string | null>>();
+const mockIsThinkingEnabled = jest.fn<() => Promise<boolean>>();
+const mockParseTranscript = jest.fn<(path: string) => Promise<TranscriptResult>>();
+const mockFetchRateLimits = jest.fn<() => Promise<RateLimitData | null>>();
+const mockFormatStatusLineV2 = jest.fn<() => string>();
 const mockFormatMinimalStatus = jest.fn<() => string>();
 
 jest.unstable_mockModule('./stdin.js', () => ({
@@ -22,14 +27,21 @@ jest.unstable_mockModule('./state.js', () => ({
   readRalphVerification: mockReadRalphVerification,
   readTodos: mockReadTodos,
   readBackgroundTasks: mockReadBackgroundTasks,
+  calculateSessionDuration: mockCalculateSessionDuration,
+  getInProgressTodo: mockGetInProgressTodo,
+  isThinkingEnabled: mockIsThinkingEnabled,
 }));
 
 jest.unstable_mockModule('./transcript.js', () => ({
   parseTranscript: mockParseTranscript,
 }));
 
+jest.unstable_mockModule('./usage-api.js', () => ({
+  fetchRateLimits: mockFetchRateLimits,
+}));
+
 jest.unstable_mockModule('./formatter.js', () => ({
-  formatStatusLine: mockFormatStatusLine,
+  formatStatusLineV2: mockFormatStatusLineV2,
   formatMinimalStatus: mockFormatMinimalStatus,
 }));
 
@@ -49,9 +61,13 @@ describe('main', () => {
     mockReadRalphVerification.mockResolvedValue(null);
     mockReadTodos.mockResolvedValue(null);
     mockReadBackgroundTasks.mockResolvedValue(0);
-    mockParseTranscript.mockResolvedValue({ runningAgents: 0, activeSkill: null });
-    mockFormatStatusLine.mockReturnValue('[OMC] ctx:50%');
-    mockFormatMinimalStatus.mockReturnValue('[OMC] ready');
+    mockCalculateSessionDuration.mockReturnValue(null);
+    mockGetInProgressTodo.mockResolvedValue(null);
+    mockIsThinkingEnabled.mockResolvedValue(false);
+    mockParseTranscript.mockResolvedValue({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null });
+    mockFetchRateLimits.mockResolvedValue(null);
+    mockFormatStatusLineV2.mockReturnValue('[OMT] ctx:50%');
+    mockFormatMinimalStatus.mockReturnValue('[OMT] ready');
   });
 
   afterEach(() => {
@@ -59,7 +75,7 @@ describe('main', () => {
   });
 
   describe('when stdin has valid input', () => {
-    it('outputs formatted status line', async () => {
+    it('outputs formatted status line using V2 formatter', async () => {
       mockReadStdin.mockResolvedValue({
         hook_event_name: 'Status',
         session_id: 'test-session',
@@ -74,11 +90,11 @@ describe('main', () => {
 
       await main();
 
-      expect(mockFormatStatusLine).toHaveBeenCalled();
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMC] ctx:50%');
+      expect(mockFormatStatusLineV2).toHaveBeenCalled();
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT] ctx:50%');
     });
 
-    it('passes context_window.used_percentage to HudData', async () => {
+    it('passes context_window.used_percentage to HudDataV2', async () => {
       mockReadStdin.mockResolvedValue({
         hook_event_name: 'Status',
         session_id: 'test-session',
@@ -93,7 +109,7 @@ describe('main', () => {
 
       await main();
 
-      expect(mockFormatStatusLine).toHaveBeenCalledWith(
+      expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
         expect.objectContaining({ contextPercent: 75.5 })
       );
     });
@@ -117,6 +133,43 @@ describe('main', () => {
       expect(mockReadUltraworkState).toHaveBeenCalledWith('/my/project');
       expect(mockReadRalphVerification).toHaveBeenCalledWith('/my/project');
       expect(mockReadTodos).toHaveBeenCalledWith('/my/project');
+      expect(mockGetInProgressTodo).toHaveBeenCalledWith('/my/project');
+    });
+
+    it('fetches rate limits', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+
+      await main();
+
+      expect(mockFetchRateLimits).toHaveBeenCalled();
+    });
+
+    it('checks thinking enabled status', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+
+      await main();
+
+      expect(mockIsThinkingEnabled).toHaveBeenCalled();
     });
 
     it('parses transcript when path is provided', async () => {
@@ -137,7 +190,7 @@ describe('main', () => {
       expect(mockParseTranscript).toHaveBeenCalledWith('/path/to/transcript.jsonl');
     });
 
-    it('includes all gathered data in HudData', async () => {
+    it('includes all gathered data in HudDataV2', async () => {
       const ralphState: RalphState = {
         active: true,
         iteration: 3,
@@ -162,6 +215,11 @@ describe('main', () => {
         completion_claim: 'done',
         created_at: '2025-01-22T10:00:00+09:00',
       };
+      const rateLimits: RateLimitData = {
+        fiveHour: { percent: 25, resetIn: '3h' },
+        sevenDay: { percent: 10, resetIn: '5d' },
+      };
+      const sessionStartedAt = new Date('2025-01-22T10:00:00+09:00');
 
       mockReadStdin.mockResolvedValue({
         hook_event_name: 'Status',
@@ -178,11 +236,20 @@ describe('main', () => {
       mockReadUltraworkState.mockResolvedValue(ultraworkState);
       mockReadRalphVerification.mockResolvedValue(ralphVerification);
       mockReadBackgroundTasks.mockResolvedValue(2);
-      mockParseTranscript.mockResolvedValue({ runningAgents: 3, activeSkill: 'prometheus' });
+      mockParseTranscript.mockResolvedValue({
+        runningAgents: 3,
+        activeSkill: 'prometheus',
+        agents: [{ type: 'M', model: 'o', id: 'main-1' }, { type: 'S', model: 's', id: 'sub-1' }],
+        sessionStartedAt,
+      });
+      mockFetchRateLimits.mockResolvedValue(rateLimits);
+      mockGetInProgressTodo.mockResolvedValue('Working on task...');
+      mockIsThinkingEnabled.mockResolvedValue(true);
+      mockCalculateSessionDuration.mockReturnValue(45);
 
       await main();
 
-      expect(mockFormatStatusLine).toHaveBeenCalledWith({
+      expect(mockFormatStatusLineV2).toHaveBeenCalledWith({
         contextPercent: 50,
         ralph: ralphState,
         ultrawork: ultraworkState,
@@ -191,7 +258,38 @@ describe('main', () => {
         runningAgents: 3,
         backgroundTasks: 2,
         activeSkill: 'prometheus',
+        rateLimits: rateLimits,
+        agents: [{ type: 'M', model: 'o', id: 'main-1' }, { type: 'S', model: 's', id: 'sub-1' }],
+        sessionDuration: 45,
+        thinkingActive: true,
+        inProgressTodo: 'Working on task...',
       });
+    });
+
+    it('calculates session duration from transcript sessionStartedAt', async () => {
+      const sessionStartedAt = new Date('2025-01-22T10:00:00+09:00');
+
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      mockParseTranscript.mockResolvedValue({
+        runningAgents: 0,
+        activeSkill: null,
+        agents: [],
+        sessionStartedAt,
+      });
+
+      await main();
+
+      expect(mockCalculateSessionDuration).toHaveBeenCalledWith(sessionStartedAt);
     });
   });
 
@@ -202,7 +300,7 @@ describe('main', () => {
       await main();
 
       expect(mockFormatMinimalStatus).toHaveBeenCalledWith(null);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMC] ready');
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT] ready');
     });
   });
 
@@ -213,7 +311,7 @@ describe('main', () => {
       await main();
 
       expect(mockFormatMinimalStatus).toHaveBeenCalledWith(null);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMC] ready');
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT] ready');
     });
 
     it('gracefully handles state file read errors', async () => {
