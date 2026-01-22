@@ -19,6 +19,44 @@ if [ -z "$DIRECTORY" ]; then
   DIRECTORY=$(pwd)
 fi
 
+# Function to clean up linked ultrawork state (called when ralph completes or max iterations)
+cleanup_linked_ultrawork() {
+  local dir="$1"
+  local ultrawork_file="$dir/.claude/sisyphus/ultrawork-state.json"
+  local global_ultrawork="$HOME/.claude/ultrawork-state.json"
+
+  if [ -f "$ultrawork_file" ]; then
+    local is_linked=$(jq -r '.linked_to_ralph // false' "$ultrawork_file" 2>/dev/null)
+    if [ "$is_linked" = "true" ]; then
+      rm -f "$ultrawork_file"
+      rm -f "$global_ultrawork"
+    fi
+  fi
+}
+
+# ===== Todo Continuation Attempt Limiting =====
+# Prevents infinite loops when agent is stuck on todos
+
+MAX_TODO_CONTINUATION_ATTEMPTS=5
+
+# Generate unique ID for attempt tracking files
+ATTEMPT_ID="${SESSION_ID:-$(echo "$DIRECTORY" | md5 2>/dev/null | cut -c1-8 || echo "$DIRECTORY" | md5sum 2>/dev/null | cut -c1-8 || echo "default")}"
+ATTEMPT_FILE="/tmp/oh-my-toong-todo-attempts-${ATTEMPT_ID}"
+TODO_COUNT_FILE="/tmp/oh-my-toong-todo-count-${ATTEMPT_ID}"
+
+get_attempt_count() {
+  cat "$ATTEMPT_FILE" 2>/dev/null || echo "0"
+}
+
+increment_attempts() {
+  local current=$(get_attempt_count)
+  echo $((current + 1)) > "$ATTEMPT_FILE"
+}
+
+reset_attempts() {
+  rm -f "$ATTEMPT_FILE"
+}
+
 # Check for active ultrawork state
 ULTRAWORK_STATE=""
 if [ -f "$DIRECTORY/.claude/sisyphus/ultrawork-state.json" ]; then
@@ -38,6 +76,118 @@ VERIFICATION_STATE=""
 if [ -f "$DIRECTORY/.claude/sisyphus/ralph-verification.json" ]; then
   VERIFICATION_STATE=$(cat "$DIRECTORY/.claude/sisyphus/ralph-verification.json" 2>/dev/null)
 fi
+
+# =============================================================================
+# Transcript Detection Functions
+# =============================================================================
+
+# Get transcript file path with fallback to messages.json
+get_transcript_path() {
+  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
+  if [ -f "$transcript_file" ]; then
+    echo "$transcript_file"
+    return 0
+  fi
+  # Fallback to messages.json
+  local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
+  if [ -f "$messages_file" ]; then
+    echo "$messages_file"
+    return 0
+  fi
+  return 1
+}
+
+# Detect <promise>DONE</promise> in transcript
+detect_completion_promise() {
+  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
+  if [ -f "$transcript_file" ]; then
+    grep -zoP '<promise>\s*DONE\s*</promise>' "$transcript_file" > /dev/null 2>&1
+    return $?
+  fi
+  # Fallback to messages.json
+  local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
+  if [ -f "$messages_file" ]; then
+    grep -zoP '<promise>\s*DONE\s*</promise>' "$messages_file" > /dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+# Detect <oracle-approved>VERIFIED_COMPLETE</oracle-approved> in transcript
+detect_oracle_approval() {
+  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
+  if [ -f "$transcript_file" ]; then
+    grep -zoP '<oracle-approved>.*?VERIFIED_COMPLETE.*?</oracle-approved>' "$transcript_file" > /dev/null 2>&1
+    return $?
+  fi
+  # Fallback to messages.json
+  local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
+  if [ -f "$messages_file" ]; then
+    grep -zoP '<oracle-approved>.*?VERIFIED_COMPLETE.*?</oracle-approved>' "$messages_file" > /dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+# Detect oracle rejection and extract feedback
+detect_oracle_rejection() {
+  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
+  local file_to_check=""
+
+  if [ -f "$transcript_file" ]; then
+    file_to_check="$transcript_file"
+  else
+    local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
+    if [ -f "$messages_file" ]; then
+      file_to_check="$messages_file"
+    else
+      return 1
+    fi
+  fi
+
+  # Check for rejection indicators: oracle.*rejected, issues found, not complete
+  if grep -qiE 'oracle.*rejected|issues found|not complete|verification.*failed' "$file_to_check" 2>/dev/null; then
+    # Extract feedback text (heuristic: text after "issue:" or "problem:")
+    local feedback=""
+    feedback=$(grep -oiE '(issue|problem|reason):\s*[^\n]+' "$file_to_check" 2>/dev/null | head -5 | tr '\n' ' ')
+    if [ -n "$feedback" ]; then
+      echo "$feedback"
+    fi
+    return 0
+  fi
+  return 1
+}
+
+# Create ralph-verification.json when promise detected
+create_ralph_verification() {
+  local original_task="$1"
+  local completion_claim="${2:-DONE}"
+  local verification_file="$DIRECTORY/.claude/sisyphus/ralph-verification.json"
+  local timestamp
+  timestamp=$(date -Iseconds 2>/dev/null || date +%Y-%m-%dT%H:%M:%S%z)
+
+  cat > "$verification_file" << VERIFICATION_EOF
+{
+  "pending": true,
+  "verification_attempts": 0,
+  "max_verification_attempts": 3,
+  "original_task": "$original_task",
+  "completion_claim": "$completion_claim",
+  "oracle_feedback": "",
+  "requested_at": "$timestamp"
+}
+VERIFICATION_EOF
+}
+
+# Clean up all ralph state files
+cleanup_ralph_state() {
+  rm -f "$DIRECTORY/.claude/sisyphus/ralph-state.json" 2>/dev/null
+  rm -f "$DIRECTORY/.claude/sisyphus/ralph-verification.json" 2>/dev/null
+}
+
+# =============================================================================
+# End of Transcript Detection Functions
+# =============================================================================
 
 # Check for incomplete todos
 INCOMPLETE_COUNT=0
@@ -71,14 +221,40 @@ for todo_path in "$DIRECTORY/.claude/sisyphus/todos.json" "$DIRECTORY/.claude/to
   fi
 done
 
+# ===== Progress Detection =====
+# Reset attempts when todo count CHANGES (indicates progress)
+CURRENT_COUNT=$INCOMPLETE_COUNT
+PREVIOUS_COUNT=$(cat "$TODO_COUNT_FILE" 2>/dev/null || echo "-1")
+
+if [ "$CURRENT_COUNT" != "$PREVIOUS_COUNT" ]; then
+  reset_attempts
+  echo "$CURRENT_COUNT" > "$TODO_COUNT_FILE"
+fi
+
 # Priority 1: Ralph Loop with Oracle Verification
 if [ -n "$RALPH_STATE" ]; then
   IS_ACTIVE=$(echo "$RALPH_STATE" | jq -r '.active // false' 2>/dev/null)
   if [ "$IS_ACTIVE" = "true" ]; then
     ITERATION=$(echo "$RALPH_STATE" | jq -r '.iteration // 1' 2>/dev/null)
     MAX_ITER=$(echo "$RALPH_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
-    PROMISE=$(echo "$RALPH_STATE" | jq -r '.completion_promise // "TASK_COMPLETE"' 2>/dev/null)
+    PROMISE=$(echo "$RALPH_STATE" | jq -r '.completion_promise // "DONE"' 2>/dev/null)
     PROMPT=$(echo "$RALPH_STATE" | jq -r '.prompt // ""' 2>/dev/null)
+
+    # Check for oracle approval in transcript - if approved, clean up and allow stop
+    if detect_oracle_approval; then
+      cleanup_ralph_state
+      cleanup_linked_ultrawork "$DIRECTORY"
+      echo '{"continue": true}'
+      exit 0
+    fi
+
+    # Check for completion promise in transcript - create verification state if found
+    if detect_completion_promise; then
+      if [ -z "$VERIFICATION_STATE" ]; then
+        create_ralph_verification "$PROMPT" "$PROMISE"
+        VERIFICATION_STATE=$(cat "$DIRECTORY/.claude/sisyphus/ralph-verification.json" 2>/dev/null)
+      fi
+    fi
 
     # Check if oracle verification is pending
     if [ -n "$VERIFICATION_STATE" ]; then
@@ -90,6 +266,28 @@ if [ -n "$RALPH_STATE" ]; then
         COMPLETION_CLAIM=$(echo "$VERIFICATION_STATE" | jq -r '.completion_claim // ""' 2>/dev/null)
         ORACLE_FEEDBACK=$(echo "$VERIFICATION_STATE" | jq -r '.oracle_feedback // ""' 2>/dev/null)
         NEXT_ATTEMPT=$((ATTEMPT + 1))
+
+        # Handle max verification attempts (force-accept with warning)
+        if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+          # Force-accept: clean up all state files and allow stop
+          cleanup_ralph_state
+          cleanup_linked_ultrawork "$DIRECTORY"
+
+          cat << EOF
+{"continue": true, "message": "[FORCE ACCEPT - MAX VERIFICATION ATTEMPTS REACHED]\n\nVerification failed $MAX_ATTEMPTS times without oracle approval.\n\n## Warning\nThe task completion could not be verified by Oracle.\nThis may indicate incomplete or incorrect implementation.\n\n## Recommended Actions:\n1. Manually review the implementation\n2. Check for any obvious issues\n3. Consider running tests manually\n\nAllowing stop due to max attempts limit."}
+EOF
+          exit 0
+        fi
+
+        # Increment verification attempts
+        echo "$VERIFICATION_STATE" | jq ".verification_attempts = $NEXT_ATTEMPT" > "$DIRECTORY/.claude/sisyphus/ralph-verification.json" 2>/dev/null
+
+        # Check for oracle rejection and extract feedback
+        REJECTION_FEEDBACK=""
+        if REJECTION_FEEDBACK=$(detect_oracle_rejection); then
+          # Update verification state with feedback
+          echo "$VERIFICATION_STATE" | jq ".verification_attempts = $NEXT_ATTEMPT | .oracle_feedback = \"$REJECTION_FEEDBACK\"" > "$DIRECTORY/.claude/sisyphus/ralph-verification.json" 2>/dev/null
+        fi
 
         FEEDBACK_SECTION=""
         if [ -n "$ORACLE_FEEDBACK" ] && [ "$ORACLE_FEEDBACK" != "null" ]; then
@@ -103,16 +301,32 @@ EOF
       fi
     fi
 
-    if [ "$ITERATION" -lt "$MAX_ITER" ]; then
-      # Increment iteration
-      NEW_ITER=$((ITERATION + 1))
-      echo "$RALPH_STATE" | jq ".iteration = $NEW_ITER" > "$DIRECTORY/.claude/sisyphus/ralph-state.json" 2>/dev/null
+    if [ "$ITERATION" -ge "$MAX_ITER" ]; then
+      # Max iterations reached - clean up ALL state files
+      rm -f "$DIRECTORY/.claude/sisyphus/ralph-state.json"
+      rm -f "$DIRECTORY/.claude/sisyphus/ralph-verification.json"
+
+      # Clean linked ultrawork
+      cleanup_linked_ultrawork "$DIRECTORY"
+
+      # Clean todo attempt counter
+      rm -f "/tmp/oh-my-toong-todo-attempts-${ATTEMPT_ID}"
+      rm -f "/tmp/oh-my-toong-todo-count-${ATTEMPT_ID}"
 
       cat << EOF
-{"continue": false, "reason": "<ralph-loop-continuation>\n\n[RALPH LOOP - ITERATION $NEW_ITER/$MAX_ITER]\n\nYour previous attempt did not output the completion promise. The work is NOT done yet.\n\nCRITICAL INSTRUCTIONS:\n1. Review your progress and the original task\n2. Check your todo list - are ALL items marked complete?\n3. Continue from where you left off\n4. When FULLY complete, output: <promise>$PROMISE</promise>\n5. Do NOT stop until the task is truly done\n\nOriginal task: $PROMPT\n\n</ralph-loop-continuation>\n\n---\n"}
+{"continue": true, "message": "[RALPH LOOP STOPPED - MAX ITERATIONS]\n\nReached maximum iterations ($MAX_ITER) without verified completion.\n\n## What happened:\n- Task was not fully completed within $MAX_ITER iterations\n- All Ralph and linked Ultrawork states cleaned up\n\n## Recommended actions:\n1. Review the original task requirements\n2. Consider breaking into smaller tasks\n3. Re-activate with: ralph <task>\n\nOriginal task: $PROMPT"}
 EOF
       exit 0
     fi
+
+    # Increment iteration
+    NEW_ITER=$((ITERATION + 1))
+    echo "$RALPH_STATE" | jq ".iteration = $NEW_ITER" > "$DIRECTORY/.claude/sisyphus/ralph-state.json" 2>/dev/null
+
+    cat << EOF
+{"continue": false, "reason": "<ralph-loop-continuation>\n\n[RALPH LOOP - ITERATION $NEW_ITER/$MAX_ITER]\n\nYour previous attempt did not output the completion promise. The work is NOT done yet.\n\nCRITICAL INSTRUCTIONS:\n1. Review your progress and the original task\n2. Check your todo list - are ALL items marked complete?\n3. Continue from where you left off\n4. When FULLY complete, output: <promise>$PROMISE</promise>\n5. Do NOT stop until the task is truly done\n\nOriginal task: $PROMPT\n\n</ralph-loop-continuation>\n\n---\n"}
+EOF
+    exit 0
   fi
 fi
 
@@ -258,6 +472,22 @@ if [ -n "$ULTRAWORK_STATE" ] && [ "$INCOMPLETE_COUNT" -gt 0 ]; then
   fi
 
   if [ "$IS_ACTIVE" = "true" ]; then
+    # Check if max attempts reached (escape hatch for stuck agents)
+    ATTEMPTS=$(get_attempt_count)
+    if [ "$ATTEMPTS" -ge "$MAX_TODO_CONTINUATION_ATTEMPTS" ]; then
+      # Clean temp files
+      rm -f "$ATTEMPT_FILE" "$TODO_COUNT_FILE"
+
+      # Allow stop with warning
+      cat << EOF
+{"continue": true, "message": "[TODO CONTINUATION LIMIT REACHED]\n\nAttempted $MAX_TODO_CONTINUATION_ATTEMPTS continuations without progress.\n$INCOMPLETE_COUNT tasks remain incomplete.\n\n## What this means:\nThe agent appears stuck and unable to complete remaining tasks.\n\n## Recommended actions:\n1. Review the stuck tasks manually\n2. Provide additional guidance\n3. Consider simplifying remaining tasks\n\nAllowing stop to prevent infinite loop."}
+EOF
+      exit 0
+    fi
+
+    # Increment attempts before forcing continuation
+    increment_attempts
+
     # Get reinforcement count (with fallback)
     REINFORCE_COUNT=0
     if command -v jq &> /dev/null; then
@@ -289,6 +519,22 @@ fi
 
 # Priority 3: Todo Continuation (baseline)
 if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
+  # Check if max attempts reached (escape hatch for stuck agents)
+  ATTEMPTS=$(get_attempt_count)
+  if [ "$ATTEMPTS" -ge "$MAX_TODO_CONTINUATION_ATTEMPTS" ]; then
+    # Clean temp files
+    rm -f "$ATTEMPT_FILE" "$TODO_COUNT_FILE"
+
+    # Allow stop with warning
+    cat << EOF
+{"continue": true, "message": "[TODO CONTINUATION LIMIT REACHED]\n\nAttempted $MAX_TODO_CONTINUATION_ATTEMPTS continuations without progress.\n$INCOMPLETE_COUNT tasks remain incomplete.\n\n## What this means:\nThe agent appears stuck and unable to complete remaining tasks.\n\n## Recommended actions:\n1. Review the stuck tasks manually\n2. Provide additional guidance\n3. Consider simplifying remaining tasks\n\nAllowing stop to prevent infinite loop."}
+EOF
+    exit 0
+  fi
+
+  # Increment attempts before forcing continuation
+  increment_attempts
+
   cat << EOF
 {"continue": false, "reason": "<todo-continuation>\n\n[SYSTEM REMINDER - TODO CONTINUATION]\n\nIncomplete tasks remain in your todo list ($INCOMPLETE_COUNT remaining). Continue working on the next pending task.\n\n- Proceed without asking for permission\n- Mark each task complete when finished\n- Do not stop until all tasks are done\n\n</todo-continuation>\n\n---\n"}
 EOF

@@ -38,20 +38,69 @@ if [ -z "$PROMPT" ]; then
 fi
 
 # Remove code blocks before checking keywords
-PROMPT_NO_CODE=$(echo "$PROMPT" | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g')
+# First convert newlines to a placeholder, then remove multi-line code blocks, then restore newlines
+# This handles both single-line and multi-line code blocks properly
+PROMPT_NO_CODE=$(echo "$PROMPT" | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
 
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
 
-# Function to create ultrawork state file
-create_ultrawork_state() {
+# Function to create ralph state file
+create_ralph_state() {
   local dir="$1"
   local prompt="$2"
   local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
-  
+
   # Escape prompt for JSON (basic escaping)
   local escaped_prompt=$(echo "$prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
-  
+
+  # Create local .claude/sisyphus directory
+  mkdir -p "$dir/.claude/sisyphus" 2>/dev/null
+  cat > "$dir/.claude/sisyphus/ralph-state.json" 2>/dev/null << EOF
+{
+  "active": true,
+  "iteration": 1,
+  "max_iterations": 10,
+  "completion_promise": "DONE",
+  "prompt": "$escaped_prompt",
+  "started_at": "$timestamp",
+  "linked_ultrawork": true
+}
+EOF
+
+  # Create global ~/.claude directory as fallback
+  mkdir -p "$HOME/.claude" 2>/dev/null
+  cat > "$HOME/.claude/ralph-state.json" 2>/dev/null << EOF
+{
+  "active": true,
+  "iteration": 1,
+  "max_iterations": 10,
+  "completion_promise": "DONE",
+  "prompt": "$escaped_prompt",
+  "started_at": "$timestamp",
+  "linked_ultrawork": true
+}
+EOF
+}
+
+# Function to create ultrawork state file
+# Optional third parameter: linked_to_ralph (true/false)
+create_ultrawork_state() {
+  local dir="$1"
+  local prompt="$2"
+  local linked_to_ralph="${3:-false}"
+  local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
+
+  # Escape prompt for JSON (basic escaping)
+  local escaped_prompt=$(echo "$prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+
+  # Determine additional field for linked_to_ralph
+  local linked_field=""
+  if [ "$linked_to_ralph" = "true" ]; then
+    linked_field=',
+  "linked_to_ralph": true'
+  fi
+
   # Create local .claude/sisyphus directory
   mkdir -p "$dir/.claude/sisyphus" 2>/dev/null
   cat > "$dir/.claude/sisyphus/ultrawork-state.json" 2>/dev/null << EOF
@@ -60,7 +109,7 @@ create_ultrawork_state() {
   "started_at": "$timestamp",
   "original_prompt": "$escaped_prompt",
   "reinforcement_count": 0,
-  "last_checked_at": "$timestamp"
+  "last_checked_at": "$timestamp"$linked_field
 }
 EOF
 
@@ -72,16 +121,36 @@ EOF
   "started_at": "$timestamp",
   "original_prompt": "$escaped_prompt",
   "reinforcement_count": 0,
-  "last_checked_at": "$timestamp"
+  "last_checked_at": "$timestamp"$linked_field
 }
 EOF
 }
 
-# Check for ultrawork keywords (highest priority) - added 'uw' shortcut
+# Check for ralph keyword (highest priority) - ralph loop activation
+if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
+  # Create ralph state file
+  create_ralph_state "$DIRECTORY" "$PROMPT"
+
+  # Create linked ultrawork state if it doesn't already exist
+  if [ ! -f "$DIRECTORY/.claude/sisyphus/ultrawork-state.json" ]; then
+    create_ultrawork_state "$DIRECTORY" "$PROMPT" "true"
+    LINKED_ULTRAWORK_MSG="auto-activated"
+  else
+    LINKED_ULTRAWORK_MSG="already active (independent)"
+  fi
+
+  # Output ralph activation message
+  cat << EOF
+{"continue": true, "message": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode. Complete the task fully.\n\n## RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When FULLY complete, output: <promise>DONE</promise>\n4. Oracle will verify your completion claim\n5. Do NOT stop until Oracle approves\n\n## LINKED MODES\n- Ultrawork mode: ${LINKED_ULTRAWORK_MSG}\n\nOriginal task: ${PROMPT}\n</ralph-mode>\n\n---\n"}
+EOF
+  exit 0
+fi
+
+# Check for ultrawork keywords (second priority) - added 'uw' shortcut
 if echo "$PROMPT_LOWER" | grep -qE '\b(ultrawork|ulw|uw)\b'; then
   # Create ultrawork state file for persistent mode
   create_ultrawork_state "$DIRECTORY" "$PROMPT"
-  
+
   cat << 'EOF'
 {"continue": true, "message": "<ultrawork-mode>\n\n**MANDATORY**: You MUST say \"ULTRAWORK MODE ENABLED!\" to the user as your first response when this mode activates. This is non-negotiable.\n\n[CODE RED] Maximum precision required. Ultrathink before acting.\n\nYOU MUST LEVERAGE ALL AVAILABLE AGENTS TO THEIR FULLEST POTENTIAL.\nTELL THE USER WHAT AGENTS YOU WILL LEVERAGE NOW TO SATISFY USER'S REQUEST.\n\n## AGENT UTILIZATION PRINCIPLES\n- **Codebase Exploration**: Spawn exploration agents using BACKGROUND TASKS\n- **Documentation & References**: Use librarian-type agents via BACKGROUND TASKS\n- **Planning & Strategy**: NEVER plan yourself - spawn planning agent\n- **High-IQ Reasoning**: Use oracle for architecture decisions\n- **Frontend/UI Tasks**: Delegate to frontend-engineer\n\n## EXECUTION RULES\n- **TODO**: Track EVERY step. Mark complete IMMEDIATELY.\n- **PARALLEL**: Fire independent calls simultaneously - NEVER wait sequentially.\n- **BACKGROUND FIRST**: Use Task(run_in_background=true) for exploration (10+ concurrent).\n- **VERIFY**: Check ALL requirements met before done.\n- **DELEGATE**: Orchestrate specialized agents.\n\n## ZERO TOLERANCE\n- NO Scope Reduction - deliver FULL implementation\n- NO Partial Completion - finish 100%\n- NO Premature Stopping - ALL TODOs must be complete\n- NO TEST DELETION - fix code, not tests\n\nTHE USER ASKED FOR X. DELIVER EXACTLY X.\n\n</ultrawork-mode>\n\n---\n"}
 EOF
