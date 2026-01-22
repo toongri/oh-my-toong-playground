@@ -25,37 +25,27 @@ When user runs `/hud setup`:
 
 2. **Check synced script exists**
    - Verify `.claude/scripts/hud.js` exists
-   - If not exists, inform user to run sync first and stop
+   - If not exists, inform user to run sync first
 
-3. **Create HUD directory**
-   ```bash
-   mkdir -p .claude/hud
-   ```
-
-4. **Copy synced script**
-   ```bash
-   cp .claude/scripts/hud.js .claude/hud/hud.js
-   ```
-
-5. **Backup existing statusLine config**
+3. **Backup existing statusLine config**
    - Read `.claude/settings.json`
    - If `statusLine` key exists, save to `.claude/statusLine.backup.json`
    - Log backup location for user
 
-6. **Update settings.json**
+4. **Update settings.json**
    - Read existing `.claude/settings.json` (or create empty object if not exists)
    - Set `statusLine` configuration:
    ```json
    {
      "statusLine": {
        "type": "command",
-       "command": "node .claude/hud/hud.js"
+       "command": "node .claude/scripts/hud.js"
      }
    }
    ```
    - Write back to `.claude/settings.json`
 
-7. **Inform user**
+5. **Inform user**
    - Display success message
    - Instruct user to restart Claude Code
 
