@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import type { StdinInput, RalphState, UltraworkState, RalphVerification, TodosState, RateLimitData } from './types.js';
+import type { StdinInput, RalphState, UltraworkState, RalphVerification, RateLimitData, TodoItem } from './types.js';
 import type { TranscriptResult } from './transcript.js';
 
 // Mock modules before imports
@@ -7,10 +7,11 @@ const mockReadStdin = jest.fn<() => Promise<StdinInput | null>>();
 const mockReadRalphState = jest.fn<(cwd: string) => Promise<RalphState | null>>();
 const mockReadUltraworkState = jest.fn<(cwd: string) => Promise<UltraworkState | null>>();
 const mockReadRalphVerification = jest.fn<(cwd: string) => Promise<RalphVerification | null>>();
-const mockReadTodos = jest.fn<(cwd: string) => Promise<TodosState | null>>();
+// readTodos removed - todos now come from transcript only for session isolation
 const mockReadBackgroundTasks = jest.fn<() => Promise<number>>();
 const mockCalculateSessionDuration = jest.fn<(startedAt: Date | null) => number | null>();
-const mockGetInProgressTodo = jest.fn<(cwd: string) => Promise<string | null>>();
+// getInProgressTodo now takes TodoItem[] and returns synchronously
+const mockGetInProgressTodo = jest.fn<(todos: TodoItem[]) => string | null>();
 const mockIsThinkingEnabled = jest.fn<() => Promise<boolean>>();
 const mockParseTranscript = jest.fn<(path: string) => Promise<TranscriptResult>>();
 const mockFetchRateLimits = jest.fn<() => Promise<RateLimitData | null>>();
@@ -25,7 +26,6 @@ jest.unstable_mockModule('./state.js', () => ({
   readRalphState: mockReadRalphState,
   readUltraworkState: mockReadUltraworkState,
   readRalphVerification: mockReadRalphVerification,
-  readTodos: mockReadTodos,
   readBackgroundTasks: mockReadBackgroundTasks,
   calculateSessionDuration: mockCalculateSessionDuration,
   getInProgressTodo: mockGetInProgressTodo,
@@ -59,10 +59,10 @@ describe('main', () => {
     mockReadRalphState.mockResolvedValue(null);
     mockReadUltraworkState.mockResolvedValue(null);
     mockReadRalphVerification.mockResolvedValue(null);
-    mockReadTodos.mockResolvedValue(null);
     mockReadBackgroundTasks.mockResolvedValue(0);
     mockCalculateSessionDuration.mockReturnValue(null);
-    mockGetInProgressTodo.mockResolvedValue(null);
+    // getInProgressTodo now returns synchronously (no Promise)
+    mockGetInProgressTodo.mockReturnValue(null);
     mockIsThinkingEnabled.mockResolvedValue(false);
     mockParseTranscript.mockResolvedValue({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null, todos: [] });
     mockFetchRateLimits.mockResolvedValue(null);
@@ -133,8 +133,8 @@ describe('main', () => {
       expect(mockReadRalphState).toHaveBeenCalledWith('/my/project');
       expect(mockReadUltraworkState).toHaveBeenCalledWith('/my/project');
       expect(mockReadRalphVerification).toHaveBeenCalledWith('/my/project');
-      expect(mockReadTodos).toHaveBeenCalledWith('/my/project');
-      expect(mockGetInProgressTodo).toHaveBeenCalledWith('/my/project');
+      // Note: getInProgressTodo now takes transcript todos (session isolation)
+      expect(mockGetInProgressTodo).toHaveBeenCalledWith([]);
     });
 
     it('fetches rate limits', async () => {
@@ -245,7 +245,8 @@ describe('main', () => {
         todos: [],
       });
       mockFetchRateLimits.mockResolvedValue(rateLimits);
-      mockGetInProgressTodo.mockResolvedValue('Working on task...');
+      // getInProgressTodo now returns synchronously
+      mockGetInProgressTodo.mockReturnValue('Working on task...');
       mockIsThinkingEnabled.mockResolvedValue(true);
       mockCalculateSessionDuration.mockReturnValue(45);
 
@@ -293,6 +294,69 @@ describe('main', () => {
       await main();
 
       expect(mockCalculateSessionDuration).toHaveBeenCalledWith(sessionStartedAt);
+    });
+
+    it('shows null todos when transcript todos are empty (session isolation)', async () => {
+      // Transcript todos are the ONLY source - no file fallback
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      // Transcript todos are empty (current session has no todos)
+      mockParseTranscript.mockResolvedValue({
+        runningAgents: 0,
+        activeSkill: null,
+        agents: [],
+        sessionStartedAt: null,
+        todos: [],
+      });
+
+      await main();
+
+      // Should use null because transcript todos are empty
+      expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
+        expect.objectContaining({ todos: null })
+      );
+    });
+
+    it('uses transcript todos when available', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      // Transcript todos from current session
+      mockParseTranscript.mockResolvedValue({
+        runningAgents: 0,
+        activeSkill: null,
+        agents: [],
+        sessionStartedAt: null,
+        todos: [
+          { content: 'Task 1', status: 'completed' },
+          { content: 'Task 2', status: 'in_progress' },
+          { content: 'Task 3', status: 'pending' },
+        ],
+      });
+
+      await main();
+
+      // Should use transcript todos: 1 completed out of 3 total
+      expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
+        expect.objectContaining({ todos: { completed: 1, total: 3 } })
+      );
     });
   });
 

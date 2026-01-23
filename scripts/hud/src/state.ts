@@ -92,38 +92,8 @@ export async function readRalphVerification(cwd: string): Promise<RalphVerificat
   return verification;
 }
 
-export async function readTodos(cwd: string): Promise<{ completed: number; total: number } | null> {
-  const allTodos: TodoItem[] = [];
-
-  // Priority 1: Project-local sisyphus todos
-  const sisyphusPath = join(cwd, '.claude', 'sisyphus', 'todos.json');
-  const sisyphusContent = await readJsonFile<TodosState | TodoItem[]>(sisyphusPath);
-  allTodos.push(...extractTodos(sisyphusContent));
-
-  // Priority 2: Project-local claude todos
-  const localPath = join(cwd, '.claude', 'todos.json');
-  const localContent = await readJsonFile<TodosState | TodoItem[]>(localPath);
-  allTodos.push(...extractTodos(localContent));
-
-  // Priority 3: Global todos directory
-  const globalTodosDir = join(homedir(), '.claude', 'todos');
-  try {
-    const files = await readdir(globalTodosDir);
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const fileContent = await readJsonFile<TodosState | TodoItem[]>(join(globalTodosDir, file));
-        allTodos.push(...extractTodos(fileContent));
-      }
-    }
-  } catch {
-    // Directory doesn't exist, skip
-  }
-
-  if (allTodos.length === 0) return null;
-
-  const completed = allTodos.filter(t => t.status === 'completed').length;
-  return { completed, total: allTodos.length };
-}
+// readTodos removed - todos now come from transcript only for session isolation
+// File-based todos caused accumulation from past sessions
 
 export async function readBackgroundTasks(): Promise<number> {
   const tasksDir = join(homedir(), '.claude', 'background-tasks');
@@ -142,22 +112,10 @@ export function calculateSessionDuration(startedAt: Date | null): number | null 
   return Math.floor((now.getTime() - startedAt.getTime()) / 60000);
 }
 
-// Get the in-progress todo's activeForm (truncated)
-export async function getInProgressTodo(cwd: string): Promise<string | null> {
-  // Reuse existing readTodos logic but look for in_progress status
-  const allTodos: Array<{ content: string; status: string; activeForm?: string }> = [];
-
-  // Read from same locations as readTodos
-  const sisyphusPath = join(cwd, '.claude', 'sisyphus', 'todos.json');
-  const sisyphusContent = await readJsonFile<TodosState | TodoItem[]>(sisyphusPath);
-  allTodos.push(...extractTodos(sisyphusContent));
-
-  const localPath = join(cwd, '.claude', 'todos.json');
-  const localContent = await readJsonFile<TodosState | TodoItem[]>(localPath);
-  allTodos.push(...extractTodos(localContent));
-
+// Get the in-progress todo's activeForm (truncated) from transcript todos
+export function getInProgressTodo(todos: TodoItem[]): string | null {
   // Find first in_progress todo
-  const inProgress = allTodos.find(t => t.status === 'in_progress');
+  const inProgress = todos.find(t => t.status === 'in_progress');
   if (!inProgress) return null;
 
   // Return activeForm or content (prefer activeForm)

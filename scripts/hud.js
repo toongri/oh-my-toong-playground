@@ -45,16 +45,6 @@ async function readJsonFile(path) {
     return null;
   }
 }
-function extractTodos(content) {
-  if (Array.isArray(content)) {
-    return content;
-  }
-  if (content && typeof content === "object" && "todos" in content) {
-    const wrapper = content;
-    return wrapper.todos || [];
-  }
-  return [];
-}
 async function findStateFile(cwd, filename) {
   const localPath = join(cwd, ".claude", "sisyphus", filename);
   if (!await isStateFileStale(localPath)) {
@@ -80,29 +70,6 @@ async function readRalphVerification(cwd) {
   }
   return verification;
 }
-async function readTodos(cwd) {
-  const allTodos = [];
-  const sisyphusPath = join(cwd, ".claude", "sisyphus", "todos.json");
-  const sisyphusContent = await readJsonFile(sisyphusPath);
-  allTodos.push(...extractTodos(sisyphusContent));
-  const localPath = join(cwd, ".claude", "todos.json");
-  const localContent = await readJsonFile(localPath);
-  allTodos.push(...extractTodos(localContent));
-  const globalTodosDir = join(homedir(), ".claude", "todos");
-  try {
-    const files = await readdir(globalTodosDir);
-    for (const file of files) {
-      if (file.endsWith(".json")) {
-        const fileContent = await readJsonFile(join(globalTodosDir, file));
-        allTodos.push(...extractTodos(fileContent));
-      }
-    }
-  } catch {
-  }
-  if (allTodos.length === 0) return null;
-  const completed = allTodos.filter((t) => t.status === "completed").length;
-  return { completed, total: allTodos.length };
-}
 async function readBackgroundTasks() {
   const tasksDir = join(homedir(), ".claude", "background-tasks");
   try {
@@ -117,15 +84,8 @@ function calculateSessionDuration(startedAt) {
   const now = /* @__PURE__ */ new Date();
   return Math.floor((now.getTime() - startedAt.getTime()) / 6e4);
 }
-async function getInProgressTodo(cwd) {
-  const allTodos = [];
-  const sisyphusPath = join(cwd, ".claude", "sisyphus", "todos.json");
-  const sisyphusContent = await readJsonFile(sisyphusPath);
-  allTodos.push(...extractTodos(sisyphusContent));
-  const localPath = join(cwd, ".claude", "todos.json");
-  const localContent = await readJsonFile(localPath);
-  allTodos.push(...extractTodos(localContent));
-  const inProgress = allTodos.find((t) => t.status === "in_progress");
+function getInProgressTodo(todos) {
+  const inProgress = todos.find((t) => t.status === "in_progress");
   if (!inProgress) return null;
   const text = inProgress.activeForm || inProgress.content;
   return text.length > 25 ? text.substring(0, 25) + "..." : text;
@@ -485,30 +445,25 @@ async function main() {
       ralph,
       ultrawork,
       ralphVerification,
-      fileTodos,
       backgroundTasks,
       transcriptData,
       rateLimits,
-      inProgressTodo,
       thinkingActive
     ] = await Promise.all([
       readRalphState(cwd),
       readUltraworkState(cwd),
       readRalphVerification(cwd),
-      readTodos(cwd),
       readBackgroundTasks(),
       input.transcript_path ? parseTranscript(input.transcript_path) : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null, todos: [] }),
       fetchRateLimits(),
-      getInProgressTodo(cwd),
       isThinkingEnabled()
     ]);
+    const inProgressTodo = getInProgressTodo(transcriptData.todos);
     const transcriptTodos = transcriptData.todos;
     let todos = null;
     if (transcriptTodos.length > 0) {
       const completed = transcriptTodos.filter((t) => t.status === "completed").length;
       todos = { completed, total: transcriptTodos.length };
-    } else {
-      todos = fileTodos;
     }
     const hudData = {
       contextPercent: input.context_window?.used_percentage ?? null,

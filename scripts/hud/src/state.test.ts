@@ -1,4 +1,4 @@
-import { readRalphState, readUltraworkState, readRalphVerification, readTodos, readBackgroundTasks, calculateSessionDuration, getInProgressTodo, isThinkingEnabled } from './state.js';
+import { readRalphState, readUltraworkState, readRalphVerification, readBackgroundTasks, calculateSessionDuration, getInProgressTodo, isThinkingEnabled } from './state.js';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
@@ -117,104 +117,7 @@ describe('state readers', () => {
     });
   });
 
-  describe('readTodos', () => {
-    // Note: readTodos aggregates from project-local dirs AND global ~/.claude/todos/
-    // So we use baseline comparison to test local file contributions
-
-    it('should aggregate todos and return completed/total count', async () => {
-      // Get baseline from global todos (may or may not exist)
-      const emptyBaselineDir = join(testDir, 'baseline-project');
-      await mkdir(emptyBaselineDir, { recursive: true });
-      const baseline = await readTodos(emptyBaselineDir);
-      const baselineTotal = baseline?.total ?? 0;
-      const baselineCompleted = baseline?.completed ?? 0;
-
-      const todosState = {
-        todos: [
-          { content: 'Task 1', status: 'completed' },
-          { content: 'Task 2', status: 'in_progress', activeForm: 'Working on Task 2' },
-          { content: 'Task 3', status: 'pending' },
-        ],
-      };
-
-      const todosDir = join(testDir, 'todos-project');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(todosState));
-
-      const result = await readTodos(todosDir);
-
-      expect(result).not.toBeNull();
-      // Local contribution: 1 completed, 3 total
-      expect(result?.completed).toBe(baselineCompleted + 1);
-      expect(result?.total).toBe(baselineTotal + 3);
-    });
-
-    it('should return null or baseline when no local todos exist', async () => {
-      // Note: May return global todos if ~/.claude/todos/ has files
-      const emptyDir = join(testDir, 'empty-project');
-      await mkdir(emptyDir, { recursive: true });
-
-      const result = await readTodos(emptyDir);
-
-      // Result depends on whether global todos exist
-      expect(result === null || typeof result === 'object').toBe(true);
-    });
-
-    it('should handle direct array format from Claude Code TaskCreate', async () => {
-      // Get baseline from global todos
-      const emptyBaselineDir = join(testDir, 'baseline-array-project');
-      await mkdir(emptyBaselineDir, { recursive: true });
-      const baseline = await readTodos(emptyBaselineDir);
-      const baselineTotal = baseline?.total ?? 0;
-      const baselineCompleted = baseline?.completed ?? 0;
-
-      // Claude Code TaskCreate saves todos as direct array, not wrapped object
-      const directArray = [
-        { content: 'Task 1', status: 'completed' },
-        { content: 'Task 2', status: 'in_progress', activeForm: 'Working on Task 2' },
-        { content: 'Task 3', status: 'pending' },
-      ];
-
-      const todosDir = join(testDir, 'direct-array-project');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(directArray));
-
-      const result = await readTodos(todosDir);
-
-      expect(result).not.toBeNull();
-      // Local contribution: 1 completed, 3 total
-      expect(result?.completed).toBe(baselineCompleted + 1);
-      expect(result?.total).toBe(baselineTotal + 3);
-    });
-
-    it('should handle direct array format in .claude/todos.json', async () => {
-      // Get baseline from global todos
-      const emptyBaselineDir = join(testDir, 'baseline-local-array');
-      await mkdir(emptyBaselineDir, { recursive: true });
-      const baseline = await readTodos(emptyBaselineDir);
-      const baselineTotal = baseline?.total ?? 0;
-      const baselineCompleted = baseline?.completed ?? 0;
-
-      const directArray = [
-        { content: 'Local Task 1', status: 'completed' },
-        { content: 'Local Task 2', status: 'pending' },
-      ];
-
-      const todosDir = join(testDir, 'direct-array-local');
-      const localClaudeDir = join(todosDir, '.claude');
-      await mkdir(localClaudeDir, { recursive: true });
-      await writeFile(join(localClaudeDir, 'todos.json'), JSON.stringify(directArray));
-
-      const result = await readTodos(todosDir);
-
-      expect(result).not.toBeNull();
-      // Local contribution: 1 completed, 2 total
-      expect(result?.completed).toBe(baselineCompleted + 1);
-      expect(result?.total).toBe(baselineTotal + 2);
-    });
-  });
+  // readTodos tests removed - todos now come from transcript only for session isolation
 
   describe('readBackgroundTasks', () => {
     it('should return count of background task files', async () => {
@@ -254,121 +157,69 @@ describe('state readers', () => {
   });
 
   describe('getInProgressTodo', () => {
-    it('should return activeForm of in_progress todo when available', async () => {
-      const todosState = {
-        todos: [
-          { content: 'Task 1', status: 'completed' },
-          { content: 'Task 2', status: 'in_progress', activeForm: 'Working on Task 2' },
-          { content: 'Task 3', status: 'pending' },
-        ],
-      };
+    // Tests updated to use new signature: getInProgressTodo(todos: TodoItem[])
+    // Function now accepts transcript todos directly for session isolation
 
-      const todosDir = join(testDir, 'inprogress-project');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(todosState));
+    it('should return activeForm of in_progress todo when available', () => {
+      const todos = [
+        { content: 'Task 1', status: 'completed' as const },
+        { content: 'Task 2', status: 'in_progress' as const, activeForm: 'Working on Task 2' },
+        { content: 'Task 3', status: 'pending' as const },
+      ];
 
-      const result = await getInProgressTodo(todosDir);
+      const result = getInProgressTodo(todos);
 
       expect(result).toBe('Working on Task 2');
     });
 
-    it('should return content when activeForm is not available', async () => {
-      const todosState = {
-        todos: [
-          { content: 'Task 1', status: 'completed' },
-          { content: 'In Progress Task', status: 'in_progress' },
-        ],
-      };
+    it('should return content when activeForm is not available', () => {
+      const todos = [
+        { content: 'Task 1', status: 'completed' as const },
+        { content: 'In Progress Task', status: 'in_progress' as const },
+      ];
 
-      const todosDir = join(testDir, 'inprogress-no-activeform');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(todosState));
-
-      const result = await getInProgressTodo(todosDir);
+      const result = getInProgressTodo(todos);
 
       expect(result).toBe('In Progress Task');
     });
 
-    it('should truncate text longer than 25 characters', async () => {
-      const todosState = {
-        todos: [
-          { content: 'This is a very long task name that exceeds twenty five characters', status: 'in_progress', activeForm: 'This is a very long active form text' },
-        ],
-      };
+    it('should truncate text longer than 25 characters', () => {
+      const todos = [
+        { content: 'This is a very long task name that exceeds twenty five characters', status: 'in_progress' as const, activeForm: 'This is a very long active form text' },
+      ];
 
-      const todosDir = join(testDir, 'inprogress-truncate');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(todosState));
-
-      const result = await getInProgressTodo(todosDir);
+      const result = getInProgressTodo(todos);
 
       expect(result).toBe('This is a very long activ...');
       expect(result?.length).toBe(28); // 25 chars + '...'
     });
 
-    it('should return null when no in_progress todo exists', async () => {
-      const todosState = {
-        todos: [
-          { content: 'Task 1', status: 'completed' },
-          { content: 'Task 2', status: 'pending' },
-        ],
-      };
-
-      const todosDir = join(testDir, 'no-inprogress');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(todosState));
-
-      const result = await getInProgressTodo(todosDir);
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null when no todos exist', async () => {
-      const emptyDir = join(testDir, 'empty-inprogress');
-      await mkdir(emptyDir, { recursive: true });
-
-      const result = await getInProgressTodo(emptyDir);
-
-      expect(result).toBeNull();
-    });
-
-    it('should also read from .claude/todos.json', async () => {
-      const todosState = {
-        todos: [
-          { content: 'Local Task', status: 'in_progress', activeForm: 'Local Active' },
-        ],
-      };
-
-      const todosDir = join(testDir, 'local-todos');
-      const claudeDir = join(todosDir, '.claude');
-      await mkdir(claudeDir, { recursive: true });
-      await writeFile(join(claudeDir, 'todos.json'), JSON.stringify(todosState));
-
-      const result = await getInProgressTodo(todosDir);
-
-      expect(result).toBe('Local Active');
-    });
-
-    it('should handle direct array format from Claude Code TaskCreate', async () => {
-      // Claude Code TaskCreate saves todos as direct array, not wrapped object
-      const directArray = [
-        { content: 'Task 1', status: 'completed' },
-        { content: 'Array Task', status: 'in_progress', activeForm: 'Array Active Form' },
-        { content: 'Task 3', status: 'pending' },
+    it('should return null when no in_progress todo exists', () => {
+      const todos = [
+        { content: 'Task 1', status: 'completed' as const },
+        { content: 'Task 2', status: 'pending' as const },
       ];
 
-      const todosDir = join(testDir, 'inprogress-array-format');
-      const todosSisyphusDir = join(todosDir, '.claude', 'sisyphus');
-      await mkdir(todosSisyphusDir, { recursive: true });
-      await writeFile(join(todosSisyphusDir, 'todos.json'), JSON.stringify(directArray));
+      const result = getInProgressTodo(todos);
 
-      const result = await getInProgressTodo(todosDir);
+      expect(result).toBeNull();
+    });
 
-      expect(result).toBe('Array Active Form');
+    it('should return null when empty array is passed', () => {
+      const result = getInProgressTodo([]);
+
+      expect(result).toBeNull();
+    });
+
+    it('should return first in_progress todo when multiple exist', () => {
+      const todos = [
+        { content: 'Task 1', status: 'in_progress' as const, activeForm: 'First Active' },
+        { content: 'Task 2', status: 'in_progress' as const, activeForm: 'Second Active' },
+      ];
+
+      const result = getInProgressTodo(todos);
+
+      expect(result).toBe('First Active');
     });
   });
 

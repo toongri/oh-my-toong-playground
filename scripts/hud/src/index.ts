@@ -1,5 +1,5 @@
 import { readStdin } from './stdin.js';
-import { readRalphState, readUltraworkState, readRalphVerification, readTodos, readBackgroundTasks, calculateSessionDuration, getInProgressTodo, isThinkingEnabled } from './state.js';
+import { readRalphState, readUltraworkState, readRalphVerification, readBackgroundTasks, calculateSessionDuration, getInProgressTodo, isThinkingEnabled } from './state.js';
 import { parseTranscript } from './transcript.js';
 import { fetchRateLimits } from './usage-api.js';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.js';
@@ -32,38 +32,33 @@ export async function main(): Promise<void> {
       ralph,
       ultrawork,
       ralphVerification,
-      fileTodos,
       backgroundTasks,
       transcriptData,
       rateLimits,
-      inProgressTodo,
       thinkingActive,
     ] = await Promise.all([
       readRalphState(cwd),
       readUltraworkState(cwd),
       readRalphVerification(cwd),
-      readTodos(cwd),
       readBackgroundTasks(),
       input.transcript_path
         ? parseTranscript(input.transcript_path)
         : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null, todos: [] }),
       fetchRateLimits(),
-      getInProgressTodo(cwd),
       isThinkingEnabled(),
     ]);
 
-    // Prefer transcript todos over file-based todos
-    // Transcript todos are session-specific; file todos may include stale data from other sessions
+    // Get in-progress todo from transcript todos (synchronous, session-isolated)
+    const inProgressTodo = getInProgressTodo(transcriptData.todos);
+
+    // Use ONLY transcript-based todos for session isolation
+    // File-based todos are not used to prevent accumulation from past sessions
     const transcriptTodos = transcriptData.todos;
     let todos: { completed: number; total: number } | null = null;
 
     if (transcriptTodos.length > 0) {
-      // Use transcript-based todos (current session only)
       const completed = transcriptTodos.filter(t => t.status === 'completed').length;
       todos = { completed, total: transcriptTodos.length };
-    } else {
-      // Fallback to file-based todos (legacy behavior)
-      todos = fileTodos;
     }
 
     const hudData: HudDataV2 = {
