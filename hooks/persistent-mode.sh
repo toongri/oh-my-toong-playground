@@ -302,7 +302,7 @@ if [ -n "$RALPH_STATE" ]; then
           rm -f "$HOME/.claude/ultrawork-state-${SESSION_ID}.json"
 
           cat << EOF
-{"continue": true, "message": "[FORCE ACCEPT - MAX VERIFICATION ATTEMPTS REACHED]\n\nVerification failed $MAX_ATTEMPTS times without oracle approval.\n\n## Warning\nThe task completion could not be verified by Oracle.\nThis may indicate incomplete or incorrect implementation.\n\n## Recommended Actions:\n1. Manually review the implementation\n2. Check for any obvious issues\n3. Consider running tests manually\n\nAllowing stop due to max attempts limit."}
+{"continue": true}
 EOF
           exit 0
         fi
@@ -323,7 +323,7 @@ EOF
         fi
 
         cat << EOF
-{"continue": false, "reason": "<ralph-verification>\n\n[🚨 ORACLE VERIFICATION REQUIRED - Attempt $NEXT_ATTEMPT/$MAX_ATTEMPTS]\n\n## ⛔ YOU CANNOT STOP YET\n\nYou output \`<promise>DONE</promise>\` but the hook detected NO oracle approval tag.\n\n**Original Task:**\n$ORIGINAL_TASK\n\n**Completion Claim:**\n$COMPLETION_CLAIM\n$FEEDBACK_SECTION\n---\n\n## 🔴 CRITICAL: ORACLE VERIFICATION PROTOCOL\n\n### Step 1: Spawn Oracle NOW\n\`\`\`\nTask(subagent_type=\"oracle\", prompt=\"Verify completion of: $ORIGINAL_TASK\")\n\`\`\`\n\n### Step 2: Read Oracle's Response\n- Did Oracle find ANY issues? → Fix them, re-verify\n- Did Oracle approve? → Proceed to Step 3\n\n### Step 3: OUTPUT THE TAG (YOU must do this, not Oracle)\n\n**⚠️ YOU MUST OUTPUT THIS EXACT TAG:**\n\n\`\`\`\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n\`\`\`\n\n### Step 4: THEN output promise\n\`\`\`\n<promise>DONE</promise>\n\`\`\`\n\n---\n\n## 🛑 WHY YOU ARE BLOCKED\n\nThe hook scans the transcript for:\n\`<oracle-approved>VERIFIED_COMPLETE</oracle-approved>\`\n\n**This tag was NOT found.** You MUST output it BEFORE the promise.\n\nSequence: Oracle verification → YOU output tag → THEN promise\n\n</ralph-verification>\n\n---\n"}
+{"decision": "block", "reason": "<ralph-verification>\n\n[🚨 ORACLE VERIFICATION REQUIRED - Attempt $NEXT_ATTEMPT/$MAX_ATTEMPTS]\n\n## ⛔ YOU CANNOT STOP YET\n\nYou output \`<promise>DONE</promise>\` but the hook detected NO oracle approval tag.\n\n**Original Task:**\n$ORIGINAL_TASK\n\n**Completion Claim:**\n$COMPLETION_CLAIM\n$FEEDBACK_SECTION\n---\n\n## 🔴 CRITICAL: ORACLE VERIFICATION PROTOCOL\n\n### Step 1: Spawn Oracle NOW\n\`\`\`\nTask(subagent_type=\"oracle\", prompt=\"Verify completion of: $ORIGINAL_TASK\")\n\`\`\`\n\n### Step 2: Read Oracle's Response\n- Did Oracle find ANY issues? → Fix them, re-verify\n- Did Oracle approve? → Proceed to Step 3\n\n### Step 3: OUTPUT THE TAG (YOU must do this, not Oracle)\n\n**⚠️ YOU MUST OUTPUT THIS EXACT TAG:**\n\n\`\`\`\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n\`\`\`\n\n### Step 4: THEN output promise\n\`\`\`\n<promise>DONE</promise>\n\`\`\`\n\n---\n\n## 🛑 WHY YOU ARE BLOCKED\n\nThe hook scans the transcript for:\n\`<oracle-approved>VERIFIED_COMPLETE</oracle-approved>\`\n\n**This tag was NOT found.** You MUST output it BEFORE the promise.\n\nSequence: Oracle verification → YOU output tag → THEN promise\n\n</ralph-verification>\n\n---\n"}
 EOF
         exit 0
       fi
@@ -343,7 +343,7 @@ EOF
       rm -f "/tmp/oh-my-toong-todo-count-${ATTEMPT_ID}"
 
       cat << EOF
-{"continue": true, "message": "[RALPH LOOP STOPPED - MAX ITERATIONS]\n\nReached maximum iterations ($MAX_ITER) without verified completion.\n\n## What happened:\n- Task was not fully completed within $MAX_ITER iterations\n- All Ralph and linked Ultrawork states cleaned up\n\n## Recommended actions:\n1. Review the original task requirements\n2. Consider breaking into smaller tasks\n3. Re-activate with: ralph <task>\n\nOriginal task: $PROMPT"}
+{"continue": true}
 EOF
       exit 0
     fi
@@ -353,7 +353,7 @@ EOF
     echo "$RALPH_STATE" | jq ".iteration = $NEW_ITER" > "$PROJECT_ROOT/.claude/sisyphus/ralph-state-${SESSION_ID}.json" 2>/dev/null
 
     cat << EOF
-{"continue": false, "reason": "<ralph-loop-continuation>\n\n[RALPH LOOP - ITERATION $NEW_ITER/$MAX_ITER]\n\nYour previous attempt did not output the completion promise. The work is NOT done yet.\n\nCRITICAL INSTRUCTIONS:\n1. Review your progress and the original task\n2. Check your todo list - are ALL items marked complete?\n3. Continue from where you left off\n4. When FULLY complete, output: <promise>$PROMISE</promise>\n5. Do NOT stop until the task is truly done\n\nOriginal task: $PROMPT\n\n</ralph-loop-continuation>\n\n---\n"}
+{"decision": "block", "reason": "<ralph-loop-continuation>\n\n[RALPH LOOP - ITERATION $NEW_ITER/$MAX_ITER]\n\nYour previous attempt did not output the completion promise. The work is NOT done yet.\n\nCRITICAL INSTRUCTIONS:\n1. Review your progress and the original task\n2. Check your todo list - are ALL items marked complete?\n3. Continue from where you left off\n4. When FULLY complete, output: <promise>$PROMISE</promise>\n5. Do NOT stop until the task is truly done\n\nOriginal task: $PROMPT\n\n</ralph-loop-continuation>\n\n---\n"}
 EOF
     exit 0
   fi
@@ -482,7 +482,7 @@ if [ ${#VERIFICATION_FAILURES[@]} -gt 0 ]; then
   done
 
   cat << EOF
-{"continue": false, "reason": "<verification-requirements>\n\n[VERIFICATION REQUIREMENTS NOT MET]\n\nBefore stopping, you must address the following verification requirements:\n$FAILURE_LIST\n\n## REQUIRED ACTIONS:\n\n1. **Build Verification**: If build scripts exist, run them and verify success\n2. **Test Verification**: Run all tests and ensure they pass\n3. **Git Status**: Review uncommitted/unpushed changes - commit or verify intentional\n4. **Background Tasks**: Wait for or check results of running background tasks\n\n**You cannot stop until these verifications are complete.**\n\nAddress each issue above, then you may conclude.\n\n</verification-requirements>\n\n---\n"}
+{"decision": "block", "reason": "<verification-requirements>\n\n[VERIFICATION REQUIREMENTS NOT MET]\n\nBefore stopping, you must address the following verification requirements:\n$FAILURE_LIST\n\n## REQUIRED ACTIONS:\n\n1. **Build Verification**: If build scripts exist, run them and verify success\n2. **Test Verification**: Run all tests and ensure they pass\n3. **Git Status**: Review uncommitted/unpushed changes - commit or verify intentional\n4. **Background Tasks**: Wait for or check results of running background tasks\n\n**You cannot stop until these verifications are complete.**\n\nAddress each issue above, then you may conclude.\n\n</verification-requirements>\n\n---\n"}
 EOF
   exit 0
 fi
@@ -509,7 +509,7 @@ if [ -n "$ULTRAWORK_STATE" ] && [ "$INCOMPLETE_COUNT" -gt 0 ]; then
 
       # Allow stop with warning
       cat << EOF
-{"continue": true, "message": "[TODO CONTINUATION LIMIT REACHED]\n\nAttempted $MAX_TODO_CONTINUATION_ATTEMPTS continuations without progress.\n$INCOMPLETE_COUNT tasks remain incomplete.\n\n## What this means:\nThe agent appears stuck and unable to complete remaining tasks.\n\n## Recommended actions:\n1. Review the stuck tasks manually\n2. Provide additional guidance\n3. Consider simplifying remaining tasks\n\nAllowing stop to prevent infinite loop."}
+{"continue": true}
 EOF
       exit 0
     fi
@@ -540,7 +540,7 @@ EOF
     fi
 
     cat << EOF
-{"continue": false, "reason": "<ultrawork-persistence>\n\n[ULTRAWORK MODE STILL ACTIVE - Reinforcement #$NEW_COUNT]\n\nYour ultrawork session is NOT complete. $INCOMPLETE_COUNT incomplete todos remain.\n\nREMEMBER THE ULTRAWORK RULES:\n- **PARALLEL**: Fire independent calls simultaneously - NEVER wait sequentially\n- **BACKGROUND FIRST**: Use Task(run_in_background=true) for exploration (10+ concurrent)\n- **TODO**: Track EVERY step. Mark complete IMMEDIATELY after each\n- **VERIFY**: Check ALL requirements met before done\n- **NO Premature Stopping**: ALL TODOs must be complete\n\nContinue working on the next pending task. DO NOT STOP until all tasks are marked complete.\n\nOriginal task: $ORIGINAL_PROMPT\n\n</ultrawork-persistence>\n\n---\n"}
+{"decision": "block", "reason": "<ultrawork-persistence>\n\n[ULTRAWORK MODE STILL ACTIVE - Reinforcement #$NEW_COUNT]\n\nYour ultrawork session is NOT complete. $INCOMPLETE_COUNT incomplete todos remain.\n\nREMEMBER THE ULTRAWORK RULES:\n- **PARALLEL**: Fire independent calls simultaneously - NEVER wait sequentially\n- **BACKGROUND FIRST**: Use Task(run_in_background=true) for exploration (10+ concurrent)\n- **TODO**: Track EVERY step. Mark complete IMMEDIATELY after each\n- **VERIFY**: Check ALL requirements met before done\n- **NO Premature Stopping**: ALL TODOs must be complete\n\nContinue working on the next pending task. DO NOT STOP until all tasks are marked complete.\n\nOriginal task: $ORIGINAL_PROMPT\n\n</ultrawork-persistence>\n\n---\n"}
 EOF
     exit 0
   fi
@@ -556,7 +556,7 @@ if [ "$INCOMPLETE_COUNT" -gt 0 ]; then
 
     # Allow stop with warning
     cat << EOF
-{"continue": true, "message": "[TODO CONTINUATION LIMIT REACHED]\n\nAttempted $MAX_TODO_CONTINUATION_ATTEMPTS continuations without progress.\n$INCOMPLETE_COUNT tasks remain incomplete.\n\n## What this means:\nThe agent appears stuck and unable to complete remaining tasks.\n\n## Recommended actions:\n1. Review the stuck tasks manually\n2. Provide additional guidance\n3. Consider simplifying remaining tasks\n\nAllowing stop to prevent infinite loop."}
+{"continue": true}
 EOF
     exit 0
   fi
@@ -565,7 +565,7 @@ EOF
   increment_attempts
 
   cat << EOF
-{"continue": false, "reason": "<todo-continuation>\n\n[SYSTEM REMINDER - TODO CONTINUATION]\n\nIncomplete tasks remain in your todo list ($INCOMPLETE_COUNT remaining). Continue working on the next pending task.\n\n- Proceed without asking for permission\n- Mark each task complete when finished\n- Do not stop until all tasks are done\n\n</todo-continuation>\n\n---\n"}
+{"decision": "block", "reason": "<todo-continuation>\n\n[SYSTEM REMINDER - TODO CONTINUATION]\n\nIncomplete tasks remain in your todo list ($INCOMPLETE_COUNT remaining). Continue working on the next pending task.\n\n- Proceed without asking for permission\n- Mark each task complete when finished\n- Do not stop until all tasks are done\n\n</todo-continuation>\n\n---\n"}
 EOF
   exit 0
 fi

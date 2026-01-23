@@ -190,40 +190,43 @@ test_no_generic_ultrawork_state_path() {
 # =============================================================================
 
 test_max_iteration_returns_user_friendly_message() {
-    # The max iteration message should be informative
-    if grep -q "RALPH LOOP STOPPED - MAX ITERATIONS" "$HOOKS_DIR/persistent-mode.sh"; then
+    # With common JSON format, continue:true cases no longer include message field
+    # This test now verifies the script still handles max iteration case
+    if grep -q "Max iterations reached" "$HOOKS_DIR/persistent-mode.sh" || \
+       grep -q '\$ITERATION.*-ge.*\$MAX_ITER' "$HOOKS_DIR/persistent-mode.sh"; then
         return 0
     else
-        echo "ASSERTION FAILED: persistent-mode.sh should contain max iteration stop message"
+        echo "ASSERTION FAILED: persistent-mode.sh should handle max iteration case"
         return 1
     fi
 }
 
 test_max_iteration_message_includes_original_task() {
-    # The max iteration message should include the original task
-    # Check for pattern that includes prompt/task in max iteration section
-    if grep -B 5 -A 30 "MAX ITERATIONS" "$HOOKS_DIR/persistent-mode.sh" | grep -qE 'Original task.*PROMPT|\$PROMPT'; then
+    # With common JSON format, message field is removed for continue:true cases
+    # This test now verifies the max iteration handler still references PROMPT variable
+    if grep -q '\$PROMPT' "$HOOKS_DIR/persistent-mode.sh"; then
         return 0
     else
-        echo "ASSERTION FAILED: max iteration message should include original task"
+        echo "ASSERTION FAILED: persistent-mode.sh should reference PROMPT variable"
         return 1
     fi
 }
 
 test_max_iteration_message_includes_recommended_actions() {
-    # The max iteration message should include recommended actions
-    if grep -q "Recommended actions" "$HOOKS_DIR/persistent-mode.sh"; then
+    # With common JSON format, message field is removed for continue:true cases
+    # This test now verifies continue:true cases use simplified JSON format
+    if grep -q '"continue": true}' "$HOOKS_DIR/persistent-mode.sh"; then
         return 0
     else
-        echo "ASSERTION FAILED: max iteration message should include recommended actions"
+        echo "ASSERTION FAILED: persistent-mode.sh should output simplified continue:true JSON"
         return 1
     fi
 }
 
 test_max_iteration_cleans_ralph_state() {
     # The max iteration handler should clean up ralph state (session-specific)
-    # The rm commands are before the MAX ITERATIONS message, need more context
-    if grep -B 15 -A 5 "MAX ITERATIONS" "$HOOKS_DIR/persistent-mode.sh" | grep -q 'rm -f.*ralph-state-\${SESSION_ID}'; then
+    # Check for rm command near the max iteration check
+    if grep -B 5 -A 15 'ITERATION.*-ge.*MAX_ITER' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'rm -f.*ralph-state-\${SESSION_ID}'; then
         return 0
     else
         echo "ASSERTION FAILED: max iteration should clean ralph-state-{SESSION_ID}.json"
@@ -233,8 +236,8 @@ test_max_iteration_cleans_ralph_state() {
 
 test_max_iteration_cleans_verification_state() {
     # The max iteration handler should clean up verification state (session-specific)
-    # The rm commands are before the MAX ITERATIONS message, need more context
-    if grep -B 15 -A 5 "MAX ITERATIONS" "$HOOKS_DIR/persistent-mode.sh" | grep -q 'rm -f.*ralph-verification-\${SESSION_ID}'; then
+    # Check for rm command near the max iteration check
+    if grep -B 5 -A 15 'ITERATION.*-ge.*MAX_ITER' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'rm -f.*ralph-verification-\${SESSION_ID}'; then
         return 0
     else
         echo "ASSERTION FAILED: max iteration should clean ralph-verification-{SESSION_ID}.json"
@@ -245,7 +248,7 @@ test_max_iteration_cleans_verification_state() {
 test_max_iteration_cleans_ultrawork_state() {
     # The max iteration handler should clean up session-specific ultrawork state (without cleanup_linked_ultrawork)
     # Should directly remove ultrawork-state-{SESSION_ID}.json
-    if grep -B 15 -A 5 "MAX ITERATIONS" "$HOOKS_DIR/persistent-mode.sh" | grep -q 'rm -f.*ultrawork-state'; then
+    if grep -B 5 -A 15 'ITERATION.*-ge.*MAX_ITER' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'rm -f.*ultrawork-state'; then
         return 0
     else
         echo "ASSERTION FAILED: max iteration should clean ultrawork state files"
@@ -293,7 +296,8 @@ test_max_iteration_cleans_todo_attempt_counter() {
 
 test_max_iteration_returns_continue_true() {
     # The max iteration handler should return continue: true to allow stopping
-    if grep -B 5 -A 30 "MAX ITERATIONS" "$HOOKS_DIR/persistent-mode.sh" | grep -q '"continue": true'; then
+    # Check near max iteration logic for continue: true output
+    if grep -B 5 -A 15 'ITERATION.*-ge.*MAX_ITER' "$HOOKS_DIR/persistent-mode.sh" | grep -q '"continue": true'; then
         return 0
     else
         echo "ASSERTION FAILED: max iteration should return continue: true"
@@ -345,8 +349,8 @@ EOF
     local output
     output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'"}' | "$HOOKS_DIR/persistent-mode.sh" 2>&1) || true
 
-    # Verify output contains max iteration message
-    if echo "$output" | grep -q "MAX ITERATIONS"; then
+    # Verify output is simplified continue:true JSON (common format)
+    if echo "$output" | grep -q '"continue": true'; then
         # Also verify the state files were cleaned up (session-specific)
         if [[ ! -f "$TEST_TMP_DIR/.claude/sisyphus/ralph-state-default.json" ]] && \
            [[ ! -f "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json" ]] && \
@@ -360,7 +364,7 @@ EOF
             return 1
         fi
     else
-        echo "ASSERTION FAILED: Script should output MAX ITERATIONS message"
+        echo "ASSERTION FAILED: Script should output continue:true JSON"
         echo "  Output: ${output:0:500}"
         return 1
     fi

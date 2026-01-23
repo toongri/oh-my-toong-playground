@@ -162,6 +162,102 @@ test_ralph_verification_uses_session_id() {
 }
 
 # =============================================================================
+# Tests: JSON output format validation (hookSpecificOutput format)
+# =============================================================================
+
+assert_json_has_hook_specific_output() {
+    local output="$1"
+    local mode_name="$2"
+    local msg="${3:-Output should have hookSpecificOutput format}"
+
+    # Check for hookSpecificOutput structure
+    if echo "$output" | grep -q '"hookSpecificOutput"'; then
+        # Check for hookEventName: UserPromptSubmit
+        if echo "$output" | grep -q '"hookEventName".*:.*"UserPromptSubmit"'; then
+            # Check for additionalContext field
+            if echo "$output" | grep -q '"additionalContext"'; then
+                return 0
+            else
+                echo "ASSERTION FAILED: $msg - missing additionalContext"
+                echo "  Output (first 500 chars): ${output:0:500}"
+                return 1
+            fi
+        else
+            echo "ASSERTION FAILED: $msg - hookEventName should be UserPromptSubmit"
+            echo "  Output (first 500 chars): ${output:0:500}"
+            return 1
+        fi
+    else
+        echo "ASSERTION FAILED: $msg - missing hookSpecificOutput"
+        echo "  Output (first 500 chars): ${output:0:500}"
+        return 1
+    fi
+}
+
+assert_no_message_field() {
+    local output="$1"
+    local msg="${2:-Output should NOT have message field at top level}"
+
+    # Check that "message" is not at the top level (directly after "continue")
+    if echo "$output" | grep -q '"continue".*"message"'; then
+        echo "ASSERTION FAILED: $msg"
+        echo "  Output (first 500 chars): ${output:0:500}"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "ralph do the task"}' | "$HOOKS_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "ralph" "Ralph mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Ralph mode should not use message field" || return 1
+}
+
+test_ultrawork_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "ultrawork do the task"}' | "$HOOKS_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "ultrawork" "Ultrawork mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Ultrawork mode should not use message field" || return 1
+}
+
+test_think_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "think about this problem"}' | "$HOOKS_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "think" "Think mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Think mode should not use message field" || return 1
+}
+
+test_search_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "search for files"}' | "$HOOKS_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "search" "Search mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Search mode should not use message field" || return 1
+}
+
+test_analyze_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "analyze this code"}' | "$HOOKS_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "analyze" "Analyze mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Analyze mode should not use message field" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -175,6 +271,13 @@ main() {
     run_test test_ralph_keyword_creates_session_specific_state_in_home
     run_test test_ralph_keyword_uses_default_when_no_session_id
     run_test test_ralph_verification_uses_session_id
+
+    # JSON output format tests (hookSpecificOutput)
+    run_test test_ralph_output_uses_hook_specific_output_format
+    run_test test_ultrawork_output_uses_hook_specific_output_format
+    run_test test_think_output_uses_hook_specific_output_format
+    run_test test_search_output_uses_hook_specific_output_format
+    run_test test_analyze_output_uses_hook_specific_output_format
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
