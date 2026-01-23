@@ -263,44 +263,66 @@ test_ralph_state_has_linked_ultrawork_true() {
 }
 
 # =============================================================================
-# Tests: Linked Ultrawork State Creation
+# Tests: Session-Based Ultrawork State Creation
 # =============================================================================
 
-test_ralph_creates_ultrawork_state_when_not_exists() {
-    # When ralph detected and ultrawork-state.json doesn't exist, create it
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
+test_ultrawork_creates_session_specific_state_file() {
+    # When ultrawork keyword detected, should create ultrawork-state-default.json (not ultrawork-state.json)
+    run_keyword_detector "ultrawork complete this" "$TEST_TMP_DIR" > /dev/null
 
-    assert_file_exists "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json" "Should create ultrawork-state.json"
+    assert_file_exists "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json" "Should create ultrawork-state-default.json"
+    assert_file_not_exists "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json" "Should NOT create ultrawork-state.json (old format)"
 }
 
-test_ralph_ultrawork_state_has_linked_to_ralph_flag() {
-    # Created ultrawork-state.json should have linked_to_ralph: true
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
+test_ultrawork_state_does_not_have_linked_to_ralph_field() {
+    # Ultrawork state should NOT have linked_to_ralph field (removed)
+    run_keyword_detector "ultrawork complete this" "$TEST_TMP_DIR" > /dev/null
 
-    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json"
+    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json"
 
-    assert_json_field "$state_file" ".linked_to_ralph" "true" "linked_to_ralph should be true"
-}
-
-test_ralph_does_not_overwrite_existing_ultrawork_state() {
-    # When ultrawork-state.json already exists, ralph should NOT overwrite it
-    local existing_state='{"active": true, "started_at": "2025-01-01T00:00:00", "original_prompt": "existing task"}'
-    echo "$existing_state" > "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json"
-
-    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
-
-    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json"
-
-    # Should preserve original content (no linked_to_ralph field)
-    assert_json_field "$state_file" ".original_prompt" "existing task" "Should preserve existing ultrawork state"
-
-    # Should NOT have linked_to_ralph (we didn't create it)
+    # linked_to_ralph field should not exist
     local linked=$(jq -r ".linked_to_ralph // \"missing\"" "$state_file" 2>/dev/null)
-    if [[ "$linked" != "missing" && "$linked" != "null" ]]; then
-        echo "ASSERTION FAILED: Existing ultrawork state should not be modified"
+    if [[ "$linked" != "missing" ]]; then
+        echo "ASSERTION FAILED: linked_to_ralph field should not exist in ultrawork state"
         return 1
     fi
     return 0
+}
+
+test_ralph_creates_session_specific_ultrawork_state() {
+    # When ralph detected and ultrawork state doesn't exist, create session-specific file
+    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
+
+    assert_file_exists "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json" "Should create ultrawork-state-default.json"
+    assert_file_not_exists "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json" "Should NOT create ultrawork-state.json (old format)"
+}
+
+test_ralph_ultrawork_state_no_linked_to_ralph_flag() {
+    # Created ultrawork state should NOT have linked_to_ralph field (removed)
+    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
+
+    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json"
+
+    # linked_to_ralph field should not exist
+    local linked=$(jq -r ".linked_to_ralph // \"missing\"" "$state_file" 2>/dev/null)
+    if [[ "$linked" != "missing" ]]; then
+        echo "ASSERTION FAILED: linked_to_ralph field should not exist in ultrawork state"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_does_not_overwrite_existing_ultrawork_state() {
+    # When ultrawork-state-default.json already exists, ralph should NOT overwrite it
+    local existing_state='{"active": true, "started_at": "2025-01-01T00:00:00", "original_prompt": "existing task"}'
+    echo "$existing_state" > "$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json"
+
+    run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
+
+    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json"
+
+    # Should preserve original content
+    assert_json_field "$state_file" ".original_prompt" "existing task" "Should preserve existing ultrawork state"
 }
 
 # =============================================================================
@@ -329,9 +351,9 @@ test_ralph_before_ultrawork_in_detection_order() {
     # Should have ralph-state-default.json
     assert_file_exists "$TEST_TMP_DIR/.claude/sisyphus/ralph-state-default.json" "ralph-state should exist"
 
-    # ultrawork-state.json should have linked_to_ralph flag (created by ralph, not by ultrawork keyword)
-    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state.json"
-    assert_json_field "$state_file" ".linked_to_ralph" "true" "ultrawork state should be created by ralph (linked_to_ralph=true)"
+    # ultrawork-state-default.json should be created (session-specific, no linked_to_ralph)
+    local state_file="$TEST_TMP_DIR/.claude/sisyphus/ultrawork-state-default.json"
+    assert_file_exists "$state_file" "ultrawork state should be created by ralph (session-specific)"
 }
 
 # =============================================================================
@@ -389,9 +411,11 @@ main() {
     run_test test_ralph_state_has_timestamp
     run_test test_ralph_state_has_linked_ultrawork_true
 
-    # Linked Ultrawork State Creation
-    run_test test_ralph_creates_ultrawork_state_when_not_exists
-    run_test test_ralph_ultrawork_state_has_linked_to_ralph_flag
+    # Session-Based Ultrawork State Creation
+    run_test test_ultrawork_creates_session_specific_state_file
+    run_test test_ultrawork_state_does_not_have_linked_to_ralph_field
+    run_test test_ralph_creates_session_specific_ultrawork_state
+    run_test test_ralph_ultrawork_state_no_linked_to_ralph_flag
     run_test test_ralph_does_not_overwrite_existing_ultrawork_state
 
     # Ralph Priority over Ultrawork

@@ -48,21 +48,6 @@ get_project_root() {
 # Get project root
 PROJECT_ROOT=$(get_project_root "$DIRECTORY")
 
-# Function to clean up linked ultrawork state (called when ralph completes or max iterations)
-cleanup_linked_ultrawork() {
-  local dir="$1"
-  local ultrawork_file="$dir/.claude/sisyphus/ultrawork-state.json"
-  local global_ultrawork="$HOME/.claude/ultrawork-state.json"
-
-  if [ -f "$ultrawork_file" ]; then
-    local is_linked=$(jq -r '.linked_to_ralph // false' "$ultrawork_file" 2>/dev/null)
-    if [ "$is_linked" = "true" ]; then
-      rm -f "$ultrawork_file"
-      rm -f "$global_ultrawork"
-    fi
-  fi
-}
-
 # ===== Todo Continuation Attempt Limiting =====
 # Prevents infinite loops when agent is stuck on todos
 
@@ -90,12 +75,12 @@ reset_attempts() {
   rm -f "$ATTEMPT_FILE"
 }
 
-# Check for active ultrawork state
+# Check for active ultrawork state (session-specific)
 ULTRAWORK_STATE=""
-if [ -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" ]; then
-  ULTRAWORK_STATE=$(cat "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" 2>/dev/null)
-elif [ -f "$HOME/.claude/ultrawork-state.json" ]; then
-  ULTRAWORK_STATE=$(cat "$HOME/.claude/ultrawork-state.json" 2>/dev/null)
+if [ -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" ]; then
+  ULTRAWORK_STATE=$(cat "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" 2>/dev/null)
+elif [ -f "$HOME/.claude/ultrawork-state-${SESSION_ID}.json" ]; then
+  ULTRAWORK_STATE=$(cat "$HOME/.claude/ultrawork-state-${SESSION_ID}.json" 2>/dev/null)
 fi
 
 # Check for active ralph loop (session-specific)
@@ -276,7 +261,9 @@ if [ -n "$RALPH_STATE" ]; then
     # Check for oracle approval in transcript - if approved, clean up and allow stop
     if detect_oracle_approval; then
       cleanup_ralph_state
-      cleanup_linked_ultrawork "$PROJECT_ROOT"
+      # Clean up session-specific ultrawork state
+      rm -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json"
+      rm -f "$HOME/.claude/ultrawork-state-${SESSION_ID}.json"
       echo '{"continue": true}'
       exit 0
     fi
@@ -304,7 +291,9 @@ if [ -n "$RALPH_STATE" ]; then
         if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
           # Force-accept: clean up all state files and allow stop
           cleanup_ralph_state
-          cleanup_linked_ultrawork "$PROJECT_ROOT"
+          # Clean up session-specific ultrawork state
+          rm -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json"
+          rm -f "$HOME/.claude/ultrawork-state-${SESSION_ID}.json"
 
           cat << EOF
 {"continue": true, "message": "[FORCE ACCEPT - MAX VERIFICATION ATTEMPTS REACHED]\n\nVerification failed $MAX_ATTEMPTS times without oracle approval.\n\n## Warning\nThe task completion could not be verified by Oracle.\nThis may indicate incomplete or incorrect implementation.\n\n## Recommended Actions:\n1. Manually review the implementation\n2. Check for any obvious issues\n3. Consider running tests manually\n\nAllowing stop due to max attempts limit."}
@@ -339,8 +328,9 @@ EOF
       rm -f "$PROJECT_ROOT/.claude/sisyphus/ralph-state-${SESSION_ID}.json"
       rm -f "$PROJECT_ROOT/.claude/sisyphus/ralph-verification-${SESSION_ID}.json"
 
-      # Clean linked ultrawork
-      cleanup_linked_ultrawork "$PROJECT_ROOT"
+      # Clean session-specific ultrawork state
+      rm -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json"
+      rm -f "$HOME/.claude/ultrawork-state-${SESSION_ID}.json"
 
       # Clean todo attempt counter
       rm -f "/tmp/oh-my-toong-todo-attempts-${ATTEMPT_ID}"
@@ -540,7 +530,7 @@ EOF
 
     # Update state file (best effort)
     if command -v jq &> /dev/null; then
-      echo "$ULTRAWORK_STATE" | jq ".reinforcement_count = $NEW_COUNT | .last_checked_at = \"$(date -Iseconds)\"" > "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" 2>/dev/null
+      echo "$ULTRAWORK_STATE" | jq ".reinforcement_count = $NEW_COUNT | .last_checked_at = \"$(date -Iseconds)\"" > "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" 2>/dev/null
     fi
 
     cat << EOF

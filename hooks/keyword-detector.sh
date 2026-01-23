@@ -115,44 +115,36 @@ EOF
 }
 
 # Function to create ultrawork state file
-# Optional third parameter: linked_to_ralph (true/false)
+# Uses SESSION_ID for session-specific file naming
 create_ultrawork_state() {
   local dir="$1"
   local prompt="$2"
-  local linked_to_ralph="${3:-false}"
   local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
 
   # Escape prompt for JSON (basic escaping)
   local escaped_prompt=$(echo "$prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
 
-  # Determine additional field for linked_to_ralph
-  local linked_field=""
-  if [ "$linked_to_ralph" = "true" ]; then
-    linked_field=',
-  "linked_to_ralph": true'
-  fi
-
   # Create local .claude/sisyphus directory
   mkdir -p "$dir/.claude/sisyphus" 2>/dev/null
-  cat > "$dir/.claude/sisyphus/ultrawork-state.json" 2>/dev/null << EOF
+  cat > "$dir/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" 2>/dev/null << EOF
 {
   "active": true,
   "started_at": "$timestamp",
   "original_prompt": "$escaped_prompt",
   "reinforcement_count": 0,
-  "last_checked_at": "$timestamp"$linked_field
+  "last_checked_at": "$timestamp"
 }
 EOF
 
   # Create global ~/.claude directory as fallback
   mkdir -p "$HOME/.claude" 2>/dev/null
-  cat > "$HOME/.claude/ultrawork-state.json" 2>/dev/null << EOF
+  cat > "$HOME/.claude/ultrawork-state-${SESSION_ID}.json" 2>/dev/null << EOF
 {
   "active": true,
   "started_at": "$timestamp",
   "original_prompt": "$escaped_prompt",
   "reinforcement_count": 0,
-  "last_checked_at": "$timestamp"$linked_field
+  "last_checked_at": "$timestamp"
 }
 EOF
 }
@@ -162,9 +154,9 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   # Create ralph state file
   create_ralph_state "$PROJECT_ROOT" "$PROMPT"
 
-  # Create linked ultrawork state if it doesn't already exist
-  if [ ! -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" ]; then
-    create_ultrawork_state "$PROJECT_ROOT" "$PROMPT" "true"
+  # Create linked ultrawork state if it doesn't already exist (session-specific)
+  if [ ! -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" ]; then
+    create_ultrawork_state "$PROJECT_ROOT" "$PROMPT"
     LINKED_ULTRAWORK_MSG="auto-activated"
   else
     LINKED_ULTRAWORK_MSG="already active (independent)"

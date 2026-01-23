@@ -48,12 +48,12 @@ PROJECT_ROOT=$(get_project_root "$DIRECTORY")
 
 MESSAGES=""
 
-# Check for active ultrawork state
-if [ -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" ] || [ -f "$HOME/.claude/ultrawork-state.json" ]; then
-  if [ -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" ]; then
-    ULTRAWORK_STATE=$(cat "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state.json" 2>/dev/null)
+# Check for active ultrawork state (session-specific)
+if [ -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" ] || [ -f "$HOME/.claude/ultrawork-state-${SESSION_ID}.json" ]; then
+  if [ -f "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" ]; then
+    ULTRAWORK_STATE=$(cat "$PROJECT_ROOT/.claude/sisyphus/ultrawork-state-${SESSION_ID}.json" 2>/dev/null)
   else
-    ULTRAWORK_STATE=$(cat "$HOME/.claude/ultrawork-state.json" 2>/dev/null)
+    ULTRAWORK_STATE=$(cat "$HOME/.claude/ultrawork-state-${SESSION_ID}.json" 2>/dev/null)
   fi
 
   if command -v jq &> /dev/null; then
