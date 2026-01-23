@@ -3,15 +3,24 @@
 # Unified handler for ultrawork, ralph-loop, and todo continuation
 # Prevents stopping when work remains incomplete
 
+# Source logging library (with fallback if not found)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/lib/logging.sh" ]; then
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/lib/logging.sh" 2>/dev/null || true
+fi
+
 # Read stdin
 INPUT=$(cat)
 
-# Get session ID and directory
+# Get session ID, directory, and transcript path
 SESSION_ID=""
 DIRECTORY=""
+TRANSCRIPT_PATH=""
 if command -v jq &> /dev/null; then
   SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
   DIRECTORY=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null)
+  TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null)
 fi
 
 # Default to current directory
@@ -47,6 +56,18 @@ get_project_root() {
 
 # Get project root
 PROJECT_ROOT=$(get_project_root "$DIRECTORY")
+
+# Initialize logging (if library is available)
+if type omt_log_init &>/dev/null; then
+  omt_log_init "persistent-mode" "$PROJECT_ROOT"
+  omt_log_start
+  omt_log_info "Session: $SESSION_ID, Directory: $DIRECTORY"
+  if [ -n "$TRANSCRIPT_PATH" ]; then
+    omt_log_info "Transcript path provided: $TRANSCRIPT_PATH"
+  else
+    omt_log_info "No transcript path provided in INPUT"
+  fi
+fi
 
 # ===== Todo Continuation Attempt Limiting =====
 # Prevents infinite loops when agent is stuck on todos
@@ -100,6 +121,8 @@ fi
 # =============================================================================
 
 # Get transcript file path with fallback to messages.json
+# NOTE: This function is kept for backward compatibility but is now unused.
+# The transcript path is now provided via INPUT JSON (transcript_path field).
 get_transcript_path() {
   local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
   if [ -f "$transcript_file" ]; then
@@ -116,51 +139,34 @@ get_transcript_path() {
 }
 
 # Detect <promise>DONE</promise> in transcript
+# Uses $TRANSCRIPT_PATH if available, otherwise falls back to session-based paths
 detect_completion_promise() {
-  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
-  if [ -f "$transcript_file" ]; then
-    perl -0777 -ne 'exit !/<promise>\s*DONE\s*<\/promise>/' "$transcript_file" 2>/dev/null
-    return $?
-  fi
-  # Fallback to messages.json
-  local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
-  if [ -f "$messages_file" ]; then
-    perl -0777 -ne 'exit !/<promise>\s*DONE\s*<\/promise>/' "$messages_file" 2>/dev/null
+  if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    grep -q '<promise>\s*DONE\s*</promise>' "$TRANSCRIPT_PATH" 2>/dev/null
     return $?
   fi
   return 1
 }
 
 # Detect <oracle-approved>VERIFIED_COMPLETE</oracle-approved> in transcript
+# Uses $TRANSCRIPT_PATH if available
 detect_oracle_approval() {
-  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
-  if [ -f "$transcript_file" ]; then
-    perl -0777 -ne 'exit !/<oracle-approved>.*?VERIFIED_COMPLETE.*?<\/oracle-approved>/s' "$transcript_file" 2>/dev/null
-    return $?
-  fi
-  # Fallback to messages.json
-  local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
-  if [ -f "$messages_file" ]; then
-    perl -0777 -ne 'exit !/<oracle-approved>.*?VERIFIED_COMPLETE.*?<\/oracle-approved>/s' "$messages_file" 2>/dev/null
+  if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    grep -q '<oracle-approved>.*VERIFIED_COMPLETE.*</oracle-approved>' "$TRANSCRIPT_PATH" 2>/dev/null
     return $?
   fi
   return 1
 }
 
 # Detect oracle rejection and extract feedback
+# Uses $TRANSCRIPT_PATH if available
 detect_oracle_rejection() {
-  local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
   local file_to_check=""
 
-  if [ -f "$transcript_file" ]; then
-    file_to_check="$transcript_file"
+  if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    file_to_check="$TRANSCRIPT_PATH"
   else
-    local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
-    if [ -f "$messages_file" ]; then
-      file_to_check="$messages_file"
-    else
-      return 1
-    fi
+    return 1
   fi
 
   # Check for rejection indicators: oracle.*rejected, issues found, not complete
@@ -565,5 +571,9 @@ EOF
 fi
 
 # No blocking needed
+if type omt_log_decision &>/dev/null; then
+  omt_log_decision "continue" "No blocking conditions found"
+  omt_log_end
+fi
 echo '{"continue": true}'
 exit 0

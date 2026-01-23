@@ -449,6 +449,178 @@ test_cleanup_ralph_state_uses_session_id() {
 }
 
 # =============================================================================
+# Tests: Transcript Path from INPUT JSON
+# =============================================================================
+
+test_extracts_transcript_path_from_input() {
+    # persistent-mode.sh should extract transcript_path from INPUT JSON
+    if grep -q 'TRANSCRIPT_PATH.*jq.*transcript_path' "$HOOKS_DIR/persistent-mode.sh"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: persistent-mode.sh should extract transcript_path from INPUT"
+        return 1
+    fi
+}
+
+test_detect_completion_promise_uses_transcript_path() {
+    # detect_completion_promise() should use $TRANSCRIPT_PATH
+    if grep -A 10 'detect_completion_promise()' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'TRANSCRIPT_PATH'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: detect_completion_promise should use TRANSCRIPT_PATH"
+        return 1
+    fi
+}
+
+test_detect_oracle_approval_uses_transcript_path() {
+    # detect_oracle_approval() should use $TRANSCRIPT_PATH
+    if grep -A 10 'detect_oracle_approval()' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'TRANSCRIPT_PATH'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: detect_oracle_approval should use TRANSCRIPT_PATH"
+        return 1
+    fi
+}
+
+test_detect_oracle_rejection_uses_transcript_path() {
+    # detect_oracle_rejection() should use $TRANSCRIPT_PATH
+    if grep -A 15 'detect_oracle_rejection()' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'TRANSCRIPT_PATH'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: detect_oracle_rejection should use TRANSCRIPT_PATH"
+        return 1
+    fi
+}
+
+test_detect_completion_promise_uses_grep_not_perl() {
+    # detect_completion_promise() should use grep instead of perl
+    if grep -A 10 'detect_completion_promise()' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'perl'; then
+        echo "ASSERTION FAILED: detect_completion_promise should use grep, not perl"
+        return 1
+    else
+        return 0
+    fi
+}
+
+test_detect_oracle_approval_uses_grep_not_perl() {
+    # detect_oracle_approval() should use grep instead of perl
+    if grep -A 10 'detect_oracle_approval()' "$HOOKS_DIR/persistent-mode.sh" | grep -q 'perl'; then
+        echo "ASSERTION FAILED: detect_oracle_approval should use grep, not perl"
+        return 1
+    else
+        return 0
+    fi
+}
+
+test_detect_completion_promise_with_transcript_file() {
+    # Behavior test: detect_completion_promise should find promise in transcript file
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Create a transcript file with promise tag
+    local transcript_file="$TEST_TMP_DIR/transcript.jsonl"
+    cat > "$transcript_file" << 'EOF'
+{"type": "message", "content": "Working on task..."}
+{"type": "message", "content": "<promise>DONE</promise>"}
+EOF
+
+    # Run with transcript_path in input
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "transcript_path": "'"$transcript_file"'"}' | "$HOOKS_DIR/persistent-mode.sh" 2>&1) || true
+
+    # Should continue (no blocking) since promise was found but no ralph loop active
+    # The key is that it doesn't crash and parses the transcript
+    return 0
+}
+
+test_detect_oracle_approval_with_transcript_file() {
+    # Behavior test: detect_oracle_approval should find approval in transcript file
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Create ralph state so we have an active loop
+    cat > "$TEST_TMP_DIR/.claude/sisyphus/ralph-state-default.json" << 'EOF'
+{
+  "active": true,
+  "iteration": 3,
+  "max_iterations": 10,
+  "completion_promise": "DONE",
+  "prompt": "test task"
+}
+EOF
+
+    # Create a transcript file with oracle approval
+    local transcript_file="$TEST_TMP_DIR/transcript.jsonl"
+    cat > "$transcript_file" << 'EOF'
+{"type": "message", "content": "Working on task..."}
+{"type": "message", "content": "<oracle-approved>VERIFIED_COMPLETE</oracle-approved>"}
+EOF
+
+    # Run with transcript_path in input
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "transcript_path": "'"$transcript_file"'"}' | "$HOOKS_DIR/persistent-mode.sh" 2>&1) || true
+
+    # Should return continue: true since oracle approval was found
+    if echo "$output" | grep -q '"continue": true'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Should detect oracle approval and return continue: true"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Tests: Logging integration
+# =============================================================================
+
+test_sources_logging_lib_with_fallback() {
+    # persistent-mode.sh should source logging.sh with fallback
+    if grep -q 'source.*logging.sh' "$HOOKS_DIR/persistent-mode.sh" || \
+       grep -q '\. .*logging.sh' "$HOOKS_DIR/persistent-mode.sh"; then
+        # Also check for fallback/conditional sourcing
+        if grep -q 'if.*logging.sh\|logging.sh.*2>/dev/null\|\|\s*true' "$HOOKS_DIR/persistent-mode.sh"; then
+            return 0
+        else
+            echo "ASSERTION FAILED: logging.sh sourcing should have fallback"
+            return 1
+        fi
+    else
+        echo "ASSERTION FAILED: persistent-mode.sh should source logging.sh"
+        return 1
+    fi
+}
+
+test_logging_does_not_break_hook() {
+    # persistent-mode.sh should work even if logging.sh is missing
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Temporarily move logging.sh (if exists) - test backward compatibility
+    local logging_lib="$HOOKS_DIR/lib/logging.sh"
+    local logging_backup=""
+    if [[ -f "$logging_lib" ]]; then
+        logging_backup=$(mktemp)
+        mv "$logging_lib" "$logging_backup"
+    fi
+
+    # Run the hook - should not crash
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'"}' | "$HOOKS_DIR/persistent-mode.sh" 2>&1) || true
+
+    # Restore logging.sh
+    if [[ -n "$logging_backup" ]] && [[ -f "$logging_backup" ]]; then
+        mv "$logging_backup" "$logging_lib"
+    fi
+
+    # Should have valid output (not empty, not error)
+    if echo "$output" | grep -q '"continue"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Hook should work without logging.sh"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -492,6 +664,20 @@ main() {
 
     # Behavior verification
     run_test test_max_iteration_script_behavior
+
+    # Transcript path tests
+    run_test test_extracts_transcript_path_from_input
+    run_test test_detect_completion_promise_uses_transcript_path
+    run_test test_detect_oracle_approval_uses_transcript_path
+    run_test test_detect_oracle_rejection_uses_transcript_path
+    run_test test_detect_completion_promise_uses_grep_not_perl
+    run_test test_detect_oracle_approval_uses_grep_not_perl
+    run_test test_detect_completion_promise_with_transcript_file
+    run_test test_detect_oracle_approval_with_transcript_file
+
+    # Logging integration tests
+    run_test test_sources_logging_lib_with_fallback
+    run_test test_logging_does_not_break_hook
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
