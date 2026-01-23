@@ -407,6 +407,275 @@ describe('parseTranscript', () => {
 
     expect(result.activeSkill).toBe('prometheus');
   });
+
+  // Tests for TaskCreate/TaskUpdate with taskId mapping
+  describe('TaskCreate and TaskUpdate workflow', () => {
+    it('should update todo status when TaskUpdate uses taskId from TaskCreate result', async () => {
+      const transcriptPath = join(testDir, 'task-create-update.jsonl');
+      const toolUseId = 'toolu_01BvX4iiiiewshdWn2UnEYcD';
+      const lines = [
+        // TaskCreate tool_use
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          message: {
+            model: 'claude-opus-4-20250514',
+            content: [
+              {
+                type: 'tool_use',
+                id: toolUseId,
+                name: 'TaskCreate',
+                input: {
+                  subject: 'Delete accumulated global todos files',
+                  activeForm: 'Deleting global todos files',
+                },
+              },
+            ],
+          },
+        }),
+        // TaskCreate tool_result with taskId in toolUseResult
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2024-01-15T10:00:01.000Z',
+          message: {
+            content: [
+              {
+                tool_use_id: toolUseId,
+                type: 'tool_result',
+                content: 'Task #3 created successfully: Delete accumulated global todos files',
+              },
+            ],
+          },
+          toolUseResult: {
+            task: {
+              id: '3',
+              subject: 'Delete accumulated global todos files',
+              status: 'pending',
+            },
+          },
+        }),
+        // TaskUpdate using taskId
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:02.000Z',
+          message: {
+            model: 'claude-opus-4-20250514',
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_update1',
+                name: 'TaskUpdate',
+                input: {
+                  taskId: '3',
+                  status: 'in_progress',
+                },
+              },
+            ],
+          },
+        }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = await parseTranscript(transcriptPath);
+
+      // The todo should exist and have status 'in_progress'
+      expect(result.todos).toHaveLength(1);
+      expect(result.todos[0].content).toBe('Delete accumulated global todos files');
+      expect(result.todos[0].status).toBe('in_progress');
+    });
+
+    it('should update todo to completed status via TaskUpdate', async () => {
+      const transcriptPath = join(testDir, 'task-complete-update.jsonl');
+      const toolUseId = 'toolu_create123';
+      const lines = [
+        // TaskCreate
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: toolUseId,
+                name: 'TaskCreate',
+                input: {
+                  subject: 'Run unit tests',
+                  activeForm: 'Running unit tests',
+                },
+              },
+            ],
+          },
+        }),
+        // TaskCreate result
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2024-01-15T10:00:01.000Z',
+          message: {
+            content: [
+              {
+                tool_use_id: toolUseId,
+                type: 'tool_result',
+                content: 'Task #5 created successfully',
+              },
+            ],
+          },
+          toolUseResult: {
+            task: {
+              id: '5',
+              subject: 'Run unit tests',
+            },
+          },
+        }),
+        // TaskUpdate to in_progress
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:02.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_update1',
+                name: 'TaskUpdate',
+                input: {
+                  taskId: '5',
+                  status: 'in_progress',
+                },
+              },
+            ],
+          },
+        }),
+        // TaskUpdate to completed
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:03.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_update2',
+                name: 'TaskUpdate',
+                input: {
+                  taskId: '5',
+                  status: 'completed',
+                },
+              },
+            ],
+          },
+        }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = await parseTranscript(transcriptPath);
+
+      expect(result.todos).toHaveLength(1);
+      expect(result.todos[0].status).toBe('completed');
+    });
+
+    it('should handle multiple TaskCreate/TaskUpdate pairs independently', async () => {
+      const transcriptPath = join(testDir, 'multiple-tasks.jsonl');
+      const lines = [
+        // First TaskCreate
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_create1',
+                name: 'TaskCreate',
+                input: { subject: 'Task One' },
+              },
+            ],
+          },
+        }),
+        // First TaskCreate result
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2024-01-15T10:00:01.000Z',
+          message: {
+            content: [
+              {
+                tool_use_id: 'toolu_create1',
+                type: 'tool_result',
+                content: 'Task #1 created',
+              },
+            ],
+          },
+          toolUseResult: { task: { id: '1', subject: 'Task One' } },
+        }),
+        // Second TaskCreate
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:02.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_create2',
+                name: 'TaskCreate',
+                input: { subject: 'Task Two' },
+              },
+            ],
+          },
+        }),
+        // Second TaskCreate result
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2024-01-15T10:00:03.000Z',
+          message: {
+            content: [
+              {
+                tool_use_id: 'toolu_create2',
+                type: 'tool_result',
+                content: 'Task #2 created',
+              },
+            ],
+          },
+          toolUseResult: { task: { id: '2', subject: 'Task Two' } },
+        }),
+        // Update Task #2 to in_progress
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:04.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_update1',
+                name: 'TaskUpdate',
+                input: { taskId: '2', status: 'in_progress' },
+              },
+            ],
+          },
+        }),
+        // Update Task #1 to completed
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:05.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_update2',
+                name: 'TaskUpdate',
+                input: { taskId: '1', status: 'completed' },
+              },
+            ],
+          },
+        }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = await parseTranscript(transcriptPath);
+
+      expect(result.todos).toHaveLength(2);
+      const taskOne = result.todos.find((t) => t.content === 'Task One');
+      const taskTwo = result.todos.find((t) => t.content === 'Task Two');
+      expect(taskOne?.status).toBe('completed');
+      expect(taskTwo?.status).toBe('in_progress');
+    });
+  });
 });
 
 describe('modelToTier', () => {

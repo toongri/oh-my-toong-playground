@@ -118,6 +118,8 @@ async function parseTranscript(transcriptPath) {
     });
     const runningAgents = /* @__PURE__ */ new Map();
     const todosMap = /* @__PURE__ */ new Map();
+    const pendingTaskCreates = /* @__PURE__ */ new Map();
+    const taskIdToSubject = /* @__PURE__ */ new Map();
     let earliestTimestamp = null;
     for await (const line of rl) {
       try {
@@ -181,17 +183,29 @@ async function parseTranscript(transcriptPath) {
                     status: "pending",
                     activeForm: input.activeForm
                   });
+                  if (item.id) {
+                    pendingTaskCreates.set(item.id, content);
+                  }
                 }
               } else if (item.name === "TaskUpdate" && item.input) {
                 const input = item.input;
                 if (input.taskId && input.status) {
-                  for (const [key, todo] of todosMap.entries()) {
-                    if (key.includes(input.taskId) || input.taskId === key) {
-                      todosMap.set(key, {
-                        ...todo,
-                        status: input.status
-                      });
-                      break;
+                  const subject = taskIdToSubject.get(input.taskId);
+                  if (subject && todosMap.has(subject)) {
+                    const todo = todosMap.get(subject);
+                    todosMap.set(subject, {
+                      ...todo,
+                      status: input.status
+                    });
+                  } else {
+                    for (const [key, todo] of todosMap.entries()) {
+                      if (key.includes(input.taskId) || input.taskId === key) {
+                        todosMap.set(key, {
+                          ...todo,
+                          status: input.status
+                        });
+                        break;
+                      }
                     }
                   }
                 }
@@ -199,6 +213,12 @@ async function parseTranscript(transcriptPath) {
             }
             if (item.type === "tool_result" && item.tool_use_id) {
               runningAgents.delete(item.tool_use_id);
+              const taskResult = entry.toolUseResult?.task;
+              if (taskResult?.id && pendingTaskCreates.has(item.tool_use_id)) {
+                const subject = pendingTaskCreates.get(item.tool_use_id);
+                taskIdToSubject.set(taskResult.id, subject);
+                pendingTaskCreates.delete(item.tool_use_id);
+              }
             }
           }
         }

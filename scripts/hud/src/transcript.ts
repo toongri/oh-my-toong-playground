@@ -40,6 +40,14 @@ interface TranscriptEntry {
     model?: string;
     content?: ContentItem[];
   };
+  // TaskCreate/TaskUpdate tool results include task info at entry level
+  toolUseResult?: {
+    task?: {
+      id?: string;
+      subject?: string;
+      status?: string;
+    };
+  };
 }
 
 export interface TranscriptResult {
@@ -77,6 +85,10 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     const runningAgents = new Map<string, AgentInfo>();
     // Track todos - use Map to handle updates by content/subject
     const todosMap = new Map<string, TodoItem>();
+    // Track pending TaskCreate calls: toolUseId -> subject
+    const pendingTaskCreates = new Map<string, string>();
+    // Map taskId -> subject for TaskUpdate lookups
+    const taskIdToSubject = new Map<string, string>();
     let earliestTimestamp: Date | null = null;
 
     for await (const line of rl) {
@@ -154,19 +166,33 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
                     status: 'pending',
                     activeForm: input.activeForm,
                   });
+                  // Store toolUseId -> subject for later taskId mapping
+                  if (item.id) {
+                    pendingTaskCreates.set(item.id, content);
+                  }
                 }
               } else if (item.name === 'TaskUpdate' && item.input) {
                 // TaskUpdate: update existing todo status
                 const input = item.input as { taskId?: string; status?: string };
                 if (input.taskId && input.status) {
-                  // Find todo by taskId (content match is approximate)
-                  for (const [key, todo] of todosMap.entries()) {
-                    if (key.includes(input.taskId) || input.taskId === key) {
-                      todosMap.set(key, {
-                        ...todo,
-                        status: input.status as TodoItem['status'],
-                      });
-                      break;
+                  // Find todo by taskId using the taskIdToSubject mapping
+                  const subject = taskIdToSubject.get(input.taskId);
+                  if (subject && todosMap.has(subject)) {
+                    const todo = todosMap.get(subject)!;
+                    todosMap.set(subject, {
+                      ...todo,
+                      status: input.status as TodoItem['status'],
+                    });
+                  } else {
+                    // Fallback: try to find by content match (legacy behavior)
+                    for (const [key, todo] of todosMap.entries()) {
+                      if (key.includes(input.taskId) || input.taskId === key) {
+                        todosMap.set(key, {
+                          ...todo,
+                          status: input.status as TodoItem['status'],
+                        });
+                        break;
+                      }
                     }
                   }
                 }
@@ -176,6 +202,14 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
             // Detect tool_result items (agent completes)
             if (item.type === 'tool_result' && item.tool_use_id) {
               runningAgents.delete(item.tool_use_id);
+
+              // Check if this is a TaskCreate result with taskId mapping
+              const taskResult = entry.toolUseResult?.task;
+              if (taskResult?.id && pendingTaskCreates.has(item.tool_use_id)) {
+                const subject = pendingTaskCreates.get(item.tool_use_id)!;
+                taskIdToSubject.set(taskResult.id, subject);
+                pendingTaskCreates.delete(item.tool_use_id);
+              }
             }
           }
         }
