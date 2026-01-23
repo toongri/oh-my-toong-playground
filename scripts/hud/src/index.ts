@@ -5,6 +5,15 @@ import { fetchRateLimits } from './usage-api.js';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.js';
 import type { HudDataV2 } from './types.js';
 
+/**
+ * Convert regular spaces to non-breaking spaces for terminal alignment.
+ * Terminal emulators may collapse or trim regular spaces, but non-breaking
+ * spaces (U+00A0) preserve alignment in status lines.
+ */
+function toNonBreakingSpaces(text: string): string {
+  return text.replace(/ /g, '\u00A0');
+}
+
 export async function main(): Promise<void> {
   try {
     // Read stdin JSON from Claude Code
@@ -12,7 +21,7 @@ export async function main(): Promise<void> {
 
     if (!input) {
       // Minimal fallback when no input
-      console.log(formatMinimalStatus(null));
+      console.log(toNonBreakingSpaces(formatMinimalStatus(null)));
       return;
     }
 
@@ -23,7 +32,7 @@ export async function main(): Promise<void> {
       ralph,
       ultrawork,
       ralphVerification,
-      todos,
+      fileTodos,
       backgroundTasks,
       transcriptData,
       rateLimits,
@@ -37,11 +46,25 @@ export async function main(): Promise<void> {
       readBackgroundTasks(),
       input.transcript_path
         ? parseTranscript(input.transcript_path)
-        : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null }),
+        : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null, todos: [] }),
       fetchRateLimits(),
       getInProgressTodo(cwd),
       isThinkingEnabled(),
     ]);
+
+    // Prefer transcript todos over file-based todos
+    // Transcript todos are session-specific; file todos may include stale data from other sessions
+    const transcriptTodos = transcriptData.todos;
+    let todos: { completed: number; total: number } | null = null;
+
+    if (transcriptTodos.length > 0) {
+      // Use transcript-based todos (current session only)
+      const completed = transcriptTodos.filter(t => t.status === 'completed').length;
+      todos = { completed, total: transcriptTodos.length };
+    } else {
+      // Fallback to file-based todos (legacy behavior)
+      todos = fileTodos;
+    }
 
     const hudData: HudDataV2 = {
       contextPercent: input.context_window?.used_percentage ?? null,
@@ -59,11 +82,11 @@ export async function main(): Promise<void> {
       inProgressTodo,
     };
 
-    // Format and output
-    console.log(formatStatusLineV2(hudData));
+    // Format and output with non-breaking spaces for terminal alignment
+    console.log(toNonBreakingSpaces(formatStatusLineV2(hudData)));
   } catch (error) {
     // Graceful fallback on any error
-    console.log(formatMinimalStatus(null));
+    console.log(toNonBreakingSpaces(formatMinimalStatus(null)));
   }
 }
 

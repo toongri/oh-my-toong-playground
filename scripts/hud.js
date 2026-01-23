@@ -45,6 +45,16 @@ async function readJsonFile(path) {
     return null;
   }
 }
+function extractTodos(content) {
+  if (Array.isArray(content)) {
+    return content;
+  }
+  if (content && typeof content === "object" && "todos" in content) {
+    const wrapper = content;
+    return wrapper.todos || [];
+  }
+  return [];
+}
 async function findStateFile(cwd, filename) {
   const localPath = join(cwd, ".claude", "sisyphus", filename);
   if (!await isStateFileStale(localPath)) {
@@ -73,24 +83,18 @@ async function readRalphVerification(cwd) {
 async function readTodos(cwd) {
   const allTodos = [];
   const sisyphusPath = join(cwd, ".claude", "sisyphus", "todos.json");
-  const sisyphusTodos = await readJsonFile(sisyphusPath);
-  if (sisyphusTodos?.todos) {
-    allTodos.push(...sisyphusTodos.todos);
-  }
+  const sisyphusContent = await readJsonFile(sisyphusPath);
+  allTodos.push(...extractTodos(sisyphusContent));
   const localPath = join(cwd, ".claude", "todos.json");
-  const localTodos = await readJsonFile(localPath);
-  if (localTodos?.todos) {
-    allTodos.push(...localTodos.todos);
-  }
+  const localContent = await readJsonFile(localPath);
+  allTodos.push(...extractTodos(localContent));
   const globalTodosDir = join(homedir(), ".claude", "todos");
   try {
     const files = await readdir(globalTodosDir);
     for (const file of files) {
       if (file.endsWith(".json")) {
-        const fileTodos = await readJsonFile(join(globalTodosDir, file));
-        if (fileTodos?.todos) {
-          allTodos.push(...fileTodos.todos);
-        }
+        const fileContent = await readJsonFile(join(globalTodosDir, file));
+        allTodos.push(...extractTodos(fileContent));
       }
     }
   } catch {
@@ -116,15 +120,11 @@ function calculateSessionDuration(startedAt) {
 async function getInProgressTodo(cwd) {
   const allTodos = [];
   const sisyphusPath = join(cwd, ".claude", "sisyphus", "todos.json");
-  const sisyphusTodos = await readJsonFile(sisyphusPath);
-  if (sisyphusTodos?.todos) {
-    allTodos.push(...sisyphusTodos.todos);
-  }
+  const sisyphusContent = await readJsonFile(sisyphusPath);
+  allTodos.push(...extractTodos(sisyphusContent));
   const localPath = join(cwd, ".claude", "todos.json");
-  const localTodos = await readJsonFile(localPath);
-  if (localTodos?.todos) {
-    allTodos.push(...localTodos.todos);
-  }
+  const localContent = await readJsonFile(localPath);
+  allTodos.push(...extractTodos(localContent));
   const inProgress = allTodos.find((t) => t.status === "in_progress");
   if (!inProgress) return null;
   const text = inProgress.activeForm || inProgress.content;
@@ -147,7 +147,8 @@ async function parseTranscript(transcriptPath) {
     runningAgents: 0,
     activeSkill: null,
     agents: [],
-    sessionStartedAt: null
+    sessionStartedAt: null,
+    todos: []
   };
   try {
     const fileStream = createReadStream(transcriptPath);
@@ -156,6 +157,7 @@ async function parseTranscript(transcriptPath) {
       crlfDelay: Infinity
     });
     const runningAgents = /* @__PURE__ */ new Map();
+    const todosMap = /* @__PURE__ */ new Map();
     let earliestTimestamp = null;
     for await (const line of rl) {
       try {
@@ -185,12 +187,68 @@ async function parseTranscript(transcriptPath) {
             result.activeSkill = entry.name;
           }
         }
+        const messageContent = entry.message?.content;
+        if (Array.isArray(messageContent)) {
+          const modelId = entry.message?.model || "";
+          for (const item of messageContent) {
+            if (item.type === "tool_use" && item.id) {
+              if (item.name === "Task") {
+                runningAgents.set(item.id, {
+                  type: "S",
+                  model: modelToTier(modelId),
+                  id: item.id
+                });
+              } else if (item.name === "Skill" && item.input?.skill) {
+                result.activeSkill = item.input.skill;
+              } else if (item.name === "TodoWrite" && item.input?.todos) {
+                todosMap.clear();
+                for (const t of item.input.todos) {
+                  const content = t.content || t.subject || "";
+                  if (content) {
+                    todosMap.set(content, {
+                      content,
+                      status: t.status || "pending",
+                      activeForm: t.activeForm
+                    });
+                  }
+                }
+              } else if (item.name === "TaskCreate" && item.input) {
+                const input = item.input;
+                const content = input.subject || input.description || "";
+                if (content) {
+                  todosMap.set(content, {
+                    content,
+                    status: "pending",
+                    activeForm: input.activeForm
+                  });
+                }
+              } else if (item.name === "TaskUpdate" && item.input) {
+                const input = item.input;
+                if (input.taskId && input.status) {
+                  for (const [key, todo] of todosMap.entries()) {
+                    if (key.includes(input.taskId) || input.taskId === key) {
+                      todosMap.set(key, {
+                        ...todo,
+                        status: input.status
+                      });
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            if (item.type === "tool_result" && item.tool_use_id) {
+              runningAgents.delete(item.tool_use_id);
+            }
+          }
+        }
       } catch {
       }
     }
     result.runningAgents = runningAgents.size;
     result.agents = Array.from(runningAgents.values());
     result.sessionStartedAt = earliestTimestamp;
+    result.todos = Array.from(todosMap.values());
   } catch {
   }
   return result;
@@ -376,12 +434,15 @@ function formatStatusLineV2(data) {
   if (data.ralph?.active) {
     const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
     let text = `ralph:${data.ralph.iteration}/${data.ralph.max_iterations}`;
+    if (data.ralph.linked_ultrawork) {
+      text += "+";
+    }
     if (data.ralphVerification?.pending) {
       text += ` v${data.ralphVerification.verification_attempts}/${data.ralphVerification.max_verification_attempts}`;
     }
     line1Parts.push(colorize(text, color));
   }
-  if (data.ultrawork?.active) {
+  if (data.ultrawork?.active && !data.ultrawork.linked_to_ralph) {
     line1Parts.push(colorize("ultrawork", ANSI.green));
   }
   if (data.thinkingActive) {
@@ -409,11 +470,14 @@ ${line2}` : line1;
 }
 
 // src/index.ts
+function toNonBreakingSpaces(text) {
+  return text.replace(/ /g, "\xA0");
+}
 async function main() {
   try {
     const input = await readStdin();
     if (!input) {
-      console.log(formatMinimalStatus(null));
+      console.log(toNonBreakingSpaces(formatMinimalStatus(null)));
       return;
     }
     const cwd = input.cwd || process.cwd();
@@ -421,7 +485,7 @@ async function main() {
       ralph,
       ultrawork,
       ralphVerification,
-      todos,
+      fileTodos,
       backgroundTasks,
       transcriptData,
       rateLimits,
@@ -433,11 +497,19 @@ async function main() {
       readRalphVerification(cwd),
       readTodos(cwd),
       readBackgroundTasks(),
-      input.transcript_path ? parseTranscript(input.transcript_path) : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null }),
+      input.transcript_path ? parseTranscript(input.transcript_path) : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null, todos: [] }),
       fetchRateLimits(),
       getInProgressTodo(cwd),
       isThinkingEnabled()
     ]);
+    const transcriptTodos = transcriptData.todos;
+    let todos = null;
+    if (transcriptTodos.length > 0) {
+      const completed = transcriptTodos.filter((t) => t.status === "completed").length;
+      todos = { completed, total: transcriptTodos.length };
+    } else {
+      todos = fileTodos;
+    }
     const hudData = {
       contextPercent: input.context_window?.used_percentage ?? null,
       ralph,
@@ -453,9 +525,9 @@ async function main() {
       thinkingActive,
       inProgressTodo
     };
-    console.log(formatStatusLineV2(hudData));
+    console.log(toNonBreakingSpaces(formatStatusLineV2(hudData)));
   } catch (error) {
-    console.log(formatMinimalStatus(null));
+    console.log(toNonBreakingSpaces(formatMinimalStatus(null)));
   }
 }
 if (import.meta.url === `file://${process.argv[1]}`) {

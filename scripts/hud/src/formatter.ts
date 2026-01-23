@@ -138,14 +138,18 @@ export function formatStatusLineV2(data: HudDataV2): string {
   if (data.ralph?.active) {
     const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
     let text = `ralph:${data.ralph.iteration}/${data.ralph.max_iterations}`;
+    // Add + suffix when linked with ultrawork
+    if (data.ralph.linked_ultrawork) {
+      text += '+';
+    }
     if (data.ralphVerification?.pending) {
       text += ` v${data.ralphVerification.verification_attempts}/${data.ralphVerification.max_verification_attempts}`;
     }
     line1Parts.push(colorize(text, color));
   }
 
-  // Ultrawork (only when active)
-  if (data.ultrawork?.active) {
+  // Ultrawork (only when active and not linked to ralph)
+  if (data.ultrawork?.active && !data.ultrawork.linked_to_ralph) {
     line1Parts.push(colorize('ultrawork', ANSI.green));
   }
 

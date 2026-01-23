@@ -239,6 +239,174 @@ describe('parseTranscript', () => {
     expect(result.agents).toHaveLength(1);
     expect(result.agents).toContainEqual({ type: 'S', model: 'h', id: 'task-2' });
   });
+
+  // Tests for actual Claude Code transcript structure
+  // Claude Code uses: { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Task', id: 'xxx', input: {...} }] } }
+  it('should detect Task agent from actual Claude Code transcript structure with message.content array', async () => {
+    const transcriptPath = join(testDir, 'claude-code-structure.jsonl');
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2024-01-15T10:00:00.000Z',
+        message: {
+          model: 'claude-opus-4-20250514',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_abc123',
+              name: 'Task',
+              input: { prompt: 'Do something' },
+            },
+          ],
+        },
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.agents).toHaveLength(1);
+    expect(result.agents).toContainEqual({
+      type: 'S',
+      model: 'o',
+      id: 'toolu_abc123',
+    });
+  });
+
+  it('should track agent completion via tool_result in Claude Code transcript', async () => {
+    const transcriptPath = join(testDir, 'claude-code-completion.jsonl');
+    const lines = [
+      // Agent starts
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2024-01-15T10:00:00.000Z',
+        message: {
+          model: 'claude-sonnet-4-20250514',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_task1',
+              name: 'Task',
+              input: { prompt: 'Task 1' },
+            },
+          ],
+        },
+      }),
+      // Another agent starts
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2024-01-15T10:01:00.000Z',
+        message: {
+          model: 'claude-3-5-haiku-20241022',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_task2',
+              name: 'Task',
+              input: { prompt: 'Task 2' },
+            },
+          ],
+        },
+      }),
+      // First agent completes
+      JSON.stringify({
+        type: 'user',
+        timestamp: '2024-01-15T10:02:00.000Z',
+        message: {
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_task1',
+              content: 'Task completed',
+            },
+          ],
+        },
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    // task1 completed, only task2 should remain
+    expect(result.agents).toHaveLength(1);
+    expect(result.agents).toContainEqual({
+      type: 'S',
+      model: 'h',
+      id: 'toolu_task2',
+    });
+  });
+
+  it('should detect multiple Task agents from single message with multiple tool_use items', async () => {
+    const transcriptPath = join(testDir, 'claude-code-multiple-tools.jsonl');
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2024-01-15T10:00:00.000Z',
+        message: {
+          model: 'claude-opus-4-5-20251101',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_task_a',
+              name: 'Task',
+              input: { prompt: 'Task A' },
+            },
+            {
+              type: 'text',
+              text: 'Running two tasks in parallel...',
+            },
+            {
+              type: 'tool_use',
+              id: 'toolu_task_b',
+              name: 'Task',
+              input: { prompt: 'Task B' },
+            },
+          ],
+        },
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.agents).toHaveLength(2);
+    expect(result.agents).toContainEqual({
+      type: 'S',
+      model: 'o',
+      id: 'toolu_task_a',
+    });
+    expect(result.agents).toContainEqual({
+      type: 'S',
+      model: 'o',
+      id: 'toolu_task_b',
+    });
+  });
+
+  it('should detect Skill from Claude Code transcript structure', async () => {
+    const transcriptPath = join(testDir, 'claude-code-skill.jsonl');
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2024-01-15T10:00:00.000Z',
+        message: {
+          model: 'claude-opus-4-20250514',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu_skill1',
+              name: 'Skill',
+              input: { skill: 'prometheus' },
+            },
+          ],
+        },
+      }),
+    ];
+    await writeFile(transcriptPath, lines.join('\n'));
+
+    const result = await parseTranscript(transcriptPath);
+
+    expect(result.activeSkill).toBe('prometheus');
+  });
 });
 
 describe('modelToTier', () => {

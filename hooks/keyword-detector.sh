@@ -28,7 +28,7 @@ fi
 
 # Fallback: simple grep extraction if jq fails
 if [ -z "$PROMPT" ] || [ "$PROMPT" = "null" ]; then
-  PROMPT=$(echo "$INPUT" | grep -oP '"(prompt|content|text)"\s*:\s*"\K[^"]+' | head -1)
+  PROMPT=$(echo "$INPUT" | perl -ne 'print "$2\n" while /"(prompt|content|text)"\s*:\s*"([^"]*)"/' | head -1)
 fi
 
 # Exit if no prompt found
@@ -141,7 +141,7 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
 
   # Output ralph activation message
   cat << EOF
-{"continue": true, "message": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode. Complete the task fully.\n\n## RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When FULLY complete, output: <promise>DONE</promise>\n4. Oracle will verify your completion claim\n5. Do NOT stop until Oracle approves\n\n## LINKED MODES\n- Ultrawork mode: ${LINKED_ULTRAWORK_MSG}\n\nOriginal task: ${PROMPT}\n</ralph-mode>\n\n---\n"}
+{"continue": true, "message": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode with MANDATORY VERIFICATION GATES.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. Do NOT output <promise>DONE</promise> until verification complete\n4. Oracle will verify your completion claim\n5. Do NOT stop until Oracle approves\n\n## COMPLETION CONDITION GUIDE (IRON LAW)\n\n**NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE**\n\n### Steps (MANDATORY - in order)\n1. **IDENTIFY**: What command proves the task is complete?\n2. **RUN**: Execute that verification command NOW\n3. **READ**: Check the actual output - did it PASS?\n4. **VERIFY**: Fresh evidence only - no cached results\n\n### Evidence Chain (ALL required before promise)\n- [ ] Build: Fresh run showing SUCCESS\n- [ ] Tests: Fresh run showing ALL PASS\n- [ ] lsp_diagnostics: 0 errors (if applicable)\n- [ ] TODO LIST: Zero pending/in_progress tasks\n- [ ] Oracle: Verification approved\n\n### Red Flags (STOP if you catch yourself)\n- Using 'should work', 'probably passes'\n- About to output promise without running verification\n- Skipping build/test because 'nothing changed'\n\n**Skipping verification = Task NOT complete**\n\n## LINKED MODES\n- Ultrawork mode: ${LINKED_ULTRAWORK_MSG}\n\nOriginal task: ${PROMPT}\n</ralph-mode>\n\n---\n"}
 EOF
   exit 0
 fi

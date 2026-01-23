@@ -33,6 +33,25 @@ async function readJsonFile<T>(path: string): Promise<T | null> {
 }
 
 /**
+ * Extract todos from content that could be either:
+ * - Direct array: TodoItem[]
+ * - Wrapper object: { todos: TodoItem[] }
+ *
+ * This handles the schema mismatch between HUD's expected format
+ * and Claude Code TaskCreate's direct array format.
+ */
+function extractTodos(content: unknown): TodoItem[] {
+  if (Array.isArray(content)) {
+    return content as TodoItem[];
+  }
+  if (content && typeof content === 'object' && 'todos' in content) {
+    const wrapper = content as TodosState;
+    return wrapper.todos || [];
+  }
+  return [];
+}
+
+/**
  * Find and read a state file from project-local path only.
  * Returns null if file doesn't exist or is stale (>2 hours old).
  *
@@ -78,17 +97,13 @@ export async function readTodos(cwd: string): Promise<{ completed: number; total
 
   // Priority 1: Project-local sisyphus todos
   const sisyphusPath = join(cwd, '.claude', 'sisyphus', 'todos.json');
-  const sisyphusTodos = await readJsonFile<TodosState>(sisyphusPath);
-  if (sisyphusTodos?.todos) {
-    allTodos.push(...sisyphusTodos.todos);
-  }
+  const sisyphusContent = await readJsonFile<TodosState | TodoItem[]>(sisyphusPath);
+  allTodos.push(...extractTodos(sisyphusContent));
 
   // Priority 2: Project-local claude todos
   const localPath = join(cwd, '.claude', 'todos.json');
-  const localTodos = await readJsonFile<TodosState>(localPath);
-  if (localTodos?.todos) {
-    allTodos.push(...localTodos.todos);
-  }
+  const localContent = await readJsonFile<TodosState | TodoItem[]>(localPath);
+  allTodos.push(...extractTodos(localContent));
 
   // Priority 3: Global todos directory
   const globalTodosDir = join(homedir(), '.claude', 'todos');
@@ -96,10 +111,8 @@ export async function readTodos(cwd: string): Promise<{ completed: number; total
     const files = await readdir(globalTodosDir);
     for (const file of files) {
       if (file.endsWith('.json')) {
-        const fileTodos = await readJsonFile<TodosState>(join(globalTodosDir, file));
-        if (fileTodos?.todos) {
-          allTodos.push(...fileTodos.todos);
-        }
+        const fileContent = await readJsonFile<TodosState | TodoItem[]>(join(globalTodosDir, file));
+        allTodos.push(...extractTodos(fileContent));
       }
     }
   } catch {
@@ -136,16 +149,12 @@ export async function getInProgressTodo(cwd: string): Promise<string | null> {
 
   // Read from same locations as readTodos
   const sisyphusPath = join(cwd, '.claude', 'sisyphus', 'todos.json');
-  const sisyphusTodos = await readJsonFile<TodosState>(sisyphusPath);
-  if (sisyphusTodos?.todos) {
-    allTodos.push(...sisyphusTodos.todos);
-  }
+  const sisyphusContent = await readJsonFile<TodosState | TodoItem[]>(sisyphusPath);
+  allTodos.push(...extractTodos(sisyphusContent));
 
   const localPath = join(cwd, '.claude', 'todos.json');
-  const localTodos = await readJsonFile<TodosState>(localPath);
-  if (localTodos?.todos) {
-    allTodos.push(...localTodos.todos);
-  }
+  const localContent = await readJsonFile<TodosState | TodoItem[]>(localPath);
+  allTodos.push(...extractTodos(localContent));
 
   // Find first in_progress todo
   const inProgress = allTodos.find(t => t.status === 'in_progress');

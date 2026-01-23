@@ -375,7 +375,8 @@ sync_hooks() {
                         if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
                             cmd_path="$custom_command"
                         elif [[ -n "$component" && "$component" != "null" ]]; then
-                            cmd_path=".claude/hooks/${display_name}"
+                            # Use $CLAUDE_PROJECT_DIR for portable paths across subdirectories
+                            cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
                         else
                             log_warn "Hook command가 정의되지 않음: event=$hook_event (스킵)"
                             continue

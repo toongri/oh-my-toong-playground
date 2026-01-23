@@ -481,8 +481,9 @@ claude_update_settings() {
         current_settings=$(cat "$settings_file")
     fi
 
-    # Merge hooks into settings (Claude Code spec: hooks at top-level, no wrapper)
-    local new_settings=$(echo "$current_settings" | jq --argjson hooks "$hooks_json" '. * $hooks')
+    # Remove existing hooks, then add new hooks under "hooks" key
+    local clean_settings=$(echo "$current_settings" | jq 'del(.hooks)')
+    local new_settings=$(echo "$clean_settings" | jq --argjson hooks "$hooks_json" '. + {hooks: $hooks}')
 
     echo "$new_settings" | jq '.' > "$settings_file"
     log_info "Updated settings.json: $settings_file"

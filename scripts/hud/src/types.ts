@@ -71,6 +71,7 @@ export interface HudData {
 export interface TranscriptData {
   runningAgents: number;
   activeSkill: string | null;
+  todos: TodoItem[];  // Todos extracted from TodoWrite/TaskCreate calls
 }
 
 // OAuth usage API response

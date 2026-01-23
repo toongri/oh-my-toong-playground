@@ -767,4 +767,85 @@ describe('formatStatusLineV2', () => {
       expect(line2).toContain(' | ');
     });
   });
+
+  describe('integrated ralph+ultrawork badge', () => {
+    it('shows + suffix on ralph when linked_ultrawork is true', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, linked_ultrawork: true }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: true }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('ralph:3/10+');
+    });
+
+    it('does not show + suffix on ralph when linked_ultrawork is false', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, linked_ultrawork: false }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: false }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('ralph:3/10');
+      expect(result).not.toContain('ralph:3/10+');
+    });
+
+    it('skips individual ultrawork display when linked_to_ralph is true', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, linked_ultrawork: true }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: true }),
+      };
+      const result = formatStatusLineV2(data);
+      // Should have ralph:3/10+ but not separate "ultrawork" text
+      expect(result).toContain('ralph:3/10+');
+      expect(result).not.toMatch(/\bultrawork\b/);
+    });
+
+    it('shows individual ultrawork when linked_to_ralph is false', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, linked_ultrawork: false }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: false }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('ralph:3/10');
+      expect(result).toContain('ultrawork');
+    });
+
+    it('inherits ralph color for integrated badge', () => {
+      // When iteration is low, should be green
+      const dataLow: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 2, max_iterations: 10, linked_ultrawork: true }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: true }),
+      };
+      const resultLow = formatStatusLineV2(dataLow);
+      expect(resultLow).toContain(ANSI.green);
+
+      // When iteration is high, should be yellow
+      const dataHigh: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 8, max_iterations: 10, linked_ultrawork: true }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: true }),
+      };
+      const resultHigh = formatStatusLineV2(dataHigh);
+      expect(resultHigh).toContain(ANSI.yellow);
+    });
+
+    it('shows + suffix with verification status when both linked and verifying', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        ralph: createRalphState({ active: true, iteration: 3, max_iterations: 10, linked_ultrawork: true }),
+        ultrawork: createUltraworkState({ active: true, linked_to_ralph: true }),
+        ralphVerification: createRalphVerification({
+          pending: true,
+          verification_attempts: 1,
+          max_verification_attempts: 3,
+        }),
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toMatch(/ralph:3\/10\+.*v1\/3/);
+    });
+  });
 });

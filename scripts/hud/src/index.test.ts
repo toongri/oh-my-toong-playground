@@ -64,7 +64,7 @@ describe('main', () => {
     mockCalculateSessionDuration.mockReturnValue(null);
     mockGetInProgressTodo.mockResolvedValue(null);
     mockIsThinkingEnabled.mockResolvedValue(false);
-    mockParseTranscript.mockResolvedValue({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null });
+    mockParseTranscript.mockResolvedValue({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null, todos: [] });
     mockFetchRateLimits.mockResolvedValue(null);
     mockFormatStatusLineV2.mockReturnValue('[OMT] ctx:50%');
     mockFormatMinimalStatus.mockReturnValue('[OMT] ready');
@@ -91,7 +91,8 @@ describe('main', () => {
       await main();
 
       expect(mockFormatStatusLineV2).toHaveBeenCalled();
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT] ctx:50%');
+      // Output should have non-breaking spaces (U+00A0)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0ctx:50%');
     });
 
     it('passes context_window.used_percentage to HudDataV2', async () => {
@@ -241,6 +242,7 @@ describe('main', () => {
         activeSkill: 'prometheus',
         agents: [{ type: 'M', model: 'o', id: 'main-1' }, { type: 'S', model: 's', id: 'sub-1' }],
         sessionStartedAt,
+        todos: [],
       });
       mockFetchRateLimits.mockResolvedValue(rateLimits);
       mockGetInProgressTodo.mockResolvedValue('Working on task...');
@@ -285,6 +287,7 @@ describe('main', () => {
         activeSkill: null,
         agents: [],
         sessionStartedAt,
+        todos: [],
       });
 
       await main();
@@ -300,7 +303,8 @@ describe('main', () => {
       await main();
 
       expect(mockFormatMinimalStatus).toHaveBeenCalledWith(null);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT] ready');
+      // Output should have non-breaking spaces (U+00A0)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0ready');
     });
   });
 
@@ -311,7 +315,7 @@ describe('main', () => {
       await main();
 
       expect(mockFormatMinimalStatus).toHaveBeenCalledWith(null);
-      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT] ready');
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0ready');
     });
 
     it('gracefully handles state file read errors', async () => {
@@ -332,6 +336,57 @@ describe('main', () => {
 
       // Should still output something
       expect(consoleLogSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('non-breaking space conversion', () => {
+    it('converts regular spaces to non-breaking spaces in output', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      mockFormatStatusLineV2.mockReturnValue('[OMT] | ctx:50%');
+
+      await main();
+
+      // Should convert regular spaces to non-breaking spaces (U+00A0)
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0|\u00A0ctx:50%');
+    });
+
+    it('converts spaces in multiline output', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      mockFormatStatusLineV2.mockReturnValue('[OMT] | ctx:50%\ntodos:3/5 | session:45m');
+
+      await main();
+
+      // Should convert spaces on both lines to non-breaking spaces
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0|\u00A0ctx:50%\ntodos:3/5\u00A0|\u00A0session:45m');
+    });
+
+    it('converts spaces in minimal status output', async () => {
+      mockReadStdin.mockResolvedValue(null);
+      mockFormatMinimalStatus.mockReturnValue('[OMT] ready');
+
+      await main();
+
+      expect(consoleLogSpy).toHaveBeenCalledWith('[OMT]\u00A0ready');
     });
   });
 });

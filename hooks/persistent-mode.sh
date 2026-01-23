@@ -101,13 +101,13 @@ get_transcript_path() {
 detect_completion_promise() {
   local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
   if [ -f "$transcript_file" ]; then
-    grep -zoP '<promise>\s*DONE\s*</promise>' "$transcript_file" > /dev/null 2>&1
+    perl -0777 -ne 'exit !/<promise>\s*DONE\s*<\/promise>/' "$transcript_file" 2>/dev/null
     return $?
   fi
   # Fallback to messages.json
   local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
   if [ -f "$messages_file" ]; then
-    grep -zoP '<promise>\s*DONE\s*</promise>' "$messages_file" > /dev/null 2>&1
+    perl -0777 -ne 'exit !/<promise>\s*DONE\s*<\/promise>/' "$messages_file" 2>/dev/null
     return $?
   fi
   return 1
@@ -117,13 +117,13 @@ detect_completion_promise() {
 detect_oracle_approval() {
   local transcript_file="$HOME/.claude/sessions/$SESSION_ID/transcript.md"
   if [ -f "$transcript_file" ]; then
-    grep -zoP '<oracle-approved>.*?VERIFIED_COMPLETE.*?</oracle-approved>' "$transcript_file" > /dev/null 2>&1
+    perl -0777 -ne 'exit !/<oracle-approved>.*?VERIFIED_COMPLETE.*?<\/oracle-approved>/s' "$transcript_file" 2>/dev/null
     return $?
   fi
   # Fallback to messages.json
   local messages_file="$HOME/.claude/sessions/$SESSION_ID/messages.json"
   if [ -f "$messages_file" ]; then
-    grep -zoP '<oracle-approved>.*?VERIFIED_COMPLETE.*?</oracle-approved>' "$messages_file" > /dev/null 2>&1
+    perl -0777 -ne 'exit !/<oracle-approved>.*?VERIFIED_COMPLETE.*?<\/oracle-approved>/s' "$messages_file" 2>/dev/null
     return $?
   fi
   return 1
@@ -493,7 +493,7 @@ EOF
     if command -v jq &> /dev/null; then
       REINFORCE_COUNT=$(echo "$ULTRAWORK_STATE" | jq -r '.reinforcement_count // 0' 2>/dev/null)
     else
-      REINFORCE_COUNT=$(echo "$ULTRAWORK_STATE" | grep -oP '"reinforcement_count"[[:space:]]*:[[:space:]]*\K[0-9]+' 2>/dev/null) || REINFORCE_COUNT=0
+      REINFORCE_COUNT=$(echo "$ULTRAWORK_STATE" | perl -ne 'print $1 if /"reinforcement_count"\s*:\s*(\d+)/' 2>/dev/null) || REINFORCE_COUNT=0
     fi
     NEW_COUNT=$((REINFORCE_COUNT + 1))
 
@@ -502,7 +502,7 @@ EOF
     if command -v jq &> /dev/null; then
       ORIGINAL_PROMPT=$(echo "$ULTRAWORK_STATE" | jq -r '.original_prompt // ""' 2>/dev/null)
     else
-      ORIGINAL_PROMPT=$(echo "$ULTRAWORK_STATE" | grep -oP '"original_prompt"[[:space:]]*:[[:space:]]*"\K[^"]+' 2>/dev/null) || ORIGINAL_PROMPT=""
+      ORIGINAL_PROMPT=$(echo "$ULTRAWORK_STATE" | perl -ne 'print $1 if /"original_prompt"\s*:\s*"([^"]*)"/' 2>/dev/null) || ORIGINAL_PROMPT=""
     fi
 
     # Update state file (best effort)
