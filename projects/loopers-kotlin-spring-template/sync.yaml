@@ -33,7 +33,7 @@ hooks:
     - component: keyword-detector.sh
       event: UserPromptSubmit
       timeout: 10
-    - component: persistent-mode.sh
+    - component: persistent-mode.js
       event: Stop
       timeout: 15
     - component: post-tool-verifier.sh
