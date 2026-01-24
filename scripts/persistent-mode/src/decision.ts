@@ -132,6 +132,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
     if (transcript.hasOracleApproval) {
       cleanupRalphState(projectRoot, sessionId);
       cleanupUltraworkState(projectRoot, sessionId);
+      cleanupAttemptFiles(stateDir, attemptId);
       return formatContinueOutput();
     }
 
@@ -203,6 +204,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
   // Ultrawork completed successfully (all todos done)
   if (ultraworkState && ultraworkState.active && incompleteTodoCount === 0) {
     cleanupUltraworkState(projectRoot, sessionId);
+    cleanupAttemptFiles(stateDir, attemptId);
     return formatContinueOutput();
   }
 

@@ -426,6 +426,7 @@ function makeDecision(context) {
     if (transcript.hasOracleApproval) {
       cleanupRalphState(projectRoot, sessionId);
       cleanupUltraworkState(projectRoot, sessionId);
+      cleanupAttemptFiles(stateDir, attemptId);
       return formatContinueOutput();
     }
     if (ralphState.iteration >= ralphState.max_iterations) {
@@ -479,6 +480,7 @@ function makeDecision(context) {
   }
   if (ultraworkState && ultraworkState.active && incompleteTodoCount === 0) {
     cleanupUltraworkState(projectRoot, sessionId);
+    cleanupAttemptFiles(stateDir, attemptId);
     return formatContinueOutput();
   }
   if (incompleteTodoCount > 0) {
