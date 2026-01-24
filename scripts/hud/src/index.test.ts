@@ -14,7 +14,7 @@ const mockLogError = jest.fn<(message: string) => void>();
 const mockLogStart = jest.fn<() => void>();
 const mockLogEnd = jest.fn<() => void>();
 const mockReadRalphState = jest.fn<(cwd: string, sessionId?: string) => Promise<RalphState | null>>();
-const mockReadUltraworkState = jest.fn<(cwd: string) => Promise<UltraworkState | null>>();
+const mockReadUltraworkState = jest.fn<(cwd: string, sessionId?: string) => Promise<UltraworkState | null>>();
 const mockReadBackgroundTasks = jest.fn<() => Promise<number>>();
 const mockCalculateSessionDuration = jest.fn<(startedAt: Date | null) => number | null>();
 const mockIsThinkingEnabled = jest.fn<() => Promise<boolean>>();
@@ -141,7 +141,7 @@ describe('main', () => {
       await main();
 
       expect(mockReadRalphState).toHaveBeenCalledWith('/my/project', 'test-session');
-      expect(mockReadUltraworkState).toHaveBeenCalledWith('/my/project');
+      expect(mockReadUltraworkState).toHaveBeenCalledWith('/my/project', 'test-session');
     });
 
     it('fetches rate limits', async () => {

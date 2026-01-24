@@ -53,8 +53,8 @@ export async function readRalphState(cwd: string, sessionId: string = 'default')
   return findStateFile<RalphState>(cwd, `ralph-state-${sessionId}.json`);
 }
 
-export async function readUltraworkState(cwd: string): Promise<UltraworkState | null> {
-  return findStateFile<UltraworkState>(cwd, 'ultrawork-state.json');
+export async function readUltraworkState(cwd: string, sessionId: string = 'default'): Promise<UltraworkState | null> {
+  return findStateFile<UltraworkState>(cwd, `ultrawork-state-${sessionId}.json`);
 }
 
 export async function readBackgroundTasks(): Promise<number> {

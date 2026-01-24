@@ -44,7 +44,7 @@ export async function main(): Promise<void> {
       thinkingActive,
     ] = await Promise.all([
       readRalphState(cwd, sessionId),
-      readUltraworkState(cwd),
+      readUltraworkState(cwd, sessionId),
       readBackgroundTasks(),
       input.transcript_path
         ? parseTranscript(input.transcript_path)

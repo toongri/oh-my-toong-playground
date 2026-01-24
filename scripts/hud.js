@@ -55,8 +55,8 @@ async function findStateFile(cwd, filename) {
 async function readRalphState(cwd, sessionId = "default") {
   return findStateFile(cwd, `ralph-state-${sessionId}.json`);
 }
-async function readUltraworkState(cwd) {
-  return findStateFile(cwd, "ultrawork-state.json");
+async function readUltraworkState(cwd, sessionId = "default") {
+  return findStateFile(cwd, `ultrawork-state-${sessionId}.json`);
 }
 async function readBackgroundTasks() {
   const tasksDir = join(homedir(), ".claude", "background-tasks");
@@ -491,7 +491,7 @@ async function main() {
       thinkingActive
     ] = await Promise.all([
       readRalphState(cwd, sessionId),
-      readUltraworkState(cwd),
+      readUltraworkState(cwd, sessionId),
       readBackgroundTasks(),
       input.transcript_path ? parseTranscript(input.transcript_path) : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null }),
       fetchRateLimits(),
