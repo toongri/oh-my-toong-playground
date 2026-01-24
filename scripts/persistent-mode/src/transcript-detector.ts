@@ -57,14 +57,15 @@ export function countIncompleteTodos(transcriptPath: string | null): number {
 
   // Track todos by ID
   const todos = new Map<string, string>(); // id -> status
-  let autoId = 0;
 
-  // Parse TaskCreate calls
-  const createPattern = /"name":\s*"TaskCreate"[\s\S]*?"subject":\s*"[^"]*"/g;
-  const creates = content.match(createPattern) || [];
-  for (const _ of creates) {
+  // Parse TaskCreate results to get actual task IDs
+  // Look for "Task #N created successfully" pattern in tool results
+  const createResultPattern = /Task #(\d+) created successfully/g;
+  let createMatch;
+  while ((createMatch = createResultPattern.exec(content)) !== null) {
+    const [, taskId] = createMatch;
     // TaskCreate always creates pending tasks
-    todos.set(`auto-${autoId++}`, 'pending');
+    todos.set(taskId, 'pending');
   }
 
   // Parse TaskUpdate calls to update status
@@ -73,9 +74,10 @@ export function countIncompleteTodos(transcriptPath: string | null): number {
   let updateMatch;
   while ((updateMatch = updatePattern.exec(content)) !== null) {
     const [, taskId, status] = updateMatch;
-    // Find the task and update its status
-    // Since we don't have exact ID mapping, we'll use the taskId directly
-    todos.set(taskId, status);
+    // Update task status if we know about this task
+    if (todos.has(taskId)) {
+      todos.set(taskId, status);
+    }
   }
 
   // Count incomplete (pending or in_progress)

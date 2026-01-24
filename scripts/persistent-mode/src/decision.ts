@@ -177,6 +177,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
     const attempts = getAttemptCount(stateDir, attemptId);
     if (attempts >= MAX_TODO_CONTINUATION_ATTEMPTS) {
       cleanupAttemptFiles(stateDir, attemptId);
+      cleanupUltraworkState(projectRoot, sessionId);
       return formatContinueOutput();
     }
 
@@ -197,6 +198,12 @@ export function makeDecision(context: DecisionContext): HookOutput {
       ultraworkState.original_prompt || ''
     );
     return formatBlockOutput(message);
+  }
+
+  // Ultrawork completed successfully (all todos done)
+  if (ultraworkState && ultraworkState.active && incompleteTodoCount === 0) {
+    cleanupUltraworkState(projectRoot, sessionId);
+    return formatContinueOutput();
   }
 
   // Priority 3: Todo Continuation (baseline)

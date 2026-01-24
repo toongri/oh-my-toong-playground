@@ -172,7 +172,7 @@ describe('main entry point', () => {
         JSON.stringify({
           type: 'user',
           message: {
-            content: [{ type: 'tool_result', tool_use_id: 'task1', content: 'Task #1 created' }],
+            content: [{ type: 'tool_result', tool_use_id: 'task1', content: 'Task #1 created successfully' }],
           },
           toolUseResult: { task: { id: '1', subject: 'Task 1' } },
         }),
@@ -187,7 +187,7 @@ describe('main entry point', () => {
         JSON.stringify({
           type: 'user',
           message: {
-            content: [{ type: 'tool_result', tool_use_id: 'task2', content: 'Task #2 created' }],
+            content: [{ type: 'tool_result', tool_use_id: 'task2', content: 'Task #2 created successfully' }],
           },
         }),
       ].join('\n');

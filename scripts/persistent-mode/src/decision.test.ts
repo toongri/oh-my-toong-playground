@@ -293,6 +293,42 @@ describe('makeDecision', () => {
 
       expect(result).toEqual({ continue: true });
     });
+
+    it('should cleanup ultrawork state when escape hatch triggers', async () => {
+      const ultraworkState = {
+        active: true,
+        reinforcement_count: 5,
+        original_prompt: 'Test task',
+      };
+      await writeFile(join(sisyphusDir, 'ultrawork-state-test-session.json'), JSON.stringify(ultraworkState));
+
+      // Set attempt count to max and todo count to same value (so no reset)
+      await writeFile(join(stateDir, 'todo-attempts-test-session'), '5');
+      await writeFile(join(stateDir, 'todo-count-test-session'), '3');
+
+      const context = createContext({ incompleteTodoCount: 3 });
+
+      makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(join(sisyphusDir, 'ultrawork-state-test-session.json'))).toBe(false);
+    });
+
+    it('should cleanup ultrawork state when all todos completed', async () => {
+      const ultraworkState = {
+        active: true,
+        reinforcement_count: 2,
+        original_prompt: 'Test task',
+      };
+      await writeFile(join(sisyphusDir, 'ultrawork-state-test-session.json'), JSON.stringify(ultraworkState));
+
+      const context = createContext({ incompleteTodoCount: 0 });
+
+      makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(join(sisyphusDir, 'ultrawork-state-test-session.json'))).toBe(false);
+    });
   });
 
   describe('Priority 3: Todo Continuation (baseline)', () => {

@@ -205,29 +205,32 @@ describe('transcript-detector', () => {
     });
 
     it('should count TaskCreate calls as pending todos', async () => {
+      // The pattern looks for "Task #N created successfully" in tool results
       const content = `
         {"name": "TaskCreate", "parameters": {"subject": "Task 1"}}
+        Task #1 created successfully
         {"name": "TaskCreate", "parameters": {"subject": "Task 2"}}
+        Task #2 created successfully
       `;
       await writeFile(transcriptPath, content);
 
       const result = countIncompleteTodos(transcriptPath);
 
-      expect(result).toBeGreaterThanOrEqual(2);
+      expect(result).toBe(2);
     });
 
     it('should handle TaskUpdate status changes', async () => {
       const content = `
         {"name": "TaskCreate", "parameters": {"subject": "Task 1"}}
+        Task #1 created successfully
         {"name": "TaskUpdate", "parameters": {"taskId": "1", "status": "completed"}}
       `;
       await writeFile(transcriptPath, content);
 
-      // TaskCreate adds one, TaskUpdate marks it completed
-      // But we track by different ID systems, so this is best-effort
+      // TaskCreate adds taskId "1", TaskUpdate marks it completed
       const result = countIncompleteTodos(transcriptPath);
 
-      expect(typeof result).toBe('number');
+      expect(result).toBe(0);
     });
 
     it('should return 0 when no todos in transcript', async () => {
@@ -281,6 +284,7 @@ describe('transcript-detector', () => {
         <promise>DONE</promise>
         <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
         {"name": "TaskCreate", "parameters": {"subject": "Task"}}
+        Task #1 created successfully
       `;
       await writeFile(transcriptPath, content);
 
@@ -288,7 +292,7 @@ describe('transcript-detector', () => {
 
       expect(result.hasCompletionPromise).toBe(true);
       expect(result.hasOracleApproval).toBe(true);
-      expect(result.incompleteTodoCount).toBeGreaterThanOrEqual(1);
+      expect(result.incompleteTodoCount).toBe(1);
     });
   });
 });

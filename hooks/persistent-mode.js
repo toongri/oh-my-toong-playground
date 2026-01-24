@@ -181,17 +181,19 @@ function countIncompleteTodos(transcriptPath) {
   const content = readFileOrNull(transcriptPath);
   if (!content) return 0;
   const todos = /* @__PURE__ */ new Map();
-  let autoId = 0;
-  const createPattern = /"name":\s*"TaskCreate"[\s\S]*?"subject":\s*"[^"]*"/g;
-  const creates = content.match(createPattern) || [];
-  for (const _ of creates) {
-    todos.set(`auto-${autoId++}`, "pending");
+  const createResultPattern = /Task #(\d+) created successfully/g;
+  let createMatch;
+  while ((createMatch = createResultPattern.exec(content)) !== null) {
+    const [, taskId] = createMatch;
+    todos.set(taskId, "pending");
   }
   const updatePattern = /"name":\s*"TaskUpdate"[\s\S]*?"taskId":\s*"(\d+)"[\s\S]*?"status":\s*"([^"]+)"/g;
   let updateMatch;
   while ((updateMatch = updatePattern.exec(content)) !== null) {
     const [, taskId, status] = updateMatch;
-    todos.set(taskId, status);
+    if (todos.has(taskId)) {
+      todos.set(taskId, status);
+    }
   }
   let incomplete = 0;
   for (const status of todos.values()) {
@@ -338,6 +340,7 @@ function makeDecision(context) {
     const attempts = getAttemptCount(stateDir, attemptId);
     if (attempts >= MAX_TODO_CONTINUATION_ATTEMPTS) {
       cleanupAttemptFiles(stateDir, attemptId);
+      cleanupUltraworkState(projectRoot, sessionId);
       return formatContinueOutput();
     }
     incrementAttempts(stateDir, attemptId);
@@ -354,6 +357,10 @@ function makeDecision(context) {
       ultraworkState.original_prompt || ""
     );
     return formatBlockOutput(message);
+  }
+  if (ultraworkState && ultraworkState.active && incompleteTodoCount === 0) {
+    cleanupUltraworkState(projectRoot, sessionId);
+    return formatContinueOutput();
   }
   if (incompleteTodoCount > 0) {
     const attempts = getAttemptCount(stateDir, attemptId);
