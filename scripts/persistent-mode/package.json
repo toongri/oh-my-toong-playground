@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Sisyphus persistent mode stop hook - TypeScript version",
   "type": "module",
-  "main": "../persistent-mode.js",
+  "main": "../../hooks/persistent-mode.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=../persistent-mode.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=../../hooks/persistent-mode.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "devDependencies": {

@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Oh-My-Toong HUD for Claude Code statusLine",
   "type": "module",
-  "main": "../hud.js",
+  "main": "../../hooks/hud.js",
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=../hud.js",
-    "start": "node ../hud.js",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=../../hooks/hud.js",
+    "start": "node ../../hooks/hud.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "devDependencies": {
