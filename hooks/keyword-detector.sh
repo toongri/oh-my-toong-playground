@@ -98,20 +98,6 @@ create_ralph_state() {
   "linked_ultrawork": true
 }
 EOF
-
-  # Create global ~/.claude directory as fallback
-  mkdir -p "$HOME/.claude" 2>/dev/null
-  cat > "$HOME/.claude/ralph-state-${SESSION_ID}.json" 2>/dev/null << EOF
-{
-  "active": true,
-  "iteration": 1,
-  "max_iterations": 10,
-  "completion_promise": "DONE",
-  "prompt": "$escaped_prompt",
-  "started_at": "$timestamp",
-  "linked_ultrawork": true
-}
-EOF
 }
 
 # Function to create ultrawork state file

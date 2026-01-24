@@ -117,21 +117,6 @@ test_ralph_keyword_creates_session_specific_state_file() {
     assert_file_not_exists "$TEST_TMP_DIR/.claude/sisyphus/ralph-state.json" "Non-session ralph state file should NOT exist" || return 1
 }
 
-test_ralph_keyword_creates_session_specific_state_in_home() {
-    # Setup: Create project marker
-    mkdir -p "$TEST_TMP_DIR/.git"
-
-    # Run with sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session-456", "prompt": "ralph do the task"}' | "$HOOKS_DIR/keyword-detector.sh" 2>&1) || true
-
-    # Verify session-specific state file was created in HOME
-    assert_file_exists "$HOME/.claude/ralph-state-test-session-456.json" "Session-specific ralph state file in HOME should exist" || return 1
-
-    # Verify old non-session file was NOT created
-    assert_file_not_exists "$HOME/.claude/ralph-state.json" "Non-session ralph state file in HOME should NOT exist" || return 1
-}
-
 test_ralph_keyword_uses_default_when_no_session_id() {
     # Setup: Create project marker
     mkdir -p "$TEST_TMP_DIR/.git"
@@ -268,7 +253,6 @@ main() {
 
     # Session-based ralph state tests
     run_test test_ralph_keyword_creates_session_specific_state_file
-    run_test test_ralph_keyword_creates_session_specific_state_in_home
     run_test test_ralph_keyword_uses_default_when_no_session_id
     run_test test_ralph_verification_uses_session_id
 
