@@ -210,6 +210,15 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
                 const subject = pendingTaskCreates.get(item.tool_use_id)!;
                 taskIdToSubject.set(taskResult.id, subject);
                 pendingTaskCreates.delete(item.tool_use_id);
+              } else if (typeof item.content === 'string' && pendingTaskCreates.has(item.tool_use_id)) {
+                // Parse task ID from content string like "Task #3 created successfully"
+                const match = item.content.match(/Task #(\d+)/i);
+                if (match) {
+                  const taskId = match[1];
+                  const subject = pendingTaskCreates.get(item.tool_use_id)!;
+                  taskIdToSubject.set(taskId, subject);
+                  pendingTaskCreates.delete(item.tool_use_id);
+                }
               }
             }
           }

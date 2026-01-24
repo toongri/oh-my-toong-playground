@@ -682,6 +682,72 @@ describe('parseTranscript', () => {
       expect(result.todos[0].status).toBe('completed');
     });
 
+    it('should parse task ID from content string when toolUseResult is not available', async () => {
+      const transcriptPath = join(testDir, 'task-id-from-content.jsonl');
+      const toolUseId = 'toolu_content_parse';
+      const lines = [
+        // TaskCreate
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:00.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: toolUseId,
+                name: 'TaskCreate',
+                input: {
+                  subject: 'Parse task ID from content',
+                  activeForm: 'Parsing task ID',
+                },
+              },
+            ],
+          },
+        }),
+        // TaskCreate result - only content string, no toolUseResult
+        JSON.stringify({
+          type: 'user',
+          timestamp: '2024-01-15T10:00:01.000Z',
+          message: {
+            content: [
+              {
+                tool_use_id: toolUseId,
+                type: 'tool_result',
+                content: 'Task #7 created successfully: Parse task ID from content',
+              },
+            ],
+          },
+          // Note: no toolUseResult field
+        }),
+        // TaskUpdate using taskId parsed from content
+        JSON.stringify({
+          type: 'assistant',
+          timestamp: '2024-01-15T10:00:02.000Z',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'toolu_update1',
+                name: 'TaskUpdate',
+                input: {
+                  taskId: '7',
+                  status: 'completed',
+                },
+              },
+            ],
+          },
+        }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = await parseTranscript(transcriptPath);
+
+      // The todo should exist and have status 'completed' (parsed from content string)
+      expect(result.todos).toHaveLength(1);
+      expect(result.todos[0].content).toBe('Parse task ID from content');
+      expect(result.todos[0].status).toBe('completed');
+    });
+
     it('should handle multiple TaskCreate/TaskUpdate pairs independently', async () => {
       const transcriptPath = join(testDir, 'multiple-tasks.jsonl');
       const lines = [

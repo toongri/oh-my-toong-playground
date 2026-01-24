@@ -229,14 +229,14 @@ describe('formatStatusLine', () => {
       expect(result).toContain('todos:3/5');
     });
 
-    it('shows green when all todos completed', () => {
+    it('shows todos when some are incomplete', () => {
       const data: HudData = {
         ...emptyData,
-        todos: { completed: 5, total: 5 },
+        todos: { completed: 4, total: 5 },
       };
       const result = formatStatusLine(data);
-      expect(result).toContain('todos:5/5');
-      expect(result).toContain(ANSI.green);
+      expect(result).toContain('todos:4/5');
+      expect(result).toContain(ANSI.yellow);
     });
 
     it('shows yellow when todos incomplete', () => {
@@ -246,6 +246,15 @@ describe('formatStatusLine', () => {
       };
       const result = formatStatusLine(data);
       expect(result).toContain(ANSI.yellow);
+    });
+
+    it('does not show todos when all completed', () => {
+      const data: HudData = {
+        ...emptyData,
+        todos: { completed: 5, total: 5 },
+      };
+      const result = formatStatusLine(data);
+      expect(result).not.toContain('todos:');
     });
   });
 
@@ -601,13 +610,14 @@ describe('formatStatusLineV2', () => {
       expect(result).toContain('todos:3/5 (Working on tests)');
     });
 
-    it('applies green color when all todos completed', () => {
+    it('shows todos when some are incomplete', () => {
       const data: HudDataV2 = {
         ...emptyDataV2,
-        todos: { completed: 5, total: 5 },
+        todos: { completed: 4, total: 5 },
       };
       const result = formatStatusLineV2(data);
-      expect(result).toContain(ANSI.green);
+      expect(result).toContain('todos:4/5');
+      expect(result).toContain(ANSI.yellow);
     });
 
     it('applies yellow color when todos incomplete', () => {
@@ -617,6 +627,15 @@ describe('formatStatusLineV2', () => {
       };
       const result = formatStatusLineV2(data);
       expect(result).toContain(ANSI.yellow);
+    });
+
+    it('does not show todos when all completed', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 5, total: 5 },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).not.toContain('todos:');
     });
   });
 

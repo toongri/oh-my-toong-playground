@@ -207,6 +207,14 @@ async function parseTranscript(transcriptPath) {
                 const subject = pendingTaskCreates.get(item.tool_use_id);
                 taskIdToSubject.set(taskResult.id, subject);
                 pendingTaskCreates.delete(item.tool_use_id);
+              } else if (typeof item.content === "string" && pendingTaskCreates.has(item.tool_use_id)) {
+                const match = item.content.match(/Task #(\d+)/i);
+                if (match) {
+                  const taskId = match[1];
+                  const subject = pendingTaskCreates.get(item.tool_use_id);
+                  taskIdToSubject.set(taskId, subject);
+                  pendingTaskCreates.delete(item.tool_use_id);
+                }
               }
             }
           }
@@ -417,14 +425,13 @@ function formatStatusLineV2(data) {
   if (data.thinkingActive) {
     line1Parts.push(colorize("thinking", ANSI.cyan));
   }
-  if (data.todos) {
+  if (data.todos && data.todos.completed < data.todos.total) {
     const { completed, total } = data.todos;
-    const color = completed === total ? ANSI.green : ANSI.yellow;
     let todoText = `todos:${completed}/${total}`;
     if (data.inProgressTodo) {
       todoText += ` (${data.inProgressTodo})`;
     }
-    line2Parts.push(colorize(todoText, color));
+    line2Parts.push(colorize(todoText, ANSI.yellow));
   }
   if (data.sessionDuration !== null && data.sessionDuration > 0) {
     const hours = Math.floor(data.sessionDuration / 60);

@@ -57,11 +57,10 @@ export function formatStatusLine(data: HudData): string {
     parts.push(colorize(`bg:${data.backgroundTasks}`, ANSI.green));
   }
 
-  // Todos completion
-  if (data.todos) {
+  // Todos completion - only show if there are incomplete tasks
+  if (data.todos && data.todos.completed < data.todos.total) {
     const { completed, total } = data.todos;
-    const color = completed === total ? ANSI.green : ANSI.yellow;
-    parts.push(colorize(`todos:${completed}/${total}`, color));
+    parts.push(colorize(`todos:${completed}/${total}`, ANSI.yellow));
   }
 
   // Active skill (truncate to 15 chars)
@@ -158,15 +157,14 @@ export function formatStatusLineV2(data: HudDataV2): string {
     line1Parts.push(colorize('thinking', ANSI.cyan));
   }
 
-  // Line 2: todos with in-progress task
-  if (data.todos) {
+  // Line 2: todos with in-progress task - only show if there are incomplete tasks
+  if (data.todos && data.todos.completed < data.todos.total) {
     const { completed, total } = data.todos;
-    const color = completed === total ? ANSI.green : ANSI.yellow;
     let todoText = `todos:${completed}/${total}`;
     if (data.inProgressTodo) {
       todoText += ` (${data.inProgressTodo})`;
     }
-    line2Parts.push(colorize(todoText, color));
+    line2Parts.push(colorize(todoText, ANSI.yellow));
   }
 
   // Session duration
