@@ -157,8 +157,13 @@ describe('main entry point', () => {
     });
   });
 
-  describe('todo counting from transcript', () => {
-    it('should count incomplete todos and block when present', async () => {
+  // Priority 3 todo-continuation baseline was REMOVED
+  // The transcript-based todo counting had a scope mismatch with Claude Code's
+  // request-level TaskList API, causing phantom todos from previous requests
+  // to block new requests. Only Ralph Loop and Ultrawork modes enforce todo completion.
+
+  describe('todo counting from transcript (Priority 3 removed)', () => {
+    it('should NOT block when incomplete todos exist without ralph/ultrawork', async () => {
       // Create transcript with TaskCreate calls
       const transcriptPath = join(testDir, 'todos-transcript.jsonl');
       const transcriptContent = [
@@ -211,9 +216,8 @@ describe('main entry point', () => {
 
       expect(capturedOutput.length).toBeGreaterThan(0);
       const output = JSON.parse(capturedOutput[capturedOutput.length - 1]);
-      // Should block because of incomplete todos
-      expect(output.decision).toBe('block');
-      expect(output.reason).toContain('remaining');
+      // Should NOT block - Priority 3 baseline todo-continuation was removed
+      expect(output.continue).toBe(true);
     });
   });
 

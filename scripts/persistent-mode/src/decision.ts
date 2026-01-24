@@ -89,22 +89,8 @@ Original task: ${originalPrompt}
 `;
 }
 
-function buildTodoContinuationMessage(incompleteCount: number): string {
-  return `<todo-continuation>
-
-[SYSTEM REMINDER - TODO CONTINUATION]
-
-Incomplete tasks remain in your todo list (${incompleteCount} remaining). Continue working on the next pending task.
-
-- Proceed without asking for permission
-- Mark each task complete when finished
-- Do not stop until all tasks are done
-
-</todo-continuation>
-
----
-`;
-}
+// buildTodoContinuationMessage removed - Priority 3 baseline todo-continuation
+// was removed due to transcript scope mismatch bug
 
 export function makeDecision(context: DecisionContext): HookOutput {
   const { projectRoot, sessionId, transcriptPath, incompleteTodoCount } = context;
@@ -208,21 +194,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
     return formatContinueOutput();
   }
 
-  // Priority 3: Todo Continuation (baseline)
-  if (incompleteTodoCount > 0) {
-    // Check escape hatch
-    const attempts = getAttemptCount(stateDir, attemptId);
-    if (attempts >= MAX_TODO_CONTINUATION_ATTEMPTS) {
-      cleanupAttemptFiles(stateDir, attemptId);
-      return formatContinueOutput();
-    }
-
-    // Increment attempts and block
-    incrementAttempts(stateDir, attemptId);
-
-    const message = buildTodoContinuationMessage(incompleteTodoCount);
-    return formatBlockOutput(message);
-  }
+  // Priority 3 (todo-continuation baseline) removed:
+  // The transcript-based incompleteTodoCount has a fundamental scope mismatch with
+  // Claude Code's request-level TaskList API. This caused phantom todos from previous
+  // requests to block new requests. Ralph Loop and Ultrawork modes use explicit
+  // activation and are unaffected.
 
   // No blocking needed
   return formatContinueOutput();

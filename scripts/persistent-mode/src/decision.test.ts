@@ -331,71 +331,31 @@ describe('makeDecision', () => {
     });
   });
 
-  describe('Priority 3: Todo Continuation (baseline)', () => {
-    it('should block and return todo message when incomplete todos exist', () => {
+  // Priority 3: Todo Continuation (baseline) - REMOVED
+  // The transcript-based incompleteTodoCount had a fundamental scope mismatch with
+  // Claude Code's request-level TaskList API, causing phantom todos from previous
+  // requests to block new requests. Ralph Loop and Ultrawork modes are unaffected
+  // as they use explicit activation.
+
+  describe('no baseline todo-continuation (Priority 3 removed)', () => {
+    it('should allow stop even when incomplete todos exist (no ralph/ultrawork)', () => {
       const context = createContext({ incompleteTodoCount: 5 });
 
       const result = makeDecision(context);
 
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<todo-continuation>');
-      expect(result.reason).toContain('5 remaining');
-    });
-
-    it('should increment attempts when blocking', async () => {
-      const context = createContext({ incompleteTodoCount: 2 });
-
-      makeDecision(context);
-
-      const { readFileSync, existsSync } = await import('fs');
-      const attemptFile = join(stateDir, 'todo-attempts-test-session');
-      expect(existsSync(attemptFile)).toBe(true);
-      expect(readFileSync(attemptFile, 'utf8')).toBe('1');
-    });
-
-    it('should allow stop after max continuation attempts', async () => {
-      // Set attempt count to max and todo count to same value (so no reset)
-      await writeFile(join(stateDir, 'todo-attempts-test-session'), '5');
-      await writeFile(join(stateDir, 'todo-count-test-session'), '2');
-
-      const context = createContext({ incompleteTodoCount: 2 });
-
-      const result = makeDecision(context);
-
+      // Should NOT block - Priority 3 was removed
       expect(result).toEqual({ continue: true });
     });
-  });
 
-  describe('progress detection (attempt reset)', () => {
-    it('should reset attempts when todo count changes', async () => {
-      // Set previous count and attempts
-      await writeFile(join(stateDir, 'todo-count-test-session'), '5');
-      await writeFile(join(stateDir, 'todo-attempts-test-session'), '3');
-
-      // New count is different
-      const context = createContext({ incompleteTodoCount: 4 });
+    it('should not create attempt files when no ralph/ultrawork active', async () => {
+      const context = createContext({ incompleteTodoCount: 2 });
 
       makeDecision(context);
 
-      const { readFileSync, existsSync } = await import('fs');
-      // Attempts should be reset (deleted), then incremented to 1
-      expect(readFileSync(join(stateDir, 'todo-attempts-test-session'), 'utf8')).toBe('1');
-      // New count should be saved
-      expect(readFileSync(join(stateDir, 'todo-count-test-session'), 'utf8')).toBe('4');
-    });
-
-    it('should not reset attempts when todo count is unchanged', async () => {
-      // Set previous count and attempts
-      await writeFile(join(stateDir, 'todo-count-test-session'), '5');
-      await writeFile(join(stateDir, 'todo-attempts-test-session'), '3');
-
-      const context = createContext({ incompleteTodoCount: 5 }); // Same count
-
-      makeDecision(context);
-
-      const { readFileSync } = await import('fs');
-      // Attempts should be incremented from 3 to 4
-      expect(readFileSync(join(stateDir, 'todo-attempts-test-session'), 'utf8')).toBe('4');
+      const { existsSync } = await import('fs');
+      const attemptFile = join(stateDir, 'todo-attempts-test-session');
+      // No attempt file should be created since we're not blocking
+      expect(existsSync(attemptFile)).toBe(false);
     });
   });
 

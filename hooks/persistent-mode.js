@@ -393,22 +393,6 @@ Original task: ${originalPrompt}
 ---
 `;
 }
-function buildTodoContinuationMessage(incompleteCount) {
-  return `<todo-continuation>
-
-[SYSTEM REMINDER - TODO CONTINUATION]
-
-Incomplete tasks remain in your todo list (${incompleteCount} remaining). Continue working on the next pending task.
-
-- Proceed without asking for permission
-- Mark each task complete when finished
-- Do not stop until all tasks are done
-
-</todo-continuation>
-
----
-`;
-}
 function makeDecision(context) {
   const { projectRoot, sessionId, transcriptPath, incompleteTodoCount } = context;
   const stateDir = `${projectRoot}/.claude/sisyphus/state`;
@@ -482,16 +466,6 @@ function makeDecision(context) {
     cleanupUltraworkState(projectRoot, sessionId);
     cleanupAttemptFiles(stateDir, attemptId);
     return formatContinueOutput();
-  }
-  if (incompleteTodoCount > 0) {
-    const attempts = getAttemptCount(stateDir, attemptId);
-    if (attempts >= MAX_TODO_CONTINUATION_ATTEMPTS) {
-      cleanupAttemptFiles(stateDir, attemptId);
-      return formatContinueOutput();
-    }
-    incrementAttempts(stateDir, attemptId);
-    const message = buildTodoContinuationMessage(incompleteTodoCount);
-    return formatBlockOutput(message);
   }
   return formatContinueOutput();
 }
