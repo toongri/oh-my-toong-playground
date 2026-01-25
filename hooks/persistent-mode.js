@@ -286,10 +286,19 @@ function detectOracleRejection(transcriptPath) {
   }
   return feedbackMatches.length > 0 ? feedbackMatches.join(" ") : "";
 }
-function countIncompleteTodos(transcriptPath) {
+function countIncompleteTodos(transcriptPath, originalPrompt) {
   if (!transcriptPath) return 0;
-  const content = readFileOrNull(transcriptPath);
+  let content = readFileOrNull(transcriptPath);
   if (!content) return 0;
+  if (originalPrompt) {
+    const lastIndex = content.lastIndexOf(originalPrompt);
+    if (lastIndex !== -1) {
+      content = content.slice(lastIndex);
+      logDebug(`filtering content from originalPrompt position ${lastIndex}`);
+    } else {
+      logDebug(`originalPrompt not found in transcript, using full content`);
+    }
+  }
   const todos = /* @__PURE__ */ new Map();
   const createResultPattern = /Task #(\d+) created successfully/g;
   let createMatch;
@@ -479,7 +488,17 @@ async function main() {
     initLogger("persistent-mode", projectRoot, input.sessionId);
     logStart();
     logInfo(`stop hook invoked, sessionId=${input.sessionId}`);
-    const incompleteTodoCount = countIncompleteTodos(input.transcriptPath);
+    let originalPrompt;
+    const ultraworkState = readUltraworkState(projectRoot, input.sessionId);
+    const ralphState = readRalphState(projectRoot, input.sessionId);
+    if (ultraworkState?.active && ultraworkState.original_prompt) {
+      originalPrompt = ultraworkState.original_prompt;
+      logDebug(`using ultrawork originalPrompt for todo counting`);
+    } else if (ralphState?.active && ralphState.prompt) {
+      originalPrompt = ralphState.prompt;
+      logDebug(`using ralph prompt for todo counting`);
+    }
+    const incompleteTodoCount = countIncompleteTodos(input.transcriptPath, originalPrompt);
     logDebug(`incompleteTodoCount=${incompleteTodoCount}`);
     const context = {
       projectRoot,

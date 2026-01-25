@@ -65,10 +65,21 @@ export function detectOracleRejection(transcriptPath: string | null): string | n
   return feedbackMatches.length > 0 ? feedbackMatches.join(' ') : '';
 }
 
-export function countIncompleteTodos(transcriptPath: string | null): number {
+export function countIncompleteTodos(transcriptPath: string | null, originalPrompt?: string): number {
   if (!transcriptPath) return 0;
-  const content = readFileOrNull(transcriptPath);
+  let content = readFileOrNull(transcriptPath);
   if (!content) return 0;
+
+  // If originalPrompt is provided, find its last occurrence and only parse content after that
+  if (originalPrompt) {
+    const lastIndex = content.lastIndexOf(originalPrompt);
+    if (lastIndex !== -1) {
+      content = content.slice(lastIndex);
+      logDebug(`filtering content from originalPrompt position ${lastIndex}`);
+    } else {
+      logDebug(`originalPrompt not found in transcript, using full content`);
+    }
+  }
 
   // Track todos by ID
   const todos = new Map<string, string>(); // id -> status

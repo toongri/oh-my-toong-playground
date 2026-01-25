@@ -240,6 +240,116 @@ describe('transcript-detector', () => {
 
       expect(result).toBe(0);
     });
+
+    describe('with originalPrompt parameter', () => {
+      it('should only count todos after originalPrompt position', async () => {
+        // Transcript with two separate requests:
+        // 1. First request creates tasks #1 and #2
+        // 2. Second request (starting with "Build the feature") creates task #3
+        const content = `
+          {"type": "human", "message": "Fix the bug"}
+          {"name": "TaskCreate", "parameters": {"subject": "Fix bug A"}}
+          Task #1 created successfully
+          {"name": "TaskCreate", "parameters": {"subject": "Fix bug B"}}
+          Task #2 created successfully
+          {"type": "human", "message": "Build the feature"}
+          {"name": "TaskCreate", "parameters": {"subject": "Add feature"}}
+          Task #3 created successfully
+        `;
+        await writeFile(transcriptPath, content);
+
+        // With originalPrompt, should only count task #3
+        const result = countIncompleteTodos(transcriptPath, 'Build the feature');
+
+        expect(result).toBe(1);
+      });
+
+      it('should find last occurrence of originalPrompt', async () => {
+        // Same prompt appears twice - should use the LAST occurrence
+        const content = `
+          {"type": "human", "message": "Do the work"}
+          {"name": "TaskCreate", "parameters": {"subject": "First batch task"}}
+          Task #1 created successfully
+          {"type": "human", "message": "Do the work"}
+          {"name": "TaskCreate", "parameters": {"subject": "Second batch task"}}
+          Task #2 created successfully
+        `;
+        await writeFile(transcriptPath, content);
+
+        // Should only count task #2 (after last "Do the work")
+        const result = countIncompleteTodos(transcriptPath, 'Do the work');
+
+        expect(result).toBe(1);
+      });
+
+      it('should count all todos when originalPrompt is not provided', async () => {
+        const content = `
+          {"type": "human", "message": "Fix the bug"}
+          {"name": "TaskCreate", "parameters": {"subject": "Fix bug A"}}
+          Task #1 created successfully
+          {"type": "human", "message": "Build the feature"}
+          {"name": "TaskCreate", "parameters": {"subject": "Add feature"}}
+          Task #2 created successfully
+        `;
+        await writeFile(transcriptPath, content);
+
+        // Without originalPrompt, should count all tasks
+        const result = countIncompleteTodos(transcriptPath);
+
+        expect(result).toBe(2);
+      });
+
+      it('should count all todos when originalPrompt is not found', async () => {
+        const content = `
+          {"type": "human", "message": "Fix the bug"}
+          {"name": "TaskCreate", "parameters": {"subject": "Fix bug A"}}
+          Task #1 created successfully
+        `;
+        await writeFile(transcriptPath, content);
+
+        // If originalPrompt not found in transcript, count all
+        const result = countIncompleteTodos(transcriptPath, 'Nonexistent prompt');
+
+        expect(result).toBe(1);
+      });
+
+      it('should handle TaskUpdate after originalPrompt correctly', async () => {
+        const content = `
+          {"type": "human", "message": "Old task"}
+          {"name": "TaskCreate", "parameters": {"subject": "Old task"}}
+          Task #1 created successfully
+          {"type": "human", "message": "New task"}
+          {"name": "TaskCreate", "parameters": {"subject": "New task"}}
+          Task #2 created successfully
+          {"name": "TaskUpdate", "parameters": {"taskId": "2", "status": "completed"}}
+        `;
+        await writeFile(transcriptPath, content);
+
+        // Task #2 is created and completed after originalPrompt
+        const result = countIncompleteTodos(transcriptPath, 'New task');
+
+        expect(result).toBe(0);
+      });
+
+      it('should ignore TaskUpdate for tasks created before originalPrompt', async () => {
+        const content = `
+          {"type": "human", "message": "Old task"}
+          {"name": "TaskCreate", "parameters": {"subject": "Old task"}}
+          Task #1 created successfully
+          {"type": "human", "message": "New task"}
+          {"name": "TaskCreate", "parameters": {"subject": "New task"}}
+          Task #2 created successfully
+          {"name": "TaskUpdate", "parameters": {"taskId": "1", "status": "completed"}}
+        `;
+        await writeFile(transcriptPath, content);
+
+        // Task #1 was created before originalPrompt, so its update shouldn't affect count
+        // Only Task #2 should be counted as incomplete
+        const result = countIncompleteTodos(transcriptPath, 'New task');
+
+        expect(result).toBe(1);
+      });
+    });
   });
 
   describe('analyzeTranscript', () => {
