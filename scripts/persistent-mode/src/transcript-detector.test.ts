@@ -2,7 +2,6 @@ import {
   detectCompletionPromise,
   detectOracleApproval,
   detectOracleRejection,
-  countIncompleteTodos,
   analyzeTranscript,
 } from './transcript-detector.js';
 import type { TranscriptDetection } from './types.js';
@@ -191,167 +190,6 @@ describe('transcript-detector', () => {
     });
   });
 
-  describe('countIncompleteTodos', () => {
-    it('should return 0 when transcriptPath is null', () => {
-      const result = countIncompleteTodos(null);
-
-      expect(result).toBe(0);
-    });
-
-    it('should return 0 when file does not exist', () => {
-      const result = countIncompleteTodos('/nonexistent/path');
-
-      expect(result).toBe(0);
-    });
-
-    it('should count TaskCreate calls as pending todos', async () => {
-      // The pattern looks for "Task #N created successfully" in tool results
-      const content = `
-        {"name": "TaskCreate", "parameters": {"subject": "Task 1"}}
-        Task #1 created successfully
-        {"name": "TaskCreate", "parameters": {"subject": "Task 2"}}
-        Task #2 created successfully
-      `;
-      await writeFile(transcriptPath, content);
-
-      const result = countIncompleteTodos(transcriptPath);
-
-      expect(result).toBe(2);
-    });
-
-    it('should handle TaskUpdate status changes', async () => {
-      const content = `
-        {"name": "TaskCreate", "parameters": {"subject": "Task 1"}}
-        Task #1 created successfully
-        {"name": "TaskUpdate", "parameters": {"taskId": "1", "status": "completed"}}
-      `;
-      await writeFile(transcriptPath, content);
-
-      // TaskCreate adds taskId "1", TaskUpdate marks it completed
-      const result = countIncompleteTodos(transcriptPath);
-
-      expect(result).toBe(0);
-    });
-
-    it('should return 0 when no todos in transcript', async () => {
-      await writeFile(transcriptPath, 'Just regular content, no task tools');
-
-      const result = countIncompleteTodos(transcriptPath);
-
-      expect(result).toBe(0);
-    });
-
-    describe('with originalPrompt parameter', () => {
-      it('should only count todos after originalPrompt position', async () => {
-        // Transcript with two separate requests:
-        // 1. First request creates tasks #1 and #2
-        // 2. Second request (starting with "Build the feature") creates task #3
-        const content = `
-          {"type": "human", "message": "Fix the bug"}
-          {"name": "TaskCreate", "parameters": {"subject": "Fix bug A"}}
-          Task #1 created successfully
-          {"name": "TaskCreate", "parameters": {"subject": "Fix bug B"}}
-          Task #2 created successfully
-          {"type": "human", "message": "Build the feature"}
-          {"name": "TaskCreate", "parameters": {"subject": "Add feature"}}
-          Task #3 created successfully
-        `;
-        await writeFile(transcriptPath, content);
-
-        // With originalPrompt, should only count task #3
-        const result = countIncompleteTodos(transcriptPath, 'Build the feature');
-
-        expect(result).toBe(1);
-      });
-
-      it('should find last occurrence of originalPrompt', async () => {
-        // Same prompt appears twice - should use the LAST occurrence
-        const content = `
-          {"type": "human", "message": "Do the work"}
-          {"name": "TaskCreate", "parameters": {"subject": "First batch task"}}
-          Task #1 created successfully
-          {"type": "human", "message": "Do the work"}
-          {"name": "TaskCreate", "parameters": {"subject": "Second batch task"}}
-          Task #2 created successfully
-        `;
-        await writeFile(transcriptPath, content);
-
-        // Should only count task #2 (after last "Do the work")
-        const result = countIncompleteTodos(transcriptPath, 'Do the work');
-
-        expect(result).toBe(1);
-      });
-
-      it('should count all todos when originalPrompt is not provided', async () => {
-        const content = `
-          {"type": "human", "message": "Fix the bug"}
-          {"name": "TaskCreate", "parameters": {"subject": "Fix bug A"}}
-          Task #1 created successfully
-          {"type": "human", "message": "Build the feature"}
-          {"name": "TaskCreate", "parameters": {"subject": "Add feature"}}
-          Task #2 created successfully
-        `;
-        await writeFile(transcriptPath, content);
-
-        // Without originalPrompt, should count all tasks
-        const result = countIncompleteTodos(transcriptPath);
-
-        expect(result).toBe(2);
-      });
-
-      it('should count all todos when originalPrompt is not found', async () => {
-        const content = `
-          {"type": "human", "message": "Fix the bug"}
-          {"name": "TaskCreate", "parameters": {"subject": "Fix bug A"}}
-          Task #1 created successfully
-        `;
-        await writeFile(transcriptPath, content);
-
-        // If originalPrompt not found in transcript, count all
-        const result = countIncompleteTodos(transcriptPath, 'Nonexistent prompt');
-
-        expect(result).toBe(1);
-      });
-
-      it('should handle TaskUpdate after originalPrompt correctly', async () => {
-        const content = `
-          {"type": "human", "message": "Old task"}
-          {"name": "TaskCreate", "parameters": {"subject": "Old task"}}
-          Task #1 created successfully
-          {"type": "human", "message": "New task"}
-          {"name": "TaskCreate", "parameters": {"subject": "New task"}}
-          Task #2 created successfully
-          {"name": "TaskUpdate", "parameters": {"taskId": "2", "status": "completed"}}
-        `;
-        await writeFile(transcriptPath, content);
-
-        // Task #2 is created and completed after originalPrompt
-        const result = countIncompleteTodos(transcriptPath, 'New task');
-
-        expect(result).toBe(0);
-      });
-
-      it('should ignore TaskUpdate for tasks created before originalPrompt', async () => {
-        const content = `
-          {"type": "human", "message": "Old task"}
-          {"name": "TaskCreate", "parameters": {"subject": "Old task"}}
-          Task #1 created successfully
-          {"type": "human", "message": "New task"}
-          {"name": "TaskCreate", "parameters": {"subject": "New task"}}
-          Task #2 created successfully
-          {"name": "TaskUpdate", "parameters": {"taskId": "1", "status": "completed"}}
-        `;
-        await writeFile(transcriptPath, content);
-
-        // Task #1 was created before originalPrompt, so its update shouldn't affect count
-        // Only Task #2 should be counted as incomplete
-        const result = countIncompleteTodos(transcriptPath, 'New task');
-
-        expect(result).toBe(1);
-      });
-    });
-  });
-
   describe('analyzeTranscript', () => {
     it('should return default values when transcriptPath is null', () => {
       const result = analyzeTranscript(null);
@@ -393,8 +231,6 @@ describe('transcript-detector', () => {
       const content = `
         <promise>DONE</promise>
         <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
-        {"name": "TaskCreate", "parameters": {"subject": "Task"}}
-        Task #1 created successfully
       `;
       await writeFile(transcriptPath, content);
 
@@ -402,7 +238,8 @@ describe('transcript-detector', () => {
 
       expect(result.hasCompletionPromise).toBe(true);
       expect(result.hasOracleApproval).toBe(true);
-      expect(result.incompleteTodoCount).toBe(1);
+      // incompleteTodoCount is deprecated - always returns 0
+      expect(result.incompleteTodoCount).toBe(0);
     });
   });
 });

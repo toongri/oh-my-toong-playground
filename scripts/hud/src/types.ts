@@ -90,6 +90,9 @@ export interface HudDataV2 {
   agents: AgentInfo[];
   sessionDuration: number | null;  // in minutes
   thinkingActive: boolean;
+  // Task progress fields
+  todos: { completed: number; total: number } | null;
+  inProgressTodo: string | null;  // activeForm of the in-progress task (already truncated to 25 chars)
 }
 
 // ANSI color codes

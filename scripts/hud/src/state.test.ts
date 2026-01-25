@@ -1,4 +1,4 @@
-import { readRalphState, readUltraworkState, readBackgroundTasks, calculateSessionDuration, isThinkingEnabled } from './state.js';
+import { readRalphState, readUltraworkState, readBackgroundTasks, calculateSessionDuration, isThinkingEnabled, readTasks, getActiveTaskForm } from './state.js';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
@@ -201,6 +201,156 @@ describe('state readers', () => {
     it('should return false by default', async () => {
       const result = await isThinkingEnabled();
       expect(result).toBe(false);
+    });
+  });
+
+  describe('readTasks', () => {
+    // Use real ~/.claude/tasks/ with unique session IDs to avoid interference
+    const tasksBaseDir = join(homedir(), '.claude', 'tasks');
+    const testSessionId = `hud-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let testSessionDir: string;
+
+    beforeAll(async () => {
+      testSessionDir = join(tasksBaseDir, testSessionId);
+      await mkdir(testSessionDir, { recursive: true });
+    });
+
+    afterAll(async () => {
+      await rm(testSessionDir, { recursive: true, force: true });
+    });
+
+    it('should return completed and total counts from session task directory', async () => {
+      // Create task files
+      await writeFile(join(testSessionDir, 'task-1.json'), JSON.stringify({
+        id: 'task-1', subject: 'Task 1', status: 'completed'
+      }));
+      await writeFile(join(testSessionDir, 'task-2.json'), JSON.stringify({
+        id: 'task-2', subject: 'Task 2', status: 'in_progress'
+      }));
+      await writeFile(join(testSessionDir, 'task-3.json'), JSON.stringify({
+        id: 'task-3', subject: 'Task 3', status: 'pending'
+      }));
+
+      const result = await readTasks(testSessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.completed).toBe(1);
+      expect(result?.total).toBe(3);
+    });
+
+    it('should return null when no tasks exist', async () => {
+      const emptySessionId = `hud-test-empty-${Date.now()}`;
+      const emptySessionDir = join(tasksBaseDir, emptySessionId);
+      await mkdir(emptySessionDir, { recursive: true });
+
+      try {
+        const result = await readTasks(emptySessionId);
+        expect(result).toBeNull();
+      } finally {
+        await rm(emptySessionDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should return null when session directory does not exist', async () => {
+      const result = await readTasks(`non-existent-session-${Date.now()}`);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getActiveTaskForm', () => {
+    // Use real ~/.claude/tasks/ with unique session IDs to avoid interference
+    const tasksBaseDir = join(homedir(), '.claude', 'tasks');
+    const testSessionId = `hud-activeform-test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let testSessionDir: string;
+
+    beforeAll(async () => {
+      testSessionDir = join(tasksBaseDir, testSessionId);
+      await mkdir(testSessionDir, { recursive: true });
+    });
+
+    afterAll(async () => {
+      await rm(testSessionDir, { recursive: true, force: true });
+    });
+
+    it('should return activeForm of first in_progress task', async () => {
+      await writeFile(join(testSessionDir, 'task-1.json'), JSON.stringify({
+        id: 'task-1', subject: 'Pending task', status: 'pending', activeForm: 'Pending form'
+      }));
+      await writeFile(join(testSessionDir, 'task-2.json'), JSON.stringify({
+        id: 'task-2', subject: 'In progress task', status: 'in_progress', activeForm: 'Running the test'
+      }));
+
+      const result = await getActiveTaskForm(testSessionId);
+
+      expect(result).toBe('Running the test');
+    });
+
+    it('should truncate activeForm longer than 25 chars with ellipsis', async () => {
+      const truncSessionId = `hud-trunc-test-${Date.now()}`;
+      const truncSessionDir = join(tasksBaseDir, truncSessionId);
+      await mkdir(truncSessionDir, { recursive: true });
+
+      try {
+        await writeFile(join(truncSessionDir, 'task-1.json'), JSON.stringify({
+          id: 'task-1',
+          subject: 'Long task',
+          status: 'in_progress',
+          activeForm: 'This is a very long active form description'
+        }));
+
+        const result = await getActiveTaskForm(truncSessionId);
+
+        expect(result).toBe('This is a very long activ...');
+        expect(result?.length).toBe(28);
+      } finally {
+        await rm(truncSessionDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should return null when no in_progress task exists', async () => {
+      const noInProgressId = `hud-no-progress-test-${Date.now()}`;
+      const noInProgressDir = join(tasksBaseDir, noInProgressId);
+      await mkdir(noInProgressDir, { recursive: true });
+
+      try {
+        await writeFile(join(noInProgressDir, 'task-1.json'), JSON.stringify({
+          id: 'task-1', subject: 'Pending', status: 'pending', activeForm: 'Form'
+        }));
+        await writeFile(join(noInProgressDir, 'task-2.json'), JSON.stringify({
+          id: 'task-2', subject: 'Completed', status: 'completed', activeForm: 'Done'
+        }));
+
+        const result = await getActiveTaskForm(noInProgressId);
+
+        expect(result).toBeNull();
+      } finally {
+        await rm(noInProgressDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should return null when in_progress task has no activeForm', async () => {
+      const noFormId = `hud-no-form-test-${Date.now()}`;
+      const noFormDir = join(tasksBaseDir, noFormId);
+      await mkdir(noFormDir, { recursive: true });
+
+      try {
+        await writeFile(join(noFormDir, 'task-1.json'), JSON.stringify({
+          id: 'task-1', subject: 'In progress without form', status: 'in_progress'
+        }));
+
+        const result = await getActiveTaskForm(noFormId);
+
+        expect(result).toBeNull();
+      } finally {
+        await rm(noFormDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should return null when session directory does not exist', async () => {
+      const result = await getActiveTaskForm(`non-existent-form-session-${Date.now()}`);
+
+      expect(result).toBeNull();
     });
   });
 });

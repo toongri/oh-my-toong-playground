@@ -1,5 +1,5 @@
 import { readStdin } from './stdin.js';
-import { readRalphState, readUltraworkState, readBackgroundTasks, calculateSessionDuration, isThinkingEnabled } from './state.js';
+import { readRalphState, readUltraworkState, readBackgroundTasks, calculateSessionDuration, isThinkingEnabled, readTasks, getActiveTaskForm } from './state.js';
 import { parseTranscript } from './transcript.js';
 import { fetchRateLimits } from './usage-api.js';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.js';
@@ -42,6 +42,8 @@ export async function main(): Promise<void> {
       transcriptData,
       rateLimits,
       thinkingActive,
+      todos,
+      inProgressTodo,
     ] = await Promise.all([
       readRalphState(cwd, sessionId),
       readUltraworkState(cwd, sessionId),
@@ -51,6 +53,8 @@ export async function main(): Promise<void> {
         : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null }),
       fetchRateLimits(),
       isThinkingEnabled(),
+      readTasks(sessionId),
+      getActiveTaskForm(sessionId),
     ]);
 
     // Log transcript parsing results
@@ -67,6 +71,8 @@ export async function main(): Promise<void> {
       agents: transcriptData.agents,
       sessionDuration: calculateSessionDuration(transcriptData.sessionStartedAt),
       thinkingActive,
+      todos,
+      inProgressTodo,
     };
 
     // Format and output with non-breaking spaces for terminal alignment

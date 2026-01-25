@@ -280,6 +280,8 @@ describe('types', () => {
         agents: [],
         sessionDuration: null,
         thinkingActive: false,
+        todos: null,
+        inProgressTodo: null,
       };
 
       expect(data.contextPercent).toBeNull();
@@ -287,6 +289,8 @@ describe('types', () => {
       expect(data.agents).toHaveLength(0);
       expect(data.sessionDuration).toBeNull();
       expect(data.thinkingActive).toBe(false);
+      expect(data.todos).toBeNull();
+      expect(data.inProgressTodo).toBeNull();
     });
 
     it('should accept fully populated HudDataV2 structure', () => {
@@ -321,6 +325,8 @@ describe('types', () => {
         ],
         sessionDuration: 45,
         thinkingActive: true,
+        todos: { completed: 3, total: 5 },
+        inProgressTodo: 'Running tests',
       };
 
       expect(data.contextPercent).toBe(75);
@@ -330,6 +336,9 @@ describe('types', () => {
       expect(data.agents[1].model).toBe('s');
       expect(data.sessionDuration).toBe(45);
       expect(data.thinkingActive).toBe(true);
+      expect(data.todos?.completed).toBe(3);
+      expect(data.todos?.total).toBe(5);
+      expect(data.inProgressTodo).toBe('Running tests');
     });
   });
 });

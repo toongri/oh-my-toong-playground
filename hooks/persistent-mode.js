@@ -286,57 +286,13 @@ function detectOracleRejection(transcriptPath) {
   }
   return feedbackMatches.length > 0 ? feedbackMatches.join(" ") : "";
 }
-function countIncompleteTodos(transcriptPath, originalPrompt) {
-  if (!transcriptPath) return 0;
-  let content = readFileOrNull(transcriptPath);
-  if (!content) return 0;
-  if (originalPrompt) {
-    const lastIndex = content.lastIndexOf(originalPrompt);
-    if (lastIndex !== -1) {
-      content = content.slice(lastIndex);
-      logDebug(`filtering content from originalPrompt position ${lastIndex}`);
-    } else {
-      logDebug(`originalPrompt not found in transcript, using full content`);
-    }
-  }
-  const todos = /* @__PURE__ */ new Map();
-  const createResultPattern = /Task #(\d+) created successfully/g;
-  let createMatch;
-  while ((createMatch = createResultPattern.exec(content)) !== null) {
-    const [, taskId] = createMatch;
-    todos.set(taskId, "pending");
-  }
-  if (todos.size > 0) {
-    logDebug(`detected ${todos.size} TaskCreate result(s)`);
-  }
-  const updatePattern = /"name":\s*"TaskUpdate"[\s\S]*?"taskId":\s*"(\d+)"[\s\S]*?"status":\s*"([^"]+)"/g;
-  let updateMatch;
-  let updateCount = 0;
-  while ((updateMatch = updatePattern.exec(content)) !== null) {
-    const [, taskId, status] = updateMatch;
-    if (todos.has(taskId)) {
-      todos.set(taskId, status);
-      updateCount++;
-    }
-  }
-  if (updateCount > 0) {
-    logDebug(`detected ${updateCount} TaskUpdate(s) affecting tracked tasks`);
-  }
-  let incomplete = 0;
-  for (const status of todos.values()) {
-    if (status === "pending" || status === "in_progress") {
-      incomplete++;
-    }
-  }
-  logDebug(`todo count: ${todos.size} total, ${incomplete} incomplete`);
-  return incomplete;
-}
 function analyzeTranscript(transcriptPath) {
   return {
     hasCompletionPromise: detectCompletionPromise(transcriptPath),
     hasOracleApproval: detectOracleApproval(transcriptPath),
     oracleRejectionFeedback: detectOracleRejection(transcriptPath),
-    incompleteTodoCount: countIncompleteTodos(transcriptPath)
+    incompleteTodoCount: 0
+    // Deprecated: now using file-based task counting
   };
 }
 
@@ -398,6 +354,25 @@ Continue working on the next pending task. DO NOT STOP until all tasks are marke
 Original task: ${originalPrompt}
 
 </ultrawork-persistence>
+
+---
+`;
+}
+function buildTodoContinuationMessage(incompleteCount) {
+  return `<todo-continuation>
+
+[INCOMPLETE TASKS DETECTED - ${incompleteCount} remaining]
+
+Your task list still has incomplete items. Please review and complete them.
+
+INSTRUCTIONS:
+1. Check your todo list with TaskList
+2. Complete remaining tasks
+3. Mark each task as completed when done
+
+Do NOT stop until all tasks are completed.
+
+</todo-continuation>
 
 ---
 `;
@@ -476,10 +451,50 @@ function makeDecision(context) {
     cleanupAttemptFiles(stateDir, attemptId);
     return formatContinueOutput();
   }
+  if (incompleteTodoCount > 0) {
+    const attempts = getAttemptCount(stateDir, attemptId);
+    if (attempts >= MAX_TODO_CONTINUATION_ATTEMPTS) {
+      cleanupAttemptFiles(stateDir, attemptId);
+      return formatContinueOutput();
+    }
+    incrementAttempts(stateDir, attemptId);
+    const message = buildTodoContinuationMessage(incompleteTodoCount);
+    return formatBlockOutput(message);
+  }
   return formatContinueOutput();
 }
 
+// ../lib/dist/task-reader.js
+import { readdir, readFile } from "fs/promises";
+import { join as join2 } from "path";
+async function readTasksFromDirectory(directoryPath) {
+  let files;
+  try {
+    files = await readdir(directoryPath);
+  } catch {
+    return [];
+  }
+  const tasks = [];
+  for (const file of files) {
+    if (!file.endsWith(".json"))
+      continue;
+    const filePath = join2(directoryPath, file);
+    try {
+      const content = await readFile(filePath, "utf-8");
+      const task = JSON.parse(content);
+      tasks.push(task);
+    } catch {
+      console.error(`Warning: Failed to parse task file: ${file}`);
+    }
+  }
+  return tasks;
+}
+function countIncompleteTasks(tasks) {
+  return tasks.filter((task) => task.status === "pending" || task.status === "in_progress").length;
+}
+
 // src/index.ts
+import { join as join3 } from "path";
 async function main() {
   try {
     const rawInput = await readStdin();
@@ -488,18 +503,11 @@ async function main() {
     initLogger("persistent-mode", projectRoot, input.sessionId);
     logStart();
     logInfo(`stop hook invoked, sessionId=${input.sessionId}`);
-    let originalPrompt;
-    const ultraworkState = readUltraworkState(projectRoot, input.sessionId);
-    const ralphState = readRalphState(projectRoot, input.sessionId);
-    if (ultraworkState?.active && ultraworkState.original_prompt) {
-      originalPrompt = ultraworkState.original_prompt;
-      logDebug(`using ultrawork originalPrompt for todo counting`);
-    } else if (ralphState?.active && ralphState.prompt) {
-      originalPrompt = ralphState.prompt;
-      logDebug(`using ralph prompt for todo counting`);
-    }
-    const incompleteTodoCount = countIncompleteTodos(input.transcriptPath, originalPrompt);
-    logDebug(`incompleteTodoCount=${incompleteTodoCount}`);
+    const homeDir = process.env.HOME || "/tmp";
+    const tasksDir = join3(homeDir, ".claude", "tasks", input.sessionId);
+    const tasks = await readTasksFromDirectory(tasksDir);
+    const incompleteTodoCount = countIncompleteTasks(tasks);
+    logDebug(`tasks from ${tasksDir}: total=${tasks.length}, incomplete=${incompleteTodoCount}`);
     const context = {
       projectRoot,
       sessionId: input.sessionId,

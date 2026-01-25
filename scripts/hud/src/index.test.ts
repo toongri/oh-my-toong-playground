@@ -18,6 +18,8 @@ const mockReadUltraworkState = jest.fn<(cwd: string, sessionId?: string) => Prom
 const mockReadBackgroundTasks = jest.fn<() => Promise<number>>();
 const mockCalculateSessionDuration = jest.fn<(startedAt: Date | null) => number | null>();
 const mockIsThinkingEnabled = jest.fn<() => Promise<boolean>>();
+const mockReadTasks = jest.fn<(sessionId: string) => Promise<{ completed: number; total: number } | null>>();
+const mockGetActiveTaskForm = jest.fn<(sessionId: string) => Promise<string | null>>();
 const mockParseTranscript = jest.fn<(path: string) => Promise<TranscriptResult>>();
 const mockFetchRateLimits = jest.fn<() => Promise<RateLimitData | null>>();
 const mockFormatStatusLineV2 = jest.fn<() => string>();
@@ -33,6 +35,8 @@ jest.unstable_mockModule('./state.js', () => ({
   readBackgroundTasks: mockReadBackgroundTasks,
   calculateSessionDuration: mockCalculateSessionDuration,
   isThinkingEnabled: mockIsThinkingEnabled,
+  readTasks: mockReadTasks,
+  getActiveTaskForm: mockGetActiveTaskForm,
 }));
 
 jest.unstable_mockModule('./transcript.js', () => ({
@@ -74,6 +78,8 @@ describe('main', () => {
     mockReadBackgroundTasks.mockResolvedValue(0);
     mockCalculateSessionDuration.mockReturnValue(null);
     mockIsThinkingEnabled.mockResolvedValue(false);
+    mockReadTasks.mockResolvedValue(null);
+    mockGetActiveTaskForm.mockResolvedValue(null);
     mockParseTranscript.mockResolvedValue({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null });
     mockFetchRateLimits.mockResolvedValue(null);
     mockFormatStatusLineV2.mockReturnValue('[OMT] ctx:50%');
@@ -180,6 +186,42 @@ describe('main', () => {
       expect(mockIsThinkingEnabled).toHaveBeenCalled();
     });
 
+    it('reads tasks with session_id', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session-abc',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+
+      await main();
+
+      expect(mockReadTasks).toHaveBeenCalledWith('test-session-abc');
+    });
+
+    it('gets active task form with session_id', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session-xyz',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+
+      await main();
+
+      expect(mockGetActiveTaskForm).toHaveBeenCalledWith('test-session-xyz');
+    });
+
     it('parses transcript when path is provided', async () => {
       mockReadStdin.mockResolvedValue({
         hook_event_name: 'Status',
@@ -244,6 +286,8 @@ describe('main', () => {
       });
       mockFetchRateLimits.mockResolvedValue(rateLimits);
       mockIsThinkingEnabled.mockResolvedValue(true);
+      mockReadTasks.mockResolvedValue({ completed: 3, total: 5 });
+      mockGetActiveTaskForm.mockResolvedValue('Running tests...');
       mockCalculateSessionDuration.mockReturnValue(45);
 
       await main();
@@ -259,6 +303,8 @@ describe('main', () => {
         agents: [{ type: 'M', model: 'o', id: 'main-1' }, { type: 'S', model: 's', id: 'sub-1' }],
         sessionDuration: 45,
         thinkingActive: true,
+        todos: { completed: 3, total: 5 },
+        inProgressTodo: 'Running tests...',
       });
     });
 

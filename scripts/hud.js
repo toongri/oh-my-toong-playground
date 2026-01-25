@@ -24,9 +24,43 @@ async function readStdin() {
 }
 
 // src/state.ts
-import { readFile, readdir, stat } from "fs/promises";
-import { join } from "path";
+import { readFile as readFile2, readdir as readdir2, stat } from "fs/promises";
+import { join as join2 } from "path";
 import { homedir } from "os";
+
+// ../lib/dist/task-reader.js
+import { readdir, readFile } from "fs/promises";
+import { join } from "path";
+async function readTasksFromDirectory(directoryPath) {
+  let files;
+  try {
+    files = await readdir(directoryPath);
+  } catch {
+    return [];
+  }
+  const tasks = [];
+  for (const file of files) {
+    if (!file.endsWith(".json"))
+      continue;
+    const filePath = join(directoryPath, file);
+    try {
+      const content = await readFile(filePath, "utf-8");
+      const task = JSON.parse(content);
+      tasks.push(task);
+    } catch {
+      console.error(`Warning: Failed to parse task file: ${file}`);
+    }
+  }
+  return tasks;
+}
+function countIncompleteTasks(tasks) {
+  return tasks.filter((task) => task.status === "pending" || task.status === "in_progress").length;
+}
+function getInProgressTask(tasks) {
+  return tasks.find((task) => task.status === "in_progress") ?? null;
+}
+
+// src/state.ts
 var MAX_STATE_AGE_MS = 2 * 60 * 60 * 1e3;
 async function isStateFileStale(path) {
   try {
@@ -39,14 +73,14 @@ async function isStateFileStale(path) {
 }
 async function readJsonFile(path) {
   try {
-    const content = await readFile(path, "utf8");
+    const content = await readFile2(path, "utf8");
     return JSON.parse(content);
   } catch {
     return null;
   }
 }
 async function findStateFile(cwd, filename) {
-  const localPath = join(cwd, ".claude", "sisyphus", filename);
+  const localPath = join2(cwd, ".claude", "sisyphus", filename);
   if (!await isStateFileStale(localPath)) {
     return readJsonFile(localPath);
   }
@@ -59,9 +93,9 @@ async function readUltraworkState(cwd, sessionId = "default") {
   return findStateFile(cwd, `ultrawork-state-${sessionId}.json`);
 }
 async function readBackgroundTasks() {
-  const tasksDir = join(homedir(), ".claude", "background-tasks");
+  const tasksDir = join2(homedir(), ".claude", "background-tasks");
   try {
-    const files = await readdir(tasksDir);
+    const files = await readdir2(tasksDir);
     return files.filter((f) => f.endsWith(".json")).length;
   } catch {
     return 0;
@@ -75,6 +109,31 @@ function calculateSessionDuration(startedAt) {
 async function isThinkingEnabled() {
   return false;
 }
+async function readTasks(sessionId) {
+  const tasksDir = join2(homedir(), ".claude", "tasks", sessionId);
+  const tasks = await readTasksFromDirectory(tasksDir);
+  if (tasks.length === 0) {
+    return null;
+  }
+  const incomplete = countIncompleteTasks(tasks);
+  return {
+    completed: tasks.length - incomplete,
+    total: tasks.length
+  };
+}
+async function getActiveTaskForm(sessionId) {
+  const tasksDir = join2(homedir(), ".claude", "tasks", sessionId);
+  const tasks = await readTasksFromDirectory(tasksDir);
+  const inProgressTask = getInProgressTask(tasks);
+  if (!inProgressTask || !inProgressTask.activeForm) {
+    return null;
+  }
+  const form = inProgressTask.activeForm;
+  if (form.length > 25) {
+    return form.slice(0, 25) + "...";
+  }
+  return form;
+}
 
 // src/transcript.ts
 import { createReadStream } from "fs";
@@ -82,7 +141,7 @@ import { createInterface } from "readline";
 
 // ../lib/dist/logging.js
 import { mkdirSync, appendFileSync, existsSync } from "fs";
-import { join as join2, dirname } from "path";
+import { join as join3, dirname } from "path";
 var LogLevel;
 (function(LogLevel2) {
   LogLevel2[LogLevel2["DEBUG"] = 0] = "DEBUG";
@@ -158,8 +217,8 @@ function initLogger(component, projectRoot, sessionId) {
   }
   componentName = component;
   const sanitizedSession = sanitizeSessionId(sessionId || "default");
-  const logDir = join2(projectRoot, ".claude", "sisyphus", "logs");
-  logFile = join2(logDir, `${component}-${sanitizedSession}.log`);
+  const logDir = join3(projectRoot, ".claude", "sisyphus", "logs");
+  logFile = join3(logDir, `${component}-${sanitizedSession}.log`);
   initialized = true;
 }
 function logInfo(message) {
@@ -263,8 +322,8 @@ async function parseTranscript(transcriptPath) {
 // src/credentials.ts
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFile as readFile2 } from "fs/promises";
-import { join as join3 } from "path";
+import { readFile as readFile3 } from "fs/promises";
+import { join as join4 } from "path";
 import { homedir as homedir2 } from "os";
 var execAsync = promisify(exec);
 async function getOAuthToken() {
@@ -280,8 +339,8 @@ async function getOAuthToken() {
   } catch {
   }
   try {
-    const credPath = join3(homedir2(), ".claude", ".credentials.json");
-    const content = await readFile2(credPath, "utf8");
+    const credPath = join4(homedir2(), ".claude", ".credentials.json");
+    const content = await readFile3(credPath, "utf8");
     const creds = JSON.parse(content);
     if (creds.claudeAiOauth?.accessToken) {
       return creds.claudeAiOauth.accessToken;
@@ -459,6 +518,14 @@ function formatStatusLineV2(data) {
     const formatted = hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
     line2Parts.push(colorize(`session:${formatted}`, ANSI.dim));
   }
+  if (data.todos) {
+    const { completed, total } = data.todos;
+    const todosText = `todos:${completed}/${total}`;
+    line2Parts.push(colorize(todosText, ANSI.green));
+  }
+  if (data.inProgressTodo) {
+    line2Parts.push(colorize(data.inProgressTodo, ANSI.dim));
+  }
   const line1 = line1Parts.join(" | ");
   const line2 = line2Parts.length > 0 ? line2Parts.join(" | ") : "";
   return line2 ? `${line1}
@@ -487,14 +554,18 @@ async function main() {
       backgroundTasks,
       transcriptData,
       rateLimits,
-      thinkingActive
+      thinkingActive,
+      todos,
+      inProgressTodo
     ] = await Promise.all([
       readRalphState(cwd, sessionId),
       readUltraworkState(cwd, sessionId),
       readBackgroundTasks(),
       input.transcript_path ? parseTranscript(input.transcript_path) : Promise.resolve({ runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null }),
       fetchRateLimits(),
-      isThinkingEnabled()
+      isThinkingEnabled(),
+      readTasks(sessionId),
+      getActiveTaskForm(sessionId)
     ]);
     logInfo(`Transcript parsed: runningAgents=${transcriptData.runningAgents}`);
     const hudData = {
@@ -507,7 +578,9 @@ async function main() {
       rateLimits,
       agents: transcriptData.agents,
       sessionDuration: calculateSessionDuration(transcriptData.sessionStartedAt),
-      thinkingActive
+      thinkingActive,
+      todos,
+      inProgressTodo
     };
     console.log(toNonBreakingSpaces(formatStatusLineV2(hudData)));
     logEnd();

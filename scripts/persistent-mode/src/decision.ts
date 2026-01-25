@@ -89,8 +89,25 @@ Original task: ${originalPrompt}
 `;
 }
 
-// buildTodoContinuationMessage removed - Priority 3 baseline todo-continuation
-// was removed due to transcript scope mismatch bug
+function buildTodoContinuationMessage(incompleteCount: number): string {
+  return `<todo-continuation>
+
+[INCOMPLETE TASKS DETECTED - ${incompleteCount} remaining]
+
+Your task list still has incomplete items. Please review and complete them.
+
+INSTRUCTIONS:
+1. Check your todo list with TaskList
+2. Complete remaining tasks
+3. Mark each task as completed when done
+
+Do NOT stop until all tasks are completed.
+
+</todo-continuation>
+
+---
+`;
+}
 
 export function makeDecision(context: DecisionContext): HookOutput {
   const { projectRoot, sessionId, transcriptPath, incompleteTodoCount } = context;
@@ -194,11 +211,20 @@ export function makeDecision(context: DecisionContext): HookOutput {
     return formatContinueOutput();
   }
 
-  // Priority 3 (todo-continuation baseline) removed:
-  // The transcript-based incompleteTodoCount has a fundamental scope mismatch with
-  // Claude Code's request-level TaskList API. This caused phantom todos from previous
-  // requests to block new requests. Ralph Loop and Ultrawork modes use explicit
-  // activation and are unaffected.
+  // Priority 3: Baseline todo-continuation (incomplete tasks from file-based counting)
+  if (incompleteTodoCount > 0) {
+    // Check escape hatch
+    const attempts = getAttemptCount(stateDir, attemptId);
+    if (attempts >= MAX_TODO_CONTINUATION_ATTEMPTS) {
+      cleanupAttemptFiles(stateDir, attemptId);
+      return formatContinueOutput();
+    }
+
+    // Increment attempts and block
+    incrementAttempts(stateDir, attemptId);
+    const message = buildTodoContinuationMessage(incompleteTodoCount);
+    return formatBlockOutput(message);
+  }
 
   // No blocking needed
   return formatContinueOutput();

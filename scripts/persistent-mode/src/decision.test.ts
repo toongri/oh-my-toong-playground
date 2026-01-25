@@ -337,25 +337,60 @@ describe('makeDecision', () => {
   // requests to block new requests. Ralph Loop and Ultrawork modes are unaffected
   // as they use explicit activation.
 
-  describe('no baseline todo-continuation (Priority 3 removed)', () => {
-    it('should allow stop even when incomplete todos exist (no ralph/ultrawork)', () => {
+  describe('Priority 3: Baseline todo-continuation', () => {
+    it('should block and return todo-continuation message when incomplete todos exist (no ralph/ultrawork)', () => {
       const context = createContext({ incompleteTodoCount: 5 });
 
       const result = makeDecision(context);
 
-      // Should NOT block - Priority 3 was removed
-      expect(result).toEqual({ continue: true });
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
+      expect(result.reason).toContain('INCOMPLETE TASKS DETECTED - 5 remaining');
+      expect(result.reason).toContain('Check your todo list with TaskList');
     });
 
-    it('should not create attempt files when no ralph/ultrawork active', async () => {
+    it('should create attempt files when blocking for baseline todos', async () => {
       const context = createContext({ incompleteTodoCount: 2 });
 
       makeDecision(context);
 
       const { existsSync } = await import('fs');
       const attemptFile = join(stateDir, 'todo-attempts-test-session');
-      // No attempt file should be created since we're not blocking
-      expect(existsSync(attemptFile)).toBe(false);
+      expect(existsSync(attemptFile)).toBe(true);
+    });
+
+    it('should allow stop after max continuation attempts (escape hatch)', async () => {
+      // Set attempt count to max and todo count to same value (so no reset)
+      await writeFile(join(stateDir, 'todo-attempts-test-session'), '5');
+      await writeFile(join(stateDir, 'todo-count-test-session'), '3');
+
+      const context = createContext({ incompleteTodoCount: 3 });
+
+      const result = makeDecision(context);
+
+      expect(result).toEqual({ continue: true });
+    });
+
+    it('should cleanup attempt files when escape hatch triggers', async () => {
+      // Set attempt count to max and todo count to same value (so no reset)
+      await writeFile(join(stateDir, 'todo-attempts-test-session'), '5');
+      await writeFile(join(stateDir, 'todo-count-test-session'), '3');
+
+      const context = createContext({ incompleteTodoCount: 3 });
+
+      makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(join(stateDir, 'todo-attempts-test-session'))).toBe(false);
+      expect(existsSync(join(stateDir, 'todo-count-test-session'))).toBe(false);
+    });
+
+    it('should allow stop when no incomplete todos', () => {
+      const context = createContext({ incompleteTodoCount: 0 });
+
+      const result = makeDecision(context);
+
+      expect(result).toEqual({ continue: true });
     });
   });
 
@@ -397,10 +432,21 @@ describe('makeDecision', () => {
 
       const result = makeDecision(context);
 
-      // Should block with ultrawork message (priority 2)
+      // Should block with ultrawork message (priority 2), not todo-continuation (priority 3)
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<ultrawork-persistence>');
       expect(result.reason).not.toContain('<todo-continuation>');
+    });
+
+    it('should use baseline todo-continuation when no ralph/ultrawork active', () => {
+      // No ralph or ultrawork, just incomplete todos
+      const context = createContext({ incompleteTodoCount: 3 });
+
+      const result = makeDecision(context);
+
+      // Should block with todo-continuation message (priority 3)
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<todo-continuation>');
     });
   });
 });

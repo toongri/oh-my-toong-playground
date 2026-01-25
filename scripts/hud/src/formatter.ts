@@ -157,6 +157,18 @@ export function formatStatusLineV2(data: HudDataV2): string {
     line2Parts.push(colorize(`session:${formatted}`, ANSI.dim));
   }
 
+  // Todos progress (only if tasks exist)
+  if (data.todos) {
+    const { completed, total } = data.todos;
+    const todosText = `todos:${completed}/${total}`;
+    line2Parts.push(colorize(todosText, ANSI.green));
+  }
+
+  // In-progress task (only if one is active)
+  if (data.inProgressTodo) {
+    line2Parts.push(colorize(data.inProgressTodo, ANSI.dim));
+  }
+
   // Combine lines
   const line1 = line1Parts.join(' | ');
   const line2 = line2Parts.length > 0 ? line2Parts.join(' | ') : '';

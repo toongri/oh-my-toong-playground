@@ -1,8 +1,8 @@
 import { readStdin, parseInput } from './stdin.js';
 import { getProjectRoot } from './utils.js';
 import { makeDecision, DecisionContext } from './decision.js';
-import { countIncompleteTodos } from './transcript-detector.js';
-import { readRalphState, readUltraworkState } from './state.js';
+import { readTasksFromDirectory, countIncompleteTasks } from '../../lib/dist/task-reader.js';
+import { join } from 'path';
 import { initLogger, logStart, logEnd, logInfo, logDebug, logError } from '../../lib/dist/logging.js';
 
 export async function main(): Promise<void> {
@@ -19,23 +19,12 @@ export async function main(): Promise<void> {
     logStart();
     logInfo(`stop hook invoked, sessionId=${input.sessionId}`);
 
-    // Determine originalPrompt from active mode state
-    // Priority: Ultrawork > Ralph (matches decision.ts priority order)
-    let originalPrompt: string | undefined;
-    const ultraworkState = readUltraworkState(projectRoot, input.sessionId);
-    const ralphState = readRalphState(projectRoot, input.sessionId);
-
-    if (ultraworkState?.active && ultraworkState.original_prompt) {
-      originalPrompt = ultraworkState.original_prompt;
-      logDebug(`using ultrawork originalPrompt for todo counting`);
-    } else if (ralphState?.active && ralphState.prompt) {
-      originalPrompt = ralphState.prompt;
-      logDebug(`using ralph prompt for todo counting`);
-    }
-
-    // Count incomplete todos from transcript (scoped to originalPrompt if available)
-    const incompleteTodoCount = countIncompleteTodos(input.transcriptPath, originalPrompt);
-    logDebug(`incompleteTodoCount=${incompleteTodoCount}`);
+    // Read tasks from file-based directory
+    const homeDir = process.env.HOME || '/tmp';
+    const tasksDir = join(homeDir, '.claude', 'tasks', input.sessionId);
+    const tasks = await readTasksFromDirectory(tasksDir);
+    const incompleteTodoCount = countIncompleteTasks(tasks);
+    logDebug(`tasks from ${tasksDir}: total=${tasks.length}, incomplete=${incompleteTodoCount}`);
 
     // Build decision context
     const context: DecisionContext = {

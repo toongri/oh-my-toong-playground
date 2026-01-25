@@ -293,6 +293,8 @@ describe('formatStatusLineV2', () => {
     agents: [],
     sessionDuration: null,
     thinkingActive: false,
+    todos: null,
+    inProgressTodo: null,
   };
 
   describe('prefix', () => {
@@ -643,6 +645,81 @@ describe('formatStatusLineV2', () => {
     it('does not show session when duration is null', () => {
       const result = formatStatusLineV2(emptyDataV2);
       expect(result).not.toContain('session:');
+    });
+  });
+
+  describe('line 2 - todos progress', () => {
+    it('shows todos progress when data.todos exists', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 3, total: 5 },
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('todos:3/5');
+    });
+
+    it('does not show todos when data.todos is null', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      expect(result).not.toContain('todos:');
+    });
+
+    it('applies green color to todos', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 2, total: 4 },
+      };
+      const result = formatStatusLineV2(data);
+      // todos should have green color
+      const line2 = result.split('\n')[1] || '';
+      expect(line2).toContain(ANSI.green);
+    });
+
+    it('shows todos on line 2', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        todos: { completed: 1, total: 3 },
+      };
+      const result = formatStatusLineV2(data);
+      const lines = result.split('\n');
+      expect(lines.length).toBe(2);
+      expect(lines[1]).toContain('todos:1/3');
+    });
+  });
+
+  describe('line 2 - in-progress task', () => {
+    it('shows in-progress task activeForm when data.inProgressTodo exists', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        inProgressTodo: 'Running tests',
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain('Running tests');
+    });
+
+    it('does not show in-progress task when data.inProgressTodo is null', () => {
+      const result = formatStatusLineV2(emptyDataV2);
+      // Should only have line 1
+      expect(result.split('\n').length).toBe(1);
+    });
+
+    it('applies dim color to in-progress task', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        inProgressTodo: 'Implementing feature',
+      };
+      const result = formatStatusLineV2(data);
+      expect(result).toContain(ANSI.dim);
+    });
+
+    it('shows in-progress task on line 2', () => {
+      const data: HudDataV2 = {
+        ...emptyDataV2,
+        inProgressTodo: 'Analyzing code',
+      };
+      const result = formatStatusLineV2(data);
+      const lines = result.split('\n');
+      expect(lines.length).toBe(2);
+      expect(lines[1]).toContain('Analyzing code');
     });
   });
 
