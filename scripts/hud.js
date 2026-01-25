@@ -494,11 +494,9 @@ function formatStatusLineV2(data) {
       line1Parts.push(parts.join(" "));
     }
   }
-  if (data.contextPercent !== null) {
-    const percent = Math.min(100, Math.round(data.contextPercent));
-    const color = getContextColor(percent);
-    line1Parts.push(colorize(`ctx:${percent}%`, color));
-  }
+  const ctxPercent = data.contextPercent !== null ? Math.min(100, Math.round(data.contextPercent)) : 0;
+  const ctxColor = ctxPercent >= 70 ? ANSI.red : ctxPercent >= 50 ? ANSI.yellow : ctxPercent >= 30 ? ANSI.green : ANSI.dim;
+  line1Parts.push(colorize(`ctx:${ctxPercent}%`, ctxColor));
   if (data.agents.length > 0) {
     const firstName = data.agents[0].name || `${data.agents[0].type}${data.agents[0].model}`;
     const remaining = data.agents.length - 1;

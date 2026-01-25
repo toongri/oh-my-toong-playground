@@ -120,12 +120,10 @@ export function formatStatusLineV2(data: HudDataV2): string {
     }
   }
 
-  // Context percentage
-  if (data.contextPercent !== null) {
-    const percent = Math.min(100, Math.round(data.contextPercent));
-    const color = getContextColor(percent);
-    line1Parts.push(colorize(`ctx:${percent}%`, color));
-  }
+  // Context percentage (always shown - dim < 30%, green 30-49%, yellow 50-69%, red 70%+)
+  const ctxPercent = data.contextPercent !== null ? Math.min(100, Math.round(data.contextPercent)) : 0;
+  const ctxColor = ctxPercent >= 70 ? ANSI.red : ctxPercent >= 50 ? ANSI.yellow : ctxPercent >= 30 ? ANSI.green : ANSI.dim;
+  line1Parts.push(colorize(`ctx:${ctxPercent}%`, ctxColor));
 
   // Agent names (compact format: agents:first+N)
   if (data.agents.length > 0) {
