@@ -470,7 +470,14 @@ function getPercentColor(percent) {
 function formatStatusLineV2(data) {
   const line1Parts = [];
   const line2Parts = [];
-  line1Parts.push(colorize("[OMT]", ANSI.bold));
+  if (data.sessionDuration !== null && data.sessionDuration > 0) {
+    const hours = Math.floor(data.sessionDuration / 60);
+    const mins = data.sessionDuration % 60;
+    const formatted = hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
+    line1Parts.push(colorize(formatted, ANSI.bold));
+  } else {
+    line1Parts.push(colorize("0m", ANSI.bold));
+  }
   if (data.rateLimits) {
     const parts = [];
     if (data.rateLimits.fiveHour) {
@@ -501,6 +508,11 @@ function formatStatusLineV2(data) {
   if (data.thinkingActive) {
     line1Parts.push(colorize("thinking", ANSI.cyan));
   }
+  const completed = data.todos?.completed ?? 0;
+  const total = data.todos?.total ?? 0;
+  const tasksText = `tasks:${completed}/${total}`;
+  const tasksColor = total > 0 ? ANSI.green : ANSI.dim;
+  line2Parts.push(colorize(tasksText, tasksColor));
   if (data.ralph?.active) {
     const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
     let text = `ralph:${data.ralph.iteration}/${data.ralph.max_iterations}`;
@@ -511,17 +523,6 @@ function formatStatusLineV2(data) {
   }
   if (data.ultrawork?.active && !data.ultrawork.linked_to_ralph) {
     line2Parts.push(colorize("ultrawork", ANSI.green));
-  }
-  if (data.sessionDuration !== null && data.sessionDuration > 0) {
-    const hours = Math.floor(data.sessionDuration / 60);
-    const mins = data.sessionDuration % 60;
-    const formatted = hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
-    line2Parts.push(colorize(`session:${formatted}`, ANSI.dim));
-  }
-  if (data.todos) {
-    const { completed, total } = data.todos;
-    const todosText = `todos:${completed}/${total}`;
-    line2Parts.push(colorize(todosText, ANSI.green));
   }
   if (data.inProgressTodo) {
     line2Parts.push(colorize(data.inProgressTodo, ANSI.dim));

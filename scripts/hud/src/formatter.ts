@@ -92,8 +92,15 @@ export function formatStatusLineV2(data: HudDataV2): string {
   const line1Parts: string[] = [];
   const line2Parts: string[] = [];
 
-  // [OMT] - changed from [OMC]
-  line1Parts.push(colorize('[OMT]', ANSI.bold));
+  // Session duration at the start (replacing [OMT])
+  if (data.sessionDuration !== null && data.sessionDuration > 0) {
+    const hours = Math.floor(data.sessionDuration / 60);
+    const mins = data.sessionDuration % 60;
+    const formatted = hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
+    line1Parts.push(colorize(formatted, ANSI.bold));
+  } else {
+    line1Parts.push(colorize('0m', ANSI.bold));
+  }
 
   // Rate limits (only if available)
   if (data.rateLimits) {
@@ -133,6 +140,13 @@ export function formatStatusLineV2(data: HudDataV2): string {
     line1Parts.push(colorize('thinking', ANSI.cyan));
   }
 
+  // Line 2: Tasks progress (always shown - dim if 0/0, green if tasks exist)
+  const completed = data.todos?.completed ?? 0;
+  const total = data.todos?.total ?? 0;
+  const tasksText = `tasks:${completed}/${total}`;
+  const tasksColor = total > 0 ? ANSI.green : ANSI.dim;
+  line2Parts.push(colorize(tasksText, tasksColor));
+
   // Line 2: Ralph (only when active)
   if (data.ralph?.active) {
     const color = getRalphColor(data.ralph.iteration, data.ralph.max_iterations);
@@ -147,21 +161,6 @@ export function formatStatusLineV2(data: HudDataV2): string {
   // Line 2: Ultrawork (only when active and not linked to ralph)
   if (data.ultrawork?.active && !data.ultrawork.linked_to_ralph) {
     line2Parts.push(colorize('ultrawork', ANSI.green));
-  }
-
-  // Session duration
-  if (data.sessionDuration !== null && data.sessionDuration > 0) {
-    const hours = Math.floor(data.sessionDuration / 60);
-    const mins = data.sessionDuration % 60;
-    const formatted = hours > 0 ? `${hours}h${mins}m` : `${mins}m`;
-    line2Parts.push(colorize(`session:${formatted}`, ANSI.dim));
-  }
-
-  // Todos progress (only if tasks exist)
-  if (data.todos) {
-    const { completed, total } = data.todos;
-    const todosText = `todos:${completed}/${total}`;
-    line2Parts.push(colorize(todosText, ANSI.green));
   }
 
   // In-progress task (only if one is active)
