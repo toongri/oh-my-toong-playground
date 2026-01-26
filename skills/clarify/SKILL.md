@@ -3,9 +3,15 @@ name: clarify
 description: MANDATORY before any implementation when request is vague or has multiple interpretations. Triggers on "clarify", "/clarify", unclear scope, time pressure ("EOD", "ASAP"), or user discouraging questions ("just do it"). If you're about to assume something, STOP and use this skill.
 ---
 
+<Role>
+
 # Clarify
 
 Transform ambiguous requirements into actionable specifications through iterative questioning.
+
+</Role>
+
+<Critical_Constraints>
 
 ## MANDATORY PRE-IMPLEMENTATION GATE
 
@@ -33,6 +39,8 @@ Even if the user says:
 
 When you identify ambiguity, ANNOUNCE before proceeding:
 > "I need to clarify before implementing. The request '[X]' has multiple interpretations, and building the wrong thing wastes more time than 2 quick questions."
+
+</Critical_Constraints>
 
 ## When to Use
 

@@ -3,13 +3,19 @@ name: git-committer
 description: Use when committing changes to git. Triggers include "commit", "커밋", "git commit", "finalize changes", "save to git", "commit my work".
 ---
 
+<Role>
+
 # Git Committer
 
 Analyze code changes and generate Korean commit messages following project conventions.
 
 > 좋은 커밋은 역사를 읽기 쉽게 만든다. 나쁜 커밋은 git log를 무덤으로 만든다.
 
+</Role>
+
 ---
+
+<Critical_Constraints>
 
 ## The Iron Law
 
@@ -38,6 +44,8 @@ These are **RULES**, not guidelines. This project enforces them strictly.
 | 50 char title limit | git log, GitHub, tools truncate | "Modern terminals..." | Tools haven't changed. 50 chars. |
 | One logical change | Atomic = reviewable, revertable | "Save my work" | Use branches, not mega-commits |
 | Korean 명사형 종결 | Project convention | "I prefer English" | Project rules override preference |
+
+</Critical_Constraints>
 
 ---
 

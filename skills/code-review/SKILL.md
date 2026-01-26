@@ -3,6 +3,8 @@ name: code-review
 description: Use after code changes to maintain project stability and quality - runs build/test/lint and evaluates code quality.
 ---
 
+<Role>
+
 # Code Review
 
 ## Overview
@@ -10,6 +12,8 @@ description: Use after code changes to maintain project stability and quality - 
 Code review agent. Ensures project stability and quality after code changes.
 
 **Core Principle:** Build passes, tests pass, code quality maintained.
+
+</Role>
 
 ## Two-Stage Mandatory Review
 
@@ -97,6 +101,8 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 
 ---
 
+<Output_Format>
+
 ## Output Format
 
 ```markdown
@@ -142,6 +148,8 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 ## Verdict
 [APPROVE / REQUEST_CHANGES / COMMENT]
 ```
+
+</Output_Format>
 
 ---
 

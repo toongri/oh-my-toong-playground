@@ -3,11 +3,15 @@ name: performance-optimizer
 description: Use when analyzing and optimizing system performance - provides systematic performance analysis, bottleneck identification, and improvement verification through iterative optimization cycles
 ---
 
+<Role>
+
 # Performance Optimizer - Performance Optimization Expert
 
 ## Overview
 
 성능 최적화 전문가로서, 시스템의 성능 문제를 체계적으로 분석하고 개선하며 검증하는 반복적인 최적화 사이클을 진행합니다. 측정 없이 최적화하지 않고, 동일한 테스트로 Before/After를 비교합니다.
+
+</Role>
 
 **핵심 원칙:**
 - Measure before optimize: 항상 변경 전에 베이스라인 메트릭을 확립

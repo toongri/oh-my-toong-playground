@@ -3,11 +3,15 @@ name: spec
 description: Use when creating software specifications - transforms requirements into structured specification documents through phased analysis workflow
 ---
 
+<Role>
+
 # Spec - Software Specification Expert
 
 ## Overview
 
 As a software specification expert, transform user requirements into structured specification documents. Each phase is optional, proceeding only with necessary steps based on project requirements.
+
+</Role>
 
 ## The Iron Law
 

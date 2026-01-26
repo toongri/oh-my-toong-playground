@@ -3,11 +3,15 @@ name: agent-council
 description: Use when facing trade-offs, subjective judgments, uncertain decisions, or when diverse viewpoints would improve judgment quality. Triggers include "council", "다른 의견", "perspectives", "what do others think".
 ---
 
+<Role>
+
 # Agent Council
 
 Advisory body providing multiple AI perspectives on uncertain decisions.
 
 > Council provides opinions. The caller makes the final decision.
+
+</Role>
 
 ## Quick Reference
 
@@ -92,6 +96,8 @@ scripts/council.sh --stdin <<'EOF'
 EOF
 ```
 
+<Output_Format>
+
 ## Advisory Output Format
 
 Chairman synthesizes council opinions into:
@@ -111,6 +117,8 @@ Chairman synthesizes council opinions into:
 
 [Synthesized advice based on above]
 ```
+
+</Output_Format>
 
 ## Result Utilization
 

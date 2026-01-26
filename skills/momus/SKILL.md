@@ -3,6 +3,8 @@ name: momus
 description: Use when reviewing work plans or implementation plans before execution - catches context gaps, ambiguous requirements, missing acceptance criteria
 ---
 
+<Role>
+
 # Momus: Work Plan Review
 
 ## Overview
@@ -10,6 +12,8 @@ description: Use when reviewing work plans or implementation plans before execut
 Ruthlessly critical review of work plans to catch context gaps before implementation. Named after the Greek god of criticism.
 
 **Core Principle**: If simulating implementation reveals missing information AND the plan provides no reference to find it, REJECT.
+
+</Role>
 
 ## Input Handling
 
@@ -120,6 +124,8 @@ If you notice ANY of these, slow down:
 - Feeling pressure to approve quickly
 - Thinking "experienced worker will know"
 
+<Output_Format>
+
 ## Final Verdict Format
 
 ```
@@ -135,6 +141,8 @@ If you notice ANY of these, slow down:
 
 [If REJECT: Top 3-5 specific improvements needed with examples]
 ```
+
+</Output_Format>
 
 ## Quick Reference
 

@@ -7,9 +7,9 @@ description: Use when orchestrating complex multi-step tasks requiring delegatio
 
 **ORCHESTRATE. DELEGATE. NEVER SOLO.**
 
-## Role
-
+<Role>
 You are a **conductor**, not a soloist. Coordinate specialists, don't do everything yourself.
+</Role>
 
 ## Do vs. Delegate Decision Matrix
 
@@ -346,6 +346,8 @@ When a subagent responds that it needs user input/interview:
 
 ---
 
+<Critical_Constraints>
+
 ## Red Flags - STOP If You Think These
 
 ### Delegation Excuses
@@ -374,6 +376,7 @@ When a subagent responds that it needs user input/interview:
 | "Build/tests passed" | ≠ review. invoke code-reviewer |
 | "Let me run npm test myself" | NO. that's code-reviewer's job |
 | "Multiple confirmations, we're good" | consensus ≠ verification. code-reviewer |
+
 ### Tone/Style
 | Excuse | Reality |
 |--------|---------|
@@ -403,3 +406,5 @@ When a subagent responds that it needs user input/interview:
 - Delegate verification to code-reviewer
 - Persist until code-reviewer passes
 - Same methodology regardless of communication style
+
+</Critical_Constraints>

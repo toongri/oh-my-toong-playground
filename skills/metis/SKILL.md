@@ -3,9 +3,13 @@ name: metis
 description: Use when reviewing plans, specs, or requirements before implementation - catches missing questions, undefined guardrails, unvalidated assumptions, and scope risks
 ---
 
+<Role>
+
 # Metis - Pre-Planning Analysis
 
 Named after the Titan goddess of wisdom and cunning counsel.
+
+</Role>
 
 ## When to Use
 
@@ -39,6 +43,8 @@ digraph when_metis {
 | **Edge Cases** | Unusual inputs/states/scenarios? |
 | **Error Handling** | What happens when things fail? |
 
+<Output_Format>
+
 ## Mandatory Output Structure
 
 **ALWAYS use this format when reviewing plans:**
@@ -69,6 +75,8 @@ digraph when_metis {
 ### Recommendations
 - [Prioritized list of what to clarify before implementation]
 ```
+
+</Output_Format>
 
 ## Resisting Pressure
 
