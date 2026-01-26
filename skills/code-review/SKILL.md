@@ -1,17 +1,17 @@
 ---
 name: code-review
-description: Use when verifying implementation completeness after sisyphus-junior reports done, when build/test/lint verification is needed, or when code quality and spec compliance must be validated before marking task complete.
+description: Use after code changes to maintain project stability and quality - runs build/test/lint and evaluates code quality.
 ---
 
 # Code Review
 
 ## Overview
 
-Senior-level code review agent. Evaluates code quality, security, and maintainability with severity-based feedback.
+Code review agent. Ensures project stability and quality after code changes.
 
-**Core Principle:** Specification compliance takes precedence over code quality. All stages operate as iterative loops.
+**Core Principle:** Build passes, tests pass, code quality maintained.
 
-## Three-Stage Mandatory Review
+## Two-Stage Mandatory Review
 
 ```dot
 digraph review_stages {
@@ -21,9 +21,7 @@ digraph review_stages {
     diff [label="Identify changes via git diff"];
     stage0 [label="Stage 0: Automated Verification" shape=box style=filled fillcolor=lightyellow];
     verify_pass [label="All pass?" shape=diamond];
-    stage1 [label="Stage 1: Spec Compliance" shape=box style=filled fillcolor=lightblue];
-    spec_pass [label="Meets spec?" shape=diamond];
-    stage2 [label="Stage 2: Code Quality" shape=box style=filled fillcolor=lightgreen];
+    stage1 [label="Stage 1: Code Quality" shape=box style=filled fillcolor=lightgreen];
     quality_pass [label="Quality pass?" shape=diamond];
     approve [label="APPROVE" shape=ellipse style=filled fillcolor=green fontcolor=white];
     fix [label="FIX -> RE-REVIEW" shape=box style=filled fillcolor=red fontcolor=white];
@@ -31,11 +29,8 @@ digraph review_stages {
     start -> diff -> stage0 -> verify_pass;
     verify_pass -> fix [label="NO"];
     verify_pass -> stage1 [label="YES"];
-    stage1 -> spec_pass;
-    spec_pass -> fix [label="NO"];
-    spec_pass -> stage2 [label="YES"];
     fix -> stage0 [style=dashed];
-    stage2 -> quality_pass;
+    stage1 -> quality_pass;
     quality_pass -> fix [label="NO"];
     quality_pass -> approve [label="YES"];
 }
@@ -43,7 +38,7 @@ digraph review_stages {
 
 ### Fast-Path Exception
 
-Single-line edits, obvious typos, or changes with no functional behavior modification skip Stage 0 and Stage 1, receiving only a brief Stage 2 quality check.
+Single-line edits, obvious typos, or changes with no functional behavior modification skip Stage 0, receiving only a brief Stage 1 quality check.
 
 ---
 
@@ -59,23 +54,7 @@ Single-line edits, obvious typos, or changes with no functional behavior modific
 
 ---
 
-## Stage 1: Specification Compliance (After Stage 0 Passes)
-
-Before any code quality analysis, verify:
-
-| Check | Question |
-|-------|----------|
-| Implementation addresses **ALL** requirements? |
-| Solves the **correct** problem? |
-| Any requested features **missing**? |
-| Any **unrequested** functionality? |
-| Requester would **recognize** their request? |
-
-**Outcome:** Pass -> Stage 2 / Fail -> FIX -> RE-REVIEW loop
-
----
-
-## Stage 2: Code Quality (After Stage 1 Passes)
+## Stage 1: Code Quality (After Stage 0 Passes)
 
 Review code against quality checklists by severity level.
 
@@ -132,6 +111,8 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 [If FAIL: Stop here, issue REQUEST_CHANGES]
 
 ---
+
+## Stage 1: Code Quality
 
 ## Summary
 | Metric | Count | Reported (>=80) |
@@ -190,7 +171,7 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 ## Quick Reference
 
 ```
-Stage 0: Automated Verification -> Stage 1: Spec Compliance -> Stage 2: Code Quality
+Stage 0: Automated Verification (Build, Test, Lint) -> Stage 1: Code Quality
 
 STAGE 0: See stage0-commands.md
 CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
