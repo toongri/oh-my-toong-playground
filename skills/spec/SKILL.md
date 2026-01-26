@@ -219,8 +219,8 @@ digraph spec_workflow {
 Follow this pattern in all phases.
 
 ### 1. Information Gathering
-- Ask clear and specific questions to the user when factual information is needed
-- Use subagents to research technical facts
+- Use `AskUserQuestion` tool to gather information about preferences, priorities, and decisions
+- Use subagents to research technical facts (explore for codebase, librarian for external docs, oracle for architecture)
 
 ### 2. Analysis and Proposal
 - Present expert analysis and best practices first
@@ -235,6 +235,61 @@ Follow this pattern in all phases.
 - Briefly summarize the results of the current step
 - Explain what will be covered in the next step
 - Confirm readiness to proceed
+
+### Context Brokering Protocol (CRITICAL)
+
+**NEVER burden the user with questions the codebase can answer.**
+
+| Question Type | Ask User? | Action |
+|---------------|-----------|--------|
+| "Which project contains X?" | NO | Use explore first |
+| "What patterns exist in the codebase?" | NO | Use explore first |
+| "Where is X implemented?" | NO | Use explore first |
+| "What's the current architecture?" | NO | Use oracle |
+| "What's the tech stack?" | NO | Use explore first |
+| "What's your timeline?" | YES | Ask user (via AskUserQuestion) |
+| "Should we prioritize speed or quality?" | YES | Ask user (via AskUserQuestion) |
+| "What's the scope boundary?" | YES | Ask user (via AskUserQuestion) |
+
+**The ONLY questions for users are about PREFERENCES, not FACTS.**
+
+### AskUserQuestion Quality Standard
+
+```yaml
+BAD:
+  question: "Which approach?"
+  options:
+    - label: "A"
+    - label: "B"
+
+GOOD:
+  question: "The login API currently returns generic 401 errors for all auth failures.
+    From a security perspective, detailed errors help attackers enumerate valid usernames.
+    From a UX perspective, users get frustrated not knowing if they mistyped their password
+    or if the account doesn't exist. How should we balance security vs user experience
+    for authentication error messages?"
+  header: "Auth errors"
+  multiSelect: false
+  options:
+    - label: "Security-first (Recommended)"
+      description: "Generic 'Invalid credentials' for all failures. Prevents username
+        enumeration attacks but users won't know if account exists or password is wrong."
+    - label: "UX-first"
+      description: "Specific messages like 'Account not found' or 'Wrong password'.
+        Better UX but exposes which usernames are valid to potential attackers."
+    - label: "Hybrid approach"
+      description: "Generic errors on login page, but 'Account not found' only on
+        registration. Balanced but adds implementation complexity."
+```
+
+**Question Structure:**
+1. **Current situation** - What exists now, what's the context
+2. **Tension/Problem** - Why this decision matters, conflicting concerns
+3. **The actual question** - Clear ask with "How should we..." or "Which approach..."
+
+### Interview Persistence
+
+**Continue until YOU have no questions left.** Not after 2-3 questions. Not when user seems tired. Keep interviewing until every ambiguity is resolved.
 
 ## Clarification Guidance
 

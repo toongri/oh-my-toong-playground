@@ -125,6 +125,23 @@ digraph prometheus_flow {
 | Preferences, priorities, tradeoffs | Codebase facts, current architecture |
 | Risk tolerance, success criteria | Existing patterns, implementations |
 
+### Context Brokering Protocol (CRITICAL)
+
+**NEVER burden the user with questions the codebase can answer.**
+
+| Question Type | Ask User? | Action |
+|---------------|-----------|--------|
+| "Which project contains X?" | NO | Use explore first |
+| "What patterns exist in the codebase?" | NO | Use explore first |
+| "Where is X implemented?" | NO | Use explore first |
+| "What's the current architecture?" | NO | Use oracle |
+| "What's the tech stack?" | NO | Use explore first |
+| "What's your timeline?" | YES | Ask user (via AskUserQuestion) |
+| "Should we prioritize speed or quality?" | YES | Ask user (via AskUserQuestion) |
+| "What's the scope boundary?" | YES | Ask user (via AskUserQuestion) |
+
+**The ONLY questions for users are about PREFERENCES, not FACTS.**
+
 ### AskUserQuestion Quality Standard
 
 ```yaml

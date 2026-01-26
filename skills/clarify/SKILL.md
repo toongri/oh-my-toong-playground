@@ -92,7 +92,24 @@ digraph {
 ### 1. Capture & Analyze
 Record original verbatim. Identify: unclear items, needed assumptions, open decisions.
 
-### 2. Iterative Clarification
+### 2. Context Brokering (CRITICAL)
+
+**NEVER burden the user with questions the codebase can answer.**
+
+| Question Type | Ask User? | Action |
+|---------------|-----------|--------|
+| "Which project contains X?" | NO | Use explore first |
+| "What patterns exist in the codebase?" | NO | Use explore first |
+| "Where is X implemented?" | NO | Use explore first |
+| "What's the current architecture?" | NO | Use oracle |
+| "What's the tech stack?" | NO | Use explore first |
+| "What's your timeline?" | YES | Ask user (via AskUserQuestion) |
+| "Should we prioritize speed or quality?" | YES | Ask user (via AskUserQuestion) |
+| "What's the scope boundary?" | YES | Ask user (via AskUserQuestion) |
+
+**The ONLY questions for users are about PREFERENCES, not FACTS.**
+
+### 3. Iterative Clarification
 Use `AskUserQuestion` for each ambiguity.
 
 **Design:** Specific > general, Options > open-ended, One at a time, Architecture before details
@@ -102,7 +119,41 @@ while ambiguities_remain:
     ask_most_critical() → update() → check_new()
 ```
 
-### 3. Before/After Summary
+### AskUserQuestion Quality Standard
+
+```yaml
+BAD:
+  question: "Which approach?"
+  options:
+    - label: "A"
+    - label: "B"
+
+GOOD:
+  question: "The login API currently returns generic 401 errors for all auth failures.
+    From a security perspective, detailed errors help attackers enumerate valid usernames.
+    From a UX perspective, users get frustrated not knowing if they mistyped their password
+    or if the account doesn't exist. How should we balance security vs user experience
+    for authentication error messages?"
+  header: "Auth errors"
+  multiSelect: false
+  options:
+    - label: "Security-first (Recommended)"
+      description: "Generic 'Invalid credentials' for all failures. Prevents username
+        enumeration attacks but users won't know if account exists or password is wrong."
+    - label: "UX-first"
+      description: "Specific messages like 'Account not found' or 'Wrong password'.
+        Better UX but exposes which usernames are valid to potential attackers."
+    - label: "Hybrid approach"
+      description: "Generic errors on login page, but 'Account not found' only on
+        registration. Balanced but adds implementation complexity."
+```
+
+**Question Structure:**
+1. **Current situation** - What exists now, what's the context
+2. **Tension/Problem** - Why this decision matters, conflicting concerns
+3. **The actual question** - Clear ask with "How should we..." or "Which approach..."
+
+### 4. Before/After Summary
 ```markdown
 ### Before: "{original}"
 ### After:
@@ -110,7 +161,7 @@ while ambiguities_remain:
 | Question | Decision |
 ```
 
-### 4. Save (Optional)
+### 5. Save (Optional)
 Offer to save to `requirements/` if substantial.
 
 ## Quick Reference
@@ -154,3 +205,4 @@ Offer to save to `requirements/` if substantial.
 3. **Minimal questions** - Only what's needed
 4. **Respect answers** - Accept decisions
 5. **Show transformation** - Always before/after
+6. **Interview persistence** - Continue until YOU have no questions left. Not after 2-3 questions. Not when user seems tired. Keep clarifying until every ambiguity is resolved.
