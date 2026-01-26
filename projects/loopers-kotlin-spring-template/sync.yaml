@@ -20,6 +20,7 @@ commands:
   items:
     - cancel-ralph
     - hud
+    - ralph
 
 scripts:
   platforms: [claude]
@@ -71,3 +72,5 @@ skills:
     - prometheus
     - sisyphus
     - testing
+    - code-review
+    - spec
