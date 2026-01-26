@@ -9,9 +9,9 @@ description: Use when reviewing code, providing PR feedback, or writing review c
 
 Senior-level code review agent. Evaluates code quality, security, and maintainability with severity-based feedback.
 
-**Core Principle:** Specification compliance takes precedence over code quality. Both stages operate as iterative loops.
+**Core Principle:** Specification compliance takes precedence over code quality. All stages operate as iterative loops.
 
-## Two-Stage Mandatory Review
+## Three-Stage Mandatory Review
 
 ```dot
 digraph review_stages {
@@ -19,6 +19,8 @@ digraph review_stages {
 
     start [label="Start Review" shape=ellipse];
     diff [label="Identify changes via git diff"];
+    stage0 [label="Stage 0: Automated Verification" shape=box style=filled fillcolor=lightyellow];
+    verify_pass [label="All pass?" shape=diamond];
     stage1 [label="Stage 1: Spec Compliance" shape=box style=filled fillcolor=lightblue];
     spec_pass [label="Meets spec?" shape=diamond];
     stage2 [label="Stage 2: Code Quality" shape=box style=filled fillcolor=lightgreen];
@@ -26,10 +28,13 @@ digraph review_stages {
     approve [label="APPROVE" shape=ellipse style=filled fillcolor=green fontcolor=white];
     fix [label="FIX → RE-REVIEW" shape=box style=filled fillcolor=red fontcolor=white];
 
-    start -> diff -> stage1 -> spec_pass;
+    start -> diff -> stage0 -> verify_pass;
+    verify_pass -> fix [label="NO"];
+    verify_pass -> stage1 [label="YES"];
+    stage1 -> spec_pass;
     spec_pass -> fix [label="NO"];
     spec_pass -> stage2 [label="YES"];
-    fix -> stage1 [style=dashed];
+    fix -> stage0 [style=dashed];
     stage2 -> quality_pass;
     quality_pass -> fix [label="NO"];
     quality_pass -> approve [label="YES"];
@@ -38,11 +43,141 @@ digraph review_stages {
 
 ### Fast-Path Exception
 
-Single-line edits, obvious typos, or changes with no functional behavior modification skip Stage 1 and receive only a brief Stage 2 quality check.
+Single-line edits, obvious typos, or changes with no functional behavior modification skip Stage 0 and Stage 1, receiving only a brief Stage 2 quality check.
 
 ---
 
-## Stage 1: Specification Compliance (Required First)
+## Stage 0: Automated Verification (MANDATORY FIRST)
+
+**Before ANY code analysis, run automated checks.** This is not optional.
+
+### Step 0.1: Discover Project Commands
+
+**Do NOT assume commands.** Each project has different tooling.
+
+**Discovery order:**
+1. **Check memory file first**: `{project-root}/.claude/skills/code-review/project-commands.md`
+2. **If not found, analyze project documentation:**
+   - `CLAUDE.md` → AI-specific instructions, often includes commands
+   - `AGENTS.md` → agent-specific guidelines
+   - `README.md` / `CONTRIBUTING.md` → documented commands
+   - `rules/` directory → project rules and conventions
+   - `.cursor/rules/` or similar → IDE-specific configs
+3. **Then analyze build files:**
+   - `package.json` → scripts section (npm/yarn/pnpm)
+   - `build.gradle` / `build.gradle.kts` → tasks
+   - `Makefile` → targets
+   - `pyproject.toml` / `setup.py` → pytest, tox
+   - `Cargo.toml` → cargo commands
+4. **If still unclear, ask user** for build/test/lint commands
+5. **Save discovered commands** to `{project-root}/.claude/skills/code-review/project-commands.md`
+
+**Memory file location:** `{project-root}/.claude/skills/code-review/project-commands.md`
+
+**Memory file format:**
+```markdown
+# Project Commands
+
+## Build/Test/Lint
+- Build: `{command}`
+- Test: `{command}`
+- Lint: `{command}`
+
+## Source
+- Discovered from: {file where commands were found}
+- Last updated: {date}
+
+## Notes
+{any special considerations}
+```
+
+**Trust but verify:** Use cached commands, but if execution fails, re-analyze and update memory file.
+
+### Step 0.2: Run Checks
+
+| Check | Pass Criteria |
+|-------|---------------|
+| **Build/Compile** | Exit code 0, no compilation errors |
+| **All Tests** | All tests pass AND tests exist for changed code |
+| **Linter/Static Analysis** | No errors (warnings acceptable) |
+
+### Special Case: No Tests for Changed Code
+
+**"0 tests executed" for new/changed code = FAILURE**
+
+- New code without tests is incomplete
+- Changed code without test coverage is risky
+- "Tests pass" requires tests to actually exist
+
+**Action:** REQUEST_CHANGES with requirement to add tests before re-review.
+
+### Special Case: No Build System / Minimal Project
+
+When project lacks build tools, tests, or linter:
+
+1. **Run what CAN be run** (syntax check is always possible)
+   - Python: `python -m py_compile file.py`
+   - JavaScript: `node --check file.js`
+   - Shell: `bash -n script.sh`
+
+2. **Document gaps as findings** for Stage 2
+   - "No test coverage" → recommend adding tests
+   - "No linter configured" → recommend setup
+
+3. **Proceed to Stage 1** after documenting
+
+**"No tools configured" is a finding, not a blocker.** The absence of tooling itself becomes a code quality concern.
+
+### Execution Order
+
+1. Run build/compile first
+2. Run full test suite
+3. Run linter/static analysis
+
+**Any failure → Immediate `REQUEST_CHANGES`**
+
+### Output Format for Stage 0
+
+```markdown
+## Stage 0: Automated Verification
+
+| Check | Status | Details |
+|-------|--------|---------|
+| Build | ✅ PASS / ❌ FAIL | [output summary] |
+| Tests | ✅ PASS (N/N) / ❌ FAIL (N/M) | [failed test names if any] |
+| Lint | ✅ PASS / ❌ FAIL | [error count if any] |
+
+**Stage 0 Result:** PASS → Proceed to Stage 1 / FAIL → REQUEST_CHANGES
+```
+
+### Stage 0 Failure = Immediate Stop
+
+If ANY check fails:
+1. **Do NOT proceed to Stage 1 or Stage 2**
+2. Report the failure with specific output
+3. Issue `REQUEST_CHANGES` immediately
+4. Wait for fix and re-run Stage 0
+
+### Red Flags for Stage 0
+
+| Excuse | Reality |
+|--------|---------|
+| "Build takes too long" | Broken code costs more. Run it. |
+| "Tests are flaky" | Report flaky tests as issue, still run them |
+| "CI will catch it" | Catching at review is cheaper than CI failure |
+| "Senior wrote it" | Seniority doesn't prevent bugs |
+| "Already in QA" | Sunk cost fallacy. Find bugs now. |
+| "Just a quick review" | Quick reviews miss broken builds |
+| "I can see it compiles" | "Can see" ≠ "verified". Run the build. |
+| "No tests exist yet" | Missing tests = incomplete code. Block until added. |
+| "It's new code, tests come later" | Tests come WITH code, not after. |
+| "0 tests passed = all pass" | 0 tests = failure, not success |
+| "I'll just use npm test" | Discover actual commands. Don't assume. |
+| "Standard commands work everywhere" | Each project is different. Check first. |
+
+---
+
+## Stage 1: Specification Compliance (After Stage 0 Passes)
 
 Before any code quality analysis, verify:
 
@@ -241,6 +376,20 @@ class PaymentService {
 ## Output Format
 
 ```markdown
+## Stage 0: Automated Verification
+
+| Check | Status | Details |
+|-------|--------|---------|
+| Build | ✅ PASS / ❌ FAIL | [output summary] |
+| Tests | ✅ PASS (N/N) / ❌ FAIL (N/M) | [failed test names] |
+| Lint | ✅ PASS / ❌ FAIL | [error count] |
+
+**Stage 0 Result:** PASS / FAIL
+
+[If FAIL: Stop here, issue REQUEST_CHANGES]
+
+---
+
 ## Summary
 | Metric | Count |
 |--------|-------|
@@ -297,7 +446,15 @@ class PaymentService {
 ## Quick Reference
 
 ```
-Stage 1: Spec Compliance → Stage 2: Code Quality
+Stage 0: Automated Verification → Stage 1: Spec Compliance → Stage 2: Code Quality
+
+STAGE 0 (MANDATORY):
+1. Discover commands:
+   - Check: {project}/.claude/skills/code-review/project-commands.md
+   - Analyze: CLAUDE.md, README.md, AGENTS.md, rules/, build files
+   - Ask user if unclear → Save to memory file
+2. Run: Build → Tests → Lint
+3. ANY failure = immediate REQUEST_CHANGES
 
 CRITICAL: Security, Data Integrity
 HIGH: Architecture, Design Principles (SRP, DI, Clean Architecture)
