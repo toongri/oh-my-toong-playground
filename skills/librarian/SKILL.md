@@ -54,11 +54,24 @@ Never mix. Handle each part with appropriate tools.
 
 ## Tool Selection
 
+**Priority: Use context7 FIRST** - it provides curated, up-to-date documentation with code examples.
+
 | Need | Tool |
 |------|------|
-| Library docs (React, Next.js, etc.) | context7 `resolve-library-id` → `query-docs` |
+| Library docs (React, Next.js, etc.) | **BOTH**: context7 (`resolve-library-id` → `query-docs`) AND WebSearch |
 | General search / current info | WebSearch |
 | Specific URL content | WebFetch |
+
+### Why Both for Library Docs?
+
+- **context7**: Curated docs, code snippets, structured answers
+- **WebSearch**: Official docs, recent changes, edge cases, community solutions
+
+**Workflow for library questions:**
+1. context7 `resolve-library-id` to find the library
+2. context7 `query-docs` for structured documentation
+3. WebSearch for official docs, recent updates, edge cases
+4. Synthesize both sources in your answer
 
 <Critical_Constraints>
 

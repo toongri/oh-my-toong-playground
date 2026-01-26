@@ -69,9 +69,29 @@ Response has **FAILED** if:
 
 ## Tool Strategy
 
+**Priority: Use Serena MCP semantic tools FIRST** before falling back to text-based search.
+
+### Serena MCP Tools (PREFERRED)
+
+Use these for code exploration - they understand code semantically, not just as text:
+
+| Tool | Use Case |
+|------|----------|
+| `get_symbols_overview` | First step for understanding any file's structure |
+| `find_symbol` | Find classes, methods, functions by name pattern |
+| `find_referencing_symbols` | Find all code that references a symbol |
+| `search_for_pattern` | Regex search with code-aware context |
+
+**Why Serena first?**
+- Reads only what you need (not entire files)
+- Understands code structure (classes, methods, dependencies)
+- Faster for large codebases
+- Returns precise locations with context
+
+### Fallback Tools
+
 | Need | Tool |
 |------|------|
-| Semantic search (definitions, references) | LSP tools |
 | Structural patterns (function shapes) | ast_grep_search |
 | Text patterns (strings, comments, logs) | grep |
 | File patterns (find by name/extension) | glob |
