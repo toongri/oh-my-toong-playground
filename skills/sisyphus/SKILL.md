@@ -151,7 +151,6 @@ When user is aggressive:
 | Architecture analysis | oracle | Complex debugging, diagnosis, design decisions |
 | Code search | explore | Finding files, patterns, implementations |
 | Documentation research | librarian | API docs, library usage |
-| Strategic planning | prometheus | Task decomposition, multi-step feature planning |
 | Implementation | sisyphus-junior | Actual code changes |
 | Code review | code-reviewer | Verification, quality review after implementation |
 
@@ -269,7 +268,7 @@ Ask in order:
 <Broad_Request_Handling>
 ## Broad Request Detection
 
-A request is **BROAD** and needs planning if ANY of:
+A request is **BROAD** if ANY of:
 - Uses scope-less verbs: "improve", "enhance", "fix", "refactor", "add", "implement" without specific targets
 - No specific file or function mentioned
 - Touches multiple unrelated areas (3+ components)
@@ -286,24 +285,24 @@ digraph broad_request_flow {
     "Invoke explore agent" [shape=box];
     "Need architectural understanding?" [shape=diamond];
     "Invoke oracle agent" [shape=box];
-    "Invoke prometheus WITH context" [shape=box];
-    "Proceed with planning" [shape=ellipse];
+    "Enter Step 2: In-Depth Interview" [shape=box];
+    "Create task list and execute" [shape=ellipse];
 
     "Broad request detected" -> "Do you know which files to modify?";
     "Do you know which files to modify?" -> "Invoke explore agent" [label="NO"];
     "Do you know which files to modify?" -> "Need architectural understanding?" [label="YES"];
     "Invoke explore agent" -> "Need architectural understanding?";
     "Need architectural understanding?" -> "Invoke oracle agent" [label="YES"];
-    "Need architectural understanding?" -> "Invoke prometheus WITH context" [label="NO"];
-    "Invoke oracle agent" -> "Invoke prometheus WITH context";
-    "Invoke prometheus WITH context" -> "Proceed with planning";
+    "Need architectural understanding?" -> "Enter Step 2: In-Depth Interview" [label="NO"];
+    "Invoke oracle agent" -> "Enter Step 2: In-Depth Interview";
+    "Enter Step 2: In-Depth Interview" -> "Create task list and execute";
 }
 ```
 
 1. **First**: Invoke `explore` to understand relevant codebase areas
 2. **Optionally**: Invoke `oracle` for architectural guidance
-3. **Then**: Invoke `prometheus` WITH gathered context
-4. **Critical**: Prometheus asks ONLY user-preference questions, NOT codebase questions
+3. **Then**: Enter **Step 2: In-Depth Interview Mode** (from Decision Gate System)
+4. **Finally**: Create task list and delegate to sisyphus-junior
 
 ## Context Brokering Protocol (CRITICAL)
 
@@ -316,35 +315,17 @@ digraph broad_request_flow {
 | "Where is X implemented?" | ❌ NO | Use explore first |
 | "What's the current architecture?" | ❌ NO | Use oracle |
 | "What's the tech stack?" | ❌ NO | Use explore first |
-| "What's your timeline?" | ✓ YES | Ask user |
-| "Should we prioritize speed or quality?" | ✓ YES | Ask user |
-| "What's the scope boundary?" | ✓ YES | Ask user |
+| "What's your timeline?" | ✓ YES | Ask user (via AskUserQuestion) |
+| "Should we prioritize speed or quality?" | ✓ YES | Ask user (via AskUserQuestion) |
+| "What's the scope boundary?" | ✓ YES | Ask user (via AskUserQuestion) |
 
 **The ONLY questions for users are about PREFERENCES, not FACTS.**
-
-When invoking prometheus, ALWAYS include pre-gathered context:
-
-```
-## Pre-Gathered Codebase Context
-### From explore:
-{explore results here}
-
-### From oracle (if gathered):
-{oracle analysis here}
-
-## User Request
-{original request}
-
-## Instructions
-- DO NOT ask codebase questions (already answered above)
-- ONLY ask about: priorities, timeline, scope, constraints, preferences
-```
 
 ## Handling Subagent User Interview Requests
 
 When a subagent responds that it needs user input/interview:
 
-1. Show the questions to the user (via AskUserQuestionTool or directly)
+1. Show the questions to the user (via AskUserQuestion or directly)
 2. Collect user responses
 3. Resume the subagent with the answers
 </Broad_Request_Handling>
