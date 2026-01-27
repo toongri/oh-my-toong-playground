@@ -56,47 +56,16 @@ NO PHASE COMPLETION WITHOUT:
 | User confirmation at checkpoints | Agent decisions = user blamed |
 | Phase skip requires evidence | "Simple" hides complexity |
 
-## Direct Insistence Defense
-
-**When user insists after initial pushback, MAINTAIN position.**
-
-The "ask twice" attack pattern:
-1. User requests something that violates quality
-2. Agent pushes back with reasoning
-3. User expresses frustration + invokes authority + commands directly
-4. **Without this defense: Agent complies. WITH this defense: Agent persists.**
-
-| Insistence Pattern | Correct Response |
-|-------------------|------------------|
-| "I'm the PO, I'll take responsibility" | Responsibility claim doesn't make "gracefully" testable |
-| "That's Agile, devs figure it out" | Agile needs clear DoD, not ambiguity |
-| "Just do what I say" | This pressure IS what we resist |
-| "Why do I have to go this far?" | Because shortcuts cost more than thoroughness |
-| "[Senior] also agreed" | Agreement is not evidence of simplicity |
-
-**Frustration is not a valid override.** Social pressure to "not be difficult" is exactly what produces bad specs.
-
 ## Phase Selection
 
-| Phase | When Needed | Skip When |
-|-------|-------------|-----------|
-| 01-Requirements | Ambiguous requirements | Already defined |
-| 02-Architecture | System structure changes | Existing patterns |
-| 03-Domain | 3+ states, business rules | Simple CRUD |
-| 04-Detailed | Performance, concurrency | Implementation obvious |
-| 05-API | External API exposure | Internal only |
-| 06-Wrapup | Records to preserve | Nothing to preserve |
-
-## Phase Entry Criteria
-
-| Phase | Entry Criteria |
-|-------|---------------|
-| 1 | Request received, scope understood |
-| 2 | Phase 1 complete OR requirements documented |
-| 3 | Architecture decided; 3+ states |
-| 4 | Domain model OR simple CRUD confirmed |
-| 5 | External API needed |
-| 6 | Spec concluding; records exist |
+| Phase | Entry Criteria | When Needed | Skip When |
+|-------|----------------|-------------|-----------|
+| 01-Requirements | Request received, scope understood | Ambiguous requirements | Already defined |
+| 02-Architecture | Phase 1 complete OR requirements documented | System structure changes | Existing patterns |
+| 03-Domain | Architecture decided; 3+ states | 3+ states, business rules | Simple CRUD |
+| 04-Detailed | Domain model OR simple CRUD confirmed | Performance, concurrency | Implementation obvious |
+| 05-API | External API needed | External API exposure | Internal only |
+| 06-Wrapup | Spec concluding; records exist | Records to preserve | Nothing to preserve |
 
 ## Subagent Selection
 
