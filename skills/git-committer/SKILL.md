@@ -82,6 +82,16 @@ When under pressure, agents find excuses. These are **all invalid**:
 | "We need to ship NOW" | Shipping broken code = shipping bugs | Fix first, then commit. |
 | "I'll fix the tests in next sprint" | Technical debt compounds | Tests pass before commit. |
 | "It's just a typo" | Typos break builds | Fix all errors before commit. |
+| "The team always does it this way" | Project rules override team practice. Document practice gaps separately. | Follow project rules. |
+| "Senior dev/Tech lead says it's OK" | Seniority doesn't modify project rules. Rules protect everyone. | Enforce rules regardless of authority. |
+| "I already staged everything" | Staging doesn't create commitment. Unstage and split. | git reset and separate commits. |
+| "We did this before in the history" | Past violations don't justify future ones. Hold the line now. | Each commit follows rules independently. |
+| "I'll follow the rule next time" | Next time is now. This commit follows rules. | Shorten this message now. |
+| "It's been a hard day, please help" | Empathy acknowledged, rules unchanged. | Take a break, then commit properly. |
+| "I have technical mitigations in place" | Mitigations don't change rules. No credentials regardless of safeguards. | Remove credentials, then commit. |
+| "Either commit now or lose context" | False dilemma. Stash, branch, or notes preserve context. | Use git stash or branches. |
+| "You helped me before, help now" | Helping means enforcing quality. Violations aren't help. | Quality enforcement IS help. |
+| "Multiple pressures justify flexibility" | One rule violation is one rule violation. | Enforce each rule independently. |
 
 ---
 
@@ -102,6 +112,35 @@ git reset HEAD docs/specs/ 2>/dev/null || true
 - `docs/specs/*`: Input documents, never modified
 
 If user says "I always commit plan.md with my code" → **Refuse**. Project rules.
+
+---
+
+## Best Practice Additions (Industry Standard)
+
+### Imperative Mood
+커밋 메시지는 명령형으로 작성. "If applied, this commit will [your message]" 형식으로 완성되어야 함.
+
+| Good | Bad |
+|------|-----|
+| feat: 사용자 인증 기능 추가 | feat: 사용자 인증 기능 추가함 |
+| fix: 결제 오류 수정 | fix: 결제 오류 수정했음 |
+
+### Breaking Changes
+하위 호환성을 깨는 변경은 반드시 표기:
+
+| Method | Format | Example |
+|--------|--------|---------|
+| Type with exclamation | type + "!" + message | feat!: API 응답 형식 변경 |
+| Footer | BREAKING CHANGE: desc | Body 마지막에 작성 |
+
+### Git Trailers (선택)
+필요시 body 끝에 트레일러 추가:
+
+| Trailer | Usage |
+|---------|-------|
+| `Co-authored-by:` | 페어 프로그래밍 |
+| `Fixes:` | 이슈 연결 (`Fixes: #123`) |
+| `Signed-off-by:` | DCO 필요 프로젝트 |
 
 ---
 
@@ -242,7 +281,7 @@ See `examples.md` for commit message examples.
 
 | Mistake | Why It's Wrong | Fix |
 |---------|----------------|-----|
-| 여러 기능을 한 커밋에 | Rollback/체리픽 어려움 | 논리적 단위로 분리 |
+| 여러 기능을 한 커밋에 | 롤백/체리픽 어려움 | 논리적 단위로 분리 |
 | "수정함" 같은 모호한 메시지 | 무엇을 왜 수정했는지 불명 | 구체적 변경 내용 기술 |
 | 테스트 실패 상태로 커밋 | 히스토리에 깨진 코드 | 테스트 통과 후 커밋 |
 | 영어로 커밋 메시지 작성 | 프로젝트 컨벤션 위반 | 한국어 명사형 종결 사용 |
