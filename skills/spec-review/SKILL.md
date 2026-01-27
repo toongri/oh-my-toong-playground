@@ -28,45 +28,84 @@ Multi-AI advisory **service** for spec and design decisions. Dispatches to claud
 
 ## Quick Reference
 
-| Scenario | Spec Review Needed? | Reason |
+| Scenario | Full Review Provided? | Reason |
 |----------|---------------------|--------|
-| Architecture decision review | ✅ Yes | Diverse perspectives needed |
-| Domain modeling review | ✅ Yes | Complex design verification |
-| API design feedback | ✅ Yes | Different AI viewpoints |
-| Typo corrections | ❌ No | No review necessary |
-| Simple CRUD | ❌ No | Clear implementation |
+| Architecture decision review | Yes | Diverse perspectives needed |
+| Domain modeling review | Yes | Complex design verification |
+| API design feedback | Yes | Different AI viewpoints |
+| Typo corrections | No | Return "No Review Needed" |
+| Simple CRUD | No | Return "No Review Needed" |
+
+> **Note**: spec-reviewer receives ALL review requests. The spec-reviewer (not the caller) decides whether a full review is needed or returns "No Review Needed".
 
 ## When to Use vs When NOT to Use
+
+spec-reviewer is a **service** that receives all review requests from callers (e.g., spec skill). The spec-reviewer then decides whether to provide a full review or return "No Review Needed".
 
 ```dot
 digraph spec_review_decision {
     rankdir=TB;
     node [shape=box, style=rounded];
 
-    start [label="Design decision needed?", shape=diamond];
-    complexity [label="Complex trade-offs involved?", shape=diamond];
-    skip [label="Skip spec review\nProceed with implementation"];
-    use [label="Use spec review"];
+    receive [label="Receive review request\nfrom caller"];
+    assess [label="Assess complexity", shape=diamond];
+    no_review [label="Return\n'No Review Needed'"];
+    full_review [label="Dispatch to\nmultiple AIs"];
+    synthesize [label="Synthesize and\nreturn advisory"];
 
-    start -> complexity [label="yes"];
-    start -> skip [label="no decision"];
-    complexity -> skip [label="no (clear requirements)"];
-    complexity -> use [label="yes (architecture, domain, API)"];
+    receive -> assess;
+    assess -> no_review [label="simple"];
+    assess -> full_review [label="complex"];
+    full_review -> synthesize;
 }
 ```
 
-**Use Spec Review:**
+**Provide Full Review When:**
 - Architecture decisions (monolith vs microservice)
 - Domain model boundaries
 - API design trade-offs
 - State machine design
 - Event sourcing vs CRUD decisions
 
-**Skip Spec Review:**
+**Return "No Review Needed" When:**
 - Simple CRUD operations
-- Clear spec requirements
-- Typo corrections
+- Clear spec requirements with no trade-offs
+- Typo-level changes
 - Code style issues
+
+## No Review Needed Response
+
+When spec-reviewer determines that no full review is needed, return this response format instead of dispatching to multiple AIs.
+
+### When to Return "No Review Needed"
+
+| Scenario | Example |
+|----------|---------|
+| Simple CRUD definitions | Basic entity create/read/update/delete with no business logic |
+| Clear requirements with no trade-offs | Single straightforward approach, no alternatives to consider |
+| Typo-level changes | Minor text corrections, formatting fixes |
+| Trivial additions | Adding a single well-defined field or method |
+
+### Response Format
+
+```markdown
+## Review Assessment
+
+**Status**: No Review Needed
+
+**Reason**: [Brief explanation why full review is unnecessary]
+
+Examples:
+- "Simple CRUD with clear requirements, no architectural decisions"
+- "Trivial field addition with no impact on existing design"
+- "Clear requirements organization, no trade-offs involved"
+
+Proceed with implementation.
+```
+
+### Key Principle
+
+spec-reviewer is a **service** that receives all requests but decides its own scope. This follows the pattern of code-reviewer returning "LGTM, no issues" for clean code. The caller (e.g., spec skill) should NOT pre-filter requests - let spec-reviewer make the judgment.
 
 ## Input Handling
 

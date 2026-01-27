@@ -129,21 +129,11 @@ After each Step completion:
 4. Regenerate `spec.md` by concatenating all completed design.md files
 5. Announce: "Step N complete. Saved. Proceed to next Step?"
 6. Wait for user confirmation
-7. (Optional) If complex decisions exist, delegate to spec-reviewer for multi-AI feedback
+7. Delegate to spec-reviewer for review assessment (spec-reviewer decides if review is needed)
 
 ## Multi-AI Review Integration
 
-After completing each design phase, you can receive multi-AI feedback by delegating to the spec-reviewer agent.
-
-### When to Request Review
-
-| Situation | Delegate to spec-reviewer? |
-|-----------|---------------------|
-| Complex architecture decisions | Yes |
-| Domain model design completed | Yes |
-| API design trade-offs | Yes |
-| Simple CRUD definitions | No |
-| Clear requirements organization | No |
+After completing each design phase, always delegate to spec-reviewer for review assessment. The spec-reviewer decides whether a full review is needed or returns "No review needed" for simple cases.
 
 ### Feedback Loop Workflow
 
@@ -153,8 +143,9 @@ digraph feedback_loop {
     node [shape=box, style=rounded];
 
     complete_step [label="Step Complete\n(design.md saved)"];
-    need_review [label="Complex decision?\nFeedback needed?", shape=diamond];
     delegate [label="Delegate to\nspec-reviewer agent"];
+    check_response [label="Review needed?", shape=diamond];
+    no_review [label="spec-reviewer returns\n'No review needed'"];
     receive_feedback [label="Receive advisory\nfeedback"];
     analyze [label="Analyze feedback\nForm YOUR opinion"];
     present [label="Present to user\n(context + recommendation)"];
@@ -162,10 +153,11 @@ digraph feedback_loop {
     incorporate [label="Update design.md"];
     next_step [label="Proceed to next Step"];
 
-    complete_step -> need_review;
-    need_review -> delegate [label="yes"];
-    need_review -> user_decides [label="no"];
-    delegate -> receive_feedback;
+    complete_step -> delegate;
+    delegate -> check_response;
+    check_response -> no_review [label="no"];
+    check_response -> receive_feedback [label="yes"];
+    no_review -> next_step;
     receive_feedback -> analyze;
     analyze -> present;
     present -> user_decides;
@@ -188,7 +180,7 @@ The final decision on feedback is always made by the **user**.
 
 ### Delegating to spec-reviewer
 
-When feedback is needed for complex decisions after completing a step, delegate to the spec-reviewer agent via Task tool.
+After completing a step, always delegate to the spec-reviewer agent via Task tool. The spec-reviewer will assess whether a full review is needed.
 
 **Delegation prompt structure:**
 
@@ -212,12 +204,25 @@ Review the following design and provide multi-AI advisory feedback.
 ```
 
 **What you receive back:**
+
+**If review is needed:**
 - **Consensus**: Points where all reviewers agree
 - **Divergence**: Points where opinions differ
 - **Concerns Raised**: Potential issues identified
 - **Recommendation**: Synthesized advice
 
+**If no review is needed:**
+- **Status**: "No Review Needed"
+- **Reason**: Brief explanation (e.g., "Simple CRUD with clear requirements")
+
 The spec-reviewer operates in a separate context and returns advisory feedback. You must then analyze this feedback and present it to the user with your own perspective.
+
+### Handling "No Review Needed" Response
+
+When spec-reviewer returns "No Review Needed":
+1. Acknowledge the assessment to the user
+2. Proceed directly to the next step without presenting feedback
+3. No user decision required for this step's review
 
 ### Presenting Feedback to User
 
@@ -242,6 +247,7 @@ After receiving spec-reviewer feedback, YOU must:
 | "Skip this feedback" | Proceed without changes |
 | "Need another round" | Delegate to spec-reviewer again |
 | "Step complete" | Save final, proceed to next step |
+| (spec-reviewer returns "No Review Needed") | Proceed to next step automatically |
 
 ## Record Workflow
 
