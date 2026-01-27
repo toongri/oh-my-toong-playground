@@ -9,7 +9,7 @@ description: Use when committing changes to git. Triggers include "commit", "커
 
 Analyze code changes and generate Korean commit messages following project conventions.
 
-> 좋은 커밋은 역사를 읽기 쉽게 만든다. 나쁜 커밋은 git log를 무덤으로 만든다.
+> "A good commit makes history easy to read. A bad commit turns git log into a graveyard."
 
 </Role>
 
@@ -118,7 +118,7 @@ If user says "I always commit plan.md with my code" → **Refuse**. Project rule
 ## Best Practice Additions (Industry Standard)
 
 ### Imperative Mood
-커밋 메시지는 명령형으로 작성. "If applied, this commit will [your message]" 형식으로 완성되어야 함.
+Commit messages should be written in imperative mood. The message should complete the sentence: "If applied, this commit will [your message]".
 
 | Good | Bad |
 |------|-----|
@@ -126,32 +126,32 @@ If user says "I always commit plan.md with my code" → **Refuse**. Project rule
 | fix: 결제 오류 수정 | fix: 결제 오류 수정했음 |
 
 ### Breaking Changes
-하위 호환성을 깨는 변경은 반드시 표기:
+Changes that break backward compatibility must be marked:
 
 | Method | Format | Example |
 |--------|--------|---------|
 | Type with exclamation | type + "!" + message | feat!: API 응답 형식 변경 |
-| Footer | BREAKING CHANGE: desc | Body 마지막에 작성 |
+| Footer | BREAKING CHANGE: desc | Write at the end of body |
 
-### Git Trailers (선택)
-필요시 body 끝에 트레일러 추가:
+### Git Trailers (Optional)
+Add trailers at the end of body when needed:
 
 | Trailer | Usage |
 |---------|-------|
-| `Co-authored-by:` | 페어 프로그래밍 |
-| `Fixes:` | 이슈 연결 (`Fixes: #123`) |
-| `Signed-off-by:` | DCO 필요 프로젝트 |
+| `Co-authored-by:` | Pair programming |
+| `Fixes:` | Issue linking (`Fixes: #123`) |
+| `Signed-off-by:` | Projects requiring DCO |
 
 ---
 
 ## Core Principle
 
-**하나의 커밋 = 하나의 논리적 변경**
+**One commit = One logical change**
 
-- 관련 없는 변경은 분리 (atomic commits)
-- 제목은 50자 이내로 핵심만
-- WHY는 body에 (선택사항)
-- 테스트 통과 상태에서만 커밋
+- Separate unrelated changes (atomic commits)
+- Title must be within 50 characters, core message only
+- WHY goes in body (optional)
+- Only commit when tests pass
 
 ---
 
@@ -261,7 +261,7 @@ EOF
 
 ## Edge Cases
 
-**No changes**: Return "⚠️ No changes to commit. Working tree is clean."
+**No changes**: Return "Warning: No changes to commit. Working tree is clean."
 
 **Message too long**: NEVER just "accept" a long message. Shorten it.
 
@@ -281,13 +281,13 @@ See `examples.md` for commit message examples.
 
 | Mistake | Why It's Wrong | Fix |
 |---------|----------------|-----|
-| 여러 기능을 한 커밋에 | 롤백/체리픽 어려움 | 논리적 단위로 분리 |
-| "수정함" 같은 모호한 메시지 | 무엇을 왜 수정했는지 불명 | 구체적 변경 내용 기술 |
-| 테스트 실패 상태로 커밋 | 히스토리에 깨진 코드 | 테스트 통과 후 커밋 |
-| 영어로 커밋 메시지 작성 | 프로젝트 컨벤션 위반 | 한국어 명사형 종결 사용 |
-| 제목에 마침표 | 불필요한 문자 | 마침표 제거 |
-| 50자 초과 제목 | git log에서 잘림 | 핵심만 남기고 body로 이동 |
-| plan.md 커밋 | Workflow 파일 섞임 | git reset HEAD plan.md |
+| Multiple features in one commit | Hard to rollback/cherry-pick | Separate by logical unit |
+| Vague messages like "수정함" | Unclear what was changed and why | Describe specific changes |
+| Committing with failing tests | Broken code in history | Commit after tests pass |
+| Writing commit messages in English | Project convention violation | Use Korean 명사형 종결 |
+| Period at end of title | Unnecessary character | Remove period |
+| Title exceeding 50 characters | Truncated in git log | Keep core message, move details to body |
+| Committing plan.md | Workflow files mixed in | git reset HEAD plan.md |
 
 ---
 
