@@ -208,21 +208,18 @@ Caller provides: "Review this design: [design content]"
 
 ## Context Collection (Automatic)
 
-When `--spec` flag is provided, spec-review automatically collects shared context:
+Context files are **automatically included if they exist, silently skipped if they don't**.
 
-### Shared Context
-- **Project Context**: `.omt/specs/context/project.md` - Tech stack, constraints
-- **Conventions**: `.omt/specs/context/conventions.md` - Established patterns
-- **Previous Decisions**: `.omt/specs/context/decisions.md` - ADR format
-- **Gotchas**: `.omt/specs/context/gotchas.md` - Known pitfalls
+| File | Included When |
+|------|---------------|
+| `.omt/specs/context/project.md` | File exists |
+| `.omt/specs/context/conventions.md` | File exists |
+| `.omt/specs/context/decisions.md` | File exists |
+| `.omt/specs/context/gotchas.md` | File exists |
 
-### What the Caller Provides
-The caller (e.g., spec skill) is responsible for providing:
-- **Current Design**: The design content to review
-- **Previous Designs**: Any finalized designs that constrain the current design
-- **Decision Records**: Any previous feedback relevant to this review
+**No context files yet?** That's fine - the review proceeds without them.
 
-> spec-review is a service. The caller drives the workflow and decides what to include.
+**Need custom context for a specific review?** Include it directly in your request content.
 
 ## Review Request Format (INPUT)
 
@@ -313,9 +310,7 @@ Execute `scripts/spec-review.sh` from this skill directory:
 
 > Note: Always write prompts in English for consistent cross-model communication.
 
-### Basic Usage (with --spec flag)
-
-When using `--spec`, the script auto-collects shared context. You provide the design content directly:
+### Usage
 
 ```bash
 scripts/spec-review.sh --spec {spec-name} --stdin <<'EOF'
@@ -351,68 +346,9 @@ We propose using Event Sourcing for order state management because...
 EOF
 ```
 
-### Full Context Mode (without --spec flag)
+**Context (Section 3)**: Automatically populated from `.omt/specs/context/` if files exist. Omit from your request.
 
-When not using `--spec`, include all context following priority order:
-
-```bash
-scripts/spec-review.sh --stdin <<'EOF'
-## 1. Current Design Under Review
-
-### Design Summary
-We propose using Event Sourcing for order state management because...
-
-### Key Decisions
-- Use event store for order lifecycle events
-- Implement CQRS with separate read models
-- Snapshot every 100 events for performance
-
-### Questions for Reviewers
-1. Is event sourcing appropriate for this volume (1M orders/day)?
-2. Should we use a dedicated event store or leverage PostgreSQL?
-
----
-
-## 2. Finalized Designs
-
-### Domain Model (previously confirmed)
-- Order aggregate with OrderLine value objects
-- Separate Customer and Product bounded contexts
-
----
-
-## 3. Context
-
-### Project Context
-- Kotlin/Spring Boot, PostgreSQL
-- Expected load: 1M orders/day, 100 concurrent users
-
-### Conventions
-- Hexagonal architecture
-- Domain events for cross-context communication
-
-### Previous Decisions
-- ADR-001: Chose PostgreSQL over MongoDB for ACID guarantees
-
-### Gotchas
-- Current DB connection pool limited to 50
-
----
-
-## 4. Decision Records
-
-### Previous Feedback
-- Claude: Suggested considering snapshot strategy
-- Gemini: Raised concern about event schema evolution
-EOF
-```
-
-### Priority Reminder
-
-```
-The design under review must always come first.
-Context is just reference material, not the core of the review.
-```
+**Custom context needed?** Just add it to your request content directly - no special flag required.
 
 <Output_Format>
 
