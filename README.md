@@ -6,6 +6,19 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## Acknowledgments
+
+이 프로젝트는 아직 놀이터 수준이지만, Claude Code 커뮤니티 덕분에 정말 많이 배우고 성장하고 있습니다.
+
+다음 프로젝트들에서 영감을 받고, 공부하고, 참고하며 개발하고 있습니다. 감사합니다.
+
+- [everything-claude-code](https://github.com/affaan-m/everything-claude-code)
+- [oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode)
+- [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode)
+- [claude-hud](https://github.com/jarrodwatts/claude-hud)
+- [superpowers](https://github.com/obra/superpowers)
+- [team-attention](https://github.com/team-attention/plugins-for-claude-natives)
+
 ---
 
 ## oh-my-toong이란?
