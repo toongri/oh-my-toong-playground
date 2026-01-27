@@ -163,9 +163,9 @@ flowchart TB
 ```
 
 **검증 프로토콜**:
-- **제로 트러스트**: sisyphus-junior의 "완료" 주장은 항상 무시
+- **Zero Trust**: sisyphus-junior의 "완료" 주장은 항상 무시
 - **필수 리뷰**: 모든 구현 후 code-reviewer 호출
-- **재시도 제한 없음**: code-reviewer가 통과할 때까지 계속
+- **Retry 제한 없음**: code-reviewer가 통과할 때까지 계속
 - **지속성**: 사용자가 프로세스를 중단할 수 없음
 
 > 📖 **상세 가이드**: [오케스트레이션 가이드](docs/ORCHESTRATION.md)에서 전체 워크플로우와 사용법을 확인하세요.
@@ -380,7 +380,7 @@ tasks:3/5 | ralph:2/10 | Implementing user auth...
 | `ralph:X/Y` | Ralph Loop 반복 횟수 | 초록 <70%, 노랑 >70%, 최대치에서 빨강 |
 | Active task | 현재 작업 설명 (최대 25자) | 흐림 |
 
-**우아한 성능 저하:**
+**Graceful Degradation:**
 - OAuth 불가 시 사용량 제한 숨김
 - 데이터 불가 시 최소 디스플레이 (`0m | ctx:0%`)
 - 2시간 이상 된 상태 파일 무시 (오래된 세션 감지)

@@ -45,7 +45,7 @@
 > "우리 API가 느려. 어떻게 최적화해야 해?"
 
 **Expected Failure (without skill):**
-- Gives generic advice: "인덱스 추가하세요", "캐싱 사용하세요"
+- Gives generic advice: "인덱스 추가하세요", "Caching 사용하세요"
 - Doesn't read any code
 - No specific file references
 

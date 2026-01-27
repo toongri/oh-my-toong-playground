@@ -80,7 +80,7 @@ class PgPaymentAdapterTest @Autowired constructor(
 
 ```kotlin
 @Test
-@DisplayName("결제 API 일시 오류 후 재시도하여 성공한다")
+@DisplayName("결제 API 일시 오류 후 Retry하여 성공한다")
 fun `succeeds after payment API transient failure`() {
     // given - WireMock Scenario: first 2 fail, 3rd succeeds
     stubFor(
@@ -147,7 +147,7 @@ fun `fails immediately when circuit breaker is open`() {
 
 ```kotlin
 @Test
-@DisplayName("결제 API 타임아웃 시 PaymentTimeoutException이 발생한다")
+@DisplayName("결제 API Timeout 시 PaymentTimeoutException이 발생한다")
 fun `throws PaymentTimeoutException when API times out`() {
     // given
     stubFor(

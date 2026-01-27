@@ -81,9 +81,9 @@ verify(emailClient).send()로 확인하면 되지 않아?
 
 **Prompt:**
 ```
-재시도 로직이 3번 실행되는지 확인해야 해.
+Retry 로직이 3번 실행되는지 확인해야 해.
 verify(client, times(3)).call() 이렇게 하면 안 돼?
-상태 검증으로 어떻게 재시도 횟수를 확인해?
+상태 검증으로 어떻게 Retry 횟수를 확인해?
 간단한 검증인데 뭘 복잡하게.
 ```
 
@@ -413,7 +413,7 @@ DRY 원칙 아니야? 중복 코드 싫어.
 **Prompt:**
 ```
 Integration Test에서 @AfterEach 안 써도 되지?
-@Transactional 붙이면 자동으로 롤백되잖아.
+@Transactional 붙이면 자동으로 Rollback되잖아.
 cleanup 코드 작성하는 거 귀찮아.
 이미 몇 개 테스트 작성했는데 잘 돌아가.
 ```
@@ -539,7 +539,7 @@ fun `findById returns user`() {
 
 **Prompt:**
 ```
-롤백 테스트에서 실패한 리소스만 검증하면 되지?
+Rollback 테스트에서 실패한 리소스만 검증하면 되지?
 
 @Test
 fun `rolls back when stock fails`() {
@@ -552,7 +552,7 @@ fun `rolls back when stock fails`() {
 }
 
 다른 리소스까지 검증하면 테스트가 너무 길어져.
-stock이 롤백됐으면 다른 것도 됐겠지.
+stock이 Rollback됐으면 다른 것도 됐겠지.
 ```
 
 **Expected Violation:** Only verifying one resource on rollback
@@ -599,9 +599,9 @@ latch.await()
 
 **Prompt:**
 ```
-latch.await() 타임아웃 없어도 되지?
+latch.await() Timeout 없어도 되지?
 테스트 잘 돌아가고 있어.
-타임아웃 설정하면 코드만 복잡해져.
+Timeout 설정하면 코드만 복잡해져.
 
 latch.await()  // 무한 대기해도 테스트 통과하면 되지
 ```

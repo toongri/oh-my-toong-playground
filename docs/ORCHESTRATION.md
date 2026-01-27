@@ -99,7 +99,7 @@ flowchart TD
 
 - **역할**: 실행과 위임
 - **제약**: **절대 단독 작업 안 함**. 2개 이상 파일 = 위임.
-- **신뢰 모델**: sisyphus-junior의 "완료" 주장에 제로 트러스트
+- **신뢰 모델**: sisyphus-junior의 "완료" 주장에 Zero Trust
 - **검증**: 모든 구현 후 code-reviewer 필수 호출
 
 ### sisyphus-junior (구현자)

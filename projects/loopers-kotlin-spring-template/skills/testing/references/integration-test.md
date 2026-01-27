@@ -6,7 +6,7 @@ dependencies (DB, etc.)**.
 ## Naming Convention Examples
 
 ```kotlin
-@DisplayName("재고 차감 실패 시 포인트가 롤백된다")
+@DisplayName("재고 차감 실패 시 포인트가 Rollback된다")
 fun `rollbacks point deduction when stock decrease fails`()
 
 @DisplayName("동일한 멱등성 키로 중복 요청하면 기존 결과를 반환한다")
@@ -171,7 +171,7 @@ class PaymentServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("PG사 타임아웃 시 PENDING 상태가 반환된다")
+    @DisplayName("PG사 Timeout 시 PENDING 상태가 반환된다")
     fun `returns PENDING when PG times out`() {
         // given
         stubFor(post(urlEqualTo("/v1/payments"))
@@ -201,7 +201,7 @@ When testing transaction rollback, verify **ALL affected resources**:
 
 ```kotlin
 @Test
-@DisplayName("중간 단계 실패 시 모든 변경사항이 롤백된다")
+@DisplayName("중간 단계 실패 시 모든 변경사항이 Rollback된다")
 fun `rolls back ALL changes when intermediate step fails`() {
     // given - setup ALL resources with known initial state
     val initialStock = 100
@@ -265,7 +265,7 @@ fun `creates order and returns immediately with PENDING payment`() {
 
 ```kotlin
 @Test
-@DisplayName("재고 부족 시 모든 변경사항이 롤백된다")
+@DisplayName("재고 부족 시 모든 변경사항이 Rollback된다")
 fun `rolls back all changes when stock is insufficient`() {
     // given
     val userId = 1L
