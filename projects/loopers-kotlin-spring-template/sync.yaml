@@ -2,7 +2,6 @@ name: loopers-spring-kotlin-template
 path: /Users/toongri/IdeaProjects/loopers-spring-kotlin-template
 
 agents:
-  platforms: [claude]
   items:
     - explore
     - librarian
@@ -10,20 +9,19 @@ agents:
     - momus
     - oracle
     - code-reviewer
+    - spec-reviewer
     - component: sisyphus-junior
       add-skills:
         - testing
         - implementation
 
 commands:
-  platforms: [claude]
   items:
     - cancel-ralph
     - hud
     - ralph
 
 scripts:
-  platforms: [claude]
   items:
     - hud.js
 
@@ -61,6 +59,12 @@ hooks:
 skills:
   platforms: [claude]
   items:
+    - component: spec
+      platforms: [claude]
+    - component: prometheus
+      platforms: [claude]
+    - component: sisyphus
+      platforms: [claude]
     - agent-council
     - clarify
     - explore
@@ -69,8 +73,5 @@ skills:
     - metis
     - momus
     - oracle
-    - prometheus
-    - sisyphus
     - testing
     - code-review
-    - spec

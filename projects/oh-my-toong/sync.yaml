@@ -2,7 +2,6 @@ name: oh-my-toong
 path: /Users/toongri/IdeaProjects/oh-my-toong
 
 agents:
-  platforms: [claude]
   items:
     - explore
     - librarian
@@ -14,14 +13,12 @@ agents:
     - sisyphus-junior
 
 commands:
-  platforms: [claude]
   items:
     - cancel-ralph
     - hud
     - ralph
 
 scripts:
-  platforms: [claude]
   items:
     - hud.js
 
@@ -55,6 +52,12 @@ hooks:
 skills:
   platforms: [claude]
   items:
+    - component: spec
+      platforms: [claude]
+    - component: prometheus
+      platforms: [claude]
+    - component: sisyphus
+      platforms: [claude]
     - agent-council
     - clarify
     - explore
@@ -63,7 +66,4 @@ skills:
     - metis
     - momus
     - oracle
-    - prometheus
-    - sisyphus
     - code-review
-    - spec

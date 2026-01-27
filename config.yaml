@@ -1,9 +1,15 @@
 # oh-my-toong Global Configuration
 # This file provides default settings for the sync system
 
-# Global default platforms (sync.yaml can override at any level)
-# Priority: component-level > section-level > sync.yaml top-level > use-platforms > hardcoded [claude]
-use-platforms: [claude, gemini, codex]
+# Global default platforms (fallback for all categories)
+# Priority: component-level > section-level > sync.yaml top-level > feature-platforms > use-platforms > hardcoded [claude]
+use-platforms: [claude]
+
+# Feature-specific default platforms (overrides use-platforms per category)
+# Categories: skills, agents, commands, hooks, scripts
+# Omitted categories fall back to use-platforms
+feature-platforms:
+  skills: [claude, gemini, codex]
 
 # Backup retention settings
 backup_retention_days: 3

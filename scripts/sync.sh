@@ -73,13 +73,19 @@ sync_agents() {
         return 0
     fi
 
-    # Get default platforms from config.yaml
+    # Get default platforms (use-platforms from config.yaml)
     local default_platforms=$(get_default_platforms)
 
-    # Get top-level platforms
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "agents")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
     local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
     if [[ "$sync_platforms" == "null" ]]; then
-        sync_platforms="$default_platforms"
+        sync_platforms="$feature_platforms"
     fi
 
     # Track which CLIs need directory preparation (Bash 3.2 compatible)
@@ -189,13 +195,19 @@ sync_commands() {
         return 0
     fi
 
-    # Get default platforms from config.yaml
+    # Get default platforms (use-platforms from config.yaml)
     local default_platforms=$(get_default_platforms)
 
-    # Get top-level platforms
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "commands")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
     local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
     if [[ "$sync_platforms" == "null" ]]; then
-        sync_platforms="$default_platforms"
+        sync_platforms="$feature_platforms"
     fi
 
     # Track which CLIs need directory preparation (Bash 3.2 compatible)
@@ -289,13 +301,19 @@ sync_hooks() {
         return 0
     fi
 
-    # Get default platforms from config.yaml
+    # Get default platforms (use-platforms from config.yaml)
     local default_platforms=$(get_default_platforms)
 
-    # Get top-level platforms
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "hooks")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
     local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
     if [[ "$sync_platforms" == "null" ]]; then
-        sync_platforms="$default_platforms"
+        sync_platforms="$feature_platforms"
     fi
 
     # Track which CLIs need directory preparation and have hooks (Bash 3.2 compatible)
@@ -502,13 +520,19 @@ sync_skills() {
         return 0
     fi
 
-    # Get default platforms from config.yaml
+    # Get default platforms (use-platforms from config.yaml)
     local default_platforms=$(get_default_platforms)
 
-    # Get top-level platforms
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "skills")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
     local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
     if [[ "$sync_platforms" == "null" ]]; then
-        sync_platforms="$default_platforms"
+        sync_platforms="$feature_platforms"
     fi
 
     # Track which CLIs need directory preparation (Bash 3.2 compatible)
@@ -601,13 +625,19 @@ sync_scripts() {
         return 0
     fi
 
-    # Get default platforms from config.yaml
+    # Get default platforms (use-platforms from config.yaml)
     local default_platforms=$(get_default_platforms)
 
-    # Get top-level platforms
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "scripts")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
     local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
     if [[ "$sync_platforms" == "null" ]]; then
-        sync_platforms="$default_platforms"
+        sync_platforms="$feature_platforms"
     fi
 
     # Track which CLIs need directory preparation (Bash 3.2 compatible)

@@ -469,3 +469,29 @@ get_default_platforms() {
     # Fallback to hardcoded default
     echo '["claude"]'
 }
+
+# Get feature-specific platforms from config.yaml feature-platforms.{category}
+# Returns JSON array if found, empty string if not found (caller handles fallback)
+#
+# 필요한 전역 변수:
+#   - ROOT_DIR: 프로젝트 루트 경로
+#
+# 사용법: feature_platforms=$(get_feature_platforms "skills")
+#         if [[ -n "$feature_platforms" ]]; then use it; else fallback; fi
+get_feature_platforms() {
+    local category="$1"
+    local config_file="$ROOT_DIR/config.yaml"
+
+    if [[ -f "$config_file" ]]; then
+        local feature_platforms
+        feature_platforms=$(yq -o=json ".feature-platforms.$category // null" "$config_file" 2>/dev/null)
+
+        if [[ "$feature_platforms" != "null" && -n "$feature_platforms" ]]; then
+            echo "$feature_platforms"
+            return 0
+        fi
+    fi
+
+    # Return empty - caller should fallback to get_default_platforms()
+    echo ""
+}
