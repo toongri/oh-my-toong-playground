@@ -1,0 +1,36 @@
+# Spec Review Configuration
+# Multi-AI advisory panel for spec and design review.
+# Max 3 reviewers: claude, gemini, codex
+
+spec-review:
+  # Reviewers configuration
+  # Each reviewer needs:
+  #   - name: identifier for the agent
+  #   - command: CLI command to execute (prompt will be appended)
+  #   - emoji: display emoji
+  #   - color: ANSI color (RED, GREEN, BLUE, YELLOW, CYAN)
+
+  reviewers:
+    - name: claude
+      command: "claude -p"
+      emoji: "🧠"
+      color: "CYAN"
+
+    - name: gemini
+      command: "gemini"
+      emoji: "💎"
+      color: "GREEN"
+
+    - name: codex
+      command: "codex exec"
+      emoji: "🤖"
+      color: "BLUE"
+
+  # Execution settings
+  settings:
+    timeout: 300                          # Timeout seconds per reviewer (spec reviews take longer)
+
+  # Spec context configuration
+  context:
+    shared_context_dir: ".omt/specs/context"   # All *.md files in this dir
+    specs_dir: ".omt/specs"                     # {specName}/spec.md and {specName}/records/*.md

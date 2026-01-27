@@ -26,14 +26,6 @@ council:
       emoji: "💎"
       color: "GREEN"
 
-  # Chairman configuration
-  chairman:
-    # role: auto|claude|codex|gemini|...
-    # - auto: infer from host tool (Claude Code => claude, Codex CLI => codex)
-    role: "auto"
-    description: "Synthesizes all opinions and provides final recommendation"
-
   # Execution settings
   settings:
     timeout: 180                          # Timeout seconds per agent (0 to disable)
-    exclude_chairman_from_members: true   # Avoid calling the chairman as a member
