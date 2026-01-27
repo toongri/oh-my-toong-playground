@@ -10,6 +10,7 @@ agents:
     - momus
     - oracle
     - code-reviewer
+    - spec-reviewer
     - sisyphus-junior
 
 commands:

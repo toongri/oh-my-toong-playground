@@ -76,6 +76,7 @@ NO PHASE COMPLETION WITHOUT:
 | Technical decisions, trade-offs | oracle |
 | External documentation | librarian |
 | Existing codebase patterns | explore |
+| Multi-AI design feedback | spec-reviewer |
 
 ## Context Brokering
 
@@ -128,15 +129,15 @@ After each Step completion:
 4. Regenerate `spec.md` by concatenating all completed design.md files
 5. Announce: "Step N complete. Saved. Proceed to next Step?"
 6. Wait for user confirmation
-7. (Optional) If complex decisions exist, invoke spec-review for multi-AI feedback
+7. (Optional) If complex decisions exist, delegate to spec-reviewer for multi-AI feedback
 
 ## Multi-AI Review Integration
 
-After completing each design phase, you can receive multi-AI feedback through spec-review.
+After completing each design phase, you can receive multi-AI feedback by delegating to the spec-reviewer agent.
 
-### When to Invoke Spec-Review
+### When to Request Review
 
-| Situation | Invoke spec-review? |
+| Situation | Delegate to spec-reviewer? |
 |-----------|---------------------|
 | Complex architecture decisions | Yes |
 | Domain model design completed | Yes |
@@ -153,24 +154,25 @@ digraph feedback_loop {
 
     complete_step [label="Step Complete\n(design.md saved)"];
     need_review [label="Complex decision?\nFeedback needed?", shape=diamond];
-    invoke_review [label="Invoke spec-review\n(multi-AI feedback)"];
-    receive_feedback [label="Receive feedback\n(Consensus/Divergence)"];
-    save_feedback [label="Save feedback to records/"];
-    incorporate [label="Incorporate feedback\nUpdate design.md"];
-    rereview [label="Re-review needed?", shape=diamond];
-    user_confirm [label="User confirms\n'This step complete'", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
+    delegate [label="Delegate to\nspec-reviewer agent"];
+    receive_feedback [label="Receive advisory\nfeedback"];
+    analyze [label="Analyze feedback\nForm YOUR opinion"];
+    present [label="Present to user\n(context + recommendation)"];
+    user_decides [label="User decides", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
+    incorporate [label="Update design.md"];
     next_step [label="Proceed to next Step"];
 
     complete_step -> need_review;
-    need_review -> invoke_review [label="yes"];
-    need_review -> user_confirm [label="no"];
-    invoke_review -> receive_feedback;
-    receive_feedback -> save_feedback;
-    save_feedback -> incorporate;
-    incorporate -> rereview;
-    rereview -> invoke_review [label="yes"];
-    rereview -> user_confirm [label="no"];
-    user_confirm -> next_step;
+    need_review -> delegate [label="yes"];
+    need_review -> user_decides [label="no"];
+    delegate -> receive_feedback;
+    receive_feedback -> analyze;
+    analyze -> present;
+    present -> user_decides;
+    user_decides -> incorporate [label="incorporate"];
+    user_decides -> delegate [label="another round"];
+    user_decides -> next_step [label="step complete"];
+    incorporate -> user_decides;
 }
 ```
 
@@ -184,68 +186,62 @@ The final decision on feedback is always made by the **user**.
 | User Role | Final decision maker |
 | Confirmation Point | When User declares "this step complete" |
 
-### Invoking spec-review
+### Delegating to spec-reviewer
 
-When feedback is needed for complex decisions after completing a step:
+When feedback is needed for complex decisions after completing a step, delegate to the spec-reviewer agent via Task tool.
 
-```bash
-# From spec skill directory
-../spec-review/scripts/spec-review.sh --stdin <<'EOF'
+**Delegation prompt structure:**
+
+```markdown
+Review the following design and provide multi-AI advisory feedback.
+
 ## 1. Current Design Under Review
-
 [Content of current step's design.md]
 
 ### Key Decisions
-[Key decision points]
+[Key decision points requiring review]
 
 ### Questions for Reviewers
-[Specific review requests]
+[Specific questions or concerns]
 
----
-
-## 2. Finalized Designs
-
-[Content of previously finalized steps' design.md files]
-
----
+## 2. Previously Finalized Designs (Constraints)
+[Summarize relevant decisions from earlier steps that constrain this design]
 
 ## 3. Context
-
-[Project context]
-EOF
+[Project context, tech stack, constraints]
 ```
 
-### Feedback Storage
+**What you receive back:**
+- **Consensus**: Points where all reviewers agree
+- **Divergence**: Points where opinions differ
+- **Concerns Raised**: Potential issues identified
+- **Recommendation**: Synthesized advice
 
-Feedback is saved in the records/ folder of the corresponding step:
+The spec-reviewer operates in a separate context and returns advisory feedback. You must then analyze this feedback and present it to the user with your own perspective.
 
-```
-step-02-architecture/records/
-  feedback.md              # Single feedback
-  feedback-001.md          # Multiple rounds
-  event-sourcing-review.md # Topic-specific separation
-```
+### Presenting Feedback to User
 
-### Including Previous Finalized Designs
+After receiving spec-reviewer feedback, YOU must:
 
-When reviewing later phases, include previously finalized designs as constraints.
+1. **Analyze the feedback** - What do you agree with? What seems overblown?
+2. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
+3. **Form your recommendation** - What do YOU think the user should do?
+4. **Present holistically** - Do not just dump reviewer output. Synthesize it.
 
-**Example: Reviewing step-04 when steps 1-3 are confirmed**
+**Example presentation:**
 
-```markdown
-## 1. Current Design Under Review
-[Content of step-04-detailed/design.md]
+> "The reviewers raised concerns about the event-sourcing approach for order state management. I partially agree - the concerns about complexity are valid for a team new to this pattern. However, we already decided in Phase 2 that we need full audit trails, which constrains us toward event-sourcing.
+>
+> My recommendation: Keep event-sourcing but add a detailed implementation guide in the spec to address the learning curve concern. What would you like to do?"
 
-## 2. Finalized Designs
-### Step 1: Requirements (Confirmed)
-[step-01-requirements/design.md]
+### User Controls the Loop
 
-### Step 2: Architecture (Confirmed)
-[step-02-architecture/design.md]
-
-### Step 3: Domain (Confirmed)
-[step-03-domain/design.md]
-```
+| User Response | Action |
+|---------------|--------|
+| "Incorporate feedback" | Update design.md, re-review if needed |
+| "Skip this feedback" | Proceed without changes |
+| "Need another round" | Delegate to spec-reviewer again |
+| "Step complete" | Save final, proceed to next step |
 
 ## Record Workflow
 
