@@ -48,6 +48,30 @@ PROJECT_ROOT=$(get_project_root "$DIRECTORY")
 
 MESSAGES=""
 
+# Cleanup stale ralph-state files (older than 3 hours)
+if command -v jq &> /dev/null; then
+  STALE_THRESHOLD=10800  # 3 hours in seconds
+  CURRENT_TIME=$(date +%s)
+
+  for state_file in "$PROJECT_ROOT"/.omt/ralph-state-*.json; do
+    if [ -f "$state_file" ]; then
+      STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
+      if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
+        # Parse ISO 8601 timestamp (strip timezone for BSD date)
+        TIME_PART=$(echo "$STARTED_AT" | sed -E 's/(Z|[+-][0-9]{2}:[0-9]{2})$//')
+        FILE_TIMESTAMP=$(date -j -f "%Y-%m-%dT%H:%M:%S" "$TIME_PART" "+%s" 2>/dev/null)
+
+        if [ -n "$FILE_TIMESTAMP" ]; then
+          AGE=$((CURRENT_TIME - FILE_TIMESTAMP))
+          if [ "$AGE" -gt "$STALE_THRESHOLD" ]; then
+            rm -f "$state_file"
+          fi
+        fi
+      fi
+    fi
+  done
+fi
+
 # Check for active ralph loop state (session-specific)
 if [ -f "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" ]; then
   RALPH_STATE=$(cat "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null)

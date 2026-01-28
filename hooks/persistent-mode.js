@@ -267,12 +267,23 @@ function formatBlockOutput(reason) {
 function formatContinueOutput() {
   return { continue: true };
 }
+var MAX_PROMPT_LENGTH = 500;
+var MAX_FEEDBACK_LENGTH = 500;
+var MAX_FEEDBACK_COUNT = 3;
+function truncateText(text, maxLength) {
+  if (text.length > maxLength) {
+    return text.substring(0, maxLength) + "...[truncated]";
+  }
+  return text;
+}
 function buildRalphContinuationMessage(iteration, maxIterations, prompt, promise, oracleFeedback) {
+  const truncatedPrompt = truncateText(prompt, MAX_PROMPT_LENGTH);
+  const limitedFeedback = oracleFeedback.slice(-MAX_FEEDBACK_COUNT).map((fb) => truncateText(fb, MAX_FEEDBACK_LENGTH));
   let feedbackSection = "";
-  if (oracleFeedback.length > 0) {
+  if (limitedFeedback.length > 0) {
     feedbackSection = `
 **Previous Oracle Feedback:**
-${oracleFeedback.join("\n")}
+${limitedFeedback.join("\n")}
 `;
   }
   return `<ralph-loop-continuation>
@@ -284,12 +295,12 @@ ${feedbackSection}
 CRITICAL INSTRUCTIONS:
 1. Review your progress and the original task
 2. Check your todo list - are ALL items marked complete?
-3. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify: ${prompt}")
+3. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify: ${truncatedPrompt}")
 4. If Oracle approves, output: <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
 5. Then output: <promise>${promise}</promise>
 6. Do NOT stop until verified by Oracle
 
-Original task: ${prompt}
+Original task: ${truncatedPrompt}
 
 </ralph-loop-continuation>
 
@@ -351,10 +362,11 @@ function makeDecision(context) {
       cleanupBlockCountFiles(stateDir, attemptId);
       return formatContinueOutput();
     }
-    const newIteration = ralphState.iteration + 1;
     const oracleFeedback = ralphState.oracle_feedback || [];
+    let newIteration = ralphState.iteration;
     if (transcript.oracleRejectionFeedback) {
       oracleFeedback.push(transcript.oracleRejectionFeedback);
+      newIteration = ralphState.iteration + 1;
     }
     const updatedState = {
       ...ralphState,

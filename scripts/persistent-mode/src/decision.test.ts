@@ -447,6 +447,161 @@ describe('makeDecision', () => {
     });
   });
 
+  describe('message size limits (truncation)', () => {
+    describe('prompt truncation', () => {
+      it('should truncate prompt to 500 characters with [truncated] suffix when exceeding limit', async () => {
+        const longPrompt = 'A'.repeat(600); // 600 chars, exceeds 500 limit
+        const ralphState = {
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: longPrompt,
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        // Should contain truncated prompt (500 chars + '...[truncated]')
+        const truncatedPrompt = 'A'.repeat(500) + '...[truncated]';
+        expect(result.reason).toContain(truncatedPrompt);
+        // Should NOT contain the full 600 char prompt
+        expect(result.reason).not.toContain(longPrompt);
+      });
+
+      it('should not truncate prompt when under 500 characters', async () => {
+        const shortPrompt = 'A'.repeat(400); // Under limit
+        const ralphState = {
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: shortPrompt,
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        expect(result.reason).toContain(shortPrompt);
+        expect(result.reason).not.toContain('...[truncated]');
+      });
+
+      it('should not truncate prompt when exactly 500 characters', async () => {
+        const exactPrompt = 'A'.repeat(500); // Exactly at limit
+        const ralphState = {
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: exactPrompt,
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        expect(result.reason).toContain(exactPrompt);
+        expect(result.reason).not.toContain('...[truncated]');
+      });
+    });
+
+    describe('oracleFeedback truncation', () => {
+      it('should truncate each feedback item to 500 characters', async () => {
+        const longFeedback = 'B'.repeat(600); // 600 chars, exceeds 500 limit
+        const ralphState = {
+          active: true,
+          iteration: 2,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Test task',
+          oracle_feedback: [longFeedback],
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        // Should contain truncated feedback (500 chars + '...[truncated]')
+        const truncatedFeedback = 'B'.repeat(500) + '...[truncated]';
+        expect(result.reason).toContain(truncatedFeedback);
+        // Should NOT contain full 600 char feedback
+        expect(result.reason).not.toContain(longFeedback);
+      });
+
+      it('should keep only the most recent 3 feedback items', async () => {
+        const ralphState = {
+          active: true,
+          iteration: 5,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Test task',
+          oracle_feedback: [
+            'Feedback 1 - oldest',
+            'Feedback 2 - old',
+            'Feedback 3 - recent',
+            'Feedback 4 - more recent',
+            'Feedback 5 - most recent',
+          ],
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        // Should NOT contain oldest feedback items (1 and 2)
+        expect(result.reason).not.toContain('Feedback 1 - oldest');
+        expect(result.reason).not.toContain('Feedback 2 - old');
+        // Should contain only the 3 most recent
+        expect(result.reason).toContain('Feedback 3 - recent');
+        expect(result.reason).toContain('Feedback 4 - more recent');
+        expect(result.reason).toContain('Feedback 5 - most recent');
+      });
+
+      it('should handle both truncation and limit together', async () => {
+        const longFeedback1 = 'X'.repeat(600);
+        const longFeedback2 = 'Y'.repeat(700);
+        const ralphState = {
+          active: true,
+          iteration: 4,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Test task',
+          oracle_feedback: [
+            'Old feedback - should be dropped',
+            longFeedback1,
+            'Short feedback',
+            longFeedback2,
+          ],
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        // Oldest should be dropped (only 3 kept)
+        expect(result.reason).not.toContain('Old feedback - should be dropped');
+        // Kept items should be truncated
+        expect(result.reason).toContain('X'.repeat(500) + '...[truncated]');
+        expect(result.reason).toContain('Short feedback');
+        expect(result.reason).toContain('Y'.repeat(500) + '...[truncated]');
+      });
+    });
+  });
+
   describe('priority ordering', () => {
     it('should check ralph before baseline todos', async () => {
       // Ralph active with incomplete todos
