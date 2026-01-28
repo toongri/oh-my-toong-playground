@@ -137,7 +137,7 @@ flowchart TB
 
 **Purpose**: Orchestrate complex tasks through delegation, never solo execution.
 
-**Core Constraint**: **ORCHESTRATE. DELEGATE. NEVER SOLO.** 2+ files OR complex analysis = DELEGATE.
+**Core Constraint**: **ORCHESTRATE. DELEGATE. NEVER SOLO.** ALL code changes (even one line) = DELEGATE.
 
 ```mermaid
 flowchart TB
@@ -254,7 +254,7 @@ oh-my-toong/
 | **clarify** | Requirements clarification | MANDATORY gate before implementation |
 | **metis** | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
-| **git-committer** | Git commit workflow | Korean messages, 50-char limit, atomic commits |
+| **git-committer** | Git commit workflow | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
 | **spec** | Specification writing | Structured spec creation workflow |
 | **code-review** | Code review | Build/test/lint verification |
@@ -280,6 +280,9 @@ Agents are specialized subagent definitions used with Claude Code's Task tool fo
 
 | Command | Description |
 |---------|-------------|
+| `/spec <description>` | Create software specification |
+| `/prometheus <task>` | Create work plan |
+| `/sisyphus` | Execute plan via orchestration |
 | `/hud setup` | Configure the Oh-My-Toong HUD in Claude Code's status bar |
 | `/hud restore` | Restore previous statusLine configuration |
 | `/ralph <task>` | Start Ralph Loop for task completion with oracle verification |
@@ -317,6 +320,8 @@ Maximum precision mode activated via keywords (`ultrawork`, `ulw`, `uw`). Enable
 | **persistent-mode.js** | Stop | Prevents stopping when work remains incomplete |
 | **pre-tool-enforcer.sh** | PreToolUse | Enforces tool execution constraints |
 | **post-tool-verifier.sh** | PostToolUse | Verifies tool execution results |
+| **sync-component-validator.sh** | Stop | Validates component existence at session end |
+| **sync-schema-validator.sh** | PostToolUse | Validates schema when sync.yaml is modified |
 
 ## Installation
 

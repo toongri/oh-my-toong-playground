@@ -98,7 +98,7 @@ flowchart TD
 ### sisyphus (오케스트레이터)
 
 - **역할**: 실행과 위임
-- **제약**: **절대 단독 작업 안 함**. 2개 이상 파일 = 위임.
+- **제약**: **절대 단독 작업 안 함**. 모든 코드 변경 = sisyphus-junior 위임.
 - **신뢰 모델**: sisyphus-junior의 "완료" 주장에 Zero Trust
 - **검증**: 모든 구현 후 code-reviewer 필수 호출
 
@@ -108,7 +108,7 @@ flowchart TD
 - **제약**: 단독 작업. 다른 에이전트에 위임 안 함.
 - **규율**: 엄격한 태스크 집중, 즉시 완료 표시
 
-### code-reviewer (검증자)
+### code-review (검증자)
 
 - **역할**: 모든 구현 검증
 - **기능**: 빌드/테스트/린트 실행, 코드 품질 평가
@@ -155,6 +155,8 @@ flowchart TD
 | `/prometheus <작업>` | 작업 계획 생성 | `.omt/plans/*.md` |
 | `/sisyphus` | 조율을 통한 계획 실행 | 검증된 코드 변경 |
 | `/ralph <작업>` | oracle 검증과 함께 반복적 완료 | 작업 완료 |
+| `/hud setup\|restore` | HUD 설정 및 관리 | statusLine 설정 |
+| `/cancel-ralph` | Ralph Loop 취소 | 상태 파일 정리 |
 
 ---
 

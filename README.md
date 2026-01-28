@@ -47,7 +47,7 @@ oh-my-toong은 **에이전틱 개발**을 지향합니다. 하나의 AI가 모�
 
 | 역할 | 에이전트 | 책임 |
 |------|----------|------|
-| 설계 | spec | 코드 작성 전 종합적인 명세 작성 |
+| 명세 | spec | 코드 작성 전 종합적인 명세 작성 |
 | 기획 | prometheus | 요구사항을 실행 가능한 작업 계획으로 변환 |
 | 실행 | sisyphus | 전문 에이전트를 통한 구현 조율 |
 | 구현 | sisyphus-junior | 코드 작성 (sisyphus가 위임) |
@@ -137,7 +137,7 @@ flowchart TB
 
 **목적**: 복잡한 작업을 위임을 통해 조율합니다. 단독 실행하지 않습니다.
 
-**핵심 제약**: **조율한다. 위임한다. 단독 작업 안 함.** 2개 이상 파일 OR 복잡한 분석 = 위임.
+**핵심 제약**: **조율한다. 위임한다. 단독 작업 안 함.** 모든 코드 변경(한 줄도) = 위임.
 
 ```mermaid
 flowchart TB
@@ -254,7 +254,7 @@ oh-my-toong/
 | **clarify** | 요구사항 명확화 | 구현 전 필수 게이트 |
 | **metis** | 사전 계획 분석 | 누락된 질문, 정의되지 않은 가드레일 포착 |
 | **momus** | 작업 계획 검토자 | 가차 없는 비평 - 구현 전 갭 포착 |
-| **git-committer** | Git 커밋 워크플로우 | 한국어 메시지, 50자 제한, 원자적 커밋 |
+| **git-committer** | Git 커밋 워크플로우 | 한국어 메시지, Subject 50자/Body 72자 제한, 원자적 커밋 |
 | **agent-council** | 다중 AI 자문단 | 트레이드오프 및 주관적 결정용 |
 | **spec** | 명세서 작성 | 구조화된 명세서 생성 워크플로우 |
 | **code-review** | 코드 리뷰 | 빌드/테스트/린트 검증 |
@@ -280,6 +280,9 @@ oh-my-toong/
 
 | 명령어 | 설명 |
 |--------|------|
+| `/spec <설명>` | 소프트웨어 명세 작성 |
+| `/prometheus <작업>` | 작업 계획 생성 |
+| `/sisyphus` | 조율을 통한 계획 실행 |
 | `/hud setup` | Claude Code 상태바에 Oh-My-Toong HUD 구성 |
 | `/hud restore` | 이전 statusLine 설정 복원 |
 | `/ralph <task>` | oracle 검증과 함께 작업 완료를 위한 Ralph Loop 시작 |
@@ -317,6 +320,8 @@ oracle 검증을 통한 반복적 완료 강제. oracle이 작업이 정말로 �
 | **persistent-mode.js** | Stop | 작업 미완료 시 종료 방지 |
 | **pre-tool-enforcer.sh** | PreToolUse | 도구 실행 제약 강제 |
 | **post-tool-verifier.sh** | PostToolUse | 도구 실행 결과 검증 |
+| **sync-component-validator.sh** | Stop | 세션 종료 시 컴포넌트 존재 검증 |
+| **sync-schema-validator.sh** | PostToolUse | sync.yaml 수정 시 스키마 검증 |
 
 ## 설치
 

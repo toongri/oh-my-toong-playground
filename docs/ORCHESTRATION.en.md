@@ -98,7 +98,7 @@ flowchart TD
 ### sisyphus (The Orchestrator)
 
 - **Role**: Execution and delegation
-- **Constraint**: **NEVER works alone**. 2+ files = DELEGATE.
+- **Constraint**: **NEVER works alone**. ALL code changes = DELEGATE to sisyphus-junior.
 - **Trust Model**: Zero trust for sisyphus-junior's "done" claims
 - **Verification**: MANDATORY code-reviewer after every implementation
 
@@ -108,7 +108,7 @@ flowchart TD
 - **Constraint**: Works ALONE. No delegation to other agents.
 - **Discipline**: Strict task focus, immediate completion marking
 
-### code-reviewer (The Verifier)
+### code-review (The Verifier)
 
 - **Role**: Validates all implementations
 - **Function**: Runs build/test/lint, evaluates code quality
@@ -155,6 +155,8 @@ With a plan ready, use `/sisyphus`:
 | `/prometheus <task>` | Create work plan | `.omt/plans/*.md` |
 | `/sisyphus` | Execute plan via orchestration | Verified code changes |
 | `/ralph <task>` | Iterative completion with oracle verification | Task completion |
+| `/hud setup\|restore` | HUD setup and management | statusLine configuration |
+| `/cancel-ralph` | Cancel Ralph Loop | State file cleanup |
 
 ---
 
