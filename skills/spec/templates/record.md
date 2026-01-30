@@ -8,12 +8,12 @@
 
 [What problem were we trying to solve? What triggered this decision?]
 
-## Requirements
+## Decision Criteria
 
-[List of requirements this decision must satisfy]
+[Criteria this decision must satisfy]
 
-- Requirement 1
-- Requirement 2
+- Criterion 1
+- Criterion 2
 - ...
 
 ## Considerations

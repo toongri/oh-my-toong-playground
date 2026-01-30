@@ -19,34 +19,6 @@ NO PHASE COMPLETION WITHOUT:
 
 **Violating the letter of these rules IS violating the spirit.** No exceptions.
 
-## Red Flags - STOP
-
-- User says "skip requirements" -> Document everything first
-- Acceptance criteria uses "properly", "gracefully" -> Get specifics
-- User rushes "just document what I said" -> Verify understanding
-- User wants to skip Phase 3 for system with 3+ states -> Domain modeling needed
-- Error cases marked "N/A" without reason -> All use cases need error cases
-- Implementation details in requirements (Redis, Kafka) -> Move to Phase 4
-- User sounds frustrated after pushback -> MAINTAIN position, do not capitulate
-- User claims "I'll take responsibility" -> Still requires testable criteria
-- User invokes role authority after rejection -> Role doesn't override quality
-- User requests "just do what I say" -> This IS the pressure to resist
-
-## Rationalization Table
-
-| Excuse | Response |
-|--------|----------|
-| "I know my requirements" | Document everything |
-| "We'll clarify during implementation" | Clarify now |
-| "This is obvious" | If not written, it doesn't exist |
-| "PM approved" | Approval is not completeness |
-| "You're the expert, decide" | Get explicit confirmation |
-| "I'll take responsibility" | Responsibility doesn't make criteria testable |
-| "That's Agile" | Agile requires clear Definition of Done, not vagueness |
-| "Just do what I say" | This IS the pressure to resist |
-| "Why do I have to go this far?" | Quality takes effort; shortcuts cost more later |
-| "[Authority] also agreed" | Consensus is not evidence |
-
 ## Non-Negotiable Rules
 
 | Rule | Why |
@@ -79,6 +51,8 @@ NO PHASE COMPLETION WITHOUT:
 ## Context Brokering
 
 **NEVER burden the user with questions the codebase can answer.** Use explore/oracle for codebase questions, ask user for preferences only.
+
+When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation.
 
 ## Language
 
@@ -276,6 +250,18 @@ At each Phase Checkpoint:
 2. For each significant decision, create a record in `step-XX-{name}/records/`
 3. Include record creation in save operation
 4. Records accumulate throughout spec work for Phase 6 analysis
+
+## Prior Phase Amendment
+
+When errors or omissions in previous Phases are discovered during design:
+
+1. Stop current Step progress
+2. Return to the relevant Phase's design.md and modify
+3. Share modifications with user and get confirmation
+4. Regenerate spec.md
+5. Resume current Step
+
+**Example**: When discovering new state transition rules in Phase 3, add the relevant scenario to Phase 1's Use Cases before continuing
 
 ## Review Protocol
 
