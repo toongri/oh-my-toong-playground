@@ -293,6 +293,42 @@ When delegating to sisyphus-junior, include these 5 sections:
 
 ---
 
+## Code-Reviewer Invocation
+
+When invoking code-reviewer after sisyphus-junior completion, pass the **original 5-Section prompt** plus implementation results:
+
+```markdown
+[Original 5-Section prompt used for sisyphus-junior]
+
+---
+
+## REVIEW REQUEST
+- Changed files: [files junior reported as modified]
+- Junior's summary: [what junior claimed to have done]
+
+Review whether the implementation meets the requirements above.
+```
+
+### Verdict Response Protocol
+
+| Verdict | Sisyphus Action |
+|---------|-----------------|
+| **APPROVE** | Mark task completed, proceed to next |
+| **REQUEST_CHANGES** (Critical/High) | Create fix task, re-delegate to sisyphus-junior |
+| **COMMENT** (Medium only) | Mark completed, create follow-up task if warranted |
+
+### Fix Task from REQUEST_CHANGES
+
+```markdown
+Subject: Fix [issue type]: [brief description]
+Description:
+- Issue: [exact issue from reviewer]
+- Location: [file:lines]
+- Required fix: [specific action]
+```
+
+---
+
 ## Decision Gates
 
 Request classification and interview workflow for the Sisyphus orchestrator.
