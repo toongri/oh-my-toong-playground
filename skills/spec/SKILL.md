@@ -33,11 +33,59 @@ NO PHASE COMPLETION WITHOUT:
 | Phase | Entry Criteria | When Needed | Skip When |
 |-------|----------------|-------------|-----------|
 | 01-Requirements | Request received, scope understood | Ambiguous requirements | Already defined |
-| 02-Architecture | Phase 1 complete OR requirements documented | System structure changes | Existing patterns |
-| 03-Domain | Architecture decided; 3+ states | 3+ states, business rules | Simple CRUD |
-| 04-Detailed | Domain model OR simple CRUD confirmed | Performance, concurrency | Implementation obvious |
-| 05-API | External API needed | External API exposure | Internal only |
-| 06-Wrapup | Spec concluding; records exist | Records to preserve | Nothing to preserve |
+| 02-Solution Design | Phase 1 complete OR requirements documented | System structure changes | Existing patterns |
+| **Dynamic Design Areas** | Phase 2 complete | See Design Area Selection Criteria | User explicitly skips with justification |
+| Wrapup | Spec concluding; records exist | Records to preserve | Nothing to preserve |
+
+### Design Areas (Selected after Phase 2)
+
+After completing Phase 2 (Solution Design), the AI suggests which Design Areas to include based on project complexity. User confirms/modifies selection via `AskUserQuestion` with `multiSelect: true`.
+
+| Design Area | Criteria for Recommendation |
+|-------------|----------------------------|
+| Domain Model | 3+ state transitions, complex business rules, aggregate boundaries |
+| Data Schema | DB/file/cache storage needed |
+| Interface Contract | External interface exposed (API, CLI, Event) |
+| Integration Pattern | External system integration, async processing, transaction boundaries |
+| Operations Guide | Production deployment, monitoring, operational settings |
+
+## Design Area Selection
+
+After Phase 2 (Solution Design) completes, analyze the project and present Design Area selection to user:
+
+### Selection Process
+
+1. **Analyze project requirements** from Phase 1-2 outputs
+2. **Determine recommended Design Areas** using criteria above
+3. **Present AskUserQuestion** with multiSelect: true
+
+**AskUserQuestion Format:**
+
+```yaml
+AskUserQuestion:
+  header: "Design Areas"
+  question: "Based on the Solution Design, I recommend the following Design Areas for this project.
+    [List recommended areas with brief justification for each]
+    Which Design Areas should we proceed with?"
+  multiSelect: true
+  options:
+    - label: "Domain Model (Recommended)"
+      description: "[Specific reason based on project - e.g., 'Order has 5 state transitions']"
+    - label: "Data Schema"
+      description: "[Specific reason or 'Not needed - no persistent storage']"
+    - label: "Interface Contract (Recommended)"
+      description: "[Specific reason based on project]"
+    - label: "Integration Pattern"
+      description: "[Specific reason or 'Not needed - no external integration']"
+    - label: "Operations Guide"
+      description: "[Specific reason or 'Standard deployment sufficient']"
+```
+
+### Validation Rules
+
+- If user selects NO Design Areas without justification, ask for rationale
+- If user deselects AI-recommended Design Area, ask for justification before proceeding
+- Selected Design Areas execute sequentially in the order: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
 
 ## Subagent Selection
 
@@ -60,145 +108,24 @@ When user has no preference or cannot decide, select best practice autonomously.
 
 ## AskUserQuestion Quality Standard
 
-```yaml
-BAD:
-  question: "Which approach?"
-  options:
-    - label: "A"
-    - label: "B"
+**Question Structure**: Context → Tension → Question
 
-GOOD:
-  question: "The login API currently returns generic 401 errors for all auth failures.
-    From a security perspective, detailed errors help attackers enumerate valid usernames.
-    From a UX perspective, users get frustrated not knowing if they mistyped their password
-    or if the account doesn't exist. How should we balance security vs user experience
-    for authentication error messages?"
-  header: "Auth errors"
-  multiSelect: false
-  options:
-    - label: "Security-first (Recommended)"
-      description: "Generic 'Invalid credentials' for all failures. Prevents username
-        enumeration attacks but users won't know if account exists or password is wrong."
-    - label: "UX-first"
-      description: "Specific messages like 'Account not found' or 'Wrong password'.
-        Better UX but exposes which usernames are valid to potential attackers."
-    - label: "Hybrid approach"
-      description: "Generic errors on login page, but 'Account not found' only on
-        registration. Balanced but adds implementation complexity."
-```
-
-**Question Structure:**
+For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 1. **Current situation** - What exists now, what's the context
 2. **Tension/Problem** - Why this decision matters, conflicting concerns
-3. **The actual question** - Clear ask with "How should we..." or "Which approach..."
-
-### Rich Context Pattern (For Design Decisions)
-
-For complex technical decisions, provide rich context via markdown BEFORE asking a single AskUserQuestion.
-
-**Structure:**
-1. **Current State** - What exists now (1-2 sentences)
-2. **Existing Project Patterns** - Relevant code, prior decisions, historical context
-3. **Change Request Background** - Why this decision is needed now
+3. **Existing Project Patterns** - Relevant code, prior decisions
 4. **Option Analysis** - For each option:
    - Behavior description
-   - Evaluation table (Security, UX, Maintainability, Adoption)
+   - Tradeoffs across perspectives (security, UX, maintainability, performance, complexity)
    - Code impact
 5. **Recommendation** - Your suggested option with rationale
-6. **AskUserQuestion** - Single question with 2-3 options
+6. **AskUserQuestion** - Single question with options
 
 **Rules:**
 - One question at a time (sequential interview)
 - Markdown provides depth, AskUserQuestion provides choice
 - Question must be independently understandable (include brief context + "See analysis above")
-
-**Example:**
-
----
-
-#### Markdown Context (Before AskUserQuestion)
-
-## Authentication Error Message Strategy
-
-### Current State
-`AuthController.login()` returns generic 401 for all auth failures.
-
-### Existing Project Patterns
-- **UserService**: Already throws distinct `UserNotFoundException` and `InvalidPasswordException`
-- **GlobalExceptionHandler**: Currently catches both as `AuthenticationException`
-- **Historical Decision**: 2024 security audit flagged username enumeration → unified to generic errors
-
-### Change Request Background
-CS team reports increasing user complaints: "Can't tell if password is wrong or account doesn't exist"
-
-### Option Analysis
-
-#### Option A: Security-first (Keep Current)
-
-**Behavior**: All auth failures → `"Invalid credentials"`
-
-| Aspect | Evaluation |
-|--------|------------|
-| **Security** | ✅ Prevents username enumeration |
-| **UX** | ❌ Users can't identify cause |
-| **Maintainability** | ✅ Simple - no code change |
-| **Adoption** | GitHub, AWS, Stripe (most B2B SaaS) |
-
-**Code Impact**: None
-
-#### Option B: UX-first
-
-**Behavior**:
-- No account → `"Account not found"`
-- Wrong password → `"Incorrect password"`
-
-| Aspect | Evaluation |
-|--------|------------|
-| **Security** | ❌ Username enumeration vulnerable |
-| **UX** | ✅ Clear feedback |
-| **Maintainability** | ✅ Simple - just exception branching |
-| **Adoption** | Small community sites, internal tools |
-
-**Code Impact**: Add exception type branching in `GlobalExceptionHandler`
-
-#### Option C: Contextual (Recommended)
-
-**Behavior**:
-- Login → `"Invalid credentials"` (generic)
-- Signup email check → `"Email already registered"`
-
-| Aspect | Evaluation |
-|--------|------------|
-| **Security** | ⚠️ Enumeration possible on signup (higher attack cost than login) |
-| **UX** | ✅ Improves signup flow (addresses most common complaint) |
-| **Maintainability** | ✅ Simple - only modify signup API |
-| **Adoption** | Twitter, Facebook, most consumer apps |
-
-**Code Impact**: Modify `SignupController.checkEmail()` response only
-
-### Recommendation
-**Option C (Contextual)** - Realistic balance between security and UX.
-
----
-
-#### AskUserQuestion (After Markdown)
-
-```yaml
-AskUserQuestion:
-  header: "Auth errors"
-  question: "We need to decide the error message strategy for authentication failures.
-    Currently all failures return generic errors for security, but CS reports
-    increasing user confusion. How should we balance security vs UX?
-    (See analysis above)"
-  multiSelect: false
-  options:
-    - label: "Security-first (Keep current)"
-      description: "Generic 'Invalid credentials' for all. Maximum security, poor UX."
-    - label: "UX-first"
-      description: "Detailed error messages. Best UX, username enumeration risk."
-    - label: "Contextual (Recommended)"
-      description: "Generic on login, detailed on signup only. Practical balance."
-```
+- Options need descriptions explaining consequences, not just labels
 
 ## Checkpoint Protocol
 
@@ -343,12 +270,19 @@ When significant decisions are made during any phase, capture them for future re
 ### Record Naming Examples
 
 ```
-.omt/specs/order-management/step-02-architecture/records/
-  p2.1-event-sourcing-vs-crud.md       # Phase 2, Step 1 decision
-  p2.3-payment-gateway-selection.md    # Phase 2, Step 3 decision
+.omt/specs/order-management/step-01-requirements/records/
+  p1.1-scope-clarification.md
 
-.omt/specs/order-management/step-03-domain/records/
-  p3.2-order-state-machine-design.md   # Phase 3, Step 2 decision
+.omt/specs/order-management/step-02-solution-design/records/
+  p2.1-event-sourcing-vs-crud.md
+  p2.3-payment-gateway-selection.md
+
+.omt/specs/order-management/design-area-domain-model/records/
+  da-domain-model.2-order-state-machine-design.md
+  da-domain-model.3-aggregate-boundary.md
+
+.omt/specs/order-management/design-area-data-schema/records/
+  da-data-schema.1-table-structure.md
 ```
 
 ### Checkpoint Integration
@@ -357,7 +291,7 @@ At each Phase Checkpoint:
 1. Review decisions made in this phase
 2. For each significant decision, create a record in `step-XX-{name}/records/`
 3. Include record creation in save operation
-4. Records accumulate throughout spec work for Phase 6 analysis
+4. Records accumulate throughout spec work for Wrapup analysis
 
 ## Prior Phase Amendment
 
@@ -369,7 +303,7 @@ When errors or omissions in previous Phases are discovered during design:
 4. Regenerate spec.md
 5. Resume current Step
 
-**Example**: When discovering new state transition rules in Phase 3, add the relevant scenario to Phase 1's Use Cases before continuing
+**Example**: When discovering new state transition rules in Domain Model Design Area, add the relevant scenario to Phase 1's Use Cases before continuing
 
 ## Review Protocol
 
@@ -387,6 +321,21 @@ At end of each Phase:
 3. Save complete Phase content
 4. Announce: "Phase X complete. Entry criteria for Phase Y: [list]"
 
+## Phase/Design Area Completion Announcements
+
+### Phase 2 Completion
+"Phase 2 (Solution Design) complete. Select Design Areas for this project."
+
+### Design Area Completion
+"[Design Area Name] complete. Proceeding to next selected Design Area: [Next Area Name]."
+
+Or if last Design Area:
+"[Design Area Name] complete. All selected Design Areas finished. Proceeding to Wrapup."
+
+### Design Area Skipped
+If Design Area was recommended but user deselected:
+"Skipping [Design Area Name] as requested. Proceeding to [Next Area Name or Wrapup]."
+
 ## Step-by-Step Persistence
 
 **Core Principle**: Save progress to `.omt/specs/{spec-name}/step-XX-{name}/design.md` whenever each Phase is completed.
@@ -400,13 +349,15 @@ Save **whenever each Phase is completed**:
 
 ### Step Directory Mapping
 
-| Phase | Step Directory |
-|-------|----------------|
+| Phase/Design Area | Step Directory |
+|-------------------|----------------|
 | Phase 1: Requirements | `step-01-requirements/` |
-| Phase 2: Architecture | `step-02-architecture/` |
-| Phase 3: Domain | `step-03-domain/` |
-| Phase 4: Detailed | `step-04-detailed/` |
-| Phase 5: API | `step-05-api/` |
+| Phase 2: Solution Design | `step-02-solution-design/` |
+| Design Area: Domain Model | `design-area-domain-model/` |
+| Design Area: Data Schema | `design-area-data-schema/` |
+| Design Area: Interface Contract | `design-area-interface-contract/` |
+| Design Area: Integration Pattern | `design-area-integration-pattern/` |
+| Design Area: Operations Guide | `design-area-operations-guide/` |
 
 ### Document Structure
 
@@ -432,39 +383,39 @@ The combined `spec.md` is auto-generated by concatenating all design.md files.
 
 ## Resume from Existing Spec
 
-When the user provides an existing spec document or requests "continue from here", "review this", "brainstorm with me", etc.:
+When the user requests "continue from here", "review this", etc.:
 
 ### Resume Workflow
 
-1. Check existing step folders in `.omt/specs/{spec-name}/`
-2. Analyze which step-XX-{name}/ directories exist and have design.md
-3. Check if all Phases complete
-4. If not complete: Identify next starting point, ask user to confirm
-5. If complete: Ask what else user needs
+1. Check existing directories in `.omt/specs/{spec-name}/`:
+   - `step-01-requirements/` - Phase 1 completion
+   - `step-02-solution-design/` - Phase 2 completion
+   - `design-area-{name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-guide)
+2. Analyze completion status based on design.md existence
+3. Present status summary to user
 
-### Analysis Criteria
+### Status Presentation
 
-Check the step folders and verify the following:
+**Example:**
+> I've reviewed the spec folders:
+> - step-01-requirements/ - Complete
+> - step-02-solution-design/ - Complete
+> - design-area-domain-model/ - Complete
+> - design-area-data-schema/ - Incomplete (design.md partial)
+> - design-area-interface-contract/ - Not started
+>
+> Design Areas were previously selected but not all completed.
+> Re-select Design Areas to continue?
 
-| Check Item | Judgment Criteria |
-|------------|-------------------|
-| Phase Completion | `step-XX-{name}/design.md` exists and has meaningful content |
-| Records Exist | `step-XX-{name}/records/` contains decision files |
-| Next Starting Point | First missing or incomplete step folder |
+### Resume Decision Tree
 
-### Resume Conversation Example
-
-**User**: Continue designing `.omt/specs/order-management/`
-
-**AI**: I've reviewed the spec folders.
-
-- step-01-requirements/ - Complete (design.md exists)
-- step-02-architecture/ - Complete (design.md exists, 2 records)
-- step-03-domain/ - Incomplete (design.md partial)
-- step-04-detailed/ - Not started
-- step-05-api/ - Not started
-
-Shall we proceed from **Phase 3: Domain Modeling**?
+| Current State | Action |
+|---------------|--------|
+| Phase 1 incomplete | Resume from Phase 1 |
+| Phase 2 incomplete | Resume from Phase 2 |
+| Phase 2 complete, no Design Areas started | Re-ask Design Area selection |
+| Some Design Areas complete | Show status, offer to re-select or continue |
+| All selected Design Areas complete | Proceed to Wrapup (if records exist) |
 
 ## Output Location
 
@@ -472,33 +423,36 @@ All specification documents are saved in the `.omt/specs/` directory.
 
 ### Directory Structure
 
-Manage design files and feedback records separately by step.
-
 ```
 .omt/specs/{spec-name}/
 ├── step-01-requirements/
-│   ├── design.md          # Design document for this step
-│   └── records/           # Decision records for this step
-│       └── p1.1-topic.md
-├── step-02-architecture/
 │   ├── design.md
 │   └── records/
-├── step-03-domain/
+├── step-02-solution-design/
 │   ├── design.md
 │   └── records/
-├── step-04-detailed/
+├── design-area-domain-model/       # if selected
 │   ├── design.md
 │   └── records/
-├── step-05-api/
+├── design-area-data-schema/        # if selected
 │   ├── design.md
 │   └── records/
-└── spec.md                # Final: generated by combining all step design.md files
+├── design-area-interface-contract/ # if selected
+│   ├── design.md
+│   └── records/
+├── design-area-integration-pattern/ # if selected
+│   ├── design.md
+│   └── records/
+├── design-area-operations-guide/   # if selected
+│   ├── design.md
+│   └── records/
+└── spec.md                         # Combines completed design.md files
 
-.omt/specs/context/        # Shared context (created by Phase 6)
-  project.md               # Tech stack, constraints
-  conventions.md           # Established patterns
-  decisions.md             # Reusable decisions (ADR format)
-  gotchas.md               # Known pitfalls
+.omt/specs/context/                 # Shared context (created by Wrapup)
+  project.md
+  conventions.md
+  decisions.md
+  gotchas.md
 ```
 
 ### Structure Rationale
@@ -512,29 +466,40 @@ Manage design files and feedback records separately by step.
 
 ### spec.md Generation
 
-The final `spec.md` is generated by concatenating all step `design.md` files in order:
+The final `spec.md` is generated by concatenating completed design.md files in order:
 
 ```
-spec.md = step-01-*/design.md + step-02-*/design.md + step-03-*/design.md + ...
+spec.md = step-01-requirements/design.md
+        + step-02-solution-design/design.md
+        + design-area-domain-model/design.md (if completed)
+        + design-area-data-schema/design.md (if completed)
+        + design-area-interface-contract/design.md (if completed)
+        + design-area-integration-pattern/design.md (if completed)
+        + design-area-operations-guide/design.md (if completed)
 ```
 
-The `spec.md` can be updated whenever each step is finalized, and this file is referenced during full spec reviews.
+**Note**: Wrapup produces context files (`.omt/specs/context/`), not spec content.
 
 ### Record Naming in Step Structure
 
 Records are saved within each step's records/ folder:
 
 ```
-step-02-architecture/records/
+step-02-solution-design/records/
   p2.1-event-sourcing-vs-crud.md
   p2.3-payment-gateway-selection.md
+
+design-area-domain-model/records/
+  da-domain-model.2-order-state-machine.md
 ```
 
 ### Naming Convention
 
-- **Step directory**: `step-{num}-{name}/` (e.g., step-01-requirements, step-02-architecture)
-- **Design document**: `step-{num}-{name}/design.md`
-- **Records**: `step-{num}-{name}/records/p{phase}.{step}-{topic}.md`
+- **Step directory**: `step-{num}-{name}/` (e.g., step-01-requirements, step-02-solution-design)
+- **Design Area directory**: `design-area-{name}/` (e.g., design-area-domain-model)
+- **Design document**: `{directory}/design.md`
+- **Phase records**: `step-{num}-{name}/records/p{phase}.{step}-{topic}.md`
+- **Design Area records**: `design-area-{name}/records/da-{area}.{step}-{topic}.md`
 
 <Critical_Constraints>
 
@@ -576,5 +541,7 @@ step-02-architecture/records/
 
 ## References
 
-- **Phase details**: See `phases/` directory (01-06)
+- **Phase details**: See `phases/` directory (01-requirements, 02-solution-design)
+- **Design Area details**: See `design-areas/` directory (domain-model, data-schema, interface-contract, integration-pattern, operations-guide)
+- **Wrapup details**: See `wrapup/` directory
 - **Output templates**: See `templates/`
