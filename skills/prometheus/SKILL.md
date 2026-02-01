@@ -177,6 +177,114 @@ GOOD:
 2. **Tension/Problem** - Why this decision matters, conflicting concerns
 3. **The actual question** - Clear ask with "How should we..." or "Which approach..."
 
+### Rich Context Pattern (For Design Decisions)
+
+For complex technical decisions, provide rich context via markdown BEFORE asking a single AskUserQuestion.
+
+**Structure:**
+1. **Current State** - What exists now (1-2 sentences)
+2. **Existing Project Patterns** - Relevant code, prior decisions, historical context
+3. **Change Request Background** - Why this decision is needed now
+4. **Option Analysis** - For each option:
+   - Behavior description
+   - Evaluation table (Security, UX, Maintainability, Adoption)
+   - Code impact
+5. **Recommendation** - Your suggested option with rationale
+6. **AskUserQuestion** - Single question with 2-3 options
+
+**Rules:**
+- One question at a time (sequential interview)
+- Markdown provides depth, AskUserQuestion provides choice
+- Question must be independently understandable (include brief context + "See analysis above")
+
+**Example:**
+
+---
+
+#### Markdown Context (Before AskUserQuestion)
+
+## Authentication Error Message Strategy
+
+### Current State
+`AuthController.login()` returns generic 401 for all auth failures.
+
+### Existing Project Patterns
+- **UserService**: Already throws distinct `UserNotFoundException` and `InvalidPasswordException`
+- **GlobalExceptionHandler**: Currently catches both as `AuthenticationException`
+- **Historical Decision**: 2024 security audit flagged username enumeration → unified to generic errors
+
+### Change Request Background
+CS team reports increasing user complaints: "Can't tell if password is wrong or account doesn't exist"
+
+### Option Analysis
+
+#### Option A: Security-first (Keep Current)
+
+**Behavior**: All auth failures → `"Invalid credentials"`
+
+| Aspect | Evaluation |
+|--------|------------|
+| **Security** | ✅ Prevents username enumeration |
+| **UX** | ❌ Users can't identify cause |
+| **Maintainability** | ✅ Simple - no code change |
+| **Adoption** | GitHub, AWS, Stripe (most B2B SaaS) |
+
+**Code Impact**: None
+
+#### Option B: UX-first
+
+**Behavior**:
+- No account → `"Account not found"`
+- Wrong password → `"Incorrect password"`
+
+| Aspect | Evaluation |
+|--------|------------|
+| **Security** | ❌ Username enumeration vulnerable |
+| **UX** | ✅ Clear feedback |
+| **Maintainability** | ✅ Simple - just exception branching |
+| **Adoption** | Small community sites, internal tools |
+
+**Code Impact**: Add exception type branching in `GlobalExceptionHandler`
+
+#### Option C: Contextual (Recommended)
+
+**Behavior**:
+- Login → `"Invalid credentials"` (generic)
+- Signup email check → `"Email already registered"`
+
+| Aspect | Evaluation |
+|--------|------------|
+| **Security** | ⚠️ Enumeration possible on signup (higher attack cost than login) |
+| **UX** | ✅ Improves signup flow (addresses most common complaint) |
+| **Maintainability** | ✅ Simple - only modify signup API |
+| **Adoption** | Twitter, Facebook, most consumer apps |
+
+**Code Impact**: Modify `SignupController.checkEmail()` response only
+
+### Recommendation
+**Option C (Contextual)** - Realistic balance between security and UX.
+
+---
+
+#### AskUserQuestion (After Markdown)
+
+```yaml
+AskUserQuestion:
+  header: "Auth errors"
+  question: "We need to decide the error message strategy for authentication failures.
+    Currently all failures return generic errors for security, but CS reports
+    increasing user confusion. How should we balance security vs UX?
+    (See analysis above)"
+  multiSelect: false
+  options:
+    - label: "Security-first (Keep current)"
+      description: "Generic 'Invalid credentials' for all. Maximum security, poor UX."
+    - label: "UX-first"
+      description: "Detailed error messages. Best UX, username enumeration risk."
+    - label: "Contextual (Recommended)"
+      description: "Generic on login, detailed on signup only. Practical balance."
+```
+
 ### Persistence
 
 **Continue until YOU have no questions left.** Not after 2-3 questions. Keep interviewing until every ambiguity is resolved.
