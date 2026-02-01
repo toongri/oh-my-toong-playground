@@ -4,6 +4,58 @@ Output format templates for each phase of the spec skill.
 
 ---
 
+## Design Area Selection Template
+
+After completing Phase 2 (Solution Design), use the following template to present Design Area selection to the user:
+
+### AskUserQuestion Format
+
+```yaml
+AskUserQuestion:
+  header: "Design Areas"
+  question: "Based on the Solution Design, the following Design Areas are recommended for this project:
+
+    **Recommended:**
+    - [Area Name]: [Specific reason based on project analysis]
+
+    **Optional:**
+    - [Area Name]: [Why it may or may not be needed]
+
+    Which Design Areas should we proceed with?"
+  multiSelect: true
+  options:
+    - label: "Domain Model (Recommended)"
+      description: "[Specific justification - e.g., 'Order entity has 5 state transitions with complex business rules']"
+    - label: "Data Schema (Recommended)"
+      description: "[Specific justification - e.g., 'Requires new RDB tables for order and payment data']"
+    - label: "Interface Contract (Recommended)"
+      description: "[Specific justification - e.g., 'New REST API endpoints for order management']"
+    - label: "Integration Pattern"
+      description: "[Specific justification or 'Not needed - no external system integration required']"
+    - label: "Operations Guide"
+      description: "[Specific justification or 'Standard deployment sufficient - no custom monitoring needed']"
+```
+
+### Recommendation Criteria
+
+Use the following criteria to determine which Design Areas to recommend:
+
+| Design Area | Recommend When | Skip When |
+|-------------|----------------|-----------|
+| Domain Model | 3+ state transitions, complex business rules, aggregate boundaries to define | Simple CRUD, no state management, straightforward entity relationships |
+| Data Schema | New DB tables needed, schema changes, migration required | No persistent storage, using existing schema |
+| Interface Contract | External API/CLI/Event interfaces exposed, consumer documentation needed | Internal-only functionality, no external interface |
+| Integration Pattern | Cross-system communication, async processing, external service calls, stateful components | Single system scope, no external integration |
+| Operations Guide | Custom monitoring needed, non-standard deployment, production-specific concerns | Standard APM sufficient, conventional deployment |
+
+### Validation Rules
+
+1. **No Selection**: If user selects zero Design Areas, ask for justification before proceeding
+2. **Deselecting Recommended**: If user removes a recommended Design Area, ask for specific reason
+3. **Adding Non-Recommended**: User may always add Design Areas not initially recommended
+
+---
+
 ## Phase 1: Requirements Analysis
 
 ```markdown
@@ -97,7 +149,7 @@ First, ... Second, ... Third, ...
 
 ---
 
-## Phase 2: Architecture Design
+## Phase 2: Solution Design
 
 ```markdown
 # Solution Design Document
@@ -207,7 +259,13 @@ sequenceDiagram
 
 ---
 
-## Phase 3: Domain Modeling
+## Design Area Outputs
+
+The following output formats are used for dynamically selected Design Areas.
+
+---
+
+### Domain Model Design Area
 
 ```markdown
 # Domain Modeling Document
@@ -316,31 +374,14 @@ Note: Publishing and consuming can be developed/tested/deployed independently. T
 
 ---
 
-## Phase 4: Detailed Design
+### Data Schema Design Area
 
 ```markdown
-# Detailed Design and Implementation Plan Document
+# Data Schema Document
 
-## 1. System Flowcharts
+## 1. Table Schema
 
-### 1.1 [Use Case Name] Flow
-
-```mermaid
-flowchart TD
-    Start([Start]) --> Step1[Step 1]
-    Step1 --> Decision{Condition?}
-    Decision -->|Yes| Step2[Step 2]
-    Decision -->|No| Error[Error Handling]
-    Step2 --> End([End])
-```
-
-[Additional flowcharts as needed]
-
-## 2. Data Model Design
-
-### 2.1 Table Schema
-
-#### [Table Name] Table
+### 1.1 [Table Name] Table
 
 ```sql
 CREATE TABLE table_name (
@@ -351,11 +392,11 @@ CREATE TABLE table_name (
 **Column Descriptions:**
 - `column_name`: Description
 
-### 2.2 Repository Implementation Details
+## 2. Repository Implementation Details
 
-Implementation details for Repository/Port interfaces defined in domain-modeling.
+Implementation details for Repository/Port interfaces defined in domain modeling.
 
-#### [Repository/Port Name]
+### 2.1 [Repository/Port Name]
 
 | Method | Implementation Approach | Performance Characteristics |
 |--------|------------------------|----------------------------|
@@ -371,32 +412,63 @@ VALUES (...)
 ON CONFLICT (key) DO UPDATE SET ...
 ```
 
-### 2.3 Index Strategy
+## 3. Index Strategy
 
 [Write only if additional indexes are needed. Otherwise note "Existing constraints are sufficient"]
 
-### 2.4 Migration Strategy
+## 4. Migration Strategy
 
 [Write only if migration is required]
+```
 
-## 3. Component Detailed Design (If Applicable)
+---
+
+### Integration Pattern Design Area
+
+```markdown
+# Integration Pattern Document
+
+## 1. Integration Points Summary
+
+| Integration Point | Communication Pattern | Sync/Async | Failure Handling | Rationale |
+|-------------------|----------------------|------------|------------------|-----------|
+| A -> B | Function Call (in-process) | Sync | Graceful Degradation | Same module, minimize latency |
+| A -> C | Kafka | Async | Retry 3x + DLQ | Service separation, ordering required |
+
+## 2. Data Flow Diagrams
+
+### 2.1 [Use Case Name] Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S1 as System1
+    participant S2 as System2
+
+    C->>S1: Request
+    activate S1
+    S1->>S2: Processing Request [Communication Pattern]
+    activate S2
+    alt Success
+        S2-->>S1: Success Response
+    else Failure
+        S2-->>S1: Failure Response
+        S1-->>C: Error Response or Graceful Degradation
+    end
+    deactivate S2
+    S1-->>C: Final Response
+    deactivate S1
+```
+
+## 3. Stateful Component Policies
 
 ### 3.1 [Component Name]
 
 **Purpose:** Description of component's role
 
-**Data Structures:**
+**Data Structure Choice:** [Map/Queue/List/etc.] - [Why this choice]
 
-```kotlin
-class ComponentName {
-    // Internal state
-    private val buffer: ConcurrentHashMap<Key, Value>
-}
-```
-
-**Concurrency Handling:**
-- Strategy used (ConcurrentHashMap, Lock, Atomic, etc.)
-- Contention scenarios and resolution approaches
+**Concurrency Policy:** [Single-threaded/Lock-based/Lock-free] - [Rationale]
 
 **Lifecycle:**
 
@@ -407,64 +479,93 @@ class ComponentName {
 | On Failure | ... |
 | On Shutdown | ... |
 
-## 4. Operational Plan
+## 4. Error and Recovery Flows
 
-### 4.1 Monitoring Strategy
-
-[Write only project-specific metrics]
-
-### 4.2 Logging Strategy
-
-[Write only project-specific logging]
-
-### 4.3 Deployment Strategy
-
-**Deployment Order:**
-1. ...
-
-**Backward Compatibility:**
-- ...
-
-**Rollback Strategy:**
-- ...
-
-### 4.4 Major Failure Scenarios and Response Plans
+### 4.1 Major Error Scenarios
 
 | Failure Scenario | Response Plan | Expected Outcome |
 |------------------|---------------|------------------|
 | ... | ... | ... |
 
-## 5. Design Decision Sharing
+### 4.2 Transaction Boundaries
 
-### 5.1 Key Design Decisions and Rationale
-
-| Design Decision | Rationale |
-|-----------------|-----------|
-| ... | ... |
+| Operation | Transaction Scope | Pattern | Notes |
+|-----------|------------------|---------|-------|
+| ... | ... | Single DB / Outbox / Saga | ... |
 ```
 
 ---
 
-## Phase 5: API Design
+### Operations Guide Design Area
 
 ```markdown
-# API Design Decisions
+# Operations Guide Document
+
+## 1. Observability Design
+
+### 1.1 Custom Metrics
+
+[Write only project-specific metrics]
+
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| ... | Counter/Gauge/Histogram | ... | ... |
+
+### 1.2 Custom Logging
+
+[Write only project-specific logging]
+
+| Log Event | Level | Fields | Description |
+|-----------|-------|--------|-------------|
+| ... | INFO/WARN/ERROR | ... | ... |
+
+## 2. Deployment Strategy
+
+### 2.1 Deployment Order
+1. ...
+
+### 2.2 Backward Compatibility
+- ...
+
+### 2.3 Rollback Strategy
+- ...
+
+## 3. Failure and Recovery Plan
+
+### 3.1 Failure Scenarios
+
+| Failure Scenario | Detection | Response Plan | Expected Outcome |
+|------------------|-----------|---------------|------------------|
+| ... | ... | ... | ... |
+
+### 3.2 Recovery Procedures
+
+[Recovery procedures for critical failure scenarios]
+```
+
+---
+
+### Interface Contract Design Area
+
+```markdown
+# Interface Contract Document
 
 ## 1. Key Design Decisions and Background
 
 ### 1.1 Business Context
-[Core problems, solution objectives, business requirements addressed by the API]
+[Core problems, solution objectives, business requirements addressed by the interfaces]
 
 ### 1.2 Major Design Decisions
-[Major API design decisions and their rationale]
+[Major interface design decisions and their rationale]
 
-## 2. API Specifications
+## 2. Interface Specifications
 
-### 2.1 [API Name]
+### 2.1 [Interface Name]
 
-**Endpoint**: `[HTTP Method] [Path]`
+**Type**: [REST API / CLI / Event / gRPC / etc.]
+**Endpoint/Command/Topic**: [Specification]
 
-**Description**: [API function description]
+**Description**: [Interface function description]
 
 **Request**:
 ```
@@ -484,43 +585,43 @@ class ComponentName {
 
 **Error Cases**:
 
-| Condition | HTTP Status | Error Code | Message |
+| Condition | Status/Code | Error Code | Message |
 |-----------|-------------|------------|---------|
 | ... | ... | ... | ... |
 
-[Repeat for additional APIs as needed]
+[Repeat for additional interfaces]
 
-## 3. API Changes
+## 3. Interface Changes
 
-### 3.1 APIs Being Added
+### 3.1 Interfaces Being Added
 
-| HTTP Method | Path | Description | Impact |
-|-------------|------|-------------|--------|
+| Type | Endpoint/Command | Description | Impact |
+|------|------------------|-------------|--------|
 | ... | ... | ... | ... |
 
-### 3.2 APIs Being Modified (if applicable)
+### 3.2 Interfaces Being Modified (if applicable)
 
-- **Target**: [HTTP Method] [Path]
+- **Target**: [Type] [Endpoint/Command]
 - **Change Type**: [Field addition/removal/modification, path change, etc.]
 - **Change Details**: [Specific change details]
 - **Reason for Change**: [Background and reason for change]
 - **Backward Compatibility**: [Maintained/Broken]
 - **Migration Period**: [Specify if needed]
 
-### 3.3 Deleted/Deprecated APIs (if applicable)
+### 3.3 Deleted/Deprecated Interfaces (if applicable)
 
-- **Target API**: [HTTP Method] [Path]
+- **Target Interface**: [Type] [Endpoint/Command]
 - **Action**: [Deletion/Deprecation]
 - **Reason**: [Reason for action]
-- **Replacement API**: [If a replacement API exists]
+- **Replacement Interface**: [If a replacement exists]
 - **End of Support Date**: [Date]
 ```
 
 ---
 
-## Phase 6: Wrap-up
+## Wrapup
 
-Phase 6 produces context files rather than a single output document. See `references/protocols.md` for context file formats:
+Wrapup produces context files rather than a single output document. See `06-wrapup.md` in `wrapup/` directory for details.
 
 - `project.md` - Tech stack, constraints, team values
 - `conventions.md` - Established patterns

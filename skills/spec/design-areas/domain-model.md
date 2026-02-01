@@ -1,4 +1,4 @@
-# Phase 3: Domain Modeling (DDD)
+# Design Area: Domain Model
 
 ## Role
 
@@ -116,7 +116,7 @@ Define operations in business terms (e.g., "atomically accumulate count", "retri
 - **Include**: Domain objects, aggregates, business rules, invariants, state transitions, domain events, repository/port interfaces (business meaning only)
 - **Exclude**: SQL statements, cache commands, framework annotations, batch strategies, and other technology-specific implementations (covered in detailed design)
 
-## STOP: Phase 3 Red Flags
+## STOP: Domain Model Red Flags
 
 - 3+ entity states but user wants to skip → Domain modeling required
 - Cross-entity business rules but no aggregate design → Cannot skip
@@ -235,7 +235,9 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 
 ### Step 6: Document Generation
 
-Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
 
-#### Checkpoint: Phase 3 Complete
-- Announce: "Phase 3 complete. Entry criteria for Phase 4: Domain model defined (Phase 3) OR confirmed simple CRUD, repository/port interfaces identified for implementation, stateful components identified"
+**Record Naming**: `da-domain-model.{step}-{topic}.md`
+
+#### Checkpoint: Domain Model Complete
+- Announce: "Domain Model complete. Proceeding to next selected Design Area: [next area name]."

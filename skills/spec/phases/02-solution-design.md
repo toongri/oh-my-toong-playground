@@ -1,8 +1,8 @@
-# Phase 2: Architecture Design
+# Phase 2: Solution Design
 
 ## Role
 
-As a software architecture design expert, establish the technical context appropriate for the project, explore optimal solutions, and organize them into a single integrated document.
+As a software solution design expert, establish the technical context appropriate for the project, explore optimal solutions, and organize them into a single integrated document.
 
 **Output Format**: See `templates/phase-outputs.md`
 
@@ -143,5 +143,32 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 
 Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
 
+#### Checkpoint: Step 5 Complete
+- Announce: "Phase 2 (Solution Design) complete. Select Design Areas for this project."
+
+### Step 6: Design Area Identification
+
+#### 6.1 Analyze Project Complexity
+- Review: Phase 1-2 outputs to determine which Design Areas are needed
+- For each Design Area, evaluate criteria:
+  - **Domain Model**: 3+ state transitions, complex business rules, aggregate boundaries
+  - **Data Schema**: DB/file/cache storage needed
+  - **Interface Contract**: External interface exposed (API, CLI, Event)
+  - **Integration Pattern**: External system integration, async processing, transaction boundaries
+  - **Operations Guide**: Production deployment, monitoring, operational settings
+
+#### 6.2 Present Design Area Selection
+- Prepare: List of recommended Design Areas with justification
+- Present: Use AskUserQuestion with multiSelect: true (see SKILL.md Design Area Selection)
+- Confirm: User selects which Design Areas to proceed with
+
+#### 6.3 Validate Selection
+- If user selects NO Design Areas: Ask for justification before proceeding
+- If user deselects AI-recommended area: Ask for justification before proceeding
+- Document: Record selected Design Areas for subsequent execution
+
+#### Checkpoint: Step 6 Complete
+Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+
 #### Checkpoint: Phase 2 Complete
-- Announce: "Phase 2 complete. Entry criteria for Phase 3: Architecture decisions made (Phase 2) OR confirmed simple, domain complexity warrants modeling (3+ states, business rules, aggregates), user confirmed readiness to proceed"
+- Announce: "Phase 2 (Solution Design) complete. Selected Design Areas: [list]. Proceeding to first Design Area: [name]."

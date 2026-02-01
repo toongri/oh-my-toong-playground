@@ -27,7 +27,10 @@ As a knowledge curator, analyze accumulated records from the specification proce
 
 #### 1.1 Gather Records
 
-- Collect: Read all records from `.omt/specs/{spec-name}/records/`
+- Collect: Read all records from:
+  - `.omt/specs/{spec-name}/step-01-requirements/records/`
+  - `.omt/specs/{spec-name}/step-02-solution-design/records/`
+  - `.omt/specs/{spec-name}/design-area-*/records/` (for each selected Design Area)
 - Organize: Group by category (architectural decisions, domain conventions, gotchas, etc.)
 
 #### 1.2 Extract Candidates
@@ -63,7 +66,7 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 ```
 ## Proposed Addition: [Topic]
 
-**Source**: Record from Phase N - [Topic Name]
+**Source**: Record from the corresponding Phase or Design Area - [Topic Name]
 **Rationale**: [Why this is worth preserving]
 **Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
 
@@ -94,7 +97,7 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 ```
 ## Proposed Decision Record: [Title]
 
-**Source**: Record from Phase N - [Topic Name]
+**Source**: Record from the corresponding Phase or Design Area - [Topic Name]
 **Rationale**: [Why this decision is worth preserving]
 **Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
 
@@ -119,7 +122,7 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 ```
 ## Proposed Gotcha: [Short Title]
 
-**Source**: Record from Phase N - [Topic Name]
+**Source**: Record from the corresponding Phase or Design Area - [Topic Name]
 **Rationale**: [Why this warning is worth preserving]
 **Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
 

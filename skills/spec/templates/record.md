@@ -2,7 +2,7 @@
 
 > Date: YYYY-MM-DD
 > Spec: {spec-name}
-> Phase: N (Phase Name)
+> Source: [Phase N (Phase Name) | Design Area: (Area Name)]
 
 ## Problem to Solve
 
@@ -71,3 +71,32 @@
 ## Gotchas (optional)
 
 [Pitfalls to watch out for. Things that might trip someone up later.]
+
+---
+
+## Record File Naming Convention
+
+Records are saved to the `records/` folder within each step or Design Area directory.
+
+### For Phases
+
+**Pattern**: `p{phase}.{step}-{topic}.md`
+
+**Examples**:
+- `p1.2-scope-clarification.md` - Phase 1, Step 2 decision
+- `p2.4-communication-pattern.md` - Phase 2, Step 4 decision
+
+**Location**: `.omt/specs/{spec-name}/step-0{N}-{name}/records/`
+
+### For Design Areas
+
+**Pattern**: `da-{area-name}.{step}-{topic}.md`
+
+**Examples**:
+- `da-domain-model.2-aggregate-boundary.md` - Domain Model, Step 2 decision
+- `da-data-schema.3-index-strategy.md` - Data Schema, Step 3 decision
+- `da-interface-contract.4-error-handling.md` - Interface Contract, Step 4 decision
+- `da-integration-pattern.2-communication-pattern.md` - Integration Pattern, Step 2 decision
+- `da-operations-guide.1-metrics-selection.md` - Operations Guide, Step 1 decision
+
+**Location**: `.omt/specs/{spec-name}/design-area-{name}/records/`

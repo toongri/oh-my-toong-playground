@@ -1,0 +1,116 @@
+# Design Area: Operations Guide
+
+## Role
+
+As an operations design specialist, systematically design the operational aspects of the project including observability, deployment, and failure recovery.
+
+**Output Format**: See `templates/phase-outputs.md`
+
+## Principles
+
+- Focus on project-specific operational needs, not general best practices
+- Do not document standard APM metrics or framework defaults
+- Include rationale for monitoring and deployment decisions
+- Plan for failure scenarios proactively
+
+### Document Scope
+
+- **Include**: Project-specific metrics, custom logging, deployment strategies, migration approaches, failure scenarios, recovery plans
+- **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, generic operational practices
+
+## STOP: Operations Guide Red Flags
+
+- "Standard monitoring is enough" without checking → Verify project-specific metrics needed
+- Deployment strategy undefined for schema changes → Document migration approach
+- Missing failure scenarios for critical paths → Identify and plan
+- No rollback plan for risky deployments → Define rollback strategy
+
+## Baseline Assumptions
+
+The following are already covered by team conventions and need not be documented:
+- Standard APM metrics (response time, error rate, throughput)
+- Framework default logging (request/response, exceptions)
+- Standard deployment pipelines
+
+Document only when project-specific customization is required.
+
+## Process
+
+### Step 1: Context Review
+
+#### 1.1 Input Document Review
+- Review: Analyze previous design documents (requirements, solution design, domain model, etc.)
+- Identify: Components requiring custom operational considerations
+- Summarize: Present key operational concerns
+
+#### 1.2 Identify Operational Scope
+- Evaluate: Which operational aspects need documentation for this project
+- Exclude: Standard practices already covered by team conventions
+- Confirm: Get user agreement on scope
+
+#### Checkpoint: Step 1 Complete
+Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+
+### Step 2: Observability Design
+
+#### 2.1 Custom Metrics
+- Identify: Project-specific technical metrics needed:
+  - Examples: buffer size, flush latency, retry count, cache hit rate
+- Define: Metric names, types (counter, gauge, histogram), and labels
+- Note: Do not include standard APM metrics
+- Review: Discuss with user
+
+#### 2.2 Custom Logging
+- Identify: Project-specific logging requirements:
+  - Examples: aggregation events, cache misses, business-critical operations
+- Define: Log levels, message formats, and context fields
+- Note: Do not include framework default logging
+- Confirm: Get user agreement
+
+#### Checkpoint: Step 2 Complete
+Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+
+### Step 3: Deployment Strategy
+
+#### 3.1 Deployment Approach
+- Design: How to safely deploy this feature:
+  - Database migration approach (if schema changes required)
+  - Deployment order and backward compatibility
+  - Feature flags or gradual rollout (if needed)
+- Review: Discuss with user
+
+#### 3.2 Pre-deployment Checklist
+- Define: Verification steps before deployment
+- Include: Data backup requirements, rollback triggers
+- Confirm: Get user agreement
+
+#### Checkpoint: Step 3 Complete
+Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+
+### Step 4: Failure and Recovery Plan
+
+#### 4.1 Failure Scenarios
+- Identify: Major failure scenarios for this feature:
+  - External dependency failures
+  - Data inconsistency scenarios
+  - Resource exhaustion cases
+- Define: Expected behavior and alerting thresholds
+- Review: Discuss with user
+
+#### 4.2 Recovery Procedures
+- Design: Response plans for each failure scenario
+- Define: Rollback procedures if critical
+- Include: Communication templates for incidents (if needed)
+- Confirm: Get user agreement
+
+#### Checkpoint: Step 4 Complete
+Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+
+### Step 5: Document Generation
+
+Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
+
+**Record Naming**: `da-operations-guide.{step}-{topic}.md`
+
+#### Checkpoint: Operations Guide Complete
+- Announce: "Operations Guide complete. All selected Design Areas finished. Proceeding to Wrapup."

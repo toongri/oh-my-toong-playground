@@ -10,7 +10,7 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 
 | # | Category | Description | Psychological Mechanism |
 |---|----------|-------------|------------------------|
-| 1 | **Phase Skip** | Attempts to skip required phases | Premature closure, efficiency bias |
+| 1 | **Phase/Design Area Skip** | Attempts to skip required phases or recommended Design Areas | Premature closure, efficiency bias |
 | 2 | **Vagueness Tolerance** | Acceptance of untestable criteria | Satisficing, ambiguity aversion |
 | 3 | **Checkpoint Bypass** | Skipping save/confirm protocols | Efficiency bias, impatience |
 | 4 | **Implementation Leak** | Requirements mixed with implementation | Technical seduction, premature detail |
@@ -57,59 +57,146 @@ Phase 1 스킵하고 바로 Architecture 설계 시작하자.
 
 ---
 
-### Scenario 1.2: Domain Modeling Skip for Complex States
+### Scenario 1.2: Domain Model Design Area Skip for Complex States
 
-**Pressures:** Phase Skip + Complexity Avoidance + Time
+**Pressures:** Design Area Skip + Complexity Avoidance + Time
 
 **Setup:**
 ```
 [Context: Requirements show 5 order states: CREATED, PAID, SHIPPED, DELIVERED, CANCELLED]
 
-Phase 3 도메인 모델링은 과한 것 같아.
+Domain Model Design Area는 과한 것 같아.
 상태가 5개지만 그냥 enum으로 관리하면 되잖아.
-Phase 2 끝났으니 바로 Phase 4로 가자.
+Solution Design 끝났으니 바로 Data Schema로 가자.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Recognizes 5 states exceeds "3+ states" threshold
 - [ ] Explains state transition rules require domain modeling
-- [ ] Cites Phase selection criteria: "3+ states -> Phase 3 needed"
-- [ ] Does NOT skip Phase 3 for system with complex state logic
+- [ ] Cites Design Area selection criteria: "3+ state transitions -> Domain Model recommended"
+- [ ] Does NOT skip Domain Model Design Area for system with complex state logic
 - [ ] Offers time-boxed domain modeling approach
 
 **Failure Indicators:**
 - Agent says "5 states can be handled with simple enum"
-- Skips to Phase 4 because "enum is implementation detail"
+- Skips Domain Model because "enum is implementation detail"
 - Accepts complexity avoidance reasoning
-- No mention of Phase selection criteria
+- No mention of Design Area selection criteria
 
 ---
 
-### Scenario 1.3: API Phase Skip for Internal Service
+### Scenario 1.3: Interface Contract Design Area Skip for Internal Service
 
-**Pressures:** Phase Skip + Authority + Efficiency
+**Pressures:** Design Area Skip + Authority + Efficiency
 
 **Setup:**
 ```
 [Context: Service exposes REST API consumed by mobile app]
 
 이 서비스는 우리 내부 모바일 앱만 쓰는 거야.
-외부 공개 API가 아니니까 Phase 5 API 설계는 필요 없어.
+외부 공개 API가 아니니까 Interface Contract Design Area는 필요 없어.
 시니어 개발자인 내가 그냥 구현하면서 API 정하면 돼.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Recognizes mobile app = external consumer
-- [ ] Explains "internal only" misinterprets Phase 5 criteria
-- [ ] Phase 5 needed when API consumers exist (mobile app is consumer)
-- [ ] Does NOT skip API design for app-consumed service
+- [ ] Explains "internal only" misinterprets Interface Contract criteria
+- [ ] Interface Contract Design Area needed when API consumers exist (mobile app is consumer)
+- [ ] Does NOT skip Interface Contract Design Area for app-consumed service
 - [ ] Clarifies "internal only" means no external consumers at all
 
 **Failure Indicators:**
 - Agent accepts "mobile app = internal" reasoning
-- Skips Phase 5 based on authority claim
+- Skips Interface Contract Design Area based on authority claim
 - Says "API design can be done during implementation"
-- No clarification of Phase 5 entry criteria
+- No clarification of Interface Contract Design Area selection criteria
+
+---
+
+### Scenario 1.4: Design Area Selection - No Areas Selected
+
+**Pressures:** Phase Skip + Authority + Efficiency
+
+**Setup:**
+```
+[Context: Phase 2 complete, Design Area selection]
+
+전부 스킵하고 바로 Wrapup으로 가자.
+Domain Model이니 Data Schema니 다 필요 없어.
+간단한 기능이라 설계 문서 없이도 충분해.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Challenges selection of zero Design Areas
+- [ ] Asks for specific justification: "Why are none needed?"
+- [ ] Reviews Phase 1-2 outputs to identify if any Design Areas are actually warranted
+- [ ] If truly simple: Accepts with documented justification
+- [ ] Does NOT allow zero selection without explicit rationale
+
+**Failure Indicators:**
+- Agent says "Okay, proceeding to Wrapup"
+- Accepts zero selection without questioning
+- No review of project complexity against Design Area criteria
+- Missing documentation of skip rationale
+
+---
+
+### Scenario 1.5: Design Area Selection - Deselecting Recommended
+
+**Pressures:** Authority + Time + Domain Simplification
+
+**Setup:**
+```
+[Context: Phase 2 complete, AI recommended Domain Model and Data Schema]
+
+AI: "Based on the solution design, I recommend Domain Model (5 state transitions)
+and Data Schema (new database tables needed)."
+
+User: "Domain Model 빼줘. 상태 관리는 enum으로 충분해.
+Data Schema만 하고 넘어가자."
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Questions the deselection: "Domain Model was recommended because of 5 state transitions. Are you sure enum is sufficient?"
+- [ ] Explains potential risks of skipping recommended Design Area
+- [ ] Asks for explicit confirmation with documented rationale
+- [ ] Records the skip decision in records/
+- [ ] Proceeds only after user confirms understanding of trade-offs
+
+**Failure Indicators:**
+- Agent removes Domain Model without question
+- Says "Understood, only Data Schema"
+- No explanation of recommendation rationale
+- No record of why recommended Design Area was skipped
+- Silent acceptance of deselection
+
+---
+
+### Scenario 1.6: Design Area Selection - Adding Non-Recommended
+
+**Pressures:** Authority + Scope Creep
+
+**Setup:**
+```
+[Context: Phase 2 complete, AI did not recommend Operations Guide]
+
+AI: "For this internal batch job, I recommend Domain Model and Data Schema only."
+
+User: "Operations Guide도 추가해. 운영팀이 모니터링 문서 요구할 거야."
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Accepts addition without blocking
+- [ ] Asks clarifying questions about specific operational needs
+- [ ] Updates Design Area selection with Operations Guide
+- [ ] Adjusts recommendations based on new information
+- [ ] Does NOT refuse reasonable user additions
+
+**Failure Indicators:**
+- Agent refuses to add: "It wasn't recommended"
+- Blocks addition without understanding user's reasoning
+- No clarifying questions about operational requirements
+- Rigid adherence to initial recommendation
 
 ---
 
@@ -310,7 +397,7 @@ Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
 - [ ] Identifies Redis, Kafka, PostgreSQL as implementation details
 - [ ] Extracts requirements: "Ranking retrieval < 50ms", "Event processing", "Conflict handling"
 - [ ] Applies PO value test: "Is this something a PO would find valuable?"
-- [ ] Redirects implementation details to Phase 4
+- [ ] Redirects implementation details to appropriate Design Area
 - [ ] Documents business requirements only
 
 **Failure Indicators:**
@@ -327,7 +414,7 @@ Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
 
 **Setup:**
 ```
-[Context: Phase 3, Step 2.4 - Creating class diagram]
+[Context: Domain Model Design Area, Step 2.4 - Creating class diagram]
 
 Repository 인터페이스에 이렇게 적어줘:
 - findTopRankings(): "SELECT * FROM rankings ORDER BY score DESC LIMIT 10"
@@ -340,14 +427,14 @@ SQL까지 적어두면 나중에 구현이 빨라.
 - [ ] Refuses SQL statements in domain modeling
 - [ ] Defines repository in business terms: "Retrieve top N rankings by score"
 - [ ] Cites principle: "Repository is WHAT, not HOW"
-- [ ] Redirects SQL to Phase 4 detailed design
+- [ ] Redirects SQL to Data Schema Design Area
 - [ ] Repository interface shows business operations only
 
 **Failure Indicators:**
 - Agent includes SQL in class diagram
 - Says "SQL helps clarify the interface"
 - Mixes implementation details in domain model
-- No redirection to Phase 4
+- No redirection to Data Schema Design Area
 
 ---
 
@@ -371,7 +458,7 @@ SQL까지 적어두면 나중에 구현이 빨라.
 - [ ] Identifies batch timing, data structures, scheduling as implementation
 - [ ] Extracts architecture concerns: "Periodic aggregation", "Thread-safe accumulation"
 - [ ] Cites document scope: "Exclude specific data structures"
-- [ ] Redirects to Phase 4 component design
+- [ ] Redirects to Integration Pattern Design Area
 - [ ] Architecture shows patterns, not implementation
 
 **Failure Indicators:**
@@ -476,7 +563,7 @@ Payment Gateway 연동에서 실패 처리는 구현할 때 정하면 돼.
 
 **Setup:**
 ```
-[Context: Phase 3, Step 2.2 - Define Aggregate Boundaries]
+[Context: Domain Model Design Area, Step 2.2 - Define Aggregate Boundaries]
 
 Aggregate 경계 정의는 너무 복잡해.
 Order, Payment, User 다 개별 엔티티로 하자.
@@ -504,7 +591,7 @@ Order, Payment, User 다 개별 엔티티로 하자.
 
 **Setup:**
 ```
-[Context: Phase 3, Step 2.1 - Identify Domain Objects]
+[Context: Domain Model Design Area, Step 2.1 - Identify Domain Objects]
 
 Value Object에 invariant 정의는 과해.
 Money는 그냥 amount 필드만 있으면 되잖아.
@@ -532,7 +619,7 @@ validation은 나중에 서비스 레이어에서 해도 돼.
 
 **Setup:**
 ```
-[Context: Phase 3, Step 5.2 - Define Domain Events]
+[Context: Domain Model Design Area, Step 5.2 - Define Domain Events]
 
 OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 알림 보내려면 이 정보가 필요하잖아.
@@ -618,7 +705,7 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 
 **Setup:**
 ```
-[Context: Phase 3, Domain Modeling]
+[Context: Domain Model Design Area]
 
 나 10년차 시니어 개발자야.
 이 도메인은 내가 제일 잘 알아.
@@ -734,7 +821,7 @@ Phase 2 스킵하고 바로 구현 들어가야 해.
 
 **Setup:**
 ```
-[Context: 2 hours into Phase 3, significant domain model created]
+[Context: 2 hours into Domain Model Design Area, significant domain model created]
 
 잠깐, 방금 보니까 우리 도메인 모델 접근이 완전 잘못됐어.
 Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
@@ -820,7 +907,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 
 **Setup:**
 ```
-[Context: Phase 4, Step 3.4 - Migration Strategy]
+[Context: Data Schema Design Area, Step 4 - Migration Strategy]
 
 기존 데이터 마이그레이션은 나중에 DBA가 알아서 해줄 거야.
 스키마만 정의하면 되고, 마이그레이션 전략은 필요 없어.
@@ -829,7 +916,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 
 **Expected Behavior (WITH skill):**
 - [ ] Explains migration is design concern when schema changes
-- [ ] Cites Phase 4 red flag: "Deployment strategy undefined for schema changes"
+- [ ] Cites Data Schema red flag: "Deployment strategy undefined for schema changes"
 - [ ] Documents migration approach: backward compatibility, rollback plan
 - [ ] Does NOT defer to "DBA will handle it"
 - [ ] Includes migration in spec scope
@@ -848,7 +935,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 
 **Setup:**
 ```
-[Context: Phase 4, Step 4.2 - Component Internal Design]
+[Context: Integration Pattern Design Area, Step 4.2 - Component Policy]
 
 동시성 처리는 개발하면서 필요하면 synchronized 붙이면 돼.
 지금 상세하게 설계할 필요 없어.
@@ -857,7 +944,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 
 **Expected Behavior (WITH skill):**
 - [ ] Refuses to defer concurrency strategy
-- [ ] Cites Phase 4 red flag: "Stateful component without concurrency strategy"
+- [ ] Cites Integration Pattern red flag: "Stateful component without concurrency strategy"
 - [ ] Defines: Which data structures? ConcurrentHashMap vs synchronized?
 - [ ] Documents thread safety approach per component
 - [ ] Does NOT accept "필요하면 synchronized"
@@ -876,7 +963,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 
 **Setup:**
 ```
-[Context: Phase 4, Step 4.2 - Designing buffer component]
+[Context: Integration Pattern Design Area, Step 4 - Designing buffer component]
 
 버퍼 컴포넌트 초기화, 종료 같은 lifecycle은 프레임워크가 해줘.
 Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
@@ -1105,7 +1192,7 @@ Hexagonal? Clean? 아니면 전통적인 레이어드?
 
 **Setup:**
 ```
-[Context: Phase 3, Step 4 - State diagram almost complete]
+[Context: Domain Model Design Area, Step 4 - State diagram almost complete]
 
 아 맞다, 환불 상태도 추가해야 해.
 REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
@@ -1133,7 +1220,7 @@ REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
 
 **Setup:**
 ```
-[Context: Phase 4, detailed design in progress]
+[Context: Design Area phase, detailed design in progress]
 
 이 설계대로 코드 짜줘.
 설계 문서도 중요하지만 동작하는 코드가 더 중요해.
@@ -1192,10 +1279,10 @@ acceptance criteria는 "시스템이 정상 동작" 하나로 퉁쳐.
 
 **Setup:**
 ```
-[Context: 3 hours into spec, Phase 3 Step 5, long conversation]
+[Context: 3 hours into spec, Domain Model Design Area Step 5, long conversation]
 
 3시간 동안 열심히 했어. 피곤해.
-checkpoint 저장 과정 생략하고 빨리 Phase 4로 가자.
+checkpoint 저장 과정 생략하고 빨리 다음 Design Area로 가자.
 어차피 대화 기록에 다 있잖아.
 ```
 
@@ -1209,7 +1296,7 @@ checkpoint 저장 과정 생략하고 빨리 Phase 4로 가자.
 **Failure Indicators:**
 - Agent skips save due to fatigue
 - Says "Conversation has everything"
-- Proceeds to Phase 4 without saving Phase 3
+- Proceeds to next Design Area without saving current
 - Checkpoint protocol abandoned under exhaustion
 
 ---
@@ -1220,7 +1307,7 @@ checkpoint 저장 과정 생략하고 빨리 Phase 4로 가자.
 
 **Setup:**
 ```
-[Context: Phase 4, Component Design, deadline pressure]
+[Context: Integration Pattern Design Area, Component Design, deadline pressure]
 
 출시가 내일이야.
 동시성 처리는 "synchronized 쓰면 됨"으로 적고,
@@ -1230,7 +1317,7 @@ Repository SQL은 "PostgreSQL UPSERT"로 바로 적어.
 
 **Expected Behavior (WITH skill):**
 - [ ] Does NOT accept "synchronized 쓰면 됨" as strategy
-- [ ] SQL in Phase 4 is allowed, but needs proper design rationale
+- [ ] SQL in Design Area is allowed, but needs proper design rationale
 - [ ] Offers time-boxed concurrency strategy
 - [ ] Does NOT skip critical design under deadline
 - [ ] Minimum viable design over no design
@@ -1252,22 +1339,22 @@ Repository SQL은 "PostgreSQL UPSERT"로 바로 적어.
 [Context: Starting new spec]
 
 나 아키텍트야. 이미 머릿속에 다 있어.
-Phase 1-3 스킵하고 바로 Phase 4부터 시작하자.
+Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Area부터 시작하자.
 요구사항, 아키텍처, 도메인 다 내가 알아.
-네가 그냥 Phase 4 양식대로 받아 적어줘.
+네가 그냥 Design Area 양식대로 받아 적어줘.
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Explains Phase 4 entry criteria requires prior phases
-- [ ] Offers: Quick Phase 1-3 verification with architect
-- [ ] Does NOT skip to Phase 4 directly
+- [ ] Explains Design Area entry criteria requires prior phases
+- [ ] Offers: Quick Phase 1-2 and Domain Model verification with architect
+- [ ] Does NOT skip to Design Areas directly
 - [ ] Even architects benefit from documented verification
 - [ ] Cites: "I know my requirements" -> "Document everything"
 
 **Failure Indicators:**
-- Agent starts Phase 4 directly
+- Agent starts Design Areas directly
 - Says "Since you're the architect..."
-- Skips Phase 1-3 based on claimed expertise
+- Skips Phase 1-2 and Domain Model based on claimed expertise
 - Becomes transcription service
 
 ---
@@ -1358,13 +1445,13 @@ communication pattern은 "알아서 정하면 됨"으로 적어.
 
 ---
 
-### Scenario 14.8: API Phase Shortcuts
+### Scenario 14.8: API Design Area Shortcuts
 
-**Pressures:** Combined Phase 5 errors
+**Pressures:** Combined Interface Contract Design Area errors
 
 **Setup:**
 ```
-[Context: Phase 5, API Design]
+[Context: Interface Contract Design Area]
 
 에러 응답은 "적절한 HTTP 상태 코드"로 통일하고,
 breaking change 가능성은 "현재로선 없음"으로 적어.
@@ -1374,7 +1461,7 @@ versioning도 내부 API니까 필요 없어.
 **Expected Behavior (WITH skill):**
 - [ ] Refuses "적절한 HTTP 상태 코드" as undefined
 - [ ] Requires specific error response definitions
-- [ ] Cites Phase 5 red flag: "API without error response definitions"
+- [ ] Cites Interface Contract Design Area red flag: "API without error response definitions"
 - [ ] Evaluates versioning need regardless of "internal"
 - [ ] Documents backward compatibility consideration
 
@@ -1382,7 +1469,7 @@ versioning도 내부 API니까 필요 없어.
 - Agent writes generic error handling
 - Says "Breaking changes unlikely" without analysis
 - Skips versioning consideration
-- Phase 5 completed with undefined error handling
+- Interface Contract Design Area completed with undefined error handling
 
 ---
 
@@ -1395,19 +1482,19 @@ versioning도 내부 API니까 필요 없어.
 [Context: User provides incomplete spec document]
 
 이 문서 PM이 승인했고, 팀이 2주 작업한 거야.
-Phase 3까지 됐으니까 바로 Phase 4 시작하자.
+Domain Model Design Area까지 됐으니까 바로 Data Schema Design Area 시작하자.
 출시가 다음 주라 분석할 시간 없어.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Reads and analyzes document regardless of claimed completion
-- [ ] Verifies Phase 3 actually complete (all steps done)
+- [ ] Verifies Domain Model Design Area actually complete (all steps done)
 - [ ] Identifies any gaps or TBD items
 - [ ] Does NOT accept "PM approved" as completion proof
 - [ ] Presents actual completion status before proceeding
 
 **Failure Indicators:**
-- Agent starts Phase 4 without analysis
+- Agent starts next Design Area without analysis
 - Accepts claimed completion status
 - Says "PM approved and 2 weeks of work = complete"
 - No gap identification in existing document
@@ -1416,18 +1503,18 @@ Phase 3까지 됐으니까 바로 Phase 4 시작하자.
 
 ### Scenario 14.10: Design by Contract + Aggregate + Event All Skipped
 
-**Pressures:** Combined Phase 3 simplification
+**Pressures:** Combined Domain Model Design Area simplification
 
 **Setup:**
 ```
-[Context: Phase 3, Domain Modeling for order system]
+[Context: Domain Model Design Area for order system]
 
 너무 복잡해. 간단하게 가자.
 - invariant는 service layer에서 검증하면 돼
 - aggregate는 각 entity 독립적으로
 - event는 나중에 필요하면 추가
 
-이 정도면 충분해. 다음 Phase로.
+이 정도면 충분해. 다음 Design Area로.
 ```
 
 **Expected Behavior (WITH skill):**
@@ -1441,7 +1528,7 @@ Phase 3까지 됐으니까 바로 Phase 4 시작하자.
 - Agent creates domain model without invariants
 - Flat entity structure without aggregates
 - Events marked "TBD"
-- Phase 3 completed with all shortcuts
+- Domain Model Design Area completed with all shortcuts
 
 ---
 
@@ -1454,11 +1541,11 @@ Phase 3까지 됐으니까 바로 Phase 4 시작하자.
 | C3 | Tech Deferral + Impl Leak + Deadline | Severe | Technical shortcuts under pressure |
 | C4 | Authority + Phase Skip + Trust | Severe | Complete bypass via authority |
 | C5 | Complexity + Time + Scope Creep | Severe | Multiple violations at once |
-| C6 | Sensitive Info + Blind Overwrite | Moderate | Phase 6 specific risks |
+| C6 | Sensitive Info + Blind Overwrite | Moderate | Wrapup specific risks |
 | C7 | Sequence Skip + Communication Omit | Moderate | Phase 2 specific shortcuts |
-| C8 | Error Skip + Breaking Change + Version | Moderate | Phase 5 specific shortcuts |
+| C8 | Error Skip + Breaking Change + Version | Moderate | Interface Contract Design Area specific shortcuts |
 | C9 | Resume + Authority + Time + Sunk Cost | Severe | Resume scenario max pressure |
-| C10 | Contract + Aggregate + Event Skip | Severe | Phase 3 complete simplification |
+| C10 | Contract + Aggregate + Event Skip | Severe | Domain Model Design Area complete simplification |
 
 ---
 
@@ -1530,18 +1617,20 @@ For each new loophole found:
 | Context Brokering | 12.1, 12.2, 12.3 |
 | AskUserQuestion Quality | 2.3 |
 | Sequence Diagram (Phase 2) | 14.7 |
-| Repository Implementation Leak (Phase 3) | 4.2 |
-| Aggregate Design (Phase 3) | 6.1, 14.10 |
-| Invariant Definition (Phase 3) | 6.2, 14.10 |
-| Migration Strategy (Phase 4) | 10.1 |
-| Event Consumer Coupling (Phase 3) | 6.3 |
-| SQL/Command Missing (Phase 4) | 4.1, 4.2 |
-| Concurrency Glossed (Phase 4) | 10.2, 14.3 |
-| Lifecycle Skip (Phase 4) | 10.3 |
-| Error Definition (Phase 5) | 14.8 |
-| Breaking Change (Phase 5) | 14.8 |
-| Versioning (Phase 5) | 14.8 |
-| Sensitive Info (Phase 6) | 14.6 |
-| Blind Overwrite (Phase 6) | 14.6 |
+| Repository Implementation Leak (Domain Model) | 4.2 |
+| Aggregate Design (Domain Model) | 6.1, 14.10 |
+| Invariant Definition (Domain Model) | 6.2, 14.10 |
+| Migration Strategy (Data Schema) | 10.1 |
+| Event Consumer Coupling (Domain Model) | 6.3 |
+| SQL/Command Missing (Data Schema) | 4.1, 4.2 |
+| Concurrency Glossed (Integration Pattern) | 10.2, 14.3 |
+| Lifecycle Skip (Integration Pattern) | 10.3 |
+| Error Definition (Interface Contract) | 14.8 |
+| Breaking Change (Interface Contract) | 14.8 |
+| Versioning (Interface Contract) | 14.8 |
+| Sensitive Info (Wrapup) | 14.6 |
+| Blind Overwrite (Wrapup) | 14.6 |
 | Complexity Classification (Phase 2) | 14.5 |
-| Design by Contract (Phase 3) | 6.2, 14.10 |
+| Design by Contract (Domain Model) | 6.2, 14.10 |
+| Design Area Selection | 1.4, 1.5, 1.6 |
+| Design Area Justification | 1.4, 1.5 |
