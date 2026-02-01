@@ -621,7 +621,7 @@ sequenceDiagram
 
 ## Wrapup
 
-Wrapup produces context files rather than a single output document. See `06-wrapup.md` in `wrapup/` directory for details.
+Wrapup produces context files rather than a single output document. See `wrapup.md` in `references/` directory for details.
 
 - `project.md` - Tech stack, constraints, team values
 - `conventions.md` - Established patterns

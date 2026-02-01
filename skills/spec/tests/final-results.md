@@ -158,11 +158,11 @@ The skill is now structured to resist the same pressure types identified in the 
 | File | Changes |
 |------|---------|
 | `SKILL.md` | Iron Law, Red Flags, Rationalization Table, Non-Negotiable Rules, Phase Entry Criteria, Standard Protocols |
-| `phases/01-requirements.md` | Entry/Exit Criteria, Red Flags, Protocol references |
-| `phases/02-architecture.md` | Entry/Exit Criteria, Red Flags, Protocol references |
-| `phases/03-domain.md` | Entry/Exit Criteria, Red Flags, Protocol references |
-| `phases/04-detailed.md` | Entry/Exit Criteria, Red Flags, Protocol references |
-| `phases/05-api.md` | Entry/Exit Criteria, Red Flags, Protocol references |
+| `references/requirements.md` | Entry/Exit Criteria, Red Flags, Protocol references |
+| `references/solution-design.md` | Entry/Exit Criteria, Red Flags, Protocol references |
+| `references/domain-model.md` | Entry/Exit Criteria, Red Flags, Protocol references |
+| `references/integration-pattern.md` | Entry/Exit Criteria, Red Flags, Protocol references |
+| `references/interface-contract.md` | Entry/Exit Criteria, Red Flags, Protocol references |
 | `tests/pressure-scenarios.md` | New file - 10 test scenarios |
 | `tests/final-results.md` | New file - this document |
 

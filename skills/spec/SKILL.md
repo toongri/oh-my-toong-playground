@@ -541,7 +541,7 @@ design-area-domain-model/records/
 
 ## References
 
-- **Phase details**: See `phases/` directory (01-requirements, 02-solution-design)
-- **Design Area details**: See `design-areas/` directory (domain-model, data-schema, interface-contract, integration-pattern, operations-guide)
-- **Wrapup details**: See `wrapup/` directory
+- **Phase details**: See `references/` directory (requirements.md, solution-design.md)
+- **Design Area details**: See `references/` directory (domain-model.md, data-schema.md, interface-contract.md, integration-pattern.md, operations-guide.md)
+- **Wrapup details**: See `references/wrapup.md`
 - **Output templates**: See `templates/`
