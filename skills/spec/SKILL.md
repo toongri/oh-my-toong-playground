@@ -428,6 +428,44 @@ step-02-architecture/records/
 - **Design document**: `step-{num}-{name}/design.md`
 - **Records**: `step-{num}-{name}/records/p{phase}.{step}-{topic}.md`
 
+<Critical_Constraints>
+
+## Red Flags - STOP If You Think These
+
+### Wrap-up Phase
+| Excuse | Reality |
+|--------|---------|
+| "No time for wrap-up" | Records exist = wrap-up phase required |
+| "Context can be saved later" | Later = never. Save now. |
+| "User wants to finish quickly" | Propose context save first, skip only if explicitly refused |
+| "Spec is done, let's move on" | Spec is NOT done until wrap-up completes |
+
+### Document Preservation
+| Excuse | Reality |
+|--------|---------|
+| "I'll regenerate spec.md" | NEVER overwrite without preserving all prior step content |
+| "It's just concatenation" | Verify ALL step design.md files included before write |
+| "The old content wasn't important" | ALL prior work must be preserved |
+| "Let me rewrite it cleaner" | Preserve first, then refine with user approval |
+
+---
+
+## Anti-Patterns
+
+**NEVER:**
+- Skip wrap-up phase when records exist
+- Regenerate spec.md losing prior step content
+- Overwrite existing context files without user approval
+- Write specification documents in non-English
+
+**ALWAYS:**
+- Complete wrap-up phase when records exist to preserve
+- Preserve ALL prior step content when regenerating spec.md
+- Get explicit user confirmation before modifying existing files
+- Write documents in English (communication in Korean is fine)
+
+</Critical_Constraints>
+
 ## References
 
 - **Phase details**: See `phases/` directory (01-06)
