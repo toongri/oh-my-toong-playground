@@ -59,9 +59,12 @@ digraph council_decision {
 
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
-3. Council members provide independent opinions
-4. Chairman (Claude) synthesizes opinions into structured advisory
-5. Receive advisory and make informed decision
+3. Council members provide independent opinions (raw outputs)
+4. **Poll until `overallState === "done"`**
+5. **Fetch results**: `council.sh results JOB_DIR`
+6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
+7. Make informed decision based on advisory
+8. **Cleanup**: `council.sh clean JOB_DIR`
 
 ## Context Synchronization
 
@@ -80,6 +83,10 @@ Execute `scripts/council.sh` from this skill directory:
 
 > Note: Always write the council prompt in English for consistent cross-model communication.
 
+### One-shot (Terminal)
+
+For interactive terminal use where you wait for completion:
+
 ```bash
 scripts/council.sh --stdin <<'EOF'
 ## Evaluation Criteria
@@ -95,6 +102,52 @@ scripts/council.sh --stdin <<'EOF'
 [Specific points needing judgment - in English]
 EOF
 ```
+
+### Host Agent Context (Claude Code)
+
+For programmatic use within Claude Code sessions:
+
+**1. Start council (returns immediately with job directory)**
+```bash
+JOB_DIR=$(scripts/council.sh --stdin <<'EOF'
+## Evaluation Criteria
+[Key principles - in English]
+
+## Project Context
+[Conventions and patterns - in English]
+
+## Target
+[Code or content under review]
+
+## Question
+[Specific points needing judgment - in English]
+EOF
+)
+```
+
+**2. Poll until completion**
+```bash
+scripts/council.sh wait "$JOB_DIR"
+# Returns JSON with overallState field
+# Keep polling until: overallState === "done"
+```
+
+**3. Fetch raw results**
+```bash
+scripts/council.sh results "$JOB_DIR"
+# Returns raw opinions from each council member
+```
+
+**4. Synthesize (caller responsibility)**
+
+You as the Chairman must synthesize raw outputs into the Advisory Format (see below). The council does NOT produce a synthesized advisory automatically.
+
+**5. Cleanup**
+```bash
+scripts/council.sh clean "$JOB_DIR"
+```
+
+> **Important:** Check `overallState === "done"` in the wait JSON before fetching results.
 
 <Output_Format>
 
