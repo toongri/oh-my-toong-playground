@@ -1,10 +1,10 @@
-# Stage 0: Automated Verification
+# Stage 1: Automated Verification
 
 Run automated checks BEFORE any code analysis. This is not optional.
 
 ---
 
-## Step 0.1: Discover Project Commands
+## Step 1.1: Discover Project Commands
 
 **Do NOT assume commands.** Each project has different tooling.
 
@@ -49,7 +49,7 @@ Run automated checks BEFORE any code analysis. This is not optional.
 
 ---
 
-## Step 0.2: Run Checks
+## Step 1.2: Run Checks
 
 | Check | Pass Criteria |
 |-------|---------------|
@@ -88,20 +88,20 @@ When project lacks build tools, tests, or linter:
    - JavaScript: `node --check file.js`
    - Shell: `bash -n script.sh`
 
-2. **Document gaps as findings** for Stage 2
+2. **Document gaps as findings** for Stage 3
    - "No test coverage" -> recommend adding tests
    - "No linter configured" -> recommend setup
 
-3. **Proceed to Stage 1** after documenting
+3. **Proceed to Stage 2** after documenting
 
 **"No tools configured" is a finding, not a blocker.** The absence of tooling itself becomes a code quality concern.
 
 ---
 
-## Stage 0 Output Format
+## Stage 1 Output Format
 
 ```markdown
-## Stage 0: Automated Verification
+## Stage 1: Automated Verification
 
 | Check | Status | Details |
 |-------|--------|---------|
@@ -109,22 +109,22 @@ When project lacks build tools, tests, or linter:
 | Tests | PASS (N/N) / FAIL (N/M) | [failed test names if any] |
 | Lint | PASS / FAIL | [error count if any] |
 
-**Stage 0 Result:** PASS -> Proceed to Stage 1 / FAIL -> REQUEST_CHANGES
+**Stage 1 Result:** PASS -> Proceed to Stage 2 / FAIL -> REQUEST_CHANGES
 ```
 
 ---
 
-## Stage 0 Failure = Immediate Stop
+## Stage 1 Failure = Immediate Stop
 
 If ANY check fails:
-1. **Do NOT proceed to Stage 1 or Stage 2**
+1. **Do NOT proceed to Stage 2 or Stage 3**
 2. Report the failure with specific output
 3. Issue `REQUEST_CHANGES` immediately
-4. Wait for fix and re-run Stage 0
+4. Wait for fix and re-run Stage 1
 
 ---
 
-## Red Flags for Stage 0
+## Red Flags for Stage 1
 
 | Excuse | Reality |
 |--------|---------|
