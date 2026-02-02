@@ -8,7 +8,7 @@ agents:
     - metis
     - momus
     - oracle
-    - code-reviewer
+    - argus
     - spec-reviewer
     - sisyphus-junior
 
@@ -64,4 +64,4 @@ skills:
     - metis
     - momus
     - oracle
-    - code-review
+    - argus

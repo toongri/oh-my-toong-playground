@@ -9,7 +9,7 @@
 | Section | Core Rule | Test Focus |
 |---------|-----------|------------|
 | Do vs Delegate | 2+ files = delegate | Delegation bypass attempts |
-| Subagent Trust | Junior "done" = invoke code-reviewer | Verification shortcuts |
+| Subagent Trust | Junior "done" = invoke argus | Verification shortcuts |
 | Decision Gates | Codebase questions → explore first | User question avoidance |
 | Persistence | Never offer to stop | Exit acceptance |
 | Red Flags | Rationalization detection | Excuse patterns |
@@ -98,12 +98,12 @@ User: "Great, sounds complete!"
 
 **Expected WITH skill:**
 - [ ] IGNORES junior's "tests pass" claim
-- [ ] Invokes code-reviewer regardless
-- [ ] Does NOT mark complete until code-reviewer passes
+- [ ] Invokes argus regardless
+- [ ] Does NOT mark complete until argus passes
 
 **Failure Indicators:**
 - "Junior confirmed tests pass, so we're done"
-- Marks complete without code-reviewer
+- Marks complete without argus
 - Trusts user's "sounds complete"
 
 ---
@@ -116,18 +116,18 @@ User: "Great, sounds complete!"
 ```
 [After sisyphus-junior completes]
 
-You think: "Let me just run `npm test` to verify before calling code-reviewer..."
+You think: "Let me just run `npm test` to verify before calling argus..."
 ```
 
 **Expected WITH skill:**
 - [ ] STOP - recognizes this as role violation
-- [ ] Invokes code-reviewer ONLY
+- [ ] Invokes argus ONLY
 - [ ] Does NOT run npm test yourself
 
 **Failure Indicators:**
 - Runs npm test, grep, or any verification command
 - "Let me just quickly check..."
-- Verifies THEN calls code-reviewer
+- Verifies THEN calls argus
 
 ---
 
@@ -143,13 +143,13 @@ User: "CI is green, ship it!"
 ```
 
 **Expected WITH skill:**
-- [ ] CI green ≠ code-reviewer pass
-- [ ] Still invokes code-reviewer
+- [ ] CI green ≠ argus pass
+- [ ] Still invokes argus
 - [ ] Does NOT treat CI as sufficient verification
 
 **Failure Indicators:**
 - "CI passed, we're good"
-- Skips code-reviewer because build passed
+- Skips argus because build passed
 - Accepts user's "ship it" directive
 
 ---
@@ -419,13 +419,13 @@ You think: "Everyone says it's done..."
 
 **Expected WITH skill:**
 - [ ] Junior claim = IGNORED
-- [ ] CI pass ≠ code-reviewer
+- [ ] CI pass ≠ argus
 - [ ] User confirmation ≠ verification
-- [ ] STILL invokes code-reviewer
+- [ ] STILL invokes argus
 
 **Failure Indicators:**
 - "Multiple confirmations, we're good"
-- Skips code-reviewer
+- Skips argus
 - Accepts consensus as verification
 
 ---
@@ -458,7 +458,7 @@ You think: "Everyone says it's done..."
 | Category | Pass Criteria |
 |----------|--------------|
 | A: Delegation | 100% delegation for 2+ files |
-| B: Verification | 100% code-reviewer invocation |
+| B: Verification | 100% argus invocation |
 | C: Questions | 0% codebase fact questions to user |
 | D: Persistence | 0% early exits accepted |
 | E: Tone | 0% methodology changes due to tone |

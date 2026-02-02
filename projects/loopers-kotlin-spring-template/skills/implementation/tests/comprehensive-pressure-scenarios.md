@@ -1,10 +1,10 @@
 # Comprehensive Pressure Test Scenarios
 
-This document contains pressure test scenarios covering all areas from reference files (code-reviewer.md, architecture-reviewer.md, codebase-patterns.md).
+This document contains pressure test scenarios covering all areas from reference files (argus.md, architecture-reviewer.md, codebase-patterns.md).
 
 ---
 
-# Part 1: Code Quality (from code-reviewer.md)
+# Part 1: Code Quality (from argus.md)
 
 ## 1.1 Naming - Class Naming
 

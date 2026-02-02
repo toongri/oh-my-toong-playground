@@ -8,7 +8,7 @@ agents:
     - metis
     - momus
     - oracle
-    - code-reviewer
+    - argus
     - spec-reviewer
     - component: sisyphus-junior
       add-skills:
@@ -72,4 +72,4 @@ skills:
     - momus
     - oracle
     - testing
-    - code-review
+    - argus

@@ -51,7 +51,7 @@ oh-my-toong은 **에이전틱 개발**을 지향합니다. 하나의 AI가 모�
 | 기획 | prometheus | 요구사항을 실행 가능한 작업 계획으로 변환 |
 | 실행 | sisyphus | 전문 에이전트를 통한 구현 조율 |
 | 구현 | sisyphus-junior | 코드 작성 (sisyphus가 위임) |
-| 검증 | code-reviewer | 모든 구현 검증 |
+| 검증 | argus | 모든 구현 검증 |
 
 **핵심 원칙**: 관심사 분리를 통해 성급한 구현을 방지하고, 필수 검증을 통해 품질을 보장합니다.
 
@@ -154,7 +154,7 @@ flowchart TB
     Loop -->|아니오| Done([완료])
     Loop -->|예| Delegate[sisyphus-junior에<br/>위임]
     Delegate --> Ignore['완료' 주장 무시]
-    Ignore --> Review[code-reviewer 호출]
+    Ignore --> Review[argus 호출]
     Review --> Pass{통과?}
     Pass -->|예| Complete[완료 처리]
     Pass -->|아니오| Fix[수정 태스크 생성]
@@ -164,8 +164,8 @@ flowchart TB
 
 **검증 프로토콜**:
 - **Zero Trust**: sisyphus-junior의 "완료" 주장은 항상 무시
-- **필수 리뷰**: 모든 구현 후 code-reviewer 호출
-- **Retry 제한 없음**: code-reviewer가 통과할 때까지 계속
+- **필수 리뷰**: 모든 구현 후 argus 호출
+- **Retry 제한 없음**: argus가 통과할 때까지 계속
 - **지속성**: 사용자가 프로세스를 중단할 수 없음
 
 > 📖 **상세 가이드**: [오케스트레이션 가이드](docs/ORCHESTRATION.md)에서 전체 워크플로우와 사용법을 확인하세요.
@@ -209,7 +209,7 @@ oh-my-toong/
 │   ├── git-committer/         # Git 커밋 워크플로우
 │   ├── agent-council/         # 다중 AI 자문단
 │   ├── spec/                  # 명세서 작성
-│   ├── code-review/           # 코드 리뷰
+│   ├── argus/                 # 백눈의 감시자 (검증)
 │   ├── spec-review/           # 다중 AI 명세서 리뷰 서비스
 │   └── performance-optimizer/ # 성능 분석 및 최적화
 ├── agents/                    # Task 도구 위임용 서브에이전트 정의
@@ -219,7 +219,7 @@ oh-my-toong/
 │   ├── librarian.md           # 외부 문서
 │   ├── momus.md               # 계획 검토자
 │   ├── metis.md               # 사전 계획 분석
-│   ├── code-reviewer.md       # 코드 리뷰 에이전트
+│   ├── argus.md              # 백눈의 감시자
 │   └── spec-reviewer.md       # 명세서 리뷰 에이전트
 ├── commands/                  # 슬래시 명령어 정의
 │   ├── hud.md                 # 상태바 HUD 설정
@@ -257,7 +257,7 @@ oh-my-toong/
 | **git-committer** | Git 커밋 워크플로우 | 한국어 메시지, Subject 50자/Body 72자 제한, 원자적 커밋 |
 | **agent-council** | 다중 AI 자문단 | 트레이드오프 및 주관적 결정용 |
 | **spec** | 명세서 작성 | 구조화된 명세서 생성 워크플로우 |
-| **code-review** | 코드 리뷰 | 빌드/테스트/린트 검증 |
+| **argus** | 백눈의 감시자 | Junior의 작업을 검증 - 잠들지 않는 눈 |
 | **spec-review** | 명세서 리뷰 | 다중 AI 자문 서비스 |
 | **performance-optimizer** | 성능 최적화 | Before/After 검증을 통한 체계적 분석 |
 
@@ -273,7 +273,7 @@ oh-my-toong/
 | **librarian** | 문서 연구자 | 외부 API, 라이브러리, 모범 사례 조사 시 |
 | **momus** | 계획 비평가 | 실행 전 작업 계획 검토 시 |
 | **metis** | 사전 계획 분석가 | 계획 생성 전 갭 포착 시 |
-| **code-reviewer** | 코드 리뷰어 | 코드 변경 리뷰 시 |
+| **argus** | 백눈의 감시자 | 코드 변경 검증 시 |
 | **spec-reviewer** | 명세서 리뷰어 | 설계에 대한 다중 AI 피드백 시 |
 
 ## 명령어

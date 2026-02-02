@@ -41,7 +41,7 @@ Oh-My-Toong solves this by clearly separating roles:
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
 | **Implementation** | sisyphus-junior | Writes code (delegated by sisyphus) |
-| **Verification** | code-reviewer | Validates all implementations |
+| **Verification** | argus | Validates all implementations |
 
 ---
 
@@ -71,7 +71,7 @@ flowchart TD
     subgraph Execution Phase
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior --> CodeReviewer[code-reviewer]
+        Junior --> CodeReviewer[argus]
         CodeReviewer -->|Pass| Done((Done))
         CodeReviewer -->|Fail| Junior
     end
@@ -100,7 +100,7 @@ flowchart TD
 - **Role**: Execution and delegation
 - **Constraint**: **NEVER works alone**. ALL code changes = DELEGATE to sisyphus-junior.
 - **Trust Model**: Zero trust for sisyphus-junior's "done" claims
-- **Verification**: MANDATORY code-reviewer after every implementation
+- **Verification**: MANDATORY argus after every implementation
 
 ### sisyphus-junior (The Implementer)
 
@@ -108,9 +108,9 @@ flowchart TD
 - **Constraint**: Works ALONE. No delegation to other agents.
 - **Discipline**: Strict task focus, immediate completion marking
 
-### code-review (The Verifier)
+### argus (The Hundred-Eyed Guardian)
 
-- **Role**: Validates all implementations
+- **Role**: Validates all implementations - nothing escapes
 - **Function**: Runs build/test/lint, evaluates code quality
 - **Verdict**: APPROVE, REQUEST_CHANGES, or COMMENT
 
@@ -142,7 +142,7 @@ With a plan ready, use `/sisyphus`:
 
 1. **Task Creation**: Breaks plan into TaskCreate items
 2. **Delegation**: Assigns tasks to sisyphus-junior
-3. **Verification**: code-reviewer validates EVERY completion
+3. **Verification**: argus validates EVERY completion
 4. **Iteration**: Continues until all tasks pass review
 
 ---
@@ -168,7 +168,7 @@ Even "simple" tasks benefit from brief planning. The time invested in planning s
 
 ### 2. Trust the Verification Protocol
 
-When code-reviewer requests changes, fix them. Don't argue or skip. The protocol exists to catch real issues.
+When argus requests changes, fix them. Don't argue or skip. The protocol exists to catch real issues.
 
 ### 3. Use Specs for Unclear Requirements
 
@@ -176,7 +176,7 @@ If you find yourself repeatedly clarifying requirements during prometheus, step 
 
 ### 4. Let Agents Do Their Jobs
 
-- Don't manually verify sisyphus-junior's work (that's code-reviewer's job)
+- Don't manually verify sisyphus-junior's work (that's argus's job)
 - Don't ask prometheus to "just write the code" (it can't and won't)
 - Don't interrupt sisyphus mid-execution (it will persist anyway)
 
@@ -192,7 +192,7 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 |---------|----------|
 | Prometheus keeps interviewing | It needs more context. Answer thoroughly or say "generate plan now". |
 | Sisyphus won't stop | This is by design. It persists until verification passes. |
-| code-reviewer keeps failing | Review the feedback carefully. The issues are real. |
+| argus keeps failing | Review the feedback carefully. The issues are real. |
 | Spec is taking too long | Skip phases that aren't relevant (simple CRUD doesn't need Architecture phase). |
 
 ---

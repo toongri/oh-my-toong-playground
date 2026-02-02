@@ -51,7 +51,7 @@ oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collab
 | Planning | prometheus | Transforms requirements into executable work plans |
 | Execution | sisyphus | Orchestrates implementation via specialized agents |
 | Implementation | sisyphus-junior | Writes code (delegated by sisyphus) |
-| Verification | code-reviewer | Validates all implementations |
+| Verification | argus | Validates all implementations |
 
 **The Core Principle**: Separation of concerns prevents premature implementation and ensures quality through mandatory verification.
 
@@ -154,7 +154,7 @@ flowchart TB
     Loop -->|No| Done([Done])
     Loop -->|Yes| Delegate[Delegate to<br/>sisyphus-junior]
     Delegate --> Ignore[IGNORE 'done' claim]
-    Ignore --> Review[Invoke code-reviewer]
+    Ignore --> Review[Invoke argus]
     Review --> Pass{Pass?}
     Pass -->|Yes| Complete[Mark completed]
     Pass -->|No| Fix[Create fix task]
@@ -164,8 +164,8 @@ flowchart TB
 
 **Verification Protocol**:
 - **Zero Trust**: sisyphus-junior's "done" claims are ALWAYS ignored
-- **Mandatory Review**: code-reviewer invoked after EVERY implementation
-- **No Retry Limit**: Continue until code-reviewer passes
+- **Mandatory Review**: argus invoked after EVERY implementation
+- **No Retry Limit**: Continue until argus passes
 - **Persistence**: User cannot stop the process prematurely
 
 > 📖 **Detailed Guide**: See the [Orchestration Guide](docs/ORCHESTRATION.en.md) for complete workflows and usage instructions.
@@ -209,7 +209,7 @@ oh-my-toong/
 │   ├── git-committer/         # Git commit workflow
 │   ├── agent-council/         # Multi-AI advisory body
 │   ├── spec/                  # Specification writing
-│   ├── code-review/           # Code review
+│   ├── argus/                 # The hundred-eyed guardian
 │   ├── spec-review/           # Multi-AI spec review service
 │   └── performance-optimizer/ # Performance analysis and optimization
 ├── agents/                    # Subagent definitions for Task tool delegation
@@ -219,7 +219,7 @@ oh-my-toong/
 │   ├── librarian.md           # External documentation
 │   ├── momus.md               # Plan reviewer
 │   ├── metis.md               # Pre-planning analysis
-│   ├── code-reviewer.md       # Code review agent
+│   ├── argus.md              # The hundred-eyed guardian
 │   └── spec-reviewer.md       # Spec review agent
 ├── commands/                  # Slash command definitions
 │   ├── hud.md                 # Status bar HUD setup
@@ -257,7 +257,7 @@ oh-my-toong/
 | **git-committer** | Git commit workflow | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
 | **spec** | Specification writing | Structured spec creation workflow |
-| **code-review** | Code review | Build/test/lint verification |
+| **argus** | The hundred-eyed guardian | Verifies Junior's work - nothing escapes |
 | **spec-review** | Spec review | Multi-AI advisory service |
 | **performance-optimizer** | Performance optimization | Systematic analysis with Before/After verification |
 
@@ -273,7 +273,7 @@ Agents are specialized subagent definitions used with Claude Code's Task tool fo
 | **librarian** | Documentation researcher | Researching external APIs, libraries, best practices |
 | **momus** | Plan critic | Reviewing work plans before execution |
 | **metis** | Pre-planning analyst | Catching gaps before plan generation |
-| **code-reviewer** | Code reviewer | Reviewing code changes |
+| **argus** | The hundred-eyed guardian | Verifying code changes |
 | **spec-reviewer** | Spec reviewer | Getting multi-AI feedback on designs |
 
 ## Commands

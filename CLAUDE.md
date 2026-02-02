@@ -33,6 +33,7 @@ oh-my-toong/
 | metis | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | git-committer | Git commit workflow | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
+| argus | Verification guardian | Verifies Junior's work - nothing escapes |
 
 ### Hooks
 
@@ -85,6 +86,7 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | Task planning | prometheus |
 | Code implementation | sisyphus-junior |
 | Plan review | momus |
+| Code verification | argus |
 
 ## Language Conventions
 

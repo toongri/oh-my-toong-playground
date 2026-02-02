@@ -41,7 +41,7 @@ Oh-My-Toong은 역할을 명확히 분리하여 이를 해결합니다:
 | **기획** | prometheus | 전략적 기획, 절대 코드 작성 안 함 |
 | **실행** | sisyphus | 위임을 통한 조율, 절대 단독 작업 안 함 |
 | **구현** | sisyphus-junior | 코드 작성 (sisyphus가 위임) |
-| **검증** | code-reviewer | 모든 구현 검증 |
+| **검증** | argus | 모든 구현 검증 |
 
 ---
 
@@ -71,7 +71,7 @@ flowchart TD
     subgraph 실행 단계
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior --> CodeReviewer[code-reviewer]
+        Junior --> CodeReviewer[argus]
         CodeReviewer -->|통과| Done((완료))
         CodeReviewer -->|실패| Junior
     end
@@ -100,7 +100,7 @@ flowchart TD
 - **역할**: 실행과 위임
 - **제약**: **절대 단독 작업 안 함**. 모든 코드 변경 = sisyphus-junior 위임.
 - **신뢰 모델**: sisyphus-junior의 "완료" 주장에 Zero Trust
-- **검증**: 모든 구현 후 code-reviewer 필수 호출
+- **검증**: 모든 구현 후 argus 필수 호출
 
 ### sisyphus-junior (구현자)
 
@@ -108,9 +108,9 @@ flowchart TD
 - **제약**: 단독 작업. 다른 에이전트에 위임 안 함.
 - **규율**: 엄격한 태스크 집중, 즉시 완료 표시
 
-### code-review (검증자)
+### argus (백눈의 감시자)
 
-- **역할**: 모든 구현 검증
+- **역할**: 모든 구현 검증 - 잠들지 않는 눈
 - **기능**: 빌드/테스트/린트 실행, 코드 품질 평가
 - **판정**: APPROVE, REQUEST_CHANGES, 또는 COMMENT
 
@@ -142,7 +142,7 @@ flowchart TD
 
 1. **태스크 생성**: 계획을 TaskCreate 항목으로 분해
 2. **위임**: sisyphus-junior에 태스크 할당
-3. **검증**: code-reviewer가 모든 완료 검증
+3. **검증**: argus가 모든 완료 검증
 4. **반복**: 모든 태스크가 리뷰 통과할 때까지 계속
 
 ---
@@ -168,7 +168,7 @@ flowchart TD
 
 ### 2. 검증 프로토콜을 신뢰하세요
 
-code-reviewer가 변경을 요청하면 수정하세요. 논쟁하거나 건너뛰지 마세요. 프로토콜은 실제 이슈를 잡기 위해 존재합니다.
+argus가 변경을 요청하면 수정하세요. 논쟁하거나 건너뛰지 마세요. 프로토콜은 실제 이슈를 잡기 위해 존재합니다.
 
 ### 3. 불명확한 요구사항에는 명세를 사용하세요
 
@@ -176,7 +176,7 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 
 ### 4. 에이전트가 자기 일을 하게 두세요
 
-- sisyphus-junior의 작업을 수동으로 검증하지 마세요 (code-reviewer의 일입니다)
+- sisyphus-junior의 작업을 수동으로 검증하지 마세요 (argus의 일입니다)
 - prometheus에게 "그냥 코드를 작성해달라"고 요청하지 마세요 (할 수 없고 하지 않습니다)
 - sisyphus 실행 중에 끼어들지 마세요 (어차피 계속됩니다)
 
@@ -192,7 +192,7 @@ prometheus 도중 요구사항을 반복적으로 명확히 해야 한다면, �
 |------|--------|
 | Prometheus가 계속 인터뷰함 | 더 많은 컨텍스트가 필요합니다. 자세히 답하거나 "지금 계획을 생성해"라고 말하세요. |
 | Sisyphus가 멈추지 않음 | 설계된 대로입니다. 검증 통과까지 지속됩니다. |
-| code-reviewer가 계속 실패함 | 피드백을 주의 깊게 검토하세요. 이슈는 실제입니다. |
+| argus가 계속 실패함 | 피드백을 주의 깊게 검토하세요. 이슈는 실제입니다. |
 | 명세가 너무 오래 걸림 | 관련 없는 단계는 건너뛰세요 (단순 CRUD에는 아키텍처 단계가 필요 없습니다). |
 
 ---
