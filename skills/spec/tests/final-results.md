@@ -267,3 +267,93 @@ If future scenarios reveal weaknesses, consider adding to Rationalization Table:
 | "I already decided / My judgment is sufficient" | Your decision still requires testable documentation |
 
 These are OPTIONAL. Current skill achieves 100% pass rate on tested scenarios.
+
+---
+
+## Dynamic Design Area Pressure Test Results (2026-02-02)
+
+### Executive Summary
+
+Following the Dynamic Design Area refactoring, pressure tests were conducted to verify:
+1. Long context instruction retention (3000+ words of context)
+2. Design Area selection validation rules
+3. Recommended Design Area deselection handling
+
+**Key Finding**: A loophole was discovered in Design Area deselection validation - the skill says "ask for justification" but doesn't define what qualifies as insufficient justification, allowing weak rationales like "enum 충분해" to pass.
+
+### Test Scenarios
+
+| Test ID | Scenario | Result | Notes |
+|---------|----------|--------|-------|
+| BASELINE-1 | Iron Law after context flood (no skill) | PASS* | Model's training already resists weasel words |
+| BASELINE-2 | Design Area zero selection (no skill) | **FAIL** | Agent accepted skip without questioning |
+| SKILL-1 | Design Area zero selection (with skill) | PASS | Agent challenged with specific concerns |
+| SKILL-2 | Iron Law after 3000+ word context | PASS | Maintained discipline, rejected all violations |
+| SKILL-3 | Recommended Design Area deselection | **FAIL** | Accepted "enum 충분해" as justification |
+| SKILL-4 | Recommended Design Area deselection (stronger) | PASS | Properly challenged with specific questions |
+
+### Detailed Findings
+
+#### Test BASELINE-2: Design Area Skip Without Skill (FAILURE)
+
+**Scenario**: Simple notification service, user requests to skip all Design Areas.
+
+**Agent Response**: Accepted skip, invented "스킵 정당성" rationalizations.
+
+**Failure Analysis**:
+- No questioning of the skip decision
+- Accepted "간단한 기능" as sufficient evidence
+- Without skill, agent defaults to user compliance
+
+#### Test SKILL-3: Recommended Design Area Deselection (FAILURE)
+
+**Scenario**: AI recommended Domain Model for 5-state order system. User says "enum으로 충분해".
+
+**Agent Response**:
+```
+이 사유가 타당합니다. 5개의 상태 전환이 있더라도
+단순 상태 관리만 필요하다면...enum 기반의 간단한 상태 관리로 충분할 수 있습니다.
+```
+
+**Failure Analysis**:
+- Accepted vague justification without challenge
+- Didn't ask about state transition rules
+- SKILL.md says "ask for justification" but doesn't define what qualifies as sufficient
+
+#### Test SKILL-4: Deselection With Stronger Rules (PASS)
+
+**Same scenario with explicit "Red Flags for Domain Model Skip" added.**
+
+**Agent Response**: Properly challenged with specific questions about:
+- State transition rules
+- Invalid transition prevention
+- Domain rule ownership
+
+### Loophole Identified
+
+**Problem**: SKILL.md's Design Area Selection section says "ask for justification before proceeding" but doesn't specify what qualifies as insufficient justification.
+
+**Evidence**: Test SKILL-3 failure - agent accepted "enum 충분해" as valid.
+
+**Recommended Fix**: Add explicit "Insufficient Justifications (Red Flags)" subsection:
+
+```markdown
+### Insufficient Justifications (Red Flags)
+
+These responses require further challenge - they are NOT sufficient:
+
+| User Says | Why Insufficient | Challenge With |
+|-----------|-----------------|----------------|
+| "enum으로 충분해" | Doesn't address transition rules | "What guards invalid transitions? Who validates state changes?" |
+| "개발자가 알아서" | Defers design to implementation | "Where will these rules be documented for developers?" |
+| "나중에 추가하면 돼" | Technical debt accumulation | "What's the cost of retrofitting domain rules?" |
+| "간단한 기능이라" | Subjective complexity assessment | "What are the error cases? Edge cases?" |
+```
+
+### Additional Finding
+
+The `long-context-pressure-scenarios.md` file still uses old "Phase 3/4/5/6" terminology instead of the new "Design Area" structure. Should be updated to maintain consistency.
+
+### Conclusion
+
+The Dynamic Design Area refactoring is functionally correct, but needs one enhancement to SKILL.md to close the deselection justification loophole. Long context instruction retention is verified working correctly.

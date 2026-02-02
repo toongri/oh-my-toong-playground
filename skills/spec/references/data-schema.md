@@ -29,6 +29,18 @@ This document provides implementation details for the Repository/Port interfaces
 - "Standard indexes are enough" without analysis → Verify project-specific needs
 - Schema change without migration strategy → Document migration approach
 
+## 모호한 답변 명확화 예시
+
+설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+
+| 모호한 답변 | 명확화 질문 |
+|------------|------------|
+| "테이블 하나면 돼" | "주요 조회 패턴은 무엇인가요? 조인이 필요한 경우는 없나요?" |
+| "인덱스는 기본으로 충분해" | "자주 사용되는 WHERE 조건은? 정렬 기준은? 예상 데이터 규모는?" |
+| "마이그레이션은 나중에" | "기존 데이터가 있나요? 스키마 변경 시 다운타임 허용 범위는?" |
+| "그냥 VARCHAR로 하면 돼" | "최대 길이 제한은? 검색이나 정렬에 사용되나요? 인코딩 이슈는?" |
+| "캐시는 알아서" | "캐시 무효화 전략은? TTL은? 일관성 요구사항은?" |
+
 ## Baseline Assumptions
 
 The following are already covered by team conventions:

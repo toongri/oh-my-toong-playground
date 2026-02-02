@@ -123,6 +123,18 @@ Define operations in business terms (e.g., "atomically accumulate count", "retri
 - Repository defined with implementation details → Keep business terms only
 - "나중에 이벤트 추가" without YAGNI analysis → Evaluate now
 
+## 모호한 답변 명확화 예시
+
+설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+
+| 모호한 답변 | 명확화 질문 |
+|------------|------------|
+| "enum으로 충분해" | "어떤 상태 전이가 유효한가요? CREATED→DELIVERED 직접 전이 가능한가요?" |
+| "상태는 5개면 돼" | "각 상태 간 전이 조건과 제약은? 무효한 전이를 어디서 검증하나요?" |
+| "aggregate는 나중에 정하면 돼" | "어떤 객체들이 같은 생명주기를 갖나요? 트랜잭션 경계는 어디인가요?" |
+| "비즈니스 규칙은 서비스에서 처리" | "해당 규칙을 소유할 도메인 객체는 무엇인가요? 규칙이 여러 곳에 흩어지면 유지보수 문제가 없을까요?" |
+| "이벤트는 필요하면 나중에 추가" | "현재 동기 처리로 충분한 근거는? 확장성 요구사항은 없나요?" |
+
 ## Process
 
 ### Step 1: Context Review

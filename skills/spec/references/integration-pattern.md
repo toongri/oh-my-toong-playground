@@ -30,6 +30,18 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - Stateful component without policy → Define buffer/cache behavior
 - Transaction boundary unclear → Specify explicitly
 
+## 모호한 답변 명확화 예시
+
+설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+
+| 모호한 답변 | 명확화 질문 |
+|------------|------------|
+| "그냥 호출하면 돼" | "동기/비동기 중 어떤 방식인가요? 실패 시 재시도 정책은?" |
+| "타임아웃은 적당히" | "구체적인 타임아웃 값은? 타임아웃 시 fallback 동작은?" |
+| "메시지 큐 쓰면 되지" | "순서 보장이 필요한가요? 멱등성 처리는? 실패 메시지 처리는?" |
+| "트랜잭션은 알아서" | "트랜잭션 경계는 어디까지인가요? 분산 트랜잭션이 필요한가요?" |
+| "버퍼링은 나중에" | "버퍼 크기 제한은? flush 조건은? 버퍼 유실 시 대응은?" |
+
 ## Process
 
 ### Step 1: Context Review

@@ -25,6 +25,18 @@ As an operations design specialist, systematically design the operational aspect
 - Missing failure scenarios for critical paths → Identify and plan
 - No rollback plan for risky deployments → Define rollback strategy
 
+## 모호한 답변 명확화 예시
+
+설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+
+| 모호한 답변 | 명확화 질문 |
+|------------|------------|
+| "모니터링은 나중에" | "장애 감지 기준은 무엇인가요? 어떤 지표를 추적해야 하나요?" |
+| "알림은 적당히" | "알림 임계값은? 알림 채널은? 에스컬레이션 정책은?" |
+| "롤백은 필요하면" | "롤백 트리거 조건은? 롤백 절차는? 데이터 정합성 확인 방법은?" |
+| "배포는 기본으로" | "다운타임 허용 범위는? 카나리/블루그린 필요한가요? DB 마이그레이션 순서는?" |
+| "장애 대응은 그때그때" | "주요 장애 시나리오는? 각 시나리오별 대응 절차는? 담당자는?" |
+
 ## Baseline Assumptions
 
 The following are already covered by team conventions and need not be documented:

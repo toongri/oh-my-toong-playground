@@ -39,7 +39,7 @@ NO PHASE COMPLETION WITHOUT:
 
 ### Design Areas (Selected after Phase 2)
 
-After completing Phase 2 (Solution Design), the AI suggests which Design Areas to include based on project complexity. User confirms/modifies selection via `AskUserQuestion` with `multiSelect: true`.
+After completing Phase 2 (Solution Design), the AI analyzes project requirements and autonomously determines which Design Areas to include based on complexity criteria.
 
 | Design Area | Criteria for Recommendation |
 |-------------|----------------------------|
@@ -51,41 +51,31 @@ After completing Phase 2 (Solution Design), the AI suggests which Design Areas t
 
 ## Design Area Selection
 
-After Phase 2 (Solution Design) completes, analyze the project and present Design Area selection to user:
+Phase 2 (Solution Design) 완료 후, AI가 Phase 1-2 결과물을 분석하여 필요한 Design Areas를 자율적으로 결정하고 진행한다.
 
-### Selection Process
+### Selection Criteria
 
-1. **Analyze project requirements** from Phase 1-2 outputs
-2. **Determine recommended Design Areas** using criteria above
-3. **Present AskUserQuestion** with multiSelect: true
+| Design Area | Criteria |
+|-------------|----------|
+| Domain Model | 3+ state transitions, complex business rules, aggregate boundaries |
+| Data Schema | DB/file/cache storage needed |
+| Interface Contract | External interface exposed (API, CLI, Event) |
+| Integration Pattern | External system integration, async processing, transaction boundaries |
+| Operations Guide | Production deployment, monitoring, operational settings |
 
-**AskUserQuestion Format:**
+### Execution Order
 
-```yaml
-AskUserQuestion:
-  header: "Design Areas"
-  question: "Based on the Solution Design, I recommend the following Design Areas for this project.
-    [List recommended areas with brief justification for each]
-    Which Design Areas should we proceed with?"
-  multiSelect: true
-  options:
-    - label: "Domain Model (Recommended)"
-      description: "[Specific reason based on project - e.g., 'Order has 5 state transitions']"
-    - label: "Data Schema"
-      description: "[Specific reason or 'Not needed - no persistent storage']"
-    - label: "Interface Contract (Recommended)"
-      description: "[Specific reason based on project]"
-    - label: "Integration Pattern"
-      description: "[Specific reason or 'Not needed - no external integration']"
-    - label: "Operations Guide"
-      description: "[Specific reason or 'Standard deployment sufficient']"
-```
+선택된 Design Areas는 다음 순서로 실행: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
 
-### Validation Rules
+## 모호한 답변 명확화 원칙
 
-- If user selects NO Design Areas without justification, ask for rationale
-- If user deselects AI-recommended Design Area, ask for justification before proceeding
-- Selected Design Areas execute sequentially in the order: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
+설계 질문에 대해 사용자가 모호하게 답변할 경우 ("~으로 충분해", "대충 ~하면 돼", "나중에 정하면 돼"):
+
+1. **그대로 수락하지 않음**
+2. **구체적 명확화 질문**으로 재질문
+3. **명확한 답변을 얻을 때까지 반복**
+
+각 Design Area reference 파일에 해당 영역의 명확화 예시 참조.
 
 ## Subagent Selection
 
