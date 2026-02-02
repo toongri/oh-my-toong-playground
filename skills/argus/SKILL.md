@@ -174,77 +174,15 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 ## Output Format
 
 ```markdown
-## Stage 1: Automated Verification
-| Check | Status | Details |
-|-------|--------|---------|
-| Build | PASS / FAIL | [output summary] |
-| Tests | PASS (N/N) / FAIL (N/M) | [failed test names] |
-| Lint | PASS / FAIL | [error count] |
+## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
 
-**Stage 1 Result:** PASS / FAIL
-[If FAIL: Stop here, issue REQUEST_CHANGES]
+## Issues (if any)
+[For each issue:]
+- **[CRITICAL/HIGH/MEDIUM/LOW]**: [Brief description]
+  - Location: [file:line]
+  - What: [problem]
+  - Fix: [how to resolve]
 
----
-
-## Stage 2: Spec Compliance
-
-### Expected Outcome
-| Criterion | Status | Evidence |
-|-----------|--------|----------|
-| Files modified | PASS / FAIL | [expected vs actual] |
-| Behavior achieved | PASS / FAIL / INCONCLUSIVE | [verification result] |
-| Verification command | PASS / FAIL / N/A | [command output] |
-
-### MUST DO Checklist
-| # | Requirement | Status | Evidence |
-|---|-------------|--------|----------|
-| 1 | [item] | PASS / FAIL | [how verified] |
-
-### MUST NOT DO Violations
-| # | Constraint | Status | Evidence |
-|---|------------|--------|----------|
-| 1 | [item] | PASS / VIOLATED | [detection method] |
-
-### Scope Check
-| Criterion | Status | Details |
-|-----------|--------|---------|
-| All expected files touched | PASS / FAIL | [missing files] |
-| No unexpected files touched | PASS / FAIL | [extra files] |
-
-**Stage 2 Result:** PASS / FAIL
-[If FAIL: Stop here, issue REQUEST_CHANGES]
-
----
-
-## Stage 3: Code Quality
-
-## Summary
-| Metric | Count | Reported (>=80) |
-|--------|-------|-----------------|
-| Critical | N | N |
-| High | N | N |
-| Medium | N | N |
-| Low | N | N |
-| Filtered (<80) | N | - |
-| Praise | N | N |
-
-## Critical Issues
-[Rich Feedback format - see feedback-protocol.md]
-
-## High Priority
-[Rich Feedback format]
-
-## Medium Priority
-[suggestion label]
-
-## Low Priority
-[nitpick (non-blocking)]
-
-## Good Practices
-[praise: ... for each - REQUIRED section]
-
-## Verdict
-[APPROVE / REQUEST_CHANGES / COMMENT]
 ```
 
 </Output_Format>
