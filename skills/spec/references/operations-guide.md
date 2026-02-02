@@ -25,11 +25,11 @@ As an operations design specialist, systematically design the operational aspect
 - Missing failure scenarios for critical paths → Identify and plan
 - No rollback plan for risky deployments → Define rollback strategy
 
-## 모호한 답변 명확화 예시
+## Vague Answer Clarification Examples
 
-설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+When users respond vaguely to design questions, clarify with specific questions.
 
-| 모호한 답변 | 명확화 질문 |
+| Vague Answer | Clarifying Question |
 |------------|------------|
 | "모니터링은 나중에" | "장애 감지 기준은 무엇인가요? 어떤 지표를 추적해야 하나요?" |
 | "알림은 적당히" | "알림 임계값은? 알림 채널은? 에스컬레이션 정책은?" |

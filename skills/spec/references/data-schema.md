@@ -29,11 +29,11 @@ This document provides implementation details for the Repository/Port interfaces
 - "Standard indexes are enough" without analysis → Verify project-specific needs
 - Schema change without migration strategy → Document migration approach
 
-## 모호한 답변 명확화 예시
+## Vague Answer Clarification Examples
 
-설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+When users respond vaguely to design questions, clarify with specific questions.
 
-| 모호한 답변 | 명확화 질문 |
+| Vague Answer | Clarifying Question |
 |------------|------------|
 | "테이블 하나면 돼" | "주요 조회 패턴은 무엇인가요? 조인이 필요한 경우는 없나요?" |
 | "인덱스는 기본으로 충분해" | "자주 사용되는 WHERE 조건은? 정렬 기준은? 예상 데이터 규모는?" |

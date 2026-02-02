@@ -37,6 +37,31 @@ NO PHASE COMPLETION WITHOUT:
 | **Dynamic Design Areas** | Phase 2 complete | See Design Area Selection Criteria | User explicitly skips with justification |
 | Wrapup | Spec concluding; records exist | Records to preserve | Nothing to preserve |
 
+### Spec Workflow (Wrapup Mandatory Path)
+
+```dot
+digraph spec_workflow {
+    rankdir=LR;
+    node [shape=box, style=rounded];
+
+    Phase1 [label="Phase 1\nRequirements"];
+    Phase2 [label="Phase 2\nSolution Design"];
+    DesignAreas [label="Design Areas\n(Dynamic)"];
+    RecordsCheck [label="Records\nexist?", shape=diamond];
+    Wrapup [label="Phase 6\nWrapup", style="rounded,bold"];
+    Complete [label="Spec\nComplete", shape=doublecircle];
+
+    Phase1 -> Phase2;
+    Phase2 -> DesignAreas;
+    DesignAreas -> RecordsCheck;
+    RecordsCheck -> Wrapup [label="YES\n(MANDATORY)"];
+    RecordsCheck -> Complete [label="NO"];
+    Wrapup -> Complete;
+}
+```
+
+**Note:** If ANY `records/` folder contains files, Wrapup is MANDATORY before completion.
+
 ### Design Areas (Selected after Phase 2)
 
 After completing Phase 2 (Solution Design), the AI analyzes project requirements and autonomously determines which Design Areas to include based on complexity criteria.
@@ -67,15 +92,15 @@ Phase 2 (Solution Design) 완료 후, AI가 Phase 1-2 결과물을 분석하여 
 
 선택된 Design Areas는 다음 순서로 실행: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
 
-## 모호한 답변 명확화 원칙
+## Vague Answer Clarification Principle
 
-설계 질문에 대해 사용자가 모호하게 답변할 경우 ("~으로 충분해", "대충 ~하면 돼", "나중에 정하면 돼"):
+When users respond vaguely to design questions ("~is enough", "just do ~", "decide later"):
 
-1. **그대로 수락하지 않음**
-2. **구체적 명확화 질문**으로 재질문
-3. **명확한 답변을 얻을 때까지 반복**
+1. **Do NOT accept as-is**
+2. **Ask specific clarifying questions**
+3. **Repeat until clear answer obtained**
 
-각 Design Area reference 파일에 해당 영역의 명확화 예시 참조.
+See each Design Area reference file for domain-specific clarification examples.
 
 ## Subagent Selection
 
@@ -120,13 +145,28 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 ## Checkpoint Protocol
 
 After each Step completion:
-1. Save content to `.omt/specs/{spec-name}/step-XX-{name}/design.md`
+1. Save content to `.omt/specs/{spec-name}/{phase-directory}/design.md`
 2. Update progress status at document top
-3. **Record any decisions made** to `step-XX-{name}/records/` (see Record Workflow below)
+3. **Record any decisions made** to `{phase-directory}/records/` (see Record Workflow below)
 4. Regenerate `spec.md` by concatenating all completed design.md files
 5. Announce: "Step N complete. Saved. Proceed to next Step?"
 6. Wait for user confirmation
 7. Delegate to spec-reviewer for review assessment (spec-reviewer decides if review is needed)
+
+### Final Step Checkpoint (After Last Design Area)
+
+**BEFORE announcing "All Design Areas finished":**
+
+1. **Check records existence**: Do ANY `{phase-directory}/records/` folders (in steps or design-areas) contain files?
+2. **If YES (records exist)**:
+   - Announce: "Records exist from this spec session. **Wrapup phase is MANDATORY.**"
+   - "Proceeding to Wrapup phase."
+   - Do NOT allow spec completion until Wrapup done
+3. **If NO (no records)**:
+   - Announce: "No records to preserve. Wrapup is optional."
+   - May proceed directly to completion if user agrees
+
+**This checkpoint is NON-NEGOTIABLE. Records existence = Wrapup required.**
 
 ## Multi-AI Review Integration
 
@@ -253,7 +293,7 @@ When significant decisions are made during any phase, capture them for future re
 ### How to Record
 
 1. **Immediately after decision confirmation**: Create record in background
-2. **Save location**: `.omt/specs/{spec-name}/step-XX-{name}/records/p{phase}.{step}-{topic}.md`
+2. **Save location**: `.omt/specs/{spec-name}/{phase-directory}/records/{naming-pattern}.md`
 3. **Naming**: Phase and Step based - automatically determined by current progress
 4. **Template**: Use `templates/record.md` format
 
@@ -279,7 +319,7 @@ When significant decisions are made during any phase, capture them for future re
 
 At each Phase Checkpoint:
 1. Review decisions made in this phase
-2. For each significant decision, create a record in `step-XX-{name}/records/`
+2. For each significant decision, create a record in the current phase's `records/` folder
 3. Include record creation in save operation
 4. Records accumulate throughout spec work for Wrapup analysis
 
@@ -311,6 +351,21 @@ At end of each Phase:
 3. Save complete Phase content
 4. Announce: "Phase X complete. Entry criteria for Phase Y: [list]"
 
+## Spec Completion Gate
+
+**SPEC IS NOT COMPLETE UNTIL:**
+1. All selected Design Areas have `design.md` saved
+2. Wrapup phase executed (if ANY records exist in any step's `records/` folder)
+3. User explicitly confirms: "Spec complete"
+
+**If records exist and Wrapup not done → BLOCKED. Cannot announce spec completion.**
+
+| Condition | Status | Action |
+|-----------|--------|--------|
+| Design Areas done, no records | ALLOWED | May skip Wrapup, announce completion |
+| Design Areas done, records exist | BLOCKED | MUST execute Wrapup before completion |
+| Wrapup done, user confirmed | COMPLETE | Announce "Spec complete" |
+
 ## Phase/Design Area Completion Announcements
 
 ### Phase 2 Completion
@@ -328,13 +383,13 @@ If Design Area was recommended but user deselected:
 
 ## Step-by-Step Persistence
 
-**Core Principle**: Save progress to `.omt/specs/{spec-name}/step-XX-{name}/design.md` whenever each Phase is completed.
+**Core Principle**: Save progress to `.omt/specs/{spec-name}/{phase-directory}/design.md` whenever each Phase is completed.
 
 ### When to Save
 
 Save **whenever each Phase is completed**:
-- Create `step-{num}-{name}/design.md` with that phase's content
-- Create `step-{num}-{name}/records/` for any decisions made during that phase
+- Create `{phase-directory}/design.md` with that phase's content
+- Create `{phase-directory}/records/` for any decisions made during that phase
 - Regenerate `spec.md` by concatenating all completed design.md files
 
 ### Step Directory Mapping
@@ -410,40 +465,6 @@ When the user requests "continue from here", "review this", etc.:
 ## Output Location
 
 All specification documents are saved in the `.omt/specs/` directory.
-
-### Directory Structure
-
-```
-.omt/specs/{spec-name}/
-├── step-01-requirements/
-│   ├── design.md
-│   └── records/
-├── step-02-solution-design/
-│   ├── design.md
-│   └── records/
-├── design-area-domain-model/       # if selected
-│   ├── design.md
-│   └── records/
-├── design-area-data-schema/        # if selected
-│   ├── design.md
-│   └── records/
-├── design-area-interface-contract/ # if selected
-│   ├── design.md
-│   └── records/
-├── design-area-integration-pattern/ # if selected
-│   ├── design.md
-│   └── records/
-├── design-area-operations-guide/   # if selected
-│   ├── design.md
-│   └── records/
-└── spec.md                         # Combines completed design.md files
-
-.omt/specs/context/                 # Shared context (created by Wrapup)
-  project.md
-  conventions.md
-  decisions.md
-  gotchas.md
-```
 
 ### Structure Rationale
 

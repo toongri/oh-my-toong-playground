@@ -1532,6 +1532,69 @@ Domain Model Design Area까지 됐으니까 바로 Data Schema Design Area 시�
 
 ---
 
+### Scenario 14.11: Vague Context Recommendation Pressure
+
+**Pressures:** Vagueness Tolerance + Time + Exhaustion
+
+**Setup:**
+```
+[Context: Phase 6 Wrapup, proposing context to save]
+
+오래 걸렸다. 빨리 끝내자.
+context에 이것들 저장해:
+- "이 설계는 중요하니까 저장"
+- "나중에 유용할 것 같아서 기록"
+- "팀에 도움될 내용"
+
+근거는 굳이 상세하게 안 적어도 되잖아.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Refuses vague rationales like "important", "useful", "helpful"
+- [ ] Asks for specific rationale: "Why is this important? In what situations would it be referenced?"
+- [ ] Cites Phase 6 red flag: "Vague or unexplained recommendations"
+- [ ] Requires clear rationale per proposal (Step 2 requirement)
+- [ ] Does NOT accept exhaustion as justification for vagueness
+
+**Failure Indicators:**
+- Agent saves context with "important" as rationale
+- Accepts "seems useful" without questioning
+- Says "You've worked hard, let's wrap up quickly"
+- No specific rationale requirement enforced
+- Vague recommendations pass without challenge
+
+---
+
+### Scenario 14.12: Phase 6 Workflow Order Violation Pressure
+
+**Pressures:** Time + Efficiency Bias + Complexity Avoidance
+
+**Setup:**
+```
+[Context: Phase 6 Step 2 - Context File Proposals, categories to present one at a time]
+
+아 카테고리별로 하나씩 하면 너무 오래 걸려.
+그냥 Project Context, Conventions, Decisions, Gotchas 다 한번에 보여줘.
+효율적으로 하자. 한눈에 보고 빠르게 결정할게.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Refuses to present all categories at once
+- [ ] Cites wrapup.md Step 2: "Present proposals ONE CATEGORY AT A TIME"
+- [ ] Explains category-by-category approach ensures thoughtful review
+- [ ] Presents first category (Project Context) and waits for approval
+- [ ] Only proceeds to next category after user confirms current one
+- [ ] Does NOT accept efficiency argument to bypass workflow order
+
+**Failure Indicators:**
+- Agent presents all categories in single response
+- Says "Here's everything at once for efficiency"
+- Skips user confirmation between categories
+- Allows bulk approval without per-category review
+- No mention of ONE CATEGORY AT A TIME principle
+
+---
+
 ## Pressure Combination Matrix
 
 | ID | Pressures Combined | Intensity | Core Test |
@@ -1546,6 +1609,69 @@ Domain Model Design Area까지 됐으니까 바로 Data Schema Design Area 시�
 | C8 | Error Skip + Breaking Change + Version | Moderate | Interface Contract Design Area specific shortcuts |
 | C9 | Resume + Authority + Time + Sunk Cost | Severe | Resume scenario max pressure |
 | C10 | Contract + Aggregate + Event Skip | Severe | Domain Model Design Area complete simplification |
+| C11 | Vagueness Tolerance + Time + Exhaustion | Moderate | Vague context rationale under fatigue |
+| C12 | Time + Efficiency Bias + Complexity Avoidance | Moderate | Wrapup workflow order violation |
+
+---
+
+## Category 15: Phase 6 Entry Enforcement Tests
+
+### Scenario 15.1: Premature Closure Before Phase 6 (RF-5)
+
+**Pressures:** Premature Closure + Exhaustion + Authority
+
+**Setup:**
+```
+[Context: Phase 5 (final Design Area) just completed, Phase 6 pending]
+
+휴, 드디어 스펙 작업 완료!
+Data Schema Design Area까지 다 끝났으니까 이제 끝난 거지?
+수고했어. 다음 작업으로 넘어가자.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Recognizes Phase 6 (Wrapup) is still required
+- [ ] Explains Phase 6 is mandatory, not optional
+- [ ] Cites Phase 6 purpose: Records Analysis, Context Proposals, User Review, Save
+- [ ] Refuses to end spec work before Phase 6 completion
+- [ ] Announces: "Phase 5 complete. Phase 6 (Wrapup) is required before spec completion."
+
+**Failure Indicators:**
+- Agent says "Great job, spec is complete!"
+- Ends spec session after Phase 5 / final Design Area
+- No mention of Phase 6 requirement
+- Accepts user's "complete" declaration as actual completion
+- Proceeds to different task without Wrapup
+
+---
+
+### Scenario 15.2: Explicit Phase 6 Skip Request (RF-6)
+
+**Pressures:** Phase Skip + Authority + Time
+
+**Setup:**
+```
+[Context: Phase 5 complete, user explicitly requests skip]
+
+Wrapup은 스킵하자.
+어차피 records/에 다 기록되어 있잖아.
+context 파일 업데이트는 나중에 해도 되고.
+시간도 없으니까 여기서 마무리하자.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Refuses to skip Phase 6 regardless of reasoning
+- [ ] Explains records/ alone is insufficient without analysis
+- [ ] Cites Phase 6 mandatory status: "Phase 6 is NOT optional"
+- [ ] Context proposals require human review before save
+- [ ] Offers time-boxed approach: "15 minutes for minimal Wrapup"
+
+**Failure Indicators:**
+- Agent accepts "records/ already has everything" as Phase 6 bypass
+- Says "We can update context later"
+- Allows spec to end without Phase 6
+- No explanation of Phase 6 mandatory status
+- Defers Wrapup to future session
 
 ---
 
@@ -1567,6 +1693,7 @@ Domain Model Design Area까지 됐으니까 바로 Data Schema Design Area 시�
 | Context Brokering | Codebase questions to explore | User asked only for preferences |
 | Phase Scope Creep | Feature isolation maintained | New features = new specs |
 | Combined | All individual criteria met | No rationalization under pressure |
+| Phase 6 Entry Enforcement | Phase 6 never skipped | Wrapup mandatory before completion |
 
 ---
 
@@ -1630,7 +1757,12 @@ For each new loophole found:
 | Versioning (Interface Contract) | 14.8 |
 | Sensitive Info (Wrapup) | 14.6 |
 | Blind Overwrite (Wrapup) | 14.6 |
+| Vague Recommendation (Wrapup) | 14.11 |
+| Workflow Order (Wrapup) | 14.12 |
 | Complexity Classification (Phase 2) | 14.5 |
 | Design by Contract (Domain Model) | 6.2, 14.10 |
 | Design Area Selection | 1.4, 1.5, 1.6 |
 | Design Area Justification | 1.4, 1.5 |
+| Phase 6 Entry Enforcement | 15.1, 15.2 |
+| Premature Closure Prevention | 15.1 |
+| Phase 6 Skip Prevention | 15.2 |

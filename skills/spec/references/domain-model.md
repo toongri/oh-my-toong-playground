@@ -123,11 +123,11 @@ Define operations in business terms (e.g., "atomically accumulate count", "retri
 - Repository defined with implementation details → Keep business terms only
 - "나중에 이벤트 추가" without YAGNI analysis → Evaluate now
 
-## 모호한 답변 명확화 예시
+## Vague Answer Clarification Examples
 
-설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+When users respond vaguely to design questions, clarify with specific questions.
 
-| 모호한 답변 | 명확화 질문 |
+| Vague Answer | Clarifying Question |
 |------------|------------|
 | "enum으로 충분해" | "어떤 상태 전이가 유효한가요? CREATED→DELIVERED 직접 전이 가능한가요?" |
 | "상태는 5개면 돼" | "각 상태 간 전이 조건과 제약은? 무효한 전이를 어디서 검증하나요?" |

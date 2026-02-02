@@ -22,11 +22,11 @@ As an interface design specialist, systematically design and document the interf
 - Missing versioning consideration for external interface → Evaluate versioning need
 - Business rules in interface doc without requirements reference → Trace back to Requirements Gathering
 
-## 모호한 답변 명확화 예시
+## Vague Answer Clarification Examples
 
-설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+When users respond vaguely to design questions, clarify with specific questions.
 
-| 모호한 답변 | 명확화 질문 |
+| Vague Answer | Clarifying Question |
 |------------|------------|
 | "REST면 되지" | "리소스 구조는 어떻게 되나요? 중첩 리소스가 필요한 경우는?" |
 | "에러는 적절히 처리" | "각 에러 케이스별 HTTP 상태 코드는? 에러 응답 본문 형식은?" |

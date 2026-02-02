@@ -30,11 +30,11 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - Stateful component without policy → Define buffer/cache behavior
 - Transaction boundary unclear → Specify explicitly
 
-## 모호한 답변 명확화 예시
+## Vague Answer Clarification Examples
 
-설계 질문에 대해 사용자가 모호하게 답변할 경우, 구체적 질문으로 명확화한다.
+When users respond vaguely to design questions, clarify with specific questions.
 
-| 모호한 답변 | 명확화 질문 |
+| Vague Answer | Clarifying Question |
 |------------|------------|
 | "그냥 호출하면 돼" | "동기/비동기 중 어떤 방식인가요? 실패 시 재시도 정책은?" |
 | "타임아웃은 적당히" | "구체적인 타임아웃 값은? 타임아웃 시 fallback 동작은?" |
