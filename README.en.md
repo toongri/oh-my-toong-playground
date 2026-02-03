@@ -2,7 +2,7 @@
 
 **[한국어](README.md)** | English
 
-**Claude Code skills and agents configuration with Greek mythology-inspired orchestration**
+**My Claude Code Configuration Library - A collection of skills, agents, and hooks to copy and customize per project**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,9 +23,7 @@ I'm developing this while being inspired by, studying, and referencing the follo
 
 ## What is oh-my-toong?
 
-oh-my-toong is a Claude Code skills and agents configuration repository. It provides structured methodologies, workflow automation, and specialized agent definitions that enhance AI-assisted development.
-
-Like the Greek Titans who each governed specific domains, each skill and agent in oh-my-toong has a clearly defined responsibility with strict constraints. Prometheus plans but never implements. Oracle advises but never touches code. Sisyphus orchestrates while his agents execute. This separation of concerns ensures predictable, high-quality AI assistance.
+Claude Code doesn't have a central plugin system, so you need to manage the `.claude/` directory manually for each project. oh-my-toong is a configuration library that collects skills, agents, and hooks in one place, letting you selectively copy what you need via `sync.yaml`. Since each project owns its copy, you can customize independently without affecting other projects.
 
 ## Features
 
@@ -37,9 +35,16 @@ Like the Greek Titans who each governed specific domains, each skill and agent i
 
 ## Philosophy
 
-### Why oh-my-toong?
+### Why This Design
 
-Claude Code's plugin system is still evolving, making it challenging to inject custom skills and workflows directly. oh-my-toong takes a different approach: **building a structured agentic development framework from the ground up**, drawing inspiration from established projects while creating patterns tailored for AI-assisted development.
+**Problem**: Claude Code doesn't have a central plugin system. You need to manage skills, agents, and hooks in the `.claude/` directory for each project manually, making it difficult to fine-tune different conventions and code patterns per project.
+
+**Solution**: Use oh-my-toong as a configuration library. Collect skills/agents/hooks in this repository, select the components you need in `sync.yaml`, and copy them to your target project.
+
+**Benefits**: Since each project owns its copy:
+- Independent customization per project
+- Freely modify without affecting other projects
+- Project-specific skill overrides (`projects/` directory)
 
 ### Agentic Development
 
