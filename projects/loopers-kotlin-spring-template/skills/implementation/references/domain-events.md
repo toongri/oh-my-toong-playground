@@ -1,5 +1,10 @@
 # Domain Events Reference
 
+## Why This Matters
+Events without version (OrderCreatedEvent) require all consumers to migrate simultaneously when schema changes.
+Putting Entity directly in events causes lazy-loading errors and circular reference issues during serialization.
+Version suffix (V1) and Snapshot pattern ensure safe evolution of event schemas.
+
 ## Overview
 
 Domain events enable loose coupling between aggregates and cross-domain communication. This reference covers event creation, listener patterns, and cross-domain communication.

@@ -1,5 +1,10 @@
 # Naming Conventions
 
+## Why This Matters
+Inconsistent naming (StockManager vs StockService) creates cognitive overhead when identifying component roles.
+Abbreviations (amt, qty) are interpreted differently by team members, increasing code review and debugging time.
+Standard suffixes and full names speed up codebase navigation and clarify team communication.
+
 ## Component Naming
 
 | Component | Pattern | Example |

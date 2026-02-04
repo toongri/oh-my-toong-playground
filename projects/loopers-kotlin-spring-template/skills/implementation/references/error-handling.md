@@ -1,5 +1,10 @@
 # Error Handling Reference
 
+## Why This Matters
+Domain-specific exception classes (OrderNotFoundException, CouponExpiredException) proliferating leads to inconsistent API response formats.
+Clients must handle dozens of exception types individually, and error logging becomes fragmented.
+Single CoreException + ErrorType enum provides consistent responses, centralized logging, and predictable error handling.
+
 ## CoreException + ErrorType Pattern
 
 This project uses a **single exception type**.

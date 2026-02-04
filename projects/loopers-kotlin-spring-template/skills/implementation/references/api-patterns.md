@@ -1,5 +1,10 @@
 # API Patterns
 
+## Why This Matters
+Swagger annotations directly on Controller mix business logic and documentation, reducing readability.
+Raw primitive parameters (offset, limit) reach DB without validation, causing invalid queries.
+ApiSpec separation and PageQuery encapsulation enforce separation of concerns and input validation.
+
 ## ApiSpec Pattern (Swagger Documentation)
 
 **Principle**: Separate interface for Swagger annotations - Controller implements interface

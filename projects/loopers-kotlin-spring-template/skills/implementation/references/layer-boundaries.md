@@ -12,6 +12,12 @@ domain/         → Single-domain business logic (Service)
 infrastructure/ → Data access, external systems (Repository Impl)
 ```
 
+## Why This Matters
+
+Without Facade, Controller calling Service directly makes cross-domain coordination difficult.
+Horizontal dependencies between Services cause circular references and increase test complexity.
+Facade is the cross-domain coordination point, wrapping multiple Services in a single transaction when needed.
+
 ## Dependency Direction
 
 ```
@@ -86,56 +92,56 @@ class OrderFacade(
 | Layer | @Transactional | Purpose |
 |-------|---------------|---------|
 | Controller | ❌ Never | HTTP handling only |
-| Facade | ✅ Always | Per use case unit |
-| Service | `readOnly=true` only | Query optimization |
-| Repository | ❌ Never | Already managed by upper layer |
+| Facade | When atomicity needed | Wraps multiple Services in single transaction |
+| Service | When atomicity needed | Ensures atomicity within single domain |
+| Repository | When atomicity needed | Ensures atomicity for complex repository operations |
+
+**readOnly usage**: Master/Slave DB routing. Use `readOnly=true` for read-only queries to route to Slave DB.
 
 ```kotlin
-// Service query method
+// Service query method - readOnly for Slave DB routing
 @Transactional(readOnly = true)
 fun findAll(query: CouponQuery): List<Coupon>
 
-// Service write method - No @Transactional
-// Transaction managed at Facade
+// Service write method - @Transactional when atomicity needed within domain
+@Transactional
 fun use(command: CouponCommand.Use): Coupon
 ```
 
 ### ⚠️ Transaction Propagation Trap
 
+Understanding propagation is critical when both Facade and Service have @Transactional.
+
 ```kotlin
-// ❌ DANGEROUS: @Transactional on both Services
+// Scenario: Both layers have @Transactional
 class PointService {
-    @Transactional  // Creates NEW tx if called outside Facade!
+    @Transactional  // propagation=REQUIRED (default)
     fun use(command: PointCommand): Point
 }
 
 class CouponService {
-    @Transactional  // Creates NEW tx if called outside Facade!
+    @Transactional  // propagation=REQUIRED (default)
     fun issue(command: CouponCommand): Coupon
 }
 
-// When called from Facade, they participate in the same tx via propagation=REQUIRED,
-// but when Services are called directly, each gets a separate transaction!
-// → If one fails, the other is still committed = data inconsistency
-
-// ✅ CORRECT: No @Transactional on Service (except readOnly)
-class PointService {
-    fun use(command: PointCommand): Point  // No @Transactional
-}
-
-class CouponService {
-    fun issue(command: CouponCommand): Coupon  // No @Transactional
-}
-
-// Only Facade manages transactions
 class RewardFacade {
     @Transactional
     fun processReward(criteria: RewardCriteria): RewardInfo {
-        pointService.use(criteria.pointCommand)
-        couponService.issue(criteria.couponCommand)
-        // Both operations execute atomically in one transaction
+        pointService.use(criteria.pointCommand)   // Participates in Facade's tx
+        couponService.issue(criteria.couponCommand)  // Participates in Facade's tx
+        // Both operations execute atomically in one transaction ✅
     }
 }
+
+// ⚠️ THE TRAP: When Services are called directly (not through Facade)
+// Each Service creates its OWN transaction!
+// → If pointService.use() succeeds but couponService.issue() fails,
+//   point deduction is committed while coupon issuance is rolled back = data inconsistency
+
+// ✅ SOLUTION: Understand your call paths
+// - Facade → Service: Service joins Facade's transaction (propagation=REQUIRED)
+// - Direct Service call: Service manages its own transaction (atomicity within domain)
+// - Cross-domain coordination: MUST go through Facade for atomicity
 ```
 
 ## Event Listener Location
@@ -240,6 +246,7 @@ class OrderFacade {
 
 @Component
 class OrderService {
+    @Transactional
     fun process(command: OrderCommand): Order {
         val order = orderRepository.findById(command.orderId)
             ?: throw CoreException(ErrorType.NOT_FOUND, "[orderId = ${command.orderId}] Order not found.")
@@ -247,16 +254,6 @@ class OrderService {
         order.process()  // Entity handles type-specific processing (polymorphism or internal logic)
         return orderRepository.save(order)
     }
-}
-```
-
-### ❌ @Transactional on Service (Except Queries)
-
-```kotlin
-// Wrong
-class CouponService {
-    @Transactional  // Should be managed at Facade
-    fun use(command: CouponCommand.Use): Coupon
 }
 ```
 

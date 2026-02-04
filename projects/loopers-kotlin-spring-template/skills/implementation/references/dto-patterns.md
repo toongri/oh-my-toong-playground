@@ -1,5 +1,10 @@
 # DTO Patterns Reference
 
+## Why This Matters
+Returning Entity directly as HTTP response exposes internal structure and causes lazy-loading errors.
+API version changes directly impact domain models, drastically increasing change costs.
+Layer-specific DTOs clarify boundaries and allow each layer to evolve independently.
+
 ## Layer-wise DTO Structure
 
 ```

@@ -45,10 +45,12 @@ See `references/layer-boundaries.md` for detailed patterns.
 
 ### 2. Layer Responsibilities
 
-| Layer | @Transactional | Horizontal Dependencies |
-|-------|---------------|------------------------|
-| Facade | Yes | Multiple Services OK |
-| Service | readOnly only | No other Services |
+| Layer | @Transactional | Horizontal Dependencies | Why |
+|-------|---------------|------------------------|-----|
+| Facade | When atomicity needed | Multiple Services OK | Wraps multiple Services in single transaction |
+| Service | When atomicity needed | No other Services | Ensures atomicity within single domain |
+
+**readOnly usage**: Master/Slave DB routing. Use `readOnly=true` for read-only queries to route to Slave DB.
 
 **Facade = COORDINATION ONLY** - No business logic (if/when/switch). Delegate to Service/Entity.
 
