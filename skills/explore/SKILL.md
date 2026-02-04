@@ -88,6 +88,35 @@ Use these for code exploration - they understand code semantically, not just as 
 - Faster for large codebases
 - Returns precise locations with context
 
+**Exploration Workflow:**
+```
+1. get_symbols_overview(relative_path="target/dir/")
+   → Understand file's top-level structure
+
+2. find_symbol(name_path="ClassName", depth=1, include_body=False)
+   → List methods in class (without body)
+
+3. find_symbol(name_path="ClassName/methodName", include_body=True)
+   → Read only the method you need
+
+4. find_referencing_symbols(name_path="ClassName/methodName")
+   → Find all code that calls this method
+```
+
+**Tool Selection:**
+| Situation | Tool |
+|-----------|------|
+| Understand file structure | `get_symbols_overview` |
+| Find specific class/function | `find_symbol` |
+| "Who uses this?" | `find_referencing_symbols` |
+| String/pattern in code | `search_for_pattern` (or grep fallback) |
+| Find by filename | `find_file` or glob |
+
+**Core Principle: Token Efficiency**
+- ❌ Reading entire files (`include_body=True` everywhere)
+- ✅ overview → list → read only what you need
+- Use `relative_path` to limit search scope → faster results
+
 ### Fallback Tools
 
 | Need | Tool |

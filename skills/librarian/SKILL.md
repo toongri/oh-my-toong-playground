@@ -73,6 +73,26 @@ Never mix. Handle each part with appropriate tools.
 3. WebSearch for official docs, recent updates, edge cases
 4. Synthesize both sources in your answer
 
+### Context7 Usage Strategy
+
+**Step 1: resolve-library-id**
+- Put your actual question in `query` - results are sorted by relevance
+- Selection criteria when multiple results:
+  1. Trust Score: High > Medium > Low
+  2. More Code Snippets = richer documentation
+  3. Higher Benchmark Score = better quality
+
+**Step 2: query-docs**
+- Be specific with `query` ("authentication" < "JWT authentication with refresh tokens")
+- For specific versions: use `/org/project/version` format
+
+**Troubleshooting:**
+| Problem | Solution |
+|---------|----------|
+| Library not found | Try alternative names (e.g., "nextjs" → "next.js") |
+| Insufficient docs | Supplement with WebSearch for official docs |
+| Version mismatch | Select exact version from versions list |
+
 <Critical_Constraints>
 
 ## The Citation Rule
