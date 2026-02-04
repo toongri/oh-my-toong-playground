@@ -257,10 +257,10 @@ import com.project.application.*
 import com.project.interfaces.*
 ```
 
-### Port/Adapter Pattern for Repositories
+### Repository Abstraction (Domain Interface + Infrastructure Implementation)
 
 ```kotlin
-// Domain layer: Port (interface)
+// Domain layer: Interface
 package com.project.domain.order
 
 interface OrderRepository {
@@ -268,11 +268,11 @@ interface OrderRepository {
     fun save(order: Order): Order
 }
 
-// Infrastructure layer: Adapter (implementation)
+// Infrastructure layer: Implementation
 package com.project.infrastructure.persistence.order
 
 @Repository
-class OrderRepositoryImpl(
+class OrderRdbRepository(
     private val orderJpaRepository: OrderJpaRepository
 ) : OrderRepository {
     override fun findById(id: Long): Order? = orderJpaRepository.findById(id).orElse(null)
@@ -367,7 +367,7 @@ class OrderService(
 
 // CORRECT: Inject domain interface, not JPA repository
 class OrderService(
-    private val orderRepository: OrderRepository  // Domain port
+    private val orderRepository: OrderRepository  // Domain interface
 )
 ```
 

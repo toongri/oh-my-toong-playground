@@ -9,7 +9,7 @@ application/    → Cross-domain coordination (Facade)
     ↓
 domain/         → Single-domain business logic (Service)
     ↑
-infrastructure/ → Data access, external systems (Repository Impl)
+infrastructure/ → Data access, external systems (Repository 구현체)
 ```
 
 ## Why This Matters
@@ -25,56 +25,6 @@ interfaces → application → domain ← infrastructure
 ```
 
 **Rule**: Domain imports nothing (pure)
-
-## Conceptual Boundary Dependencies
-
-Objects within the same conceptual boundary communicate via **object references**.
-Objects across different conceptual boundaries communicate via **ID references**.
-
-This principle applies uniformly across all layers:
-
-### Member Variables (Constructor Injection)
-```kotlin
-// ✅ Same concept: inject Repository directly
-class CouponService(
-    private val couponRepository: CouponRepository,  // Same aggregate
-)
-
-// ❌ Cross-concept: NEVER inject other domain's Service/Repository
-class CouponService(
-    private val orderService: OrderService,  // Different aggregate = violation
-)
-```
-
-### Method Signatures
-```kotlin
-// ✅ Same concept: accept/return domain objects
-fun issue(command: Issue): Coupon
-
-// ✅ Cross-concept: accept ID, not foreign domain object
-fun issue(orderId: Long, couponType: CouponType): Coupon  // orderId, not Order object
-
-// ❌ Cross-concept violation
-fun issue(order: Order, couponType: CouponType): Coupon  // Order is foreign aggregate
-```
-
-### Service Layer
-Services represent a single conceptual boundary (aggregate). Therefore:
-- **Within Service**: Use domain objects freely
-- **Across Services**: Use IDs only, coordinate via Facade
-
-```kotlin
-// Facade: coordinates across concepts using IDs
-class OrderFacade(
-    private val orderService: OrderService,
-    private val couponService: CouponService,
-) {
-    fun createOrderWithCoupon(userId: Long, couponId: Long) {
-        val coupon = couponService.findById(couponId)  // Get by ID
-        val order = orderService.create(userId, coupon.discountAmount)  // Pass value, not object
-    }
-}
-```
 
 ## Service vs Facade
 

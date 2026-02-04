@@ -92,7 +92,7 @@
 | 1.17 Structural Duplication | 공통 패턴 추상화 | 각 서비스에 유사 패턴 반복 | ❌ 구조적 중복 |
 | 1.18 Entity Pattern | BaseEntity 확장, factory method | 개인 스타일로 구현 | ❌ 패턴 불일치 |
 | 1.19 Service Pattern | Repository만 의존, @Transactional 위치 | 다른 Service 의존, 메서드별 @Transactional | ❌ 서비스 패턴 불일치 |
-| 1.20 Repository Pattern | Port/Adapter 분리, QueryDSL | 단일 JpaRepository 인터페이스 | ❌ 레포지토리 패턴 불일치 |
+| 1.20 Repository Pattern | Repository Abstraction, QueryDSL | 단일 JpaRepository 인터페이스 | ❌ 레포지토리 패턴 불일치 |
 
 **공통 rationalization 패턴:**
 - "나중에 정리하면 됨"

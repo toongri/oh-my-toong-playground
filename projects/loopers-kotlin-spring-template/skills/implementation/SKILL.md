@@ -147,7 +147,7 @@ Seven Rules:
 | `@Component` on Service | `@JsonProperty`, `@JsonIgnore` |
 | | Spring Data imports |
 
-**Port/Adapter**: Interface in domain, implementation in infrastructure.
+**Repository Abstraction**: Interface in domain, implementation in infrastructure.
 
 ### 10. Null Safety
 
@@ -204,7 +204,7 @@ data class ProductPageQuery(val page: Int, val size: Int) {
 | "Event without V1 suffix" | Version suffix required |
 | "Just @EventListener" | Use @TransactionalEventListener with phase |
 | "Async listener without try-catch" | Async failures must be caught and logged |
-| "Inject JpaRepository directly" | Use Port/Adapter pattern |
+| "Inject JpaRepository directly" | Define interface in domain |
 | "@JsonProperty in domain" | JSON is infrastructure concern |
 | "Nullable for required fields" | Non-nullable by default |
 | "!! operator" | Use ?: throw CoreException |

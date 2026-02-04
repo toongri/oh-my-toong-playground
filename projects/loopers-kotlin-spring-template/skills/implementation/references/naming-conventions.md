@@ -13,6 +13,8 @@ Standard suffixes and full names speed up codebase navigation and clarify team c
 | ApiSpec | `{Domain}V{n}ApiSpec` | `ProductV1ApiSpec` |
 | Facade | `{Domain}Facade` | `ProductFacade` |
 | Service | `{Domain}Service` | `ProductService` |
+| Repository (Domain) | `{Domain}Repository` | `ProductRepository` |
+| Repository (Infra) | `{Domain}{Tech}Repository` | `ProductRdbRepository`, `ProductRedisRepository` |
 | Event | `{Action}EventV{n}` | `OrderCreatedEventV1` |
 | PageQuery | `{Domain}PageQuery` | `ProductPageQuery` |
 | Request | `{Domain}V{n}Request.{Action}` | `ProductV1Request.Search` |

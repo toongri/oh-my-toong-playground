@@ -805,7 +805,7 @@ class ReviewService(
 
 **Expected Violations Without Skill**:
 - Using JpaRepository directly in Domain
-- Not applying Port/Adapter separation
+- Not applying Repository Abstraction
 - Not using QueryDSL
 - Wrong transaction annotation placement
 
