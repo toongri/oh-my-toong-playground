@@ -224,9 +224,9 @@ inner class Deduct {
 ### Validation Exception
 
 ```kotlin
-@DisplayName("잔액보다 많은 금액 차감 시도 시 예외가 발생한다")
+@DisplayName("잔액보다 많은 금액 차감 시도 시 BAD_REQUEST CoreException 발생")
 @Test
-fun `throws exception when deduct amount exceeds balance`() {
+fun `throws BAD_REQUEST CoreException when deduct amount exceeds balance`() {
     // given
     val initialBalance = Money.krw(5000)
     val pointAccount = createPointAccount(balance = initialBalance)
@@ -261,10 +261,10 @@ fun `increase stock when valid amount is provided`(amount: Int) {
     assertThat(stock.quantity).isEqualTo(initialQuantity + amount)
 }
 
-@DisplayName("0 이하로 재고를 증가시키면 예외가 발생한다.")
+@DisplayName("0 이하로 재고를 증가시키면 BAD_REQUEST CoreException 발생")
 @ParameterizedTest
 @ValueSource(ints = [0, -1, -5])
-fun `throws exception when increase amount is zero or below`(amount: Int) {
+fun `throws BAD_REQUEST CoreException when increase amount is zero or below`(amount: Int) {
     // given
     val stock = createStock()
 

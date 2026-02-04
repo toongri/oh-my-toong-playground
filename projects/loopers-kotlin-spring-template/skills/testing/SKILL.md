@@ -167,6 +167,33 @@ inner class Use {
 - `@DisplayName`: Korean description
 - Method name: English with backticks, `[result] when [condition]`
 
+#### Exception Naming Patterns
+
+Two patterns for exception test names:
+
+| Pattern | Korean (DisplayName) | English (Method name) |
+|---------|---------------------|----------------------|
+| Specific Error Type | `[condition]하면 [SPECIFIC_ERROR] 예외가 발생한다` | `throws [SPECIFIC_ERROR] when [condition]` |
+| CoreException | `[condition]하면 [ErrorType] CoreException 발생` | `throws [ErrorType] CoreException when [condition]` |
+
+**Examples:**
+
+```kotlin
+// Specific Error Type - when the exception class name is descriptive
+@Test
+@DisplayName("잔액이 부족하면 InsufficientBalanceException 예외가 발생한다")
+fun `throws InsufficientBalanceException when balance is insufficient`()
+
+// CoreException - when using CoreException with ErrorType enum
+@Test
+@DisplayName("존재하지 않는 사용자면 NotFound CoreException 발생")
+fun `throws NotFound CoreException when user does not exist`()
+
+@Test
+@DisplayName("권한이 없으면 Forbidden CoreException 발생")
+fun `throws Forbidden CoreException when user has no permission`()
+```
+
 ### Given/When/Then
 
 Every test must have comments specifying concrete values and expected results.
