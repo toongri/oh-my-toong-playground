@@ -185,6 +185,19 @@ data class ProductPageQuery(val page: Int, val size: Int) {
 "사용자를 찾을 수 없습니다. [userId = $userId]"
 ```
 
+### 13. Caching
+
+| Rule | Pattern |
+|------|---------|
+| **Layer** | Application Layer(Facade) ONLY |
+| **Pattern** | Manual Cache-Aside with `CacheTemplate` |
+| **Cache Key** | Sealed class + TTL embedded |
+| **Cache Model** | `CachedXxxV1` versioned DTO (never Entity/Response) |
+| **List Caching** | IDs only + separate Detail cache |
+| **Invalidation** | Domain Event + `@TransactionalEventListener(AFTER_COMMIT)` |
+
+See `references/caching-patterns.md` for detailed patterns, examples, and forbidden patterns.
+
 ## Red Flags (Top 25)
 
 | Thought | Reality |
@@ -214,6 +227,11 @@ data class ProductPageQuery(val page: Int, val size: Int) {
 | "External call inside @Transactional" | Use AFTER_COMMIT event listener |
 | "Entity is just data holder" | Anemic domain model anti-pattern - entities MUST have behavior |
 | "Skip validation in init" | Invalid objects are forbidden |
+| "@Cacheable is simpler" | Use CacheTemplate for control |
+| "Cache in Service/Repository" | Caching belongs in Facade ONLY |
+| "Cache Response directly" | Use CachedXxxV1 dedicated DTO |
+| "String cache key" | Use sealed class with TTL |
+| "@CacheEvict allEntries" | Domain Event + selective evict |
 
 ## References
 
@@ -228,3 +246,4 @@ Load these files ONLY when working on specific areas:
 | `references/entity-patterns.md` | Entity design, encapsulation rules, null safety, domain purity |
 | `references/naming-conventions.md` | Method/variable/message naming, Korean messages |
 | `references/api-patterns.md` | ApiSpec interface, Query/PageQuery patterns |
+| `references/caching-patterns.md` | Cache-Aside in Facade, CacheKey sealed class, CachedXxxV1 DTOs, invalidation |
