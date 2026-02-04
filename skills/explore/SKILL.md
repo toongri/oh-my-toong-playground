@@ -71,51 +71,77 @@ Response has **FAILED** if:
 
 **Priority: Use Serena MCP semantic tools FIRST** before falling back to text-based search.
 
-### Serena MCP Tools (PREFERRED)
+### Serena Tool Constraints
 
-Use these for code exploration - they understand code semantically, not just as text:
+| Tool | Input | Purpose |
+|------|-------|---------|
+| `get_symbols_overview` | **FILE only** | Top-level symbols in a single file |
+| `find_symbol` | File OR Directory | Search by name pattern (can search entire codebase) |
+| `find_referencing_symbols` | **FILE only** (where symbol is defined) | Find all code that references a symbol |
+| `list_dir` | Any path | List directory contents |
+| `find_file` | Directory + pattern | Find files by name pattern |
+| `search_for_pattern` | Optional path | Regex search across codebase |
 
-| Tool | Use Case |
-|------|----------|
-| `get_symbols_overview` | First step for understanding any file's structure |
-| `find_symbol` | Find classes, methods, functions by name pattern |
-| `find_referencing_symbols` | Find all code that references a symbol |
-| `search_for_pattern` | Regex search with code-aware context |
+### Decision Tree: Start From What You Know
 
-**Why Serena first?**
-- Reads only what you need (not entire files)
-- Understands code structure (classes, methods, dependencies)
-- Faster for large codebases
-- Returns precise locations with context
-
-**Exploration Workflow:**
 ```
-1. get_symbols_overview(relative_path="target/dir/")
-   → Understand file's top-level structure
-
-2. find_symbol(name_path="ClassName", depth=1, include_body=False)
-   → List methods in class (without body)
-
-3. find_symbol(name_path="ClassName/methodName", include_body=True)
-   → Read only the method you need
-
-4. find_referencing_symbols(name_path="ClassName/methodName")
-   → Find all code that calls this method
+What do you know?
+├── File path (e.g., "src/auth/AuthService.kt")
+│   └── get_symbols_overview(file) → find_symbol(body=True)
+│   └── ❌ DO NOT list_dir first - you already know the path
+│
+├── Directory only (e.g., "src/auth/")
+│   └── list_dir OR find_file → get_symbols_overview → find_symbol
+│
+├── Symbol name only (e.g., "AuthService")
+│   └── find_symbol(name_path="AuthService") ← no relative_path = searches entire codebase
+│
+└── Nothing (broad search)
+    └── search_for_pattern OR list_dir(recursive=True)
 ```
 
-**Tool Selection:**
-| Situation | Tool |
-|-----------|------|
-| Understand file structure | `get_symbols_overview` |
-| Find specific class/function | `find_symbol` |
-| "Who uses this?" | `find_referencing_symbols` |
-| String/pattern in code | `search_for_pattern` (or grep fallback) |
-| Find by filename | `find_file` or glob |
+### Workflow Examples
 
-**Core Principle: Token Efficiency**
-- ❌ Reading entire files (`include_body=True` everywhere)
-- ✅ overview → list → read only what you need
-- Use `relative_path` to limit search scope → faster results
+**Scenario 1: Known file path**
+```
+get_symbols_overview(relative_path="src/auth/AuthService.kt")
+→ find_symbol(name_path="AuthService", depth=1, include_body=False)
+→ find_symbol(name_path="AuthService/login", include_body=True)
+```
+
+**Scenario 2: Known directory, unknown files**
+```
+list_dir(relative_path="src/auth/", recursive=False)
+→ get_symbols_overview(relative_path="src/auth/AuthService.kt")
+→ find_symbol(...)
+```
+
+**Scenario 3: Known symbol name, unknown location**
+```
+find_symbol(name_path="AuthService", include_body=False, depth=1)
+← searches ENTIRE codebase when relative_path omitted
+→ find_symbol(name_path="AuthService/login", include_body=True, relative_path="<found path>")
+```
+
+**Scenario 4: Find who calls a method**
+```
+find_referencing_symbols(name_path="AuthService/login", relative_path="src/auth/AuthService.kt")
+← relative_path = where symbol IS DEFINED, not search scope
+← automatically searches entire codebase for references
+```
+
+### Anti-Patterns (AVOID)
+
+| ❌ Don't | ✅ Do Instead |
+|----------|---------------|
+| `list_dir` when you know file path | Go directly to `get_symbols_overview` |
+| `get_symbols_overview` on directory | Use `list_dir` first, then overview per file |
+| `find_symbol(include_body=True)` on large class | Get method list first, then specific method |
+| Read entire files | Use symbolic tools to read only what you need |
+
+### Core Principle: Token Efficiency
+
+Read only what you need, when you need it. No unnecessary steps.
 
 ### Fallback Tools
 
