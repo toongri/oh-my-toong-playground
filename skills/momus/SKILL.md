@@ -52,8 +52,8 @@ digraph review_process {
     "1. Read/receive plan content" -> "2. Extract ALL file references";
     "2. Extract ALL file references" -> "3. Verify references (if codebase accessible)";
     "3. Verify references (if codebase accessible)" -> "4. Apply 4 Criteria";
-    "4. Apply 4 Criteria" -> "5. Simulate 2-3 tasks mentally";
-    "5. Simulate 2-3 tasks mentally" -> "All criteria pass?" [shape=diamond];
+    "4. Apply 4 Criteria" -> "5. Simulate each task";
+    "5. Simulate each task" -> "All criteria pass?" [shape=diamond];
     "All criteria pass?" -> "OKAY" [label="yes"];
     "All criteria pass?" -> "REJECT with specifics" [label="no"];
 }
@@ -61,7 +61,7 @@ digraph review_process {
 
 ### Simulation Protocol
 
-For 2-3 tasks from the plan, simulate each:
+For each task in the plan:
 1. Identify the action sequence (which files, which commands)
 2. Find ALL ambiguities (missing info, unclear references)
 3. Check if plan provides resolution for each
