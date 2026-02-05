@@ -149,6 +149,14 @@ scripts/council.sh clean "$JOB_DIR"
 
 > **Important:** Check `overallState === "done"` in the wait JSON before fetching results.
 
+### Synthesis Protocol
+
+When synthesizing raw outputs:
+1. Extract each reviewer's core position and key reasoning
+2. Overlapping positions → Consensus
+3. Conflicting positions → Divergence (report ALL, not majority)
+4. Unique concerns from any reviewer → include in advisory
+
 <Output_Format>
 
 ## Advisory Output Format

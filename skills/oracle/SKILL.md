@@ -88,6 +88,14 @@ Before ANY analysis, gather context via parallel tool calls:
 | Performance | Bottlenecks, complexity, resource usage |
 | Security | Input validation, auth, data exposure |
 
+### Root Cause Tracing (Debugging Analysis)
+
+Before stating diagnosis:
+1. State the observable symptom
+2. List 2-3 immediate causes that could produce it
+3. For the most likely cause, trace one level deeper
+4. Cite evidence (file:line)
+
 ### Phase 3: Recommendation Synthesis
 
 Structure your output:

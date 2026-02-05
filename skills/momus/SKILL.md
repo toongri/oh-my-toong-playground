@@ -59,6 +59,15 @@ digraph review_process {
 }
 ```
 
+### Simulation Protocol
+
+For 2-3 tasks from the plan, simulate each:
+1. Identify the action sequence (which files, which commands)
+2. Find ALL ambiguities (missing info, unclear references)
+3. Check if plan provides resolution for each
+
+Unresolved ambiguities → list as blocking gaps in verdict.
+
 ### Reference Verification Strategy
 
 **When you CAN access the codebase:**
