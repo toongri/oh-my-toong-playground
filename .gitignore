@@ -4,6 +4,7 @@
 # ai
 .serena/
 .claude/
+.superset/
 
 *.log
 .DS_Store
