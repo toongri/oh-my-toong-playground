@@ -94,7 +94,7 @@ What do you know?
 │   └── list_dir OR find_file → get_symbols_overview → find_symbol
 │
 ├── Symbol name only (e.g., "AuthService")
-│   └── find_symbol(name_path="AuthService") ← no relative_path = searches entire codebase
+│   └── find_symbol(name_path_pattern="AuthService") ← no relative_path = searches entire codebase
 │
 └── Nothing (broad search)
     └── search_for_pattern OR list_dir(recursive=True)
@@ -105,8 +105,8 @@ What do you know?
 **Scenario 1: Known file path**
 ```
 get_symbols_overview(relative_path="src/auth/AuthService.kt")
-→ find_symbol(name_path="AuthService", depth=1, include_body=False)
-→ find_symbol(name_path="AuthService/login", include_body=True)
+→ find_symbol(name_path_pattern="AuthService", depth=1, include_body=False)
+→ find_symbol(name_path_pattern="AuthService/login", include_body=True)
 ```
 
 **Scenario 2: Known directory, unknown files**
@@ -118,9 +118,9 @@ list_dir(relative_path="src/auth/", recursive=False)
 
 **Scenario 3: Known symbol name, unknown location**
 ```
-find_symbol(name_path="AuthService", include_body=False, depth=1)
+find_symbol(name_path_pattern="AuthService", include_body=False, depth=1)
 ← searches ENTIRE codebase when relative_path omitted
-→ find_symbol(name_path="AuthService/login", include_body=True, relative_path="<found path>")
+→ find_symbol(name_path_pattern="AuthService/login", include_body=True, relative_path="<found path>")
 ```
 
 **Scenario 4: Find who calls a method**
@@ -128,6 +128,13 @@ find_symbol(name_path="AuthService", include_body=False, depth=1)
 find_referencing_symbols(name_path="AuthService/login", relative_path="src/auth/AuthService.kt")
 ← relative_path = where symbol IS DEFINED, not search scope
 ← automatically searches entire codebase for references
+```
+
+**Scenario 5: Unknown symbol, searching by code pattern**
+```
+search_for_pattern(substring_pattern="@Scheduled", restrict_search_to_code_files=True)
+→ get_symbols_overview(relative_path="<matched file>")
+→ find_symbol(name_path_pattern="<discovered class>", depth=1)
 ```
 
 ### Anti-Patterns (AVOID)
