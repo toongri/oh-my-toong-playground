@@ -1,0 +1,63 @@
+name: toongri.github.io
+path: /Users/toongri/IdeaProjects/toongri.github.io
+
+agents:
+  items:
+    - explore
+    - librarian
+    - metis
+    - momus
+    - oracle
+    - argus
+    - spec-reviewer
+    - sisyphus-junior
+
+commands:
+  items:
+    - cancel-ralph
+    - hud
+    - ralph
+
+scripts:
+  items:
+    - hud.js
+
+hooks:
+  items:
+    - component: keyword-detector.sh
+      event: UserPromptSubmit
+      timeout: 10
+    - component: persistent-mode.js
+      event: Stop
+      timeout: 15
+      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/persistent-mode.js"
+    - component: post-tool-verifier.sh
+      event: PostToolUse
+      timeout: 10
+    - component: pre-tool-enforcer.sh
+      event: PreToolUse
+      timeout: 5
+    - component: session-start.sh
+      event: SessionStart
+      timeout: 10
+    - component: stop-notify.sh
+      event: Stop
+      timeout: 5
+
+skills:
+  items:
+    - component: spec
+      platforms: [claude]
+    - component: prometheus
+      platforms: [claude]
+    - component: sisyphus
+      platforms: [claude]
+    - agent-council
+    - clarify
+    - explore
+    - git-committer
+    - librarian
+    - metis
+    - momus
+    - oracle
+    - argus
