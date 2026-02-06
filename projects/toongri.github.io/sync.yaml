@@ -40,9 +40,6 @@ hooks:
     - component: session-start.sh
       event: SessionStart
       timeout: 10
-    - component: stop-notify.sh
-      event: Stop
-      timeout: 5
 
 skills:
   items:

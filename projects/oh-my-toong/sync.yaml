@@ -47,9 +47,6 @@ hooks:
     - component: oh-my-toong:sync-component-validator.sh
       event: Stop
       timeout: 30
-    - component: stop-notify.sh
-      event: Stop
-      timeout: 5
 
 skills:
   items:
