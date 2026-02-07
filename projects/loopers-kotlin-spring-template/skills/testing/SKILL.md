@@ -71,6 +71,7 @@ These thoughts mean you're rationalizing. STOP and reconsider:
 | "Too many combinations, test the main ones" | Document which combinations are skipped and why. Silent omission is a defect. |
 | "BVA only applies to numeric types"         | Boundaries exist in dates, string lengths, collection sizes. Apply BVA to all. |
 | "Commenting test values is over-documenting" | If you can't name the class a value represents, you don't know why you chose it. |
+| "@CsvSource rows exceed 8 while verifying conditions from 2+ independent responsibilities in a single test" | Eager Test anti-pattern. Split by responsibility so each test fails for exactly one reason. |
 
 **All of these mean: Follow the rules anyway.**
 
@@ -98,6 +99,7 @@ Common excuses and why they're wrong:
 | "Too many combinations, not practical"       | Undocumented reduction = hidden risk | Apply Decision Table, document reduction rationale |
 | "BVA is only for integers"                   | Dates, string lengths, prices all have boundaries | Apply BVA to any ordered/comparable type |
 | "Test value comments clutter the code"       | Unnamed values = arbitrary values = untested | Comment which equivalence class each value covers |
+| "Verifying all combinations in one place is faster" | Eager Test anti-pattern. Separating by responsibility ensures each test fails for exactly one reason | Split @CsvSource by responsibility, one test per concern |
 
 ---
 

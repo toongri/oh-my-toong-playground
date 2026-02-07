@@ -507,14 +507,52 @@ fun `process order with all condition combinations`(
 
 **Combinatorial explosion guide:**
 
-| Conditions | Combinations | Strategy |
-|-----------|-------------|----------|
-| 2 × 2     | 4           | Enumerate all |
-| 2 × 2 × 2 | 8          | Enumerate all |
-| 3 × 3 × 2 | 18         | Reduce: identify interactions |
-| 4+ dims   | 50+         | Pairwise or risk-based selection |
+**Step 1: Responsibility Separation (before counting combinations)**
 
-**Rule**: If combinations > ~20, document reduction rationale. Never silently skip combinations.
+If combinations exceed 8, **strongly suspect** the test is trying to verify too many responsibilities at once.
+
+Verification questions:
+- Do these conditions truly belong to a single responsibility?
+- Are there independently verifiable conditions mixed together?
+
+If independent responsibilities are mixed, separate each into **individual tests with clear business meaning**.
+Do NOT lump them into a catch-all "complex cases test".
+
+```kotlin
+// Bad: multiple responsibilities bundled into one ParameterizedTest
+@DisplayName("복잡한 할인 조합 케이스")
+@ParameterizedTest
+@CsvSource("VIP, CARD, true, 8000", "STAFF, POINT, false, 3500", ...)
+fun `complex discount combination cases`(...)
+
+// Good: each responsibility as a test with clear business meaning
+@Nested
+@DisplayName("할인 정책 적용")
+inner class DiscountPolicyTest {
+    @Test fun `VIP 회원은 20% 할인을 받는다`() { ... }
+    @Test fun `직원은 50% 할인을 받는다`() { ... }
+}
+```
+
+**Step 2: Combinations within a Single Responsibility**
+
+After separation, enumerate remaining combinations within a single responsibility using ParameterizedTest.
+Use @CsvSource only when verifying the same logic with different data inputs.
+
+**Step 3: Cross-Responsibility Interaction**
+
+If the output of one responsibility becomes input to another, write **separate tests with clear interaction semantics**.
+
+```kotlin
+@Nested
+@DisplayName("할인과 결제수단 상호작용")
+inner class DiscountPaymentInteractionTest {
+    @Test fun `VIP 할인과 포인트 결제가 동시 적용되면 할인이 먼저 계산된다`() { ... }
+    @Test fun `직원 할인 적용 시 최소 결제금액 제약이 유지된다`() { ... }
+}
+```
+
+**Rule**: Never silently skip combinations. Always document reduction rationale.
 
 ---
 
