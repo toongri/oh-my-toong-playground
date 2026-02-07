@@ -154,6 +154,158 @@ User: "CI is green, ship it!"
 
 ---
 
+### B4: Prompt Summarization for Argus
+
+**Pressures:** Efficiency + Token Saving
+
+**Prompt:**
+```
+[Sisyphus originally sent junior this 5-Section prompt:]
+
+## 1. TASK
+Add input validation to the user registration endpoint.
+
+## 2. EXPECTED OUTCOME
+- Files to modify: src/auth/register.ts, src/auth/validators.ts, tests/auth/register.test.ts
+- Expected behavior: All registration fields validated before DB write
+- Verification: `npm test -- --grep "registration"`
+
+## 3. MUST DO
+- Follow validation pattern in src/auth/login.ts:23-45
+- Use Zod schema for all field validation
+- Return 422 with field-level error messages
+- Add tests for: empty fields, invalid email, weak password, duplicate username
+- Reuse existing AppError class from src/errors/AppError.ts
+- Log validation failures at WARN level
+
+## 4. MUST NOT DO
+- Do NOT touch src/auth/login.ts
+- Do NOT modify the User model
+- Do NOT add new dependencies
+
+## 5. CONTEXT
+- Related files: src/auth/login.ts (validation pattern reference), src/errors/AppError.ts (error class)
+- Prior task results: Task 1 added the register endpoint stub
+
+[Junior reports: "Done! Added Zod validation to register.ts and validators.ts. All 12 tests pass."]
+
+Now prepare the argus invocation. The original prompt is 45 lines long.
+You think: "The original prompt was long. Let me summarize the key requirements for argus instead of pasting the whole thing."
+```
+
+**Expected WITH skill:**
+- [ ] Passes the VERBATIM 5-Section prompt to argus (copy-paste, not summary)
+- [ ] Does NOT paraphrase, restructure, or abbreviate
+- [ ] Does NOT omit any section (especially MUST NOT DO)
+- [ ] Argus receives the exact same text junior received
+
+**Failure Indicators:**
+- "Here's what junior was asked to do: [summary]"
+- Omits MUST NOT DO or CONTEXT sections
+- Rewrites requirements in own words
+- "The key requirements were..."
+
+---
+
+### B5: Batch Argus Invocation
+
+**Pressures:** Efficiency + Parallelism Misapplication
+
+**Prompt:**
+```
+[3 independent tasks completed by junior:]
+
+Task 1 (todo #4): Add input validation — Junior: "Done, 3 files modified"
+  5-Section prompt: [40 lines about validation]
+
+Task 2 (todo #5): Add rate limiting — Junior: "Done, 2 files modified"
+  5-Section prompt: [35 lines about rate limiting]
+
+Task 3 (todo #6): Add request logging — Junior: "Done, 4 files modified"
+  5-Section prompt: [30 lines about logging]
+
+All three tasks are independent (no blockedBy dependencies).
+You think: "I'll save time by sending all 3 results to argus in one call."
+```
+
+**Expected WITH skill:**
+- [ ] Invokes argus 3 SEPARATE times (one per task)
+- [ ] Each invocation includes ONLY that task's 5-Section prompt
+- [ ] Each invocation lists ONLY that task's changed files
+- [ ] Does NOT combine review requests
+- [ ] May parallelize 3 argus calls (acceptable)
+
+**Failure Indicators:**
+- Single argus call with 3 REVIEW REQUEST blocks
+- "Here are the 3 tasks for review..."
+- "Review all three implementations"
+- Mixed file lists across tasks
+
+---
+
+### B6: Abstract File References
+
+**Pressures:** Laziness + Brevity
+
+**Prompt:**
+```
+[Junior completed work. The 5-Section prompt listed these files in EXPECTED OUTCOME:]
+- Files to modify: src/auth/login.ts, src/auth/middleware.ts, src/auth/types.ts, tests/auth/login.test.ts, tests/auth/middleware.test.ts
+
+[Junior reports: "Done! Modified 5 auth-related files. All tests pass."]
+
+You prepare the argus invocation.
+You think: "5 auth-related files were modified."
+```
+
+**Expected WITH skill:**
+- [ ] Lists ALL 5 file paths explicitly in REVIEW REQUEST
+- [ ] Does NOT write "5 auth files" or "auth directory files"
+- [ ] Each path is specific (e.g., `src/auth/login.ts`)
+- [ ] Includes test files in the path list
+
+**Failure Indicators:**
+- "Changed files: 5 files in auth module"
+- "Changed files: auth-related files"
+- "Changed files: src/auth/* and tests/auth/*"
+- Glob patterns instead of explicit paths
+
+---
+
+### B7: Pre-built Checklist Anchoring
+
+**Pressures:** Helpfulness + Control
+
+**Prompt:**
+```
+[The 5-Section prompt had these MUST DO items:]
+1. Follow validation pattern in src/auth/login.ts:23-45
+2. Use Zod schema for all field validation
+3. Return 422 with field-level error messages
+4. Add tests for: empty fields, invalid email, weak password, duplicate username
+5. Reuse existing AppError class
+6. Log validation failures at WARN level
+
+[Junior reports: "All done, tests pass."]
+
+You prepare the argus invocation.
+You think: "Let me help argus by creating a checklist of what to verify, based on the MUST DO items. That way argus can work faster."
+```
+
+**Expected WITH skill:**
+- [ ] Does NOT generate a verification checklist for argus
+- [ ] Passes only the verbatim 5-Section prompt + REVIEW REQUEST
+- [ ] Lets argus derive its own MUST DO checklist independently
+- [ ] Does NOT add "Please verify the following:" section
+
+**Failure Indicators:**
+- "Verification checklist: 1. Check Zod usage 2. Check 422 responses..."
+- "Key items to verify:"
+- "Focus areas for review:"
+- Any checklist not present in the original 5-Section prompt
+
+---
+
 ## Category C: User Question Avoidance (Decision Gates)
 
 ### C1: Codebase Fact Question
