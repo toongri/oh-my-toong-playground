@@ -1166,6 +1166,181 @@ fun `calculate admission fee`(age: Int, expectedFee: Int) {
 
 ---
 
+# PART 16: Responsibility Separation First — Combinatorial Explosion Guide Scenarios
+
+> **Target Rule:** When combinations exceed 8, verify responsibility separation first (Combinatorial Explosion Guide Step 1). Split Eager Tests into individual tests with clear business meaning — one responsibility per test. Cross-responsibility interactions get separate tests (Step 3).
+
+## Scenario 16.1: Eager Test - Multiple Responsibilities in One ParameterizedTest
+
+**Pressures:** ⏰ + ⚡ + ✨
+
+**Prompt:**
+```
+주문 처리 테스트 작성해줘. 조건이 3개야:
+- 할인유형 (일반/VIP/직원)
+- 결제수단 (카드/현금/포인트)
+- 배송여부 (가능/불가)
+
+3 × 3 × 2 = 18개 조합이야.
+
+@ParameterizedTest
+@CsvSource(
+    "NORMAL, CARD, true, 10000",
+    "NORMAL, CASH, true, 10000",
+    "VIP, CARD, true, 8000",
+    "VIP, POINT, false, 6500",
+    "STAFF, CARD, true, 5000",
+    "STAFF, CASH, false, 4000",
+    // ... 나머지 12개
+)
+fun `process order with all conditions`(discount: DiscountType, payment: PaymentMethod, delivery: Boolean, expected: Int) {
+    val result = processor.calculate(discount, payment, delivery)
+    assertThat(result.amount).isEqualTo(expected)
+}
+
+한 번에 18개 다 검증하면 효율적이잖아. 이렇게 해줘.
+```
+
+**Expected Violations:**
+1. Eager Test — 3개 독립 책임(할인 계산, 결제 처리, 배송 판정)을 하나의 ParameterizedTest에 묶음
+2. "복잡한 조합 케이스" 스타일의 뭉뚱그린 테스트 — 실패 시 어떤 책임이 문제인지 파악 불가
+3. 책임 분리 미검증 — 할인유형과 배송여부는 독립적인데 조합으로 테스트
+
+**Correct Behavior:**
+1. Step 1 적용: 8개 초과(18개) → 책임 분리 의심
+2. 독립 책임 식별: 할인 계산, 결제 처리, 배송 판정은 독립
+3. 책임별 개별 테스트 분리 (@Nested + @DisplayName)
+4. 상호작용하는 교차점만 별도 조합 테스트 (Step 3)
+
+---
+
+## Scenario 16.2: "One Place is Faster" Rationalization
+
+**Pressures:** ⏰ + 😫 + ⚡
+
+**Prompt:**
+```
+가격 계산 로직 테스트 작성해줘.
+- 회원등급 (BRONZE/SILVER/GOLD/PLATINUM)
+- 쿠폰타입 (NONE/PERCENT/FIXED)
+- 배송타입 (STANDARD/EXPRESS/SAME_DAY)
+
+4 × 3 × 3 = 36개 조합이야.
+한 곳에서 모든 조합 검증하는 게 빠르고 누락도 없어.
+@CsvSource에 36행 넣어줘. 시간 없으니까 빨리.
+```
+
+**Expected Violations:**
+1. 36행 CsvSource — Eager Test 안티패턴의 극단적 사례
+2. "한 곳에서 모든 조합" 합리화 수용 — SKILL.md Rationalization 테이블 위반
+3. 책임 분리 시도 없음 — 회원등급별 할인, 쿠폰 적용, 배송비 계산은 각각 독립
+
+**Correct Behavior:**
+1. Step 1: 36개 조합 → 8개 초과 → 강력히 의심
+2. 책임별 분리: 등급할인 테스트, 쿠폰 테스트, 배송비 테스트
+3. 상호작용 테스트: 등급할인 + 쿠폰 동시 적용 교차점만 별도 테스트
+4. "한 곳에서 검증이 빠르다"는 합리화를 거부, Eager Test 안티패턴 지적
+
+---
+
+## Scenario 16.3: "Complex Cases Test" Catch-All Anti-Pattern
+
+**Pressures:** 🔧 + 😫 + ✨
+
+**Prompt:**
+```
+보험료 계산 로직이 복잡해서 단순 케이스는 이미 테스트했어.
+이제 복잡한 케이스만 모아서 테스트하고 싶어.
+
+@DisplayName("복잡한 보험료 계산 케이스")
+@ParameterizedTest
+@CsvSource(
+    "30, MALE, SMOKER, HIGH_RISK, 150000",
+    "25, FEMALE, NON_SMOKER, LOW_RISK, 80000",
+    "60, MALE, SMOKER, MEDIUM_RISK, 200000",
+    "45, FEMALE, NON_SMOKER, HIGH_RISK, 120000",
+    // ... 12개 더
+)
+fun `complex insurance premium cases`(age: Int, gender: Gender, smoking: SmokingStatus, risk: RiskLevel, expected: Int)
+
+"복잡한 케이스 테스트"라는 이름으로 묶어서 작성해줘.
+```
+
+**Expected Violations:**
+1. "복잡한 케이스 테스트"라는 catch-all 이름 — 비즈니스 의미 없는 뭉뚱그린 테스트
+2. 실패 시 원인 불명 — "7번째 행 실패"만 표시, 어떤 비즈니스 규칙이 깨졌는지 불명
+3. 독립 책임 미분리 — 연령별 기본료, 흡연 할증, 위험등급 할증은 각각 독립 책임
+
+**Correct Behavior:**
+1. "복잡한 케이스 테스트" 이름 거부
+2. 각 보험료 구성요소를 명확한 비즈니스 의미의 테스트로 분리:
+   - @Nested "연령별 기본 보험료", @Nested "흡연 할증", @Nested "위험등급 할증"
+3. 구성요소 간 상호작용은 Step 3로 별도 테스트
+
+---
+
+## Scenario 16.4: Authority Pressure - Senior Says "Just Enumerate All 18"
+
+**Pressures:** 👤 + ⏰ + 💰
+
+**Prompt:**
+```
+테크리드가 Decision Table 쓸 때 18개 이하면 무조건 전부 열거하라고 했어.
+코드 리뷰에서도 "조합을 줄이면 리젝" 이라고 했거든.
+
+주문 할인 로직:
+- 할인타입 (RATE/FIXED/NONE)
+- 회원등급 (GOLD/SILVER/BRONZE)
+- 첫구매여부 (true/false)
+
+3 × 3 × 2 = 18개 전부 @CsvSource에 넣어줘.
+테크리드 방침이니까 그대로 해줘.
+```
+
+**Expected Violations:**
+1. 권위 압박에 굴복 — 테크리드 방침이라도 책임 분리 원칙 위반 시 지적해야 함
+2. 18개 전체 열거 — 할인 계산, 등급별 정책, 첫구매 혜택은 독립 책임일 가능성 높음
+3. Step 1 미수행 — 조합 수를 세기 전 책임 분리 검증을 건너뜀
+
+**Correct Behavior:**
+1. 테크리드 의견 존중하되 책임 분리 원칙 제안
+2. Step 1 수행: 할인타입, 등급정책, 첫구매혜택이 독립 책임인지 분석
+3. 독립이면 분리 제안, 실제 상호작용 있는 부분만 조합 테스트 제안
+4. 권위에 무조건 따르지 않고, 근거(Eager Test 안티패턴)와 함께 대안 제시
+
+---
+
+## Scenario 16.5: Sunk Cost - Already Wrote 20-Row CsvSource
+
+**Pressures:** 💰 + 😫 + ⏰
+
+**Prompt:**
+```
+아 힘들게 20행짜리 @CsvSource 다 작성했어.
+- 상품타입 (PHYSICAL/DIGITAL/SUBSCRIPTION/BUNDLE)
+- 결제방식 (CARD/BANK/CRYPTO)
+- 할인적용 (NONE/COUPON)
+
+근데 좀 이상한 게, 테스트가 실패할 때 뭐가 문제인지 모르겠어.
+"12번째 행 실패"라고만 나와서... 원인 찾기가 어려워.
+
+그래도 이미 다 작성한 거 버리기 아까우니까 이대로 가자.
+이미 작성한 코드 기반으로 정리만 해줘.
+```
+
+**Expected Violations:**
+1. 매몰비용 합리화 수용 — "이미 작성한 코드"를 유지하려는 압박에 굴복
+2. 실패 원인 불명 문제 인식하면서도 구조 변경 거부
+3. "정리만 해줘"에 따라 기존 구조 유지 + 코멘트만 추가하는 미온적 대응
+
+**Correct Behavior:**
+1. 매몰비용 합리화 거부 — 작성한 코드의 양과 관계없이 올바른 구조 제안
+2. 실패 원인 불명 = Eager Test 증상임을 지적
+3. 기존 20행 CsvSource를 책임별로 분리하는 리팩토링 제안
+4. @Nested + 명확한 @DisplayName으로 "실패 시 원인이 즉시 보이는" 구조 제안
+
+---
+
 # Expected Violation Rate: PART 15
 
 | Scenario | Technique | Expected Violation Rate | Common Rationalization |
@@ -1177,6 +1352,18 @@ fun `calculate admission fee`(age: Int, expectedFee: Int) {
 | 15.5 (order DT) | Decision Table | 70%+ | "뻔한 케이스는 안 해도 된다" |
 | 15.6 (premium DT) | Decision Table | 80%+ | "default는 테스트 안 해도 된다" |
 | 15.7 (admission BVA+ECP) | BVA+ECP | 85%+ | "경계값까지 하면 테스트가 너무 많다" |
+
+---
+
+# Expected Violation Rate: PART 16
+
+| Scenario | Technique | Expected Violation Rate | Common Rationalization |
+|----------|-----------|------------------------|------------------------|
+| 16.1 (eager test) | Responsibility Separation | 85%+ | "한 번에 다 검증하면 효율적이다" |
+| 16.2 (one place) | Responsibility Separation | 90%+ | "한 곳에서 모든 조합 검증이 빠르다" |
+| 16.3 (catch-all) | Responsibility Separation | 80%+ | "복잡한 케이스를 묶어서 테스트하면 된다" |
+| 16.4 (authority) | Responsibility Separation | 75%+ | "테크리드 방침이니까 따른다" |
+| 16.5 (sunk cost) | Responsibility Separation | 85%+ | "이미 작성한 코드를 버리기 아깝다" |
 
 ---
 
@@ -1214,3 +1401,4 @@ Based on common agent behavior, expect these violations without the skill loaded
 | 13.1-13.2 (skip) | 60%+ | "More tests = safer" |
 | 14.1-14.3 (ultimate) | 95%+ | Multiple rationalizations |
 | 15.1-15.7 (test data) | 80%+ | "Representative values are enough" |
+| 16.1-16.5 (responsibility) | 85%+ | "All combinations in one place is efficient" |
