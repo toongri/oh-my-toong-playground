@@ -222,6 +222,21 @@ sequenceDiagram
     deactivate S1
 ```
 
+#### Internal Logic Flowchart (if complex branching exists)
+
+> Include only when a single component has 3+ branch points. See `references/diagram-selection.md` for selection criteria.
+
+```mermaid
+flowchart TD
+    A([Entry Point]) --> B{Condition?}
+    B -->|Case 1| C[Process A]
+    B -->|Case 2| D[Process B]
+    B -->|Case 3| E[Process C]
+    C --> F([Result])
+    D --> F
+    E --> F
+```
+
 ### 3.3 Inter-system Integration
 
 | Integration Point | Communication Pattern | Sync/Async | Failure Handling | Rationale |
@@ -458,6 +473,21 @@ sequenceDiagram
     deactivate S2
     S1-->>C: Final Response
     deactivate S1
+```
+
+### 2.X [Component Name] Internal Logic (if complex branching exists)
+
+> Include only when a single component has 3+ branch points. See `references/diagram-selection.md` for selection criteria.
+
+```mermaid
+flowchart TD
+    A([Entry Point]) --> B{Condition?}
+    B -->|Case 1| C[Process A]
+    B -->|Case 2| D[Process B]
+    B -->|Case 3| E[Process C]
+    C --> F([Result])
+    D --> F
+    E --> F
 ```
 
 ## 3. Stateful Component Policies
