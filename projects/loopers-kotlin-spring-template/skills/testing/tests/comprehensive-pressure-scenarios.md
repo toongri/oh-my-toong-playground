@@ -896,6 +896,290 @@ verify(repository).save(any())가 결국 "저장됐다"를 확인하는 거 아�
 
 ---
 
+# PART 15: Test Data Design Techniques (BVA / ECP / Decision Table)
+
+> **Target Rule:** Test values must be systematically selected using Boundary Value Analysis, Equivalence Class Partitioning, and Decision Table techniques. Every @ValueSource/@CsvSource value must represent a named equivalence class, and every numeric constraint must have boundary-1, boundary, boundary+1 coverage.
+
+## Scenario 15.1: BVA - Stock Decrease with Arbitrary Values
+
+**Pressures:** ⏰ + ✨ + 👥
+
+**Prompt:**
+```
+Stock.decrease() 테스트 작성해줘. 재고 10개에서 차감하는 거야.
+팀에서 이미 이렇게 작성했어:
+
+@DisplayName("재고 차감")
+@Test
+fun `decrease stock`() {
+    val stock = createStock(quantity = 10)
+    stock.decrease(3)
+    assertThat(stock.quantity).isEqualTo(7)
+}
+
+@DisplayName("재고 부족 시 예외")
+@Test
+fun `decrease throws when insufficient`() {
+    val stock = createStock(quantity = 10)
+    assertThatThrownBy { stock.decrease(15) }
+        .isInstanceOf(IllegalArgumentException::class.java)
+}
+
+이 정도면 성공/실패 다 커버했지? 빨리 나머지 케이스 추가해줘.
+시간 없으니까 간단하게.
+```
+
+**Expected Violations:**
+1. Boundary 미포함 — quantity=10에서 decrease(10) (경계값), decrease(9) (경계-1), decrease(11) (경계+1) 테스트 없음
+2. 임의의 값(3, 15) 사용 — 왜 3인지, 왜 15인지 근거 없음
+3. decrease(0) 경계 미테스트
+
+**Correct Behavior:**
+1. 경계값 식별: quantity가 constraint → decrease(quantity-1), decrease(quantity), decrease(quantity+1) 테스트
+2. 0 경계도 포함: decrease(0)의 동작 명시
+3. 모든 테스트 값에 선택 근거 제시
+
+---
+
+## Scenario 15.2: BVA - Multi-Dimension Rate Discount
+
+**Pressures:** ⏰ + 😫 + ⚡
+
+**Prompt:**
+```
+할인율 계산 로직 테스트 작성해줘.
+규칙: 주문금액 50,000원 이상이면 10% 할인, 100,000원 이상이면 20% 할인.
+단, 최대 할인금액은 30,000원.
+
+@ParameterizedTest
+@CsvSource("30000, 0", "60000, 6000", "150000, 30000")
+fun `calculate discount`(amount: Long, expectedDiscount: Long) {
+    val discount = calculator.calculate(amount)
+    assertThat(discount).isEqualTo(expectedDiscount)
+}
+
+이거면 되지? 시간 아깝다. 다 통과하는데 뭘 더 해.
+```
+
+**Expected Violations:**
+1. 경계값 누락 — 49,999 / 50,000 / 50,001 테스트 없음
+2. 두 번째 경계 누락 — 99,999 / 100,000 / 100,001 테스트 없음
+3. maxDiscount 경계 미테스트 — 할인금액이 정확히 30,000이 되는 입력값, 30,001이 되는 입력값 미테스트
+4. 한 차원만 테스트 — amount 경계만 있고 maxDiscount 경계는 무시
+
+**Correct Behavior:**
+1. 두 개의 경계 차원 식별: amount 경계(50,000 / 100,000)와 maxDiscount 경계(30,000)
+2. 각 경계에 boundary-1, boundary, boundary+1 적용
+3. maxDiscount 캡이 걸리는 정확한 입력값 계산하여 테스트
+
+---
+
+## Scenario 15.3: ECP - Coupon Issuance with Partial Invalid Classes
+
+**Pressures:** ⏰ + ✨ + 💰
+
+**Prompt:**
+```
+쿠폰 발급 테스트야. 조건:
+- 쿠폰 상태: ACTIVE만 발급 가능
+- 사용자 등급: GOLD, PLATINUM만 발급 가능 (BASIC, SILVER 불가)
+- 수량: 0보다 커야 함
+
+@DisplayName("쿠폰 발급 성공")
+@Test
+fun `issue coupon successfully`() {
+    val coupon = createCoupon(status = ACTIVE, remainingQuantity = 5)
+    val user = createUser(grade = GOLD)
+    coupon.issue(user)
+    assertThat(coupon.remainingQuantity).isEqualTo(4)
+}
+
+@DisplayName("비활성 쿠폰 발급 실패")
+@Test
+fun `issue fails when coupon is inactive`() {
+    val coupon = createCoupon(status = INACTIVE)
+    val user = createUser(grade = GOLD)
+    assertThatThrownBy { coupon.issue(user) }
+        .isInstanceOf(IllegalStateException::class.java)
+}
+
+이 패턴으로 필요한 거 추가해줘. 깔끔하게 부탁해.
+```
+
+**Expected Violations:**
+1. 유효하지 않은 상태 클래스 누락 — INACTIVE만 테스트, EXPIRED/SUSPENDED 등 다른 무효 상태 클래스 미커버
+2. 사용자 등급 무효 클래스 불완전 — BASIC만 테스트하거나, SILVER 누락
+3. 등가 클래스 명시 없음 — 왜 GOLD를 대표값으로 선택했는지 근거 없음
+4. 수량 경계 미테스트 — remainingQuantity=1 (경계), remainingQuantity=0 (경계+1 → 무효)
+
+**Correct Behavior:**
+1. 각 입력 차원의 등가 클래스 명시적 나열
+2. 유효 클래스: {ACTIVE}, {GOLD, PLATINUM}, {quantity > 0} — 각 클래스에서 대표값 1개
+3. 무효 클래스: {INACTIVE, EXPIRED, SUSPENDED}, {BASIC, SILVER}, {quantity ≤ 0} — 각 무효 클래스에서 대표값 1개
+4. 수량 경계에 BVA 적용
+
+---
+
+## Scenario 15.4: ECP - @ValueSource with Unmotivated Arbitrary Values
+
+**Pressures:** 💰 + 😫 + ⏰
+
+**Prompt:**
+```
+나이 기반 요금 계산 ParameterizedTest 작성해줘.
+규칙: 6세 미만 무료, 6-12세 50% 할인, 13-18세 30% 할인, 19세 이상 정가.
+
+@ParameterizedTest
+@ValueSource(ints = [3, 8, 15, 25])
+fun `calculate fare by age`(age: Int) {
+    val fare = calculator.calculate(age, baseFare = 10000)
+    assertThat(fare).isGreaterThanOrEqualTo(0)
+}
+
+이미 각 구간 하나씩 있으니까 충분하지?
+프로덕션 코드도 다 작성돼있어. 빨리 마무리하자.
+```
+
+**Expected Violations:**
+1. 값 선택 근거 없음 — 왜 3, 8, 15, 25인지 설명 없음
+2. 등가 클래스 명명 없음 — 어떤 클래스를 대표하는지 불분명
+3. assertion이 의미 없음 — `isGreaterThanOrEqualTo(0)`는 아무것도 검증 안 함
+4. 경계값 완전 부재 — 5/6, 12/13, 18/19 경계점 없음
+
+**Correct Behavior:**
+1. 등가 클래스 명시: {0-5: 무료}, {6-12: 50%}, {13-18: 30%}, {19+: 정가}
+2. 각 클래스 대표값 + 클래스 간 경계값 포함한 @CsvSource
+3. 정확한 기대값 assertion: `assertThat(fare).isEqualTo(expectedFare)`
+4. @CsvSource에 각 값이 어떤 클래스/경계를 대표하는지 주석
+
+---
+
+## Scenario 15.5: Decision Table - 3-Condition Combo with Obvious Cases Only
+
+**Pressures:** ⏰ + 😫 + 🔧
+
+**Prompt:**
+```
+주문 처리 로직 테스트해줘. 조건 3개:
+- 결제 완료 여부 (paid: true/false)
+- 재고 확인 여부 (inStock: true/false)
+- 배송 가능 지역 여부 (deliverable: true/false)
+
+→ 3개 모두 true면 주문 확정, 하나라도 false면 주문 거절 + 사유 반환
+
+@ParameterizedTest
+@CsvSource(
+    "true, true, true, CONFIRMED",
+    "false, true, true, REJECTED",
+    "true, false, true, REJECTED",
+    "true, true, false, REJECTED"
+)
+fun `process order`(paid: Boolean, inStock: Boolean, deliverable: Boolean, expected: OrderStatus) {
+    val result = processor.process(paid, inStock, deliverable)
+    assertThat(result.status).isEqualTo(expected)
+}
+
+이미 성공 1 + 실패 3 = 4개 케이스야. 이 정도면 충분하지?
+복잡하게 하면 유지보수만 어려워져.
+```
+
+**Expected Violations:**
+1. 다중 실패 조합 누락 — (false, false, true), (false, true, false), (true, false, false), (false, false, false) 미테스트
+2. 상호작용 효과 미검증 — 2개 이상 false일 때 사유 반환이 어떻게 달라지는지 미테스트
+3. 체계적 열거 없음 — 2³=8 조합 중 4개만 커버, 나머지 4개 무시 근거 없음
+
+**Correct Behavior:**
+1. 조합 체계적 열거: 2×2×2 = 8개 전체 나열
+2. 8개 모두 @CsvSource에 포함
+3. 실패 사유(rejectionReason) 각 조합별로 구체적 검증
+4. 조합 수가 적으므로(8개) 전부 테스트, 축소 불필요
+
+---
+
+## Scenario 15.6: Decision Table - Success-Path Only, Failure Combos Skipped
+
+**Pressures:** ✨ + ⏰ + 👤
+
+**Prompt:**
+```
+프리미엄 회원 혜택 적용 로직이야.
+조건:
+- 회원 등급 (PREMIUM / STANDARD)
+- 구매 이력 (hasHistory: true/false)
+- 이벤트 기간 (eventPeriod: true/false)
+
+혜택: 등급 PREMIUM + 구매이력 있음 → 20% 할인
+       등급 PREMIUM + 이벤트 기간 → 추가 5% 할인
+       그 외 → 기본 혜택
+
+시니어 개발자가 "성공 케이스만 잘 테스트하면 된다. 실패는 default로 빠지니까 걱정 없어" 라고 했어.
+빨리 작성해줘.
+```
+
+**Expected Violations:**
+1. 성공 경로만 테스트 — PREMIUM + hasHistory + eventPeriod 조합만 커버
+2. 실패 조합 스킵 — STANDARD 등급의 모든 조합 미테스트
+3. "default로 빠진다" 합리화 수용 — default 분기에서 잘못된 동작 가능성 무시
+4. 혜택 중첩 조합 미검증 — 20% + 5% 동시 적용 케이스
+
+**Correct Behavior:**
+1. 전체 조합 열거: 2×2×2 = 8개
+2. 성공/실패 모든 경로 테스트
+3. 혜택 중첩 시 정확한 할인율 검증
+4. 시니어 의견이라도 체계적 테스트 원칙 유지
+
+---
+
+## Scenario 15.7: BVA+ECP Combined - Age-Based Pricing with Representatives Only
+
+**Pressures:** 😫 + ⏰ + ✨
+
+**Prompt:**
+```
+놀이공원 입장료 계산이야.
+- 5세 이하: 무료
+- 6~12세: 5,000원
+- 13~18세: 8,000원
+- 19세 이상: 12,000원
+
+@ParameterizedTest
+@CsvSource("3, 0", "9, 5000", "16, 8000", "25, 12000")
+fun `calculate admission fee`(age: Int, expectedFee: Int) {
+    assertThat(calculator.calculate(age)).isEqualTo(expectedFee)
+}
+
+각 구간 대표값 하나씩 있으니까 충분해.
+경계값까지 하면 테스트가 너무 많아져. 실용적으로 가자.
+```
+
+**Expected Violations:**
+1. 대표값만 있고 경계값 없음 — 클래스 간 전환점(5/6, 12/13, 18/19)이 완전히 누락
+2. 경계 = 클래스 엣지라는 인식 부재 — 범위 기반 파티션에서 경계가 가장 버그 발생 확률 높은 지점
+3. "테스트가 너무 많아진다" 합리화 — 경계값 6개 추가는 과도하지 않음
+4. 0세, 음수 나이 같은 하한 경계 미테스트
+
+**Correct Behavior:**
+1. 등가 클래스 대표값 + 클래스 경계값 모두 포함
+2. @CsvSource: 0(하한), 3(무료 대표), 5(경계), 6(경계), 9(어린이 대표), 12(경계), 13(경계), 16(청소년 대표), 18(경계), 19(경계), 25(성인 대표)
+3. 각 값에 주석으로 "어떤 클래스 대표" 또는 "어떤 경계" 표기
+4. 음수 나이 등 비정상 입력도 등가 클래스로 식별
+
+---
+
+# Expected Violation Rate: PART 15
+
+| Scenario | Technique | Expected Violation Rate | Common Rationalization |
+|----------|-----------|------------------------|------------------------|
+| 15.1 (stock BVA) | BVA | 85%+ | "성공/실패 케이스면 충분하다" |
+| 15.2 (rate BVA) | BVA | 80%+ | "대표값 하나면 된다" |
+| 15.3 (coupon ECP) | ECP | 75%+ | "하나의 무효 케이스면 된다" |
+| 15.4 (age ValueSource) | ECP | 90%+ | "각 구간 하나씩이면 충분하다" |
+| 15.5 (order DT) | Decision Table | 70%+ | "뻔한 케이스는 안 해도 된다" |
+| 15.6 (premium DT) | Decision Table | 80%+ | "default는 테스트 안 해도 된다" |
+| 15.7 (admission BVA+ECP) | BVA+ECP | 85%+ | "경계값까지 하면 테스트가 너무 많다" |
+
+---
+
 # Evaluation Criteria
 
 For each scenario, document:
@@ -929,3 +1213,4 @@ Based on common agent behavior, expect these violations without the skill loaded
 | 12.1 (events) | 85%+ | "Infrastructure concern" |
 | 13.1-13.2 (skip) | 60%+ | "More tests = safer" |
 | 14.1-14.3 (ultimate) | 95%+ | Multiple rationalizations |
+| 15.1-15.7 (test data) | 80%+ | "Representative values are enough" |
