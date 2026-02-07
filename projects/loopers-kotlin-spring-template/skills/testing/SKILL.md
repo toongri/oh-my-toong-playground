@@ -66,6 +66,11 @@ These thoughts mean you're rationalizing. STOP and reconsider:
 | "Mock Unit Test is faster than Integration" | Speed is not the goal. Correct test level is.                      |
 | "verify() is just extra insurance"       | Any verify() use is forbidden. No "insurance" exceptions.            |
 | "Following the spirit, not the letter"   | Violating the letter IS violating the spirit. No exceptions.         |
+| "Happy path + one failure is enough"     | Boundaries and class edges are where bugs hide. Systematic coverage required. |
+| "Any value in the valid range works"     | Every test value must represent a named equivalence class. Arbitrary = untested. |
+| "Too many combinations, test the main ones" | Document which combinations are skipped and why. Silent omission is a defect. |
+| "BVA only applies to numeric types"         | Boundaries exist in dates, string lengths, collection sizes. Apply BVA to all. |
+| "Commenting test values is over-documenting" | If you can't name the class a value represents, you don't know why you chose it. |
 
 **All of these mean: Follow the rules anyway.**
 
@@ -88,6 +93,11 @@ Common excuses and why they're wrong:
 | "State verified, verify() is extra safety"   | ANY verify() usage is forbidden. No hybrids. | Remove verify(), state only      |
 | "Service does X, so Unit Test for X"         | If X is domain logic, test Domain model      | Unit Test Domain, Integration Service |
 | "Mock is faster than real DB"                | Speed < correctness. Mocks hide real bugs.   | Use real DB via Integration Test |
+| "One success + one failure covers it"        | Boundaries between success/failure are untested | Apply BVA: boundary-1, boundary, boundary+1 |
+| "ParameterizedTest values don't need explanation" | Every value must represent a named class | Comment which equivalence class each value covers |
+| "Too many combinations, not practical"       | Undocumented reduction = hidden risk | Apply Decision Table, document reduction rationale |
+| "BVA is only for integers"                   | Dates, string lengths, prices all have boundaries | Apply BVA to any ordered/comparable type |
+| "Test value comments clutter the code"       | Unnamed values = arbitrary values = untested | Comment which equivalence class each value covers |
 
 ---
 

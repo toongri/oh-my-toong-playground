@@ -180,6 +180,269 @@ Same scenarios tested with agents reading the skill first.
 
 ---
 
+## PART 15: Test Data Design Techniques
+
+### RED Phase: Baseline Tests (With Current Skill, Before Data Design Changes)
+
+Tested with current skill loaded. Agents produce structurally correct tests (BDD, factory, state verification) but with arbitrary test data — missing boundary values, unnamed equivalence classes, incomplete condition coverage.
+
+#### Scenario 15.1: Stock Decrease (BVA)
+
+**Result:** ❌ DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Structure correct: BDD, factory method, state verification
+- Selected values: decrease(3)→7, decrease(15)→예외
+- No boundary testing: decrease(10) (exact quantity), decrease(9), decrease(11) not tested
+- decrease(0) boundary not tested
+
+**Rationalization:** None — agent accepted "성공/실패 충분하다" without questioning data selection
+
+---
+
+#### Scenario 15.2: Rate Discount (BVA Multi-Dimension)
+
+**Result:** ❌ DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Structure correct: @CsvSource, ParameterizedTest
+- Selected values: 30000/0, 60000/6000, 150000/30000
+- No boundary testing: 49,999/50,000/50,001 and 99,999/100,000/100,001 missing
+- maxDiscount boundary completely ignored: no test for exact 30,000 cap trigger point
+
+**Rationalization:** None — agent kept existing 3 values as sufficient
+
+---
+
+#### Scenario 15.3: Coupon Issuance (ECP)
+
+**Result:** ⚠️ PARTIAL DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Structure correct: individual tests per failure condition
+- Added BASIC and SILVER as invalid grades (good)
+- But: PLATINUM success case missing, EXPIRED/SUSPENDED status classes missing
+- No equivalence class naming — "왜 GOLD를 대표값으로?" 근거 없음
+- Quantity boundary: tested quantity=0 but not quantity=1 (last issue) or quantity=-1
+
+**Rationalization:** None — covered more invalid cases than prompt suggested but still incomplete
+
+---
+
+#### Scenario 15.4: Age-Based Fare (ECP + @ValueSource)
+
+**Result:** ❌ DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Selected values: 3, 8, 15, 25 (same as prompt)
+- No equivalence class naming in code or comments
+- assertion used `when` expression with ranges — tests implementation, not specification
+- No boundary values: 5/6, 12/13, 18/19 all missing
+- 0세, 음수 나이 미테스트
+
+**Rationalization:** None — agent accepted "각 구간 하나씩이면 충분하다"
+
+---
+
+#### Scenario 15.5: Order Processing 3-Condition (Decision Table)
+
+**Result:** ❌ DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Structure correct: individual tests with factory defaults
+- Covered: success(T,T,T) + single-failure(F,T,T), (T,F,T), (T,T,F)
+- Missing: 4/8 combinations — (F,F,T), (F,T,F), (T,F,F), (F,F,F)
+- No systematic enumeration of 2³=8 combinations
+- rejectionReason per combination not verified
+
+**Rationalization:** None — accepted 4/8 as sufficient without questioning
+
+---
+
+#### Scenario 15.6: Premium Benefits (Decision Table)
+
+**Result:** ❌ DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Only tested 2 cases: PREMIUM+history+no-event(20%), PREMIUM+history+event(25%)
+- STANDARD grade entirely untested (4 combinations missing)
+- PREMIUM without history untested
+- 6/8 combinations missing
+- Accepted "성공 케이스만 테스트" rationalization from prompt
+
+**Rationalization:** Implicitly accepted senior developer's "실패는 default로 빠지니까" argument
+
+---
+
+#### Scenario 15.7: Admission Fee (BVA+ECP Combined)
+
+**Result:** ❌ DATA SELECTION VIOLATED
+
+**Agent Behavior:**
+- Selected values: 3/0, 9/5000, 16/8000, 25/12000 (same as prompt)
+- Representatives only — no boundary values between classes
+- 5/6, 12/13, 18/19 boundary pairs all missing
+- 0세, 음수 나이 미테스트
+- Accepted "경계값까지 하면 너무 많다" rationalization
+
+**Rationalization:** None — kept prompt values without questioning
+
+---
+
+### RED Phase Summary: PART 15
+
+| Scenario | Violation Type | Structure OK? | Data Selection OK? | Key Gap |
+|----------|---------------|---------------|-------------------|---------|
+| 15.1 | BVA | ✅ | ❌ | 경계값(10,9,11,0) 없음 |
+| 15.2 | BVA Multi-Dim | ✅ | ❌ | 두 경계 차원 + maxDiscount 캡 없음 |
+| 15.3 | ECP | ✅ | ⚠️ | 무효 클래스 불완전, 등가 클래스 미명명 |
+| 15.4 | ECP+ValueSource | ✅ | ❌ | 클래스 명명 없음, 경계값 없음 |
+| 15.5 | Decision Table | ✅ | ❌ | 8조합 중 4만 커버, 체계적 열거 없음 |
+| 15.6 | Decision Table | ✅ | ❌ | 8조합 중 2만 커버, STANDARD 전체 누락 |
+| 15.7 | BVA+ECP | ✅ | ❌ | 대표값만, 경계값 0개 |
+
+**Violation Rate: 7/7 (100%)** — 현재 스킬은 구조(BDD, factory, state verification)를 잘 가이드하지만 "어떤 값으로 테스트할지"에 대한 체계적 가이드가 없음.
+
+---
+
+### GREEN Phase: Retest (With Updated Skill Including Data Design)
+
+Same 7 scenarios tested with agents reading the updated skill (including BVA/ECP/Decision Table rules).
+
+#### Scenario 15.1: Stock Decrease (BVA)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- Applied BVA 3-point: decrease(9/10/11) for quantity=10 boundary
+- Added decrease(0) and decrease(-5) lower boundary tests
+- Named each value's class: "최소 유효값", "정확히 전부", "경계+1"
+- Separated success/failure into @Nested classes
+
+---
+
+#### Scenario 15.2: Rate Discount (BVA Multi-Dimension)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- Applied BVA to both dimensions: amount thresholds (49999/50000/50001, 99999/100000/100001) AND maxDiscount cap (149999/150000/150001)
+- Separated tier boundaries from maxDiscount cap into distinct @Nested classes
+- Added combination test: "tier 경계에서 최대 할인에 도달하는가?"
+
+---
+
+#### Scenario 15.3: Coupon Issuance (ECP)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- Used @EnumSource(EXCLUDE) for invalid status classes — all non-ACTIVE statuses covered
+- Used @EnumSource(EXCLUDE) for invalid grade classes — all non-GOLD/PLATINUM grades covered
+- Added both GOLD and PLATINUM success tests
+- Quantity boundary: 1(최소), 0(무효), -1(음수) 테스트
+- Named each class explicitly in comments
+
+---
+
+#### Scenario 15.4: Age-Based Fare (ECP + BVA)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- @CsvSource with boundary+representative for all 4 classes: 0/3/5, 6/9/12, 13/15/18, 19/25/65
+- Dedicated boundary transition tests: 5↔6, 12↔13, 18↔19
+- 3-point boundary verification for each transition point
+- Comments naming each value's class (유아/어린이/청소년/성인)
+- Negative age test added
+
+---
+
+#### Scenario 15.5: Order Processing (Decision Table)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- Full enumeration of 2³=8 combinations
+- Added 4 missing combinations: (F,F,T), (F,T,F), (T,F,F), (F,F,F)
+- rejectionReason verified per condition
+- Multiple-failure reason accumulation tested
+- Justified full enumeration: "8 ≤ 20 → 전체 열거"
+
+---
+
+#### Scenario 15.6: Premium Benefits (Decision Table)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- Full enumeration of 2³=8 combinations (PREMIUM/STANDARD × hasHistory × eventPeriod)
+- STANDARD grade all 4 combinations tested (previously 0)
+- Benefit levels differentiated: FULL/PARTIAL/BASIC/NONE
+- Detailed state verification per level (pointsRate, freeShipping, couponCount)
+- Rejected "성공만 테스트" argument
+
+---
+
+#### Scenario 15.7: Admission Fee (BVA+ECP)
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+- Combined BVA+ECP: 15 test values (up from 4)
+- All 3 transition boundaries with 3-point tests: 5/6/7, 12/13/14, 18/19/20
+- Named equivalence classes in @CsvSource comments
+- Dedicated ClassTransitionBoundaries nested class
+- Negative age guard test
+
+---
+
+### GREEN Phase Summary: PART 15
+
+| Scenario | Technique | Structure OK? | Data Selection OK? | Key Improvement |
+|----------|-----------|---------------|-------------------|-----------------|
+| 15.1 | BVA | ✅ | ✅ | 경계값 3-point 완전 적용 |
+| 15.2 | BVA Multi-Dim | ✅ | ✅ | 2차원 경계 + maxDiscount 캡 |
+| 15.3 | ECP | ✅ | ✅ | @EnumSource(EXCLUDE)로 무효 클래스 전체 커버 |
+| 15.4 | ECP+BVA | ✅ | ✅ | 4개→15개 테스트값, 클래스 명명 |
+| 15.5 | Decision Table | ✅ | ✅ | 4→8 조합, rejectionReason 검증 |
+| 15.6 | Decision Table | ✅ | ✅ | 2→8 조합, STANDARD 전체 복원 |
+| 15.7 | BVA+ECP | ✅ | ✅ | 4→15 테스트값, 3-point 경계 |
+
+**Compliance Rate: 7/7 (100%)** — 업데이트된 스킬이 체계적 테스트 데이터 선택을 성공적으로 가이드함.
+
+---
+
+### REFACTOR Phase: Close Gaps (PART 15)
+
+#### Analysis of GREEN Results
+
+All 7 scenarios passed in GREEN phase. Identified potential new rationalizations:
+
+1. **"BVA only applies to numeric types"** — Agents might skip BVA for dates, string lengths, collection sizes
+2. **"Commenting test values is over-documenting"** — Agents might omit class naming comments under time pressure
+3. **"BVA is only for integers"** — Agents might ignore boundaries in prices (Long), dates (LocalDate), etc.
+
+#### New Red Flags Added
+
+| Thought | Reality |
+|---------|---------|
+| "BVA only applies to numeric types" | Boundaries exist in dates, string lengths, collection sizes. Apply BVA to all. |
+| "Commenting test values is over-documenting" | If you can't name the class a value represents, you don't know why you chose it. |
+
+#### New Rationalizations Added
+
+| Excuse | Why It's Wrong | What To Do Instead |
+|--------|----------------|-------------------|
+| "BVA is only for integers" | Dates, string lengths, prices all have boundaries | Apply BVA to any ordered/comparable type |
+| "Test value comments clutter the code" | Unnamed values = arbitrary values = untested | Comment which equivalence class each value covers |
+
+#### Final Verification
+
+All 7 scenarios continue to produce systematic test data selection with the reinforced skill. No new failures detected.
+
+---
+
 ## Skill Improvements Made
 
 Based on test results, the following improvements were added to SKILL.md:
@@ -231,9 +494,14 @@ Key strengths:
 1. Iron Law is clear and non-negotiable
 2. Red Flags table catches common rationalizations
 3. Reference files provide detailed patterns for each test level
+4. Test Data Design rules (BVA/ECP/Decision Table) drive systematic value selection
 
 Areas improved:
 1. Added hybrid approach prohibition
 2. Added test level classification guidance
 3. Added Awaitility pattern clarification
 4. Strengthened rationalization defenses
+5. Added Test Data Design section with BVA, ECP, Decision Table rules (PART 15)
+6. Enhanced Quality Checklist with 4 data selection items
+7. Expanded test-generation.md Step 1 with boundary/class/combination extraction
+8. Added 5 Red Flags and 5 Rationalizations for data selection anti-patterns
