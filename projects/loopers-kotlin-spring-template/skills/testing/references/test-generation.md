@@ -45,6 +45,8 @@ Place each piece at the appropriate test level.
 
 **Rule**: Domain logic correctness → Unit Test. Scenario outcome in DB → Integration Test.
 
+> If combinations exceed 8, apply unit-test.md Combinatorial Explosion Guide Step 1 to verify responsibility separation first.
+
 ---
 
 ## Handling Spec-Code Gaps (TDD Essential)

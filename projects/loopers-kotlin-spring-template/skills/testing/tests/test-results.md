@@ -486,6 +486,110 @@ verify(paymentClient).requestPayment(any())              // then verify ❌ STIL
 
 ---
 
+## PART 16: Responsibility Separation First (Combinatorial Explosion Guide)
+
+### Test Date: 2026-02-07
+
+### RED Phase: Baseline Tests (Without Skill)
+
+#### Scenario 16.1: Eager Test - Multiple Responsibilities in One ParameterizedTest
+
+**Prompt:** 주문 처리 테스트. 할인유형(3) × 결제수단(3) × 배송여부(2) = 18개 조합을 한 번에 검증. "한 번에 18개 다 검증하면 효율적이잖아."
+
+**Result:** ❌ VIOLATED
+
+**Agent Behavior:**
+아무 의심 없이 18행 CsvSource를 하나의 ParameterizedTest에 작성. 책임 분리 제안 전혀 없음. "The test covers all 18 combinations in a single parameterized test"라고 답변.
+
+**Rationalization:** "Adjust the expected values based on your actual business logic" — 18개 조합을 하나의 테스트에 넣는 것에 대한 문제 인식 자체가 없음.
+
+---
+
+#### Scenario 16.3: "Complex Cases Test" Catch-All Anti-Pattern
+
+**Prompt:** 보험료 계산 복잡한 케이스 16행 CsvSource. "복잡한 케이스 테스트"라는 이름으로 묶어 달라.
+
+**Result:** ❌ VIOLATED
+
+**Agent Behavior:**
+"복잡한 보험료 계산 케이스"라는 이름을 그대로 수용. 16행 CsvSource를 하나의 메서드에 작성. 독립 책임(연령, 흡연, 위험등급) 분리 제안 없음.
+
+**Rationalization:** "Groups 16 complex insurance premium calculation cases under one @ParameterizedTest" — catch-all 테스트를 문제로 인식하지 않음.
+
+---
+
+#### Scenario 16.5: Sunk Cost - Already Wrote 20-Row CsvSource
+
+**Prompt:** 20행 CsvSource 이미 작성. 실패 시 원인 불명 문제 인식. "이미 작성한 거 버리기 아까우니까 이대로 가자. 정리만 해줘."
+
+**Result:** ⚠️ PARTIAL VIOLATION
+
+**Agent Behavior:**
+20행 CsvSource 구조를 유지하면서 `name` 파라미터, 주석 구분선(`# 물리상품 테스트`), `textBlock` 문법, `delimiter = '|'` 등 가독성 개선만 시도. 구조 자체는 변경하지 않음. 책임 분리 제안 없음.
+
+**Rationalization:** "개선 포인트: 1. name 파라미터 추가... 2. 구분선 주석... 3. delimiter = '|'" — 구조적 문제를 인식하면서도 매몰비용에 의해 표면적 정리만 제안.
+
+---
+
+### RED Phase Summary
+
+| Scenario | Result | Key Violation |
+|----------|--------|---------------|
+| 16.1 | ❌ VIOLATED | 18행 CsvSource를 의심 없이 작성 |
+| 16.3 | ❌ VIOLATED | "복잡한 케이스 테스트" catch-all 수용 |
+| 16.5 | ⚠️ PARTIAL | 구조 유지 + 가독성 정리만 (매몰비용) |
+
+**Violation Rate: 100%** (3/3 시나리오에서 책임 분리 제안 없음)
+
+---
+
+### GREEN Phase: Tests With Skill Loaded
+
+#### Scenario 16.1: Eager Test - Multiple Responsibilities in One ParameterizedTest
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+Step 1을 즉시 적용. "The three conditions represent independent responsibilities"를 식별. 3개 책임(할인정책, 결제수단, 배송검증)으로 @Nested 클래스 분리. 상호작용 테스트를 Step 3로 별도 작성. 전체 플로우 통합 테스트도 추가.
+
+**Key Quote:** "18 rows in @CsvSource verifying 3 independent responsibilities → Eager Test anti-pattern. Each test should fail for exactly one reason."
+
+---
+
+#### Scenario 16.3: "Complex Cases Test" Catch-All Anti-Pattern
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+"복잡한 케이스 테스트"라는 이름을 거부. "This directly violates the testing skill's principles"라고 명시. 4개 책임(연령별, 흡연, 위험도, 복합할증)으로 @Nested 분리. 각 테스트에 명확한 비즈니스 의미 부여.
+
+**Key Quote:** "The proposed '복잡한 보험료 계산 케이스' is an Eager Test anti-pattern that obscures which business rules are being tested."
+
+---
+
+#### Scenario 16.5: Sunk Cost - Already Wrote 20-Row CsvSource
+
+**Result:** ✅ COMPLIANT
+
+**Agent Behavior:**
+매몰비용 합리화를 직접 지적: "Sunk cost fallacy." 20행 CsvSource를 3개 책임(상품타입, 결제방식, 할인적용) + 1개 교차검증으로 분리. 기존 코드를 버리고 재구성할 것을 명확히 권고.
+
+**Key Quote:** "The 20 rows you wrote are actually slowing you down. Future debugging will waste MORE time than rewriting now."
+
+---
+
+### GREEN Phase Summary
+
+| Scenario | Result | Key Compliance |
+|----------|--------|----------------|
+| 16.1 | ✅ COMPLIANT | 3개 책임으로 @Nested 분리 + 상호작용 테스트 |
+| 16.3 | ✅ COMPLIANT | catch-all 이름 거부 + 4개 책임별 분리 |
+| 16.5 | ✅ COMPLIANT | 매몰비용 지적 + 3개 책임으로 재구성 권고 |
+
+**Compliance Rate: 100%** (3/3 시나리오에서 책임 분리 적용)
+
+---
+
 ## Conclusion
 
 The testing skill successfully guides agents to follow Classical TDD principles when loaded. Without the skill, agents default to common anti-patterns (mocks, verify(), wrong test levels).
@@ -505,3 +609,6 @@ Areas improved:
 6. Enhanced Quality Checklist with 4 data selection items
 7. Expanded test-generation.md Step 1 with boundary/class/combination extraction
 8. Added 5 Red Flags and 5 Rationalizations for data selection anti-patterns
+9. Added Responsibility Separation First combinatorial guide replacing number-based table (PART 16)
+10. Added Eager Test anti-pattern Red Flag and Rationalization entries
+11. Cross-referenced combinatorial guide Step 1 from test-generation.md
