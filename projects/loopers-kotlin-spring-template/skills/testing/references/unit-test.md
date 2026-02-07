@@ -383,6 +383,141 @@ fun `decrease does not register event when quantity greater than 0`() {
 }
 ```
 
+## Test Data Design
+
+Systematic test value selection. Every test value must have a reason.
+
+### BVA (Boundary Value Analysis)
+
+For every numeric constraint, test **3 points**: boundary-1, boundary, boundary+1.
+
+```kotlin
+// Stock.decrease() — constraint: decreaseAmount ≤ quantity
+// quantity = 10 일 때:
+@DisplayName("재고 차감 경계값 테스트")
+@ParameterizedTest(name = "재고 10개에서 {0}개 차감 → 남은 수량 {1}")
+@CsvSource(
+    "9, 1",   // boundary-1: 경계 직전, 성공
+    "10, 0",  // boundary: 정확히 재고만큼 차감, 성공
+)
+fun `decrease succeeds at boundary`(amount: Int, expectedRemaining: Int) {
+    // given
+    val initialQuantity = 10
+    val stock = createStock(quantity = initialQuantity)
+
+    // when
+    stock.decrease(amount)
+
+    // then
+    assertThat(stock.quantity).isEqualTo(expectedRemaining)
+}
+
+@DisplayName("재고보다 1개 많이 차감하면 예외가 발생한다")
+@Test
+fun `throws when decrease exceeds quantity by one`() {
+    // given
+    val initialQuantity = 10
+    val stock = createStock(quantity = initialQuantity)
+
+    // when & then — boundary+1: 초과
+    assertThatThrownBy { stock.decrease(initialQuantity + 1) }
+        .isInstanceOf(IllegalArgumentException::class.java)
+}
+```
+
+**Rule**: If a spec says "X 이상", "X 이하", "X 초과", "X 미만", that boundary produces 3 test values.
+
+### ECP (Equivalence Class Partitioning)
+
+For every input dimension, identify equivalence classes → select **ONE representative** per class.
+Every value in `@ValueSource`/`@CsvSource` must represent a **named** equivalence class. If you can't name the class, the value is arbitrary.
+
+```kotlin
+// Coupon status: {ACTIVE} = valid, {INACTIVE, EXPIRED, SUSPENDED} = invalid
+@DisplayName("비활성 상태 쿠폰은 발급할 수 없다")
+@ParameterizedTest(name = "{0} 상태 쿠폰 → 발급 실패")
+@EnumSource(value = CouponStatus::class, names = ["INACTIVE", "EXPIRED", "SUSPENDED"])
+fun `throws when coupon status is not ACTIVE`(invalidStatus: CouponStatus) {
+    // given
+    val coupon = createCoupon(status = invalidStatus)
+    val user = createUser(grade = UserGrade.GOLD)
+
+    // when & then
+    assertThatThrownBy { coupon.issue(user) }
+        .isInstanceOf(IllegalStateException::class.java)
+}
+```
+
+### BVA + ECP: Range-Based Partitions
+
+For range-based partitions, boundaries ARE class edges. Test both representatives AND boundaries.
+
+```kotlin
+// 나이별 요금: {0-5: 무료}, {6-12: 50%}, {13-18: 30%}, {19+: 정가}
+@DisplayName("나이별 입장료 계산")
+@ParameterizedTest(name = "나이 {0}세 → 입장료 {1}원")
+@CsvSource(
+    // 무료 구간 (0-5세)
+    "0, 0",      // 하한 경계
+    "3, 0",      // 대표값
+    "5, 0",      // 상한 경계
+    // 50% 할인 구간 (6-12세)
+    "6, 5000",   // 하한 경계 (클래스 전환점)
+    "9, 5000",   // 대표값
+    "12, 5000",  // 상한 경계
+    // 30% 할인 구간 (13-18세)
+    "13, 8000",  // 하한 경계 (클래스 전환점)
+    "16, 8000",  // 대표값
+    "18, 8000",  // 상한 경계
+    // 정가 구간 (19세 이상)
+    "19, 12000", // 하한 경계 (클래스 전환점)
+    "25, 12000", // 대표값
+)
+fun `calculate admission fee by age`(age: Int, expectedFee: Int) {
+    assertThat(calculator.calculate(age)).isEqualTo(expectedFee)
+}
+```
+
+### Decision Table (Multi-Condition Combination)
+
+When behavior depends on **2+ independent conditions**, enumerate combinations systematically before writing `@CsvSource`.
+
+```kotlin
+// paid × inStock × deliverable = 2³ = 8 combinations
+@DisplayName("주문 처리 조건 조합")
+@ParameterizedTest(name = "paid={0}, inStock={1}, deliverable={2} → {3}")
+@CsvSource(
+    // 전체 조합 체계적 열거 (2×2×2 = 8)
+    "true,  true,  true,  CONFIRMED",  // 모두 충족
+    "true,  true,  false, REJECTED",   // 배송 불가
+    "true,  false, true,  REJECTED",   // 재고 없음
+    "true,  false, false, REJECTED",   // 재고 없음 + 배송 불가
+    "false, true,  true,  REJECTED",   // 미결제
+    "false, true,  false, REJECTED",   // 미결제 + 배송 불가
+    "false, false, true,  REJECTED",   // 미결제 + 재고 없음
+    "false, false, false, REJECTED",   // 모두 미충족
+)
+fun `process order with all condition combinations`(
+    paid: Boolean, inStock: Boolean, deliverable: Boolean, expected: OrderStatus,
+) {
+    val result = processor.process(paid, inStock, deliverable)
+    assertThat(result.status).isEqualTo(expected)
+}
+```
+
+**Combinatorial explosion guide:**
+
+| Conditions | Combinations | Strategy |
+|-----------|-------------|----------|
+| 2 × 2     | 4           | Enumerate all |
+| 2 × 2 × 2 | 8          | Enumerate all |
+| 3 × 3 × 2 | 18         | Reduce: identify interactions |
+| 4+ dims   | 50+         | Pairwise or risk-based selection |
+
+**Rule**: If combinations > ~20, document reduction rationale. Never silently skip combinations.
+
+---
+
 ## Quality Checklist
 
 - [ ] Every business rule in spec has a test case
@@ -391,3 +526,7 @@ fun `decrease does not register event when quantity greater than 0`() {
 - [ ] ParameterizedTest used for 3+ cases with same behavior pattern
 - [ ] Domain events verified when state triggers event registration
 - [ ] Factory methods have all parameters defaulted
+- [ ] Boundary values tested with boundary-1, boundary, boundary+1 for EVERY numeric constraint
+- [ ] Each @ValueSource/@CsvSource value represents a named equivalence class
+- [ ] Multi-condition logic tested with systematic combination (Decision Table)
+- [ ] If combinations reduced, reduction rationale documented in test comments

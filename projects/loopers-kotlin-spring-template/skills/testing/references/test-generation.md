@@ -73,6 +73,12 @@ Read the spec sections specified in the milestone instruction and extract all te
 - Calculations that must be accurate
 - State transitions that must be allowed or prevented
 - Error conditions that must be handled
+- Numeric constraints and their boundaries (min, max, thresholds)
+  → Each boundary produces 3 test values: boundary-1, boundary, boundary+1
+- Input dimensions and their equivalence classes
+  → Each class produces 1 representative test value
+- Multi-condition interaction points
+  → Conditions that combine to determine outcomes need systematic combination
 
 ### Step 2: Determine Test Level
 
