@@ -92,6 +92,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
   - Success and failure scenarios using `alt`/`else` blocks
   - Clear action labels (optionally with pattern notation: [Function Call], [Kafka], etc.)
 - Review: Review diagrams with user
+- **Internal logic**: For complex branching within a single component (3+ branch points), consider adding a Flowchart. See `references/diagram-selection.md`
 
 #### 3.2 Event-Driven Integration (if applicable)
 - **Event list**: Name, trigger, required payload fields (schema details in implementation)
