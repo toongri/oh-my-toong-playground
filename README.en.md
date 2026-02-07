@@ -23,28 +23,29 @@ I'm developing this while being inspired by, studying, and referencing the follo
 
 ## What is oh-my-toong?
 
-Claude Code doesn't have a central plugin system, so you need to manage the `.claude/` directory manually for each project. oh-my-toong is a configuration library that collects skills, agents, and hooks in one place, letting you selectively copy what you need via `sync.yaml`. Since each project owns its copy, you can customize independently without affecting other projects.
+Claude Code's Skill tool only recognizes files inside a project's `.claude/` directory. This means every project must have its own skill files, yet skills with the same name (`testing`, `implementation`, etc.) may need different content depending on the project's language and conventions. oh-my-toong is a configuration library that solves this dilemma. It version-controls skills, agents, and hooks in this repository and selectively syncs them to each target project's `.claude/` via `sync.yaml`. Project-specific overrides (`projects/`) allow the same skill name to carry different conventions per project.
 
 ## Features
 
 - **Skill-based workflows** - Task-specific methodologies loaded on demand via the Skill tool
 - **Specialized agents** - Subagents for delegation with clear role boundaries
 - **Session hooks** - Lifecycle scripts for persistent modes and keyword detection
-- **Project overrides** - Per-project skill customization without modifying core skills
-- **Sync system** - Declarative synchronization to Claude Code configuration
+- **Project-specific skill differentiation** - Upward search logic overrides global skills with project-specific conventions
+- **Declarative sync** - Syncs skills/agents/hooks to target project's `.claude/` via `sync.yaml`
 
 ## Philosophy
 
 ### Why This Design
 
-**Problem**: Claude Code doesn't have a central plugin system. You need to manage skills, agents, and hooks in the `.claude/` directory for each project manually, making it difficult to fine-tune different conventions and code patterns per project.
+**Step 1 - Technical Constraint**: Claude Code's Skill tool only recognizes files inside a project's `.claude/` directory. There is no plugin system to load skills from external paths, so every project must have its own skill files within `.claude/`.
 
-**Solution**: Use oh-my-toong as a configuration library. Collect skills/agents/hooks in this repository, select the components you need in `sync.yaml`, and copy them to your target project.
+**Step 2 - Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in a Kotlin/Spring project means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
 
-**Benefits**: Since each project owns its copy:
-- Independent customization per project
-- Freely modify without affecting other projects
-- Project-specific skill overrides (`projects/` directory)
+**Step 3 - Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms:
+- **Global skills** (`skills/`): Skills that are common across projects (prometheus, sisyphus, oracle, etc.) are version-controlled in one place
+- **Project overrides** (`projects/<name>/skills/`): Skills that must differ per project (testing, implementation) are differentiated by project
+
+During sync, an **Upward Search** logic is applied: when a project's sync.yaml references `testing`, it first looks in the project's `projects/<name>/skills/testing/`, falling back to the global `skills/testing/` if not found.
 
 ### Agentic Development
 
@@ -372,25 +373,33 @@ Maximum precision mode activated via keywords (`ultrawork`, `ulw`, `uw`). Enable
 
 ### Project-Specific Skills
 
-Create project-specific skill overrides in the `projects/` directory:
+When skills with the same name need different conventions per project's language/framework, create project-specific overrides in the `projects/` directory:
 
 ```
 projects/
-└── your-project-name/
+└── loopers-kotlin-spring-template/
     └── skills/
-        └── testing/
-            └── SKILL.md    # Custom testing skill for this project
+        ├── testing/
+        │   └── SKILL.md    # Classical TDD, no verify(), BDD structure
+        └── implementation/
+            └── SKILL.md    # Kotlin/Spring architecture patterns
 ```
 
-Reference in sync.yaml:
+When a skill is referenced in sync.yaml, the sync process searches the project folder first and falls back to global:
+
 ```yaml
+# projects/loopers-kotlin-spring-template/sync.yaml
 skills:
-  - component: your-project-name:testing
-```
+  items:
+    - testing          # → projects/loopers-.../skills/testing/ (project first)
+    - oracle           # → skills/oracle/ (global fallback)
 
-```
-Skill(skill: "prometheus")  // Correct
-Read("skills/prometheus/SKILL.md")  // Wrong
+agents:
+  items:
+    - component: sisyphus-junior
+      add-skills:
+        - testing          # Injects project-specific testing skill into sisyphus-junior
+        - implementation   # Injects project-specific implementation skill into sisyphus-junior
 ```
 
 ## HUD Display
