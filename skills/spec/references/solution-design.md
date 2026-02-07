@@ -135,6 +135,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
   - Define consistency policy and acceptable divergence
   - Specify behavior on secondary store failure (without implementation details)
 - Review: Review diagrams with user
+- **Internal logic**: For complex branching within a single component (3+ branch points), consider adding a Flowchart. See `references/diagram-selection.md`
 
 #### Checkpoint: Step 4 Complete
 Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
