@@ -23,28 +23,29 @@
 
 ## oh-my-toong이란?
 
-Claude Code는 중앙 플러그인 시스템이 없어서, 프로젝트마다 `.claude/` 디렉토리를 직접 관리해야 합니다. oh-my-toong은 스킬, 에이전트, 훅을 한 곳에 모아두고 `sync.yaml`로 필요한 것만 선택적으로 복사하는 설정 라이브러리입니다. 각 프로젝트가 복사본을 소유하므로 독립적으로 커스터마이징할 수 있고, 프로젝트 간 영향 없이 자유롭게 수정할 수 있습니다.
+Claude Code의 Skill 도구는 프로젝트의 `.claude/` 디렉토리 안에 있는 파일만 인식합니다. 이 때문에 모든 프로젝트가 각자 스킬 파일을 가져야 하지만, 같은 이름의 스킬(`testing`, `implementation` 등)이라도 프로젝트의 언어와 컨벤션에 따라 내용이 달라야 합니다. oh-my-toong은 이 딜레마를 해결하는 설정 라이브러리입니다. 스킬, 에이전트, 훅을 이 저장소에서 버전 관리하고, `sync.yaml`로 필요한 것만 선택적으로 대상 프로젝트의 `.claude/`에 동기화합니다. 프로젝트별 오버라이드(`projects/`)를 통해 같은 이름의 스킬이라도 프로젝트 특성에 맞게 분화할 수 있습니다.
 
 ## 주요 기능
 
 - **스킬 기반 워크플로우** - Skill 도구를 통해 필요할 때 로드되는 작업별 방법론
 - **특화된 에이전트** - 명확한 역할 경계를 가진 위임용 서브에이전트
 - **세션 훅** - 지속 모드와 키워드 감지를 위한 라이프사이클 스크립트
-- **프로젝트 오버라이드** - 핵심 스킬을 수정하지 않고 프로젝트별 스킬 커스터마이징
-- **동기화 시스템** - Claude Code 설정으로의 선언적 동기화
+- **프로젝트별 스킬 분화** - 상위 검색 로직으로 글로벌 스킬 위에 프로젝트 고유 컨벤션 오버라이드
+- **선언적 동기화** - `sync.yaml`로 스킬/에이전트/훅을 대상 프로젝트의 `.claude/`에 동기화
 
 ## 철학
 
 ### 왜 이 설계인가
 
-**문제**: Claude Code는 중앙 플러그인 시스템이 없습니다. 각 프로젝트에서 `.claude/` 디렉토리에 스킬, 에이전트, 훅을 직접 관리해야 하는데, 프로젝트별로 다른 컨벤션과 코드 패턴을 세밀하게 조정하기가 어렵습니다.
+**1단계 - 기술적 제약**: Claude Code의 Skill 도구는 프로젝트의 `.claude/` 디렉토리에 있는 파일만 인식합니다. 외부 경로에서 스킬을 불러오는 플러그인 시스템이 없으므로, 모든 프로젝트가 자신의 `.claude/` 안에 스킬 파일을 직접 가져야 합니다.
 
-**해결**: oh-my-toong을 설정 라이브러리로 사용합니다. 스킬/에이전트/훅을 이 저장소에 모아두고, `sync.yaml`에서 필요한 컴포넌트만 선택해서 대상 프로젝트로 복사합니다.
+**2단계 - 같은 이름, 다른 내용**: 각 프로젝트에 동일한 스킬을 복사하면 되지만, 핵심 딜레마가 있습니다. 예를 들어 `testing`은 Kotlin/Spring 프로젝트에서 "Classical TDD, verify() 금지, BDD 구조"를 의미하지만, 다른 프로젝트에서는 완전히 다른 컨벤션을 가질 수 있습니다. `implementation`도 마찬가지입니다. **동일한 이름의 스킬이 프로젝트마다 다른 내용을 담아야 합니다.**
 
-**장점**: 각 프로젝트가 복사본을 소유하므로:
-- 프로젝트별로 독립적인 커스터마이징 가능
-- 다른 프로젝트에 영향 없이 자유롭게 수정
-- 프로젝트 특성에 맞는 스킬 오버라이드 (`projects/` 디렉토리)
+**3단계 - 중앙 관리 + 프로젝트 분화**: oh-my-toong은 이 딜레마를 두 가지 메커니즘으로 해결합니다:
+- **글로벌 스킬** (`skills/`): 프로젝트에 관계없이 공통인 스킬(prometheus, sisyphus, oracle 등)을 한 곳에서 버전 관리
+- **프로젝트 오버라이드** (`projects/<name>/skills/`): 프로젝트마다 달라야 하는 스킬(testing, implementation)을 프로젝트별로 분화
+
+동기화 시 **상위 검색(Upward Search)** 로직이 동작합니다: 프로젝트의 sync.yaml에서 `testing`을 참조하면, 먼저 해당 프로젝트의 `projects/<name>/skills/testing/`을 찾고, 없으면 글로벌 `skills/testing/`으로 폴백합니다.
 
 ### 에이전틱 개발 (Agentic Development)
 
@@ -372,22 +373,33 @@ oracle 검증을 통한 반복적 완료 강제. oracle이 작업이 정말로 �
 
 ### 프로젝트별 스킬
 
-`projects/` 디렉토리에 프로젝트별 스킬 오버라이드 생성:
+같은 이름의 스킬이라도 프로젝트의 언어/프레임워크에 따라 다른 컨벤션이 필요할 때, `projects/` 디렉토리에 프로젝트별 오버라이드를 생성합니다:
 
 ```
 projects/
-└── your-project-name/
+└── loopers-kotlin-spring-template/
     └── skills/
-        └── testing/
-            └── SKILL.md    # 이 프로젝트용 커스텀 테스팅 스킬
+        ├── testing/
+        │   └── SKILL.md    # Classical TDD, verify() 금지, BDD 구조
+        └── implementation/
+            └── SKILL.md    # Kotlin/Spring 아키텍처 패턴
 ```
 
-sync.yaml에서 참조:
+sync.yaml에서 스킬을 참조하면, 동기화 시 해당 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다:
+
 ```yaml
+# projects/loopers-kotlin-spring-template/sync.yaml
 skills:
-  - component: your-project-name:testing
-```
+  items:
+    - testing          # → projects/loopers-.../skills/testing/ (프로젝트 우선)
+    - oracle           # → skills/oracle/ (글로벌 폴백)
 
+agents:
+  items:
+    - component: sisyphus-junior
+      add-skills:
+        - testing          # sisyphus-junior에 프로젝트별 testing 스킬 주입
+        - implementation   # sisyphus-junior에 프로젝트별 implementation 스킬 주입
 ```
 
 ## HUD 디스플레이
