@@ -292,19 +292,42 @@ When delegating to sisyphus-junior, include these 5 sections:
 
 ## Argus Invocation
 
-When invoking argus after sisyphus-junior completion, pass the **original 5-Section prompt** plus implementation results:
+### Invocation Rules
+
+| Rule | Requirement |
+|------|-------------|
+| **Prompt Fidelity** | Pass the 5-Section prompt **VERBATIM** — copy-paste only. No summarizing, paraphrasing, or restructuring. |
+| **Per-Task Invocation** | Invoke argus **once per completed task**. NEVER batch multiple tasks into one call. |
+| **File Path Specificity** | List changed files as **explicit paths**, NEVER abstract counts ("3 files") or globs. |
+| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own from the 5-Section prompt. |
+
+### Invocation Template
 
 ```markdown
-[Original 5-Section prompt used for sisyphus-junior]
+[VERBATIM copy of the 5-Section prompt sent to sisyphus-junior — DO NOT summarize or restructure]
 
 ---
 
 ## REVIEW REQUEST
-- Changed files: [files junior reported as modified]
+- Task: [exact task subject from todo list]
+- Changed files:
+  - src/auth/login.ts
+  - src/auth/middleware.ts
+  - tests/auth/login.test.ts
 - Junior's summary: [what junior claimed to have done]
 
-Review whether the implementation meets the requirements above.
+Review whether the implementation meets the requirements in the 5-Section prompt above.
 ```
+
+### Argus Invocation Anti-Patterns
+
+| Anti-Pattern | Example | Why Harmful |
+|-------------|---------|-------------|
+| Prompt summarization | "Junior was asked to add auth" instead of full 5-Section | Argus cannot verify MUST DO items it never received |
+| Batch invocation | Passing 3 tasks' results in one argus call | Scope check becomes impossible; verdict ambiguous |
+| Abstract file references | "Changed files: 3 files" | Scope Boundary Check requires concrete paths |
+| Pre-built checklist | "Here's what to verify: [your list]" | Anchors argus, defeats independent derivation |
+| Selective prompt sections | Omitting MUST NOT DO | Argus cannot detect violations of rules it doesn't see |
 
 ### Verdict Response Protocol
 
@@ -496,6 +519,10 @@ When a subagent responds that it needs user input/interview:
 | "Build/tests passed" | ≠ review. invoke argus |
 | "Let me run npm test myself" | NO. that's argus's job |
 | "Multiple confirmations, we're good" | consensus ≠ verification. argus |
+| "Here's a summary of what junior was asked to do" | NO. pass the VERBATIM 5-Section prompt |
+| "I'll send all task results to argus at once" | NO. one argus call per task |
+| "Changed files: several files modified" | NO. list every file path explicitly |
+| "Here's a checklist for argus to verify" | NO. argus derives its own checklist |
 
 ### Tone/Style
 | Excuse | Reality |
@@ -513,6 +540,10 @@ When a subagent responds that it needs user input/interview:
 - Ask user codebase questions (explore/oracle first)
 - Run sequential when parallel is possible
 - Verify implementations yourself
+- Summarize or paraphrase the 5-Section prompt when invoking argus
+- Batch multiple task results into a single argus invocation
+- Provide argus with abstract file counts instead of explicit paths
+- Generate a verification checklist for argus (argus derives its own)
 
 **ALWAYS:**
 - Create task list before multi-step work
