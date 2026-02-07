@@ -27,12 +27,18 @@ flowchart TD
     Q3 -->|보통: 3+ 분기<br/>또는 병렬 처리| FC[Flowchart]
     Q3 -->|복잡: 중첩 조건 +<br/>병렬 + 에러 분기| FCSUB[Flowchart<br/>with subgraphs]
 
+    SEQ --> Q4{Sequence 내 특정 참여자에<br/>3+ 분기점 존재?}
+    Q4 -->|No| DONE1[Sequence Diagram만으로 완료]
+    Q4 -->|Yes| ZOOM[해당 참여자 내부 로직을<br/>별도 Flowchart로 분해]
+
     style CLASS fill:#e1f5fe
     style STATE fill:#f3e5f5
     style SEQ fill:#e8f5e9
     style PROSE fill:#fff9c4
     style FC fill:#fff3e0
     style FCSUB fill:#fbe9e7
+    style ZOOM fill:#fff3e0
+    style DONE1 fill:#e8f5e9
 ```
 
 ## 3. Scenario Mapping
@@ -46,6 +52,8 @@ flowchart TD
 | 할인 계산: 쿠폰 → 등급 할인 → 최소 금액 검증 → 에러 분기 | Flowchart with subgraphs | 중첩 조건 + 에러 분기 |
 | if-else 하나로 끝나는 단순 조건 | 산문 | 2개 이하 분기, 다이어그램 과잉 |
 | 서비스 A에서 서비스 B로 메시지 전달 흐름 | Sequence | 시스템 간 흐름 (Flowchart 금지) |
+| 주문 처리 전체 흐름(서비스 간) + Payment 내부 분기(5+ 분기점) | Sequence + Decomposition Flowchart | Sequence = 시스템 간 흐름, Flowchart = 단일 참여자 내부 상세 분기. 추상화 수준이 다르므로 중복 아님 |
+| 동일 서비스 간 흐름을 Sequence와 Flowchart로 동일 수준에서 표현 | 금지 | 동일 추상화 수준 중복. 하나만 선택 |
 
 ## 4. Guardrails
 
@@ -58,7 +66,8 @@ flowchart TD
 
 | Rule | Rationale |
 |------|-----------|
-| 개념당 최대 1종류 다이어그램 | 중복 표현 방지 |
+| 동일 추상화 수준에서 동일 흐름의 다이어그램 중복 금지 | 중복 표현 방지 |
+| Decomposition 허용: Sequence 내 단일 참여자의 내부 분기(3+ 분기점)는 별도 Flowchart로 상세화 가능 | 보완적 다층 표현 |
 | 산문으로 충분하면 다이어그램 불필요 | 과도한 시각화 방지 |
 | Flowchart는 3+ 분기점일 때만 | 단순 로직에 다이어그램 과잉 방지 |
 | 시스템 간 흐름에 Flowchart 금지 | Sequence Diagram 사용 |
@@ -70,9 +79,23 @@ flowchart TD
 |--------------|-----------------|
 | 시스템 간 API 호출을 Flowchart로 표현 | Sequence Diagram 사용 |
 | 2개 분기를 Flowchart로 표현 | 산문으로 충분 |
-| 하나의 개념에 Sequence + Flowchart 중복 | 하나만 선택 |
+| 동일 추상화 수준에서 같은 흐름을 Sequence + Flowchart로 표현 | 하나만 선택. 시스템 간이면 Sequence, 단일 컴포넌트면 Flowchart |
+| Sequence 내 참여자 내부 분기를 alt/note로만 억지 표현 | 3+ 분기점이면 해당 참여자 내부 로직을 별도 Flowchart로 분해(Decomposition) |
 | 15+ 노드의 거대한 Flowchart | subgraph로 분리하거나 범위 축소 |
 | State Diagram으로 분기 로직 표현 | State = 생명주기, Flowchart = 분기 로직 |
+
+### 4d. Decomposition Pattern
+
+| Pattern | 조건 | 예시 |
+|---------|------|------|
+| Sequence + Decomposition Flowchart | Sequence 내 특정 참여자가 3+ 내부 분기점을 가질 때 | 주문 흐름 Sequence에서 PaymentService 내부 결제수단 분기를 Flowchart로 상세화 |
+
+**Decomposition 적용 기준:**
+1. Sequence Diagram이 이미 시스템 간 흐름을 표현하고 있을 것
+2. Decomposition 대상은 Sequence의 **단일 참여자**일 것
+3. 해당 참여자 내부에 **3+ 분기점**이 존재할 것 (R3 기준 적용)
+4. Flowchart는 해당 참여자의 **내부 로직만** 표현할 것 (다른 참여자와의 상호작용 포함 금지)
+5. Sequence Diagram에서 Decomposition 대상을 `Note over` 등으로 Flowchart 참조 명시
 
 ## 5. Flowchart Quick Reference
 
