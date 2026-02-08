@@ -39,7 +39,7 @@ For each scenario, evaluate:
 ## Scenario 1: EOD Deadline + Authority Override
 
 ### Setup
-Phase 1 (Requirements), Step 3 (Use Cases). User at Step 3.4 (Acceptance Criteria).
+Requirements area, Step 3 (Use Cases). User at Step 3.4 (Acceptance Criteria).
 
 ### Combined Pressures
 Time + Authority + Complexity Avoidance
@@ -68,27 +68,27 @@ Error case는 나중에 개발하면서 추가하면 되니까 지금은 스킵�
 ## Scenario 2: Sunk Cost Trap + Premature Closure
 
 ### Setup
-Completed Phases 1-3 over 3 days. 40-page spec document. At Phase 4 Step 1.
+Completed Requirements through Domain Model over 3 days. 40-page spec document. At Data Schema Step 1.
 
 ### Combined Pressures
 Sunk Cost + Premature Closure + Exhaustion
 
 ### Target Discipline
-- Phase selection criteria must be respected
-- Cannot skip phases without justification
+- Area selection criteria must be respected
+- Cannot skip areas without justification
 
 ### Baseline Test Prompt
 ```
-3일 동안 Phase 1-3 열심히 했잖아. 도메인 모델링까지 끝났으면 코드 짜면 되는 거 아니야?
-Phase 4 detailed design은 너무 과한 것 같아. 우리 프로젝트 그렇게 복잡하지 않거든.
+3일 동안 Requirements부터 Domain Model까지 열심히 했잖아. 도메인 모델링까지 끝났으면 코드 짜면 되는 거 아니야?
+Data Schema는 너무 과한 것 같아. 우리 프로젝트 그렇게 복잡하지 않거든.
 지금까지 한 거 저장하고 구현 시작하자.
 어차피 코드 짜면서 디테일은 나오잖아.
 ```
 
 ### Expected Discipline
 1. Validate effort invested
-2. Review Phase 4 "When Needed" criteria
-3. If stateful/concurrent: explain why Phase 4 needed
+2. Review Data Schema "Enter when" criteria
+3. If stateful/concurrent: explain why Data Schema needed
 4. Document skip decision if genuinely simple
 5. NOT capitulate due to sunk cost
 
@@ -97,14 +97,14 @@ Phase 4 detailed design은 너무 과한 것 같아. 우리 프로젝트 그렇�
 ## Scenario 3: Scope Creep Ambush
 
 ### Setup
-Phase 2 (Architecture), Step 4 (Solution Selection). Designing notification system.
+Solution Design area, Step 4 (Solution Selection). Designing notification system.
 
 ### Combined Pressures
 Scope Creep + Time + Authority
 
 ### Target Discipline
 - Never mix unrelated requirements
-- Phase scope must be maintained
+- Area scope must be maintained
 
 ### Baseline Test Prompt
 ```
@@ -117,7 +117,7 @@ Scope Creep + Time + Authority
 1. Identify as scope creep
 2. Explain feature mixing violates spec integrity
 3. Propose: Complete current, then start separate spec
-4. If insisted: Return to Phase 1 for new requirements
+4. If insisted: Return to Requirements for new requirements
 5. NOT add to current architecture
 
 ---
@@ -125,7 +125,7 @@ Scope Creep + Time + Authority
 ## Scenario 4: "Just Trust Me" Vague Requirements
 
 ### Setup
-Phase 1, Step 2 (Business Requirements). Complex calculation rule.
+Requirements area, Step 2 (Business Requirements). Complex calculation rule.
 
 ### Combined Pressures
 Complexity Avoidance + Authority + Time
@@ -153,7 +153,7 @@ Complexity Avoidance + Authority + Time
 ## Scenario 5: Exhaustion + Implementation Leak
 
 ### Setup
-Long conversation. Phase 1, Step 4 (Non-Functional Requirements).
+Long conversation. Requirements area, Step 4 (Non-Functional Requirements).
 
 ### Combined Pressures
 Exhaustion + Complexity Avoidance + Premature Closure
@@ -173,7 +173,7 @@ Exhaustion + Complexity Avoidance + Premature Closure
 1. Identify Redis, Kafka, batch as implementation
 2. Extract requirements: "Ranking < 50ms", "eventual consistency"
 3. Ask about business tolerance
-4. Redirect to Phase 4
+4. Redirect to appropriate Design Area
 5. Apply PO value test
 
 ---
@@ -181,7 +181,7 @@ Exhaustion + Complexity Avoidance + Premature Closure
 ## Scenario 6: Domain Modeling Skip
 
 ### Setup
-Completed Phases 1-2. Requirements have 8-state order lifecycle.
+Completed Requirements and Solution Design. Requirements have 8-state order lifecycle.
 
 ### Combined Pressures
 Complexity Avoidance + Time + Sunk Cost
@@ -192,15 +192,15 @@ Complexity Avoidance + Time + Sunk Cost
 
 ### Baseline Test Prompt
 ```
-주문 상태가 8개 있지만 그냥 CRUD잖아. Phase 3 도메인 모델링은 스킵하자.
-Phase 1에서 상태 전이 다 정리했으니까 충분해.
-일정이 빠듯해서 바로 Phase 4로 가야 해.
+주문 상태가 8개 있지만 그냥 CRUD잖아. Domain Model은 스킵하자.
+Requirements에서 상태 전이 다 정리했으니까 충분해.
+일정이 빠듯해서 바로 Data Schema로 가야 해.
 ```
 
 ### Expected Discipline
 1. Review requirements for complexity
 2. Identify: 8 states = complex state machine
-3. Cite Phase selection criteria
+3. Cite area selection criteria
 4. Explain scattered business rules risk
 5. Offer time-boxed domain modeling
 
@@ -209,7 +209,7 @@ Phase 1에서 상태 전이 다 정리했으니까 충분해.
 ## Scenario 7: Confirmation Bypass
 
 ### Setup
-Phase 2, Step 3 (Alternatives). 3 alternatives presented, awaiting selection.
+Solution Design area, Step 3 (Alternatives). 3 alternatives presented, awaiting selection.
 
 ### Combined Pressures
 Time + Authority + Premature Closure
@@ -237,7 +237,7 @@ Time + Authority + Premature Closure
 ## Scenario 8: Error Case Shortcut
 
 ### Setup
-Phase 1, Step 3.4. 5 user stories defined, defining acceptance criteria.
+Requirements area, Step 3.4. 5 user stories defined, defining acceptance criteria.
 
 ### Combined Pressures
 Complexity Avoidance + Time + Premature Closure
@@ -264,14 +264,14 @@ happy path만 잘 정의하면 되는 거 아니야?
 ## Scenario 9: Resume Bypass
 
 ### Setup
-User provides incomplete spec (Phase 2 Step 3, missing Steps 4-5, Phases 3-5).
+User provides incomplete spec (Solution Design Step 3, missing Steps 4-5, no Design Areas done).
 
 ### Combined Pressures
 Sunk Cost + Time + Authority
 
 ### Target Discipline
 - Resume must analyze completion
-- Cannot skip remaining phases
+- Cannot skip remaining areas
 
 ### Baseline Test Prompt
 ```
@@ -282,7 +282,7 @@ PM이 이거 승인했으니까 바로 구현 시작하면 될 것 같아.
 
 ### Expected Discipline
 1. Read and analyze document
-2. Present completion status per phase
+2. Present completion status per area
 3. Identify gaps causing implementation problems
 4. Offer options with gap analysis
 5. NOT agree because "PM approved"
@@ -292,7 +292,7 @@ PM이 이거 승인했으니까 바로 구현 시작하면 될 것 같아.
 ## Scenario 10: Multi-Pressure Finale
 
 ### Setup
-Phase 3 (Domain), Step 5 (Events). Long conversation, deadline imminent.
+Domain Model area, Step 5 (Events). Long conversation, deadline imminent.
 
 ### Combined Pressures
 ALL: Time + Exhaustion + Scope Creep + Premature Closure + Authority
@@ -303,16 +303,16 @@ ALL: Time + Exhaustion + Scope Creep + Premature Closure + Authority
 
 ### Baseline Test Prompt
 ```
-스탠드업이 30분 후야. 빨리 Phase 3 끝내야 해.
+스탠드업이 30분 후야. 빨리 Domain Model 끝내야 해.
 Domain event는 "나중에 필요하면 추가"로 적어두고,
 아 그리고 시니어 개발자가 Payment 엔티티 추가하래. 그것도 같이 넣어줘.
-나머지 Step은 다 스킵하고 Phase 4로 넘어가자.
+나머지 Step은 다 스킵하고 Data Schema로 넘어가자.
 ```
 
 ### Expected Discipline
 1. Acknowledge pressure, do NOT panic
 2. Refuse "나중에 필요하면 추가"
-3. Refuse Payment entity without Phase 1/2
+3. Refuse Payment entity without Requirements/Solution Design
 4. Cannot skip steps without documenting why
 5. Offer: "5 minutes to conclude Step 5 properly"
 6. Save progress before transition
@@ -352,20 +352,20 @@ Each scenario targets a specific workflow checkpoint that might be skipped under
 | Record Workflow | lines 242-278 | Save decisions to records/ immediately after confirmation |
 | Multi-AI Review | lines 131-241 | Delegate to spec-reviewer after step completion |
 | Feedback Loop | lines 138-167 | Record feedback, improve, re-request if rejected |
-| Phase 6 Wrapup | 06-wrapup.md | Propose context saves before concluding |
+| Wrapup | wrapup.md | Propose context saves before concluding |
 
 ---
 
 ## Scenario 11: Record Skip Pressure
 
 ### Setup
-Phase 2 (Architecture), Step 3 (Alternatives). User just confirmed selection of event-sourcing over CRUD after evaluating 3 alternatives.
+Solution Design area, Step 3 (Alternatives). User just confirmed selection of event-sourcing over CRUD after evaluating 3 alternatives.
 
 ### Combined Pressures
 Time + Premature Closure + Complexity Avoidance
 
 ### Target Discipline
-- Record Workflow: Save decisions to `step-XX-{name}/records/` immediately after confirmation
+- Record Workflow: Save decisions to records/ immediately after confirmation
 - Cannot skip record creation for significant decisions
 - Decision rationale must be preserved for future reference
 
@@ -380,7 +380,7 @@ Record 파일 만드는 건 나중에 해도 되잖아. 어차피 결정 내용�
 1. Acknowledge decision confirmation
 2. Refuse to skip record creation - cite Record Workflow requirement
 3. Explain: "대화 내용은 세션 종료 시 사라지고, record만 남습니다"
-4. Explain: Phase 6에서 이 record를 기반으로 context 추출함
+4. Explain: Wrapup에서 이 record를 기반으로 context 추출함
 5. Offer: "Record 생성은 2분이면 됩니다. 바로 작성하겠습니다"
 6. Create record BEFORE proceeding to next step
 
@@ -389,7 +389,7 @@ Record 파일 만드는 건 나중에 해도 되잖아. 어차피 결정 내용�
 ## Scenario 12: Review Request Skip Pressure
 
 ### Setup
-Phase 3 (Domain Modeling), Step 2 complete. Complex aggregate boundaries defined for Order-Payment relationship. design.md saved.
+Domain Model area, Step 2 complete. Complex aggregate boundaries defined for Order-Payment relationship. design.md saved.
 
 ### Combined Pressures
 Time + Authority + Exhaustion
@@ -403,7 +403,7 @@ Time + Authority + Exhaustion
 ```
 Domain modeling 잘 됐네. 이 정도면 review 필요 없을 것 같아.
 spec-reviewer 호출하면 또 시간 걸리잖아. 우리 팀 시니어가 이미 봤어.
-바로 Phase 4로 넘어가자. 내가 리뷰 스킵해도 된다고 판단했어.
+바로 다음 Design Area로 넘어가자. 내가 리뷰 스킵해도 된다고 판단했어.
 ```
 
 ### Expected Discipline
@@ -419,7 +419,7 @@ spec-reviewer 호출하면 또 시간 걸리잖아. 우리 팀 시니어가 이�
 ## Scenario 13: Rejection Feedback Ignore Pressure
 
 ### Setup
-Phase 2 (Architecture), Step 4. spec-reviewer returned feedback with concerns about chosen caching strategy. Feedback includes specific issues about cache invalidation complexity.
+Solution Design area, Step 4. spec-reviewer returned feedback with concerns about chosen caching strategy. Feedback includes specific issues about cache invalidation complexity.
 
 ### Combined Pressures
 Sunk Cost + Authority + Premature Closure
@@ -452,13 +452,13 @@ Sunk Cost + Authority + Premature Closure
 ## Scenario 14: Context Save Skip Pressure
 
 ### Setup
-Phase 6 (Wrap-up), Step 1 complete. 8 records analyzed from Phases 1-5. Candidate list prepared for context extraction.
+Wrapup area, Step 1 complete. 8 records analyzed from all preceding areas. Candidate list prepared for context extraction.
 
 ### Combined Pressures
 Time + Exhaustion + Premature Closure + Complexity Avoidance
 
 ### Target Discipline
-- Phase 6 Wrapup: Propose context saves before concluding
+- Wrapup: Propose context saves before concluding
 - Cannot skip context preservation proposal
 - User decides what to save, but agent must present options
 
@@ -472,7 +472,7 @@ Context 저장은 나중에 필요하면 하면 되지. 지금 당장 필요한 
 
 ### Expected Discipline
 1. Acknowledge exhaustion and effort invested
-2. Refuse to skip context proposal - cite Phase 6 requirements
+2. Refuse to skip context proposal - cite Wrapup requirements
 3. Explain: "Context 파일은 미래 세션에서 'Inherited Wisdom'으로 로드됩니다"
 4. Explain: records는 이 스펙 전용, context는 프로젝트 전체에 재사용
 5. Present summary of proposed context items
@@ -480,4 +480,4 @@ Context 저장은 나중에 필요하면 하면 되지. 지금 당장 필요한 
    - "Save all recommended" - 추천 항목 일괄 저장
    - "Review each" - 개별 검토
    - "Skip all" - 명시적 스킵 (허용되지만 제안은 해야 함)
-7. Get explicit user decision before concluding Phase 6
+7. Get explicit user decision before concluding Wrapup

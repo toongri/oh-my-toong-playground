@@ -1,4 +1,4 @@
-# Design Area: Integration Pattern
+# Integration Pattern
 
 ## Role
 
@@ -58,7 +58,7 @@ When users respond vaguely to design questions, clarify with specific questions.
 - Confirm: Get user agreement on scope
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Communication Pattern Definition
 
@@ -80,7 +80,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Data Flow Design
 
@@ -107,7 +107,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Review: Discuss with user
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Stateful Component Policy
 
@@ -129,7 +129,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Review: Discuss with user
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Error and Recovery Flows
 
@@ -145,13 +145,13 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 5 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 6: Document Generation
 
-Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-**Record Naming**: `da-integration-pattern.{step}-{topic}.md`
+**Record Naming**: `{step}-{topic}.md`
 
 #### Checkpoint: Integration Pattern Complete
 - Announce: "Integration Pattern complete. Proceeding to next selected Design Area: [next area name]."

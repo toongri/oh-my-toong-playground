@@ -1,4 +1,4 @@
-# Phase 2: Solution Design
+# Solution Design
 
 ## Role
 
@@ -26,7 +26,7 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - **Included**: System structure, component responsibilities, data flow between systems, communication patterns, failure handling policies, transaction boundaries, consistency policies
 - **Excluded**: SQL statements, specific data structures (e.g., Redis ZSET), cache commands, algorithms, internal component design (covered in detailed design)
 
-## STOP: Phase 2 Red Flags
+## STOP: Solution Design Red Flags
 
 - Selecting solution without presenting alternatives → Show trade-offs to user
 - Communication pattern undefined for integration point → Document sync/async pattern
@@ -50,7 +50,7 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - Confirm: Get user agreement on complexity classification before proceeding
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Existing Architecture Analysis
 
@@ -69,7 +69,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Review: Review accuracy with user
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Solution Alternative Exploration
 
@@ -89,7 +89,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Discuss: Collect user feedback on each alternative
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Solution Selection
 
@@ -138,19 +138,19 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - **Internal logic**: For complex branching within a single component (3+ branch points), consider adding a Flowchart. See `references/diagram-selection.md` for Decision Tree, Decomposition criteria, and Flowchart syntax
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Document Generation
 
-Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Step 5 Complete
-- Announce: "Phase 2 (Solution Design) complete. Select Design Areas for this project."
+- Announce: "Solution Design complete. Select Design Areas for this project."
 
 ### Step 6: Design Area Identification
 
 #### 6.1 Analyze Project Complexity
-- Review: Phase 1-2 outputs to determine which Design Areas are needed
+- Review: Requirements and Solution Design outputs to determine which Design Areas are needed
 - For each Design Area, evaluate criteria:
   - **Domain Model**: 3+ state transitions, complex business rules, aggregate boundaries
   - **Data Schema**: DB/file/cache storage needed
@@ -169,7 +169,7 @@ Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
 - Document: Record selected Design Areas for subsequent execution
 
 #### Checkpoint: Step 6 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
-#### Checkpoint: Phase 2 Complete
-- Announce: "Phase 2 (Solution Design) complete. Selected Design Areas: [list]. Proceeding to first Design Area: [name]."
+#### Checkpoint: Solution Design Complete
+- Announce: "Solution Design complete. Selected Design Areas: [list]. Proceeding to first Design Area: [name]."

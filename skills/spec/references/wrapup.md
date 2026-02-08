@@ -1,4 +1,4 @@
-# Phase 6: Wrap-up
+# Wrapup
 
 ## Role
 
@@ -14,7 +14,7 @@ As a knowledge curator, analyze accumulated records from the specification proce
 - Preserve the "why" behind decisions
 - Respect user's judgment on what's worth keeping
 
-## STOP: Phase 6 Red Flags
+## STOP: Wrapup Red Flags
 
 - Saving without user approval -> Always get explicit confirmation
 - Including sensitive or confidential information -> Verify content is safe to persist
@@ -28,9 +28,9 @@ As a knowledge curator, analyze accumulated records from the specification proce
 #### 1.1 Gather Records
 
 - Collect: Read all records from:
-  - `.omt/specs/{spec-name}/step-01-requirements/records/`
-  - `.omt/specs/{spec-name}/step-02-solution-design/records/`
-  - `.omt/specs/{spec-name}/design-area-*/records/` (for each selected Design Area)
+  - `.omt/specs/{spec-name}/requirements/records/`
+  - `.omt/specs/{spec-name}/solution-design/records/`
+  - `.omt/specs/{spec-name}/{area-name}/records/` (for each selected area: domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
 - Organize: Group by category (architectural decisions, domain conventions, gotchas, etc.)
 
 #### 1.2 Extract Candidates
@@ -43,7 +43,7 @@ As a knowledge curator, analyze accumulated records from the specification proce
 
 #### Checkpoint: Step 1 Complete
 
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Context File Proposals
 
@@ -66,7 +66,7 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 ```
 ## Proposed Addition: [Topic]
 
-**Source**: Record from the corresponding Phase or Design Area - [Topic Name]
+**Source**: Record from the corresponding area - [Topic Name]
 **Rationale**: [Why this is worth preserving]
 **Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
 
@@ -97,7 +97,7 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 ```
 ## Proposed Decision Record: [Title]
 
-**Source**: Record from the corresponding Phase or Design Area - [Topic Name]
+**Source**: Record from the corresponding area - [Topic Name]
 **Rationale**: [Why this decision is worth preserving]
 **Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
 
@@ -122,7 +122,7 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 ```
 ## Proposed Gotcha: [Short Title]
 
-**Source**: Record from the corresponding Phase or Design Area - [Topic Name]
+**Source**: Record from the corresponding area - [Topic Name]
 **Rationale**: [Why this warning is worth preserving]
 **Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
 
@@ -135,7 +135,7 @@ Details: [Explanation of what to watch for and why]
 
 #### Checkpoint: Step 2 Complete
 
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: User Review and Approval
 
@@ -162,7 +162,7 @@ If existing context files exist:
 
 #### Checkpoint: Step 3 Complete
 
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Save and Summarize
 
@@ -177,8 +177,8 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - List: What was saved and where
 - Remind: "These will be loaded as 'Inherited Wisdom' in future spec sessions"
 
-#### Checkpoint: Phase 6 Complete
+#### Checkpoint: Wrapup Complete
 
-Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-- Announce: "Phase 6 complete. Specification process finished. Context preserved for future sessions."
+- Announce: "Wrapup complete. Specification process finished. Context preserved for future sessions."

@@ -1,4 +1,4 @@
-# Design Area: Domain Model
+# Domain Model
 
 ## Role
 
@@ -148,7 +148,7 @@ When users respond vaguely to design questions, clarify with specific questions.
 - Confirm: Get user agreement on scope
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Class Diagram Design
 
@@ -178,7 +178,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Review: Review diagram with user
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Define Domain Rules
 
@@ -198,7 +198,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement on categorization
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Create State Diagram
 
@@ -218,7 +218,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Review: Review diagram with user
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Identify Domain Events
 
@@ -243,13 +243,13 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 5 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 6: Document Generation
 
-Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-**Record Naming**: `da-domain-model.{step}-{topic}.md`
+**Record Naming**: `{step}-{topic}.md`
 
 #### Checkpoint: Domain Model Complete
 - Announce: "Domain Model complete. Proceeding to next selected Design Area: [next area name]."

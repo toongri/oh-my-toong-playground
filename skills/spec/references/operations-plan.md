@@ -1,4 +1,4 @@
-# Design Area: Operations Plan
+# Operations Plan
 
 ## Role
 
@@ -61,7 +61,7 @@ Document only when project-specific customization is required.
 - Confirm: Get user agreement on scope
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Observability Design
 
@@ -80,7 +80,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Deployment Strategy
 
@@ -97,7 +97,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Failure and Recovery Plan
 
@@ -116,13 +116,13 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Document Generation
 
-Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-**Record Naming**: `da-operations-plan.{step}-{topic}.md`
+**Record Naming**: `{step}-{topic}.md`
 
 #### Checkpoint: Operations Plan Complete
 - Announce: "Operations Plan complete. All selected Design Areas finished. Proceeding to Wrapup."
