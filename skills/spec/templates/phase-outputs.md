@@ -6,7 +6,7 @@ Output format templates for each phase of the spec skill.
 
 ## Design Area Selection Template
 
-After completing Phase 2 (Solution Design), use the following template to present Design Area selection to the user:
+After completing Solution Design, use the following template to present Design Area selection to the user:
 
 ### AskUserQuestion Format
 
@@ -56,7 +56,7 @@ Use the following criteria to determine which Design Areas to recommend:
 
 ---
 
-## Phase 1: Requirements Analysis
+## Requirements Analysis
 
 ```markdown
 # Requirements Analysis Document: [Project Name]
@@ -149,7 +149,7 @@ First, ... Second, ... Third, ...
 
 ---
 
-## Phase 2: Solution Design
+## Solution Design
 
 ```markdown
 # Solution Design Document

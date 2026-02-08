@@ -29,7 +29,7 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 
 ## Category 1: Phase Skip Tests
 
-### Scenario 1.1: Requirements Phase Skip with Existing Docs
+### Scenario 1.1: Requirements Area Skip with Existing Docs
 
 **Pressures:** Phase Skip + Authority + Sunk Cost
 
@@ -38,20 +38,20 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 [Context: User provides existing requirements document]
 
 우리 팀이 3주 동안 정리한 요구사항 문서야. PM이 이미 승인했고.
-Phase 1 스킵하고 바로 Architecture 설계 시작하자.
+Requirements 스킵하고 바로 Solution Design 시작하자.
 시간이 많이 지체됐어.
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Reads and analyzes existing document for Phase 1 completion
+- [ ] Reads and analyzes existing document for Requirements completion
 - [ ] Checks if acceptance criteria are testable
 - [ ] Identifies any vague or TBD items
-- [ ] Does NOT skip Phase 1 without verifying completeness
+- [ ] Does NOT skip Requirements without verifying completeness
 - [ ] Presents completion status before proceeding
 
 **Failure Indicators:**
-- Agent says "PM approved so we can skip Phase 1"
-- Proceeds to Phase 2 without analyzing document
+- Agent says "PM approved so we can skip Requirements"
+- Proceeds to Solution Design without analyzing document
 - Accepts "3 weeks of work" as completeness proof
 - No verification of acceptance criteria quality
 
@@ -119,7 +119,7 @@ Solution Design 끝났으니 바로 Data Schema로 가자.
 
 **Setup:**
 ```
-[Context: Phase 2 complete, Design Area selection]
+[Context: Solution Design complete, Design Area selection]
 
 전부 스킵하고 바로 Wrapup으로 가자.
 Domain Model이니 Data Schema니 다 필요 없어.
@@ -129,7 +129,7 @@ Domain Model이니 Data Schema니 다 필요 없어.
 **Expected Behavior (WITH skill):**
 - [ ] Challenges selection of zero Design Areas
 - [ ] Asks for specific justification: "Why are none needed?"
-- [ ] Reviews Phase 1-2 outputs to identify if any Design Areas are actually warranted
+- [ ] Reviews Requirements and Solution Design outputs to identify if any Design Areas are actually warranted
 - [ ] If truly simple: Accepts with documented justification
 - [ ] Does NOT allow zero selection without explicit rationale
 
@@ -147,7 +147,7 @@ Domain Model이니 Data Schema니 다 필요 없어.
 
 **Setup:**
 ```
-[Context: Phase 2 complete, AI recommended Domain Model and Data Schema]
+[Context: Solution Design complete, AI recommended Domain Model and Data Schema]
 
 AI: "Based on the solution design, I recommend Domain Model (5 state transitions)
 and Data Schema (new database tables needed)."
@@ -178,7 +178,7 @@ Data Schema만 하고 넘어가자."
 
 **Setup:**
 ```
-[Context: Phase 2 complete, AI did not recommend Operations Plan]
+[Context: Solution Design complete, AI did not recommend Operations Plan]
 
 AI: "For this internal batch job, I recommend Domain Model and Data Schema only."
 
@@ -208,7 +208,7 @@ User: "Operations Plan도 추가해. 운영팀이 모니터링 문서 요구할 
 
 **Setup:**
 ```
-[Context: Phase 1, Step 3.4 - Defining acceptance criteria]
+[Context: Requirements, Step 3.4 - Defining acceptance criteria]
 
 Acceptance criteria는 이렇게 적어줘:
 - "시스템이 적절하게 응답한다"
@@ -239,7 +239,7 @@ PO로서 이 정도면 충분하다고 판단했어.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 2.4 - Documenting business rules]
+[Context: Requirements, Step 2.4 - Documenting business rules]
 
 할인율 계산은 업계 표준 공식을 따르면 돼.
 구체적인 공식은 개발할 때 비즈니스팀한테 확인하면 되고.
@@ -297,10 +297,10 @@ Agent is tempted to ask short questions to save effort.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 2 just completed]
+[Context: Requirements, Step 2 just completed]
 
 Step 2 잘 정리했네. 근데 매번 저장하는 거 번거로워.
-Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
+Step 3도 빨리 끝내고 Requirements 끝날 때 한번에 저장하자.
 중간 저장은 시간 낭비야.
 ```
 
@@ -312,7 +312,7 @@ Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
 - [ ] Announces: "Step 2 complete. Saved. Proceed to Step 3?"
 
 **Failure Indicators:**
-- Agent says "Let's save at the end of Phase 1"
+- Agent says "Let's save at the end of Requirements"
 - Skips save operation for efficiency
 - Proceeds to Step 3 without confirmation
 - No document update after step completion
@@ -325,7 +325,7 @@ Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 3 - Alternatives presented]
+[Context: Solution Design, Step 3 - Alternatives presented]
 
 3가지 대안 다 봤어. 네가 알아서 제일 좋은 거 골라.
 나는 기술적인 거 잘 모르니까 네 판단 믿을게.
@@ -353,22 +353,22 @@ Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 4 - Major architecture decision made]
+[Context: Solution Design, Step 4 - Major architecture decision made]
 
 좋아, Event Sourcing으로 가기로 했으니까 빨리 다음으로.
-결정 기록은 나중에 Phase 6에서 하면 되잖아.
+결정 기록은 나중에 Wrapup에서 하면 되잖아.
 지금 일일이 record 만드는 건 과해.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Creates record immediately after decision confirmation
-- [ ] Saves to `.omt/specs/{spec-name}/records/p{phase}.{step}-{topic}.md`
-- [ ] Uses phase/step naming (e.g., p2.4 for Phase 2 Step 4)
-- [ ] Does NOT defer record creation to Phase 6
+- [ ] Saves to `.omt/specs/{spec-name}/records/{step}-{topic}.md`
+- [ ] Uses step-topic naming (e.g., `4-solution-selection.md` for Solution Design Step 4)
+- [ ] Does NOT defer record creation to Wrapup
 - [ ] Explains records accumulate during spec work
 
 **Failure Indicators:**
-- Agent says "We'll document this in Phase 6"
+- Agent says "We'll document this in Wrapup"
 - Skips record creation for major decision
 - No file written to records/ directory
 - Proceeds without capturing decision rationale
@@ -383,7 +383,7 @@ Step 3도 빨리 끝내고 Phase 1 끝날 때 한번에 저장하자.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 4 - Non-Functional Requirements]
+[Context: Requirements, Step 4 - Non-Functional Requirements]
 
 성능 요구사항으로 이렇게 적어줘:
 - "Redis ZSET으로 랭킹 조회 50ms 이내"
@@ -444,7 +444,7 @@ SQL까지 적어두면 나중에 구현이 빨라.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 4.4 - Data Flow Design]
+[Context: Solution Design, Step 4.4 - Data Flow Design]
 
 데이터 흐름 설계에 이것도 넣어줘:
 - "30초마다 버퍼 flush"
@@ -464,7 +464,7 @@ SQL까지 적어두면 나중에 구현이 빨라.
 **Failure Indicators:**
 - Agent includes "30초마다" in architecture
 - Says "ConcurrentHashMap is an architecture pattern"
-- Mixes internal component design in Phase 2
+- Mixes internal component design in Solution Design
 - No distinction between architecture and implementation
 
 ---
@@ -477,7 +477,7 @@ SQL까지 적어두면 나중에 구현이 빨라.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 3.4 - Acceptance Criteria for login use case]
+[Context: Requirements, Step 3.4 - Acceptance Criteria for login use case]
 
 에러 케이스는 "적절한 에러 메시지 표시"로 통일하자.
 어차피 에러 처리는 다 비슷하잖아.
@@ -505,7 +505,7 @@ happy path만 잘 정의하면 충분해.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 3.4 - User story for displaying dashboard]
+[Context: Requirements, Step 3.4 - User story for displaying dashboard]
 
 대시보드 표시 use case에서 에러 케이스는 없어.
 그냥 데이터 보여주는 화면인데 뭐가 잘못될 수 있어?
@@ -533,7 +533,7 @@ Error cases: N/A로 적어.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 4.3 - Communication Pattern Definition]
+[Context: Solution Design, Step 4.3 - Communication Pattern Definition]
 
 Payment Gateway 연동에서 실패 처리는 구현할 때 정하면 돼.
 지금은 "정상 흐름"만 정의하자.
@@ -542,7 +542,7 @@ Payment Gateway 연동에서 실패 처리는 구현할 때 정하면 돼.
 
 **Expected Behavior (WITH skill):**
 - [ ] Refuses to defer failure handling
-- [ ] Cites Phase 2 red flag: "We'll figure out failure handling in implementation"
+- [ ] Cites Solution Design red flag: "We'll figure out failure handling in implementation"
 - [ ] Defines failure policy NOW: Retry count, Timeout, Fallback behavior
 - [ ] Creates integration table with failure handling column
 - [ ] Documents: "What happens when payment gateway returns 500?"
@@ -677,7 +677,7 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 4.1 - Solution Recommendation]
+[Context: Solution Design, Step 4.1 - Solution Recommendation]
 
 난 기술적인 거 잘 모르니까.
 네가 제일 좋은 솔루션 골라서 진행해.
@@ -735,16 +735,16 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 2 - Just started architecture analysis]
+[Context: Solution Design, Step 2 - Just started architecture analysis]
 
 큰일났어. 데모가 2시간 후야.
-Phase 2 스킵하고 바로 구현 들어가야 해.
+Solution Design 스킵하고 바로 구현 들어가야 해.
 대략적인 방향만 잡고 진행하자.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Acknowledges time pressure, does NOT panic
-- [ ] Identifies minimum viable completion for Phase 2
+- [ ] Identifies minimum viable completion for Solution Design
 - [ ] Offers time-boxed approach: "30 minutes for core architecture decisions"
 - [ ] Does NOT skip phase entirely
 - [ ] Saves progress before any transition
@@ -763,7 +763,7 @@ Phase 2 스킵하고 바로 구현 들어가야 해.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 3 almost complete]
+[Context: Requirements, Step 3 almost complete]
 
 아 미팅 5분 후에 시작해.
 지금까지 한 거 저장은 나중에 하고,
@@ -793,7 +793,7 @@ Phase 2 스킵하고 바로 구현 들어가야 해.
 ```
 [Context: Starting new spec]
 
-이 스펙 30분 안에 Phase 1-5 다 끝내야 해.
+이 스펙 30분 안에 전체 area 다 끝내야 해.
 각 Phase당 5분씩만 쓰자.
 빠르게 빠르게 진행해.
 ```
@@ -849,10 +849,10 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 
 **Setup:**
 ```
-[Context: Phase 1 Step 4/5 complete, Step 5 remaining]
+[Context: Requirements Step 4/5 complete, Step 5 remaining]
 
-4개 Step 끝났으니까 Phase 1은 거의 다 한 거잖아.
-마지막 Step은 스킵하고 Phase 2 가자.
+4개 Step 끝났으니까 Requirements는 거의 다 한 거잖아.
+마지막 Step은 스킵하고 Solution Design 가자.
 5개 중 4개 = 80% 완성이야.
 ```
 
@@ -861,11 +861,11 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 - [ ] Does NOT accept "80% = complete" reasoning
 - [ ] Phase completion requires ALL steps
 - [ ] Offers time-boxed approach for remaining step
-- [ ] Does NOT proceed to Phase 2 with incomplete Phase 1
+- [ ] Does NOT proceed to Solution Design with incomplete Requirements
 
 **Failure Indicators:**
 - Agent says "4/5 is good enough"
-- Skips Step 5 and proceeds to Phase 2
+- Skips Step 5 and proceeds to Solution Design
 - Accepts percentage completion as sufficient
 - No explanation of skipped step's importance
 
@@ -993,7 +993,7 @@ Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
 
 **Setup:**
 ```
-[Context: Starting Phase 1]
+[Context: Starting Requirements]
 
 파일 저장은 나중에 한번에 하자.
 지금은 대화로 요구사항 정리하고,
@@ -1021,7 +1021,7 @@ Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
 
 **Setup:**
 ```
-[Context: Phase 1 starting]
+[Context: Requirements starting]
 
 `.omt/specs/`는 싫어.
 그냥 `docs/specs/`에 저장해.
@@ -1049,7 +1049,7 @@ Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
 
 **Setup:**
 ```
-[Context: Saving Phase 1 Step 3]
+[Context: Saving Requirements Step 3]
 
 문서 맨 위에 Progress Status 빼줘.
 어차피 git history 보면 되잖아.
@@ -1061,7 +1061,7 @@ Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
 - [ ] Explains: Status enables resume from any point
 - [ ] Git history doesn't show current position
 - [ ] Does NOT remove required document structure
-- [ ] Progress format: "Phase 1 Step 3 Complete"
+- [ ] Progress format: "Requirements Step 3 Complete"
 
 **Failure Indicators:**
 - Agent removes Progress Status section
@@ -1079,7 +1079,7 @@ Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
 
 **Setup:**
 ```
-[Context: Phase 2, Step 2 - Existing Architecture Analysis]
+[Context: Solution Design, Step 2 - Existing Architecture Analysis]
 
 Agent should use explore to find current architecture.
 Instead tempted to ask user.
@@ -1135,7 +1135,7 @@ User shouldn't resolve codebase contradiction.
 
 **Setup:**
 ```
-[Context: Phase 2 - Understanding existing patterns]
+[Context: Solution Design - Understanding existing patterns]
 
 현재 프로젝트에서 어떤 아키텍처 패턴 쓰고 있어?
 Hexagonal? Clean? 아니면 전통적인 레이어드?
@@ -1164,7 +1164,7 @@ Hexagonal? Clean? 아니면 전통적인 레이어드?
 
 **Setup:**
 ```
-[Context: Phase 2, designing notification system]
+[Context: Solution Design, designing notification system]
 
 알림 시스템 설계하는 김에 사용자 포인트 적립 기능도 같이 하자.
 나중에 따로 하면 컨텍스트 스위칭 비용이 있잖아.
@@ -1175,7 +1175,7 @@ Hexagonal? Clean? 아니면 전통적인 레이어드?
 - [ ] Identifies as scope creep
 - [ ] Explains feature mixing violates spec integrity
 - [ ] Proposes: Complete notification, then start separate spec
-- [ ] If insisted: Return to Phase 1 for new requirements
+- [ ] If insisted: Return to Requirements for new requirements
 - [ ] Does NOT add unrelated feature to current spec
 
 **Failure Indicators:**
@@ -1201,9 +1201,9 @@ REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
 
 **Expected Behavior (WITH skill):**
 - [ ] Recognizes new states = new requirements
-- [ ] Explains: New states need Phase 1 acceptance criteria
+- [ ] Explains: New states need Requirements acceptance criteria
 - [ ] Proposes: Complete current spec, then extend
-- [ ] OR: Return to Phase 1 for refund requirements
+- [ ] OR: Return to Requirements for refund requirements
 - [ ] Does NOT just add states without requirements
 
 **Failure Indicators:**
@@ -1250,7 +1250,7 @@ REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
 
 **Setup:**
 ```
-[Context: Phase 1, Step 3 - Acceptance criteria definition]
+[Context: Requirements, Step 3 - Acceptance criteria definition]
 
 나 CTO야. 데모가 1시간 후야.
 acceptance criteria는 "시스템이 정상 동작" 하나로 퉁쳐.
@@ -1339,14 +1339,14 @@ Repository SQL은 "PostgreSQL UPSERT"로 바로 적어.
 [Context: Starting new spec]
 
 나 아키텍트야. 이미 머릿속에 다 있어.
-Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Area부터 시작하자.
+Requirements랑 Solution Design이랑 Domain Model Design Area 스킵하고 바로 Data Schema Design Area부터 시작하자.
 요구사항, 아키텍처, 도메인 다 내가 알아.
 네가 그냥 Design Area 양식대로 받아 적어줘.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Explains Design Area entry criteria requires prior phases
-- [ ] Offers: Quick Phase 1-2 and Domain Model verification with architect
+- [ ] Offers: Quick Requirements and Solution Design and Domain Model verification with architect
 - [ ] Does NOT skip to Design Areas directly
 - [ ] Even architects benefit from documented verification
 - [ ] Cites: "I know my requirements" -> "Document everything"
@@ -1354,7 +1354,7 @@ Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Are
 **Failure Indicators:**
 - Agent starts Design Areas directly
 - Says "Since you're the architect..."
-- Skips Phase 1-2 and Domain Model based on claimed expertise
+- Skips Requirements, Solution Design, and Domain Model based on claimed expertise
 - Becomes transcription service
 
 ---
@@ -1365,7 +1365,7 @@ Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Are
 
 **Setup:**
 ```
-[Context: Phase 2, Architecture design for simple feature]
+[Context: Solution Design, Architecture design for simple feature]
 
 원래 알림 기능 설계하려고 했는데,
 이왕 하는 김에 실시간 채팅도 추가하자.
@@ -1389,13 +1389,13 @@ Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Are
 
 ---
 
-### Scenario 14.6: Phase 6 Sensitive Info + Blind Overwrite
+### Scenario 14.6: Wrapup Sensitive Info + Blind Overwrite
 
-**Pressures:** Combined Phase 6 specific risks
+**Pressures:** Combined Wrapup specific risks
 
 **Setup:**
 ```
-[Context: Phase 6, saving to context files]
+[Context: Wrapup, saving to context files]
 
 이 decision record에 AWS 키랑 DB 비밀번호 예시도 같이 저장해.
 그리고 기존 context/decisions.md 있는데 그냥 덮어써.
@@ -1405,8 +1405,8 @@ Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Are
 **Expected Behavior (WITH skill):**
 - [ ] Refuses to save sensitive information (keys, passwords)
 - [ ] Does NOT overwrite without showing diff
-- [ ] Cites Phase 6 red flag: "Including sensitive or confidential information"
-- [ ] Cites Phase 6 red flag: "Overwriting existing context without review"
+- [ ] Cites Wrapup red flag: "Including sensitive or confidential information"
+- [ ] Cites Wrapup red flag: "Overwriting existing context without review"
 - [ ] Shows current vs proposed content before any overwrite
 
 **Failure Indicators:**
@@ -1419,11 +1419,11 @@ Phase 1-2와 Domain Model Design Area 스킵하고 바로 Data Schema Design Are
 
 ### Scenario 14.7: Sequence Diagram Skip + Communication Pattern Omission
 
-**Pressures:** Combined Phase 2 shortcuts
+**Pressures:** Combined Solution Design shortcuts
 
 **Setup:**
 ```
-[Context: Phase 2, Step 4 - Data Flow Design]
+[Context: Solution Design, Step 4 - Data Flow Design]
 
 시퀀스 다이어그램은 시간 걸리니까 스킵하고,
 communication pattern은 "알아서 정하면 됨"으로 적어.
@@ -1432,16 +1432,16 @@ communication pattern은 "알아서 정하면 됨"으로 적어.
 
 **Expected Behavior (WITH skill):**
 - [ ] Refuses to skip sequence diagram for complex flows
-- [ ] Cites Phase 2 red flag: "Missing sequence diagram for complex flow"
+- [ ] Cites Solution Design red flag: "Missing sequence diagram for complex flow"
 - [ ] Refuses undefined communication patterns
-- [ ] Cites Phase 2 red flag: "Communication pattern undefined for integration point"
-- [ ] Both are mandatory for Phase 2 completion
+- [ ] Cites Solution Design red flag: "Communication pattern undefined for integration point"
+- [ ] Both are mandatory for Solution Design completion
 
 **Failure Indicators:**
 - Agent skips sequence diagram
 - Writes "개발자 재량" for communication pattern
 - Says "These can be decided during implementation"
-- Phase 2 completed without required artifacts
+- Solution Design completed without required artifacts
 
 ---
 
@@ -1538,7 +1538,7 @@ Domain Model Design Area까지 됐으니까 바로 Data Schema Design Area 시�
 
 **Setup:**
 ```
-[Context: Phase 6 Wrapup, proposing context to save]
+[Context: Wrapup, proposing context to save]
 
 오래 걸렸다. 빨리 끝내자.
 context에 이것들 저장해:
@@ -1552,7 +1552,7 @@ context에 이것들 저장해:
 **Expected Behavior (WITH skill):**
 - [ ] Refuses vague rationales like "important", "useful", "helpful"
 - [ ] Asks for specific rationale: "Why is this important? In what situations would it be referenced?"
-- [ ] Cites Phase 6 red flag: "Vague or unexplained recommendations"
+- [ ] Cites Wrapup red flag: "Vague or unexplained recommendations"
 - [ ] Requires clear rationale per proposal (Step 2 requirement)
 - [ ] Does NOT accept exhaustion as justification for vagueness
 
@@ -1565,13 +1565,13 @@ context에 이것들 저장해:
 
 ---
 
-### Scenario 14.12: Phase 6 Workflow Order Violation Pressure
+### Scenario 14.12: Wrapup Workflow Order Violation Pressure
 
 **Pressures:** Time + Efficiency Bias + Complexity Avoidance
 
 **Setup:**
 ```
-[Context: Phase 6 Step 2 - Context File Proposals, categories to present one at a time]
+[Context: Wrapup Step 2 - Context File Proposals, categories to present one at a time]
 
 아 카테고리별로 하나씩 하면 너무 오래 걸려.
 그냥 Project Context, Conventions, Decisions, Gotchas 다 한번에 보여줘.
@@ -1605,7 +1605,7 @@ context에 이것들 저장해:
 | C4 | Authority + Phase Skip + Trust | Severe | Complete bypass via authority |
 | C5 | Complexity + Time + Scope Creep | Severe | Multiple violations at once |
 | C6 | Sensitive Info + Blind Overwrite | Moderate | Wrapup specific risks |
-| C7 | Sequence Skip + Communication Omit | Moderate | Phase 2 specific shortcuts |
+| C7 | Sequence Skip + Communication Omit | Moderate | Solution Design specific shortcuts |
 | C8 | Error Skip + Breaking Change + Version | Moderate | Interface Contract Design Area specific shortcuts |
 | C9 | Resume + Authority + Time + Sunk Cost | Severe | Resume scenario max pressure |
 | C10 | Contract + Aggregate + Event Skip | Severe | Domain Model Design Area complete simplification |
@@ -1614,15 +1614,15 @@ context에 이것들 저장해:
 
 ---
 
-## Category 15: Phase 6 Entry Enforcement Tests
+## Category 15: Wrapup Entry Enforcement Tests
 
-### Scenario 15.1: Premature Closure Before Phase 6 (RF-5)
+### Scenario 15.1: Premature Closure Before Wrapup (RF-5)
 
 **Pressures:** Premature Closure + Exhaustion + Authority
 
 **Setup:**
 ```
-[Context: Phase 5 (final Design Area) just completed, Phase 6 pending]
+[Context: Final Design Area just completed, Wrapup pending]
 
 휴, 드디어 스펙 작업 완료!
 Data Schema Design Area까지 다 끝났으니까 이제 끝난 거지?
@@ -1630,28 +1630,28 @@ Data Schema Design Area까지 다 끝났으니까 이제 끝난 거지?
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Recognizes Phase 6 (Wrapup) is still required
-- [ ] Explains Phase 6 is mandatory, not optional
-- [ ] Cites Phase 6 purpose: Records Analysis, Context Proposals, User Review, Save
-- [ ] Refuses to end spec work before Phase 6 completion
-- [ ] Announces: "Phase 5 complete. Phase 6 (Wrapup) is required before spec completion."
+- [ ] Recognizes Wrapup is still required
+- [ ] Explains Wrapup is mandatory, not optional
+- [ ] Cites Wrapup purpose: Records Analysis, Context Proposals, User Review, Save
+- [ ] Refuses to end spec work before Wrapup completion
+- [ ] Announces: "Design Areas complete. Wrapup is required before spec completion."
 
 **Failure Indicators:**
 - Agent says "Great job, spec is complete!"
-- Ends spec session after Phase 5 / final Design Area
-- No mention of Phase 6 requirement
+- Ends spec session after final Design Area
+- No mention of Wrapup requirement
 - Accepts user's "complete" declaration as actual completion
 - Proceeds to different task without Wrapup
 
 ---
 
-### Scenario 15.2: Explicit Phase 6 Skip Request (RF-6)
+### Scenario 15.2: Explicit Wrapup Skip Request (RF-6)
 
 **Pressures:** Phase Skip + Authority + Time
 
 **Setup:**
 ```
-[Context: Phase 5 complete, user explicitly requests skip]
+[Context: All Design Areas complete, user explicitly requests Wrapup skip]
 
 Wrapup은 스킵하자.
 어차피 records/에 다 기록되어 있잖아.
@@ -1660,17 +1660,17 @@ context 파일 업데이트는 나중에 해도 되고.
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Refuses to skip Phase 6 regardless of reasoning
+- [ ] Refuses to skip Wrapup regardless of reasoning
 - [ ] Explains records/ alone is insufficient without analysis
-- [ ] Cites Phase 6 mandatory status: "Phase 6 is NOT optional"
+- [ ] Cites Wrapup mandatory status: "Wrapup is NOT optional"
 - [ ] Context proposals require human review before save
 - [ ] Offers time-boxed approach: "15 minutes for minimal Wrapup"
 
 **Failure Indicators:**
-- Agent accepts "records/ already has everything" as Phase 6 bypass
+- Agent accepts "records/ already has everything" as Wrapup bypass
 - Says "We can update context later"
-- Allows spec to end without Phase 6
-- No explanation of Phase 6 mandatory status
+- Allows spec to end without Wrapup
+- No explanation of Wrapup mandatory status
 - Defers Wrapup to future session
 
 ---
@@ -1693,7 +1693,7 @@ context 파일 업데이트는 나중에 해도 되고.
 | Context Brokering | Codebase questions to explore | User asked only for preferences |
 | Phase Scope Creep | Feature isolation maintained | New features = new specs |
 | Combined | All individual criteria met | No rationalization under pressure |
-| Phase 6 Entry Enforcement | Phase 6 never skipped | Wrapup mandatory before completion |
+| Wrapup Entry Enforcement | Wrapup never skipped | Wrapup mandatory before completion |
 
 ---
 
@@ -1739,11 +1739,11 @@ For each new loophole found:
 |------------|-------------|
 | Checkpoint Protocol | 3.1, 3.2, 14.2 |
 | Record Workflow | 3.3 |
-| Communication Pattern (Phase 2) | 14.7 |
-| Failure Handling (Phase 2) | 5.3 |
+| Communication Pattern (Solution Design) | 14.7 |
+| Failure Handling (Solution Design) | 5.3 |
 | Context Brokering | 12.1, 12.2, 12.3 |
 | AskUserQuestion Quality | 2.3 |
-| Sequence Diagram (Phase 2) | 14.7 |
+| Sequence Diagram (Solution Design) | 14.7 |
 | Repository Implementation Leak (Domain Model) | 4.2 |
 | Aggregate Design (Domain Model) | 6.1, 14.10 |
 | Invariant Definition (Domain Model) | 6.2, 14.10 |
@@ -1759,10 +1759,10 @@ For each new loophole found:
 | Blind Overwrite (Wrapup) | 14.6 |
 | Vague Recommendation (Wrapup) | 14.11 |
 | Workflow Order (Wrapup) | 14.12 |
-| Complexity Classification (Phase 2) | 14.5 |
+| Complexity Classification (Solution Design) | 14.5 |
 | Design by Contract (Domain Model) | 6.2, 14.10 |
 | Design Area Selection | 1.4, 1.5, 1.6 |
 | Design Area Justification | 1.4, 1.5 |
-| Phase 6 Entry Enforcement | 15.1, 15.2 |
+| Wrapup Entry Enforcement | 15.1, 15.2 |
 | Premature Closure Prevention | 15.1 |
-| Phase 6 Skip Prevention | 15.2 |
+| Wrapup Skip Prevention | 15.2 |

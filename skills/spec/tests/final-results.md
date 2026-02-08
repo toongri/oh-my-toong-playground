@@ -1,5 +1,9 @@
 # Spec Skill Improvement - Final Results
 
+> **Historical Document**: This file records test results from when the spec skill used Phase 1-6 terminology.
+> Phase references (e.g., `01-requirements.md`, `Phase 2`) reflect the naming at time of testing.
+> The current model uses area-based naming: Requirements, Solution Design, Domain Model, Data Schema, Interface Contract, Integration Pattern, Operations Plan, Wrapup.
+
 ## Date
 2026-01-26
 
@@ -59,7 +63,7 @@ All 5 phase files updated with:
 - Entry/Exit Criteria checklists
 - "No TBD" verification in Exit Criteria
 - Checkpoint patterns replaced with protocol references
-- Phase Completion Protocol references
+- Area Completion Protocol references
 
 Phase-specific Red Flags added to:
 - 01-requirements.md (5 flags)
@@ -183,7 +187,7 @@ The transition from RED to GREEN achieved 100% success rate across all 4 scenari
 | 11 | Record Skip Pressure | Record Workflow (lines 242-278) | Time + Premature Closure + Complexity Avoidance |
 | 12 | Review Request Skip Pressure | Checkpoint Protocol (lines 121-131) | Time + Authority + Exhaustion |
 | 13 | Rejection Feedback Ignore Pressure | Feedback Loop (lines 136-167) | Sunk Cost + Authority + Premature Closure |
-| 14 | Context Save Skip Pressure | Phase 6 Wrapup (06-wrapup.md) | Time + Exhaustion + Premature Closure + Complexity Avoidance |
+| 14 | Context Save Skip Pressure | Wrapup (wrapup.md) | Time + Exhaustion + Premature Closure + Complexity Avoidance |
 
 ### Results Summary
 
@@ -246,7 +250,7 @@ The spec skill successfully enforces all 4 target workflow behaviors:
 | Record creation | Record Workflow + Iron Law | PASS |
 | Review request | Checkpoint Protocol + Multi-AI Review | PASS |
 | Rejection handling | Feedback Loop + User Controls the Loop | PASS |
-| Context save proposal | Phase 6 Wrapup | PASS |
+| Context save proposal | Wrapup | PASS |
 
 #### Key Discipline Patterns Enforced
 
@@ -352,7 +356,7 @@ These responses require further challenge - they are NOT sufficient:
 
 ### Additional Finding
 
-The `long-context-pressure-scenarios.md` file still uses old "Phase 3/4/5/6" terminology instead of the new "Design Area" structure. Should be updated to maintain consistency.
+The `long-context-pressure-scenarios.md` file has been updated to use area-based naming consistent with the current model.
 
 ### Conclusion
 

@@ -1,4 +1,4 @@
-# Phase 1: Requirements Analysis
+# Requirements Analysis
 
 ## Role
 
@@ -28,11 +28,11 @@ For each user action the system tracks, clarify exactly when it occurs, how dupl
 - Exclude: "30-second flush cycle", "Redis ZSET", "Kafka Consumer", "Bucket key format"
 - Test: "Is this something a PO would find valuable to understand?" → Yes = Requirement, No = Implementation detail
 
-## STOP: Phase 1 Red Flags
+## STOP: Requirements Red Flags
 
 - Acceptance criteria uses "properly", "gracefully", "correctly" → Get specifics
 - Error case marked "N/A" without reason → Define or justify
-- Implementation details appear (Redis, Kafka, SQL) → Move to Phase 4
+- Implementation details appear (Redis, Kafka, SQL) → Move to appropriate Design Area
 - "Industry standard" or "We can ask later" → Get concrete formula/rule now
 - User says "skip this step" → Explain why each step matters
 
@@ -57,7 +57,7 @@ For each user action the system tracks, clarify exactly when it occurs, how dupl
 - Confirmation: Finalize the definition of done
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Understanding Business Requirements
 
@@ -83,7 +83,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
   - Specific examples with numbers
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Deriving Use Cases
 
@@ -139,7 +139,7 @@ For each user story:
      - Business rule violations
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Define Non-Functional Requirements
 
@@ -176,7 +176,7 @@ Define only requirements that differ from project baselines or are critical.
 - Finalization: Finalize with user
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Define Validation Scenarios
 
@@ -190,11 +190,11 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirmation: Get user approval
 
 #### Checkpoint: Step 5 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 6: Document Generation
 
-Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-#### Checkpoint: Phase 1 Complete
-- Announce: "Phase 1 complete. Entry criteria for Phase 2: Phase 1 complete OR requirements already documented, user confirmed readiness to proceed, complexity classification agreed upon"
+#### Checkpoint: Requirements Complete
+- Announce: "Requirements complete. Entry criteria for Solution Design: Requirements complete OR requirements already documented, user confirmed readiness to proceed, complexity classification agreed upon"
