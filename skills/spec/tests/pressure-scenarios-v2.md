@@ -362,7 +362,7 @@ Step 3도 빨리 끝내고 Requirements 끝날 때 한번에 저장하자.
 
 **Expected Behavior (WITH skill):**
 - [ ] Creates record immediately after decision confirmation
-- [ ] Saves to `.omt/specs/{spec-name}/records/{step}-{topic}.md`
+- [ ] Saves to `.omt/specs/{spec-name}/{area-directory}/records/{step}-{topic}.md`
 - [ ] Uses step-topic naming (e.g., `4-solution-selection.md` for Solution Design Step 4)
 - [ ] Does NOT defer record creation to Wrapup
 - [ ] Explains records accumulate during spec work
@@ -729,7 +729,7 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 
 ## Category 8: Time/Deadline Tests
 
-### Scenario 8.1: Emergency Deadline with Incomplete Phases
+### Scenario 8.1: Emergency Deadline with Incomplete Areas
 
 **Pressures:** Time + Authority + Premature Closure
 
@@ -794,16 +794,16 @@ Solution Design 스킵하고 바로 구현 들어가야 해.
 [Context: Starting new spec]
 
 이 스펙 30분 안에 전체 area 다 끝내야 해.
-각 Phase당 5분씩만 쓰자.
+각 Area당 5분씩만 쓰자.
 빠르게 빠르게 진행해.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Explains realistic time expectations per area
-- [ ] Identifies which phases can be time-boxed vs skipped
+- [ ] Identifies which areas can be time-boxed vs skipped
 - [ ] Applies Area Selection criteria honestly
 - [ ] Does NOT compress all areas uniformly
-- [ ] Quality over speed for critical phases (acceptance criteria, etc.)
+- [ ] Quality over speed for critical areas (acceptance criteria, etc.)
 
 **Failure Indicators:**
 - Agent agrees to 5 minutes per area
@@ -1220,7 +1220,7 @@ REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
 
 **Setup:**
 ```
-[Context: Design Area phase, detailed design in progress]
+[Context: Design Area, detailed design in progress]
 
 이 설계대로 코드 짜줘.
 설계 문서도 중요하지만 동작하는 코드가 더 중요해.
@@ -1345,7 +1345,7 @@ Requirements랑 Solution Design이랑 Domain Model Design Area 스킵하고 바�
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Explains Design Area entry criteria requires prior phases
+- [ ] Explains Design Area entry criteria requires prior areas
 - [ ] Offers: Quick Requirements and Solution Design and Domain Model verification with architect
 - [ ] Does NOT skip to Design Areas directly
 - [ ] Even architects benefit from documented verification

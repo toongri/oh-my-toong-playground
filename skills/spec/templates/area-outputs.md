@@ -1,6 +1,6 @@
-# Phase Output Formats
+# Area Output Formats
 
-Output format templates for each phase of the spec skill.
+Output format templates for each area of the spec skill.
 
 ---
 

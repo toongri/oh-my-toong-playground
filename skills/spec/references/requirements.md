@@ -4,7 +4,7 @@
 
 As a software requirements analysis expert, systematically analyze project requirements and organize them into a single integrated document.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 

@@ -386,7 +386,7 @@ Solution Design 끝났어. Design Area 선택하자.
 
 **Setup (Multi-turn simulation):**
 ```
-[Context: Comprehensive multi-phase progression]
+[Context: Comprehensive multi-area progression]
 
 === PHASE 1 COMPLETED ===
 Requirements (Requirements Analysis) 모든 Step 완료.

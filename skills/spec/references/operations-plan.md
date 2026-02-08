@@ -4,7 +4,7 @@
 
 As an operations design specialist, systematically design the operational aspects of the project including observability, deployment, and failure recovery.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 

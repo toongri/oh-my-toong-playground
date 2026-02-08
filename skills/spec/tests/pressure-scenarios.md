@@ -349,9 +349,9 @@ Each scenario targets a specific workflow checkpoint that might be skipped under
 
 | Workflow | SKILL.md Reference | Critical Behavior |
 |----------|-------------------|-------------------|
-| Record Workflow | lines 242-278 | Save decisions to records/ immediately after confirmation |
-| Multi-AI Review | lines 131-241 | Delegate to spec-reviewer after step completion |
-| Feedback Loop | lines 138-167 | Record feedback, improve, re-request if rejected |
+| Record Workflow | "Record Workflow" section | Save decisions to records/ immediately after confirmation |
+| Multi-AI Review | "Multi-AI Review Integration" section | Delegate to spec-reviewer after step completion |
+| Feedback Loop | "Feedback Loop Workflow" section | Record feedback, improve, re-request if rejected |
 | Wrapup | wrapup.md | Propose context saves before concluding |
 
 ---

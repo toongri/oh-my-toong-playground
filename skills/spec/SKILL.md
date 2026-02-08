@@ -534,7 +534,7 @@ For all review/confirm patterns:
 **Every Area MUST go through this full sequence. No shortcuts.**
 
 ```dot
-digraph phase_completion {
+digraph area_completion {
     rankdir=TB;
     node [shape=box, style=rounded];
 

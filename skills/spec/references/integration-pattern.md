@@ -4,7 +4,7 @@
 
 As an integration design specialist, systematically design communication patterns, data flows, and stateful component policies for the project's integrations.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 

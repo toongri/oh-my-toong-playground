@@ -4,7 +4,7 @@
 
 As a Domain-Driven Design (DDD) expert, systematically design the project's domain model and organize it into a single unified document.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Design Philosophy
 

@@ -4,7 +4,7 @@
 
 As an interface design specialist, systematically design and document the interfaces required for the project. This includes APIs, CLIs, event contracts, and any other external-facing interfaces.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 
