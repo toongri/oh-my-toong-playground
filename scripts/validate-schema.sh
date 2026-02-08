@@ -45,13 +45,15 @@ VALID_SKILL_SECTION_FIELDS="platforms items"
 VALID_SCRIPT_SECTION_FIELDS="platforms items"
 
 # Item-level fields (inside items array, for objects)
-VALID_AGENT_ITEM_FIELDS="component add-skills platforms"
+VALID_AGENT_ITEM_FIELDS="component add-skills add-hooks platforms"
 VALID_COMMAND_ITEM_FIELDS="component platforms"
 VALID_HOOK_ITEM_FIELDS="component event matcher type timeout command prompt platforms"
 VALID_SKILL_ITEM_FIELDS="component platforms"
 VALID_SCRIPT_ITEM_FIELDS="component platforms"
 
-VALID_EVENTS="SessionStart UserPromptSubmit PreToolUse PostToolUse Stop"
+VALID_ADD_HOOK_ITEM_FIELDS="event component command type matcher timeout prompt"
+
+VALID_EVENTS="SessionStart UserPromptSubmit PreToolUse PostToolUse Stop SubagentStop"
 VALID_HOOK_TYPES="command prompt"
 VALID_TARGETS="claude gemini codex"
 
@@ -231,6 +233,39 @@ validate_agents() {
                         local skill=$(yq ".agents.items[$i].add-skills[$j]" "$yaml_file")
                         if [[ -n "$skill" && "$skill" != "null" ]]; then
                             check_project_component_format "$skill" "agents.items[$i].add-skills[$j]"
+                        fi
+                    done
+                fi
+            fi
+
+            # add-hooks 검증
+            local has_add_hooks=$(yq ".agents.items[$i].add-hooks // null" "$yaml_file")
+            if [[ "$has_add_hooks" != "null" ]]; then
+                local hooks_count=$(yq ".agents.items[$i].add-hooks | length" "$yaml_file")
+                if [[ $hooks_count -gt 0 ]]; then
+                    for j in $(seq 0 $((hooks_count - 1))); do
+                        check_unknown_fields "$yaml_file" ".agents.items[$i].add-hooks[$j]" "$VALID_ADD_HOOK_ITEM_FIELDS" "agents.items[$i].add-hooks[$j]"
+
+                        # event 값 검증
+                        local hook_event=$(yq ".agents.items[$i].add-hooks[$j].event // \"\"" "$yaml_file")
+                        if [[ -n "$hook_event" && "$hook_event" != "null" ]]; then
+                            if [[ ! " $VALID_EVENTS " =~ " $hook_event " ]]; then
+                                log_error "agents.items[$i].add-hooks[$j].event: 잘못된 값 '$hook_event' (지원: $VALID_EVENTS)"
+                            fi
+                        fi
+
+                        # type 값 검증
+                        local hook_type=$(yq ".agents.items[$i].add-hooks[$j].type // \"\"" "$yaml_file")
+                        if [[ -n "$hook_type" && "$hook_type" != "null" ]]; then
+                            if [[ ! " $VALID_HOOK_TYPES " =~ " $hook_type " ]]; then
+                                log_error "agents.items[$i].add-hooks[$j].type: 잘못된 값 '$hook_type' (지원: $VALID_HOOK_TYPES)"
+                            fi
+                        fi
+
+                        # component 형식 검증
+                        local hook_component=$(yq ".agents.items[$i].add-hooks[$j].component // \"\"" "$yaml_file")
+                        if [[ -n "$hook_component" && "$hook_component" != "null" ]]; then
+                            check_project_component_format "$hook_component" "agents.items[$i].add-hooks[$j].component"
                         fi
                     done
                 fi
