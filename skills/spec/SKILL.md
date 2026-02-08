@@ -36,8 +36,11 @@ NO AREA COMPLETION WITHOUT:
 | User confirmation at every Step | Agent decisions = user blamed |
 | Area completion = spec-reviewer + user gate | Unchecked areas = compounding errors |
 | No Step/Area skipping ever | "Simple" hides complexity |
+| spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
 
 ## Area Entry Criteria
+
+**Interpretation rule:** Enter when **ANY** condition is met. Skip when **ALL** conditions are met.
 
 ### Requirements Analysis
 
@@ -239,7 +242,7 @@ See each Design Area reference file for domain-specific clarification examples.
 
 **NEVER burden the user with questions the codebase can answer.** Use explore/oracle for codebase questions, ask user for preferences only.
 
-When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation.
+When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation. Autonomous decisions still require full Questioning Protocol quality (Context→Tension→Question) when presenting the decision rationale.
 
 ## Language
 
@@ -437,6 +440,7 @@ After receiving spec-reviewer feedback, YOU must:
 2. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
 3. **Form your recommendation** - What do YOU think the user should do?
 4. **Present holistically** - Do not just dump reviewer output. Synthesize it.
+5. **All sections mandatory** - Present every section spec-reviewer returns (Consensus, Divergence, Concerns, Recommendation). No section omission.
 
 **Example presentation:**
 
@@ -449,7 +453,7 @@ After receiving spec-reviewer feedback, YOU must:
 | User Response | Action |
 |---------------|--------|
 | "Incorporate feedback" | Update design.md, re-review if needed |
-| "Skip this feedback" | Proceed without changes |
+| "Skip this feedback" | Record skip reason in `records/`, then proceed without changes |
 | "Need another round" | Delegate to spec-reviewer again |
 | "Step complete" | Save final, proceed to next step |
 
@@ -509,6 +513,13 @@ When errors or omissions in previous Areas are discovered during design:
 5. Resume current Step
 
 **Example**: When discovering new state transition rules in Domain Model, add the relevant scenario to Requirements' Use Cases before continuing
+
+## Scope Guard
+
+New features or requirements NOT in the original spec scope MUST be redirected to a separate spec. The current spec session handles only the originally scoped work.
+
+- "이것도 같이 하자" → "That requires a separate spec. Let's finish the current scope first."
+- Prior Area Amendment is for fixing **omissions in existing scope**, NOT for adding new features.
 
 ## Review Protocol
 
@@ -754,6 +765,7 @@ domain-model/records/
 | "Area is clearly done, proceeding to next" | Only USER can declare Area complete. Wait. |
 | "The data is straightforward, skip to design" | Every Area must go through spec-reviewer + user gate. |
 | "We discussed this in a previous Area" | New Area = fresh confirmation. Present and confirm. |
+| "We already invested so much, skip the rest" | Investment is not completion. Only Entry Criteria determine skip. |
 
 ### Wrap-up
 | Excuse | Reality |
@@ -762,6 +774,13 @@ domain-model/records/
 | "Context can be saved later" | Later = never. Save now. |
 | "User wants to finish quickly" | Propose context save first, skip only if explicitly refused |
 | "Spec is done, let's move on" | Spec is NOT done until wrap-up completes |
+
+### Scope Creep
+| Excuse | Reality |
+|--------|---------|
+| "This is related, let's add it here" | Related ≠ in scope. New feature = new spec. |
+| "It's small, just one more thing" | Small additions compound. Scope Guard applies. |
+| "We'll save time by bundling" | Bundling obscures scope. Each spec has clear boundaries. |
 
 ### Document Preservation
 | Excuse | Reality |
@@ -788,6 +807,7 @@ domain-model/records/
 - Regenerate spec.md losing prior step content
 - Overwrite existing context files without user approval
 - Write specification documents in non-English
+- Add new features to current spec mid-session (redirect to separate spec)
 
 **ALWAYS:**
 - Ask exactly ONE question per message, wait for answer, then ask next
