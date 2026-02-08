@@ -10,11 +10,18 @@ Transform user requirements into structured specification documents. Each phase 
 ## The Iron Law
 
 ```
+NO STEP SKIPPING:
+- Every Step MUST present results/proposals to user
+- "Already known" info → Present as proposal, get user approval
+- AI judgment NEVER substitutes user confirmation
+
 NO PHASE COMPLETION WITHOUT:
-1. User confirmation of understanding
-2. All acceptance criteria testable
-3. No "TBD" or vague placeholders remaining
-4. Document saved to .omt/specs/
+1. All Steps in the Phase completed with user confirmation
+2. spec-reviewer review completed (feedback loop resolved)
+3. User explicitly declares "Phase complete"
+4. All acceptance criteria testable
+5. No "TBD" or vague placeholders remaining
+6. Document saved to .omt/specs/
 ```
 
 **Violating the letter of these rules IS violating the spirit.** No exceptions.
@@ -25,8 +32,10 @@ NO PHASE COMPLETION WITHOUT:
 |------|-----|
 | Testable acceptance criteria | Untestable = unverifiable |
 | Error cases defined | Happy path only = production incidents |
-| User confirmation at checkpoints | Agent decisions = user blamed |
-| Phase skip requires evidence | "Simple" hides complexity |
+| Every Step presents to user | Skipped steps = missed requirements |
+| User confirmation at every Step | Agent decisions = user blamed |
+| Phase completion = spec-reviewer + user gate | Unchecked phases = compounding errors |
+| No Step/Phase skipping ever | "Simple" hides complexity |
 
 ## Phase Selection
 
@@ -142,16 +151,35 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
 
-## Checkpoint Protocol
+## Checkpoint Protocol (Per Step - MANDATORY)
 
-After each Step completion:
-1. Save content to `.omt/specs/{spec-name}/{phase-directory}/design.md`
-2. Update progress status at document top
-3. **Record any decisions made** to `{phase-directory}/records/` (see Record Workflow below)
-4. Regenerate `spec.md` by concatenating all completed design.md files
-5. Announce: "Step N complete. Saved. Proceed to next Step?"
-6. Wait for user confirmation
-7. Delegate to spec-reviewer for review assessment (spec-reviewer decides if review is needed)
+**EVERY Step MUST complete this protocol. No exceptions. No skipping.**
+
+Even if AI already has sufficient information for a Step, it MUST:
+- Present what it knows as a **proposal/draft** to the user
+- Get explicit user confirmation before marking the Step complete
+
+### Step Completion Sequence
+
+1. **Present results**: Show the Step's output/proposal to user (even if based on prior knowledge)
+2. **User confirmation**: Wait for explicit user approval of the Step content
+3. Save content to `.omt/specs/{spec-name}/{phase-directory}/design.md`
+4. Update progress status at document top
+5. **Record any decisions made** to `{phase-directory}/records/` (see Record Workflow below)
+6. Regenerate `spec.md` by concatenating all completed design.md files
+7. Announce: "Step N complete. Saved. Proceed to next Step?"
+8. Wait for user confirmation to proceed
+
+### Information Sufficiency Rule
+
+```
+AI has enough info for a Step?
+├── YES → Present as PROPOSAL to user → Get confirmation → Step complete
+└── NO  → Interview user → Build content → Present → Get confirmation → Step complete
+```
+
+**"I already know this" is NEVER a reason to skip presenting to the user.**
+If you have sufficient information, use it to draft a high-quality proposal and present it for user review. The user may have corrections, additions, or different priorities that only surface when they see your proposal.
 
 ### Final Step Checkpoint (After Last Design Area)
 
@@ -170,7 +198,9 @@ After each Step completion:
 
 ## Multi-AI Review Integration
 
-After completing each design phase, always delegate to spec-reviewer for review assessment. The spec-reviewer decides whether a full review is needed or returns "No review needed" for simple cases.
+**MANDATORY at Phase completion.** After completing all Steps in a Phase, ALWAYS delegate to spec-reviewer. This is part of the Phase Completion Protocol and cannot be skipped.
+
+The spec-reviewer decides whether a full review is needed or returns "No review needed" for simple cases. Either way, the result MUST be presented to the user.
 
 ### Feedback Loop Workflow
 
@@ -179,29 +209,34 @@ digraph feedback_loop {
     rankdir=TB;
     node [shape=box, style=rounded];
 
-    complete_step [label="Step Complete\n(design.md saved)"];
-    delegate [label="Delegate to\nspec-reviewer agent"];
+    complete_step [label="Phase Complete\n(all Steps done, design.md saved)"];
+    delegate [label="MANDATORY: Delegate to\nspec-reviewer agent"];
     check_response [label="Review needed?", shape=diamond];
     no_review [label="spec-reviewer returns\n'No review needed'"];
+    present_no_review [label="Present 'No review needed'\nresult to user"];
     receive_feedback [label="Receive advisory\nfeedback"];
     analyze [label="Analyze feedback\nForm YOUR opinion"];
     present [label="Present to user\n(context + recommendation)"];
     user_decides [label="User decides", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Update design.md"];
-    next_step [label="Proceed to next Step"];
+    user_final [label="User declares\n'Phase complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
+    next_phase [label="Proceed to next Phase"];
 
     complete_step -> delegate;
     delegate -> check_response;
     check_response -> no_review [label="no"];
     check_response -> receive_feedback [label="yes"];
-    no_review -> next_step;
+    no_review -> present_no_review;
+    present_no_review -> user_final;
     receive_feedback -> analyze;
     analyze -> present;
     present -> user_decides;
     user_decides -> incorporate [label="incorporate"];
     user_decides -> delegate [label="another round"];
-    user_decides -> next_step [label="step complete"];
-    incorporate -> user_decides;
+    user_decides -> user_final [label="feedback resolved"];
+    incorporate -> delegate [label="re-review"];
+    user_final -> next_phase [label="YES"];
+    user_final -> present [label="NO: more discussion"];
 }
 ```
 
@@ -343,13 +378,59 @@ For all review/confirm patterns:
 3. User must explicitly confirm understanding
 4. Silence is NOT agreement
 
-## Phase Completion Protocol
+## Phase Completion Protocol (MANDATORY - No Phase Skipping)
 
-At end of each Phase:
-1. Present summary of all decisions
-2. Get final approval
-3. Save complete Phase content
-4. Announce: "Phase X complete. Entry criteria for Phase Y: [list]"
+**Every Phase MUST go through this full sequence. No shortcuts.**
+
+```dot
+digraph phase_completion {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+
+    all_steps [label="All Steps in Phase\ncompleted with user confirmation"];
+    save_phase [label="Save complete Phase content"];
+    present_summary [label="Present summary of\nall decisions to user"];
+    delegate_reviewer [label="MANDATORY: Delegate to\nspec-reviewer for review"];
+    receive_feedback [label="Receive reviewer feedback"];
+    analyze_present [label="Analyze feedback\nPresent to user with recommendation"];
+    user_decides [label="User decides on feedback", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
+    incorporate [label="Incorporate feedback\nUpdate design.md"];
+    another_round [label="Delegate to\nspec-reviewer again"];
+    user_final [label="User explicitly declares\n'Phase complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
+    announce_next [label="Announce: Phase X complete.\nEntry criteria for Phase Y: [list]"];
+
+    all_steps -> save_phase;
+    save_phase -> present_summary;
+    present_summary -> delegate_reviewer;
+    delegate_reviewer -> receive_feedback;
+    receive_feedback -> analyze_present;
+    analyze_present -> user_decides;
+    user_decides -> incorporate [label="incorporate"];
+    user_decides -> another_round [label="another round"];
+    user_decides -> user_final [label="feedback resolved"];
+    incorporate -> delegate_reviewer [label="re-review"];
+    another_round -> receive_feedback;
+    user_final -> announce_next [label="YES: 'Phase complete'"];
+    user_final -> analyze_present [label="NO: more discussion"];
+}
+```
+
+### Phase Completion Sequence
+
+1. **Verify all Steps completed**: Every Step in the Phase must have passed its Checkpoint Protocol
+2. **Save complete Phase content**: Write to `{phase-directory}/design.md`
+3. **Present Phase summary**: Show all decisions made in this Phase to user
+4. **MANDATORY spec-reviewer review**: Delegate Phase results to spec-reviewer
+   - Even if spec-reviewer returns "No review needed", present this to user
+5. **Feedback loop**: If feedback exists, analyze and present to user with recommendation
+   - User decides: incorporate, request another round, or mark feedback resolved
+   - Loop continues until user is satisfied
+6. **User final gate**: User MUST explicitly declare "Phase complete"
+   - Silence is NOT agreement
+   - AI CANNOT self-declare Phase completion
+7. **Announce next Phase**: "Phase X complete. Entry criteria for Phase Y: [list]"
+
+**Without user's explicit "Phase complete" declaration, the Phase is NOT complete and next Phase CANNOT begin.**
 
 ## Spec Completion Gate
 
@@ -516,6 +597,18 @@ design-area-domain-model/records/
 
 ## Red Flags - STOP If You Think These
 
+### Step/Phase Skipping
+| Excuse | Reality |
+|--------|---------|
+| "I already have enough information for this Step" | Present it as a PROPOSAL to user. They may disagree. |
+| "This Step is obvious, no need to confirm" | Obvious to AI ≠ obvious to user. Present and confirm. |
+| "User already told me this earlier" | Restate as structured proposal. User confirms in context. |
+| "Let me combine these Steps for efficiency" | Each Step has its own checkpoint. No combining. |
+| "spec-reviewer said no review needed, moving on" | Still show user the result. User declares Phase complete. |
+| "Phase is clearly done, proceeding to next" | Only USER can declare Phase complete. Wait. |
+| "The data is straightforward, skip to design" | Every Phase must go through spec-reviewer + user gate. |
+| "We discussed this in a previous Phase" | New Phase = fresh confirmation. Present and confirm. |
+
 ### Wrap-up Phase
 | Excuse | Reality |
 |--------|---------|
@@ -537,12 +630,22 @@ design-area-domain-model/records/
 ## Anti-Patterns
 
 **NEVER:**
+- Skip a Step because "information is already known"
+- Combine multiple Steps into one
+- Self-declare Phase completion without user's explicit confirmation
+- Skip spec-reviewer at Phase completion
+- Proceed to next Phase without user declaring "Phase complete"
 - Skip wrap-up phase when records exist
 - Regenerate spec.md losing prior step content
 - Overwrite existing context files without user approval
 - Write specification documents in non-English
 
 **ALWAYS:**
+- Present every Step's output to user (as proposal if info already known)
+- Get user confirmation at every Step checkpoint
+- Delegate to spec-reviewer at every Phase completion
+- Present spec-reviewer results to user (even "No review needed")
+- Wait for user's explicit "Phase complete" before proceeding
 - Complete wrap-up phase when records exist to preserve
 - Preserve ALL prior step content when regenerating spec.md
 - Get explicit user confirmation before modifying existing files
