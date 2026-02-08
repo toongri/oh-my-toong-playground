@@ -4,7 +4,7 @@
 
 As a data design specialist, systematically design the data storage layer and organize implementation details into a single integrated document.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 

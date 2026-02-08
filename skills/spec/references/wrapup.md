@@ -4,7 +4,7 @@
 
 As a knowledge curator, analyze accumulated records from the specification process and extract reusable wisdom for future projects.
 
-**Output Format**: See `templates/phase-outputs.md` (produces context files, not a single document)
+**Output Format**: See `templates/area-outputs.md` (produces context files, not a single document)
 
 ## Principles
 

@@ -4,7 +4,7 @@
 
 As a software solution design expert, establish the technical context appropriate for the project, explore optimal solutions, and organize them into a single integrated document.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 
