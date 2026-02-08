@@ -178,17 +178,17 @@ Data Schema만 하고 넘어가자."
 
 **Setup:**
 ```
-[Context: Phase 2 complete, AI did not recommend Operations Guide]
+[Context: Phase 2 complete, AI did not recommend Operations Plan]
 
 AI: "For this internal batch job, I recommend Domain Model and Data Schema only."
 
-User: "Operations Guide도 추가해. 운영팀이 모니터링 문서 요구할 거야."
+User: "Operations Plan도 추가해. 운영팀이 모니터링 문서 요구할 거야."
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Accepts addition without blocking
 - [ ] Asks clarifying questions about specific operational needs
-- [ ] Updates Design Area selection with Operations Guide
+- [ ] Updates Design Area selection with Operations Plan
 - [ ] Adjusts recommendations based on new information
 - [ ] Does NOT refuse reasonable user additions
 

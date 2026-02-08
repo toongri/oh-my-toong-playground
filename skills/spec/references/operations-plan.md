@@ -1,4 +1,4 @@
-# Design Area: Operations Guide
+# Design Area: Operations Plan
 
 ## Role
 
@@ -18,7 +18,7 @@ As an operations design specialist, systematically design the operational aspect
 - **Include**: Project-specific metrics, custom logging, deployment strategies, migration approaches, failure scenarios, recovery plans
 - **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, generic operational practices
 
-## STOP: Operations Guide Red Flags
+## STOP: Operations Plan Red Flags
 
 - "Standard monitoring is enough" without checking → Verify project-specific metrics needed
 - Deployment strategy undefined for schema changes → Document migration approach
@@ -122,7 +122,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 
 Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
 
-**Record Naming**: `da-operations-guide.{step}-{topic}.md`
+**Record Naming**: `da-operations-plan.{step}-{topic}.md`
 
-#### Checkpoint: Operations Guide Complete
-- Announce: "Operations Guide complete. All selected Design Areas finished. Proceeding to Wrapup."
+#### Checkpoint: Operations Plan Complete
+- Announce: "Operations Plan complete. All selected Design Areas finished. Proceeding to Wrapup."

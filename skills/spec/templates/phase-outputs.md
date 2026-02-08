@@ -32,7 +32,7 @@ AskUserQuestion:
       description: "[Specific justification - e.g., 'New REST API endpoints for order management']"
     - label: "Integration Pattern"
       description: "[Specific justification or 'Not needed - no external system integration required']"
-    - label: "Operations Guide"
+    - label: "Operations Plan"
       description: "[Specific justification or 'Standard deployment sufficient - no custom monitoring needed']"
 ```
 
@@ -46,7 +46,7 @@ Use the following criteria to determine which Design Areas to recommend:
 | Data Schema | New DB tables needed, schema changes, migration required | No persistent storage, using existing schema |
 | Interface Contract | External API/CLI/Event interfaces exposed, consumer documentation needed | Internal-only functionality, no external interface |
 | Integration Pattern | Cross-system communication, async processing, external service calls, stateful components | Single system scope, no external integration |
-| Operations Guide | Custom monitoring needed, non-standard deployment, production-specific concerns | Standard APM sufficient, conventional deployment |
+| Operations Plan | Custom monitoring needed, non-standard deployment, production-specific concerns | Standard APM sufficient, conventional deployment |
 
 ### Validation Rules
 
@@ -526,10 +526,10 @@ flowchart TD
 
 ---
 
-### Operations Guide Design Area
+### Operations Plan Design Area
 
 ```markdown
-# Operations Guide Document
+# Operations Plan Document
 
 ## 1. Observability Design
 

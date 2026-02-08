@@ -156,7 +156,7 @@ Apply **Phase Completion Protocol** (see SKILL.md Standard Protocols)
   - **Data Schema**: DB/file/cache storage needed
   - **Interface Contract**: External interface exposed (API, CLI, Event)
   - **Integration Pattern**: External system integration, async processing, transaction boundaries
-  - **Operations Guide**: Production deployment, monitoring, operational settings
+  - **Operations Plan**: Production deployment, monitoring, operational settings
 
 #### 6.2 Present Design Area Selection
 - Prepare: List of recommended Design Areas with justification
