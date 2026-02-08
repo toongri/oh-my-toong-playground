@@ -130,7 +130,33 @@ When user has no preference or cannot decide, select best practice autonomously.
 
 - Communication: Korean / Documents: English / Code terms: Original English
 
-## AskUserQuestion Quality Standard
+## Questioning Protocol: One Question at a Time
+
+**THE RULE: Ask exactly ONE question per message. Wait for answer. Then ask the next.**
+
+This applies to ALL question types - AskUserQuestion, plain text questions, clarifications. No exceptions.
+
+```
+WRONG: "다음 질문들에 답변해주세요: 1. ... 2. ... 3. ... 4. ..."
+RIGHT: "Jira 댓글의 키워드도 트리거 대상인가요?"
+       → (wait for answer)
+       "하나의 티켓에 여러 건의 오류가 보고될 수 있나요?"
+       → (wait for answer)
+       ...
+```
+
+### Question Type Selection
+
+| Situation | Method | Why |
+|-----------|--------|-----|
+| 2-4개 선택지가 명확한 결정 | AskUserQuestion | 구조화된 선택지 제공 |
+| 주관식/열린 질문 | 일반 텍스트 질문 | 자유로운 답변 필요 |
+| Yes/No 확인 | 일반 텍스트 질문 | AskUserQuestion은 과잉 |
+| 복잡한 트레이드오프 결정 | Markdown 분석 + AskUserQuestion | 깊은 맥락 + 구조화된 선택 |
+
+**주관식 질문에 AskUserQuestion을 억지로 쓰지 마라.** 답이 열려있으면 그냥 텍스트로 물어봐라.
+
+### AskUserQuestion Quality Standard (선택지가 있는 결정에만)
 
 **Question Structure**: Context → Tension → Question
 
@@ -146,7 +172,6 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 6. **AskUserQuestion** - Single question with options
 
 **Rules:**
-- One question at a time (sequential interview)
 - Markdown provides depth, AskUserQuestion provides choice
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
@@ -597,6 +622,14 @@ design-area-domain-model/records/
 
 ## Red Flags - STOP If You Think These
 
+### Question Batching
+| Excuse | Reality |
+|--------|---------|
+| "여러 질문을 한번에 하면 효율적" | 유저가 한 질문에 집중하지 못함. 하나씩 물어라. |
+| "관련된 질문이니까 묶어도 돼" | 관련돼도 하나씩. 답변이 다음 질문에 영향 줄 수 있다. |
+| "초안에 열린 질문 리스트를 붙이면 편해" | 질문은 대화로 하나씩. 문서에 질문 리스트 금지. |
+| "주관식인데 AskUserQuestion을 써야지" | 주관식은 일반 텍스트로 물어봐라. |
+
 ### Step/Phase Skipping
 | Excuse | Reality |
 |--------|---------|
@@ -630,6 +663,9 @@ design-area-domain-model/records/
 ## Anti-Patterns
 
 **NEVER:**
+- Ask multiple questions in one message (one question per message, always)
+- Bundle open questions into a document or list and dump them
+- Use AskUserQuestion for open-ended/subjective questions (use plain text)
 - Skip a Step because "information is already known"
 - Combine multiple Steps into one
 - Self-declare Phase completion without user's explicit confirmation
@@ -641,6 +677,8 @@ design-area-domain-model/records/
 - Write specification documents in non-English
 
 **ALWAYS:**
+- Ask exactly ONE question per message, wait for answer, then ask next
+- Use plain text for open-ended questions, AskUserQuestion only for structured choices
 - Present every Step's output to user (as proposal if info already known)
 - Get user confirmation at every Step checkpoint
 - Delegate to spec-reviewer at every Phase completion
