@@ -1,10 +1,10 @@
-# Design Area: Data Schema
+# Data Schema
 
 ## Role
 
 As a data design specialist, systematically design the data storage layer and organize implementation details into a single integrated document.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 
@@ -63,7 +63,7 @@ Document only when project-specific customization is required.
 - Confirm: Get user agreement on the scope
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Table Structure Design
 
@@ -78,7 +78,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Repository Implementation Details
 
@@ -96,7 +96,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Migration Strategy
 
@@ -112,13 +112,13 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Document Generation
 
-Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-**Record Naming**: `da-data-schema.{step}-{topic}.md`
+**Record Naming**: `{step}-{topic}.md`
 
 #### Checkpoint: Data Schema Complete
 - Announce: "Data Schema complete. Proceeding to next selected Design Area: [next area name]."

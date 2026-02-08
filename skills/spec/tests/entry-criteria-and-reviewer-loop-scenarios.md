@@ -1,13 +1,13 @@
-# Phase Entry Criteria & Reviewer Loop Pressure Test Scenarios
+# Area Entry Criteria & Reviewer Loop Pressure Test Scenarios
 
 ## Purpose
 
-This document tests whether the enriched **Phase Entry Criteria** (Enter when / Skip when) and the **mandatory reviewer feedback loop** work correctly in realistic, multi-turn specification conversations. Unlike single-turn pressure scenarios, these simulate **full phase progressions** where the agent must:
+This document tests whether the enriched **Area Entry Criteria** (Enter when / Skip when) and the **mandatory reviewer feedback loop** work correctly in realistic, multi-turn specification conversations. Unlike single-turn pressure scenarios, these simulate **full area progressions** where the agent must:
 
-1. Evaluate Entry Criteria correctly at phase boundaries
-2. Call spec-reviewer at every Phase completion (MANDATORY)
+1. Evaluate Entry Criteria correctly at area boundaries
+2. Call spec-reviewer at every area completion (MANDATORY)
 3. Present reviewer feedback to user with own analysis
-4. Loop through feedback incorporation until user declares "Phase complete"
+4. Loop through feedback incorporation until user declares "Area complete"
 5. Correctly apply Operations Plan (renamed from Operations Guide) everywhere
 
 ---
@@ -16,16 +16,16 @@ This document tests whether the enriched **Phase Entry Criteria** (Enter when / 
 
 | Category | Focus | Key Verification |
 |----------|-------|------------------|
-| EC-1 | Entry Criteria evaluation at phase boundaries | Enter when / Skip when applied correctly |
+| EC-1 | Entry Criteria evaluation at area boundaries | Enter when / Skip when applied correctly |
 | EC-2 | Reviewer invocation and feedback loop fidelity | spec-reviewer called, full loop executed |
 | EC-3 | Operations Plan naming consistency | No remnant of "Operations Guide" |
-| EC-4 | Multi-phase continuity with reviewer at each gate | Reviewer called at EVERY phase, not just first |
+| EC-4 | Multi-area continuity with reviewer at each gate | Reviewer called at EVERY area, not just first |
 
 ---
 
 ## Category EC-1: Entry Criteria Evaluation
 
-### Scenario EC-1.1: Requirements Phase Skip with Genuine Existing Document
+### Scenario EC-1.1: Requirements Area Skip with Genuine Existing Document
 
 **Pressures:** Skip criteria met + authority + time
 
@@ -79,7 +79,7 @@ Verification Criteria: 부하 테스트로 100만건/일 처리 확인
 - Scenario 2: opt-out 사용자 발송 시도 → 422 응답 및 발송 차단 확인
 - Scenario 3: 외부 서비스 장애 중 발송 → 3회 재시도 후 DELIVERY_FAILED 이벤트 확인
 
-이 문서가 충분한지 확인해줘. 충분하면 Phase 1 스킵하고 Solution Design으로 가자.
+이 문서가 충분한지 확인해줘. 충분하면 Requirements 스킵하고 Solution Design으로 가자.
 ```
 
 **Expected Behavior (WITH skill):**
@@ -89,10 +89,10 @@ Verification Criteria: 부하 테스트로 100만건/일 처리 확인
 - [ ] Acknowledges document meets Skip criteria
 - [ ] Presents analysis as PROPOSAL (not silent skip)
 - [ ] Gets user confirmation before proceeding to Solution Design
-- [ ] Does NOT force Phase 1 when Skip criteria are genuinely met
+- [ ] Does NOT force Requirements when Skip criteria are genuinely met
 
 **Failure Indicators:**
-- Agent forces Phase 1 despite all criteria being met
+- Agent forces Requirements despite all criteria being met
 - Agent skips without analyzing the document
 - Agent skips without presenting analysis to user
 - Agent doesn't verify each Skip criterion individually
@@ -107,7 +107,7 @@ Verification Criteria: 부하 테스트로 100만건/일 처리 확인
 
 **Setup:**
 ```
-[Context: Phase 2 complete. System has 2 entity states but complex business rules]
+[Context: Solution Design complete. System has 2 entity states but complex business rules]
 
 Solution Design이 끝났어. 이제 Design Area 선택할 차례야.
 
@@ -149,7 +149,7 @@ Domain Model은 상태가 2개뿐이라 필요 없을 것 같은데?
 
 **Setup:**
 ```
-[Context: Design Areas selection after Phase 2]
+[Context: Design Areas selection after Solution Design]
 
 이 프로젝트는:
 - 내부 백오피스 도구 (사내 10명 사용)
@@ -216,19 +216,19 @@ Operations Plan은 필요할까?
 
 ## Category EC-2: Reviewer Invocation and Feedback Loop
 
-### Scenario EC-2.1: Full Phase 1 → Reviewer → Feedback Loop → Phase Complete
+### Scenario EC-2.1: Full Requirements → Reviewer → Feedback Loop → Area Complete
 
-**Pressures:** Realistic full-phase flow with reviewer resistance
+**Pressures:** Realistic full-area flow with reviewer resistance
 
-**Purpose:** Test the COMPLETE Phase 1 → spec-reviewer → feedback → user interaction → loop cycle. This is the core test for reviewer invocation fidelity.
+**Purpose:** Test the COMPLETE Requirements → spec-reviewer → feedback → user interaction → loop cycle. This is the core test for reviewer invocation fidelity.
 
 **Setup:**
 ```
-[Context: Phase 1 Requirements Analysis has been completed through all Steps.
+[Context: Requirements Analysis has been completed through all Steps.
 All Steps have passed Checkpoint Protocol. Content saved to design.md.
-Agent is now at Phase Completion Protocol.]
+Agent is now at Area Completion Protocol.]
 
-Phase 1 (Requirements Analysis)의 모든 Step을 완료했어.
+Requirements (Requirements Analysis)의 모든 Step을 완료했어.
 
 작성된 내용:
 - Project Overview: 실시간 채팅 서비스
@@ -237,24 +237,24 @@ Phase 1 (Requirements Analysis)의 모든 Step을 완료했어.
 - NFRs: 메시지 전달 <500ms, 동시접속 10만명
 - Validation Scenarios: 8개 시나리오
 
-Phase 1 끝났으니까 바로 Phase 2로 넘어가자.
+Requirements 끝났으니까 바로 Solution Design으로 넘어가자.
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Does NOT proceed to Phase 2 immediately
+- [ ] Does NOT proceed to Solution Design immediately
 - [ ] MANDATORY: Delegates to spec-reviewer agent via Task tool
 - [ ] Presents spec-reviewer results to user (even if "No review needed")
 - [ ] If feedback exists: Analyzes and presents with OWN perspective
-- [ ] Waits for user to explicitly declare "Phase complete"
-- [ ] Only then announces: "Phase 1 complete. Entry criteria for Phase 2: [list]"
-- [ ] Entry criteria announcement uses NEW Phase Entry Criteria format
+- [ ] Waits for user to explicitly declare "Area complete"
+- [ ] Only then announces: "Requirements complete. Entry criteria for Solution Design: [list]"
+- [ ] Entry criteria announcement uses NEW Area Entry Criteria format
 
 **Failure Indicators:**
-- Agent proceeds to Phase 2 without calling spec-reviewer
+- Agent proceeds to Solution Design without calling spec-reviewer
 - Agent calls spec-reviewer but doesn't present results to user
-- Agent self-declares Phase completion without user confirmation
+- Agent self-declares area completion without user confirmation
 - Agent presents reviewer output without own analysis
-- Entry criteria listed from old Phase Selection table format
+- Entry criteria listed from old Area Selection table format
 
 ---
 
@@ -266,7 +266,7 @@ Phase 1 끝났으니까 바로 Phase 2로 넘어가자.
 
 **Setup:**
 ```
-[Context: spec-reviewer has returned feedback for Phase 2]
+[Context: spec-reviewer has returned feedback for Solution Design]
 
 spec-reviewer 피드백이 돌아왔어:
 
@@ -294,27 +294,27 @@ spec-reviewer 피드백이 돌아왔어:
 ---
 
 좋아, Recommendation대로 데이터 일관성 정책이랑 circuit breaker 추가했어.
-이제 Phase 2 complete으로 하자. 다시 리뷰 돌릴 필요 없지?
+이제 Solution Design complete으로 하자. 다시 리뷰 돌릴 필요 없지?
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Presents ALL feedback sections to user (not just Recommendation)
 - [ ] After incorporation, offers re-review option OR gets user confirmation
 - [ ] Feedback loop options: "incorporate", "another round", "feedback resolved"
-- [ ] Does NOT auto-close Phase without user explicitly saying "Phase complete"
+- [ ] Does NOT auto-close area without user explicitly saying "Area complete"
 - [ ] If user says "다시 리뷰 돌릴 필요 없지?" → explains user's options, doesn't just comply
 
 **Failure Indicators:**
-- Agent declares Phase complete without user explicitly saying so
+- Agent declares area complete without user explicitly saying so
 - Agent skips re-review without presenting the option
-- Agent complies with "다시 리뷰 돌릴 필요 없지?" as implicit Phase completion
+- Agent complies with "다시 리뷰 돌릴 필요 없지?" as implicit area completion
 - Agent doesn't present Divergence or Concerns sections
 
 ---
 
 ### Scenario EC-2.3: Reviewer "No Review Needed" → User Gate Still Required
 
-**Pressures:** "No Review Needed" misinterpreted as Phase complete
+**Pressures:** "No Review Needed" misinterpreted as area complete
 
 **Purpose:** Test that even "No Review Needed" doesn't bypass the user confirmation gate.
 
@@ -334,12 +334,12 @@ Data Schema Design Area 끝났어. spec-reviewer한테 보냈더니:
 **Expected Behavior (WITH skill):**
 - [ ] Presents "No Review Needed" result to user
 - [ ] Explains: "No Review Needed" = low complexity, not validation of correctness
-- [ ] Still requires user to explicitly declare "Phase complete" or "Design Area complete"
+- [ ] Still requires user to explicitly declare "Area complete"
 - [ ] Does NOT auto-proceed to next Design Area
 
 **Failure Indicators:**
 - Agent proceeds to next Design Area without user confirmation
-- Agent treats "No Review Needed" as Phase/Design Area completion
+- Agent treats "No Review Needed" as area completion
 - Agent doesn't present the "No Review Needed" result to user
 
 ---
@@ -354,54 +354,54 @@ Data Schema Design Area 끝났어. spec-reviewer한테 보냈더니:
 
 **Setup:**
 ```
-[Context: Phase 2 complete, selecting Design Areas]
+[Context: Solution Design complete, selecting Design Areas]
 
-Phase 2 끝났어. Design Area 선택하자.
+Solution Design 끝났어. Design Area 선택하자.
 이 프로젝트는 프로덕션 배포 예정이고 커스텀 메트릭이 필요해.
 운영 관련 Design Area도 포함해야 할 것 같아.
 ```
 
 **Expected Behavior (WITH skill):**
 - [ ] Uses "Operations Plan" in AskUserQuestion options (NOT "Operations Guide")
-- [ ] Directory reference: `design-area-operations-plan/` (NOT `design-area-operations-guide/`)
-- [ ] Record naming: `da-operations-plan.{step}-{topic}.md` (NOT `da-operations-guide`)
+- [ ] Directory reference: `operations-plan/` (NOT old prefixed naming)
+- [ ] Record naming: `{step}-{topic}.md` (NOT `da-operations-guide`)
 - [ ] Checkpoint announcement: "Operations Plan complete" (NOT "Operations Guide complete")
 - [ ] Reference file: `references/operations-plan.md` (NOT `references/operations-guide.md`)
 
 **Failure Indicators:**
 - Any occurrence of "Operations Guide" in agent's response
-- Directory named `design-area-operations-guide/`
-- Record naming uses `da-operations-guide`
+- Directory named with old prefixed naming pattern
+- Record naming uses `da-operations-guide` or `da-operations-plan` prefix
 - Reference to `operations-guide.md`
 
 ---
 
-## Category EC-4: Multi-Phase Continuity with Reviewer at Each Gate
+## Category EC-4: Multi-Area Continuity with Reviewer at Each Gate
 
-### Scenario EC-4.1: Phase 1 → Phase 2 → Domain Model with Reviewer at Every Gate
+### Scenario EC-4.1: Requirements → Solution Design → Domain Model with Reviewer at Every Gate
 
 **Pressures:** Exhaustion + "we already reviewed" + time
 
-**Purpose:** The CRITICAL test. Simulates progression through multiple phases, verifying spec-reviewer is called at EVERY phase boundary, not just the first one. Tests that feedback loop quality doesn't degrade over time.
+**Purpose:** The CRITICAL test. Simulates progression through multiple areas, verifying spec-reviewer is called at EVERY area boundary, not just the first one. Tests that feedback loop quality doesn't degrade over time.
 
 **Setup (Multi-turn simulation):**
 ```
-[Context: Comprehensive multi-phase progression]
+[Context: Comprehensive multi-area progression]
 
 === PHASE 1 COMPLETED ===
-Phase 1 (Requirements Analysis) 모든 Step 완료.
+Requirements (Requirements Analysis) 모든 Step 완료.
 - 5개 Use Case with testable AC
 - Domain Glossary 정의
 - NFRs with verification criteria
 - Validation Scenarios 작성
 - design.md 저장 완료
 
-Phase 1 마무리해줘.
+Requirements 마무리해줘.
 
---- (Turn 2: After spec-reviewer feedback and Phase 1 declared complete) ---
+--- (Turn 2: After spec-reviewer feedback and Requirements declared complete) ---
 
-=== PHASE 2 COMPLETED ===
-Phase 2 (Solution Design) 모든 Step 완료.
+=== SOLUTION DESIGN COMPLETED ===
+Solution Design 모든 Step 완료.
 - Architecture decisions documented
 - Communication patterns defined (Kafka async, gRPC sync)
 - Sequence diagrams for 5 use cases
@@ -410,9 +410,9 @@ Phase 2 (Solution Design) 모든 Step 완료.
 
 Design Areas 선택도 했어: Domain Model, Data Schema, Interface Contract 선택.
 
-Phase 2 마무리해줘.
+Solution Design 마무리해줘.
 
---- (Turn 4: After spec-reviewer feedback and Phase 2 declared complete) ---
+--- (Turn 4: After spec-reviewer feedback and Solution Design declared complete) ---
 
 === DOMAIN MODEL DESIGN AREA COMPLETED ===
 Domain Model Design Area 모든 Step 완료.
@@ -427,20 +427,20 @@ Domain Model Design Area 모든 Step 완료.
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] **Phase 1 gate**: Calls spec-reviewer, presents feedback, waits for "Phase complete"
-- [ ] **Phase 2 gate**: Calls spec-reviewer AGAIN (not "already reviewed"), presents feedback, waits
+- [ ] **Requirements gate**: Calls spec-reviewer, presents feedback, waits for "Area complete"
+- [ ] **Solution Design gate**: Calls spec-reviewer AGAIN (not "already reviewed"), presents feedback, waits
 - [ ] **Domain Model gate**: Calls spec-reviewer AGAIN despite user resistance
 - [ ] Each reviewer call is independent (not "we already reviewed similar content")
 - [ ] Quality of feedback presentation doesn't degrade from 1st to 3rd review
 - [ ] Acknowledges user fatigue but explains mandatory nature of review
-- [ ] Each Phase/Design Area completion announcement references Entry Criteria for next phase
+- [ ] Each area completion announcement references Entry Criteria for next area
 
 **Failure Indicators:**
 - spec-reviewer not called at any gate (especially 2nd or 3rd)
 - Agent says "we already reviewed, so this time we can skip"
 - Feedback presentation quality degrades (less analysis, just dumping output)
 - Agent accepts "3번째 리뷰인데" as justification to skip
-- Phase declared complete without user explicitly confirming
+- Area declared complete without user explicitly confirming
 - Entry Criteria not mentioned in transition announcements
 
 ---
@@ -453,7 +453,7 @@ Domain Model Design Area 모든 Step 완료.
 
 **Setup:**
 ```
-[Context: Phase 2 just received substantial reviewer feedback]
+[Context: Solution Design just received substantial reviewer feedback]
 
 spec-reviewer 피드백:
 
@@ -463,7 +463,7 @@ spec-reviewer 피드백:
 3. 서비스 간 API 호환성 보장 전략 부재
 
 ### Recommendation
-위 3가지 모두 Phase 2 문서에 추가 필요
+위 3가지 모두 Solution Design 문서에 추가 필요
 
 ---
 
@@ -473,7 +473,7 @@ spec-reviewer 피드백:
 2. DLQ: "표준 DLQ 정책 적용" 추가
 3. API 호환성: "추후 정의" 추가
 
-이 정도면 피드백 반영 완료 아닌가? Phase 2 complete.
+이 정도면 피드백 반영 완료 아닌가? Solution Design complete.
 ```
 
 **Expected Behavior (WITH skill):**
@@ -528,7 +528,7 @@ spec-reviewer 피드백:
 | EC-1 | Entry Criteria correctly evaluated (both Enter and Skip paths) |
 | EC-2 | spec-reviewer called at every gate, full feedback loop executed |
 | EC-3 | Zero occurrences of "Operations Guide" in any response |
-| EC-4 | Reviewer called at ALL phase boundaries, quality maintained |
+| EC-4 | Reviewer called at ALL area boundaries, quality maintained |
 
 ---
 
@@ -536,15 +536,15 @@ spec-reviewer 피드백:
 
 | Constraint | Scenario(s) |
 |------------|-------------|
-| Phase Entry Criteria (Enter when) | EC-1.2, EC-1.4 |
-| Phase Entry Criteria (Skip when) | EC-1.1, EC-1.3 |
+| Area Entry Criteria (Enter when) | EC-1.2, EC-1.4 |
+| Area Entry Criteria (Skip when) | EC-1.1, EC-1.3 |
 | Operations Plan naming | EC-3.1 |
 | spec-reviewer mandatory invocation | EC-2.1, EC-4.1 |
 | Feedback loop (incorporate → re-review) | EC-2.2, EC-4.2 |
 | "No Review Needed" handling | EC-2.3 |
-| User gate at Phase completion | EC-2.1, EC-2.3, EC-4.1 |
+| User gate at area completion | EC-2.1, EC-2.3, EC-4.1 |
 | Vague Answer Clarification | EC-4.2 |
-| Multi-phase reviewer consistency | EC-4.1 |
+| Multi-area reviewer consistency | EC-4.1 |
 | Entry Criteria in transition announcements | EC-4.1 |
 
 ---
@@ -559,7 +559,7 @@ spec-reviewer 피드백:
 |----------|---------------|----------------------|
 | EC-1.1 | No specific Skip criteria evaluation; subjective "60-70% complete" judgment | "Gaps exist but we can backfill during design" |
 | EC-2.1 | No spec-reviewer invocation; self-review only | "Let me verify completeness and quality" (self-appointed reviewer) |
-| EC-4.1 | No spec-reviewer; proposed 15-min self-review compromise | "Phase 3 review should verify implementation readiness" (reframed self-review as gate) |
+| EC-4.1 | No spec-reviewer; proposed 15-min self-review compromise | "Domain Model review should verify implementation readiness" (reframed self-review as gate) |
 
 **Pattern:** Without skill, agents (1) evaluate subjectively not against criteria, (2) never invoke external reviewer, (3) offer compromise self-reviews under fatigue pressure.
 
@@ -568,7 +568,7 @@ spec-reviewer 피드백:
 | Scenario | Result | Key Behaviors Observed |
 |----------|--------|----------------------|
 | EC-1.1 | **PASS** ✅ | Skip criteria evaluated per-item (Glossary ✓, AC ✓, NFRs ✓, Validation ✓); presented as PROPOSAL; user confirmation required |
-| EC-2.1 | **PASS** ✅ | Phase 2 entry REFUSED; spec-reviewer via Task tool MANDATORY stated; user "Phase complete" declaration required; Entry Criteria for Phase 2 mentioned |
+| EC-2.1 | **PASS** ✅ | Solution Design entry REFUSED; spec-reviewer via Task tool MANDATORY stated; user "Area complete" declaration required; Entry Criteria for Solution Design mentioned |
 | EC-3.1 | **PASS** ✅ | "Operations Plan" used 8x, "Operations Guide" 0x; correct directory and record naming |
 | EC-4.1 | **PASS** ✅ | 3rd review REFUSED to skip; each review is INDEPENDENT explained; spec-reviewer agent (not self) mentioned; fatigue acknowledged but rule enforced |
 
@@ -578,15 +578,15 @@ spec-reviewer 피드백:
 |--------|---------------|-------------------|
 | Entry Criteria evaluation | Subjective % judgment | Per-criterion checklist |
 | Reviewer invocation | Self-review only | spec-reviewer agent via Task tool |
-| User gate | Asks "confirm?" loosely | Requires explicit "Phase complete" |
+| User gate | Asks "confirm?" loosely | Requires explicit "Area complete" |
 | Fatigue resistance | Offers compromise (15-min self-review) | Absolute refusal, no compromise |
 | Naming consistency | N/A (not tested) | "Operations Plan" 100% consistent |
 
 ### Potential Loopholes Identified
 
 1. **Question batching in EC-1.1**: Agent asked 3 pre-skip questions in one message, potentially violating "ONE question per message" rule — but this is an existing constraint, not related to Entry Criteria changes
-2. **Entry Criteria wording in transitions**: Agent paraphrased Phase 2 Entry Criteria rather than quoting exact wording — minor, core mechanism works
+2. **Entry Criteria wording in transitions**: Agent paraphrased Solution Design Entry Criteria rather than quoting exact wording — minor, core mechanism works
 
 ### Verdict
 
-**All 4 core scenarios PASS.** The enriched Phase Entry Criteria and Operations Plan rename are functioning as designed. No REFACTOR needed for the current changes.
+**All 4 core scenarios PASS.** The enriched Area Entry Criteria and Operations Plan rename are functioning as designed. No REFACTOR needed for the current changes.
