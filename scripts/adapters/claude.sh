@@ -317,13 +317,15 @@ claude_sync_skills() {
 #   $2 - display_name: Display name for the agent
 #   $3 - source_path: Pre-resolved absolute source path
 #   $4 - add_skills: Comma-separated skills to add (can be empty)
-#   $5 - dry_run: "true" or "false"
+#   $5 - add_hooks_json: JSON array of hooks to inject into frontmatter (can be empty)
+#   $6 - dry_run: "true" or "false"
 claude_sync_agents_direct() {
     local target_path="$1"
     local display_name="$2"
     local source_path="$3"
     local add_skills="${4:-}"
-    local dry_run="${5:-false}"
+    local add_hooks_json="${5:-}"
+    local dry_run="${6:-false}"
 
     local target_dir="$target_path/.claude/agents"
     local target_file="$target_dir/${display_name}.md"
@@ -348,6 +350,30 @@ claude_sync_agents_direct() {
         for skill in "${skills_array[@]}"; do
             claude_update_agent_frontmatter "$target_file" "$skill" "$dry_run"
         done
+    fi
+
+    # Handle add_hooks if provided
+    if [[ -n "$add_hooks_json" && "$add_hooks_json" != "[]" ]]; then
+        # Deploy hook component files referenced in add_hooks
+        local hook_count=$(echo "$add_hooks_json" | jq 'length')
+        for k in $(seq 0 $((hook_count - 1))); do
+            local hook_source=$(echo "$add_hooks_json" | jq -r ".[$k].source_path // \"\"")
+            local hook_display=$(echo "$add_hooks_json" | jq -r ".[$k].display_name // \"\"")
+            if [[ -n "$hook_source" && -f "$hook_source" ]]; then
+                claude_sync_hooks_direct "$target_path" "$hook_display" "$hook_source" "$dry_run"
+            fi
+        done
+
+        # Build frontmatter-ready hooks JSON (with command paths pointing to deployed location)
+        local frontmatter_hooks=$(echo "$add_hooks_json" | jq -c '[.[] | {
+            event: .event,
+            matcher: (.matcher // "*"),
+            type: (.type // "command"),
+            command: (if .command != "" and .command != null then .command else ("\u0024CLAUDE_PROJECT_DIR/.claude/hooks/" + .display_name) end),
+            timeout: (.timeout // 10)
+        }]')
+
+        claude_update_agent_hooks_frontmatter "$target_file" "$frontmatter_hooks" "$dry_run"
     fi
 }
 
@@ -548,6 +574,102 @@ claude_update_agent_frontmatter() {
     rm -f "$frontmatter_file" "$body_file"
 
     log_info "Updated frontmatter: $agent_file"
+}
+
+# Update agent frontmatter to add hooks
+# Arguments:
+#   $1 - agent_file: Path to agent file
+#   $2 - hooks_json: JSON array of hook definitions (flat format)
+#   $3 - dry_run: "true" or "false"
+#
+# Input format (flat JSON array):
+#   [{"event":"SubagentStop","matcher":"*","type":"command","command":"...","timeout":60}]
+#
+# Output format (Claude frontmatter YAML):
+#   hooks:
+#     SubagentStop:
+#       - matcher: "*"
+#         hooks:
+#           - type: command
+#             command: "..."
+#             timeout: 60
+claude_update_agent_hooks_frontmatter() {
+    local agent_file="$1"
+    local hooks_json="$2"
+    local dry_run="${3:-false}"
+
+    if [[ -z "$hooks_json" || "$hooks_json" == "[]" ]]; then
+        return 0
+    fi
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Update frontmatter hooks: $agent_file"
+        return 0
+    fi
+
+    # Check for frontmatter
+    local has_frontmatter=$(head -1 "$agent_file" | grep -c "^---$" || true)
+    if [[ "$has_frontmatter" -eq 0 ]]; then
+        log_warn "No frontmatter found: $agent_file"
+        return 0
+    fi
+
+    # Create temp files
+    local temp_file=$(mktemp)
+    local frontmatter_file=$(mktemp)
+    local body_file=$(mktemp)
+
+    # Separate frontmatter and body
+    awk '/^---$/{n++; next} n==1' "$agent_file" > "$frontmatter_file"
+    awk '/^---$/{n++; if(n==2) p=1; next} p' "$agent_file" > "$body_file"
+
+    # Convert flat hooks JSON to Claude frontmatter format (event-grouped)
+    # Build a YAML snippet for hooks and merge it into frontmatter
+    local hooks_yaml_file=$(mktemp)
+    echo "hooks:" > "$hooks_yaml_file"
+
+    # Group by event
+    local events=$(echo "$hooks_json" | jq -r '.[].event' | sort -u)
+    for event in $events; do
+        echo "  $event:" >> "$hooks_yaml_file"
+        # Get all hooks for this event
+        local event_hooks=$(echo "$hooks_json" | jq -c "[.[] | select(.event == \"$event\")]")
+        local hook_count=$(echo "$event_hooks" | jq 'length')
+        for j in $(seq 0 $((hook_count - 1))); do
+            local matcher=$(echo "$event_hooks" | jq -r ".[$j].matcher // \"*\"")
+            local hook_type=$(echo "$event_hooks" | jq -r ".[$j].type // \"command\"")
+            local timeout=$(echo "$event_hooks" | jq -r ".[$j].timeout // 10")
+
+            echo "    - matcher: \"$matcher\"" >> "$hooks_yaml_file"
+            echo "      hooks:" >> "$hooks_yaml_file"
+
+            if [[ "$hook_type" == "prompt" ]]; then
+                local prompt=$(echo "$event_hooks" | jq -r ".[$j].prompt // \"\"")
+                echo "        - type: prompt" >> "$hooks_yaml_file"
+                echo "          prompt: \"$prompt\"" >> "$hooks_yaml_file"
+                echo "          timeout: $timeout" >> "$hooks_yaml_file"
+            else
+                local command=$(echo "$event_hooks" | jq -r ".[$j].command // \"\"")
+                echo "        - type: command" >> "$hooks_yaml_file"
+                echo "          command: \"$command\"" >> "$hooks_yaml_file"
+                echo "          timeout: $timeout" >> "$hooks_yaml_file"
+            fi
+        done
+    done
+
+    # Merge hooks into frontmatter using yq
+    yq -i eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' "$frontmatter_file" "$hooks_yaml_file"
+
+    # Reassemble file
+    echo "---" > "$temp_file"
+    cat "$frontmatter_file" >> "$temp_file"
+    echo "---" >> "$temp_file"
+    cat "$body_file" >> "$temp_file"
+
+    mv "$temp_file" "$agent_file"
+    rm -f "$frontmatter_file" "$body_file" "$hooks_yaml_file"
+
+    log_info "Updated frontmatter hooks: $agent_file"
 }
 
 # =============================================================================

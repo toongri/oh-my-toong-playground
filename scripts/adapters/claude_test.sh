@@ -361,6 +361,179 @@ EOF
 }
 
 # =============================================================================
+# Tests: Update Agent Hooks Frontmatter
+# =============================================================================
+
+test_claude_update_agent_hooks_frontmatter_adds_hooks() {
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude/agents"
+
+    # Create agent file with frontmatter
+    cat > "$target_dir/.claude/agents/test-agent.md" << 'EOF'
+---
+skills:
+  - existing-skill
+---
+# Test Agent Content
+EOF
+
+    # Execute with a SubagentStop hook
+    local hooks_json='[{"event":"SubagentStop","matcher":"*","type":"command","command":"$CLAUDE_PROJECT_DIR/.claude/hooks/my-hook.sh","timeout":120}]'
+    claude_update_agent_hooks_frontmatter "$target_dir/.claude/agents/test-agent.md" "$hooks_json" "false"
+
+    # Verify
+    assert_file_contains "$target_dir/.claude/agents/test-agent.md" "existing-skill" "Should preserve existing skill"
+    assert_file_contains "$target_dir/.claude/agents/test-agent.md" "SubagentStop" "Should add SubagentStop hook"
+    assert_file_contains "$target_dir/.claude/agents/test-agent.md" "my-hook.sh" "Should contain hook command"
+    assert_file_contains "$target_dir/.claude/agents/test-agent.md" "120" "Should contain timeout"
+}
+
+test_claude_update_agent_hooks_frontmatter_empty_json_does_nothing() {
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude/agents"
+
+    cat > "$target_dir/.claude/agents/test-agent.md" << 'EOF'
+---
+skills:
+  - existing-skill
+---
+# Test Agent Content
+EOF
+
+    local original_content=$(cat "$target_dir/.claude/agents/test-agent.md")
+
+    # Execute with empty hooks
+    claude_update_agent_hooks_frontmatter "$target_dir/.claude/agents/test-agent.md" "[]" "false"
+
+    local current_content=$(cat "$target_dir/.claude/agents/test-agent.md")
+    assert_equals "$original_content" "$current_content" "Content should not change with empty hooks"
+}
+
+test_claude_update_agent_hooks_frontmatter_dry_run_does_not_modify() {
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude/agents"
+
+    cat > "$target_dir/.claude/agents/test-agent.md" << 'EOF'
+---
+skills:
+  - existing-skill
+---
+# Test Agent Content
+EOF
+
+    local original_content=$(cat "$target_dir/.claude/agents/test-agent.md")
+
+    local hooks_json='[{"event":"SubagentStop","matcher":"*","type":"command","command":"test","timeout":60}]'
+    claude_update_agent_hooks_frontmatter "$target_dir/.claude/agents/test-agent.md" "$hooks_json" "true"
+
+    local current_content=$(cat "$target_dir/.claude/agents/test-agent.md")
+    assert_equals "$original_content" "$current_content" "Content should not change in dry-run mode"
+}
+
+# =============================================================================
+# Tests: Frontmatter Hooks - Empty Command Fallback
+# =============================================================================
+
+test_claude_sync_agents_direct_empty_command_uses_fallback_path() {
+    # Setup: create source agent file with frontmatter
+    local source_file="$TEST_TMP_DIR/source-agent.md"
+    cat > "$source_file" << 'EOF'
+---
+skills:
+  - some-skill
+---
+# Test Agent
+EOF
+
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude"
+
+    # add_hooks_json with .command as empty string "" (simulates yq reading missing value)
+    local add_hooks_json='[{"event":"SubagentStop","display_name":"my-hook.sh","source_path":"","command":"","timeout":120}]'
+
+    # Execute
+    claude_sync_agents_direct "$target_dir" "test-agent" "$source_file" "" "$add_hooks_json" "false"
+
+    # Verify: the agent file should contain the fallback path, not an empty command
+    local agent_file="$target_dir/.claude/agents/test-agent.md"
+    if grep -q 'command: "\$CLAUDE_PROJECT_DIR/.claude/hooks/my-hook.sh"' "$agent_file"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Agent hooks should contain fallback path with \$CLAUDE_PROJECT_DIR"
+        echo "  Expected command to contain: \$CLAUDE_PROJECT_DIR/.claude/hooks/my-hook.sh"
+        echo "  Actual file content:"
+        cat "$agent_file"
+        return 1
+    fi
+}
+
+test_claude_sync_agents_direct_null_command_uses_fallback_path() {
+    # Setup: create source agent file with frontmatter
+    local source_file="$TEST_TMP_DIR/source-agent.md"
+    cat > "$source_file" << 'EOF'
+---
+skills:
+  - some-skill
+---
+# Test Agent
+EOF
+
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude"
+
+    # add_hooks_json with .command as null (no command field)
+    local add_hooks_json='[{"event":"SubagentStop","display_name":"my-hook.sh","source_path":""}]'
+
+    # Execute
+    claude_sync_agents_direct "$target_dir" "test-agent" "$source_file" "" "$add_hooks_json" "false"
+
+    # Verify: the agent file should contain the fallback path
+    local agent_file="$target_dir/.claude/agents/test-agent.md"
+    if grep -q 'command: "\$CLAUDE_PROJECT_DIR/.claude/hooks/my-hook.sh"' "$agent_file"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Agent hooks should contain fallback path when command is null"
+        echo "  Expected command to contain: \$CLAUDE_PROJECT_DIR/.claude/hooks/my-hook.sh"
+        echo "  Actual file content:"
+        cat "$agent_file"
+        return 1
+    fi
+}
+
+test_claude_sync_agents_direct_explicit_command_preserved() {
+    # Setup: create source agent file with frontmatter
+    local source_file="$TEST_TMP_DIR/source-agent.md"
+    cat > "$source_file" << 'EOF'
+---
+skills:
+  - some-skill
+---
+# Test Agent
+EOF
+
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude"
+
+    # add_hooks_json with explicit .command
+    local add_hooks_json='[{"event":"SubagentStop","display_name":"my-hook.sh","source_path":"","command":"/custom/path/hook.sh","timeout":60}]'
+
+    # Execute
+    claude_sync_agents_direct "$target_dir" "test-agent" "$source_file" "" "$add_hooks_json" "false"
+
+    # Verify: the agent file should contain the explicit command, not fallback
+    local agent_file="$target_dir/.claude/agents/test-agent.md"
+    if grep -q 'command: "/custom/path/hook.sh"' "$agent_file"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Agent hooks should preserve explicit command"
+        echo "  Expected command: /custom/path/hook.sh"
+        echo "  Actual file content:"
+        cat "$agent_file"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -399,6 +572,16 @@ main() {
     # Agent Frontmatter
     run_test test_claude_update_agent_frontmatter_adds_skills
     run_test test_claude_update_agent_frontmatter_dry_run_does_not_modify
+
+    # Agent Hooks Frontmatter
+    run_test test_claude_update_agent_hooks_frontmatter_adds_hooks
+    run_test test_claude_update_agent_hooks_frontmatter_empty_json_does_nothing
+    run_test test_claude_update_agent_hooks_frontmatter_dry_run_does_not_modify
+
+    # Frontmatter Hooks - Empty Command Fallback
+    run_test test_claude_sync_agents_direct_empty_command_uses_fallback_path
+    run_test test_claude_sync_agents_direct_null_command_uses_fallback_path
+    run_test test_claude_sync_agents_direct_explicit_command_preserved
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

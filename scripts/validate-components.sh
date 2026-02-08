@@ -349,6 +349,20 @@ validate_components() {
                             done
                         fi
                     fi
+
+                    # add-hooks 검증
+                    local has_add_hooks=$(yq ".agents.items[$i].add-hooks // null" "$yaml_file")
+                    if [[ "$has_add_hooks" != "null" ]]; then
+                        local hooks_count=$(yq ".agents.items[$i].add-hooks | length" "$yaml_file")
+                        if [[ $hooks_count -gt 0 ]]; then
+                            for j in $(seq 0 $((hooks_count - 1))); do
+                                local hook_component=$(yq ".agents.items[$i].add-hooks[$j].component // \"\"" "$yaml_file")
+                                if [[ -n "$hook_component" && "$hook_component" != "null" ]]; then
+                                    validate_scoped_component "hooks" "$hook_component" "" || true
+                                fi
+                            done
+                        fi
+                    fi
                 fi
             done
         fi

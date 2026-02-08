@@ -44,16 +44,11 @@ hooks:
     - component: session-start.sh
       event: SessionStart
       timeout: 10
-    # Kotlin project-specific hooks (inline)
-    - event: PreToolUse
-      matcher: "Bash(git commit:*)"
-      command: "./gradlew ktlintCheck -q 2>&1; KTLINT=$?; ./gradlew test -q 2>&1; TEST=$?; if [ $KTLINT -ne 0 ] || [ $TEST -ne 0 ]; then echo 'VALIDATION_FAILED: ktlint='$KTLINT' test='$TEST; exit 1; fi"
-    - event: PostToolUse
-      matcher: "Edit(**/src/main/**/*.kt)"
-      command: "#!/bin/bash\ninput=$(cat)\nfile_path=$(echo \"$input\" | jq -r '.tool_input.file_path // \"\"')\n\nif [ -n \"$file_path\" ] && [ -f \"$file_path\" ]; then\n  module=$(echo \"$file_path\" | grep -oE '^(apps|modules)/[^/]+' | tr '/' ':')\n  if [ -n \"$module\" ]; then\n    errors=$(./gradlew $module:compileKotlin -q 2>&1 | grep -E 'e:' | head -10)\n    if [ -n \"$errors\" ]; then\n      echo \"[compile error]\" >&2\n      echo \"$errors\" >&2\n    fi\n  fi\nfi\n\necho \"$input\""
-    - event: PostToolUse
-      matcher: "Edit(**/src/**/*.kt)"
-      command: "#!/bin/bash\ninput=$(cat)\n./gradlew ktlintFormat -q 2>/dev/null || true\necho \"$input\""
+    # Kotlin project-specific hooks (file-based)
+    - component: pre-commit-gate.sh
+      event: PreToolUse
+      matcher: "Bash"
+      timeout: 120
 
 skills:
   items:

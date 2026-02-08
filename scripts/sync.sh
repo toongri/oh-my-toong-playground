@@ -107,8 +107,9 @@ sync_agents() {
         get_item_info "$yaml_file" "agents" "$i"
         local component="$ITEM_COMPONENT"
 
-        # Get add-skills (only for object items)
+        # Get add-skills and add-hooks (only for object items)
         local add_skills=""
+        local add_hooks_json="[]"
         local item_platforms
         if [[ "$ITEM_IS_OBJECT" == "true" ]]; then
             local add_skills_count=$(yq ".agents.items[$i].add-skills | length // 0" "$yaml_file")
@@ -120,6 +121,44 @@ sync_agents() {
                     else
                         add_skills="$skill"
                     fi
+                done
+            fi
+
+            # Get add-hooks
+            local add_hooks_count=$(yq ".agents.items[$i].add-hooks | length // 0" "$yaml_file")
+            if [[ "$add_hooks_count" -gt 0 ]]; then
+                for j in $(seq 0 $((add_hooks_count - 1))); do
+                    local hook_event=$(yq ".agents.items[$i].add-hooks[$j].event // \"\"" "$yaml_file")
+                    local hook_component=$(yq ".agents.items[$i].add-hooks[$j].component // \"\"" "$yaml_file")
+                    local hook_command=$(yq ".agents.items[$i].add-hooks[$j].command // \"\"" "$yaml_file")
+                    local hook_type=$(yq ".agents.items[$i].add-hooks[$j].type // \"command\"" "$yaml_file")
+                    local hook_matcher=$(yq ".agents.items[$i].add-hooks[$j].matcher // \"*\"" "$yaml_file")
+                    local hook_timeout=$(yq ".agents.items[$i].add-hooks[$j].timeout // 10" "$yaml_file")
+
+                    # Resolve hook component source path if present
+                    local hook_source_path=""
+                    local hook_display_name=""
+                    if [[ -n "$hook_component" && "$hook_component" != "null" ]]; then
+                        resolve_scoped_source_path "hooks" "$hook_component" ""
+                        if [[ -n "$SCOPED_SOURCE_PATH" ]]; then
+                            hook_source_path="$SCOPED_SOURCE_PATH"
+                            hook_display_name="$SCOPED_DISPLAY_NAME"
+                        else
+                            log_warn "add-hooks component not found: $hook_component ($SCOPED_RESOLUTION_ERROR)"
+                            continue
+                        fi
+                    fi
+
+                    add_hooks_json=$(echo "$add_hooks_json" | jq \
+                        --arg event "$hook_event" \
+                        --arg component "$hook_component" \
+                        --arg command "$hook_command" \
+                        --arg type "$hook_type" \
+                        --arg matcher "$hook_matcher" \
+                        --argjson timeout "$hook_timeout" \
+                        --arg source_path "$hook_source_path" \
+                        --arg display_name "$hook_display_name" \
+                        '. + [{event: $event, component: $component, command: $command, type: $type, matcher: $matcher, timeout: $timeout, source_path: $source_path, display_name: $display_name}]')
                 done
             fi
 
@@ -153,7 +192,7 @@ sync_agents() {
                         mkdir -p "$target_path/.claude/agents"
                         prepared_claude=true
                     fi
-                    claude_sync_agents_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$add_skills" "$DRY_RUN"
+                    claude_sync_agents_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$add_skills" "$add_hooks_json" "$DRY_RUN"
                     ;;
                 gemini)
                     if [[ "$prepared_gemini" == false && "$DRY_RUN" != true ]]; then
@@ -763,10 +802,10 @@ process_yaml() {
         mkdir -p "$target_path/.claude"
     fi
 
-    # 각 카테고리 동기화
+    # 각 카테고리 동기화 (hooks를 먼저 처리: rm -rf 후 재생성하므로 agents의 add-hooks 파일이 삭제되지 않도록)
+    sync_hooks "$target_path" "$yaml_file"
     sync_agents "$target_path" "$yaml_file"
     sync_commands "$target_path" "$yaml_file"
-    sync_hooks "$target_path" "$yaml_file"
     sync_skills "$target_path" "$yaml_file"
     sync_scripts "$target_path" "$yaml_file"
 
