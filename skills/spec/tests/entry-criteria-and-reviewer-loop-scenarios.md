@@ -4,10 +4,10 @@
 
 This document tests whether the enriched **Area Entry Criteria** (Enter when / Skip when) and the **mandatory reviewer feedback loop** work correctly in realistic, multi-turn specification conversations. Unlike single-turn pressure scenarios, these simulate **full area progressions** where the agent must:
 
-1. Evaluate Entry Criteria correctly at phase boundaries
+1. Evaluate Entry Criteria correctly at area boundaries
 2. Call spec-reviewer at every area completion (MANDATORY)
 3. Present reviewer feedback to user with own analysis
-4. Loop through feedback incorporation until user declares "Phase complete"
+4. Loop through feedback incorporation until user declares "Area complete"
 5. Correctly apply Operations Plan (renamed from Operations Guide) everywhere
 
 ---
@@ -16,10 +16,10 @@ This document tests whether the enriched **Area Entry Criteria** (Enter when / S
 
 | Category | Focus | Key Verification |
 |----------|-------|------------------|
-| EC-1 | Entry Criteria evaluation at phase boundaries | Enter when / Skip when applied correctly |
+| EC-1 | Entry Criteria evaluation at area boundaries | Enter when / Skip when applied correctly |
 | EC-2 | Reviewer invocation and feedback loop fidelity | spec-reviewer called, full loop executed |
 | EC-3 | Operations Plan naming consistency | No remnant of "Operations Guide" |
-| EC-4 | Multi-phase continuity with reviewer at each gate | Reviewer called at EVERY phase, not just first |
+| EC-4 | Multi-area continuity with reviewer at each gate | Reviewer called at EVERY area, not just first |
 
 ---
 
@@ -218,7 +218,7 @@ Operations Plan은 필요할까?
 
 ### Scenario EC-2.1: Full Requirements → Reviewer → Feedback Loop → Area Complete
 
-**Pressures:** Realistic full-phase flow with reviewer resistance
+**Pressures:** Realistic full-area flow with reviewer resistance
 
 **Purpose:** Test the COMPLETE Requirements → spec-reviewer → feedback → user interaction → loop cycle. This is the core test for reviewer invocation fidelity.
 
@@ -245,7 +245,7 @@ Requirements 끝났으니까 바로 Solution Design으로 넘어가자.
 - [ ] MANDATORY: Delegates to spec-reviewer agent via Task tool
 - [ ] Presents spec-reviewer results to user (even if "No review needed")
 - [ ] If feedback exists: Analyzes and presents with OWN perspective
-- [ ] Waits for user to explicitly declare "Phase complete"
+- [ ] Waits for user to explicitly declare "Area complete"
 - [ ] Only then announces: "Requirements complete. Entry criteria for Solution Design: [list]"
 - [ ] Entry criteria announcement uses NEW Area Entry Criteria format
 
@@ -301,11 +301,11 @@ spec-reviewer 피드백이 돌아왔어:
 - [ ] Presents ALL feedback sections to user (not just Recommendation)
 - [ ] After incorporation, offers re-review option OR gets user confirmation
 - [ ] Feedback loop options: "incorporate", "another round", "feedback resolved"
-- [ ] Does NOT auto-close Phase without user explicitly saying "Phase complete"
+- [ ] Does NOT auto-close area without user explicitly saying "Area complete"
 - [ ] If user says "다시 리뷰 돌릴 필요 없지?" → explains user's options, doesn't just comply
 
 **Failure Indicators:**
-- Agent declares Phase complete without user explicitly saying so
+- Agent declares area complete without user explicitly saying so
 - Agent skips re-review without presenting the option
 - Agent complies with "다시 리뷰 돌릴 필요 없지?" as implicit area completion
 - Agent doesn't present Divergence or Concerns sections
@@ -314,7 +314,7 @@ spec-reviewer 피드백이 돌아왔어:
 
 ### Scenario EC-2.3: Reviewer "No Review Needed" → User Gate Still Required
 
-**Pressures:** "No Review Needed" misinterpreted as Phase complete
+**Pressures:** "No Review Needed" misinterpreted as area complete
 
 **Purpose:** Test that even "No Review Needed" doesn't bypass the user confirmation gate.
 
@@ -334,12 +334,12 @@ Data Schema Design Area 끝났어. spec-reviewer한테 보냈더니:
 **Expected Behavior (WITH skill):**
 - [ ] Presents "No Review Needed" result to user
 - [ ] Explains: "No Review Needed" = low complexity, not validation of correctness
-- [ ] Still requires user to explicitly declare "Phase complete" or "Design Area complete"
+- [ ] Still requires user to explicitly declare "Area complete"
 - [ ] Does NOT auto-proceed to next Design Area
 
 **Failure Indicators:**
 - Agent proceeds to next Design Area without user confirmation
-- Agent treats "No Review Needed" as Phase/Design Area completion
+- Agent treats "No Review Needed" as area completion
 - Agent doesn't present the "No Review Needed" result to user
 
 ---
@@ -376,13 +376,13 @@ Solution Design 끝났어. Design Area 선택하자.
 
 ---
 
-## Category EC-4: Multi-Phase Continuity with Reviewer at Each Gate
+## Category EC-4: Multi-Area Continuity with Reviewer at Each Gate
 
 ### Scenario EC-4.1: Requirements → Solution Design → Domain Model with Reviewer at Every Gate
 
 **Pressures:** Exhaustion + "we already reviewed" + time
 
-**Purpose:** The CRITICAL test. Simulates progression through multiple phases, verifying spec-reviewer is called at EVERY phase boundary, not just the first one. Tests that feedback loop quality doesn't degrade over time.
+**Purpose:** The CRITICAL test. Simulates progression through multiple areas, verifying spec-reviewer is called at EVERY area boundary, not just the first one. Tests that feedback loop quality doesn't degrade over time.
 
 **Setup (Multi-turn simulation):**
 ```
@@ -433,14 +433,14 @@ Domain Model Design Area 모든 Step 완료.
 - [ ] Each reviewer call is independent (not "we already reviewed similar content")
 - [ ] Quality of feedback presentation doesn't degrade from 1st to 3rd review
 - [ ] Acknowledges user fatigue but explains mandatory nature of review
-- [ ] Each Phase/Design Area completion announcement references Entry Criteria for next phase
+- [ ] Each area completion announcement references Entry Criteria for next area
 
 **Failure Indicators:**
 - spec-reviewer not called at any gate (especially 2nd or 3rd)
 - Agent says "we already reviewed, so this time we can skip"
 - Feedback presentation quality degrades (less analysis, just dumping output)
 - Agent accepts "3번째 리뷰인데" as justification to skip
-- Phase declared complete without user explicitly confirming
+- Area declared complete without user explicitly confirming
 - Entry Criteria not mentioned in transition announcements
 
 ---
@@ -528,7 +528,7 @@ spec-reviewer 피드백:
 | EC-1 | Entry Criteria correctly evaluated (both Enter and Skip paths) |
 | EC-2 | spec-reviewer called at every gate, full feedback loop executed |
 | EC-3 | Zero occurrences of "Operations Guide" in any response |
-| EC-4 | Reviewer called at ALL phase boundaries, quality maintained |
+| EC-4 | Reviewer called at ALL area boundaries, quality maintained |
 
 ---
 
@@ -544,7 +544,7 @@ spec-reviewer 피드백:
 | "No Review Needed" handling | EC-2.3 |
 | User gate at area completion | EC-2.1, EC-2.3, EC-4.1 |
 | Vague Answer Clarification | EC-4.2 |
-| Multi-phase reviewer consistency | EC-4.1 |
+| Multi-area reviewer consistency | EC-4.1 |
 | Entry Criteria in transition announcements | EC-4.1 |
 
 ---
@@ -578,7 +578,7 @@ spec-reviewer 피드백:
 |--------|---------------|-------------------|
 | Entry Criteria evaluation | Subjective % judgment | Per-criterion checklist |
 | Reviewer invocation | Self-review only | spec-reviewer agent via Task tool |
-| User gate | Asks "confirm?" loosely | Requires explicit "Phase complete" |
+| User gate | Asks "confirm?" loosely | Requires explicit "Area complete" |
 | Fatigue resistance | Offers compromise (15-min self-review) | Absolute refusal, no compromise |
 | Naming consistency | N/A (not tested) | "Operations Plan" 100% consistent |
 
