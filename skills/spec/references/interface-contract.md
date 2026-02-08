@@ -28,11 +28,11 @@ When users respond vaguely to design questions, clarify with specific questions.
 
 | Vague Answer | Clarifying Question |
 |------------|------------|
-| "REST면 되지" | "리소스 구조는 어떻게 되나요? 중첩 리소스가 필요한 경우는?" |
-| "에러는 적절히 처리" | "각 에러 케이스별 HTTP 상태 코드는? 에러 응답 본문 형식은?" |
-| "버전 관리는 나중에" | "기존 클라이언트가 있나요? Breaking change 발생 시 대응 방안은?" |
-| "응답은 JSON으로" | "필드 네이밍 컨벤션은? null 처리 정책은? 날짜 형식은?" |
-| "인증은 기본으로" | "어떤 인증 방식인가요? 권한 체계는? 토큰 만료 정책은?" |
+| "REST is fine" | "What's the resource structure? Are there cases requiring nested resources?" |
+| "Handle errors appropriately" | "What HTTP status codes for each error case? What's the error response body format?" |
+| "Versioning can wait" | "Are there existing clients? What's the plan for handling breaking changes?" |
+| "Response in JSON" | "What's the field naming convention? Null handling policy? Date format?" |
+| "Basic authentication" | "Which authentication method? What's the authorization scheme? Token expiration policy?" |
 
 ## Process
 

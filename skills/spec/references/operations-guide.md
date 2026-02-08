@@ -31,11 +31,11 @@ When users respond vaguely to design questions, clarify with specific questions.
 
 | Vague Answer | Clarifying Question |
 |------------|------------|
-| "모니터링은 나중에" | "장애 감지 기준은 무엇인가요? 어떤 지표를 추적해야 하나요?" |
-| "알림은 적당히" | "알림 임계값은? 알림 채널은? 에스컬레이션 정책은?" |
-| "롤백은 필요하면" | "롤백 트리거 조건은? 롤백 절차는? 데이터 정합성 확인 방법은?" |
-| "배포는 기본으로" | "다운타임 허용 범위는? 카나리/블루그린 필요한가요? DB 마이그레이션 순서는?" |
-| "장애 대응은 그때그때" | "주요 장애 시나리오는? 각 시나리오별 대응 절차는? 담당자는?" |
+| "Monitoring can wait" | "What are the failure detection criteria? Which metrics should be tracked?" |
+| "Alerts are whatever" | "What are the alert thresholds? Alert channels? Escalation policy?" |
+| "Rollback if needed" | "What are the rollback trigger conditions? Rollback procedure? How to verify data consistency?" |
+| "Default deployment" | "What's the acceptable downtime range? Is canary/blue-green needed? DB migration order?" |
+| "Handle incidents as they come" | "What are the major failure scenarios? Response procedure for each? Who's responsible?" |
 
 ## Baseline Assumptions
 
