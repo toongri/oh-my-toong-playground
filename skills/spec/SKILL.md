@@ -85,7 +85,7 @@ After completing Phase 2 (Solution Design), the AI analyzes project requirements
 
 ## Design Area Selection
 
-Phase 2 (Solution Design) 완료 후, AI가 Phase 1-2 결과물을 분석하여 필요한 Design Areas를 자율적으로 결정하고 진행한다.
+After completing Phase 2 (Solution Design), the AI analyzes Phase 1-2 outputs to autonomously determine the necessary Design Areas and proceeds accordingly.
 
 ### Selection Criteria
 
@@ -99,7 +99,7 @@ Phase 2 (Solution Design) 완료 후, AI가 Phase 1-2 결과물을 분석하여 
 
 ### Execution Order
 
-선택된 Design Areas는 다음 순서로 실행: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
+Selected Design Areas are executed in the following order: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
 
 ## Vague Answer Clarification Principle
 
@@ -137,10 +137,10 @@ When user has no preference or cannot decide, select best practice autonomously.
 This applies to ALL question types - AskUserQuestion, plain text questions, clarifications. No exceptions.
 
 ```
-WRONG: "다음 질문들에 답변해주세요: 1. ... 2. ... 3. ... 4. ..."
-RIGHT: "Jira 댓글의 키워드도 트리거 대상인가요?"
+WRONG: "Please answer the following questions: 1. ... 2. ... 3. ... 4. ..."
+RIGHT: "Are Jira comment keywords also trigger targets?"
        → (wait for answer)
-       "하나의 티켓에 여러 건의 오류가 보고될 수 있나요?"
+       "Can multiple errors be reported in a single ticket?"
        → (wait for answer)
        ...
 ```
@@ -149,14 +149,14 @@ RIGHT: "Jira 댓글의 키워드도 트리거 대상인가요?"
 
 | Situation | Method | Why |
 |-----------|--------|-----|
-| 2-4개 선택지가 명확한 결정 | AskUserQuestion | 구조화된 선택지 제공 |
-| 주관식/열린 질문 | 일반 텍스트 질문 | 자유로운 답변 필요 |
-| Yes/No 확인 | 일반 텍스트 질문 | AskUserQuestion은 과잉 |
-| 복잡한 트레이드오프 결정 | Markdown 분석 + AskUserQuestion | 깊은 맥락 + 구조화된 선택 |
+| Decision with 2-4 clear options | AskUserQuestion | Provides structured choices |
+| Open-ended/subjective question | Plain text question | Requires free-form answer |
+| Yes/No confirmation | Plain text question | AskUserQuestion is overkill |
+| Complex trade-off decision | Markdown analysis + AskUserQuestion | Deep context + structured choice |
 
-**주관식 질문에 AskUserQuestion을 억지로 쓰지 마라.** 답이 열려있으면 그냥 텍스트로 물어봐라.
+**Do NOT force AskUserQuestion for open-ended questions.** If the answer is open-ended, just ask in plain text.
 
-### AskUserQuestion Quality Standard (선택지가 있는 결정에만)
+### AskUserQuestion Quality Standard (Only for decisions with options)
 
 **Question Structure**: Context → Tension → Question
 
@@ -625,10 +625,10 @@ design-area-domain-model/records/
 ### Question Batching
 | Excuse | Reality |
 |--------|---------|
-| "여러 질문을 한번에 하면 효율적" | 유저가 한 질문에 집중하지 못함. 하나씩 물어라. |
-| "관련된 질문이니까 묶어도 돼" | 관련돼도 하나씩. 답변이 다음 질문에 영향 줄 수 있다. |
-| "초안에 열린 질문 리스트를 붙이면 편해" | 질문은 대화로 하나씩. 문서에 질문 리스트 금지. |
-| "주관식인데 AskUserQuestion을 써야지" | 주관식은 일반 텍스트로 물어봐라. |
+| "Asking multiple questions at once is efficient" | User can't focus on one question. Ask one at a time. |
+| "Related questions can be bundled" | Even if related, ask one at a time. Answers may affect the next question. |
+| "Attaching an open question list to the draft is convenient" | Ask questions one at a time in conversation. No question lists in documents. |
+| "It's open-ended so I should use AskUserQuestion" | Use plain text for open-ended questions. |
 
 ### Step/Phase Skipping
 | Excuse | Reality |

@@ -33,7 +33,7 @@ For each user action the system tracks, clarify exactly when it occurs, how dupl
 - Acceptance criteria uses "properly", "gracefully", "correctly" → Get specifics
 - Error case marked "N/A" without reason → Define or justify
 - Implementation details appear (Redis, Kafka, SQL) → Move to Phase 4
-- "업계 표준" or "나중에 물어보면 돼" → Get concrete formula/rule now
+- "Industry standard" or "We can ask later" → Get concrete formula/rule now
 - User says "skip this step" → Explain why each step matters
 
 ## Process
