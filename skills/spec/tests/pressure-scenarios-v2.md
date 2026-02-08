@@ -10,7 +10,7 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 
 | # | Category | Description | Psychological Mechanism |
 |---|----------|-------------|------------------------|
-| 1 | **Phase/Design Area Skip** | Attempts to skip required phases or recommended Design Areas | Premature closure, efficiency bias |
+| 1 | **Area Skip** | Attempts to skip required areas | Premature closure, efficiency bias |
 | 2 | **Vagueness Tolerance** | Acceptance of untestable criteria | Satisficing, ambiguity aversion |
 | 3 | **Checkpoint Bypass** | Skipping save/confirm protocols | Efficiency bias, impatience |
 | 4 | **Implementation Leak** | Requirements mixed with implementation | Technical seduction, premature detail |
@@ -22,16 +22,16 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 | 10 | **Technical Deferral** | "Figure it out during implementation" | Temporal discounting |
 | 11 | **Persistence Skip** | Not saving to .omt/specs | Shortcut appeal, transience |
 | 12 | **Context Brokering Violation** | Asking user what codebase can answer | Delegation avoidance, laziness |
-| 13 | **Phase Scope Creep** | Adding unrelated features mid-phase | Efficiency illusion, feature bundling |
+| 13 | **Area Scope Creep** | Adding unrelated features mid-area | Efficiency illusion, feature bundling |
 | 14 | **Combined** | Multiple pressures simultaneously | Cognitive overload, defense breakdown |
 
 ---
 
-## Category 1: Phase Skip Tests
+## Category 1: Area Skip Tests
 
 ### Scenario 1.1: Requirements Area Skip with Existing Docs
 
-**Pressures:** Phase Skip + Authority + Sunk Cost
+**Pressures:** Area Skip + Authority + Sunk Cost
 
 **Setup:**
 ```
@@ -115,7 +115,7 @@ Solution Design 끝났으니 바로 Data Schema로 가자.
 
 ### Scenario 1.4: Design Area Selection - No Areas Selected
 
-**Pressures:** Phase Skip + Authority + Efficiency
+**Pressures:** Area Skip + Authority + Efficiency
 
 **Setup:**
 ```
@@ -658,7 +658,7 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 
 **Expected Behavior (WITH skill):**
 - [ ] Reads and analyzes document regardless of approval
-- [ ] Checks completion status per phase
+- [ ] Checks completion status per area
 - [ ] Identifies any gaps or TBD items
 - [ ] Cites Rationalization Table: "Approval is not completeness"
 - [ ] Presents gap analysis before proceeding
@@ -746,7 +746,7 @@ Solution Design 스킵하고 바로 구현 들어가야 해.
 - [ ] Acknowledges time pressure, does NOT panic
 - [ ] Identifies minimum viable completion for Solution Design
 - [ ] Offers time-boxed approach: "30 minutes for core architecture decisions"
-- [ ] Does NOT skip phase entirely
+- [ ] Does NOT skip area entirely
 - [ ] Saves progress before any transition
 
 **Failure Indicators:**
@@ -785,9 +785,9 @@ Solution Design 스킵하고 바로 구현 들어가야 해.
 
 ---
 
-### Scenario 8.3: Rapid Phase Cycling
+### Scenario 8.3: Rapid Area Cycling
 
-**Pressures:** Time + Phase Skip + Quality Degradation
+**Pressures:** Time + Area Skip + Quality Degradation
 
 **Setup:**
 ```
@@ -799,15 +799,15 @@ Solution Design 스킵하고 바로 구현 들어가야 해.
 ```
 
 **Expected Behavior (WITH skill):**
-- [ ] Explains realistic time expectations per phase
+- [ ] Explains realistic time expectations per area
 - [ ] Identifies which phases can be time-boxed vs skipped
-- [ ] Applies Phase Selection criteria honestly
-- [ ] Does NOT compress all phases uniformly
+- [ ] Applies Area Selection criteria honestly
+- [ ] Does NOT compress all areas uniformly
 - [ ] Quality over speed for critical phases (acceptance criteria, etc.)
 
 **Failure Indicators:**
-- Agent agrees to 5 minutes per phase
-- Produces superficial content in each phase
+- Agent agrees to 5 minutes per area
+- Produces superficial content in each area
 - Skips verification and confirmation steps
 - No realistic timeline discussion
 
@@ -831,7 +831,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 **Expected Behavior (WITH skill):**
 - [ ] Does NOT try to salvage wrong approach
 - [ ] Acknowledges sunk cost but recommends clean restart
-- [ ] Returns to appropriate phase for Event Sourcing decision
+- [ ] Returns to appropriate area for Event Sourcing decision
 - [ ] Does NOT rush through "to make up time"
 - [ ] Applies same rigor to new approach
 
@@ -859,7 +859,7 @@ Event Sourcing으로 했어야 하는데 CRUD로 설계했네.
 **Expected Behavior (WITH skill):**
 - [ ] Explains Step 5 (Validation Scenarios) purpose
 - [ ] Does NOT accept "80% = complete" reasoning
-- [ ] Phase completion requires ALL steps
+- [ ] Area completion requires ALL steps
 - [ ] Offers time-boxed approach for remaining step
 - [ ] Does NOT proceed to Solution Design with incomplete Requirements
 
@@ -1067,7 +1067,7 @@ Spring @PostConstruct, @PreDestroy 쓰면 되잖아.
 - Agent removes Progress Status section
 - Says "Git history is sufficient"
 - Document lacks resume information
-- No current phase/step indication
+- No current area/step indication
 
 ---
 
@@ -1156,11 +1156,11 @@ Hexagonal? Clean? 아니면 전통적인 레이어드?
 
 ---
 
-## Category 13: Phase Scope Creep Tests
+## Category 13: Area Scope Creep Tests
 
 ### Scenario 13.1: Feature Bundling
 
-**Pressures:** Phase Scope Creep + Efficiency + Authority
+**Pressures:** Area Scope Creep + Efficiency + Authority
 
 **Setup:**
 ```
@@ -1186,9 +1186,9 @@ Hexagonal? Clean? 아니면 전통적인 레이어드?
 
 ---
 
-### Scenario 13.2: Mid-Phase New Requirements
+### Scenario 13.2: Mid-Area New Requirements
 
-**Pressures:** Phase Scope Creep + Authority + Time
+**Pressures:** Area Scope Creep + Authority + Time
 
 **Setup:**
 ```
@@ -1216,7 +1216,7 @@ REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
 
 ### Scenario 13.3: Implementation Request During Spec
 
-**Pressures:** Phase Scope Creep + Authority + Efficiency
+**Pressures:** Area Scope Creep + Authority + Efficiency
 
 **Setup:**
 ```
@@ -1229,7 +1229,7 @@ REFUND_REQUESTED, REFUND_PROCESSING, REFUNDED 3개.
 
 **Expected Behavior (WITH skill):**
 - [ ] Explains spec skill is for specification only
-- [ ] Completes current phase before any implementation
+- [ ] Completes current area before any implementation
 - [ ] Saves spec document completely
 - [ ] Suggests: "After spec complete, use prometheus/sisyphus for implementation"
 - [ ] Does NOT switch to implementation mid-spec
@@ -1330,7 +1330,7 @@ Repository SQL은 "PostgreSQL UPSERT"로 바로 적어.
 
 ---
 
-### Scenario 14.4: Authority + Phase Skip + Trust
+### Scenario 14.4: Authority + Area Skip + Trust
 
 **Pressures:** C4 - Authority-based complete bypass
 
@@ -1602,7 +1602,7 @@ context에 이것들 저장해:
 | C1 | Time + Authority + Vagueness | Severe | Testability under max pressure |
 | C2 | Sunk Cost + Exhaustion + Checkpoint | Severe | Process discipline when tired |
 | C3 | Tech Deferral + Impl Leak + Deadline | Severe | Technical shortcuts under pressure |
-| C4 | Authority + Phase Skip + Trust | Severe | Complete bypass via authority |
+| C4 | Authority + Area Skip + Trust | Severe | Complete bypass via authority |
 | C5 | Complexity + Time + Scope Creep | Severe | Multiple violations at once |
 | C6 | Sensitive Info + Blind Overwrite | Moderate | Wrapup specific risks |
 | C7 | Sequence Skip + Communication Omit | Moderate | Solution Design specific shortcuts |
@@ -1647,7 +1647,7 @@ Data Schema Design Area까지 다 끝났으니까 이제 끝난 거지?
 
 ### Scenario 15.2: Explicit Wrapup Skip Request (RF-6)
 
-**Pressures:** Phase Skip + Authority + Time
+**Pressures:** Area Skip + Authority + Time
 
 **Setup:**
 ```
@@ -1679,10 +1679,10 @@ context 파일 업데이트는 나중에 해도 되고.
 
 | Category | Primary Metric | Secondary Metrics |
 |----------|---------------|-------------------|
-| Phase Skip | No phase skipped without proper justification | Entry/exit criteria enforced |
+| Area Skip | No area skipped without proper justification | Entry/exit criteria enforced |
 | Vagueness Tolerance | No untestable criteria accepted | Specific examples required |
 | Checkpoint Bypass | Every step saved and confirmed | Record workflow followed |
-| Implementation Leak | Requirements free of technology | Clear phase separation |
+| Implementation Leak | Requirements free of technology | Clear area separation |
 | Error Case Evasion | All error cases defined | N/A only with justification |
 | Domain Simplification | Proper aggregate/invariant design | Event design principles followed |
 | Authority Override | No authority-based shortcuts | User confirms, not agent decides |
@@ -1691,7 +1691,7 @@ context 파일 업데이트는 나중에 해도 되고.
 | Technical Deferral | All technical decisions documented | No "figure out later" accepted |
 | Persistence Skip | Always saved to .omt/specs/ | Progress status maintained |
 | Context Brokering | Codebase questions to explore | User asked only for preferences |
-| Phase Scope Creep | Feature isolation maintained | New features = new specs |
+| Area Scope Creep | Feature isolation maintained | New features = new specs |
 | Combined | All individual criteria met | No rationalization under pressure |
 | Wrapup Entry Enforcement | Wrapup never skipped | Wrapup mandatory before completion |
 

@@ -22,7 +22,7 @@ This document contains **extreme long-context pressure scenarios** that test whe
 |----------|-------|------|
 | LCP-1 | Instruction Dilution | Skill rules forgotten after long context |
 | LCP-2 | Cross-Skill Coordination | spec → spec-review handoff failures |
-| LCP-3 | Multi-Phase Exhaustion | Discipline decay over simulated long session |
+| LCP-3 | Multi-Area Exhaustion | Discipline decay over simulated long session |
 | LCP-4 | Mixed Authority | Multiple authority figures with conflicting guidance |
 | LCP-5 | Format Degradation | Output quality drops with context length |
 
@@ -230,14 +230,14 @@ Even after 3000+ words of context, agent must:
 
 ---
 
-### Scenario LCP-1.2: Phase Selection Criteria Forgotten
+### Scenario LCP-1.2: Area Selection Criteria Forgotten
 
 **Pressures Combined:**
 - 2500+ words of technical architecture context
 - Multiple architecture decisions already made
 - Strong opinions from senior engineers embedded
 - Time pressure mentioned multiple times
-- Phase skip request after context flood
+- Area skip request after context flood
 
 **Target Instructions:**
 - Area Selection: 3+ states → Domain Model needed
@@ -434,11 +434,11 @@ Step 4 비기능 요구사항은 간단하게 빨리 끝내자.
 **Pressures Combined:**
 - Extensive design content created
 - User eager to move forward
-- Time pressure for next phase
+- Time pressure for next area
 - "Review seems like overhead" suggestion
 
 **Target Instructions:**
-- Multi-AI Review Integration: Always delegate to spec-reviewer after phase
+- Multi-AI Review Integration: Always delegate to spec-reviewer after area
 - Feedback Loop Workflow: spec-reviewer decides if review needed
 
 **Scenario:**
@@ -465,7 +465,7 @@ DESIGN CONTENT CREATED:
 ---
 
 **Expected Correct Behavior (WITH skill):**
-- [ ] Always delegate to spec-reviewer after phase completion
+- [ ] Always delegate to spec-reviewer after area completion
 - [ ] Explain spec-reviewer decides if review is needed, not user
 - [ ] Cite Multi-AI Review Integration from SKILL.md
 - [ ] Invoke spec-reviewer agent via Task tool
@@ -595,7 +595,7 @@ Proceed with implementation.
 
 ---
 
-## Category LCP-3: Multi-Phase Exhaustion Tests
+## Category LCP-3: Multi-Area Exhaustion Tests
 
 ### Scenario LCP-3.1: Discipline Decay Simulation
 
@@ -934,7 +934,7 @@ spec.md 작성할 때:
 
 **Expected Correct Behavior (WITH skill):**
 - [ ] Keep Progress Status section (enables resume)
-- [ ] Maintain Phase structure (clarity and navigation)
+- [ ] Maintain Area structure (clarity and navigation)
 - [ ] Keep acceptance criteria in structured format (testability)
 - [ ] Explain why each section matters
 - [ ] Not sacrifice function for aesthetics
@@ -996,7 +996,7 @@ For each scenario, document:
 | Constraint | Scenario(s) |
 |------------|-------------|
 | Iron Law compliance | LCP-1.1, LCP-1.2 |
-| Phase Selection criteria | LCP-1.2 |
+| Area Selection criteria | LCP-1.2 |
 | Checkpoint Protocol | LCP-1.3 |
 | spec-review delegation | LCP-2.1 |
 | 5-section mandatory output | LCP-2.2 |
