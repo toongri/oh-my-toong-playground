@@ -1,10 +1,10 @@
-# Design Area: Interface Contract
+# Interface Contract
 
 ## Role
 
 As an interface design specialist, systematically design and document the interfaces required for the project. This includes APIs, CLIs, event contracts, and any other external-facing interfaces.
 
-**Output Format**: See `templates/phase-outputs.md`
+**Output Format**: See `templates/area-outputs.md`
 
 ## Principles
 
@@ -47,7 +47,7 @@ When users respond vaguely to design questions, clarify with specific questions.
 - Confirm: Get user agreement on scope
 
 #### Checkpoint: Step 1 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 2: Business Context Analysis
 
@@ -62,7 +62,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 2 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 3: Technical Environment Understanding
 
@@ -77,7 +77,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement on technical constraints
 
 #### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 4: Interface Design
 
@@ -102,7 +102,7 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 5: Interface Change Documentation
 
@@ -123,13 +123,13 @@ Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 5 Complete
-Apply **Checkpoint Protocol** (see SKILL.md Standard Protocols)
+Apply **Checkpoint Protocol** (see SKILL.md)
 
 ### Step 6: Document Generation
 
-Apply **Design Area Completion Protocol** (see SKILL.md Standard Protocols)
+Apply **Area Completion Protocol** (see SKILL.md)
 
-**Record Naming**: `da-interface-contract.{step}-{topic}.md`
+**Record Naming**: `{step}-{topic}.md`
 
 #### Checkpoint: Interface Contract Complete
 - Announce: "Interface Contract complete. Proceeding to next selected Design Area: [next area name]."

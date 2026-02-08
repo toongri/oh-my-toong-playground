@@ -5,7 +5,7 @@ description: Use when creating software specifications. Triggers include "spec",
 
 # Spec - Software Specification Expert
 
-Transform user requirements into structured specification documents. Each phase is optional, proceeding only with necessary steps.
+Transform user requirements into structured specification documents. Each area is optional, proceeding only with necessary steps.
 
 ## The Iron Law
 
@@ -15,10 +15,10 @@ NO STEP SKIPPING:
 - "Already known" info → Present as proposal, get user approval
 - AI judgment NEVER substitutes user confirmation
 
-NO PHASE COMPLETION WITHOUT:
-1. All Steps in the Phase completed with user confirmation
+NO AREA COMPLETION WITHOUT:
+1. All Steps in the Area completed with user confirmation
 2. spec-reviewer review completed (feedback loop resolved)
-3. User explicitly declares "Phase complete"
+3. User explicitly declares "Area complete"
 4. All acceptance criteria testable
 5. No "TBD" or vague placeholders remaining
 6. Document saved to .omt/specs/
@@ -34,10 +34,13 @@ NO PHASE COMPLETION WITHOUT:
 | Error cases defined | Happy path only = production incidents |
 | Every Step presents to user | Skipped steps = missed requirements |
 | User confirmation at every Step | Agent decisions = user blamed |
-| Phase completion = spec-reviewer + user gate | Unchecked phases = compounding errors |
-| No Step/Phase skipping ever | "Simple" hides complexity |
+| Area completion = spec-reviewer + user gate | Unchecked areas = compounding errors |
+| No Step/Area skipping ever | "Simple" hides complexity |
+| spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
 
-## Phase Entry Criteria
+## Area Entry Criteria
+
+**Interpretation rule:** Enter when **ANY** condition is met. Skip when **ALL** conditions are met.
 
 ### Requirements Analysis
 
@@ -180,10 +183,10 @@ NO PHASE COMPLETION WITHOUT:
 **Designs:** Context files for future reference (project.md, conventions.md, decisions.md, gotchas.md)
 
 **Enter when:**
-- Decision records were created during any phase (architecture choices, trade-off resolutions, technology selections)
+- Decision records were created during any area (architecture choices, trade-off resolutions, technology selections)
 
 **Skip when:**
-- No records exist in any `records/` folder across all phases
+- No records exist in any `records/` folder across all areas
 
 **Reference:** `references/wrapup.md`
 
@@ -198,15 +201,15 @@ digraph spec_workflow {
     rankdir=LR;
     node [shape=box, style=rounded];
 
-    Phase1 [label="Phase 1\nRequirements"];
-    Phase2 [label="Phase 2\nSolution Design"];
+    Requirements [label="Requirements"];
+    SolutionDesign [label="Solution Design"];
     DesignAreas [label="Design Areas\n(Dynamic)"];
     RecordsCheck [label="Records\nexist?", shape=diamond];
-    Wrapup [label="Phase 6\nWrapup", style="rounded,bold"];
+    Wrapup [label="Wrapup", style="rounded,bold"];
     Complete [label="Spec\nComplete", shape=doublecircle];
 
-    Phase1 -> Phase2;
-    Phase2 -> DesignAreas;
+    Requirements -> SolutionDesign;
+    SolutionDesign -> DesignAreas;
     DesignAreas -> RecordsCheck;
     RecordsCheck -> Wrapup [label="YES\n(MANDATORY)"];
     RecordsCheck -> Complete [label="NO"];
@@ -239,7 +242,7 @@ See each Design Area reference file for domain-specific clarification examples.
 
 **NEVER burden the user with questions the codebase can answer.** Use explore/oracle for codebase questions, ask user for preferences only.
 
-When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation.
+When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation. Autonomous decisions still require full Questioning Protocol quality (Context→Tension→Question) when presenting the decision rationale.
 
 ## Language
 
@@ -303,9 +306,9 @@ Even if AI already has sufficient information for a Step, it MUST:
 
 1. **Present results**: Show the Step's output/proposal to user (even if based on prior knowledge)
 2. **User confirmation**: Wait for explicit user approval of the Step content
-3. Save content to `.omt/specs/{spec-name}/{phase-directory}/design.md`
+3. Save content to `.omt/specs/{spec-name}/{area-directory}/design.md`
 4. Update progress status at document top
-5. **Record any decisions made** to `{phase-directory}/records/` (see Record Workflow below)
+5. **Record any decisions made** to `{area-directory}/records/` (see Record Workflow below)
 6. Regenerate `spec.md` by concatenating all completed design.md files
 7. Announce: "Step N complete. Saved. Proceed to next Step?"
 8. Wait for user confirmation to proceed
@@ -325,10 +328,10 @@ If you have sufficient information, use it to draft a high-quality proposal and 
 
 **BEFORE announcing "All Design Areas finished":**
 
-1. **Check records existence**: Do ANY `{phase-directory}/records/` folders (in steps or design-areas) contain files?
+1. **Check records existence**: Do ANY `{area-directory}/records/` folders contain files?
 2. **If YES (records exist)**:
-   - Announce: "Records exist from this spec session. **Wrapup phase is MANDATORY.**"
-   - "Proceeding to Wrapup phase."
+   - Announce: "Records exist from this spec session. **Wrapup is MANDATORY.**"
+   - "Proceeding to Wrapup."
    - Do NOT allow spec completion until Wrapup done
 3. **If NO (no records)**:
    - Announce: "No records to preserve. Wrapup is optional."
@@ -338,7 +341,7 @@ If you have sufficient information, use it to draft a high-quality proposal and 
 
 ## Multi-AI Review Integration
 
-**MANDATORY at Phase completion.** After completing all Steps in a Phase, ALWAYS delegate to spec-reviewer. This is part of the Phase Completion Protocol and cannot be skipped.
+**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-reviewer. This is part of the Area Completion Protocol and cannot be skipped.
 
 The spec-reviewer decides whether a full review is needed or returns "No review needed" for simple cases. Either way, the result MUST be presented to the user.
 
@@ -349,7 +352,7 @@ digraph feedback_loop {
     rankdir=TB;
     node [shape=box, style=rounded];
 
-    complete_step [label="Phase Complete\n(all Steps done, design.md saved)"];
+    complete_step [label="Area Complete\n(all Steps done, design.md saved)"];
     delegate [label="MANDATORY: Delegate to\nspec-reviewer agent"];
     check_response [label="Review needed?", shape=diamond];
     no_review [label="spec-reviewer returns\n'No review needed'"];
@@ -359,8 +362,8 @@ digraph feedback_loop {
     present [label="Present to user\n(context + recommendation)"];
     user_decides [label="User decides", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Update design.md"];
-    user_final [label="User declares\n'Phase complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
-    next_phase [label="Proceed to next Phase"];
+    user_final [label="User declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
+    next_area [label="Proceed to next Area"];
 
     complete_step -> delegate;
     delegate -> check_response;
@@ -375,7 +378,7 @@ digraph feedback_loop {
     user_decides -> delegate [label="another round"];
     user_decides -> user_final [label="feedback resolved"];
     incorporate -> delegate [label="re-review"];
-    user_final -> next_phase [label="YES"];
+    user_final -> next_area [label="YES"];
     user_final -> present [label="NO: more discussion"];
 }
 ```
@@ -437,10 +440,11 @@ After receiving spec-reviewer feedback, YOU must:
 2. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
 3. **Form your recommendation** - What do YOU think the user should do?
 4. **Present holistically** - Do not just dump reviewer output. Synthesize it.
+5. **All sections mandatory** - Present every section spec-reviewer returns (Consensus, Divergence, Concerns, Recommendation). No section omission.
 
 **Example presentation:**
 
-> "The reviewers raised concerns about the event-sourcing approach for order state management. I partially agree - the concerns about complexity are valid for a team new to this pattern. However, we already decided in Phase 2 that we need full audit trails, which constrains us toward event-sourcing.
+> "The reviewers raised concerns about the event-sourcing approach for order state management. I partially agree - the concerns about complexity are valid for a team new to this pattern. However, we already decided in Solution Design that we need full audit trails, which constrains us toward event-sourcing.
 >
 > My recommendation: Keep event-sourcing but add a detailed implementation guide in the spec to address the learning curve concern. What would you like to do?"
 
@@ -449,13 +453,13 @@ After receiving spec-reviewer feedback, YOU must:
 | User Response | Action |
 |---------------|--------|
 | "Incorporate feedback" | Update design.md, re-review if needed |
-| "Skip this feedback" | Proceed without changes |
+| "Skip this feedback" | Record skip reason in `records/`, then proceed without changes |
 | "Need another round" | Delegate to spec-reviewer again |
 | "Step complete" | Save final, proceed to next step |
 
 ## Record Workflow
 
-When significant decisions are made during any phase, capture them for future reference.
+When significant decisions are made during any area, capture them for future reference.
 
 ### When to Record
 
@@ -468,47 +472,54 @@ When significant decisions are made during any phase, capture them for future re
 ### How to Record
 
 1. **Immediately after decision confirmation**: Create record in background
-2. **Save location**: `.omt/specs/{spec-name}/{phase-directory}/records/{naming-pattern}.md`
-3. **Naming**: Phase and Step based - automatically determined by current progress
+2. **Save location**: `.omt/specs/{spec-name}/{area-directory}/records/{naming-pattern}.md`
+3. **Naming**: Area and Step based - automatically determined by current progress
 4. **Template**: Use `templates/record.md` format
 
 ### Record Naming Examples
 
 ```
-.omt/specs/order-management/step-01-requirements/records/
-  p1.1-scope-clarification.md
+.omt/specs/order-management/requirements/records/
+  1-scope-clarification.md
 
-.omt/specs/order-management/step-02-solution-design/records/
-  p2.1-event-sourcing-vs-crud.md
-  p2.3-payment-gateway-selection.md
+.omt/specs/order-management/solution-design/records/
+  1-event-sourcing-vs-crud.md
+  3-payment-gateway-selection.md
 
-.omt/specs/order-management/design-area-domain-model/records/
-  da-domain-model.2-order-state-machine-design.md
-  da-domain-model.3-aggregate-boundary.md
+.omt/specs/order-management/domain-model/records/
+  2-order-state-machine-design.md
+  3-aggregate-boundary.md
 
-.omt/specs/order-management/design-area-data-schema/records/
-  da-data-schema.1-table-structure.md
+.omt/specs/order-management/data-schema/records/
+  1-table-structure.md
 ```
 
 ### Checkpoint Integration
 
-At each Phase Checkpoint:
-1. Review decisions made in this phase
-2. For each significant decision, create a record in the current phase's `records/` folder
+At each Area Checkpoint:
+1. Review decisions made in this area
+2. For each significant decision, create a record in the current area's `records/` folder
 3. Include record creation in save operation
 4. Records accumulate throughout spec work for Wrapup analysis
 
-## Prior Phase Amendment
+## Prior Area Amendment
 
-When errors or omissions in previous Phases are discovered during design:
+When errors or omissions in previous Areas are discovered during design:
 
 1. Stop current Step progress
-2. Return to the relevant Phase's design.md and modify
+2. Return to the relevant Area's design.md and modify
 3. Share modifications with user and get confirmation
 4. Regenerate spec.md
 5. Resume current Step
 
-**Example**: When discovering new state transition rules in Domain Model Design Area, add the relevant scenario to Phase 1's Use Cases before continuing
+**Example**: When discovering new state transition rules in Domain Model, add the relevant scenario to Requirements' Use Cases before continuing
+
+## Scope Guard
+
+New features or requirements NOT in the original spec scope MUST be redirected to a separate spec. The current spec session handles only the originally scoped work.
+
+- "이것도 같이 하자" → "That requires a separate spec. Let's finish the current scope first."
+- Prior Area Amendment is for fixing **omissions in existing scope**, NOT for adding new features.
 
 ## Review Protocol
 
@@ -518,17 +529,17 @@ For all review/confirm patterns:
 3. User must explicitly confirm understanding
 4. Silence is NOT agreement
 
-## Phase Completion Protocol (MANDATORY - No Phase Skipping)
+## Area Completion Protocol (MANDATORY - No Area Skipping)
 
-**Every Phase MUST go through this full sequence. No shortcuts.**
+**Every Area MUST go through this full sequence. No shortcuts.**
 
 ```dot
-digraph phase_completion {
+digraph area_completion {
     rankdir=TB;
     node [shape=box, style=rounded];
 
-    all_steps [label="All Steps in Phase\ncompleted with user confirmation"];
-    save_phase [label="Save complete Phase content"];
+    all_steps [label="All Steps in Area\ncompleted with user confirmation"];
+    save_area [label="Save complete Area content"];
     present_summary [label="Present summary of\nall decisions to user"];
     delegate_reviewer [label="MANDATORY: Delegate to\nspec-reviewer for review"];
     receive_feedback [label="Receive reviewer feedback"];
@@ -536,11 +547,11 @@ digraph phase_completion {
     user_decides [label="User decides on feedback", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Incorporate feedback\nUpdate design.md"];
     another_round [label="Delegate to\nspec-reviewer again"];
-    user_final [label="User explicitly declares\n'Phase complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
-    announce_next [label="Announce: Phase X complete.\nEntry criteria for Phase Y: [list]"];
+    user_final [label="User explicitly declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
+    announce_next [label="Announce: [Area Name] complete.\nEntry criteria for [Next Area]: [list]"];
 
-    all_steps -> save_phase;
-    save_phase -> present_summary;
+    all_steps -> save_area;
+    save_area -> present_summary;
     present_summary -> delegate_reviewer;
     delegate_reviewer -> receive_feedback;
     receive_feedback -> analyze_present;
@@ -550,33 +561,33 @@ digraph phase_completion {
     user_decides -> user_final [label="feedback resolved"];
     incorporate -> delegate_reviewer [label="re-review"];
     another_round -> receive_feedback;
-    user_final -> announce_next [label="YES: 'Phase complete'"];
+    user_final -> announce_next [label="YES: 'Area complete'"];
     user_final -> analyze_present [label="NO: more discussion"];
 }
 ```
 
-### Phase Completion Sequence
+### Area Completion Sequence
 
-1. **Verify all Steps completed**: Every Step in the Phase must have passed its Checkpoint Protocol
-2. **Save complete Phase content**: Write to `{phase-directory}/design.md`
-3. **Present Phase summary**: Show all decisions made in this Phase to user
-4. **MANDATORY spec-reviewer review**: Delegate Phase results to spec-reviewer
+1. **Verify all Steps completed**: Every Step in the Area must have passed its Checkpoint Protocol
+2. **Save complete Area content**: Write to `{area-directory}/design.md`
+3. **Present Area summary**: Show all decisions made in this Area to user
+4. **MANDATORY spec-reviewer review**: Delegate Area results to spec-reviewer
    - Even if spec-reviewer returns "No review needed", present this to user
 5. **Feedback loop**: If feedback exists, analyze and present to user with recommendation
    - User decides: incorporate, request another round, or mark feedback resolved
    - Loop continues until user is satisfied
-6. **User final gate**: User MUST explicitly declare "Phase complete"
+6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
-   - AI CANNOT self-declare Phase completion
-7. **Announce next Phase**: "Phase X complete. Entry criteria for Phase Y: [list]"
+   - AI CANNOT self-declare Area completion
+7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 
-**Without user's explicit "Phase complete" declaration, the Phase is NOT complete and next Phase CANNOT begin.**
+**Without user's explicit "Area complete" declaration, the Area is NOT complete and next Area CANNOT begin.**
 
 ## Spec Completion Gate
 
 **SPEC IS NOT COMPLETE UNTIL:**
 1. All selected Design Areas have `design.md` saved
-2. Wrapup phase executed (if ANY records exist in any step's `records/` folder)
+2. Wrapup executed (if ANY records exist in any area's `records/` folder)
 3. User explicitly confirms: "Spec complete"
 
 **If records exist and Wrapup not done → BLOCKED. Cannot announce spec completion.**
@@ -587,10 +598,10 @@ digraph phase_completion {
 | Design Areas done, records exist | BLOCKED | MUST execute Wrapup before completion |
 | Wrapup done, user confirmed | COMPLETE | Announce "Spec complete" |
 
-## Phase/Design Area Completion Announcements
+## Completion Announcements
 
-### Phase 2 Completion
-"Phase 2 (Solution Design) complete. Select Design Areas for this project."
+### Solution Design Completion
+"Solution Design complete. Select Design Areas for this project."
 
 ### Design Area Completion
 "[Design Area Name] complete. Proceeding to next selected Design Area: [Next Area Name]."
@@ -604,35 +615,35 @@ If Design Area was recommended but user deselected:
 
 ## Step-by-Step Persistence
 
-**Core Principle**: Save progress to `.omt/specs/{spec-name}/{phase-directory}/design.md` whenever each Phase is completed.
+**Core Principle**: Save progress to `.omt/specs/{spec-name}/{area-directory}/design.md` whenever each Area is completed.
 
 ### When to Save
 
-Save **whenever each Phase is completed**:
-- Create `{phase-directory}/design.md` with that phase's content
-- Create `{phase-directory}/records/` for any decisions made during that phase
+Save **whenever each Area is completed**:
+- Create `{area-directory}/design.md` with that area's content
+- Create `{area-directory}/records/` for any decisions made during that area
 - Regenerate `spec.md` by concatenating all completed design.md files
 
-### Step Directory Mapping
+### Directory Mapping
 
-| Phase/Design Area | Step Directory |
-|-------------------|----------------|
-| Phase 1: Requirements | `step-01-requirements/` |
-| Phase 2: Solution Design | `step-02-solution-design/` |
-| Design Area: Domain Model | `design-area-domain-model/` |
-| Design Area: Data Schema | `design-area-data-schema/` |
-| Design Area: Interface Contract | `design-area-interface-contract/` |
-| Design Area: Integration Pattern | `design-area-integration-pattern/` |
-| Design Area: Operations Plan | `design-area-operations-plan/` |
+| Area | Directory |
+|------|-----------|
+| Requirements | `requirements/` |
+| Solution Design | `solution-design/` |
+| Domain Model | `domain-model/` |
+| Data Schema | `data-schema/` |
+| Interface Contract | `interface-contract/` |
+| Integration Pattern | `integration-pattern/` |
+| Operations Plan | `operations-plan/` |
 
 ### Document Structure
 
-Each step's design.md reflects that phase's content:
+Each step's design.md reflects that area's content:
 
 ```markdown
 # [Project Name] - Requirements Analysis
 
-> **Phase**: 1 - Requirements Analysis
+> **Area**: Requirements Analysis
 > **Last Updated**: 2024-01-15
 
 ## Project Overview
@@ -654,9 +665,9 @@ When the user requests "continue from here", "review this", etc.:
 ### Resume Workflow
 
 1. Check existing directories in `.omt/specs/{spec-name}/`:
-   - `step-01-requirements/` - Phase 1 completion
-   - `step-02-solution-design/` - Phase 2 completion
-   - `design-area-{name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
+   - `requirements/` - Requirements completion
+   - `solution-design/` - Solution Design completion
+   - `{area-name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
 2. Analyze completion status based on design.md existence
 3. Present status summary to user
 
@@ -664,11 +675,11 @@ When the user requests "continue from here", "review this", etc.:
 
 **Example:**
 > I've reviewed the spec folders:
-> - step-01-requirements/ - Complete
-> - step-02-solution-design/ - Complete
-> - design-area-domain-model/ - Complete
-> - design-area-data-schema/ - Incomplete (design.md partial)
-> - design-area-interface-contract/ - Not started
+> - requirements/ - Complete
+> - solution-design/ - Complete
+> - domain-model/ - Complete
+> - data-schema/ - Incomplete (design.md partial)
+> - interface-contract/ - Not started
 >
 > Design Areas were previously selected but not all completed.
 > Re-select Design Areas to continue?
@@ -677,9 +688,9 @@ When the user requests "continue from here", "review this", etc.:
 
 | Current State | Action |
 |---------------|--------|
-| Phase 1 incomplete | Resume from Phase 1 |
-| Phase 2 incomplete | Resume from Phase 2 |
-| Phase 2 complete, no Design Areas started | Re-ask Design Area selection |
+| Requirements incomplete | Resume from Requirements |
+| Solution Design incomplete | Resume from Solution Design |
+| Solution Design complete, no Design Areas started | Re-ask Design Area selection |
 | Some Design Areas complete | Show status, offer to re-select or continue |
 | All selected Design Areas complete | Proceed to Wrapup (if records exist) |
 
@@ -691,7 +702,7 @@ All specification documents are saved in the `.omt/specs/` directory.
 
 | Component | Purpose |
 |-----------|---------|
-| `step-{num}-{name}/` | Folder for each design phase |
+| `{area-name}/` | Folder for each design area |
 | `design.md` | Design content for the corresponding step |
 | `records/` | Decision records from the corresponding step |
 | `spec.md` | Final spec document combining all step design.md files in order |
@@ -701,37 +712,35 @@ All specification documents are saved in the `.omt/specs/` directory.
 The final `spec.md` is generated by concatenating completed design.md files in order:
 
 ```
-spec.md = step-01-requirements/design.md
-        + step-02-solution-design/design.md
-        + design-area-domain-model/design.md (if completed)
-        + design-area-data-schema/design.md (if completed)
-        + design-area-interface-contract/design.md (if completed)
-        + design-area-integration-pattern/design.md (if completed)
-        + design-area-operations-plan/design.md (if completed)
+spec.md = requirements/design.md
+        + solution-design/design.md
+        + domain-model/design.md (if completed)
+        + data-schema/design.md (if completed)
+        + interface-contract/design.md (if completed)
+        + integration-pattern/design.md (if completed)
+        + operations-plan/design.md (if completed)
 ```
 
 **Note**: Wrapup produces context files (`.omt/specs/context/`), not spec content.
 
-### Record Naming in Step Structure
+### Record Naming
 
-Records are saved within each step's records/ folder:
+Records are saved within each area's records/ folder:
 
 ```
-step-02-solution-design/records/
-  p2.1-event-sourcing-vs-crud.md
-  p2.3-payment-gateway-selection.md
+solution-design/records/
+  1-event-sourcing-vs-crud.md
+  3-payment-gateway-selection.md
 
-design-area-domain-model/records/
-  da-domain-model.2-order-state-machine.md
+domain-model/records/
+  2-order-state-machine.md
 ```
 
 ### Naming Convention
 
-- **Step directory**: `step-{num}-{name}/` (e.g., step-01-requirements, step-02-solution-design)
-- **Design Area directory**: `design-area-{name}/` (e.g., design-area-domain-model)
-- **Design document**: `{directory}/design.md`
-- **Phase records**: `step-{num}-{name}/records/p{phase}.{step}-{topic}.md`
-- **Design Area records**: `design-area-{name}/records/da-{area}.{step}-{topic}.md`
+- **Area directory**: `{area-name}/` (e.g., requirements, solution-design, domain-model)
+- **Design document**: `{area-directory}/design.md`
+- **Records**: `{area-directory}/records/{step}-{topic}.md`
 
 <Critical_Constraints>
 
@@ -745,25 +754,33 @@ design-area-domain-model/records/
 | "Attaching an open question list to the draft is convenient" | Ask questions one at a time in conversation. No question lists in documents. |
 | "It's open-ended so I should use AskUserQuestion" | Use plain text for open-ended questions. |
 
-### Step/Phase Skipping
+### Step/Area Skipping
 | Excuse | Reality |
 |--------|---------|
 | "I already have enough information for this Step" | Present it as a PROPOSAL to user. They may disagree. |
 | "This Step is obvious, no need to confirm" | Obvious to AI ≠ obvious to user. Present and confirm. |
 | "User already told me this earlier" | Restate as structured proposal. User confirms in context. |
 | "Let me combine these Steps for efficiency" | Each Step has its own checkpoint. No combining. |
-| "spec-reviewer said no review needed, moving on" | Still show user the result. User declares Phase complete. |
-| "Phase is clearly done, proceeding to next" | Only USER can declare Phase complete. Wait. |
-| "The data is straightforward, skip to design" | Every Phase must go through spec-reviewer + user gate. |
-| "We discussed this in a previous Phase" | New Phase = fresh confirmation. Present and confirm. |
+| "spec-reviewer said no review needed, moving on" | Still show user the result. User declares Area complete. |
+| "Area is clearly done, proceeding to next" | Only USER can declare Area complete. Wait. |
+| "The data is straightforward, skip to design" | Every Area must go through spec-reviewer + user gate. |
+| "We discussed this in a previous Area" | New Area = fresh confirmation. Present and confirm. |
+| "We already invested so much, skip the rest" | Investment is not completion. Only Entry Criteria determine skip. |
 
-### Wrap-up Phase
+### Wrap-up
 | Excuse | Reality |
 |--------|---------|
-| "No time for wrap-up" | Records exist = wrap-up phase required |
+| "No time for wrap-up" | Records exist = wrap-up required |
 | "Context can be saved later" | Later = never. Save now. |
 | "User wants to finish quickly" | Propose context save first, skip only if explicitly refused |
 | "Spec is done, let's move on" | Spec is NOT done until wrap-up completes |
+
+### Scope Creep
+| Excuse | Reality |
+|--------|---------|
+| "This is related, let's add it here" | Related ≠ in scope. New feature = new spec. |
+| "It's small, just one more thing" | Small additions compound. Scope Guard applies. |
+| "We'll save time by bundling" | Bundling obscures scope. Each spec has clear boundaries. |
 
 ### Document Preservation
 | Excuse | Reality |
@@ -783,23 +800,24 @@ design-area-domain-model/records/
 - Use AskUserQuestion for open-ended/subjective questions (use plain text)
 - Skip a Step because "information is already known"
 - Combine multiple Steps into one
-- Self-declare Phase completion without user's explicit confirmation
-- Skip spec-reviewer at Phase completion
-- Proceed to next Phase without user declaring "Phase complete"
-- Skip wrap-up phase when records exist
+- Self-declare Area completion without user's explicit confirmation
+- Skip spec-reviewer at Area completion
+- Proceed to next Area without user declaring "Area complete"
+- Skip wrap-up when records exist
 - Regenerate spec.md losing prior step content
 - Overwrite existing context files without user approval
 - Write specification documents in non-English
+- Add new features to current spec mid-session (redirect to separate spec)
 
 **ALWAYS:**
 - Ask exactly ONE question per message, wait for answer, then ask next
 - Use plain text for open-ended questions, AskUserQuestion only for structured choices
 - Present every Step's output to user (as proposal if info already known)
 - Get user confirmation at every Step checkpoint
-- Delegate to spec-reviewer at every Phase completion
+- Delegate to spec-reviewer at every Area completion
 - Present spec-reviewer results to user (even "No review needed")
-- Wait for user's explicit "Phase complete" before proceeding
-- Complete wrap-up phase when records exist to preserve
+- Wait for user's explicit "Area complete" before proceeding
+- Complete wrap-up when records exist to preserve
 - Preserve ALL prior step content when regenerating spec.md
 - Get explicit user confirmation before modifying existing files
 - Write documents in English (communication in Korean is fine)
