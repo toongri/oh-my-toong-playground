@@ -33,6 +33,7 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - "We'll figure out failure handling in implementation" → Define failure policy now
 - Missing sequence diagram for complex flow → Visualize before proceeding
 - User says "just pick the best one" → Get explicit decision with rationale
+- Implementation details appear (data structures, timer intervals, algorithms, cache commands) → Extract architecture concern, redirect to Design Area. Example: "30초 flush + ConcurrentHashMap" → Architecture: "Periodic buffered aggregation", Implementation → Integration Pattern Area
 
 ## Process
 

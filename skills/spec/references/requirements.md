@@ -32,7 +32,7 @@ For each user action the system tracks, clarify exactly when it occurs, how dupl
 
 - Acceptance criteria uses "properly", "gracefully", "correctly" → Get specifics
 - Error case marked "N/A" without reason → Define or justify
-- Implementation details appear (Redis, Kafka, SQL) → Move to appropriate Design Area
+- Implementation details appear (Redis, Kafka, SQL, timer intervals, data structures, infrastructure) → Apply PO value test: "Would a PO find this valuable?" If No → Extract business requirement, redirect tech to Design Area. Example: "Redis ZSET으로 랭킹 50ms" → Requirement: "Ranking query p95 < 50ms", Implementation "Redis ZSET" → Data Schema Area
 - "Industry standard" or "We can ask later" → Get concrete formula/rule now
 - User says "skip this step" → Explain why each step matters
 
