@@ -37,14 +37,159 @@ NO PHASE COMPLETION WITHOUT:
 | Phase completion = spec-reviewer + user gate | Unchecked phases = compounding errors |
 | No Step/Phase skipping ever | "Simple" hides complexity |
 
-## Phase Selection
+## Phase Entry Criteria
 
-| Phase | Entry Criteria | When Needed | Skip When |
-|-------|----------------|-------------|-----------|
-| 01-Requirements | Request received, scope understood | Ambiguous requirements | Already defined |
-| 02-Solution Design | Phase 1 complete OR requirements documented | System structure changes | Existing patterns |
-| **Dynamic Design Areas** | Phase 2 complete | See Design Area Selection Criteria | User explicitly skips with justification |
-| Wrapup | Spec concluding; records exist | Records to preserve | Nothing to preserve |
+### Requirements Analysis
+
+**Designs:** Problem definition, business requirements, domain glossary, use cases with testable acceptance criteria, non-functional requirements, validation scenarios
+
+**Enter when:**
+- Requirements are ambiguous or informally described
+- Business rules need formalization (calculations, thresholds, policies undocumented)
+- Acceptance criteria not yet testable
+- Success criteria or completion conditions undefined
+- Domain terminology not agreed upon
+
+**Skip when:**
+- Requirements document already exists with testable acceptance criteria, domain glossary, NFRs, and validation scenarios
+- User explicitly confirms existing requirements are sufficient and up-to-date
+
+**Reference:** `references/requirements.md`
+
+---
+
+### Solution Design
+
+**Designs:** Architecture decisions, component responsibilities, communication patterns, integration points with failure policies, data flow, solution alternatives analysis
+
+**Enter when:**
+- System structure needs to be designed or changed
+- Multiple solution approaches are possible and need evaluation
+- New components or integration points being introduced
+- Architecture impact analysis needed (coupling, scalability, failure propagation)
+
+**Skip when:**
+- Change is confined to a single component with no architectural impact
+- Solution approach is obvious from requirements alone (no alternatives to evaluate)
+- Existing architecture patterns apply directly without new components or integration points
+
+**Reference:** `references/solution-design.md`
+
+---
+
+### Domain Model
+
+**Designs:** Aggregates, entities, value objects, business rules, invariants, state machines, domain events, repository/port interfaces (business-level)
+
+**Enter when:**
+- 3+ entity states with transitions that need formalization
+- Complex business rules exist (calculations, multi-entity constraints, conditional logic)
+- Aggregate boundaries need to be defined (lifecycle grouping, transactional consistency)
+- Rich domain logic beyond CRUD (domain events, policies, domain services)
+
+**Skip when:**
+- Simple CRUD with no business logic beyond field validation
+- No state management required
+- Entity relationships are straightforward with no aggregate boundary decisions
+- All business logic is trivial and fits in validation alone
+
+**Reference:** `references/domain-model.md`
+
+---
+
+### Data Schema
+
+**Designs:** Table schemas, column definitions, constraints, repository implementation (SQL/cache commands), index strategy, migration strategy
+
+**Enter when:**
+- New database tables or schema changes needed
+- Persistent storage design required (RDB, cache, file storage)
+- Existing schema requires migration (structural changes, data transformation)
+- Repository/port interfaces from Domain Model need implementation details
+
+**Skip when:**
+- No persistent storage in the solution
+- Using existing schema without any modification
+- All storage is in-memory or ephemeral (no durability requirement)
+
+**Reference:** `references/data-schema.md`
+
+---
+
+### Interface Contract
+
+**Designs:** API endpoints (URI, methods, request/response), error handling patterns, versioning strategy, interface change documentation
+
+**Enter when:**
+- External interface exposed (REST API, gRPC, CLI, Event contract)
+- API consumers exist who need documented contracts (other teams, external clients)
+- Existing interfaces being modified or deprecated (breaking change management)
+
+**Skip when:**
+- Internal-only functionality with no external consumers
+- No interface exposed to other systems, teams, or users
+- All interfaces already documented and unchanged by this project
+
+**Reference:** `references/interface-contract.md`
+
+---
+
+### Integration Pattern
+
+**Designs:** Communication patterns (sync/async), data flow sequences, stateful component policies, error/recovery flows, transaction boundaries
+
+**Enter when:**
+- Cross-system or cross-service communication involved
+- Async processing or event-driven patterns needed
+- External service integration required
+- Stateful components exist (buffers, caches, aggregators, schedulers)
+- Transaction boundaries span multiple operations or stores
+
+**Skip when:**
+- Single system with all operations in-process and synchronous
+- No external service calls or event-driven processing
+- No stateful components beyond simple CRUD persistence
+- No cross-boundary transaction concerns
+
+**Reference:** `references/integration-pattern.md`
+
+---
+
+### Operations Plan
+
+**Designs:** Custom metrics, custom logging, deployment strategy, failure scenarios, recovery procedures
+
+**Enter when:**
+- Production deployment is planned
+- Custom monitoring beyond standard APM needed (project-specific metrics, business alerts)
+- Non-standard deployment required (schema migration ordering, feature flags, canary/blue-green)
+- Critical failure scenarios need pre-planned recovery procedures
+
+**Skip when:**
+- Development or prototype environment only (no production deployment)
+- Standard APM metrics sufficient (response time, error rate, throughput)
+- Conventional deployment pipeline applies without special ordering or migration
+- No production-specific operational concerns beyond framework defaults
+
+**Reference:** `references/operations-plan.md`
+
+---
+
+### Wrapup
+
+**Designs:** Context files for future reference (project.md, conventions.md, decisions.md, gotchas.md)
+
+**Enter when:**
+- Decision records were created during any phase (architecture choices, trade-off resolutions, technology selections)
+
+**Skip when:**
+- No records exist in any `records/` folder across all phases
+
+**Reference:** `references/wrapup.md`
+
+---
+
+**Supporting files:** `references/diagram-selection.md` (diagram type selection), `templates/` (output formats)
 
 ### Spec Workflow (Wrapup Mandatory Path)
 
@@ -70,36 +215,6 @@ digraph spec_workflow {
 ```
 
 **Note:** If ANY `records/` folder contains files, Wrapup is MANDATORY before completion.
-
-### Design Areas (Selected after Phase 2)
-
-After completing Phase 2 (Solution Design), the AI analyzes project requirements and autonomously determines which Design Areas to include based on complexity criteria.
-
-| Design Area | Criteria for Recommendation |
-|-------------|----------------------------|
-| Domain Model | 3+ state transitions, complex business rules, aggregate boundaries |
-| Data Schema | DB/file/cache storage needed |
-| Interface Contract | External interface exposed (API, CLI, Event) |
-| Integration Pattern | External system integration, async processing, transaction boundaries |
-| Operations Guide | Production deployment, monitoring, operational settings |
-
-## Design Area Selection
-
-After completing Phase 2 (Solution Design), the AI analyzes Phase 1-2 outputs to autonomously determine the necessary Design Areas and proceeds accordingly.
-
-### Selection Criteria
-
-| Design Area | Criteria |
-|-------------|----------|
-| Domain Model | 3+ state transitions, complex business rules, aggregate boundaries |
-| Data Schema | DB/file/cache storage needed |
-| Interface Contract | External interface exposed (API, CLI, Event) |
-| Integration Pattern | External system integration, async processing, transaction boundaries |
-| Operations Guide | Production deployment, monitoring, operational settings |
-
-### Execution Order
-
-Selected Design Areas are executed in the following order: Domain Model → Data Schema → Interface Contract → Integration Pattern → Operations Guide
 
 ## Vague Answer Clarification Principle
 
@@ -508,7 +623,7 @@ Save **whenever each Phase is completed**:
 | Design Area: Data Schema | `design-area-data-schema/` |
 | Design Area: Interface Contract | `design-area-interface-contract/` |
 | Design Area: Integration Pattern | `design-area-integration-pattern/` |
-| Design Area: Operations Guide | `design-area-operations-guide/` |
+| Design Area: Operations Plan | `design-area-operations-plan/` |
 
 ### Document Structure
 
@@ -541,7 +656,7 @@ When the user requests "continue from here", "review this", etc.:
 1. Check existing directories in `.omt/specs/{spec-name}/`:
    - `step-01-requirements/` - Phase 1 completion
    - `step-02-solution-design/` - Phase 2 completion
-   - `design-area-{name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-guide)
+   - `design-area-{name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
 2. Analyze completion status based on design.md existence
 3. Present status summary to user
 
@@ -592,7 +707,7 @@ spec.md = step-01-requirements/design.md
         + design-area-data-schema/design.md (if completed)
         + design-area-interface-contract/design.md (if completed)
         + design-area-integration-pattern/design.md (if completed)
-        + design-area-operations-guide/design.md (if completed)
+        + design-area-operations-plan/design.md (if completed)
 ```
 
 **Note**: Wrapup produces context files (`.omt/specs/context/`), not spec content.
@@ -691,10 +806,3 @@ design-area-domain-model/records/
 
 </Critical_Constraints>
 
-## References
-
-- **Phase details**: See `references/` directory (requirements.md, solution-design.md)
-- **Design Area details**: See `references/` directory (domain-model.md, data-schema.md, interface-contract.md, integration-pattern.md, operations-guide.md)
-- **Wrapup details**: See `references/wrapup.md`
-- **Diagram selection**: See `references/diagram-selection.md` for type selection rules, Necessity Test, and Flowchart syntax
-- **Output templates**: See `templates/`

@@ -97,6 +97,6 @@ Records are saved to the `records/` folder within each step or Design Area direc
 - `da-data-schema.3-index-strategy.md` - Data Schema, Step 3 decision
 - `da-interface-contract.4-error-handling.md` - Interface Contract, Step 4 decision
 - `da-integration-pattern.2-communication-pattern.md` - Integration Pattern, Step 2 decision
-- `da-operations-guide.1-metrics-selection.md` - Operations Guide, Step 1 decision
+- `da-operations-plan.1-metrics-selection.md` - Operations Plan, Step 1 decision
 
 **Location**: `.omt/specs/{spec-name}/design-area-{name}/records/`
