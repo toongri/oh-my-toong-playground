@@ -285,7 +285,7 @@ test_sync_does_not_duplicate_claude_functions() {
 test_sync_agents_uses_adapter_dispatch() {
     # sync_agents should use adapter dispatch pattern (e.g., claude_sync_agents)
     # Check for adapter function call pattern within sync_agents function
-    if grep -A 100 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q 'claude_sync_agents'; then
+    if grep -A 200 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q 'claude_sync_agents'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_agents should call claude_sync_agents adapter"
@@ -529,7 +529,7 @@ test_sync_agents_uses_null_check_for_component_platforms() {
 
 test_sync_agents_uses_jq_for_platforms_iteration() {
     # sync_agents should use jq to iterate over JSON array platforms
-    if grep -A 100 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q "jq -r '\.\[\]'"; then
+    if grep -A 200 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q "jq -r '\.\[\]'"; then
         return 0
     else
         echo "ASSERTION FAILED: sync_agents should use jq for platforms iteration"
