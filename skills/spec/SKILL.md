@@ -363,7 +363,9 @@ Even if AI already has sufficient information for a Step, it MUST:
 2. **User confirmation**: Wait for explicit user approval of the Step content
 3. Save content to `.omt/specs/{spec-name}/{area-directory}/design.md`
 4. Update progress status at document top
-5. **Record any decisions made** to `{area-directory}/records/` (see Record Workflow below)
+5. **MANDATORY: Record decisions** to `{area-directory}/records/` (see Record Workflow below)
+   - If decisions were made: Create record NOW. This is a BLOCKING gate — do NOT proceed to step 6 until record is saved.
+   - If no decisions were made: Explicitly state "No recordable decisions in this Step" before proceeding.
 6. Regenerate `spec.md` by concatenating all completed design.md files
 7. Announce: "Step N complete. Saved. Proceed to next Step?"
 8. Wait for user confirmation to proceed
@@ -524,9 +526,31 @@ When significant decisions are made during any area, capture them for future ref
 - Domain modeling decisions (aggregate boundaries, event choices)
 - Any decision where alternatives were evaluated
 
+### Decision Recognition Checklist
+
+A statement is a **recordable decision** if ANY of these apply:
+
+| Signal | Example | Why Recordable |
+|--------|---------|----------------|
+| Technology/tool selection | "Redis로 하자", "Kafka Streams로" | Technology choice with alternatives |
+| Strategy/approach choice | "멱등성은 UUID 기반으로" | Approach selected over alternatives |
+| Priority/classification | "P0/P1으로 나누자" | Affects scope and ordering |
+| Scope inclusion/exclusion | "관리자 대시보드는 빼자" | Scope boundary decision |
+| Feature deferral | "2차 릴리스에서 하자" | Timeline and scope impact |
+| Architecture pattern | "하이브리드로 가자" | Structural decision |
+| Boundary definition | "같은 Aggregate로 묶자" | Domain modeling decision |
+| Elimination conclusion | Two options rejected → third selected | Implicit selection by elimination |
+
+**Decisions often hide behind casual language:**
+- "~하면 될 것 같아" → This IS a decision, not a suggestion
+- "당연히 ~이지" → "Obviously" framing does NOT make it non-recordable
+- "참고로 ~" → Informational framing CAN contain decisions
+- "뭐 ~하면 되겠지" → Throwaway tone does NOT reduce significance
+- "~는 빼자/연기하자" → Exclusions and deferrals ARE decisions
+
 ### How to Record
 
-1. **Immediately after decision confirmation**: Create record in background
+1. **Create record NOW — not later, not at Area completion, not in batches**: Record MUST be created at the Step where the decision was confirmed. Do NOT defer to next Step, do NOT batch with other decisions, do NOT wait for Area Checkpoint.
 2. **Save location**: `.omt/specs/{spec-name}/{area-directory}/records/{naming-pattern}.md`
 3. **Naming**: Area and Step based - automatically determined by current progress
 4. **Template**: Use `templates/record.md` format
@@ -549,13 +573,17 @@ When significant decisions are made during any area, capture them for future ref
   1-table-structure.md
 ```
 
-### Checkpoint Integration
+### Checkpoint Integration (Verification Only)
+
+Records should ALREADY exist at Area Checkpoint — they were created at each Step's decision point.
 
 At each Area Checkpoint:
-1. Review decisions made in this area
-2. For each significant decision, create a record in the current area's `records/` folder
-3. Include record creation in save operation
+1. **Verify** all decisions made in this area have corresponding records in `records/`
+2. If any record is MISSING: Create it now as catch-up (this is a failure — records should have been created at decision time)
+3. Log any catch-up records as process violations for improvement
 4. Records accumulate throughout spec work for Wrapup analysis
+
+**Normal flow**: All records already exist at checkpoint. Checkpoint is verification, not creation.
 
 ## Prior Area Amendment
 
@@ -830,6 +858,18 @@ domain-model/records/
 | "User wants to finish quickly" | Propose context save first, skip only if explicitly refused |
 | "Spec is done, let's move on" | Spec is NOT done until wrap-up completes |
 
+### Record Deferral
+| Excuse | Reality |
+|--------|---------|
+| "I'll record all decisions at the end of this area" | Records MUST be created at decision point, not batched at Area end |
+| "These are related, one combined record is cleaner" | 1 decision = 1 record. Combining loses individual context and rationale |
+| "User is in a hurry, I'll batch records later" | Momentum pressure does NOT override record timing obligation |
+| "Step is almost done, I'll include this in the next batch" | Each Step's decisions recorded within that Step. No cross-Step deferral |
+| "It's just an obvious choice, no need to record" | "Obvious" to AI ≠ obvious to future readers. Record all decisions |
+| "The user didn't explicitly say 'decide', so it's not a decision" | Casual phrasing ("~하면 될 것 같아") IS a decision. See Decision Recognition Checklist |
+| "This exclusion/deferral doesn't need a record" | Exclusions and deferrals are EQUALLY important decisions |
+| "Creating records disrupts the flow" | Brief record creation is the flow. Skipping creates bigger disruption later |
+
 ### Scope Creep
 | Excuse | Reality |
 |--------|---------|
@@ -863,6 +903,10 @@ domain-model/records/
 - Overwrite existing context files without user approval
 - Write specification documents in non-English
 - Add new features to current spec mid-session (redirect to separate spec)
+- Defer record creation to Area Checkpoint or Wrapup (create at decision point)
+- Batch multiple decisions into a single record (1 decision = 1 record)
+- Skip recording because decision seemed "obvious" or "casual"
+- Treat exclusion/deferral decisions as non-recordable
 
 **ALWAYS:**
 - Ask exactly ONE question per message, wait for answer, then ask next
@@ -876,6 +920,10 @@ domain-model/records/
 - Preserve ALL prior step content when regenerating spec.md
 - Get explicit user confirmation before modifying existing files
 - Write documents in English (communication in Korean is fine)
+- Create record IMMEDIATELY at the Step where decision is confirmed (not later)
+- Create one record per decision (never combine multiple decisions)
+- Apply Decision Recognition Checklist to catch casual/implicit decisions
+- Verify all records exist at Area Checkpoint (checkpoint = verification, not creation)
 
 </Critical_Constraints>
 
