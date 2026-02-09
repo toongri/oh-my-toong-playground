@@ -663,9 +663,9 @@ flowchart TD
 
 ## Wrapup
 
-Wrapup produces context files rather than a single output document. See `wrapup.md` in `references/` directory for details.
+Wrapup produces context files for future spec sessions — information that shapes the **next specification's direction**. See `wrapup.md` in `references/` directory for details.
 
-- `project.md` - Tech stack, constraints, team values
-- `conventions.md` - Established patterns
-- `decisions.md` - ADR-format decision records
-- `gotchas.md` - Known pitfalls to avoid
+- `project.md` - Big picture: tech stack, system philosophy, external dependencies, constraints
+- `decisions.md` - Team decision-making tendencies extracted from patterns across multiple decisions (NOT individual ADR entries)
+- `conventions.md` - Repeatable coding-level patterns for implementation consistency
+- `gotchas.md` - Implementation traps that would catch someone unfamiliar with this project
