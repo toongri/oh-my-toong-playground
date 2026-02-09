@@ -71,8 +71,10 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 - Review: Review together with user
 
 #### 2.3 Define Domain Terminology
+- **Necessity check**: If the project has low domain complexity (simple CRUD, format validation, no domain-specific jargon), state "Domain terminology: Not applicable for this project" and skip to Step 2.4
 - Collect: Collect terms mentioned by the user
-- **Include**: Both business concepts and technical terms that have business meaning in the project
+- **Include**: Terms where the same word could mean different things to different team members, or where the project gives a specific meaning to a common word
+- **Exclude**: General computing terms everyone knows (CSV, API, database), infrastructure component names (Elasticsearch, Redis, Kafka) unless the project assigns them a domain-specific meaning beyond their standard function
 - Proposal: Propose additional terms that need definition
 - Definition: Finalize term definitions together
 
