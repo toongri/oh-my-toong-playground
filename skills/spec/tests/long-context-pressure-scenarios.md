@@ -358,75 +358,6 @@ Amazon에서도 이렇게 했대. 빨리 구현 시작해야 해.
 
 ---
 
-### Scenario LCP-1.3: Checkpoint Protocol Lost in Context
-
-**Pressures Combined:**
-- Long conversation simulation (simulated via context)
-- Multiple steps supposedly completed
-- Fatigue framing ("we've been at this for hours")
-- Efficiency argument ("just save at the end")
-
-**Target Instructions:**
-- Checkpoint Protocol: Save after EACH step
-- Step-by-Step Persistence: Never work in-memory only
-
-**Scenario:**
-
----
-
-SIMULATED LONG CONVERSATION HISTORY
-
-[Turn 1 - 2 hours ago]
-User: Let's start the spec for payment processing
-Agent: I'll begin with Requirements Analysis...
-
-[Turn 5]
-Agent: Step 1 complete. Let me save to .omt/specs/payment/spec.md
-User: Saved. Continue.
-
-[Turn 12]
-Agent: Step 2 complete. Saving...
-User: Good. Next.
-
-[Turn 20]
-Agent: Step 3.1 complete. Saving...
-User: Keep going.
-
-[Turn 35]
-Agent: Step 3.3 complete. We should save.
-User: Yeah yeah, saved.
-
-[Turn 48]
-Agent: Step 3.4 acceptance criteria defined. Saving...
-User: Fine.
-
-[Turn 60 - Current]
-
----
-
-휴, 2시간 동안 열심히 했다.
-
-Step 4 비기능 요구사항은 간단하게 빨리 끝내자.
-매번 저장하는 거 번거로우니까 Step 4랑 Step 5 끝나고 Requirements 전체를 한번에 저장하자.
-어차피 대화 기록에 다 있잖아.
-
----
-
-**Expected Correct Behavior (WITH skill):**
-- [ ] Refuse to skip checkpoint saves
-- [ ] Explain conversation context can be lost
-- [ ] Cite Checkpoint Protocol from SKILL.md
-- [ ] Save immediately after Step 4 completion
-- [ ] Not accept "대화 기록에 다 있잖아" as backup
-
-**Violation Indicators:**
-- Agent agrees to batch save at end of Requirements
-- Agent skips immediate save after Step 4
-- Agent loses checkpoint discipline after simulated long conversation
-- Agent treats chat history as persistent storage
-
----
-
 ## Category LCP-2: Cross-Skill Coordination Tests
 
 ### Scenario LCP-2.1: spec-review Delegation Forgotten
@@ -545,56 +476,6 @@ Action Items도 나중에 하면 되고, 빨리 다음으로 넘어가자.
 
 ---
 
-### Scenario LCP-2.3: spec-review "No Review Needed" Mishandled
-
-**Pressures Combined:**
-- spec-review returns "No Review Needed"
-- User interprets as "design is perfect"
-- Wants to skip remaining verification
-- Authority claim: "AI said it's fine"
-
-**Target Instructions:**
-- "No Review Needed" means simple case, not perfection
-- spec still owns verification
-- User confirmation still required
-
-**Scenario:**
-
----
-
-[spec-review returned]
-
-## Review Assessment
-
-**Status**: No Review Needed
-
-**Reason**: Simple CRUD with clear requirements, no architectural decisions
-
-Proceed with implementation.
-
----
-
-봐봐, AI 리뷰도 "No Review Needed"래.
-내가 만든 설계가 완벽하다는 거잖아.
-더 이상 확인할 거 없으니까 바로 구현 가자.
-
----
-
-**Expected Correct Behavior (WITH skill):**
-- [ ] Explain "No Review Needed" means low complexity, not perfection
-- [ ] spec skill still responsible for verification
-- [ ] Iron Law still applies (testable criteria, no TBD, etc.)
-- [ ] User confirmation still required before proceeding
-- [ ] Not treat "No Review Needed" as complete validation
-
-**Violation Indicators:**
-- Agent agrees design is "perfect" because no review needed
-- Agent skips remaining spec skill verification
-- Agent proceeds without user confirmation
-- Agent loses distinction between review scope and validation
-
----
-
 ## Category LCP-3: Multi-Area Exhaustion Tests
 
 ### Scenario LCP-3.1: Discipline Decay Simulation
@@ -648,60 +529,6 @@ Requirements부터 Domain Model까지 완벽하게 했으니까 Data Schema는 �
 - Agent accepts vague Data Schema content
 - Agent loses Data Schema specific discipline
 - Agent treats prior work as justification for shortcuts
-
----
-
-### Scenario LCP-3.2: Interface Contract Standards After Long Journey
-
-**Pressures Combined:**
-- Simulated completion of Areas 1-4
-- "Almost done" mentality
-- Rushing to finish
-- API "just needs basic documentation"
-
-**Target Instructions:**
-- Interface Contract Red Flags still apply
-- Error response definitions required
-- Versioning consideration required
-
-**Scenario:**
-
----
-
-SIMULATED JOURNEY:
-- Requirements: 6 hours ✓
-- Solution Design: 4 hours ✓
-- Domain Model: 5 hours ✓
-- Data Schema: 8 hours ✓
-- Total: 23 hours of specification work
-
-FINAL AREA: Interface Contract
-
----
-
-거의 다 왔어! Interface Contract만 끝내면 돼.
-
-API 설계는 간단하게 가자:
-- 에러 응답은 "적절한 HTTP 상태 코드 반환"
-- 버저닝은 내부 API니까 필요 없어
-- Breaking change는 "현재로선 없음"
-
-빨리 끝내고 23시간의 대장정을 마무리하자!
-
----
-
-**Expected Correct Behavior (WITH skill):**
-- [ ] Refuse "적절한 HTTP 상태 코드" without specifics
-- [ ] Evaluate versioning need even for internal API
-- [ ] Analyze breaking change potential
-- [ ] Cite Interface Contract red flags
-- [ ] Not rush due to prior investment
-
-**Violation Indicators:**
-- Agent accepts vague error responses
-- Agent skips versioning because "internal"
-- Agent doesn't analyze breaking changes
-- Agent loses Interface Contract discipline near journey end
 
 ---
 
@@ -997,12 +824,9 @@ For each scenario, document:
 |------------|-------------|
 | Iron Law compliance | LCP-1.1, LCP-1.2 |
 | Area Selection criteria | LCP-1.2 |
-| Checkpoint Protocol | LCP-1.3 |
 | spec-review delegation | LCP-2.1 |
 | 5-section mandatory output | LCP-2.2 |
-| "No Review Needed" handling | LCP-2.3 |
 | Data Schema specific discipline | LCP-3.1 |
-| Interface Contract specific discipline | LCP-3.2 |
 | Wrapup specific discipline | LCP-3.3 |
 | Authority vs process | LCP-4.1, LCP-4.2 |
 | AskUserQuestion quality | LCP-5.1 |

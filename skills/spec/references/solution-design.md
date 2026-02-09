@@ -19,7 +19,7 @@ For each system/domain boundary, specify communication patterns, failure handlin
 
 ### Communication Pattern Specification
 
-Clearly distinguish between synchronous patterns (in-process function calls, HTTP/gRPC) and asynchronous patterns (message queues, internal event listeners). Pattern selection is an architecture decision with significant impact on coupling, failure propagation, and scalability.
+Architecture-level communication pattern selection is recorded here. For detailed pattern specifications and integration tables, see `references/integration-pattern.md`.
 
 ### Document Scope
 
@@ -137,37 +137,23 @@ Steps 4.2, 4.3, and 4.4 each contain design decisions that may have multiple via
 - Identify: External systems and their integration points
 - **Cross-cutting concerns**:
   - Transaction boundaries: Where do transactions start and end?
-  - If patterns like Outbox or Saga are used, identify which components participate
+  - If distributed transaction patterns are involved, note the decision here. For detailed Saga/Outbox component design, see Integration Pattern area.
 - Review: Confirm with user
 
 #### 4.3 Communication Pattern Definition
 - **For each integration point** (system-to-system or domain-to-domain):
   - Identify whether in-process or cross-process
-  - Identify viable communication pattern alternatives (apply **Design Decision Significance Check**)
-    - **Synchronous**: Function calls (in-process), HTTP/gRPC (cross-service)
-    - **Asynchronous**: Message queues (Kafka, RabbitMQ), internal event listeners (@EventListener), Webhooks
+  - Select communication pattern (apply **Design Decision Significance Check**)
   - For significant decisions (2+ viable alternatives): Present alternatives with trade-offs, get user selection
   - For non-significant decisions: Select best practice, document rationale
-  - Define failure handling policy
-- **Create integration table**: Summarize all integration points
+- For detailed pattern specifications, failure handling policies, and integration table creation, see Integration Pattern area.
 - Review: Review with user
 
 #### 4.4 Data Flow Design
 - Apply **Design Decision Significance Check** to approach decisions within data flow (e.g., external system access methods, flow structure choices)
 - Create: Sequence diagrams for each major use case (in mermaid format)
-- Include:
-  - System-level participants (with process boundary notes if needed)
-  - Activation bars using `activate`/`deactivate`
-  - Success and failure scenarios using `alt`/`else` blocks
-  - Clear action labels (optionally with pattern notation: [Function Call], [Kafka], etc.)
-- **Event-driven integration**:
-  - Event list with required payload fields (schema details in detailed design)
-  - Clarify publishers and consumers
-  - Note ordering or idempotency requirements
-- **Multi-store scenarios** (e.g., RDB + Cache):
-  - Specify source of truth
-  - Define consistency policy and acceptable divergence
-  - Specify behavior on secondary store failure (without implementation details)
+- Include: System-level participants with clear action labels
+- For detailed diagram specifications (activation bars, alt/else blocks, pattern notation), event-driven integration details, and multi-store consistency policies, see Integration Pattern area.
 - Review: Review diagrams with user
 - **Internal logic**: For complex branching within a single component (3+ branch points), consider adding a Flowchart. See `references/diagram-selection.md` for Decision Tree, Decomposition criteria, and Flowchart syntax
 

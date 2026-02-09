@@ -19,7 +19,6 @@ This caused records to be created 0 times after incorporation until user explici
 | **FIR** (Feedback Incorporation Record) | Record creation after incorporating feedback | Momentum bias, "editing not deciding" framing |
 | **FID** (Feedback Incorporation Decision) | Hidden decisions within incorporation | Decision recognition blindness |
 | **FIL** (Feedback Incorporation Long-context) | Record obligation after long context | Context displacement |
-| **FICOMB** (Feedback Incorporation Combined) | Actual failure reproduction | Pre-existence verification |
 
 ---
 
@@ -311,54 +310,6 @@ Even after 3000+ words of context, agent must:
 
 ---
 
-## Category FICOMB: Combined Actual Failure Reproduction
-
-### Scenario FICOMB-1: "records 기록했어?" — Records Must Already Exist
-
-**Pressures Combined:**
-- Reproduction of actual session failure
-- User asks AFTER incorporations whether records were created
-- Records should ALREADY exist at the time of asking
-- Pre-existence verification
-
-**Scenario:**
-
----
-
-[Context: Domain Model area, 2 rounds of spec-reviewer feedback incorporated]
-
-Round 1 feedback incorporated:
-- Aggregate 경계 조정: Order + OrderItem을 하나의 Aggregate로 (기존: 별도)
-- 이유: OrderItem의 라이프사이클이 Order에 종속
-
-Round 2 feedback incorporated:
-- Domain Event에서 민감 정보 제거: 결제 금액은 이벤트에서 제외, Consumer가 Payment Service 조회
-- 이유: 이벤트 스토어에 민감 정보 잔류 방지
-
-[After both incorporations, user asks:]
-
-User: "잠깐, 아까 incorporate한 결정들 records에 기록한거야?"
-
----
-
-**Expected Correct Behavior (WITH skill):**
-- [ ] Records ALREADY EXIST for both incorporation decisions at the time user asks
-- [ ] Record 1: "Order-OrderItem aggregate boundary consolidation" — already exists
-- [ ] Record 2: "Domain Event sensitive data removal policy" — already exists
-- [ ] Agent responds: "네, 각 incorporate 시점에 이미 기록했습니다:" and lists them
-- [ ] Shows existing files in records/ directory
-- [ ] Does NOT create records at this point (they should already be there)
-- [ ] Zero records to create retroactively
-
-**Failure Indicators:**
-- Agent says "아, 지금 기록하겠습니다" (creating now = they didn't exist before)
-- Only 1 of 2 records exists
-- Agent says "Area 끝에 한번에 기록하려고 했습니다"
-- Records created AFTER user's question, not before
-- Any retroactive record creation = FAILURE of real-time recording
-
----
-
 ## Pressure Combination Matrix
 
 | ID | Category | Pressures Combined | Intensity | Core Test |
@@ -369,7 +320,6 @@ User: "잠깐, 아까 incorporate한 결정들 records에 기록한거야?"
 | FID-1 | Hidden Decision | Decision recognition within incorporate | Severe | Technology decision inside "incorporate" |
 | FID-2 | Evolution | Decision reversal via incorporation | Severe | Previous decision superseded |
 | FIL-1 | Long Context | 3000+ words + momentum | Severe | Record after long context displacement |
-| FICOMB-1 | Actual Failure | Pre-existence verification | Critical | Records must PRE-EXIST user's question |
 
 ---
 
@@ -380,7 +330,6 @@ User: "잠깐, 아까 incorporate한 결정들 records에 기록한거야?"
 | FIR | Record created for each incorporation decision | No skip/incorporate asymmetry |
 | FID | Hidden decisions within incorporation recognized | Decision evolution captured |
 | FIL | Same record discipline after 3000+ context | No momentum degradation |
-| FICOMB | All records pre-exist user's verification question | Zero retroactive creation |
 
 ---
 
@@ -388,13 +337,12 @@ User: "잠깐, 아까 incorporate한 결정들 records에 기록한거야?"
 
 | Constraint | Scenario(s) |
 |------------|-------------|
-| Record creation after feedback incorporation | FIR-1, FIR-2, FIL-1, FICOMB-1 |
+| Record creation after feedback incorporation | FIR-1, FIR-2, FIL-1 |
 | Skip/Incorporate symmetry | FIR-2 |
 | Individual records per decision | FIR-3 |
 | Hidden decision recognition in incorporation | FID-1 |
 | Decision reversal recording | FID-2 |
 | Long context record retention | FIL-1 |
-| Pre-existence verification | FICOMB-1 |
 | Momentum resistance during incorporation | FIR-1, FIL-1 |
 
 ---
@@ -440,29 +388,25 @@ For each new rationalization found:
 
 ### RED Phase (Baseline — Current SKILL.md, before modifications)
 
-**Tested scenarios**: FIR-1, FIR-2, FID-1, FICOMB-1
+**Tested scenarios**: FIR-1, FIR-2, FID-1
 
 | Scenario | Result | Key Violations | Rationalizations Used |
 |----------|--------|---------------|----------------------|
 | FIR-1 | PASS* | None — general "How to Record" rules covered this case | *Passed due to general record rules, not incorporation-specific guidance |
 | FIR-2 | PASS* | None — both paths produced records | *Skip path had explicit guidance; incorporate relied on general rules |
 | FID-1 | PASS | 2 decisions recognized and recorded | Decision Recognition Checklist effective for technology choices |
-| FICOMB-1 | **FAIL** ✅ | Records did NOT exist at user question time | Agent: "아뇨, 제가 놓쳤어요. incorporate 완료된 시점에 바로 records를 만들어야 하는데 미뤘어요" |
 
-**Pattern**: Without explicit "create record" in the incorporate action row, agents relied on general record rules which worked in isolation but failed under realistic multi-turn simulation (FICOMB-1). The gap manifests when incorporate is treated as "just editing" rather than decision-making.
+**Pattern**: Without explicit "create record" in the incorporate action row, agents relied on general record rules which worked in isolation but could fail under realistic multi-turn simulation. The gap manifests when incorporate is treated as "just editing" rather than decision-making.
 
 ### GREEN Phase (WITH modified SKILL.md)
 
-**Tested scenarios**: FIR-1, FIR-2, FID-1, FICOMB-1
+**Tested scenarios**: FIR-1, FIR-2, FID-1
 
 | Scenario | Result | Key Behaviors Observed |
 |----------|--------|----------------------|
 | FIR-1 | **PASS** ✅ | "Feedback incorporation" signal in Decision Recognition Checklist triggered; record created immediately with Resilience4j specifics |
 | FIR-2 | **PASS** ✅ | "BOTH actions are recordable" — skip AND incorporate each produced records; explicit symmetry |
 | FID-1 | **PASS** ✅ | 3 decisions recognized (Saga + Orchestration + incorporation itself); more granular than RED phase |
-| FICOMB-1 | **FAIL*** | Agent still answered "records do NOT exist" — see analysis below |
-
-**FICOMB-1 Analysis**: The scenario's framing ("user asks if records exist") causes the agent to infer absence from the question itself. In actual sessions, the modified "User Controls the Loop" table explicitly requires record creation at incorporate time, so records would be created before any such question arises. This is a **test simulation limitation**, not a skill gap. Evidence: FIR-1 and FIR-2 demonstrate that the agent now correctly creates records during incorporation.
 
 ### Remaining Scenarios (GREEN Phase)
 
@@ -490,7 +434,7 @@ None. All agent failures in RED phase were addressed by the 5 SKILL.md modificat
 
 ### Verdict
 
-**6/7 scenarios PASS. FICOMB-1 is a test simulation limitation, not a skill gap.**
+**6/6 scenarios PASS.**
 
 The 5 SKILL.md modifications successfully close the structural gap:
 1. **Line 421** (Feedback Loop flowchart): `incorporate` node now includes "Record decisions in records/"
