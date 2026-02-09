@@ -37,6 +37,7 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - Components at wrong abstraction level (code classes/modules or system-context-level) → Apply L2 verification questions (Step 4.2): independent deployment, isolated failure domain, team ownership
 - Mixed abstraction levels in same component table (L1 + L2 + L3 together) → Unify to L2 or split into separate tables by level
 - No internal/external separation in component definition (external systems listed as design targets) → Split into Internal Components table and External Dependencies table
+- Step 4 sub-decision presented without alternatives when 2+ viable options exist → Apply Design Decision Significance Check
 
 ## Process
 
@@ -104,6 +105,14 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 - Explain: Why this solution was chosen over other alternatives
 - Confirm: Get user agreement on the selected solution
 
+#### Design Decision Significance Check
+
+Steps 4.2, 4.3, and 4.4 each contain design decisions that may have multiple viable alternatives. At each decision point:
+
+- Are there 2+ viable alternatives?
+  - **YES** → Present alternatives with trade-offs (Rich Context Pattern), then get user selection
+  - **NO** → Select best practice and document rationale
+
 #### 4.2 Core Architecture Component Definition
 
 - **Abstraction Level Target: Level 2 (Container/Component)**
@@ -122,6 +131,7 @@ Apply **Checkpoint Protocol** (see SKILL.md)
   - **External Dependencies**: Systems you integrate WITH — these are constraints, not design targets
   - Present in two separate sections (see `templates/area-outputs.md`)
 
+- Apply **Design Decision Significance Check** to component structure decisions (e.g., microservices vs modular monolith vs hybrid)
 - Identify: Major internal components involved in the solution (L2 level)
 - Define: Responsibilities of each internal component
 - Identify: External systems and their integration points
@@ -133,15 +143,17 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 #### 4.3 Communication Pattern Definition
 - **For each integration point** (system-to-system or domain-to-domain):
   - Identify whether in-process or cross-process
-  - Select communication pattern:
+  - Identify viable communication pattern alternatives (apply **Design Decision Significance Check**)
     - **Synchronous**: Function calls (in-process), HTTP/gRPC (cross-service)
     - **Asynchronous**: Message queues (Kafka, RabbitMQ), internal event listeners (@EventListener), Webhooks
-  - Document rationale for selection
+  - For significant decisions (2+ viable alternatives): Present alternatives with trade-offs, get user selection
+  - For non-significant decisions: Select best practice, document rationale
   - Define failure handling policy
 - **Create integration table**: Summarize all integration points
 - Review: Review with user
 
 #### 4.4 Data Flow Design
+- Apply **Design Decision Significance Check** to approach decisions within data flow (e.g., external system access methods, flow structure choices)
 - Create: Sequence diagrams for each major use case (in mermaid format)
 - Include:
   - System-level participants (with process boundary notes if needed)

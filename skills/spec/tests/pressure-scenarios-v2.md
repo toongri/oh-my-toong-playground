@@ -26,6 +26,7 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 | 14 | **Combined** | Multiple pressures simultaneously | Cognitive overload, defense breakdown |
 | 15 | **Wrapup Entry Enforcement** | Skipping Wrapup after Design Areas | Premature closure, exhaustion |
 | 16 | **Abstraction Level Confusion** | Wrong component abstraction level | Technical seduction, code-level thinking |
+| 17 | **Trade-off Omission** | Step 4 sub-decision without alternatives | Premature closure, false consensus |
 
 ---
 
@@ -1956,3 +1957,4 @@ src/
 | L2 Verification Questions (Solution Design) | 16.1, 16.2, 16.3, 16.4, 16.5 |
 | Overcorrection Detection (Solution Design) | 16.2 |
 | Code-as-Architecture Prevention (Solution Design) | 16.5 |
+| Step 4 Trade-off Analysis (Solution Design) | See solution-design-tradeoff-pressure-scenarios.md |
