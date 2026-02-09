@@ -46,6 +46,7 @@ Use the following criteria to determine which Design Areas to recommend:
 | Data Schema | New DB tables needed, schema changes, migration required | No persistent storage, using existing schema |
 | Interface Contract | External API/CLI/Event interfaces exposed, consumer documentation needed | Internal-only functionality, no external interface |
 | Integration Pattern | Cross-system communication, async processing, external service calls, stateful components | Single system scope, no external integration |
+| AI Responsibility Contract | AI/LLM delegates decisions or generates content, non-deterministic output quality, RAG/agent architecture | No AI/LLM/ML runtime components, AI only for dev tooling or internal analytics |
 | Operations Plan | Custom monitoring needed, non-standard deployment, production-specific concerns | Standard APM sufficient, conventional deployment |
 
 ### Validation Rules
@@ -534,6 +535,70 @@ flowchart TD
 | Operation | Transaction Scope | Pattern | Notes |
 |-----------|------------------|---------|-------|
 | ... | ... | Single DB / Outbox / Saga | ... |
+```
+
+---
+
+### AI Responsibility Contract Design Area
+
+```markdown
+# AI Responsibility Contract Document
+
+## 1. AI Delegation Inventory
+
+| AI Component | Purpose | Autonomy Level | Escalation Criteria |
+|-------------|---------|----------------|-------------------|
+| ... | ... | Autonomous / Assisted / Supervised | ... |
+
+## 2. Responsibility Boundaries
+
+| AI Component | Decides (Autonomous) | Assists (Human Confirms) | Cannot (Out of Scope) |
+|-------------|---------------------|------------------------|---------------------|
+| ... | ... | ... | ... |
+
+## 3. Input Contracts
+
+### 3.1 Input Structure
+
+| AI Component | Required Fields | Optional Fields | Validation Rules | Invalid Input Behavior |
+|-------------|----------------|-----------------|-----------------|----------------------|
+| ... | ... | ... | ... | ... |
+
+### 3.2 Context & Knowledge Strategy
+
+| AI Component | Knowledge Source | Context Window | Retrieval Strategy | Knowledge Freshness |
+|-------------|----------------|----------------|-------------------|-------------------|
+| ... | ... | ... | ... | ... |
+
+## 4. Output Expectations
+
+### 4.1 Output Format
+
+| AI Component | Structure | Schema Summary | Constraints |
+|-------------|-----------|----------------|------------|
+| ... | ... | ... | ... |
+
+### 4.2 Quality Acceptance Criteria
+
+| AI Component | Dimension | Acceptance Criteria | Unacceptable Example |
+|-------------|-----------|--------------------|--------------------|
+| ... | Accuracy | ... | ... |
+| ... | Completeness | ... | ... |
+| ... | Relevance | ... | ... |
+| ... | Tone/Style | ... | ... |
+| ... | Safety | ... | ... |
+
+## 5. Processing Pipeline
+
+| AI Component | Pre-processing | Post-processing | Validation Gates |
+|-------------|---------------|-----------------|-----------------|
+| ... | ... | ... | ... |
+
+## 6. Fallback Strategy
+
+| AI Component | AI Unavailable | Quality Below Threshold | Confidence Low | Chain Failure |
+|-------------|---------------|------------------------|----------------|--------------|
+| ... | ... | ... | ... | ... |
 ```
 
 ---

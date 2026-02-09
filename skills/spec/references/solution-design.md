@@ -190,6 +190,7 @@ Apply **Area Completion Protocol** (see SKILL.md)
   - **Data Schema**: DB/file/cache storage needed
   - **Interface Contract**: External interface exposed (API, CLI, Event)
   - **Integration Pattern**: External system integration, async processing, transaction boundaries
+  - **AI Responsibility Contract**: AI/LLM delegation exists with quality-sensitive output
   - **Operations Plan**: Production deployment, monitoring, operational settings
 
 #### 6.2 Present Design Area Selection
