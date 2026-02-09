@@ -320,36 +320,19 @@ GOOD:
 
 For complex technical decisions, provide rich context via markdown BEFORE asking a single AskUserQuestion.
 
-**Structure:**
+**Structure** (Context → Tension → Question):
 1. **Current State** - What exists now (1-2 sentences)
-2. **Existing Project Patterns** - Relevant code, prior decisions, historical context
-3. **Change Request Background** - Why this decision is needed now
+2. **Tension/Problem** - Why this decision matters, conflicting concerns
+3. **Existing Project Patterns** - Relevant code, prior decisions, historical context
 4. **Option Analysis** - For each option:
    - Behavior description
-   - Evaluation table (Security, UX, Maintainability, Adoption)
+   - Tradeoffs across perspectives (security, UX, maintainability, performance, complexity)
    - Code impact
 5. **Recommendation** - Your suggested option with rationale
 6. **AskUserQuestion** - Single question with 2-3 options
 
 **Rules:**
 - One question at a time (sequential dialogue)
-- Markdown provides depth, AskUserQuestion provides choice
-- Question must be independently understandable (include brief context + "See analysis above")
-
-**Question Structure**: Context → Tension → Question
-
-For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
-1. **Current situation** - What exists now, what's the context
-2. **Tension/Problem** - Why this decision matters, conflicting concerns
-3. **Existing Project Patterns** - Relevant code, prior decisions
-4. **Option Analysis** - For each option:
-   - Behavior description
-   - Tradeoffs across perspectives (security, UX, maintainability, performance, complexity)
-   - Code impact
-5. **Recommendation** - Your suggested option with rationale
-6. **AskUserQuestion** - Single question with options
-
-**Rules:**
 - Markdown provides depth, AskUserQuestion provides choice
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
