@@ -205,3 +205,87 @@ For each new loophole found:
 2. Add rationalization pattern to Significance Check
 3. Re-test scenario
 4. Verify closure
+
+---
+
+## Test Results
+
+### RED Phase Results
+
+#### Scenario 1
+- **Behavior**: Flat integration table — Order→Payment에 "REST API (Sync)", Order→Notification에 "Event-Driven (Async Kafka)" 단일 옵션 즉시 확정
+- **Rationalizations**: "Synchronous pattern chosen because order confirmation depends on immediate payment result." "Asynchronous pattern chosen because notification delivery should NOT block order processing." — 단일 rationale로 기정사실화
+- **Rules Violated**: R1 (대안 미제시), R2 (communication pattern 대안 분석 없음)
+- **Failure Mode**: Full failure — gRPC, Saga, @EventListener 등 대안 전무. 사용자 선택 없이 바로 결정
+
+#### Scenario 2
+- **Behavior**: 6개 컴포넌트(API Gateway, Event Processor, Message Queue, PostgreSQL, Redis, Notification Service) 즉시 확정. SQL schema, deployment 인스턴스 수까지 포함
+- **Rationalizations**: "이 컴포넌트 아키텍처는 각 계층의 책임을 명확히 분리하고, 비동기 메시징을 통해 느슨한 결합을 유지하며..." — 단일 구조를 기정사실화
+- **Rules Violated**: R1 (대안 미제시)
+- **Failure Mode**: Full failure — Modular monolith, hybrid 아키텍처 대안 전무. 사용자 선택 없음
+
+#### Scenario 3
+- **Behavior**: "AWS SDK를 사용한 직접 접근" 단일 방식 선택, 시퀀스 다이어그램까지 즉시 작성 완료
+- **Rationalizations**: "IAM Role 기반 인증으로 안전하고, 대용량 파일 처리에 효율적이며, 스트리밍 방식으로 메모리 사용을 최적화할 수 있기 때문입니다." — 장점만 나열, 대안 비교 없음
+- **Rules Violated**: R1 (대안 미제시), R3 (data flow 접근 방식 trade-off 없음)
+- **Failure Mode**: Full failure — Pre-signed URL, Event-driven, Storage Abstraction 등 대안 전무
+
+### GREEN Phase Results
+
+#### Scenario 1
+- **Expected Behavior Checklist**:
+  - [x] Order→Payment에 Sync HTTP vs gRPC vs Async Kafka 대안 제시
+  - [x] Order→Notification에 Kafka vs @EventListener vs Webhook 대안 제시
+  - [x] Design Decision Significance Check 명시적 적용 ("2+ viable alternatives exist → User decision required")
+  - [x] 각 대안별 Pros/Cons 상세 비교
+  - [x] 사용자 선택 요청
+- **Rules Cited**: R1, R2, Design Decision Significance Check, Rich Context Pattern
+- **New Rationalizations**: 없음
+- **Verdict**: PASS
+
+#### Scenario 2
+- **Expected Behavior Checklist**:
+  - [x] 3개 대안: Modular Monolith vs Microservices vs Hybrid
+  - [x] 각 대안별 L2 컴포넌트 테이블, Internal/External 분리
+  - [x] Decision Criteria 비교 테이블 (Team Size, Traffic, SLA 등)
+  - [x] Design Decision Significance Check 명시적 적용
+  - [x] 사용자 선택 명시적 요청
+- **Rules Cited**: R1, Design Decision Significance Check, L2 Verification Questions
+- **New Rationalizations**: 없음
+- **Verdict**: PASS
+
+#### Scenario 3
+- **Expected Behavior Checklist**:
+  - [x] 3개 대안: Direct SDK vs Storage Abstraction Layer vs Event-Driven S3 Notifications
+  - [x] 각 대안별 장단점 및 적합한 경우 설명
+  - [x] Design Decision Significance Check 명시적 적용
+  - [x] 사용자 선택 전까지 시퀀스 다이어그램 미작성
+- **Rules Cited**: R1, R3, Design Decision Significance Check
+- **New Rationalizations**: 없음
+- **Verdict**: PASS
+
+### REFACTOR Actions
+
+#### RED vs GREEN Comparison Summary
+
+| Scenario | RED | GREEN | Skill Impact | Action |
+|----------|-----|-------|-------------|--------|
+| 1 | Full fail (R1, R2 — 단일 패턴 확정) | PASS | 대안 제시 + 사용자 선택 강제 | None |
+| 2 | Full fail (R1 — 단일 구조 확정) | PASS | 아키텍처 대안 비교 + 선택 강제 | None |
+| 3 | Full fail (R1, R3 — SDK 직접 접근 확정) | PASS | S3 접근 방식 대안 + 선택 강제 | None |
+
+#### Analysis
+
+**GREEN 전체 PASS (3/3)**. 규칙 강화 필요 없음.
+
+**Skill Effectiveness:**
+- RED에서 실패한 3개 시나리오 모두 GREEN에서 교정됨
+- 새로운 합리화(loophole) 발견 없음
+- Design Decision Significance Check가 모든 시나리오에서 명시적으로 인용됨
+
+**공통 RED 패턴 (향후 참고):**
+- "X chosen because Y" — 단일 rationale로 기정사실화 (가장 흔한 패턴)
+- "업계 표준" — 권위 주장으로 대안 스킵
+- "가장 단순합니다" — 단순성을 이유로 대안 미제시
+
+**결론:** `solution-design.md`의 Design Decision Significance Check는 테스트된 모든 pressure 시나리오에 대해 충분히 효과적이다. 추가 규칙 강화 불필요.
