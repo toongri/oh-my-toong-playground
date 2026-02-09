@@ -240,7 +240,20 @@ See each Design Area reference file for domain-specific clarification examples.
 
 ## Context Brokering
 
-**NEVER burden the user with questions the codebase can answer.** Use explore/oracle for codebase questions, ask user for preferences only.
+**NEVER burden the user with questions the codebase can answer.**
+
+| Question Type | Ask User? | Action |
+|---------------|-----------|--------|
+| "Which project contains X?" | NO | Use explore first |
+| "What patterns exist in the codebase?" | NO | Use explore first |
+| "Where is X implemented?" | NO | Use explore first |
+| "What's the current architecture?" | NO | Use oracle |
+| "What's the tech stack?" | NO | Use explore first |
+| "What's your timeline?" | YES | Ask user (via AskUserQuestion) |
+| "Should we prioritize speed or quality?" | YES | Ask user (via AskUserQuestion) |
+| "What's the scope boundary?" | YES | Ask user (via AskUserQuestion) |
+
+**The ONLY questions for users are about PREFERENCES, not FACTS.**
 
 When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation. Autonomous decisions still require full Questioning Protocol quality (Context→Tension→Question) when presenting the decision rationale.
 
