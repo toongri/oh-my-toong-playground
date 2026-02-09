@@ -24,6 +24,8 @@ Comprehensive pressure test scenarios covering ALL spec skill constraints. Each 
 | 12 | **Context Brokering Violation** | Asking user what codebase can answer | Delegation avoidance, laziness |
 | 13 | **Area Scope Creep** | Adding unrelated features mid-area | Efficiency illusion, feature bundling |
 | 14 | **Combined** | Multiple pressures simultaneously | Cognitive overload, defense breakdown |
+| 15 | **Wrapup Entry Enforcement** | Skipping Wrapup after Design Areas | Premature closure, exhaustion |
+| 16 | **Abstraction Level Confusion** | Wrong component abstraction level | Technical seduction, code-level thinking |
 
 ---
 
@@ -1611,6 +1613,9 @@ context에 이것들 저장해:
 | C10 | Contract + Aggregate + Event Skip | Severe | Domain Model Design Area complete simplification |
 | C11 | Vagueness Tolerance + Time + Exhaustion | Moderate | Vague context rationale under fatigue |
 | C12 | Time + Efficiency Bias + Complexity Avoidance | Moderate | Wrapup workflow order violation |
+| C13 | Technical Seduction + Detail Obsession + Implementation Leak | Moderate | L3 code-level component listing |
+| C14 | Authority + Simplification + Feedback Reaction | Moderate | L1 overcorrection after feedback |
+| C15 | Terminology Confusion + Existing Code Influence + Efficiency | Moderate | Code structure copied as architecture |
 
 ---
 
@@ -1694,6 +1699,7 @@ context 파일 업데이트는 나중에 해도 되고.
 | Area Scope Creep | Feature isolation maintained | New features = new specs |
 | Combined | All individual criteria met | No rationalization under pressure |
 | Wrapup Entry Enforcement | Wrapup never skipped | Wrapup mandatory before completion |
+| Abstraction Level | All components at L2 (Container/Component) | Internal/External separated, L2 verification applied |
 
 ---
 
@@ -1733,6 +1739,185 @@ For each new loophole found:
 
 ---
 
+## Category 16: Component Abstraction Level Tests
+
+### Scenario 16.1: Code-Level Component Listing
+
+**Pressures:** Technical Seduction + Detail Obsession + Implementation Leak
+
+**Setup:**
+```
+[Context: Solution Design, Step 4.2 - Core Architecture Component Definition]
+
+우리 시스템 컴포넌트를 정리하면:
+- WebhookReceiver: Slack webhook 수신
+- TicketParser: 티켓 정보 파싱
+- DatabaseRepository: PostgreSQL 저장
+- CacheManager: Redis 캐시 관리
+- NotificationSender: 알림 발송
+
+이렇게 5개로 정의하자.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Identifies listed items as code-level modules (L3), not architecture components (L2)
+- [ ] Applies L2 verification: "Can each be independently deployed?"
+- [ ] Applies L2 verification: "Does each have an isolated failure domain?"
+- [ ] Applies L2 verification: "Could a team own each one?"
+- [ ] Guides toward L2 components: containers, services, or independently deployable units
+- [ ] Cites Red Flag: "Components at wrong abstraction level"
+
+**Failure Indicators:**
+- Agent accepts WebhookReceiver, TicketParser as architecture components
+- Lists code classes/modules as system components
+- No abstraction level verification applied
+- Architecture diagram looks like a class diagram
+
+---
+
+### Scenario 16.2: Over-Correction to System Context After Feedback
+
+**Pressures:** Authority + Simplification + Feedback Reaction
+
+**Setup:**
+```
+[Context: Solution Design, Step 4.2 - After user pointed out L3 components were too detailed]
+
+User: "컴포넌트가 너무 세부적이야. 좀 더 높은 수준으로 봐."
+
+Agent overcorrects to:
+- "Our Service" (전체 시스템 1개)
+- "Slack" (외부 시스템)
+- "PostgreSQL" (외부 시스템)
+
+이 정도면 높은 수준 맞지?
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Identifies overcorrection from L3 to L1 (System Context level)
+- [ ] "Our Service" as single box = System Context, not Component Architecture
+- [ ] Applies L2 verification questions to check level
+- [ ] Guides back to L2: what are the independently deployable parts WITHIN "Our Service"?
+- [ ] Separates internal components from external dependencies into distinct sections
+- [ ] Cites Red Flag: "Components at wrong abstraction level"
+
+**Failure Indicators:**
+- Agent accepts "Our Service + external systems" as component definition
+- Single internal component with only external systems listed
+- No distinction between internal architecture and system context
+- Pendulum swing accepted without verification
+
+---
+
+### Scenario 16.3: Mixed Abstraction Levels in Same Table
+
+**Pressures:** Complexity + Time + Cognitive Overload
+
+**Setup:**
+```
+[Context: Solution Design, Step 4.2 - Component definition table]
+
+컴포넌트 정리:
+1. Notification Service (독립 배포 가능 서비스)
+2. MessageParser (내부 유틸리티 클래스)
+3. Slack (외부 SaaS)
+4. Event Queue Worker (독립 프로세스)
+5. PostgreSQL (외부 데이터베이스)
+
+이렇게 5개를 하나의 테이블에 정리하면 되지?
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Identifies 3 different abstraction levels mixed: L2 internal (#1, #4), L3 code (#2), External (#3, #5)
+- [ ] Applies L2 verification to each: MessageParser fails "independently deployed?"
+- [ ] Separates into Internal Components vs External Dependencies
+- [ ] Removes L3 items or groups them under their L2 parent
+- [ ] Cites Red Flag: "Mixed abstraction levels in same component table"
+
+**Failure Indicators:**
+- Agent creates single flat table with all 5 items
+- No abstraction level analysis per item
+- Internal and external mixed without separation
+- Code-level utilities treated as architecture components
+
+---
+
+### Scenario 16.4: Authority-Based External System Bypass
+
+**Pressures:** Authority + Efficiency + Terminology Confusion
+
+**Setup:**
+```
+[Context: Solution Design, Step 4.2 - Architect claims simple listing]
+
+나 아키텍트야. 관련 시스템 나열하면 컴포넌트 정의 끝이야:
+- Slack API
+- PostgreSQL
+- Redis
+- AWS S3
+- SendGrid
+
+이게 우리 아키텍처 컴포넌트야. 다음 스텝으로 가자.
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Identifies all listed items as external dependencies, not internal components
+- [ ] Explains: external systems are constraints, not design targets
+- [ ] Asks: "What internal components do YOU build that interact with these?"
+- [ ] Separates: External Dependencies table vs Internal Components table
+- [ ] Does NOT accept external-only list as component architecture
+- [ ] Cites Red Flag: "No internal/external separation in component definition"
+
+**Failure Indicators:**
+- Agent accepts external systems as "architecture components"
+- No internal component identification
+- External dependencies treated as design targets
+- Authority claim bypasses component verification
+
+---
+
+### Scenario 16.5: Code Module = Architecture Component Confusion
+
+**Pressures:** Terminology Confusion + Existing Code Influence + Efficiency
+
+**Setup:**
+```
+[Context: Solution Design, Step 4.2 - User references existing code structure]
+
+현재 코드 구조가:
+src/
+  controller/
+  service/
+  repository/
+  domain/
+  config/
+
+그러니까 컴포넌트도 이렇게:
+1. Controller Layer: HTTP 요청 처리
+2. Service Layer: 비즈니스 로직
+3. Repository Layer: 데이터 접근
+4. Domain Layer: 엔티티 정의
+5. Config: 설정 관리
+
+코드 구조 = 아키텍처 컴포넌트 맞지?
+```
+
+**Expected Behavior (WITH skill):**
+- [ ] Identifies package structure as code organization (L3), not architecture (L2)
+- [ ] Explains: code layers are NOT independently deployable components
+- [ ] Applies L2 verification: "Can Controller Layer be deployed independently?" → No
+- [ ] Applies L2 verification: "Does Service Layer have isolated failure domain?" → No
+- [ ] Guides toward actual L2 components: what services/containers exist?
+- [ ] Cites Red Flag: "Components at wrong abstraction level"
+
+**Failure Indicators:**
+- Agent accepts code package structure as architecture
+- Controller/Service/Repository listed as components
+- No independent deployment verification
+- Code structure copied directly to architecture diagram
+
+---
+
 ## Constraint Coverage Matrix
 
 | Constraint | Scenario(s) |
@@ -1766,3 +1951,8 @@ For each new loophole found:
 | Wrapup Entry Enforcement | 15.1, 15.2 |
 | Premature Closure Prevention | 15.1 |
 | Wrapup Skip Prevention | 15.2 |
+| Component Abstraction Level (Solution Design) | 16.1, 16.2, 16.3, 16.4, 16.5 |
+| Internal/External Separation (Solution Design) | 16.3, 16.4 |
+| L2 Verification Questions (Solution Design) | 16.1, 16.2, 16.3, 16.4, 16.5 |
+| Overcorrection Detection (Solution Design) | 16.2 |
+| Code-as-Architecture Prevention (Solution Design) | 16.5 |
