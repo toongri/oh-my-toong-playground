@@ -418,7 +418,7 @@ digraph feedback_loop {
     analyze [label="Analyze feedback\nForm YOUR opinion"];
     present [label="Present to user\n(context + recommendation)"];
     user_decides [label="User decides", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
-    incorporate [label="Update design.md"];
+    incorporate [label="Update design.md\nRecord decisions in records/"];
     user_final [label="User declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
     next_area [label="Proceed to next Area"];
 
@@ -509,7 +509,7 @@ After receiving spec-reviewer feedback, YOU must:
 
 | User Response | Action |
 |---------------|--------|
-| "Incorporate feedback" | Update design.md, re-review if needed |
+| "Incorporate feedback" | Update design.md, create record for each decision made during incorporation in `records/`, re-review if needed |
 | "Skip this feedback" | Record skip reason in `records/`, then proceed without changes |
 | "Need another round" | Delegate to spec-reviewer again |
 | "Step complete" | Save final, proceed to next step |
@@ -540,6 +540,7 @@ A statement is a **recordable decision** if ANY of these apply:
 | Architecture pattern | "하이브리드로 가자" | Structural decision |
 | Boundary definition | "같은 Aggregate로 묶자" | Domain modeling decision |
 | Elimination conclusion | Two options rejected → third selected | Implicit selection by elimination |
+| Feedback incorporation | Reviewer concern accepted → design changed | Design modification through external review |
 
 **Decisions often hide behind casual language:**
 - "~하면 될 것 같아" → This IS a decision, not a suggestion
@@ -628,7 +629,7 @@ digraph area_completion {
     receive_feedback [label="Receive reviewer feedback"];
     analyze_present [label="Analyze feedback\nPresent to user with recommendation"];
     user_decides [label="User decides on feedback", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
-    incorporate [label="Incorporate feedback\nUpdate design.md"];
+    incorporate [label="Incorporate feedback\nUpdate design.md\nRecord decisions in records/"];
     another_round [label="Delegate to\nspec-reviewer again"];
     user_final [label="User explicitly declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
     announce_next [label="Announce: [Area Name] complete.\nEntry criteria for [Next Area]: [list]"];
@@ -869,6 +870,8 @@ domain-model/records/
 | "The user didn't explicitly say 'decide', so it's not a decision" | Casual phrasing ("~하면 될 것 같아") IS a decision. See Decision Recognition Checklist |
 | "This exclusion/deferral doesn't need a record" | Exclusions and deferrals are EQUALLY important decisions |
 | "Creating records disrupts the flow" | Brief record creation is the flow. Skipping creates bigger disruption later |
+| "Incorporating feedback is just editing, not deciding" | Accepting reviewer feedback IS a decision. Changing design based on external input = recordable |
+| "The reviewer already documented the concern" | Reviewer documents concerns; YOU document the DECISION to accept/modify. Different artifacts, both needed |
 
 ### Scope Creep
 | Excuse | Reality |
