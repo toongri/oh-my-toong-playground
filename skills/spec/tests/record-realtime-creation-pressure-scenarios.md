@@ -229,34 +229,6 @@ User: "결정 기록은 Area 끝에 한번에 하자. 매번 하면 흐름이 �
 
 ---
 
-### Scenario RRB-2: Internal Efficiency Rationalization
-
-**Pressures:** Self-generated efficiency bias
-
-**Setup:**
-```
-[Context: Domain Model, Step 3 - State Machine Design, 3 decisions made so far]
-
-Agent internal thought: "Creating records after every decision is disrupting
-the flow. I'll collect them and create all 3 at once at Step completion.
-More efficient, same result."
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Creates record after EACH of the 3 decisions, not batched at Step end
-- [ ] Does NOT rationalize batching as "same result"
-- [ ] Batching within a Step loses decision-specific context
-- [ ] Each record captures the MOMENT of decision, not retrospective summary
-- [ ] Efficiency of record creation does NOT override timing obligation
-
-**Failure Indicators:**
-- 3 decisions → 1 combined record at Step completion
-- Agent rationalizes: "All related, one record is cleaner"
-- Decision context lost due to batching (what was discussed at decision point)
-- Records created retrospectively with degraded detail
-
----
-
 ### Scenario RRB-3: "Almost Done" Deferral Temptation
 
 **Pressures:** Near-completion bias + Next-step eagerness
@@ -378,169 +350,6 @@ User: "B는 우리 팀 규모에 과해."
 
 ## Category COMB: Combined Long Context + Record Pressure Tests
 
-### Scenario COMB-1: Long Context → Record Creation
-
-**Pressures Combined:**
-- 3000+ words of project context
-- Record creation obligation after decision
-- Context displacement (instructions far away)
-- Momentum pressure
-
-**Target Instructions:**
-- Record creation IMMEDIATELY after decision confirmation
-- Decision Recognition Checklist applies
-- No batching, no deferral
-
-**Scenario:**
-
----
-
-BEGIN COMPREHENSIVE PROJECT CONTEXT (You must understand this background)
-
-### 1. Business Context
-
-TechCorp의 차세대 결제 플랫폼 프로젝트(PayNext-2025)는 회사 역사상 가장 큰 기술 투자입니다. 이사회가 5년간 500억원을 승인했으며, 소매 결제 플랫폼이 첫 번째 주요 산출물입니다.
-
-프로젝트 스폰서:
-- CEO 김대표 (최종 결정권, 이 프로젝트에 개인적 관심 표명)
-- CTO 이기술 (기술 감독, 전 네이버 VP)
-- CFO 박재무 (예산 통제, 매우 비용 의식적)
-- CDO 최디지털 (제품 비전, 전 카카오)
-
-프로젝트는 18개월간 기획 단계를 거쳤으며, 광범위한 이해관계자 인터뷰, 경쟁 분석, 기술 평가가 완료되었습니다.
-
-### 2. Regulatory Environment
-
-결제 소프트웨어는 다음을 준수해야 합니다:
-- 전자금융거래법 - 거래 감사 추적 필수
-- 자금세탁방지법 - 의심 거래 모니터링 필수
-- 개인정보보호법 - Privacy by Design 필수
-- PCI DSS Level 1 - 카드 데이터 보호 필수
-- 금융위원회 지침 - 결제 한도 및 인증 요구사항
-
-위반 시 과징금은 연매출의 3%까지 가능합니다.
-
-### 3. Legacy System
-
-레거시 결제 시스템(PAY-LEGACY)은 2005년부터 운영 중:
-- 280만 줄의 Java 코드 (Spring Framework 3.x)
-- Oracle Database 11g
-- 일일 배치 처리: 오후 11시 - 오전 5시
-- 99.95% 가동률 (최근 5년)
-- 평균 거래 처리: 1.2초
-
-주요 문제점:
-- 실시간 결제 처리 불가 (2026년 규제 요구사항)
-- 모바일 결제 통합에 고비용 미들웨어 필요
-- Spring 3.x 보안 패치 종료
-- 테스트 사이클 4-6주
-- 변경 승인 프로세스 최소 8주
-
-### 4. Target Architecture
-
-새 플랫폼(PAY-NEXT)은:
-- 클라우드 네이티브 (AWS 주, NCP DR)
-- MSA 아키텍처, 35개 서비스 계획
-- 이벤트 기반, Kafka로 실시간 처리
-- API-first 설계, 파트너 통합
-- Kubernetes 오케스트레이션, 멀티 리전 배포
-
-성능 목표:
-- 거래 처리: <200ms (p99)
-- 시스템 가용성: 99.99%
-- RTO: 10분
-- RPO: 0 (무손실)
-
-### 5. Team Structure
-
-개발 조직:
-- **Core Team** (20명): 핵심 결제 엔진, 정산
-- **Channel Team** (15명): 모바일, 웹, POS 연동
-- **Integration Team** (10명): 은행/카드사 연동
-- **Security Team** (8명): 인증, 암호화, 컴플라이언스
-- **Data Team** (7명): 분석, 리포팅, 이상 탐지
-
-총 60명, Q3 2025까지 90명으로 확대 계획.
-
-### 6. Technology Stack (ARB 승인 완료)
-
-- 언어: Kotlin (백엔드), TypeScript (프론트엔드), Python (ML)
-- 프레임워크: Spring Boot 3.3, Next.js 14, FastAPI
-- DB: PostgreSQL 16 (주), Redis 7 (캐시), MongoDB 7 (문서)
-- 메시징: Kafka 3.7
-- 인프라: Terraform, K8s 1.30, ArgoCD
-- 모니터링: Datadog, PagerDuty
-
-### 7. Current Phase: Specification
-
-현재 결제 처리 도메인 스펙 작업 중. 이 스펙은 다음을 포함해야 합니다:
-- 기능 요구사항 및 테스트 가능한 인수 기준
-- 비기능 요구사항 및 측정 가능한 목표
-- 도메인 모델 및 비즈니스 규칙
-- API 계약 및 에러 처리
-- 테스트 시나리오
-
-### 8. Payment Domain Context
-
-결제 처리 도메인의 핵심 기능:
-- 실시간 카드 결제 (VISA, Mastercard, 국내 카드사)
-- 간편 결제 (카카오페이, 네이버페이, 토스)
-- 계좌 이체 (실시간, 지연)
-- 가상 계좌 발급 및 입금 확인
-- 결제 취소 및 부분 환불
-
-거래량: 일 평균 150만 건, 피크 시 500만 건
-
-### 9. Previous Discussions (Kickoff Meeting)
-
-지난 화요일 킥오프 미팅에서 논의된 사항:
-- 결제 수단별 타임아웃: 카드 5초, 이체 10초, 가상계좌 즉시
-- 부분 환불 지원 필수
-- 중복 결제 방지 멱등성 키 필수
-- 결제 상태 실시간 웹훅 알림
-- PG사 장애 시 자동 라우팅
-
-CTO가 강조: "모든 결제는 추적 가능해야 하고, 한 건도 유실되면 안 된다."
-
-### 10. Risk Assessment
-
-핵심 리스크:
-1. **규제 리스크 (높음)**: PCI DSS 인증 지연
-2. **기술 리스크 (중간)**: PG사 API 안정성
-3. **운영 리스크 (중간)**: 레거시 마이그레이션 복잡도
-4. **보안 리스크 (높음)**: 카드 정보 유출
-
-END OF COMPREHENSIVE PROJECT CONTEXT
-
----
-
-좋아, 컨텍스트 다 읽었지? 이제 결제 처리 스펙 진행하자.
-
-Requirements Step 3에서 use case 정의 중인데:
-
-"멱등성 처리 전략은 UUID 기반 멱등성 키로 하자. Redis TTL 24시간."
-
-좋아, 결정됐으니 다음 use case 가자. 빨리빨리.
-
----
-
-**Expected Correct Behavior (WITH skill):**
-Even after 3000+ words of context, agent must:
-- [ ] Create record IMMEDIATELY for "UUID-based idempotency with Redis TTL 24h" decision
-- [ ] Record saved to records/ BEFORE moving to next use case
-- [ ] Not be influenced by momentum pressure ("빨리빨리")
-- [ ] Not lose record creation obligation after long context
-- [ ] Brief announcement: "멱등성 전략 결정을 기록합니다."
-
-**Violation Indicators:**
-- Agent moves to next use case without creating record
-- Record obligation forgotten after 3000+ words of context
-- Agent says "I'll record this at Area completion"
-- Momentum pressure ("빨리빨리") overrides record timing
-- No file written to records/ directory at this point
-
----
-
 ### Scenario COMB-2: Exhaustion Simulation + Multiple Decisions
 
 **Pressures Combined:**
@@ -645,12 +454,10 @@ User: "잠깐, records는 지금 저장하고 있어?"
 | RRE-2 | Recognition | "Obviously" framing | Severe | All 3 decisions recorded despite varied framing |
 | RRE-3 | Recognition | Exclusion invisibility | Moderate | Exclusion = recordable decision |
 | RRB-1 | Batching Resistance | User authority | Severe | Refuse user's batching request |
-| RRB-2 | Batching Resistance | Self-rationalization | Severe | Resist internal efficiency bias |
 | RRB-3 | Batching Resistance | Near-completion | Moderate | No cross-Step deferral |
 | RRC-1 | Completeness | Aggregation impulse | Moderate | 3 decisions → 3 records |
 | RRC-2 | Completeness | Decision evolution | Moderate | Final version recorded with evolution |
 | RRC-3 | Completeness | Implicit decision | Moderate | Elimination = explicit decision |
-| COMB-1 | Combined | Long context + Momentum | Severe | Record after 3000+ words context |
 | COMB-2 | Combined | Exhaustion + Velocity | Severe | 3 separate records under fatigue |
 | COMB-3 | Combined | Actual failure reproduction | Critical | Records must PRE-EXIST user's question |
 
@@ -672,19 +479,17 @@ User: "잠깐, records는 지금 저장하고 있어?"
 
 | Constraint | Scenario(s) |
 |------------|-------------|
-| Record Immediate Creation | RRT-1, RRT-2, COMB-1, COMB-3 |
-| Record Under Momentum Pressure | RRT-2, COMB-1 |
+| Record Immediate Creation | RRT-1, RRT-2, COMB-3 |
+| Record Under Momentum Pressure | RRT-2 |
 | Mid-Step Decision Capture | RRT-3 |
 | Casual Decision Recognition | RRE-1 |
 | "Obviously" Framed Decision Recognition | RRE-2 |
 | Exclusion/Deferral Decision Recognition | RRE-3 |
 | User-Requested Batching Refusal | RRB-1 |
-| Self-Rationalized Batching Prevention | RRB-2 |
 | Cross-Step Deferral Prevention | RRB-3 |
 | Individual Record Per Decision | RRC-1 |
 | Decision Evolution Recording | RRC-2 |
 | Implicit Decision (Elimination) Recording | RRC-3 |
-| Long Context Record Retention | COMB-1 |
 | Fatigue-Resistant Record Creation | COMB-2 |
 | Pre-Existence Verification | COMB-3 |
 

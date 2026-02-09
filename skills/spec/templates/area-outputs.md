@@ -38,16 +38,7 @@ AskUserQuestion:
 
 ### Recommendation Criteria
 
-Use the following criteria to determine which Design Areas to recommend:
-
-| Design Area | Recommend When | Skip When |
-|-------------|----------------|-----------|
-| Domain Model | 3+ state transitions, complex business rules, aggregate boundaries to define | Simple CRUD, no state management, straightforward entity relationships |
-| Data Schema | New DB tables needed, schema changes, migration required | No persistent storage, using existing schema |
-| Interface Contract | External API/CLI/Event interfaces exposed, consumer documentation needed | Internal-only functionality, no external interface |
-| Integration Pattern | Cross-system communication, async processing, external service calls, stateful components | Single system scope, no external integration |
-| AI Responsibility Contract | AI/LLM delegates decisions or generates content, non-deterministic output quality, RAG/agent architecture | No AI/LLM/ML runtime components, AI only for dev tooling or internal analytics |
-| Operations Plan | Custom monitoring needed, non-standard deployment, production-specific concerns | Standard APM sufficient, conventional deployment |
+Use SKILL.md Area Entry Criteria to determine which Design Areas to recommend.
 
 ### Validation Rules
 
@@ -626,28 +617,11 @@ flowchart TD
 |-----------|-------|--------|-------------|
 | ... | INFO/WARN/ERROR | ... | ... |
 
-## 2. Deployment Strategy
+## 2. Feature Flag Strategy
 
-### 2.1 Deployment Order
-1. ...
-
-### 2.2 Backward Compatibility
-- ...
-
-### 2.3 Rollback Strategy
-- ...
-
-## 3. Failure and Recovery Plan
-
-### 3.1 Failure Scenarios
-
-| Failure Scenario | Detection | Response Plan | Expected Outcome |
-|------------------|-----------|---------------|------------------|
-| ... | ... | ... | ... |
-
-### 3.2 Recovery Procedures
-
-[Recovery procedures for critical failure scenarios]
+| Flag Name | Scope | Default | Rollback Action |
+|-----------|-------|---------|-----------------|
+| ... | ... | ON/OFF | ... |
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 ## Role
 
-As an operations design specialist, systematically design the operational aspects of the project including observability, deployment, and failure recovery.
+As an operations design specialist, systematically design the observability aspects of the project including custom metrics, custom logging, and feature flag strategy.
 
 **Output Format**: See `templates/area-outputs.md`
 
@@ -10,20 +10,16 @@ As an operations design specialist, systematically design the operational aspect
 
 - Focus on project-specific operational needs, not general best practices
 - Do not document standard APM metrics or framework defaults
-- Include rationale for monitoring and deployment decisions
-- Plan for failure scenarios proactively
+- Include rationale for monitoring decisions
 
 ### Document Scope
 
-- **Include**: Project-specific metrics, custom logging, deployment strategies, migration approaches, failure scenarios, recovery plans
-- **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, generic operational practices
+- **Include**: Project-specific metrics, custom logging, feature flag strategy
+- **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, deployment procedures, failure recovery plans, generic operational practices
 
 ## STOP: Operations Plan Red Flags
 
 - "Standard monitoring is enough" without checking → Verify project-specific metrics needed
-- Deployment strategy undefined for schema changes → Document migration approach
-- Missing failure scenarios for critical paths → Identify and plan
-- No rollback plan for risky deployments → Define rollback strategy
 - Every pipeline step gets its own metric → Over-instrumentation. Apply Metric Necessity Test
 - All log points are INFO level → Apply Log Level Decision Guide
 - More than 4 custom metrics proposed → Justify each through Metric Necessity Test
@@ -36,18 +32,15 @@ When users respond vaguely to design questions, clarify with specific questions.
 |------------|------------|
 | "Monitoring can wait" | "What are the failure detection criteria? Which metrics should be tracked?" |
 | "Alerts are whatever" | "What are the alert thresholds? Alert channels? Escalation policy?" |
-| "Rollback if needed" | "What are the rollback trigger conditions? Rollback procedure? How to verify data consistency?" |
-| "Default deployment" | "What's the acceptable downtime range? Is canary/blue-green needed? DB migration order?" |
-| "Handle incidents as they come" | "What are the major failure scenarios? Response procedure for each? Who's responsible?" |
 | "Monitor everything just in case" | "What specific action would each metric trigger? If no action, it's a log line, not a metric." |
 | "INFO for all log points" | "At this volume, how many INFO lines per request? Boundary only or every step?" |
+| "Feature flags are overkill" | "What's the rollback strategy without feature flags? How to limit blast radius?" |
 
 ## Baseline Assumptions
 
 The following are already covered by team conventions and need not be documented:
 - Standard APM metrics (response time, error rate, throughput)
 - Framework default logging (request/response, exceptions)
-- Standard deployment pipelines
 
 Document only when project-specific customization is required.
 
@@ -103,46 +96,19 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 - Note: Do not include framework default logging
 - Confirm: Get user agreement
 
+#### 2.3 Feature Flag Strategy (if applicable)
+- Evaluate: Whether this feature needs gradual rollout or kill-switch capability
+- Design: Feature flag approach (if needed):
+  - Flag granularity (per-feature, per-component)
+  - Rollout strategy (percentage-based, user-segment)
+  - Flag lifecycle (temporary vs. permanent, cleanup plan)
+- Note: For DB migration strategy, see Data Schema area. For failure handling and error scenarios, see Integration Pattern area.
+- Confirm: Get user agreement
+
 #### Checkpoint: Step 2 Complete
 Apply **Checkpoint Protocol** (see SKILL.md)
 
-### Step 3: Deployment Strategy
-
-#### 3.1 Deployment Approach
-- Design: How to safely deploy this feature:
-  - Database migration approach (if schema changes required)
-  - Deployment order and backward compatibility
-  - Feature flags or gradual rollout (if needed)
-- Review: Discuss with user
-
-#### 3.2 Pre-deployment Checklist
-- Define: Verification steps before deployment
-- Include: Data backup requirements, rollback triggers
-- Confirm: Get user agreement
-
-#### Checkpoint: Step 3 Complete
-Apply **Checkpoint Protocol** (see SKILL.md)
-
-### Step 4: Failure and Recovery Plan
-
-#### 4.1 Failure Scenarios
-- Identify: Major failure scenarios for this feature:
-  - External dependency failures
-  - Data inconsistency scenarios
-  - Resource exhaustion cases
-- Define: Expected behavior and alerting thresholds
-- Review: Discuss with user
-
-#### 4.2 Recovery Procedures
-- Design: Response plans for each failure scenario
-- Define: Rollback procedures if critical
-- Include: Communication templates for incidents (if needed)
-- Confirm: Get user agreement
-
-#### Checkpoint: Step 4 Complete
-Apply **Checkpoint Protocol** (see SKILL.md)
-
-### Step 5: Document Generation
+### Step 3: Document Generation
 
 Apply **Area Completion Protocol** (see SKILL.md)
 

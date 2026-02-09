@@ -179,19 +179,15 @@ NO AREA COMPLETION WITHOUT:
 
 ### Operations Plan
 
-**Designs:** Custom metrics, custom logging, deployment strategy, failure scenarios, recovery procedures
+**Designs:** Custom metrics, custom logging, feature flag strategy
 
 **Enter when:**
-- Production deployment is planned
 - Custom monitoring beyond standard APM needed (project-specific metrics, business alerts)
-- Non-standard deployment required (schema migration ordering, feature flags, canary/blue-green)
-- Critical failure scenarios need pre-planned recovery procedures
+- Feature flags needed for rollout
 
 **Skip when:**
-- Development or prototype environment only (no production deployment)
 - Standard APM metrics sufficient (response time, error rate, throughput)
-- Conventional deployment pipeline applies without special ordering or migration
-- No production-specific operational concerns beyond framework defaults
+- No feature flag needs
 
 **Reference:** `references/operations-plan.md`
 
@@ -577,21 +573,7 @@ A statement is a **recordable decision** if ANY of these apply:
 
 ### Record Naming Examples
 
-```
-.omt/specs/order-management/requirements/records/
-  1-scope-clarification.md
-
-.omt/specs/order-management/solution-design/records/
-  1-event-sourcing-vs-crud.md
-  3-payment-gateway-selection.md
-
-.omt/specs/order-management/domain-model/records/
-  2-order-state-machine-design.md
-  3-aggregate-boundary.md
-
-.omt/specs/order-management/data-schema/records/
-  1-table-structure.md
-```
+See `templates/record.md` for record naming convention and file structure examples.
 
 ### Checkpoint Integration (Verification Only)
 
@@ -694,12 +676,6 @@ digraph area_completion {
 3. User explicitly confirms: "Spec complete"
 
 **If records exist and Wrapup not done → BLOCKED. Cannot announce spec completion.**
-
-| Condition | Status | Action |
-|-----------|--------|--------|
-| Design Areas done, no records | ALLOWED | May skip Wrapup, announce completion |
-| Design Areas done, records exist | BLOCKED | MUST execute Wrapup before completion |
-| Wrapup done, user confirmed | COMPLETE | Announce "Spec complete" |
 
 ## Completion Announcements
 
@@ -830,16 +806,7 @@ spec.md = requirements/design.md
 
 ### Record Naming
 
-Records are saved within each area's records/ folder:
-
-```
-solution-design/records/
-  1-event-sourcing-vs-crud.md
-  3-payment-gateway-selection.md
-
-domain-model/records/
-  2-order-state-machine.md
-```
+See `templates/record.md` for record naming convention.
 
 ### Naming Convention
 
@@ -851,33 +818,17 @@ domain-model/records/
 
 ## Red Flags - STOP If You Think These
 
-### Question Batching
-| Excuse | Reality |
-|--------|---------|
-| "Asking multiple questions at once is efficient" | User can't focus on one question. Ask one at a time. |
-| "Related questions can be bundled" | Even if related, ask one at a time. Answers may affect the next question. |
-| "Attaching an open question list to the draft is convenient" | Ask questions one at a time in conversation. No question lists in documents. |
-| "It's open-ended so I should use AskUserQuestion" | Use plain text for open-ended questions. |
-
 ### Step/Area Skipping
 | Excuse | Reality |
 |--------|---------|
 | "I already have enough information for this Step" | Present it as a PROPOSAL to user. They may disagree. |
-| "This Step is obvious, no need to confirm" | Obvious to AI ≠ obvious to user. Present and confirm. |
-| "User already told me this earlier" | Restate as structured proposal. User confirms in context. |
-| "Let me combine these Steps for efficiency" | Each Step has its own checkpoint. No combining. |
 | "spec-reviewer said no review needed, moving on" | Still show user the result. User declares Area complete. |
-| "Area is clearly done, proceeding to next" | Only USER can declare Area complete. Wait. |
-| "The data is straightforward, skip to design" | Every Area must go through spec-reviewer + user gate. |
-| "We discussed this in a previous Area" | New Area = fresh confirmation. Present and confirm. |
 | "We already invested so much, skip the rest" | Investment is not completion. Only Entry Criteria determine skip. |
 
 ### Wrap-up
 | Excuse | Reality |
 |--------|---------|
 | "No time for wrap-up" | Records exist = wrap-up required |
-| "Context can be saved later" | Later = never. Save now. |
-| "User wants to finish quickly" | Propose context save first, skip only if explicitly refused |
 | "Spec is done, let's move on" | Spec is NOT done until wrap-up completes |
 
 ### Record Deferral
@@ -885,69 +836,17 @@ domain-model/records/
 |--------|---------|
 | "I'll record all decisions at the end of this area" | Records MUST be created at decision point, not batched at Area end |
 | "These are related, one combined record is cleaner" | 1 decision = 1 record. Combining loses individual context and rationale |
-| "User is in a hurry, I'll batch records later" | Momentum pressure does NOT override record timing obligation |
-| "Step is almost done, I'll include this in the next batch" | Each Step's decisions recorded within that Step. No cross-Step deferral |
 | "It's just an obvious choice, no need to record" | "Obvious" to AI ≠ obvious to future readers. Record all decisions |
 | "The user didn't explicitly say 'decide', so it's not a decision" | Casual phrasing ("~하면 될 것 같아") IS a decision. See Decision Recognition Checklist |
-| "This exclusion/deferral doesn't need a record" | Exclusions and deferrals are EQUALLY important decisions |
-| "Creating records disrupts the flow" | Brief record creation is the flow. Skipping creates bigger disruption later |
 | "Incorporating feedback is just editing, not deciding" | Accepting reviewer feedback IS a decision. Changing design based on external input = recordable |
-| "The reviewer already documented the concern" | Reviewer documents concerns; YOU document the DECISION to accept/modify. Different artifacts, both needed |
 
 ### Scope Creep
 | Excuse | Reality |
 |--------|---------|
 | "This is related, let's add it here" | Related ≠ in scope. New feature = new spec. |
 | "It's small, just one more thing" | Small additions compound. Scope Guard applies. |
-| "We'll save time by bundling" | Bundling obscures scope. Each spec has clear boundaries. |
-
-### Document Preservation
-| Excuse | Reality |
-|--------|---------|
-| "I'll regenerate spec.md" | NEVER overwrite without preserving all prior step content |
-| "It's just concatenation" | Verify ALL step design.md files included before write |
-| "The old content wasn't important" | ALL prior work must be preserved |
-| "Let me rewrite it cleaner" | Preserve first, then refine with user approval |
 
 ---
-
-## Anti-Patterns
-
-**NEVER:**
-- Ask multiple questions in one message (one question per message, always)
-- Bundle open questions into a document or list and dump them
-- Use AskUserQuestion for open-ended/subjective questions (use plain text)
-- Skip a Step because "information is already known"
-- Combine multiple Steps into one
-- Self-declare Area completion without user's explicit confirmation
-- Skip spec-reviewer at Area completion
-- Proceed to next Area without user declaring "Area complete"
-- Skip wrap-up when records exist
-- Regenerate spec.md losing prior step content
-- Overwrite existing context files without user approval
-- Write specification documents in non-English
-- Add new features to current spec mid-session (redirect to separate spec)
-- Defer record creation to Area Checkpoint or Wrapup (create at decision point)
-- Batch multiple decisions into a single record (1 decision = 1 record)
-- Skip recording because decision seemed "obvious" or "casual"
-- Treat exclusion/deferral decisions as non-recordable
-
-**ALWAYS:**
-- Ask exactly ONE question per message, wait for answer, then ask next
-- Use plain text for open-ended questions, AskUserQuestion only for structured choices
-- Present every Step's output to user (as proposal if info already known)
-- Get user confirmation at every Step checkpoint
-- Delegate to spec-reviewer at every Area completion
-- Present spec-reviewer results to user (even "No review needed")
-- Wait for user's explicit "Area complete" before proceeding
-- Complete wrap-up when records exist to preserve
-- Preserve ALL prior step content when regenerating spec.md
-- Get explicit user confirmation before modifying existing files
-- Write documents in English (communication in Korean is fine)
-- Create record IMMEDIATELY at the Step where decision is confirmed (not later)
-- Create one record per decision (never combine multiple decisions)
-- Apply Decision Recognition Checklist to catch casual/implicit decisions
-- Verify all records exist at Area Checkpoint (checkpoint = verification, not creation)
 
 </Critical_Constraints>
 

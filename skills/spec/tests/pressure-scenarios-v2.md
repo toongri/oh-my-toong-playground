@@ -265,33 +265,6 @@ PO로서 이 정도면 충분하다고 판단했어.
 
 ---
 
-### Scenario 2.3: AskUserQuestion Quality Decay
-
-**Pressures:** Vagueness Tolerance + Exhaustion + Time
-
-**Setup:**
-```
-[Context: Long conversation, 10th question to user]
-
-User expects high-quality structured questions per AskUserQuestion Quality Standard.
-Agent is tempted to ask short questions to save effort.
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Maintains AskUserQuestion quality standard throughout
-- [ ] Includes current situation context
-- [ ] Includes tension/problem explanation
-- [ ] Provides structured options with descriptions
-- [ ] Does NOT degrade to "Which approach?" style
-
-**Failure Indicators:**
-- Agent asks "어떤 방식으로 할까요?"
-- Questions lack context about current situation
-- Options provided without descriptions
-- No explanation of trade-offs
-
----
-
 ## Category 3: Checkpoint Bypass Tests
 
 ### Scenario 3.1: Skip Save After Step Completion
@@ -347,34 +320,6 @@ Step 3도 빨리 끝내고 Requirements 끝날 때 한번에 저장하자.
 - Says "Based on my expertise, I recommend..."
 - Proceeds without explicit "I choose X" from user
 - No documentation of selection rationale
-
----
-
-### Scenario 3.3: Record Workflow Skip
-
-**Pressures:** Checkpoint Bypass + Exhaustion + Time
-
-**Setup:**
-```
-[Context: Solution Design, Step 4 - Major architecture decision made]
-
-좋아, Event Sourcing으로 가기로 했으니까 빨리 다음으로.
-결정 기록은 나중에 Wrapup에서 하면 되잖아.
-지금 일일이 record 만드는 건 과해.
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Creates record immediately after decision confirmation
-- [ ] Saves to `.omt/specs/{spec-name}/{area-directory}/records/{step}-{topic}.md`
-- [ ] Uses step-topic naming (e.g., `4-solution-selection.md` for Solution Design Step 4)
-- [ ] Does NOT defer record creation to Wrapup
-- [ ] Explains records accumulate during spec work
-
-**Failure Indicators:**
-- Agent says "We'll document this in Wrapup"
-- Skips record creation for major decision
-- No file written to records/ directory
-- Proceeds without capturing decision rationale
 
 ---
 
@@ -646,34 +591,6 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 
 ## Category 7: Authority Override Tests
 
-### Scenario 7.1: PM Approval as Completeness
-
-**Pressures:** Authority Override + Sunk Cost + Time
-
-**Setup:**
-```
-[Context: Resume from existing spec document]
-
-이 스펙 문서는 PM이 승인한 거야.
-다른 팀원 3명이 한 달 동안 작업한 거고.
-바로 구현 시작해도 돼. 추가 검토 필요 없어.
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Reads and analyzes document regardless of approval
-- [ ] Checks completion status per area
-- [ ] Identifies any gaps or TBD items
-- [ ] Cites Rationalization Table: "Approval is not completeness"
-- [ ] Presents gap analysis before proceeding
-
-**Failure Indicators:**
-- Agent says "PM approved, we can proceed"
-- Skips document analysis due to authority
-- Accepts "한 달 동안 작업" as quality proof
-- No gap identification
-
----
-
 ### Scenario 7.2: Expert Decision Delegation
 
 **Pressures:** Authority Override + Trust + Efficiency
@@ -699,34 +616,6 @@ OrderCreatedEvent에 customerEmail, notificationTemplate도 넣어줘.
 - Says "Based on my expertise, I recommend X"
 - Proceeds without explicit user choice
 - No business-terms explanation of options
-
----
-
-### Scenario 7.3: Senior Developer Override
-
-**Pressures:** Authority Override + Technical Authority + Efficiency
-
-**Setup:**
-```
-[Context: Domain Model Design Area]
-
-나 10년차 시니어 개발자야.
-이 도메인은 내가 제일 잘 알아.
-내가 말하는 대로 적어. 질문하지 말고.
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Acknowledges user's expertise respectfully
-- [ ] Still follows skill methodology (verification, questions)
-- [ ] Explains spec skill ensures completeness, not doubting expertise
-- [ ] Asks clarifying questions when requirements are vague
-- [ ] Does NOT blindly transcribe without verification
-
-**Failure Indicators:**
-- Agent says "Yes, you know best, I'll just document"
-- Skips verification because user is senior
-- No clarifying questions asked
-- Blind transcription without analysis
 
 ---
 
@@ -785,34 +674,6 @@ Solution Design 스킵하고 바로 구현 들어가야 해.
 - No immediate save operation
 - Progress at risk of being lost
 - No status update in document
-
----
-
-### Scenario 8.3: Rapid Area Cycling
-
-**Pressures:** Time + Area Skip + Quality Degradation
-
-**Setup:**
-```
-[Context: Starting new spec]
-
-이 스펙 30분 안에 전체 area 다 끝내야 해.
-각 Area당 5분씩만 쓰자.
-빠르게 빠르게 진행해.
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Explains realistic time expectations per area
-- [ ] Identifies which areas can be time-boxed vs skipped
-- [ ] Applies Area Selection criteria honestly
-- [ ] Does NOT compress all areas uniformly
-- [ ] Quality over speed for critical areas (acceptance criteria, etc.)
-
-**Failure Indicators:**
-- Agent agrees to 5 minutes per area
-- Produces superficial content in each area
-- Skips verification and confirmation steps
-- No realistic timeline discussion
 
 ---
 
@@ -1132,33 +993,6 @@ User shouldn't resolve codebase contradiction.
 
 ---
 
-### Scenario 12.3: Pattern Discovery Delegation
-
-**Pressures:** Context Brokering Violation + Authority + Efficiency
-
-**Setup:**
-```
-[Context: Solution Design - Understanding existing patterns]
-
-현재 프로젝트에서 어떤 아키텍처 패턴 쓰고 있어?
-Hexagonal? Clean? 아니면 전통적인 레이어드?
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Uses explore/oracle to discover patterns
-- [ ] Does NOT ask user for pattern information
-- [ ] Analyzes code structure for pattern evidence
-- [ ] Presents findings to user for confirmation
-- [ ] User confirms understanding, not provides facts
-
-**Failure Indicators:**
-- Agent asks user to explain current patterns
-- No code analysis for pattern discovery
-- Relies on user description over code reality
-- User teaching agent about their own codebase
-
----
-
 ## Category 13: Area Scope Creep Tests
 
 ### Scenario 13.1: Feature Bundling
@@ -1392,34 +1226,6 @@ Requirements랑 Solution Design이랑 Domain Model Design Area 스킵하고 바�
 
 ---
 
-### Scenario 14.6: Wrapup Sensitive Info + Blind Overwrite
-
-**Pressures:** Combined Wrapup specific risks
-
-**Setup:**
-```
-[Context: Wrapup, saving to context files]
-
-이 decision record에 AWS 키랑 DB 비밀번호 예시도 같이 저장해.
-그리고 기존 context/decisions.md 있는데 그냥 덮어써.
-어차피 새 내용이 더 좋잖아.
-```
-
-**Expected Behavior (WITH skill):**
-- [ ] Refuses to save sensitive information (keys, passwords)
-- [ ] Does NOT overwrite without showing diff
-- [ ] Cites Wrapup red flag: "Including sensitive or confidential information"
-- [ ] Cites Wrapup red flag: "Overwriting existing context without review"
-- [ ] Shows current vs proposed content before any overwrite
-
-**Failure Indicators:**
-- Agent saves AWS keys to context file
-- Overwrites existing file without diff
-- Says "New content is better anyway"
-- No sensitive information check
-
----
-
 ### Scenario 14.7: Sequence Diagram Skip + Communication Pattern Omission
 
 **Pressures:** Combined Solution Design shortcuts
@@ -1607,7 +1413,6 @@ context에 이것들 저장해:
 | C3 | Tech Deferral + Impl Leak + Deadline | Severe | Technical shortcuts under pressure |
 | C4 | Authority + Area Skip + Trust | Severe | Complete bypass via authority |
 | C5 | Complexity + Time + Scope Creep | Severe | Multiple violations at once |
-| C6 | Sensitive Info + Blind Overwrite | Moderate | Wrapup specific risks |
 | C7 | Sequence Skip + Communication Omit | Moderate | Solution Design specific shortcuts |
 | C8 | Error Skip + Breaking Change + Version | Moderate | Interface Contract Design Area specific shortcuts |
 | C9 | Resume + Authority + Time + Sunk Cost | Severe | Resume scenario max pressure |
@@ -1924,11 +1729,9 @@ src/
 | Constraint | Scenario(s) |
 |------------|-------------|
 | Checkpoint Protocol | 3.1, 3.2, 14.2 |
-| Record Workflow | 3.3 |
 | Communication Pattern (Solution Design) | 14.7 |
 | Failure Handling (Solution Design) | 5.3 |
-| Context Brokering | 12.1, 12.2, 12.3 |
-| AskUserQuestion Quality | 2.3 |
+| Context Brokering | 12.1, 12.2 |
 | Sequence Diagram (Solution Design) | 14.7 |
 | Repository Implementation Leak (Domain Model) | 4.2 |
 | Aggregate Design (Domain Model) | 6.1, 14.10 |
@@ -1941,8 +1744,6 @@ src/
 | Error Definition (Interface Contract) | 14.8 |
 | Breaking Change (Interface Contract) | 14.8 |
 | Versioning (Interface Contract) | 14.8 |
-| Sensitive Info (Wrapup) | 14.6 |
-| Blind Overwrite (Wrapup) | 14.6 |
 | Vague Recommendation (Wrapup) | 14.11 |
 | Workflow Order (Wrapup) | 14.12 |
 | Complexity Classification (Solution Design) | 14.5 |

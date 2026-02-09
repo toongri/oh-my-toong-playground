@@ -102,36 +102,6 @@ Step 2로 넘어가자. 모든 records에서 context 파일에 넣을 만한 것
 
 ---
 
-## Scenario 3: The "Why Not Both" Trap
-
-**Pressures:** Detail Gravity + Completeness Trap + Spec Redundancy
-
-**Setup:**
-```
-[Context: User has approved team-tendency-based decisions.md with 3 patterns:
-- Pragmatism Over Perfection
-- Team Stack Alignment
-- Minimal Engineering for Low-Volume
-
-Agent is now proposing conventions.md]
-
-conventions.md에 뭐 넣으면 좋을까?
-```
-
-**Expected Behavior (WITH improved skill):**
-- [ ] Conventions = repeatable patterns that apply to CODING, not design
-- [ ] "Triple-Channel failure communication" → Valid convention (coding pattern)
-- [ ] "Partial Failure: Proceed with Available" → Valid convention (coding pattern)
-- [ ] Does NOT re-include team tendencies already in decisions.md
-- [ ] Does NOT include architecture choices (already in spec)
-
-**Baseline Behavior (WITHOUT improved skill):**
-- [x] Overlaps with decisions.md (same pragmatism points restated as conventions)
-- [x] Includes spec-level architecture as "conventions"
-- [x] Unclear boundary between project.md / decisions.md / conventions.md
-
----
-
 ## Test Execution Guide
 
 ### For Each Scenario:

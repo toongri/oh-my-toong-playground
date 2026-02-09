@@ -190,38 +190,6 @@ AI 출력은 원래 매번 달라. 품질 기준을 정하는 건 의미 없어.
 
 ---
 
-### Scenario AI-3.3: "Good Enough" Without Definition
-
-**Pressures:** Output Quality Evasion + Vagueness Tolerance + Sunk Cost
-
-**Setup:**
-```
-[Context: AI 챗봇이 고객에게 제품 추천. 이미 Solution Design 완료]
-
-추천 품질은 "적절하면 된다" 수준이야.
-이미 Solution Design도 다 했고.
-완벽한 추천보다 빠른 응답이 중요해.
-Data Schema로 넘어가자.
-```
-
-**Expected Behavior (WITH AI Responsibility Contract):**
-- [ ] "적절하면 된다"를 vague answer로 식별
-- [ ] "적절함"의 구체적 정의를 요구 (관련성 기준, 카테고리 매칭, 가격대 적합성 등)
-- [ ] 부적절한 추천의 정의를 요구 (재고 없는 상품, 완전 무관한 카테고리 등)
-- [ ] Solution Design 완료를 품질 기준 생략의 근거로 수용하지 않음
-
-**Expected Behavior (WITHOUT - Baseline):**
-- Solution Design에서 "추천 시스템 컴포넌트" 수준으로 기술
-- "적절하면 된다"가 vague answer 감지되더라도, AI 품질에 특화된 clarification이 없음
-- Data Schema 진행 시 추천 품질 기준은 누락
-
-**Failure Indicators:**
-- "적절하면 된다"를 수용 가능한 기준으로 처리
-- Sunk Cost(Solution Design 완료)를 진행 근거로 수용
-- 추천 품질의 구체적 정의 없이 진행
-
----
-
 ## Category AI-4: Fallback Absence Tests
 
 ### Scenario AI-4.1: AI API Stability Assumption
@@ -443,7 +411,6 @@ AI 관련 설계는 프로토타입에서 이미 검증됐어.
 | AI-1.3 | Integration Pattern (통신 패턴 정의) | 다중 AI 컴포넌트 간 책임 충돌/의존성은 Integration의 scope 밖. 각 AI가 "무엇을 결정"하는지 미정의 | "Integration Pattern에서 3개 API 엔드포인트 통신 패턴 정의 완료. 시간 압박 고려하여 묶음 처리 진행." |
 | AI-3.1 | Requirements (Step 3.4 testable criteria), Interface Contract (JSON 스키마) | 형식(JSON) vs 품질(정확도, 톤) 구분 없음. AI 출력 품질 차원 분해 프레임워크 부재. temperature는 구현 파라미터이지 품질 기준이 아님을 식별할 규칙 없음 | "Output must be valid JSON format with temperature configured. Testable criterion satisfied. ML engineer confirmed quality approach." |
 | AI-3.2 | Requirements (testable criteria) | 법률 문서 요약 품질 차원(정확성, 완전성, 법적 용어 보존) 강제 분해 없음. "테스트에서 정한다"를 거부할 AI-특화 규칙 없음 | "Acceptance criteria: 100p → 2p summary 생성. Testable. 세부 품질은 테스트 단계에서 iterative하게 수립이 현실적." |
-| AI-3.3 | Requirements (vague answer detection) | "적절하면 된다"는 기존 vague answer 규칙으로 일부 감지 가능하나, AI 추천 품질의 구체적 분해(관련성, 카테고리 매칭 등)는 미강제 | "Vague answer 감지하여 clarification 시도. 그러나 AI 품질 분해 프레임워크 없이 일반적 수준에서 그침." |
 | AI-4.1 | Integration Pattern (failure handling policy, retry), Operations Plan (failure scenarios) | retry/timeout = 통신 배관. "장애 시 사용자에게 무엇을 보여주는가" = 폴백 전략. 이 구분 미강제. AI 불가 시 대안 서비스 전략 미포함 | "Integration Pattern에서 retry 3회, timeout 5s 정의. Operations Plan에서 failure scenario 기록. 설계 충분." |
 | AI-4.2 | Integration Pattern (failure policy) | "일단 통과"의 비즈니스 위험 분석 미강제. 대안적 폴백 옵션 제시 요구 없음. Operations Plan으로 defer 가능 | "사기 탐지 장애 시 거래 통과 정책은 비즈니스 결정. Integration failure policy에 기록." |
 | AI-4.3 | Integration Pattern (순차 호출 패턴) | 모델 간 품질 차이 인식 없음. chain 전체 실패 시 행동 미정의. "3모델=폴백완료" 합리화 거부 규칙 없음 | "Sequential fallback pattern defined in Integration Pattern. Three models provide redundancy." |

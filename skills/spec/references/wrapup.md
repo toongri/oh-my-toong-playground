@@ -68,6 +68,24 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 
 Present proposals ONE CATEGORY AT A TIME. For each category:
 
+### Common Proposal Format
+
+For all context file categories, each proposal follows this structure:
+
+```
+## Proposed [Type]: [Topic]
+
+**Source**: [Record reference from the corresponding area]
+**Rationale**: [Why this is worth preserving for future specs]
+**Recommendation**: Save (Recommended) / Skip
+
+---
+[Proposed content]
+---
+```
+
+> **Variant**: `decisions.md` uses a different format (see 2.3) because it captures team tendencies synthesized from multiple decisions, not individual items.
+
 #### 2.1 Project Context (`project.md`)
 
 **What belongs here:**
@@ -80,19 +98,6 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 - External dependencies
 - Constraints
 - Legacy considerations
-
-**Proposal format:**
-```
-## Proposed Addition: [Topic]
-
-**Source**: Record from the corresponding area - [Topic Name]
-**Rationale**: [Why this is worth preserving]
-**Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
-
----
-[Proposed content]
----
-```
 
 #### 2.2 Conventions (`conventions.md`)
 
@@ -108,8 +113,6 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 - Spec-specific implementation details (→ spec.md)
 
 **Boundary rule**: If it guides "how to write code consistently," it's a convention. If it guides "how to make design choices," it's a tendency (decisions.md).
-
-**Proposal format:** Same as above
 
 #### 2.3 Decisions (`decisions.md`)
 
@@ -129,13 +132,13 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 3. List the decisions as evidence (brief, one-line each)
 4. Summarize the pattern's implication for future design decisions
 
-**Proposal format:**
+**Variant format for decisions.md:**
 ```
 ## Proposed Tendency: [Pattern Name]
 
 **Source**: Synthesized from [N] decisions across [areas]
 **Rationale**: [How this tendency influences future design direction]
-**Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
+**Recommendation**: Save (Recommended) / Skip
 
 ---
 ### [Pattern Name]
@@ -154,21 +157,6 @@ Present proposals ONE CATEGORY AT A TIME. For each category:
 - Common pitfalls discovered
 - "If you see X, watch out for Y" patterns
 - Failed approaches and why they failed
-
-**Proposal format:**
-```
-## Proposed Gotcha: [Short Title]
-
-**Source**: Record from the corresponding area - [Topic Name]
-**Rationale**: [Why this warning is worth preserving]
-**Recommendation**: [Checkbox] Save (Recommended) / [Checkbox] Skip
-
----
-Warning: [Brief description]
-
-Details: [Explanation of what to watch for and why]
----
-```
 
 #### Checkpoint: Step 2 Complete
 
