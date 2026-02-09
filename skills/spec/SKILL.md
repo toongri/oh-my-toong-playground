@@ -158,6 +158,25 @@ NO AREA COMPLETION WITHOUT:
 
 ---
 
+### AI Responsibility Contract
+
+**Designs:** AI delegation boundaries, input contracts, output quality criteria, context/knowledge strategies, pre/post processing, fallback strategies
+
+**Enter when:**
+- System delegates decisions or content generation to AI/LLM components
+- Non-deterministic output affects user-facing quality
+- RAG, AI agents, or ML inference is part of the architecture
+- AI output quality directly impacts business outcomes
+
+**Skip when:**
+- No AI/LLM/ML components in the system
+- AI used only as development tooling (Copilot, code review) not runtime component
+- AI used only for internal analytics/reporting with no user-facing output
+
+**Reference:** `references/ai-responsibility-contract.md`
+
+---
+
 ### Operations Plan
 
 **Designs:** Custom metrics, custom logging, deployment strategy, failure scenarios, recovery procedures
@@ -718,6 +737,7 @@ Save **whenever each Area is completed**:
 | Data Schema | `data-schema/` |
 | Interface Contract | `interface-contract/` |
 | Integration Pattern | `integration-pattern/` |
+| AI Responsibility Contract | `ai-responsibility-contract/` |
 | Operations Plan | `operations-plan/` |
 
 ### Document Structure
@@ -802,6 +822,7 @@ spec.md = requirements/design.md
         + data-schema/design.md (if completed)
         + interface-contract/design.md (if completed)
         + integration-pattern/design.md (if completed)
+        + ai-responsibility-contract/design.md (if completed)
         + operations-plan/design.md (if completed)
 ```
 
