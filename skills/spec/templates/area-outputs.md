@@ -192,10 +192,22 @@ First, ... Second, ... Third, ...
 
 #### Core Architecture Components
 
-**1. [System Name]**
-- Responsibility 1
-- Responsibility 2
-- Responsibility 3
+> Target: Level 2 (Container/Component) — independently deployable units with clear operational boundaries.
+> Apply L2 verification for each: (1) Independent deployment? (2) Isolated failure domain? (3) Team ownership?
+
+**Internal Components** (systems you design and build):
+
+| Component | Responsibilities |
+|-----------|-----------------|
+| [Component Name] | - Responsibility 1<br>- Responsibility 2 |
+| [Component Name] | - Responsibility 1<br>- Responsibility 2 |
+
+**External Dependencies** (systems you integrate with — constraints, not design targets):
+
+| System | Interface Type | Integration Point |
+|--------|---------------|-------------------|
+| [External System] | REST API / SDK / Message Queue | [How your system connects] |
+| [External System] | REST API / SDK / Message Queue | [How your system connects] |
 
 #### Data Flow
 

@@ -34,6 +34,9 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - Missing sequence diagram for complex flow → Visualize before proceeding
 - User says "just pick the best one" → Get explicit decision with rationale
 - Implementation details appear (data structures, timer intervals, algorithms, cache commands) → Extract architecture concern, redirect to Design Area. Example: "30초 flush + ConcurrentHashMap" → Architecture: "Periodic buffered aggregation", Implementation → Integration Pattern Area
+- Components at wrong abstraction level (code classes/modules or system-context-level) → Apply L2 verification questions (Step 4.2): independent deployment, isolated failure domain, team ownership
+- Mixed abstraction levels in same component table (L1 + L2 + L3 together) → Unify to L2 or split into separate tables by level
+- No internal/external separation in component definition (external systems listed as design targets) → Split into Internal Components table and External Dependencies table
 
 ## Process
 
@@ -102,8 +105,26 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 - Confirm: Get user agreement on the selected solution
 
 #### 4.2 Core Architecture Component Definition
-- Identify: Major systems involved in the solution
-- Define: Responsibilities of each system
+
+- **Abstraction Level Target: Level 2 (Container/Component)**
+  - L1 (System Context): Too high — "our system" as single box with external actors
+  - **L2 (Container/Component): TARGET** — independently deployable units with clear operational boundaries
+  - L3 (Code): Too low — classes, modules, packages, utility functions
+
+- **L2 Verification Questions** (apply to EACH proposed component):
+  1. **Independent Deployment**: Can this component be deployed without redeploying others?
+  2. **Isolated Failure Domain**: If this component fails, does it have a bounded blast radius?
+  3. **Team Ownership**: Could a team independently own and operate this component?
+  - If any answer is "No" → component is likely L3 (code-level), merge into its L2 parent
+
+- **Internal vs External Separation**:
+  - **Internal Components**: Systems YOU design and build — these are your design targets
+  - **External Dependencies**: Systems you integrate WITH — these are constraints, not design targets
+  - Present in two separate sections (see `templates/area-outputs.md`)
+
+- Identify: Major internal components involved in the solution (L2 level)
+- Define: Responsibilities of each internal component
+- Identify: External systems and their integration points
 - **Cross-cutting concerns**:
   - Transaction boundaries: Where do transactions start and end?
   - If patterns like Outbox or Saga are used, identify which components participate
