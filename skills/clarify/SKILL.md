@@ -129,7 +129,54 @@ while ambiguities_remain:
     ask_most_critical() → update() → check_new()
 ```
 
-### AskUserQuestion Quality Standard
+### Question Quality Standard
+
+```yaml
+BAD:
+  question: "Which approach?"
+  options:
+    - label: "A"
+    - label: "B"
+
+GOOD:
+  question: "The login API currently returns generic 401 errors for all auth failures.
+    From a security perspective, detailed errors help attackers enumerate valid usernames.
+    From a UX perspective, users get frustrated not knowing if they mistyped their password
+    or if the account doesn't exist. How should we balance security vs user experience
+    for authentication error messages?"
+  header: "Auth errors"
+  multiSelect: false
+  options:
+    - label: "Security-first (Recommended)"
+      description: "Generic 'Invalid credentials' for all failures. Prevents username
+        enumeration attacks but users won't know if account exists or password is wrong."
+    - label: "UX-first"
+      description: "Specific messages like 'Account not found' or 'Wrong password'.
+        Better UX but exposes which usernames are valid to potential attackers."
+    - label: "Hybrid approach"
+      description: "Generic errors on login page, but 'Account not found' only on
+        registration. Balanced but adds implementation complexity."
+```
+
+### Rich Context Pattern (For Design Decisions)
+
+For complex technical decisions, provide rich context via markdown BEFORE asking a single AskUserQuestion.
+
+**Structure:**
+1. **Current State** - What exists now (1-2 sentences)
+2. **Existing Project Patterns** - Relevant code, prior decisions, historical context
+3. **Change Request Background** - Why this decision is needed now
+4. **Option Analysis** - For each option:
+   - Behavior description
+   - Evaluation table (Security, UX, Maintainability, Adoption)
+   - Code impact
+5. **Recommendation** - Your suggested option with rationale
+6. **AskUserQuestion** - Single question with 2-3 options
+
+**Rules:**
+- One question at a time (sequential interview)
+- Markdown provides depth, AskUserQuestion provides choice
+- Question must be independently understandable (include brief context + "See analysis above")
 
 **Question Structure**: Context → Tension → Question
 
@@ -149,6 +196,26 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 - Markdown provides depth, AskUserQuestion provides choice
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
+
+### Question Type Selection
+
+| Situation | Method | Why |
+|-----------|--------|-----|
+| Decision with 2-4 clear options | AskUserQuestion | Provides structured choices |
+| Open-ended/subjective question | Plain text question | Requires free-form answer |
+| Yes/No confirmation | Plain text question | AskUserQuestion is overkill |
+| Complex trade-off decision | Markdown analysis + AskUserQuestion | Deep context + structured choice |
+
+**Do NOT force AskUserQuestion for open-ended questions.** If the answer is open-ended, just ask in plain text.
+
+### Vague Answer Clarification
+
+When users respond vaguely ("~is enough", "just do ~", "decide later"):
+1. **Do NOT accept as-is**
+2. **Ask specific clarifying questions**
+3. **Repeat until clear answer obtained**
+
+> Note: This applies when the user attempts to answer but is vague. For explicit deferral ("skip", "your call"), see User Deferral Handling in the Protocol section above.
 
 ### 4. Before/After Summary
 ```markdown
@@ -194,6 +261,8 @@ Offer to save to `requirements/` if substantial.
 | Details before architecture | Big decisions first |
 | **Skipping clarification due to time pressure** | **Time pressure = ask fewer but more critical questions, NOT zero** |
 | **Obeying "no questions" requests** | **Politely explain: "2 quick questions now save hours later"** |
+| AskUserQuestion for open-ended questions | Plain text for open-ended, AskUserQuestion for structured choices |
+| Accepting vague answers ("~is enough") | Ask specific follow-up until clear |
 
 ## Rules
 

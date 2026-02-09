@@ -274,7 +274,54 @@ RIGHT: "Are Jira comment keywords also trigger targets?"
 
 **Do NOT force AskUserQuestion for open-ended questions.** If the answer is open-ended, just ask in plain text.
 
-### AskUserQuestion Quality Standard (Only for decisions with options)
+### Question Quality Standard
+
+```yaml
+BAD:
+  question: "Which approach?"
+  options:
+    - label: "A"
+    - label: "B"
+
+GOOD:
+  question: "The login API currently returns generic 401 errors for all auth failures.
+    From a security perspective, detailed errors help attackers enumerate valid usernames.
+    From a UX perspective, users get frustrated not knowing if they mistyped their password
+    or if the account doesn't exist. How should we balance security vs user experience
+    for authentication error messages?"
+  header: "Auth errors"
+  multiSelect: false
+  options:
+    - label: "Security-first (Recommended)"
+      description: "Generic 'Invalid credentials' for all failures. Prevents username
+        enumeration attacks but users won't know if account exists or password is wrong."
+    - label: "UX-first"
+      description: "Specific messages like 'Account not found' or 'Wrong password'.
+        Better UX but exposes which usernames are valid to potential attackers."
+    - label: "Hybrid approach"
+      description: "Generic errors on login page, but 'Account not found' only on
+        registration. Balanced but adds implementation complexity."
+```
+
+### Rich Context Pattern (For Design Decisions)
+
+For complex technical decisions, provide rich context via markdown BEFORE asking a single AskUserQuestion.
+
+**Structure:**
+1. **Current State** - What exists now (1-2 sentences)
+2. **Existing Project Patterns** - Relevant code, prior decisions, historical context
+3. **Change Request Background** - Why this decision is needed now
+4. **Option Analysis** - For each option:
+   - Behavior description
+   - Evaluation table (Security, UX, Maintainability, Adoption)
+   - Code impact
+5. **Recommendation** - Your suggested option with rationale
+6. **AskUserQuestion** - Single question with 2-3 options
+
+**Rules:**
+- One question at a time (sequential dialogue)
+- Markdown provides depth, AskUserQuestion provides choice
+- Question must be independently understandable (include brief context + "See analysis above")
 
 **Question Structure**: Context → Tension → Question
 
@@ -293,6 +340,18 @@ For complex decisions, provide markdown analysis BEFORE asking AskUserQuestion:
 - Markdown provides depth, AskUserQuestion provides choice
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
+
+### Dialogue Persistence
+
+**Continue until YOU have no questions left.** Not after 2-3 questions. Keep the design dialogue going until every ambiguity is resolved.
+
+### User Deferral Handling
+
+When user explicitly defers ("skip", "I don't know", "your call", "you decide", "no preference"):
+1. Research autonomously via explore/oracle/librarian
+2. Select industry best practice or codebase-consistent approach
+3. Document in spec: "Autonomous decision: [X] - user deferred, based on [codebase pattern/best practice]"
+4. Continue spec work without blocking
 
 ## Checkpoint Protocol (Per Step - MANDATORY)
 
@@ -318,7 +377,7 @@ Even if AI already has sufficient information for a Step, it MUST:
 ```
 AI has enough info for a Step?
 ├── YES → Present as PROPOSAL to user → Get confirmation → Step complete
-└── NO  → Interview user → Build content → Present → Get confirmation → Step complete
+└── NO  → Dialogue with user → Build content → Present → Get confirmation → Step complete
 ```
 
 **"I already know this" is NEVER a reason to skip presenting to the user.**
