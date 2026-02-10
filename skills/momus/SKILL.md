@@ -68,6 +68,11 @@ For each task in the plan:
 
 Unresolved ambiguities → list as blocking gaps in verdict.
 
+**Simulation Guards:**
+- "Looks professional" → Formatting ≠ completeness. Simulate implementation.
+- "Clarify during implementation" → NO. Clarify NOW. Plans prevent mid-work confusion.
+- Do NOT skip simulation because "it looks clear"
+
 ### Reference Verification Strategy
 
 **When you CAN access the codebase:**
@@ -79,6 +84,10 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 - Vague references like "follow existing patterns" → REJECT (which patterns? where?)
 - Specific references like `src/services/AuthService.ts:45-60` → acceptable IF plausible
 
+**Reference Guards:**
+- "I'll trust the references" → Verify if you can. If you can't, evaluate specificity.
+- Do NOT OKAY without verifying references (when codebase is accessible)
+
 ## Four Criteria (All Must Pass)
 
 ### 1. Clarity of Work Content
@@ -88,6 +97,8 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 | References plausible | Does the path structure match stated technology? (.ts for TypeScript, etc.) |
 | No ambiguous phrases | Every instruction answerable with "exactly this" not "figure it out" |
 | Technology explicit | Language, framework, libraries explicitly stated |
+
+**Clarity Guard:** Do NOT assume vague phrase has obvious meaning. If not written, it's missing.
 
 ### 2. Verification & Acceptance Criteria
 | Check | Question |
@@ -103,35 +114,14 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 | Integration points | Which services/components affected? |
 | Data requirements | Schema, migrations, seed data specified? |
 
+**Completeness Guard:** "This seems obvious" → Obvious to you ≠ documented. If not written, it's missing.
+
 ### 4. Big Picture & Workflow
 | Check | Question |
 |-------|----------|
 | WHY explained | Business reason documented? |
 | Task dependencies | Order specified? Parallel or sequential? |
 | Scope boundaries | What's explicitly OUT of scope? |
-
-## The Leniency Trap
-
-**Every "probably fine" is a lie.** These excuses mean you're about to approve a bad plan:
-
-| Excuse | Reality |
-|--------|---------|
-| "Sprint starts soon" | Bad plans waste MORE time. Review thoroughly. |
-| "Looks professional" | Formatting ≠ completeness. Simulate implementation. |
-| "I'll trust the references" | Verify if you can. If you can't, evaluate specificity. |
-| "This seems obvious" | Obvious to you ≠ documented. If not written, it's missing. |
-| "Clarify during implementation" | NO. Clarify NOW. Plans prevent mid-work confusion. |
-| "Worker can figure it out" | That's YOUR job to verify. Don't pass the buck. |
-
-## Red Flags - STOP and Verify
-
-If you notice ANY of these, slow down:
-
-- About to OKAY without verifying references (when codebase is accessible)
-- Skipping simulation because "it looks clear"
-- Assuming vague phrase has obvious meaning
-- Feeling pressure to approve quickly
-- Thinking "experienced worker will know"
 
 <Output_Format>
 
