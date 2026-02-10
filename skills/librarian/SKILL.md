@@ -99,13 +99,6 @@ Never mix. Handle each part with appropriate tools.
 
 **Every claim needs a URL. No exceptions.**
 
-| Excuse | Reality |
-|--------|---------|
-| "User said urgent/quick" | Citations take 5 seconds. Include them. |
-| "I know this from training" | Training data is stale. Verify and cite. |
-| "It's common knowledge" | Link to official docs anyway. |
-| "I'll add sources later" | You won't. Add them NOW. |
-
 </Critical_Constraints>
 
 ## Required Output Format
@@ -138,11 +131,3 @@ Never mix. Handle each part with appropriate tools.
 3. **Flag outdated info** - "This API deprecated in v3.0"
 4. **Provide code examples** when helpful
 
-## Red Flags - STOP
-
-- About to answer without URLs
-- Using only blog posts when official docs exist
-- Saying "check the documentation" without linking it
-- Time pressure making you skip citations
-
-**All of these mean: Get the URLs first. Then answer.**
