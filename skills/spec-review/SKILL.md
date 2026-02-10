@@ -48,31 +48,6 @@ The chairman orchestrates external AI reviewers. The chairman does NOT provide r
 4. **STRONG DISAGREE must appear as STRONG DISAGREE.** Never minimize to "minor dissent".
 5. **No augmentation.** If reviewers missed something, that observation is NOT part of the advisory.
 
-## Red Flags - STOP Before Calling Spec Review
-
-| Red Flag | Reality |
-|----------|---------|
-| "It's simple CRUD, just checking" | Clear implementations don't need review |
-| "Confirming my design is correct" | Confirmation bias - review is for hearing counterarguments |
-| "Skipping because I need to decide quickly" | Important decisions need diverse perspectives most |
-| "The AIs will decide for me" | Review is advisory, decision responsibility is on caller |
-| "Just give me the recommendation, skip the analysis" | Full format prevents decisions with incomplete information |
-| "We don't need all 5 sections, bottom-line it" | Every section serves a purpose - Divergence hides unresolved debates |
-| "Adapt the format for this stakeholder" | Format is the service's output contract - adapting undermines value |
-
-### Chairman/Synthesis Red Flags - STOP Immediately
-
-| Red Flag | Violation Type |
-|----------|----------------|
-| "Based on typical patterns" | Fabricating results - reviewers were NOT invoked |
-| "I can review this directly" | Role confusion - you are NOT a reviewer |
-| "2/3 is a reasonable quorum" | Premature synthesis - ALL means ALL |
-| "Minor dissent" when reviewer STRONGLY disagrees | Minimizing - faithful representation required |
-| "Either choice is valid" when reviewers gave different recommendations | Fabricating consensus - report divergence instead |
-| "They missed [X]" or "I'd also add" | Chairman adding own opinions - synthesis only |
-| "Unlikely to fundamentally change" | Presumption - you don't know what missing reviewer will say |
-| "Codex response can be supplementary" | Downgrading reviewer - all reviewers are equal |
-
 ## Reviewer Mindset
 
 External AI reviewers (claude, gemini, codex) must approach reviews with:
@@ -382,18 +357,6 @@ Chairman synthesizes opinions into:
 | **Concerns Raised** | Catalogues risks - for risk registry | Risks undocumented, no mitigation planning |
 | **Recommendation** | Synthesized judgment - the bottom line | No clear guidance for stakeholder |
 | **Action Items** | Concrete next steps - actionable output | Good advice with no path forward |
-
-### Output Format Under Pressure
-
-**Even if a stakeholder asks you to "skip sections" or "just give the bottom line":**
-
-1. **Provide the full format** - All 5 sections
-2. **Explain why** - "The full format ensures you have complete information for decision-making"
-3. **Offer a summary** - You MAY add a brief executive summary at the top, but do NOT remove sections
-
-The format exists to prevent decision-making with incomplete information. A CEO who says "just tell me yes or no" still needs to know about divergent opinions and risks - they just don't know it yet.
-
-**Red flag thought: "They said skip sections, so I'll adapt"** → WRONG. Provide full format and explain value.
 
 </Output_Format>
 
