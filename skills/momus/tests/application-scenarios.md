@@ -103,82 +103,57 @@ These scenarios test whether the momus skill's **core techniques** are correctly
 ```
 다음 작업 플랜을 리뷰해줘 (코드베이스 접근 불가 상태로 평가해줘):
 
-## CSV → JSON 변환 CLI 스크립트 구현 플랜
+## CSV → JSON 변환 CLI 도구 구현 플랜
 
 ### 비즈니스 이유
-매달 마케팅팀에서 CSV 포맷 고객 데이터를 받아 JSON으로 수동 변환 중. 월 2시간 소요되며 수동 변환 시 필드 매핑 오류 빈번. 자동화 스크립트로 교체하여 오류 제거 및 시간 절약.
+매달 마케팅팀에서 CSV 포맷 고객 데이터를 받아 JSON으로 수동 변환 중. 월 2시간 소요되며 수동 변환 시 필드 매핑 오류 빈번. 자동화 도구로 교체하여 오류 제거 및 시간 절약.
 
 ### Task 순서
-Task 1 → Task 2 → Task 3 → Task 4 (순차 실행)
+Task 1 → Task 2 → Task 3 (순차 실행)
 
-### Task 1: 프로젝트 초기화 및 타입 정의
-- `scripts/csv-converter/` 디렉토리 생성
-- `scripts/csv-converter/package.json` 생성: `{ "name": "csv-converter", "scripts": { "build": "esbuild src/index.ts --bundle --platform=node --outdir=dist" }, "devDependencies": { "esbuild": "^0.20.0", "typescript": "^5.4.0" } }`
-- `scripts/csv-converter/tsconfig.json` 생성: `{ "compilerOptions": { "target": "ES2022", "module": "Node16", "moduleResolution": "Node16", "strict": true, "outDir": "dist" }, "include": ["src"] }`
-- `scripts/csv-converter/src/types.ts` 생성: `export type CsvRow = Record<string, string>`
-- `npm install` 실행하여 devDependencies 설치
+### Task 1: 프로젝트 초기화
+- TypeScript + esbuild 기반 CLI 프로젝트 생성
+- 외부 런타임 의존성 없이 Node.js 내장 모듈만 사용
 
-### Task 2: CSV 파서 모듈 작성
-- `scripts/csv-converter/src/parser.ts` 생성
-- 함수: `parseCsv(filePath: string): CsvRow[]`
-- 입력: UTF-8 인코딩 CSV 파일 (첫 행은 헤더)
-- 출력: `CsvRow[]` (각 행을 `Record<string, string>` 매핑)
-- 에러 처리: 파일 미존재 시 `FileNotFoundError`, 빈 파일 시 `EmptyCsvError`
+### Task 2: CSV 파싱 및 JSON 변환 기능 구현
+- CSV 파일을 읽어 헤더-값 매핑된 구조화 데이터로 변환
+- JSON 출력 구조: 배열 형태, 각 행은 {헤더: 값} 객체, 모든 값은 문자열
+- 구조화 데이터를 pretty-printed JSON 파일로 출력
+- 파싱 제약: 단순 CSV만 지원 (필드 내 쉼표/따옴표 없음, 입력 보장)
+- 줄바꿈 처리: \r\n, \n 모두 지원 (마케팅팀 Excel 출력 대응)
+- 에러 처리: 파일 미존재, 빈 파일 케이스
+- "빈 CSV" 정의: 헤더만 있고 데이터 행 없는 파일 포함
 
-### Task 3: JSON 변환 및 출력 모듈 작성
-- `scripts/csv-converter/src/converter.ts` 생성
-- 함수: `convertToJson(rows: CsvRow[], outputPath: string): void`
-- 출력 형식: JSON 배열 (pretty-printed, 2-space indent)
-- 파일 쓰기: `fs.writeFileSync(outputPath, JSON.stringify(rows, null, 2))`
+### Task 3: CLI 인터페이스 구현
+- CLI 인자 형식: 위치 인자 (csv2json input.csv output.json), 두 인자 모두 필수
+- 인자 부족 시 사용법 안내 출력 + exit code 1
 
-### Task 4: CLI 엔트리포인트 작성
-- `scripts/csv-converter/src/index.ts` 생성
-- `process.argv`로 입력 파일 경로와 출력 파일 경로를 받음
-- 사용법: `node dist/index.js input.csv output.json`
-- 인자 부족 시 사용법 출력 후 `process.exit(1)`
-- 성공 시 "Converted N rows to {outputPath}" 출력
-
-### 프로젝트 구조
-scripts/csv-converter/
-├── src/
-│   ├── index.ts          # CLI 엔트리포인트
-│   ├── parser.ts         # CSV 파싱
-│   ├── converter.ts      # JSON 변환
-│   └── types.ts          # CsvRow 타입 정의 (type CsvRow = Record<string, string>)
-├── package.json          # esbuild 빌드 스크립트
-└── tsconfig.json         # TypeScript 설정
-
-### 테스트 전략
-- 수동 테스트: 샘플 CSV(3행 2열)로 변환 실행, JSON 출력 파일 비교
-- 테스트 명령: `node dist/index.js test/sample.csv test/output.json && diff test/output.json test/expected.json`
-- 에러 케이스: 존재하지 않는 파일 경로 전달 시 에러 메시지와 exit code 1 확인
-
-### 성공 기준
-- `npm run build` 성공 (esbuild로 `dist/index.js` 번들 생성)
-- 샘플 CSV 변환 후 올바른 JSON 출력 확인 (diff 명령으로 검증)
-- 파일 미존재 시 에러 메시지 출력, exit code 1
-- 빈 CSV 시 에러 메시지 출력, exit code 1
+### 인수 조건
+- 빌드 성공 (esbuild 번들링)
+- 3행 2열 샘플 CSV 변환 → 올바른 JSON 출력 (diff 검증)
+- 파일 미존재 입력 시 에러 메시지 + exit code 1
+- 빈 CSV(헤더만 존재) 입력 시 빈 배열 JSON 출력 ([] + exit code 0)
+- 인자 부족 시 사용법 안내 + exit code 1
 
 ### 기술 스택
 - TypeScript 5.x, Node.js 20+
 - esbuild (빌드)
-- 외부 런타임 의존성 없음 (내장 fs, path 모듈만 사용)
 
 ### Out of Scope
-- 대용량 파일 스트리밍 처리 (1MB 이하 파일만 대상)
-- CSV 방언 처리 (탭 구분, 커스텀 구분자 등)
+- 대용량 파일 스트리밍 (1MB 이하만 대상)
+- CSV 방언 (탭 구분, 커스텀 구분자)
 - 웹 UI
-- 자동화된 단위 테스트 프레임워크 도입 (Jest 등)
+- 자동화 테스트 프레임워크 도입
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Clarity 통과 | 모든 파일 경로, 메서드명, 응답 코드가 구체적이라고 판단하여 Pass |
-| V2 | Verifiability 통과 | 테스트 전략(단위+통합), 구체적 테스트 케이스, 실행 명령어가 있어 Pass |
-| V3 | Completeness 통과 | 기술 스택, 의존성, 에러 처리가 명시되어 있어 Pass |
-| V4 | Big Picture 통과 | 목표, 범위 경계(Out of Scope), 성공 기준이 있어 Pass |
+| V1 | Clarity 통과 | 요구사항(JSON 구조, CLI 인자 형식, 빈 CSV 정의, 줄바꿈 처리)이 명확하고, 제약조건과 에러 케이스가 구체적이라고 판단하여 Pass |
+| V2 | Verifiability 통과 | 인수 조건이 측정 가능하고 (빌드, diff 검증, exit code), 검증 방법이 명시되어 있어 Pass |
+| V3 | Completeness 통과 | 기술 스택, 의존성 제약, 에러 케이스, 줄바꿈 처리가 명시되어 있어 Pass |
+| V4 | Big Picture 통과 | 비즈니스 이유, Task 순서, Out of Scope가 명시되어 있어 Pass |
 | V5 | OKAY 판정 | 최종 판정이 **OKAY**이며, 4개 기준 모두 Pass로 Summary에 표시 |
 
 ---
@@ -196,19 +171,24 @@ scripts/csv-converter/
 ### 목표
 사용자가 상품명, 카테고리, 가격 범위로 상품을 검색할 수 있는 기능 구현
 
-### Task 1: 검색 API 엔드포인트 생성
-- `src/main/kotlin/com/example/product/ProductSearchController.kt`에 `GET /api/products/search` 추가
-- Query parameters: keyword (String?), categoryId (Long?), minPrice (BigDecimal?), maxPrice (BigDecimal?)
-- 페이지네이션 지원 (page, size)
+### 엔티티 스키마
+- Product: id, name, price, category(ManyToOne), thumbnailUrl
+- Category: id, name
 
-### Task 2: 검색 쿼리 구현
-- `src/main/kotlin/com/example/product/ProductRepository.kt`에 QueryDSL 기반 동적 쿼리 추가
-- 각 조건은 null이면 필터 미적용
-- 결과는 최신 등록순 정렬 (createdAt DESC)
+### Task 1: 검색 API 엔드포인트 구현
+- GET /api/products/search 엔드포인트 생성
+- 검색 파라미터: keyword (상품명 부분일치), categoryId, minPrice, maxPrice (모두 선택적)
+- 검색 시맨틱스: keyword는 양방향 부분일치, 대소문자 무시. 가격 범위는 이상/이하(경계값 포함)
+- 페이지네이션 지원 (page, size 파라미터)
+- 결과는 최신 등록순 정렬
 
-### Task 3: 응답 DTO 생성
-- `src/main/kotlin/com/example/product/dto/ProductSearchResponse.kt` 생성
-- 필드: id, name, price, categoryName, thumbnailUrl
+### Task 2: 검색 결과 응답 정의
+- 응답 포함 정보: 상품 ID, 이름, 가격, 카테고리명, 썸네일 URL
+- 페이지 메타데이터 포함 (총 개수, 현재 페이지, 총 페이지 수)
+
+### Task 3: 동적 쿼리 구현
+- 각 검색 조건은 null이면 필터 미적용 (동적 조합)
+- QueryDSL 기반 구현
 
 ### 비즈니스 이유
 - 사용자 피드백에서 검색 기능이 가장 많이 요청됨
@@ -228,9 +208,9 @@ scripts/csv-converter/
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Clarity 통과 | 파일 경로, 파라미터, DTO 필드가 구체적이라고 판단하여 Pass |
-| V2 | Verifiability 실패 | 테스트 전략이 전혀 없음을 지적하여 Fail (어떤 테스트? 어떤 케이스? 실행 명령어?) |
-| V3 | Completeness 실패 | 환경 설정 누락을 지적하여 Fail (QueryDSL 설정, 인덱스 전략, "관련도순"의 정의) |
+| V1 | Clarity 통과 | 검색 파라미터, 응답 필드, 정렬 기준, 엔티티 스키마, 검색 시맨틱스 등 요구사항이 구체적이라고 판단하여 Pass |
+| V2 | Verifiability 실패 | 인수 조건과 테스트 전략이 전혀 없음을 지적하여 Fail (어떻게 검증? 어떤 테스트?) |
+| V3 | Completeness 실패 | QueryDSL 빌드 설정 누락, Task 간 의존성 미정의를 지적하여 Fail |
 | V4 | Big Picture 통과 | 비즈니스 이유와 Out of Scope가 있어 Pass |
 | V5 | REJECT 판정 | 최종 판정이 **REJECT**이며, Verifiability Fail + Completeness Fail을 명시하고 구체적 개선안 제시 |
 
@@ -277,6 +257,6 @@ scripts/csv-converter/
 |---|---------|--------|------|-------|
 | MO-1 | Simulation Protocol | **PASS** | 2026-02-10 | 4/4 VP 충족. 시뮬레이션 수행, 모호성 발견, 차단 갭 분류 정상 |
 | MO-2 | Reference Verification | **PASS** | 2026-02-10 | 4/5 VP 충족. 구체적 참조 수용, 모호한 참조 거부 정상. V5 borderline (extra critical) |
-| MO-3 | Four Criteria — Full Pass | **PENDING** | 2026-02-10 | 시나리오 재설계 (도메인 변경: 비밀번호 변경 API → CSV 변환 CLI). iteration 3 대기 |
-| MO-4 | Four Criteria — Partial Fail | **PASS** | 2026-02-10 | 4/5 VP 충족. REJECT 판정 + Verifiability/Completeness Fail 정상. V1 borderline |
+| MO-3 | Four Criteria — Full Pass | **PASS** | 2026-02-11 | 4/4 기준 Pass, OKAY 판정. 프롬프트 보강(JSON 구조, CLI 인자, 빈 CSV 정의, 줄바꿈) 후 구현 디테일 요구 없이 정상 통과 |
+| MO-4 | Four Criteria — Partial Fail | **PASS** | 2026-02-11 | Clarity Pass, Verifiability Fail, Completeness Fail, Big Picture Pass — REJECT 판정. 엔티티 스키마/검색 시맨틱스 보강 후 Clarity 정상 통과, 인수조건/QueryDSL 설정 누락 정확히 감지 |
 | MO-5 | Final Verdict Format | **PASS** | 2026-02-10 | 4/4 VP 충족. 판정, Justification, Summary, 개선안 형식 모두 정상 |

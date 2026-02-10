@@ -93,12 +93,14 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 ### 1. Clarity of Work Content
 | Check | Question |
 |-------|----------|
-| References specific | File paths, line numbers, function names - not vague "existing patterns" |
-| References plausible | Does the path structure match stated technology? (.ts for TypeScript, etc.) |
-| No ambiguous phrases | Every instruction answerable with "exactly this" not "figure it out" |
-| Technology explicit | Language, framework, libraries explicitly stated |
+| Requirements clear | 무엇을 만들지, 어떤 동작을 해야 하는지 명확한가? |
+| Acceptance testable | 인수 조건이 측정/검증 가능한가? |
+| Constraints explicit | 제약조건(지원 범위, 에러 케이스, 기술 스택)이 명시되었는가? |
+| No ambiguous requirements | 요구사항이 "exactly this"로 답할 수 있는가? (구현 방법이 아닌 요구사항 기준) |
 
-**Clarity Guard:** Do NOT assume vague phrase has obvious meaning. If not written, it's missing.
+**Plan Scope:** 플랜은 WHAT(요구사항), WHEN(인수조건), WHY(비즈니스 이유)를 정의한다. HOW(파일 구조, 함수 시그니처, 내부 패턴)는 실행자 재량이며 플랜 평가 대상이 아니다.
+
+**Clarity Guard:** Do NOT assume vague phrase has obvious meaning. If not written, it's missing. But do NOT demand implementation details — evaluate requirements clarity, not implementation specificity.
 
 ### 2. Verification & Acceptance Criteria
 | Check | Question |
