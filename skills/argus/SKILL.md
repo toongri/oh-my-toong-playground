@@ -114,16 +114,6 @@ FLAG if: B - A ≠ ∅ (unexpected files touched)
 
 **Acceptable exceptions:** Test files for in-scope code, related config files.
 
-### The Leniency Trap (Spec Compliance)
-
-| Excuse | Reality |
-|--------|---------|
-| "Junior probably understood the intent" | Probably ≠ verified. Check every MUST DO. |
-| "Close enough to spec" | Close ≠ compliant. Partial is incomplete. |
-| "They added extra functionality" | Out of scope = violation, not bonus. |
-| "The tests pass" | Tests prove tests pass, not spec compliance. |
-| "It works" | Working ≠ correct. Verify against spec. |
-
 ---
 
 ## Stage 3: Code Quality (After Stage 2 Passes)
@@ -198,23 +188,6 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 | Stage 3 CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
 | MEDIUM only | **COMMENT** (conditional merge approval) |
 | LOW only or no issues | **APPROVE** |
-
----
-
-## Red Flags - STOP
-
-| Excuse | Reality |
-|--------|---------|
-| "Security is another team's concern" | Every developer owns security |
-| "Architecture can be fixed later" | Violations spread and compound |
-| "It works, so it's fine" | Working != maintainable |
-| "Tests will catch it" | Catching at review is cheapest |
-| "No time for praise" | Balance builds collaborative culture |
-| "Seems fine, let it pass" | Seems fine ≠ verified. Flag it. |
-| "Junior already checked this" | Trust nothing. Verify everything. |
-| "Junior said they followed the spec" | Junior's word ≠ verification. Check each item. |
-| "MUST DO is obvious, skip checking" | Obvious ≠ done. Verify explicitly. |
-| "Extra changes show initiative" | Scope creep = violation. Flag it. |
 
 ---
 
