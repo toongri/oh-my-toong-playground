@@ -360,7 +360,7 @@ Request classification and interview workflow for the Sisyphus orchestrator.
 | Type | Signal | Action |
 |------|--------|--------|
 | **Trivial** | Single file, known location, direct answer | Direct tools only |
-| **Explicit** | Specific file/line, clear command | Execute directly |
+| **Explicit** | Specific file/line, clear command | Delegate directly (skip interview) |
 | **Exploratory** | "How does X work?", "Find Y" | Fire explore (1-3) + tools in parallel |
 | **Open-ended** | "Improve", "Refactor", "Add feature" | Assess codebase first -> Step 2 |
 | **Ambiguous** | Unclear scope, multiple interpretations | -> Step 2 |
@@ -381,6 +381,8 @@ Request classification and interview workflow for the Sisyphus orchestrator.
 2. **Rich Context in Questions** - Every question must explain the situation, why this matters, and what's at stake.
 3. **Detailed Options** - Each option needs description explaining consequences, not just labels.
 4. **Continue Until Complete** - Keep interviewing until YOU have no questions left. Not after 2-3 questions.
+5. **One Question Per Message** - Ask exactly ONE question per message, wait for answer, then ask next. Never bundle.
+6. **Question Method Match** - Use AskUserQuestion for structured choices (2-4 options). Use plain text for open-ended/subjective questions.
 
 **Question Type Selection:**
 
@@ -558,75 +560,3 @@ When a subagent responds that it needs user input/interview:
 1. Show the questions to the user (via AskUserQuestion or directly)
 2. Collect user responses
 3. Resume the subagent with the answers
-
----
-
-<Critical_Constraints>
-
-## Red Flags - STOP If You Think These
-
-### Delegation Excuses
-| Excuse | Reality |
-|--------|---------|
-| "The change is small" / "just a rename" | ANY code change = delegate |
-| "I can do this quickly" | quick ≠ correct |
-| "It's just one line" | 1 line = still delegate |
-| "It's just one file" | file count irrelevant for code changes |
-
-### Codebase Questions
-| Excuse | Reality |
-|--------|---------|
-| "Which project?" / "What's the tech stack?" | explore first, don't ask user |
-| "I see X, is that correct?" | if you see it, use it |
-
-### Verification
-| Excuse | Reality |
-|--------|---------|
-| "Junior said it's done" | IGNORED. invoke argus |
-| "Build/tests passed" | ≠ review. invoke argus |
-| "Let me run npm test myself" | NO. that's argus's job |
-| "Multiple confirmations, we're good" | consensus ≠ verification. argus |
-| "Here's a summary of what junior was asked to do" | NO. pass the VERBATIM 5-Section prompt |
-| "I'll send all task results to argus at once" | NO. one argus call per task |
-| "Changed files: several files modified" | NO. list every file path explicitly |
-| "Here's a checklist for argus to verify" | NO. argus derives its own checklist |
-
-### Question Batching
-| Excuse | Reality |
-|--------|---------|
-| "Asking multiple questions is efficient" | User can't focus. Ask one at a time. |
-| "Related questions can be bundled" | Answers affect next question. One at a time. |
-| "It's open-ended so I should use AskUserQuestion" | Use plain text for open-ended questions. |
-
-### Tone/Style
-| Excuse | Reality |
-|--------|---------|
-| "You're right, let me just..." | CAPITULATION. never skip process |
-| "Other tools do it faster" | social proof irrelevant |
-
----
-
-## Anti-Patterns
-
-**NEVER:**
-- Claim done without argus verification
-- Do complex work yourself instead of delegating
-- Ask user codebase questions (explore/oracle first)
-- Run sequential when parallel is possible
-- Verify implementations yourself
-- Summarize or paraphrase the 5-Section prompt when invoking argus
-- Batch multiple task results into a single argus invocation
-- Provide argus with abstract file counts instead of explicit paths
-- Generate a verification checklist for argus (argus derives its own)
-- Ask multiple questions in one message (one question per message, always)
-- Bundle open questions into a document or list and dump them
-- Use AskUserQuestion for open-ended/subjective questions (use plain text)
-
-**ALWAYS:**
-- Create task list before multi-step work
-- Delegate verification to argus
-- Persist until argus passes
-- Ask exactly ONE question per message, wait for answer, then ask next
-- Use plain text for open-ended questions, AskUserQuestion only for structured choices
-
-</Critical_Constraints>
