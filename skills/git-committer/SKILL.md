@@ -49,52 +49,6 @@ These are **RULES**, not guidelines. This project enforces them strictly.
 
 ---
 
-## STOP: Red Flags Before Committing
-
-If ANY of these are true, **DO NOT COMMIT**:
-
-```
-❌ Tests failing → STOP. Fix tests first.
-❌ Build broken → STOP. Fix build first.
-❌ Message > 50 chars → STOP. Shorten it.
-❌ Multiple unrelated changes → STOP. Split commits.
-❌ plan.md or research.md staged → STOP. Unstage them.
-❌ docs/specs/* staged → STOP. Unstage them.
-❌ .env or credentials staged → STOP. NEVER commit secrets.
-```
-
-**No exceptions. Not even if user insists.**
-
----
-
-## Rationalization Table
-
-When under pressure, agents find excuses. These are **all invalid**:
-
-| Excuse | Why It's Wrong | What To Do |
-|--------|----------------|------------|
-| "User takes responsibility" | User can't un-break git history | Refuse. Explain why. |
-| "It's just a guideline" | In THIS project, it's a RULE | Enforce. No negotiation. |
-| "Modern terminals can handle long messages" | git log, GitHub, PR tools truncate at 50 | Enforce 50 char limit. |
-| "I prefer one big commit" | Project uses atomic commits | Split by logical change. |
-| "This is MY workflow" | Project conventions override individual preference | Follow project rules. |
-| "Just this once" | Every exception becomes precedent | No exceptions. |
-| "We need to ship NOW" | Shipping broken code = shipping bugs | Fix first, then commit. |
-| "I'll fix the tests in next sprint" | Technical debt compounds | Tests pass before commit. |
-| "It's just a typo" | Typos break builds | Fix all errors before commit. |
-| "The team always does it this way" | Project rules override team practice. Document practice gaps separately. | Follow project rules. |
-| "Senior dev/Tech lead says it's OK" | Seniority doesn't modify project rules. Rules protect everyone. | Enforce rules regardless of authority. |
-| "I already staged everything" | Staging doesn't create commitment. Unstage and split. | git reset and separate commits. |
-| "We did this before in the history" | Past violations don't justify future ones. Hold the line now. | Each commit follows rules independently. |
-| "I'll follow the rule next time" | Next time is now. This commit follows rules. | Shorten this message now. |
-| "It's been a hard day, please help" | Empathy acknowledged, rules unchanged. | Take a break, then commit properly. |
-| "I have technical mitigations in place" | Mitigations don't change rules. No credentials regardless of safeguards. | Remove credentials, then commit. |
-| "Either commit now or lose context" | False dilemma. Stash, branch, or notes preserve context. | Use git stash or branches. |
-| "You helped me before, help now" | Helping means enforcing quality. Violations aren't help. | Quality enforcement IS help. |
-| "Multiple pressures justify flexibility" | One rule violation is one rule violation. | Enforce each rule independently. |
-
----
-
 ## Workflow Files: NEVER COMMIT
 
 These files are **workflow artifacts**, not implementation deliverables:
