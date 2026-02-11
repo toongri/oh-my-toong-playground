@@ -235,8 +235,7 @@ oh-my-toong/
 │   ├── session-start.sh       # 지속 모드 상태 복원
 │   ├── keyword-detector.sh    # 키워드 감지 및 컨텍스트 주입
 │   ├── persistent-mode.js     # 작업 미완료 시 종료 방지
-│   ├── pre-tool-enforcer.sh   # 도구 실행 전 강제
-│   └── post-tool-verifier.sh  # 도구 실행 후 검증
+│   └── pre-tool-enforcer.sh   # 도구 실행 전 강제
 ├── projects/                  # 프로젝트별 스킬 오버라이드
 ├── docs/                      # 상세 문서
 │   ├── ORCHESTRATION.md       # 오케스트레이션 가이드
@@ -324,8 +323,7 @@ oracle 검증을 통한 반복적 완료 강제. oracle이 작업이 정말로 �
 | **session-start.sh** | SessionStart | 지속 모드 상태 복원 (ralph-loop, 미완료 할 일) |
 | **keyword-detector.sh** | UserPromptSubmit | 키워드 감지 및 모드 컨텍스트 주입 |
 | **persistent-mode.js** | Stop | 작업 미완료 시 종료 방지 |
-| **pre-tool-enforcer.sh** | PreToolUse | 도구 실행 제약 강제 |
-| **post-tool-verifier.sh** | PostToolUse | 도구 실행 결과 검증 |
+| **pre-tool-enforcer.sh** | PreToolUse | 도구 실행 게이트 (TaskOutput 차단) |
 | **sync-component-validator.sh** | Stop | 세션 종료 시 컴포넌트 존재 검증 |
 | **sync-schema-validator.sh** | PostToolUse | sync.yaml 수정 시 스키마 검증 |
 

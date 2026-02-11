@@ -40,7 +40,7 @@ oh-my-toong/
 - **session-start.sh**: Restores persistent mode states (ralph-loop, incomplete todos)
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
 - **persistent-mode.sh**: Prevents stopping when work remains incomplete (Stop hook)
-- **pre-tool-enforcer.sh** / **post-tool-verifier.sh**: Tool execution enforcement
+- **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
 
 ### Key Workflows
 
