@@ -659,26 +659,26 @@ After 1 more question, all 3 criteria met:
 
 | # | Scenario | Result | Date | Notes |
 |---|---------|--------|------|-------|
-| S-1 | Do vs Delegate — Code Change Always Delegates | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs PASS (added (e) intermittent 403 + V6) |
-| S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-5 | Argus Prompt Fidelity — Verbatim 5-Section | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs PASS (V3 updated: falsifiable) |
-| S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs PASS (Input updated: overlapping-file conflict) |
-| S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs PASS |
-| S-13 | 5-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 6/6 VPs PASS |
-| S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs PASS (V6 updated: Trivial/Explicit routing distinction) |
-| S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs PASS (V5 updated: 3-part exit condition) |
-| S-17 | User Deferral — Autonomous Decision | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-18 | Broad Request Detection — Explore First | PASS | 2026-02-11 | 5/5 VPs PASS |
-| S-19 | Vague Answer Clarification | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-20 | Subagent Requests User Interview | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-21 | Verification Retry Loop | PASS | 2026-02-11 | 5/5 VPs PASS |
-| S-22 | Rich Context Pattern | PASS | 2026-02-11 | 6/6 VPs PASS |
-| S-23 | Interview Exit Condition | PASS | 2026-02-11 | 4/4 VPs PASS |
+| S-1 | Do vs Delegate — Code Change Always Delegates | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
+| S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-5 | Argus Prompt Fidelity — Verbatim 5-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
+| S-13 | 5-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
+| S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
+| S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
+| S-17 | User Deferral — Autonomous Decision | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-18 | Broad Request Detection — Explore First | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
+| S-19 | Vague Answer Clarification | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-20 | Subagent Requests User Interview | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-21 | Verification Retry Loop | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
+| S-22 | Rich Context Pattern | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
+| S-23 | Interview Exit Condition | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
