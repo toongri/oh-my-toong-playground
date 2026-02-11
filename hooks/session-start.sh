@@ -127,7 +127,7 @@ fi
 if [ -n "$MESSAGES" ]; then
   # Escape for JSON
   MESSAGES_ESCAPED=$(echo "$MESSAGES" | sed 's/"/\\"/g')
-  echo "{\"continue\": true, \"message\": \"$MESSAGES_ESCAPED\"}"
+  echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"SessionStart\", \"additionalContext\": \"$MESSAGES_ESCAPED\"}}"
 else
   echo '{"continue": true}'
 fi

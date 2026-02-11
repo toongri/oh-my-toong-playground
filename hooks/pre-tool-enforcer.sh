@@ -29,6 +29,14 @@ if [[ -f "$todo_file" ]] && command -v jq &> /dev/null; then
     fi
 fi
 
+# Block TaskOutput immediately (wastes context with full JSONL logs)
+if [[ "$toolName" == "TaskOutput" ]]; then
+    cat <<EOF
+{"continue": false, "reason": "TaskOutput은 에이전트의 전체 JSONL 로그를 반환하여 컨텍스트를 낭비합니다. 포그라운드 병렬 Task를 사용하세요. 백그라운드 태스크 상태 확인이 필요하면 Read로 output_file 경로를 읽으세요."}
+EOF
+    exit 0
+fi
+
 # Generate contextual reminder based on tool type
 message=""
 
@@ -62,15 +70,14 @@ case "$toolName" in
         ;;
 esac
 
-# Return JSON response (always continue, just remind)
-# Escape message for JSON (replace " with \", newlines with \n)
-escaped_message=$(echo "$message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
-
-cat <<EOF
-{
-    "continue": true,
-    "message": "$escaped_message"
-}
+# Return JSON response (always continue, inject context via additionalContext)
+if [[ -z "$message" ]]; then
+    echo '{"continue": true}'
+else
+    escaped_message=$(echo "$message" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
+    cat <<EOF
+{"continue": true, "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": "$escaped_message"}}
 EOF
+fi
 
 exit 0
