@@ -116,13 +116,6 @@ Define operations in business terms (e.g., "atomically accumulate count", "retri
 - **Include**: Domain objects, aggregates, business rules, invariants, state transitions, domain events, repository/port interfaces (business meaning only)
 - **Exclude**: SQL statements, cache commands, framework annotations, batch strategies, and other technology-specific implementations (covered in detailed design)
 
-## STOP: Domain Model Red Flags
-
-- 3+ entity states but user wants to skip → Domain modeling required
-- Cross-entity business rules but no aggregate design → Cannot skip
-- Repository defined with implementation details → Keep business terms only
-- "Add events later" without YAGNI analysis → Evaluate now
-
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

@@ -31,24 +31,6 @@ Clearly distinguish between what AI decides autonomously and what requires human
 | AI quality monitoring | AI Responsibility Contract (criteria definition) | Operations Plan (metric implementation) | Define "what is quality" here, define "how to measure" there |
 | AI context strategy | AI Responsibility Contract (policy) | Data Schema (storage) | Define context window policy here, schema for storage there |
 
-## STOP: AI Responsibility Contract Red Flags
-
-- AI component without explicit delegation scope → Define what it decides and what it doesn't
-- "AI will handle it" without boundary definition → Specify exact responsibilities and escalation criteria
-- Output quality defined only by format (JSON valid) → Define content quality criteria separately
-- "AI output varies, so no quality standard" → Non-determinism requires acceptance criteria, not exemption
-- No fallback when AI is unavailable → Define user-facing behavior for AI outage
-- "API is reliable, no fallback needed" → Even 99.9% uptime needs 0.1% failure strategy
-- Multiple AI components without individual contracts → Each AI needs its own responsibility boundary
-- "QA team will check quality" → QA validates against criteria; criteria must exist first
-- Prototype success treated as production quality definition → Redefine for production constraints
-- AI pipeline without per-stage quality gates → Each stage needs input/output expectations
-- "Managed AI service handles quality" → Provider handles model quality, not YOUR quality criteria. Define what "acceptable" means for YOUR use case
-- "Just a thin wrapper around [AI API]" → Wrapper still needs input validation, output quality gates, and fallback strategy
-- "AI is a minor feature" → Even 1% of features need explicit delegation boundaries. Minor ≠ no design needed
-- "Framework (Langchain/LlamaIndex) manages it" → Framework provides tools, not policies. Define retry logic, context strategy, quality thresholds
-- "Model evaluation is [other team]'s job" → Other teams evaluate models, YOU define acceptance criteria for YOUR application
-
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.
