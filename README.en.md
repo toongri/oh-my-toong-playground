@@ -235,8 +235,7 @@ oh-my-toong/
 │   ├── session-start.sh       # Restores persistent mode states
 │   ├── keyword-detector.sh    # Detects keywords and injects context
 │   ├── persistent-mode.js     # Prevents stopping when work incomplete
-│   ├── pre-tool-enforcer.sh   # Pre-tool execution enforcement
-│   └── post-tool-verifier.sh  # Post-tool verification
+│   └── pre-tool-enforcer.sh   # Pre-tool execution enforcement
 ├── projects/                  # Project-specific skill overrides
 ├── docs/                      # Detailed documentation
 │   ├── ORCHESTRATION.md       # Orchestration guide (Korean)
@@ -324,8 +323,7 @@ Maximum precision mode activated via keywords (`ultrawork`, `ulw`, `uw`). Enable
 | **session-start.sh** | SessionStart | Restores persistent mode states (ralph-loop, incomplete todos) |
 | **keyword-detector.sh** | UserPromptSubmit | Detects keywords and injects mode context |
 | **persistent-mode.js** | Stop | Prevents stopping when work remains incomplete |
-| **pre-tool-enforcer.sh** | PreToolUse | Enforces tool execution constraints |
-| **post-tool-verifier.sh** | PostToolUse | Verifies tool execution results |
+| **pre-tool-enforcer.sh** | PreToolUse | Tool execution gate (TaskOutput blocking) |
 | **sync-component-validator.sh** | Stop | Validates component existence at session end |
 | **sync-schema-validator.sh** | PostToolUse | Validates schema when sync.yaml is modified |
 
