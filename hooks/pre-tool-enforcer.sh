@@ -42,7 +42,7 @@ case "$toolName" in
         ;;
 
     Task)
-        message="${todo_status}Launch multiple agents in parallel when tasks are independent. Use run_in_background for long operations."
+        message="${todo_status}Fire multiple Task calls in ONE message for parallel execution (default: foreground). Background (run_in_background=true) is for Bash shell commands only (builds, tests, installs), NEVER for agent Tasks."
         ;;
 
     Edit|Write)
