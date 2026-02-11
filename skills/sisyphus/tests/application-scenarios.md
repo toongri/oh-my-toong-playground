@@ -34,6 +34,11 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-16 | Interview Mode — Sequential + Quality | In-Depth Interview Mode | One Q per message + rich context |
 | S-17 | User Deferral — Autonomous Decision | User Deferral Handling | "your call" → autonomous + documented |
 | S-18 | Broad Request Detection — Explore First | Broad Request Handling | scope-less verbs → explore → interview |
+| S-19 | Vague Answer Clarification | Vague Answer Clarification | User Deferral distinction |
+| S-20 | Subagent Requests User Interview | Handling Subagent User Interview Requests | Relay + resume |
+| S-21 | Verification Retry Loop | Verification Flow / No Retry Limit | argus repeated failure → fix → re-verify |
+| S-22 | Rich Context Pattern | Rich Context Pattern | 6-stage analysis → AskUserQuestion |
+| S-23 | Interview Exit Condition | Interview Exit Condition | 3-part exit criteria |
 
 ---
 
@@ -92,6 +97,7 @@ User request involves multiple needs:
 (b) Analyze why the login endpoint has 2-second latency
 (c) Update user.ts and profile.ts to add email validation
 (d) Check React Query v5 docs for the new mutation API
+(e) Users report intermittent 403 errors under high load
 ```
 
 **Verification Points:**
@@ -103,6 +109,7 @@ User request involves multiple needs:
 | V3 | sisyphus-junior for code changes (c) | Dispatches sisyphus-junior for the file modifications |
 | V4 | librarian for external docs (d) | Dispatches librarian agent for React Query v5 documentation lookup |
 | V5 | No agent-role mismatch | Does NOT send code changes to oracle, does NOT send analysis to junior, does NOT ask user codebase questions |
+| V6 | oracle for intermittent 403 investigation (e) | Dispatches oracle for 403-under-load investigation — recognizes as intermittent/flaky bug requiring root cause analysis, does NOT assume "simple auth fix" and send to junior |
 
 ---
 
@@ -238,7 +245,7 @@ Three argus verdicts received for different tasks:
 |---|-------|-------------------|
 | V1 | APPROVE (Task A) → mark complete and proceed | Task A is marked completed, sisyphus moves to next task |
 | V2 | REQUEST_CHANGES (Task B) → create fix task and re-delegate | A new fix task is created for the XSS issue and dispatched to sisyphus-junior |
-| V3 | COMMENT (Task C) → mark complete, optional follow-up | Task C is marked completed; a follow-up task for naming may be created but is not blocking |
+| V3 | COMMENT (Task C) → mark complete, does NOT block progression | Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
 | V4 | Fix task contains exact issue details | The fix task for Task B includes the specific issue from argus (missing input sanitization), file location, and required fix action |
 
 ---
@@ -249,12 +256,12 @@ Three argus verdicts received for different tasks:
 
 **Input:**
 ```
-Two juniors were dispatched to fix the same authentication timeout bug:
-- Junior A: "Fixed by increasing token refresh interval from 15min to 60min in auth/token.ts"
-- Junior B: "Fixed by adding session keepalive heartbeat in auth/session.ts"
+Two juniors dispatched to adjacent tasks that modify overlapping files:
+- Junior A (Task: Add rate limiting): Modified auth/middleware.ts to add rate limit checks in the request handler
+- Junior B (Task: Add request logging): Modified auth/middleware.ts to add logging in the same request handler
 
-Both claim the bug is resolved. The fixes address different root causes
-(token refresh vs session timeout) and may conflict.
+Both report completion, but their changes to auth/middleware.ts conflict
+(overlapping edits to the same request handler function).
 ```
 
 **Verification Points:**
@@ -391,7 +398,7 @@ Five separate user requests:
 | V3 | (c) classified as Exploratory | "How does X work?" triggers explore agent for codebase investigation |
 | V4 | (d) classified as Open-ended → Step 2 Interview | "Improve performance" has no specific target, enters In-Depth Interview Mode |
 | V5 | (e) classified as Ambiguous → Step 2 Interview | "Make the app better" has unclear scope and multiple interpretations, enters interview |
-| V6 | (a)(b) use direct tools, (d)(e) enter interview | Trivial/Explicit requests do NOT trigger interview; Open-ended/Ambiguous always do |
+| V6 | (a) handled directly by sisyphus, (b) delegated to junior — both skip interview | Trivial requests (a) are handled by sisyphus directly (read/answer); Explicit code changes (b) are delegated to sisyphus-junior — both skip interview, but routing differs per Do vs Delegate Matrix |
 
 ---
 
@@ -440,7 +447,7 @@ logging strategy, retry behavior, error response format.
 | V2 | Rich context + options with descriptions | Each question includes situation context, why it matters, and options with consequence descriptions — not bare labels |
 | V3 | Uses AskUserQuestion for structured choices | When presenting 2-4 clear options, uses AskUserQuestion tool with descriptive option labels |
 | V4 | Uses plain text for open-ended questions | Open-ended/subjective questions are asked in plain text, not forced into AskUserQuestion |
-| V5 | Continues until all ambiguities resolved | Does NOT stop after 2-3 questions — interviews until scope, deliverables, and success criteria are clear |
+| V5 | Continues until 3-part exit condition met | Does NOT stop after 2-3 questions — interviews until ALL three are clearly articulated: (1) what will be built, (2) how success will be measured, (3) what is explicitly OUT of scope |
 
 ---
 
@@ -493,25 +500,185 @@ Uses scope-less verb "improve" without a concrete target.
 
 ---
 
+## Scenario S-19: Vague Answer Clarification
+
+**Primary Technique:** Vague Answer Clarification — vague answers are re-questioned, NOT accepted as-is
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Sisyphus asks: "How should authentication errors be displayed to the user?
+Option A: Toast notification (disappears after 5s)
+Option B: Inline error message (persists until resolved)
+Option C: Modal dialog (requires explicit dismissal)"
+
+User responds: "~is enough" (or "just do something reasonable", "whatever works")
+
+Turn 2:
+Sisyphus must clarify, not accept the vague response.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Does NOT accept vague answer as-is | Does NOT interpret "~is enough" as selecting any option or proceed with an assumption |
+| V2 | Asks specific clarifying question | Asks a targeted follow-up like "Do you mean Option A (toast) is enough, or that any approach is fine? The choice affects error visibility — toasts can be missed, inline messages are always visible." |
+| V3 | Distinguishes from User Deferral | Does NOT trigger User Deferral Handling — "~is enough" is a vague attempt to answer, NOT an explicit deferral like "skip" or "your call" |
+| V4 | Repeats until clear answer obtained | Continues asking clarifying questions until user provides a specific, actionable answer |
+
+---
+
+## Scenario S-20: Subagent Requests User Interview
+
+**Primary Technique:** Handling Subagent User Interview Requests — relay questions to user, resume subagent with answers
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Sisyphus dispatches oracle to analyze the payment module architecture.
+Oracle responds: "I need user input to proceed — the payment module has two integration
+paths (Stripe and PayPal). Which one should I analyze first, or both? Also, are there
+planned changes to the payment flow that would affect my analysis?"
+
+Turn 2:
+Sisyphus relays oracle's questions to the user.
+User responds: "Analyze Stripe first, we're deprecating PayPal next quarter."
+
+Turn 3:
+Sisyphus resumes oracle with the user's answers.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Relays subagent's questions to user | Shows oracle's questions to the user via AskUserQuestion or direct message — does NOT answer on oracle's behalf |
+| V2 | Does NOT fabricate answers for the subagent | Does NOT invent responses or make assumptions about user preferences to avoid relaying |
+| V3 | Resumes subagent with user's actual answers | Passes the user's exact responses back to oracle, does NOT paraphrase in ways that lose meaning |
+| V4 | Maintains orchestrator role throughout | Does NOT attempt to perform oracle's analysis directly — remains in orchestrator role, acting as communication relay |
+
+---
+
+## Scenario S-21: Verification Retry Loop
+
+**Primary Technique:** Verification Flow / No Retry Limit — continue fix-verify cycle until argus passes, never give up
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Junior completes Task T-5 (add input validation to registration form).
+Argus review: REQUEST_CHANGES — "Missing email format validation, only checks non-empty."
+
+Turn 2:
+Fix task created, junior fixes email validation.
+Argus review: REQUEST_CHANGES — "Email regex rejects valid emails with '+' character (e.g., user+tag@example.com)."
+
+Turn 3:
+Fix task created, junior updates regex.
+Argus review: APPROVE — all checks passed.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Creates fix task after first argus failure | After first REQUEST_CHANGES, creates a new fix task with the specific issue (missing email format validation) and re-delegates to junior |
+| V2 | Creates fix task after second argus failure | After second REQUEST_CHANGES, creates another fix task with the new specific issue (regex rejecting '+' emails) and re-delegates to junior |
+| V3 | Does NOT abandon or skip after repeated failures | Does NOT give up, mark as "good enough", or skip verification after 2 consecutive failures — continues the loop |
+| V4 | Marks complete ONLY after argus APPROVE | Task T-5 is marked completed only after the third argus review returns APPROVE — never before |
+| V5 | Each fix task contains exact issue from argus | Fix tasks reference the specific issue from argus (not generic "fix validation"), including what was wrong and what the expected behavior is |
+
+---
+
+## Scenario S-22: Rich Context Pattern
+
+**Primary Technique:** Rich Context Pattern — 6-stage analysis before AskUserQuestion for complex design decisions
+
+**Input:**
+```
+User asks: "Add error handling to the API"
+After explore reveals: Express.js project, no consistent error handling pattern,
+mix of try-catch and unhandled rejections, 15 API endpoints.
+Sisyphus enters interview mode and encounters a complex design decision:
+how should the API-wide error response format be standardized?
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Provides Current State before asking | Includes a description of what exists now (e.g., "Currently 15 endpoints with inconsistent error handling — mix of try-catch and unhandled rejections") |
+| V2 | Includes Existing Project Patterns | References relevant existing code patterns or prior decisions found via explore |
+| V3 | Presents Option Analysis with tradeoffs | For each option, provides behavior description and evaluation across multiple dimensions (e.g., consistency, debugging ease, client impact) |
+| V4 | Includes Recommendation with rationale | States a recommended option and explains WHY based on the project's current state and patterns |
+| V5 | Uses AskUserQuestion AFTER markdown analysis | The AskUserQuestion call comes AFTER the rich markdown context — not before, not standalone |
+| V6 | Single question per message | Does NOT bundle multiple questions — asks exactly one question with 2-3 options |
+
+---
+
+## Scenario S-23: Interview Exit Condition
+
+**Primary Technique:** Interview Exit Condition — interview continues until all 3 exit criteria are met
+
+**Input (Multi-turn):**
+```
+Turn 1:
+User request: "Add caching to the API"
+Classified as Open-ended → enters interview.
+After 2 questions, sisyphus knows:
+- What: Redis-based caching for GET endpoints
+- Measurement: still UNKNOWN
+- Out of scope: still UNKNOWN
+
+Turn 2:
+After 1 more question, sisyphus knows:
+- What: Redis-based caching for GET endpoints
+- Measurement: Response time < 100ms for cached endpoints
+- Out of scope: still UNKNOWN
+
+Turn 3:
+After 1 more question, all 3 criteria met:
+- What: Redis-based caching for GET endpoints
+- Measurement: Response time < 100ms for cached endpoints
+- Out of scope: No cache invalidation strategy (manual purge only for now)
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Does NOT exit interview after Turn 1 | After Turn 1, 2 of 3 criteria are still unknown — interview continues |
+| V2 | Does NOT exit interview after Turn 2 | After Turn 2, "out of scope" is still unknown — interview continues |
+| V3 | Exits interview after Turn 3 | All 3 exit criteria are met — sisyphus proceeds to task creation |
+| V4 | Can articulate all 3 criteria clearly | Before proceeding, sisyphus can state: what will be built, how success is measured, and what is explicitly out of scope |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
 |---|---------|--------|------|-------|
 | S-1 | Do vs Delegate — Code Change Always Delegates | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 5/5 VPs PASS |
+| S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs PASS (added (e) intermittent 403 + V6) |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-5 | Argus Prompt Fidelity — Verbatim 5-Section | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs PASS |
+| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs PASS (V3 updated: falsifiable) |
+| S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs PASS (Input updated: overlapping-file conflict) |
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs PASS |
 | S-13 | 5-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 6/6 VPs PASS |
-| S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs PASS (after fix: "Execute directly" → "Delegate directly (skip interview)") |
+| S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs PASS (V6 updated: Trivial/Explicit routing distinction) |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs PASS |
-| S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs PASS |
+| S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs PASS (V5 updated: 3-part exit condition) |
 | S-17 | User Deferral — Autonomous Decision | PASS | 2026-02-11 | 4/4 VPs PASS |
 | S-18 | Broad Request Detection — Explore First | PASS | 2026-02-11 | 5/5 VPs PASS |
+| S-19 | Vague Answer Clarification | PASS | 2026-02-11 | 4/4 VPs PASS |
+| S-20 | Subagent Requests User Interview | PASS | 2026-02-11 | 4/4 VPs PASS |
+| S-21 | Verification Retry Loop | PASS | 2026-02-11 | 5/5 VPs PASS |
+| S-22 | Rich Context Pattern | PASS | 2026-02-11 | 6/6 VPs PASS |
+| S-23 | Interview Exit Condition | PASS | 2026-02-11 | 4/4 VPs PASS |
