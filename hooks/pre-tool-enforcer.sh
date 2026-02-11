@@ -15,8 +15,14 @@ extract_json_field() {
     echo "$input" | grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed 's/.*"\([^"]*\)".*/\1/' || echo "$default"
 }
 
-toolName=$(extract_json_field "toolName" "unknown")
-directory=$(extract_json_field "directory" "")
+toolName=$(extract_json_field "tool_name" "")
+if [[ -z "$toolName" ]]; then
+    toolName=$(extract_json_field "toolName" "unknown")
+fi
+directory=$(extract_json_field "cwd" "")
+if [[ -z "$directory" ]]; then
+    directory=$(extract_json_field "directory" "")
+fi
 
 # Try to get todo count from todo list file (if exists)
 todo_file="${directory}/.omt/todos.json"
