@@ -35,10 +35,6 @@ hooks:
       event: Stop
       timeout: 15
       command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/persistent-mode.js"
-    - component: post-tool-verifier.js
-      event: PostToolUse
-      timeout: 10
-      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-verifier.js"
     - component: pre-tool-enforcer.sh
       event: PreToolUse
       timeout: 5
@@ -69,3 +65,8 @@ skills:
     - oracle
     - testing
     - argus
+
+rules:
+  items:
+    - tool-usage-policy
+    - work-principles
