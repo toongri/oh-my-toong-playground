@@ -123,21 +123,17 @@ def generate_message(tool_name, tool_output, session_id, tool_count):
         if detect_write_failure(tool_output):
             message = "Task delegation failed. Verify agent name and parameters."
         elif detect_background_operation(tool_output):
-            message = "Background task launched. Use TaskOutput to check results when needed."
+            message = "Background agent detected. Do NOT use TaskOutput (returns full JSONL logs). Results arrive automatically. For status checks, use Read on the output_file path."
         elif tool_count > 5:
             message = f"Multiple tasks delegated ({tool_count} total). Track their completion status."
 
     elif tool_name == "Edit":
         if detect_write_failure(tool_output):
             message = "Edit operation failed. Verify file exists and content matches exactly."
-        else:
-            message = "Code modified. Verify changes work as expected before marking complete."
 
     elif tool_name == "Write":
         if detect_write_failure(tool_output):
             message = "Write operation failed. Check file permissions and directory existence."
-        else:
-            message = "File written. Test the changes to ensure they work correctly."
 
     elif tool_name == "TodoWrite":
         output_lower = tool_output.lower()
@@ -168,10 +164,10 @@ def main():
         # Read JSON input from stdin
         input_data = json.load(sys.stdin)
 
-        tool_name = input_data.get("toolName", "")
-        tool_output = input_data.get("toolOutput", "")
-        session_id = input_data.get("sessionId", "unknown")
-        directory = input_data.get("directory", "")
+        tool_name = input_data.get("tool_name") or input_data.get("toolName", "")
+        tool_output = input_data.get("tool_response") or input_data.get("toolOutput", "")
+        session_id = input_data.get("session_id") or input_data.get("sessionId", "unknown")
+        directory = input_data.get("cwd") or input_data.get("directory", "")
 
         # Update session statistics
         tool_count = update_stats(tool_name, session_id)
@@ -179,10 +175,13 @@ def main():
         # Generate contextual message
         message = generate_message(tool_name, tool_output, session_id, tool_count)
 
-        # Build response JSON (always continue for post-tool hooks)
+        # Build response - use hookSpecificOutput.additionalContext for PostToolUse
         response = {"continue": True}
         if message:
-            response["message"] = message
+            response["hookSpecificOutput"] = {
+                "hookEventName": "PostToolUse",
+                "additionalContext": message
+            }
 
         # Output response
         print(json.dumps(response, indent=2))
