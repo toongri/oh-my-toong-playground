@@ -17,13 +17,6 @@ As an operations design specialist, systematically design the observability aspe
 - **Include**: Project-specific metrics, custom logging, feature flag strategy
 - **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, deployment procedures, failure recovery plans, generic operational practices
 
-## STOP: Operations Plan Red Flags
-
-- "Standard monitoring is enough" without checking → Verify project-specific metrics needed
-- Every pipeline step gets its own metric → Over-instrumentation. Apply Metric Necessity Test
-- All log points are INFO level → Apply Log Level Decision Guide
-- More than 4 custom metrics proposed → Justify each through Metric Necessity Test
-
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

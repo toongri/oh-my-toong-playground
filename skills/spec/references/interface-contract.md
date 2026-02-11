@@ -14,14 +14,6 @@ As an interface design specialist, systematically design and document the interf
 - **Security**: Authentication, authorization, and data protection mechanisms
 - **Performance**: Optimization of response time, throughput, and resource usage
 
-## STOP: Interface Contract Red Flags
-
-- Interface without error response definitions → Define all error cases
-- Breaking change without migration strategy → Document backward compatibility plan
-- Response structure inconsistent with existing interfaces → Align or document exception
-- Missing versioning consideration for external interface → Evaluate versioning need
-- Business rules in interface doc without requirements reference → Trace back to Requirements Gathering
-
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

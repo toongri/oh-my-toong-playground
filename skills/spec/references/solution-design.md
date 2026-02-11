@@ -26,19 +26,6 @@ Architecture-level communication pattern selection is recorded here. For detaile
 - **Included**: System structure, component responsibilities, data flow between systems, communication patterns, failure handling policies, transaction boundaries, consistency policies
 - **Excluded**: SQL statements, specific data structures (e.g., Redis ZSET), cache commands, algorithms, internal component design (covered in detailed design)
 
-## STOP: Solution Design Red Flags
-
-- Selecting solution without presenting alternatives → Show trade-offs to user
-- Communication pattern undefined for integration point → Document sync/async pattern
-- "We'll figure out failure handling in implementation" → Define failure policy now
-- Missing sequence diagram for complex flow → Visualize before proceeding
-- User says "just pick the best one" → Get explicit decision with rationale
-- Implementation details appear (data structures, timer intervals, algorithms, cache commands) → Extract architecture concern, redirect to Design Area. Example: "30초 flush + ConcurrentHashMap" → Architecture: "Periodic buffered aggregation", Implementation → Integration Pattern Area
-- Components at wrong abstraction level (code classes/modules or system-context-level) → Apply L2 verification questions (Step 4.2): independent deployment, isolated failure domain, team ownership
-- Mixed abstraction levels in same component table (L1 + L2 + L3 together) → Unify to L2 or split into separate tables by level
-- No internal/external separation in component definition (external systems listed as design targets) → Split into Internal Components table and External Dependencies table
-- Step 4 sub-decision presented without alternatives when 2+ viable options exist → Apply Design Decision Significance Check
-
 ## Process
 
 ### Step 1: Initial Assessment

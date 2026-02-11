@@ -28,14 +28,6 @@ For each user action the system tracks, clarify exactly when it occurs, how dupl
 - Exclude: "30-second flush cycle", "Redis ZSET", "Kafka Consumer", "Bucket key format"
 - Test: "Is this something a PO would find valuable to understand?" → Yes = Requirement, No = Implementation detail
 
-## STOP: Requirements Red Flags
-
-- Acceptance criteria uses "properly", "gracefully", "correctly" → Get specifics
-- Error case marked "N/A" without reason → Define or justify
-- Implementation details appear (Redis, Kafka, SQL, timer intervals, data structures, infrastructure) → Apply PO value test: "Would a PO find this valuable?" If No → Extract business requirement, redirect tech to Design Area. Example: "Redis ZSET으로 랭킹 50ms" → Requirement: "Ranking query p95 < 50ms", Implementation "Redis ZSET" → Data Schema Area
-- "Industry standard" or "We can ask later" → Get concrete formula/rule now
-- User says "skip this step" → Explain why each step matters
-
 ## Process
 
 ### Step 1: Project Overview

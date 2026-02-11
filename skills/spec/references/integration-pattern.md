@@ -22,14 +22,6 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - **Include**: Communication patterns, data flow designs, transaction boundaries, consistency policies, stateful component policies, error and recovery flows
 - **Exclude**: SQL statements, cache commands, specific data structures, algorithms, implementation details (covered in implementation stage)
 
-## STOP: Integration Pattern Red Flags
-
-- Communication pattern undefined for integration point → Document sync/async pattern
-- "We'll figure out failure handling in implementation" → Define failure policy now
-- Missing sequence diagram for complex flow → Visualize before proceeding
-- Stateful component without policy → Define buffer/cache behavior
-- Transaction boundary unclear → Specify explicitly
-
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

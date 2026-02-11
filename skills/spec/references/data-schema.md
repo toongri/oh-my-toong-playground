@@ -22,13 +22,6 @@ This document provides implementation details for the Repository/Port interfaces
 - **Include**: Table schemas, column definitions, data types, constraints, SQL/cache commands, indexes, migration strategies
 - **Exclude**: Business rule definitions, domain model structures, system-level architecture decisions (already defined in previous documents)
 
-## STOP: Data Schema Red Flags
-
-- Repository implementation without SQL/commands → Specify actual queries
-- Missing index strategy for key queries → Document optimization approach
-- "Standard indexes are enough" without analysis → Verify project-specific needs
-- Schema change without migration strategy → Document migration approach
-
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

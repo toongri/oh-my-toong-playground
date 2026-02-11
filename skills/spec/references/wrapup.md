@@ -17,16 +17,6 @@ As a knowledge curator, extract information that shapes the **next specification
 - Make knowledge discoverable and scannable
 - Respect user's judgment on what's worth keeping
 
-## STOP: Wrapup Red Flags
-
-- Listing individual decisions as ADR entries -> Extract team tendencies/patterns instead
-- Including implementation parameters (numbers, sizes, counts) -> These belong in spec.md
-- Duplicating spec.md content in condensed form -> Context files serve a DIFFERENT purpose than spec summaries
-- Saving without user approval -> Always get explicit confirmation
-- Including sensitive or confidential information -> Verify content is safe to persist
-- Overwriting existing context without review -> Show diff and confirm
-- Vague or unexplained recommendations -> Provide clear rationale
-
 ## Process
 
 ### Step 1: Records Analysis
