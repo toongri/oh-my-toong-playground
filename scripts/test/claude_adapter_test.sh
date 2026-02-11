@@ -188,6 +188,79 @@ test_update_settings_dry_run() {
 }
 
 # =============================================================================
+# Tests for claude_supports_feature (rules)
+# =============================================================================
+
+# Test: claude_supports_feature returns 0 for "rules"
+test_supports_feature_rules() {
+    claude_supports_feature "rules"
+    local result=$?
+    assert_equals "0" "$result" "rules should be a supported feature"
+}
+
+# =============================================================================
+# Tests for claude_sync_rules_direct
+# =============================================================================
+
+# Test: Copies .md file to .claude/rules/ directory
+test_sync_rules_direct_copies_file() {
+    # Given: A source rule file
+    local source_file="$TEST_TMP_DIR/source-rule.md"
+    echo "# Tool Usage Policy" > "$source_file"
+    echo "Do not use Bash for file reads." >> "$source_file"
+
+    # When: Sync rule to target
+    claude_sync_rules_direct "$TEST_TMP_DIR" "tool-usage-policy" "$source_file" "false"
+
+    # Then: File should be copied to .claude/rules/
+    local target_file="$TEST_TMP_DIR/.claude/rules/tool-usage-policy.md"
+    if [[ ! -f "$target_file" ]]; then
+        echo "ASSERTION FAILED: Target file does not exist: $target_file"
+        return 1
+    fi
+
+    local content=$(cat "$target_file")
+    local expected_first_line="# Tool Usage Policy"
+    local actual_first_line=$(head -1 "$target_file")
+    assert_equals "$expected_first_line" "$actual_first_line" "Rule file content should match"
+}
+
+# Test: Returns gracefully when source file is missing
+test_sync_rules_direct_missing_source() {
+    # Given: A non-existent source file
+    local source_file="$TEST_TMP_DIR/nonexistent-rule.md"
+
+    # When: Sync rule with missing source
+    claude_sync_rules_direct "$TEST_TMP_DIR" "missing-rule" "$source_file" "false"
+    local result=$?
+
+    # Then: Should return 0 (graceful handling)
+    assert_equals "0" "$result" "Should return 0 for missing source file"
+
+    # And: Target file should NOT exist
+    if [[ -f "$TEST_TMP_DIR/.claude/rules/missing-rule.md" ]]; then
+        echo "ASSERTION FAILED: Target file should not exist for missing source"
+        return 1
+    fi
+}
+
+# Test: Dry run does not create file
+test_sync_rules_direct_dry_run() {
+    # Given: A source rule file
+    local source_file="$TEST_TMP_DIR/dry-rule.md"
+    echo "# Dry Run Rule" > "$source_file"
+
+    # When: Sync in dry run mode
+    claude_sync_rules_direct "$TEST_TMP_DIR" "dry-rule" "$source_file" "true"
+
+    # Then: Target file should NOT exist
+    if [[ -f "$TEST_TMP_DIR/.claude/rules/dry-rule.md" ]]; then
+        echo "ASSERTION FAILED: Dry run should not create target file"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Run all tests
 # =============================================================================
 
@@ -195,5 +268,9 @@ run_test test_update_settings_normal_merge
 run_test test_update_settings_cleans_existing_hooks_wrapper
 run_test test_update_settings_preserves_existing_settings
 run_test test_update_settings_dry_run
+run_test test_supports_feature_rules
+run_test test_sync_rules_direct_copies_file
+run_test test_sync_rules_direct_missing_source
+run_test test_sync_rules_direct_dry_run
 
 print_summary

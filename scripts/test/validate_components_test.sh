@@ -986,6 +986,146 @@ EOF
 }
 
 # =============================================================================
+# Tests: Rules Component Validation
+# =============================================================================
+
+test_rules_validation_passes_with_existing_global_rule() {
+    # Rules validation should pass when rule .md file exists in global rules/
+    cat > "$TEST_TMP_DIR/sync.yaml" << EOF
+name: root
+path: $TEST_TMP_DIR/target
+platforms:
+  - claude
+rules:
+  items:
+    - tool-usage-policy
+EOF
+
+    # Create target CLAUDE.md
+    echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
+
+    # Create global rule source file
+    mkdir -p "$TEST_TMP_DIR/rules"
+    echo "# Tool Usage Policy" > "$TEST_TMP_DIR/rules/tool-usage-policy.md"
+
+    # Reset error count
+    ERROR_COUNT=0
+
+    # Run validation
+    validate_components "$TEST_TMP_DIR/sync.yaml" 2>/dev/null
+
+    # Should have no errors
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Rules validation should pass when global rule .md file exists"
+        return 1
+    fi
+}
+
+test_rules_validation_fails_with_missing_rule() {
+    # Rules validation should fail when rule .md file does not exist
+    cat > "$TEST_TMP_DIR/sync.yaml" << EOF
+name: root
+path: $TEST_TMP_DIR/target
+platforms:
+  - claude
+rules:
+  items:
+    - nonexistent-rule
+EOF
+
+    # Create target CLAUDE.md
+    echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
+
+    # No rule source file exists
+    # Reset error count
+    ERROR_COUNT=0
+
+    # Run validation, capture output
+    local output_file="$TEST_TMP_DIR/output.txt"
+    validate_components "$TEST_TMP_DIR/sync.yaml" > "$output_file" 2>&1
+
+    # Should have errors
+    if [[ $ERROR_COUNT -gt 0 ]]; then
+        return 0
+    else
+        echo "Rules validation should fail when rule .md file does not exist"
+        return 1
+    fi
+}
+
+test_rules_validation_project_upward_search() {
+    # Project sync.yaml should search project rules/ then global rules/
+    mkdir -p "$TEST_TMP_DIR/projects/my-proj"
+    cat > "$TEST_TMP_DIR/projects/my-proj/sync.yaml" << EOF
+name: my-proj
+path: $TEST_TMP_DIR/target
+platforms:
+  - claude
+rules:
+  items:
+    - project-rule
+EOF
+
+    # Create target CLAUDE.md
+    echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
+
+    # Create rule in project-specific location
+    mkdir -p "$TEST_TMP_DIR/projects/my-proj/rules"
+    echo "# Project Rule" > "$TEST_TMP_DIR/projects/my-proj/rules/project-rule.md"
+
+    # Reset error count
+    ERROR_COUNT=0
+
+    # Run validation
+    validate_components "$TEST_TMP_DIR/projects/my-proj/sync.yaml" 2>/dev/null
+
+    # Should have no errors (found in project location)
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Rules validation should find rule in project-specific location"
+        return 1
+    fi
+}
+
+test_rules_validation_falls_back_to_global() {
+    # Project sync.yaml should fall back to global rules/ if not in project
+    mkdir -p "$TEST_TMP_DIR/projects/my-proj"
+    cat > "$TEST_TMP_DIR/projects/my-proj/sync.yaml" << EOF
+name: my-proj
+path: $TEST_TMP_DIR/target
+platforms:
+  - claude
+rules:
+  items:
+    - tool-usage-policy
+EOF
+
+    # Create target CLAUDE.md
+    echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
+
+    # Create rule in global location only
+    mkdir -p "$TEST_TMP_DIR/rules"
+    echo "# Tool Usage Policy" > "$TEST_TMP_DIR/rules/tool-usage-policy.md"
+
+    # Reset error count
+    ERROR_COUNT=0
+
+    # Run validation
+    validate_components "$TEST_TMP_DIR/projects/my-proj/sync.yaml" 2>/dev/null
+
+    # Should have no errors (found in global location)
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Rules validation should fall back to global rules/"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1050,6 +1190,12 @@ main() {
 
     # Scoped validation - error messages
     run_test test_missing_component_shows_search_paths
+
+    # Rules component validation
+    run_test test_rules_validation_passes_with_existing_global_rule
+    run_test test_rules_validation_fails_with_missing_rule
+    run_test test_rules_validation_project_upward_search
+    run_test test_rules_validation_falls_back_to_global
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

@@ -414,6 +414,22 @@ validate_components() {
         fi
     fi
 
+    # rules 검증 (새 형식만 지원)
+    field_exists=$(yq '.rules' "$yaml_file")
+    if [[ "$field_exists" != "null" ]]; then
+        local count=$(yq '.rules.items | length // 0' "$yaml_file")
+        if [[ $count -gt 0 ]]; then
+            for i in $(seq 0 $((count - 1))); do
+                local component
+                component=$(get_item_component "$yaml_file" "rules" "$i")
+
+                if [[ -n "$component" && "$component" != "null" ]]; then
+                    validate_scoped_component "rules" "$component" ".md" || true
+                fi
+            done
+        fi
+    fi
+
     return 0
 }
 

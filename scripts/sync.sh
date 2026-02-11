@@ -757,6 +757,97 @@ sync_scripts() {
     log_success "Scripts 동기화 완료"
 }
 
+# ============================================================
+# Rules 동기화
+# ============================================================
+sync_rules() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    # 필드 자체가 없으면 스킵
+    local field_exists=$(yq '.rules' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    # items 필드 확인
+    local items_exists=$(yq '.rules.items' "$yaml_file")
+    if [[ "$items_exists" == "null" ]]; then
+        log_warn "rules.items가 없음, 스킵"
+        return 0
+    fi
+
+    # Get default platforms (use-platforms from config.yaml)
+    local default_platforms=$(get_default_platforms)
+
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "rules")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
+    local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
+    if [[ "$sync_platforms" == "null" ]]; then
+        sync_platforms="$feature_platforms"
+    fi
+
+    # Track which CLIs need directory preparation (Bash 3.2 compatible)
+    local prepared_claude=false
+
+    # Section-level platforms
+    local section_platforms=$(yq -o=json '.rules.platforms // null' "$yaml_file")
+    if [[ "$section_platforms" == "null" ]]; then
+        section_platforms="$sync_platforms"
+    fi
+
+    local count=$(yq '.rules.items | length // 0' "$yaml_file")
+    log_info "Rules 동기화 시작 ($count 개)"
+
+    for i in $(seq 0 $((count - 1))); do
+        get_item_info "$yaml_file" "rules" "$i"
+        local component="$ITEM_COMPONENT"
+
+        local item_platforms
+        if [[ "$ITEM_IS_OBJECT" == "true" ]]; then
+            item_platforms=$(yq -o=json ".rules.items[$i].platforms // null" "$yaml_file")
+            if [[ "$item_platforms" == "null" ]]; then
+                item_platforms="$section_platforms"
+            fi
+        else
+            item_platforms="$section_platforms"
+        fi
+
+        if [[ -z "$component" || "$component" == "null" ]]; then
+            continue
+        fi
+
+        resolve_scoped_source_path "rules" "$component" ".md"
+        if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
+            log_warn "$SCOPED_RESOLUTION_ERROR"
+            continue
+        fi
+
+        # Dispatch to each target adapter
+        for target in $(echo "$item_platforms" | jq -r '.[]'); do
+            case "$target" in
+                claude)
+                    if [[ "$prepared_claude" == false && "$DRY_RUN" != true ]]; then
+                        mkdir -p "$target_path/.claude/rules"
+                        prepared_claude=true
+                    fi
+                    claude_sync_rules_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
+                    ;;
+                *)
+                    log_warn "Rules: platform '$target'는 rules 동기화를 지원하지 않습니다 (스킵)"
+                    ;;
+            esac
+        done
+    done
+
+    log_success "Rules 동기화 완료"
+}
+
 # =============================================================================
 # YAML 처리
 # =============================================================================
@@ -808,6 +899,7 @@ process_yaml() {
     sync_commands "$target_path" "$yaml_file"
     sync_skills "$target_path" "$yaml_file"
     sync_scripts "$target_path" "$yaml_file"
+    sync_rules "$target_path" "$yaml_file"
 
     log_success "완료: $yaml_file"
 }
