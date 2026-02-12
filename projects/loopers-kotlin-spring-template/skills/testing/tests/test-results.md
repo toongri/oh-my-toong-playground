@@ -1,5 +1,11 @@
 # Testing Skill Verification Results
 
+> **Archival Note (2026-02-12):** Scenarios referenced by number (1.1-16.5) correspond to
+> the archived pressure-scenarios.md and comprehensive-pressure-scenarios.md files.
+> These files were replaced by application-scenarios.md as part of the transition
+> from pressure-based to technique-focused verification. Historical results below
+> remain for reference.
+
 ## Test Date: 2026-01-20
 
 ## Overview
@@ -612,3 +618,84 @@ Areas improved:
 9. Added Responsibility Separation First combinatorial guide replacing number-based table (PART 16)
 10. Added Eager Test anti-pattern Red Flag and Rationalization entries
 11. Cross-referenced combinatorial guide Step 1 from test-generation.md
+
+---
+
+## Application Scenario Results
+
+### Test Date: 2026-02-12
+
+### Methodology
+- Transitioned from pressure-based to technique-focused verification
+- Deleted pressure-scenarios.md and comprehensive-pressure-scenarios.md
+- Created application-scenarios.md with 31 scenarios across 11 categories
+- Cleaned SKILL.md of pressure-defense content (3 Red Flag rows, 4 Rationalization rows, Decision Flow section)
+
+### RED Phase Summary (Without Skill)
+
+**Overall: 29/31 PASS (93.5%)**
+
+| Scenario | Result | Key Violation |
+|----------|--------|---------------|
+| SV-1 | PASS | — |
+| SV-2 | **FAIL** | Used `verify(emailClient).send()` + `@MockBean` instead of WireMock/Adapter |
+| SV-3 | **FAIL** | Gave nuanced "conditionally OK" instead of firm rejection of hybrid `verify()` |
+| TL-1 | PASS | — |
+| TL-2 | PASS | — |
+| TL-3 | PASS | — |
+| TL-4 | PASS | — |
+| BD-1 | PASS | — |
+| BD-2 | PASS | — |
+| BD-3 | PASS | — |
+| FM-1 | PASS | — |
+| FM-2 | PASS | — |
+| FM-3 | PASS | — |
+| TD-1 | PASS | — |
+| TD-2 | PASS | — |
+| TD-3 | PASS | — |
+| TD-4 | PASS | — |
+| TD-5 | PASS | — |
+| IP-1 | PASS | — |
+| IP-2 | PASS | — |
+| IP-3 | PASS | — |
+| CC-1 | PASS | — |
+| CC-2 | PASS | — |
+| AP-1 | PASS | — |
+| AP-2 | PASS | — |
+| TG-1 | PASS | — |
+| TG-2 | PASS | — |
+| SK-1 | PASS | — |
+| SK-2 | PASS | — |
+| EN-1 | PASS | — |
+| EN-2 | PASS | — |
+
+**Analysis:** Only State Verification (Iron Law) scenarios failed — the skill's core differentiator. All technique-application scenarios (BDD, BVA, ECP, Factory Method, etc.) passed without the skill, indicating these are general developer knowledge. The skill's primary value is enforcing the absolute `verify()` prohibition.
+
+### GREEN Phase Summary (With Skill)
+
+**Overall: 12/12 PASS (100%)**
+
+| Scenario | Result | Key Compliance |
+|----------|--------|----------------|
+| SV-1 | PASS | No verify(), state assertion on persisted entity |
+| SV-2 | **PASS** ← RED FAIL | WireMock Adapter pattern, no verify(), state-only |
+| SV-3 | **PASS** ← RED FAIL | Firm rejection citing Iron Law, no exceptions |
+| AP-1 | PASS | WireMock Scenario states, no verify(times(N)) |
+| TL-2 | PASS | Domain extraction + Unit/Integration split |
+| BD-1 | PASS | @Nested per behavior + Korean @DisplayName |
+| FM-2 | PASS | createPoint(balance = X) pattern |
+| TD-1 | PASS | 3-point BVA (9, 10, 11) + named classes |
+| TD-5 | PASS | Eager Test identified, @Nested per responsibility |
+| SK-1 | PASS | Pure data object → skip target |
+| EN-1 | PASS | Both exception naming patterns correct |
+| CC-1 | PASS | Race condition identified, assertion after await() |
+
+**Key Finding:** SV-2 and SV-3 transitioned from FAIL to PASS, confirming the skill effectively enforces the Iron Law. No regressions in other categories.
+
+### REFACTOR Changes
+
+None required — GREEN phase achieved 100% compliance with no technique guidance gaps identified.
+
+### Conclusion
+
+The testing skill's primary enforcement value lies in the **Iron Law (absolute verify() prohibition)**. Technique-application guidance (BDD structure, BVA, ECP, factory methods, etc.) serves as a **consistency enforcer** rather than a knowledge provider, as competent developers already apply these patterns naturally. The transition from pressure-based to technique-focused verification maintains full coverage while removing social pressure framing.
