@@ -623,74 +623,94 @@ Areas improved:
 
 ## Application Scenario Results
 
-### Test Date: 2026-02-12
+### Test Date: 2026-02-12 (교정: 2026-02-12)
 
 ### Methodology
 - Transitioned from pressure-based to technique-focused verification
 - Deleted pressure-scenarios.md and comprehensive-pressure-scenarios.md
 - Created application-scenarios.md with 31 scenarios across 11 categories
-- Cleaned SKILL.md of pressure-defense content (3 Red Flag rows, 4 Rationalization rows, Decision Flow section)
+- Cleaned SKILL.md of pressure-defense content
+- **교정**: RED Phase를 blind testing 방식으로 재실행 (Input만 전달, Expected Output 미노출)
 
-### RED Phase Summary (Without Skill)
+### RED Phase Summary (Without Skill — Blind Test)
 
-**Overall: 29/31 PASS (93.5%)**
+**Overall: 16/31 PASS (51.6%)**
 
 | Scenario | Result | Key Violation |
 |----------|--------|---------------|
 | SV-1 | PASS | — |
-| SV-2 | **FAIL** | Used `verify(emailClient).send()` + `@MockBean` instead of WireMock/Adapter |
-| SV-3 | **FAIL** | Gave nuanced "conditionally OK" instead of firm rejection of hybrid `verify()` |
+| SV-2 | **FAIL** | verify(emailClient).send() 사용, WireMock/Adapter 미적용 |
+| SV-3 | **FAIL** | "권장하지 않음" 수준 — 절대 금지(FORBIDDEN) 아님 |
 | TL-1 | PASS | — |
-| TL-2 | PASS | — |
-| TL-3 | PASS | — |
-| TL-4 | PASS | — |
-| BD-1 | PASS | — |
+| TL-2 | **FAIL** | Service에 로직 유지, Domain 추출 미제안 |
+| TL-3 | **FAIL** | E2E에서 DB 직접 검증을 적절하다고 판단 |
+| TL-4 | **FAIL** | Domain 추출 미제안, Step Integration 미언급 |
+| BD-1 | **FAIL** | @Nested 미사용, flat structure |
 | BD-2 | PASS | — |
-| BD-3 | PASS | — |
+| BD-3 | **FAIL** | backtick 네이밍 미사용, camelCase 사용 |
 | FM-1 | PASS | — |
 | FM-2 | PASS | — |
 | FM-3 | PASS | — |
-| TD-1 | PASS | — |
+| TD-1 | **FAIL** | 3-point BVA 패턴 미적용, 등가 클래스 미명명 |
 | TD-2 | PASS | — |
 | TD-3 | PASS | — |
 | TD-4 | PASS | — |
 | TD-5 | PASS | — |
-| IP-1 | PASS | — |
+| IP-1 | **FAIL** | 실패 리소스만 검증, 전체 리소스 검증 누락 |
 | IP-2 | PASS | — |
 | IP-3 | PASS | — |
 | CC-1 | PASS | — |
-| CC-2 | PASS | — |
-| AP-1 | PASS | — |
-| AP-2 | PASS | — |
-| TG-1 | PASS | — |
+| CC-2 | **FAIL** | 별도 ConcurrencyTest 파일 분리 미제안 |
+| AP-1 | **FAIL** | verify(times(3)) 사용, WireMock Scenario 미적용 |
+| AP-2 | **FAIL** | CircuitBreaker 리셋 미언급, WireMock만 리셋 |
+| TG-1 | **FAIL** | 클래스별 분해 없이 단일 Service 테스트 |
 | TG-2 | PASS | — |
-| SK-1 | PASS | — |
-| SK-2 | PASS | — |
+| SK-1 | **FAIL** | data class에 테스트 작성 (skip 해야 함) |
+| SK-2 | **FAIL** | cron expression 테스트 작성 (infrastructure) |
 | EN-1 | PASS | — |
 | EN-2 | PASS | — |
 
-**Analysis:** Only State Verification (Iron Law) scenarios failed — the skill's core differentiator. All technique-application scenarios (BDD, BVA, ECP, Factory Method, etc.) passed without the skill, indicating these are general developer knowledge. The skill's primary value is enforcing the absolute `verify()` prohibition.
+**Analysis:** 스킬 없이도 PASS한 16개 시나리오는 대부분 일반적인 개발 지식으로 해결 가능한 항목(Factory Method, Test Isolation, Decision Table, ECP 등). FAIL한 15개는 스킬 고유의 규칙이 필요한 항목으로, 크게 4개 영역으로 분류된다: (1) Iron Law — verify() 절대 금지 (SV-2, SV-3, AP-1), (2) Test Level 분류 — Domain 추출, E2E 경계 (TL-2~4, TG-1), (3) BDD 구조 — @Nested, backtick 네이밍 (BD-1, BD-3), (4) 도메인 특화 패턴 — BVA 3-point, skip 기준, CircuitBreaker 리셋 등 (TD-1, SK-1, SK-2, CC-2, AP-2, IP-1).
 
-### GREEN Phase Summary (With Skill)
+### GREEN Phase Summary (With Skill — Blind Test)
 
-**Overall: 12/12 PASS (100%)**
+**Overall: 31/31 PASS (100%)**
 
 | Scenario | Result | Key Compliance |
 |----------|--------|----------------|
-| SV-1 | PASS | No verify(), state assertion on persisted entity |
+| SV-1 | PASS | Integration Test, assertThat on persisted entity, no verify() |
 | SV-2 | **PASS** ← RED FAIL | WireMock Adapter pattern, no verify(), state-only |
-| SV-3 | **PASS** ← RED FAIL | Firm rejection citing Iron Law, no exceptions |
-| AP-1 | PASS | WireMock Scenario states, no verify(times(N)) |
-| TL-2 | PASS | Domain extraction + Unit/Integration split |
-| BD-1 | PASS | @Nested per behavior + Korean @DisplayName |
-| FM-2 | PASS | createPoint(balance = X) pattern |
-| TD-1 | PASS | 3-point BVA (9, 10, 11) + named classes |
-| TD-5 | PASS | Eager Test identified, @Nested per responsibility |
-| SK-1 | PASS | Pure data object → skip target |
-| EN-1 | PASS | Both exception naming patterns correct |
-| CC-1 | PASS | Race condition identified, assertion after await() |
+| SV-3 | **PASS** ← RED FAIL | "절대 안 됩니다" firm rejection, Iron Law 인용 |
+| TL-1 | PASS | Pure delegation 식별, Integration Test 권장 |
+| TL-2 | **PASS** ← RED FAIL | Domain model로 로직 이동, Unit + Integration 분리 |
+| TL-3 | **PASS** ← RED FAIL | E2E 레이어 경계 위반 지적, API 응답만 검증 |
+| TL-4 | **PASS** ← RED FAIL | Domain Unit Test with BVA + Processor Integration Test |
+| BD-1 | **PASS** ← RED FAIL | @Nested per behavior (Charge, Deduct, GetBalance) |
+| BD-2 | PASS | Eager Test 안티패턴 식별, @Nested 분리 |
+| BD-3 | **PASS** ← RED FAIL | Korean @DisplayName + English backtick naming |
+| FM-1 | PASS | private factory, all defaults, createProduct() |
+| FM-2 | PASS | createPoint(balance=X) pattern, Expose Only What Matters |
+| FM-3 | PASS | 공유 가변 상태 거부, Test Isolation > Code Reuse |
+| TD-1 | **PASS** ← RED FAIL | 3-point BVA (9, 10, 11), named equivalence classes |
+| TD-2 | PASS | @EnumSource, 각 상태별 명명된 클래스 |
+| TD-3 | PASS | 8개 전체 조합, @Nested로 책임별 분리 |
+| TD-4 | PASS | 구간별 3-point BVA, 전환점(5/6, 12/13, 18/19) 커버 |
+| TD-5 | PASS | Eager Test 식별, @Nested per responsibility |
+| IP-1 | **PASS** ← RED FAIL | stock + point + coupon + order 전체 리소스 검증 |
+| IP-2 | PASS | BEFORE/AFTER_COMMIT 구분, Awaitility 사용 |
+| IP-3 | PASS | during() + atMost() 패턴, 상태변경 vs 무변경 구분 |
+| CC-1 | PASS | latch.await() 후 assertion, race condition 식별 |
+| CC-2 | **PASS** ← RED FAIL | 별도 *ConcurrencyTest.kt + timeout 설정 |
+| AP-1 | **PASS** ← RED FAIL | WireMock Scenario states, verify() FORBIDDEN |
+| AP-2 | **PASS** ← RED FAIL | WireMock + CircuitBreaker 모두 reset |
+| TG-1 | **PASS** ← RED FAIL | Point Unit, Inventory Unit, OrderService Integration 분리 |
+| TG-2 | PASS | 구체적 값 (userId=1L, couponId=100L) 명시 |
+| SK-1 | **PASS** ← RED FAIL | "테스트 작성 불필요" — pure data object skip |
+| SK-2 | **PASS** ← RED FAIL | Service만 테스트, cron은 Spring 책임 |
+| EN-1 | PASS | CoreException + IllegalArgumentException 양쪽 패턴 |
+| EN-2 | PASS | @ParameterizedTest + @EnumSource 통합 |
 
-**Key Finding:** SV-2 and SV-3 transitioned from FAIL to PASS, confirming the skill effectively enforces the Iron Law. No regressions in other categories.
+**Key Finding:** RED에서 FAIL이었던 15개 시나리오가 GREEN에서 모두 PASS로 전환. 스킬이 제공하는 가치는 (1) verify() 절대 금지 원칙, (2) Domain 추출 + 올바른 Test Level 분류, (3) @Nested/backtick BDD 구조 강제, (4) 도메인 특화 패턴(BVA 3-point, skip 기준, Adapter cleanup)에 집중된다.
 
 ### REFACTOR Changes
 
@@ -698,4 +718,4 @@ None required — GREEN phase achieved 100% compliance with no technique guidanc
 
 ### Conclusion
 
-The testing skill's primary enforcement value lies in the **Iron Law (absolute verify() prohibition)**. Technique-application guidance (BDD structure, BVA, ECP, factory methods, etc.) serves as a **consistency enforcer** rather than a knowledge provider, as competent developers already apply these patterns naturally. The transition from pressure-based to technique-focused verification maintains full coverage while removing social pressure framing.
+Blind testing으로 교정된 결과, 스킬의 **실제 baseline 실패율은 48.4% (15/31 FAIL)**로 확인되었다. 이전 오염된 결과(6.5% 실패율)와 크게 다르며, 스킬의 존재 가치를 더 명확히 보여준다. 스킬 없이도 일반 개발 지식으로 해결 가능한 영역(Factory Method, Test Isolation, Decision Table 등)과 스킬이 반드시 필요한 영역(Iron Law, Test Level 분류, BDD 구조, 도메인 특화 패턴)이 명확히 구분된다. RED→GREEN 전환율 100% (15/15)는 스킬의 규칙이 정확하게 필요한 지점을 커버하고 있음을 증명한다.
