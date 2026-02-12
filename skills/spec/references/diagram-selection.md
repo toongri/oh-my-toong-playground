@@ -96,3 +96,33 @@ flowchart TD
 3. That participant must have **3+ internal branch points** (R3 threshold applies)
 4. The Flowchart must represent **only that participant's internal logic** (no cross-participant interactions)
 5. The Sequence Diagram must reference the decomposition target via `Note over` or similar
+
+## 5. Diagram Presentation Protocol
+
+Every diagram must be presented in a mandatory 3-part sequence:
+
+### 5a. Structure
+
+1. **Why (before diagram)**: State why this diagram is needed and what it verifies. Must contain at least one verification objective.
+2. **Diagram**: The Mermaid diagram itself.
+3. **Interpretation (after diagram)**: 2-3 lines highlighting key structural observations. Must contain at least 2 specific structural observations.
+
+### 5b. Example
+
+> **Why**: To verify responsibility isolation between OrderService and PaymentService, and confirm the transaction boundary does not span all three services.
+>
+> *(Sequence Diagram here)*
+>
+> **Interpretation**: PaymentService is the only participant communicating with external PG — isolating PG dependency. The alt block shows synchronous rollback, meaning the user waits for cleanup.
+
+### 5c. Anti-Pattern
+
+| Anti-Pattern | Correct Approach |
+|--------------|-----------------|
+| Presenting a diagram without Why or Interpretation | Always include all 3 parts in order |
+| Generic/vacuous Why or Interpretation (e.g., "This diagram shows the flow") | State specific verification objectives and structural observations |
+
+### 5d. Nesting with Rich Context Pattern
+
+When combined with the Rich Context Pattern, Diagram Presentation Protocol nests inside Option Analysis:
+- Context → Tension → [Why → Diagram → Interpretation] → Recommendation → AskUserQuestion

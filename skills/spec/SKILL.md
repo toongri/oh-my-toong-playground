@@ -282,6 +282,11 @@ When user has no preference or cannot decide, select best practice autonomously.
 
 This applies to ALL question types - AskUserQuestion, plain text questions, clarifications. No exceptions.
 
+**Structural Verification Criteria:**
+- Each message to the user contains at most **1 question** requiring a response
+- Bundling questions into numbered lists (1. ... 2. ... 3. ...) or bulleted lists is **prohibited**
+- Context/analysis paragraphs are fine — only the question itself must be singular
+
 ```
 WRONG: "Please answer the following questions: 1. ... 2. ... 3. ... 4. ..."
 RIGHT: "Are Jira comment keywords also trigger targets?"
@@ -291,7 +296,23 @@ RIGHT: "Are Jira comment keywords also trigger targets?"
        ...
 ```
 
+### Question Priority
+
+When multiple questions are pending within a step, ask in order: **Blocking → Important → Nice-to-have**.
+
+| Priority | Definition | Delay Cost |
+|----------|-----------|------------|
+| **Blocking** | Answer changes the structural direction of subsequent steps (scope boundary, technology constraint, architectural decision) | Rework across multiple steps |
+| **Important** | Answer affects one specific area but does not alter the overall direction | Local revision only |
+| **Nice-to-have** | Answer provides polish or detail. Can be deferred without structural impact | None — defer freely |
+
+**Constraint:** Priority ordering applies WITHIN a step. Do NOT collect questions across steps to reorder them.
+
 ### Question Type Selection
+
+**Mandatory Trigger Rules (not suggestions):**
+- When a decision has 2-4 clear, mutually exclusive options → **MUST** use AskUserQuestion
+- When a question is open-ended or has no predefined options → **MUST** use plain text
 
 | Situation | Method | Why |
 |-----------|--------|-----|
@@ -303,6 +324,11 @@ RIGHT: "Are Jira comment keywords also trigger targets?"
 **Do NOT force AskUserQuestion for open-ended questions.** If the answer is open-ended, just ask in plain text.
 
 ### Question Quality Standard
+
+**Consequence Statement Rule:** Every AskUserQuestion option MUST include a `description` field with at least one concrete consequence statement.
+
+- Anti-pattern: `description: "Simple approach"` — RED (no consequence, just a label)
+- Good: `description: "Simple approach — single transaction, but rollback affects all operations if any step fails"` — GREEN (states what happens as a result)
 
 ```yaml
 BAD:
