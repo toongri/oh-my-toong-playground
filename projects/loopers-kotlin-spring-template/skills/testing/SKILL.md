@@ -55,13 +55,10 @@ These thoughts mean you're rationalizing. STOP and reconsider:
 |------------------------------------------|----------------------------------------------------------------------|
 | "This is too simple for BDD structure"   | Simple code deserves consistent structure. Lower cost = less excuse. |
 | "verify() is fine for external services" | Use WireMock/Adapter test. If impossible, it's design feedback.      |
-| "The team already uses this pattern"     | Check the actual codebase. Existing tests follow Classical TDD.      |
 | "State verification is impossible here"  | Redesign to return verifiable result. "Hard to test" = "bad design". |
-| "I'll refactor to proper pattern later"  | Later never comes. Do it right now.                                  |
 | "This is just a utility class"           | Utilities need BDD too. Consistency > convenience.                   |
 | "It's overkill for this case"            | Rules exist precisely for these "exception" moments.                 |
 | "Factory method is boilerplate"          | 5 minutes now saves hours of confusion later.                        |
-| "Time pressure - need to ship fast"      | Fast + wrong = slower than slow + right.                             |
 | "Service has domain logic, needs Unit Test" | Domain logic belongs in Domain model. Service only orchestrates.  |
 | "Mock Unit Test is faster than Integration" | Speed is not the goal. Correct test level is.                      |
 | "verify() is just extra insurance"       | Any verify() use is forbidden. No "insurance" exceptions.            |
@@ -87,10 +84,6 @@ Common excuses and why they're wrong:
 | "BDD structure is overhead for simple tests" | Consistency trumps perceived efficiency      | Apply same structure everywhere  |
 | "Factory methods are boilerplate"            | They're investment, not cost                 | Create factory with all defaults |
 | "DRY - share setup between tests"            | Test isolation > code reuse                  | Fresh fixtures per test          |
-| "The user insisted on verify()"              | Project rules > user preference              | Educate on Classical TDD         |
-| "Other projects use Mockito verify()"        | This project's rules apply here              | Follow this project's standards  |
-| "I'll fix the structure later"               | Technical debt compounds                     | Do it correctly now              |
-| "It's urgent, no time for proper tests"      | Bad tests are worse than no tests            | Take time to do it right         |
 | "State verified, verify() is extra safety"   | ANY verify() usage is forbidden. No hybrids. | Remove verify(), state only      |
 | "Service does X, so Unit Test for X"         | If X is domain logic, test Domain model      | Unit Test Domain, Integration Service |
 | "Mock is faster than real DB"                | Speed < correctness. Mocks hide real bugs.   | Use real DB via Integration Test |
@@ -103,28 +96,13 @@ Common excuses and why they're wrong:
 
 ---
 
-## Decision Flow: When Rules Feel Burdensome
+## Handling Genuine Technical Limitations
 
-```dot
-digraph rule_check {
-    "Rule feels unnecessary?" [shape=diamond];
-    "Is this a real technical limitation?" [shape=diamond];
-    "STOP - You're rationalizing" [shape=box, style=filled, fillcolor="#ffcccc"];
-    "Consult references for the pattern" [shape=box];
-    "Can you redesign to enable state verification?" [shape=diamond];
-    "Follow the rule anyway" [shape=box, style=filled, fillcolor="#ccffcc"];
-    "Document limitation, propose design change" [shape=box];
+If state verification appears technically impossible:
 
-    "Rule feels unnecessary?" -> "Is this a real technical limitation?" [label="yes"];
-    "Rule feels unnecessary?" -> "STOP - You're rationalizing" [label="no, just inconvenient"];
-    "Is this a real technical limitation?" -> "Can you redesign to enable state verification?" [label="maybe"];
-    "Is this a real technical limitation?" -> "STOP - You're rationalizing" [label="not really"];
-    "Can you redesign to enable state verification?" -> "Follow the rule anyway" [label="yes"];
-    "Can you redesign to enable state verification?" -> "Document limitation, propose design change" [label="truly impossible"];
-    "STOP - You're rationalizing" -> "Consult references for the pattern";
-    "Consult references for the pattern" -> "Follow the rule anyway";
-}
-```
+1. **Verify it's truly impossible** — Can you redesign to return/expose verifiable state?
+2. **If redesign is possible** — Follow the rule. Redesign first, then test.
+3. **If truly impossible** — Document the limitation and propose a design change. Do not use verify() as a workaround.
 
 ---
 
