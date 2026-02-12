@@ -2,7 +2,7 @@
 
 Area: Diagram Selection (Cross-cutting)
 Reference: `skills/spec/references/diagram-selection.md`
-Scenario Count: 3
+Scenario Count: 4
 
 ---
 
@@ -47,3 +47,18 @@ Scenario Count: 3
 **Expected Output**: Decomposition 적용 — (1) 시스템 간 흐름은 Sequence Diagram으로 유지, (2) PaymentService의 내부 분기 로직을 별도 Flowchart로 분리, (3) Sequence Diagram에서 `Note over PaymentService`로 Flowchart 참조. 5가지 Decomposition Criteria 모두 충족 확인.
 
 **Pass Criteria**: (1) Sequence + Flowchart 분리가 이루어지고, (2) Flowchart는 PaymentService 내부 로직만 포함하며, (3) Sequence에서 `Note over` 참조가 포함됨. (4) 5가지 Decomposition Criteria(기존 Sequence 존재, 단일 참여자, 3+ branch points, 내부 로직만, Note over 참조)가 모두 언급됨. 하나라도 누락되면 RED.
+
+---
+
+### DG-4: Diagram Presentation Protocol
+
+**Technique Under Test**: Diagram Presentation Protocol — Why → Diagram → Interpretation sequence (diagram-selection.md)
+
+**Input**: Solution Design step requires a Sequence Diagram for the order creation flow involving Client, OrderService, PaymentService, and InventoryService.
+
+**Expected Output**: Diagram is presented in the mandatory 3-part sequence:
+1. **Why section (before diagram)**: States why this diagram is needed and what it verifies (e.g., "to verify responsibility isolation between OrderService and PaymentService, and confirm the transaction boundary does not span all three services")
+2. **Diagram**: Mermaid Sequence Diagram with participants and interactions
+3. **Interpretation section (after diagram)**: 2-3 lines highlighting key structural points (e.g., "PaymentService is the only participant communicating with external PG — isolating PG dependency. The alt block shows synchronous rollback, meaning the user waits for cleanup.")
+
+**Pass Criteria**: (1) Why section appears BEFORE the diagram. (2) Interpretation section appears AFTER the diagram. (3) Why section contains at least one verification objective. (4) Interpretation section contains at least 2 specific structural observations about the diagram. If the diagram is presented without a preceding Why or a following Interpretation, RED. If Why or Interpretation are generic/vacuous ("This diagram shows the flow"), RED.

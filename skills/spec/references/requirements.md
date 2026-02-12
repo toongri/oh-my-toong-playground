@@ -28,12 +28,36 @@ For each user action the system tracks, clarify exactly when it occurs, how dupl
 - Exclude: "30-second flush cycle", "Redis ZSET", "Kafka Consumer", "Bucket key format"
 - Test: "Is this something a PO would find valuable to understand?" → Yes = Requirement, No = Implementation detail
 
+### Surfacing Ambiguous Requirements
+
+Classify undecided aspects into 3 question types, ordered by priority:
+
+1. **Policy questions** (ask first — blocking): Business rules and policy decisions that must be resolved before design.
+   - e.g., [Policy] "What is the time window for cancellation?"
+   - e.g., [Policy] "What counts as 'order failure' — validation error, payment timeout, inventory shortage?"
+2. **Boundary questions** (ask next): Responsibility and scope boundaries between components or teams.
+   - e.g., [Boundary] "Who owns the cancellation logic — Order Service or Payment Service?"
+   - e.g., [Boundary] "Is partial cancellation (refund only the failed item) in scope?"
+3. **Extension questions** (ask last — non-blocking): Future extensibility considerations that do not block current design.
+   - e.g., [Extension] "Could cancellation rules vary by payment method in the future?"
+   - e.g., [Extension] "Will manual cancellation by CS agents be needed later?"
+
+Label each question with its type and address Policy/blocking questions before Extension questions.
+
 ## Process
 
 ### Step 1: Project Overview
 
 #### 1.1 Define Core Problem
 - Question: What is the core problem this project aims to solve?
+- **3-Perspective Problem Reframing**: Do not accept feature requests at face value. Reframe them as problem statements from 3 perspectives:
+  - **User**: What pain or friction does the user experience?
+  - **Business**: What business value is at risk?
+  - **System**: What technical inconsistency or constraint exists?
+  - Example — Feature request: "Add order cancellation"
+    - User: "users cannot reverse mistaken or unwanted orders"
+    - Business: "irrevocable orders increase CS load and refund costs"
+    - System: "order lifecycle has no reverse transition from CONFIRMED state"
 
 #### 1.2 Business Value Analysis
 - Analysis: Analyze and present possible business values based on user responses
