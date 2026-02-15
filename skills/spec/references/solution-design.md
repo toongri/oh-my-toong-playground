@@ -168,8 +168,14 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### 6.2 Present Design Area Selection
 - Prepare: List of recommended Design Areas with justification
-- Present: Use AskUserQuestion with multiSelect: true (see SKILL.md Design Area Selection)
-- Confirm: User selects which Design Areas to proceed with
+- Present: "The following Design Areas are recommended as analytical lenses for this project.
+  They are defaults — not exhaustive. Are there additional project-specific or cross-cutting
+  concerns that warrant dedicated design analysis?"
+- AI Proactive Check: Review Solution Design output for concerns that may not map
+  to any recommended Area (e.g., migration strategy, security model, workflow orchestration).
+  If found, recommend to user as additional concern.
+- Confirm: User selects which Design Areas to proceed with, optionally adding custom concerns
+- Custom concerns: Apply Emergent Concern Protocol triage
 
 #### 6.3 Validate Selection
 - If user selects NO Design Areas: Ask for justification before proceeding
