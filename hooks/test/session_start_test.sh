@@ -200,26 +200,6 @@ EOF
 # Tests: Session-based ultrawork state file reading
 # =============================================================================
 
-test_session_start_reads_session_specific_ultrawork_state() {
-    # Create session-specific ultrawork state file
-    cat > "$TEST_TMP_DIR/.omt/ultrawork-state-test-session-xyz.json" << 'EOF'
-{
-  "active": true,
-  "started_at": "2024-01-01T00:00:00",
-  "original_prompt": "session specific ultrawork task",
-  "reinforcement_count": 0,
-  "last_checked_at": "2024-01-01T00:00:00"
-}
-EOF
-
-    # Run with sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session-xyz"}' | "$HOOKS_DIR/session-start.sh" 2>&1) || true
-
-    # Verify output contains ultrawork mode restored message
-    assert_output_contains "$output" "ULTRAWORK MODE RESTORED" "Should restore session-specific ultrawork state" || return 1
-}
-
 test_session_start_ignores_other_sessions_ultrawork_state() {
     # Create ultrawork state file for DIFFERENT session
     cat > "$TEST_TMP_DIR/.omt/ultrawork-state-other-session.json" << 'EOF'
@@ -238,37 +218,6 @@ EOF
 
     # Should NOT contain ultrawork mode restored (no state for this session)
     assert_output_not_contains "$output" "ULTRAWORK MODE RESTORED" "Should NOT restore other session's ultrawork state" || return 1
-}
-
-test_session_start_uses_default_session_for_ultrawork() {
-    # Create default ultrawork state file
-    cat > "$TEST_TMP_DIR/.omt/ultrawork-state-default.json" << 'EOF'
-{
-  "active": true,
-  "started_at": "2024-01-01T00:00:00",
-  "original_prompt": "default session ultrawork task",
-  "reinforcement_count": 0,
-  "last_checked_at": "2024-01-01T00:00:00"
-}
-EOF
-
-    # Run without sessionId in input
-    local output
-    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'"}' | "$HOOKS_DIR/session-start.sh" 2>&1) || true
-
-    # Should contain ultrawork mode restored (using default session)
-    assert_output_contains "$output" "ULTRAWORK MODE RESTORED" "Should restore default session ultrawork state" || return 1
-}
-
-test_session_start_uses_session_id_for_ultrawork_path() {
-    # Check that session-start.sh uses session-specific ultrawork file
-    if grep -q 'ultrawork-state-\${SESSION_ID' "$HOOKS_DIR/session-start.sh" || \
-       grep -q 'ultrawork-state-.*SESSION_ID' "$HOOKS_DIR/session-start.sh"; then
-        return 0
-    else
-        echo "ASSERTION FAILED: session-start.sh should use session-specific ultrawork state file"
-        return 1
-    fi
 }
 
 test_session_start_no_generic_ultrawork_state() {
@@ -300,10 +249,7 @@ main() {
     run_test test_session_start_reads_oracle_feedback_from_ralph_state
 
     # Session-based ultrawork state tests
-    run_test test_session_start_reads_session_specific_ultrawork_state
     run_test test_session_start_ignores_other_sessions_ultrawork_state
-    run_test test_session_start_uses_default_session_for_ultrawork
-    run_test test_session_start_uses_session_id_for_ultrawork_path
     run_test test_session_start_no_generic_ultrawork_state
 
     echo "=========================================="

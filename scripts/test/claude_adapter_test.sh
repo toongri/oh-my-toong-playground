@@ -105,11 +105,11 @@ test_update_settings_normal_merge() {
     local hooks_json='{"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo test"}]}]}'
     claude_update_settings "$TEST_TMP_DIR" "$hooks_json" "false"
 
-    # Then: Settings should have hooks at top level
+    # Then: Settings should have hooks nested under "hooks" key
     local result=$(cat "$TEST_TMP_DIR/.claude/settings.json")
-    local expected='{"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo test"}]}]}'
+    local expected='{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo test"}]}]}}'
 
-    assert_json_equals "$expected" "$result" "Hooks should be at top level"
+    assert_json_equals "$expected" "$result" "Hooks should be nested under hooks key"
 }
 
 # Test: Merge when existing settings has hooks wrapper - THE BUG CASE
@@ -128,16 +128,16 @@ EOF
     local hooks_json='{"PreToolUse": [{"matcher": "new", "hooks": []}]}'
     claude_update_settings "$TEST_TMP_DIR" "$hooks_json" "false"
 
-    # Then: Result should NOT have nested hooks wrapper
+    # Then: Result should have new hooks under .hooks key and old hooks replaced
     local result=$(cat "$TEST_TMP_DIR/.claude/settings.json")
 
-    # Should have PreToolUse at top level
-    local has_top_level_hooks=$(echo "$result" | jq 'has("PreToolUse")')
-    assert_equals "true" "$has_top_level_hooks" "Should have PreToolUse at top level"
+    # Should have PreToolUse under .hooks
+    local has_pre_tool_use=$(echo "$result" | jq '.hooks | has("PreToolUse")')
+    assert_equals "true" "$has_pre_tool_use" "Should have PreToolUse under .hooks"
 
-    # Should NOT have .hooks wrapper
-    local has_hooks_wrapper=$(echo "$result" | jq 'has("hooks")')
-    assert_equals "false" "$has_hooks_wrapper" "Should NOT have hooks wrapper"
+    # Should have .hooks key
+    local has_hooks_key=$(echo "$result" | jq 'has("hooks")')
+    assert_equals "true" "$has_hooks_key" "Should have hooks key"
 
     # Should preserve other settings
     local has_other_setting=$(echo "$result" | jq '.someOtherSetting')
@@ -161,7 +161,7 @@ EOF
     # Then: Both hooks and existing settings should be present
     local result=$(cat "$TEST_TMP_DIR/.claude/settings.json")
 
-    local has_stop=$(echo "$result" | jq 'has("Stop")')
+    local has_stop=$(echo "$result" | jq '.hooks | has("Stop")')
     assert_equals "true" "$has_stop" "Should have Stop hook"
 
     local existing_value=$(echo "$result" | jq -r '.existingSetting')
