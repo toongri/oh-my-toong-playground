@@ -315,7 +315,7 @@ test_sync_hooks_uses_adapter_dispatch() {
 
 test_sync_skills_uses_adapter_dispatch() {
     # sync_skills should use adapter dispatch pattern
-    if grep -A 80 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q 'claude_sync_skills'; then
+    if grep -A 120 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q 'claude_sync_skills'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_skills should call claude_sync_skills adapter"
@@ -390,7 +390,7 @@ test_sync_commands_dispatches_to_codex() {
 
 test_sync_skills_dispatches_to_gemini() {
     # sync_skills should have gemini_sync_skills dispatch
-    if grep -A 80 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q 'gemini_sync_skills'; then
+    if grep -A 120 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q 'gemini_sync_skills'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_skills should dispatch to gemini_sync_skills"
@@ -400,7 +400,7 @@ test_sync_skills_dispatches_to_gemini() {
 
 test_sync_skills_dispatches_to_codex() {
     # sync_skills should have codex_sync_skills dispatch
-    if grep -A 100 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q 'codex_sync_skills'; then
+    if grep -A 120 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q 'codex_sync_skills'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_skills should dispatch to codex_sync_skills"

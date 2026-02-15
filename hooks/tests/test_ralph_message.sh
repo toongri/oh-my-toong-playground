@@ -24,33 +24,33 @@ test_json_valid() {
 # Test function to check for COMPLETION CONDITION GUIDE section
 test_completion_guide_present() {
     local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.message')
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.hookSpecificOutput.additionalContext')
 
-    if [[ "$message" != *"COMPLETION CONDITION GUIDE (IRON LAW)"* ]]; then
-        echo "FAIL: Message does not contain 'COMPLETION CONDITION GUIDE (IRON LAW)'"
+    if [[ "$message" != *"COMPLETION SEQUENCE (MANDATORY)"* ]]; then
+        echo "FAIL: Message does not contain 'COMPLETION SEQUENCE (MANDATORY)'"
         return 1
     fi
-    echo "PASS: COMPLETION CONDITION GUIDE present"
+    echo "PASS: COMPLETION SEQUENCE (MANDATORY) present"
     return 0
 }
 
-# Test function to check for Evidence Chain section
-test_evidence_chain_present() {
+# Test function to check for VERIFICATION REQUIREMENTS section
+test_verification_requirements_present() {
     local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.message')
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.hookSpecificOutput.additionalContext')
 
-    if [[ "$message" != *"Evidence Chain"* ]]; then
-        echo "FAIL: Message does not contain 'Evidence Chain'"
+    if [[ "$message" != *"VERIFICATION REQUIREMENTS"* ]]; then
+        echo "FAIL: Message does not contain 'VERIFICATION REQUIREMENTS'"
         return 1
     fi
-    echo "PASS: Evidence Chain present"
+    echo "PASS: VERIFICATION REQUIREMENTS present"
     return 0
 }
 
 # Test function to check for Red Flags section
 test_red_flags_present() {
     local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.message')
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.hookSpecificOutput.additionalContext')
 
     if [[ "$message" != *"Red Flags"* ]]; then
         echo "FAIL: Message does not contain 'Red Flags'"
@@ -60,24 +60,23 @@ test_red_flags_present() {
     return 0
 }
 
-# Test function to check for mandatory steps
-test_mandatory_steps_present() {
+# Test function to check for CORE RULES section
+test_core_rules_present() {
     local message
-    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.message')
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.hookSpecificOutput.additionalContext')
 
-    if [[ "$message" != *"IDENTIFY"* ]] || [[ "$message" != *"RUN"* ]] || \
-       [[ "$message" != *"READ"* ]] || [[ "$message" != *"VERIFY"* ]]; then
-        echo "FAIL: Message does not contain mandatory steps (IDENTIFY, RUN, READ, VERIFY)"
+    if [[ "$message" != *"CORE RULES"* ]]; then
+        echo "FAIL: Message does not contain 'CORE RULES'"
         return 1
     fi
-    echo "PASS: Mandatory steps present"
+    echo "PASS: CORE RULES present"
     return 0
 }
 
 # Test function to check variable expansion
 test_variable_expansion() {
     local message
-    message=$(echo '{"prompt": "ralph implement feature X", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.message')
+    message=$(echo '{"prompt": "ralph implement feature X", "cwd": "/tmp"}' | "$HOOK_SCRIPT" | jq -r '.hookSpecificOutput.additionalContext')
 
     if [[ "$message" != *"Original task: ralph implement feature X"* ]]; then
         echo "FAIL: PROMPT variable not expanded correctly"
@@ -96,9 +95,9 @@ FAILED=0
 
 test_json_valid || FAILED=1
 test_completion_guide_present || FAILED=1
-test_evidence_chain_present || FAILED=1
+test_verification_requirements_present || FAILED=1
 test_red_flags_present || FAILED=1
-test_mandatory_steps_present || FAILED=1
+test_core_rules_present || FAILED=1
 test_variable_expansion || FAILED=1
 
 echo ""
