@@ -36,6 +36,10 @@ AskUserQuestion:
       description: "[Specific justification or 'Standard deployment sufficient - no custom monitoring needed']"
 ```
 
+**Custom Concerns**: The AskUserQuestion options above are defaults. If the user identifies
+additional design concerns (e.g., "마이그레이션 전략", "보안 모델"), apply the Emergent Concern
+Protocol triage from SKILL.md. Custom concerns are not constrained to the predefined 6 Areas.
+
 ### Recommendation Criteria
 
 Use SKILL.md Area Entry Criteria to determine which Design Areas to recommend.
@@ -696,6 +700,34 @@ flowchart TD
 - **Reason**: [Reason for action]
 - **Replacement Interface**: [If a replacement exists]
 - **End of Support Date**: [Date]
+```
+
+### Custom Design Concern
+
+For emergent concerns promoted to Design Area status via Emergent Concern Protocol.
+
+```markdown
+# [Concern Name] Design
+
+## 1. Concern Definition
+What specific problem, question, or requirement does this design address?
+Why was it surfaced? Which Area/Step triggered it?
+
+## 2. Analysis and Options
+2-3 potential strategies or patterns. Each with:
+- Behavior description
+- Pros and cons with consequences
+
+## 3. Recommended Approach
+Selected option with rationale.
+
+## 4. Design Elaboration
+Detailed description of the recommended approach:
+- Key components, rules, interactions
+- Diagrams if necessary (apply diagram-selection.md criteria)
+
+## 5. Impacts and Dependencies
+How does this decision affect other Design Areas or system parts?
 ```
 
 ---

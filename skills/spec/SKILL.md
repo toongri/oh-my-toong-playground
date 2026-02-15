@@ -7,6 +7,11 @@ description: Use when creating software specifications. Triggers include "spec",
 
 Transform user requirements into structured specification documents. Each area is optional, proceeding only with necessary steps.
 
+Design Areas are default analytical lenses — proven tools to surface and structure design needs.
+They are NOT an exhaustive list. Any design concern discovered during the spec process
+— whether it maps to a predefined Area or not — must be explicitly addressed through
+the Emergent Concern Protocol.
+
 ## The Iron Law
 
 ```
@@ -407,6 +412,8 @@ Even if AI already has sufficient information for a Step, it MUST:
 5. **MANDATORY: Record decisions** to `{area-directory}/records/` (see Record Workflow below)
    - If decisions were made: Create record NOW. This is a BLOCKING gate — do NOT proceed to step 6 until record is saved.
    - If no decisions were made: Explicitly state "No recordable decisions in this Step" before proceeding.
+5.5. **Emergent Concern Check**: "이 Step에서 선택된 Design Areas에서 다뤄지지 않는
+     설계/명확화 필요성이 발견되었는가?" 발견 시 Emergent Concern Protocol 적용.
 6. Regenerate `spec.md` by concatenating all completed design.md files
 7. Announce: "Step N complete. Saved. Proceed to next Step?"
 8. Wait for user confirmation to proceed
@@ -613,6 +620,21 @@ At each Area Checkpoint:
 
 **Normal flow**: All records already exist at checkpoint. Checkpoint is verification, not creation.
 
+### Deferred Concern Record
+
+When a concern is deferred via Emergent Concern Protocol Option (C):
+
+**Record format:**
+- **Concern name**: 식별된 concern의 이름
+- **Discovery point**: 어느 Area의 어느 Step에서 발견되었는지
+- **Defer reason**: 왜 현재 스펙에서 다루지 않는지
+- **Follow-up needed**: 후속 조치 필요 여부 및 권장 시점
+- **Impact on current spec**: 현재 스펙에 미치는 영향 (있다면)
+
+**Save location**: `.omt/specs/{spec-name}/{current-area}/records/{step}-deferred-{concern-name}.md`
+
+**Wrapup integration**: Deferred concern records are listed in Wrapup as a separate "Deferred Concerns" section.
+
 ## Prior Area Amendment
 
 When errors or omissions in previous Areas are discovered during design:
@@ -631,6 +653,38 @@ New features or requirements NOT in the original spec scope MUST be redirected t
 
 - "이것도 같이 하자" → "That requires a separate spec. Let's finish the current scope first."
 - Prior Area Amendment is for fixing **omissions in existing scope**, NOT for adding new features.
+
+## Emergent Concern Protocol
+
+When a design concern surfaces that is not covered by the selected Design Areas —
+whether discovered by AI analysis or raised by the user — it must be explicitly triaged.
+
+### Trigger
+- **User-initiated**: 사용자가 concern을 직접 제기
+- **AI-initiated**: AI가 분석 중 미다뤄진 설계 필요성 발견
+- **Timing**: Design Area 선택 시점 AND 이후 모든 Step checkpoint에서
+
+### Triage (3-way)
+
+| Option | When | Procedure |
+|--------|------|-----------|
+| **(A) 새 Design Area로 승격** | concern이 독립된 설계 영역으로 충분히 크고 복잡할 때 | 이름/범위 정의 → Custom Design Concern template 사용 → 기존 Area와 동일한 Checkpoint/Review/Completion Protocol 적용 |
+| **(B) 기존 Area에 병합** | concern이 기존 (예정된) Area의 범위에 자연스럽게 포함될 때 | 해당 Area의 scope에 concern 추가 → 해당 Area 진행 시 함께 설계 |
+| **(C) Defer and Record** | concern이 현재 스펙 범위 밖이거나 우선순위가 낮을 때 | Record에 기록 (concern명, 발견 시점, defer 사유) → Wrapup에서 deferred concerns로 표시 |
+
+### Scope Guard Integration
+- 새 Design Area 승격 전 반드시 확인: "이 concern은 현재 스펙의 Requirements에 추적 가능한가?"
+- Requirements에 추적 불가 → Scope Guard 발동, 별도 스펙으로 안내
+- Requirements에 추적 가능 → 승격 진행, 사용자 확인 필수
+
+### Rationalization Guards
+
+| Rationalization | Counter |
+|-----------------|---------|
+| "사용자가 명시적으로 요청하지 않았으므로 넘어간다" | AI-initiated surfacing 의무: AI는 분석 중 발견한 concern을 반드시 제기해야 한다. 사용자 요청 여부와 무관. |
+| "이건 Scope Guard 대상이다" | Scope Guard vs Emergent Concern 구분: 새 feature 추가 → Scope Guard. 기존 scope 내 미다뤄진 설계 필요성 → Emergent Concern Protocol. |
+| "기존 Area에서 충분히 다룰 수 있다" | 병합 결정도 명시적 triage 거쳐야 함: 자동 병합 금지. 반드시 3-way triage를 사용자에게 제시. |
+| "간단한 건이라 별도 Area까지는 필요 없다" | 크기와 무관하게 triage는 필수: 복잡도와 무관하게 concern이 식별되면 triage 필수. |
 
 ## Review Protocol
 
@@ -741,6 +795,10 @@ Save **whenever each Area is completed**:
 | Integration Pattern | `integration-pattern/` |
 | AI Responsibility Contract | `ai-responsibility-contract/` |
 | Operations Plan | `operations-plan/` |
+| Custom Design Concern | `{concern-name}/` (kebab-case) |
+
+**Custom Design Concerns** promoted via Emergent Concern Protocol receive the same directory structure:
+`{concern-name}/design.md`, `{concern-name}/records/`, and are included in `spec.md` generation.
 
 ### Document Structure
 
@@ -826,6 +884,7 @@ spec.md = requirements/design.md
         + integration-pattern/design.md (if completed)
         + ai-responsibility-contract/design.md (if completed)
         + operations-plan/design.md (if completed)
+        + {custom-concern}/design.md (if promoted via Emergent Concern Protocol)
 ```
 
 **Note**: Wrapup produces context files (`.omt/specs/context/`), not spec content.
