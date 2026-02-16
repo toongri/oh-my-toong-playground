@@ -21,10 +21,8 @@ Analyze code changes and generate Korean commit messages following project conve
 
 ```
 NO COMMIT WITHOUT:
-1. Tests passing
-2. Build succeeding
-3. Single logical change
-4. Message ≤ 50 characters
+1. Single logical change (or properly split)
+2. Message ≤ 50 characters
 ```
 
 **Violating the letter of these rules IS violating the spirit.**
@@ -39,8 +37,6 @@ These are **RULES**, not guidelines. This project enforces them strictly.
 
 | Rule | Why Non-Negotiable | Common Excuse | Reality |
 |------|-------------------|---------------|---------|
-| Tests must pass | Broken history breaks everyone | "Fix later" | Later never comes. Fix now. |
-| Build must succeed | Can't deploy broken code | "Just a typo" | Typos break builds. Fix first. |
 | 50 char title limit | git log, GitHub, tools truncate | "Modern terminals..." | Tools haven't changed. 50 chars. |
 | One logical change | Atomic = reviewable, revertable | "Save my work" | Use branches, not mega-commits |
 | Korean 명사형 종결 | Project convention | "I prefer English" | Project rules override preference |
@@ -105,7 +101,7 @@ Add trailers at the end of body when needed:
 - Separate unrelated changes (atomic commits)
 - Title must be within 50 characters, core message only
 - WHY goes in body (optional)
-- Only commit when tests pass
+- 3+ files changed → check split threshold (see Atomic Commit Splitting)
 
 ---
 
@@ -125,18 +121,7 @@ Add trailers at the end of body when needed:
 
 ## Process Steps
 
-### Step 1: Pre-Commit Verification
-
-**BEFORE analyzing changes, verify:**
-
-```bash
-./gradlew build  # Must succeed
-./gradlew test   # Must pass
-```
-
-If either fails → **STOP. Fix first. Do not proceed.**
-
-### Step 2: Analyze Changes
+### Step 1: Analyze Changes
 
 ```bash
 git status
@@ -149,7 +134,47 @@ For each changed file, categorize:
 - What is the main change?
 - Are there multiple logical changes? → Split!
 
-### Step 3: Verify No Workflow Files
+### Atomic Commit Splitting
+
+**When staged files exceed thresholds, split into multiple commits:**
+
+| Changed Files | Minimum Commits |
+|---------------|-----------------|
+| 3+ files | 2+ commits |
+| 5+ files | 3+ commits |
+| 10+ files | 5+ commits |
+
+**Concern-Based Split Criteria:**
+
+| Signal | Action |
+|--------|--------|
+| Different directories/modules | SPLIT |
+| Different component types (config / source / test / docs) | SPLIT |
+| Independently revertable | SPLIT |
+
+**Grouping Strategy (commit in this order):**
+
+1. **Config files** -- settings, build config, dependencies
+2. **Source/Logic files** -- business logic, application code
+3. **Test files** -- unit tests, integration tests
+4. **Documentation** -- README, docs, comments
+
+Commit in **dependency order**: what is depended on gets committed first.
+
+**Splitting Workflow:**
+
+```
+Staged files → Count check against threshold
+  → Below threshold? → Single commit
+  → Above threshold? → Group by concern → Sequential commits in dependency order
+```
+
+Each split commit must:
+- Be independently meaningful (not "part 1 of 3")
+- Have its own proper commit message
+- Be revertable without breaking other commits
+
+### Step 2: Verify No Workflow Files
 
 ```bash
 git diff --staged --name-only | grep -E "^(plan\.md|research\.md|docs/specs/)"
@@ -157,7 +182,7 @@ git diff --staged --name-only | grep -E "^(plan\.md|research\.md|docs/specs/)"
 
 If any match → Unstage them before proceeding.
 
-### Step 4: Determine Commit Type
+### Step 3: Determine Commit Type
 
 - New functionality → `feat`
 - Bug/error fixed → `fix`
@@ -167,7 +192,7 @@ If any match → Unstage them before proceeding.
 - Build/config → `chore`
 - Performance → `perf`
 
-### Step 5: Generate Commit Message
+### Step 4: Generate Commit Message
 
 **Subject rules (NON-NEGOTIABLE):**
 - Korean (한국어)
@@ -194,7 +219,7 @@ If any match → Unstage them before proceeding.
 
 See `references/commit-conventions.md` for complete format.
 
-### Step 6: Execute Commit
+### Step 5: Execute Commit
 
 ```bash
 git add .
@@ -212,7 +237,7 @@ EOF
 )"
 ```
 
-### Step 7: Return Result
+### Step 6: Return Result
 
 ```markdown
 ## Commit Result
@@ -248,7 +273,6 @@ See `examples.md` for commit message examples.
 |---------|----------------|-----|
 | Multiple features in one commit | Hard to rollback/cherry-pick | Separate by logical unit |
 | Vague messages like "수정함" | Unclear what was changed and why | Describe specific changes |
-| Committing with failing tests | Broken code in history | Commit after tests pass |
 | Writing commit messages in English | Project convention violation | Use Korean 명사형 종결 |
 | Period at end of title | Unnecessary character | Remove period |
 | Title exceeding 50 characters | Truncated in git log | Keep core message, move details to body |
@@ -258,7 +282,5 @@ See `examples.md` for commit message examples.
 
 ## When NOT to Use
 
-- Tests failing → Fix tests first
-- Build broken → Fix build first
 - Uncommitted changes in unrelated files → Stash or separate commit
 - No actual changes → Nothing to commit
