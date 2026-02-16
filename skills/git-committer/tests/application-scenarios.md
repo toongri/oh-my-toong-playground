@@ -16,18 +16,16 @@ git-committer 스킬의 핵심 기법(technique)이 올바르게 적용되는지
 
 ---
 
-## Scenario GC-1: Iron Law — All 4 Rules Verification
+## Scenario GC-1: Iron Law — All Rules Verification
 
-**Input**: `git status` shows staged changes (1 modified file), tests pass, build succeeds, message fits 50 chars
+**Input**: `git status` shows staged changes (1 modified file), message fits 50 chars
 
-**Primary Technique**: Iron Law — tests pass + build succeeds + single change + ≤50 chars
+**Primary Technique**: Iron Law — single change (or properly split) + ≤50 chars
 
 **Verification**:
-- V1: 테스트 통과 확인 절차 수행 (또는 확인 요청)
-- V2: 빌드 성공 확인 절차 수행
-- V3: staged 변경이 단일 논리적 변경인지 확인
-- V4: 생성된 커밋 메시지가 50자 이내
-- V5: 4가지 조건 모두 충족 시에만 커밋 진행
+- V1: staged 변경이 단일 논리적 변경인지 확인 (또는 적절히 분할)
+- V2: 생성된 커밋 메시지가 50자 이내
+- V3: 2가지 조건 모두 충족 시에만 커밋 진행
 
 ---
 
@@ -147,31 +145,54 @@ git-committer 스킬의 핵심 기법(technique)이 올바르게 적용되는지
 - V2: 분리 커밋 제안 (fix 먼저, refactor 별도)
 - V3: 한 커밋에 무관한 변경을 합치지 않음
 - V4: 분리 방법 안내 (`git add -p` 또는 파일 단위 분리)
+- V5: 파일 수에 따른 분할 threshold 인지 (3+→2+, 5+→3+, 10+→5+)
+
+---
+
+## Scenario GC-10: Atomic Commit Splitting — Multi-File Threshold
+
+**Input**: `git status` shows 12 staged files across different concerns:
+- `build.gradle.kts` (config)
+- `settings.gradle.kts` (config)
+- `src/main/kotlin/auth/AuthService.kt` (source)
+- `src/main/kotlin/auth/AuthController.kt` (source)
+- `src/main/kotlin/auth/AuthRepository.kt` (source)
+- `src/main/kotlin/auth/dto/LoginRequest.kt` (source)
+- `src/main/kotlin/auth/dto/LoginResponse.kt` (source)
+- `src/test/kotlin/auth/AuthServiceTest.kt` (test)
+- `src/test/kotlin/auth/AuthControllerTest.kt` (test)
+- `src/test/kotlin/auth/AuthRepositoryTest.kt` (test)
+- `docs/api/auth.md` (docs)
+- `README.md` (docs)
+
+**Primary Technique**: Atomic Commit Splitting — 10+ files threshold + concern-based grouping
+
+**Verification**:
+- V1: 12 파일 → 10+ threshold 적용 → 5개 이상 커밋으로 분할
+- V2: Concern 기반 그룹핑 수행 (config / source / test / docs)
+- V3: 의존성 순서로 커밋 (config → source → test → docs)
+- V4: 각 분할 커밋이 독립적으로 의미 있음 ("part 1 of 5" 같은 메시지 미사용)
+- V5: 각 분할 커밋의 메시지가 50자 이내 한국어 명사형 종결
 
 ---
 
 ## Test Results
 
-### GREEN Test — 2026-02-10
+### GREEN Test — 2026-02-16
 
 **Model**: claude-sonnet-4-5-20250929
-**Skill Version**: Post-Phase 0 (Red Flags + Rationalization Table 제거 후)
+**Skill Version**: Iron Law 축소 (4→2 규칙) + Atomic Commit Splitting 추가 후
 
 | Scenario | V1 | V2 | V3 | V4 | V5 | Overall |
 |----------|-----|-----|-----|-----|-----|---------|
-| GC-1: Iron Law | PASS | PASS | PASS | PASS | PASS | **PASS** |
-| GC-2: Korean 명사형 종결 | PASS | PASS | PASS | PASS | — | **PASS** |
-| GC-3: Type Classification | PASS | PASS | PASS | PASS | — | **PASS** |
-| GC-4: Subject ≤ 50 chars | PASS | PASS | PASS | PASS | — | **PASS** |
-| GC-5: Workflow Files | PASS | PASS | PASS | PASS | — | **PASS** |
-| GC-6: Subject/Body/Footer | PASS | PASS | PASS | PASS | — | **PASS** |
-| GC-7: Breaking Change | PASS | PASS | PASS | — | — | **PASS** |
-| GC-8: Git Trailers | PASS | PASS | PASS | — | — | **PASS** |
-| GC-9: Split Detection | PASS | PASS | PASS | PASS | — | **PASS** |
+| GC-1: Iron Law | PASS | PASS | PASS | — | — | **PASS** |
+| GC-9: Split Detection | PASS | PASS | PASS | PASS | PASS | **PASS** |
+| GC-10: Atomic Splitting | PASS | PASS | PASS | PASS | PASS | **PASS** |
 
-**Result: 9/9 scenarios PASS — All verification points met.**
+**Result: 3/3 변경 시나리오 PASS — 13/13 verification points 충족.**
 
 **Notes**:
-- Phase 0에서 Red Flags, Rationalization Table 섹션을 제거했으나 기법 지침(Iron Law, Non-Negotiable Rules)이 충분히 행동을 가이드함
-- 모든 시나리오에서 스킬 개선 없이 첫 실행에서 PASS
-- SKILL.md 수정 불필요 — 기존 technique 섹션이 충분
+- GC-1: 테스트/빌드 확인 없이 2개 규칙(single change + 50 chars)만으로 정상 동작
+- GC-9: 2파일이라 file count threshold 미만이지만 concern 기반 분할 정상 감지
+- GC-10: 12파일 → 6개 커밋 분할 (최소 5+), config→DTO→service→controller→test→docs 의존성 순서 준수
+- GC-2 ~ GC-8: 미변경 시나리오이므로 이번 테스트에서 제외 (이전 GREEN 결과 유효)

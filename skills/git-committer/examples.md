@@ -43,14 +43,32 @@ refactor: 포인트 유효성 검증 로직 분리
 test: 포인트 엔티티 상태 전이 테스트 추가
 ```
 
-## Example 6: Multiple Logical Changes
+## Example 6: Atomic Commit Splitting (10+ Files)
 
-**Situation**: Entity + Repository + Tests all in one milestone
+**Situation**: 인증 기능 전체 구현 — 12 파일 변경 (config 2, source 5, test 3, docs 2)
+
+분할 threshold: 10+ files → 5+ commits
+
+**Split result:**
 
 ```
-feat: 포인트 저장소 및 조회 기능 구현
+# Commit 1: Config
+chore: 인증 관련 Gradle 의존성 추가
 
-- JpaPointRepository 구현
-- 비관적 락 적용 조회 메서드 추가
-- 통합 테스트 작성
+# Commit 2: Core domain
+feat: 인증 도메인 엔티티 및 DTO 구현
+
+# Commit 3: Service & API layer
+feat: 인증 서비스 및 컨트롤러 구현
+
+# Commit 4: Tests
+test: 인증 서비스 및 컨트롤러 테스트 추가
+
+# Commit 5: Documentation
+docs: 인증 API 문서 작성
 ```
+
+**Why split?**
+- Config → Source → Test → Docs 순서 (의존성 순서)
+- 각 커밋이 독립적으로 revert 가능
+- `git bisect`로 문제 추적 용이
