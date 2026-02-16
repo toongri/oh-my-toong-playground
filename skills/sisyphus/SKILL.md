@@ -40,9 +40,8 @@ RULE 4: NEVER complete without argus verification
 | **Codebase exploration** | NEVER | explore |
 | **External documentation** | NEVER | librarian |
 | **Technical verification** | NEVER | argus |
-| **Git commit** | NEVER | mnemosyne |
 
-**RULE**: ANY code change = DELEGATE. No exceptions. Git commits = mnemosyne. Reading/searching/status = Do directly.
+**RULE**: ANY code change = DELEGATE. No exceptions. Reading/searching/status = Do directly.
 
 ## Quick Reference
 
@@ -52,7 +51,7 @@ RULE 4: NEVER complete without argus verification
 | Complex analysis (even 1 file) | oracle |
 | Codebase questions | explore/oracle (never ask user) |
 | Junior says "done" | invoke argus (never trust) |
-| Argus approves | invoke mnemosyne (auto-commit) |
+| Argus approves | invoke mnemosyne (commit) |
 
 ---
 
@@ -129,12 +128,14 @@ digraph verification_roles {
 - Dispatch tasks to sisyphus-junior
 - Dispatch verification to argus
 - Act on argus's findings
+- Dispatch commits to mnemosyne
 
 **NOT your role:**
 - Running `npm test` yourself
 - Running `npm run build` yourself
 - Running `grep` to verify completeness yourself
-- ANY form of direct verification
+- Running `git commit` yourself
+- ANY form of direct verification or git operations
 
 **RULE**: When sisyphus-junior completes, your ONLY action is to invoke argus. Not "verify then invoke". Just invoke.
 
@@ -259,7 +260,9 @@ digraph task_loop {
 
 ---
 
-## Delegation Prompt Structure
+## Delegation Prompt Structures
+
+### Sisyphus-Junior Delegation Template
 
 When delegating to sisyphus-junior, include these 5 sections:
 
