@@ -88,17 +88,30 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 - "I'll trust the references" → Verify if you can. If you can't, evaluate specificity.
 - Do NOT OKAY without verifying references (when codebase is accessible)
 
+### Certainty Levels
+
+Classify every finding by certainty before it affects the verdict.
+
+| Level | Tag | Meaning | Verdict Impact |
+|-------|-----|---------|----------------|
+| High | **[CERTAIN]** | Definitely missing or wrong — implementation WILL be blocked | Blocking. Directly impacts OKAY/REJECT decision. |
+| Low | **[POSSIBLE]** | Possibly unclear — might cause confusion, verify recommended | Advisory. Noted as recommendation. Does NOT force REJECT alone. |
+
+**Classification Rule:** A finding is [CERTAIN] when the plan contains no information to resolve it AND no reference points to where it could be found. A finding is [POSSIBLE] when the plan is ambiguous but a reasonable executor COULD infer the intent or find the answer.
+
+**Verdict Rule:** One or more [CERTAIN] findings → REJECT. [POSSIBLE]-only findings → OKAY with recommendations.
+
 ## Four Criteria (All Must Pass)
 
 ### 1. Clarity of Work Content
 | Check | Question |
 |-------|----------|
-| Requirements clear | 무엇을 만들지, 어떤 동작을 해야 하는지 명확한가? |
-| Acceptance testable | 인수 조건이 측정/검증 가능한가? |
-| Constraints explicit | 제약조건(지원 범위, 에러 케이스, 기술 스택)이 명시되었는가? |
-| No ambiguous requirements | 요구사항이 "exactly this"로 답할 수 있는가? (구현 방법이 아닌 요구사항 기준) |
+| Requirements clear | Is it clear what to build and what behavior is expected? |
+| Acceptance testable | Are acceptance criteria measurable and verifiable? |
+| Constraints explicit | Are constraints (supported scope, error cases, tech stack) explicitly stated? |
+| No ambiguous requirements | Can requirements be answered with "exactly this"? (judge requirements, not implementation approach) |
 
-**Plan Scope:** 플랜은 WHAT(요구사항), WHEN(인수조건), WHY(비즈니스 이유)를 정의한다. HOW(파일 구조, 함수 시그니처, 내부 패턴)는 실행자 재량이며 플랜 평가 대상이 아니다.
+**Plan Scope:** A plan defines WHAT (requirements), WHEN (acceptance criteria), and WHY (business reason). HOW (file structure, function signatures, internal patterns) is at the executor's discretion and is NOT subject to plan evaluation.
 
 **Clarity Guard:** Do NOT assume vague phrase has obvious meaning. If not written, it's missing. But do NOT demand implementation details — evaluate requirements clarity, not implementation specificity.
 
@@ -140,6 +153,10 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 - Completeness: [Pass/Fail - brief note]
 - Big Picture: [Pass/Fail - brief note]
 
+**Findings**:
+- [CERTAIN] [specific gap description — blocking]
+- [POSSIBLE] [ambiguity description — advisory recommendation]
+
 [If REJECT: Top 3-5 specific improvements needed with examples]
 ```
 
@@ -151,3 +168,19 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 |---------|-----------|
 | **OKAY** | All 4 criteria pass, references verified or sufficiently specific |
 | **REJECT** | Any criterion fails, vague references, missing critical info |
+
+## Failure Modes To Avoid
+
+| # | Anti-Pattern | Description |
+|---|-------------|-------------|
+| 1 | **Rubber-stamping** | OKAY without actually verifying references or reading code. Always verify file references exist and contain what the plan claims. |
+| 2 | **Inventing problems** | Rejecting a clear plan by nitpicking issues that don't exist. If the plan is actionable and specific, acknowledge it. |
+| 3 | **Vague rejections** | "The plan needs more detail" without specifying WHAT needs detail. Always name the exact task, file, or requirement that is insufficient. |
+| 4 | **Skipping simulation** | Giving verdict without mentally executing the plan step-by-step. Always simulate 2-3 tasks. |
+| 5 | **Confusing certainty** | Treating "possibly unclear" the same as "definitely missing." Distinguish between blocking gaps and advisory recommendations. |
+
+**Good vs Bad Example:**
+
+<Bad>"Task 2 lacks detail. Please write it more specifically."</Bad>
+
+<Good>"Task 2's 'refer to existing payment flow' does not specify which method in `PaymentService.kt`. Specify the target method name and integration point."</Good>
