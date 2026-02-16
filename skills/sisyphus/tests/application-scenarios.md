@@ -827,4 +827,4 @@ Three argus verdicts received for different tasks:
 | S-26 | Mnemosyne Trust Model — No Re-verification | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
 | S-28 | Full Task Loop with Commit Step | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
-| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PARTIAL | 2026-02-16 | 2/4 VPs PASS, V3/V4 PARTIAL — COMMENT verdict mnemosyne not explicit in skill |
+| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PASS | 2026-02-16 | 4/4 VPs — GREEN verified (COMMENT row fixed in SKILL.md) |

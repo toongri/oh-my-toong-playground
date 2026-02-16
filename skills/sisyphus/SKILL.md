@@ -376,7 +376,7 @@ Review whether the implementation meets the requirements in the 5-Section prompt
 |---------|-----------------|
 | **APPROVE** | Invoke mnemosyne to commit, then mark task completed |
 | **REQUEST_CHANGES** (Critical/High) | Create fix task, re-delegate to sisyphus-junior |
-| **COMMENT** (Medium only) | Mark completed, create follow-up task if warranted |
+| **COMMENT** (Medium only) | Invoke mnemosyne to commit, then mark completed. Create follow-up task if warranted |
 
 ### Fix Task from REQUEST_CHANGES
 
