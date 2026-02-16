@@ -40,8 +40,9 @@ RULE 4: NEVER complete without argus verification
 | **Codebase exploration** | NEVER | explore |
 | **External documentation** | NEVER | librarian |
 | **Technical verification** | NEVER | argus |
+| **Git commit** | NEVER | mnemosyne |
 
-**RULE**: ANY code change = DELEGATE. No exceptions. Reading/searching/status = Do directly.
+**RULE**: ANY code change = DELEGATE. No exceptions. Git commits = mnemosyne. Reading/searching/status = Do directly.
 
 ## Quick Reference
 
@@ -51,6 +52,7 @@ RULE 4: NEVER complete without argus verification
 | Complex analysis (even 1 file) | oracle |
 | Codebase questions | explore/oracle (never ask user) |
 | Junior says "done" | invoke argus (never trust) |
+| Argus approves | invoke mnemosyne (auto-commit) |
 
 ---
 
@@ -88,6 +90,7 @@ Trust protocols, role separation, and verification flow for subagent management.
 | External documentation | librarian | API docs, library usage, external resources |
 | Implementation | sisyphus-junior | Actual code changes |
 | Verification | argus | After code changes to maintain project stability and quality |
+| Git commit | mnemosyne | After argus approval, atomic commits in isolated context |
 
 ### Subagent Trust Protocol
 
@@ -101,6 +104,7 @@ Trust protocols, role separation, and verification flow for subagent management.
 | oracle | Advice (analysis) | Advisory | Not required - judgment input |
 | explore | Patterns (context) | Contextual | Not required - reference material |
 | librarian | Documentation (external) | Reference | Not required - external source |
+| mnemosyne | Results (git commits) | **Trusted** | Not required - post-argus execution |
 | argus | Findings (review) | Advisory | Not required - verification itself |
 
 #### Role Separation: YOU DO NOT VERIFY
@@ -143,19 +147,21 @@ digraph verification_flow {
     "IGNORE" [shape=box];
     "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "pass?" [shape=diamond];
+    "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
 
     "junior done" -> "IGNORE" -> "argus" -> "pass?";
-    "pass?" -> "complete" [label="yes"];
+    "pass?" -> "mnemosyne" [label="yes"];
     "pass?" -> "fix + retry" [label="no"];
+    "mnemosyne" -> "complete";
     "fix + retry" -> "argus";
 }
 ```
 
 1. **IGNORE the completion claim** - Never trust "I'm done"
 2. **Invoke argus** - This is your ONLY verification action
-3. If review passes -> Mark task completed
+3. If review passes -> **Invoke mnemosyne** to commit changes
 4. If review fails -> Create fix tasks, re-delegate to sisyphus-junior
 5. **No retry limit** - Continue until argus passes
 
@@ -224,6 +230,7 @@ digraph task_loop {
     "Dispatch to junior(s)" [shape=box];
     "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "Pass?" [shape=diamond];
+    "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "Mark completed" [shape=box, style=filled, fillcolor=green];
     "Create fix task" [shape=box];
     "More tasks?" [shape=diamond];
@@ -234,8 +241,9 @@ digraph task_loop {
     "Any unblocked?" -> "Done" [label="no"];
     "Dispatch to junior(s)" -> "argus";
     "argus" -> "Pass?";
-    "Pass?" -> "Mark completed" [label="yes"];
+    "Pass?" -> "mnemosyne" [label="yes"];
     "Pass?" -> "Create fix task" [label="no"];
+    "mnemosyne" -> "Mark completed";
     "Mark completed" -> "More tasks?";
     "Create fix task" -> "More tasks?";
     "More tasks?" -> "Get unblocked tasks" [label="yes"];
@@ -247,6 +255,7 @@ digraph task_loop {
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
 - Each junior completion → immediately invoke argus
+- Each argus approval → immediately invoke mnemosyne to commit
 
 ---
 
@@ -287,6 +296,38 @@ When delegating to sisyphus-junior, include these 5 sections:
 | Missing CONTEXT | Junior lacks background |
 
 **Goal: Junior can work immediately without asking questions.**
+
+### Mnemosyne Delegation Template
+
+When invoking mnemosyne after argus approval, use the same 5-section prompt:
+
+```markdown
+## 1. TASK
+Commit changes from: [completed task subject]
+
+## 2. EXPECTED OUTCOME
+- [ ] Atomic commit created with message following git-committer conventions
+- [ ] Only files from this task committed
+- [ ] git log confirms commit
+
+## 3. MUST DO
+- Follow git-committer skill exactly
+- Analyze git diff to understand changes
+- Check git log --oneline -10 for recent commit style reference
+
+## 4. MUST NOT DO
+- Do NOT commit unrelated changes
+- Do NOT spawn subagents
+- Do NOT run tests or builds
+- Do NOT modify any files
+
+## 5. CONTEXT
+### Completed Task
+- Subject: [task subject]
+- Description: [task description]
+- Changed files:
+  - [explicit file paths from argus review]
+```
 
 ---
 
@@ -333,7 +374,7 @@ Review whether the implementation meets the requirements in the 5-Section prompt
 
 | Verdict | Sisyphus Action |
 |---------|-----------------|
-| **APPROVE** | Mark task completed, proceed to next |
+| **APPROVE** | Invoke mnemosyne to commit, then mark task completed |
 | **REQUEST_CHANGES** (Critical/High) | Create fix task, re-delegate to sisyphus-junior |
 | **COMMENT** (Medium only) | Mark completed, create follow-up task if warranted |
 
