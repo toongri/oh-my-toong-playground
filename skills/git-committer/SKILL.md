@@ -21,10 +21,8 @@ Analyze code changes and generate Korean commit messages following project conve
 
 ```
 NO COMMIT WITHOUT:
-1. Tests passing
-2. Build succeeding
-3. Single logical change
-4. Message ≤ 50 characters
+1. Single logical change (or properly split)
+2. Message ≤ 50 characters
 ```
 
 **Violating the letter of these rules IS violating the spirit.**
@@ -39,8 +37,6 @@ These are **RULES**, not guidelines. This project enforces them strictly.
 
 | Rule | Why Non-Negotiable | Common Excuse | Reality |
 |------|-------------------|---------------|---------|
-| Tests must pass | Broken history breaks everyone | "Fix later" | Later never comes. Fix now. |
-| Build must succeed | Can't deploy broken code | "Just a typo" | Typos break builds. Fix first. |
 | 50 char title limit | git log, GitHub, tools truncate | "Modern terminals..." | Tools haven't changed. 50 chars. |
 | One logical change | Atomic = reviewable, revertable | "Save my work" | Use branches, not mega-commits |
 | Korean 명사형 종결 | Project convention | "I prefer English" | Project rules override preference |
@@ -105,7 +101,7 @@ Add trailers at the end of body when needed:
 - Separate unrelated changes (atomic commits)
 - Title must be within 50 characters, core message only
 - WHY goes in body (optional)
-- Only commit when tests pass
+- Many files ≠ many commits — logical cohesion decides (see Atomic Commit Splitting)
 
 ---
 
@@ -125,18 +121,7 @@ Add trailers at the end of body when needed:
 
 ## Process Steps
 
-### Step 1: Pre-Commit Verification
-
-**BEFORE analyzing changes, verify:**
-
-```bash
-./gradlew build  # Must succeed
-./gradlew test   # Must pass
-```
-
-If either fails → **STOP. Fix first. Do not proceed.**
-
-### Step 2: Analyze Changes
+### Step 1: Analyze Changes
 
 ```bash
 git status
@@ -149,7 +134,66 @@ For each changed file, categorize:
 - What is the main change?
 - Are there multiple logical changes? → Split!
 
-### Step 3: Verify No Workflow Files
+### Atomic Commit Splitting
+
+> "Separate each logical change into a separate patch." — Linux Kernel Documentation
+>
+> "If you make a single change to numerous files, group those changes into a single patch." — Linux Kernel Patch Philosophy
+
+**File count is a TRIGGER for analysis, NOT a splitting rule.**
+
+#### Split Analysis Trigger
+
+| Changed Files | Action |
+|---------------|--------|
+| 1-2 files | Likely single commit — verify one logical change |
+| 3+ files | **Pause and analyze** — are there multiple concerns? |
+| 10+ files | **Strongly consider splitting** — multiple concerns are probable |
+
+**IMPORTANT**: One feature ≠ one commit. A feature may contain multiple logical changes (config, domain, service, test, docs). Each independently meaningful layer is a separate commit. However, a single atomic operation (e.g., renaming across 10 files) IS one commit.
+
+#### When to Split
+
+Split when ANY of these are true:
+
+| Signal | Example |
+|--------|---------|
+| Different change types mixed | Bug fix + unrelated refactor |
+| Different domains/modules affected | auth/ change + user/ change with no dependency |
+| Independently revertable parts | Config change that works without the feature using it |
+| Description gets too long | "Fixed X and also added Y and refactored Z" |
+| Different architectural layers | Config + domain + service + test + docs for one feature |
+
+#### When NOT to Split
+
+Keep as single commit when:
+
+| Signal | Example |
+|--------|---------|
+| Truly atomic operation | Renaming a class across 5 files |
+| Tightly coupled pair | DTO definition + the single mapper using it |
+| Cannot exist independently | Interface + its only implementation (in same module) |
+| Single mechanical change | Formatting/linting across many files |
+
+#### Grouping Strategy (when splitting)
+
+Commit in this order (dependency-first):
+
+1. **Config/Build** — dependencies, build settings
+2. **Infrastructure** — refactoring, API changes
+3. **Source/Logic** — business logic, features
+4. **Tests** — related test code
+5. **Documentation** — README, docs
+
+#### Splitting Rules
+
+Each split commit must:
+- Be independently meaningful (not "part 1 of 3")
+- Have its own proper commit message
+- Leave the codebase in a buildable state
+- Be revertable without breaking other commits
+
+### Step 2: Verify No Workflow Files
 
 ```bash
 git diff --staged --name-only | grep -E "^(plan\.md|research\.md|docs/specs/)"
@@ -157,7 +201,7 @@ git diff --staged --name-only | grep -E "^(plan\.md|research\.md|docs/specs/)"
 
 If any match → Unstage them before proceeding.
 
-### Step 4: Determine Commit Type
+### Step 3: Determine Commit Type
 
 - New functionality → `feat`
 - Bug/error fixed → `fix`
@@ -167,7 +211,7 @@ If any match → Unstage them before proceeding.
 - Build/config → `chore`
 - Performance → `perf`
 
-### Step 5: Generate Commit Message
+### Step 4: Generate Commit Message
 
 **Subject rules (NON-NEGOTIABLE):**
 - Korean (한국어)
@@ -194,7 +238,7 @@ If any match → Unstage them before proceeding.
 
 See `references/commit-conventions.md` for complete format.
 
-### Step 6: Execute Commit
+### Step 5: Execute Commit
 
 ```bash
 git add .
@@ -212,7 +256,7 @@ EOF
 )"
 ```
 
-### Step 7: Return Result
+### Step 6: Return Result
 
 ```markdown
 ## Commit Result
@@ -234,6 +278,8 @@ EOF
 
 **User insists on violation**: Explain why you cannot comply. Offer alternatives.
 
+**Large cohesive change (10+ files)**: Analyze by concern. One feature ≠ one commit. Split by architectural layer (config, source, test, docs) unless the change is a single atomic operation (e.g., rename).
+
 ---
 
 ## Examples
@@ -248,7 +294,6 @@ See `examples.md` for commit message examples.
 |---------|----------------|-----|
 | Multiple features in one commit | Hard to rollback/cherry-pick | Separate by logical unit |
 | Vague messages like "수정함" | Unclear what was changed and why | Describe specific changes |
-| Committing with failing tests | Broken code in history | Commit after tests pass |
 | Writing commit messages in English | Project convention violation | Use Korean 명사형 종결 |
 | Period at end of title | Unnecessary character | Remove period |
 | Title exceeding 50 characters | Truncated in git log | Keep core message, move details to body |
@@ -258,7 +303,5 @@ See `examples.md` for commit message examples.
 
 ## When NOT to Use
 
-- Tests failing → Fix tests first
-- Build broken → Fix build first
 - Uncommitted changes in unrelated files → Stash or separate commit
 - No actual changes → Nothing to commit
