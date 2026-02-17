@@ -48,27 +48,31 @@ Ask user: "이 브랜치에서 무엇을 구현했나요? 원래 요구사항/sp
 
 ## Step 1: Input Parsing
 
-| Input | Diff Command |
-|-------|-------------|
-| `pr <number or URL>` | `gh pr diff <number>` |
-| `<base> <target>` | `git diff <base>...<target>` |
-| (none) | Detect default branch (`origin/main` or `origin/master`), then `git diff <default>...HEAD` |
+Determine diff command and range for subsequent steps:
+
+| Input | Diff Command | Range |
+|-------|-------------|-------|
+| `pr <number or URL>` | `gh pr diff <number>` | Extract via `gh pr view <number> --json baseRefName,headRefName` → `origin/<baseRefName>..<headRefName>` |
+| `<base> <target>` | `git diff <base>...<target>` | `<base>...<target>` |
+| (none) | Detect default branch (`origin/main` or `origin/master`), then `git diff <default>...HEAD` | `<default>...HEAD` |
+
+All subsequent steps use `{range}` from this table.
 
 ## Early Exit
 
 After Input Parsing, before proceeding to Step 2:
 
-1. Run `git diff --stat` (using the diff command determined in Step 1)
+1. Run `git diff {range} --stat` (using the range determined in Step 1)
 2. If empty diff: report "변경사항이 없습니다 (<base>와 <target> 사이)" and exit
 3. If binary-only diff: report "바이너리 파일 변경만 감지되었습니다" and exit
 
 ## Step 2: Context Gathering
 
-Collect in parallel:
+Collect in parallel (using `{range}` from Step 1):
 
-1. `git diff --stat` (change scale)
-2. `git diff --name-only` (file list)
-3. `git log <base>..<target> --oneline` (commit history)
+1. `git diff {range} --stat` (change scale)
+2. `git diff {range} --name-only` (file list)
+3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
 Subagent context (conditional):
