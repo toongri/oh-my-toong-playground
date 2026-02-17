@@ -12,6 +12,22 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 ---
 
+## Technique Coverage Map
+
+| # | Scenario | Primary Technique | What it isolates |
+|---|---------|-------------------|------------------|
+| A-1 | Expected Outcome verification | File reading | git diff 제거 확인 |
+| A-2 | MUST DO evidence search | Content grep | diff 대신 파일 내용 검색 |
+| A-3 | MUST NOT DO file scope | Changed files list | git diff --name-only 제거 |
+| A-4 | Scope Boundary set ops | Changed files as B | git diff 기반 집합 연산 제거 |
+| A-5 | Parallel isolation | Agent isolation | 병렬 Junior 오염 방지 |
+| A-6 | Pattern prohibition | Content search | 파일 내용 패턴 검색 |
+| A-7 | Fast-Path | No git diff needed | trivial 변경도 파일 읽기 |
+
+> **Note:** Confidence Scoring, Rich Feedback Protocol, YAGNI Detection, Verdict Classification, Output Format 등 기존 기법 테스트(이전 A-5~A-10)는 2026-02-10에 전부 GREEN PASS 확인됨. 해당 기법들은 이번 변경에 영향받지 않으므로 이 파일에서 제외. 기법 자체가 변경될 경우 별도 시나리오 추가 필요.
+
+---
+
 ## A-1: Expected Outcome — 파일 읽기 기반 검증
 
 **Context:** Junior가 auth/login.ts에 JWT validation을 추가하라는 task를 완료함.
@@ -29,7 +45,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Argus reads auth/login.ts content directly (not via git diff), verifies JWT validation exists and jsonwebtoken is used.
 
-**VP:**
+**Verification Points:**
 1. Argus가 변경 식별을 위해 git diff를 사용하지 않는다
 2. Changed files 목록(auth/login.ts)을 기반으로 파일을 직접 읽는다
 3. 파일 내용에서 JWT validation 로직과 jsonwebtoken 사용을 확인한다
@@ -53,10 +69,10 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Argus reads service/user-service.ts and searches file content for null check pattern, not diff.
 
-**VP:**
+**Verification Points:**
 1. MUST DO 증거를 "diff에서 검색"이 아닌 "파일 내용에서 검색"으로 확인한다
 2. null check 존재 여부를 파일 내용 grep으로 판단한다
-3. DB query 로직 변경 여부도 파일 내용 읽기로 확인한다 (MUST NOT DO)
+3. MUST NOT DO "DB query 로직 변경 금지"는 Junior's summary + 파일 내용 리뷰로 확인한다 (diff 없이 "변하지 않았는지"를 기계적으로 판단할 수 없으므로, behavior constraint는 내용 리뷰 기반 판단)
 
 ---
 
@@ -77,7 +93,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Argus verifies "Do NOT touch auth/config.ts" by checking that auth/config.ts is NOT in the Changed files list. Does NOT use git diff --name-only.
 
-**VP:**
+**Verification Points:**
 1. MUST NOT DO 파일 scope 검증을 Changed files 목록 기반으로 수행한다
 2. `git diff --name-only`를 사용하지 않는다
 3. auth/config.ts가 Changed files에 없으므로 PASS 판정한다
@@ -101,7 +117,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Argus verifies ONLY src/A.ts and src/B.ts. Does NOT discover C.ts changes. Does NOT perform B ⊆ A set difference using git diff.
 
-**VP:**
+**Verification Points:**
 1. `git diff`로 "Actual changed files" 집합(B)을 구하지 않는다
 2. Changed files 목록의 파일만 검증 대상으로 삼는다
 3. working tree의 다른 변경(C.ts)을 무시한다
@@ -125,7 +141,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Argus reads only auth.ts. payment.ts의 변경을 발견하지 않음. scope violation으로 flag하지 않음.
 
-**VP:**
+**Verification Points:**
 1. Argus가 auth.ts만 읽고 검증한다
 2. payment.ts(Junior B의 작업)를 scope violation으로 flag하지 않는다
 3. MUST NOT DO "Do NOT modify payment routes"를 Changed files 기반으로만 확인한다
@@ -150,7 +166,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Argus reads types.ts content and greps for `any` type usage. This is a pattern prohibition, not file scope, so file content search is appropriate.
 
-**VP:**
+**Verification Points:**
 1. 파일 내용에서 `any` 타입 패턴을 검색한다
 2. 검색 대상은 Changed files 목록의 파일(types.ts)이다
 3. `any`가 발견되면 MUST NOT DO violation으로 flag한다
@@ -174,7 +190,29 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). Stage 1 skip, Stage 3 brief quality check만 수행. git diff 불필요.
 
-**VP:**
+**Verification Points:**
 1. Fast-Path로 분류하여 Stage 1을 skip한다
 2. git diff 없이 README.md를 읽어서 오타 수정 확인
 3. Stage 3 brief quality check만 수행한다
+
+---
+
+## Evaluation Criteria
+
+| Verdict | Meaning |
+|---------|---------|
+| PASS | Verification point fully met |
+| PARTIAL | Mentioned but insufficient or incorrect |
+| FAIL | Not mentioned or wrong judgment |
+
+## Test Results
+
+| # | Scenario | Result | Date | Notes |
+|---|---------|--------|------|-------|
+| A-1 | Expected Outcome — 파일 읽기 기반 검증 | | | |
+| A-2 | MUST DO — 파일 내용 기반 증거 검색 | | | |
+| A-3 | MUST NOT DO — git diff 없이 파일 scope 감지 | | | |
+| A-4 | Scope Boundary — git diff 기반 집합 연산 없음 | | | |
+| A-5 | 병렬 Junior — 격리된 검증 | | | |
+| A-6 | MUST NOT DO — 파일 내용의 패턴 금지 | | | |
+| A-7 | Fast-Path — git diff 없이 동작 | | | |
