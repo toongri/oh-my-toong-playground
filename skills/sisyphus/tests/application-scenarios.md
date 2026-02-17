@@ -39,6 +39,12 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-21 | Verification Retry Loop | Verification Flow / No Retry Limit | argus repeated failure → fix → re-verify |
 | S-22 | Rich Context Pattern | Rich Context Pattern | 6-stage analysis → AskUserQuestion |
 | S-23 | Interview Exit Condition | Interview Exit Condition | 3-part exit criteria |
+| S-24 | Subagent Selection — Mnemosyne for Git Commit | Subagent Selection Guide + Do vs Delegate Matrix | mnemosyne for commits |
+| S-25 | Verification Flow — Argus Pass Triggers Mnemosyne | Verification Flow (argus → mnemosyne → complete) | Post-argus commit step |
+| S-26 | Mnemosyne Trust Model — No Re-verification | Trust Protocol (Trusted) | No argus after mnemosyne |
+| S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | Mnemosyne Delegation Template | 5-Section format |
+| S-28 | Full Task Loop with Commit Step | Task Execution Loop (전체 사이클) | mnemosyne in loop |
+| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | Verdict Response Protocol | APPROVE → mnemosyne → complete |
 
 ---
 
@@ -243,7 +249,7 @@ Three argus verdicts received for different tasks:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → mark complete and proceed | Task A is marked completed, sisyphus moves to next task |
+| V1 | APPROVE (Task A) → invoke mnemosyne, then mark complete | Task A: mnemosyne is invoked to commit changes, THEN task is marked completed |
 | V2 | REQUEST_CHANGES (Task B) → create fix task and re-delegate | A new fix task is created for the XSS issue and dispatched to sisyphus-junior |
 | V3 | COMMENT (Task C) → mark complete, does NOT block progression | Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
 | V4 | Fix task contains exact issue details | The fix task for Task B includes the specific issue from argus (missing input sanitization), file location, and required fix action |
@@ -655,6 +661,140 @@ After 1 more question, all 3 criteria met:
 
 ---
 
+## Scenario S-24: Subagent Selection — Mnemosyne for Git Commit
+
+**Primary Technique:** Subagent Selection Guide + Do vs Delegate Matrix — mnemosyne is the designated agent for git commits
+
+**Input:**
+```
+User says "커밋해줘" after sisyphus-junior has completed a code change and argus has returned APPROVE.
+Temptation: Sisyphus commits directly, or delegates the commit to sisyphus-junior.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Selects mnemosyne for git commit | Dispatches mnemosyne agent for the commit operation — identified from Subagent Selection Guide table |
+| V2 | Does NOT commit directly | Sisyphus does NOT run git commands or create commits itself — commits are ALWAYS delegated |
+| V3 | Does NOT delegate commit to sisyphus-junior | Commit is NOT included in sisyphus-junior's task scope — junior does code changes, mnemosyne does commits |
+| V4 | mnemosyne identified from Subagent Selection Guide table | The selection follows the Subagent Selection Guide where mnemosyne is mapped to git commit operations |
+
+---
+
+## Scenario S-25: Verification Flow — Argus Pass Triggers Mnemosyne
+
+**Primary Technique:** Verification Flow (argus → mnemosyne → complete) — after argus APPROVE, the NEXT action is mnemosyne
+
+**Input:**
+```
+Argus returns APPROVE for Task T-3 (add input validation).
+Junior's work is verified. Changed files: src/validation/input.ts, tests/validation/input.test.ts.
+Temptation: Mark T-3 as complete immediately after argus APPROVE.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | mnemosyne invoked AFTER argus APPROVE | After receiving APPROVE from argus, sisyphus's next action is to invoke mnemosyne — not mark complete |
+| V2 | mnemosyne invoked BEFORE marking task complete | The task is NOT marked complete until mnemosyne has finished committing the changes |
+| V3 | Does NOT skip mnemosyne step | Does NOT treat argus APPROVE as sufficient to mark complete — the commit step via mnemosyne is mandatory |
+| V4 | Full flow: junior done → argus → APPROVE → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers mnemosyne, mnemosyne commits, THEN task is marked complete |
+
+---
+
+## Scenario S-26: Mnemosyne Trust Model — No Re-verification
+
+**Primary Technique:** Trust Protocol (Trusted) — mnemosyne has "Trusted" trust level, no post-commit verification needed
+
+**Input:**
+```
+Mnemosyne reports commit created with hash abc1234 for Task T-3.
+Temptation: Re-invoke argus to verify the commit quality, or run git log to double-check.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Does NOT invoke argus after mnemosyne | After mnemosyne commits, sisyphus does NOT send the commit back through argus for re-verification |
+| V2 | Trusts mnemosyne output | Accepts mnemosyne's commit report as final — does NOT run git commands to double-check |
+| V3 | Marks task complete after mnemosyne | The task is marked completed immediately after mnemosyne reports success |
+| V4 | Recognizes mnemosyne has "Trusted" trust level | Follows the Subagent Trust Protocol table where mnemosyne's Trust Model is "Trusted" and Verification Required is "Not required — post-argus execution" |
+
+---
+
+## Scenario S-27: Mnemosyne Delegation Prompt — 5-Section Fidelity
+
+**Primary Technique:** Mnemosyne Delegation Template — uses the 5-Section format with correct content
+
+**Input:**
+```
+Task "Add JWT authentication" (T-4) completed by junior, argus returned APPROVE.
+Changed files reported by argus review: src/auth/jwt.ts, tests/auth/jwt.test.ts.
+Sisyphus needs to invoke mnemosyne to commit the changes.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Uses 5-Section format | Mnemosyne delegation prompt contains all 5 sections: TASK, EXPECTED OUTCOME, MUST DO, MUST NOT DO, CONTEXT |
+| V2 | TASK section contains commit reference | TASK section contains "Commit changes from: [task subject]" identifying what is being committed |
+| V3 | MUST NOT DO includes operational constraints | MUST NOT DO includes "Do NOT spawn subagents", "Do NOT run tests or builds", "Do NOT modify any files" |
+| V4 | CONTEXT includes task details and changed files | CONTEXT section includes the completed task subject/description and explicit changed file paths from argus review |
+| V5 | MUST DO includes git-committer skill reference | MUST DO includes "Follow git-committer skill exactly" to ensure commit conventions are followed |
+
+---
+
+## Scenario S-28: Full Task Loop with Commit Step
+
+**Primary Technique:** Task Execution Loop (전체 사이클) — complete task loop includes the mnemosyne commit step
+
+**Input:**
+```
+2-task plan:
+- T1: Add User model (unblocked)
+- T2: Add UserService with CRUD operations (blocked by T1)
+Execute full loop for both tasks.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | T1 full cycle: dispatch junior → argus → APPROVE → mnemosyne → mark complete | T1 follows the complete loop including the mnemosyne commit step before being marked complete |
+| V2 | T2 unblocked after T1 complete | T2 becomes unblocked only after T1 is fully completed (including mnemosyne commit) |
+| V3 | T2 full cycle: dispatch junior → argus → APPROVE → mnemosyne → mark complete | T2 follows the same complete loop with mnemosyne commit before being marked complete |
+| V4 | Plan NOT considered done until both tasks committed via mnemosyne | The plan is not marked as finished until both T1 and T2 have had their changes committed by mnemosyne |
+| V5 | mnemosyne invoked exactly once per task (not batched) | Each task gets its own separate mnemosyne invocation — commits are NOT batched across tasks |
+
+---
+
+## Scenario S-29: Verdict APPROVE — Mnemosyne Before Mark Complete
+
+**Primary Technique:** Verdict Response Protocol — APPROVE verdict now triggers mnemosyne THEN mark complete
+
+**Input:**
+```
+Three argus verdicts received for different tasks:
+- Task A: APPROVE — all checks passed
+- Task B: REQUEST_CHANGES (Critical) — missing input sanitization, potential XSS
+- Task C: COMMENT (Medium) — variable naming could be more descriptive
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | APPROVE (Task A) → invoke mnemosyne → then mark complete | Task A: mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
+| V2 | REQUEST_CHANGES (Task B) → create fix task, re-delegate (no mnemosyne) | A new fix task is created for the XSS issue and dispatched to sisyphus-junior — mnemosyne is NOT invoked since task is not approved |
+| V3 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
+| V4 | mnemosyne ONLY invoked when argus approves (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts, but NOT for REQUEST_CHANGES where work must be redone |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -682,3 +822,9 @@ After 1 more question, all 3 criteria met:
 | S-21 | Verification Retry Loop | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
 | S-22 | Rich Context Pattern | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-23 | Interview Exit Condition | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-24 | Subagent Selection — Mnemosyne for Git Commit | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
+| S-25 | Verification Flow — Argus Pass Triggers Mnemosyne | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
+| S-26 | Mnemosyne Trust Model — No Re-verification | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
+| S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
+| S-28 | Full Task Loop with Commit Step | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
+| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PASS | 2026-02-16 | 4/4 VPs — GREEN verified (COMMENT row fixed in SKILL.md) |

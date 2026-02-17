@@ -6,6 +6,7 @@ agents:
     - explore
     - librarian
     - metis
+    - mnemosyne
     - momus
     - oracle
     - argus
