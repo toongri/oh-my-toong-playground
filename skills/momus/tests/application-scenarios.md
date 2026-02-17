@@ -13,6 +13,8 @@ These scenarios test whether the momus skill's **core techniques** are correctly
 | MO-3 | Four Criteria — Full Pass | 4개 기준 전체 통과 평가 | OKAY 판정 |
 | MO-4 | Four Criteria — Partial Fail | Verifiability/Completeness 실패 감지 | REJECT 판정 + 개선안 |
 | MO-5 | Final Verdict Format | 출력 형식 준수 | 판정 구조 검증 |
+| MO-6 | Failure_Modes | Rubber-stamping 회피 및 구체적 REJECT 사유 제시 | 모호한 거부 방지 |
+| MO-7 | Certainty Levels | "확실히 누락" vs "불명확할 수 있음" 구분 | 심각도별 판정 가중치 |
 
 ---
 
@@ -248,6 +250,120 @@ Task 1 → Task 2 → Task 3 (순차 실행)
 | V2 | Justification 존재 | `**Justification**:` 레이블과 1-2문장 근거가 포함됨 |
 | V3 | Summary with Per-Criterion 존재 | `**Summary**:` 아래에 Clarity, Verifiability, Completeness, Big Picture 각각의 Pass/Fail이 포함됨 |
 | V4 | 개선안 (REJECT인 경우) | REJECT 판정 시 구체적 개선 항목이 3-5개 포함됨 |
+
+---
+
+## Scenario MO-6: Failure_Modes — Rubber-stamping & Vague Rejection Avoidance
+
+**Primary Technique:** Failure_Modes — Rubber-stamping 회피 및 구체적 REJECT 사유 제시
+
+**Prompt:**
+```
+다음 작업 플랜을 리뷰해줘:
+
+## 결제 재시도 로직 구현 플랜
+
+### 목표
+결제 실패 시 자동 재시도하여 결제 성공률을 높이는 기능 구현
+
+### 참조 파일
+- `src/main/kotlin/com/example/payment/PaymentService.kt` — 결제 처리 핵심 서비스
+- `src/main/kotlin/com/example/payment/RetryPolicy.kt` — 재시도 정책 정의
+- `src/main/resources/application.yml` — 재시도 관련 설정값
+
+### Task 1: 재시도 정책 구현
+- `RetryPolicy.kt`에 재시도 정책 클래스 구현
+- 최대 재시도 횟수: `application.yml`의 `payment.retry.max-attempts` 값 사용
+- 재시도 간격: 지수 백오프 적용 (기본 1초, 배수 2)
+- 재시도 대상: 네트워크 타임아웃, 5xx 응답만 해당. 4xx 응답은 재시도 안 함
+
+### Task 2: PaymentService에 재시도 통합
+- 결제 실패 시 RetryPolicy를 적용하여 자동 재시도
+- 기존 결제 흐름을 참고하여 적절한 위치에 통합
+- 재시도 중 상태 관리는 기존 방식 활용
+
+### Task 3: 재시도 이력 기록
+- 재시도 발생 시 이력을 DB에 저장
+- 기존 테이블을 활용하여 적절히 저장
+- 로깅은 기존 로깅 패턴을 따름
+
+### 기술 스택
+- Kotlin, Spring Boot 3.2
+- PostgreSQL
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | 참조 파일 실제 읽기 시도 (rubber-stamping 회피) | 참조된 3개 파일(`PaymentService.kt`, `RetryPolicy.kt`, `application.yml`)을 실제로 읽으려 시도하거나, 읽을 수 없는 경우 해당 사실을 명시. "참조 파일이 있으므로 충분하다"고 무비판 수용하지 않음 |
+| V2 | REJECT 사유가 파일/위치를 특정 | "플랜에 디테일이 부족합니다" 같은 모호한 거부가 아닌, "Task 2의 '기존 결제 흐름을 참고'는 `PaymentService.kt`의 어떤 메서드인지 특정 불가" 수준의 구체적 사유 제시 |
+| V3 | "기존 방식/패턴" 모호성을 구체적으로 지적 | Task 2 "기존 방식 활용", Task 3 "기존 테이블 활용", "기존 로깅 패턴" 각각에 대해 어떤 파일/테이블/패턴인지 구체적으로 특정하라는 개선안 제시 (포괄적 "모호하다"가 아닌 항목별 지적) |
+| V4 | Task 1의 구체적 요구사항은 정당하게 수용 | Task 1의 재시도 횟수, 간격, 대상 조건이 구체적임을 인정하고 해당 부분은 Pass 처리 (문제 발명 회피) |
+
+---
+
+## Scenario MO-7: Certainty Levels — Severity Differentiation in Findings
+
+**Primary Technique:** Certainty Levels — "확실히 누락"과 "불명확할 수 있음"의 구분
+
+**Prompt:**
+```
+다음 작업 플랜을 리뷰해줘 (코드베이스 접근 불가 상태로 평가해줘):
+
+## 사용자 알림 설정 API 구현 플랜
+
+### 비즈니스 이유
+사용자별 알림 수신 채널(이메일, SMS, 푸시)과 알림 유형별 On/Off를 설정할 수 있는 기능이 필요. CS팀에서 월 50건 이상 "알림 끄고 싶다" 문의 발생 중.
+
+### 엔티티 스키마
+- NotificationPreference: id, userId, channel(ENUM: EMAIL/SMS/PUSH), notificationType(ENUM: MARKETING/TRANSACTIONAL/SYSTEM), enabled(Boolean)
+- 복합 유니크 제약: (userId, channel, notificationType)
+
+### Task 1: 알림 설정 조회 API
+- GET /api/users/{userId}/notification-preferences
+- 응답: 해당 사용자의 모든 알림 설정 목록 (channel, notificationType, enabled)
+- 설정이 없는 사용자: 빈 배열 반환
+
+### Task 2: 알림 설정 변경 API
+- PUT /api/users/{userId}/notification-preferences
+- 요청 바디: { channel: "EMAIL", notificationType: "MARKETING", enabled: false }
+- 해당 설정이 없으면 새로 생성, 있으면 업데이트 (Upsert)
+- SYSTEM 유형 알림은 변경 불가 (항상 enabled=true), 시도 시 400 응답
+
+### Task 3: 알림 발송 시 설정 확인 로직
+- 알림 발송 전 해당 사용자의 설정을 확인하여 enabled=false이면 발송 스킵
+- 설정이 없는 경우 기본값은 enabled=true로 간주
+- 발송 스킵 시 로그 기록
+
+### Task 4: 기본 설정 초기화
+- 신규 사용자 가입 시 기본 알림 설정을 생성하는 로직 필요
+- 어떤 시점에, 어떤 이벤트로 트리거할지는 추후 결정
+
+### 인수 조건
+- 조회 API: 설정이 있는 사용자 → 목록 반환, 없는 사용자 → 빈 배열
+- 변경 API: Upsert 동작 검증, SYSTEM 유형 변경 시 400 응답
+- 알림 스킵: enabled=false 설정된 알림이 발송되지 않음을 검증
+- 복합 유니크 제약 위반 시 적절한 에러 처리
+
+### 기술 스택
+- Kotlin, Spring Boot 3.2, Spring Data JPA
+- PostgreSQL
+
+### Out of Scope
+- 관리자 일괄 설정 변경
+- 알림 설정 이력 추적
+- 알림 채널 추가 (현재 3개 고정)
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Task 4 "추후 결정"을 높은 확실성(확실히 누락)으로 분류 | "어떤 시점에, 어떤 이벤트로 트리거할지는 추후 결정"은 구현 시 반드시 차단되는 미결 사항이므로 critical/blocking 수준으로 지적 |
+| V2 | Task 3 발송 로직 통합 지점을 낮은 확실성(불명확할 수 있음)으로 분류 | Task 3는 "알림 발송 전 확인"이라고 했지만 기존 발송 로직의 위치가 미명시. 이를 Task 4와 동일한 심각도가 아닌 "구체적 파일 참조 추가 권장" 정도의 낮은 심각도로 구분 |
+| V3 | Task 1-2의 명확한 요구사항은 높은 확실성 Pass 처리 | 엔티티 스키마, API 경로, 응답 형식, Upsert 동작, SYSTEM 제약 등 구체적인 부분을 확실한 Pass로 판정 (불필요한 문제 발명 없음) |
+| V4 | 심각도가 판정 가중치에 영향 | "확실히 누락"(Task 4 트리거)이 REJECT 사유의 핵심 근거가 되고, "불명확할 수 있음"(Task 3 통합 지점)은 부가적 개선 권고로 분리되어, 심각도에 따른 가중치 차이가 판정 근거에 드러남 |
 
 ---
 
