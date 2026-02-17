@@ -19,6 +19,10 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-9 | Acceptance Criteria Drafting | Acceptance Criteria Drafting | - |
 | P-10 | Plan Generation + Metis Consultation | Plan Generation + Metis Consultation | Plan Language (English) |
 | P-11 | Subagent Selection | Subagent Selection | Context Brokering |
+| P-12 | Plan Template Structure | Plan Template Structure | Plan Generation |
+| P-13 | Clearance Checklist | Clearance Checklist | Sequential Interview |
+| P-14 | Metis Feedback Loop | Metis Feedback Loop | Plan Generation + Gap Classification |
+| P-15 | Failure Mode Avoidance | Failure Mode Avoidance | Sequential Interview + Plan Generation |
 
 ---
 
@@ -254,6 +258,105 @@ React 공식 문서에서 Server Components 패턴 참고해서 우리 프로젝
 | V1 | Librarian for external docs | Skill uses librarian agent for React official documentation (external source) |
 | V2 | Explore for codebase search | Skill uses explore agent for "우리 프로젝트" codebase investigation |
 | V3 | Never reverses agent roles | Librarian is NOT used for codebase search; explore is NOT used for external documentation |
+
+---
+
+## Scenario P-12: Plan Template Structure
+
+**Primary Technique:** Plan Template Structure — 생성된 플랜이 구조화된 템플릿을 따르는지 검증
+
+**Turn 1-N — Setup:**
+Interview is completed (all clarifying questions answered, acceptance criteria confirmed). User triggers plan generation.
+
+**Final Turn — Input:**
+```
+결제 시스템에 환불 기능 추가하는 플랜 만들어줘
+```
+
+**Final Turn — Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | TL;DR section exists | Plan begins with a TL;DR section containing Quick Summary, Deliverables, and Estimated Effort fields |
+| V2 | Must NOT Have section exists | Plan contains a "Must NOT Have (Guardrails)" section with explicit exclusions and scope boundaries |
+| V3 | TODOs have acceptance criteria | Every TODO item includes concrete, agent-executable acceptance criteria (not vague "verify it works" descriptions) |
+| V4 | Context section with Interview Summary and Metis Review | Plan includes Context section containing Original Request, Interview Summary (Key Discussions + Research Findings), and Metis Review (Identified Gaps) |
+| V5 | Verification Strategy section present | Plan includes Verification Strategy with Test Decision, and Agent-Executed QA Scenarios for each TODO |
+
+---
+
+## Scenario P-13: Clearance Checklist
+
+**Primary Technique:** Clearance Checklist — 인터뷰 후 플랜 생성 전 5항목 자가 점검 수행
+
+**Turn 1 — Input:**
+```
+사용자 프로필에 아바타 업로드 기능 추가하고 싶어
+```
+
+**Turn 1 — Expected:**
+Skill asks a clarifying question (e.g., supported image formats, size limit, storage approach).
+
+**Turn 2 — Input:**
+```
+PNG랑 JPG만 지원하면 돼. 5MB 제한으로. 플랜 만들어줘.
+```
+
+**Turn 2 — Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | 5-item checklist evaluated | Skill internally evaluates all 5 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach decided, (5) Test strategy confirmed |
+| V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not confirmed, technical approach not decided), skill continues interview instead of generating plan |
+| V3 | No auto-generation after clearance | Even when all 5 checks pass, Prometheus does NOT generate a plan until user explicitly triggers with a recognized trigger phrase (e.g., "Generate the plan") |
+
+---
+
+## Scenario P-14: Metis Feedback Loop
+
+**Primary Technique:** Metis Feedback Loop — 플랜 생성 전 Metis 상담, 결과를 플랜에 반영 및 갭 분류
+
+**Turn 1-N — Setup:**
+Interview is completed (all clarifying questions answered, acceptance criteria confirmed, clearance checklist passed).
+
+**Final Turn — Input:**
+```
+실시간 알림 기능 WebSocket으로 구현하는 플랜 생성해줘
+```
+
+**Final Turn — Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Metis invoked before plan generation | Metis agent is summoned BEFORE the plan is written, with interview context (user's goal, key discussions, research findings) passed to Metis |
+| V2 | Metis gaps addressed in plan | Gaps identified by Metis are incorporated into the generated plan (in Metis Review section and reflected in guardrails/TODOs) — not ignored or deferred |
+| V3 | Gap Classification applied | Post-plan self-review classifies each identified gap as CRITICAL (requires user input), MINOR (self-resolve), or AMBIGUOUS (apply default) — each type handled per its protocol |
+| V4 | Self-Review Checklist executed | After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, zero human-intervention criteria |
+
+---
+
+## Scenario P-15: Failure Mode Avoidance
+
+**Primary Technique:** Failure Mode Avoidance — 과잉 계획, 과소 계획, 조기 생성 회피
+
+**Prompt (over-planning test):**
+```
+헤더 컴포넌트에 다크모드 토글 버튼 추가해줘
+```
+
+**Prompt (premature generation test):**
+```
+검색 기능에 필터 추가하고 싶어
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with acceptance criteria — NOT 20-30 granular micro-steps with implementation details |
+| V2 | No plan generated before explicit trigger | For the filter feature request, skill enters interview mode and does NOT generate a plan until user explicitly requests it (e.g., "플랜 만들어줘") |
+| V3 | No under-planning | Each task is broken into verifiable chunks — no single task like "Step 1: Implement the feature" without further breakdown |
+| V4 | No architecture redesign | Skill proposes targeted changes that work within existing codebase patterns — does NOT suggest rewriting the entire component or introducing new frameworks unnecessarily |
 
 ---
 
