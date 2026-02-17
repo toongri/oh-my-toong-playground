@@ -101,7 +101,7 @@ Add trailers at the end of body when needed:
 - Separate unrelated changes (atomic commits)
 - Title must be within 50 characters, core message only
 - WHY goes in body (optional)
-- 3+ files changed → check split threshold (see Atomic Commit Splitting)
+- Many files ≠ many commits — logical cohesion decides (see Atomic Commit Splitting)
 
 ---
 
@@ -136,42 +136,61 @@ For each changed file, categorize:
 
 ### Atomic Commit Splitting
 
-**When staged files exceed thresholds, split into multiple commits:**
+> "Separate each logical change into a separate patch." — Linux Kernel Documentation
+>
+> "If you make a single change to numerous files, group those changes into a single patch." — Linux Kernel Patch Philosophy
 
-| Changed Files | Minimum Commits |
-|---------------|-----------------|
-| 3+ files | 2+ commits |
-| 5+ files | 3+ commits |
-| 10+ files | 5+ commits |
+**File count is a TRIGGER for analysis, NOT a splitting rule.**
 
-**Concern-Based Split Criteria:**
+#### Split Analysis Trigger
 
-| Signal | Action |
-|--------|--------|
-| Different directories/modules | SPLIT |
-| Different component types (config / source / test / docs) | SPLIT |
-| Independently revertable | SPLIT |
+| Changed Files | Action |
+|---------------|--------|
+| 1-2 files | Likely single commit — verify one logical change |
+| 3+ files | **Pause and analyze** — are there multiple concerns? |
+| 10+ files | **Strongly consider splitting** — multiple concerns are probable |
 
-**Grouping Strategy (commit in this order):**
+**IMPORTANT**: One feature ≠ one commit. A feature may contain multiple logical changes (config, domain, service, test, docs). Each independently meaningful layer is a separate commit. However, a single atomic operation (e.g., renaming across 10 files) IS one commit.
 
-1. **Config files** -- settings, build config, dependencies
-2. **Source/Logic files** -- business logic, application code
-3. **Test files** -- unit tests, integration tests
-4. **Documentation** -- README, docs, comments
+#### When to Split
 
-Commit in **dependency order**: what is depended on gets committed first.
+Split when ANY of these are true:
 
-**Splitting Workflow:**
+| Signal | Example |
+|--------|---------|
+| Different change types mixed | Bug fix + unrelated refactor |
+| Different domains/modules affected | auth/ change + user/ change with no dependency |
+| Independently revertable parts | Config change that works without the feature using it |
+| Description gets too long | "Fixed X and also added Y and refactored Z" |
+| Different architectural layers | Config + domain + service + test + docs for one feature |
 
-```
-Staged files → Count check against threshold
-  → Below threshold? → Single commit
-  → Above threshold? → Group by concern → Sequential commits in dependency order
-```
+#### When NOT to Split
+
+Keep as single commit when:
+
+| Signal | Example |
+|--------|---------|
+| Truly atomic operation | Renaming a class across 5 files |
+| Tightly coupled pair | DTO definition + the single mapper using it |
+| Cannot exist independently | Interface + its only implementation (in same module) |
+| Single mechanical change | Formatting/linting across many files |
+
+#### Grouping Strategy (when splitting)
+
+Commit in this order (dependency-first):
+
+1. **Config/Build** — dependencies, build settings
+2. **Infrastructure** — refactoring, API changes
+3. **Source/Logic** — business logic, features
+4. **Tests** — related test code
+5. **Documentation** — README, docs
+
+#### Splitting Rules
 
 Each split commit must:
 - Be independently meaningful (not "part 1 of 3")
 - Have its own proper commit message
+- Leave the codebase in a buildable state
 - Be revertable without breaking other commits
 
 ### Step 2: Verify No Workflow Files
@@ -258,6 +277,8 @@ EOF
 **Mixed types**: Use primary type, mention secondary in body.
 
 **User insists on violation**: Explain why you cannot comply. Offer alternatives.
+
+**Large cohesive change (10+ files)**: Analyze by concern. One feature ≠ one commit. Split by architectural layer (config, source, test, docs) unless the change is a single atomic operation (e.g., rename).
 
 ---
 
