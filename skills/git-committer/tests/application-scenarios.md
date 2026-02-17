@@ -145,11 +145,11 @@ git-committer 스킬의 핵심 기법(technique)이 올바르게 적용되는지
 - V2: 분리 커밋 제안 (fix 먼저, refactor 별도)
 - V3: 한 커밋에 무관한 변경을 합치지 않음
 - V4: 분리 방법 안내 (`git add -p` 또는 파일 단위 분리)
-- V5: 파일 수에 따른 분할 threshold 인지 (3+→2+, 5+→3+, 10+→5+)
+- V5: 파일 수를 분할 분석 트리거로 인지 (파일 수 ≠ 커밋 수, 논리적 응집성 기준)
 
 ---
 
-## Scenario GC-10: Atomic Commit Splitting — Multi-File Threshold
+## Scenario GC-10: Atomic Commit Splitting — Concern-Based Analysis
 
 **Input**: `git status` shows 12 staged files across different concerns:
 - `build.gradle.kts` (config)
@@ -165,34 +165,54 @@ git-committer 스킬의 핵심 기법(technique)이 올바르게 적용되는지
 - `docs/api/auth.md` (docs)
 - `README.md` (docs)
 
-**Primary Technique**: Atomic Commit Splitting — 10+ files threshold + concern-based grouping
+**Primary Technique**: Atomic Commit Splitting — 10+ files triggers analysis, concern-based grouping determines split
 
 **Verification**:
-- V1: 12 파일 → 10+ threshold 적용 → 5개 이상 커밋으로 분할
-- V2: Concern 기반 그룹핑 수행 (config / source / test / docs)
+- V1: 12 파일 → 10+ files 분석 트리거 → concern 분석 수행
+- V2: 4가지 concern 감지 (config / source / test / docs) → 분할 결정
 - V3: 의존성 순서로 커밋 (config → source → test → docs)
 - V4: 각 분할 커밋이 독립적으로 의미 있음 ("part 1 of 5" 같은 메시지 미사용)
 - V5: 각 분할 커밋의 메시지가 50자 이내 한국어 명사형 종결
 
 ---
 
+## Scenario GC-11: Cohesive Multi-File Change — Do NOT Split
+
+**Input**: `git status` shows 4 staged files, all for one feature:
+- `src/main/kotlin/point/PointService.kt` (새 서비스)
+- `src/main/kotlin/point/PointRepository.kt` (새 저장소)
+- `src/main/kotlin/point/PointController.kt` (새 컨트롤러)
+- `src/test/kotlin/point/PointServiceTest.kt` (새 테스트)
+
+All files implement the single "포인트 적립" feature. PointController depends on PointService, which depends on PointRepository. Test depends on Service.
+
+**Primary Technique**: Atomic Commit Splitting — 3+ files triggers analysis, but cohesive change = single commit
+
+**Verification**:
+- V1: 4 파일 → 3+ files 분석 트리거 → concern 분석 수행
+- V2: 분석 결과: 모든 파일이 단일 기능(포인트 적립)에 종속 → 분할 불필요 판단
+- V3: 단일 커밋으로 진행 (분할 강제하지 않음)
+- V4: 커밋 메시지가 전체 변경을 적절히 설명
+- V5: 분할하면 중간 커밋이 빌드 실패하는 점 인지
+
+---
+
 ## Test Results
 
-### GREEN Test — 2026-02-16
+### GREEN Test — 2026-02-17
 
 **Model**: claude-sonnet-4-5-20250929
-**Skill Version**: Iron Law 축소 (4→2 규칙) + Atomic Commit Splitting 추가 후
+**Skill Version**: Heuristic trigger 개정 + feature ≠ logical change 명확화 후
 
 | Scenario | V1 | V2 | V3 | V4 | V5 | Overall |
 |----------|-----|-----|-----|-----|-----|---------|
-| GC-1: Iron Law | PASS | PASS | PASS | — | — | **PASS** |
-| GC-9: Split Detection | PASS | PASS | PASS | PASS | PASS | **PASS** |
-| GC-10: Atomic Splitting | PASS | PASS | PASS | PASS | PASS | **PASS** |
+| GC-10: Concern-Based Analysis | PASS | PASS | PASS | PASS | PASS | **PASS** |
+| GC-11: Cohesive No-Split | PASS | PASS | PASS | PASS | PASS | **PASS** |
 
-**Result: 3/3 변경 시나리오 PASS — 13/13 verification points 충족.**
+**Result: 2/2 핵심 시나리오 PASS — 10/10 verification points 충족.**
 
 **Notes**:
-- GC-1: 테스트/빌드 확인 없이 2개 규칙(single change + 50 chars)만으로 정상 동작
-- GC-9: 2파일이라 file count threshold 미만이지만 concern 기반 분할 정상 감지
-- GC-10: 12파일 → 6개 커밋 분할 (최소 5+), config→DTO→service→controller→test→docs 의존성 순서 준수
-- GC-2 ~ GC-8: 미변경 시나리오이므로 이번 테스트에서 제외 (이전 GREEN 결과 유효)
+- GC-10: 12파일 → 4개 architectural layer 감지 → 4개 커밋 분할 (config→source→test→docs)
+- GC-11: 4파일 tightly coupled → 단일 커밋 유지 ("Cannot exist independently")
+- "One feature ≠ one commit" 명확화가 agent 판단을 정확히 교정
+- GC-1 ~ GC-9: 미변경 시나리오이므로 이전 결과 유효
