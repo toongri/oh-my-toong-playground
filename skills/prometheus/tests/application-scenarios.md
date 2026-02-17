@@ -277,7 +277,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | TL;DR section exists | Plan begins with a TL;DR section containing Quick Summary, Deliverables, Estimated Effort, Parallel Execution, and Critical Path fields |
+| V1 | TL;DR section exists | Plan begins with a TL;DR section containing Quick Summary, Deliverables, and Estimated Effort fields |
 | V2 | Must NOT Have section exists | Plan contains a "Must NOT Have (Guardrails)" section with explicit exclusions and scope boundaries |
 | V3 | TODOs have acceptance criteria | Every TODO item includes concrete, agent-executable acceptance criteria (not vague "verify it works" descriptions) |
 | V4 | Context section with Interview Summary and Metis Review | Plan includes Context section containing Original Request, Interview Summary (Key Discussions + Research Findings), and Metis Review (Identified Gaps) |
@@ -308,7 +308,7 @@ PNG랑 JPG만 지원하면 돼. 5MB 제한으로. 플랜 만들어줘.
 |---|-------|-------------------|
 | V1 | 5-item checklist evaluated | Skill internally evaluates all 5 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach decided, (5) Test strategy confirmed |
 | V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not confirmed, technical approach not decided), skill continues interview instead of generating plan |
-| V3 | Passes checklist → proceeds to plan generation | Only when ALL 5 items are satisfied does skill proceed to Metis consultation and plan generation |
+| V3 | No auto-generation after clearance | Even when all 5 checks pass, Prometheus does NOT generate a plan until user explicitly triggers with a recognized trigger phrase (e.g., "Generate the plan") |
 
 ---
 

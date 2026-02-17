@@ -233,10 +233,11 @@ When user explicitly defers ("skip", "I don't know", "your call", "you decide", 
 | 4 | Technical approach validated? | YES |
 | 5 | Test/verification strategy identified? | YES |
 
-**All YES** -> Proceed to Acceptance Criteria Drafting, then Plan Generation.
-**Any NO** -> Continue interview. Do NOT generate plan.
+**All YES** -> READY for next phase. Proceed to Acceptance Criteria Drafting.
+Plan generation still requires explicit user trigger (see Plan Generation section).
+**Any NO** -> Continue interview. Do NOT proceed to AC Drafting.
 
-This checklist is internal -- do not present it to the user. It prevents premature plan generation.
+This checklist is internal -- do not present it to the user.
 
 ## Acceptance Criteria Drafting (MANDATORY)
 
