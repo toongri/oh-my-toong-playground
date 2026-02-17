@@ -26,7 +26,7 @@ digraph review_stages {
     rankdir=TB;
 
     start [label="Start Review" shape=ellipse];
-    diff [label="Identify changes via git diff"];
+    diff [label="Identify target files from Changed files list"];
     stage1 [label="Stage 1: Automated Verification" shape=box style=filled fillcolor=lightyellow];
     verify_pass [label="All pass?" shape=diamond];
     stage2 [label="Stage 2: Spec Compliance" shape=box style=filled fillcolor=lightblue];
@@ -77,8 +77,8 @@ The 5-Section prompt from sisyphus defines what Junior was asked to do. Verify e
 
 | Criterion | Method | Pass Condition |
 |-----------|--------|----------------|
-| Files modified | Compare `git diff --name-only` vs listed paths | All listed files touched |
-| Behavior achieved | Match Junior's summary vs expected behavior | Intent alignment |
+| Files listed | Check Changed files in REVIEW REQUEST vs EXPECTED OUTCOME paths | All expected files listed |
+| Behavior achieved | Read each Changed file, verify expected behavior in content | Implementation matches intent |
 | Verification command | Execute if provided | Command succeeds |
 
 ### MUST DO Checklist
@@ -91,26 +91,28 @@ Convert each MUST DO bullet into a verification item:
 
 **Verification methods by type:**
 - Pattern reference ("Follow X.ts:45-60") -> Read pattern, compare new code
-- Explicit requirement ("Add null check") -> Search diff for evidence
+- Explicit requirement ("Add null check") -> Search file content for evidence
 - Test requirement ("Add unit test") -> Check test file modified/added
 
 ### MUST NOT DO Violation Detection
 
 | Violation Type | Detection Method |
 |----------------|------------------|
-| File scope ("Do NOT touch X.ts") | Check if forbidden file in `git diff --name-only` |
-| Pattern prohibition ("Do NOT use any") | Grep diff for prohibited pattern |
-| Behavior constraint ("Do NOT change API") | Manual review of interfaces |
+| File scope ("Do NOT touch X.ts") | Check if forbidden file appears in Changed files list |
+| Pattern prohibition ("Do NOT use any") | Grep Changed files' content for prohibited pattern |
+| Behavior constraint ("Do NOT change API") | Read and review interfaces in Changed files |
 
 ### Scope Boundary Check
 
 ```
 Expected files (from EXPECTED OUTCOME) = A
-Actual changed files (git diff) = B
+Changed files (from REVIEW REQUEST) = B
 
-PASS if: B ⊆ A (changes within scope)
-FLAG if: B - A ≠ ∅ (unexpected files touched)
+PASS if: B ⊆ A (changes within declared scope)
+FLAG if: B - A ≠ ∅ (undeclared files in Changed files list)
 ```
+
+Changed files list is the Single Source of Truth. Do NOT use `git diff` to independently discover changes — in parallel execution, git diff includes changes from other concurrent Junior agents.
 
 **Acceptable exceptions:** Test files for in-scope code, related config files.
 
@@ -133,7 +135,7 @@ Review code against quality checklists by severity level.
 - Pre-existing issues (not introduced by this change)
 - Linter-catchable problems (let tools handle these)
 - Style preferences without documented standard
-- Code not touched by this change
+- Code not in the Changed files list
 - "Could be better" without concrete problem
 
 **When Uncertain:** Flag as nitpick - better to catch than miss. Missed issues escape forever.
