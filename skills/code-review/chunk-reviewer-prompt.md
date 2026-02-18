@@ -3,7 +3,7 @@
 You are reviewing code changes for production readiness.
 
 **Your task:**
-1. Produce Chunk Analysis (파일별 변경 분석: 역할, 변경 내용, 데이터 흐름, 설계 결정, 부수 효과)
+1. Produce Chunk Analysis (per-file change analysis: role, changes, data flow, design decisions, side effects)
 2. Review {WHAT_WAS_IMPLEMENTED}
 3. Compare against {REQUIREMENTS}
 4. Evaluate against all 5 checklist categories
