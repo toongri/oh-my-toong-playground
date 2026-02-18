@@ -35,6 +35,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input:**
 - TASK: Add JWT validation to login endpoint
 - EXPECTED OUTCOME: Files to modify: [auth/login.ts]. JWT token validation logic added.
+- REQUIRED TOOLS: Serena find_symbol (auth/login.ts의 login 함수 탐색)
 - MUST DO: Use jsonwebtoken library
 - MUST NOT DO: Do NOT modify auth/middleware.ts
 - CONTEXT: Existing auth flow in auth/login.ts
@@ -59,6 +60,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input:**
 - TASK: Add null check for userId parameter
 - EXPECTED OUTCOME: Files to modify: [service/user-service.ts]. Null check added before DB query.
+- REQUIRED TOOLS: Serena find_symbol (user-service.ts의 userId 파라미터 사용 위치 탐색)
 - MUST DO: Add explicit null/undefined check, throw BadRequestError if null
 - MUST NOT DO: Do NOT change the DB query logic itself
 - CONTEXT: user-service.ts handles user CRUD operations
@@ -83,6 +85,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input:**
 - TASK: Fix login validation bug
 - EXPECTED OUTCOME: Files to modify: [auth/login.ts]
+- REQUIRED TOOLS: Serena find_symbol (auth/login.ts의 validation 로직 탐색)
 - MUST DO: Fix the email regex pattern
 - MUST NOT DO: Do NOT touch auth/config.ts
 - CONTEXT: Bug report: email validation accepts invalid formats
@@ -107,6 +110,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input:**
 - TASK: Refactor data access layer
 - EXPECTED OUTCOME: Files to modify: [src/A.ts, src/B.ts]
+- REQUIRED TOOLS: Serena find_symbol (A.ts, B.ts의 query 로직 탐색)
 - MUST DO: Extract common query logic into shared method
 - MUST NOT DO: Do NOT modify controller files
 - CONTEXT: A.ts and B.ts contain duplicated query logic
@@ -131,6 +135,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input (Junior A의 task):**
 - TASK: Add rate limiting to auth endpoint
 - EXPECTED OUTCOME: Files to modify: [auth.ts]
+- REQUIRED TOOLS: Serena find_symbol (auth.ts의 endpoint 구조 탐색)
 - MUST DO: Use express-rate-limit middleware
 - MUST NOT DO: Do NOT modify payment routes
 - CONTEXT: Auth endpoint needs rate limiting for security
@@ -156,6 +161,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input:**
 - TASK: Add type definitions for API responses
 - EXPECTED OUTCOME: Files to modify: [types.ts]
+- REQUIRED TOOLS: Serena get_symbols_overview (types.ts의 기존 타입 구조 파악)
 - MUST DO: Define proper TypeScript interfaces for all API responses
 - MUST NOT DO: Do NOT use `any` type anywhere
 - CONTEXT: Project enforces strict TypeScript typing
@@ -180,6 +186,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 **6-Section Input:**
 - TASK: Fix typo in README.md
 - EXPECTED OUTCOME: Files to modify: [README.md]. Typo "authenication" → "authentication" corrected.
+- REQUIRED TOOLS: None (단순 오타 수정)
 - MUST DO: Fix the specific typo only
 - MUST NOT DO: Do NOT change any other content
 - CONTEXT: Typo reported in README
