@@ -26,9 +26,14 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 Three-question gate — adapt by input mode:
 
 **PR mode:**
-1. Auto-extract PR title + description via `gh pr view <number> --json title,body`
-2. If description is substantial (>1 sentence): proceed with auto-extracted context, confirm with user: "Extracted requirements from PR description: [summary]. Anything to add?"
-3. If description is thin: ask user "Do you have core requirements or a spec for this PR?"
+1. Auto-extract PR metadata:
+   `gh pr view <number> --json title,body,labels,comments,reviews`
+2. Scan PR body and comments for references to related documents (previous PRs, issues, Jira tickets, design docs, external URLs, review threads, etc.):
+   - GitHub refs (`#123`) → fetch context via `gh pr view` or `gh issue view`
+   - Non-fetchable references (Jira, Notion, Confluence, etc.) → note for user inquiry
+3. If description is substantial (>1 sentence): proceed with auto-extracted context, confirm with user: "Extracted requirements from PR description: [summary]. Anything to add?"
+4. If description is thin AND no linked references found: ask user "Do you have core requirements or a spec for this PR?"
+5. If non-fetchable external references found, ask user: "The PR references these external documents: [links]. Please share relevant context if available. (If not, review will proceed with available information)"
 
 **Branch comparison mode:**
 Ask user: "What was implemented on this branch? If there are original requirements/spec, please share."
@@ -86,15 +91,30 @@ Proceed to Step 1 when any of the following are met:
 
 ## Step 1: Input Parsing
 
-Determine diff command and range for subsequent steps:
+Determine range and setup for subsequent steps:
 
-| Input | Diff Command | Range |
-|-------|-------------|-------|
-| `pr <number or URL>` | `gh pr diff <number>` | Extract via `gh pr view <number> --json baseRefName,headRefName` → `origin/<baseRefName>..<headRefName>` |
-| `<base> <target>` | `git diff <base>...<target>` | `<base>...<target>` |
-| (none) | Detect default branch (`origin/main` or `origin/master`), then `git diff <default>...HEAD` | `<default>...HEAD` |
+| Input | Setup | Range |
+|-------|-------|-------|
+| `pr <number or URL>` | Fetch PR ref locally (see below) | `origin/<baseRefName>...pr-<number>` |
+| `<base> <target>` | (none — branches already local) | `<base>...<target>` |
+| (none) | Detect default branch (`origin/main` or `origin/master`) | `<default>...HEAD` |
 
-All subsequent steps use `{range}` from this table.
+### PR Mode: Local Ref Setup (NO checkout)
+
+Fetch the PR ref and base branch without switching the current branch:
+
+```bash
+# 1. Get base branch name
+BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
+
+# 2. Fetch PR ref and base branch (no checkout — user's working directory untouched)
+git fetch origin pull/<number>/head:pr-<number>
+git fetch origin ${BASE_REF}
+```
+
+The range `origin/<baseRefName>...pr-<number>` uses three-dot syntax to show only changes introduced by the PR (not changes on the base branch since the PR branched).
+
+All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output.
 
 ## Early Exit
 
@@ -212,10 +232,20 @@ When chunk-reviewer reviews library code, the code itself may be syntactically c
 
 | Condition | Strategy |
 |-----------|----------|
-| Changed files <= 15 | Single review -- skip to Step 4 with full diff |
+| Changed files <= 15 | Single review — `git diff {range}` for full diff |
 | Changed files > 15 | Group into chunks of ~10-15 files by directory/module affinity |
 
 Chunking heuristic: group files sharing a directory prefix or import relationships.
+
+### Per-Chunk Diff Acquisition
+
+For each chunk, obtain the diff using git's native path filtering:
+
+```bash
+git diff {range} -- <file1> <file2> ... <fileN>
+```
+
+This produces a diff containing ONLY the files in that chunk. Do NOT parse a full diff output to extract per-file sections.
 
 ## Step 4: Agent Dispatch
 
@@ -226,7 +256,7 @@ Chunking heuristic: group files sharing a directory prefix or import relationshi
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
    - {CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)
    - {FILE_LIST} ← Step 2 file list
-   - {DIFF} ← Step 1 diff (full or chunk)
+   - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
