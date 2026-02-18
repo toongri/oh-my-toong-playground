@@ -71,7 +71,7 @@ Single-line edits, obvious typos, or changes with no functional behavior modific
 
 **Before reviewing code quality, verify the implementation meets the original request.**
 
-The 5-Section prompt from sisyphus defines what Junior was asked to do. Verify each section.
+The 6-Section prompt from sisyphus defines what Junior was asked to do. Verify each section.
 
 ### Expected Outcome Verification
 
@@ -197,7 +197,7 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 
 ```
 Stage 1: Automated Verification (Build, Test, Lint)
-Stage 2: Spec Compliance (vs 5-Section prompt)
+Stage 2: Spec Compliance (vs 6-Section prompt)
 Stage 3: Code Quality (Security, Architecture, Performance, Maintainability, YAGNI)
 
 STAGE 1: See stage1-commands.md
