@@ -258,6 +258,31 @@ See each Design Area reference file for domain-specific clarification examples.
 | Existing codebase patterns | explore |
 | Multi-AI design feedback | spec-reviewer |
 
+### Explore/Librarian Prompt Guide
+
+Explore and librarian are contextual search agents — treat them like targeted grep, not consultants.
+Always run in background. Always parallel when independent.
+
+**Prompt structure** (each field should be substantive, not a single sentence):
+- **[CONTEXT]**: What task you're working on, which files/modules are involved, and what approach you're taking
+- **[GOAL]**: The specific outcome you need — what decision or action the results will unblock
+- **[DOWNSTREAM]**: How you will use the results — what you'll build/decide based on what's found
+- **[REQUEST]**: Concrete search instructions — what to find, what format to return, and what to SKIP
+
+**Examples:**
+
+```
+// Spec research (internal)
+Task(subagent_type="explore", prompt="I'm designing a spec for a new caching layer and need to understand existing data access patterns. I'll use this to decide where caching fits in the architecture. Find: repository/DAO patterns, data access layers, existing caching (if any), query hot spots. Focus on src/ — skip tests. Return file paths with usage frequency indicators.")
+
+// Spec research (external)
+Task(subagent_type="librarian", prompt="I'm specifying a Redis caching strategy and need authoritative guidance on cache invalidation patterns. I'll use this to recommend the right approach in the spec. Find: cache-aside vs write-through patterns, TTL strategies, invalidation approaches, Redis best practices for [framework]. Skip introductory content — architecture-level guidance only.")
+```
+
+### Oracle Consultation
+
+For technical decisions and architecture trade-offs during spec work, briefly announce "Consulting Oracle for [reason]" before invocation.
+
 ## Context Brokering
 
 **NEVER burden the user with questions the codebase can answer.**

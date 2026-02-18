@@ -10,7 +10,7 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 |---|---------|-------------------|-----------|
 | M-1 | Analysis Framework 전반부 | Requirements / Assumptions / Scope / Dependencies | 카테고리 누락 감지 |
 | M-2 | Analysis Framework 후반부 | Risks / Success Criteria / Edge Cases / Error Handling | 보안/에러 처리 누락 감지 |
-| M-3 | Mandatory Output Structure | 7-section markdown 출력 구조 | 섹션별 품질 검증 |
+| M-3 | Mandatory Output Structure | 8-section markdown 출력 구조 | 섹션별 품질 검증 |
 | M-4 | Vague Term Detection | 모호한 용어 감지 및 명확화 요청 | Analysis Framework 전반 |
 | M-5 | Completeness | Scope Exclusion / Common Mistake Detection | 암묵적 가정 질문 |
 | M-6 | Intent Classification | MT-1: Intent 분류 → 분석 전 수행 | 분류 신뢰도 검증 |
@@ -103,7 +103,7 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 
 ## Scenario M-3: Mandatory Output Structure Compliance
 
-**Primary Technique:** 7-section Mandatory Output Structure
+**Primary Technique:** 8-section Mandatory Output Structure
 
 **Prompt:**
 ```
@@ -132,6 +132,7 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 | V5 | Missing Acceptance Criteria 섹션 존재 | "### Missing Acceptance Criteria" 헤딩과 측정 가능한 기준 제안이 포함됨 |
 | V6 | Edge Cases 섹션 존재 | "### Edge Cases" 헤딩과 비정상 시나리오가 포함됨 |
 | V7 | Recommendations 섹션 존재 | "### Recommendations" 헤딩과 우선순위가 매겨진 명확화 항목이 포함됨 |
+| V8 | Domain Context 섹션 존재 | "### Domain Context" 헤딩과 도메인 맥락/분석 동기 설명이 출력 최상단(Intent Classification 이전)에 포함됨 |
 
 ---
 
@@ -240,7 +241,7 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 |---|-------|-------------------|
 | V1 | Intent Type 명시 | 분석 시작 전에 Intent Type을 "Refactoring"으로 명시적으로 분류함 |
 | V2 | Confidence Level 제시 | 분류 신뢰도(High/Medium/Low)를 근거와 함께 제시함 |
-| V3 | 분류가 분석보다 선행 | Intent Classification이 출력 구조에서 가장 먼저 등장하며, 이후 분석이 이 분류에 기반함 |
+| V3 | 분류가 분석보다 선행 | Intent Classification이 세부 분석 섹션보다 먼저 등장하며, 이후 분석이 이 분류에 기반함 |
 
 ---
 
@@ -508,6 +509,6 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 |---|---------|--------|------|-------|
 | M-1 | Analysis Framework 전반부 | PASS | 2026-02-10 | V1-V4 모두 충족 |
 | M-2 | Analysis Framework 후반부 | PASS | 2026-02-10 | V1-V4 모두 충족 |
-| M-3 | Mandatory Output Structure | PASS | 2026-02-10 | V1-V7 모두 충족 |
+| M-3 | Mandatory Output Structure | PASS | 2026-02-10 | V1-V7 모두 충족 (V8 Domain Context 추가됨 — 재검증 필요) |
 | M-4 | Vague Term Detection | PASS | 2026-02-10 | V1-V5 모두 충족 |
 | M-5 | Completeness | PASS | 2026-02-10 | V1-V4 모두 충족 |

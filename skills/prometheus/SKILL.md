@@ -89,6 +89,31 @@ digraph prometheus_flow {
 - **Metis** = Pre-plan validation (catches gaps BEFORE writing)
 - **Momus** = Post-plan review (catches issues AFTER writing)
 
+### Explore/Librarian Prompt Guide
+
+Explore and librarian are contextual search agents — treat them like targeted grep, not consultants.
+Always run in background. Always parallel when independent.
+
+**Prompt structure** (each field should be substantive, not a single sentence):
+- **[CONTEXT]**: What task you're working on, which files/modules are involved, and what approach you're taking
+- **[GOAL]**: The specific outcome you need — what decision or action the results will unblock
+- **[DOWNSTREAM]**: How you will use the results — what you'll build/decide based on what's found
+- **[REQUEST]**: Concrete search instructions — what to find, what format to return, and what to SKIP
+
+**Examples:**
+
+```
+// Pre-interview research (internal)
+Task(subagent_type="explore", prompt="I'm planning a new authentication feature and need to understand existing patterns before interviewing the user. I'll use this to ask informed questions instead of codebase-answerable ones. Find: existing auth implementations, middleware patterns, session handling. Focus on src/ — skip tests. Return file paths with pattern descriptions.")
+
+// Pre-interview research (external)
+Task(subagent_type="librarian", prompt="I'm planning to implement OAuth 2.0 and need authoritative guidance for the work plan. I'll use this to recommend the right approach during the interview. Find official docs: setup, flow types (authorization code, PKCE), security considerations, common pitfalls. Skip beginner tutorials — production patterns only.")
+```
+
+### Oracle Consultation
+
+For architecture-level questions during interview, briefly announce "Consulting Oracle for [reason]" before invocation.
+
 ## Interview Mode (Default State)
 
 **Use AskUserQuestion tool to interview in-depth until nothing is ambiguous.**

@@ -77,9 +77,11 @@ Collect in parallel (using `{range}` from Step 1):
 
 Subagent context (conditional):
 
-5. Dispatch explore agent: "Find existing patterns, conventions, and related code for the changed files: [file list]"
+5. Dispatch explore agent (4-Field):
+   Task(subagent_type="explore", prompt="I'm reviewing a PR that changes [file list] and need to understand the existing conventions these files should follow. I'll use this to evaluate whether the PR matches codebase patterns. Find: related implementations, naming conventions, error handling patterns, and test structure for the changed modules. Skip unrelated directories. Return file paths with pattern descriptions.")
    → Always dispatch (lightweight, provides codebase context)
-6. Dispatch oracle agent: "Analyze architecture implications of these changes: [file list summary]"
+6. Dispatch oracle agent (only if trigger conditions met):
+   Briefly announce "Consulting Oracle for [reason]" before invocation.
    → Only if trigger conditions met (see below)
 
 **Oracle trigger conditions:**
@@ -124,7 +126,8 @@ After all agents return:
 1. **Merge** all Strengths, Issues, Recommendations sections
 2. **Deduplicate** issues appearing in multiple chunks
 3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
-4. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
-5. **Produce unified report** in the standard output format (Strengths / Issues / Recommendations / Assessment)
+4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
+5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
+6. **Produce unified report** in the standard output format (Strengths / Issues / Recommendations / Assessment)
 
 For single-chunk reviews, return the agent's output directly.

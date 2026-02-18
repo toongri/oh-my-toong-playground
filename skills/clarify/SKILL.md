@@ -119,6 +119,28 @@ Record original verbatim. Identify: unclear items, needed assumptions, open deci
 
 **The ONLY questions for users are about PREFERENCES, not FACTS.**
 
+### Explore/Librarian Prompt Guide
+
+Explore and librarian are contextual search agents — treat them like targeted grep, not consultants.
+Always run in background. Always parallel when independent.
+
+**Prompt structure** (each field should be substantive, not a single sentence):
+- **[CONTEXT]**: What task you're working on, which files/modules are involved, and what approach you're taking
+- **[GOAL]**: The specific outcome you need — what decision or action the results will unblock
+- **[DOWNSTREAM]**: How you will use the results — what you'll build/decide based on what's found
+- **[REQUEST]**: Concrete search instructions — what to find, what format to return, and what to SKIP
+
+**Examples:**
+
+```
+// Fact-finding before asking user
+Task(subagent_type="explore", prompt="I'm clarifying requirements for a user's auth feature request and need to check what already exists before asking redundant questions. I'll use this to eliminate codebase-answerable questions from my interview. Find: existing auth implementations, login flows, user model structure. Focus on src/ — skip tests. Return file paths with brief descriptions.")
+```
+
+### Oracle Consultation
+
+For understanding current architecture before asking scope questions, briefly announce "Consulting Oracle for [reason]" before invocation.
+
 ### 3. Iterative Clarification
 Use `AskUserQuestion` for each ambiguity.
 
