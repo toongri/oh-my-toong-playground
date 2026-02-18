@@ -63,3 +63,4 @@ rules:
   items:
     - tool-usage-policy
     - work-principles
+    - coding-discipline
