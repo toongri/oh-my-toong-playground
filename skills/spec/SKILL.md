@@ -268,68 +268,68 @@ See each Design Area reference file for domain-specific clarification examples.
 | spec-reviewer | Multi-AI design review | Spec quality, completeness, consistency, alternative perspectives | **MANDATORY** at Area completion |
 
 Role clarity:
-- explore = "코드베이스에서 현재 구현과 관습을 찾아라" (targeted grep)
-- oracle = "이 설계 선택이 기술적으로 타당한지 분석하라" (deep reasoning)
-- librarian = "이 라이브러리/기술의 버전과 스펙을 확인하라" (version/spec verification)
-- spec-reviewer = "이 설계를 다각도에서 검증하라" (multi-perspective review)
+- explore = "Find current implementations and conventions from the codebase" (targeted grep)
+- oracle = "Analyze whether this design choice is technically sound" (deep reasoning)
+- librarian = "Verify the version and spec of this library/technology" (version/spec verification)
+- spec-reviewer = "Validate this design from multiple perspectives" (multi-perspective review)
 
 ### Explore -- Codebase Pattern Discovery
 
-Spec 설계 시 코드베이스 사실을 사용자에게 물으면:
-- 사용자의 기억에 의존하여 실제와 다른 전제 위에 설계 수립 (false premise)
-- 기존에 검증된 패턴을 무시하고 불필요하게 새 패턴 도입 (inconsistency)
-- 통합 지점/의존성을 누락하여 불완전한 설계 산출 (missing constraints)
+When asking the user about codebase facts during spec design:
+- Design built on incorrect premises based on user's inaccurate memory (false premise)
+- Unnecessarily introducing new patterns while ignoring existing proven ones (inconsistency)
+- Incomplete design due to missing integration points/dependencies (missing constraints)
 
-→ 설계 중 코드베이스에 대한 궁금증이 생기면 항상 explore dispatch. 사용자에게 절대 묻지 않음.
+→ Always dispatch explore for any codebase question during design. NEVER ask the user.
 
 ### Oracle -- Design Decision Analysis
 
-핵심 원칙: **explore 결과와 사용자 요구사항만으로는 최적의 설계를 선택할 수 없을 때** dispatch.
+Core principle: **Dispatch when explore results and user requirements alone cannot determine the optimal design.**
 
-Explore는 "코드베이스에 무엇이 있는가"를 알려주고, 사용자 인터뷰는 "무엇을 원하는가"를 알려주지만, "어떤 설계가 기술적으로 최선인가"는 알려주지 않는다. Oracle은 코드베이스 전체를 분석하여 다음 4가지 유형의 설계 질문에 답한다:
+Explore reveals "what exists in the codebase" and user interviews reveal "what they want," but neither answers "which design is technically optimal." Oracle analyzes the entire codebase to answer 4 types of design questions:
 
-| 유형 | 질문 | 예시 |
-|------|------|------|
-| Design alternative analysis | "이 설계 선택지 중 어떤 것이 기존 아키텍처에 적합한가?" | event-sourcing vs state-based, sync vs async, embedded vs separate service |
-| Feasibility validation | "이 설계가 현재 시스템에서 실현 가능한가?" | 기존 스키마 호환성, 인프라 제약, 성능 한계 |
-| Impact assessment | "이 설계가 기존 시스템에 어떤 영향을 미치는가?" | 기존 API consumer에 대한 breaking change, 데이터 마이그레이션 필요성 |
-| Constraint discovery | "설계 시 반드시 고려해야 할 숨겨진 제약이 있는가?" | 기존 트랜잭션 경계, 레이어 규칙, 공유 리소스 경합 |
+| Type | Question | Example |
+|------|----------|---------|
+| Design alternative analysis | "Which design option fits the existing architecture?" | event-sourcing vs state-based, sync vs async, embedded vs separate service |
+| Feasibility validation | "Is this design achievable in the current system?" | Existing schema compatibility, infrastructure constraints, performance limits |
+| Impact assessment | "What impact does this design have on existing systems?" | Breaking changes for existing API consumers, data migration necessity |
+| Constraint discovery | "Are there hidden constraints that must be considered in design?" | Existing transaction boundaries, layer rules, shared resource contention |
 
 **When NOT to dispatch oracle:**
-- explore로 답할 수 있는 단순 패턴 확인 -- "기존에 비슷한 구현이 있는가" 수준
-- 사용자가 이미 명확한 기술적 근거와 함께 설계를 결정한 경우
-- 표준적이고 선택지가 명확한 설계 -- 단순 CRUD, 필드 추가 등
-- 코드베이스를 아직 탐색하지 않은 상태 -- explore 먼저 실행
-- spec-reviewer 피드백으로 충분히 해결 가능한 설계 개선 사항
+- Simple pattern checks answerable by explore -- "does a similar implementation exist" level
+- User already decided the design with clear technical rationale
+- Standard designs with obvious choices -- simple CRUD, field additions, etc.
+- Codebase not yet explored -- run explore first
+- Design improvements sufficiently resolvable through spec-reviewer feedback
 
 **Oracle trigger conditions:**
-- 2개 이상의 아키텍처 대안이 경합하고 각각 명확한 trade-off가 있을 때 → (design alternative analysis)
-- 새 컴포넌트/서비스/레이어 도입이 기존 시스템 구조에 영향을 줄 때 → (impact assessment, feasibility validation)
-- 도메인 모델 경계 결정이 트랜잭션 범위에 영향을 줄 때 → (constraint discovery)
-- 인터페이스 변경이 외부 consumer에게 영향을 줄 때 → (impact assessment)
-- 비기능 요구사항 (성능, 확장성, 보안)이 설계 선택을 제약할 때 → (feasibility validation, constraint discovery)
+- 2+ architecture alternatives competing with clear trade-offs each → (design alternative analysis)
+- New component/service/layer introduction affects existing system structure → (impact assessment, feasibility validation)
+- Domain model boundary decisions affect transaction scope → (constraint discovery)
+- Interface changes affect external consumers → (impact assessment)
+- Non-functional requirements (performance, scalability, security) constrain design choices → (feasibility validation, constraint discovery)
 
 Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ### Librarian -- Library Version/Spec Verification
 
-핵심 원칙: **라이브러리의 버전/스펙을 확인하지 않으면 올바른 기술 적용을 설계에 반영할 수 없을 때** dispatch.
+Core principle: **Dispatch when the design cannot reflect correct technology usage without verifying library version/spec.**
 
-Spec에 기술 선택을 포함할 때, 코드베이스에 없는 정보가 필요할 수 있다:
-- deprecated API를 사용하고 있는가?
-- 알려진 보안 취약점이 있는 버전인가?
-- 공식 문서에서 권장하지 않는 패턴인가?
+When the spec includes technology choices, information outside the codebase may be needed:
+- Is a deprecated API being used?
+- Is the version known to have security vulnerabilities?
+- Is the pattern discouraged by official documentation?
 
 **When NOT to dispatch librarian:**
-- 이미 프로젝트에서 검증된 기술의 일반적 사용 패턴 -- explore로 기존 적용 사례 확인 가능
-- 내부 설계 결정 (도메인 모델, 컴포넌트 분리 등) -- 이건 oracle 영역
-- 사용자가 외부 문서 참조와 함께 기술 선택을 제시한 경우
+- General usage patterns of technology already proven in the project -- explore can verify existing usage
+- Internal design decisions (domain model, component separation, etc.) -- oracle territory
+- User provided technology choice with external documentation references
 
 **Librarian trigger conditions:**
-- 새 라이브러리/프레임워크/인프라 도입이 설계에 포함될 때
-- 특정 기술의 설계 패턴을 비교 평가해야 할 때 (예: cache invalidation 전략, event schema 설계)
-- 보안/인증 관련 설계에서 공식 권장 사항이 필요할 때
-- 기존 dependency의 major 버전 업그레이드가 설계에 포함될 때
+- New library/framework/infrastructure introduction included in the design
+- Design patterns of a specific technology need comparative evaluation (e.g., cache invalidation strategy, event schema design)
+- Official recommendations needed for security/authentication-related design
+- Major version upgrade of existing dependency included in the design
 
 ### Explore/Librarian Prompt Guide
 
