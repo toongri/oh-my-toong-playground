@@ -79,15 +79,70 @@ digraph prometheus_flow {
 | Need | Agent | When |
 |------|-------|------|
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
-| External documentation | librarian | Official docs, library usage, API references |
+| Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
+| External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** before plan generation - catches missing questions |
 | Plan review | momus | Optional loop after plan generation - catches quality issues |
 
-**Role Clarity:**
-- **Explore** = Codebase facts (NOT user preferences)
-- **Librarian** = External docs (NOT internal codebase)
-- **Metis** = Pre-plan validation (catches gaps BEFORE writing)
-- **Momus** = Post-plan review (catches issues AFTER writing)
+### Explore -- Codebase Fact-Finding
+
+When Prometheus asks the user about codebase facts during interview:
+- Asks about implementation details the user may not know (user burden)
+- Plans based on the user's inaccurate memory (false premise)
+- Ignores existing patterns and plans new approaches (reinvention)
+
+→ Always dispatch explore for any codebase question during interview. NEVER ask the user.
+
+### Oracle -- Architecture Analysis
+
+Core principle: **Dispatch when interview information alone cannot determine technical feasibility.**
+
+User interviews reveal "what they want" but not "whether it's technically feasible" or "what risks exist." Oracle analyzes the codebase and architecture to answer 4 types of questions:
+
+| Type | Question | Example |
+|------|----------|---------|
+| Feasibility | "Is this requirement achievable in the current architecture?" | Can the existing schema accommodate the new domain? Does current infrastructure support the required performance? |
+| Risk assessment | "What are the technical risks of this approach?" | Could this change break existing functionality? Is the migration path safe? |
+| Alternative evaluation | "Is there a better design alternative?" | Can we use a proven pattern from the existing codebase instead? |
+| Dependency mapping | "What systems does this feature depend on?" | What downstream systems are affected? Can tasks be parallelized? |
+
+**When NOT to dispatch oracle:**
+- User preference/priority questions -- ask directly in interview
+- Simple codebase facts answerable by explore -- "where is X" level
+- Technical choices already clearly decided in interview
+- Standard low-risk implementations -- CRUD, simple API additions, etc.
+- Codebase not yet explored -- run explore first
+
+**Oracle trigger conditions:**
+- User requirements may conflict with existing architecture → (feasibility)
+- Large-scale migration or schema change involved → (risk assessment)
+- 2+ technical approaches competing → (alternative evaluation)
+- Change scope spans 3+ modules/services → (dependency mapping)
+- Design decision directly affects performance/security/scalability → (risk assessment, feasibility)
+
+Briefly announce "Consulting Oracle for [reason]" before invocation.
+
+**Exception**: This is the ONLY case where you announce before acting. For all other work, start immediately without status updates.
+
+### Librarian -- External Documentation Research
+
+Core principle: **Dispatch when the plan requires external documentation that the codebase cannot provide.**
+
+When Prometheus includes technology choices in the plan, information outside the codebase may be needed:
+- Is the recommended usage pattern being followed for the current version?
+- Are there known pitfalls, deprecated APIs, or security advisories?
+- What does official documentation recommend as best practices?
+
+**When NOT to dispatch librarian:**
+- General usage of technology already in the project -- explore can verify existing patterns
+- User provided a clear technology choice with rationale
+- Internal code structure/architecture questions -- explore or oracle territory
+
+**Librarian trigger conditions:**
+- New library/framework introduction included in the plan
+- Major version upgrade of existing dependency required
+- Security-related technology choices (authentication, encryption, access control, etc.)
+- User requests specific technology but the team has no prior experience with it
 
 ### Explore/Librarian Prompt Guide
 
@@ -109,10 +164,6 @@ Task(subagent_type="explore", prompt="I'm planning a new authentication feature 
 // Pre-interview research (external)
 Task(subagent_type="librarian", prompt="I'm planning to implement OAuth 2.0 and need authoritative guidance for the work plan. I'll use this to recommend the right approach during the interview. Find official docs: setup, flow types (authorization code, PKCE), security considerations, common pitfalls. Skip beginner tutorials — production patterns only.")
 ```
-
-### Oracle Consultation
-
-For architecture-level questions during interview, briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ## Interview Mode (Default State)
 
