@@ -251,12 +251,85 @@ See each Design Area reference file for domain-specific clarification examples.
 
 ## Subagent Selection
 
-| Need | Agent |
-|------|-------|
-| Technical decisions, trade-offs | oracle |
-| External documentation | librarian |
-| Existing codebase patterns | explore |
-| Multi-AI design feedback | spec-reviewer |
+| Need | Agent | When |
+|------|-------|------|
+| Existing codebase patterns | explore | Find current implementations, conventions, integration points |
+| Technical decisions, trade-offs | oracle | Architecture choices, design alternatives, risk assessment |
+| External documentation | librarian | Official docs, version compatibility, pattern validation |
+| Multi-AI design feedback | spec-reviewer | **MANDATORY** at Area completion |
+
+### Agent Role Separation
+
+| Agent | Role | Scope | Trigger |
+|-------|------|-------|---------|
+| explore | Codebase convention/pattern discovery | Internal implementations, naming, structure, integration points | Always when design needs codebase context (lightweight) |
+| oracle | Design decision analysis | Architecture alternatives, feasibility, risk, cross-system impact | Conditional (see triggers) |
+| librarian | Library version/spec verification | Official docs, version compatibility, known pitfalls, ecosystem patterns | Conditional (see triggers) |
+| spec-reviewer | Multi-AI design review | Spec quality, completeness, consistency, alternative perspectives | **MANDATORY** at Area completion |
+
+Role clarity:
+- explore = "코드베이스에서 현재 구현과 관습을 찾아라" (targeted grep)
+- oracle = "이 설계 선택이 기술적으로 타당한지 분석하라" (deep reasoning)
+- librarian = "이 라이브러리/기술의 버전과 스펙을 확인하라" (version/spec verification)
+- spec-reviewer = "이 설계를 다각도에서 검증하라" (multi-perspective review)
+
+### Explore -- Codebase Pattern Discovery
+
+Spec 설계 시 코드베이스 사실을 사용자에게 물으면:
+- 사용자의 기억에 의존하여 실제와 다른 전제 위에 설계 수립 (false premise)
+- 기존에 검증된 패턴을 무시하고 불필요하게 새 패턴 도입 (inconsistency)
+- 통합 지점/의존성을 누락하여 불완전한 설계 산출 (missing constraints)
+
+→ 설계 중 코드베이스에 대한 궁금증이 생기면 항상 explore dispatch. 사용자에게 절대 묻지 않음.
+
+### Oracle -- Design Decision Analysis
+
+핵심 원칙: **explore 결과와 사용자 요구사항만으로는 최적의 설계를 선택할 수 없을 때** dispatch.
+
+Explore는 "코드베이스에 무엇이 있는가"를 알려주고, 사용자 인터뷰는 "무엇을 원하는가"를 알려주지만, "어떤 설계가 기술적으로 최선인가"는 알려주지 않는다. Oracle은 코드베이스 전체를 분석하여 다음 4가지 유형의 설계 질문에 답한다:
+
+| 유형 | 질문 | 예시 |
+|------|------|------|
+| Design alternative analysis | "이 설계 선택지 중 어떤 것이 기존 아키텍처에 적합한가?" | event-sourcing vs state-based, sync vs async, embedded vs separate service |
+| Feasibility validation | "이 설계가 현재 시스템에서 실현 가능한가?" | 기존 스키마 호환성, 인프라 제약, 성능 한계 |
+| Impact assessment | "이 설계가 기존 시스템에 어떤 영향을 미치는가?" | 기존 API consumer에 대한 breaking change, 데이터 마이그레이션 필요성 |
+| Constraint discovery | "설계 시 반드시 고려해야 할 숨겨진 제약이 있는가?" | 기존 트랜잭션 경계, 레이어 규칙, 공유 리소스 경합 |
+
+**When NOT to dispatch oracle:**
+- explore로 답할 수 있는 단순 패턴 확인 -- "기존에 비슷한 구현이 있는가" 수준
+- 사용자가 이미 명확한 기술적 근거와 함께 설계를 결정한 경우
+- 표준적이고 선택지가 명확한 설계 -- 단순 CRUD, 필드 추가 등
+- 코드베이스를 아직 탐색하지 않은 상태 -- explore 먼저 실행
+- spec-reviewer 피드백으로 충분히 해결 가능한 설계 개선 사항
+
+**Oracle trigger conditions:**
+- 2개 이상의 아키텍처 대안이 경합하고 각각 명확한 trade-off가 있을 때 → (design alternative analysis)
+- 새 컴포넌트/서비스/레이어 도입이 기존 시스템 구조에 영향을 줄 때 → (impact assessment, feasibility validation)
+- 도메인 모델 경계 결정이 트랜잭션 범위에 영향을 줄 때 → (constraint discovery)
+- 인터페이스 변경이 외부 consumer에게 영향을 줄 때 → (impact assessment)
+- 비기능 요구사항 (성능, 확장성, 보안)이 설계 선택을 제약할 때 → (feasibility validation, constraint discovery)
+
+Briefly announce "Consulting Oracle for [reason]" before invocation.
+
+### Librarian -- Library Version/Spec Verification
+
+핵심 원칙: **라이브러리의 버전/스펙을 확인하지 않으면 올바른 기술 적용을 설계에 반영할 수 없을 때** dispatch.
+
+Spec에 기술 선택을 포함할 때, 코드베이스에 없는 정보가 필요할 수 있다:
+- deprecated API를 사용하고 있는가?
+- 알려진 보안 취약점이 있는 버전인가?
+- 공식 문서에서 권장하지 않는 패턴인가?
+
+**When NOT to dispatch librarian:**
+- 이미 프로젝트에서 검증된 기술의 일반적 사용 패턴 -- explore로 기존 적용 사례 확인 가능
+- 내부 설계 결정 (도메인 모델, 컴포넌트 분리 등) -- 이건 oracle 영역
+- 사용자가 외부 문서 참조와 함께 기술 선택을 제시한 경우
+
+**Librarian trigger conditions:**
+- 새 라이브러리/프레임워크/인프라 도입이 설계에 포함될 때
+- 특정 기술의 설계 패턴을 비교 평가해야 할 때 (예: cache invalidation 전략, event schema 설계)
+- 보안/인증 관련 설계에서 공식 권장 사항이 필요할 때
+- 기존 dependency의 major 버전 업그레이드가 설계에 포함될 때
 
 ### Explore/Librarian Prompt Guide
 
@@ -278,10 +351,6 @@ Task(subagent_type="explore", prompt="I'm designing a spec for a new caching lay
 // Spec research (external)
 Task(subagent_type="librarian", prompt="I'm specifying a Redis caching strategy and need authoritative guidance on cache invalidation patterns. I'll use this to recommend the right approach in the spec. Find: cache-aside vs write-through patterns, TTL strategies, invalidation approaches, Redis best practices for [framework]. Skip introductory content — architecture-level guidance only.")
 ```
-
-### Oracle Consultation
-
-For technical decisions and architecture trade-offs during spec work, briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ## Context Brokering
 
