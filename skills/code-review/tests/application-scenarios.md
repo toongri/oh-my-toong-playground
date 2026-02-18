@@ -134,3 +134,39 @@
 | V2 | 빈 diff 감지 시 "No changes found" 메시지 출력 |
 | V3 | 빈 diff 시 인터뷰/dispatch 없이 즉시 종료 |
 | V4 | binary-only diff 시 "Only binary file changes detected" 출력 |
+
+---
+
+### CR-9: Chunk Analysis Output — Single Chunk
+
+**Input**: Branch mode, 8개 파일 변경. 단일 chunk 리뷰. code-reviewer agent가 Chunk Analysis + critique 결과를 반환한 상태.
+
+**Primary Technique**: Step 5 Phase 1: Walkthrough Synthesis — 단일 chunk Chunk Analysis 기반 Walkthrough 생성
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | code-reviewer agent 출력에 Chunk Analysis 섹션 존재 (파일별 변경 분석) |
+| V2 | Orchestrator가 Chunk Analysis + Step 2 컨텍스트 기반으로 Walkthrough 직접 생성 |
+| V3 | Walkthrough에 변경 요약, 핵심 로직 분석 포함 |
+| V4 | 구조적 변경이 있으면 아키텍처 다이어그램(Mermaid) 포함, 없으면 "구조적 변경 없음" |
+| V5 | 호출 흐름 변경이 있으면 시퀀스 다이어그램(Mermaid) 포함, 없으면 "호출 흐름 변경 없음" |
+| V6 | 최종 출력에서 Walkthrough가 critique(Strengths/Issues/Recommendations/Assessment) 앞에 배치 |
+
+---
+
+### CR-10: Walkthrough Synthesis — Multi-chunk
+
+**Input**: Branch mode, 45개 파일 변경. 4개 chunk으로 분할. 모든 code-reviewer agent가 Chunk Analysis + critique 결과를 반환한 상태.
+
+**Primary Technique**: Step 5 Phase 1 + Phase 2: 다중 chunk Chunk Analysis 통합 Walkthrough + Critique 합성
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | 4개 chunk의 Chunk Analysis가 모두 수집됨 |
+| V2 | Orchestrator가 4개 Chunk Analysis를 모듈/기능 단위로 재구성하여 통합 핵심 로직 분석 생성 |
+| V3 | 아키텍처 다이어그램이 모든 chunk의 구조적 변경을 통합하여 단일 다이어그램으로 생성 |
+| V4 | 시퀀스 다이어그램이 chunk 간 호출 관계를 포함하여 생성 |
+| V5 | Phase 2 critique 합성이 기존 로직대로 수행 (merge, dedup, cross-file, severity, verdict) |
+| V6 | 최종 출력 순서: Walkthrough → Strengths → Issues → Recommendations → Assessment |
