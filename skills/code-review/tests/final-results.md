@@ -97,7 +97,7 @@
 | CR-1 | PASS | Step 0 Auto-detect mode에 요구사항 질문, {REQUIREMENTS} 수집, Context Brokering 모두 정의 |
 | CR-2 | PASS | Step 0 PR mode에 metadata 추출, reference scanning, non-fetchable inquiry, 충분한 description 시 인터뷰 스킵 정의 |
 | CR-3 | PASS | Step 0 User deferral 경로에 "그냥 리뷰해줘" 수용, "N/A" 폴백, 블로킹 없이 진행 정의 |
-| CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md, explore/oracle agent dispatch 모두 정의 |
+| CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md, explore dispatch 정의 (V5 oracle trigger는 CR-15 전용으로 이관, V5 제거) |
 | CR-5 | PASS | Step 3-4에 chunking 기준, 템플릿 기반 dispatch, 병렬 발행 정의 |
 | CR-6 | PASS | Step 4에 템플릿 읽기, 모든 플레이스홀더 인터폴레이션, 필수/선택 필드 처리 정의 |
 | CR-7 | PASS | Step 5에 병합/중복제거/cross-file/verdict 정의 + agent에 Severity Definitions 추가 |
@@ -108,7 +108,7 @@
 | CR-12 | PASS | Step 0 Question Method, One Question Per Message, Question Quality Standard 모두 정의 |
 | CR-13 | PASS | Step 0 Exit Condition 3가지 경로 모두 정의 |
 | CR-14 | PASS | Step 2 explore dispatch 4-Field prompt 구조 정의 |
-| CR-15 | PASS | Step 2 Oracle trigger conditions 7개 카테고리 + announcement 정의 |
+| CR-15 | PASS | Step 2 Oracle trigger conditions → semantic 6개 카테고리로 재작성. Subagent GREEN 테스트 통과 |
 | CR-16 | PASS | Step 2 Librarian trigger + 4-Field prompt + announcement 정의 |
 | CR-17 | PASS | chunk-reviewer agent Chunk Review Mode에 Cross-File Concerns subsection 정의 |
 | CR-18 | PASS | Step 1 PR Mode Local Ref Setup — git fetch 기반, NO checkout, three-dot range 정의 |
@@ -157,8 +157,8 @@
 | V1 | PASS | SKILL.md Step 1 테이블: "`<base> <target>` -> `git diff <base>...<target>`" — "main feature/auth" 입력 시 `git diff main...feature/auth` 생성 |
 | V2 | PASS | SKILL.md Step 2: "Collect in parallel:" 하에 `git diff --stat`, `git diff --name-only`, `git log` 3개 명령어 나열 |
 | V3 | PASS | SKILL.md Step 2 항목 4: "CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)" |
-| V4 | PASS | SKILL.md Step 2 항목 5: "Dispatch explore agent: 'Find existing patterns, conventions, and related code for the changed files'" + "Always dispatch (lightweight, provides codebase context)" |
-| V5 | PASS | SKILL.md Step 2 항목 6: "Dispatch oracle agent: 'Analyze architecture implications'" + Oracle trigger conditions에 `*auth*` 패턴 포함 — feature/auth 시나리오에서 트리거 |
+| V4 | PASS | SKILL.md Step 2 항목 5: "Dispatch explore agent" + "Always dispatch (lightweight, provides codebase context)" |
+| ~~V5~~ | REMOVED | Oracle trigger 검증은 CR-15 전용 시나리오로 이관. CR-4는 Input Parsing + Context Gathering 기본 파이프라인 검증에 집중 |
 
 ---
 
@@ -282,17 +282,18 @@
 
 ---
 
-#### CR-15: Extended Oracle Triggers — 7 Categories
+#### CR-15: Semantic Oracle Triggers — 6 Categories
+
+> Oracle trigger가 glob 패턴에서 semantic 기반으로 전면 재작성됨 (2026-02-19). Subagent GREEN 테스트 통과.
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files involve performance-critical patterns: `*cache*`, `*queue*`, `*batch*`, `*index*`" — Session A `CacheManager.kt` 매칭 |
-| V2 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files contain complex business logic: state machine, transaction coordination, multi-step workflows" — Session B `OrderStateMachine.kt`, `PaymentCoordinator.kt` 매칭 |
-| V3 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files involve concurrency: `*lock*`, `*mutex*`, `*worker*`, `*thread*`, `*async*`, `*coroutine*`" — Session C `WorkerPool.kt`, `AsyncProcessor.kt` 매칭 |
-| V4 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files introduce external integrations: new HTTP clients, webhooks, SDK wrappers, third-party API adapters" — Session D `StripeClient.kt`, `WebhookHandler.kt` 매칭 |
-| V5 | PASS | SKILL.md Step 2 Oracle trigger: migration/schema/sql + 3+ directories + auth/security/crypto/permission — 기존 3개 trigger 모두 유효 |
-| V6 | PASS | SKILL.md Step 2: "When NOT to dispatch oracle:" 섹션에 4가지 비트리거 조건 명시 (simple refactoring, test-only, doc/config-only, single function logic) — 불필요한 dispatch 방지 |
-| V7 | PASS | SKILL.md Step 2 항목 6: "Briefly announce 'Consulting Oracle for [reason]' before invocation." — announcement 형식 정의 |
+| V1 | PASS | SKILL.md: "Changes modify shared interfaces, base classes, or contracts consumed by other modules → (impact analysis)" — `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈 소비 → 직접 매칭 |
+| V2 | PASS | SKILL.md: "New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)" — `NotificationService` 신규 레이어 도입 → 직접 매칭 |
+| V3 | PASS | SKILL.md: "Database schema or data model changes with downstream consumers → (impact analysis)" — Flyway migration + `ReportService` downstream consumer → 직접 매칭 |
+| V4 | PASS | SKILL.md: "Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)" — `SELECT FOR UPDATE` + HTTP/Kafka 이중 접근 경로 → 직접 매칭 |
+| V5 | PASS | SKILL.md: "Simple refactoring (rename, extract method, move file) -- diff is sufficient" — `getUserName()`→`getUsername()` rename → "When NOT to dispatch" 직접 매칭 |
+| V6 | PASS | SKILL.md: "Briefly announce 'Consulting Oracle for [reason]' before invocation." — dispatch 전 announcement 필수 |
 
 ---
 
@@ -306,7 +307,7 @@
 | V4 | PASS | SKILL.md Step 2 librarian prompt: "[GOAL] Verify usage against official documentation and known best practices." — 공식 문서 대비 검증 목적 |
 | V5 | PASS | SKILL.md Step 2 librarian prompt: "[DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to catch misuse patterns the chunk-reviewer might miss." — {CODEBASE_CONTEXT} 주입 명시 |
 | V6 | PASS | SKILL.md Step 2 librarian prompt: "[REQUEST] Find: correct usage examples, common pitfalls, version-specific breaking changes, and security advisories for {dependency/API}." — 4가지 검색 항목 포함 |
-| V7 | PASS | SKILL.md Step 2 librarian [DOWNSTREAM]: "Output injected into {CODEBASE_CONTEXT}" + Step 4: "{CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)" — Step 4 필드 참조에 librarian 미명시이나 Step 2 librarian prompt의 [DOWNSTREAM]이 {CODEBASE_CONTEXT} 주입을 명시하므로 기능적으로 충족 |
+| V7 | PASS | SKILL.md Step 2 librarian [DOWNSTREAM]: "Output injected into {CODEBASE_CONTEXT}" + Step 4: "{CODEBASE_CONTEXT} ← Step 2 explore/oracle/librarian output (or empty)" — Step 4 필드 참조에 librarian 명시적 포함 (수정 반영) |
 
 ---
 
@@ -348,7 +349,13 @@
 
 ---
 
-**전체 결과**: 99/99 verification points 통과 (19/19 시나리오 PASS)
+**전체 결과**: 93/93 verification points 통과 (19/19 시나리오 PASS)
+
+> **변경 이력 (2026-02-19):**
+> - Oracle trigger conditions: glob 패턴 → semantic 기반으로 전면 재작성 (prometheus/spec과 패러다임 통일)
+> - CR-4 V5 제거 (oracle trigger 검증은 CR-15 전용)
+> - CR-15 시나리오 및 VP 전면 재작성 (7 glob categories → 6 semantic categories)
+> - CR-16 V7: Step 4 `{CODEBASE_CONTEXT}` source에 librarian 추가 (스킬 문서 결함 수정)
 
 **RED -> GREEN 개선 요약** (CR-1 ~ CR-8):
 
@@ -356,7 +363,7 @@
 |---|-----------|---------------|-------------|
 | 1 | **Step 0: Requirements Interview** — 3가지 입력 모드별 요구사항 수집, PR description 자동 추출, deferral 경로, Context Brokering | CR-1, CR-2, CR-3 | 11 |
 | 2 | **Early Exit** — 빈 diff/binary-only diff 감지, 메시지 출력, short-circuit 종료 | CR-8 | 4 |
-| 3 | **Subagent Orchestration** — explore (항상)/oracle (조건부) agent dispatch, trigger conditions | CR-4 | 2 |
+| 3 | **Subagent Orchestration** — explore (항상)/oracle (조건부) agent dispatch, trigger conditions | CR-4 | 1 |
 | 4 | **Dispatch Template** — chunk-reviewer-prompt.md 템플릿, 8개 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
 | 5 | **Severity Definitions** — agent에 Critical/Important/Minor 명시적 기준 + Example Output 추가 | CR-7 | 1 |
 
@@ -367,7 +374,7 @@
 | 6 | **Step 5 Walkthrough Synthesis** — Chunk Analysis 기반 Walkthrough 생성, 다이어그램, 출력 순서 | CR-9, CR-10 | 12 |
 | 7 | **Step 0 Vague Answer + Question Discipline** — 2-strike rule, Question Method/Quality, One Question Per Message | CR-11, CR-12 | 10 |
 | 8 | **Step 0 Exit Condition** — 3가지 종료 경로별 올바른 전환 | CR-13 | 5 |
-| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle 7 triggers, librarian trigger + dispatch | CR-14, CR-15, CR-16 | 19 |
+| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle semantic triggers, librarian trigger + dispatch | CR-14, CR-15, CR-16 | 18 |
 | 10 | **Chunk Review Cross-File** — chunk-reviewer agent Cross-File Concerns subsection | CR-17 | 5 |
 | 11 | **Step 1 PR Mode Ref Setup** — git fetch 기반 NO checkout, three-dot range | CR-18 | 6 |
 | 12 | **Step 3 Per-Chunk Diff** — path filter 기반 chunk별 diff 획득 | CR-19 | 6 |

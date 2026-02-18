@@ -183,13 +183,12 @@ A diff shows "what changed" but not "whether this change is safe for the existin
 - Explore results already provide sufficient context
 
 **Oracle trigger conditions:**
-- Changed files include `*migration*`, `*schema*`, `*.sql` → (impact analysis)
-- Changed files span 3+ top-level directories → (design fitness, consistency verification)
-- Changed files include `*auth*`, `*security*`, `*crypto*`, `*permission*` → (consistency verification, hidden interaction)
-- Changed files involve performance-critical patterns: `*cache*`, `*queue*`, `*batch*`, `*index*` → (hidden interaction, impact analysis)
-- Changed files contain complex business logic: state machine, transaction coordination, multi-step workflows → (hidden interaction, consistency verification)
-- Changed files involve concurrency: `*lock*`, `*mutex*`, `*worker*`, `*thread*`, `*async*`, `*coroutine*` → (hidden interaction)
-- Changed files introduce external integrations: new HTTP clients, webhooks, SDK wrappers, third-party API adapters → (consistency verification, design fitness)
+- Changes modify shared interfaces, base classes, or contracts consumed by other modules → (impact analysis)
+- New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)
+- Changes span 3+ top-level directories or cross architectural layer boundaries → (consistency verification, design fitness)
+- Database schema or data model changes with downstream consumers → (impact analysis)
+- Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)
+- Complex dependency graph requires understanding beyond what the diff shows (inheritance hierarchies, event flows, plugin systems) → (hidden interaction, design fitness)
 
 6. Dispatch oracle agent (only if trigger conditions met):
    Briefly announce "Consulting Oracle for [reason]" before invocation.
@@ -254,7 +253,7 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
-   - {CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)
+   - {CODEBASE_CONTEXT} ← Step 2 explore/oracle/librarian output (or empty)
    - {FILE_LIST} ← Step 2 file list
    - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
