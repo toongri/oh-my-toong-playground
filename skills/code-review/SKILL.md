@@ -119,15 +119,81 @@ Chunking heuristic: group files sharing a directory prefix or import relationshi
 | Single chunk | 1 agent call |
 | Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST} |
 
-## Step 5: Result Synthesis (multi-chunk only)
+## Step 5: Walkthrough Synthesis + Result Synthesis
 
-After all agents return:
+After all agents return, produce the final output in two phases.
+
+### Phase 1: Walkthrough Synthesis (MANDATORY)
+
+Orchestrator directly produces the Walkthrough from:
+- All chunk Chunk Analysis sections (raw comprehension material from code-reviewer agents)
+- Step 2 context (explore/oracle output, CLAUDE.md, commit history)
+
+**Generate the following sections:**
+
+#### 변경 요약
+- 전체 변경의 목적과 맥락을 1-2 문단으로 작성
+- 동기(motivation), 접근 방식(approach), 전체적 영향(impact) 포함
+- 코드를 모르는 사람도 이해할 수 있는 수준
+
+#### 핵심 로직 분석
+- 각 chunk의 Chunk Analysis를 통합하여 모듈/기능 단위로 재구성
+- 핵심 변경과 부수적 변경을 모두 포함
+- 데이터 흐름, 설계 결정, 부수 효과를 모듈 간 관계 관점에서 설명
+- 코드를 직접 읽지 않아도 전체 변경을 이해할 수 있는 수준의 상세도
+
+#### 아키텍처 다이어그램
+- Mermaid class diagram 또는 component diagram
+- 변경된 클래스/모듈과 그 관계(상속, 합성, 의존) 표시
+- 신규 vs 수정 요소 구분
+- 구조적 변경이 없는 경우(기존 메서드 내 로직 변경만): "구조적 변경 없음 — 기존 아키텍처 유지"
+
+#### 시퀀스 다이어그램
+- Mermaid sequence diagram으로 주요 호출 흐름 시각화
+- 액터, 메서드 호출, 반환값, 주요 분기 포함
+- 호출 흐름 변경이 없는 경우(변수명 변경, 설정 변경 등): "호출 흐름 변경 없음"
+
+### Phase 2: Critique Synthesis
+
+For multi-chunk reviews:
 
 1. **Merge** all Strengths, Issues, Recommendations sections
 2. **Deduplicate** issues appearing in multiple chunks
 3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
 4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
 5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
-6. **Produce unified report** in the standard output format (Strengths / Issues / Recommendations / Assessment)
+6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
-For single-chunk reviews, return the agent's output directly.
+For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment).
+
+### Final Output Format
+
+```
+## Walkthrough
+
+### 변경 요약
+[Phase 1에서 생성]
+
+### 핵심 로직 분석
+[Phase 1에서 생성]
+
+### 아키텍처 다이어그램
+[Phase 1에서 생성 — Mermaid or "구조적 변경 없음"]
+
+### 시퀀스 다이어그램
+[Phase 1에서 생성 — Mermaid or "호출 흐름 변경 없음"]
+
+---
+
+## Strengths
+[Phase 2에서 생성]
+
+## Issues
+[Phase 2에서 생성]
+
+## Recommendations
+[Phase 2에서 생성]
+
+## Assessment
+[Phase 2에서 생성]
+```
