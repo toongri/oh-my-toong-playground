@@ -80,26 +80,9 @@ digraph prometheus_flow {
 |------|-------|------|
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
-| External documentation | librarian | Official docs, library usage, API references |
+| External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** before plan generation - catches missing questions |
 | Plan review | momus | Optional loop after plan generation - catches quality issues |
-
-### Agent Role Separation
-
-| Agent | Role | Scope | Trigger |
-|-------|------|-------|---------|
-| explore | Codebase fact-finding | Internal patterns, existing implementations, conventions | Always during interview (lightweight) |
-| oracle | Architecture analysis | Feasibility, risk, cross-system impact, design alternatives | Conditional (see triggers) |
-| librarian | Library version/spec verification | Official docs, version compatibility, known pitfalls | Conditional (see triggers) |
-| metis | Gap analysis | Missing questions, unvalidated assumptions, scope creep | **MANDATORY** before plan generation |
-| momus | Plan review | Plan quality, completeness, coherence | Optional after plan generation |
-
-Role clarity:
-- explore = "Find facts from the codebase" (targeted grep)
-- oracle = "Analyze whether this design direction is technically sound" (deep reasoning)
-- librarian = "Verify the version and spec of this library/technology" (version/spec verification)
-- metis = "Validate nothing is missing from the plan" (gap detection)
-- momus = "Critique plan quality" (quality review)
 
 ### Explore -- Codebase Fact-Finding
 
@@ -141,14 +124,14 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 **Exception**: This is the ONLY case where you announce before acting. For all other work, start immediately without status updates.
 
-### Librarian -- Library Version/Spec Verification
+### Librarian -- External Documentation Research
 
-Core principle: **Dispatch when the plan cannot reflect correct technology usage without verifying library version/spec.**
+Core principle: **Dispatch when the plan requires external documentation that the codebase cannot provide.**
 
 When Prometheus includes technology choices in the plan, information outside the codebase may be needed:
-- Is a deprecated API being used?
-- Is the version known to have security vulnerabilities?
-- Is the pattern discouraged by official documentation?
+- Is the recommended usage pattern being followed for the current version?
+- Are there known pitfalls, deprecated APIs, or security advisories?
+- What does official documentation recommend as best practices?
 
 **When NOT to dispatch librarian:**
 - General usage of technology already in the project -- explore can verify existing patterns
