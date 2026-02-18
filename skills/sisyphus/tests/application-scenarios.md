@@ -20,7 +20,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | Complexity Triggers | Single file ≠ simple |
 | S-3 | Subagent Selection — Correct Agent Per Situation | Subagent Selection Guide | Role matching |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | Verification Flow | Role Separation |
-| S-5 | Argus Prompt Fidelity — Verbatim 5-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
+| S-5 | Argus Prompt Fidelity — Verbatim 6-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
 | S-6 | Per-Task Argus — One Call Per Task | Argus Invocation (Per-Task) | No batch |
 | S-7 | File Path Specificity + No Pre-built Checklist | Argus Invocation (File Path + Checklist) | No abstractions |
 | S-8 | Verdict Response Protocol — Action Per Verdict | Verdict Response Protocol | APPROVE/REQUEST_CHANGES/COMMENT |
@@ -28,7 +28,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-10 | Partial Completion — New Tasks, Never Solo | Subagent Partial Completion | No direct execution |
 | S-11 | Parallelization — Independent = Concurrent | Parallelization Heuristic | Code tasks always delegate |
 | S-12 | Task Execution Loop — Full Cycle | Task Execution Loop | blockedBy + dispatch + argus + next |
-| S-13 | 5-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 5 sections + quality check |
+| S-13 | 6-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 6 sections + quality check |
 | S-14 | Request Classification — Routing Per Type | Decision Gate (Step 1) | 5 types: Trivial/Explicit/Exploratory/Open-ended/Ambiguous |
 | S-15 | Context Brokering — Facts vs Preferences | Context Brokering Protocol | Explore for facts, user for preferences |
 | S-16 | Interview Mode — Sequential + Quality | In-Depth Interview Mode | One Q per message + rich context |
@@ -142,27 +142,30 @@ Everything is working correctly."
 
 ---
 
-## Scenario S-5: Argus Prompt Fidelity — Verbatim 5-Section
+## Scenario S-5: Argus Prompt Fidelity — Verbatim 6-Section
 
 **Primary Technique:** Argus Invocation (Prompt Fidelity) — copy-paste VERBATIM, no summarization
 
 **Input:**
 ```
-Original 5-Section delegation prompt sent to junior (45 lines):
+Original 6-Section delegation prompt sent to junior (45 lines):
 ## 1. TASK
 Add JWT authentication to the /api/users endpoint...
 ## 2. EXPECTED OUTCOME
 - Files to modify: src/auth/jwt.ts, src/api/users.ts, tests/auth/jwt.test.ts
 - Expected behavior: All /api/users requests require valid JWT...
 - Verification: `npm test -- --grep "jwt"`
-## 3. MUST DO
+## 3. REQUIRED TOOLS
+- Serena find_symbol: Navigate JWT implementation patterns in src/auth/
+- Bash: Run `npm test -- --grep "jwt"` for verification only
+## 4. MUST DO
 - Follow pattern in src/auth/session.ts:15-40
 - Use RS256 algorithm, not HS256
 - Token expiry: 1 hour
-## 4. MUST NOT DO
+## 5. MUST NOT DO
 - Do NOT modify session.ts
 - Do NOT add new dependencies
-## 5. CONTEXT
+## 6. CONTEXT
 - Related files: src/auth/session.ts (existing auth pattern)
 - Prior task: T-1 added the User model
 
@@ -173,8 +176,8 @@ Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 5-Section prompt copied VERBATIM to argus | The entire 5-Section prompt appears in the argus invocation without any edits |
-| V2 | No section omitted | All 5 sections (TASK, EXPECTED OUTCOME, MUST DO, MUST NOT DO, CONTEXT) are present in the argus call |
+| V1 | 6-Section prompt copied VERBATIM to argus | The entire 6-Section prompt appears in the argus invocation without any edits |
+| V2 | No section omitted | All 6 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT) are present in the argus call |
 | V3 | No paraphrasing or restructuring | Text is not summarized, rephrased, or reorganized — exact copy-paste |
 | V4 | MUST NOT DO section included | The MUST NOT DO section is explicitly included, not dropped as "less important" |
 
@@ -199,7 +202,7 @@ All 3 juniors report completion at roughly the same time.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | 3 separate argus invocations | Exactly 3 argus calls are made — one per completed task |
-| V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 5-Section prompt, not T-2 or T-3 |
+| V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 6-Section prompt, not T-2 or T-3 |
 | V3 | No batching of multiple tasks | Does NOT combine multiple tasks into a single argus call for "efficiency" |
 | V4 | Each argus call lists only that task's changed files | File paths in each argus call correspond exclusively to that task's scope |
 
@@ -228,7 +231,7 @@ Also tempted to include: "Please verify: 1) Tests pass, 2) No regressions, 3) Ty
 |---|-------|-------------------|
 | V1 | All 5 file paths explicitly listed | Each of the 5 files is listed by its full path in the argus invocation |
 | V2 | No glob patterns or abstract counts | Does NOT use "auth/**", "5 files", or "auth module files" — concrete paths only |
-| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 5-Section prompt |
+| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 6-Section prompt |
 | V4 | Junior's summary included as-is | Junior's completion claim is included as reference, not as verified facts |
 
 ---
@@ -352,9 +355,9 @@ Junior reports: "Completed 3/6 modules. Remaining 3 follow the same pattern."
 
 ---
 
-## Scenario S-13: 5-Section Delegation Prompt — Generation Quality
+## Scenario S-13: 6-Section Delegation Prompt — Generation Quality
 
-**Primary Technique:** Delegation Prompt Structure — all 5 sections present with sufficient detail
+**Primary Technique:** Delegation Prompt Structure — all 6 sections present with sufficient detail
 
 **Input:**
 ```
@@ -372,12 +375,13 @@ Known context:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | All 5 sections present | TASK, EXPECTED OUTCOME, MUST DO, MUST NOT DO, and CONTEXT sections all appear in the delegation prompt |
-| V2 | Prompt exceeds 30 lines | The generated prompt is substantial (>30 lines), not a brief summary |
-| V3 | Includes concrete file paths | Specific files (src/api/register.ts, src/validation/user.ts) and pattern references (src/auth/login-validation.ts:10-45) are included |
-| V4 | Includes verification command | EXPECTED OUTCOME contains a runnable verification command (e.g., `npm test`) |
-| V5 | MUST NOT DO section has constraints | Explicit constraints (e.g., do NOT modify User model or database schema) are listed |
-| V6 | Pattern references included in MUST DO | MUST DO references existing patterns with file and line numbers for junior to follow |
+| V1 | All 6 sections present | TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, and CONTEXT sections all appear in the delegation prompt |
+| V2 | REQUIRED TOOLS section has explicit tool whitelist | REQUIRED TOOLS contains at least one tool with what to use it for — not empty or generic |
+| V3 | Prompt exceeds 30 lines | The generated prompt is substantial (>30 lines), not a brief summary |
+| V4 | Includes concrete file paths | Specific files (src/api/register.ts, src/validation/user.ts) and pattern references (src/auth/login-validation.ts:10-45) are included |
+| V5 | Includes verification command | EXPECTED OUTCOME contains a runnable verification command (e.g., `npm test`) |
+| V6 | MUST NOT DO section has constraints | Explicit constraints (e.g., do NOT modify User model or database schema) are listed |
+| V7 | Pattern references included in MUST DO | MUST DO references existing patterns with file and line numbers for junior to follow |
 
 ---
 
@@ -803,7 +807,7 @@ Three argus verdicts received for different tasks:
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-5 | Argus Prompt Fidelity — Verbatim 5-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-5 | Argus Prompt Fidelity — Verbatim 6-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
@@ -811,7 +815,7 @@ Three argus verdicts received for different tasks:
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
-| S-13 | 5-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
+| S-13 | 6-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 7/7 VPs — GREEN verified |
 | S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |

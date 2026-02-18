@@ -264,7 +264,7 @@ digraph task_loop {
 
 ### Sisyphus-Junior Delegation Template
 
-When delegating to sisyphus-junior, include these 5 sections:
+When delegating to sisyphus-junior, include these 6 sections:
 
 ```markdown
 ## 1. TASK
@@ -275,17 +275,59 @@ When delegating to sisyphus-junior, include these 5 sections:
 - Expected behavior: [specific]
 - Verification: `[command]`
 
-## 3. MUST DO
+## 3. REQUIRED TOOLS
+- [tool]: [what to search/check]
+- context7: Look up [library] docs
+- [Explicit tool whitelist — prevents tool sprawl]
+
+## 4. MUST DO
 - Follow pattern in [file:lines]
 - [Non-negotiable requirements]
 
-## 4. MUST NOT DO
+## 5. MUST NOT DO
 - Do NOT touch [out-of-scope files]
 - [Constraints]
 
-## 5. CONTEXT
+## 6. CONTEXT
 - Related files: [with roles]
 - Prior task results: [dependencies]
+```
+
+### Example: Complete 6-Section Prompt
+
+```markdown
+## 1. TASK
+Add rate limiting middleware to the REST API endpoints.
+Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when exceeded.
+
+## 2. EXPECTED OUTCOME
+- Files to modify: `src/api/middleware/rate-limiter.ts` (create), `src/api/router.ts` (add middleware)
+- Expected behavior: All /api/* routes enforce 100 req/min per IP, returning 429 with Retry-After header
+- Verification: `npm test -- --grep "rate limit"` passes
+
+## 3. REQUIRED TOOLS
+- Serena find_symbol: Navigate to router setup and existing middleware chain in src/api/router.ts
+- Serena get_symbols_overview: Understand middleware structure in src/api/middleware/
+- context7: Look up rate limiting library docs for configuration options
+- Bash: Run `npm test` for verification only — no other shell commands
+
+## 4. MUST DO
+- Follow middleware pattern in src/api/middleware/auth.ts:15-40
+- Add rate limiter BEFORE auth middleware in the chain
+- Include Retry-After header in 429 response
+- Write tests covering: under-limit, at-limit, over-limit, header presence
+
+## 5. MUST NOT DO
+- Do NOT modify existing middleware files
+- Do NOT add persistent storage (use in-memory store)
+- Do NOT rate limit health check endpoints (/health, /ready)
+
+## 6. CONTEXT
+- Related files:
+  - src/api/middleware/auth.ts — existing middleware pattern to follow
+  - src/api/router.ts — where middleware chain is registered
+  - tests/api/middleware/ — test directory structure
+- Prior task results: Auth middleware was refactored in Task #3, middleware chain order matters
 ```
 
 ### Prompt Quality Check
@@ -295,6 +337,7 @@ When delegating to sisyphus-junior, include these 5 sections:
 | Symptom | Problem |
 |---------|---------|
 | One-line EXPECTED OUTCOME | Unclear verification criteria |
+| Empty REQUIRED TOOLS | Junior may use wrong tools or too many |
 | Empty MUST DO | No pattern reference for junior |
 | Missing CONTEXT | Junior lacks background |
 
@@ -302,7 +345,7 @@ When delegating to sisyphus-junior, include these 5 sections:
 
 ### Mnemosyne Delegation Template
 
-When invoking mnemosyne after argus approval, use the same 5-section prompt:
+When invoking mnemosyne after argus approval, use this 5-section prompt:
 
 ```markdown
 ## 1. TASK
@@ -332,6 +375,64 @@ Commit changes from: [completed task subject]
   - [explicit file paths from argus review]
 ```
 
+### Explore/Librarian Prompt Guide
+
+Explore and librarian are contextual search agents — treat them like targeted grep, not consultants.
+Always run in background. Always parallel when independent.
+
+**Prompt structure** (each field should be substantive, not a single sentence):
+- **[CONTEXT]**: What task you're working on, which files/modules are involved, and what approach you're taking
+- **[GOAL]**: The specific outcome you need — what decision or action the results will unblock
+- **[DOWNSTREAM]**: How you will use the results — what you'll build/decide based on what's found
+- **[REQUEST]**: Concrete search instructions — what to find, what format to return, and what to SKIP
+
+**Examples:**
+
+```
+// Contextual Grep (internal)
+Task(subagent_type="explore", prompt="I'm implementing JWT auth for the REST API in src/api/routes/ and need to match existing auth conventions so my code fits seamlessly. I'll use this to decide middleware structure and token flow. Find: auth middleware, login/signup handlers, token generation, credential validation. Focus on src/ — skip tests. Return file paths with pattern descriptions.")
+Task(subagent_type="explore", prompt="I'm adding error handling to the auth flow and need to follow existing error conventions exactly. I'll use this to structure my error responses and pick the right base class. Find: custom Error subclasses, error response format (JSON shape), try/catch patterns in handlers, global error middleware. Skip test files. Return the error class hierarchy and response format.")
+
+// Reference Grep (external)
+Task(subagent_type="librarian", prompt="I'm implementing JWT auth and need current security best practices to choose token storage (httpOnly cookies vs localStorage) and set expiration policy. Find: OWASP auth guidelines, recommended token lifetimes, refresh token rotation strategies, common JWT vulnerabilities. Skip 'what is JWT' tutorials — production security guidance only.")
+Task(subagent_type="librarian", prompt="I'm building Express auth middleware and need production-quality patterns to structure my middleware chain. Find how established Express apps (1000+ stars) handle: middleware ordering, token refresh, role-based access control, auth error propagation. Skip basic tutorials — I need battle-tested patterns with proper error handling.")
+```
+
+// Continue working immediately. Collect results when needed.
+
+### Oracle Consultation
+
+Oracle is a read-only, high-quality reasoning model for debugging and architecture. Consultation only — never implementation.
+
+**When to consult:**
+
+| Trigger | Action |
+|---------|--------|
+| Complex debugging (root cause unclear after initial read) | Oracle FIRST, then implement |
+| Architecture decisions with long-term impact | Oracle FIRST, then implement |
+| Performance/security deep analysis | Oracle FIRST, then implement |
+| Multi-file dependency tracing | Oracle FIRST, then implement |
+
+**When NOT to consult:**
+- Simple file operations (use direct tools)
+- First attempt at any fix (try yourself first)
+- Questions answerable from code you've read
+- Trivial decisions (variable names, formatting)
+- Things inferable from existing code patterns
+
+**Usage Pattern:**
+Briefly announce "Consulting Oracle for [reason]" before invocation.
+
+**Exception**: This is the ONLY case where you announce before acting. For all other work, start immediately without status updates.
+
+**Example:**
+
+```
+Consulting Oracle for race condition analysis in concurrent order processing.
+
+Task(subagent_type="oracle", prompt="Two order processing workers occasionally produce duplicate entries. Worker A reads order #123, processes it, and writes to DB. Worker B reads the same order before A's write completes. We have optimistic locking via version column but duplicates still appear in production logs (avg 3/day). Code: src/workers/order-processor.ts:45-80 handles the read-process-write cycle. The version check is at line 67. Diagnose: Why does optimistic locking fail here? Is there a gap between the version read and the conditional write? Recommend a fix approach.")
+```
+
 ---
 
 ## Argus Invocation
@@ -340,15 +441,15 @@ Commit changes from: [completed task subject]
 
 | Rule | Requirement |
 |------|-------------|
-| **Prompt Fidelity** | Pass the 5-Section prompt **VERBATIM** — copy-paste only. No summarizing, paraphrasing, or restructuring. |
+| **Prompt Fidelity** | Pass the 6-Section prompt **VERBATIM** — copy-paste only. No summarizing, paraphrasing, or restructuring. |
 | **Per-Task Invocation** | Invoke argus **once per completed task**. NEVER batch multiple tasks into one call. |
 | **File Path Specificity** | List changed files as **explicit paths**, NEVER abstract counts ("3 files") or globs. |
-| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own from the 5-Section prompt. |
+| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own from the 6-Section prompt. |
 
 ### Invocation Template
 
 ```markdown
-[VERBATIM copy of the 5-Section prompt sent to sisyphus-junior — DO NOT summarize or restructure]
+[VERBATIM copy of the 6-Section prompt sent to sisyphus-junior — DO NOT summarize or restructure]
 
 ---
 
@@ -360,14 +461,14 @@ Commit changes from: [completed task subject]
   - tests/auth/login.test.ts
 - Junior's summary: [what junior claimed to have done]
 
-Review whether the implementation meets the requirements in the 5-Section prompt above.
+Review whether the implementation meets the requirements in the 6-Section prompt above.
 ```
 
 ### Argus Invocation Anti-Patterns
 
 | Anti-Pattern | Example | Why Harmful |
 |-------------|---------|-------------|
-| Prompt summarization | "Junior was asked to add auth" instead of full 5-Section | Argus cannot verify MUST DO items it never received |
+| Prompt summarization | "Junior was asked to add auth" instead of full 6-Section | Argus cannot verify MUST DO items it never received |
 | Batch invocation | Passing 3 tasks' results in one argus call | Scope check becomes impossible; verdict ambiguous |
 | Abstract file references | "Changed files: 3 files" | Scope Boundary Check requires concrete paths |
 | Pre-built checklist | "Here's what to verify: [your list]" | Anchors argus, defeats independent derivation |
