@@ -27,31 +27,31 @@ Three-question gate — adapt by input mode:
 
 **PR mode:**
 1. Auto-extract PR title + description via `gh pr view <number> --json title,body`
-2. If description is substantial (>1 sentence): proceed with auto-extracted context, confirm with user: "PR 설명에서 요구사항을 추출했습니다: [요약]. 추가할 사항이 있나요?"
-3. If description is thin: ask user "이 PR의 핵심 요구사항이나 spec이 있나요?"
+2. If description is substantial (>1 sentence): proceed with auto-extracted context, confirm with user: "Extracted requirements from PR description: [summary]. Anything to add?"
+3. If description is thin: ask user "Do you have core requirements or a spec for this PR?"
 
 **Branch comparison mode:**
-Ask user: "이 브랜치에서 무엇을 구현했나요? 원래 요구사항/spec이 있다면 알려주세요."
+Ask user: "What was implemented on this branch? If there are original requirements/spec, please share."
 
 **Auto-detect mode:**
 1. Infer from commit messages (`git log --oneline`)
-2. Ask user: "최근 작업의 요구사항/spec이 있나요? (없으면 코드 품질 중심으로 리뷰합니다)"
+2. Ask user: "Do you have requirements/spec for the recent work? (If not, review will focus on code quality)"
 
 **User deferral** ("없어", "그냥 리뷰해줘", "skip"):
 → Set {REQUIREMENTS} = "N/A - code quality review only"
 → Proceed without blocking
 
 **Vague Answer Handling:**
-- Explicit deferral ("없어", "skip", "그냥 해줘") → N/A 처리 후 진행
-- Vague answer → 후속 질문으로 구체화:
+- Explicit deferral ("없어", "skip", "그냥 해줘") → Treat as N/A and proceed
+- Vague answer → Refine with follow-up question:
 
 | User says | Follow-up |
 |-----------|-----------|
-| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 확인할 수 있나요? (PR description, Notion, Jira 등)" |
-| "그냥 성능 개선이야" | "구체적으로 어떤 지표를 개선하려고 했나요? (latency, throughput, memory 등)" |
-| "여러 가지 고쳤어" | "가장 중요한 변경 1-2가지만 알려주세요. 나머지는 코드에서 파악합니다." |
+| "대충 있어" / "뭐 좀 있긴 한데" | "Where can I find them? (PR description, Notion, Jira, etc.)" |
+| "그냥 성능 개선이야" | "What specific metrics were you trying to improve? (latency, throughput, memory, etc.)" |
+| "여러 가지 고쳤어" | "What are the 1-2 most important changes? I'll identify the rest from code." |
 
-Rule: 2회 연속 vague → "코드에서 직접 파악하겠습니다" 선언 후 진행. 무한 질문 금지.
+Rule: 2 consecutive vague answers → Declare "I'll identify the context directly from the code" and proceed. No infinite questioning.
 
 **Question Method:**
 
@@ -64,17 +64,17 @@ Rule: 2회 연속 vague → "코드에서 직접 파악하겠습니다" 선언 �
 
 | BAD | GOOD |
 |-----|------|
-| "요구사항이 있나요?" | "이 PR의 핵심 요구사항이나 spec이 있나요? (없으면 코드 품질 중심으로 리뷰합니다)" |
-| "어떤 부분을 볼까요?" | "변경 파일이 23개입니다. 특히 집중할 영역이 있나요? (없으면 전체 리뷰합니다)" |
-| "테스트 있나요?" | "테스트 커버리지 기준이 있나요? (예: 80% line coverage, 특정 시나리오 필수 등)" |
+| "요구사항이 있나요?" | "Do you have core requirements or a spec for this PR? (If not, review will focus on code quality)" |
+| "어떤 부분을 볼까요?" | "23 files changed. Any specific area to focus on? (If not, I'll review everything)" |
+| "테스트 있나요?" | "Do you have test coverage standards? (e.g., 80% line coverage, mandatory scenarios, etc.)" |
 
-Rule: 모든 질문에 default 행동을 괄호로 명시. User가 답하지 않아도 진행 가능하게.
+Rule: Every question must include a default action in parentheses. Ensure progress is possible even without user response.
 
 **One Question Per Message:**
-질문은 한 번에 하나씩. 답변을 받은 후 다음 질문 진행. 여러 질문을 한 메시지에 묶지 말 것.
+One question at a time. Proceed to the next question only after receiving an answer. Never bundle multiple questions in a single message.
 
 **Step 0 Exit Condition:**
-다음 중 하나 충족 시 Step 1로 진행:
+Proceed to Step 1 when any of the following are met:
 - Requirements captured (PR description, user input, or spec reference)
 - User explicitly deferred ("skip", "없어", "그냥 리뷰해줘")
 - 2-strike vague limit reached → proceed with code-quality-only review
@@ -101,8 +101,8 @@ All subsequent steps use `{range}` from this table.
 After Input Parsing, before proceeding to Step 2:
 
 1. Run `git diff {range} --stat` (using the range determined in Step 1)
-2. If empty diff: report "변경사항이 없습니다 (<base>와 <target> 사이)" and exit
-3. If binary-only diff: report "바이너리 파일 변경만 감지되었습니다" and exit
+2. If empty diff: report "No changes detected (between <base> and <target>)" and exit
+3. If binary-only diff: report "Only binary file changes detected" and exit
 
 ## Step 2: Context Gathering
 
@@ -124,18 +124,18 @@ Subagent context:
 | librarian | External documentation verification | Official docs, best practices, known pitfalls | Conditional (see triggers) |
 
 Role clarity:
-- explore = "코드베이스에서 관습을 찾아라" (targeted grep)
-- oracle = "이 변경이 기존 시스템에 안전한지 분석하라" (deep reasoning)
-- librarian = "이 라이브러리/API를 올바르게 쓰고 있는지 확인하라" (external reference)
+- explore = "Find conventions in the codebase" (targeted grep)
+- oracle = "Analyze whether this change is safe for the existing system" (deep reasoning)
+- librarian = "Verify correct usage of this library/API" (external reference)
 
 ### Explore -- Codebase Convention Baseline
 
-Chunk-reviewer는 diff만 보므로 "이 코드가 프로젝트 관습에 맞는지"를 판단할 기준이 없다. Explore가 제공하는 convention baseline이 없으면 chunk-reviewer는:
-- 프로젝트에서 이미 해결된 패턴을 무시하고 새 패턴을 제안 (noise)
-- 프로젝트 관습에 맞는 코드를 "개선 필요"로 오판 (false positive)
-- 프로젝트 관습을 위반하는 코드를 놓침 (false negative)
+Chunk-reviewer only sees the diff, so it has no baseline for judging "does this code follow project conventions?" Without explore's convention baseline, chunk-reviewer will:
+- Suggest new patterns while ignoring already-established ones (noise)
+- Misjudge convention-compliant code as "needs improvement" (false positive)
+- Miss code that violates project conventions (false negative)
 
-→ 그래서 항상 dispatch. Cost 낮고 (targeted grep 수준), value 높음 (모든 chunk 리뷰의 품질 보정).
+→ Always dispatch. Low cost (targeted grep level), high value (quality calibration for all chunk reviews).
 
 5. Dispatch explore agent (4-Field prompt):
    ```
@@ -149,23 +149,23 @@ Chunk-reviewer는 diff만 보므로 "이 코드가 프로젝트 관습에 맞는
 
 ### Oracle -- Deep Codebase Analysis
 
-핵심 원칙: **diff만으로는 이 변경의 안전성을 판단할 수 없을 때** dispatch.
+Core principle: **Dispatch when the diff alone cannot determine the safety of this change.**
 
-Diff는 "무엇이 바뀌었는가"를 보여주지만, "이 변경이 기존 시스템에서 안전한가"는 알려주지 않는다. Oracle은 코드베이스 전체를 읽고 다음 4가지 유형의 질문에 답한다:
+A diff shows "what changed" but not "whether this change is safe for the existing system." Oracle reads the entire codebase and answers four types of questions:
 
-| 유형 | 질문 | 예시 |
-|------|------|------|
-| Impact analysis | "이 변경이 어디까지 영향을 미치는가?" | migration이 기존 쿼리를 깨뜨리는가, 캐시 키 변경이 다른 서비스를 무효화하는가 |
-| Consistency verification | "기존 패턴과 일관되는가?" | 새 에러 핸들링이 기존 전략과 다른가, 새 연동의 retry 정책이 기존과 불일치하는가 |
-| Hidden interaction | "보이지 않는 의존성이 있는가?" | 이 lock이 다른 lock과 deadlock을 만드는가, 이 이벤트가 consumer의 기대와 맞는가 |
-| Design fitness | "아키텍처 원칙에 맞는가?" | 레이어 경계를 위반하는가, 기존 추상화를 우회하는가 |
+| Type | Question | Example |
+|------|----------|---------|
+| Impact analysis | "How far does this change's impact reach?" | Does the migration break existing queries? Does the cache key change invalidate other services? |
+| Consistency verification | "Is it consistent with existing patterns?" | Does the new error handling differ from the existing strategy? Does the new integration's retry policy mismatch existing ones? |
+| Hidden interaction | "Are there invisible dependencies?" | Does this lock create deadlocks with other locks? Does this event match consumer expectations? |
+| Design fitness | "Does it fit architectural principles?" | Does it violate layer boundaries? Does it bypass existing abstractions? |
 
 **When NOT to dispatch oracle:**
-- 단순 리팩토링 (rename, extract method, move file) -- diff로 충분
-- 테스트만 변경 -- production 영향 없음
-- 문서/설정만 변경 -- 아키텍처 분석 불필요
-- 단일 함수 내부 로직 변경 (외부 인터페이스 불변) -- cross-file 영향 없음
-- explore 결과로 이미 충분한 컨텍스트를 확보한 경우
+- Simple refactoring (rename, extract method, move file) -- diff is sufficient
+- Test-only changes -- no production impact
+- Documentation/config-only changes -- no architecture analysis needed
+- Logic changes within a single function (external interface unchanged) -- no cross-file impact
+- Explore results already provide sufficient context
 
 **Oracle trigger conditions:**
 - Changed files include `*migration*`, `*schema*`, `*.sql` → (impact analysis)
@@ -182,19 +182,19 @@ Diff는 "무엇이 바뀌었는가"를 보여주지만, "이 변경이 기존 �
 
 ### Librarian -- External Documentation Verification
 
-핵심 원칙: **외부 문서 없이는 올바른 사용법을 판단할 수 없을 때** dispatch.
+Core principle: **Dispatch when correct usage cannot be determined without external documentation.**
 
-Chunk-reviewer가 라이브러리 코드를 리뷰할 때, 코드 자체는 문법적으로 올바를 수 있지만:
-- deprecated API를 사용하고 있는가?
-- 알려진 보안 취약점이 있는 버전인가?
-- 공식 문서에서 권장하지 않는 패턴인가?
+When chunk-reviewer reviews library code, the code itself may be syntactically correct, but:
+- Is it using a deprecated API?
+- Is it a version with known security vulnerabilities?
+- Is it a pattern not recommended by official documentation?
 
-→ 이런 정보는 코드베이스에 없고, 외부 문서에만 있음.
+→ This information exists only in external documentation, not in the codebase.
 
 **When NOT to dispatch librarian:**
-- 기존 dependency의 사소한 사용 변경 -- 이미 프로젝트에서 검증된 패턴
-- 내부 코드만 변경 -- 외부 문서 참조 불필요
-- 버전 변경 없는 설정 변경 -- breaking change 우려 없음
+- Minor usage changes to existing dependencies -- already validated patterns in the project
+- Internal code changes only -- no external documentation reference needed
+- Config changes without version changes -- no breaking change concern
 
 **Librarian trigger conditions:**
 - New dependency introduced (new entries in `build.gradle`, `package.json`, `go.mod`, `requirements.txt`, etc.)
