@@ -255,23 +255,8 @@ See each Design Area reference file for domain-specific clarification examples.
 |------|-------|------|
 | Existing codebase patterns | explore | Find current implementations, conventions, integration points |
 | Technical decisions, trade-offs | oracle | Architecture choices, design alternatives, risk assessment |
-| External documentation | librarian | Official docs, version compatibility, pattern validation |
+| External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Multi-AI design feedback | spec-reviewer | **MANDATORY** at Area completion |
-
-### Agent Role Separation
-
-| Agent | Role | Scope | Trigger |
-|-------|------|-------|---------|
-| explore | Codebase convention/pattern discovery | Internal implementations, naming, structure, integration points | Always when design needs codebase context (lightweight) |
-| oracle | Design decision analysis | Architecture alternatives, feasibility, risk, cross-system impact | Conditional (see triggers) |
-| librarian | Library version/spec verification | Official docs, version compatibility, known pitfalls, ecosystem patterns | Conditional (see triggers) |
-| spec-reviewer | Multi-AI design review | Spec quality, completeness, consistency, alternative perspectives | **MANDATORY** at Area completion |
-
-Role clarity:
-- explore = "Find current implementations and conventions from the codebase" (targeted grep)
-- oracle = "Analyze whether this design choice is technically sound" (deep reasoning)
-- librarian = "Verify the version and spec of this library/technology" (version/spec verification)
-- spec-reviewer = "Validate this design from multiple perspectives" (multi-perspective review)
 
 ### Explore -- Codebase Pattern Discovery
 
@@ -311,14 +296,14 @@ Explore reveals "what exists in the codebase" and user interviews reveal "what t
 
 Briefly announce "Consulting Oracle for [reason]" before invocation.
 
-### Librarian -- Library Version/Spec Verification
+### Librarian -- External Documentation Research
 
-Core principle: **Dispatch when the design cannot reflect correct technology usage without verifying library version/spec.**
+Core principle: **Dispatch when the design requires external documentation that the codebase cannot provide.**
 
 When the spec includes technology choices, information outside the codebase may be needed:
-- Is a deprecated API being used?
-- Is the version known to have security vulnerabilities?
-- Is the pattern discouraged by official documentation?
+- Is the recommended usage pattern being followed for the current version?
+- Are there known pitfalls, deprecated APIs, or security advisories?
+- What does official documentation recommend as best practices?
 
 **When NOT to dispatch librarian:**
 - General usage patterns of technology already proven in the project -- explore can verify existing usage

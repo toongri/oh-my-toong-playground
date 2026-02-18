@@ -115,18 +115,13 @@ Collect in parallel (using `{range}` from Step 1):
 
 Subagent context:
 
-### Agent Role Separation
+### Subagent Selection Guide
 
-| Agent | Role | Scope | Trigger |
-|-------|------|-------|---------|
-| explore | Codebase convention baseline | Internal codebase patterns, naming, structure | Always (lightweight) |
-| oracle | Deep codebase analysis | Cross-file impact, hidden dependencies, architectural fit | Conditional (see triggers) |
-| librarian | External documentation verification | Official docs, best practices, known pitfalls | Conditional (see triggers) |
-
-Role clarity:
-- explore = "Find conventions in the codebase" (targeted grep)
-- oracle = "Analyze whether this change is safe for the existing system" (deep reasoning)
-- librarian = "Verify correct usage of this library/API" (external reference)
+| Need | Agent | When |
+|------|-------|------|
+| Codebase convention baseline | explore | Find internal patterns, naming conventions, structure to calibrate chunk-reviewer |
+| Deep codebase analysis | oracle | Analyze cross-file impact, hidden dependencies, architectural fit |
+| External documentation research | librarian | Official docs, best practices, known pitfalls for libraries/APIs in the diff |
 
 ### Explore -- Codebase Convention Baseline
 
@@ -180,9 +175,9 @@ A diff shows "what changed" but not "whether this change is safe for the existin
    Briefly announce "Consulting Oracle for [reason]" before invocation.
    → Only if trigger conditions met (see above)
 
-### Librarian -- External Documentation Verification
+### Librarian -- External Documentation Research
 
-Core principle: **Dispatch when correct usage cannot be determined without external documentation.**
+Core principle: **Dispatch when correct usage cannot be determined without external documentation research.**
 
 When chunk-reviewer reviews library code, the code itself may be syntactically correct, but:
 - Is it using a deprecated API?

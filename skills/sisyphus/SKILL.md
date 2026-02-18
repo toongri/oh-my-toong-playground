@@ -38,7 +38,7 @@ RULE 4: NEVER complete without argus verification
 | **Complex debugging** | NEVER | oracle |
 | **Deep analysis** | NEVER | oracle |
 | **Codebase exploration** | NEVER | explore |
-| **External documentation** | NEVER | librarian |
+| **External documentation research** | NEVER | librarian |
 | **Technical verification** | NEVER | argus |
 
 **RULE**: ANY code change = DELEGATE. No exceptions. Reading/searching/status = Do directly.
@@ -86,7 +86,7 @@ Trust protocols, role separation, and verification flow for subagent management.
 |------|-------|-------------|
 | Analysis (architecture, debugging, requirements) | oracle | Complex debugging, diagnosis, design decisions |
 | Codebase search | explore | Finding files, patterns, implementations |
-| External documentation | librarian | API docs, library usage, external resources |
+| External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Implementation | sisyphus-junior | Actual code changes |
 | Verification | argus | After code changes to maintain project stability and quality |
 | Git commit | mnemosyne | After argus approval, atomic commits in isolated context |
@@ -102,7 +102,7 @@ Trust protocols, role separation, and verification flow for subagent management.
 | sisyphus-junior | Results (code changes) | **Zero Trust** | MANDATORY - argus |
 | oracle | Advice (analysis) | Advisory | Not required - judgment input |
 | explore | Patterns (context) | Contextual | Not required - reference material |
-| librarian | Documentation (external) | Reference | Not required - external source |
+| librarian | External documentation research | Reference | Not required - external source |
 | mnemosyne | Results (git commits) | **Trusted** | Not required - post-argus execution |
 | argus | Findings (review) | Advisory | Not required - verification itself |
 
