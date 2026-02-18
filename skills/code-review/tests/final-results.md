@@ -11,8 +11,8 @@
 | CR-2 | FAIL | V1, V2, V3 | Step 0 부재로 PR description 자동 추출 불가 — Step 1에서 `gh pr diff`만 수행, `gh pr view --json` 미사용. V4는 인터뷰 자체가 없어 vacuous pass (기능 부재로 인한 무의미한 통과) |
 | CR-3 | FAIL | V1, V2, V3, V4 | Step 0 부재로 deferral 경로 자체가 존재하지 않음 — 요구사항 질문도, "N/A" 폴백도 없음 |
 | CR-4 | FAIL | V4, V5 | V1-V3 PASS (Input Parsing + Context Gathering 기존 존재). V4 FAIL: explore agent dispatch 부재 (코드베이스 패턴/관습 조사 없음). V5 FAIL: oracle agent dispatch 부재 (cross-module 아키텍처 분석 없음) |
-| CR-5 | FAIL | V4 | V1-V3, V5 PASS (chunking 로직 + 병렬 dispatch 기존 존재). V4 FAIL: 템플릿 기반 dispatch 부재 — `code-reviewer-prompt.md` 없이 직접 agent dispatch |
-| CR-6 | FAIL | V1, V2, V3, V4 | Dispatch Template 전체 부재 — `code-reviewer-prompt.md` 파일 미존재, 플레이스홀더 인터폴레이션 메커니즘 없음 |
+| CR-5 | FAIL | V4 | V1-V3, V5 PASS (chunking 로직 + 병렬 dispatch 기존 존재). V4 FAIL: 템플릿 기반 dispatch 부재 — `chunk-reviewer-prompt.md` 없이 직접 agent dispatch |
+| CR-6 | FAIL | V1, V2, V3, V4 | Dispatch Template 전체 부재 — `chunk-reviewer-prompt.md` 파일 미존재, 플레이스홀더 인터폴레이션 메커니즘 없음 |
 | CR-7 | FAIL | V4 | V1-V3, V5 PASS (병합, 중복제거, cross-file concerns, strictest verdict 로직 기존 존재). V4 FAIL: severity 재분류가 orchestrator 레벨에서 정의되지 않음 — agent가 자체적으로 분류하나 synthesis 단계에서 cross-chunk severity 검증/조정 명시 없음 |
 | CR-8 | FAIL | V1, V2, V3, V4 | Early Exit 경로 전체 부재 — Step 2에서 `git diff --stat` 수집하나 빈 diff 감지/short-circuit 로직 없음. binary-only diff 감지도 없음 |
 
@@ -47,11 +47,11 @@
 - **V1 PASS**: Step 3에서 "Group into chunks of ~10-15 files" 명시
 - **V2 PASS**: Step 3에서 "group files sharing a directory prefix or import relationships" 명시
 - **V3 PASS**: Step 4에서 "Multiple chunks → Parallel dispatch" 명시
-- **V4 FAIL**: 템플릿 기반 dispatch 부재. Step 4에서 agent에게 전달하는 항목(Diff, CLAUDE.md, commit history, file list)이 나열되어 있으나, `code-reviewer-prompt.md` 템플릿을 읽어서 인터폴레이션하는 방식이 아닌 직접 전달 방식
+- **V4 FAIL**: 템플릿 기반 dispatch 부재. Step 4에서 agent에게 전달하는 항목(Diff, CLAUDE.md, commit history, file list)이 나열되어 있으나, `chunk-reviewer-prompt.md` 템플릿을 읽어서 인터폴레이션하는 방식이 아닌 직접 전달 방식
 - **V5 PASS**: Step 4에서 "all chunks in ONE response" 명시
 
 #### CR-6: Dispatch Template — Post-implementation
-- **V1 FAIL**: `code-reviewer-prompt.md` 템플릿 파일이 참조되지 않음. SKILL.md 어디에도 템플릿 파일 읽기 언급 없음
+- **V1 FAIL**: `chunk-reviewer-prompt.md` 템플릿 파일이 참조되지 않음. SKILL.md 어디에도 템플릿 파일 읽기 언급 없음
 - **V2 FAIL**: {WHAT_WAS_IMPLEMENTED} 플레이스홀더 개념 없음. 현재 agent dispatch 시 "무엇이 구현되었는지" 컨텍스트 전달 미정의
 - **V3 FAIL**: {DIFF}, {FILE_LIST}, {REQUIREMENTS} 등 플레이스홀더 인터폴레이션 메커니즘 전체 부재
 - **V4 FAIL**: {CODEBASE_CONTEXT}, {CLAUDE_MD} 등 선택 필드 처리 로직 없음
@@ -60,7 +60,7 @@
 - **V1 PASS**: Step 5 항목 1: "Merge all Strengths, Issues, Recommendations sections"
 - **V2 PASS**: Step 5 항목 2: "Deduplicate issues appearing in multiple chunks"
 - **V3 PASS**: Step 5 항목 3: "Identify cross-file concerns"
-- **V4 FAIL**: Orchestrator 레벨에서 severity 재분류/검증 미정의. Agent(code-reviewer.md)가 Critical/Important/Minor 분류를 하지만, synthesis 단계에서 cross-chunk 관점으로 severity를 재평가하는 명시적 지침 없음. 예: 개별 chunk에서 Important로 분류된 이슈가 여러 chunk에서 반복되면 Critical로 승격해야 하는 로직 부재
+- **V4 FAIL**: Orchestrator 레벨에서 severity 재분류/검증 미정의. Agent(chunk-reviewer.md)가 Critical/Important/Minor 분류를 하지만, synthesis 단계에서 cross-chunk 관점으로 severity를 재평가하는 명시적 지침 없음. 예: 개별 chunk에서 Important로 분류된 이슈가 여러 chunk에서 반복되면 Critical로 승격해야 하는 로직 부재
 - **V5 PASS**: Step 5 항목 4: "STRICTEST of all chunk verdicts (any 'No' = overall 'No')"
 
 #### CR-8: Early Exit — Empty Diff
@@ -78,7 +78,7 @@
 | 1 | **Step 0: Requirements Interview** — 리뷰 전 요구사항 수집/PR description 추출/deferral 경로 | CR-1, CR-2, CR-3 | 11 |
 | 2 | **Early Exit** — 빈 diff/binary-only diff 감지 및 short-circuit | CR-8 | 4 |
 | 3 | **Subagent Orchestration** — explore/oracle agent dispatch로 코드베이스 컨텍스트 수집 | CR-4 | 2 |
-| 4 | **Dispatch Template** — `code-reviewer-prompt.md` 템플릿 및 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
+| 4 | **Dispatch Template** — `chunk-reviewer-prompt.md` 템플릿 및 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
 | 5 | **Severity Definitions (orchestrator-level)** — synthesis 단계에서 cross-chunk severity 재분류 | CR-7 | 1 |
 
 **총 결과**: 0/8 시나리오 PASS, 8/8 FAIL (23개 VP 실패 / 35개 VP 중)
@@ -90,7 +90,7 @@
 ## GREEN Phase — After improvements
 
 **테스트 일시**: 2026-02-16
-**테스트 방법**: 업데이트된 SKILL.md + agent (code-reviewer.md) + template (code-reviewer-prompt.md) 분석적 대조
+**테스트 방법**: 업데이트된 SKILL.md + agent (chunk-reviewer.md) + template (chunk-reviewer-prompt.md) 분석적 대조
 
 | Scenario | Verdict | Notes |
 |----------|---------|-------|
@@ -156,8 +156,8 @@
 |----|--------|----------|
 | V1 | PASS | SKILL.md Step 3: "Changed files > 15 -> Group into chunks of ~10-15 files" — 87파일은 15 초과하므로 chunking 적용 |
 | V2 | PASS | SKILL.md Step 3: "Chunking heuristic: group files sharing a directory prefix or import relationships" |
-| V3 | PASS | SKILL.md Step 4 Dispatch rules: "Multiple chunks -> Parallel dispatch" — 각 chunk에 code-reviewer agent 병렬 dispatch |
-| V4 | PASS | SKILL.md Step 4: "Read dispatch template from `code-reviewer-prompt.md`" + "Interpolate placeholders" — 템플릿 기반 dispatch 명시. code-reviewer-prompt.md 파일 존재 확인 |
+| V3 | PASS | SKILL.md Step 4 Dispatch rules: "Multiple chunks -> Parallel dispatch" — 각 chunk에 chunk-reviewer agent 병렬 dispatch |
+| V4 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" + "Interpolate placeholders" — 템플릿 기반 dispatch 명시. chunk-reviewer-prompt.md 파일 존재 확인 |
 | V5 | PASS | SKILL.md Step 4 Dispatch rules: "all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST}" |
 
 ---
@@ -166,7 +166,7 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 4: "Read dispatch template from `code-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `skills/code-review/code-reviewer-prompt.md`에 존재 |
+| V1 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `skills/code-review/chunk-reviewer-prompt.md`에 존재 |
 | V2 | PASS | SKILL.md Step 4: "{WHAT_WAS_IMPLEMENTED} <- Step 0 description" + template 라인 6: "Review {WHAT_WAS_IMPLEMENTED}" |
 | V3 | PASS | SKILL.md Step 4: {DIFF} <- Step 1, {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
 | V4 | PASS | SKILL.md Step 4: "{CODEBASE_CONTEXT} <- Step 2 explore/oracle output (or empty)", "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
@@ -180,7 +180,7 @@
 | V1 | PASS | SKILL.md Step 5 항목 1: "Merge all Strengths, Issues, Recommendations sections" |
 | V2 | PASS | SKILL.md Step 5 항목 2: "Deduplicate issues appearing in multiple chunks" |
 | V3 | PASS | SKILL.md Step 5 항목 3: "Identify cross-file concerns -- issues spanning chunk boundaries" + agent Chunk Review Mode: "Flag cross-file suspicions" |
-| V4 | PASS | agent Severity Definitions: Critical/Important/Minor 기준 명시적 정의 — "Critical: Blocks merge. Security vulnerabilities, data loss risks, broken functionality" / "Important: Should fix before merge" / "Minor: Nice to have". 모든 chunk의 code-reviewer agent가 동일 기준 적용하여 일관된 severity 분류 보장 |
+| V4 | PASS | agent Severity Definitions: Critical/Important/Minor 기준 명시적 정의 — "Critical: Blocks merge. Security vulnerabilities, data loss risks, broken functionality" / "Important: Should fix before merge" / "Minor: Nice to have". 모든 chunk의 chunk-reviewer agent가 동일 기준 적용하여 일관된 severity 분류 보장 |
 | V5 | PASS | SKILL.md Step 5 항목 4: "Determine final verdict -- 'Ready to merge?' is the STRICTEST of all chunk verdicts (any 'No' = overall 'No')" |
 
 ---
@@ -207,7 +207,7 @@
 | 1 | **Step 0: Requirements Interview** — 3가지 입력 모드별 요구사항 수집, PR description 자동 추출, deferral 경로, Context Brokering | CR-1, CR-2, CR-3 | 11 |
 | 2 | **Early Exit** — 빈 diff/binary-only diff 감지, 메시지 출력, short-circuit 종료 | CR-8 | 4 |
 | 3 | **Subagent Orchestration** — explore (항상)/oracle (조건부) agent dispatch, trigger conditions | CR-4 | 2 |
-| 4 | **Dispatch Template** — code-reviewer-prompt.md 템플릿, 8개 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
+| 4 | **Dispatch Template** — chunk-reviewer-prompt.md 템플릿, 8개 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
 | 5 | **Severity Definitions** — agent에 Critical/Important/Minor 명시적 기준 + Example Output 추가 | CR-7 | 1 |
 
 ---
