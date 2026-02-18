@@ -73,7 +73,20 @@ fi
 PROMPT_NO_CODE=$(echo "$PROMPT" | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
 
 # Remove system-reminder tags
-PROMPT_CLEAN=$(echo "$PROMPT_NO_CODE" | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+PROMPT_CLEAN=$(echo "$PROMPT" | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+
+# Extract file paths from non-text parts (e.g., @file mentions)
+FILE_PATHS=""
+if command -v jq &> /dev/null; then
+  FILE_PATHS=$(echo "$INPUT" | jq -r '
+    [(.parts // [])[] | select(.type != "text") | .file_path // .path // empty] | join(", ")
+  ' 2>/dev/null)
+fi
+
+# Append file references to cleaned prompt
+if [ -n "$FILE_PATHS" ] && [ "$FILE_PATHS" != "null" ]; then
+  PROMPT_CLEAN="${PROMPT_CLEAN} [referenced files: ${FILE_PATHS}]"
+fi
 
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
