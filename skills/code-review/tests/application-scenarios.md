@@ -59,7 +59,7 @@
 
 **Input**: User provides branch: "main 대비 feature/auth 브랜치 리뷰해줘". Requirements는 이미 수집된 상태.
 
-**Primary Technique**: Step 1-2: Input Parsing + Context Gathering — 올바른 git 명령어, CLAUDE.md 수집, subagent dispatch
+**Primary Technique**: Step 1-2: Input Parsing + Context Gathering — 올바른 git 명령어, CLAUDE.md 수집, explore dispatch
 
 **Verification Points**:
 | ID | Expected Behavior |
@@ -68,7 +68,6 @@
 | V2 | `git diff --stat`, `git diff --name-only`, `git log` 병렬 수집 |
 | V3 | CLAUDE.md 파일 수집 (root + 변경 디렉토리) |
 | V4 | explore agent dispatch (코드베이스 패턴/관습 조사) |
-| V5 | oracle agent dispatch (해당 시 — cross-module changes 등) |
 
 ---
 
@@ -245,26 +244,25 @@
 
 ---
 
-### CR-15: Extended Oracle Triggers — 7 Categories
+### CR-15: Semantic Oracle Triggers — 6 Categories
 
-**Input**: 4개의 독립적 세션에서 각각 다른 oracle trigger 조건을 테스트.
-- Session A: 변경 파일에 `CacheManager.kt`, `RedisConfig.kt` 포함 (performance 패턴)
-- Session B: 변경 파일에 `OrderStateMachine.kt`, `PaymentCoordinator.kt` 포함 (complex business logic)
-- Session C: 변경 파일에 `WorkerPool.kt`, `AsyncProcessor.kt` 포함 (concurrency)
-- Session D: 변경 파일에 `StripeClient.kt`, `WebhookHandler.kt` 포함 (external integration)
+**Input**: 4개의 독립적 세션에서 각각 다른 semantic oracle trigger 조건을 테스트.
+- Session A: diff에서 `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈에서 이 인터페이스를 구현/소비 (shared interface modification)
+- Session B: 새로운 `NotificationService` 레이어 도입, 기존 `OrderService`→`EmailSender` 직접 호출을 `NotificationService` 경유로 변경 (new architectural layer)
+- Session C: Flyway migration 추가 (`V2024_002__add_audit_log.sql`), `AuditLog` 엔티티 신규, `OrderRepository`에서 audit 조회 추가 (schema change with downstream)
+- Session D: `InventoryLock` 도입, `ReservationService`에서 `SELECT FOR UPDATE` + Kafka consumer 간 분산 조율 (concurrency + distributed state)
 
-**Primary Technique**: Step 2: Oracle Trigger Conditions — 확장된 7개 카테고리 중 새 4개 trigger 검증
+**Primary Technique**: Step 2: Oracle Trigger Conditions — semantic 기반 6개 trigger 검증
 
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Session A: `*cache*` 패턴 매칭 → oracle dispatch 발생 |
-| V2 | Session B: state machine/transaction coordination 감지 → oracle dispatch 발생 |
-| V3 | Session C: `*worker*`, `*async*` 패턴 매칭 → oracle dispatch 발생 |
-| V4 | Session D: new HTTP clients/webhooks/SDK 감지 → oracle dispatch 발생 |
-| V5 | 기존 3개 trigger도 유효 (migration, 3+ dirs, auth/security) |
-| V6 | Trigger 미해당 시 oracle dispatch 안 함 (불필요한 dispatch 방지) |
-| V7 | "Consulting Oracle for [reason]" 형식의 announcement 선행 |
+| V1 | Session A: shared interface 변경으로 다른 모듈 영향 감지 → oracle dispatch (impact analysis) |
+| V2 | Session B: 새 architectural layer 도입 → oracle dispatch (design fitness, impact analysis) |
+| V3 | Session C: schema 변경 + downstream consumer 존재 → oracle dispatch (impact analysis) |
+| V4 | Session D: concurrency coordination + distributed state → oracle dispatch (hidden interaction) |
+| V5 | "When NOT to" 조건 해당 시 oracle dispatch 안 함 (simple refactoring, test-only, config-only, single-function logic) |
+| V6 | "Consulting Oracle for [reason]" 형식의 announcement 선행 |
 
 ---
 
