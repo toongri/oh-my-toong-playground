@@ -89,8 +89,20 @@
 
 ## GREEN Phase — After improvements
 
-**테스트 일시**: 2026-02-16 (CR-1~CR-8), 2026-02-19 (CR-9~CR-19)
-**테스트 방법**: 업데이트된 SKILL.md + agent (chunk-reviewer.md) + template (chunk-reviewer-prompt.md) 분석적 대조
+**테스트 일시**: 2026-02-16 (CR-1~CR-8 분석적 대조), 2026-02-19 (CR-9~CR-19 분석적 대조 + CR-1~CR-19 전체 subagent 기반 검증)
+**테스트 방법**: Subagent 기반 GREEN 테스트 — 4개 병렬 그룹으로 분할하여 독립 subagent가 SKILL.md + chunk-reviewer.md + chunk-reviewer-prompt.md 대조 검증
+**검증 대상**: `skills/code-review/SKILL.md` (orchestrator), `agents/chunk-reviewer.md` (agent 정의), `skills/code-review/chunk-reviewer-prompt.md` (dispatch 템플릿)
+
+**Subagent 테스트 구성:**
+
+| Group | Scenarios | 검증 영역 | VPs | Result |
+|-------|-----------|----------|-----|--------|
+| 1 | CR-1, CR-2, CR-3, CR-11, CR-12, CR-13 | Step 0 Requirements Interview | 28 | ALL PASS |
+| 2 | CR-4, CR-5, CR-18, CR-19 | Steps 1-3 Input Parsing, Chunking, Diff | 21 | ALL PASS |
+| 3 | CR-6, CR-7, CR-9, CR-10 | Steps 4-5 Dispatch Template, Synthesis | 21 | ALL PASS |
+| 4 | CR-8, CR-14, CR-15, CR-17 | Early Exit, Explore/Oracle, Cross-File | 20 | ALL PASS (CR-17 retest) |
+
+> **CR-17 재검증 노트**: Group 4 초기 subagent가 `chunk-reviewer-prompt.md`(dispatch 템플릿)만 확인하고 `agents/chunk-reviewer.md`(agent 정의)를 누락하여 5/5 FAIL 보고. 별도 subagent로 agent 정의 파일 포함 재검증한 결과 5/5 PASS 확인.
 
 | Scenario | Verdict | Notes |
 |----------|---------|-------|
@@ -341,7 +353,7 @@
 
 ---
 
-**전체 결과**: 86/86 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED)
+**전체 결과**: 90/90 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED) — subagent 기반 검증 완료
 
 > **변경 이력 (2026-02-19):**
 > - Oracle trigger conditions: glob 패턴 → semantic 기반으로 전면 재작성 (prometheus/spec과 패러다임 통일)
@@ -350,6 +362,7 @@
 > - Oracle trigger 6 (catch-all) 제거, trigger 1에 event schemas/extension points 흡수 (6→5 categories)
 > - Oracle trigger 3: "3+ top-level directories" → "multiple independent business modules"로 교체
 > - Librarian subagent 전체 제거 → CR-16 시나리오 REMOVED (7 VP 제거)
+> - CR-1~CR-19 전체 subagent 기반 GREEN 테스트 수행 (4개 병렬 그룹, 90 VP 검증)
 
 **RED -> GREEN 개선 요약** (CR-1 ~ CR-8):
 
