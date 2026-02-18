@@ -22,19 +22,20 @@
 
 ---
 
-### CR-2: Interview Skip — PR Mode
+### CR-2: Interview Skip — PR Mode (with Reference Scanning)
 
-**Input**: User provides PR number: "#42 PR 리뷰해줘" (PR description에 2문장 이상의 요구사항 기술 존재)
+**Input**: User provides PR number: "#42 PR 리뷰해줘" (PR description에 2문장 이상의 요구사항 기술 존재, body에 "#38 이슈 참조" 및 Jira 링크 포함)
 
-**Primary Technique**: Step 0: Interview Skip — PR description 자동 추출, 인터뷰 스킵
+**Primary Technique**: Step 0: PR Metadata Extraction + Reference Scanning — PR metadata 자동 추출, GitHub refs fetch, non-fetchable reference 유저 문의, 인터뷰 스킵
 
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | `gh pr view --json title,body` 실행 시도 |
-| V2 | PR description이 충분하면 (>1문장) 인터뷰 스킵 |
-| V3 | auto-extracted 컨텍스트를 {REQUIREMENTS}로 사용 |
-| V4 | 불필요한 인터뷰 질문 없음 |
+| V1 | `gh pr view --json title,body,labels,comments,reviews` 실행 시도 |
+| V2 | PR body에서 GitHub refs (#123 등) 스캔 및 `gh pr view`/`gh issue view`로 컨텍스트 fetch |
+| V3 | Non-fetchable references (Jira, Notion 등) 발견 시 유저에게 컨텍스트 요청 |
+| V4 | PR description이 충분하면 (>1문장) 인터뷰 스킵, auto-extracted 컨텍스트를 {REQUIREMENTS}로 사용 |
+| V5 | Description이 부족하고 linked references도 없으면 유저에게 요구사항 질문 |
 
 ---
 
@@ -300,3 +301,39 @@
 | V3 | 레이어 간 트랜잭션 경계 누수 감지 (예: controller의 @Transactional이 infrastructure layer까지 확장) |
 | V4 | Cross-file concern이 개별 파일 이슈와 구분되어 별도 섹션에 기술 |
 | V5 | chunk 외부 파일에 대한 추측 없음 (chunk 내 파일만 분석) |
+
+---
+
+### CR-18: PR Local Ref Setup (NO checkout)
+
+**Input**: PR mode, `pr 42` 입력. PR은 `feature/payment` 브랜치에서 `main`으로의 PR.
+
+**Primary Technique**: Step 1: PR Mode Local Ref Setup — `git fetch` 기반 ref 획득, checkout 없이 range 설정
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | `gh pr view 42 --json baseRefName --jq '.baseRefName'`으로 base branch 확인 |
+| V2 | `git fetch origin pull/42/head:pr-42`로 PR ref를 로컬에 fetch (checkout 아님) |
+| V3 | `git fetch origin main`으로 base branch fetch |
+| V4 | Range가 `origin/main...pr-42` (three-dot syntax) 사용 |
+| V5 | `git checkout` 명령어 미사용 (유저 working directory 불변) |
+| V6 | 후속 Step 2에서 `git diff origin/main...pr-42 --stat` 등 range 활용 |
+
+---
+
+### CR-19: Per-Chunk Diff Acquisition via Path Filtering
+
+**Input**: Branch mode, 25개 파일 변경. Step 3에서 2개 chunk으로 분할 완료. Chunk A: `src/api/` 12파일, Chunk B: `src/domain/` + `src/infra/` 13파일.
+
+**Primary Technique**: Step 3: Per-Chunk Diff Acquisition — `git diff {range} -- <files>` 방식의 chunk별 diff 획득
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | 25개 파일 > 15 → chunking 적용 결정 |
+| V2 | Chunk A diff: `git diff {range} -- src/api/file1.ts src/api/file2.ts ...` (path filter 사용) |
+| V3 | Chunk B diff: `git diff {range} -- src/domain/... src/infra/...` (path filter 사용) |
+| V4 | 전체 diff를 파싱하여 per-file 추출하지 않음 ("Do NOT parse a full diff output" 준수) |
+| V5 | 단일 chunk (<=15 파일)인 경우 `git diff {range}` (path filter 없이 전체 diff) 사용 |
+| V6 | Step 4의 {DIFF} 플레이스홀더에 chunk별 `git diff` 출력이 인터폴레이션됨 |
