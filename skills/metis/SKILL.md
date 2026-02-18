@@ -211,6 +211,9 @@ If any of the following patterns are detected during analysis, ask the user a cl
 ```markdown
 ## Metis Analysis: [Topic]
 
+### Domain Context
+[1-2 sentences: Why this analysis matters for this specific domain. Connect the plan's subject area to the risks that pre-planning analysis prevents.]
+
 ### Intent Classification
 - **Type**: [Refactoring | Build from Scratch | Mid-sized | Collaborative | Architecture | Research]
 - **Confidence**: [High | Medium | Low]
