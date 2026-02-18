@@ -72,6 +72,9 @@ fi
 # This handles both single-line and multi-line code blocks properly
 PROMPT_NO_CODE=$(echo "$PROMPT" | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
 
+# Remove system-reminder tags
+PROMPT_CLEAN=$(echo "$PROMPT_NO_CODE" | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
 
@@ -102,11 +105,11 @@ EOF
 # Check for ralph keyword (highest priority) - ralph loop activation
 if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   # Create ralph state file
-  create_ralph_state "$PROJECT_ROOT" "$PROMPT"
+  create_ralph_state "$PROJECT_ROOT" "$PROMPT_CLEAN"
 
   # Output ralph activation message
   cat << EOF
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode with MANDATORY VERIFICATION GATES.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When ALL tasks complete, output <promise>DONE</promise> to trigger Oracle verification\n4. After Oracle approves, output <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n5. Do NOT stop until Oracle approves\n\n## COMPLETION SEQUENCE (MANDATORY)\n\n1. **Complete all tasks** - Check TODO list is empty\n2. **Run verification** - Build, test, lint as applicable\n3. **Output promise** - <promise>DONE</promise>\n4. **Stop hook triggers** - Oracle verification will be requested\n5. **Spawn Oracle** - Verify completion with oracle agent\n6. **Output approval tag** - <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n7. **Done** - Session can end\n\n## VERIFICATION REQUIREMENTS\n\n- [ ] Build: Fresh run showing SUCCESS\n- [ ] Tests: Fresh run showing ALL PASS\n- [ ] TODO LIST: Zero pending/in_progress tasks\n- [ ] Oracle: Verification approved\n\n### Red Flags (STOP if you catch yourself)\n- Using 'should work', 'probably passes'\n- Skipping build/test because 'nothing changed'\n- Forgetting to output <promise>DONE</promise> when complete\n\nOriginal task: ${PROMPT}\n</ralph-mode>\n\n---\n"}}
+{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode with MANDATORY VERIFICATION GATES.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When ALL tasks complete, output <promise>DONE</promise> to trigger Oracle verification\n4. After Oracle approves, output <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n5. Do NOT stop until Oracle approves\n\n## COMPLETION SEQUENCE (MANDATORY)\n\n1. **Complete all tasks** - Check TODO list is empty\n2. **Run verification** - Build, test, lint as applicable\n3. **Output promise** - <promise>DONE</promise>\n4. **Stop hook triggers** - Oracle verification will be requested\n5. **Spawn Oracle** - Verify completion with oracle agent\n6. **Output approval tag** - <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n7. **Done** - Session can end\n\n## VERIFICATION REQUIREMENTS\n\n- [ ] Build: Fresh run showing SUCCESS\n- [ ] Tests: Fresh run showing ALL PASS\n- [ ] TODO LIST: Zero pending/in_progress tasks\n- [ ] Oracle: Verification approved\n\n### Red Flags (STOP if you catch yourself)\n- Using 'should work', 'probably passes'\n- Skipping build/test because 'nothing changed'\n- Forgetting to output <promise>DONE</promise> when complete\n\nOriginal task: ${PROMPT_CLEAN}\n</ralph-mode>\n\n---\n"}}
 EOF
   exit 0
 fi

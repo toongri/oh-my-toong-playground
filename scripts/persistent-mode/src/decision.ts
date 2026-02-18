@@ -25,13 +25,13 @@ function formatContinueOutput(): HookOutput {
   return { continue: true };
 }
 
-const MAX_PROMPT_LENGTH = 500;
+const MAX_PROMPT_LENGTH = 2000;
 const MAX_FEEDBACK_LENGTH = 500;
 const MAX_FEEDBACK_COUNT = 3;
 
 function truncateText(text: string, maxLength: number): string {
   if (text.length > maxLength) {
-    return text.substring(0, maxLength) + '...[truncated]';
+    return text.substring(0, maxLength) + `...[truncated from ${text.length} chars]`;
   }
   return text;
 }
@@ -63,14 +63,12 @@ function buildRalphContinuationMessage(
 Your previous attempt did not include oracle approval. The work is NOT verified complete yet.
 ${feedbackSection}
 CRITICAL INSTRUCTIONS:
-1. Review your progress and the original task
+1. Review your progress and the original task below
 2. Check your todo list - are ALL items marked complete?
-3. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify: ${truncatedPrompt}")
+3. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify task completion: ${truncatedPrompt}")
 4. If Oracle approves, output: <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
 5. Then output: <promise>${promise}</promise>
 6. Do NOT stop until verified by Oracle
-
-Original task: ${truncatedPrompt}
 
 </ralph-loop-continuation>
 
