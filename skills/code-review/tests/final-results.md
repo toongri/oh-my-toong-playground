@@ -89,19 +89,30 @@
 
 ## GREEN Phase — After improvements
 
-**테스트 일시**: 2026-02-16
+**테스트 일시**: 2026-02-16 (CR-1~CR-8), 2026-02-19 (CR-9~CR-19)
 **테스트 방법**: 업데이트된 SKILL.md + agent (chunk-reviewer.md) + template (chunk-reviewer-prompt.md) 분석적 대조
 
 | Scenario | Verdict | Notes |
 |----------|---------|-------|
 | CR-1 | PASS | Step 0 Auto-detect mode에 요구사항 질문, {REQUIREMENTS} 수집, Context Brokering 모두 정의 |
-| CR-2 | PASS | Step 0 PR mode에 `gh pr view --json` 자동 추출, 충분한 description 시 인터뷰 스킵 정의 |
+| CR-2 | PASS | Step 0 PR mode에 metadata 추출, reference scanning, non-fetchable inquiry, 충분한 description 시 인터뷰 스킵 정의 |
 | CR-3 | PASS | Step 0 User deferral 경로에 "그냥 리뷰해줘" 수용, "N/A" 폴백, 블로킹 없이 진행 정의 |
 | CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md, explore/oracle agent dispatch 모두 정의 |
 | CR-5 | PASS | Step 3-4에 chunking 기준, 템플릿 기반 dispatch, 병렬 발행 정의 |
 | CR-6 | PASS | Step 4에 템플릿 읽기, 모든 플레이스홀더 인터폴레이션, 필수/선택 필드 처리 정의 |
 | CR-7 | PASS | Step 5에 병합/중복제거/cross-file/verdict 정의 + agent에 Severity Definitions 추가 |
 | CR-8 | PASS | Early Exit 섹션에 빈 diff/binary-only diff 감지, 메시지 출력, 즉시 종료 정의 |
+| CR-9 | PASS | Step 5 Phase 1 Walkthrough Synthesis + chunk-reviewer agent Chunk Analysis 모두 정의 |
+| CR-10 | PASS | Step 5 Phase 1 multi-chunk 통합 Walkthrough + Phase 2 Critique 합성 정의 |
+| CR-11 | PASS | Step 0 Vague Answer Handling + 2-strike rule 정의 (English 텍스트로 i18n 반영) |
+| CR-12 | PASS | Step 0 Question Method, One Question Per Message, Question Quality Standard 모두 정의 |
+| CR-13 | PASS | Step 0 Exit Condition 3가지 경로 모두 정의 |
+| CR-14 | PASS | Step 2 explore dispatch 4-Field prompt 구조 정의 |
+| CR-15 | PASS | Step 2 Oracle trigger conditions 7개 카테고리 + announcement 정의 |
+| CR-16 | PASS | Step 2 Librarian trigger + 4-Field prompt + announcement 정의 |
+| CR-17 | PASS | chunk-reviewer agent Chunk Review Mode에 Cross-File Concerns subsection 정의 |
+| CR-18 | PASS | Step 1 PR Mode Local Ref Setup — git fetch 기반, NO checkout, three-dot range 정의 |
+| CR-19 | PASS | Step 3 Per-Chunk Diff Acquisition — path filter 기반 chunk별 diff 획득 정의 |
 
 ### 시나리오별 VP 검증
 
@@ -116,14 +127,15 @@
 
 ---
 
-#### CR-2: Interview Skip — PR Mode
+#### CR-2: Interview Skip — PR Mode (with Reference Scanning)
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 0 PR mode: "Auto-extract PR title + description via `gh pr view <number> --json title,body`" — 명시적 명령어 정의 |
-| V2 | PASS | SKILL.md Step 0 PR mode: "If description is substantial (>1 sentence): proceed with auto-extracted context" — 충분한 description 시 full interview 스킵 |
-| V3 | PASS | SKILL.md Step 0 -> Step 4: auto-extracted context가 {REQUIREMENTS}로 전달. Step 4에서 "{REQUIREMENTS} <- Step 0 requirements"로 인터폴레이션 |
-| V4 | PASS | SKILL.md Step 0 PR mode: substantial description 시 "추가할 사항이 있나요?"만 확인 — 블로킹 인터뷰 질문 없이 경량 확인만 수행 |
+| V1 | PASS | SKILL.md Step 0 PR mode: "`gh pr view <number> --json title,body,labels,comments,reviews`" — 확장된 metadata 필드 포함 명시적 명령어 정의 |
+| V2 | PASS | SKILL.md Step 0 PR mode item 2: "Scan PR body and comments for references... GitHub refs (`#123`) → fetch context via `gh pr view` or `gh issue view`" |
+| V3 | PASS | SKILL.md Step 0 PR mode item 5: "If non-fetchable external references found, ask user: 'The PR references these external documents: [links]. Please share relevant context if available.'" |
+| V4 | PASS | SKILL.md Step 0 PR mode item 3: "If description is substantial (>1 sentence): proceed with auto-extracted context" — auto-extracted context가 {REQUIREMENTS}로 사용 |
+| V5 | PASS | SKILL.md Step 0 PR mode item 4: "If description is thin AND no linked references found: ask user 'Do you have core requirements or a spec for this PR?'" |
 
 ---
 
@@ -189,18 +201,156 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Early Exit 항목 1: "Run `git diff --stat` (using the diff command from Step 1)" — 변경사항 확인용 명시 |
-| V2 | PASS | SKILL.md Early Exit 항목 2: "If empty diff: report '변경사항이 없습니다 (<base>와 <target> 사이)' and exit" — 빈 diff 메시지 정의 |
-| V3 | PASS | SKILL.md Early Exit: "Before proceeding to Step 0" 위치 + "and exit" 지시 — 빈 diff 시 Step 0~5 전체 스킵, 즉시 종료 |
-| V4 | PASS | SKILL.md Early Exit 항목 3: "If binary-only diff: report '바이너리 파일 변경만 감지되었습니다' and exit" |
-
-**참고 (Argus MEDIUM 이슈)**: Early Exit이 "using the diff command from Step 1"을 참조하지만, Early Exit은 "Before proceeding to Step 0"에 위치함. 이는 문서 순서상의 전방 참조(forward reference)이며, 실제 실행에서는 orchestrator가 입력을 파싱(어떤 base/target인지 결정)한 후 Early Exit을 수행하므로 기능적 결함은 아님. 다만 Step 번호 참조가 혼란을 줄 수 있어 REFACTOR 후보로 기록.
+| V1 | PASS | SKILL.md Early Exit 항목 1: "Run `git diff {range} --stat` (using the range determined in Step 1)" — 변경사항 확인용 명시 |
+| V2 | PASS | SKILL.md Early Exit 항목 2: "If empty diff: report 'No changes detected (between <base> and <target>)' and exit" — 빈 diff 메시지 정의 (REFACTOR 후 영문으로 i18n) |
+| V3 | PASS | SKILL.md Early Exit: "After Input Parsing, before proceeding to Step 2:" 위치 + "and exit" 지시 — 빈 diff 시 Step 2~5 전체 스킵, 즉시 종료 (REFACTOR 후 위치 수정 반영) |
+| V4 | PASS | SKILL.md Early Exit 항목 3: "If binary-only diff: report 'Only binary file changes detected' and exit" (REFACTOR 후 영문으로 i18n) |
 
 ---
 
-**전체 결과**: 35/35 verification points 통과 (8/8 시나리오 PASS)
+#### CR-9: Chunk Analysis Output — Single Chunk
 
-**RED -> GREEN 개선 요약**:
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a file-by-file change analysis for the files in your assigned chunk" — Role/Changes/Data Flow/Design Decisions/Side Effects 5개 항목 정의 |
+| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents) + Step 2 context" |
+| V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Explain data flow, design decisions, and side effects" |
+| V4 | PASS | SKILL.md Step 5 "Architecture Diagram": "Mermaid class diagram or component diagram" + "If no structural changes: write 'No structural changes — existing architecture preserved'" |
+| V5 | PASS | SKILL.md Step 5 "Sequence Diagram": "Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes" + "If no call flow changes: write 'No call flow changes'" |
+| V6 | PASS | SKILL.md Step 5 Final Output Format: Walkthrough (Change Summary → Core Logic → Architecture → Sequence) → Strengths → Issues → Recommendations → Assessment — Walkthrough가 critique 앞에 배치 |
+
+---
+
+#### CR-10: Walkthrough Synthesis — Multi-chunk
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 5 Phase 1: "All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)" — 모든 chunk 분석 수집 명시 |
+| V2 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" — 모듈/기능 단위 재구성 |
+| V3 | PASS | SKILL.md Step 5 "Architecture Diagram": "Show changed classes/modules and their relationships (inheritance, composition, dependency)" + "Distinguish new vs modified elements" — multi-chunk 구조적 변경 통합 |
+| V4 | PASS | SKILL.md Step 5 "Sequence Diagram": "Include actors, method calls, return values, and significant conditional branches" — chunk 간 호출 관계 포함 |
+| V5 | PASS | SKILL.md Step 5 Phase 2 항목 1-5: "Merge all Strengths, Issues, Recommendations" + "Deduplicate" + "Identify cross-file concerns" + "Normalize severity labels" + "Determine final verdict" — 기존 합성 로직 그대로 |
+| V6 | PASS | SKILL.md Step 5 Final Output Format: "## Walkthrough" → "## Strengths" → "## Issues" → "## Recommendations" → "## Assessment" — 명시적 순서 정의 |
+
+---
+
+#### CR-11: Vague Answer Handling + 2-Strike Rule
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 0 Vague Answer Handling 테이블: "뭐 좀 있긴 한데" → "Where can I find them? (PR description, Notion, Jira, etc.)" — 구체화 후속 질문 정의 |
+| V2 | PASS | SKILL.md Step 0: "Rule: 2 consecutive vague answers → Declare 'I'll identify the context directly from the code' and proceed. No infinite questioning." — 2-strike 조건 및 자동 진행 규칙 |
+| V3 | PASS | SKILL.md Step 0 동일 규칙: "Declare 'I'll identify the context directly from the code' and proceed" — VP 원문은 Korean "코드에서 직접 파악하겠습니다"이나 i18n 후 English로 변경. 기저 요구사항(선언 후 자동 진행) 충족 |
+| V4 | PASS | SKILL.md Step 0: "No infinite questioning." — 2-strike 이후 추가 질문 금지 명시 |
+| V5 | PASS | SKILL.md Step 0 Vague Answer Handling: "Explicit deferral ('없어', 'skip', '그냥 해줘') → Treat as N/A and proceed" — vague와 deferral 명확히 구분 |
+
+---
+
+#### CR-12: Question Discipline — Method Selection + Sequential + Quality
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 0 Question Method 테이블: "2-4 structured choices (review scope, severity threshold) → AskUserQuestion tool" |
+| V2 | PASS | SKILL.md Step 0 Question Method 테이블: "Free-form / subjective (intent, context, concerns) → Plain text question" |
+| V3 | PASS | SKILL.md Step 0: "One Question Per Message: One question at a time. Proceed to the next question only after receiving an answer. Never bundle multiple questions in a single message." |
+| V4 | PASS | SKILL.md Step 0: "Rule: Every question must include a default action in parentheses. Ensure progress is possible even without user response." |
+| V5 | PASS | SKILL.md Step 0 Question Quality Standard: BAD "요구사항이 있나요?" vs GOOD "Do you have core requirements or a spec for this PR? (If not, review will focus on code quality)" — default 행동 포함 패턴 |
+
+---
+
+#### CR-13: Step 0 Exit Condition — 3 Exit Paths
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 0 Exit Condition: "Requirements captured (PR description, user input, or spec reference)" — Session A 경로 |
+| V2 | PASS | SKILL.md Step 0 Exit Condition: "User explicitly deferred ('skip', '없어', '그냥 리뷰해줘')" + User deferral: "Set {REQUIREMENTS} = 'N/A - code quality review only'" — Session B 경로 |
+| V3 | PASS | SKILL.md Step 0 Exit Condition: "2-strike vague limit reached → proceed with code-quality-only review" — Session C 경로. VP 원문 Korean "코드에서 직접 파악하겠습니다"는 i18n 후 English "I'll identify the context directly from the code"로 변경. 기저 요구사항 충족 |
+| V4 | PASS | SKILL.md Step 0 Exit Condition: "Proceed to Step 1 when any of the following are met:" — 3개 세션 모두 Step 1 진행 |
+| V5 | PASS | SKILL.md Step 0 Exit Condition: 3가지 조건이 exhaustive하게 나열되어 있으며, 조건 미충족 시 질문 루프가 계속됨 (Step 0에 "when any of the following are met" 조건부 진행) |
+
+---
+
+#### CR-14: 4-Field Explore Prompt Structure
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 2 explore prompt: "[CONTEXT] Reviewing a PR that changes {file_list}. PR description: {DESCRIPTION}." — 변경 파일 목록 + PR 설명 포함 |
+| V2 | PASS | SKILL.md Step 2 explore prompt: "[GOAL] Understand existing codebase conventions to evaluate whether the PR follows established patterns." — 코드베이스 관습 파악 목적 |
+| V3 | PASS | SKILL.md Step 2 explore prompt: "[DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to calibrate chunk-reviewer agent against project norms." — chunk-reviewer 보정 맥락 |
+| V4 | PASS | SKILL.md Step 2 explore prompt: "[REQUEST] Find: naming conventions, error handling patterns, test structure, and related implementations for the changed modules. Return file paths with pattern descriptions. Skip unrelated directories." — 구체적 검색 지시 |
+| V5 | PASS | SKILL.md Step 2 explore prompt: 4개 필드 모두 구체적 문장 포함 — [CONTEXT] 2개 변수, [GOAL] 1문장, [DOWNSTREAM] 1문장, [REQUEST] 3개 지시 (Find/Return/Skip) |
+
+---
+
+#### CR-15: Extended Oracle Triggers — 7 Categories
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files involve performance-critical patterns: `*cache*`, `*queue*`, `*batch*`, `*index*`" — Session A `CacheManager.kt` 매칭 |
+| V2 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files contain complex business logic: state machine, transaction coordination, multi-step workflows" — Session B `OrderStateMachine.kt`, `PaymentCoordinator.kt` 매칭 |
+| V3 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files involve concurrency: `*lock*`, `*mutex*`, `*worker*`, `*thread*`, `*async*`, `*coroutine*`" — Session C `WorkerPool.kt`, `AsyncProcessor.kt` 매칭 |
+| V4 | PASS | SKILL.md Step 2 Oracle trigger: "Changed files introduce external integrations: new HTTP clients, webhooks, SDK wrappers, third-party API adapters" — Session D `StripeClient.kt`, `WebhookHandler.kt` 매칭 |
+| V5 | PASS | SKILL.md Step 2 Oracle trigger: migration/schema/sql + 3+ directories + auth/security/crypto/permission — 기존 3개 trigger 모두 유효 |
+| V6 | PASS | SKILL.md Step 2: "When NOT to dispatch oracle:" 섹션에 4가지 비트리거 조건 명시 (simple refactoring, test-only, doc/config-only, single function logic) — 불필요한 dispatch 방지 |
+| V7 | PASS | SKILL.md Step 2 항목 6: "Briefly announce 'Consulting Oracle for [reason]' before invocation." — announcement 형식 정의 |
+
+---
+
+#### CR-16: Librarian Trigger + Dispatch + Announcement
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 2 Librarian trigger: "New dependency introduced (new entries in `build.gradle`, `package.json`, `go.mod`, `requirements.txt`, etc.)" — build.gradle 변경에서 새 dependency 감지 |
+| V2 | PASS | SKILL.md Step 2 항목 7: "Briefly announce 'Consulting Librarian for [dependency/API]' before invocation." — announcement 형식 정의 |
+| V3 | PASS | SKILL.md Step 2 librarian prompt: "[CONTEXT] Reviewing a PR that introduces {dependency/API/pattern}." — 도입된 dependency/API 명시 |
+| V4 | PASS | SKILL.md Step 2 librarian prompt: "[GOAL] Verify usage against official documentation and known best practices." — 공식 문서 대비 검증 목적 |
+| V5 | PASS | SKILL.md Step 2 librarian prompt: "[DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to catch misuse patterns the chunk-reviewer might miss." — {CODEBASE_CONTEXT} 주입 명시 |
+| V6 | PASS | SKILL.md Step 2 librarian prompt: "[REQUEST] Find: correct usage examples, common pitfalls, version-specific breaking changes, and security advisories for {dependency/API}." — 4가지 검색 항목 포함 |
+| V7 | PASS | SKILL.md Step 2 librarian [DOWNSTREAM]: "Output injected into {CODEBASE_CONTEXT}" + Step 4: "{CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)" — Step 4 필드 참조에 librarian 미명시이나 Step 2 librarian prompt의 [DOWNSTREAM]이 {CODEBASE_CONTEXT} 주입을 명시하므로 기능적으로 충족 |
+
+---
+
+#### CR-17: Cross-File Concerns Detection — Chunk Review
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | chunk-reviewer.md Chunk Review Mode 항목 3: "note them under a `#### Cross-File Concerns` subsection within Issues" — 명시적 subsection 정의 |
+| V2 | PASS | chunk-reviewer.md Chunk Review Mode 항목 3: "interface changes, shared state mutations, inconsistent error conventions" — 인터페이스 계약 불일치 감지 커버 |
+| V3 | PASS | chunk-reviewer.md Review Checklist Architecture: "Scalability considerations? Performance implications?" + Chunk Review Mode의 cross-file suspicion flag — 레이어 간 트랜잭션 경계 누수 감지 가능 |
+| V4 | PASS | chunk-reviewer.md: "`#### Cross-File Concerns` subsection within Issues" — Issues 내 별도 subsection으로 개별 파일 이슈와 구분 |
+| V5 | PASS | chunk-reviewer.md Chunk Review Mode 항목 1: "Do not speculate about files outside your chunk." — chunk 외부 파일 추측 금지 명시 |
+
+---
+
+#### CR-18: PR Local Ref Setup (NO checkout)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 1 PR Mode: "`BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')`" — base branch 확인 명령어 |
+| V2 | PASS | SKILL.md Step 1 PR Mode: "`git fetch origin pull/<number>/head:pr-<number>`" — PR ref를 로컬에 fetch, checkout 아닌 fetch |
+| V3 | PASS | SKILL.md Step 1 PR Mode: "`git fetch origin ${BASE_REF}`" — base branch fetch |
+| V4 | PASS | SKILL.md Step 1 테이블: range = "`origin/<baseRefName>...pr-<number>`" + "uses three-dot syntax to show only changes introduced by the PR" |
+| V5 | PASS | SKILL.md Step 1 PR Mode: "(no checkout — user's working directory untouched)" — checkout 미사용 명시 |
+| V6 | PASS | SKILL.md Step 2: "Collect in parallel (using `{range}` from Step 1):" → "`git diff {range} --stat`" 등 — range가 후속 Step에서 활용 |
+
+---
+
+#### CR-19: Per-Chunk Diff Acquisition via Path Filtering
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | SKILL.md Step 3: "Changed files > 15 → Group into chunks of ~10-15 files by directory/module affinity" — 25개 > 15 → chunking 적용 |
+| V2 | PASS | SKILL.md Step 3 Per-Chunk Diff Acquisition: "`git diff {range} -- <file1> <file2> ... <fileN>`" + "This produces a diff containing ONLY the files in that chunk" — Chunk A path filter 사용 |
+| V3 | PASS | SKILL.md Step 3 동일: Chunk B도 동일한 path filter 방식 적용 |
+| V4 | PASS | SKILL.md Step 3: "Do NOT parse a full diff output to extract per-file sections." — 전체 diff 파싱 금지 명시 |
+| V5 | PASS | SKILL.md Step 3 테이블: "Changed files <= 15 → Single review — `git diff {range}` for full diff" — 단일 chunk 시 path filter 없이 전체 diff |
+| V6 | PASS | SKILL.md Step 4: "{DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)" — chunk별 diff가 {DIFF} 플레이스홀더에 인터폴레이션 |
+
+---
+
+**전체 결과**: 99/99 verification points 통과 (19/19 시나리오 PASS)
+
+**RED -> GREEN 개선 요약** (CR-1 ~ CR-8):
 
 | # | 추가된 기능 | 해결된 시나리오 | 해결된 VP 수 |
 |---|-----------|---------------|-------------|
@@ -209,6 +359,18 @@
 | 3 | **Subagent Orchestration** — explore (항상)/oracle (조건부) agent dispatch, trigger conditions | CR-4 | 2 |
 | 4 | **Dispatch Template** — chunk-reviewer-prompt.md 템플릿, 8개 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
 | 5 | **Severity Definitions** — agent에 Critical/Important/Minor 명시적 기준 + Example Output 추가 | CR-7 | 1 |
+
+**GREEN 추가 검증** (CR-9 ~ CR-19, 테스트 일시: 2026-02-19):
+
+| # | 검증 영역 | 시나리오 | VP 수 |
+|---|----------|---------|-------|
+| 6 | **Step 5 Walkthrough Synthesis** — Chunk Analysis 기반 Walkthrough 생성, 다이어그램, 출력 순서 | CR-9, CR-10 | 12 |
+| 7 | **Step 0 Vague Answer + Question Discipline** — 2-strike rule, Question Method/Quality, One Question Per Message | CR-11, CR-12 | 10 |
+| 8 | **Step 0 Exit Condition** — 3가지 종료 경로별 올바른 전환 | CR-13 | 5 |
+| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle 7 triggers, librarian trigger + dispatch | CR-14, CR-15, CR-16 | 19 |
+| 10 | **Chunk Review Cross-File** — chunk-reviewer agent Cross-File Concerns subsection | CR-17 | 5 |
+| 11 | **Step 1 PR Mode Ref Setup** — git fetch 기반 NO checkout, three-dot range | CR-18 | 6 |
+| 12 | **Step 3 Per-Chunk Diff** — path filter 기반 chunk별 diff 획득 | CR-19 | 6 |
 
 ---
 
