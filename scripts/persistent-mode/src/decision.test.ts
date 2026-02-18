@@ -449,8 +449,8 @@ describe('makeDecision', () => {
 
   describe('message size limits (truncation)', () => {
     describe('prompt truncation', () => {
-      it('should truncate prompt to 500 characters with [truncated] suffix when exceeding limit', async () => {
-        const longPrompt = 'A'.repeat(600); // 600 chars, exceeds 500 limit
+      it('should truncate prompt to 2000 characters with structural suffix when exceeding limit', async () => {
+        const longPrompt = 'A'.repeat(2500); // 2500 chars, exceeds 2000 limit
         const ralphState = {
           active: true,
           iteration: 1,
@@ -465,15 +465,15 @@ describe('makeDecision', () => {
         const result = makeDecision(context);
 
         expect(result.decision).toBe('block');
-        // Should contain truncated prompt (500 chars + '...[truncated]')
-        const truncatedPrompt = 'A'.repeat(500) + '...[truncated]';
+        // Should contain truncated prompt (2000 chars + '...[truncated from 2500 chars]')
+        const truncatedPrompt = 'A'.repeat(2000) + '...[truncated from 2500 chars]';
         expect(result.reason).toContain(truncatedPrompt);
-        // Should NOT contain the full 600 char prompt
+        // Should NOT contain the full 2500 char prompt
         expect(result.reason).not.toContain(longPrompt);
       });
 
-      it('should not truncate prompt when under 500 characters', async () => {
-        const shortPrompt = 'A'.repeat(400); // Under limit
+      it('should not truncate prompt when under 2000 characters', async () => {
+        const shortPrompt = 'A'.repeat(1500); // Under limit
         const ralphState = {
           active: true,
           iteration: 1,
@@ -489,11 +489,11 @@ describe('makeDecision', () => {
 
         expect(result.decision).toBe('block');
         expect(result.reason).toContain(shortPrompt);
-        expect(result.reason).not.toContain('...[truncated]');
+        expect(result.reason).not.toContain('...[truncated from');
       });
 
-      it('should not truncate prompt when exactly 500 characters', async () => {
-        const exactPrompt = 'A'.repeat(500); // Exactly at limit
+      it('should not truncate prompt when exactly 2000 characters', async () => {
+        const exactPrompt = 'A'.repeat(2000); // Exactly at limit
         const ralphState = {
           active: true,
           iteration: 1,
@@ -509,12 +509,12 @@ describe('makeDecision', () => {
 
         expect(result.decision).toBe('block');
         expect(result.reason).toContain(exactPrompt);
-        expect(result.reason).not.toContain('...[truncated]');
+        expect(result.reason).not.toContain('...[truncated from');
       });
     });
 
     describe('oracleFeedback truncation', () => {
-      it('should truncate each feedback item to 500 characters', async () => {
+      it('should truncate each feedback item to 500 characters with structural suffix', async () => {
         const longFeedback = 'B'.repeat(600); // 600 chars, exceeds 500 limit
         const ralphState = {
           active: true,
@@ -531,8 +531,8 @@ describe('makeDecision', () => {
         const result = makeDecision(context);
 
         expect(result.decision).toBe('block');
-        // Should contain truncated feedback (500 chars + '...[truncated]')
-        const truncatedFeedback = 'B'.repeat(500) + '...[truncated]';
+        // Should contain truncated feedback (500 chars + '...[truncated from 600 chars]')
+        const truncatedFeedback = 'B'.repeat(500) + '...[truncated from 600 chars]';
         expect(result.reason).toContain(truncatedFeedback);
         // Should NOT contain full 600 char feedback
         expect(result.reason).not.toContain(longFeedback);
@@ -594,10 +594,69 @@ describe('makeDecision', () => {
         expect(result.decision).toBe('block');
         // Oldest should be dropped (only 3 kept)
         expect(result.reason).not.toContain('Old feedback - should be dropped');
-        // Kept items should be truncated
-        expect(result.reason).toContain('X'.repeat(500) + '...[truncated]');
+        // Kept items should be truncated with structural suffix
+        expect(result.reason).toContain('X'.repeat(500) + '...[truncated from 600 chars]');
         expect(result.reason).toContain('Short feedback');
-        expect(result.reason).toContain('Y'.repeat(500) + '...[truncated]');
+        expect(result.reason).toContain('Y'.repeat(500) + '...[truncated from 700 chars]');
+      });
+    });
+
+    describe('prompt duplication removal', () => {
+      it('should contain prompt only once in continuation message', async () => {
+        const testPrompt = 'UNIQUE_PROMPT_FOR_DUPLICATION_TEST';
+        const ralphState = {
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: testPrompt,
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        // Count occurrences of the prompt in the message
+        const occurrences = result.reason!.split(testPrompt).length - 1;
+        expect(occurrences).toBe(1);
+      });
+
+      it('should not contain "Original task:" section in continuation message', async () => {
+        const ralphState = {
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Test task',
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        expect(result.reason).not.toContain('Original task:');
+      });
+
+      it('should contain prompt in Oracle spawn instruction with "Verify task completion:" prefix', async () => {
+        const ralphState = {
+          active: true,
+          iteration: 1,
+          max_iterations: 10,
+          completion_promise: 'DONE',
+          prompt: 'Test task',
+        };
+        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+        const context = createContext();
+
+        const result = makeDecision(context);
+
+        expect(result.decision).toBe('block');
+        expect(result.reason).toContain('Verify task completion: Test task');
       });
     });
   });
