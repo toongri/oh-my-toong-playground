@@ -108,8 +108,8 @@
 | CR-12 | PASS | Step 0 Question Method, One Question Per Message, Question Quality Standard 모두 정의 |
 | CR-13 | PASS | Step 0 Exit Condition 3가지 경로 모두 정의 |
 | CR-14 | PASS | Step 2 explore dispatch 4-Field prompt 구조 정의 |
-| CR-15 | PASS | Step 2 Oracle trigger conditions → semantic 6개 카테고리로 재작성. Subagent GREEN 테스트 통과 |
-| CR-16 | PASS | Step 2 Librarian trigger + 4-Field prompt + announcement 정의 |
+| CR-15 | PASS | Step 2 Oracle trigger conditions → semantic 5개 카테고리로 재작성. Subagent GREEN 테스트 통과 |
+| CR-16 | REMOVED | Librarian subagent가 code-review 오케스트레이터에서 제거됨 |
 | CR-17 | PASS | chunk-reviewer agent Chunk Review Mode에 Cross-File Concerns subsection 정의 |
 | CR-18 | PASS | Step 1 PR Mode Local Ref Setup — git fetch 기반, NO checkout, three-dot range 정의 |
 | CR-19 | PASS | Step 3 Per-Chunk Diff Acquisition — path filter 기반 chunk별 diff 획득 정의 |
@@ -282,13 +282,13 @@
 
 ---
 
-#### CR-15: Semantic Oracle Triggers — 6 Categories
+#### CR-15: Semantic Oracle Triggers — 5 Categories
 
-> Oracle trigger가 glob 패턴에서 semantic 기반으로 전면 재작성됨 (2026-02-19). Subagent GREEN 테스트 통과.
+> Oracle trigger가 glob 패턴에서 semantic 기반으로 전면 재작성됨 (2026-02-19). Catch-all trigger 제거, trigger 1에 event schemas/extension points 흡수 (2026-02-19). Subagent GREEN 테스트 통과.
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md: "Changes modify shared interfaces, base classes, or contracts consumed by other modules → (impact analysis)" — `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈 소비 → 직접 매칭 |
+| V1 | PASS | SKILL.md: "Changes modify shared interfaces, base classes, contracts, event schemas, or extension points consumed by other modules → (impact analysis, hidden interaction)" — `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈 소비 → 직접 매칭. event schemas/extension points 추가로 커버리지 확대 |
 | V2 | PASS | SKILL.md: "New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)" — `NotificationService` 신규 레이어 도입 → 직접 매칭 |
 | V3 | PASS | SKILL.md: "Database schema or data model changes with downstream consumers → (impact analysis)" — Flyway migration + `ReportService` downstream consumer → 직접 매칭 |
 | V4 | PASS | SKILL.md: "Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)" — `SELECT FOR UPDATE` + HTTP/Kafka 이중 접근 경로 → 직접 매칭 |
@@ -297,17 +297,9 @@
 
 ---
 
-#### CR-16: Librarian Trigger + Dispatch + Announcement
+#### ~~CR-16: Librarian Trigger + Dispatch + Announcement~~ (REMOVED)
 
-| VP | Result | Evidence |
-|----|--------|----------|
-| V1 | PASS | SKILL.md Step 2 Librarian trigger: "New dependency introduced (new entries in `build.gradle`, `package.json`, `go.mod`, `requirements.txt`, etc.)" — build.gradle 변경에서 새 dependency 감지 |
-| V2 | PASS | SKILL.md Step 2 항목 7: "Briefly announce 'Consulting Librarian for [dependency/API]' before invocation." — announcement 형식 정의 |
-| V3 | PASS | SKILL.md Step 2 librarian prompt: "[CONTEXT] Reviewing a PR that introduces {dependency/API/pattern}." — 도입된 dependency/API 명시 |
-| V4 | PASS | SKILL.md Step 2 librarian prompt: "[GOAL] Verify usage against official documentation and known best practices." — 공식 문서 대비 검증 목적 |
-| V5 | PASS | SKILL.md Step 2 librarian prompt: "[DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to catch misuse patterns the chunk-reviewer might miss." — {CODEBASE_CONTEXT} 주입 명시 |
-| V6 | PASS | SKILL.md Step 2 librarian prompt: "[REQUEST] Find: correct usage examples, common pitfalls, version-specific breaking changes, and security advisories for {dependency/API}." — 4가지 검색 항목 포함 |
-| V7 | PASS | SKILL.md Step 2 librarian [DOWNSTREAM]: "Output injected into {CODEBASE_CONTEXT}" + Step 4: "{CODEBASE_CONTEXT} ← Step 2 explore/oracle/librarian output (or empty)" — Step 4 필드 참조에 librarian 명시적 포함 (수정 반영) |
+> **제거 사유**: Librarian subagent가 code-review 오케스트레이터에서 제거됨 (2026-02-19). 외부 문서 검증이 필요한 경우 chunk-reviewer가 직접 수행하는 방향으로 전환. 7개 VP 전체 N/A.
 
 ---
 
@@ -349,13 +341,15 @@
 
 ---
 
-**전체 결과**: 93/93 verification points 통과 (19/19 시나리오 PASS)
+**전체 결과**: 86/86 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED)
 
 > **변경 이력 (2026-02-19):**
 > - Oracle trigger conditions: glob 패턴 → semantic 기반으로 전면 재작성 (prometheus/spec과 패러다임 통일)
 > - CR-4 V5 제거 (oracle trigger 검증은 CR-15 전용)
 > - CR-15 시나리오 및 VP 전면 재작성 (7 glob categories → 6 semantic categories)
-> - CR-16 V7: Step 4 `{CODEBASE_CONTEXT}` source에 librarian 추가 (스킬 문서 결함 수정)
+> - Oracle trigger 6 (catch-all) 제거, trigger 1에 event schemas/extension points 흡수 (6→5 categories)
+> - Oracle trigger 3: "3+ top-level directories" → "multiple independent business modules"로 교체
+> - Librarian subagent 전체 제거 → CR-16 시나리오 REMOVED (7 VP 제거)
 
 **RED -> GREEN 개선 요약** (CR-1 ~ CR-8):
 
@@ -374,7 +368,7 @@
 | 6 | **Step 5 Walkthrough Synthesis** — Chunk Analysis 기반 Walkthrough 생성, 다이어그램, 출력 순서 | CR-9, CR-10 | 12 |
 | 7 | **Step 0 Vague Answer + Question Discipline** — 2-strike rule, Question Method/Quality, One Question Per Message | CR-11, CR-12 | 10 |
 | 8 | **Step 0 Exit Condition** — 3가지 종료 경로별 올바른 전환 | CR-13 | 5 |
-| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle semantic triggers, librarian trigger + dispatch | CR-14, CR-15, CR-16 | 18 |
+| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle semantic triggers | CR-14, CR-15 | 11 |
 | 10 | **Chunk Review Cross-File** — chunk-reviewer agent Cross-File Concerns subsection | CR-17 | 5 |
 | 11 | **Step 1 PR Mode Ref Setup** — git fetch 기반 NO checkout, three-dot range | CR-18 | 6 |
 | 12 | **Step 3 Per-Chunk Diff** — path filter 기반 chunk별 diff 획득 | CR-19 | 6 |

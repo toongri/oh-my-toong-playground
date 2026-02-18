@@ -244,15 +244,15 @@
 
 ---
 
-### CR-15: Semantic Oracle Triggers — 6 Categories
+### CR-15: Semantic Oracle Triggers — 5 Categories
 
 **Input**: 4개의 독립적 세션에서 각각 다른 semantic oracle trigger 조건을 테스트.
-- Session A: diff에서 `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈에서 이 인터페이스를 구현/소비 (shared interface modification)
+- Session A: diff에서 `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈에서 이 인터페이스를 구현/소비 (shared interface/contract modification)
 - Session B: 새로운 `NotificationService` 레이어 도입, 기존 `OrderService`→`EmailSender` 직접 호출을 `NotificationService` 경유로 변경 (new architectural layer)
 - Session C: Flyway migration 추가 (`V2024_002__add_audit_log.sql`), `AuditLog` 엔티티 신규, `OrderRepository`에서 audit 조회 추가 (schema change with downstream)
 - Session D: `InventoryLock` 도입, `ReservationService`에서 `SELECT FOR UPDATE` + Kafka consumer 간 분산 조율 (concurrency + distributed state)
 
-**Primary Technique**: Step 2: Oracle Trigger Conditions — semantic 기반 6개 trigger 검증
+**Primary Technique**: Step 2: Oracle Trigger Conditions — semantic 기반 5개 trigger 검증
 
 **Verification Points**:
 | ID | Expected Behavior |
@@ -266,22 +266,9 @@
 
 ---
 
-### CR-16: Librarian Trigger + Dispatch + Announcement
+### ~~CR-16: Librarian Trigger + Dispatch + Announcement~~ (REMOVED)
 
-**Input**: Branch mode, PR에서 새 dependency 도입 (`build.gradle`에 `resilience4j` 추가) + Stripe SDK 버전 업그레이드.
-
-**Primary Technique**: Step 2: Librarian Trigger + 4-Field Prompt + Announcement — 외부 문서 참조 agent dispatch
-
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | `build.gradle` 변경에서 새 dependency 감지 → librarian trigger 발동 |
-| V2 | "Consulting Librarian for [dependency/API]" announcement 선행 |
-| V3 | librarian dispatch 시 [CONTEXT] 필드에 도입된 dependency/API 명시 |
-| V4 | [GOAL] 필드에 "공식 문서 대비 사용법 검증" 목적 포함 |
-| V5 | [DOWNSTREAM] 필드에 {CODEBASE_CONTEXT} 주입 용도 명시 |
-| V6 | [REQUEST] 필드에 "correct usage, common pitfalls, breaking changes, security advisories" 포함 |
-| V7 | librarian 결과가 {CODEBASE_CONTEXT}에 합산되어 chunk-reviewer에 전달 |
+> **제거 사유**: Librarian subagent가 code-review 오케스트레이터에서 제거됨 (2026-02-19). 외부 문서 검증이 필요한 경우 chunk-reviewer가 직접 수행하는 방향으로 전환.
 
 ---
 

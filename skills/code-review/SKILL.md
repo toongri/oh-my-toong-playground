@@ -141,7 +141,6 @@ Subagent context:
 |------|-------|------|
 | Codebase convention baseline | explore | Find internal patterns, naming conventions, structure to calibrate chunk-reviewer |
 | Deep codebase analysis | oracle | Analyze cross-file impact, hidden dependencies, architectural fit |
-| External documentation research | librarian | Official docs, best practices, known pitfalls for libraries/APIs in the diff |
 
 ### Explore -- Codebase Convention Baseline
 
@@ -183,48 +182,14 @@ A diff shows "what changed" but not "whether this change is safe for the existin
 - Explore results already provide sufficient context
 
 **Oracle trigger conditions:**
-- Changes modify shared interfaces, base classes, or contracts consumed by other modules → (impact analysis)
+- Changes modify shared interfaces, base classes, contracts, event schemas, or extension points consumed by other modules → (impact analysis, hidden interaction)
 - New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)
-- Changes span 3+ top-level directories or cross architectural layer boundaries → (consistency verification, design fitness)
+- Changes cross architectural layer boundaries or span multiple independent business modules → (consistency verification, design fitness)
 - Database schema or data model changes with downstream consumers → (impact analysis)
 - Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)
-- Complex dependency graph requires understanding beyond what the diff shows (inheritance hierarchies, event flows, plugin systems) → (hidden interaction, design fitness)
 
 6. Dispatch oracle agent (only if trigger conditions met):
    Briefly announce "Consulting Oracle for [reason]" before invocation.
-   → Only if trigger conditions met (see above)
-
-### Librarian -- External Documentation Research
-
-Core principle: **Dispatch when correct usage cannot be determined without external documentation research.**
-
-When chunk-reviewer reviews library code, the code itself may be syntactically correct, but:
-- Is it using a deprecated API?
-- Is it a version with known security vulnerabilities?
-- Is it a pattern not recommended by official documentation?
-
-→ This information exists only in external documentation, not in the codebase.
-
-**When NOT to dispatch librarian:**
-- Minor usage changes to existing dependencies -- already validated patterns in the project
-- Internal code changes only -- no external documentation reference needed
-- Config changes without version changes -- no breaking change concern
-
-**Librarian trigger conditions:**
-- New dependency introduced (new entries in `build.gradle`, `package.json`, `go.mod`, `requirements.txt`, etc.)
-- External API integration added or modified (REST clients, SDK usage, webhook handlers)
-- Framework migration or major version upgrade
-- New infrastructure pattern introduced (caching strategy, message queue, search engine, etc.)
-
-7. Dispatch librarian agent (only if trigger conditions met):
-   Briefly announce "Consulting Librarian for [dependency/API]" before invocation.
-   ```
-   Task(subagent_type="librarian", prompt="
-   [CONTEXT] Reviewing a PR that introduces {dependency/API/pattern}.
-   [GOAL] Verify usage against official documentation and known best practices.
-   [DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to catch misuse patterns the chunk-reviewer might miss.
-   [REQUEST] Find: correct usage examples, common pitfalls, version-specific breaking changes, and security advisories for {dependency/API}. Return concise findings with doc URLs.")
-   ```
    → Only if trigger conditions met (see above)
 
 ## Step 3: Chunking Decision
@@ -253,7 +218,7 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
-   - {CODEBASE_CONTEXT} ← Step 2 explore/oracle/librarian output (or empty)
+   - {CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)
    - {FILE_LIST} ← Step 2 file list
    - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
