@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Use when reviewing code changes - supports PR numbers, branch comparison, and post-implementation review with automatic chunking for large diffs
+description: Use when reviewing code changes for quality, correctness, and production readiness before merge
 ---
 
 # Code Review
