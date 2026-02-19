@@ -211,7 +211,7 @@ This checklist is internal -- do NOT show it to the user.
 
 - Use emoji section headers: `📌 Summary`, `🔧 Changes`, `💬 Review Points`, `✅ Checklist`, `📎 References`
 - Each Changes subsection MUST include `**영향 범위**` (Impact Scope)
-- Each Checklist item MUST include the relevant file path indented below it
+- Each Checklist item MUST be a **검증 가능한 인수조건**(verifiable acceptance criterion) in `- [ ]` 체크박스 형태, with the relevant file path indented below. 파일 나열이나 피처 설명이 아닌, true/false로 판별 가능한 조건을 작성
 - Review Points MUST use the 5-part structure: 배경 및 문제 상황 → 해결 방안 → 구현 세부사항 → 관련 코드 (optional) → 선택과 트레이드오프
 
 ### Review Points Selection Criteria
@@ -278,6 +278,7 @@ Present the drafted PR description to the user and collect feedback.
 | Writing PR in English | Violates project convention | Write entirely in Korean |
 | Missing emoji section headers | Inconsistent with output-format.md template | Use 📌, 🔧, 💬, ✅, 📎 prefixes |
 | Checklist items without file paths | Unverifiable conditions | Add indented file path under each item |
+| Checklist가 파일 목록이나 피처 나열 | 검증 불가, 인수 조건이 아님 | 검증 가능한 인수조건(true/false 판별)으로 작성 |
 | Missing Impact Scope in Changes | Reviewer can't assess blast radius | Add `**영향 범위**` per Changes subsection |
 | Omitting PR title | Incomplete deliverable | Include conventional commit style Korean title |
 | Review Point에 교과서 정의 작성 | 리뷰어가 아는 내용 반복, filler | 직면한 구체적 제약을 서술 |

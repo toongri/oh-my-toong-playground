@@ -69,7 +69,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 | 7 | Mermaid 다이어그램 | D | 구조적 변경 Review Point에 mermaid 다이어그램 존재 |
 | 8 | 다이어그램 샌드위치 | D | 이유(1-2문장) → 다이어그램 → 해석(1-2문장) 순서 |
 | 9 | 프레이밍 문구 | E | Review Points 섹션 상단에 읽기 안내 문구 존재 |
-| 10 | 기존 포맷 유지 | - | 📌🔧💬✅📎 헤더, 영향 범위, 파일 경로, PR 타이틀 |
+| 10 | 기존 포맷 유지 | - | 📌🔧💬✅📎 헤더, 영향 범위, Checklist 검증 가능한 인수조건, PR 타이틀 |
 
 ### RED Baseline Result (현재 스킬)
 
@@ -130,7 +130,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 | 5 | 코드 큐레이션 | C | 변경 전후 핵심 코드 포함 (결정 포인트) |
 | 6 | 다이어그램 미포함 | D | 단순 변경이므로 다이어그램 없어야 함 |
 | 7 | 프레이밍 문구 | E | Review Points 섹션 상단에 읽기 안내 문구 존재 |
-| 8 | 기존 포맷 유지 | - | 📌🔧💬✅📎 헤더, 영향 범위, 파일 경로, PR 타이틀 |
+| 8 | 기존 포맷 유지 | - | 📌🔧💬✅📎 헤더, 영향 범위, Checklist 검증 가능한 인수조건, PR 타이틀 |
 
 ### RED Baseline Result (현재 스킬)
 
@@ -240,7 +240,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 | 10 | PR title | Conventional commit style, Korean, under 50 chars |
 | 11 | Emoji headers | 📌🔧💬✅📎 prefixes |
 | 12 | Impact Scope | **영향 범위** in each Changes subsection |
-| 13 | File paths | File paths under each Checklist item |
+| 13 | Checklist 검증 가능한 인수조건 | 각 항목이 true/false 판별 가능한 조건 + 파일 경로 (파일 나열/피처 설명 아님) |
 | 14 | Review Point labels | Korean 5-part labels (배경 및 문제 상황, 해결 방안, 구현 세부사항, 관련 코드, 고민한 점) |
 
 ### Result: 12/12 PASS (Round 1: 9/9, Round 2 with format criteria: 12/12)
@@ -290,7 +290,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 | 10 | PR title | Conventional commit style, Korean |
 | 11 | Emoji headers | All 5 emoji section headers present |
 | 12 | Impact Scope | **영향 범위** in Changes |
-| 13 | File paths | File paths in Checklist items |
+| 13 | Checklist 검증 가능한 인수조건 | 각 항목이 true/false 판별 가능한 조건 + 파일 경로 (파일 나열/피처 설명 아님) |
 | 14 | Review Point labels | Korean 5-part structure |
 
 ### Result: 11/11 PASS (Round 1: 9/9, Round 2 with format criteria: 11/11)
@@ -431,7 +431,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 | 7 | 선택과 트레이드오프 label | "고민한 점" 대신 "선택과 트레이드오프" 사용 |
 | 8 | No textbook definitions | "Elasticsearch란..." 같은 일반론 없음 |
 | 9 | Framing text present | Review Points 섹션 상단 안내 문구 존재 |
-| 10 | Output format compliance | 📌🔧💬✅📎 헤더, 영향 범위, 파일 경로, PR 타이틀 |
+| 10 | Output format compliance | 📌🔧💬✅📎 헤더, 영향 범위, Checklist 검증 가능한 인수조건, PR 타이틀 |
 | 11 | Changes background is factual | Changes 배경은 사실 서술만, 설계 논의 아님 |
 
 ### GREEN Result
