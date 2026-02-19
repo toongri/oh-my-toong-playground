@@ -41,7 +41,17 @@ NO AREA COMPLETION WITHOUT:
 | User confirmation at every Step | Agent decisions = user blamed |
 | Area completion = spec-reviewer + user gate | Unchecked areas = compounding errors |
 | No Step/Area skipping ever | "Simple" hides complexity |
+| Design proposals include potential risks | Hidden risks = surprise in production |
 | spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
+
+## Tone & Style
+
+| Principle | Rationale |
+|-----------|-----------|
+| Design review tone, not lecture tone | The user is the architect; you are the reviewer. Present observations and questions, not explanations. |
+| Trade-offs over verdicts | When risks or concerns exist, present them as trade-offs with alternatives — never as definitive problems with a single correct answer. |
+| Intent, responsibility, boundary over code | Focus design discussions on WHY and WHO-OWNS-WHAT, not HOW-TO-IMPLEMENT. |
+| Surface what must be thought about before implementation | Your primary value is pulling out unconsidered concerns, not confirming what the user already knows. |
 
 ## Area Entry Criteria
 
@@ -484,7 +494,7 @@ Even if AI already has sufficient information for a Step, it MUST:
 
 ### Step Completion Sequence
 
-1. **Present results**: Show the Step's output/proposal to user (even if based on prior knowledge)
+1. **Present results**: Show the Step's output/proposal to user (even if based on prior knowledge). Include potential risks of the proposed design (e.g., transaction scope expansion, coupling increase, blast radius of policy changes). Present risks as trade-offs with alternatives, not as blocking problems.
 2. **User confirmation**: Wait for explicit user approval of the Step content
 3. Save content to `.omt/specs/{spec-name}/{area-directory}/design.md`
 4. Update progress status at document top
@@ -622,7 +632,7 @@ After receiving spec-reviewer feedback, YOU must:
 
 1. **Analyze the feedback** - What do you agree with? What seems overblown?
 2. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
-3. **Form your recommendation** - What do YOU think the user should do?
+3. **Form your recommendation** - What do YOU think the user should do? Frame recommendations as options with trade-offs, not as the single right answer.
 4. **Present holistically** - Do not just dump reviewer output. Synthesize it.
 5. **All sections mandatory** - Present every section spec-reviewer returns (Consensus, Divergence, Concerns, Recommendation). No section omission.
 
