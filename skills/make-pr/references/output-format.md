@@ -110,10 +110,11 @@ PR description follows the structure below. Write entirely in Korean.
 
 ### Checklist
 
-- **Purpose**: Organize PR acceptance criteria in verifiable form
+- **Purpose**: 검증 가능한 인수조건(verifiable acceptance criteria)을 `- [ ]` 체크박스 형태로 정리
 - **Structure**: Group by feature/domain
-- **Each item**: Verifiable condition + relevant file path
-- **Avoid**: Vague conditions ("check if it works well")
+- **Format**: `- [ ] [검증 가능한 조건]` + indented `file path`
+- **Each item**: true/false로 판별 가능한 구체적 조건. "~이 동작함", "~이 보장됨", "~시 ~됨" 형태
+- **Anti-patterns**: 파일 나열("이벤트 설계"), 피처 설명("Outbox Pattern 구현"), 모호한 조건("잘 동작하는지 확인")
 
 ### References
 

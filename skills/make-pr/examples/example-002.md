@@ -253,75 +253,36 @@ public void handleOrderCreated(OrderEvent.OrderCreated event) {
 
 ## ✅ Checklist
 
-- [ ] **도메인(애플리케이션) 이벤트 설계**
-  - `apps/commerce-api/src/main/java/com/loopers/domain/like/LikeEvent.java`
-  - `apps/commerce-api/src/main/java/com/loopers/domain/order/OrderEvent.java`
-  - `apps/commerce-api/src/main/java/com/loopers/domain/product/ProductEvent.java`
-  - 이벤트 타입: `LikeAdded`, `LikeRemoved`, `OrderCreated`, `ProductViewed`
+### Producer (Outbox 이벤트 발행)
 
-- [ ] **Producer 앱에서 도메인 이벤트 발행**
+- [ ] LikeAdded, LikeRemoved, OrderCreated, ProductViewed 4종 도메인 이벤트가 발행되어 OutboxEvent로 변환됨
   - `apps/commerce-api/src/main/java/com/loopers/application/outbox/OutboxBridgeEventListener.java`
-  - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java`
-  - 토픽: `like-events`, `order-events`, `product-events`
-
-- [ ] **PartitionKey 기반의 이벤트 순서 보장**
-  - `apps/commerce-api/src/main/java/com/loopers/domain/outbox/OutboxEvent.java` (partitionKey 필드)
-  - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java` (KafkaHeaders.KEY 설정)
-  - 파티션 키: `like-events`, `product-events` → `productId`, `order-events` → `orderId`
-
-- [ ] **At Least Once 보장 (acks=all, idempotence=true)**
-  - `modules/kafka/src/main/resources/kafka.yml` (19-21줄)
-  - 설정: `acks: all`, `enable.idempotence: true`, `max.in.flight.requests.per.connection: 5`
-
-- [ ] **Transactional Outbox Pattern 구현**
-  - `apps/commerce-api/src/main/java/com/loopers/domain/outbox/OutboxEvent.java`
+- [ ] 도메인 트랜잭션과 OutboxEvent 저장이 같은 트랜잭션에서 원자적으로 실행됨
   - `apps/commerce-api/src/main/java/com/loopers/application/outbox/OutboxEventService.java`
+  - `apps/commerce-api/src/main/java/com/loopers/domain/outbox/OutboxEvent.java`
+- [ ] 스케줄러가 PENDING 이벤트를 like-events, order-events, product-events 토픽으로 발행함
   - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java`
-  - `apps/commerce-api/src/main/java/com/loopers/application/outbox/OutboxBridgeEventListener.java`
+- [ ] like-events/product-events는 productId, order-events는 orderId를 파티션 키로 사용하여 같은 aggregate의 이벤트가 순서대로 처리됨
+  - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java`
+- [ ] Producer 설정이 acks=all, enable.idempotence=true로 메시지 유실 없이 전달됨
+  - `modules/kafka/src/main/resources/kafka.yml`
+- [ ] 개별 이벤트 발행 실패 시 FAILED 상태로 변경되어 다음 스케줄에서 재시도됨
+  - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java`
 
-- [ ] **메시지 발행 실패 처리**
-  - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java` (63-69줄)
-  - 개별 이벤트 발행 실패 시 `FAILED` 상태로 변경하고 다음 스케줄에서 재시도
+### Consumer (메트릭 집계)
 
-### Consumer
-
-- [ ] **Consumer가 Metrics 집계 처리**
+- [ ] 좋아요 수, 판매량, 조회 수가 이벤트 수신 시 product_metrics에 실시간 집계됨
+  - `apps/commerce-streamer/src/main/java/com/loopers/application/metrics/ProductMetricsService.java`
+- [ ] 이벤트 처리 성공 후에만 offset이 커밋되어 처리 실패 시 재처리 가능함
   - `apps/commerce-streamer/src/main/java/com/loopers/interfaces/consumer/ProductMetricsConsumer.java`
-  - `apps/commerce-streamer/src/main/java/com/loopers/application/metrics/ProductMetricsService.java`
-  - 집계 대상: 좋아요 수, 판매량, 조회 수
-
-- [ ] **Manual Ack 처리**
-  - `modules/kafka/src/main/resources/kafka.yml` (27, 29줄)
-  - `apps/commerce-streamer/src/main/java/com/loopers/interfaces/consumer/ProductMetricsConsumer.java` (141, 217줄)
-  - 설정: `enable-auto-commit: false`, `ack-mode: manual`
-
-- [ ] **`event_handled` 테이블 기반 멱등 처리**
-  - `apps/commerce-streamer/src/main/java/com/loopers/domain/eventhandled/EventHandled.java`
+- [ ] 동일 eventId를 가진 중복 메시지가 UNIQUE 제약조건으로 한 번만 처리됨
   - `apps/commerce-streamer/src/main/java/com/loopers/application/eventhandled/EventHandledService.java`
-  - `apps/commerce-streamer/src/main/java/com/loopers/interfaces/consumer/ProductMetricsConsumer.java` (91, 275줄)
-  - UNIQUE 제약조건으로 동시성 상황에서도 중복 방지
-
-- [ ] **`version` 기준 최신 이벤트만 반영**
-  - `apps/commerce-api/src/main/java/com/loopers/domain/outbox/OutboxEvent.java` (56줄, version 필드)
-  - `apps/commerce-api/src/main/java/com/loopers/application/outbox/OutboxEventService.java` (59-60줄, 버전 생성)
-  - `apps/commerce-api/src/main/java/com/loopers/infrastructure/outbox/OutboxEventPublisher.java` (99-102줄, 헤더에 추가)
-  - `apps/commerce-streamer/src/main/java/com/loopers/interfaces/consumer/ProductMetricsConsumer.java` (100, 284줄, 헤더에서 추출)
-  - `apps/commerce-streamer/src/main/java/com/loopers/application/metrics/ProductMetricsService.java` (100, 126줄, 버전 비교)
-  - `apps/commerce-streamer/src/main/java/com/loopers/domain/metrics/ProductMetrics.java` (shouldUpdate 메서드)
-
-- [ ] **`product_metrics` 테이블에 upsert**
+- [ ] 오래된 버전의 이벤트가 나중에 도착해도 최신 상태를 덮어쓰지 않음
   - `apps/commerce-streamer/src/main/java/com/loopers/domain/metrics/ProductMetrics.java`
-  - `apps/commerce-streamer/src/main/java/com/loopers/application/metrics/ProductMetricsService.java`
-  - `apps/commerce-streamer/src/main/java/com/loopers/infrastructure/metrics/ProductMetricsRepositoryImpl.java`
-
-- [ ] **중복 메시지 재전송 테스트**
-  - `apps/commerce-streamer/src/test/java/com/loopers/interfaces/consumer/ProductMetricsConsumerTest.java` (352줄, `handlesDuplicateMessagesIdempotently()`)
-  - 동일한 `eventId`를 가진 메시지가 한 번만 처리되는지 검증
-
-- [ ] **재고 소진 시 상품 캐시 갱신**
-  - `apps/commerce-api/src/main/java/com/loopers/application/product/ProductEventHandler.java` (147-151줄)
-  - `apps/commerce-api/src/main/java/com/loopers/application/product/ProductCacheService.java` (evictProductDetailCache 메서드)
-  - 재고 차감 후 `stock == 0` 체크하여 캐시 무효화
+- [ ] 동일 eventId 메시지를 중복 전송해도 메트릭이 한 번만 증가함
+  - `apps/commerce-streamer/src/test/java/com/loopers/interfaces/consumer/ProductMetricsConsumerTest.java`
+- [ ] 재고 차감 후 stock == 0이면 상품 상세 캐시가 무효화됨
+  - `apps/commerce-api/src/main/java/com/loopers/application/product/ProductEventHandler.java`
 
 ---
 
