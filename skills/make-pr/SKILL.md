@@ -7,7 +7,7 @@ description: Use when creating a PR description. Triggers include "PR 작성", "
 
 # Make-PR -- PR Description Writer
 
-시니어 백엔드 엔지니어 관점에서 한국어 PR description을 작성한다. 동료 개발자가 변경사항을 빠르게 이해할 수 있도록 작성하며, "무엇이 변경되었는지"(Changes)와 "무엇을 논의해야 하는지"(Review Points)를 명확히 분리한다.
+Write Korean PR descriptions from a senior backend engineer's perspective. diff를 보지 않아도 PR만으로 핵심 결정을 충분히 이해할 수 있도록, "what changed" (Changes)와 "what needs discussion" (Review Points)를 명확히 분리하여 작성한다.
 
 > "A good PR description makes review productive. A bad one makes review a guessing game."
 
@@ -23,7 +23,7 @@ description: Use when creating a PR description. Triggers include "PR 작성", "
 NO PR DESCRIPTION WITHOUT SUFFICIENT CONTEXT
 ```
 
-충분한 컨텍스트 없이 PR description을 작성하지 않는다. Clearance Checklist의 모든 항목이 YES가 될 때까지 인터뷰를 계속한다.
+Never write a PR description without sufficient context. Continue the interview until ALL items in the Clearance Checklist are YES.
 
 **Violating the letter of this rule IS violating the spirit.**
 
@@ -33,10 +33,10 @@ NO PR DESCRIPTION WITHOUT SUFFICIENT CONTEXT
 
 | Rule | Why Non-Negotiable | Common Excuse | Reality |
 |------|-------------------|---------------|---------|
-| Clearance Checklist all YES | 불충분한 정보로 작성하면 부정확한 PR | "대충 알겠으니 작성해" | 빠진 컨텍스트는 잘못된 PR로 이어짐 |
-| 한국어 작성 | 프로젝트 컨벤션 | "영어가 더 편해" | 프로젝트 규칙이 우선 |
-| `gh pr create` 실행 금지 | PR description 작성만이 스코프 | "실행까지 해줘" | 스코프 밖. 유저가 직접 실행 |
-| git diff 파일 내용 읽지 않음 | 메타데이터만 활용 | "코드를 봐야 정확해" | explore로 패턴 파악. 유저 인터뷰가 핵심 |
+| Clearance Checklist all YES | Insufficient info leads to inaccurate PR | "I roughly get it, just write it" | Missing context leads to wrong PR |
+| Write in Korean | Project convention | "English is easier" | Project rules take priority |
+| Never run `gh pr create` | Writing PR description is the only scope | "Run it for me too" | Out of scope. User runs it themselves |
+| Never read git diff file contents | Use metadata only | "Need to see code for accuracy" | Use explore for patterns. User interview is key |
 
 </Critical_Constraints>
 
@@ -44,7 +44,15 @@ NO PR DESCRIPTION WITHOUT SUFFICIENT CONTEXT
 
 ## Scope
 
-PR description(본문) 작성만 담당한다. `gh pr create` 실행은 하지 않는다.
+Only writes the PR description body. Does NOT run `gh pr create`.
+
+---
+
+## When NOT to Use
+
+- User wants to run `gh pr create` directly without a description
+- Purpose is code review (use code-review skill)
+- Purpose is writing commit messages (use git-committer skill)
 
 ---
 
@@ -72,206 +80,212 @@ digraph make_pr_flow {
     "Clearance Checklist" -> "Draft PR Description" [label="ALL YES"];
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
-    "User Feedback" -> "Draft PR Description" [label="수정 요청"];
-    "User Feedback" -> "Final Output" [label="승인"];
+    "User Feedback" -> "Draft PR Description" [label="Revision requested"];
+    "User Feedback" -> "Final Output" [label="Approved"];
 }
 ```
 
 ---
 
-## Step 1: Git Metadata 수집
+## Step 1: Collect Git Metadata
 
-유저의 PR 작성 요청을 받으면, 먼저 가벼운 git 메타데이터를 수집한다.
+Upon receiving a PR writing request, first collect lightweight git metadata.
 
 ```bash
-# 커밋 히스토리
+# Commit history
 git log main..HEAD --oneline
 
-# 변경 파일 리스트
+# Changed file list
 git diff main..HEAD --stat
 
-# 커밋 메시지와 description
+# Commit messages and descriptions
 git log main..HEAD --format='%s%n%b'
 ```
 
-이 메타데이터는 인터뷰의 보조 컨텍스트로 활용한다. 변경의 규모와 범위를 파악하는 데 사용하되, 실제 파일 내용은 읽지 않는다.
+Use this metadata as supplementary context for the interview. Use it to gauge the scope and scale of changes, but do NOT read actual file contents.
 
 ---
 
-## Step 2: 코드베이스 패턴 파악
+## Step 2: Explore Codebase Patterns
 
-explore agent를 활용하여 코드베이스의 패턴과 구조를 파악한다. 유저에게 코드베이스에 대해 묻지 않는다.
+Use the explore agent to understand codebase patterns and structure. Do NOT ask the user about the codebase.
 
 **Context Brokering (CRITICAL):**
 
-| 질문 유형 | 유저에게 묻는가? | 행동 |
-|-----------|----------------|------|
-| "이 프로젝트의 아키텍처가 뭔가요?" | NO | explore로 파악 |
-| "어떤 파일이 변경됐나요?" | NO | git metadata로 확인 |
-| "기존 패턴이 어떤가요?" | NO | explore로 파악 |
-| "이 변경의 배경이 뭔가요?" | YES | 유저 인터뷰 |
-| "어떤 대안을 고려했나요?" | YES | 유저 인터뷰 |
-| "리뷰어에게 묻고 싶은 게 있나요?" | YES | 유저 인터뷰 |
+| Question Type | Ask User? | Action |
+|---------------|-----------|--------|
+| "What's the project architecture?" | NO | Discover via explore |
+| "Which files changed?" | NO | Check via git metadata |
+| "What are the existing patterns?" | NO | Discover via explore |
+| "What's the motivation for this change?" | YES | User interview |
+| "What alternatives were considered?" | YES | User interview |
+| "Anything you want to ask reviewers?" | YES | User interview |
 
-**유저에게는 PREFERENCES와 DECISIONS만 묻는다. FACTS는 직접 파악한다.**
+**Only ask the user about PREFERENCES and DECISIONS. Discover FACTS yourself.**
 
 ---
 
-## Step 3: 유저 인터뷰
+## Step 3: User Interview
 
-### 인터뷰 규칙
+### Interview Rules
 
-1. **한 번에 한 질문** -- 절대 여러 질문을 묶지 않는다
-2. **적응형 질문 수** -- Clearance Checklist가 all YES가 될 때까지 반복. 유저가 처음에 충분한 정보를 줬으면 1-2개로 끝날 수 있고, 복잡하면 5-6개 이상 가능
-3. **AskUserQuestion = 구조화된 선택지**, plain text = 열린 질문
-4. **Context Brokering** -- 코드베이스가 답할 수 있는 건 묻지 않고 explore로 해결
+1. **One question at a time** -- never bundle multiple questions
+2. **Adaptive question count** -- repeat until Clearance Checklist is all YES. Could be 1-2 if user provides enough upfront, or 5-6+ for complex changes
+3. **AskUserQuestion = structured choices**, plain text = open-ended questions
+4. **Context Brokering** -- if the codebase can answer it, use explore instead of asking
 
-### 질문 유형 선택
+### Question Type Selection
 
-| 상황 | 방법 | 이유 |
-|------|------|------|
-| 2-4개 명확한 선택지가 있는 결정 | AskUserQuestion | 구조화된 선택 제공 |
-| 열린/주관적 질문 | plain text | 자유 형식 답변 필요 |
-| Yes/No 확인 | plain text | AskUserQuestion은 과함 |
+| Situation | Method | Reason |
+|-----------|--------|--------|
+| Decision with 2-4 clear options | AskUserQuestion | Provide structured choices |
+| Open/subjective question | plain text | Free-form answer needed |
+| Yes/No confirmation | plain text | AskUserQuestion is overkill |
 
-### 질문 품질 기준
+### Question Quality Standard
 
 ```yaml
 BAD:
-  question: "어떤 변경인가요?"
+  question: "What changed?"
 
 GOOD:
-  question: "git log를 보니 OrderService와 PaymentService에 변경이 있습니다.
-    커밋 메시지에서 이벤트 기반 분리를 진행하신 것으로 보이는데,
-    이 변경의 핵심 동기(예: 도메인 간 결합 제거, 트랜잭션 분리, 확장성 등)가
-    무엇인지 알려주시겠어요?"
+  question: "I see changes in OrderService and PaymentService from git log.
+    The commit messages suggest event-based decoupling.
+    Could you share the core motivation (e.g., removing domain coupling,
+    transaction separation, scalability)?"
 ```
 
-### 유저 답변 처리
+### Handling User Responses
 
-**모호한 답변 시:**
-1. 그대로 수용하지 않는다
-2. 구체적인 추가 질문을 한다
-3. 명확해질 때까지 반복한다
+**Vague answers:**
+1. Do not accept as-is
+2. Ask specific follow-up questions
+3. Repeat until clear
 
-**명시적 위임 시** ("알아서 해", "패스", "네가 판단해"):
-1. explore/git metadata로 자율 조사
-2. 업계 모범 사례 또는 코드베이스 패턴 기반 결정
-3. PR description에 해당 결정 반영
+**Explicit delegation** ("figure it out", "pass", "you decide"):
+1. Investigate autonomously via explore/git metadata
+2. Decide based on industry best practices or codebase patterns
+3. Reflect the decision in the PR description
 
 ---
 
-## Step 4: Clearance Checklist (인터뷰 종료 조건)
+## Step 4: Clearance Checklist (Interview Exit Condition)
 
-**매 인터뷰 턴 후 실행한다.** ANY NO이면 인터뷰를 계속한다.
+**Run after every interview turn.** If ANY NO, continue the interview.
 
 | # | Check | Must Be |
 |---|-------|---------|
-| 1 | Summary를 쓸 수 있을 만큼 배경/목적이 명확한가? | YES |
-| 2 | Changes를 쓸 수 있을 만큼 변경 내용과 이유가 파악되었는가? | YES |
-| 3 | Review Points를 쓸 수 있을 만큼 기술 결정/고민이 수집되었는가? | YES |
-| 4 | Checklist를 쓸 수 있을 만큼 인수 조건이 정리되었는가? | YES |
+| 1 | Is the background/purpose clear enough to write Summary? | YES |
+| 2 | Are the changes and their reasons clear enough to write Changes? | YES |
+| 3 | Are enough technical decisions/concerns collected to write Review Points? | YES |
+| 4 | Are acceptance criteria organized enough to write Checklist? | YES |
 
-**All YES** -> Step 5로 진행.
-**Any NO** -> 인터뷰 계속. 진행하지 않는다.
+**All YES** -> Proceed to Step 5.
+**Any NO** -> Continue interview. Do not proceed.
 
-이 체크리스트는 내부용이다 -- 유저에게 보여주지 않는다.
-
----
-
-## Step 5: PR Description 작성
-
-### 작성 원칙
-
-- 동료 개발자가 변경사항을 빠르게 이해할 수 있도록 작성
-- 간결하고 핵심에 집중
-- "무엇이 변경되었는지"(Changes)와 "무엇을 논의해야 하는지"(Review Points)를 분리
-- 리뷰어 피드백이 도움될 영역을 능동적으로 식별
-- 제공된 문서와 코드에 기반, 불확실하면 확인 요청
-
-### 출력 포맷
-
-`references/output-format.md`를 따른다.
-
-### Review Points 선정 기준
-
-- 핵심 아키텍처 결정
-- 경쟁하는 관심사 간의 트레이드오프 (성능 vs 가독성, 단순성 vs 확장성)
-- 여러 유효한 대안이 존재하는 패턴/접근법
-- 시니어 엔지니어의 도메인 전문성이 유용한 영역
-- 일반적인 컨벤션에서 벗어나는 구현 선택
-- 같은 흐름 내 혼재된 전략 (예: 서로 다른 락 메커니즘)
-- 향후 확장성에 영향을 미치는 데이터 모델링 결정
-
-### 각 Review Point 구조
-
-1. **배경 및 문제 상황**: 왜 필요했는지, 어떤 문제가 있었는지
-2. **해결 방안**: 어떻게 해결했는지 (개요)
-3. **구현 세부사항**: 상세 구현 설명
-4. **관련 코드**: (선택) Before/After 비교 시 유용
-5. **고민한 점**: 트레이드오프, 고려한 대안, 리뷰어에게 묻고 싶은 질문
+This checklist is internal -- do NOT show it to the user.
 
 ---
 
-## Step 6: 유저 확인 및 수정
+## Step 5: Write PR Title & Description
 
-작성한 PR description을 유저에게 제시하고 피드백을 받는다.
+### PR Title
 
-- 승인 시: 최종 PR description 출력
-- 수정 요청 시: 피드백 반영 후 재제시
+- Include a PR title along with the description body
+- Format: conventional commit style (`feat:`, `fix:`, `refactor:`, etc.)
+- Language: Korean
+- Length: under 50 characters (excluding prefix)
+- Example: `refactor: 주문-결제 간 이벤트 기반 아키텍처 전환`
+
+### Writing Principles
+
+- Write so fellow developers can quickly understand the changes
+- Be concise and focused on essentials
+- Separate "what changed" (Changes) from "what needs discussion" (Review Points)
+- Proactively identify areas where reviewer feedback would help
+- Base on provided documents and code; ask for confirmation if uncertain
+
+### Output Format
+
+**MUST** follow `references/output-format.md` exactly. Key requirements:
+
+- Use emoji section headers: `📌 Summary`, `🔧 Changes`, `💬 Review Points`, `✅ Checklist`, `📎 References`
+- Each Changes subsection MUST include `**영향 범위**` (Impact Scope)
+- Each Checklist item MUST include the relevant file path indented below it
+- Review Points MUST use the 5-part structure: 배경 및 문제 상황 → 해결 방안 → 구현 세부사항 → 관련 코드 (optional) → 선택과 트레이드오프
+
+### Review Points Selection Criteria
+
+- Core architecture decisions
+- Trade-offs between competing concerns (performance vs readability, simplicity vs extensibility)
+- Patterns/approaches where multiple valid alternatives exist
+- Areas where a senior engineer's domain expertise would be valuable
+- Implementation choices that deviate from common conventions
+- Mixed strategies within the same flow (e.g., different lock mechanisms)
+- Data modeling decisions affecting future extensibility
+
+### Each Review Point Structure
+
+1. **배경 및 문제 상황**: Why it was needed, what problem existed
+2. **해결 방안**: How it was solved (overview)
+3. **구현 세부사항**: Detailed implementation explanation
+4. **관련 코드**: (Optional) Useful for Before/After comparison
+5. **선택과 트레이드오프**: 선택 근거, 거부한 대안, 인지된 트레이드오프. 열린 질문은 있을 때만 자연스럽게 포함
 
 ---
 
-## Output Format
+## Step 6: User Review & Revision
 
-See `references/output-format.md` for the complete PR template and per-section writing guide.
+Present the drafted PR description to the user and collect feedback.
+
+- If approved: output the final PR description
+- If revision requested: incorporate feedback and re-present
 
 ---
 
 ## Examples
 
-See `examples/example-001.md` and `examples/example-002.md` for real PR description examples.
+- `examples/example-001.md`: Event-driven architecture PR — domain decoupling, compensating transactions, layer responsibility separation
+- `examples/example-002.md`: Kafka event pipeline PR — Transactional Outbox Pattern, idempotency guarantees, multi-module setup
 
 ---
 
 ## Quick Reference
 
-| 단계 | 행동 | 핵심 포인트 |
-|------|------|------------|
-| Git Metadata 수집 | `git log`, `git diff --stat` 실행 | 메타데이터만, 파일 내용 NO |
-| 코드베이스 파악 | explore agent 활용 | 유저에게 코드베이스 질문 NO |
-| 유저 인터뷰 | 한 번에 한 질문, Clearance Checklist 기반 | 적응형 질문 수 |
-| Clearance Checklist | 매 턴마다 확인 | All YES까지 계속 |
-| PR Description 작성 | output-format.md 따름 | Changes와 Review Points 분리 |
-| 유저 확인 | 제시 후 피드백 수렴 | 승인까지 반복 |
+| Step | Action | Key Point |
+|------|--------|-----------|
+| Collect Git Metadata | Run `git log`, `git diff --stat` | Metadata only, NO file contents |
+| Explore Codebase | Use explore agent | Do NOT ask user about codebase |
+| User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
+| Clearance Checklist | Check after every turn | Continue until all YES |
+| Write PR Title & Description | Follow output-format.md exactly | Emoji headers, Impact Scope, file paths in Checklist |
+| User Review | Present and collect feedback | Repeat until approved |
 
 ---
 
 ## Common Mistakes
 
-| 실수 | 왜 문제인가 | 해결 |
-|------|-----------|------|
-| Clearance Checklist 확인 없이 작성 | 불완전한 정보로 부정확한 PR | 매 턴마다 체크리스트 확인 |
-| 여러 질문을 한 번에 묶어서 질문 | 유저 부담 증가, 답변 품질 하락 | 한 번에 한 질문만 |
-| 코드베이스 사실을 유저에게 질문 | 유저 불필요한 부담 | explore로 직접 파악 |
-| Changes에 설계 고민을 서술 | Changes와 Review Points 혼재 | 설계 고민은 Review Points에서 |
-| Review Points 없이 작성 | 리뷰어가 피드백할 포인트 부재 | 능동적으로 Review Points 식별 |
-| `gh pr create` 실행 | 스코프 밖 | PR description 출력만 |
-| git diff 파일 내용 읽기 | 무거운 컨텍스트 로딩 | git metadata + explore만 활용 |
-| 질문 수를 고정 | 컨텍스트에 따라 필요 질문 수가 다름 | Clearance Checklist 기반 적응형 |
-| 영어로 PR 작성 | 프로젝트 컨벤션 위반 | 전체 한국어로 작성 |
+| Mistake | Why It's a Problem | Fix |
+|---------|-------------------|-----|
+| Writing without Clearance Checklist | Incomplete info leads to inaccurate PR | Check checklist every turn |
+| Bundling multiple questions | Increases user burden, lowers answer quality | One question at a time |
+| Asking user about codebase facts | Unnecessary burden on user | Discover via explore |
+| Describing design concerns in Changes | Mixes Changes and Review Points | Design concerns go in Review Points |
+| Writing without Review Points | No focal points for reviewer feedback | Proactively identify Review Points |
+| Running `gh pr create` | Out of scope | Output PR description only |
+| Reading git diff file contents | Heavy context loading | Use git metadata + explore only |
+| Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |
+| Writing PR in English | Violates project convention | Write entirely in Korean |
+| Missing emoji section headers | Inconsistent with output-format.md template | Use 📌, 🔧, 💬, ✅, 📎 prefixes |
+| Checklist items without file paths | Unverifiable conditions | Add indented file path under each item |
+| Missing Impact Scope in Changes | Reviewer can't assess blast radius | Add `**영향 범위**` per Changes subsection |
+| Omitting PR title | Incomplete deliverable | Include conventional commit style Korean title |
+| Review Point에 교과서 정의 작성 | 리뷰어가 아는 내용 반복, filler | 직면한 구체적 제약을 서술 |
+| "개선 효과" 마케팅 나열 | Review Point 목적과 무관 | 선택과 트레이드오프에 집중 |
 
 ---
 
 ## Language Rules
 
-- PR 본문 전체 한국어
-- 유저와의 대화도 한국어
-
----
-
-## When NOT to Use
-
-- PR description 없이 바로 `gh pr create` 실행 원하는 경우
-- 코드 리뷰가 목적인 경우 (code-review 스킬 사용)
-- 커밋 메시지 작성이 목적인 경우 (git-committer 스킬 사용)
+- Entire PR body in Korean
+- Conversations with user also in Korean
