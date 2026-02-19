@@ -14,7 +14,49 @@ API 서비스(`commerce-api`)와 독립된 집계 서비스(`commerce-streamer`)
 - `order-events`: `OrderCreated` → 판매량 집계
 - `product-events`: `ProductViewed` → 조회 수 집계
 
+---
+
+## 🔧 Changes
+
+### Producer (commerce-api)
+
+- Transactional Outbox Pattern 기반 이벤트 발행 파이프라인 구현
+- 도메인 이벤트(ApplicationEvent)를 OutboxEvent로 변환하여 DB에 저장
+- 스케줄러가 1초 주기로 PENDING 이벤트를 Kafka로 발행
+
+기존 도메인 이벤트 시스템(Spring ApplicationEvent)은 JVM 내부에서만 동작했다. 외부 서비스(집계 서비스)와의 통신이 필요해지면서, 도메인 트랜잭션과 Kafka 발행의 원자성을 보장하기 위해 Outbox Pattern을 도입했다.
+
+**영향 범위**
+- `commerce-api` 모듈에 Outbox 관련 엔티티/서비스/스케줄러 추가
+- 기존 도메인 이벤트 발행 흐름에는 영향 없음 (브릿지 리스너가 별도로 Outbox 변환)
+
+### Consumer (commerce-streamer)
+
+- 새 모듈(`commerce-streamer`) 추가: Kafka 이벤트 수취 및 상품 메트릭 집계
+- `event_handled` 테이블 + `version` 필드 기반 멱등성 보장
+- Manual Ack으로 이벤트 처리 성공 후에만 offset 커밋
+
+상품별 좋아요 수, 판매량, 조회 수를 실시간으로 집계하기 위한 독립 서비스다. API 서비스와 분리하여 집계 장애가 주문/결제에 영향을 주지 않도록 했다.
+
+**영향 범위**
+- 신규 모듈이므로 기존 서비스에 직접적 영향 없음
+- Kafka 토픽 3개 추가: `like-events`, `order-events`, `product-events`
+
+### Kafka 설정 (modules/kafka)
+
+- Producer: `acks=all`, `enable.idempotence=true`로 At Least Once 보장
+- Consumer: `auto.offset.reset=latest`, Manual Ack으로 수동 커밋
+- 파티션 키: `like-events`/`product-events` → `productId`, `order-events` → `orderId`
+
+**영향 범위**
+- 공유 Kafka 모듈에 설정 추가. 기존 Consumer가 없으므로 호환성 문제 없음
+
+---
+
 ## 💬 Review Points
+
+> 각 포인트는 저자의 기술적 선택과 트레이드오프를 담고 있습니다.
+> diff를 보지 않아도 PR의 핵심 결정을 이해할 수 있도록 작성되었습니다.
 
 #### 1. Transactional Outbox Pattern 구현 방식의 적절성
 
@@ -28,6 +70,28 @@ API 서비스(`commerce-api`)와 독립된 집계 서비스(`commerce-streamer`)
 1. **ApplicationEvent → OutboxEvent 변환**: `OutboxBridgeEventListener`가 `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`로 설정되어, 도메인 트랜잭션이 커밋된 후에만 Outbox에 저장합니다. 이렇게 하면 도메인 로직이 실패하여 트랜잭션이 롤백되면 Outbox 저장도 롤백되어 불필요한 이벤트가 저장되지 않습니다.
 
 2. **스케줄러 기반 발행**: `OutboxEventPublisher`가 1초마다 실행되어 PENDING 상태의 이벤트를 최대 100개씩 읽어 Kafka로 발행합니다. 발행 성공 시 `PUBLISHED` 상태로 변경하고, 실패 시 `FAILED` 상태로 변경하여 다음 스케줄에서 재시도할 수 있도록 했습니다.
+
+도메인 트랜잭션과 Kafka 발행의 원자성을 보장하는 흐름을 아래 시퀀스로 나타냈다.
+트랜잭션 경계가 어디서 끊기는지가 핵심이다.
+
+```mermaid
+sequenceDiagram
+    participant App as DomainService
+    participant DB as Database
+    participant Outbox as OutboxTable
+    participant Scheduler as EventPublisher
+    participant Kafka as Kafka
+
+    App->>DB: 도메인 로직 실행 (같은 TX)
+    App->>Outbox: OutboxEvent 저장 (같은 TX)
+    Note over DB,Outbox: TX COMMIT — 원자성 보장
+    Scheduler->>Outbox: PENDING 이벤트 조회 (1초 주기)
+    Scheduler->>Kafka: 이벤트 발행
+    Scheduler->>Outbox: PUBLISHED 상태 변경
+```
+
+도메인 로직과 Outbox 저장이 같은 트랜잭션에 있으므로, 둘 중 하나만 성공하는 상황이 불가능하다.
+스케줄러는 별도 트랜잭션으로 동작하며, 발행 실패 시 FAILED 상태로 변경하여 재시도한다.
 
 **관련 코드:**
 ```java
@@ -48,7 +112,7 @@ public void publishPendingEvents() {
 }
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`를 사용한 이유는, 도메인 트랜잭션이 성공적으로 커밋된 후에만 Outbox에 저장하여 일관성을 보장하기 위함입니다. 만약 `AFTER_COMMIT`이 아닌 다른 시점에 저장하면, 도메인 로직이 실패하여 롤백되었는데도 Outbox에 이벤트가 저장될 수 있습니다. 하지만 `AFTER_COMMIT`은 트랜잭션이 완전히 커밋된 후에 실행되므로, Outbox 저장 실패 시 도메인 트랜잭션을 롤백할 수 없다는 단점이 있습니다. 이 부분에 대한 검토가 필요합니다.
 
 - 스케줄러 주기(1초)와 배치 크기(100)는 현재 트래픽을 고려하여 설정했지만, 실제 운영 환경에서는 이벤트 발생 빈도와 Kafka 처리 속도를 고려하여 조정이 필요할 수 있습니다. 너무 짧은 주기(예: 100ms)는 DB 부하를 증가시킬 수 있고, 너무 긴 주기(예: 10초)는 이벤트 발행 지연이 발생할 수 있습니다.
@@ -114,7 +178,7 @@ public void incrementLikeCount(Long productId, Long eventVersion) {
 }
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `event_handled` 테이블의 UNIQUE 제약조건으로 동시성 상황에서도 중복 처리를 방지했지만, 이 테이블이 계속 증가하는 문제가 있습니다. 시간이 지나면서 이 테이블의 데이터가 무한정 증가하게 되는데, 이는 스토리지 비용과 조회 성능에 영향을 줄 수 있습니다. TTL(Time To Live)을 설정하여 일정 기간이 지난 레코드를 자동으로 삭제하거나, 아카이빙 전략을 수립하여 오래된 데이터를 별도 테이블로 이동시키는 등의 방안이 필요할 수 있습니다.
 
 - `version` 필드는 `aggregateId`별로 자동 증가하도록 구현했는데, 이 방식의 장점은 간단하고 순차적인 버전 관리가 가능하다는 것입니다. 하지만 `updatedAt` 기반 방식과 비교했을 때, `updatedAt`은 시간 기반이므로 네트워크 지연이나 시스템 시간 불일치 문제가 발생할 수 있습니다. 반면 `version`은 순차적으로 증가하므로 이러한 문제가 없습니다. 다만, `aggregateId`별로 별도의 버전을 관리해야 하므로 복잡도가 증가합니다. 이 방식이 적절한지, 또는 다른 방식(예: `updatedAt` 기반, 또는 이벤트 발생 시점의 타임스탬프 기반)이 더 나은지 검토가 필요합니다.
@@ -245,7 +309,7 @@ void setUp() {
 }
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `offset.reset: latest`는 새로운 Consumer Group이 시작할 때만 적용되므로, 테스트 환경에서는 각 테스트 실행 전에 `KafkaCleanUp.resetAllTestTopics()`와 `resetAllConsumerGroups()`를 호출하여 토픽과 Consumer Group을 초기화했습니다. 이렇게 하면 매 테스트마다 `offset.reset: latest` 설정이 적용되어, 이전 테스트의 메시지가 다음 테스트에 영향을 주지 않습니다. 하지만 이 방식은 테스트 실행 시간을 증가시킬 수 있고, 프로덕션 환경에서는 사용할 수 없습니다. 다른 테스트 격리 전략(예: 각 테스트마다 고유한 Consumer Group ID 사용, 또는 테스트용 별도 토픽 사용)이 더 나은지 검토가 필요합니다.
 
 - 파티션 키를 `productId` 또는 `orderId`로 설정했는데, 이로 인한 파티션 불균형 문제가 발생할 수 있습니다. 예를 들어, 특정 상품에 대한 이벤트가 매우 많으면 해당 상품의 파티션에만 메시지가 집중되어 다른 파티션은 비어있을 수 있습니다. 하지만 현재 구현에서는 파티션 키를 사용하여 순서를 보장하는 것이 더 중요하다고 판단했습니다. 만약 파티션 불균형이 심각한 문제가 된다면, 파티션 키를 해시 함수로 변환하거나, 복합 키를 사용하는 등의 방안을 고려할 수 있습니다.
@@ -341,7 +405,7 @@ spring:
         max.in.flight.requests.per.connection: 5  # idempotence=true일 때 필수
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `acks=all`은 메시지 유실을 방지하지만, 모든 리플리카에 쓰기가 완료될 때까지 대기하므로 지연 시간이 증가할 수 있습니다. 하지만 메시지 유실을 방지하는 것이 더 중요하다고 판단하여 `acks=all`을 선택했습니다.
 - `enable.idempotence=true`는 Producer 측에서 중복을 제거하지만, 네트워크 오류나 Consumer 재시작 등의 상황에서 동일한 메시지가 여러 번 전달될 수 있습니다. 따라서 Consumer 측에서도 멱등 처리가 필요합니다.
 
@@ -384,7 +448,7 @@ public void consumeLikeEvents(..., Acknowledgment acknowledgment) {
 }
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - Manual Ack를 사용하면 이벤트 처리 성공 후에만 offset이 커밋되므로, 처리 실패 시 재처리가 가능합니다. 하지만 Consumer가 재시작되거나 장애가 발생하면 처리 중이던 메시지들이 다시 처리될 수 있습니다. 따라서 멱등 처리가 필수적입니다.
 - 배치 처리 시 모든 메시지 처리 완료 후 한 번에 커밋하는 방식과, 각 메시지 처리 후 개별적으로 커밋하는 방식 중 선택할 수 있습니다. 현재는 배치 처리 후 한 번에 커밋하는 방식을 사용했는데, 이는 성능상 유리하지만 일부 메시지 처리 실패 시 전체 배치가 재처리됩니다. 개별 커밋 방식은 성능이 떨어지지만 실패한 메시지만 재처리할 수 있습니다.
 
@@ -415,7 +479,7 @@ productMetricsService.incrementLikeCount(...);
 eventHandledService.markAsHandled(eventId, ...);  // UNIQUE 제약조건으로 중복 방지
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `event_handled` 테이블을 DB로 구현했지만, Redis를 사용하는 것도 고려할 수 있습니다. Redis는 TTL을 쉽게 설정할 수 있고 조회 성능이 빠르지만, 영속성이 보장되지 않습니다. DB는 영속성이 보장되지만 TTL 설정이 복잡하고 조회 성능이 상대적으로 느릴 수 있습니다. 현재는 DB를 선택했는데, 이는 영속성이 중요하고 TTL은 별도 아카이빙 전략으로 해결할 수 있다고 판단했기 때문입니다.
 - `event_handled` 테이블이 계속 증가하는 문제가 있습니다. 시간이 지나면서 이 테이블의 데이터가 무한정 증가하게 되는데, 이는 스토리지 비용과 조회 성능에 영향을 줄 수 있습니다. TTL을 설정하여 일정 기간이 지난 레코드를 자동으로 삭제하거나, 아카이빙 전략을 수립하여 오래된 데이터를 별도 테이블로 이동시키는 등의 방안이 필요할 수 있습니다.
 
@@ -500,7 +564,7 @@ if (!metrics.shouldUpdate(eventVersion)) return;  // 오래된 이벤트 스킵
 metrics.incrementLikeCount();
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `version` 필드는 `aggregateId`별로 자동 증가하도록 구현했는데, 이 방식의 장점은 간단하고 순차적인 버전 관리가 가능하다는 것입니다. 하지만 `updatedAt` 기반 방식과 비교했을 때, `updatedAt`은 시간 기반이므로 네트워크 지연이나 시스템 시간 불일치 문제가 발생할 수 있습니다. 반면 `version`은 순차적으로 증가하므로 이러한 문제가 없습니다. 다만, `aggregateId`별로 별도의 버전을 관리해야 하므로 복잡도가 증가합니다.
 - `version` 필드가 `aggregateId`별로 관리되므로, 같은 `aggregateId`에 대한 이벤트는 순차적으로 처리되어야 합니다. 하지만 파티션 키를 `aggregateId`로 설정했으므로, 같은 `aggregateId`에 대한 이벤트는 같은 파티션에서 순서대로 처리되므로 이 문제는 해결됩니다.
 
@@ -523,7 +587,7 @@ outboxEventService.saveEvent(..., partitionKey: orderId.toString());     // orde
 messageBuilder.setHeader(KafkaHeaders.KEY, event.getPartitionKey());
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - 파티션 키를 `productId` 또는 `orderId`로 설정했는데, 이로 인한 파티션 불균형 문제가 발생할 수 있습니다. 예를 들어, 특정 상품에 대한 이벤트가 매우 많으면 해당 상품의 파티션에만 메시지가 집중되어 다른 파티션은 비어있을 수 있습니다. 하지만 현재 구현에서는 파티션 키를 사용하여 순서를 보장하는 것이 더 중요하다고 판단했습니다. 만약 파티션 불균형이 심각한 문제가 된다면, 파티션 키를 해시 함수로 변환하거나, 복합 키를 사용하는 등의 방안을 고려할 수 있습니다.
 - 파티션 키를 사용하지 않고 랜덤 키를 사용하면 어떤 문제가 발생할까요? 예를 들어, 같은 상품에 대한 `LikeAdded`와 `LikeRemoved` 이벤트가 서로 다른 파티션에 발행되면, Consumer가 `LikeRemoved`를 먼저 처리하고 `LikeAdded`를 나중에 처리할 수 있습니다. 이 경우 좋아요 수가 음수가 되거나 잘못된 메트릭이 생성될 수 있습니다. 따라서 파티션 키를 사용하여 같은 aggregate root에 대한 이벤트는 항상 같은 파티션에서 순서대로 처리되도록 하는 것이 중요합니다.
 
@@ -570,36 +634,12 @@ Long eventVersion = extractVersion(record);
 productMetricsService.incrementLikeCount(productId, eventVersion);  // version 비교 포함
 ```
 
-**고민한 점:**
+**선택과 트레이드오프:**
 - `eventId`와 `version`을 모두 사용하는 것이 중복일 수 있다는 의문이 있습니다. 하지만 두 가지는 서로 다른 목적을 가지고 있습니다. `eventId`는 동일한 이벤트의 완전 중복을 방지하고, `version`은 순서가 뒤바뀐 이벤트를 처리하지 않도록 합니다. 예를 들어, 네트워크 문제로 인해 `version=3` 이벤트가 먼저 도착하고 `version=2` 이벤트가 나중에 도착하는 경우, `eventId`로는 중복을 감지할 수 없지만 `version`으로는 오래된 이벤트임을 감지할 수 있습니다. 반대로, 동일한 이벤트가 네트워크 오류로 인해 여러 번 전달되는 경우, `version`으로는 중복을 감지할 수 없지만 `eventId`로는 중복을 감지할 수 있습니다.
 
 - `aggregateId`만으로는 동일 이벤트를 판단할 수 없는 이유는, 같은 `aggregateId`에 대해 여러 번 이벤트가 발생할 수 있기 때문입니다. 예를 들어, 같은 상품에 대해 좋아요가 여러 번 추가되면, 각각은 서로 다른 이벤트이지만 `productId`만으로는 구분할 수 없습니다. 따라서 각 이벤트에 고유한 `eventId`를 부여하여 구분해야 합니다.
 
 - `version`은 `aggregateId`별로 관리되므로, 같은 `aggregateId`에 대한 이벤트는 순차적으로 처리되어야 합니다. 하지만 파티션 키를 `aggregateId`로 설정했으므로, 같은 `aggregateId`에 대한 이벤트는 같은 파티션에서 순서대로 처리되므로 이 문제는 해결됩니다.
-
-#### 6. 파티션 키 설정
-
-**배경:**
-Kafka는 기본적으로 파티션 내에서만 순서를 보장하고, 서로 다른 파티션 간의 순서는 보장하지 않습니다. 따라서 같은 aggregate root에 대한 이벤트는 같은 파티션에서 처리되어야 순서가 보장됩니다.
-
-**설정 내용:**
-- `like-events`, `product-events`: `productId`를 파티션 키로 사용하여, 같은 상품에 대한 이벤트는 항상 같은 파티션에서 순서대로 처리됩니다.
-- `order-events`: `orderId`를 파티션 키로 사용하여, 같은 주문에 대한 이벤트는 항상 같은 파티션에서 순서대로 처리됩니다.
-
-**관련 코드:**
-```java
-// OutboxBridgeEventListener.java - 파티션 키 설정
-outboxEventService.saveEvent(..., partitionKey: productId.toString());  // like-events, product-events
-outboxEventService.saveEvent(..., partitionKey: orderId.toString());     // order-events
-
-// OutboxEventPublisher.java - Kafka 메시지에 파티션 키 설정
-messageBuilder.setHeader(KafkaHeaders.KEY, event.getPartitionKey());
-```
-
-**고민한 점:**
-- 파티션 키를 `productId` 또는 `orderId`로 설정했는데, 이로 인한 파티션 불균형 문제가 발생할 수 있습니다. 예를 들어, 특정 상품에 대한 이벤트가 매우 많으면 해당 상품의 파티션에만 메시지가 집중되어 다른 파티션은 비어있을 수 있습니다. 하지만 현재 구현에서는 파티션 키를 사용하여 순서를 보장하는 것이 더 중요하다고 판단했습니다. 만약 파티션 불균형이 심각한 문제가 된다면, 파티션 키를 해시 함수로 변환하거나, 복합 키를 사용하는 등의 방안을 고려할 수 있습니다.
-- 파티션 키를 사용하지 않고 랜덤 키를 사용하면 어떤 문제가 발생할까요? 예를 들어, 같은 상품에 대한 `LikeAdded`와 `LikeRemoved` 이벤트가 서로 다른 파티션에 발행되면, Consumer가 `LikeRemoved`를 먼저 처리하고 `LikeAdded`를 나중에 처리할 수 있습니다. 이 경우 좋아요 수가 음수가 되거나 잘못된 메트릭이 생성될 수 있습니다. 따라서 파티션 키를 사용하여 같은 aggregate root에 대한 이벤트는 항상 같은 파티션에서 순서대로 처리되도록 하는 것이 중요합니다.
-
 
 ## ✅ Checklist
 - [x] **도메인(애플리케이션) 이벤트 설계**
