@@ -2,7 +2,7 @@
 
 Skill type: Technique
 Testing approach: Application / Variation / Edge Case (per writing-skills guide)
-Last tested: 2026-02-19 (Round 4)
+Last tested: 2026-02-19 (Round 5)
 
 ---
 
@@ -320,7 +320,148 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 
 ---
 
+## Scenario 6: Question Type Selection (AskUserQuestion vs plain text)
+
+**Type:** Application
+**Purpose:** Validate correct use of AskUserQuestion for structured decisions vs plain text for open-ended questions
+
+### Input
+
+- User message: "PR 만들어줘"
+- Git metadata:
+  ```
+  $ git log main..HEAD --oneline
+  a1b2c3d feat: 캐시 레이어 도입 (Redis vs Local Cache 선택)
+  e4f5g6h refactor: ProductService 조회 로직에 캐시 적용
+  i7j8k9l test: 캐시 히트/미스 시나리오 테스트 추가
+
+  $ git diff main..HEAD --stat
+   src/main/kotlin/product/app/ProductService.kt          | 38 ++++++---
+   src/main/kotlin/product/infra/ProductCacheService.kt    | 55 +++++++++++
+   src/main/kotlin/product/infra/RedisConfig.kt            | 28 ++++++
+   src/test/kotlin/product/app/ProductServiceCacheTest.kt  | 67 +++++++++++++
+   4 files changed, 168 insertions(+), 20 deletions(-)
+  ```
+- Explore result: Kotlin/Spring Boot e-commerce. ProductService.getProductDetail()에 Redis 캐시 도입. @Cacheable 어노테이션 사용. TTL 5분 설정. Cache-aside 패턴.
+- Scripted user responses:
+  1. "상품 상세 조회 API가 DB 부하의 60%를 차지해서 캐시를 도입했어."
+  2. User selects "Cache-aside (look-aside)" from AskUserQuestion options
+  3. "캐시 TTL을 5분으로 설정했는데 이게 적절한지, 그리고 캐시 무효화 전략에 대해 리뷰 받고 싶어."
+
+### Success Criteria
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | Decision question uses AskUserQuestion | When asking about cache strategy with 2-4 clear options → uses AskUserQuestion |
+| 2 | Open-ended question uses plain text | When asking about motivation/background (subjective) → uses plain text |
+| 3 | Yes/No question uses plain text | If any yes/no confirmation arises → uses plain text |
+| 4 | One question at a time | Never bundles multiple questions in one turn |
+| 5 | Method reason matches guideline | Each method selection reason references the SKILL's Question Type Selection table |
+| 6 | Context Brokering respected | Codebase facts discovered via explore, not asked to user |
+
+### GREEN Result
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | Decision question uses AskUserQuestion | **PASS** | Turn 2: cache strategy (Cache-aside/Read-through/Write-through) → AskUserQuestion |
+| 2 | Open-ended question uses plain text | **PASS** | Turn 1 (motivation), Turn 3 (review concerns) → plain text |
+| 3 | Yes/No question uses plain text | **N/A** | No yes/no question arose in this flow |
+| 4 | One question at a time | **PASS** | Each turn had exactly one question |
+| 5 | Method reason matches guideline | **PASS** | Each method selection explicitly references Question Type Selection table |
+| 6 | Context Brokering respected | **PASS** | Architecture/patterns from explore, only preferences asked to user |
+
+**Summary: 5/5 applicable PASS, 1 N/A**
+
+---
+
+## Scenario 7: Changes vs Review Points Separation
+
+**Type:** Application
+**Purpose:** Validate correct separation of Changes (factual) and Review Points (decisions/trade-offs) from mixed-complexity changes
+
+### Input
+
+- User message: "PR 만들어줘"
+- Git metadata:
+  ```
+  $ git log main..HEAD --oneline
+  a1b2c3d feat: 상품 검색 API에 Elasticsearch 도입
+  d4e5f6g chore: Elasticsearch Docker 설정 추가
+  h7i8j9k refactor: 상품명 검색을 DB LIKE에서 ES full-text로 전환
+  l0m1n2o fix: 검색 결과 정렬 버그 수정 (createdAt → score)
+  p3q4r5s test: ES 검색 통합 테스트 추가
+
+  $ git diff main..HEAD --stat
+   src/main/kotlin/product/app/ProductSearchService.kt        | 72 ++++++++---
+   src/main/kotlin/product/infra/ProductElasticRepository.kt   | 85 ++++++++++++
+   src/main/kotlin/product/infra/ElasticsearchConfig.kt        | 35 +++++
+   src/main/kotlin/product/domain/ProductDocument.kt           | 42 ++++++
+   docker/docker-compose.yml                                    | 15 +++
+   src/test/kotlin/product/app/ProductSearchServiceTest.kt     | 98 ++++++++++++++
+   6 files changed, 325 insertions(+), 22 deletions(-)
+  ```
+- Explore result: Kotlin/Spring Boot e-commerce. ProductSearchService에서 JPA LIKE → ES full-text search 전환. Spring Data Elasticsearch. ProductDocument는 ES 인덱스 매핑 엔티티. 정렬 createdAt → relevance score 변경. Docker Compose에 ES 컨테이너 추가.
+- Scripted user responses:
+  1. "상품 검색이 DB LIKE 쿼리라 성능이 나빴어. 특히 한글 형태소 분석이 안 돼서 '운동화'로 검색하면 '운동화 세트'가 안 나왔어. ES 도입해서 full-text 검색으로 바꿨어."
+  2. "ES 인덱스 설계에서 nori 형태소 분석기를 쓸지 ngram을 쓸지 고민했는데, 한글 검색 정확도 때문에 nori를 선택했어. 정렬도 createdAt에서 relevance score 기반으로 바꿨는데 이게 사용자 경험에 맞는지 의견 받고 싶어."
+  3. "ES 장애 시 DB LIKE 쿼리로 fallback하는 구조도 넣었는데, fallback 시 검색 품질이 떨어지는 트레이드오프가 있어."
+
+### Expected Separation
+
+**Changes only** (factual):
+- Docker 설정, ProductDocument, ElasticsearchConfig, 테스트 추가
+- 검색 로직 전환 사실, 정렬 수정 사실
+
+**Review Points** (decisions/trade-offs):
+- DB LIKE → ES 전환 (architecture decision)
+- nori vs ngram 선택 (competing alternatives)
+- ES 장애 시 fallback (가용성 vs 검색 품질 trade-off)
+- relevance score 정렬 전환 (UX decision)
+
+### Success Criteria
+
+| # | Criterion | Description |
+|---|-----------|-------------|
+| 1 | Simple changes in Changes only | Docker 설정, 테스트 추가, 엔티티 추가 등은 Changes에만 |
+| 2 | No design concerns in Changes | Changes에 "nori vs ngram 고민", "fallback 트레이드오프" 없음 |
+| 3 | Architecture decisions in Review Points | ES 도입 결정, 형태소 분석기 선택이 Review Points에 있음 |
+| 4 | Trade-offs in Review Points | fallback의 가용성 vs 검색 품질이 Review Points에 있음 |
+| 5 | Multiple valid alternatives mentioned | nori vs ngram, DB LIKE vs ES 등 대안이 Review Points에서 언급 |
+| 6 | Review Point 5-part structure | 배경 및 문제 상황 → 해결 방안 → 구현 세부사항 → 관련 코드 → 선택과 트레이드오프 |
+| 7 | 선택과 트레이드오프 label | "고민한 점" 대신 "선택과 트레이드오프" 사용 |
+| 8 | No textbook definitions | "Elasticsearch란..." 같은 일반론 없음 |
+| 9 | Framing text present | Review Points 섹션 상단 안내 문구 존재 |
+| 10 | Output format compliance | 📌🔧💬✅📎 헤더, 영향 범위, 파일 경로, PR 타이틀 |
+| 11 | Changes background is factual | Changes 배경은 사실 서술만, 설계 논의 아님 |
+
+### GREEN Result
+
+| # | Criterion | Result | Notes |
+|---|-----------|--------|-------|
+| 1 | Simple changes in Changes only | **PASS** | Docker, ProductDocument, 테스트, 정렬 수정 모두 Changes에만 기술 |
+| 2 | No design concerns in Changes | **PASS** | Changes에 nori/ngram 비교, fallback 트레이드오프 없음. 사실적 배경만 |
+| 3 | Architecture decisions in Review Points | **PASS** | RP1: DB LIKE→ES 전환, RP2: 형태소 분석기 선택 |
+| 4 | Trade-offs in Review Points | **PASS** | RP3: 가용성 vs 검색 품질, RP4: 정렬의 UX 영향 |
+| 5 | Multiple valid alternatives mentioned | **PASS** | 각 RP에서 거부한 대안 명시 (MySQL FULLTEXT, ngram, Circuit Breaker only 등) |
+| 6 | Review Point 5-part structure | **PASS** | 4개 RP 모두 5-part 구조 준수 |
+| 7 | 선택과 트레이드오프 label | **PASS** | 모든 RP에서 "선택과 트레이드오프" 사용 |
+| 8 | No textbook definitions | **PASS** | 일반론 없이 프로젝트 맥락 제약만 서술 |
+| 9 | Framing text present | **PASS** | 프레이밍 문구 존재 |
+| 10 | Output format compliance | **PASS** | 전체 포맷 준수 |
+| 11 | Changes background is factual | **PASS** | "한글 형태소 분석 불가능" 등 사실 서술만 |
+
+**Summary: 11/11 PASS**
+
+---
+
 ## Gaps Found and Fixed
+
+### Round 4 → Round 5 (Coverage Gap)
+
+| Gap | Description | Fix Applied |
+|-----|-------------|-------------|
+| Question Type Selection 미검증 | AskUserQuestion vs plain text 구분이 테스트되지 않음 | Scenario 6 추가 (5/5 PASS) |
+| Changes vs Review Points 분리 미검증 | 혼재 변경에서 올바른 분류가 테스트되지 않음 | Scenario 7 추가 (11/11 PASS) |
 
 ### Round 1 → Round 2 (REFACTOR)
 
