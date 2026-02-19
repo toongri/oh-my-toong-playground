@@ -1,40 +1,40 @@
-# Type Classification (문서 유형 분류)
+# Type Classification
 
 ## Role
 
-문서의 유형을 분류하고, 해당 유형의 필수 요소가 충족되었는지 검증한다.
+Classifies document type and verifies that required elements for that type are met.
 
-## 4가지 문서 유형
+## 4 Document Types
 
-| 유형 | 독자 상태 | 핵심 질문 |
-|------|-----------|----------|
-| 학습 | 처음 접함 | "어떻게 시작하지?" |
-| 문제 해결 | 배경 지식 있음, 문제 발생 | "이 문제 어떻게 해결하지?" |
-| 참조 | 사용법 앎, 세부 확인 | "이 파라미터 뭐였지?" |
-| 설명 | 개념/원리 깊이 이해 원함 | "이게 왜 이렇게 동작하지?" |
+| Type | Reader State | Core Question |
+|------|-------------|---------------|
+| Tutorial | First encounter | "어떻게 시작하지?" |
+| How-to | Has background, problem occurred | "이 문제 어떻게 해결하지?" |
+| Reference | Knows usage, checking details | "이 파라미터 뭐였지?" |
+| Explanation | Wants deep understanding | "이게 왜 이렇게 동작하지?" |
 
 ## Process
 
-### Step 1: 유형 분류
+### Step 1: Type Classification
 
-문서의 제목, 개요, 본문 첫 단락을 읽고 유형을 판별한다.
+Read the document's title, overview, and first paragraph to determine the type.
 
-**P16. 유형 선택 기준:**
-- "에러 해결", "문제 발생 시" → 문제 해결
-- "개념", "원리", "왜" → 설명
-- "API", "파라미터", "시그니처" → 참조
-- "시작하기", "설치", "첫 번째" → 학습
-- 복합 유형 허용: 학습+참조 등
+**P16. Type selection criteria:**
+- "에러 해결", "문제 발생 시" → How-to
+- "개념", "원리", "왜" → Explanation
+- "API", "파라미터", "시그니처" → Reference
+- "시작하기", "설치", "첫 번째" → Tutorial
+- Hybrid types allowed: Tutorial+Reference, etc.
 
-### Step 2: 유형별 필수 요소 검증
+### Step 2: Verify Required Elements by Type
 
-#### P17. 학습 문서 필수 요소
+#### P17. Tutorial Required Elements
 
-1. 명확한 학습 목표 (문서 시작에)
-2. 사전 준비사항 (버전, 도구, 선행 지식)
-3. 단계별 구조 (간단 → 점진적 난이도 상승)
-4. 실행 가능한 코드 예제 (독자가 직접 검증 가능)
-5. FAQ 또는 다음 단계 안내
+1. Clear learning objectives (at document start)
+2. Prerequisites (versions, tools, prior knowledge)
+3. Step-by-step structure (simple → progressive difficulty)
+4. Executable code examples (reader can verify independently)
+5. FAQ or next steps guide
 
 **Template:**
 
@@ -67,9 +67,9 @@
 [독자가 목표를 달성했을 때, 어떤 결과가 나오는지 설명하세요.]
 ```
 
-**P18. 시작하기 vs 튜토리얼 구분:**
-- 시작하기: 전체 흐름 이해 (개요 중심, 빠른 시작)
-- 튜토리얼: 명확한 목표+결과물 (단계별 실습 중심)
+**P18. Getting Started vs Tutorial distinction:**
+- Getting Started: Understand overall flow (overview-focused, quick start)
+- Tutorial: Clear goal + deliverable (step-by-step hands-on)
 
 **Example: React 시작하기**
 
@@ -137,19 +137,19 @@
 > export default App;
 > ```
 
-주석:
+Notes:
 
-1. 필수 개념과 기본 사용법을 안내한다. 문서의 학습 목표를 명확히 제시해야 한다.
-2. 가장 기본적인 설치 및 기본 설정을 안내한다. 실행 후 결과를 확인하는 방법도 알려준다.
-3. 사용자가 최소한의 코드로 바로 실행할 수 있도록 구성한다. 각 단계를 잘 완료했을 때 기대할 수 있는 결과를 명확히 알려줘야 독자 스스로 각 단계를 성공했는지 확인할 수 있다.
+1. Introduces essential concepts and basic usage. Learning objectives must be clearly stated.
+2. Guides through the most basic installation and setup. Includes how to verify results after execution.
+3. Structured so users can run with minimal code. Expected results at each step must be clear so readers can self-verify success.
 
-#### P19. 문제 해결 문서 필수 요소
+#### P19. How-to Document Required Elements
 
-1. 명확한 문제 상황 정의 (원인 + 현상 구분)
-2. 에러 메시지/로그 예시 포함
-3. 즉시 적용 가능한 해결 방법 + 코드/명령어
-4. 해결 원리 설명 ("왜 이 방법이 동작하는가")
-5. 환경별 차이 (OS, 라이브러리 버전)
+1. Clear problem definition (distinguish cause vs symptom)
+2. Include error message/log examples
+3. Immediately applicable solution + code/commands
+4. Explanation of why the solution works
+5. Environment-specific differences (OS, library versions)
 
 **Template:**
 
@@ -179,11 +179,11 @@
 [문제가 해결된 후의 모습이나 확인하는 방법을 설명하세요.]
 ```
 
-**P20. 가이드 vs 트러블슈팅 구분:**
-- How-to 가이드: 특정 기능 구현에 초점 ("~하는 방법")
-- 트러블슈팅: 이미 발생한 문제 진단 + 해결
+**P20. How-to Guide vs Troubleshooting distinction:**
+- How-to guide: Focused on implementing a specific feature ("how to do X")
+- Troubleshooting: Diagnosing + resolving an existing problem
 
-**Example 1: How-to 가이드 - React에서 자동 재시도 기능 통합 가이드**
+**Example 1: How-to Guide — React에서 자동 재시도 기능 통합 가이드**
 
 > 자동 재시도 로직을 React 컴포넌트에 통합하여 API 요청 실패 시 자동으로 재시도하는 기능을 구현하는 방법을 알려드려요. 이 기능으로 네트워크 불안정 상황에서도 안정적인 데이터 요청을 보장하여 사용자 경험을 개선할 수 있어요.
 >
@@ -230,9 +230,9 @@
 > export default App;
 > ```
 
-주석: 문서의 목표와 타겟 독자를 명확히 정의했다. 자동 재시도 로직(`fetchWithRetry`)을 활용해 API 데이터를 안정적으로 요청하고 그 결과를 상태(state)에 반영하는 방법을 상세히 알려준다.
+Notes: Clearly defines the document goal and target audience. Shows how to use the retry logic (`fetchWithRetry`) to reliably request API data and reflect results in state.
 
-**Example 2: 트러블슈팅 - "Module not found: Can't resolve 'react'" 에러 해결 가이드**
+**Example 2: Troubleshooting — "Module not found: Can't resolve 'react'" 에러 해결 가이드**
 
 > "Module not found: Can't resolve 'react'" 에러가 발생했을 때 해결 방법을 알려드려요.
 >
@@ -273,11 +273,11 @@
 > nvm use 18
 > ```
 
-주석: 첫 번째 단계에서 문제의 가장 기본적인 원인을 신속하게 진단할 수 있도록 안내한다. 다른 해결 방법도 제안해서 해결 가능성을 높이고, `npm start`를 실행하는 단계를 포함하여 최종적으로 문제가 해결되었는지 확인할 수 있도록 구성했다.
+Notes: First step guides quick diagnosis of the most basic cause. Suggests alternative solutions to increase resolution probability. Includes `npm start` step for final verification that the problem is resolved.
 
-#### P21. 참조 문서 표준 구조
+#### P21. Reference Document Standard Structure
 
-함수명 → 시그니처 → 매개변수(타입/기본값/필수여부) → 반환값 → 사용 예제(기본 → 응용)
+Function name → Signature → Parameters (type/default/required) → Return value → Usage examples (basic → advanced)
 
 **Template:**
 
@@ -305,10 +305,10 @@
 [어떤 상황에서 사용하는지 구체적인 예시와 함께 예제 코드를 알려주세요.]
 ```
 
-**P22. 참조 문서 품질 기준:**
-- 정확성·완전성: 기술 오류 없음, 누락 없음, 최신 상태
-- 검색 용이성: 목차, 키워드, 앵커 링크
-- 사전 필수 정보(API 키, 인증 방식) 문서 앞부분 배치
+**P22. Reference Document Quality Criteria:**
+- Accuracy & completeness: No technical errors, no omissions, up-to-date
+- Searchability: Table of contents, keywords, anchor links
+- Place prerequisite info (API keys, auth methods) at the beginning
 
 **Example: fetch API 참조 문서**
 
@@ -402,11 +402,11 @@
 > fetchData();
 > ```
 
-주석: fetch 함수에 대해 기능과 제공하는 가치를 설명했다. 시그니처로 입력값과 반환값을 직관적으로 파악할 수 있게 했다. 매개변수와 반환값을 정리하고, 기본 사용 예제부터 async/await 활용까지 단계적으로 제공했다.
+Notes: Explains the function's capability and value. Signature provides intuitive understanding of inputs and outputs. Parameters and return values are organized, with examples progressing from basic usage to async/await.
 
-#### P23. 설명 문서 구성 순서
+#### P23. Explanation Document Composition Order
 
-등장 배경(문제 상황) → 개념 정의 → 작동 방식(단계별) → 시각적 다이어그램 → 코드 예제
+Background (problem situation) → Concept definition → How it works (step-by-step) → Visual diagram → Code example
 
 **Template:**
 
@@ -426,9 +426,9 @@
 [실제 프로젝트에서 이 개념이 어떻게 사용되는지 설명하세요.]
 ```
 
-**P24. 시각화 필수 사용:**
-- 복잡한 개념은 다이어그램/흐름도로 보완
-- 텍스트만으로 부족할 때 반드시 시각 자료 추가
+**P24. Mandatory use of visualizations:**
+- Supplement complex concepts with diagrams/flowcharts
+- Always add visual materials when text alone is insufficient
 
 **Example: React의 가상 DOM 작동 원리**
 
@@ -516,10 +516,10 @@
 >
 > 이 코드에서 `setCount`를 호출하면 React는 새로운 가상 DOM을 생성하고, 이전 상태와 비교하여 변경된 부분만 실제 DOM에 반영합니다.
 
-주석: 가상 DOM의 등장 배경(문제 상황) → 개념 정의 → 작동 방식(단계별) → 시각적 다이어그램 → 코드 예제 순서로 구성했다. P23의 설명 문서 구성 순서를 그대로 따른다.
+Notes: Follows P23 composition order exactly — background (problem situation) → concept definition → how it works (step-by-step) → visual diagram → code example.
 
-### Step 3: 유형 불일치 보고
+### Step 3: Type Mismatch Reporting
 
-문서의 실제 내용이 유형 기대와 다를 경우:
-- 현재 유형과 실제 내용의 불일치 지점 명시
-- 적합한 유형 제안 또는 누락 요소 나열
+When the document's actual content doesn't match the expected type:
+- Specify mismatch points between current type and actual content
+- Suggest appropriate type or list missing elements
