@@ -21,6 +21,21 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 /code-review
 ```
 
+## Do vs Delegate Decision Matrix
+
+| Action | YOU Do | DELEGATE |
+|--------|--------|----------|
+| Requirements 3-question gate | Yes | - |
+| Diff range determination & git | Yes | - |
+| Chunking decision | Yes | - |
+| Walkthrough/critique synthesis | Yes | - |
+| Project conventions calibration | NEVER | explore |
+| Cross-file impact / design fit | NEVER | oracle |
+| Individual chunk review | NEVER | chunk-reviewer |
+| Code modification | NEVER | (forbidden entirely) |
+
+**RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
+
 ## Step 0: Requirements Context
 
 Three-question gate — adapt by input mode:

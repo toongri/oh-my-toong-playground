@@ -84,6 +84,23 @@ digraph prometheus_flow {
 | Gap analysis | metis | **MANDATORY** before plan generation - catches missing questions |
 | Plan review | momus | Optional loop after plan generation - catches quality issues |
 
+### Do vs Delegate Decision Matrix
+
+| Action | YOU Do | DELEGATE |
+|--------|--------|----------|
+| Interview questions | Yes | - |
+| Clearance checklist evaluation | Yes | - |
+| AC drafting & user confirmation | Yes | - |
+| Plan file writing (.omt/plans/) | Yes | - |
+| Codebase fact gathering | NEVER | explore |
+| Architecture feasibility check | NEVER | oracle |
+| External tech research | NEVER | librarian |
+| Pre-plan gap analysis | NEVER | metis |
+| Plan quality review | NEVER | momus (optional) |
+| Code/pseudocode generation | NEVER | (forbidden entirely) |
+
+**RULE**: Planning, interviewing, checklist evaluation = Do directly. Research, analysis, gap detection = DELEGATE. Code generation = FORBIDDEN.
+
 ### Explore -- Codebase Fact-Finding
 
 When Prometheus asks the user about codebase facts during interview:

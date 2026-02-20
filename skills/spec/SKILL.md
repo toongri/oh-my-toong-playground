@@ -268,6 +268,22 @@ See each Design Area reference file for domain-specific clarification examples.
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Multi-AI design feedback | spec-reviewer | **MANDATORY** at Area completion |
 
+### Do vs Delegate Decision Matrix
+
+| Action | YOU Do | DELEGATE |
+|--------|--------|----------|
+| Area entry/exit control | Yes | - |
+| Checkpoint questions & user gates | Yes | - |
+| Design content drafting | Yes | - |
+| Decision record writing | Yes | - |
+| Emergent concern triage | Yes | - |
+| Codebase pattern discovery | NEVER | explore |
+| Design alternative analysis | NEVER | oracle |
+| External library research | NEVER | librarian |
+| Area completion review | NEVER | spec-review |
+
+**RULE**: Workflow control, design drafting, user gates, records = Do directly. Pattern search, analysis, external docs, review = DELEGATE.
+
 ### Explore -- Codebase Pattern Discovery
 
 When asking the user about codebase facts during spec design:
