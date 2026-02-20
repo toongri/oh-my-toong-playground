@@ -936,4 +936,8 @@ module.exports = {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
+  buildUiPayload,
+  parseCouncilConfig,
+  parseYamlSimple,
+  computeStatus,
 };

@@ -530,3 +530,282 @@ describe('runWithRetry', () => {
     assert.ok(delays[1] < 3000, `delay[1] should be < 3000, got ${delays[1]}`);
   });
 });
+
+// ---------------------------------------------------------------------------
+// assemblePrompt
+// ---------------------------------------------------------------------------
+
+describe('assemblePrompt', () => {
+  let assemblePrompt;
+  let tmpDir;
+
+  beforeEach(() => {
+    assemblePrompt = require(WORKER_PATH).assemblePrompt;
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns structured prompt with REVIEW CONTENT when role file exists and reviewContent provided', () => {
+    const roleContent = '# Claude Role\nYou are a helpful assistant.';
+    fs.writeFileSync(path.join(tmpDir, 'claude.md'), roleContent, 'utf8');
+
+    const result = assemblePrompt({
+      promptsDir: tmpDir,
+      entityName: 'claude',
+      rawPrompt: 'Analyze the code',
+      reviewContent: 'function foo() { return 42; }',
+    });
+
+    assert.equal(result.isStructured, true);
+    assert.ok(result.assembled.includes('<system-instructions>'), 'should include system-instructions tag');
+    assert.ok(result.assembled.includes(roleContent), 'should include role content');
+    assert.ok(result.assembled.includes('--- REVIEW CONTENT ---'), 'should include REVIEW CONTENT section');
+    assert.ok(result.assembled.includes('function foo() { return 42; }'), 'should include the review content');
+    assert.ok(result.assembled.includes('--- END REVIEW CONTENT ---'), 'should include END REVIEW CONTENT');
+    assert.ok(result.assembled.includes('[HEADLESS SESSION]'), 'should include headless enforcement');
+    assert.ok(result.assembled.includes('Analyze the code'), 'should include raw prompt');
+  });
+
+  it('returns structured prompt without REVIEW CONTENT when role file exists and no reviewContent', () => {
+    const roleContent = '# Codex Role\nYou are an expert reviewer.';
+    fs.writeFileSync(path.join(tmpDir, 'codex.md'), roleContent, 'utf8');
+
+    const result = assemblePrompt({
+      promptsDir: tmpDir,
+      entityName: 'codex',
+      rawPrompt: 'Review this PR',
+    });
+
+    assert.equal(result.isStructured, true);
+    assert.ok(result.assembled.includes('<system-instructions>'), 'should include system-instructions tag');
+    assert.ok(result.assembled.includes(roleContent), 'should include role content');
+    assert.ok(!result.assembled.includes('--- REVIEW CONTENT ---'), 'should NOT include REVIEW CONTENT section');
+    assert.ok(result.assembled.includes('[HEADLESS SESSION]'), 'should include headless enforcement');
+    assert.ok(result.assembled.includes('Review this PR'), 'should include raw prompt');
+  });
+
+  it('returns unstructured fallback when role file is absent', () => {
+    // No role file created in tmpDir
+    const result = assemblePrompt({
+      promptsDir: tmpDir,
+      entityName: 'nonexistent',
+      rawPrompt: 'Just do the thing',
+    });
+
+    assert.equal(result.isStructured, false);
+    assert.equal(result.assembled, 'Just do the thing');
+  });
+
+  it('returns unstructured fallback when role file is absent even with reviewContent', () => {
+    // No role file, but reviewContent provided → still falls back
+    const result = assemblePrompt({
+      promptsDir: tmpDir,
+      entityName: 'missing-model',
+      rawPrompt: 'Analyze it',
+      reviewContent: 'some review content',
+    });
+
+    assert.equal(result.isStructured, false);
+    assert.equal(result.assembled, 'Analyze it');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce - invalid command (unmatched quote)
+// ---------------------------------------------------------------------------
+
+describe('runOnce - invalid command', () => {
+  let runOnce;
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    runOnce = require(WORKER_PATH).runOnce;
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns error state with Invalid command message for unmatched quote', async () => {
+    const result = await runOnce({
+      command: "echo 'unmatched",
+      prompt: '',
+      member: 'test',
+      safeMember: 'test-member',
+      jobDir: paths.jobDir,
+      timeoutSec: 5,
+      attempt: 0,
+    });
+
+    assert.equal(result.state, 'error');
+    assert.ok(
+      result.message.includes('Invalid command'),
+      `expected message to include 'Invalid command', got: ${result.message}`,
+    );
+    // Also verify status.json was written
+    const status = readStatus(paths.statusPath);
+    assert.equal(status.state, 'error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce - non-SIGTERM signal (SIGKILL)
+// ---------------------------------------------------------------------------
+
+describe('runOnce - SIGKILL signal', () => {
+  let runOnce;
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    runOnce = require(WORKER_PATH).runOnce;
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns error state (not canceled) when process is killed with SIGKILL', async () => {
+    const resultPromise = runOnce({
+      command: 'sleep 60',
+      prompt: '',
+      member: 'test',
+      safeMember: 'test-member',
+      jobDir: paths.jobDir,
+      timeoutSec: 0,
+      attempt: 0,
+    });
+
+    // Poll for pid in status.json
+    await new Promise((resolve) => {
+      const interval = setInterval(() => {
+        try {
+          const status = readStatus(paths.statusPath);
+          if (status.pid) {
+            clearInterval(interval);
+            process.kill(status.pid, 'SIGKILL');
+            resolve();
+          }
+        } catch {
+          // status.json not written yet
+        }
+      }, 20);
+    });
+
+    const result = await resultPromise;
+    assert.equal(result.state, 'error');
+    assert.notEqual(result.state, 'canceled');
+    assert.equal(result.exitCode, null);
+    assert.equal(result.signal, 'SIGKILL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce - assembled-prompt.txt creation
+// ---------------------------------------------------------------------------
+
+describe('runOnce - assembled-prompt.txt', () => {
+  let runOnce;
+  let assemblePrompt;
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    const worker = require(WORKER_PATH);
+    runOnce = worker.runOnce;
+    assemblePrompt = worker.assemblePrompt;
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates assembled-prompt.txt when role file exists', async () => {
+    // runOnce uses PROMPTS_DIR = path.resolve(__dirname, '../prompts') internally.
+    // We need to place a role file at that location for the member name.
+    // Instead, use a unique member name with a role file in the real prompts dir.
+    // Actually, the PROMPTS_DIR is hardcoded. Let's check if prompts dir has files.
+    const promptsDir = path.resolve(__dirname, '../prompts');
+
+    // Find any existing role file in the prompts dir
+    let entityName = null;
+    try {
+      const files = fs.readdirSync(promptsDir);
+      for (const f of files) {
+        if (f.endsWith('.md')) {
+          entityName = f.replace('.md', '');
+          break;
+        }
+      }
+    } catch {
+      // prompts dir doesn't exist
+    }
+
+    if (!entityName) {
+      // Create prompts dir and a test role file
+      fs.mkdirSync(promptsDir, { recursive: true });
+      fs.writeFileSync(path.join(promptsDir, '__test-entity__.md'), '# Test Role', 'utf8');
+      entityName = '__test-entity__';
+    }
+
+    const safeMember = 'test-member';
+    const result = await runOnce({
+      command: 'true',
+      prompt: 'test prompt for assembly',
+      member: entityName,
+      safeMember,
+      jobDir: paths.jobDir,
+      timeoutSec: 5,
+      attempt: 0,
+    });
+
+    assert.equal(result.state, 'done');
+
+    // Verify assembled-prompt.txt was created
+    const assembledPath = path.join(paths.memberDir, 'assembled-prompt.txt');
+    assert.ok(fs.existsSync(assembledPath), 'assembled-prompt.txt should exist');
+
+    // Verify content matches what assemblePrompt would produce
+    const assembledContent = fs.readFileSync(assembledPath, 'utf8');
+    const expected = assemblePrompt({
+      promptsDir,
+      entityName,
+      rawPrompt: 'test prompt for assembly',
+    });
+    assert.equal(assembledContent, expected.assembled);
+
+    // Clean up test role file if we created it
+    try {
+      fs.unlinkSync(path.join(promptsDir, '__test-entity__.md'));
+    } catch { /* ignore */ }
+  });
+
+  it('does not create assembled-prompt.txt when role file is absent', async () => {
+    const safeMember = 'test-member';
+    const result = await runOnce({
+      command: 'true',
+      prompt: 'raw prompt only',
+      member: 'nonexistent-model-xyz',
+      safeMember,
+      jobDir: paths.jobDir,
+      timeoutSec: 5,
+      attempt: 0,
+    });
+
+    assert.equal(result.state, 'done');
+
+    // assembled-prompt.txt should NOT exist since role file is missing
+    const assembledPath = path.join(paths.memberDir, 'assembled-prompt.txt');
+    assert.ok(!fs.existsSync(assembledPath), 'assembled-prompt.txt should NOT exist when role file is absent');
+  });
+});
