@@ -212,10 +212,10 @@ Skill asks about a design choice (e.g., storage approach, file size limit, valid
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Drafts AC with Functional/Technical criteria | Response includes proposed acceptance criteria with both Functional and Technical sections |
-| V2 | Includes Out of Scope | Acceptance criteria include an explicit Out of Scope section |
-| V3 | Proposes to user for confirmation | Skill presents the draft AC to the user and asks for review/confirmation |
-| V4 | Measurable, testable conditions | Each criterion is specific, measurable, and objectively testable |
+| V1 | Work-item structure with responsibility | AC organized by work item, each with a responsibility statement explaining WHY the item exists separately |
+| V2 | Two-line criterion format | Each criterion follows Observable outcome + indented Verification line structure |
+| V3 | Out of Scope and Not covered | Per-item "Not covered" section + overall "Out of Scope" section present |
+| V4 | Proposes to user for confirmation | Skill presents the draft AC to the user and asks for review/confirmation |
 
 ---
 
@@ -372,6 +372,6 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | P-6 | Question Type Selection | **PASS** | 2026-02-11 | 2/2 VP. GREEN: 제거된 섹션과 무관. 회귀 없음 |
 | P-7 | Vague Answer Clarification | **PASS** | 2026-02-11 | 3/3 VP. GREEN: 3-step protocol 그대로. 회귀 없음 |
 | P-8 | User Deferral Handling | **PASS** | 2026-02-11 | 4/4 VP. GREEN: 4-step protocol 그대로. 회귀 없음 |
-| P-9 | Acceptance Criteria Drafting | **PASS** | 2026-02-11 | 4/4 VP. GREEN: MANDATORY 태그 + NEVER proceed 언어로 충분. 회귀 없음 |
+| P-9 | Acceptance Criteria Drafting | | | AC section rewritten -- verification points updated, needs re-testing |
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |

@@ -21,6 +21,7 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 | M-11 | Why_This_Matters | MT-6: 분석 동기 및 맥락 전달 | 분석 가치 설명 |
 | M-12 | Failure_Modes | MT-7: 안티패턴 회피 (시장 분석, 모호한 발견, 과분석) | 영향도 우선순위 |
 | M-13 | Success_Criteria + Checklist | MT-8: 측정 가능한 기준 및 자기 검증 | 검증 방법 명시 |
+| M-14 | AC Quality Check | AC Quality 검증 — 기존 AC의 품질 결함 감지 | Analysis Guards (AC) |
 
 ---
 
@@ -129,7 +130,7 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 | V2 | Undefined Guardrails 섹션 존재 | "### Undefined Guardrails" 헤딩과 구체적 경계 정의 제안이 포함됨 |
 | V3 | Scope Risks 섹션 존재 | "### Scope Risks" 헤딩과 스코프 확장 위험 항목이 포함됨 |
 | V4 | Unvalidated Assumptions 섹션 존재 | "### Unvalidated Assumptions" 헤딩과 검증 필요 가정이 포함됨 |
-| V5 | Missing Acceptance Criteria 섹션 존재 | "### Missing Acceptance Criteria" 헤딩과 측정 가능한 기준 제안이 포함됨 |
+| V5 | Acceptance Criteria Gaps 섹션 존재 | "### Acceptance Criteria Gaps" 헤딩과 측정 가능한 기준 제안이 포함됨 |
 | V6 | Edge Cases 섹션 존재 | "### Edge Cases" 헤딩과 비정상 시나리오가 포함됨 |
 | V7 | Recommendations 섹션 존재 | "### Recommendations" 헤딩과 우선순위가 매겨진 명확화 항목이 포함됨 |
 | V8 | Domain Context 섹션 존재 | "### Domain Context" 헤딩과 도메인 맥락/분석 동기 설명이 출력 최상단(Intent Classification 이전)에 포함됨 |
@@ -498,8 +499,47 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | 발견별 검증 방법 명시 | 각 발견 항목에 "어떻게 이 gap이 해소되었는지 검증할 수 있는가"가 포함됨 (예: "최대 파일 크기 미정의 → 정의 후 해당 크기 초과 파일 업로드 시 413 응답 확인") |
-| V2 | 수락 기준이 테스트 가능 | Missing Acceptance Criteria에서 제안하는 기준이 pass/fail로 판단 가능함 (예: "정상 동작" → "100MB PDF 업로드 후 presigned URL로 다운로드 시 원본과 MD5 일치") |
+| V2 | 수락 기준이 테스트 가능 | Acceptance Criteria Gaps에서 제안하는 기준이 pass/fail로 판단 가능함 (예: "정상 동작" → "100MB PDF 업로드 후 presigned URL로 다운로드 시 원본과 MD5 일치") |
 | V3 | 자기 검증 체크리스트 존재 | 분석 완료 후 "모든 요구사항의 완전성 검토 여부", "발견이 구체적이고 해결 방안 포함 여부" 등 자기 검증 항목이 포함됨 |
+
+---
+
+## Scenario M-14: AC Quality Check — 기존 인수조건의 구조적 결함 감지
+
+**Primary Technique:** AC Quality Check — 기존 인수조건의 구조적 결함 감지
+
+**Prompt:**
+```
+다음 플랜을 리뷰해줘:
+
+## council 워커 리팩토링 플랜
+
+### 목표
+council과 spec-review 워커의 공통 로직을 추출하고 프롬프트 조립을 구조화한다.
+
+### 작업 항목
+1. 공통 워커 인프라 추출
+2. 구조화된 프롬프트 파이프라인 구축
+
+### 인수조건
+- [ ] skills/shared/lib/worker-core.js 생성 — splitCommand, atomicWriteJson, sleepMs 등 공통 함수 추출
+- [ ] 프롬프트 파이프라인이 구현됨
+- [ ] 기존 테스트 통과 확인
+- [ ] council-worker와 spec-worker가 공통 모듈을 import하여, 중복 함수 없이 동작
+      Verification: grep으로 양쪽 워커에서 공통 모듈 import 확인, 중복 함수 0개
+
+### 기술 스택
+- Node.js, JavaScript
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | 파일 나열 AC 감지 | "worker-core.js 생성 -- splitCommand, atomicWriteJson..." 항목이 파일/함수 나열임을 지적하고, observable outcome으로 재작성을 제안 |
+| V2 | 작업 재진술 AC 감지 | "프롬프트 파이프라인이 구현됨"이 작업을 재진술할 뿐 완료 후 상태를 기술하지 않음을 지적 |
+| V3 | 모호한 검증 AC 감지 | "기존 테스트 통과 확인"이 보편적 진리(universal truth)이며 plan-specific하지 않음을 지적 |
+| V4 | 잘 작성된 AC 구분 | 4번째 criterion (공통 모듈 import + grep 검증)은 observable outcome + 구체적 verification이 있으므로 문제로 지적하지 않음 |
 
 ---
 
@@ -512,3 +552,4 @@ These scenarios test whether the metis skill's **core techniques** are correctly
 | M-3 | Mandatory Output Structure | PASS | 2026-02-10 | V1-V7 모두 충족 (V8 Domain Context 추가됨 — 재검증 필요) |
 | M-4 | Vague Term Detection | PASS | 2026-02-10 | V1-V5 모두 충족 |
 | M-5 | Completeness | PASS | 2026-02-10 | V1-V4 모두 충족 |
+| M-14 | AC Quality Check | | | AC Quality 검증 추가 — 테스트 필요 |
