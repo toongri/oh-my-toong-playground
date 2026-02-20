@@ -297,7 +297,7 @@ When multi-chunk is required:
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
    - {CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)
    - {FILE_LIST} ← Step 2 file list
-   - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
+   - {DIFF_COMMAND} ← complete shell command string that the chunk-reviewer will execute to obtain the diff. Orchestrator constructs this from range (Step 1) and chunk file list (Step 3) but does NOT execute it. Examples: `git diff origin/main...HEAD` (single chunk) or `git diff origin/main...HEAD -- src/api/auth.ts src/api/router.ts` (multi-chunk)
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
@@ -309,7 +309,7 @@ When multi-chunk is required:
 | Scale | Action |
 |-------|--------|
 | Single chunk | 1 agent call |
-| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST} |
+| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
 
 ## Step 5: Walkthrough Synthesis + Result Synthesis
 

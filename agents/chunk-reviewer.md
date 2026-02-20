@@ -17,20 +17,28 @@ Before executing, check `chunk-review.config.yaml` `settings.mode`:
 
 | Mode | Behavior |
 |------|----------|
-| `single` | Use the Read tool to read `skills/code-review/prompts/reviewer.md`, then review the code directly using that methodology. Skip multi-model dispatch. |
+| `single` | Execute `{DIFF_COMMAND}` from the prompt via Bash tool to obtain the diff. Then use the Read tool to read `skills/code-review/prompts/reviewer.md` and review using that methodology. Skip multi-model dispatch. |
 | `chairman` | Execute multi-model workflow (steps below). |
 
-If mode is `single`, use the Read tool to read `skills/code-review/prompts/reviewer.md`, follow the review instructions in that file, and return the review directly. The rest of this document applies only to `chairman` mode.
+If mode is `single`, execute `{DIFF_COMMAND}` from the prompt via Bash tool to obtain the diff, then use the Read tool to read `skills/code-review/prompts/reviewer.md`, follow the review instructions in that file, and return the review directly. The rest of this document applies only to `chairman` mode.
 
 ## Chairman Workflow
 
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff, context, requirements via `chunk-reviewer-prompt.md`)
 2. **Check mode** in `chunk-review.config.yaml` `settings.mode` -- if `single`, review directly per `prompts/reviewer.md` and stop
-3. **Extract review data** from the received prompt (diff, file list, requirements, context)
+3. **Execute `{DIFF_COMMAND}`** from the received prompt via Bash tool to obtain the diff content, then extract remaining review data (file list, requirements, context)
 4. **Write review data to stdin** for the dispatch script
 5. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool -- blocks until complete, then prints JSON results to stdout
 6. **Synthesize** with consensus classification rules (below)
 7. **Return** structured synthesis
+
+### Diff Command Failure Handling
+
+If `{DIFF_COMMAND}` execution fails (non-zero exit code) or returns empty output:
+
+- Report `"Diff command failed: [error message or 'empty output']"` and return immediately without proceeding to review
+- Do NOT attempt to review without diff content
+- Do NOT fabricate or guess diff content
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
