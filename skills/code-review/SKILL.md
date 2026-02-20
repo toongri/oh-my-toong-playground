@@ -36,6 +36,57 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 
 **RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
 
+### Role Separation: YOU DO NOT REVIEW CODE
+
+**Code review is NOT your job. It is chunk-reviewer's job.**
+
+```dot
+digraph review_roles {
+    rankdir=LR;
+    "orchestrator" [shape=box, label="Code-Review\n(Orchestrator)"];
+    "chunk-reviewer" [shape=box, label="Chunk-Reviewer\n(Reviewer)"];
+
+    "orchestrator" -> "chunk-reviewer" [label="dispatch {DIFF_COMMAND}"];
+    "chunk-reviewer" -> "orchestrator" [label="review results"];
+}
+```
+
+**Your role as orchestrator:**
+- Dispatch chunks to chunk-reviewer with diff commands
+- Synthesize walkthrough and critique from chunk-reviewer results
+- Decide chunking strategy, severity normalization, final verdict
+
+**NOT your role:**
+- Reading raw diff output (no `git diff {range}` without `--stat` or `--name-only`)
+- Reviewing code quality, correctness, or patterns yourself
+- Running `git diff {range} -- <files>` to load changed file content
+
+**RULE**: When chunk-reviewer returns results, your ONLY actions are synthesis and verdict. Not "review then synthesize". Just synthesize.
+
+### Context Budget
+
+What you are **allowed** to load into context:
+
+| Allowed | Command / Source |
+|---------|-----------------|
+| Diff statistics | `git diff {range} --stat` |
+| Changed file list | `git diff {range} --name-only` |
+| Commit history | `git log {range} --oneline` |
+| Project conventions | CLAUDE.md files |
+| Codebase context | explore / oracle agent summaries |
+| Review results | chunk-reviewer agent output |
+
+What you are **forbidden** from loading:
+
+| Forbidden | Why |
+|-----------|-----|
+| `git diff {range}` (without `--stat` or `--name-only`) | Loads raw diff lines into orchestrator context |
+| `git diff {range} -- <files>` | Loads file-level diff into orchestrator context |
+| `Read` tool on diff target source files | Loads changed file content into orchestrator context |
+| Any tool that loads changed file content | Review responsibility belongs to chunk-reviewer |
+
+**RULE**: If a command would put diff lines or source code into your context, it is forbidden. Only metadata (stats, file names, commit messages) and agent outputs are allowed.
+
 ## Step 0: Requirements Context
 
 Three-question gate — adapt by input mode:
@@ -209,22 +260,33 @@ A diff shows "what changed" but not "whether this change is safe for the existin
 
 ## Step 3: Chunking Decision
 
-| Condition | Strategy |
-|-----------|----------|
-| Changed files <= 15 | Single review — `git diff {range}` for full diff |
-| Changed files > 15 | Group into chunks of ~10-15 files by directory/module affinity |
+### Diff Size Measurement
 
-Chunking heuristic: group files sharing a directory prefix or import relationships.
+Parse the `--stat` summary line (already collected in Step 2):
 
-### Per-Chunk Diff Acquisition
-
-For each chunk, obtain the diff using git's native path filtering:
-
-```bash
-git diff {range} -- <file1> <file2> ... <fileN>
+```
+ N files changed, X insertions(+), Y deletions(-)
 ```
 
-This produces a diff containing ONLY the files in that chunk. Do NOT parse a full diff output to extract per-file sections.
+Total changed lines = X + Y (insertions + deletions).
+
+### Threshold
+
+| Condition | Strategy |
+|-----------|----------|
+| Total < 1500 lines AND < 30 files | Single review |
+| Total >= 1500 lines OR >= 30 files | Multi-chunk review |
+
+### Chunking Algorithm
+
+When multi-chunk is required:
+
+1. **Group by top-level directory prefix** from the `--name-only` file list (e.g., `src/order/`, `src/payment/`, `test/`)
+2. **Per-chunk cap: ~1500 lines** (soft guide). Walk groups in order:
+   - If adding the next group would exceed ~1500 lines, start a new chunk
+   - If a single file exceeds 1500 lines, it becomes a standalone chunk
+3. **Split oversized groups**: If a single directory group exceeds the cap, split by subdirectory prefix within that group
+4. **Flat structure fallback**: If subdirectory splitting still produces oversized chunks (flat directory with many files), batch alphabetically into groups of ~10-15 files each
 
 ## Step 4: Agent Dispatch
 
