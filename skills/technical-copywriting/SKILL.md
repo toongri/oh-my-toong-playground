@@ -5,7 +5,7 @@ description: Use when reviewing teaser/promotion text for sharing technical blog
 
 # Technical Copywriting Review
 
-Reviews teaser/promotion text that accompanies technical blog post shares. 3-phase sequential review: Platform Classification → Structure Review → Voice & Authenticity.
+Reviews teaser/promotion text that accompanies technical blog post shares. 3-phase sequential review: Type Classification → Structure Review → Voice & Authenticity.
 
 ## The Iron Law
 
@@ -17,10 +17,10 @@ Reviews teaser/promotion text that accompanies technical blog post shares. 3-pha
 
 | Rule | Description |
 |------|-------------|
-| Sequential Execution | Platform → Structure → Voice order |
+| Sequential Execution | Type → Structure → Voice order |
 | Per-Area Approval | User confirmation after each Area |
 | Before/After | All improvement suggestions in Before/After format |
-| Cite Principle | Each suggestion must cite its principle ID (CP1~CP12) |
+| Cite Principle | Each suggestion must cite its principle ID (CP1~CP16) |
 
 ## Review Areas
 
@@ -29,30 +29,30 @@ digraph review_flow {
     rankdir=LR;
     node [shape=box];
 
-    "Input Text" -> "Area 1:\nPlatform Classification";
-    "Area 1:\nPlatform Classification" -> "Area 2:\nStructure Review";
+    "Input Text" -> "Area 1:\nType Classification";
+    "Area 1:\nType Classification" -> "Area 2:\nStructure Review";
     "Area 2:\nStructure Review" -> "Area 3:\nVoice & Authenticity";
     "Area 3:\nVoice & Authenticity" -> "Review Complete";
 }
 ```
 
-### Area 1: Platform Classification
+### Area 1: Type Classification
 
-- **Reviews**: Platform identification, constraint compliance (char limits, link placement, format rules)
+- **Reviews**: Teaser type classification, required elements verification per type, platform constraint compliance
 - **Enter when**: Review target text exists
-- **Skip when**: User already specified platform and requested no platform verification
-- **Reference**: `references/platform.md`
+- **Skip when**: User already specified type and requested no type verification
+- **Reference**: `references/type.md`
 
 ### Area 2: Structure Review
 
-- **Reviews**: Hook quality, value delivery (takeaways), CTA appropriateness
+- **Reviews**: Type-specific opening, value delivery mode, closing pattern, proportion balance
 - **Enter when**: Area 1 completed
 - **Skip when**: Only voice-level review requested
 - **Reference**: `references/structure.md`
 
 ### Area 3: Voice & Authenticity Review
 
-- **Reviews**: Developer audience tone, authenticity, platform-specific manner, anti-marketing-speak
+- **Reviews**: Developer authenticity, anti-marketing-speak, platform tone, vulnerability-based connection, authority citation, Korean naturalness
 - **Enter when**: Area 2 completed (or Area 1 if Area 2 skipped)
 - **Skip when**: Only structure-level review requested
 - **Reference**: `references/voice.md`
@@ -81,8 +81,8 @@ Each Area's review results use this format:
 ```
 
 **Severity criteria:**
-- **Critical**: Text violates platform constraints, contains no hook, or has zero takeaways (reader scrolls past or gets no value)
-- **Suggestion**: Tone/voice improvement, proportion adjustment, minor format optimization
+- **Critical**: Type mismatch (e.g. Learning Journey structure applied to Announcement), missing required elements for the identified type, platform constraint violations
+- **Suggestion**: Tone adjustment, proportion optimization, minor structural improvement
 
 ## Area Completion Protocol
 
