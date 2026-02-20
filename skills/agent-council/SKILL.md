@@ -156,6 +156,25 @@ When synthesizing raw outputs:
 2. Overlapping positions → Consensus
 3. Conflicting positions → Divergence (report ALL, not majority)
 4. Unique concerns from any reviewer → include in advisory
+5. On divergence: consult Model Characteristics table to inform weighting. Cite the table when weighting one model's opinion higher.
+
+## Model Characteristics (Synthesis Weighting)
+
+> Last verified: 2026-02 (review quarterly as models update)
+
+When synthesizing, weight each model's opinion based on the question domain:
+
+| Member | Primary Strengths | Weight Higher When |
+|--------|-------------------|-------------------|
+| claude | Nuanced trade-off reasoning, instruction coherence across long context, risk/impact assessment | Architecture decisions, requirement ambiguity resolution, risk evaluation |
+| codex | Code-level feasibility analysis, implementation cost/complexity estimation, API contract design | "Is this buildable?" questions, implementation approach choices, technical debt evaluation |
+| gemini | Broad factual grounding, alternative solution discovery, edge case identification | Technology comparisons, "what are we missing?" questions, assumption challenges |
+
+**Application rules:**
+- On **consensus**: model strengths are irrelevant — report agreement as-is
+- On **divergence**: reference the table above. If the question is about implementation feasibility and codex disagrees with claude and gemini, state: "Codex's position carries additional weight here as an implementation feasibility question (see Model Characteristics)"
+- On **contradiction with table**: if a model gives a strong argument outside its listed strengths, the argument's quality overrides the table. Strengths are tie-breakers, not vetoes
+- **Never discard** a model's opinion solely because the domain doesn't match its listed strengths
 
 <Output_Format>
 
@@ -176,7 +195,7 @@ Chairman synthesizes council opinions into:
 
 ### Recommendation
 
-[Synthesized advice based on above]
+[Synthesized advice. When model opinions diverge, note which model's expertise is most relevant to this domain and why — referencing Model Characteristics table]
 ```
 
 </Output_Format>
@@ -192,6 +211,8 @@ Chairman synthesizes council opinions into:
 - Use divergence to identify edge cases
 
 **Mixed Signals** → Weigh perspectives based on relevance
+
+**Partial Results** → Apply Degradation Policy. Synthesize from available responses, note missing perspectives.
 
 ---
 
@@ -213,3 +234,34 @@ Chairman synthesizes council opinions into:
 | "내 판단이 맞으니까 확인만" | 확인 편향 - council은 반론을 들으려고 쓰는 것 |
 | "에러 메시지가 뭔지 모르겠어서" | 객관적 문제는 council 대상 아님 |
 | "council이 결정해줄 거야" | Council은 조언, 결정 책임은 호출자 |
+
+## Degradation Policy
+
+Council members may fail due to CLI unavailability, timeout, or errors. This is NOT the same as quorum logic.
+
+**Critical distinction:**
+- **PROHIBITED quorum logic**: "2/3 responded, that's enough, skip the third" — this is giving up on a working member
+- **PERMITTED degradation**: "2/3 responded, third member's CLI crashed (missing_cli/timed_out/error state)" — this is handling infrastructure failure
+
+**Decision tree:**
+1. `overallState === 'done'` AND all members have terminal states?
+2. Check failed members' states:
+   - `missing_cli` → CLI not installed. Degradation applies.
+   - `timed_out` → CLI exceeded timeout. Degradation applies.
+   - `error` (non-zero exit) → CLI failed. Degradation applies.
+   - `canceled` → Manually stopped. Degradation applies.
+3. Synthesize from successful members only.
+
+**Synthesis by response count:**
+
+| Responses | Action | Output Modification |
+|-----------|--------|---------------------|
+| 3/3 | Full synthesis | Standard advisory format |
+| 2/3 | Partial synthesis | Prepend: "⚠️ Partial advisory (2/3 respondents). [failed_member] unavailable: [state]. The following synthesis lacks [failed_member]'s perspective ([see Model Characteristics for what this model typically contributes])." |
+| 1/3 | Single response report | Prepend: "⚠️ Limited advisory (1/3 respondents). [failed_members] unavailable. Presenting single response from [available_member] without synthesis. Treat as individual opinion, not council advisory." |
+| 0/3 | Failure report | "❌ Council advisory unavailable. All members failed: [list states]. No synthesis possible." |
+
+**Partial synthesis rules:**
+- Use "partial consensus (N/3 respondents)" when reporting agreement
+- In Divergence section, note: "Note: [missing_member]'s perspective is absent. Based on Model Characteristics, this model typically contributes [strength area] — this gap may affect the advisory's completeness in that domain."
+- Do NOT extrapolate what the missing model "would have said"
