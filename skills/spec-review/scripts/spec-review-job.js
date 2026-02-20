@@ -12,19 +12,29 @@ const WORKER_PATH = path.join(SCRIPT_DIR, 'spec-review-worker.js');
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'spec-review.config.yaml');
 const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'spec-review.config.yaml');
 
+const UI_STRINGS = {
+  dispatch: {
+    completed: 'Dispatched review prompts',
+    inProgress: 'Dispatching review prompts',
+  },
+  synthesize: {
+    completed: 'Spec review results ready',
+    inProgress: 'Ready to synthesize',
+    pending: 'Waiting to synthesize',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Pure utility functions
+// ---------------------------------------------------------------------------
+
 function exitWithError(message) {
   process.stderr.write(`${message}\n`);
   process.exit(1);
 }
 
-function resolveDefaultConfigFile() {
-  if (fs.existsSync(SKILL_CONFIG_FILE)) return SKILL_CONFIG_FILE;
-  if (fs.existsSync(REPO_CONFIG_FILE)) return REPO_CONFIG_FILE;
-  return SKILL_CONFIG_FILE;
-}
-
-function detectHostRole() {
-  const normalized = SKILL_DIR.replace(/\\/g, '/');
+function detectHostRole(skillDir) {
+  const normalized = skillDir.replace(/\\/g, '/');
   if (normalized.includes('/.claude/skills/')) return 'claude';
   if (normalized.includes('/.codex/skills/')) return 'codex';
   return 'unknown';
@@ -44,6 +54,584 @@ function resolveAutoRole(role, hostRole) {
   if (hostRole === 'codex') return 'codex';
   if (hostRole === 'claude') return 'claude';
   return 'claude';
+}
+
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function safeFileName(name, fallback) {
+  const cleaned = String(name || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  return cleaned || (fallback || 'reviewer');
+}
+
+function atomicWriteJson(filePath, payload) {
+  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+function readJsonIfExists(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function sleepMs(ms) {
+  const msNum = Number(ms);
+  if (!Number.isFinite(msNum) || msNum <= 0) return;
+  const sab = new SharedArrayBuffer(4);
+  const view = new Int32Array(sab);
+  Atomics.wait(view, 0, 0, Math.trunc(msNum));
+}
+
+function computeTerminalDoneCount(counts) {
+  const c = counts || {};
+  return (
+    Number(c.done || 0) +
+    Number(c.missing_cli || 0) +
+    Number(c.error || 0) +
+    Number(c.timed_out || 0) +
+    Number(c.canceled || 0)
+  );
+}
+
+function asCodexStepStatus(value) {
+  const v = String(value || '');
+  if (v === 'pending' || v === 'in_progress' || v === 'completed') return v;
+  return 'pending';
+}
+
+// ---------------------------------------------------------------------------
+// Argument parsing
+// ---------------------------------------------------------------------------
+
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const out = { _: [] };
+  const booleanFlags = new Set([
+    'json',
+    'text',
+    'checklist',
+    'help',
+    'h',
+    'verbose',
+    'include-chairman',
+    'exclude-chairman',
+    'stdin',
+  ]);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') {
+      out._.push(...args.slice(i + 1));
+      break;
+    }
+    if (!a.startsWith('--')) {
+      out._.push(a);
+      continue;
+    }
+
+    const eqIdx = a.indexOf('=');
+    if (eqIdx !== -1) {
+      out[a.slice(2, eqIdx)] = a.slice(eqIdx + 1);
+      continue;
+    }
+
+    const normalizedKey = a.slice(2);
+    if (booleanFlags.has(normalizedKey)) {
+      out[normalizedKey] = true;
+      continue;
+    }
+
+    const next = args[i + 1];
+    if (next == null || next.startsWith('--')) {
+      out[normalizedKey] = true;
+      continue;
+    }
+    out[normalizedKey] = next;
+    i++;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Wait cursor utilities
+// ---------------------------------------------------------------------------
+
+function parseWaitCursor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const parts = raw.split(':');
+  const version = parts[0];
+  if (version === 'v1' && parts.length === 4) {
+    const bucketSize = Number(parts[1]);
+    const doneBucket = Number(parts[2]);
+    const isDone = parts[3] === '1';
+    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
+    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
+    return { version, bucketSize, dispatchBucket: 0, doneBucket, isDone };
+  }
+  if (version === 'v2' && parts.length === 5) {
+    const bucketSize = Number(parts[1]);
+    const dispatchBucket = Number(parts[2]);
+    const doneBucket = Number(parts[3]);
+    const isDone = parts[4] === '1';
+    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
+    if (!Number.isFinite(dispatchBucket) || dispatchBucket < 0) return null;
+    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
+    return { version, bucketSize, dispatchBucket, doneBucket, isDone };
+  }
+  return null;
+}
+
+function formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone) {
+  return `v2:${bucketSize}:${dispatchBucket}:${doneBucket}:${isDone ? 1 : 0}`;
+}
+
+function resolveBucketSize(options, total, prevCursor) {
+  const raw = options.bucket != null ? options.bucket : options['bucket-size'];
+
+  if (raw == null || raw === true) {
+    if (prevCursor && prevCursor.bucketSize) return prevCursor.bucketSize;
+  } else {
+    const asString = String(raw).trim().toLowerCase();
+    if (asString !== 'auto') {
+      const num = Number(asString);
+      if (!Number.isFinite(num) || num <= 0) exitWithError(`wait: invalid --bucket: ${raw}`);
+      return Math.trunc(num);
+    }
+  }
+
+  const totalNum = Number(total || 0);
+  if (!Number.isFinite(totalNum) || totalNum <= 0) return 1;
+  return Math.max(1, Math.ceil(totalNum / 5));
+}
+
+// ---------------------------------------------------------------------------
+// Job ID generation
+// ---------------------------------------------------------------------------
+
+function generateJobId() {
+  return `${new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15)}-${crypto
+    .randomBytes(3)
+    .toString('hex')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Worker spawning
+// ---------------------------------------------------------------------------
+
+function spawnWorkers({ reviewers, workerPath, jobDir, reviewersDir, timeoutSec }) {
+  for (const reviewer of reviewers) {
+    const name = String(reviewer.name);
+    const safeName = safeFileName(name, 'reviewer');
+    const reviewerDir = path.join(reviewersDir, safeName);
+    ensureDir(reviewerDir);
+
+    atomicWriteJson(path.join(reviewerDir, 'status.json'), {
+      reviewer: name,
+      state: 'queued',
+      queuedAt: new Date().toISOString(),
+      command: String(reviewer.command),
+    });
+
+    const workerArgs = [
+      workerPath,
+      '--job-dir',
+      jobDir,
+      '--reviewer',
+      name,
+      '--safe-reviewer',
+      safeName,
+      '--command',
+      String(reviewer.command),
+    ];
+    if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
+      workerArgs.push('--timeout', String(timeoutSec));
+    }
+
+    const child = spawn(process.execPath, workerArgs, {
+      detached: true,
+      stdio: 'ignore',
+      env: process.env,
+    });
+    child.unref();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status computation
+// ---------------------------------------------------------------------------
+
+function computeStatus(jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
+
+  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  if (!jobMeta) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
+
+  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
+  if (!fs.existsSync(reviewersRoot)) exitWithError(`reviewers folder not found: ${reviewersRoot}`);
+
+  const reviewers = [];
+  for (const entry of fs.readdirSync(reviewersRoot)) {
+    const statusPath = path.join(reviewersRoot, entry, 'status.json');
+    const status = readJsonIfExists(statusPath);
+    if (status) reviewers.push({ safeName: entry, ...status });
+  }
+
+  const totals = { queued: 0, running: 0, retrying: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
+  for (const r of reviewers) {
+    const state = String(r.state || 'unknown');
+    if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
+  }
+
+  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0;
+  const overallState = allDone ? 'done' : (totals.running > 0 || totals.retrying > 0) ? 'running' : 'queued';
+
+  return {
+    jobDir: resolvedJobDir,
+    id: jobMeta.id || null,
+    chairmanRole: jobMeta.chairmanRole || null,
+    overallState,
+    counts: { total: reviewers.length, ...totals },
+    specName: jobMeta.specName || null,
+    reviewers: reviewers
+      .map((r) => ({
+        reviewer: r.reviewer,
+        state: r.state,
+        startedAt: r.startedAt || null,
+        finishedAt: r.finishedAt || null,
+        exitCode: r.exitCode != null ? r.exitCode : null,
+        message: r.message || null,
+      }))
+      .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// UI payload
+// ---------------------------------------------------------------------------
+
+function buildUiPayload(statusPayload) {
+  const counts = statusPayload.counts || {};
+  const done = computeTerminalDoneCount(counts);
+  const total = Number(counts.total || 0);
+  const isDone = String(statusPayload.overallState || '') === 'done';
+
+  const queued = Number(counts.queued || 0);
+  const running = Number(counts.running || 0);
+
+  const reviewersArray = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
+  const sortedReviewers = reviewersArray
+    .map((r) => ({
+      entity: r && r.reviewer != null ? String(r.reviewer) : '',
+      state: r && r.state != null ? String(r.state) : 'unknown',
+      exitCode: r && r.exitCode != null ? r.exitCode : null,
+    }))
+    .filter((r) => r.entity)
+    .sort((a, b) => a.entity.localeCompare(b.entity));
+
+  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled']);
+  const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
+  let hasInProgress = dispatchStatus === 'in_progress';
+
+  const reviewerSteps = sortedReviewers.map((r) => {
+    const state = r.state || 'unknown';
+    const isTerminal = terminalStates.has(state);
+
+    let status;
+    if (isTerminal) {
+      status = 'completed';
+    } else if (!hasInProgress && running > 0 && state === 'running') {
+      status = 'in_progress';
+      hasInProgress = true;
+    } else {
+      status = 'pending';
+    }
+
+    const label = `[Spec Review] Ask ${r.entity}`;
+    return { label, status: asCodexStepStatus(status) };
+  });
+
+  const synthStatus = asCodexStepStatus(isDone ? (hasInProgress ? 'pending' : 'in_progress') : 'pending');
+
+  const codexPlan = [
+    { step: '[Spec Review] Prompt dispatch', status: dispatchStatus },
+    ...reviewerSteps.map((s) => ({ step: s.label, status: s.status })),
+    { step: '[Spec Review] Synthesize', status: synthStatus },
+  ];
+
+  const claudeTodos = [
+    {
+      content: '[Spec Review] Prompt dispatch',
+      status: dispatchStatus,
+      activeForm: dispatchStatus === 'completed'
+        ? UI_STRINGS.dispatch.completed
+        : UI_STRINGS.dispatch.inProgress,
+    },
+    ...reviewerSteps.map((s) => ({
+      content: s.label,
+      status: s.status,
+      activeForm: s.status === 'completed' ? 'Finished' : 'Awaiting response',
+    })),
+    {
+      content: '[Spec Review] Synthesize',
+      status: synthStatus,
+      activeForm:
+        synthStatus === 'completed'
+          ? UI_STRINGS.synthesize.completed
+          : synthStatus === 'in_progress'
+            ? UI_STRINGS.synthesize.inProgress
+            : UI_STRINGS.synthesize.pending,
+    },
+  ];
+
+  return {
+    progress: { done, total, overallState: String(statusPayload.overallState || '') },
+    codex: { update_plan: { plan: codexPlan } },
+    claude: { todo_write: { todos: claudeTodos } },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Wait payload
+// ---------------------------------------------------------------------------
+
+function asWaitPayload(statusPayload) {
+  const reviewersArray = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
+
+  return {
+    jobDir: statusPayload.jobDir,
+    id: statusPayload.id,
+    chairmanRole: statusPayload.chairmanRole,
+    overallState: statusPayload.overallState,
+    counts: statusPayload.counts,
+    specName: statusPayload.specName,
+    reviewers: reviewersArray.map((r) => ({
+      reviewer: r.reviewer,
+      state: r.state,
+      exitCode: r.exitCode != null ? r.exitCode : null,
+      message: r.message || null,
+    })),
+    ui: buildUiPayload(statusPayload),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Command implementations
+// ---------------------------------------------------------------------------
+
+function cmdStatus(options, jobDir) {
+  const payload = computeStatus(jobDir);
+
+  const wantChecklist = Boolean(options.checklist) && !options.json;
+  if (wantChecklist) {
+    const done = computeTerminalDoneCount(payload.counts);
+    const headerId = payload.id ? ` (${payload.id})` : '';
+    const extraInfo = payload.specName ? ` [spec: ${payload.specName}]` : '';
+    process.stdout.write(`Spec Review${headerId}${extraInfo}\n`);
+    process.stdout.write(
+      `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
+    );
+    for (const r of payload.reviewers) {
+      const state = String(r.state || '');
+      const mark =
+        state === 'done'
+          ? '[x]'
+          : state === 'running' || state === 'queued'
+            ? '[ ]'
+            : state
+              ? '[!]'
+              : '[ ]';
+      const exitInfo = r.exitCode != null ? ` (exit ${r.exitCode})` : '';
+      process.stdout.write(`${mark} ${r.reviewer} \u2014 ${state}${exitInfo}\n`);
+    }
+    return;
+  }
+
+  const wantText = Boolean(options.text) && !options.json;
+  if (wantText) {
+    const done = computeTerminalDoneCount(payload.counts);
+    process.stdout.write(`reviewers ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
+    if (options.verbose) {
+      for (const r of payload.reviewers) {
+        process.stdout.write(`- ${r.reviewer}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
+      }
+    }
+    return;
+  }
+
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function cmdWait(options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
+  const prevCursorRaw =
+    options.cursor != null
+      ? String(options.cursor)
+      : fs.existsSync(cursorFilePath)
+        ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
+        : '';
+  const prevCursor = parseWaitCursor(prevCursorRaw);
+
+  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
+  const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
+
+  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 0;
+  const timeoutMs = Math.trunc(Number(timeoutMsRaw));
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
+
+  let payload = computeStatus(jobDir);
+  const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
+
+  const doneCount = computeTerminalDoneCount(payload.counts);
+  const isDone = payload.overallState === 'done';
+  const total = Number(payload.counts.total || 0);
+  const queued = Number(payload.counts.queued || 0);
+  const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
+  const doneBucket = Math.floor(doneCount / bucketSize);
+  const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
+
+  if (!prevCursor) {
+    fs.writeFileSync(cursorFilePath, cursor, 'utf8');
+    process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor }, null, 2)}\n`);
+    return;
+  }
+
+  const start = Date.now();
+  while (cursor === prevCursorRaw) {
+    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
+    sleepMs(intervalMs);
+    payload = computeStatus(jobDir);
+    const d = computeTerminalDoneCount(payload.counts);
+    const doneFlag = payload.overallState === 'done';
+    const totalCount = Number(payload.counts.total || 0);
+    const queuedCount = Number(payload.counts.queued || 0);
+    const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
+    const doneB = Math.floor(d / bucketSize);
+    const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
+    if (nextCursor !== prevCursorRaw) {
+      fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
+      process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor: nextCursor }, null, 2)}\n`);
+      return;
+    }
+  }
+
+  const finalPayload = computeStatus(jobDir);
+  const finalDone = computeTerminalDoneCount(finalPayload.counts);
+  const finalDoneFlag = finalPayload.overallState === 'done';
+  const finalTotal = Number(finalPayload.counts.total || 0);
+  const finalQueued = Number(finalPayload.counts.queued || 0);
+  const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
+  const finalDoneBucket = Math.floor(finalDone / bucketSize);
+  const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
+  fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
+  process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload), cursor: finalCursor }, null, 2)}\n`);
+}
+
+function cmdResults(options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
+
+  const reviewers = [];
+  if (fs.existsSync(reviewersRoot)) {
+    for (const entry of fs.readdirSync(reviewersRoot)) {
+      const statusPath = path.join(reviewersRoot, entry, 'status.json');
+      const outputPath = path.join(reviewersRoot, entry, 'output.txt');
+      const errorPath = path.join(reviewersRoot, entry, 'error.txt');
+      const status = readJsonIfExists(statusPath);
+      if (!status) continue;
+      const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
+      const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
+      reviewers.push({ safeName: entry, ...status, output, stderr });
+    }
+  }
+
+  if (options.json) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          jobDir: resolvedJobDir,
+          id: jobMeta ? jobMeta.id : null,
+          specName: jobMeta ? jobMeta.specName : null,
+          prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
+            ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
+            : null,
+          reviewers: reviewers
+            .map((r) => ({
+              reviewer: r.reviewer,
+              state: r.state,
+              exitCode: r.exitCode != null ? r.exitCode : null,
+              message: r.message || null,
+              output: r.output,
+              stderr: r.stderr,
+            }))
+            .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  for (const r of reviewers.sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)))) {
+    process.stdout.write(`\n=== ${r.reviewer} (${r.state}) ===\n`);
+    if (r.message) process.stdout.write(`${r.message}\n`);
+    process.stdout.write(r.output || '');
+    if (!r.output && r.stderr) {
+      process.stdout.write('\n');
+      process.stdout.write(r.stderr);
+    }
+    process.stdout.write('\n');
+  }
+}
+
+function cmdStop(_options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
+  if (!fs.existsSync(reviewersRoot)) exitWithError(`No reviewers folder found: ${reviewersRoot}`);
+
+  let stoppedAny = false;
+  for (const entry of fs.readdirSync(reviewersRoot)) {
+    const statusPath = path.join(reviewersRoot, entry, 'status.json');
+    const status = readJsonIfExists(statusPath);
+    if (!status) continue;
+    if (status.state !== 'running') continue;
+    if (!status.pid) continue;
+
+    try {
+      process.kill(Number(status.pid), 'SIGTERM');
+      stoppedAny = true;
+    } catch {
+      // ignore
+    }
+  }
+
+  process.stdout.write(stoppedAny ? `stop: sent SIGTERM to running reviewers\n` : `stop: no running reviewers\n`);
+}
+
+function cmdClean(_options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  fs.rmSync(resolvedJobDir, { recursive: true, force: true });
+  process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
+}
+
+// ---------------------------------------------------------------------------
+// Spec-review-specific config parsing
+// ---------------------------------------------------------------------------
+
+function resolveDefaultConfigFile() {
+  if (fs.existsSync(SKILL_CONFIG_FILE)) return SKILL_CONFIG_FILE;
+  if (fs.existsSync(REPO_CONFIG_FILE)) return REPO_CONFIG_FILE;
+  return SKILL_CONFIG_FILE;
 }
 
 function parseSpecReviewConfig(configPath) {
@@ -189,56 +777,37 @@ function parseYamlSimple(configPath, fallback) {
   }
 }
 
-function ensureDir(dirPath) {
-  fs.mkdirSync(dirPath, { recursive: true });
-}
+// ---------------------------------------------------------------------------
+// Spec-review-specific functions
+// ---------------------------------------------------------------------------
 
-function safeFileName(name) {
-  const cleaned = String(name || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-  return cleaned || 'reviewer';
-}
+function findProjectRoot() {
+  let current = SKILL_DIR;
+  const root = path.parse(current).root;
 
-function atomicWriteJson(filePath, payload) {
-  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
-  fs.renameSync(tmpPath, filePath);
-}
+  while (current !== root) {
+    const omtDir = path.join(current, '.omt');
+    if (fs.existsSync(omtDir) && fs.statSync(omtDir).isDirectory()) {
+      return current;
+    }
 
-function readJsonIfExists(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
+    const gitDir = path.join(current, '.git');
+    if (fs.existsSync(gitDir)) {
+      return current;
+    }
+
+    current = path.dirname(current);
   }
+
+  const normalized = SKILL_DIR.replace(/\\/g, '/');
+  const skillsMatch = normalized.match(/^(.+?)\/.claude\/skills\//);
+  if (skillsMatch) {
+    return skillsMatch[1];
+  }
+
+  return null;
 }
 
-function sleepMs(ms) {
-  const msNum = Number(ms);
-  if (!Number.isFinite(msNum) || msNum <= 0) return;
-  const sab = new SharedArrayBuffer(4);
-  const view = new Int32Array(sab);
-  Atomics.wait(view, 0, 0, Math.trunc(msNum));
-}
-
-function computeTerminalDoneCount(counts) {
-  const c = counts || {};
-  return (
-    Number(c.done || 0) +
-    Number(c.missing_cli || 0) +
-    Number(c.error || 0) +
-    Number(c.timed_out || 0) +
-    Number(c.canceled || 0)
-  );
-}
-
-function asCodexStepStatus(value) {
-  const v = String(value || '');
-  if (v === 'pending' || v === 'in_progress' || v === 'completed') return v;
-  return 'pending';
-}
-
-// Gather spec context from .omt/specs/ directory
 function gatherSpecContext(specName, config) {
   const parts = [];
   const projectRoot = findProjectRoot();
@@ -256,7 +825,6 @@ function gatherSpecContext(specName, config) {
 
   const files = [];
 
-  // 1. Gather ALL *.md files from shared_context_dir
   if (fs.existsSync(contextDir)) {
     try {
       const contextFiles = fs.readdirSync(contextDir)
@@ -278,7 +846,6 @@ function gatherSpecContext(specName, config) {
     }
   }
 
-  // 2. Gather spec.md from {specs_dir}/{specName}/
   const specPath = path.join(specDir, 'spec.md');
   if (fs.existsSync(specPath)) {
     try {
@@ -290,7 +857,6 @@ function gatherSpecContext(specName, config) {
     }
   }
 
-  // 3. Gather decision records from {specs_dir}/{specName}/records/
   const recordsDir = path.join(specDir, 'records');
   if (fs.existsSync(recordsDir)) {
     try {
@@ -319,208 +885,9 @@ function gatherSpecContext(specName, config) {
   };
 }
 
-function findProjectRoot() {
-  // Look for .omt directory starting from skill directory and going up
-  let current = SKILL_DIR;
-  const root = path.parse(current).root;
-
-  while (current !== root) {
-    const omtDir = path.join(current, '.omt');
-    if (fs.existsSync(omtDir) && fs.statSync(omtDir).isDirectory()) {
-      return current;
-    }
-
-    // Also check for .git as fallback project root indicator
-    const gitDir = path.join(current, '.git');
-    if (fs.existsSync(gitDir)) {
-      return current;
-    }
-
-    current = path.dirname(current);
-  }
-
-  // Fallback: try common patterns
-  const normalized = SKILL_DIR.replace(/\\/g, '/');
-  const skillsMatch = normalized.match(/^(.+?)\/.claude\/skills\//);
-  if (skillsMatch) {
-    return skillsMatch[1];
-  }
-
-  return null;
-}
-
-function buildSpecReviewUiPayload(statusPayload) {
-  const counts = statusPayload.counts || {};
-  const done = computeTerminalDoneCount(counts);
-  const total = Number(counts.total || 0);
-  const isDone = String(statusPayload.overallState || '') === 'done';
-
-  const queued = Number(counts.queued || 0);
-  const running = Number(counts.running || 0);
-
-  const reviewers = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
-  const sortedReviewers = reviewers
-    .map((m) => ({
-      reviewer: m && m.reviewer != null ? String(m.reviewer) : '',
-      state: m && m.state != null ? String(m.state) : 'unknown',
-      exitCode: m && m.exitCode != null ? m.exitCode : null,
-    }))
-    .filter((m) => m.reviewer)
-    .sort((a, b) => a.reviewer.localeCompare(b.reviewer));
-
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled']);
-  const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
-  let hasInProgress = dispatchStatus === 'in_progress';
-
-  const reviewerSteps = sortedReviewers.map((m) => {
-    const state = m.state || 'unknown';
-    const isTerminal = terminalStates.has(state);
-
-    let status;
-    if (isTerminal) {
-      status = 'completed';
-    } else if (!hasInProgress && running > 0 && state === 'running') {
-      status = 'in_progress';
-      hasInProgress = true;
-    } else {
-      status = 'pending';
-    }
-
-    const label = `[Spec Review] Ask ${m.reviewer}`;
-    return { label, status: asCodexStepStatus(status) };
-  });
-
-  const synthStatus = asCodexStepStatus(isDone ? (hasInProgress ? 'pending' : 'in_progress') : 'pending');
-
-  const codexPlan = [
-    { step: `[Spec Review] Prompt dispatch`, status: dispatchStatus },
-    ...reviewerSteps.map((s) => ({ step: s.label, status: s.status })),
-    { step: `[Spec Review] Synthesize`, status: synthStatus },
-  ];
-
-  const claudeTodos = [
-    {
-      content: `[Spec Review] Prompt dispatch`,
-      status: dispatchStatus,
-      activeForm: dispatchStatus === 'completed' ? 'Dispatched review prompts' : 'Dispatching review prompts',
-    },
-    ...reviewerSteps.map((s) => ({
-      content: s.label,
-      status: s.status,
-      activeForm: s.status === 'completed' ? 'Finished' : 'Awaiting response',
-    })),
-    {
-      content: `[Spec Review] Synthesize`,
-      status: synthStatus,
-      activeForm:
-        synthStatus === 'completed'
-          ? 'Spec review results ready'
-          : synthStatus === 'in_progress'
-            ? 'Ready to synthesize'
-            : 'Waiting to synthesize',
-    },
-  ];
-
-  return {
-    progress: { done, total, overallState: String(statusPayload.overallState || '') },
-    codex: { update_plan: { plan: codexPlan } },
-    claude: { todo_write: { todos: claudeTodos } },
-  };
-}
-
-function computeStatusPayload(jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
-
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
-  if (!jobMeta) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
-
-  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
-  if (!fs.existsSync(reviewersRoot)) exitWithError(`reviewers folder not found: ${reviewersRoot}`);
-
-  const reviewers = [];
-  for (const entry of fs.readdirSync(reviewersRoot)) {
-    const statusPath = path.join(reviewersRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath);
-    if (status) reviewers.push({ safeName: entry, ...status });
-  }
-
-  const totals = { queued: 0, running: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
-  for (const r of reviewers) {
-    const state = String(r.state || 'unknown');
-    if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
-  }
-
-  const allDone = totals.running === 0 && totals.queued === 0;
-  const overallState = allDone ? 'done' : totals.running > 0 ? 'running' : 'queued';
-
-  return {
-    jobDir: resolvedJobDir,
-    id: jobMeta.id || null,
-    chairmanRole: jobMeta.chairmanRole || null,
-    specName: jobMeta.specName || null,
-    overallState,
-    counts: { total: reviewers.length, ...totals },
-    reviewers: reviewers
-      .map((r) => ({
-        reviewer: r.reviewer,
-        state: r.state,
-        startedAt: r.startedAt || null,
-        finishedAt: r.finishedAt || null,
-        exitCode: r.exitCode != null ? r.exitCode : null,
-        message: r.message || null,
-      }))
-      .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
-  };
-}
-
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const out = { _: [] };
-  const booleanFlags = new Set([
-    'json',
-    'text',
-    'checklist',
-    'help',
-    'h',
-    'verbose',
-    'include-chairman',
-    'exclude-chairman',
-    'stdin',
-  ]);
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--') {
-      out._.push(...args.slice(i + 1));
-      break;
-    }
-    if (!a.startsWith('--')) {
-      out._.push(a);
-      continue;
-    }
-
-    const [key, rawValue] = a.split('=', 2);
-    if (rawValue != null) {
-      out[key.slice(2)] = rawValue;
-      continue;
-    }
-
-    const normalizedKey = key.slice(2);
-    if (booleanFlags.has(normalizedKey)) {
-      out[normalizedKey] = true;
-      continue;
-    }
-
-    const next = args[i + 1];
-    if (next == null || next.startsWith('--')) {
-      out[normalizedKey] = true;
-      continue;
-    }
-    out[normalizedKey] = next;
-    i++;
-  }
-  return out;
-}
+// ---------------------------------------------------------------------------
+// Spec-review-specific start command
+// ---------------------------------------------------------------------------
 
 function printHelp() {
   process.stdout.write(`Spec Review (job mode)
@@ -549,7 +916,7 @@ function cmdStart(options, prompt) {
 
   ensureDir(jobsDir);
 
-  const hostRole = detectHostRole();
+  const hostRole = detectHostRole(SKILL_DIR);
   const config = parseSpecReviewConfig(configPath);
   const chairmanRoleRaw = options.chairman || process.env.SPEC_REVIEW_CHAIRMAN || config['spec-review'].chairman.role || 'auto';
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
@@ -574,14 +941,12 @@ function cmdStart(options, prompt) {
     return true;
   });
 
-  // Handle spec context
   const specName = options.spec || null;
   let specContext = { context: '', files: [] };
   if (specName) {
     specContext = gatherSpecContext(specName, config);
   }
 
-  // Build final prompt with spec context
   let finalPrompt = prompt;
   if (specContext.context) {
     finalPrompt = `# Spec Review Context
@@ -595,9 +960,7 @@ ${specContext.context}
 ${prompt}`;
   }
 
-  const jobId = `${new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15)}-${crypto
-    .randomBytes(3)
-    .toString('hex')}`;
+  const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `spec-review-${jobId}`);
   const reviewersDir = path.join(jobDir, 'reviewers');
   ensureDir(reviewersDir);
@@ -625,41 +988,13 @@ ${prompt}`;
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
 
-  for (const reviewer of reviewers) {
-    const name = String(reviewer.name);
-    const safeName = safeFileName(name);
-    const reviewerDir = path.join(reviewersDir, safeName);
-    ensureDir(reviewerDir);
-
-    atomicWriteJson(path.join(reviewerDir, 'status.json'), {
-      reviewer: name,
-      state: 'queued',
-      queuedAt: new Date().toISOString(),
-      command: String(reviewer.command),
-    });
-
-    const workerArgs = [
-      WORKER_PATH,
-      '--job-dir',
-      jobDir,
-      '--reviewer',
-      name,
-      '--safe-reviewer',
-      safeName,
-      '--command',
-      String(reviewer.command),
-    ];
-    if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
-      workerArgs.push('--timeout', String(timeoutSec));
-    }
-
-    const child = spawn(process.execPath, workerArgs, {
-      detached: true,
-      stdio: 'ignore',
-      env: process.env,
-    });
-    child.unref();
-  }
+  spawnWorkers({
+    reviewers,
+    workerPath: WORKER_PATH,
+    jobDir,
+    reviewersDir,
+    timeoutSec,
+  });
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
@@ -668,272 +1003,9 @@ ${prompt}`;
   }
 }
 
-function cmdStatus(options, jobDir) {
-  const payload = computeStatusPayload(jobDir);
-
-  const wantChecklist = Boolean(options.checklist) && !options.json;
-  if (wantChecklist) {
-    const done = computeTerminalDoneCount(payload.counts);
-    const headerId = payload.id ? ` (${payload.id})` : '';
-    const specInfo = payload.specName ? ` [spec: ${payload.specName}]` : '';
-    process.stdout.write(`Spec Review${headerId}${specInfo}\n`);
-    process.stdout.write(
-      `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
-    );
-    for (const r of payload.reviewers) {
-      const state = String(r.state || '');
-      const mark =
-        state === 'done'
-          ? '[x]'
-          : state === 'running' || state === 'queued'
-            ? '[ ]'
-            : state
-              ? '[!]'
-              : '[ ]';
-      const exitInfo = r.exitCode != null ? ` (exit ${r.exitCode})` : '';
-      process.stdout.write(`${mark} ${r.reviewer} — ${state}${exitInfo}\n`);
-    }
-    return;
-  }
-
-  const wantText = Boolean(options.text) && !options.json;
-  if (wantText) {
-    const done = computeTerminalDoneCount(payload.counts);
-    process.stdout.write(`reviewers ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
-    if (options.verbose) {
-      for (const r of payload.reviewers) {
-        process.stdout.write(`- ${r.reviewer}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
-      }
-    }
-    return;
-  }
-
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-}
-
-function parseWaitCursor(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return null;
-  const parts = raw.split(':');
-  const version = parts[0];
-  if (version === 'v1' && parts.length === 4) {
-    const bucketSize = Number(parts[1]);
-    const doneBucket = Number(parts[2]);
-    const isDone = parts[3] === '1';
-    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
-    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
-    return { version, bucketSize, dispatchBucket: 0, doneBucket, isDone };
-  }
-  if (version === 'v2' && parts.length === 5) {
-    const bucketSize = Number(parts[1]);
-    const dispatchBucket = Number(parts[2]);
-    const doneBucket = Number(parts[3]);
-    const isDone = parts[4] === '1';
-    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
-    if (!Number.isFinite(dispatchBucket) || dispatchBucket < 0) return null;
-    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
-    return { version, bucketSize, dispatchBucket, doneBucket, isDone };
-  }
-  return null;
-}
-
-function formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone) {
-  return `v2:${bucketSize}:${dispatchBucket}:${doneBucket}:${isDone ? 1 : 0}`;
-}
-
-function asWaitPayload(statusPayload) {
-  const reviewers = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
-  return {
-    jobDir: statusPayload.jobDir,
-    id: statusPayload.id,
-    chairmanRole: statusPayload.chairmanRole,
-    specName: statusPayload.specName,
-    overallState: statusPayload.overallState,
-    counts: statusPayload.counts,
-    reviewers: reviewers.map((r) => ({
-      reviewer: r.reviewer,
-      state: r.state,
-      exitCode: r.exitCode != null ? r.exitCode : null,
-      message: r.message || null,
-    })),
-    ui: buildSpecReviewUiPayload(statusPayload),
-  };
-}
-
-function resolveBucketSize(options, total, prevCursor) {
-  const raw = options.bucket != null ? options.bucket : options['bucket-size'];
-
-  if (raw == null || raw === true) {
-    if (prevCursor && prevCursor.bucketSize) return prevCursor.bucketSize;
-  } else {
-    const asString = String(raw).trim().toLowerCase();
-    if (asString !== 'auto') {
-      const num = Number(asString);
-      if (!Number.isFinite(num) || num <= 0) exitWithError(`wait: invalid --bucket: ${raw}`);
-      return Math.trunc(num);
-    }
-  }
-
-  const totalNum = Number(total || 0);
-  if (!Number.isFinite(totalNum) || totalNum <= 0) return 1;
-  return Math.max(1, Math.ceil(totalNum / 5));
-}
-
-function cmdWait(options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
-  const prevCursorRaw =
-    options.cursor != null
-      ? String(options.cursor)
-      : fs.existsSync(cursorFilePath)
-        ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
-        : '';
-  const prevCursor = parseWaitCursor(prevCursorRaw);
-
-  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
-  const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
-
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 0;
-  const timeoutMs = Math.trunc(Number(timeoutMsRaw));
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
-
-  let payload = computeStatusPayload(jobDir);
-  const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
-
-  const doneCount = computeTerminalDoneCount(payload.counts);
-  const isDone = payload.overallState === 'done';
-  const total = Number(payload.counts.total || 0);
-  const queued = Number(payload.counts.queued || 0);
-  const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
-  const doneBucket = Math.floor(doneCount / bucketSize);
-  const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
-
-  if (!prevCursor) {
-    fs.writeFileSync(cursorFilePath, cursor, 'utf8');
-    process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor }, null, 2)}\n`);
-    return;
-  }
-
-  const start = Date.now();
-  while (cursor === prevCursorRaw) {
-    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
-    sleepMs(intervalMs);
-    payload = computeStatusPayload(jobDir);
-    const d = computeTerminalDoneCount(payload.counts);
-    const doneFlag = payload.overallState === 'done';
-    const totalCount = Number(payload.counts.total || 0);
-    const queuedCount = Number(payload.counts.queued || 0);
-    const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
-    const doneB = Math.floor(d / bucketSize);
-    const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
-    if (nextCursor !== prevCursorRaw) {
-      fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
-      process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor: nextCursor }, null, 2)}\n`);
-      return;
-    }
-  }
-
-  const finalPayload = computeStatusPayload(jobDir);
-  const finalDone = computeTerminalDoneCount(finalPayload.counts);
-  const finalDoneFlag = finalPayload.overallState === 'done';
-  const finalTotal = Number(finalPayload.counts.total || 0);
-  const finalQueued = Number(finalPayload.counts.queued || 0);
-  const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
-  const finalDoneBucket = Math.floor(finalDone / bucketSize);
-  const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
-  fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
-  process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload), cursor: finalCursor }, null, 2)}\n`);
-}
-
-function cmdResults(options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
-  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
-
-  const reviewers = [];
-  if (fs.existsSync(reviewersRoot)) {
-    for (const entry of fs.readdirSync(reviewersRoot)) {
-      const statusPath = path.join(reviewersRoot, entry, 'status.json');
-      const outputPath = path.join(reviewersRoot, entry, 'output.txt');
-      const errorPath = path.join(reviewersRoot, entry, 'error.txt');
-      const status = readJsonIfExists(statusPath);
-      if (!status) continue;
-      const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-      const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
-      reviewers.push({ safeName: entry, ...status, output, stderr });
-    }
-  }
-
-  if (options.json) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          jobDir: resolvedJobDir,
-          id: jobMeta ? jobMeta.id : null,
-          specName: jobMeta ? jobMeta.specName : null,
-          prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
-            ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
-            : null,
-          reviewers: reviewers
-            .map((r) => ({
-              reviewer: r.reviewer,
-              state: r.state,
-              exitCode: r.exitCode != null ? r.exitCode : null,
-              message: r.message || null,
-              output: r.output,
-              stderr: r.stderr,
-            }))
-            .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
-        },
-        null,
-        2
-      )}\n`
-    );
-    return;
-  }
-
-  for (const r of reviewers.sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)))) {
-    process.stdout.write(`\n=== ${r.reviewer} (${r.state}) ===\n`);
-    if (r.message) process.stdout.write(`${r.message}\n`);
-    process.stdout.write(r.output || '');
-    if (!r.output && r.stderr) {
-      process.stdout.write('\n');
-      process.stdout.write(r.stderr);
-    }
-    process.stdout.write('\n');
-  }
-}
-
-function cmdStop(_options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
-  if (!fs.existsSync(reviewersRoot)) exitWithError(`No reviewers folder found: ${reviewersRoot}`);
-
-  let stoppedAny = false;
-  for (const entry of fs.readdirSync(reviewersRoot)) {
-    const statusPath = path.join(reviewersRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath);
-    if (!status) continue;
-    if (status.state !== 'running') continue;
-    if (!status.pid) continue;
-
-    try {
-      process.kill(Number(status.pid), 'SIGTERM');
-      stoppedAny = true;
-    } catch {
-      // ignore
-    }
-  }
-
-  process.stdout.write(stoppedAny ? 'stop: sent SIGTERM to running reviewers\n' : 'stop: no running reviewers\n');
-}
-
-function cmdClean(_options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  fs.rmSync(resolvedJobDir, { recursive: true, force: true });
-  process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
-}
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 
 function main() {
   const options = parseArgs(process.argv);
@@ -992,3 +1064,25 @@ function main() {
 if (require.main === module) {
   main();
 }
+
+module.exports = {
+  detectHostRole,
+  normalizeBool,
+  resolveAutoRole,
+  ensureDir,
+  safeFileName,
+  atomicWriteJson,
+  readJsonIfExists,
+  sleepMs,
+  computeTerminalDoneCount,
+  asCodexStepStatus,
+  parseArgs,
+  parseWaitCursor,
+  formatWaitCursor,
+  resolveBucketSize,
+  generateJobId,
+  buildUiPayload,
+  parseSpecReviewConfig,
+  parseYamlSimple,
+  computeStatus,
+};
