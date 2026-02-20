@@ -78,6 +78,7 @@ This mindset is conveyed to external AIs in every review request.
 ## Review Assessment
 **Status**: No Review Needed
 **Reason**: [Brief explanation - e.g., "Simple CRUD with clear requirements, no architectural decisions"]
+**Verdict**: APPROVE
 Proceed with implementation.
 ```
 
@@ -320,7 +321,7 @@ EOF
 
 ## Advisory Output Format
 
-**ALL 5 SECTIONS ARE MANDATORY. No exceptions.**
+**ALL 6 SECTIONS ARE MANDATORY. No exceptions.**
 
 Chairman synthesizes opinions into:
 
@@ -346,6 +347,12 @@ Chairman synthesizes opinions into:
 ### Action Items
 
 [Suggested next steps based on feedback]
+
+### Review Verdict
+
+- **Verdict**: [APPROVE / REQUEST_CHANGES / COMMENT]
+- **Blocking Concerns**: [해소되지 않은 substantive 우려 목록, 없으면 "None"]
+- **Rationale**: [1-2문장 판정 근거]
 ```
 
 ### Why Every Section Matters
@@ -357,6 +364,19 @@ Chairman synthesizes opinions into:
 | **Concerns Raised** | Catalogues risks - for risk registry | Risks undocumented, no mitigation planning |
 | **Recommendation** | Synthesized judgment - the bottom line | No clear guidance for stakeholder |
 | **Action Items** | Concrete next steps - actionable output | Good advice with no path forward |
+| **Review Verdict** | Machine-readable judgment - enables caller loop control | Caller can't automate review cycles |
+
+### Verdict Criteria
+
+| Verdict | Condition | Meaning |
+|---------|-----------|---------|
+| **APPROVE** | No concerns raised, OR "No Review Needed" shortcut | 수정 없이 진행 가능 |
+| **REQUEST_CHANGES** | Blocking concerns 존재 (substantive 수정 필요) | 우려 해소 전까지 진행 불가 |
+| **COMMENT** | Minor concerns만 존재 (non-blocking) | 진행 가능, 개선 권고 |
+
+**Blocking vs Non-blocking 판정 기준:**
+- **Blocking**: 설계 결함, 확장성 위험, 데이터 정합성 문제, 보안 취약점 등 수정 없이 진행 시 심각한 문제 초래
+- **Non-blocking**: 네이밍 개선, 문서화 보완, 선택적 최적화 등 현재 설계로도 동작에 문제없음
 
 </Output_Format>
 
@@ -405,6 +425,18 @@ Chairman synthesizes opinions into:
 | "This is incomplete without mentioning X" | (nothing - synthesis only) |
 
 **The advisory reflects reviewer input, not chairman expertise.** If the review seems incomplete, that's the actual state of reviewer feedback.
+
+### Verdict Determination
+
+**Chairman determines the verdict by synthesizing reviewer concerns. The verdict reflects reviewer feedback, not chairman opinion.**
+
+| Reviewer Feedback State | Verdict | Rationale |
+|-------------------------|---------|-----------|
+| No concerns from any reviewer | APPROVE | 리뷰어 전원 우려 없음 |
+| Only minor/non-blocking concerns | COMMENT | 진행 가능, 개선 권고 사항 존재 |
+| Any blocking concern from any reviewer | REQUEST_CHANGES | 해소 필요한 substantive 우려 존재 |
+
+**Escalation rule:** 가장 심각한 우려 수준이 verdict를 결정한다. 2명이 APPROVE이더라도 1명이 blocking concern을 제기하면 REQUEST_CHANGES.
 
 ## Result Utilization
 
