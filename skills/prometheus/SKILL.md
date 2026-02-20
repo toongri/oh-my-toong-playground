@@ -606,7 +606,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | Section | Contents |
 |---------|----------|
 | **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
-| **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved) |
+| **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved), Momus review (findings and how resolved) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands, final checklist |
