@@ -4,6 +4,8 @@
 
 ## What Was Implemented
 
+**{WHAT_WAS_IMPLEMENTED}**
+
 {DESCRIPTION}
 
 ## Requirements/Plan

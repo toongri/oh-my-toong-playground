@@ -15,4 +15,4 @@ chunk-review:
   settings:
     timeout: 300
     mode: chairman
-    exclude_chairman_from_reviewers: true
+    exclude_chairman_from_reviewers: false
