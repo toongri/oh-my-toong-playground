@@ -240,6 +240,8 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
    - {COMMIT_HISTORY} ← Step 2 commit history
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
+> **Note:** chunk-reviewer internally dispatches to multiple models and returns consensus-annotated synthesis.
+
 **Dispatch rules:**
 
 | Scale | Action |
@@ -283,16 +285,28 @@ Orchestrator directly produces the Walkthrough from:
 
 ### Phase 2: Critique Synthesis
 
+Chunk-reviewer agents return consensus-annotated findings from multi-model review. Each issue carries a consensus level:
+
+- :red_circle: **Confirmed (3/3)** -- all models flagged this issue
+- :orange_circle: **High Confidence (2/3)** -- majority of models flagged this issue
+- :yellow_circle: **Needs Review (1/3)** -- single model flagged this issue
+
 For multi-chunk reviews:
 
 1. **Merge** all Strengths, Issues, Recommendations sections
-2. **Deduplicate** issues appearing in multiple chunks
-3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
-4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
-5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
-6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
+2. **Deduplicate** issues appearing in multiple chunks, applying **cross-chunk consensus promotion**:
+   - Same issue Confirmed in chunk A and Needs Review in chunk B → promote to Confirmed
+   - Same issue at different consensus levels across chunks → use the strongest (highest agreement) level
+3. **Carry issues by consensus level:**
+   - :red_circle: Confirmed (3/3): carry directly to final output
+   - :orange_circle: High Confidence (2/3): carry with consensus annotation preserved
+   - :yellow_circle: Needs Review (1/3): include with "single-model finding" note
+4. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
+5. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
+6. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
+7. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
-For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment).
+For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment), preserving consensus annotations.
 
 ### Final Output Format
 
