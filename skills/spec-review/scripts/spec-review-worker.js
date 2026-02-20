@@ -308,6 +308,12 @@ async function runWithRetry(opts) {
 
     if (attempt < MAX_RETRIES) {
       const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * BASE_DELAY_MS;
+      atomicWriteJson(path.join(runOpts.reviewerDir, 'status.json'), {
+        reviewer: runOpts.reviewer,
+        state: 'retrying',
+        attempt: attempt + 1,
+        message: `Retrying after attempt ${attempt} failure`,
+      });
       await sleepFn(delay);
     }
   }

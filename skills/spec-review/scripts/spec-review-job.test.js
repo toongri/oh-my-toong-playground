@@ -1398,4 +1398,16 @@ describe('computeStatus', () => {
     const result = computeStatus(jobDir);
     assert.equal(result.chairmanRole, 'claude');
   });
+
+  it('treats retrying reviewer as non-terminal (running)', () => {
+    const jobDir = path.join(tmpDir, 'job13');
+    setupJob(jobDir, { id: 'test-13' }, {
+      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
+      bob: { reviewer: 'bob', state: 'retrying' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.overallState, 'running');
+    assert.equal(result.counts.retrying, 1);
+    assert.equal(result.counts.done, 1);
+  });
 });
