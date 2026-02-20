@@ -1,14 +1,6 @@
-# Code Review Request
+# Chunk Review Data
 
-You are reviewing code changes for production readiness.
-
-**Your task:**
-1. Produce Chunk Analysis (per-file change analysis: role, changes, data flow, design decisions, side effects)
-2. Review {WHAT_WAS_IMPLEMENTED}
-3. Compare against {REQUIREMENTS}
-4. Evaluate against all 5 checklist categories
-5. Categorize issues by severity
-6. Assess production readiness
+> This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/reviewer.md.
 
 ## What Was Implemented
 
