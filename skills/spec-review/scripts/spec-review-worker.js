@@ -365,6 +365,7 @@ if (require.main === module) {
 module.exports = {
   splitCommand,
   atomicWriteJson,
+  assemblePrompt,
   runOnce,
   runWithRetry,
   sleepMs,

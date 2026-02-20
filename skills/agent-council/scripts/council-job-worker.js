@@ -359,4 +359,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { splitCommand, atomicWriteJson, sleepMs, runOnce, runWithRetry };
+module.exports = { splitCommand, atomicWriteJson, sleepMs, assemblePrompt, runOnce, runWithRetry };

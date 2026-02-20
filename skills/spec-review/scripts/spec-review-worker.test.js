@@ -12,6 +12,7 @@ const {
   runOnce,
   runWithRetry,
   sleepMs,
+  assemblePrompt,
   MAX_RETRIES,
   BASE_DELAY_MS,
 } = require('./spec-review-worker.js');
@@ -570,5 +571,222 @@ describe('constants', () => {
 
   it('BASE_DELAY_MS is 1000', () => {
     assert.equal(BASE_DELAY_MS, 1000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assemblePrompt() tests (H-2)
+// ---------------------------------------------------------------------------
+
+describe('assemblePrompt', () => {
+  let tmpDir;
+  let promptsDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    promptsDir = path.join(tmpDir, 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns structured prompt with REVIEW CONTENT when role file exists and reviewContent provided', () => {
+    fs.writeFileSync(path.join(promptsDir, 'claude.md'), 'You are a reviewer.', 'utf8');
+
+    const result = assemblePrompt({
+      promptsDir,
+      entityName: 'claude',
+      rawPrompt: 'Review this code',
+      reviewContent: 'function add(a,b) { return a+b; }',
+    });
+
+    assert.equal(result.isStructured, true);
+    assert.ok(result.assembled.includes('You are a reviewer.'), 'should contain role prompt');
+    assert.ok(result.assembled.includes('--- REVIEW CONTENT ---'), 'should contain REVIEW CONTENT header');
+    assert.ok(result.assembled.includes('function add(a,b) { return a+b; }'), 'should contain review content');
+    assert.ok(result.assembled.includes('--- END REVIEW CONTENT ---'), 'should contain END REVIEW CONTENT');
+    assert.ok(result.assembled.includes('Review this code'), 'should contain raw prompt');
+    assert.ok(result.assembled.includes('<system-instructions>'), 'should contain system-instructions tag');
+    assert.ok(result.assembled.includes('[HEADLESS SESSION]'), 'should contain headless enforcement');
+  });
+
+  it('returns structured prompt without REVIEW CONTENT when role file exists but no reviewContent', () => {
+    fs.writeFileSync(path.join(promptsDir, 'claude.md'), 'You are a reviewer.', 'utf8');
+
+    const result = assemblePrompt({
+      promptsDir,
+      entityName: 'claude',
+      rawPrompt: 'Review this code',
+    });
+
+    assert.equal(result.isStructured, true);
+    assert.ok(result.assembled.includes('You are a reviewer.'), 'should contain role prompt');
+    assert.ok(!result.assembled.includes('--- REVIEW CONTENT ---'), 'should NOT contain REVIEW CONTENT header');
+    assert.ok(result.assembled.includes('Review this code'), 'should contain raw prompt');
+  });
+
+  it('returns rawPrompt with isStructured=false when role file does not exist', () => {
+    const result = assemblePrompt({
+      promptsDir,
+      entityName: 'nonexistent',
+      rawPrompt: 'Review this code',
+    });
+
+    assert.equal(result.isStructured, false);
+    assert.equal(result.assembled, 'Review this code');
+  });
+
+  it('returns rawPrompt with isStructured=false when role file missing even with reviewContent', () => {
+    const result = assemblePrompt({
+      promptsDir,
+      entityName: 'nonexistent',
+      rawPrompt: 'Review this code',
+      reviewContent: 'some content to review',
+    });
+
+    assert.equal(result.isStructured, false);
+    assert.equal(result.assembled, 'Review this code');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce() — synchronous spawn throw (M-2)
+// ---------------------------------------------------------------------------
+
+describe('runOnce - synchronous spawnFn throw', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(async () => {
+    // Allow async stream cleanup to complete before removing tmpDir
+    await sleepMs(50);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns error state when spawnFn throws synchronously', async () => {
+    const throwingSpawn = () => { throw new Error('spawn failed'); };
+
+    const result = await runOnce({
+      program: 'anything',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'anything',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: throwingSpawn,
+    });
+
+    assert.equal(result.state, 'error');
+    assert.ok(result.message.includes('spawn failed'), `expected 'spawn failed' in message, got: ${result.message}`);
+
+    const status = readStatus(paths.statusPath);
+    assert.equal(status.state, 'error');
+    assert.ok(status.message.includes('spawn failed'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce() — non-SIGTERM signal (M-4)
+// ---------------------------------------------------------------------------
+
+describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns error state (not canceled) when process killed with SIGKILL', async () => {
+    const resultPromise = runOnce({
+      program: 'sleep',
+      args: ['60'],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sleep 60',
+      timeoutSec: 0,
+      attempt: 0,
+    });
+
+    // Poll status.json for pid
+    let pid = null;
+    for (let i = 0; i < 100; i++) {
+      await sleepMs(50);
+      try {
+        const status = readStatus(paths.statusPath);
+        if (status.pid) {
+          pid = status.pid;
+          break;
+        }
+      } catch { /* status.json not written yet */ }
+    }
+    assert.ok(pid, 'should have obtained pid from status.json');
+    try { process.kill(pid, 'SIGKILL'); } catch { /* ignore */ }
+
+    const result = await resultPromise;
+    assert.equal(result.state, 'error', 'SIGKILL should produce error, not canceled');
+    assert.equal(result.exitCode, null, 'exitCode should be null for signal kill');
+    assert.equal(result.signal, 'SIGKILL', 'signal should be SIGKILL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce() — assembled-prompt.txt creation (M-5)
+// ---------------------------------------------------------------------------
+
+describe('runOnce - assembled-prompt.txt creation', () => {
+  let tmpDir;
+  let paths;
+  let promptsDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+    // Create a prompts dir with a role file matching the reviewer name
+    promptsDir = path.join(tmpDir, 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates assembled-prompt.txt in reviewerDir when role file exists', async () => {
+    // assemblePrompt uses PROMPTS_DIR which is hardcoded to ../prompts relative to script.
+    // We need to use a reviewer name that has a role file in the real prompts dir.
+    // The real prompts dir has claude.md, codex.md, gemini.md.
+    // Use 'claude' as reviewer to trigger structured prompt assembly.
+    const result = await runOnce({
+      program: 'true',
+      args: [],
+      prompt: 'test prompt',
+      reviewer: 'claude',
+      reviewerDir: paths.reviewerDir,
+      command: 'true',
+      timeoutSec: 5,
+      attempt: 0,
+    });
+
+    assert.equal(result.state, 'done');
+    const assembledPath = path.join(paths.reviewerDir, 'assembled-prompt.txt');
+    assert.ok(fs.existsSync(assembledPath), 'assembled-prompt.txt should exist');
+    const content = fs.readFileSync(assembledPath, 'utf8');
+    assert.ok(content.includes('test prompt'), 'assembled-prompt.txt should contain the raw prompt');
+    assert.ok(content.includes('<system-instructions>'), 'assembled-prompt.txt should contain structured prompt');
   });
 });

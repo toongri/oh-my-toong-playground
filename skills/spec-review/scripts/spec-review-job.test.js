@@ -22,6 +22,10 @@ const {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
+  buildUiPayload,
+  parseSpecReviewConfig,
+  parseYamlSimple,
+  computeStatus,
 } = require('./spec-review-job.js');
 
 // ---------------------------------------------------------------------------
@@ -505,6 +509,11 @@ describe('parseArgs', () => {
     assert.equal(result.foo, true);
     assert.equal(result.bar, 'val');
   });
+
+  it('handles --key=value where value contains =', () => {
+    const result = parseArgs(['node', 'script', '--config=a=b']);
+    assert.equal(result.config, 'a=b');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -718,5 +727,675 @@ describe('generateJobId', () => {
     const id = generateJobId();
     const today = new Date().toISOString().slice(0, 10);
     assert.ok(id.startsWith(today), `Expected "${id}" to start with "${today}"`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseYamlSimple
+// ---------------------------------------------------------------------------
+
+describe('parseYamlSimple', () => {
+  let tmpDir;
+  const fallback = {
+    'spec-review': {
+      chairman: { role: 'auto' },
+      reviewers: [
+        { name: 'claude', command: 'claude -p', emoji: '🧠', color: 'CYAN' },
+      ],
+      context: {},
+      settings: { exclude_chairman_from_reviewers: true, timeout: 180 },
+    },
+  };
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('parses basic key-value in chairman section', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    role: gemini',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].chairman.role, 'gemini');
+  });
+
+  it('parses reviewers array with multiple entries', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  reviewers:',
+      '    - name: alice',
+      '      command: alice-cli',
+      '    - name: bob',
+      '      command: bob-cli',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].reviewers.length, 2);
+    assert.equal(result['spec-review'].reviewers[0].name, 'alice');
+    assert.equal(result['spec-review'].reviewers[0].command, 'alice-cli');
+    assert.equal(result['spec-review'].reviewers[1].name, 'bob');
+  });
+
+  it('parses context section', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  context:',
+      '    shared_context_dir: .omt/ctx',
+      '    specs_dir: .omt/specs',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].context.shared_context_dir, '.omt/ctx');
+    assert.equal(result['spec-review'].context.specs_dir, '.omt/specs');
+  });
+
+  it('parses settings section with type coercion', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  settings:',
+      '    timeout: 300',
+      '    exclude_chairman_from_reviewers: false',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].settings.timeout, 300);
+    assert.equal(result['spec-review'].settings.exclude_chairman_from_reviewers, false);
+  });
+
+  it('skips comment lines', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      '# This is a comment',
+      'spec-review:',
+      '  chairman:',
+      '    # Another comment',
+      '    role: codex',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].chairman.role, 'codex');
+  });
+
+  it('falls back to default reviewers when none defined', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    role: auto',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.deepEqual(result['spec-review'].reviewers, fallback['spec-review'].reviewers);
+  });
+
+  it('returns fallback on read error (non-existent file)', () => {
+    const result = parseYamlSimple(path.join(tmpDir, 'missing.yaml'), fallback);
+    assert.deepEqual(result, fallback);
+  });
+
+  it('merges chairman with fallback defaults', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    name: custom',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].chairman.name, 'custom');
+    assert.equal(result['spec-review'].chairman.role, 'auto');
+  });
+
+  it('handles "members:" as alias for reviewers section', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  members:',
+      '    - name: alice',
+      '      command: alice-cli',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].reviewers.length, 1);
+    assert.equal(result['spec-review'].reviewers[0].name, 'alice');
+  });
+
+  it('strips quotes from reviewer name values', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  reviewers:',
+      '    - name: "quoted-name"',
+      '      command: some-cmd',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].reviewers[0].name, 'quoted-name');
+  });
+
+  it('skips empty lines', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '',
+      '  chairman:',
+      '',
+      '    role: codex',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['spec-review'].chairman.role, 'codex');
+  });
+
+  it('coerces "true" string to boolean true in settings', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  settings:',
+      '    verbose: true',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.strictEqual(result['spec-review'].settings.verbose, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseSpecReviewConfig
+// ---------------------------------------------------------------------------
+
+describe('parseSpecReviewConfig', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns fallback when config file does not exist', () => {
+    const result = parseSpecReviewConfig(path.join(tmpDir, 'missing.yaml'));
+    assert.ok(result['spec-review']);
+    assert.ok(Array.isArray(result['spec-review'].reviewers));
+    assert.ok(result['spec-review'].reviewers.length > 0);
+    assert.equal(result['spec-review'].chairman.role, 'auto');
+  });
+
+  it('fallback contains default reviewers (claude, codex, gemini)', () => {
+    const result = parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
+    const names = result['spec-review'].reviewers.map(r => r.name);
+    assert.ok(names.includes('claude'));
+    assert.ok(names.includes('codex'));
+    assert.ok(names.includes('gemini'));
+  });
+
+  it('fallback contains default settings', () => {
+    const result = parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
+    assert.equal(result['spec-review'].settings.exclude_chairman_from_reviewers, true);
+    assert.equal(result['spec-review'].settings.timeout, 180);
+  });
+
+  it('fallback contains empty context object', () => {
+    const result = parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
+    assert.deepEqual(result['spec-review'].context, {});
+  });
+
+  it('parses valid config via simple parser (yaml module unavailable)', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    role: gemini',
+      '  reviewers:',
+      '    - name: alice',
+      '      command: alice-cli',
+      '  context:',
+      '    shared_context_dir: .omt/custom-ctx',
+      '  settings:',
+      '    timeout: 600',
+    ].join('\n'));
+    const result = parseSpecReviewConfig(configPath);
+    assert.equal(result['spec-review'].chairman.role, 'gemini');
+    assert.equal(result['spec-review'].reviewers.length, 1);
+    assert.equal(result['spec-review'].reviewers[0].name, 'alice');
+    assert.equal(result['spec-review'].context.shared_context_dir, '.omt/custom-ctx');
+    assert.equal(result['spec-review'].settings.timeout, 600);
+  });
+
+  it('merges settings with defaults from fallback', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  settings:',
+      '    timeout: 999',
+    ].join('\n'));
+    const result = parseSpecReviewConfig(configPath);
+    assert.equal(result['spec-review'].settings.timeout, 999);
+    assert.equal(result['spec-review'].settings.exclude_chairman_from_reviewers, true);
+  });
+
+  it('returns structure with spec-review top-level key', () => {
+    const result = parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
+    const keys = Object.keys(result);
+    assert.deepEqual(keys, ['spec-review']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildUiPayload
+// ---------------------------------------------------------------------------
+
+describe('buildUiPayload', () => {
+  it('returns progress, codex, and claude keys', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 1, done: 1, queued: 0, running: 0, error: 0 },
+      reviewers: [{ reviewer: 'alice', state: 'done', exitCode: 0 }],
+    };
+    const result = buildUiPayload(payload);
+    assert.ok(result.progress);
+    assert.ok(result.codex);
+    assert.ok(result.claude);
+  });
+
+  it('reports correct progress done/total', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 3, done: 1, error: 1, queued: 0, running: 1, missing_cli: 0, timed_out: 0, canceled: 0 },
+      reviewers: [
+        { reviewer: 'alice', state: 'done' },
+        { reviewer: 'bob', state: 'error' },
+        { reviewer: 'carol', state: 'running' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.progress.done, 2);
+    assert.equal(result.progress.total, 3);
+  });
+
+  it('marks dispatch as completed when no queued reviewers', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 2, done: 1, queued: 0, running: 1 },
+      reviewers: [
+        { reviewer: 'alice', state: 'done' },
+        { reviewer: 'bob', state: 'running' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.codex.update_plan.plan[0].status, 'completed');
+  });
+
+  it('marks dispatch as in_progress when queued reviewers exist', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 2, done: 0, queued: 1, running: 1 },
+      reviewers: [
+        { reviewer: 'alice', state: 'running' },
+        { reviewer: 'bob', state: 'queued' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.codex.update_plan.plan[0].status, 'in_progress');
+  });
+
+  it('marks terminal-state reviewers as completed', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 3, done: 1, error: 1, missing_cli: 1, queued: 0, running: 0 },
+      reviewers: [
+        { reviewer: 'alice', state: 'done' },
+        { reviewer: 'bob', state: 'error' },
+        { reviewer: 'carol', state: 'missing_cli' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const reviewerSteps = result.codex.update_plan.plan.slice(1, -1);
+    for (const step of reviewerSteps) {
+      assert.equal(step.status, 'completed');
+    }
+  });
+
+  it('marks first running reviewer as in_progress when dispatch completed', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 2, done: 0, queued: 0, running: 2 },
+      reviewers: [
+        { reviewer: 'alice', state: 'running' },
+        { reviewer: 'bob', state: 'running' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const reviewerSteps = result.codex.update_plan.plan.slice(1, -1);
+    assert.equal(reviewerSteps[0].status, 'in_progress');
+    assert.equal(reviewerSteps[1].status, 'pending');
+  });
+
+  it('handles empty reviewers array', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 0, done: 0, queued: 0, running: 0 },
+      reviewers: [],
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.progress.done, 0);
+    assert.equal(result.progress.total, 0);
+    assert.equal(result.codex.update_plan.plan.length, 2);
+  });
+
+  it('all reviewers done sets synth to in_progress', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 2, done: 2, queued: 0, running: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 },
+      reviewers: [
+        { reviewer: 'alice', state: 'done' },
+        { reviewer: 'bob', state: 'done' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const plan = result.codex.update_plan.plan;
+    const synthStep = plan[plan.length - 1];
+    assert.equal(synthStep.status, 'in_progress');
+  });
+
+  it('all reviewers error sets synth to in_progress (all terminal, isDone)', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 2, done: 0, queued: 0, running: 0, error: 2 },
+      reviewers: [
+        { reviewer: 'alice', state: 'error' },
+        { reviewer: 'bob', state: 'error' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const plan = result.codex.update_plan.plan;
+    const synthStep = plan[plan.length - 1];
+    assert.equal(synthStep.status, 'in_progress');
+  });
+
+  it('synth is pending when not all done', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 2, done: 1, queued: 0, running: 1 },
+      reviewers: [
+        { reviewer: 'alice', state: 'done' },
+        { reviewer: 'bob', state: 'running' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const plan = result.codex.update_plan.plan;
+    const synthStep = plan[plan.length - 1];
+    assert.equal(synthStep.status, 'pending');
+  });
+
+  it('claude todos have content, status, and activeForm fields', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 1, done: 1, queued: 0, running: 0 },
+      reviewers: [{ reviewer: 'alice', state: 'done' }],
+    };
+    const result = buildUiPayload(payload);
+    for (const todo of result.claude.todo_write.todos) {
+      assert.ok('content' in todo);
+      assert.ok('status' in todo);
+      assert.ok('activeForm' in todo);
+    }
+  });
+
+  it('reviewer labels contain [Spec Review] prefix', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 1, done: 0, queued: 0, running: 1 },
+      reviewers: [{ reviewer: 'alice', state: 'running' }],
+    };
+    const result = buildUiPayload(payload);
+    const reviewerStep = result.codex.update_plan.plan[1];
+    assert.ok(reviewerStep.step.startsWith('[Spec Review]'));
+  });
+
+  it('sorts reviewers alphabetically', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 3, done: 0, queued: 0, running: 3 },
+      reviewers: [
+        { reviewer: 'carol', state: 'running' },
+        { reviewer: 'alice', state: 'running' },
+        { reviewer: 'bob', state: 'running' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const reviewerSteps = result.codex.update_plan.plan.slice(1, -1);
+    assert.ok(reviewerSteps[0].step.includes('alice'));
+    assert.ok(reviewerSteps[1].step.includes('bob'));
+    assert.ok(reviewerSteps[2].step.includes('carol'));
+  });
+
+  it('filters out reviewers with null/empty entity', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 2, done: 1, queued: 0, running: 0 },
+      reviewers: [
+        { reviewer: 'alice', state: 'done' },
+        { reviewer: null, state: 'done' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const reviewerSteps = result.codex.update_plan.plan.slice(1, -1);
+    assert.equal(reviewerSteps.length, 1);
+  });
+
+  it('handles missing counts gracefully', () => {
+    const payload = {
+      overallState: 'done',
+      reviewers: [],
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.progress.done, 0);
+    assert.equal(result.progress.total, 0);
+  });
+
+  it('handles missing reviewers gracefully', () => {
+    const payload = {
+      overallState: 'done',
+      counts: { total: 0 },
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.codex.update_plan.plan.length, 2);
+  });
+
+  it('hasInProgress propagation: dispatch in_progress prevents reviewer in_progress', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 2, done: 0, queued: 1, running: 1 },
+      reviewers: [
+        { reviewer: 'alice', state: 'running' },
+        { reviewer: 'bob', state: 'queued' },
+      ],
+    };
+    const result = buildUiPayload(payload);
+    const reviewerSteps = result.codex.update_plan.plan.slice(1, -1);
+    assert.equal(reviewerSteps[0].status, 'pending');
+    assert.equal(reviewerSteps[1].status, 'pending');
+  });
+
+  it('overallState is propagated in progress', () => {
+    const payload = {
+      overallState: 'running',
+      counts: { total: 1, done: 0, queued: 0, running: 1 },
+      reviewers: [{ reviewer: 'alice', state: 'running' }],
+    };
+    const result = buildUiPayload(payload);
+    assert.equal(result.progress.overallState, 'running');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeStatus
+// ---------------------------------------------------------------------------
+
+describe('computeStatus', () => {
+  let tmpDir;
+
+  function setupJob(jobDir, jobJson, reviewers) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(jobJson));
+    const reviewersDir = path.join(jobDir, 'reviewers');
+    fs.mkdirSync(reviewersDir, { recursive: true });
+    for (const [name, status] of Object.entries(reviewers)) {
+      const dir = path.join(reviewersDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns done overallState when all reviewers are terminal', () => {
+    const jobDir = path.join(tmpDir, 'job1');
+    setupJob(jobDir, { id: 'test-1', specName: 'my-spec' }, {
+      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
+      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.overallState, 'done');
+    assert.equal(result.counts.total, 2);
+    assert.equal(result.counts.done, 2);
+    assert.equal(result.counts.running, 0);
+  });
+
+  it('returns running overallState when some reviewers are running', () => {
+    const jobDir = path.join(tmpDir, 'job2');
+    setupJob(jobDir, { id: 'test-2' }, {
+      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
+      bob: { reviewer: 'bob', state: 'running' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.overallState, 'running');
+    assert.equal(result.counts.running, 1);
+    assert.equal(result.counts.done, 1);
+  });
+
+  it('returns queued overallState when only queued (no running)', () => {
+    const jobDir = path.join(tmpDir, 'job3');
+    setupJob(jobDir, { id: 'test-3' }, {
+      alice: { reviewer: 'alice', state: 'queued' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.overallState, 'queued');
+    assert.equal(result.counts.queued, 1);
+  });
+
+  it('counts error states correctly', () => {
+    const jobDir = path.join(tmpDir, 'job4');
+    setupJob(jobDir, { id: 'test-4' }, {
+      alice: { reviewer: 'alice', state: 'error', exitCode: 1 },
+      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      carol: { reviewer: 'carol', state: 'missing_cli' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.overallState, 'done');
+    assert.equal(result.counts.error, 1);
+    assert.equal(result.counts.missing_cli, 1);
+    assert.equal(result.counts.done, 1);
+  });
+
+  it('includes specName from job.json', () => {
+    const jobDir = path.join(tmpDir, 'job5');
+    setupJob(jobDir, { id: 'test-5', specName: 'auth-flow' }, {
+      alice: { reviewer: 'alice', state: 'done' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.specName, 'auth-flow');
+  });
+
+  it('returns null specName when not in job.json', () => {
+    const jobDir = path.join(tmpDir, 'job6');
+    setupJob(jobDir, { id: 'test-6' }, {
+      alice: { reviewer: 'alice', state: 'done' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.specName, null);
+  });
+
+  it('skips reviewer directories without status.json', () => {
+    const jobDir = path.join(tmpDir, 'job7');
+    setupJob(jobDir, { id: 'test-7' }, {
+      alice: { reviewer: 'alice', state: 'done' },
+    });
+    fs.mkdirSync(path.join(jobDir, 'reviewers', 'bob'));
+    const result = computeStatus(jobDir);
+    assert.equal(result.counts.total, 1);
+    assert.equal(result.reviewers.length, 1);
+  });
+
+  it('sorts reviewers alphabetically by name', () => {
+    const jobDir = path.join(tmpDir, 'job8');
+    setupJob(jobDir, { id: 'test-8' }, {
+      carol: { reviewer: 'carol', state: 'done' },
+      alice: { reviewer: 'alice', state: 'done' },
+      bob: { reviewer: 'bob', state: 'done' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.reviewers[0].reviewer, 'alice');
+    assert.equal(result.reviewers[1].reviewer, 'bob');
+    assert.equal(result.reviewers[2].reviewer, 'carol');
+  });
+
+  it('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', () => {
+    const jobDir = path.join(tmpDir, 'job9');
+    setupJob(jobDir, { id: 'test-9' }, {
+      alice: {
+        reviewer: 'alice',
+        state: 'done',
+        startedAt: '2026-01-01T00:00:00Z',
+        finishedAt: '2026-01-01T00:01:00Z',
+        exitCode: 0,
+        message: 'success',
+      },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.reviewers[0].startedAt, '2026-01-01T00:00:00Z');
+    assert.equal(result.reviewers[0].finishedAt, '2026-01-01T00:01:00Z');
+    assert.equal(result.reviewers[0].exitCode, 0);
+    assert.equal(result.reviewers[0].message, 'success');
+  });
+
+  it('returns null for missing reviewer metadata fields', () => {
+    const jobDir = path.join(tmpDir, 'job10');
+    setupJob(jobDir, { id: 'test-10' }, {
+      alice: { reviewer: 'alice', state: 'running' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.reviewers[0].startedAt, null);
+    assert.equal(result.reviewers[0].finishedAt, null);
+    assert.equal(result.reviewers[0].exitCode, null);
+    assert.equal(result.reviewers[0].message, null);
+  });
+
+  it('includes jobDir and id in result', () => {
+    const jobDir = path.join(tmpDir, 'job11');
+    setupJob(jobDir, { id: 'test-11' }, {
+      alice: { reviewer: 'alice', state: 'done' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.id, 'test-11');
+    assert.ok(result.jobDir.endsWith('job11'));
+  });
+
+  it('includes chairmanRole from job.json', () => {
+    const jobDir = path.join(tmpDir, 'job12');
+    setupJob(jobDir, { id: 'test-12', chairmanRole: 'claude' }, {
+      alice: { reviewer: 'alice', state: 'done' },
+    });
+    const result = computeStatus(jobDir);
+    assert.equal(result.chairmanRole, 'claude');
   });
 });

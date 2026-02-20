@@ -134,13 +134,13 @@ function parseArgs(argv) {
       continue;
     }
 
-    const [key, rawValue] = a.split('=', 2);
-    if (rawValue != null) {
-      out[key.slice(2)] = rawValue;
+    const eqIdx = a.indexOf('=');
+    if (eqIdx !== -1) {
+      out[a.slice(2, eqIdx)] = a.slice(eqIdx + 1);
       continue;
     }
 
-    const normalizedKey = key.slice(2);
+    const normalizedKey = a.slice(2);
     if (booleanFlags.has(normalizedKey)) {
       out[normalizedKey] = true;
       continue;
@@ -1081,4 +1081,8 @@ module.exports = {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
+  buildUiPayload,
+  parseSpecReviewConfig,
+  parseYamlSimple,
+  computeStatus,
 };
