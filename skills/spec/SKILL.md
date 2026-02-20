@@ -733,7 +733,7 @@ After receiving spec-review feedback, YOU must:
 4. Re-delegate to spec-review with **Re-review Context** (MANDATORY)
 5. Repeat until APPROVE received
 
-**CRITICAL: spec-review APPROVE 없이 Area complete 선언 불가.** REQUEST_CHANGES verdict가 반환된 상태에서 유저가 "Area complete"를 선언해도, APPROVE를 받을 때까지 Area를 완료할 수 없다.
+**CRITICAL: spec-review가 pass(APPROVE 또는 COMMENT) 하지 않으면 Area complete 선언 불가.** REQUEST_CHANGES verdict가 반환된 상태에서 유저가 "Area complete"를 선언해도, pass할 때까지 Area를 완료할 수 없다.
 
 ## Record Workflow
 
@@ -934,11 +934,11 @@ digraph area_completion {
 6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
    - AI CANNOT self-declare Area completion
-   - **spec-review APPROVE 없이 Area complete 선언 불가** — APPROVE가 선행 조건
+   - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 
 **Two gates must BOTH be passed for Area completion:**
-1. **spec-review APPROVE** (quality gate)
+1. **spec-review pass** — APPROVE 또는 COMMENT (quality gate). REQUEST_CHANGES는 차단.
 2. **User "Area complete" declaration** (authority gate)
 
 **Without BOTH gates passed, the Area is NOT complete and next Area CANNOT begin.**

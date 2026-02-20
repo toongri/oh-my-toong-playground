@@ -505,7 +505,7 @@ Overall structure:
 
 ### Metis Feedback Loop (MANDATORY Before Generation)
 
-**Before generating the plan**, invoke the metis skill to catch what you missed. **Metis APPROVE is required to proceed to plan generation. No APPROVE = no plan.**
+**Before generating the plan**, invoke the metis skill to catch what you missed. **Metis must pass (APPROVE or COMMENT) to proceed to plan generation. REQUEST_CHANGES blocks until resolved.**
 
 **Metis Consultation Flow:**
 1. Summarize the planning session (user goal, interview findings, research results)
@@ -547,7 +547,7 @@ When re-invoking metis after REQUEST_CHANGES, include this context so metis can 
 
 ### Momus Feedback Loop (MANDATORY Before Handoff)
 
-**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus APPROVE is required to proceed to handoff. No APPROVE = no handoff.**
+**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus must pass (APPROVE or COMMENT) to proceed to handoff. REQUEST_CHANGES blocks until resolved.**
 
 **Momus Review Flow:**
 1. Generate the plan to `.omt/plans/{name}.md`
