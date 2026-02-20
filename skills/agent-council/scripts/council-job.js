@@ -283,14 +283,14 @@ function computeStatus(jobDir) {
     if (status) members.push({ safeName: entry, ...status });
   }
 
-  const totals = { queued: 0, running: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
+  const totals = { queued: 0, running: 0, retrying: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
   for (const m of members) {
     const state = String(m.state || 'unknown');
     if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
   }
 
-  const allDone = totals.running === 0 && totals.queued === 0;
-  const overallState = allDone ? 'done' : totals.running > 0 ? 'running' : 'queued';
+  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0;
+  const overallState = allDone ? 'done' : (totals.running > 0 || totals.retrying > 0) ? 'running' : 'queued';
 
   return {
     jobDir: resolvedJobDir,

@@ -558,6 +558,30 @@ describe('runWithRetry', () => {
     assert.equal(status.attempt, 1);
     assert.equal(status.state, 'done');
   });
+
+  it('writes retrying status before backoff sleep', async () => {
+    const markerFile = path.join(tmpDir, 'attempt-marker-retrying');
+    let capturedStatus = null;
+
+    const sleepFn = async () => {
+      capturedStatus = readStatus(paths.statusPath);
+    };
+
+    await runWithRetry({
+      program: 'sh',
+      args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sh -c marker-script',
+      timeoutSec: 5,
+      sleepFn,
+    });
+
+    assert.ok(capturedStatus, 'sleepFn should have been called and captured status');
+    assert.equal(capturedStatus.state, 'retrying');
+    assert.equal(capturedStatus.attempt, 1);
+  });
 });
 
 // ---------------------------------------------------------------------------

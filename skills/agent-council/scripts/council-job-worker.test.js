@@ -529,6 +529,34 @@ describe('runWithRetry', () => {
     assert.ok(delays[1] >= 2000, `delay[1] should be >= 2000, got ${delays[1]}`);
     assert.ok(delays[1] < 3000, `delay[1] should be < 3000, got ${delays[1]}`);
   });
+
+  it('writes retrying status before backoff sleep', async () => {
+    const markerFile = path.join(tmpDir, 'attempt-marker-retrying');
+    const script = `sh -c 'if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}" && exit 1; fi'`;
+
+    const capturedStatuses = [];
+    const sleepFn = async (ms) => {
+      // Read status.json during sleep to verify retrying state
+      const status = readStatus(paths.statusPath);
+      capturedStatuses.push(status);
+    };
+
+    const result = await runWithRetry({
+      command: script,
+      prompt: '',
+      member: 'test',
+      safeMember: 'test-member',
+      jobDir: paths.jobDir,
+      timeoutSec: 5,
+      sleepFn,
+    });
+
+    assert.equal(result.state, 'done');
+    assert.equal(capturedStatuses.length, 1);
+    assert.equal(capturedStatuses[0].state, 'retrying');
+    assert.equal(capturedStatuses[0].attempt, 1);
+    assert.equal(capturedStatuses[0].member, 'test');
+  });
 });
 
 // ---------------------------------------------------------------------------

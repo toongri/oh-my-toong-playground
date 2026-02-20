@@ -1413,4 +1413,17 @@ describe('computeStatus', () => {
     assert.equal(result.counts.timed_out, 1);
     assert.equal(result.counts.canceled, 1);
   });
+
+  it('treats retrying member as non-terminal (running)', () => {
+    const jobDir = setupJobDir([
+      { safeName: 'claude', status: { member: 'claude', state: 'done', exitCode: 0 } },
+      { safeName: 'codex', status: { member: 'codex', state: 'retrying', attempt: 1 } },
+    ]);
+
+    const result = computeStatus(jobDir);
+
+    assert.equal(result.overallState, 'running');
+    assert.equal(result.counts.retrying, 1);
+    assert.equal(result.counts.done, 1);
+  });
 });
