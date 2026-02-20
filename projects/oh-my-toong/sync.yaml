@@ -63,6 +63,10 @@ skills:
     - momus
     - oracle
     - argus
+    - code-review
+    - make-pr
+    - spec-review
+    - technical-writing
 
 rules:
   items:
