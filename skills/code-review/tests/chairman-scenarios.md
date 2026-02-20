@@ -10,7 +10,7 @@
 
 **Description**: All three models report the same issue. The Chairman should mark it as Confirmed with unanimous consensus.
 
-**Setup/Given**: Three models (Claude, Gemini, GPT) each independently review the same chunk. All three report the same issue: "Missing null check in `processPayment()` at line 42" with severity Important.
+**Setup/Given**: Three models (Claude, Gemini, Codex) each independently review the same chunk. All three report the same issue: "Missing null check in `processPayment()` at line 42" with severity Important.
 
 **Expected Behavior/Then**: The Chairman synthesizes the three reports and marks the issue as Confirmed (3/3 agreement). The final verdict reflects unanimous agreement.
 
@@ -29,7 +29,7 @@
 
 **Description**: Two of three models report the same issue, but one model does not flag it. The Chairman should mark it as High Confidence and note the dissenter.
 
-**Setup/Given**: Three models review the same chunk. Claude and GPT both report "Unbounded loop in `fetchAll()` risks OOM" as Important. Gemini does not flag this issue.
+**Setup/Given**: Three models review the same chunk. Claude and Codex both report "Unbounded loop in `fetchAll()` risks OOM" as Important. Gemini does not flag this issue.
 
 **Expected Behavior/Then**: The Chairman synthesizes the reports and marks the issue as High Confidence (2/3 agreement). The dissenting model (Gemini) is explicitly noted.
 
@@ -37,7 +37,7 @@
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | Issue labeled 🟠 High Confidence (2/3 consensus) |
-| V2 | Agreeing models (Claude, GPT) attributed as sources |
+| V2 | Agreeing models (Claude, Codex) attributed as sources |
 | V3 | Dissenting model (Gemini) explicitly noted as not flagging |
 | V4 | Severity reflects the majority classification |
 | V5 | Issue included in final output (not silently dropped) |
@@ -48,7 +48,7 @@
 
 **Description**: Only one model reports an issue that the other two do not. The Chairman should mark it as Needs Review with model attribution.
 
-**Setup/Given**: Three models review the same chunk. Only Gemini reports "Race condition between `updateInventory()` and `processRefund()` under concurrent requests" as Important. Claude and GPT do not flag this.
+**Setup/Given**: Three models review the same chunk. Only Gemini reports "Race condition between `updateInventory()` and `processRefund()` under concurrent requests" as Important. Claude and Codex do not flag this.
 
 **Expected Behavior/Then**: The Chairman marks the issue as Needs Review (1/3 agreement) and attributes it to the reporting model.
 
@@ -57,7 +57,7 @@
 |----|-------------------|
 | V1 | Issue labeled 🟡 Needs Review (1/3 consensus) |
 | V2 | Reporting model (Gemini) attributed as sole source |
-| V3 | Non-reporting models (Claude, GPT) noted as not flagging |
+| V3 | Non-reporting models (Claude, Codex) noted as not flagging |
 | V4 | Issue included in final output — not silently dropped |
 | V5 | Issue surfaced for human judgment rather than auto-resolved |
 
@@ -67,7 +67,7 @@
 
 **Description**: A Critical issue reported by only one model must never be downgraded. Critical severity is exempt from consensus-based downgrading.
 
-**Setup/Given**: Three models review the same chunk. Only Claude reports "SQL injection via unsanitized `orderId` parameter in `findOrder()`" as Critical. Gemini and GPT do not flag this issue.
+**Setup/Given**: Three models review the same chunk. Only Claude reports "SQL injection via unsanitized `orderId` parameter in `findOrder()`" as Critical. Gemini and Codex do not flag this issue.
 
 **Expected Behavior/Then**: Despite 1/3 consensus (which would normally yield 🟡 Needs Review), the Critical severity is preserved. The issue remains Critical and is never downgraded.
 
@@ -86,7 +86,7 @@
 
 **Description**: One of three models fails to respond. The Chairman should proceed with a partial review using the two available results and warn about the missing model's gap.
 
-**Setup/Given**: Three models dispatched for review. Claude and Gemini return valid results. GPT fails (timeout, error, or empty response).
+**Setup/Given**: Three models dispatched for review. Claude and Gemini return valid results. Codex fails (timeout, error, or empty response).
 
 **Expected Behavior/Then**: The Chairman proceeds with 2/3 available results. A partial review warning is emitted. The gap from the missing model is noted.
 
@@ -95,7 +95,7 @@
 |----|-------------------|
 | V1 | Review proceeds with 2 available model results (not aborted) |
 | V2 | Partial review warning emitted (e.g., "Partial review: 2/3 models responded") |
-| V3 | Missing model (GPT) explicitly identified in the warning |
+| V3 | Missing model (Codex) explicitly identified in the warning |
 | V4 | Gap noted: areas that the missing model might have uniquely covered |
 | V5 | Consensus classification adjusted to 2-model scale (2/2 = Confirmed, 1/2 = High Confidence) |
 
@@ -105,7 +105,7 @@
 
 **Description**: Two of three models fail to respond. The Chairman should proceed with limited review from the single remaining model.
 
-**Setup/Given**: Three models dispatched. Only Claude returns a valid result. Gemini and GPT both fail.
+**Setup/Given**: Three models dispatched. Only Claude returns a valid result. Gemini and Codex both fail.
 
 **Expected Behavior/Then**: The Chairman proceeds with 1/3 available results. A limited review warning is emitted. Consensus classification is not applicable with a single model.
 
@@ -114,7 +114,7 @@
 |----|-------------------|
 | V1 | Review proceeds with 1 available model result (not aborted) |
 | V2 | Limited review warning emitted (e.g., "Limited review: 1/3 models responded") |
-| V3 | Missing models (Gemini, GPT) explicitly identified |
+| V3 | Missing models (Gemini, Codex) explicitly identified |
 | V4 | No consensus classification applied — single-model findings presented as-is |
 | V5 | Recommendation to re-run review noted given limited coverage |
 
@@ -124,7 +124,7 @@
 
 **Description**: All three models fail to respond. The Chairman should emit a failure report without producing a review.
 
-**Setup/Given**: Three models dispatched. All three (Claude, Gemini, GPT) fail to return valid results.
+**Setup/Given**: Three models dispatched. All three (Claude, Gemini, Codex) fail to return valid results.
 
 **Expected Behavior/Then**: The Chairman does not produce a review. A failure report is emitted with details of the failures.
 
@@ -162,9 +162,9 @@
 
 **Description**: When models disagree on the merge verdict, the strictest verdict wins. Any "No" from any model means overall "No".
 
-**Setup/Given**: Three models review the same PR. Claude verdict: "Yes, ready to merge". Gemini verdict: "Yes, with minor issues". GPT verdict: "No, Critical issues found".
+**Setup/Given**: Three models review the same PR. Claude verdict: "Yes, ready to merge". Gemini verdict: "Yes, with minor issues". Codex verdict: "No, Critical issues found".
 
-**Expected Behavior/Then**: The final verdict is "No" because GPT issued a "No". The strictest verdict wins regardless of majority.
+**Expected Behavior/Then**: The final verdict is "No" because Codex issued a "No". The strictest verdict wins regardless of majority.
 
 **Verification Points**:
 | ID | Expected Behavior |
@@ -172,7 +172,7 @@
 | V1 | Final verdict is "No" (not majority-ruled "Yes") |
 | V2 | Each model's individual verdict attributed and visible |
 | V3 | Strictest-wins rule applied: any "No" = overall "No" |
-| V4 | The "No" rationale from GPT included in the final assessment |
+| V4 | The "No" rationale from Codex included in the final assessment |
 | V5 | Dissenting "Yes" verdicts from Claude and Gemini noted but do not override |
 
 ---
@@ -219,7 +219,7 @@
 
 **Description**: When multiple models produce per-file Chunk Analysis, the richest (most detailed) analysis for each file is selected across models.
 
-**Setup/Given**: Three models produce Chunk Analysis for the same 5-file chunk. For `PaymentService.java`: Claude provides 3-line analysis, Gemini provides 8-line analysis with data flow details, GPT provides 5-line analysis. For `OrderController.java`: Claude provides 7-line analysis, Gemini provides 2-line analysis, GPT provides 4-line analysis.
+**Setup/Given**: Three models produce Chunk Analysis for the same 5-file chunk. For `PaymentService.java`: Claude provides 3-line analysis, Gemini provides 8-line analysis with data flow details, Codex provides 5-line analysis. For `OrderController.java`: Claude provides 7-line analysis, Gemini provides 2-line analysis, Codex provides 4-line analysis.
 
 **Expected Behavior/Then**: The Chairman selects the richest per-file analysis across models. `PaymentService.java` uses Gemini's 8-line analysis. `OrderController.java` uses Claude's 7-line analysis.
 

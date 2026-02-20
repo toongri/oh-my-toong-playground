@@ -9,8 +9,8 @@ const SCRIPT_DIR = __dirname;
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'chunk-review-worker.js');
 
-const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'config.yaml');
-const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'config.yaml');
+const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'chunk-review.config.yaml');
+const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'chunk-review.config.yaml');
 
 const UI_STRINGS = {
   dispatch: {

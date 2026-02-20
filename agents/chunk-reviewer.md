@@ -13,25 +13,24 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 ## Mode Toggle
 
-Before executing, check `config.yaml` `settings.mode`:
+Before executing, check `chunk-review.config.yaml` `settings.mode`:
 
 | Mode | Behavior |
 |------|----------|
-| `single` | Review the code directly using the review methodology in `prompts/reviewer.md`. Skip multi-model dispatch. |
+| `single` | Use the Read tool to read `skills/code-review/prompts/reviewer.md`, then review the code directly using that methodology. Skip multi-model dispatch. |
 | `chairman` | Execute multi-model workflow (steps below). |
 
-If mode is `single`, follow the instructions in `prompts/reviewer.md` and return the review directly. The rest of this document applies only to `chairman` mode.
+If mode is `single`, use the Read tool to read `skills/code-review/prompts/reviewer.md`, follow the review instructions in that file, and return the review directly. The rest of this document applies only to `chairman` mode.
 
 ## Chairman Workflow
 
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff, context, requirements via `chunk-reviewer-prompt.md`)
-2. **Check mode** in `config.yaml` `settings.mode` -- if `single`, review directly per `prompts/reviewer.md` and stop
+2. **Check mode** in `chunk-review.config.yaml` `settings.mode` -- if `single`, review directly per `prompts/reviewer.md` and stop
 3. **Extract review data** from the received prompt (diff, file list, requirements, context)
 4. **Write review data to stdin** for the dispatch script
-5. **Execute dispatch**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool
-6. **Parse JSON results** from stdout: `bash skills/code-review/scripts/chunk-review.sh results --json $JOB_DIR`
-7. **Synthesize** with consensus classification rules (below)
-8. **Return** structured synthesis
+5. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool -- blocks until complete, then prints JSON results to stdout
+6. **Synthesize** with consensus classification rules (below)
+7. **Return** structured synthesis
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
