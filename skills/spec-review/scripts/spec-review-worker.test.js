@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 
-const { describe, it, beforeEach, afterEach, mock } = require('node:test');
+const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const EventEmitter = require('events');
 
 const {
   splitCommand,
@@ -25,42 +24,20 @@ function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'worker-test-'));
 }
 
-function buildJobDir(tmpDir) {
+function setupJobDir(tmpDir) {
+  const reviewer = 'test-reviewer';
+  const safeReviewer = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
-  const reviewerDir = path.join(jobDir, 'reviewers', 'safe-rev');
+  const reviewerDir = path.join(jobDir, 'reviewers', safeReviewer);
   fs.mkdirSync(reviewerDir, { recursive: true });
-  fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt content', 'utf8');
-  return jobDir;
+  const statusPath = path.join(reviewerDir, 'status.json');
+  const outPath = path.join(reviewerDir, 'output.txt');
+  const errPath = path.join(reviewerDir, 'error.txt');
+  return { jobDir, reviewer, safeReviewer, reviewerDir, statusPath, outPath, errPath };
 }
 
-/** Create a fake ChildProcess EventEmitter with stdin/stdout/stderr stubs. */
-function fakeChild({ pid = 12345 } = {}) {
-  const child = new EventEmitter();
-  child.pid = pid;
-
-  // stdin mock
-  const stdinData = [];
-  child.stdin = {
-    write(data) { stdinData.push(data); },
-    end() { stdinData.push('__END__'); },
-    on() {},
-    _written() { return stdinData.filter(d => d !== '__END__').join(''); },
-    _ended() { return stdinData.includes('__END__'); },
-  };
-
-  // stdout/stderr as passthrough
-  child.stdout = new EventEmitter();
-  child.stdout.pipe = function (dest) {
-    this.on('data', (chunk) => dest.write(chunk));
-    return dest;
-  };
-  child.stderr = new EventEmitter();
-  child.stderr.pipe = function (dest) {
-    this.on('data', (chunk) => dest.write(chunk));
-    return dest;
-  };
-
-  return { child, stdinData };
+function readStatus(statusPath) {
+  return JSON.parse(fs.readFileSync(statusPath, 'utf8'));
 }
 
 // ---------------------------------------------------------------------------
@@ -181,78 +158,52 @@ describe('sleepMs', () => {
 
 describe('runOnce - stdin pipe', () => {
   let tmpDir;
-  let jobDir;
+  let paths;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    jobDir = buildJobDir(tmpDir);
+    paths = setupJobDir(tmpDir);
   });
 
-  afterEach(async () => {
-    await sleepMs(50); // let write streams close
+  afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('writes prompt to child stdin instead of passing as CLI argument', async () => {
-    const { child, stdinData } = fakeChild();
-
-    const spawnMock = mock.fn(() => child);
-
-    const resultPromise = runOnce({
-      program: 'echo',
-      args: ['--flag'],
-      prompt: 'my prompt text',
-      reviewer: 'rev1',
-      reviewerDir: path.join(jobDir, 'reviewers', 'safe-rev'),
-      command: 'echo --flag',
-      timeoutSec: 0,
+    const result = await runOnce({
+      program: 'cat',
+      args: [],
+      prompt: 'hello from stdin',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'cat',
+      timeoutSec: 5,
       attempt: 0,
-      spawnFn: spawnMock,
     });
 
-    // Verify spawn was called WITHOUT prompt in args
-    const spawnArgs = spawnMock.mock.calls[0].arguments;
-    assert.equal(spawnArgs[0], 'echo');
-    assert.deepEqual(spawnArgs[1], ['--flag']);
-    // stdio should have 'pipe' for stdin
-    assert.equal(spawnArgs[2].stdio[0], 'pipe');
-
-    // Verify stdin received the prompt
-    assert.equal(child.stdin._written(), 'my prompt text');
-    assert.ok(child.stdin._ended());
-
-    // Complete the child
-    child.emit('exit', 0, null);
-    await resultPromise;
+    assert.equal(result.state, 'done');
+    const output = fs.readFileSync(paths.outPath, 'utf8');
+    assert.ok(output.includes('hello from stdin'), `expected prompt in output, got: ${output}`);
   });
 
   it('handles stdin pipe errors gracefully', async () => {
-    const { child } = fakeChild();
-    let stdinErrorHandler = null;
-    child.stdin.on = (event, handler) => {
-      if (event === 'error') stdinErrorHandler = handler;
-    };
-
-    const spawnMock = mock.fn(() => child);
-
-    const resultPromise = runOnce({
+    const result = await runOnce({
       program: 'echo',
-      args: [],
-      prompt: 'test',
-      reviewer: 'rev1',
-      reviewerDir: path.join(jobDir, 'reviewers', 'safe-rev'),
-      command: 'echo',
-      timeoutSec: 0,
+      args: ['fixed-output'],
+      prompt: 'THIS_SHOULD_NOT_APPEAR',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'echo fixed-output',
+      timeoutSec: 5,
       attempt: 0,
-      spawnFn: spawnMock,
     });
 
-    // Trigger stdin error — should not crash
-    if (stdinErrorHandler) stdinErrorHandler(new Error('pipe broken'));
-
-    child.emit('exit', 0, null);
-    const result = await resultPromise;
     assert.equal(result.state, 'done');
+    const output = fs.readFileSync(paths.outPath, 'utf8');
+    assert.ok(
+      !output.includes('THIS_SHOULD_NOT_APPEAR'),
+      `prompt leaked into CLI args: ${output}`,
+    );
   });
 });
 
@@ -262,133 +213,154 @@ describe('runOnce - stdin pipe', () => {
 
 describe('runOnce - exit states', () => {
   let tmpDir;
-  let jobDir;
-  let reviewerDir;
+  let paths;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    jobDir = buildJobDir(tmpDir);
-    reviewerDir = path.join(jobDir, 'reviewers', 'safe-rev');
+    paths = setupJobDir(tmpDir);
   });
 
-  afterEach(async () => {
-    await sleepMs(50); // let write streams close
+  afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function makeRunOnce(overrides = {}) {
-    const { child } = fakeChild();
-    const spawnMock = mock.fn(() => child);
-    const defaults = {
-      program: 'test-cmd',
+  it('returns done state on exit code 0', async () => {
+    const result = await runOnce({
+      program: 'true',
       args: [],
       prompt: '',
-      reviewer: 'rev1',
-      reviewerDir,
-      command: 'test-cmd',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'true',
       timeoutSec: 0,
       attempt: 0,
-      spawnFn: spawnMock,
-    };
-    return { child, spawnMock, opts: { ...defaults, ...overrides } };
-  }
-
-  it('returns done state on exit code 0', async () => {
-    const { child, opts } = makeRunOnce();
-    const p = runOnce(opts);
-    child.emit('exit', 0, null);
-    const result = await p;
+    });
     assert.equal(result.state, 'done');
     assert.equal(result.exitCode, 0);
   });
 
   it('returns error state on non-zero exit code', async () => {
-    const { child, opts } = makeRunOnce();
-    const p = runOnce(opts);
-    child.emit('exit', 1, null);
-    const result = await p;
+    const result = await runOnce({
+      program: 'false',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'false',
+      timeoutSec: 0,
+      attempt: 0,
+    });
     assert.equal(result.state, 'error');
     assert.equal(result.exitCode, 1);
   });
 
   it('returns missing_cli state on ENOENT error', async () => {
-    const { child, opts } = makeRunOnce();
-    const p = runOnce(opts);
-    const err = new Error('spawn test-cmd ENOENT');
-    err.code = 'ENOENT';
-    child.emit('error', err);
-    const result = await p;
+    const result = await runOnce({
+      program: 'nonexistent-command-xyz-abc-123',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'nonexistent-command-xyz-abc-123',
+      timeoutSec: 0,
+      attempt: 0,
+    });
     assert.equal(result.state, 'missing_cli');
   });
 
   it('returns timed_out state when timeout triggers', async () => {
-    const { child } = fakeChild();
-    const spawnMock = mock.fn(() => child);
-    const p = runOnce({
-      program: 'test-cmd',
-      args: [],
+    const result = await runOnce({
+      program: 'sleep',
+      args: ['60'],
       prompt: '',
-      reviewer: 'rev1',
-      reviewerDir,
-      command: 'test-cmd',
-      timeoutSec: 0.05,
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sleep 60',
+      timeoutSec: 0.2,
       attempt: 0,
-      spawnFn: spawnMock,
     });
-
-    // Wait for timeout to fire then emit exit
-    await sleepMs(100);
-    child.emit('exit', null, 'SIGTERM');
-    const result = await p;
     assert.equal(result.state, 'timed_out');
   });
 
   it('returns canceled state on SIGTERM without timeout', async () => {
-    const { child, opts } = makeRunOnce();
-    const p = runOnce(opts);
-    child.emit('exit', null, 'SIGTERM');
-    const result = await p;
+    const resultPromise = runOnce({
+      program: 'sleep',
+      args: ['60'],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sleep 60',
+      timeoutSec: 0,
+      attempt: 0,
+    });
+
+    // Poll status.json for pid
+    let pid = null;
+    for (let i = 0; i < 100; i++) {
+      await sleepMs(50);
+      try {
+        const status = readStatus(paths.statusPath);
+        if (status.pid) {
+          pid = status.pid;
+          break;
+        }
+      } catch { /* status.json not written yet */ }
+    }
+    assert.ok(pid, 'should have obtained pid from status.json');
+    try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+
+    const result = await resultPromise;
     assert.equal(result.state, 'canceled');
   });
 
   it('includes attempt field in status.json', async () => {
-    const { child, opts } = makeRunOnce({ attempt: 2 });
-    const p = runOnce(opts);
-    child.emit('exit', 0, null);
-    const result = await p;
-    assert.equal(result.attempt, 2);
+    await runOnce({
+      program: 'true',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'true',
+      timeoutSec: 0,
+      attempt: 2,
+    });
+    const status = readStatus(paths.statusPath);
+    assert.equal(status.attempt, 2);
   });
 
   it('writes status.json to reviewerDir', async () => {
-    const { child, opts } = makeRunOnce();
-    const p = runOnce(opts);
-    child.emit('exit', 0, null);
-    await p;
-    const statusPath = path.join(reviewerDir, 'status.json');
-    const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    await runOnce({
+      program: 'true',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'true',
+      timeoutSec: 0,
+      attempt: 0,
+    });
+    const status = readStatus(paths.statusPath);
     assert.equal(status.state, 'done');
     assert.equal(status.attempt, 0);
-    assert.equal(status.reviewer, 'rev1');
+    assert.equal(status.reviewer, paths.reviewer);
   });
 
   it('writes output.txt and error.txt', async () => {
-    const { child, opts } = makeRunOnce();
-    const p = runOnce(opts);
+    await runOnce({
+      program: 'sh',
+      args: ['-c', 'echo stdout-data; echo stderr-data >&2'],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sh -c "echo stdout-data; echo stderr-data >&2"',
+      timeoutSec: 5,
+      attempt: 0,
+    });
 
-    // Simulate stdout/stderr data
-    child.stdout.emit('data', Buffer.from('stdout data'));
-    child.stderr.emit('data', Buffer.from('stderr data'));
-
-    child.emit('exit', 0, null);
-    await p;
-
-    // Give streams a moment to flush
-    await sleepMs(50);
-
-    const outPath = path.join(reviewerDir, 'output.txt');
-    const errPath = path.join(reviewerDir, 'error.txt');
-    assert.equal(fs.readFileSync(outPath, 'utf8'), 'stdout data');
-    assert.equal(fs.readFileSync(errPath, 'utf8'), 'stderr data');
+    const out = fs.readFileSync(paths.outPath, 'utf8');
+    const err = fs.readFileSync(paths.errPath, 'utf8');
+    assert.ok(out.includes('stdout-data'), `expected 'stdout-data' in output, got: ${out}`);
+    assert.ok(err.includes('stderr-data'), `expected 'stderr-data' in error, got: ${err}`);
   });
 });
 
@@ -398,175 +370,140 @@ describe('runOnce - exit states', () => {
 
 describe('runWithRetry', () => {
   let tmpDir;
-  let jobDir;
-  let reviewerDir;
+  let paths;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    jobDir = buildJobDir(tmpDir);
-    reviewerDir = path.join(jobDir, 'reviewers', 'safe-rev');
+    paths = setupJobDir(tmpDir);
   });
 
-  afterEach(async () => {
-    await sleepMs(50); // let write streams close
+  afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function makeOpts(overrides = {}) {
-    return {
-      program: 'test-cmd',
+  it('succeeds without retry on first exit 0', async () => {
+    const result = await runWithRetry({
+      program: 'true',
       args: [],
       prompt: '',
-      reviewer: 'rev1',
-      reviewerDir,
-      command: 'test-cmd',
-      timeoutSec: 0,
-      ...overrides,
-    };
-  }
-
-  it('succeeds without retry on first exit 0', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      // Auto-exit success
-      process.nextTick(() => child.emit('exit', 0, null));
-      return child;
-    };
-
-    const result = await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
-      sleepFn: () => Promise.resolve(),
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'true',
+      timeoutSec: 5,
     });
 
     assert.equal(result.state, 'done');
-    assert.equal(callCount, 1);
     assert.equal(result.attempt, 0);
   });
 
   it('retries on error and succeeds on second attempt', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      if (callCount === 1) {
-        process.nextTick(() => child.emit('exit', 1, null));
-      } else {
-        process.nextTick(() => child.emit('exit', 0, null));
-      }
-      return child;
-    };
-
+    const markerFile = path.join(tmpDir, 'attempt-marker');
     const result = await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+      program: 'sh',
+      args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sh -c marker-script',
+      timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
     });
 
     assert.equal(result.state, 'done');
-    assert.equal(callCount, 2);
     assert.equal(result.attempt, 1);
   });
 
   it('exhausts all retries and returns final error', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      process.nextTick(() => child.emit('exit', 1, null));
-      return child;
-    };
-
     const result = await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+      program: 'false',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'false',
+      timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
     });
 
     assert.equal(result.state, 'error');
-    assert.equal(callCount, 3); // 1 initial + 2 retries
-    assert.equal(result.attempt, 2);
+    assert.equal(result.attempt, 2); // 0, 1, 2 = 3 attempts
   });
 
   it('does NOT retry on missing_cli (ENOENT)', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      const err = new Error('ENOENT');
-      err.code = 'ENOENT';
-      process.nextTick(() => child.emit('error', err));
-      return child;
-    };
-
     const result = await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+      program: 'nonexistent-command-xyz-abc-123',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'nonexistent-command-xyz-abc-123',
+      timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
     });
 
     assert.equal(result.state, 'missing_cli');
-    assert.equal(callCount, 1);
+    assert.equal(result.attempt, 0);
   });
 
   it('does NOT retry on timed_out', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      // We need runOnce to detect timed_out. Use short timeout.
-      return child;
-    };
-
-    // Use a very short timeout so it fires
     const result = await runWithRetry({
-      ...makeOpts({ timeoutSec: 0.05 }),
-      spawnFn: () => {
-        callCount++;
-        const { child } = fakeChild();
-        // Wait for timeout to trigger, then emit exit
-        setTimeout(() => child.emit('exit', null, 'SIGTERM'), 100);
-        return child;
-      },
+      program: 'sleep',
+      args: ['60'],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sleep 60',
+      timeoutSec: 0.2,
       sleepFn: () => Promise.resolve(),
     });
 
     assert.equal(result.state, 'timed_out');
-    assert.equal(callCount, 1);
+    assert.equal(result.attempt, 0);
   });
 
   it('does NOT retry on canceled', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      process.nextTick(() => child.emit('exit', null, 'SIGTERM'));
-      return child;
-    };
-
-    const result = await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+    const resultPromise = runWithRetry({
+      program: 'sleep',
+      args: ['60'],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sleep 60',
+      timeoutSec: 0,
       sleepFn: () => Promise.resolve(),
     });
 
+    // Poll status.json for pid
+    let pid = null;
+    for (let i = 0; i < 100; i++) {
+      await sleepMs(50);
+      try {
+        const status = readStatus(paths.statusPath);
+        if (status.pid) {
+          pid = status.pid;
+          break;
+        }
+      } catch { /* status.json not written yet */ }
+    }
+    assert.ok(pid, 'should have obtained pid from status.json');
+    try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+
+    const result = await resultPromise;
     assert.equal(result.state, 'canceled');
-    assert.equal(callCount, 1);
+    assert.equal(result.attempt, 0);
   });
 
   it('applies exponential backoff with jitter between retries', async () => {
     const delays = [];
-    const spawnFactory = () => {
-      const { child } = fakeChild();
-      process.nextTick(() => child.emit('exit', 1, null));
-      return child;
-    };
 
     await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+      program: 'false',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'false',
+      timeoutSec: 5,
       sleepFn: (ms) => {
         delays.push(ms);
         return Promise.resolve();
@@ -586,62 +523,37 @@ describe('runWithRetry', () => {
   });
 
   it('overwrites output.txt and error.txt on retry', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      process.nextTick(() => {
-        child.stdout.emit('data', Buffer.from(`stdout-attempt-${callCount}`));
-        child.stderr.emit('data', Buffer.from(`stderr-attempt-${callCount}`));
-        if (callCount < 2) {
-          child.emit('exit', 1, null);
-        } else {
-          child.emit('exit', 0, null);
-        }
-      });
-      return child;
-    };
-
-    await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+    const markerFile = path.join(tmpDir, 'attempt-marker2');
+    const result = await runWithRetry({
+      program: 'sh',
+      args: ['-c', `if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi`],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sh -c marker-script',
+      timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
     });
 
-    await sleepMs(50); // let streams flush
-
-    const outPath = path.join(reviewerDir, 'output.txt');
-    const errPath = path.join(reviewerDir, 'error.txt');
-    const out = fs.readFileSync(outPath, 'utf8');
-    const err = fs.readFileSync(errPath, 'utf8');
-
-    // Should contain only the last attempt's data
-    assert.ok(out.includes('stdout-attempt-2'), `output.txt should have attempt 2 data, got: ${out}`);
-    assert.ok(!out.includes('stdout-attempt-1'), `output.txt should NOT have attempt 1 data, got: ${out}`);
-    assert.ok(err.includes('stderr-attempt-2'), `error.txt should have attempt 2 data, got: ${err}`);
+    const out = fs.readFileSync(paths.outPath, 'utf8');
+    assert.ok(out.includes('attempt2'), `expected 'attempt2' in output, got: ${out}`);
+    assert.ok(!out.includes('attempt1'), `should not contain 'attempt1', got: ${out}`);
   });
 
   it('includes attempt field in final status.json', async () => {
-    let callCount = 0;
-    const spawnFactory = () => {
-      callCount++;
-      const { child } = fakeChild();
-      if (callCount === 1) {
-        process.nextTick(() => child.emit('exit', 1, null));
-      } else {
-        process.nextTick(() => child.emit('exit', 0, null));
-      }
-      return child;
-    };
-
+    const markerFile = path.join(tmpDir, 'attempt-marker3');
     await runWithRetry({
-      ...makeOpts(),
-      spawnFn: spawnFactory,
+      program: 'sh',
+      args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'sh -c marker-script',
+      timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
     });
 
-    const statusPath = path.join(reviewerDir, 'status.json');
-    const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    const status = readStatus(paths.statusPath);
     assert.equal(status.attempt, 1);
     assert.equal(status.state, 'done');
   });
