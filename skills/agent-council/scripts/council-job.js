@@ -919,3 +919,21 @@ function main() {
 if (require.main === module) {
   main();
 }
+
+module.exports = {
+  detectHostRole,
+  normalizeBool,
+  resolveAutoRole,
+  ensureDir,
+  safeFileName,
+  atomicWriteJson,
+  readJsonIfExists,
+  sleepMs,
+  computeTerminalDoneCount,
+  asCodexStepStatus,
+  parseArgs,
+  parseWaitCursor,
+  formatWaitCursor,
+  resolveBucketSize,
+  generateJobId,
+};
