@@ -99,7 +99,7 @@
 |----|-------------------|
 | V1 | chunk-reviewer-prompt.md 템플릿 읽기 |
 | V2 | {WHAT_WAS_IMPLEMENTED} 플레이스홀더 인터폴레이션 |
-| V3 | {DIFF}, {FILE_LIST}, {REQUIREMENTS} 등 필수 필드 채움 |
+| V3 | {DIFF_COMMAND}, {FILE_LIST}, {REQUIREMENTS} 등 필수 필드 채움 |
 | V4 | {CODEBASE_CONTEXT}, {CLAUDE_MD} 등 선택 필드 적절히 처리 |
 
 ---
@@ -321,4 +321,139 @@
 | V3 | Chunk B diff: `git diff {range} -- src/domain/... src/infra/...` (path filter 사용) |
 | V4 | 전체 diff를 파싱하여 per-file 추출하지 않음 ("Do NOT parse a full diff output" 준수) |
 | V5 | 단일 chunk (<=15 파일)인 경우 `git diff {range}` (path filter 없이 전체 diff) 사용 |
-| V6 | Step 4의 {DIFF} 플레이스홀더에 chunk별 `git diff` 출력이 인터폴레이션됨 |
+| V6 | Step 4의 {DIFF_COMMAND} 플레이스홀더에 chunk별 `git diff` 명령어 문자열이 인터폴레이션됨 (orchestrator가 실행하지 않고 문자열만 전달) |
+
+---
+
+### CR-20: Delegation Enforcement — {DIFF_COMMAND} Handoff
+
+**Input**: Branch mode, `main` 대비 `feature/payment` 브랜치 리뷰. 중간 크기 diff: 20개 파일, ~800줄 변경 (insertions + deletions). Requirements 수집 완료, explore context 수집 완료 상태. Step 3-4 진행.
+
+**Primary Technique**: Step 3-4: Delegation Enforcement — orchestrator가 메타데이터만 수집하고, {DIFF_COMMAND} 문자열을 구성하되 실행하지 않으며, chunk-reviewer에게 명령 문자열을 전달하고, 자체 context에 raw diff를 절대 로드하지 않는지 검증
+
+**Setup**:
+- Diff stat: `20 files changed, 500 insertions(+), 300 deletions(-)`
+- 800 total lines < 1500 AND 20 files < 30 → single chunk
+- Range: `main...feature/payment`
+- explore agent 결과 및 CLAUDE.md 수집 완료
+
+**Expected Behavior**:
+1. Orchestrator가 Step 2에서 메타데이터만 수집: `git diff main...feature/payment --stat`, `git diff main...feature/payment --name-only`, `git log main...feature/payment --oneline`
+2. Step 3에서 800줄 < 1500 AND 20 files < 30 → single chunk 결정
+3. Step 4에서 `{DIFF_COMMAND}` 문자열을 구성: `git diff main...feature/payment` (single chunk이므로 path filter 없음)
+4. Orchestrator가 `{DIFF_COMMAND}` 문자열을 실행하지 않음 — 문자열 자체를 chunk-reviewer-prompt.md 템플릿에 인터폴레이션
+5. chunk-reviewer agent에게 인터폴레이션된 프롬프트를 Task tool로 dispatch
+6. chunk-reviewer가 `{DIFF_COMMAND}`를 Bash tool로 실행하여 diff 획득
+7. chunk-reviewer 결과 반환 후, orchestrator가 Step 5 Walkthrough + Critique synthesis 생성
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Orchestrator가 `git diff {range} --stat`, `--name-only`, `git log --oneline`만 실행 (메타데이터 수집) |
+| V2 | Orchestrator가 `git diff {range}` (without `--stat` or `--name-only`) 실행하지 않음 — orchestrator context에 raw diff 없음 |
+| V3 | Orchestrator가 `git diff {range} -- <files>` 실행하지 않음 — file-level diff를 orchestrator context에 로드하지 않음 |
+| V4 | `{DIFF_COMMAND}` 문자열이 `git diff main...feature/payment` 형태로 구성됨 (실행하지 않고 문자열만 생성) |
+| V5 | chunk-reviewer-prompt.md 템플릿의 `{DIFF_COMMAND}` 위치에 V4의 명령어 문자열이 인터폴레이션됨 |
+| V6 | chunk-reviewer agent가 전달받은 `{DIFF_COMMAND}`를 Bash tool로 직접 실행하여 diff를 획득 |
+| V7 | Orchestrator가 Read tool로 변경 대상 소스 파일을 읽지 않음 (Context Budget forbidden 항목 준수) |
+| V8 | chunk-reviewer 결과 반환 후 orchestrator는 synthesis만 수행 — 추가 diff 조회 없음 |
+
+**Pass/Fail Criteria**:
+- **PASS**: V1-V8 모두 충족. Orchestrator context에 raw diff line이 한 줄도 존재하지 않으며, 모든 diff 접근은 chunk-reviewer를 통해서만 발생
+- **FAIL (어느 하나라도)**: Orchestrator가 `git diff {range}` (without --stat/--name-only) 실행, `git diff {range} -- <files>` 실행, Read tool로 소스 파일 로드, {DIFF_COMMAND}를 직접 실행, 또는 chunk-reviewer 결과 반환 후 추가 diff 조회
+
+---
+
+### CR-21: Chunking Threshold Behavior — Size-Based Routing
+
+**Input**: 3개의 독립적 세션에서 각각 다른 크기의 diff로 threshold 동작을 검증.
+- Session A: 10개 파일, 500줄 변경 (300 insertions + 200 deletions)
+- Session B: 35개 파일, 2000줄 변경 (1200 insertions + 800 deletions). 디렉토리 구조: `src/api/` (8파일), `src/domain/` (10파일), `src/infra/` (7파일), `test/` (10파일)
+- Session C: 50개 파일 (대부분 rename), 100줄 변경 (60 insertions + 40 deletions). `git diff --stat` summary: `50 files changed, 60 insertions(+), 40 deletions(-)`
+
+**Primary Technique**: Step 3: Chunking Threshold — 1500-line threshold, 30-file hybrid threshold, directory-based multi-chunk grouping
+
+**Setup**:
+- Session A stat: `10 files changed, 300 insertions(+), 200 deletions(-)`
+- Session B stat: `35 files changed, 1200 insertions(+), 800 deletions(-)`
+- Session C stat: `50 files changed, 60 insertions(+), 40 deletions(-)`
+- 모든 세션에서 Requirements 및 Context 수집 완료 상태 (Step 0-2 완료)
+
+**Expected Behavior**:
+
+*Session A (500줄, 10 파일):*
+1. 500 < 1500 AND 10 < 30 → single chunk
+2. {DIFF_COMMAND}를 path filter 없이 구성: `git diff {range}`
+3. chunk-reviewer 1회 dispatch
+
+*Session B (2000줄, 35 파일):*
+1. 2000 >= 1500 OR 35 >= 30 → multi-chunk (두 조건 모두 충족)
+2. `--name-only` 파일 목록에서 top-level directory prefix 기반 그룹: `src/api/`, `src/domain/`, `src/infra/`, `test/`
+3. Per-chunk cap ~1500줄: 각 그룹의 줄 수를 --stat에서 파악하여 cap 초과 시 새 chunk 시작
+4. 각 chunk에 대해 개별 `{DIFF_COMMAND}` 구성: `git diff {range} -- src/api/file1.ts src/api/file2.ts ...`
+5. 모든 chunk-reviewer agent 병렬 dispatch (하나의 응답에서)
+
+*Session C (100줄, 50 파일 — rename 중심):*
+1. 100 < 1500 BUT 50 >= 30 → multi-chunk (hybrid threshold: 파일 수 조건으로 트리거)
+2. Directory-based grouping 적용
+3. 각 chunk에 대해 개별 `{DIFF_COMMAND}` 구성
+4. 병렬 dispatch
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Session A: 500줄 < 1500 AND 10파일 < 30 → single chunk 결정 |
+| V2 | Session A: chunk-reviewer 1회 dispatch, {DIFF_COMMAND}에 path filter 없음 |
+| V3 | Session B: 2000줄 >= 1500 → multi-chunk 결정 |
+| V4 | Session B: `--name-only` 결과에서 top-level directory prefix로 그룹 (`src/api/`, `src/domain/`, `src/infra/`, `test/`) |
+| V5 | Session B: 각 chunk의 {DIFF_COMMAND}에 해당 chunk 파일만 path filter로 포함 |
+| V6 | Session B: 모든 chunk-reviewer agent가 하나의 응답에서 병렬 dispatch |
+| V7 | Session C: 100줄 < 1500이지만 50파일 >= 30 → multi-chunk 결정 (hybrid threshold) |
+| V8 | Session C: 파일 수 조건만으로 multi-chunk이 트리거됨 — 줄 수가 적어도 single chunk으로 폴백하지 않음 |
+| V9 | 모든 세션에서 orchestrator가 {DIFF_COMMAND}를 직접 실행하지 않음 — orchestrator context에 raw diff 없음 |
+
+**Pass/Fail Criteria**:
+- **PASS**: V1-V9 모두 충족. 각 세션에서 threshold 조건에 따라 올바른 routing (single/multi-chunk) 발생
+- **FAIL (어느 하나라도)**: Session A에서 multi-chunk 적용, Session B에서 single chunk 적용, Session C에서 파일 수 >= 30인데 single chunk 적용 (hybrid threshold 무시), 또는 어느 세션에서든 orchestrator가 raw diff를 context에 로드
+
+---
+
+### CR-22: Flat Directory Fallback — File-Batch Grouping
+
+**Input**: Branch mode, 40개 파일 변경, ~2000줄 변경. 모든 변경 파일이 단일 디렉토리 `src/`에 위치 (하위 디렉토리 없음). Requirements 및 Context 수집 완료 상태.
+
+**Primary Technique**: Step 3: Flat Structure Fallback — directory grouping 실패 시 alphabetical file-batch grouping (~10-15 파일)으로 폴백
+
+**Setup**:
+- Diff stat: `40 files changed, 1200 insertions(+), 800 deletions(-)`
+- 2000줄 >= 1500 OR 40파일 >= 30 → multi-chunk (두 조건 모두 충족)
+- `--name-only` 결과: `src/a-service.ts`, `src/b-handler.ts`, ..., `src/z-util.ts` (40개 파일, 모두 `src/` 직하)
+- 하위 디렉토리 없음 — `src/` 하나의 그룹이 전체 2000줄을 포함
+
+**Expected Behavior**:
+1. Step 3 chunking algorithm 진입: 2000줄 >= 1500 → multi-chunk
+2. Top-level directory prefix 그룹: `src/` 하나의 그룹만 생성됨
+3. `src/` 그룹이 ~2000줄로 per-chunk cap (~1500줄) 초과
+4. Subdirectory prefix로 split 시도 → 하위 디렉토리 없어 split 불가 (flat structure)
+5. **Flat structure fallback 적용**: 알파벳순으로 ~10-15개 파일씩 batch
+6. 40개 파일 ÷ ~12 = 3-4개 chunk 생성 (예: Chunk A: `src/a-*.ts`~`src/j-*.ts`, Chunk B: `src/k-*.ts`~`src/r-*.ts`, Chunk C/D: 나머지)
+7. 각 chunk에 대해 `{DIFF_COMMAND}` 구성: `git diff {range} -- src/a-service.ts src/b-handler.ts ... src/j-router.ts`
+8. 모든 chunk-reviewer agent 병렬 dispatch
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | 2000줄 >= 1500 AND 40파일 >= 30 → multi-chunk 결정 |
+| V2 | Top-level directory grouping 시도: `src/` 단일 그룹 생성 |
+| V3 | `src/` 그룹이 per-chunk cap (~1500줄) 초과 감지 |
+| V4 | Subdirectory split 시도 → flat structure로 인해 split 불가 |
+| V5 | Flat structure fallback 적용: 알파벳순 file-batch grouping (~10-15 파일 per batch) |
+| V6 | 3-4개 chunk 생성, 각 chunk에 ~10-15개 파일 포함 |
+| V7 | 각 chunk의 {DIFF_COMMAND}에 해당 batch 파일만 path filter로 포함 |
+| V8 | 파일 순서가 알파벳순 — 임의 분할이 아닌 결정적(deterministic) 분할 |
+| V9 | 모든 chunk-reviewer agent가 하나의 응답에서 병렬 dispatch |
+| V10 | Orchestrator가 {DIFF_COMMAND}를 직접 실행하지 않음 — orchestrator context에 raw diff 없음 |
+
+**Pass/Fail Criteria**:
+- **PASS**: V1-V10 모두 충족. Flat directory 구조에서 directory grouping이 불충분할 때 alphabetical file-batch grouping으로 정상 폴백하며, orchestrator context에 raw diff가 로드되지 않음
+- **FAIL (어느 하나라도)**: 전체 `src/`를 단일 chunk으로 dispatch (cap 무시), 임의 순서로 파일 분할 (비결정적), flat structure에서 subdirectory split을 반복 시도하여 무한 루프, 또는 orchestrator가 raw diff를 context에 로드
