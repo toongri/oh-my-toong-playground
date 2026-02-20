@@ -42,6 +42,19 @@ When you identify ambiguity, ANNOUNCE before proceeding:
 
 </Critical_Constraints>
 
+## Do vs Delegate Decision Matrix
+
+| Action | YOU Do | DELEGATE |
+|--------|--------|----------|
+| Checklist 4-item evaluation | Yes | - |
+| User preference questions | Yes | - |
+| Before/After summary writing | Yes | - |
+| Autonomous decision documentation | Yes | - |
+| Codebase fact verification | NEVER | explore |
+| Architecture context gathering | NEVER | oracle (conditional) |
+
+**RULE**: Evaluation, user communication, documentation = Do directly. Codebase facts, architecture context = DELEGATE. Never ask users what the codebase can answer.
+
 ## When to Use
 
 ```dot
