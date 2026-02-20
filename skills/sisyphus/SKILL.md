@@ -474,12 +474,80 @@ Review whether the implementation meets the requirements in the 6-Section prompt
 | Pre-built checklist | "Here's what to verify: [your list]" | Anchors argus, defeats independent derivation |
 | Selective prompt sections | Omitting MUST NOT DO | Argus cannot detect violations of rules it doesn't see |
 
+### Re-review Protocol
+
+When argus returns **REQUEST_CHANGES** and sisyphus-junior completes the fix task, the subsequent argus re-invocation **MUST** include a Re-review Context section. This does NOT apply to initial (first-time) argus invocations.
+
+**Why**: Without re-review context, argus performs a fresh review and may miss whether previous findings were actually addressed, or re-raise already-resolved issues.
+
+#### Re-review Invocation Template
+
+재리뷰 시, Re-review Context를 `## 6. CONTEXT` 섹션 안에 `###` 서브섹션으로 포함한다. 6-Section 구조를 깨지 않으면서 이전 리뷰 이력을 전달한다.
+
+```markdown
+## 1. TASK
+[초회와 동일]
+
+## 2. EXPECTED OUTCOME
+[초회와 동일]
+
+## 3. REQUIRED TOOLS
+[초회와 동일]
+
+## 4. MUST DO
+[초회와 동일]
+
+## 5. MUST NOT DO
+[초회와 동일]
+
+## 6. CONTEXT
+- Related files: [초회와 동일]
+- Prior task results: [초회와 동일]
+
+### Re-review Context
+#### Previous Verdict
+- **Verdict**: REQUEST_CHANGES
+- **Key Findings**:
+  1. [이전 지적 A 원문]
+  2. [이전 지적 B 원문]
+
+#### Changes Made
+| Finding | Change | Intent |
+|---------|--------|--------|
+| [지적 A] | [구체적 수정 내용] | [왜 이 방향으로] |
+| [지적 B] | [구체적 수정 내용] | [왜 이 방향으로] |
+
+#### Current State
+[수정 반영된 현재 결과물 — EXPECTED OUTCOME 기준으로 현재 상태]
+
+---
+
+## REVIEW REQUEST
+- Task: [exact task subject from todo list]
+- Changed files:
+  - [explicit file paths]
+- Junior's summary: [what junior claimed to have done]
+
+Review whether the previous findings have been addressed and whether the implementation now meets the requirements.
+```
+
+#### Re-review Context Rules
+
+| Rule | Requirement |
+|------|-------------|
+| **Scope** | Applies ONLY to re-invocations after REQUEST_CHANGES, not initial invocations |
+| **Location** | `## 6. CONTEXT` 안에 `### Re-review Context`로 포함 — 6-Section 바깥에 별도 블록 금지 |
+| **Previous Findings** | Copy argus's findings VERBATIM — no summarizing or paraphrasing |
+| **Changes Made** | Map each finding to the specific change and explain intent |
+| **Current State** | Describe current state relative to EXPECTED OUTCOME |
+| **Sections 1-5** | 초회와 동일하게 유지 — 변경 금지 |
+
 ### Verdict Response Protocol
 
 | Verdict | Sisyphus Action |
 |---------|-----------------|
 | **APPROVE** | Invoke mnemosyne to commit, then mark task completed |
-| **REQUEST_CHANGES** (Critical/High) | Create fix task, re-delegate to sisyphus-junior |
+| **REQUEST_CHANGES** (Critical/High) | Create fix task, re-delegate to sisyphus-junior. **Re-invocation MUST include Re-review Context** |
 | **COMMENT** (Medium only) | Invoke mnemosyne to commit, then mark completed. Create follow-up task if warranted |
 
 ### Fix Task from REQUEST_CHANGES
@@ -490,6 +558,8 @@ Description:
 - Issue: [exact issue from reviewer]
 - Location: [file:lines]
 - Required fix: [specific action]
+- Argus findings (verbatim):
+  > [argus의 원문 피드백 전체 — 요약하지 말 것]
 ```
 
 ---

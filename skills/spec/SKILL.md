@@ -22,7 +22,7 @@ NO STEP SKIPPING:
 
 NO AREA COMPLETION WITHOUT:
 1. All Steps in the Area completed with user confirmation
-2. spec-reviewer review completed (feedback loop resolved)
+2. spec-review APPROVE verdict received (review loop resolved)
 3. User explicitly declares "Area complete"
 4. All acceptance criteria testable
 5. No "TBD" or vague placeholders remaining
@@ -39,7 +39,7 @@ NO AREA COMPLETION WITHOUT:
 | Error cases defined | Happy path only = production incidents |
 | Every Step presents to user | Skipped steps = missed requirements |
 | User confirmation at every Step | Agent decisions = user blamed |
-| Area completion = spec-reviewer + user gate | Unchecked areas = compounding errors |
+| Area completion = spec-review APPROVE + user gate | Unchecked areas = compounding errors |
 | No Step/Area skipping ever | "Simple" hides complexity |
 | Design proposals include potential risks | Hidden risks = surprise in production |
 | spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
@@ -551,9 +551,9 @@ If you have sufficient information, use it to draft a high-quality proposal and 
 
 ## Multi-AI Review Integration
 
-**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-reviewer. This is part of the Area Completion Protocol and cannot be skipped.
+**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-review. This is part of the Area Completion Protocol and cannot be skipped.
 
-The spec-reviewer decides whether a full review is needed or returns "No review needed" for simple cases. Either way, the result MUST be presented to the user.
+The spec-review decides whether a full review is needed or returns "No review needed" (with APPROVE verdict) for simple cases. Either way, the verdict MUST be handled according to the Verdict-Based Flow Control.
 
 ### Feedback Loop Workflow
 
@@ -563,49 +563,57 @@ digraph feedback_loop {
     node [shape=box, style=rounded];
 
     complete_step [label="Area Complete\n(all Steps done, design.md saved)"];
-    delegate [label="MANDATORY: Delegate to\nspec-reviewer agent"];
-    check_response [label="Review needed?", shape=diamond];
-    no_review [label="spec-reviewer returns\n'No review needed'"];
-    present_no_review [label="Present 'No review needed'\nresult to user"];
-    receive_feedback [label="Receive advisory\nfeedback"];
-    analyze [label="Analyze feedback\nForm YOUR opinion"];
-    present [label="Present to user\n(context + recommendation)"];
-    user_decides [label="User decides", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
-    incorporate [label="Update design.md\nRecord decisions in records/"];
-    user_final [label="User declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
+    delegate [label="MANDATORY: Delegate to\nspec-review agent"];
+    check_verdict [label="Verdict?", shape=diamond];
+
+    approve [label="APPROVE"];
+    ask_user [label="Ask user:\n'Area 넘어갈까요?'", style="rounded,filled", fillcolor="#ccffcc"];
     next_area [label="Proceed to next Area"];
 
+    request_changes [label="REQUEST_CHANGES"];
+    present_feedback [label="Present feedback to user\n(context + recommendation)"];
+    user_consensus [label="User reviews & agrees\non changes", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
+    incorporate [label="Apply changes\nUpdate design.md\nRecord decisions in records/"];
+    re_delegate [label="Re-delegate to spec-review\n(with Re-review Context)"];
+
+    comment [label="COMMENT"];
+    share_comment [label="Share COMMENT with user\n(create follow-up if needed)"];
+
     complete_step -> delegate;
-    delegate -> check_response;
-    check_response -> no_review [label="no"];
-    check_response -> receive_feedback [label="yes"];
-    no_review -> present_no_review;
-    present_no_review -> user_final;
-    receive_feedback -> analyze;
-    analyze -> present;
-    present -> user_decides;
-    user_decides -> incorporate [label="incorporate"];
-    user_decides -> delegate [label="another round"];
-    user_decides -> user_final [label="feedback resolved"];
-    incorporate -> delegate [label="re-review"];
-    user_final -> next_area [label="YES"];
-    user_final -> present [label="NO: more discussion"];
+    delegate -> check_verdict;
+
+    check_verdict -> approve [label="APPROVE"];
+    approve -> ask_user;
+    ask_user -> next_area [label="YES: 'Area complete'"];
+    ask_user -> present_feedback [label="NO: more discussion"];
+
+    check_verdict -> request_changes [label="REQUEST_CHANGES"];
+    request_changes -> present_feedback;
+    present_feedback -> user_consensus;
+    user_consensus -> incorporate [label="agree on changes"];
+    incorporate -> re_delegate;
+    re_delegate -> check_verdict [label="loop until APPROVE"];
+
+    check_verdict -> comment [label="COMMENT"];
+    comment -> share_comment;
+    share_comment -> ask_user [label="proceed"];
 }
 ```
 
 ### Human-in-the-Loop
 
-The final decision on feedback is always made by the **user**.
+The final decision on feedback is always made by the **user**, but spec-review APPROVE is a prerequisite for Area completion.
 
 | Item | Description |
 |------|-------------|
-| AI Role | Provide advice and diverse perspectives |
-| User Role | Final decision maker |
-| Confirmation Point | When User declares "this step complete" |
+| spec-review Role | Quality gate — APPROVE required before Area can complete |
+| AI (spec) Role | Present feedback, form recommendation, facilitate consensus |
+| User Role | Review feedback, agree on changes, declare "Area complete" after APPROVE |
+| Gate Order | spec-review APPROVE first → then user "Area complete" declaration |
 
-### Delegating to spec-reviewer
+### Delegating to spec-review
 
-After completing a step, always delegate to the spec-reviewer agent via Task tool. The spec-reviewer will assess whether a full review is needed.
+After completing all Steps in an Area, always delegate to the spec-review agent via Task tool. The spec-review will assess whether a full review is needed and return a verdict.
 
 **Delegation prompt structure:**
 
@@ -635,37 +643,97 @@ Review the following design and provide multi-AI advisory feedback.
 - **Divergence**: Points where opinions differ
 - **Concerns Raised**: Potential issues identified
 - **Recommendation**: Synthesized advice
+- **Review Verdict**: APPROVE / REQUEST_CHANGES / COMMENT (with blocking concerns list and rationale)
 
 **If no review is needed:**
 - **Status**: "No Review Needed"
+- **Verdict**: APPROVE
 - **Reason**: Brief explanation (e.g., "Simple CRUD with clear requirements")
 
-The spec-reviewer operates in a separate context and returns advisory feedback. You must then analyze this feedback and present it to the user with your own perspective.
+The spec-review operates in a separate context and returns advisory feedback with a verdict. You must then handle the verdict accordingly and present it to the user.
+
+### Re-review Context (MANDATORY for Re-delegation)
+
+When re-delegating to spec-review after applying REQUEST_CHANGES feedback, the delegation prompt MUST include a Re-review Context section. This provides reviewers with full traceability of what was changed and why.
+
+**Re-review delegation prompt structure:**
+
+```markdown
+Review the following design and provide multi-AI advisory feedback.
+
+## Re-review Context
+
+### Previous Verdict
+- **Verdict**: REQUEST_CHANGES
+- **Key Findings**: [이전 리뷰에서 지적된 blocking concerns 원문]
+
+### Changes Made
+| Finding | Change | Intent |
+|---------|--------|--------|
+| [지적 사항] | [수정 내용] | [수정 의도] |
+
+### Current State
+[수정이 반영된 현재 Area design.md 내용]
+
+---
+
+## 1. Current Design Under Review
+[위 Current State와 동일 — 수정 반영된 전체 design.md]
+
+### Key Decisions
+[Key decision points requiring review]
+
+### Questions for Reviewers
+[Specific questions — 특히 이전 지적사항 해소 여부에 대한 질문]
+
+## 2. Previously Finalized Designs (Constraints)
+[Summarize relevant decisions from earlier steps that constrain this design]
+
+## 3. Context
+[Project context, tech stack, constraints]
+```
+
+**Re-review Context omission = VIOLATION.** 리뷰어가 이전 지적사항과 수정 내용을 모르면 effective re-review가 불가능하다.
 
 ### Presenting Feedback to User
 
-After receiving spec-reviewer feedback, YOU must:
+After receiving spec-review feedback, YOU must:
 
-1. **Analyze the feedback** - What do you agree with? What seems overblown?
-2. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
-3. **Form your recommendation** - What do YOU think the user should do? Frame recommendations as options with trade-offs, not as the single right answer.
-4. **Present holistically** - Do not just dump reviewer output. Synthesize it.
-5. **All sections mandatory** - Present every section spec-reviewer returns (Consensus, Divergence, Concerns, Recommendation). No section omission.
+1. **State the verdict** - APPROVE, REQUEST_CHANGES, or COMMENT — make it explicit
+2. **Analyze the feedback** - What do you agree with? What seems overblown?
+3. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
+4. **Form your recommendation** - What do YOU think the user should do? Frame recommendations as options with trade-offs, not as the single right answer.
+5. **Present holistically** - Do not just dump reviewer output. Synthesize it.
+6. **All sections mandatory** - Present every section spec-review returns (Consensus, Divergence, Concerns, Recommendation, Verdict). No section omission.
 
-**Example presentation:**
+**Verdict-specific presentation:**
 
-> "The reviewers raised concerns about the event-sourcing approach for order state management. I partially agree - the concerns about complexity are valid for a team new to this pattern. However, we already decided in Solution Design that we need full audit trails, which constrains us toward event-sourcing.
->
-> My recommendation: Keep event-sourcing but add a detailed implementation guide in the spec to address the learning curve concern. What would you like to do?"
+| Verdict | Presentation |
+|---------|-------------|
+| **APPROVE** | "spec-review APPROVE. [Brief summary]. Area 넘어갈까요?" |
+| **REQUEST_CHANGES** | "spec-review REQUEST_CHANGES. [Blocking concerns 요약 + 권고사항]. 다음과 같이 수정하면 어떨까요? [구체적 수정 제안]" |
+| **COMMENT** | "spec-review COMMENT. [Non-blocking 개선 권고 요약]. 참고하여 진행하겠습니다. [follow-up 필요 시 생성]" |
 
-### User Controls the Loop
+**Example (REQUEST_CHANGES):**
 
-| User Response | Action |
-|---------------|--------|
-| "Incorporate feedback" | Update design.md, create record for each decision made during incorporation in `records/`, re-review if needed |
-| "Skip this feedback" | Record skip reason in `records/`, then proceed without changes |
-| "Need another round" | Delegate to spec-reviewer again |
-| "Step complete" | Save final, proceed to next step |
+> "spec-review **REQUEST_CHANGES**. 리뷰어들이 order state management의 event-sourcing 접근에 blocking concern을 제기했습니다. 팀의 ES 경험 부족과 복잡도 우려가 주요 지적입니다. 다만 Solution Design에서 full audit trail 필요성을 확정했으므로, event-sourcing을 유지하되 상세 구현 가이드를 스펙에 추가하는 방향을 제안합니다. 이 방향에 동의하시나요?"
+
+### Verdict-Based Flow Control
+
+| Verdict | User Interaction | Next Action |
+|---------|-----------------|-------------|
+| **APPROVE** | "Area 넘어갈까요?" 질문 | User "Area complete" 선언 → 다음 Area |
+| **REQUEST_CHANGES** | Blocking concerns + 수정 제안 제시 | User 합의 → 수정 반영 → Re-review Context 포함하여 spec-review 재호출 |
+| **COMMENT** | Non-blocking 개선 권고 공유 | User 확인 → follow-up 생성 가능 → "Area 넘어갈까요?" 질문 |
+
+**REQUEST_CHANGES Loop:**
+1. Present blocking concerns and recommended changes to user
+2. User reviews and agrees on specific changes (user may modify recommendations)
+3. Apply agreed changes to design.md, record decisions in `records/`
+4. Re-delegate to spec-review with **Re-review Context** (MANDATORY)
+5. Repeat until APPROVE received
+
+**CRITICAL: spec-review가 pass(APPROVE 또는 COMMENT) 하지 않으면 Area complete 선언 불가.** REQUEST_CHANGES verdict가 반환된 상태에서 유저가 "Area complete"를 선언해도, pass할 때까지 Area를 완료할 수 없다.
 
 ## Record Workflow
 
@@ -811,28 +879,45 @@ digraph area_completion {
     all_steps [label="All Steps in Area\ncompleted with user confirmation"];
     save_area [label="Save complete Area content"];
     present_summary [label="Present summary of\nall decisions to user"];
-    delegate_reviewer [label="MANDATORY: Delegate to\nspec-reviewer for review"];
-    receive_feedback [label="Receive reviewer feedback"];
-    analyze_present [label="Analyze feedback\nPresent to user with recommendation"];
-    user_decides [label="User decides on feedback", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
-    incorporate [label="Incorporate feedback\nUpdate design.md\nRecord decisions in records/"];
-    another_round [label="Delegate to\nspec-reviewer again"];
+    delegate_reviewer [label="MANDATORY: Delegate to\nspec-review"];
+    check_verdict [label="Verdict?", shape=diamond];
+
+    approve [label="APPROVE"];
+    ask_complete [label="Ask user:\n'Area 넘어갈까요?'", style="rounded,filled", fillcolor="#ccffcc"];
     user_final [label="User explicitly declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
     announce_next [label="Announce: [Area Name] complete.\nEntry criteria for [Next Area]: [list]"];
+
+    request_changes [label="REQUEST_CHANGES"];
+    present_feedback [label="Present blocking concerns\nto user with recommendation"];
+    user_consensus [label="User agrees on\nchanges to make", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
+    incorporate [label="Apply changes\nUpdate design.md\nRecord decisions in records/"];
+    re_review [label="Re-delegate to spec-review\n(Re-review Context MANDATORY)"];
+
+    comment [label="COMMENT"];
+    share_comment [label="Share non-blocking\nconcerns with user"];
 
     all_steps -> save_area;
     save_area -> present_summary;
     present_summary -> delegate_reviewer;
-    delegate_reviewer -> receive_feedback;
-    receive_feedback -> analyze_present;
-    analyze_present -> user_decides;
-    user_decides -> incorporate [label="incorporate"];
-    user_decides -> another_round [label="another round"];
-    user_decides -> user_final [label="feedback resolved"];
-    incorporate -> delegate_reviewer [label="re-review"];
-    another_round -> receive_feedback;
+    delegate_reviewer -> check_verdict;
+
+    check_verdict -> approve [label="APPROVE"];
+    approve -> ask_complete;
+    ask_complete -> user_final;
+
+    check_verdict -> request_changes [label="REQUEST_CHANGES"];
+    request_changes -> present_feedback;
+    present_feedback -> user_consensus;
+    user_consensus -> incorporate [label="agree"];
+    incorporate -> re_review;
+    re_review -> check_verdict [label="loop until\nAPPROVE"];
+
+    check_verdict -> comment [label="COMMENT"];
+    comment -> share_comment;
+    share_comment -> ask_complete [label="proceed"];
+
     user_final -> announce_next [label="YES: 'Area complete'"];
-    user_final -> analyze_present [label="NO: more discussion"];
+    user_final -> present_feedback [label="NO: more discussion"];
 }
 ```
 
@@ -841,17 +926,22 @@ digraph area_completion {
 1. **Verify all Steps completed**: Every Step in the Area must have passed its Checkpoint Protocol
 2. **Save complete Area content**: Write to `{area-directory}/design.md`
 3. **Present Area summary**: Show all decisions made in this Area to user
-4. **MANDATORY spec-reviewer review**: Delegate Area results to spec-reviewer
-   - Even if spec-reviewer returns "No review needed", present this to user
-5. **Feedback loop**: If feedback exists, analyze and present to user with recommendation
-   - User decides: incorporate, request another round, or mark feedback resolved
-   - Loop continues until user is satisfied
+4. **MANDATORY spec-review**: Delegate Area results to spec-review
+5. **Verdict handling**:
+   - **APPROVE** → Proceed to step 6
+   - **REQUEST_CHANGES** → Present blocking concerns to user with recommendation → User agrees on changes → Apply changes, update design.md, record decisions in `records/` → Re-delegate to spec-review with **Re-review Context** (MANDATORY) → Return to step 5
+   - **COMMENT** → Share non-blocking concerns with user, create follow-up if needed → Proceed to step 6
 6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
    - AI CANNOT self-declare Area completion
+   - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 
-**Without user's explicit "Area complete" declaration, the Area is NOT complete and next Area CANNOT begin.**
+**Two gates must BOTH be passed for Area completion:**
+1. **spec-review pass** — APPROVE 또는 COMMENT (quality gate). REQUEST_CHANGES는 차단.
+2. **User "Area complete" declaration** (authority gate)
+
+**Without BOTH gates passed, the Area is NOT complete and next Area CANNOT begin.**
 
 ## Spec Completion Gate
 

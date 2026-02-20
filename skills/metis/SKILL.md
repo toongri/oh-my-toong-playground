@@ -272,9 +272,28 @@ AC Quality Checks:
 - MUST NOT: [Specific anti-pattern to prevent]
 - PATTERN: Follow `[file:lines]` [existing pattern to reference]
 - TOOL: Use `[subagent/tool]` for [purpose]
+
+### Analysis Verdict
+- **Verdict**: [APPROVE / REQUEST_CHANGES / COMMENT]
+- **Blocking Items**: [Critical gaps that must be resolved before planning, or "None"]
+- **Rationale**: [1-2 sentence justification for the verdict]
 ```
 
 </Output_Format>
+
+<Verdict_Criteria>
+
+### Verdict Criteria
+
+| Verdict | Condition | Effect |
+|---------|-----------|--------|
+| **APPROVE** | Critical gaps 없음. 분석 결과 high-impact 이슈가 발견되지 않음. | Prometheus가 즉시 플랜 생성 가능 |
+| **REQUEST_CHANGES** | Critical gaps 존재. Missing Questions, Undefined Guardrails, Unvalidated Assumptions 등에서 high-impact 항목이 1개 이상 발견됨. | 해당 항목 해소 후 Metis 재검증 필요. Prometheus 진행 차단. |
+| **COMMENT** | Minor gaps 또는 edge cases만 존재. 플랜 품질에 영향을 주지만 차단 사유는 아님. | Prometheus가 플랜에 반영하되 진행은 허용 |
+
+**Critical gap 판정 기준**: 해당 gap이 해소되지 않으면 Prometheus가 올바른 플랜을 생성할 수 없는 경우 (예: 핵심 요구사항 누락, 범위 미정의, 검증 불가능한 AC)
+
+</Verdict_Criteria>
 
 <Failure_Modes_To_Avoid>
 
@@ -313,6 +332,7 @@ AC Quality Checks:
 - [ ] Are critical gaps prioritized above "nice-to-haves"?
 - [ ] Is the focus on implementation feasibility? (no market/value judgments)
 - [ ] Do Directives specify concrete actions with MUST/MUST NOT?
+- [ ] Does the verdict match the severity of findings? (critical gaps = REQUEST_CHANGES, minor only = COMMENT, none = APPROVE)
 
 </Final_Checklist>
 
