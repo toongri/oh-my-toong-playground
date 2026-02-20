@@ -31,7 +31,7 @@ CP7 위반:
 
 ---
 
-### SCT-2: Learning Journey를 bullet takeaway 부재로 오진하는 케이스
+### SCT-2: Learning Journey에서 bullet takeaway 추가 제안의 적절성
 
 **Technique Under Test**: CP8 유형별 가치 전달 (structure.md Step 2)
 
@@ -45,16 +45,25 @@ CP7 위반:
 ```
 
 **Expected Output**:
-CP8 PASS:
-- Learning Journey 유형으로서 유효한 가치 전달
-- 취약성 ("진땀 빼야 하죠"), 권위 인용 (Kleppmann), 주제 프레이밍이 가치를 구성
-- 서사적 여정 자체가 가치 전달 방식 -- bullet takeaway가 아닌 것은 결함이 아님
-- CP8 위반 없음
+CP8 Suggestion (not Critical):
+- Learning Journey로서 서사적 가치 전달은 유효
+- 스캔 가능성을 높이기 위해 핵심 포인트 추가를 제안할 수 있음
+- 개선 제안:
+  > 트랜잭션 일관성은 매우 중요합니다. 하지만 트랜잭션 격리 레벨 몰라서 물어보는 분들에게 설명하기란 진땀 빼야 하죠..
+  >
+  > 정리하면서 깨달은 핵심:
+  > - 격리 레벨은 "어디까지 보여줄 것인가"의 문제
+  > - Lock은 격리를 구현하는 메커니즘
+  > - Update Lock은 교착 상태 방지의 핵심
+  >
+  > Kleppmann의 DDIA를 기반으로 정리해봤습니다. [link]
 
 **Pass Criteria**:
-(1) 가치 전달이 유효한 Learning Journey 서사로 인정됨
-(2) CP8 위반으로 플래그되지 않음
-(3) "구체적 takeaway가 없다"고 플래그하면 RED
+(1) 서사적 가치 전달이 유효함을 인정
+(2) Suggestion으로 bullet 추가를 제안 (Critical이 아님)
+(3) 서사와 bullet을 결합한 개선안 제시
+(4) "bullet 필요 없음, 서사만으로 충분"이라고만 평가하면 RED
+(5) "bullet이 없으므로 가치 전달 실패"라고만 평가해도 RED
 
 ---
 

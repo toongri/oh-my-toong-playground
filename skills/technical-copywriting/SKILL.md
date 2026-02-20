@@ -20,7 +20,7 @@ Reviews teaser/promotion text that accompanies technical blog post shares. 3-pha
 | Sequential Execution | Type → Structure → Voice order |
 | Per-Area Approval | User confirmation after each Area |
 | Before/After | All improvement suggestions in Before/After format |
-| Cite Principle | Each suggestion must cite its principle ID (CP1~CP16) |
+| Cite Principle | Each suggestion must cite its principle ID (CP1~CP15) |
 
 ## Review Areas
 
@@ -52,7 +52,7 @@ digraph review_flow {
 
 ### Area 3: Voice & Authenticity Review
 
-- **Reviews**: Developer authenticity, anti-marketing-speak, platform tone, vulnerability-based connection, authority citation, Korean naturalness
+- **Reviews**: Developer authenticity, anti-marketing-speak, platform tone, reader connection, Korean naturalness
 - **Enter when**: Area 2 completed (or Area 1 if Area 2 skipped)
 - **Skip when**: Only structure-level review requested
 - **Reference**: `references/voice.md`
