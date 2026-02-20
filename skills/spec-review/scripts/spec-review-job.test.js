@@ -125,11 +125,11 @@ describe('resolveAutoRole', () => {
     assert.equal(resolveAutoRole('auto', 'unknown'), 'claude');
   });
 
-  it('returns claude when role is empty string', () => {
+  it('falls through to hostRole when role is empty string', () => {
     assert.equal(resolveAutoRole('', 'codex'), 'codex');
   });
 
-  it('returns claude when role is null', () => {
+  it('falls through to hostRole when role is null', () => {
     assert.equal(resolveAutoRole(null, 'codex'), 'codex');
   });
 
@@ -483,7 +483,7 @@ describe('parseArgs', () => {
     assert.equal(result.stdin, true);
   });
 
-  it('parses -h alias for help', () => {
+  it('parses --h as boolean flag', () => {
     const result = parseArgs(['node', 'script', '--h']);
     assert.equal(result.h, true);
   });
