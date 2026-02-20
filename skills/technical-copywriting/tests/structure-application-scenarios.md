@@ -2,7 +2,7 @@
 
 Area: Structure Review
 Reference: `skills/technical-copywriting/references/structure.md`
-Scenario Count: 4
+Scenario Count: 6
 
 ---
 
@@ -122,3 +122,61 @@ CP10 위반:
 (2) CP10 비율 불균형 지적 (분석 본문 부재)
 (3) 분석과 패턴 식별을 포함한 개선안 제시
 (4) 도구 이름 나열을 유효한 Industry Insight로 판단하면 RED
+
+---
+
+### SCT-5: LinkedIn 첫 140자가 모호한 경우
+
+**Technique Under Test**: CP7 Above-the-fold test (structure.md Step 1)
+
+**Input**:
+```markdown
+개발자라면 누구나 한 번쯤은 고민하게 되는 주제가 있습니다. 저도 최근에 이 주제에 대해 깊이 생각해보게 되었는데요.
+
+격리 레벨별 Lock 동작을 실제 트랜잭션 로그로 검증했습니다. Read Committed에서 Phantom Read가 발생하는 조건, Serializable에서의 성능 비용까지 정리했습니다.
+```
+
+**Expected Output**:
+CP7 위반 (Above-the-fold):
+- 첫 140자: "개발자라면 누구나 한 번쯤은 고민하게 되는 주제가 있습니다. 저도 최근에 이 주제에 대해 깊이 생각해보게 되었는데요." → 주제가 무엇인지 알 수 없음
+- 구체적 주제("트랜잭션 격리 레벨")와 관심을 끌 요소("실제 로그로 검증")가 fold 아래에 숨겨져 있음
+- 개선: 구체적 내용을 첫 줄로 이동
+  > 격리 레벨별 Lock 동작을 실제 트랜잭션 로그로 검증했습니다.
+  >
+  > Read Committed에서 Phantom Read가 발생하는 조건, Serializable에서의 성능 비용까지 정리했습니다.
+
+**Pass Criteria**:
+(1) 첫 140자에서 구체적 주제 부재를 지적
+(2) Above-the-fold test 실패 근거 (topic + reason to care)
+(3) 구체적 내용을 앞으로 이동하는 개선안 제시
+(4) "개발자라면 누구나"를 유효한 오프닝으로 판단하면 RED
+
+---
+
+### SCT-6: 블로그 홍보 포스트인데 링크가 없는 경우
+
+**Technique Under Test**: CP9 유형별 마무리 (structure.md Step 3)
+
+**Input**:
+```markdown
+CI 빌드 시간을 18분에서 7분으로 줄였습니다. Docker 캐시 전략을 LRU에서 LFU로 변경한 게 가장 효과가 컸습니다.
+
+병렬 실행 도입, 불필요한 스텝 제거까지 합치면 총 60% 단축.
+
+이 과정을 블로그에 상세히 정리해뒀습니다. 앞으로도 CI/CD 최적화를 계속 파고들 생각입니다.
+```
+
+**Expected Output**:
+CP9 위반:
+- 블로그 글을 홍보하는 포스트("블로그에 상세히 정리해뒀습니다")인데 링크가 없음
+- 홍보 포스트에서 콘텐츠로의 경로는 필수 — 독자가 전체 글에 도달할 방법이 없음
+- "앞으로도 ~ 파고들 생각입니다" → 성찰적 마무리는 유효하지만, 링크를 대체할 수 없음
+- 개선: 링크 추가 (내장형 또는 명시적)
+  > 이 과정을 블로그에 상세히 정리해뒀습니다. 👇 [link]
+  > 또는: 전체 과정은 첫 댓글 링크에서 확인하세요.
+
+**Pass Criteria**:
+(1) CP9 위반으로 링크/CTA 부재 지적
+(2) 홍보 포스트에서 링크가 필수임을 근거로 제시
+(3) 내장형 또는 명시적 링크 개선안 제시
+(4) 성찰적 마무리만으로 충분하다고 판단하면 RED

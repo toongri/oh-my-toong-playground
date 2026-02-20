@@ -60,10 +60,15 @@ CP13. Platform-specific tone:
 
 | Platform | Tone | Register | Characteristics |
 |----------|------|----------|-----------------|
-| LinkedIn | Professional but personal | Semi-formal | Personal narrative or thought leadership. Substance over posturing. |
+| LinkedIn | Professional but personal | Semi-formal | Authenticity is the foundation of, not the alternative to, thought leadership. Lead with genuine experience or original analysis. Substance over posturing. |
 | Slack | Casual, collegial | Informal | Write like messaging a teammate. Brief. |
 | Twitter/X | Punchy, direct | Informal-concise | No verbose intros. Every word earns its place. |
 | Newsletter | Conversational authority | Semi-formal | Brief and focused. Subscriber knows you. |
+
+LinkedIn primary anti-pattern for developer audiences:
+- Empty credential assertions ("10년간 전문가로 활동하며...")
+- Corporate voice or third-person detachment
+- Claims of expertise without evidence (specific results, concrete examples)
 
 Before (LinkedIn, empty credential):
 > 저는 10년간 마이크로서비스 아키텍처 전문가로 활동하며 수백 개의 시스템을 설계해왔습니다.

@@ -23,6 +23,9 @@ Universal anti-patterns (flag these regardless of type):
 - "이번 포스트에서는..." / "In this post, I..."
 - Generic opener with no specific claim, topic, or news
 
+Above-the-fold test (LinkedIn):
+Read only the first 140 characters. Does the reader know (a) what specific topic this is about, AND (b) why they should care (specific claim, number, or surprising angle)? If either is missing, the opening fails regardless of which type pattern it follows.
+
 Before:
 > 블로그에 동기화에 대한 글을 올렸습니다. 관심 있으시면 읽어보세요.
 
@@ -43,7 +46,7 @@ CP8. Value delivery by type:
 | Announcement | Feature descriptions -- what's new IS the value | Numbered items with context per feature | Reader understands what changed and why it matters |
 | Industry Insight | Analysis and pattern identification | Timeline, comparisons, "what changed vs what didn't" | Reader gains a new lens for understanding the industry |
 
-Both narrative and structured formats are valid. Narrative journey posts deliver value through the author's discovery process. Structured bullet-point takeaways deliver value through scannable insights. For Learning Journey type, consider suggesting key takeaways alongside the narrative to improve scannability.
+**Best practice: pair narrative with scannable elements.** LinkedIn formatted posts get significantly more engagement. For Learning Journey type, the narrative journey IS the core value — but adding 2-3 key takeaway bullets alongside the narrative improves scannability without destroying the story. Pure narrative without scannable elements is a Suggestion-level issue. Pure bullet takeaways without narrative context strip the Learning Journey of its defining characteristic and should be flagged as a type mismatch.
 
 Anti-patterns (still flag these):
 - Vague teasers: "X에 대한 제 생각을 공유합니다" (no specific insight)
@@ -62,15 +65,16 @@ CP9. Closing patterns by type:
 
 | Type | Valid Closing | Example |
 |------|-------------|---------|
-| Learning Journey | Reflective continuation + optional embedded link | "이제 요구사항 공학의 첫걸음을 뗐으니, 더 깊이 파고 들어가야겠습니다" |
+| Learning Journey | Reflective continuation + embedded link (when promoting an article) | "이제 요구사항 공학의 첫걸음을 뗐으니, 더 깊이 파고 들어가야겠습니다" |
 | Practical Tip | Call to try + optional link | "연휴 끝나면 출발선에 서 있을 겁니다" |
 | Announcement | Link to resource + broader context | "이 스킬들은 plugins-for-claude-natives에서 공개해 두었습니다. [link]" |
 | Industry Insight | Memorable thesis statement | "More tokens, more wins" |
 
 Key principles:
-- If the post promotes a blog article, include a clear path to the full content (CTA or embedded link).
-- Both narrative-embedded links ("여기 정리해봤습니다. 👇") and explicit CTAs ("전체 글은 첫 댓글에") are valid approaches.
-- Reflective closings without CTA are valid for posts that don't promote a specific article (e.g., pure Industry Insight).
+- When the post promotes a blog article, a clear path to the full content is **required** (not optional). This is the post's primary conversion goal.
+- Narrative-embedded links ("여기 정리해봤습니다") are preferred for Learning Journey and Industry Insight types — they feel less promotional.
+- Explicit CTAs ("전체 글은 첫 댓글에") are natural for Practical Tip and Announcement types.
+- Reflective closings without any link are valid ONLY for posts that don't promote a specific article (e.g., pure Industry Insight or opinion).
 
 Anti-pattern:
 - "좋아요와 공유 부탁드립니다!" (engagement begging)

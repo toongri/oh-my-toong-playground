@@ -148,8 +148,9 @@ CP6. Platform constraints:
 | Newsletter | ~100 words intro | "Read more" CTA button | Subject line + preview + body |
 
 Key rules:
-- LinkedIn: First 2 lines visible before fold. They don't need to be "hooks" -- declarative thesis statements work equally well.
+- LinkedIn: First 2 lines visible before fold. Clickbait-style hooks are unnecessary for developer audiences, but the opening must contain a specific claim, number, or surprising thesis. Vague declarative statements ("X는 중요합니다") fail the same way clickbait does — they give no reason to expand.
 - LinkedIn: Inline links in narrative ("여기 정리해봤습니다.") are a valid alternative to "link in comments". Both approaches work.
+- LinkedIn: Algorithm may reduce reach for posts with external links in body text. "Link in first comment" avoids this penalty but adds friction for the reader. Narrative-embedded links feel more natural but may reduce distribution. State the trade-off; do not prescribe one approach.
 - Slack: No algorithm to fight. Lead with context, then link directly.
 - Twitter/X: Thread for technical depth. First tweet must stand alone.
 - Newsletter: Subject line is the primary hook. Preview text is secondary.
