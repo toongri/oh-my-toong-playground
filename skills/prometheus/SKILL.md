@@ -335,59 +335,78 @@ This checklist is internal -- do not present it to the user.
 4. **Iterate** - Refine based on user feedback
 5. **Finalize** - Include confirmed criteria in plan
 
-### Acceptance Criteria Requirements
+### Reference Integration (MANDATORY when user provides references)
 
-Each criterion MUST be:
-- **Specific** - Clear, unambiguous condition
-- **Measurable** - Can be objectively verified (test, command, observation)
-- **Relevant** - Directly tied to user's actual need
-- **Testable** - Executor can verify completion
+When the user specifies references ("reference X", "based on Y pattern", "follow Z approach"):
+
+1. Each reference MUST produce at least one AC item that names a **specific behavioral constraint derived from that reference**
+2. The constraint must be verifiable without reading the reference itself -- it must be self-contained in the AC
+
+| Pattern | WRONG | RIGHT |
+|---------|-------|-------|
+| User says "reference council-config.json" | "References council-config.json" | "Model synthesis weighting follows priority ranking defined in council-config.json" |
+| User says "follow the prompt-injection.ts pattern" | "Uses prompt-injection.ts pattern" | "Final prompt has 3-layer structure: system instructions, untrusted content with injection-safe delimiter, user prompt -- matching buildPromptWithSystemContext() architecture" |
+| User says "based on team SKILL.md routing table" | "Refers to team SKILL.md" | "Each model's strengths are expressed as prose descriptions enabling routing decisions, following the role-based routing table format in team/SKILL.md" |
+
+If a reference cannot produce a specific behavioral constraint, ask the user: "What specific aspect of [reference] should the implementation follow?"
+
+### Acceptance Criteria Format (MANDATORY)
+
+Each criterion MUST follow this two-line structure:
+
+- [ ] **[Observable outcome]**: WHAT state change is visible after completion -- not what action was taken, but what is TRUE afterwards
+      **Verification**: HOW to confirm -- executable command, observable behavior, or state assertion
+
+The criterion is the **contract between planner and executor**.
+The executor has NO interview context. If the criterion cannot be verified
+by someone who only reads the plan, it is incomplete.
 
 ### Proposal Format
 
-When proposing acceptance criteria to user:
+When proposing acceptance criteria to user, organize by **work item** (not by functional/technical category):
 
-```markdown
-## Proposed Acceptance Criteria
+For each work item:
+1. State the **responsibility** in one sentence -- WHY this work item exists separately from others (what goes wrong if removed)
+2. List acceptance criteria using the two-line format above
+3. Specify what this work item does NOT cover (prevents scope creep between items)
 
-Based on your requirements, I propose the following completion criteria:
+Overall structure:
+- Per-work-item sections with responsibility + criteria + not-scope
+- A final "Out of Scope" section for the entire plan
+- Review questions for user confirmation
 
-### Functional Criteria
-- [ ] [Specific behavior that must work]
-- [ ] [Another specific behavior]
+### AC Anti-Patterns
 
-### Technical Criteria
-- [ ] [Build/test requirement]
-- [ ] [Performance/security requirement if applicable]
+**NEVER write criteria that match these patterns:**
 
-### Out of Scope (explicitly excluded)
-- [What this task will NOT do]
-
----
-**Please review:**
-1. Are these criteria correct and complete?
-2. Any criteria to add, modify, or remove?
-3. Any priorities among these criteria?
-```
+| Anti-Pattern | Example | Why It Fails | Instead |
+|-------------|---------|--------------|---------|
+| **File listing** | "shared/lib/worker-core.js created with splitCommand, atomicWriteJson" | Implementation detail, not outcome. Executor creates file but may miss the responsibility | "Common logic (parsing, retry, state) managed from single source. Verification: grep shows council-worker and spec-worker both import from shared module" |
+| **Section adding** | "Add ## Model Characteristics section to SKILL.md" | Action, not verifiable result. Executor adds empty section and technically passes | "Chairman's synthesis protocol references model-specific strengths when opinions diverge. Verification: Synthesis Protocol section contains explicit model characteristic weighting instruction" |
+| **Vague verification** | "Verify it works", "dry-run review", "confirm functionality" | Not executable. No one can run "verify it works" | Name the command, the observable state, or the assertion. If you can't, the criterion is incomplete |
+| **Task restatement** | "Authentication is implemented" | Restates the task. Criterion must describe a STATE that is TRUE after, not the ACTION | "Unauthenticated requests to /api/* return 401. Verification: curl without token returns 401 status" |
+| **Universal truths** | "All tests pass", "No console errors" | Always true, not plan-specific. Belongs in Verification Strategy | Move to plan's Verification Strategy section |
 
 ### Example
 
 **User request:** "Add a logout button to the header"
 
 **Your proposal:**
-```markdown
+
 ## Proposed Acceptance Criteria
 
-Based on your requirements, I propose the following completion criteria:
+### 1. Logout UI State
 
-### Functional Criteria
+**Responsibility:** Authenticated users can trigger logout from the header. Without this, there is no user-facing mechanism to end a session.
+
 - [ ] Logout button visible in header when user is authenticated
+      **Verification**: Navigate to any authenticated page, confirm button element present in header
 - [ ] Clicking logout clears session and redirects to login page
+      **Verification**: Click logout, confirm session cookie cleared and current URL is /login
 - [ ] Button not visible when user is not authenticated
+      **Verification**: Open header in unauthenticated state, confirm no logout element rendered
 
-### Technical Criteria
-- [ ] All existing tests pass
-- [ ] No console errors during logout flow
+**Not covered:** Session timeout handling, "Remember me" functionality
 
 ### Out of Scope (explicitly excluded)
 - Session timeout handling (separate feature)
@@ -398,7 +417,49 @@ Based on your requirements, I propose the following completion criteria:
 1. Are these criteria correct and complete?
 2. Any criteria to add, modify, or remove?
 3. Any priorities among these criteria?
-```
+
+### Complex Example
+
+**User request:** "council과 spec-review에서 공통 로직을 추출하고, oh-my-claude-sisyphus의 프롬프트 조립 패턴을 참고해서 구조화된 프롬프트 파이프라인을 만들어줘"
+
+**Your proposal:**
+
+## Proposed Acceptance Criteria
+
+### 1. Shared Worker Infrastructure
+
+**Responsibility:** council과 spec-review 워커의 공통 로직을 단일 소스로 통합하여, 이후 변경이 한 곳에서만 이루어지게 한다. 이 항목이 없으면 두 워커에 동일한 로직이 중복되어 한쪽만 수정되는 drift 위험이 존재한다.
+
+- [ ] 공통 로직(명령어 파싱, 프로세스 스폰, 재시도, 상태 기록)이 하나의 모듈에서 관리된다
+      **Verification**: council-worker와 spec-worker 양쪽에서 공통 모듈을 import하며, 중복 함수가 0개
+- [ ] 각 워커는 공통 모듈에 스킬별 설정(용어, 디렉토리 구조)만 주입한다
+      **Verification**: 워커 파일이 config 객체를 생성하여 공통 모듈에 전달하는 패턴만 포함
+
+**Not covered:** 공통 모듈의 API 설계 (구현자 재량), 테스트 프레임워크 변경
+
+### 2. Structured Prompt Assembly Pipeline
+
+**Responsibility:** 외부 모델이 역할 정의 + 콘텐츠 경계 + 사용자 질문의 구조화된 프롬프트를 수신하도록 한다. 이 항목이 없으면 prompt injection에 취약하고 모델이 리뷰 대상을 지시사항으로 해석할 수 있다.
+
+**Required Reference -- oh-my-claude-sisyphus:**
+- buildPromptWithSystemContext()의 3-layer 조립 구조 (system-instructions + untrusted data delimiter + user prompt)
+
+- [ ] 최종 프롬프트가 3-layer 계층 구조를 가진다: (1) system instructions, (2) untrusted content with injection-safe delimiter, (3) user prompt
+      **Verification**: job 디렉토리의 전송 로그에서 delimiter 패턴(`===UNTRUSTED` 등)이 확인됨
+- [ ] role prompt 파일이 없는 member는 기존 동작(raw prompt)으로 graceful fallback한다
+      **Verification**: role prompt 없이 실행 시 에러 없이 기존 출력과 동일한 결과
+
+**Not covered:** role prompt 파일 내용 작성 (별도 작업), Codex 에이전트 포맷 변환
+
+### Out of Scope (explicitly excluded)
+- Dynamic member selection, sequential cross-validation
+- UI payload 구조 변경
+
+---
+**Please review:**
+1. Are these criteria correct and complete?
+2. Any criteria to add, modify, or remove?
+3. Any priorities among these criteria?
 
 ### Handling User Response
 
