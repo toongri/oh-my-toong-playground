@@ -2,7 +2,7 @@
 
 ## Role
 
-Reviews tone, authenticity, and language quality. Verifies developer audience alignment, anti-marketing-speak, platform tone, vulnerability-based connection, authority anchoring, and Korean naturalness.
+Reviews tone, authenticity, and language quality. Verifies developer audience alignment, anti-marketing-speak, platform tone, reader connection, and Korean naturalness.
 
 ## Process
 
@@ -60,71 +60,49 @@ CP13. Platform-specific tone:
 
 | Platform | Tone | Register | Characteristics |
 |----------|------|----------|-----------------|
-| LinkedIn | Professional but personal | Semi-formal | Reflective learner framing. Personal narrative arc. NOT thought-leader posturing. |
+| LinkedIn | Professional but personal | Semi-formal | Personal narrative or thought leadership. Substance over posturing. |
 | Slack | Casual, collegial | Informal | Write like messaging a teammate. Brief. |
 | Twitter/X | Punchy, direct | Informal-concise | No verbose intros. Every word earns its place. |
 | Newsletter | Conversational authority | Semi-formal | Brief and focused. Subscriber knows you. |
 
-Before (LinkedIn, thought-leader posturing):
+Before (LinkedIn, empty credential):
 > 저는 10년간 마이크로서비스 아키텍처 전문가로 활동하며 수백 개의 시스템을 설계해왔습니다.
 
-After (LinkedIn, reflective learner):
-> 다행히도 좋은 멘토들을 만나 백엔드 전반적인 지식을 올바른 방향으로 쌓을 수 있었죠. 레이어드 아키텍처와 클린 아키텍처에 대한 오해를 바로 잡고...
+After (LinkedIn, substance-first):
+> 서비스가 5개를 넘어가면 동기 통신만으로는 한계가 옵니다. 장애 전파, 결합도, 확장성 — 3가지 문제를 비동기 전환으로 해결한 과정을 정리했습니다.
 
-### Step 4: Vulnerability-Based Connection
+### Step 4: Reader Connection
 
-CP14. Vulnerability-based connection:
+CP14. Reader connection:
 
-Connection comes from shared vulnerability, not from reader-directed "you" language.
+Effective connection strategies for developer audiences:
 
-Primary connection mechanisms:
+**Vulnerability-based (first-person):**
 - Admitting ignorance: "전혀 모르고 있다는 사실을 깨달았습니다"
 - Sharing struggle: "읽는 과정은 쉽지 않았습니다"
 - Ongoing imperfection: "아직 읽은 것 전부를 이해한 것도 아닌 듯합니다"
-- Shared experience: "제게는 이런 잘못알고 있는 지식이 꽤 있습니다"
 
-"You" language is optional, not required. First-person vulnerability IS the connection.
+**Reader-directed ("you"):**
+- Problem identification: "CI 빌드에 매번 18분 기다리고 계신가요?"
+- Shared challenge: "트랜잭션 격리 레벨 설명하기 어렵지 않으셨나요?"
+- Direct benefit: "캐시 전략 하나로 7분까지 줄일 수 있습니다"
 
-Before (forced "you" pivot):
-> CI 빌드에 매번 18분 기다리고 계신가요? 캐시 전략 하나로 7분까지 줄일 수 있습니다.
+Both approaches are valid. Choose based on the teaser type:
+- Learning Journey → vulnerability-based fits naturally
+- Practical Tip → reader-directed fits naturally
+- Mix freely within other types
 
-After (vulnerability-based):
-> 결국 '알아야' AI도 써먹을 수 있겠더군요. AI가 생산성 향상에 큰 도움을 주는 도구라는 것은 부정할 수 없습니다. 하지만 문제 해결에 언제나 올바른 대답을 제공한다고 보기엔 힘듭니다.
+Anti-pattern: condescending or quiz-like tone regardless of approach.
 
-Note: Reader-directed "you" language is not WRONG -- it's simply not the only way to create connection. Both approaches are valid. Flag only when "you" language feels forced or marketing-like ("~하고 계신가요?").
+Before (condescending):
+> 동기화, 알고 계신가요? 정확하게 정의하실 수 있으신가요? 대부분의 개발자들이 이 개념을 정확히 모릅니다.
 
-### Step 5: Authority Anchoring via Citation
+After (genuine reader-directed):
+> 트랜잭션 격리 레벨 설명하기 어렵지 않으셨나요? 저도 그랬습니다. Kleppmann의 DDIA를 기반으로 정리해봤습니다.
 
-CP15. Authority anchoring:
+### Step 5: Korean Naturalness
 
-Credibility comes from demonstrated reading and study, not from personal achievement claims.
-
-Citation patterns:
-- Parenthetical: "(리팩터링 2판, 마틴 파울러)"
-- Inline reference: "데이터 중심 애플리케이션 설계'(Martin Kleppmann, 2017)에서도 강조하고 있습니다"
-- Book list: Enumerated reading list with author names and years
-- Expert name: "마틴 파울러", "에릭 에반스" as intellectual anchors
-
-Authority signals that build trust:
-- Listing multiple books read on a topic (shows depth of study)
-- Citing specific quotes from authoritative sources
-- Naming mentors or educators who influenced the learning
-- Referencing specific frameworks/concepts by their proper names
-
-Anti-patterns:
-- Self-credential claims: "10년 경력의 전문가로서..."
-- Unattributed claims: Making authoritative statements without citing sources
-- Name-dropping without substance: Mentioning experts without connecting to the content
-
-Before (self-credential):
-> 시니어 개발자로서 말씀드리자면, 트랜잭션 격리 레벨은 이렇게 이해하시면 됩니다.
-
-After (authority anchoring):
-> 이 분야의 고전이라 불리는 '데이터 중심 애플리케이션 설계'(Martin Kleppmann, 2017)에서도 강조하고 있습니다. "트랜잭션의 일관성은 데이터베이스 시스템의 원자성과 격리성에 기대어 구현될 수 있다."
-
-### Step 6: Korean Naturalness
-
-CP16. Korean naturalness (when Korean text):
+CP15. Korean naturalness (when Korean text):
 
 Apply technical-writing principles T10 (remove unnecessary Sino-Korean) and T11 (no translationese). Technical copywriting in Korean should sound natural, not translated from English marketing copy.
 

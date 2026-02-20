@@ -43,7 +43,7 @@ CP8. Value delivery by type:
 | Announcement | Feature descriptions -- what's new IS the value | Numbered items with context per feature | Reader understands what changed and why it matters |
 | Industry Insight | Analysis and pattern identification | Timeline, comparisons, "what changed vs what didn't" | Reader gains a new lens for understanding the industry |
 
-IMPORTANT: Bullet-point takeaways are NOT the only valid value delivery mode. Narrative journey posts where the reader learns from the author's discovery process are equally valid.
+Both narrative and structured formats are valid. Narrative journey posts deliver value through the author's discovery process. Structured bullet-point takeaways deliver value through scannable insights. For Learning Journey type, consider suggesting key takeaways alongside the narrative to improve scannability.
 
 Anti-patterns (still flag these):
 - Vague teasers: "X에 대한 제 생각을 공유합니다" (no specific insight)
@@ -67,23 +67,26 @@ CP9. Closing patterns by type:
 | Announcement | Link to resource + broader context | "이 스킬들은 plugins-for-claude-natives에서 공개해 두었습니다. [link]" |
 | Industry Insight | Memorable thesis statement | "More tokens, more wins" |
 
-Key principle: Not every post needs a CTA. Reflective closings and insight statements are equally valid endings.
+Key principles:
+- If the post promotes a blog article, include a clear path to the full content (CTA or embedded link).
+- Both narrative-embedded links ("여기 정리해봤습니다. 👇") and explicit CTAs ("전체 글은 첫 댓글에") are valid approaches.
+- Reflective closings without CTA are valid for posts that don't promote a specific article (e.g., pure Industry Insight).
 
-When a link IS present, it should be embedded naturally in the narrative:
-- Valid: "여기 정리해봤습니다." / "독후감을 겸해 읽은 내용을 정리해보았습니다"
-- Anti-pattern: "전체 글은 첫 댓글 링크에서 확인하세요" (formulaic)
-- Anti-pattern: CTA as a separate section disconnected from narrative
+Anti-pattern:
+- "좋아요와 공유 부탁드립니다!" (engagement begging)
+- No link or CTA at all when the post IS promoting a blog article
 
-Before (formulaic CTA):
+Before (engagement begging):
 > 동기화에 대해 정리해봤습니다.
 >
 > 전체 글은 여기서 확인하세요! [link]
 >
 > 좋아요와 공유 부탁드립니다!
 
-After (narrative-embedded):
-> 여기 정리해봤습니다.
-> [link]
+After (clean CTA):
+> 동기화에 대해 정리해봤습니다.
+>
+> 전체 과정은 첫 댓글 링크에서 확인하세요.
 
 ### Step 4: Structure Proportion
 
