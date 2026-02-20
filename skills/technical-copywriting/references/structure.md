@@ -2,120 +2,98 @@
 
 ## Role
 
-Reviews the structural composition of teaser text. Verifies hook presence and quality, value delivery through takeaways, CTA appropriateness, and overall proportion balance.
+Reviews structural composition based on teaser type. Verifies type-specific opening, value delivery, closing, and proportion balance.
 
 ## Process
 
-### Step 1: Hook Presence and Quality
+### Step 1: Type-Specific Opening
 
-**CP4. Hook presence and quality:**
+CP7. Opening patterns by type:
 
-First 1-2 lines must stop the scroll. The hook determines whether anyone reads the rest.
+| Type | Valid Opening Patterns |
+|------|----------------------|
+| Learning Journey | Declarative thesis ("X는 중요합니다"), Provocative question citing authority ("왜 마틴 파울러는 X라고 했을까요?") |
+| Practical Tip | Contrarian/paradoxical claim ("가장 좋은 X 강의는 X 자체입니다"), Direct instruction |
+| Announcement | Direct news statement ("X를 업데이트했습니다") |
+| Industry Insight | Trend observation ("X 도구가 사랑받고 있습니다"), Industry pattern statement |
 
-Effective hook patterns for developers:
-
-| Pattern | Example |
-|---------|---------|
-| Statistic/quantifier | "12%의 엔지니어만 이 방법을 쓰고 있습니다..." |
-| Contrarian | "우리가 [X]에 대해 잘못 알고 있었습니다." |
-| Pain point | "모든 개발자가 결국 이 벽에 부딪힙니다..." |
-| Result | "CI 시간을 60% 줄였습니다. 변경한 건 딱 하나." |
-
-Anti-patterns (flag these):
-- Starting with "I wrote a blog post about..." / "블로그에 글을 올렸습니다..."
-- Starting with "Check out my new article..." / "새 글을 확인해보세요..."
-- Starting with "In this post, I..." / "이번 포스트에서는..."
-- Generic opener with no specific claim or tension
+Universal anti-patterns (flag these regardless of type):
+- "블로그에 글을 올렸습니다..." / "I wrote a blog post about..."
+- "새 글을 확인해보세요..." / "Check out my new article..."
+- "이번 포스트에서는..." / "In this post, I..."
+- Generic opener with no specific claim, topic, or news
 
 Before:
-> 블로그에 CI/CD 최적화에 대한 글을 올렸습니다. 관심 있으시면 읽어보세요.
+> 블로그에 동기화에 대한 글을 올렸습니다. 관심 있으시면 읽어보세요.
 
-After:
-> CI 빌드 18분 → 7분. 캐시 전략 하나 바꿨을 뿐입니다.
+After (Learning Journey):
+> 다들 동기화, 동기/비동기, 블로킹/논블로킹. 이것들을 정확하게 정의하고 예시를 들 수 있겠지만, 저는 그러지 못했습니다.
 
-Before:
-> 새 블로그 포스트를 작성했는데요, Kubernetes 모니터링에 대한 내용입니다.
+After (Practical Tip):
+> 동기/비동기를 설명 못 하면 면접에서 떨어집니다. 3분이면 정리됩니다.
 
-After:
-> 프로덕션 장애의 70%는 모니터링 사각지대에서 발생합니다. 우리 팀이 Kubernetes 모니터링 사각지대를 없앤 3가지 방법.
+### Step 2: Type-Specific Value Delivery
 
-### Step 2: Value Delivery (Takeaways)
+CP8. Value delivery by type:
 
-**CP5. Value delivery (takeaways):**
+| Type | Value Mode | Format | Key Principle |
+|------|-----------|--------|--------------|
+| Learning Journey | Narrative journey -- the story of learning IS the value | Prose paragraphs. Book/reference lists. | Reader gains insight from the author's process of discovery |
+| Practical Tip | Specific instructions -- the technique IS the value | Numbered steps or short, direct paragraphs | Reader gets an immediately applicable method |
+| Announcement | Feature descriptions -- what's new IS the value | Numbered items with context per feature | Reader understands what changed and why it matters |
+| Industry Insight | Analysis and pattern identification | Timeline, comparisons, "what changed vs what didn't" | Reader gains a new lens for understanding the industry |
 
-Must extract 2-4 concrete takeaways from the blog post. Each takeaway must be independently valuable: the reader learns something even without clicking the link.
+IMPORTANT: Bullet-point takeaways are NOT the only valid value delivery mode. Narrative journey posts where the reader learns from the author's discovery process are equally valid.
 
-Requirements:
-- Numbered lists or bullet points preferred for scannability
-- Each point delivers a specific insight, not a vague teaser
-- Takeaways should make the reader think "I need to read the full post for details"
-
-Anti-patterns:
-- Vague teasers: "X에 대한 제 생각을 공유합니다" / "I share my thoughts on X"
-- Table-of-contents style: "1장에서는... 2장에서는..."
+Anti-patterns (still flag these):
+- Vague teasers: "X에 대한 제 생각을 공유합니다" (no specific insight)
+- Table-of-contents style: "1장에서는... 2장에서는..." (chapter listing, not value)
 - Promise without preview: "놀라운 결과가 있었습니다" without stating the result
 
-Before:
-> Kubernetes 모니터링에 대한 글을 썼습니다.
-> - 모니터링이 중요한 이유
-> - 우리 팀의 경험
-> - 앞으로의 방향
+Before (vague Learning Journey):
+> 요구사항 작성에 대한 책을 읽었습니다. 좋은 내용이 많았습니다. 정리해봤습니다.
 
-After:
-> Kubernetes 모니터링 사각지대를 없앤 3가지 방법:
-> 1. Node-level 메트릭만 보면 Pod OOM은 못 잡는다 → cAdvisor 커스텀 알림 추가
-> 2. Readiness probe 실패는 로그에 안 남는다 → Event Exporter 도입
-> 3. HPA 스케일링 지연의 원인은 metrics-server 주기 → 15s로 조정
+After (proper Learning Journey):
+> 루퍼스 교육 과정에서 요구사항을 작성하는 과제를 하게 되었습니다. 그런데 정작 '요구사항을 어떻게 작성해야 하는지' 전혀 모르고 있다는 사실을 깨달았습니다. 그래서 관련 서적들을 찾아 읽었습니다.
 
-### Step 3: CTA Appropriateness
+### Step 3: Type-Specific Closing
 
-**CP6. CTA appropriateness by platform:**
+CP9. Closing patterns by type:
 
-| Platform | Recommended CTA | Anti-pattern |
-|----------|-----------------|--------------|
-| LinkedIn | "Link in comments" / "전체 글은 첫 댓글에" | Raw URL in post body |
-| Slack | Direct link, no CTA fluff | "Please take a moment to read..." |
-| Twitter/X | "Thread below" or link at end | "Click here to learn more!" |
-| Newsletter | "Read the full post" with clear button/link | No CTA at all |
+| Type | Valid Closing | Example |
+|------|-------------|---------|
+| Learning Journey | Reflective continuation + optional embedded link | "이제 요구사항 공학의 첫걸음을 뗐으니, 더 깊이 파고 들어가야겠습니다" |
+| Practical Tip | Call to try + optional link | "연휴 끝나면 출발선에 서 있을 겁니다" |
+| Announcement | Link to resource + broader context | "이 스킬들은 plugins-for-claude-natives에서 공개해 두었습니다. [link]" |
+| Industry Insight | Memorable thesis statement | "More tokens, more wins" |
 
-Before (LinkedIn):
-> 전체 글은 여기서 확인하세요: https://blog.example.com/post
+Key principle: Not every post needs a CTA. Reflective closings and insight statements are equally valid endings.
 
-After (LinkedIn):
-> 전체 과정이 궁금하시면 첫 번째 댓글에 링크 남겨두었습니다.
+When a link IS present, it should be embedded naturally in the narrative:
+- Valid: "여기 정리해봤습니다." / "독후감을 겸해 읽은 내용을 정리해보았습니다"
+- Anti-pattern: "전체 글은 첫 댓글 링크에서 확인하세요" (formulaic)
+- Anti-pattern: CTA as a separate section disconnected from narrative
 
-Before (Slack):
-> 시간 나실 때 읽어보시면 좋을 것 같습니다. 피드백도 환영합니다!
-
-After (Slack):
-> https://blog.example.com/post
-
-### Step 4: Hook-Value-CTA Proportion
-
-**CP7. Hook-Value-CTA proportion:**
-
-| Section | Target Proportion | Purpose |
-|---------|-------------------|---------|
-| Hook | 10-20% | Stop the scroll, create tension |
-| Value | 60-70% | Deliver takeaways, build credibility |
-| CTA | 10-20% | Direct to full content |
-
-Anti-patterns:
-- All hook, no value: Creates curiosity but delivers nothing. Reader feels baited.
-- All CTA, no substance: "Read my post! Link below!" with no reason to click.
-- No hook, straight to value: Informative but invisible. Nobody stops to read it.
-
-Before (all hook, no value):
-> 우리 팀의 CI 빌드 시간이 너무 느렸습니다. 정말 답답했죠. 매번 18분을 기다려야 했으니까요. 이 문제를 어떻게 해결했을까요? 블로그에 정리했습니다. 링크는 댓글에!
-
-After (balanced):
-> CI 빌드 18분 → 7분. (Hook: 10%)
+Before (formulaic CTA):
+> 동기화에 대해 정리해봤습니다.
 >
-> 핵심 변경 3가지:
-> 1. Docker layer 캐시 전략을 remote cache로 전환
-> 2. 테스트를 변경 파일 기반으로 필터링
-> 3. 불필요한 lint 스텝을 pre-commit으로 이동
+> 전체 글은 여기서 확인하세요! [link]
 >
-> (Value: 70%)
->
-> 전체 과정과 삽질 기록은 첫 댓글 링크에. (CTA: 20%)
+> 좋아요와 공유 부탁드립니다!
+
+After (narrative-embedded):
+> 여기 정리해봤습니다.
+> [link]
+
+### Step 4: Structure Proportion
+
+CP10. Proportion by type:
+
+| Type | Opening | Body | Closing |
+|------|---------|------|---------|
+| Learning Journey | Thesis 10-15% | Confession + journey 55-65% | Reflection + link 20-30% |
+| Practical Tip | Claim 15-20% | Instructions + evidence 60-70% | Action + result 10-20% |
+| Announcement | News 10-15% | Features + context 65-75% | Link + significance 10-20% |
+| Industry Insight | Observation 15-20% | Analysis + timeline 60-70% | Insight 10-20% |
+
+Note: These are guidelines, not hard limits. The proportions will naturally vary. Flag only extreme imbalances (e.g., 80% opening and 0% body).
