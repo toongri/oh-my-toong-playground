@@ -56,6 +56,10 @@ skills:
     - momus
     - oracle
     - argus
+    - code-review
+    - make-pr
+    - spec-review
+    - technical-writing
     - make-resume
     - review-resume
 
