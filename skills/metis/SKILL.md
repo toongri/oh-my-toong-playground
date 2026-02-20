@@ -175,6 +175,7 @@ For architecture intent, briefly announce "Consulting Oracle for [reason]" befor
 | **Dependencies** | What must exist before work starts? |
 | **Risks** | What could go wrong? Mitigation? |
 | **Success Criteria** | How do we know it's done? Measurable? |
+| **AC Quality** | Well-formed? Observable outcomes? Verification methods concrete? |
 | **Edge Cases** | Unusual inputs/states/scenarios? |
 | **Error Handling** | What happens when things fail? |
 
@@ -185,6 +186,9 @@ For architecture intent, briefly announce "Consulting Oracle for [reason]" befor
 - Do NOT skip categories because they seem "obvious"
 - Do NOT accept vague terms without demanding definitions ("events happen", "preferences", "appropriate")
 - Do NOT accept scope without explicit exclusions
+- Do NOT accept acceptance criteria that list files or functions as outcomes ("create X.js with functions A, B") — criteria must describe observable state changes
+- Do NOT accept acceptance criteria with vague verification ("dry-run review", "verify it works", "confirm functionality") — verification must be a concrete command, assertion, or observable state
+- Do NOT accept acceptance criteria that restate the task ("Authentication is implemented") — criteria must describe what is TRUE after completion, not what ACTION was taken
 - Do NOT miss security/error handling questions
 
 <AI_Slop_Detection>
@@ -233,8 +237,15 @@ If any of the following patterns are detected during analysis, ask the user a cl
 ### Unvalidated Assumptions
 1. [Assumption] - [How to validate]
 
-### Missing Acceptance Criteria
-1. [What success looks like] - [Measurable criterion]
+### Acceptance Criteria Gaps
+1. **Missing**: [What success condition is absent] - [Suggested measurable criterion]
+2. **Poorly-formed**: [Existing criterion that fails quality check] - [What's wrong] - [Suggested rewrite]
+
+AC Quality Checks:
+- Each criterion has an observable outcome (state after completion, not action taken)?
+- Each criterion has a concrete verification method (command, assertion, or observable state)?
+- No file-listing criteria (implementation details instead of outcomes)?
+- No vague verification ("verify it works", "dry-run review")?
 
 ### Edge Cases
 1. [Unusual scenario] - [How to handle]
