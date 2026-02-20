@@ -58,7 +58,10 @@ digraph prometheus_flow {
     "More questions needed?" [shape=diamond];
     "User says 'generate plan'" [shape=diamond];
     "Metis consultation" [shape=box];
+    "Metis verdict?" [shape=diamond];
     "Write plan to .omt/plans/*.md" [shape=box];
+    "Momus review" [shape=box];
+    "Momus verdict?" [shape=diamond];
     "Handoff: Tell user to run /start-work" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
@@ -69,8 +72,13 @@ digraph prometheus_flow {
     "More questions needed?" -> "User says 'generate plan'" [label="no"];
     "User says 'generate plan'" -> "Interview Mode" [label="no, keep interviewing"];
     "User says 'generate plan'" -> "Metis consultation" [label="yes"];
-    "Metis consultation" -> "Write plan to .omt/plans/*.md";
-    "Write plan to .omt/plans/*.md" -> "Handoff: Tell user to run /start-work";
+    "Metis consultation" -> "Metis verdict?";
+    "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
+    "Metis verdict?" -> "Write plan to .omt/plans/*.md" [label="APPROVE"];
+    "Write plan to .omt/plans/*.md" -> "Momus review";
+    "Momus review" -> "Momus verdict?";
+    "Momus verdict?" -> "Write plan to .omt/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
+    "Momus verdict?" -> "Handoff: Tell user to run /start-work" [label="APPROVE"];
 }
 ```
 
@@ -82,7 +90,7 @@ digraph prometheus_flow {
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** before plan generation - catches missing questions |
-| Plan review | momus | Optional loop after plan generation - catches quality issues |
+| Plan review | momus | **MANDATORY** after plan generation -- catches quality issues |
 
 ### Do vs Delegate Decision Matrix
 
@@ -96,7 +104,7 @@ digraph prometheus_flow {
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
 | Pre-plan gap analysis | NEVER | metis |
-| Plan quality review | NEVER | momus (optional) |
+| Plan quality review | NEVER | momus (MANDATORY) |
 | Code/pseudocode generation | NEVER | (forbidden entirely) |
 
 **RULE**: Planning, interviewing, checklist evaluation = Do directly. Research, analysis, gap detection = DELEGATE. Code generation = FORBIDDEN.
@@ -497,28 +505,86 @@ Overall structure:
 
 ### Metis Feedback Loop (MANDATORY Before Generation)
 
-**Before generating the plan**, invoke the metis skill to catch what you missed.
+**Before generating the plan**, invoke the metis skill to catch what you missed. **Metis APPROVE is required to proceed to plan generation. No APPROVE = no plan.**
 
 **Metis Consultation Flow:**
 1. Summarize the planning session (user goal, interview findings, research results)
 2. Invoke metis to identify: missed questions, missing guardrails, scope creep risks, unvalidated assumptions, missing acceptance criteria, unaddressed edge cases
-3. Classify each gap Metis found
-4. Incorporate findings into the plan
+3. Receive Metis verdict (APPROVE / REQUEST_CHANGES / COMMENT)
+4. Act on verdict per the table below
+5. **Repeat until APPROVE**
 
-**Gap Classification:**
+**Verdict Handling:**
 
-| Gap Type | Action | Example |
-|----------|--------|---------|
-| **Critical** | Must ask user before proceeding | Business logic choice, unclear requirement, tech stack preference |
-| **Minor** | Fix silently in plan | Missing file reference found via search, obvious acceptance criteria |
-| **Ambiguous** | Apply sensible default, note in plan | Error handling strategy, naming convention, logging level |
+| Verdict | Action |
+|---------|--------|
+| **APPROVE** | Proceed to plan generation. Gate passed. |
+| **REQUEST_CHANGES** | Return to Interview Mode. Resolve all blocking items with the user. Then re-invoke metis with Re-review Context (see template below). **Loop until APPROVE.** |
+| **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
+
+**Re-review Context Template (MANDATORY on re-invocation):**
+
+When re-invoking metis after REQUEST_CHANGES, include this context so metis can verify resolution:
+
+```markdown
+## Re-review Context
+### Previous Verdict
+- **Verdict**: REQUEST_CHANGES
+- **Key Findings**: [Previous blocking items — paste original findings verbatim]
+### Changes Made
+| Finding | Change | Intent |
+|---------|--------|--------|
+| [Original finding] | [What was changed/resolved] | [Why this resolves the finding] |
+### Current State
+[Updated interview summary reflecting resolved gaps]
+```
 
 **Post-Metis Summary** (include in plan under Context section):
-- **Identified Gaps**: What Metis found
+- **Identified Gaps**: What Metis found (across all iterations)
 - **How Resolved**: Classification applied to each gap
 - **Incorporated**: What was folded into the plan
+- **Iterations**: Number of metis invocations before APPROVE
 
-If Metis finds CRITICAL gaps, return to interview mode to resolve them before generating.
+### Momus Feedback Loop (MANDATORY Before Handoff)
+
+**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus APPROVE is required to proceed to handoff. No APPROVE = no handoff.**
+
+**Momus Review Flow:**
+1. Generate the plan to `.omt/plans/{name}.md`
+2. Invoke momus with the plan file path
+3. Receive Momus verdict (APPROVE / REQUEST_CHANGES / COMMENT)
+4. Act on verdict per the table below
+5. **Repeat until APPROVE**
+
+**Verdict Handling:**
+
+| Verdict | Action |
+|---------|--------|
+| **APPROVE** | Proceed to handoff. Gate passed. |
+| **REQUEST_CHANGES** | Revise the plan to address all [CERTAIN] findings. Then re-invoke momus with Re-review Context (see template below). **Loop until APPROVE.** |
+| **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Proceed to handoff. |
+
+**Re-review Context Template (MANDATORY on re-invocation):**
+
+When re-invoking momus after REQUEST_CHANGES, include this context so momus can verify resolution:
+
+```markdown
+## Re-review Context
+### Previous Verdict
+- **Verdict**: REQUEST_CHANGES
+- **Key Findings**: [Previous [CERTAIN] findings — paste original findings verbatim]
+### Changes Made
+| Finding | Change | Intent |
+|---------|--------|--------|
+| [Original finding] | [What was changed in the plan] | [Why this resolves the finding] |
+### Current State
+[Updated plan file path or summary of revisions made]
+```
+
+**Post-Momus Summary** (append to plan under Context section):
+- **Findings**: What Momus found (across all iterations)
+- **How Resolved**: Changes made to address each finding
+- **Iterations**: Number of momus invocations before APPROVE
 
 ### Plan Output
 
