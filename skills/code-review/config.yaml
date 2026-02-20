@@ -1,0 +1,18 @@
+chunk-review:
+  reviewers:
+    - name: claude
+      command: "claude -p"
+      emoji: "\U0001F9E0"
+      color: "CYAN"
+    - name: gemini
+      command: "gemini"
+      emoji: "\U0001F48E"
+      color: "GREEN"
+    - name: codex
+      command: "codex exec"
+      emoji: "\U0001F916"
+      color: "BLUE"
+  settings:
+    timeout: 300
+    mode: chairman
+    exclude_chairman_from_reviewers: true
