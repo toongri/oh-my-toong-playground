@@ -2,7 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const core = require('../../shared/lib/job-core.js');
+const crypto = require('crypto');
+const { spawn } = require('child_process');
 
 const SCRIPT_DIR = __dirname;
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
@@ -10,14 +11,6 @@ const WORKER_PATH = path.join(SCRIPT_DIR, 'council-job-worker.js');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'council.config.yaml');
 const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'council.config.yaml');
-
-const ENTITY_CONFIG = {
-  entityKey: 'member',
-  entitiesDirName: 'members',
-  uiLabel: '[Council]',
-  skillName: 'Agent Council',
-  safeNameFallback: 'member',
-};
 
 const UI_STRINGS = {
   dispatch: {
@@ -30,6 +23,606 @@ const UI_STRINGS = {
     pending: 'Waiting to synthesize',
   },
 };
+
+// ---------------------------------------------------------------------------
+// Pure utility functions
+// ---------------------------------------------------------------------------
+
+function exitWithError(message) {
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+}
+
+function detectHostRole(skillDir) {
+  const normalized = skillDir.replace(/\\/g, '/');
+  if (normalized.includes('/.claude/skills/')) return 'claude';
+  if (normalized.includes('/.codex/skills/')) return 'codex';
+  return 'unknown';
+}
+
+function normalizeBool(value) {
+  if (value == null) return null;
+  const v = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(v)) return false;
+  return null;
+}
+
+function resolveAutoRole(role, hostRole) {
+  const roleLc = String(role || '').trim().toLowerCase();
+  if (roleLc && roleLc !== 'auto') return roleLc;
+  if (hostRole === 'codex') return 'codex';
+  if (hostRole === 'claude') return 'claude';
+  return 'claude';
+}
+
+function ensureDir(dirPath) {
+  fs.mkdirSync(dirPath, { recursive: true });
+}
+
+function safeFileName(name, fallback) {
+  const cleaned = String(name || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
+  return cleaned || (fallback || 'member');
+}
+
+function atomicWriteJson(filePath, payload) {
+  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+function readJsonIfExists(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function sleepMs(ms) {
+  const msNum = Number(ms);
+  if (!Number.isFinite(msNum) || msNum <= 0) return;
+  const sab = new SharedArrayBuffer(4);
+  const view = new Int32Array(sab);
+  Atomics.wait(view, 0, 0, Math.trunc(msNum));
+}
+
+function computeTerminalDoneCount(counts) {
+  const c = counts || {};
+  return (
+    Number(c.done || 0) +
+    Number(c.missing_cli || 0) +
+    Number(c.error || 0) +
+    Number(c.timed_out || 0) +
+    Number(c.canceled || 0)
+  );
+}
+
+function asCodexStepStatus(value) {
+  const v = String(value || '');
+  if (v === 'pending' || v === 'in_progress' || v === 'completed') return v;
+  return 'pending';
+}
+
+// ---------------------------------------------------------------------------
+// Argument parsing
+// ---------------------------------------------------------------------------
+
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const out = { _: [] };
+  const booleanFlags = new Set([
+    'json',
+    'text',
+    'checklist',
+    'help',
+    'h',
+    'verbose',
+    'include-chairman',
+    'exclude-chairman',
+    'stdin',
+  ]);
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') {
+      out._.push(...args.slice(i + 1));
+      break;
+    }
+    if (!a.startsWith('--')) {
+      out._.push(a);
+      continue;
+    }
+
+    const [key, rawValue] = a.split('=', 2);
+    if (rawValue != null) {
+      out[key.slice(2)] = rawValue;
+      continue;
+    }
+
+    const normalizedKey = key.slice(2);
+    if (booleanFlags.has(normalizedKey)) {
+      out[normalizedKey] = true;
+      continue;
+    }
+
+    const next = args[i + 1];
+    if (next == null || next.startsWith('--')) {
+      out[normalizedKey] = true;
+      continue;
+    }
+    out[normalizedKey] = next;
+    i++;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Wait cursor utilities
+// ---------------------------------------------------------------------------
+
+function parseWaitCursor(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const parts = raw.split(':');
+  const version = parts[0];
+  if (version === 'v1' && parts.length === 4) {
+    const bucketSize = Number(parts[1]);
+    const doneBucket = Number(parts[2]);
+    const isDone = parts[3] === '1';
+    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
+    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
+    return { version, bucketSize, dispatchBucket: 0, doneBucket, isDone };
+  }
+  if (version === 'v2' && parts.length === 5) {
+    const bucketSize = Number(parts[1]);
+    const dispatchBucket = Number(parts[2]);
+    const doneBucket = Number(parts[3]);
+    const isDone = parts[4] === '1';
+    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
+    if (!Number.isFinite(dispatchBucket) || dispatchBucket < 0) return null;
+    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
+    return { version, bucketSize, dispatchBucket, doneBucket, isDone };
+  }
+  return null;
+}
+
+function formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone) {
+  return `v2:${bucketSize}:${dispatchBucket}:${doneBucket}:${isDone ? 1 : 0}`;
+}
+
+function resolveBucketSize(options, total, prevCursor) {
+  const raw = options.bucket != null ? options.bucket : options['bucket-size'];
+
+  if (raw == null || raw === true) {
+    if (prevCursor && prevCursor.bucketSize) return prevCursor.bucketSize;
+  } else {
+    const asString = String(raw).trim().toLowerCase();
+    if (asString !== 'auto') {
+      const num = Number(asString);
+      if (!Number.isFinite(num) || num <= 0) exitWithError(`wait: invalid --bucket: ${raw}`);
+      return Math.trunc(num);
+    }
+  }
+
+  const totalNum = Number(total || 0);
+  if (!Number.isFinite(totalNum) || totalNum <= 0) return 1;
+  return Math.max(1, Math.ceil(totalNum / 5));
+}
+
+// ---------------------------------------------------------------------------
+// Job ID generation
+// ---------------------------------------------------------------------------
+
+function generateJobId() {
+  return `${new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15)}-${crypto
+    .randomBytes(3)
+    .toString('hex')}`;
+}
+
+// ---------------------------------------------------------------------------
+// Worker spawning
+// ---------------------------------------------------------------------------
+
+function spawnWorkers({ members, workerPath, jobDir, membersDir, timeoutSec }) {
+  for (const member of members) {
+    const name = String(member.name);
+    const safeName = safeFileName(name, 'member');
+    const memberDir = path.join(membersDir, safeName);
+    ensureDir(memberDir);
+
+    atomicWriteJson(path.join(memberDir, 'status.json'), {
+      member: name,
+      state: 'queued',
+      queuedAt: new Date().toISOString(),
+      command: String(member.command),
+    });
+
+    const workerArgs = [
+      workerPath,
+      '--job-dir',
+      jobDir,
+      '--member',
+      name,
+      '--safe-member',
+      safeName,
+      '--command',
+      String(member.command),
+    ];
+    if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
+      workerArgs.push('--timeout', String(timeoutSec));
+    }
+
+    const child = spawn(process.execPath, workerArgs, {
+      detached: true,
+      stdio: 'ignore',
+      env: process.env,
+    });
+    child.unref();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status computation
+// ---------------------------------------------------------------------------
+
+function computeStatus(jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
+
+  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  if (!jobMeta) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
+
+  const membersRoot = path.join(resolvedJobDir, 'members');
+  if (!fs.existsSync(membersRoot)) exitWithError(`members folder not found: ${membersRoot}`);
+
+  const members = [];
+  for (const entry of fs.readdirSync(membersRoot)) {
+    const statusPath = path.join(membersRoot, entry, 'status.json');
+    const status = readJsonIfExists(statusPath);
+    if (status) members.push({ safeName: entry, ...status });
+  }
+
+  const totals = { queued: 0, running: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
+  for (const m of members) {
+    const state = String(m.state || 'unknown');
+    if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
+  }
+
+  const allDone = totals.running === 0 && totals.queued === 0;
+  const overallState = allDone ? 'done' : totals.running > 0 ? 'running' : 'queued';
+
+  return {
+    jobDir: resolvedJobDir,
+    id: jobMeta.id || null,
+    chairmanRole: jobMeta.chairmanRole || null,
+    overallState,
+    counts: { total: members.length, ...totals },
+    members: members
+      .map((m) => ({
+        member: m.member,
+        state: m.state,
+        startedAt: m.startedAt || null,
+        finishedAt: m.finishedAt || null,
+        exitCode: m.exitCode != null ? m.exitCode : null,
+        message: m.message || null,
+      }))
+      .sort((a, b) => String(a.member).localeCompare(String(b.member))),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// UI payload
+// ---------------------------------------------------------------------------
+
+function buildUiPayload(statusPayload) {
+  const counts = statusPayload.counts || {};
+  const done = computeTerminalDoneCount(counts);
+  const total = Number(counts.total || 0);
+  const isDone = String(statusPayload.overallState || '') === 'done';
+
+  const queued = Number(counts.queued || 0);
+  const running = Number(counts.running || 0);
+
+  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+  const sortedMembers = membersArray
+    .map((m) => ({
+      entity: m && m.member != null ? String(m.member) : '',
+      state: m && m.state != null ? String(m.state) : 'unknown',
+      exitCode: m && m.exitCode != null ? m.exitCode : null,
+    }))
+    .filter((m) => m.entity)
+    .sort((a, b) => a.entity.localeCompare(b.entity));
+
+  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled']);
+  const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
+  let hasInProgress = dispatchStatus === 'in_progress';
+
+  const memberSteps = sortedMembers.map((m) => {
+    const state = m.state || 'unknown';
+    const isTerminal = terminalStates.has(state);
+
+    let status;
+    if (isTerminal) {
+      status = 'completed';
+    } else if (!hasInProgress && running > 0 && state === 'running') {
+      status = 'in_progress';
+      hasInProgress = true;
+    } else {
+      status = 'pending';
+    }
+
+    const label = `[Council] Ask ${m.entity}`;
+    return { label, status: asCodexStepStatus(status) };
+  });
+
+  const synthStatus = asCodexStepStatus(isDone ? (hasInProgress ? 'pending' : 'in_progress') : 'pending');
+
+  const codexPlan = [
+    { step: '[Council] Prompt dispatch', status: dispatchStatus },
+    ...memberSteps.map((s) => ({ step: s.label, status: s.status })),
+    { step: '[Council] Synthesize', status: synthStatus },
+  ];
+
+  const claudeTodos = [
+    {
+      content: '[Council] Prompt dispatch',
+      status: dispatchStatus,
+      activeForm: dispatchStatus === 'completed'
+        ? UI_STRINGS.dispatch.completed
+        : UI_STRINGS.dispatch.inProgress,
+    },
+    ...memberSteps.map((s) => ({
+      content: s.label,
+      status: s.status,
+      activeForm: s.status === 'completed' ? 'Finished' : 'Awaiting response',
+    })),
+    {
+      content: '[Council] Synthesize',
+      status: synthStatus,
+      activeForm:
+        synthStatus === 'completed'
+          ? UI_STRINGS.synthesize.completed
+          : synthStatus === 'in_progress'
+            ? UI_STRINGS.synthesize.inProgress
+            : UI_STRINGS.synthesize.pending,
+    },
+  ];
+
+  return {
+    progress: { done, total, overallState: String(statusPayload.overallState || '') },
+    codex: { update_plan: { plan: codexPlan } },
+    claude: { todo_write: { todos: claudeTodos } },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Wait payload
+// ---------------------------------------------------------------------------
+
+function asWaitPayload(statusPayload) {
+  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+
+  return {
+    jobDir: statusPayload.jobDir,
+    id: statusPayload.id,
+    chairmanRole: statusPayload.chairmanRole,
+    overallState: statusPayload.overallState,
+    counts: statusPayload.counts,
+    members: membersArray.map((m) => ({
+      member: m.member,
+      state: m.state,
+      exitCode: m.exitCode != null ? m.exitCode : null,
+      message: m.message || null,
+    })),
+    ui: buildUiPayload(statusPayload),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Command implementations
+// ---------------------------------------------------------------------------
+
+function cmdStatus(options, jobDir) {
+  const payload = computeStatus(jobDir);
+
+  const wantChecklist = Boolean(options.checklist) && !options.json;
+  if (wantChecklist) {
+    const done = computeTerminalDoneCount(payload.counts);
+    const headerId = payload.id ? ` (${payload.id})` : '';
+    process.stdout.write(`Agent Council${headerId}\n`);
+    process.stdout.write(
+      `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
+    );
+    for (const m of payload.members) {
+      const state = String(m.state || '');
+      const mark =
+        state === 'done'
+          ? '[x]'
+          : state === 'running' || state === 'queued'
+            ? '[ ]'
+            : state
+              ? '[!]'
+              : '[ ]';
+      const exitInfo = m.exitCode != null ? ` (exit ${m.exitCode})` : '';
+      process.stdout.write(`${mark} ${m.member} \u2014 ${state}${exitInfo}\n`);
+    }
+    return;
+  }
+
+  const wantText = Boolean(options.text) && !options.json;
+  if (wantText) {
+    const done = computeTerminalDoneCount(payload.counts);
+    process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
+    if (options.verbose) {
+      for (const m of payload.members) {
+        process.stdout.write(`- ${m.member}: ${m.state}${m.exitCode != null ? ` (exit ${m.exitCode})` : ''}\n`);
+      }
+    }
+    return;
+  }
+
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function cmdWait(options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
+  const prevCursorRaw =
+    options.cursor != null
+      ? String(options.cursor)
+      : fs.existsSync(cursorFilePath)
+        ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
+        : '';
+  const prevCursor = parseWaitCursor(prevCursorRaw);
+
+  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
+  const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
+
+  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 0;
+  const timeoutMs = Math.trunc(Number(timeoutMsRaw));
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
+
+  let payload = computeStatus(jobDir);
+  const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
+
+  const doneCount = computeTerminalDoneCount(payload.counts);
+  const isDone = payload.overallState === 'done';
+  const total = Number(payload.counts.total || 0);
+  const queued = Number(payload.counts.queued || 0);
+  const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
+  const doneBucket = Math.floor(doneCount / bucketSize);
+  const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
+
+  if (!prevCursor) {
+    fs.writeFileSync(cursorFilePath, cursor, 'utf8');
+    process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor }, null, 2)}\n`);
+    return;
+  }
+
+  const start = Date.now();
+  while (cursor === prevCursorRaw) {
+    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
+    sleepMs(intervalMs);
+    payload = computeStatus(jobDir);
+    const d = computeTerminalDoneCount(payload.counts);
+    const doneFlag = payload.overallState === 'done';
+    const totalCount = Number(payload.counts.total || 0);
+    const queuedCount = Number(payload.counts.queued || 0);
+    const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
+    const doneB = Math.floor(d / bucketSize);
+    const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
+    if (nextCursor !== prevCursorRaw) {
+      fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
+      process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor: nextCursor }, null, 2)}\n`);
+      return;
+    }
+  }
+
+  const finalPayload = computeStatus(jobDir);
+  const finalDone = computeTerminalDoneCount(finalPayload.counts);
+  const finalDoneFlag = finalPayload.overallState === 'done';
+  const finalTotal = Number(finalPayload.counts.total || 0);
+  const finalQueued = Number(finalPayload.counts.queued || 0);
+  const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
+  const finalDoneBucket = Math.floor(finalDone / bucketSize);
+  const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
+  fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
+  process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload), cursor: finalCursor }, null, 2)}\n`);
+}
+
+function cmdResults(options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  const membersRoot = path.join(resolvedJobDir, 'members');
+
+  const members = [];
+  if (fs.existsSync(membersRoot)) {
+    for (const entry of fs.readdirSync(membersRoot)) {
+      const statusPath = path.join(membersRoot, entry, 'status.json');
+      const outputPath = path.join(membersRoot, entry, 'output.txt');
+      const errorPath = path.join(membersRoot, entry, 'error.txt');
+      const status = readJsonIfExists(statusPath);
+      if (!status) continue;
+      const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
+      const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
+      members.push({ safeName: entry, ...status, output, stderr });
+    }
+  }
+
+  if (options.json) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          jobDir: resolvedJobDir,
+          id: jobMeta ? jobMeta.id : null,
+          prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
+            ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
+            : null,
+          members: members
+            .map((m) => ({
+              member: m.member,
+              state: m.state,
+              exitCode: m.exitCode != null ? m.exitCode : null,
+              message: m.message || null,
+              output: m.output,
+              stderr: m.stderr,
+            }))
+            .sort((a, b) => String(a.member).localeCompare(String(b.member))),
+        },
+        null,
+        2
+      )}\n`
+    );
+    return;
+  }
+
+  for (const m of members.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
+    process.stdout.write(`\n=== ${m.member} (${m.state}) ===\n`);
+    if (m.message) process.stdout.write(`${m.message}\n`);
+    process.stdout.write(m.output || '');
+    if (!m.output && m.stderr) {
+      process.stdout.write('\n');
+      process.stdout.write(m.stderr);
+    }
+    process.stdout.write('\n');
+  }
+}
+
+function cmdStop(_options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const membersRoot = path.join(resolvedJobDir, 'members');
+  if (!fs.existsSync(membersRoot)) exitWithError(`No members folder found: ${membersRoot}`);
+
+  let stoppedAny = false;
+  for (const entry of fs.readdirSync(membersRoot)) {
+    const statusPath = path.join(membersRoot, entry, 'status.json');
+    const status = readJsonIfExists(statusPath);
+    if (!status) continue;
+    if (status.state !== 'running') continue;
+    if (!status.pid) continue;
+
+    try {
+      process.kill(Number(status.pid), 'SIGTERM');
+      stoppedAny = true;
+    } catch {
+      // ignore
+    }
+  }
+
+  process.stdout.write(stoppedAny ? `stop: sent SIGTERM to running members\n` : `stop: no running members\n`);
+}
+
+function cmdClean(_options, jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  fs.rmSync(resolvedJobDir, { recursive: true, force: true });
+  process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
+}
+
+// ---------------------------------------------------------------------------
+// Council-specific config parsing
+// ---------------------------------------------------------------------------
 
 function resolveDefaultConfigFile() {
   if (fs.existsSync(SKILL_CONFIG_FILE)) return SKILL_CONFIG_FILE;
@@ -56,7 +649,6 @@ function parseCouncilConfig(configPath) {
   try {
     YAML = require('yaml');
   } catch {
-    // yaml 패키지가 없으면 간단한 파서 사용
     return parseYamlSimple(configPath, fallback);
   }
 
@@ -65,17 +657,17 @@ function parseCouncilConfig(configPath) {
     parsed = YAML.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error) {
     const message = error && error.message ? error.message : String(error);
-    core.exitWithError(`Invalid YAML in ${configPath}: ${message}`);
+    exitWithError(`Invalid YAML in ${configPath}: ${message}`);
   }
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    core.exitWithError(`Invalid config in ${configPath}: expected a YAML mapping/object at the document root`);
+    exitWithError(`Invalid config in ${configPath}: expected a YAML mapping/object at the document root`);
   }
   if (!parsed.council) {
-    core.exitWithError(`Invalid config in ${configPath}: missing required top-level key 'council:'`);
+    exitWithError(`Invalid config in ${configPath}: missing required top-level key 'council:'`);
   }
   if (typeof parsed.council !== 'object' || Array.isArray(parsed.council)) {
-    core.exitWithError(`Invalid config in ${configPath}: 'council' must be a mapping/object`);
+    exitWithError(`Invalid config in ${configPath}: 'council' must be a mapping/object`);
   }
 
   const merged = {
@@ -90,21 +682,21 @@ function parseCouncilConfig(configPath) {
 
   if (council.chairman != null) {
     if (typeof council.chairman !== 'object' || Array.isArray(council.chairman)) {
-      core.exitWithError(`Invalid config in ${configPath}: 'council.chairman' must be a mapping/object`);
+      exitWithError(`Invalid config in ${configPath}: 'council.chairman' must be a mapping/object`);
     }
     merged.council.chairman = { ...merged.council.chairman, ...council.chairman };
   }
 
   if (Object.prototype.hasOwnProperty.call(council, 'members')) {
     if (!Array.isArray(council.members)) {
-      core.exitWithError(`Invalid config in ${configPath}: 'council.members' must be a list/array`);
+      exitWithError(`Invalid config in ${configPath}: 'council.members' must be a list/array`);
     }
     merged.council.members = council.members;
   }
 
   if (council.settings != null) {
     if (typeof council.settings !== 'object' || Array.isArray(council.settings)) {
-      core.exitWithError(`Invalid config in ${configPath}: 'council.settings' must be a mapping/object`);
+      exitWithError(`Invalid config in ${configPath}: 'council.settings' must be a mapping/object`);
     }
     merged.council.settings = { ...merged.council.settings, ...council.settings };
   }
@@ -112,7 +704,6 @@ function parseCouncilConfig(configPath) {
   return merged;
 }
 
-// yaml 패키지 없이 간단한 YAML 파싱 (기본적인 구조만 지원)
 function parseYamlSimple(configPath, fallback) {
   try {
     const content = fs.readFileSync(configPath, 'utf8');
@@ -159,7 +750,6 @@ function parseYamlSimple(configPath, fallback) {
 
     if (currentMember) result.council.members.push(currentMember);
 
-    // 기본값 병합
     if (result.council.members.length === 0) {
       result.council.members = fallback.council.members;
     }
@@ -173,20 +763,8 @@ function parseYamlSimple(configPath, fallback) {
 }
 
 // ---------------------------------------------------------------------------
-// Council-specific command implementations
+// Council-specific start command
 // ---------------------------------------------------------------------------
-
-function computeStatus(jobDir) {
-  return core.computeStatusPayload(jobDir, ENTITY_CONFIG);
-}
-
-function buildCouncilUiPayload(statusPayload) {
-  return core.buildUiPayload(statusPayload, ENTITY_CONFIG, UI_STRINGS);
-}
-
-function councilAsWaitPayload(statusPayload) {
-  return core.asWaitPayload(statusPayload, ENTITY_CONFIG, buildCouncilUiPayload);
-}
 
 function printHelp() {
   process.stdout.write(`Agent Council (job mode)
@@ -212,18 +790,18 @@ function cmdStart(options, prompt) {
   const jobsDir =
     options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(SKILL_DIR, '.jobs');
 
-  core.ensureDir(jobsDir);
+  ensureDir(jobsDir);
 
-  const hostRole = core.detectHostRole(SKILL_DIR);
+  const hostRole = detectHostRole(SKILL_DIR);
   const config = parseCouncilConfig(configPath);
   const chairmanRoleRaw = options.chairman || process.env.COUNCIL_CHAIRMAN || config.council.chairman.role || 'auto';
-  const chairmanRole = core.resolveAutoRole(chairmanRoleRaw, hostRole);
+  const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
   const includeChairman = Boolean(options['include-chairman']);
   const excludeChairmanOverride =
     options['exclude-chairman'] != null ? true : options['include-chairman'] != null ? false : null;
 
-  const excludeSetting = core.normalizeBool(config.council.settings.exclude_chairman_from_members);
+  const excludeSetting = normalizeBool(config.council.settings.exclude_chairman_from_members);
   const excludeChairmanFromMembers =
     excludeChairmanOverride != null ? excludeChairmanOverride : excludeSetting != null ? excludeSetting : true;
 
@@ -239,10 +817,10 @@ function cmdStart(options, prompt) {
     return true;
   });
 
-  const jobId = core.generateJobId();
+  const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `council-${jobId}`);
   const membersDir = path.join(jobDir, 'members');
-  core.ensureDir(membersDir);
+  ensureDir(membersDir);
 
   fs.writeFileSync(path.join(jobDir, 'prompt.txt'), String(prompt), 'utf8');
 
@@ -263,14 +841,13 @@ function cmdStart(options, prompt) {
       color: m.color ? String(m.color) : null,
     })),
   };
-  core.atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
+  atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
 
-  core.spawnWorkers({
-    entities: members,
-    entityConfig: ENTITY_CONFIG,
+  spawnWorkers({
+    members,
     workerPath: WORKER_PATH,
     jobDir,
-    entitiesDir: membersDir,
+    membersDir,
     timeoutSec,
   });
 
@@ -286,15 +863,57 @@ function cmdStart(options, prompt) {
 // ---------------------------------------------------------------------------
 
 function main() {
-  core.mainRouter({
-    printHelp,
-    cmdStart,
-    cmdStatus: (options, jobDir) => core.cmdStatus(options, jobDir, ENTITY_CONFIG, computeStatus),
-    cmdWait: (options, jobDir) => core.cmdWait(options, jobDir, ENTITY_CONFIG, computeStatus, councilAsWaitPayload),
-    cmdResults: (options, jobDir) => core.cmdResults(options, jobDir, ENTITY_CONFIG),
-    cmdStop: (options, jobDir) => core.cmdStop(options, jobDir, ENTITY_CONFIG),
-    cmdClean: (options, jobDir) => core.cmdClean(options, jobDir),
-  });
+  const options = parseArgs(process.argv);
+  const [command, ...rest] = options._;
+
+  if (!command || options.help || options.h) {
+    printHelp();
+    return;
+  }
+
+  if (command === 'start') {
+    let prompt;
+    if (options.stdin) {
+      prompt = fs.readFileSync(0, 'utf8');
+    } else {
+      prompt = rest.join(' ').trim();
+    }
+    if (!prompt) exitWithError('start: missing prompt');
+    cmdStart(options, prompt);
+    return;
+  }
+  if (command === 'status') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('status: missing jobDir');
+    cmdStatus(options, jobDir);
+    return;
+  }
+  if (command === 'wait') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('wait: missing jobDir');
+    cmdWait(options, jobDir);
+    return;
+  }
+  if (command === 'results') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('results: missing jobDir');
+    cmdResults(options, jobDir);
+    return;
+  }
+  if (command === 'stop') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('stop: missing jobDir');
+    cmdStop(options, jobDir);
+    return;
+  }
+  if (command === 'clean') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('clean: missing jobDir');
+    cmdClean(options, jobDir);
+    return;
+  }
+
+  exitWithError(`Unknown command: ${command}`);
 }
 
 if (require.main === module) {
