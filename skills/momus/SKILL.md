@@ -11,7 +11,7 @@ description: Use when reviewing work plans or implementation plans before execut
 
 Ruthlessly critical review of work plans to catch context gaps before implementation. Named after the Greek god of criticism.
 
-**Core Principle**: If simulating implementation reveals missing information AND the plan provides no reference to find it, REJECT.
+**Core Principle**: If simulating implementation reveals missing information AND the plan provides no reference to find it, REQUEST_CHANGES.
 
 </Role>
 
@@ -54,8 +54,12 @@ digraph review_process {
     "3. Verify references (if codebase accessible)" -> "4. Apply 4 Criteria";
     "4. Apply 4 Criteria" -> "5. Simulate each task";
     "5. Simulate each task" -> "All criteria pass?" [shape=diamond];
-    "All criteria pass?" -> "OKAY" [label="yes"];
-    "All criteria pass?" -> "REJECT with specifics" [label="no"];
+    "All criteria pass?" -> "No findings?" [label="yes"];
+    "No findings?" -> "APPROVE" [label="yes"];
+    "No findings?" -> "[POSSIBLE]-only?" [label="no"];
+    "[POSSIBLE]-only?" -> "COMMENT with recommendations" [label="yes"];
+    "[POSSIBLE]-only?" -> "REQUEST_CHANGES with specifics" [label="no — has [CERTAIN]"];
+    "All criteria pass?" -> "REQUEST_CHANGES with specifics" [label="no"];
 }
 ```
 
@@ -77,16 +81,16 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 
 **When you CAN access the codebase:**
 - READ every referenced file to verify it exists and contains what the plan claims
-- If references don't exist or are wrong: REJECT with specific findings
+- If references don't exist or are wrong: REQUEST_CHANGES with specific findings
 
 **When you CANNOT access the codebase** (reviewing plan in isolation):
 - Evaluate whether references are SPECIFIC enough (file path, line numbers, function names)
-- Vague references like "follow existing patterns" → REJECT (which patterns? where?)
+- Vague references like "follow existing patterns" → REQUEST_CHANGES (which patterns? where?)
 - Specific references like `src/services/AuthService.ts:45-60` → acceptable IF plausible
 
 **Reference Guards:**
 - "I'll trust the references" → Verify if you can. If you can't, evaluate specificity.
-- Do NOT OKAY without verifying references (when codebase is accessible)
+- Do NOT APPROVE without verifying references (when codebase is accessible)
 
 ### Certainty Levels
 
@@ -94,12 +98,15 @@ Classify every finding by certainty before it affects the verdict.
 
 | Level | Tag | Meaning | Verdict Impact |
 |-------|-----|---------|----------------|
-| High | **[CERTAIN]** | Definitely missing or wrong — implementation WILL be blocked | Blocking. Directly impacts OKAY/REJECT decision. |
-| Low | **[POSSIBLE]** | Possibly unclear — might cause confusion, verify recommended | Advisory. Noted as recommendation. Does NOT force REJECT alone. |
+| High | **[CERTAIN]** | Definitely missing or wrong — implementation WILL be blocked | Blocking. Triggers REQUEST_CHANGES. |
+| Low | **[POSSIBLE]** | Possibly unclear — might cause confusion, verify recommended | Advisory. Triggers COMMENT (not REQUEST_CHANGES) when alone. |
 
 **Classification Rule:** A finding is [CERTAIN] when the plan contains no information to resolve it AND no reference points to where it could be found. A finding is [POSSIBLE] when the plan is ambiguous but a reasonable executor COULD infer the intent or find the answer.
 
-**Verdict Rule:** One or more [CERTAIN] findings → REJECT. [POSSIBLE]-only findings → OKAY with recommendations.
+**Verdict Rule:**
+- No findings → **APPROVE**
+- [POSSIBLE]-only findings → **COMMENT** (with recommendations)
+- One or more [CERTAIN] findings → **REQUEST_CHANGES**
 
 ## Four Criteria (All Must Pass)
 
@@ -143,7 +150,7 @@ Classify every finding by certainty before it affects the verdict.
 ## Final Verdict Format
 
 ```
-**[OKAY / REJECT]**
+**[APPROVE / REQUEST_CHANGES / COMMENT]**
 
 **Justification**: [1-2 sentences]
 
@@ -157,7 +164,7 @@ Classify every finding by certainty before it affects the verdict.
 - [CERTAIN] [specific gap description — blocking]
 - [POSSIBLE] [ambiguity description — advisory recommendation]
 
-[If REJECT: Top 3-5 specific improvements needed with examples]
+[If REQUEST_CHANGES: Top 3-5 specific improvements needed with examples]
 ```
 
 </Output_Format>
@@ -166,14 +173,15 @@ Classify every finding by certainty before it affects the verdict.
 
 | Verdict | Condition |
 |---------|-----------|
-| **OKAY** | All 4 criteria pass, references verified or sufficiently specific |
-| **REJECT** | Any criterion fails, vague references, missing critical info |
+| **APPROVE** | No findings — all 4 criteria pass, references verified or sufficiently specific |
+| **COMMENT** | [POSSIBLE]-only findings — criteria pass but with advisory recommendations |
+| **REQUEST_CHANGES** | One or more [CERTAIN] findings — criterion fails, vague references, missing critical info |
 
 ## Failure Modes To Avoid
 
 | # | Anti-Pattern | Description |
 |---|-------------|-------------|
-| 1 | **Rubber-stamping** | OKAY without actually verifying references or reading code. Always verify file references exist and contain what the plan claims. |
+| 1 | **Rubber-stamping** | APPROVE without actually verifying references or reading code. Always verify file references exist and contain what the plan claims. |
 | 2 | **Inventing problems** | Rejecting a clear plan by nitpicking issues that don't exist. If the plan is actionable and specific, acknowledge it. |
 | 3 | **Vague rejections** | "The plan needs more detail" without specifying WHAT needs detail. Always name the exact task, file, or requirement that is insufficient. |
 | 4 | **Skipping simulation** | Giving verdict without mentally executing the plan step-by-step. Always simulate 2-3 tasks. |
