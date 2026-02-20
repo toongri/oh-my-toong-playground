@@ -11,6 +11,7 @@ function runOnce({ program, args, prompt, reviewer, reviewerDir, command, timeou
     program, args, prompt,
     entityName: reviewer, entityKey: 'reviewer', entityDir: reviewerDir,
     command, timeoutSec, attempt, spawnFn,
+    promptsDir: path.resolve(__dirname, '../prompts'),
   });
 }
 
@@ -19,6 +20,7 @@ function runWithRetry({ program, args, prompt, reviewer, reviewerDir, command, t
     program, args, prompt,
     entityName: reviewer, entityKey: 'reviewer', entityDir: reviewerDir,
     command, timeoutSec, spawnFn, sleepFn,
+    promptsDir: path.resolve(__dirname, '../prompts'),
   });
 }
 

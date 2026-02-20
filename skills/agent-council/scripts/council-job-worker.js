@@ -22,6 +22,7 @@ function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec, atte
     program: tokens[0], args: tokens.slice(1), prompt,
     entityName: member, entityKey: 'member', entityDir: memberDir,
     command, timeoutSec, attempt,
+    promptsDir: path.resolve(__dirname, '../prompts'),
   });
 }
 
@@ -41,6 +42,7 @@ function runWithRetry({ command, prompt, member, safeMember, jobDir, timeoutSec,
     program: tokens[0], args: tokens.slice(1), prompt,
     entityName: member, entityKey: 'member', entityDir: memberDir,
     command, timeoutSec, sleepFn,
+    promptsDir: path.resolve(__dirname, '../prompts'),
   });
 }
 
