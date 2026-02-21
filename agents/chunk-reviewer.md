@@ -27,7 +27,7 @@ Before executing, check `skills/code-review/chunk-review.config.yaml` → `chunk
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
 2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
 3. **Write the received prompt** (containing all review data and the {DIFF_COMMAND} reference) to stdin for the dispatch script
-4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool -- blocks until complete, then prints JSON results to stdout
+4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool with **timeout 660000** (11 minutes) -- blocks until complete, then prints JSON results to stdout
 5. **Synthesize** with consensus classification rules (below)
 6. **Return** structured synthesis
 
