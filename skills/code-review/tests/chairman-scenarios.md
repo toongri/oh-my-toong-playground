@@ -217,7 +217,7 @@
 
 ### CH-12: Chunk Analysis Merge — Richest Per-File Analysis Selected
 
-**Description**: When multiple models produce per-file Chunk Analysis, the richest (most detailed) analysis for each file is selected across models.
+**Description**: When multiple models produce per-file Chunk Analysis, the richest analysis for each file is selected across models. Richest = most fields populated (Role, Changes, Data Flow, Design Decisions, Side Effects); tiebreak by word count.
 
 **Setup/Given**: Three models produce Chunk Analysis for the same 5-file chunk. For `PaymentService.java`: Claude provides 3-line analysis, Gemini provides 8-line analysis with data flow details, Codex provides 5-line analysis. For `OrderController.java`: Claude provides 7-line analysis, Gemini provides 2-line analysis, Codex provides 4-line analysis.
 
@@ -227,7 +227,7 @@
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | Per-file analysis selection is file-by-file, not all-from-one-model |
-| V2 | Richest (most detailed) analysis selected for each file |
+| V2 | Richest analysis selected for each file (richest = most fields populated; tiebreak by word count) |
 | V3 | Selected analysis attributed to its source model |
 | V4 | No analysis content merged/blended across models for the same file — selection is atomic per file |
 | V5 | All files in the chunk have an analysis entry in the final output |

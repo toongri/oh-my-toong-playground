@@ -309,18 +309,18 @@
 
 ### CR-19: Per-Chunk Diff Acquisition via Path Filtering
 
-**Input**: Branch mode, 25개 파일 변경. Step 3에서 2개 chunk으로 분할 완료. Chunk A: `src/api/` 12파일, Chunk B: `src/domain/` + `src/infra/` 13파일.
+**Input**: Branch mode, 25개 파일 변경, ~2000줄 변경 (1200 insertions + 800 deletions). Step 3에서 2개 chunk으로 분할 완료. Chunk A: `src/api/` 12파일, Chunk B: `src/domain/` + `src/infra/` 13파일.
 
 **Primary Technique**: Step 3: Per-Chunk Diff Acquisition — `git diff {range} -- <files>` 방식의 chunk별 diff 획득
 
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | 25개 파일 > 15 → chunking 적용 결정 |
+| V1 | 2000줄 >= 1500 → multi-chunk(chunking) 적용 결정 |
 | V2 | Chunk A diff: `git diff {range} -- src/api/file1.ts src/api/file2.ts ...` (path filter 사용) |
 | V3 | Chunk B diff: `git diff {range} -- src/domain/... src/infra/...` (path filter 사용) |
 | V4 | 전체 diff를 파싱하여 per-file 추출하지 않음 ("Do NOT parse a full diff output" 준수) |
-| V5 | 단일 chunk (<=15 파일)인 경우 `git diff {range}` (path filter 없이 전체 diff) 사용 |
+| V5 | 단일 chunk (< 1500줄 AND < 30파일)인 경우 `git diff {range}` (path filter 없이 전체 diff) 사용 |
 | V6 | Step 4의 {DIFF_COMMAND} 플레이스홀더에 chunk별 `git diff` 명령어 문자열이 인터폴레이션됨 (orchestrator가 실행하지 않고 문자열만 전달) |
 
 ---
