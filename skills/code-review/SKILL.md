@@ -36,6 +36,43 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 
 **RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
 
+### Role Separation
+
+```dot
+digraph role_separation {
+    rankdir=LR;
+    "Orchestrator" [shape=box];
+    "chunk-reviewer" [shape=box];
+    "Orchestrator" -> "chunk-reviewer" [label="dispatch with {DIFF_COMMAND}"];
+    "chunk-reviewer" -> "Orchestrator" [label="chunk analysis results"];
+}
+```
+
+**Your role as orchestrator:**
+- Dispatch chunk-reviewer agents with diff command strings
+- Synthesize chunk analysis results into walkthrough + critique
+- Make chunking decisions and determine final verdict
+
+**NOT your role:**
+- Reading raw diff content (never run `git diff` without `--stat` or `--name-only`)
+- Reviewing code directly
+- Loading changed file content via Read tool
+
+### Context Budget
+
+**Allowed in orchestrator context:**
+- `git diff {range} --stat` output
+- `git diff {range} --name-only` output
+- `git log {range} --oneline` output
+- CLAUDE.md file content
+- explore/oracle agent summaries (Phase 1a)
+- chunk-reviewer results
+
+**Forbidden in orchestrator context:**
+- Raw diff lines (`git diff` without `--stat`/`--name-only`)
+- `Read` tool on diff target source files
+- Any tool that loads changed file content into orchestrator context
+
 ## Step 0: Requirements Context
 
 Three-question gate — adapt by input mode:
@@ -150,22 +187,30 @@ Collect in parallel (using `{range}` from Step 1):
 
 ## Step 3: Chunking Decision
 
+Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`):
+
 | Condition | Strategy |
 |-----------|----------|
-| Changed files <= 15 | Single review — `git diff {range}` for full diff |
-| Changed files > 15 | Group into chunks of ~10-15 files by directory/module affinity |
+| Total changed lines (insertions + deletions) < 1500 AND changed files < 30 | Single review |
+| Total changed lines >= 1500 OR changed files >= 30 | Group into chunks by directory/module affinity |
 
 Chunking heuristic: group files sharing a directory prefix or import relationships.
 
-### Per-Chunk Diff Acquisition
+**Per-chunk size guide:**
+- Target ~1500 lines per chunk (soft guide — files are the atomic unit)
+- If adding the next file exceeds ~1500 lines, start a new chunk
+- If a single file alone exceeds ~1500 lines, it becomes its own chunk
+- If a directory group is oversized, split by subdirectory; if still oversized (flat structure), batch alphabetically (~10-15 files per chunk)
 
-For each chunk, obtain the diff using git's native path filtering:
+### Per-Chunk Diff Command Construction
+
+For each chunk, construct the diff command string using git's native path filtering:
 
 ```bash
 git diff {range} -- <file1> <file2> ... <fileN>
 ```
 
-This produces a diff containing ONLY the files in that chunk. Do NOT parse a full diff output to extract per-file sections.
+The orchestrator constructs this command string but does NOT execute it. The command is passed to the chunk-reviewer via {DIFF_COMMAND}, and each reviewer CLI executes it independently.
 
 ## Step 4: Agent Dispatch
 
@@ -175,7 +220,7 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
    - {FILE_LIST} ← Step 2 file list
-   - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
+   - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
@@ -185,7 +230,7 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
 | Scale | Action |
 |-------|--------|
 | Single chunk | 1 agent call |
-| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST} |
+| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
 
 ## Step 5: Walkthrough Synthesis + Result Synthesis
 
@@ -197,29 +242,7 @@ Orchestrator directly produces the Walkthrough from:
 - All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)
 - Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)
 
-**Generate the following sections:**
-
-#### Change Summary
-- 1-2 paragraph prose summary of the entire change's purpose and context
-- Include motivation, approach taken, and overall impact
-- Written for someone unfamiliar with the code to understand the change
-
-#### Core Logic Analysis
-- Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative
-- Cover both core changes AND supporting/peripheral changes
-- Explain data flow, design decisions, and side effects from the perspective of inter-module relationships
-- Level of detail: enough to understand the full change WITHOUT reading the code
-
-#### Architecture Diagram
-- Mermaid class diagram or component diagram
-- Show changed classes/modules and their relationships (inheritance, composition, dependency)
-- Distinguish new vs modified elements
-- If no structural changes (e.g., logic-only changes within existing methods): write "No structural changes — existing architecture preserved"
-
-#### Sequence Diagram
-- Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes
-- Include actors, method calls, return values, and significant conditional branches
-- If no call flow changes (e.g., variable rename, config change): write "No call flow changes"
+**Execution order:** First evaluate Phase 1a (context enrichment). Then generate the sections below.
 
 ### Phase 1a: Context Enrichment (Conditional)
 
@@ -270,6 +293,28 @@ Phase 1: Read all Chunk Analysis sections
        → If gaps: dispatch explore/oracle (Phase 1a)
        → Write Walkthrough using: Chunk Analysis + Step 2 metadata + Phase 1a results (if any)
 ```
+
+#### Change Summary
+- 1-2 paragraph prose summary of the entire change's purpose and context
+- Include motivation, approach taken, and overall impact
+- Written for someone unfamiliar with the code to understand the change
+
+#### Core Logic Analysis
+- Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative
+- Cover both core changes AND supporting/peripheral changes
+- Explain data flow, design decisions, and side effects from the perspective of inter-module relationships
+- Level of detail: enough to understand the full change WITHOUT reading the code
+
+#### Architecture Diagram
+- Mermaid class diagram or component diagram
+- Show changed classes/modules and their relationships (inheritance, composition, dependency)
+- Distinguish new vs modified elements
+- If no structural changes (e.g., logic-only changes within existing methods): write "No structural changes — existing architecture preserved"
+
+#### Sequence Diagram
+- Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes
+- Include actors, method calls, return values, and significant conditional branches
+- If no call flow changes (e.g., variable rename, config change): write "No call flow changes"
 
 ### Phase 2: Critique Synthesis
 
