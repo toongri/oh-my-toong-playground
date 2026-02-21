@@ -25,19 +25,11 @@ Before executing, check `skills/code-review/chunk-review.config.yaml` → `chunk
 ## Chairman Workflow
 
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff, context, requirements via `chunk-reviewer-prompt.md`)
-2. **Execute the diff command** from the `## Diff Command` section of the received prompt via Bash tool to obtain the diff content, then extract remaining review data (file list, requirements, context)
-3. **Write review data to stdin** for the dispatch script
+2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
+3. **Write the received prompt** (containing all review data and the {DIFF_COMMAND} reference) to stdin for the dispatch script
 4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool -- blocks until complete, then prints JSON results to stdout
 5. **Synthesize** with consensus classification rules (below)
 6. **Return** structured synthesis
-
-### Diff Command Failure Handling
-
-If the diff command (from the `## Diff Command` section) execution fails (non-zero exit code) or returns empty output:
-
-- Report `"Diff command failed: [error message or 'empty output']"` and return immediately without proceeding to review
-- Do NOT attempt to review without diff content
-- Do NOT fabricate or guess diff content
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
