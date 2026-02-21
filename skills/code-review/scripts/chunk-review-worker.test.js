@@ -983,4 +983,26 @@ describe('runOnce - workerEnv injection', () => {
     // Existing env vars should still be present
     assert.equal(captured.options.env.PATH, process.env.PATH);
   });
+
+  it('workerEnv values override existing process.env values', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'test-program',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+      workerEnv: { HOME: '/override/home' },
+    });
+
+    // workerEnv should take precedence (spread order: { ...process.env, ...workerEnv })
+    assert.equal(captured.options.env.HOME, '/override/home');
+    // Other process.env vars should still be present
+    assert.equal(captured.options.env.PATH, process.env.PATH);
+  });
 });
