@@ -26,6 +26,8 @@ const {
   parseChunkReviewConfig,
   parseYamlSimple,
   computeStatus,
+  detectCliType,
+  buildAugmentedCommand,
 } = require('./chunk-review-job.js');
 
 // ---------------------------------------------------------------------------
@@ -1374,5 +1376,118 @@ describe('computeStatus', () => {
     assert.equal(result.overallState, 'running');
     assert.equal(result.counts.retrying, 1);
     assert.equal(result.counts.done, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectCliType
+// ---------------------------------------------------------------------------
+
+describe('detectCliType', () => {
+  it('returns "claude" for "claude -p"', () => {
+    assert.equal(detectCliType('claude -p'), 'claude');
+  });
+
+  it('returns "codex" for "codex exec"', () => {
+    assert.equal(detectCliType('codex exec'), 'codex');
+  });
+
+  it('returns "gemini" for bare "gemini"', () => {
+    assert.equal(detectCliType('gemini'), 'gemini');
+  });
+
+  it('returns "unknown" for unrecognized command', () => {
+    assert.equal(detectCliType('my-script'), 'unknown');
+  });
+
+  it('returns "unknown" for null', () => {
+    assert.equal(detectCliType(null), 'unknown');
+  });
+
+  it('returns "unknown" for empty string', () => {
+    assert.equal(detectCliType(''), 'unknown');
+  });
+
+  it('returns "unknown" for undefined', () => {
+    assert.equal(detectCliType(undefined), 'unknown');
+  });
+
+  it('returns "claude" when command has leading whitespace', () => {
+    assert.equal(detectCliType('  claude --model opus'), 'claude');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildAugmentedCommand
+// ---------------------------------------------------------------------------
+
+describe('buildAugmentedCommand', () => {
+  it('claude: appends --model and --output-format, sets env for effort_level', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', model: 'opus', effort_level: 'high', output_format: 'json' },
+      'claude',
+    );
+    assert.equal(result.command, 'claude -p --model opus --output-format json');
+    assert.deepEqual(result.env, { CLAUDE_CODE_EFFORT_LEVEL: 'high' });
+  });
+
+  it('codex: appends -m, -c for effort, --json for output_format', () => {
+    const result = buildAugmentedCommand(
+      { command: 'codex exec', model: 'o3', effort_level: 'high', output_format: 'json' },
+      'codex',
+    );
+    assert.equal(result.command, 'codex exec -m o3 -c model_reasoning_effort=high --json');
+    assert.deepEqual(result.env, {});
+  });
+
+  it('gemini: appends --model, ignores effort_level', () => {
+    const result = buildAugmentedCommand(
+      { command: 'gemini', model: 'gemini-2.5-pro', effort_level: 'high' },
+      'gemini',
+    );
+    assert.equal(result.command, 'gemini --model gemini-2.5-pro');
+    assert.deepEqual(result.env, {});
+  });
+
+  it('no fields present: returns command unchanged with empty env', () => {
+    const result = buildAugmentedCommand({ command: 'claude -p' }, 'claude');
+    assert.equal(result.command, 'claude -p');
+    assert.deepEqual(result.env, {});
+  });
+
+  it('falsy values (empty string, null): treated as absent', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', model: '', effort_level: null },
+      'claude',
+    );
+    assert.equal(result.command, 'claude -p');
+    assert.deepEqual(result.env, {});
+  });
+
+  it('unknown CLI type: only appends --model, ignores effort and output_format', () => {
+    const result = buildAugmentedCommand(
+      { command: 'my-script', model: 'gpt-4', effort_level: 'high', output_format: 'json' },
+      'unknown',
+    );
+    assert.equal(result.command, 'my-script --model gpt-4');
+    assert.deepEqual(result.env, {});
+  });
+
+  it('output_format "text" is ignored (no flag appended)', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', output_format: 'text' },
+      'claude',
+    );
+    assert.equal(result.command, 'claude -p');
+    assert.deepEqual(result.env, {});
+  });
+
+  it('codex output_format non-json still appends --json', () => {
+    const result = buildAugmentedCommand(
+      { command: 'codex exec', output_format: 'stream' },
+      'codex',
+    );
+    assert.equal(result.command, 'codex exec --json');
+    assert.deepEqual(result.env, {});
   });
 });

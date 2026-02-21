@@ -2,6 +2,7 @@
 
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
+const EventEmitter = require('node:events');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -829,5 +830,121 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
     assert.equal(result.state, 'error', 'SIGKILL should produce error, not canceled');
     assert.equal(result.exitCode, null, 'exitCode should be null for signal kill');
     assert.equal(result.signal, 'SIGKILL', 'signal should be SIGKILL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce() — workerEnv injection
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a mock spawnFn that captures spawn options and simulates
+ * a successful child process (exit code 0).
+ */
+function createCapturingSpawnFn() {
+  const captured = {};
+
+  function mockSpawn(_program, _args, options) {
+    captured.program = _program;
+    captured.args = _args;
+    captured.options = options;
+
+    const child = new EventEmitter();
+    const stdin = new EventEmitter();
+    stdin.write = () => true;
+    stdin.end = () => {};
+    child.stdin = stdin;
+    child.stdout = new EventEmitter();
+    child.stdout.pipe = () => {};
+    child.stderr = new EventEmitter();
+    child.stderr.pipe = () => {};
+    child.pid = 99999;
+
+    // Simulate successful exit on next tick
+    process.nextTick(() => child.emit('exit', 0, null));
+    return child;
+  }
+
+  return { mockSpawn, captured };
+}
+
+describe('runOnce - workerEnv injection', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('merges workerEnv into spawn env', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: ['--arg1'],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'test-program --arg1',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+      workerEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'high' },
+    });
+
+    assert.equal(captured.options.env.CLAUDE_CODE_EFFORT_LEVEL, 'high');
+    // Existing env vars should still be present
+    assert.equal(captured.options.env.PATH, process.env.PATH);
+  });
+
+  it('uses process.env only when workerEnv is not provided', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'test-program',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+    });
+
+    // Existing env vars should be present
+    assert.equal(captured.options.env.PATH, process.env.PATH);
+    assert.equal(captured.options.env.HOME, process.env.HOME);
+    // No extra keys beyond what process.env has
+    const envKeys = Object.keys(captured.options.env);
+    const processEnvKeys = Object.keys(process.env);
+    assert.deepEqual(envKeys.sort(), processEnvKeys.sort());
+  });
+
+  it('merges multiple workerEnv vars into spawn env', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: [],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'test-program',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+      workerEnv: { VAR_A: '1', VAR_B: '2' },
+    });
+
+    assert.equal(captured.options.env.VAR_A, '1');
+    assert.equal(captured.options.env.VAR_B, '2');
+    // Existing env vars should still be present
+    assert.equal(captured.options.env.PATH, process.env.PATH);
   });
 });

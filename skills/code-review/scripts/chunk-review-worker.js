@@ -193,7 +193,7 @@ function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent }) {
 function runOnce(opts) {
   const {
     program, args, prompt, reviewer, reviewerDir, command,
-    timeoutSec, attempt, spawnFn = spawn, promptsDir = PROMPTS_DIR,
+    timeoutSec, attempt, spawnFn = spawn, promptsDir = PROMPTS_DIR, workerEnv,
   } = opts;
 
   // Prompt assembly: attempt structured prompt from role files
@@ -223,7 +223,7 @@ function runOnce(opts) {
     try {
       child = spawnFn(program, [...args], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: process.env,
+        env: { ...process.env, ...workerEnv },
       });
     } catch (error) {
       const result = {
@@ -347,6 +347,19 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
+  // Parse --env args: collect KEY=VALUE pairs
+  const workerEnv = {};
+  const rawArgs = process.argv.slice(2);
+  for (let i = 0; i < rawArgs.length; i++) {
+    if (rawArgs[i] === '--env' && i + 1 < rawArgs.length) {
+      const eqIdx = rawArgs[i + 1].indexOf('=');
+      if (eqIdx > 0) {
+        workerEnv[rawArgs[i + 1].slice(0, eqIdx)] = rawArgs[i + 1].slice(eqIdx + 1);
+      }
+      i++;
+    }
+  }
+
   if (!jobDir) exitWithError('worker: missing --job-dir');
   if (!reviewer) exitWithError('worker: missing --reviewer');
   if (!safeReviewer) exitWithError('worker: missing --safe-reviewer');
@@ -372,7 +385,7 @@ function main() {
   const args = tokens.slice(1);
 
   runWithRetry({
-    program, args, prompt, reviewer, reviewerDir, command, timeoutSec,
+    program, args, prompt, reviewer, reviewerDir, command, timeoutSec, workerEnv,
   }).then((result) => {
     process.exit(result.state === 'done' ? 0 : 1);
   });
