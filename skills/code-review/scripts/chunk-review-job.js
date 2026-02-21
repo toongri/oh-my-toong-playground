@@ -273,6 +273,17 @@ function buildAugmentedCommand(reviewer, cliType) {
 // ---------------------------------------------------------------------------
 
 function spawnWorkers({ reviewers, workerPath, jobDir, reviewersDir, timeoutSec }) {
+  // Detect safe name collisions before spawning
+  const safeNames = new Map();
+  for (const reviewer of reviewers) {
+    const name = String(reviewer.name);
+    const safeName = safeFileName(name, 'reviewer');
+    if (safeNames.has(safeName)) {
+      exitWithError(`start: reviewer name collision — "${name}" and "${safeNames.get(safeName)}" both map to safe name "${safeName}"`);
+    }
+    safeNames.set(safeName, name);
+  }
+
   for (const reviewer of reviewers) {
     const name = String(reviewer.name);
     const safeName = safeFileName(name, 'reviewer');
@@ -664,8 +675,18 @@ function cmdStop(_options, jobDir) {
   process.stdout.write(stoppedAny ? `stop: sent SIGTERM to running reviewers\n` : `stop: no running reviewers\n`);
 }
 
-function cmdClean(_options, jobDir) {
+function cmdClean(options, jobDir) {
+  const jobsDir = path.resolve(
+    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(SKILL_DIR, '.jobs')
+  );
   const resolvedJobDir = path.resolve(jobDir);
+
+  // Path traversal guard: ensure target is under the configured jobs directory
+  const relative = path.relative(jobsDir, resolvedJobDir);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    exitWithError(`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${jobsDir})`);
+  }
+
   fs.rmSync(resolvedJobDir, { recursive: true, force: true });
   process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
 }
