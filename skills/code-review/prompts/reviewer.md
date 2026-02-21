@@ -17,6 +17,8 @@ For each file in the diff, determine:
 
 Cover ALL files -- core changes AND supporting/peripheral changes. Produce enough detail for someone to understand the change WITHOUT reading the code.
 
+Step 1 output becomes the Chunk Analysis section of your final output.
+
 ### Step 2: Correctness Verification
 
 Walk through the changed logic line by line:
