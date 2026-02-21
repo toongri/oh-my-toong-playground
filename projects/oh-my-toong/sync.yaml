@@ -10,6 +10,7 @@ agents:
     - momus
     - oracle
     - argus
+    - chunk-reviewer
     - spec-reviewer
     - sisyphus-junior
 
