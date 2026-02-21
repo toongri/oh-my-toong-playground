@@ -148,3 +148,5 @@ done
 trap - INT TERM
 
 "$JOB_SCRIPT" results --json "$JOB_DIR"
+
+"$JOB_SCRIPT" clean "$JOB_DIR" >/dev/null 2>&1 || true
