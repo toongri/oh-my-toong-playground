@@ -24,7 +24,7 @@
 #   (forces blocking wait behavior, bypassing host agent context detection)
 #
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JOB_SCRIPT="$SCRIPT_DIR/chunk-review-job.sh"

@@ -870,6 +870,43 @@ describe('runOnce - SIGKILL fallback after SIGTERM timeout', () => {
 });
 
 // ---------------------------------------------------------------------------
+// runOnce - SIGTERM trap with graceful exit (timeout misclassification bug)
+// ---------------------------------------------------------------------------
+
+describe('runOnce - SIGTERM trap with graceful exit', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns timed_out when child traps SIGTERM and exits 0', { timeout: 15000 }, async () => {
+    // Child traps SIGTERM, does cleanup, then exits with code 0.
+    // This means signal=null in the exit handler, but timeoutTriggered=true.
+    const result = await runOnce({
+      program: 'node',
+      args: ['-e', "process.on('SIGTERM', () => { process.exit(0); }); setTimeout(() => {}, 60000)"],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'node -e "trap SIGTERM exit 0"',
+      timeoutSec: 0.2,
+      attempt: 0,
+    });
+
+    // Must be timed_out, not done — timeoutTriggered is the authoritative signal
+    assert.equal(result.state, 'timed_out');
+    assert.ok(result.message.includes('Timed out'), `expected timeout message, got: ${result.message}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOnce() — workerEnv injection
 // ---------------------------------------------------------------------------
 
