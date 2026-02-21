@@ -94,7 +94,7 @@ digraph prometheus_flow {
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
-| Gap analysis | metis | Auto-invoked when Clearance + AC complete — catches missing questions before user is asked to generate plan |
+| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete. Catches missing questions before user is asked to generate plan |
 | Plan review | momus | **MANDATORY** after plan generation -- catches quality issues |
 
 ### Do vs Delegate Decision Matrix
@@ -515,10 +515,11 @@ Overall structure:
 
 **When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before presenting results to the user. REQUEST_CHANGES blocks until resolved.**
 
-**TIMING: Metis is invoked when ALL of these conditions are met:**
+**TIMING: Metis is invoked when BOTH conditions are met:**
 1. Clearance Checklist: all YES
 2. Acceptance Criteria: drafted and confirmed by user
-3. You judge the interview is complete
+
+> When conditions 1 and 2 are satisfied, the interview is complete by definition. No additional judgment needed.
 
 **Do NOT wait for user to say "generate plan" — invoke metis as soon as you are ready.**
 **Do NOT invoke metis during interview phase or upon receiving the initial request.**
