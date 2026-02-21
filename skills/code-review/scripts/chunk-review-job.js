@@ -222,6 +222,53 @@ function generateJobId() {
 }
 
 // ---------------------------------------------------------------------------
+// CLI detection & augmented command construction
+// ---------------------------------------------------------------------------
+
+function detectCliType(command) {
+  if (!command) return 'unknown';
+  const firstToken = String(command).trim().split(/\s+/)[0];
+  if (['claude', 'gemini', 'codex'].includes(firstToken)) return firstToken;
+  return 'unknown';
+}
+
+function buildAugmentedCommand(reviewer, cliType) {
+  const parts = [String(reviewer.command)];
+  const env = {};
+
+  // model
+  if (reviewer.model) {
+    if (cliType === 'codex') {
+      parts.push('-m', String(reviewer.model));
+    } else {
+      parts.push('--model', String(reviewer.model));
+    }
+  }
+
+  // effort_level
+  if (reviewer.effort_level) {
+    if (cliType === 'claude') {
+      env.CLAUDE_CODE_EFFORT_LEVEL = String(reviewer.effort_level);
+    } else if (cliType === 'codex') {
+      parts.push('-c', `model_reasoning_effort=${reviewer.effort_level}`);
+    }
+    // gemini/unknown: ignored
+  }
+
+  // output_format
+  if (reviewer.output_format && reviewer.output_format !== 'text') {
+    if (cliType === 'claude' || cliType === 'gemini') {
+      parts.push('--output-format', String(reviewer.output_format));
+    } else if (cliType === 'codex') {
+      parts.push('--json');
+    }
+    // unknown: ignored
+  }
+
+  return { command: parts.join(' '), env };
+}
+
+// ---------------------------------------------------------------------------
 // Worker spawning
 // ---------------------------------------------------------------------------
 
@@ -239,17 +286,19 @@ function spawnWorkers({ reviewers, workerPath, jobDir, reviewersDir, timeoutSec 
       command: String(reviewer.command),
     });
 
+    const cliType = detectCliType(reviewer.command);
+    const augmented = buildAugmentedCommand(reviewer, cliType);
+
     const workerArgs = [
       workerPath,
-      '--job-dir',
-      jobDir,
-      '--reviewer',
-      name,
-      '--safe-reviewer',
-      safeName,
-      '--command',
-      String(reviewer.command),
+      '--job-dir', jobDir,
+      '--reviewer', name,
+      '--safe-reviewer', safeName,
+      '--command', augmented.command,
     ];
+    for (const [key, value] of Object.entries(augmented.env)) {
+      workerArgs.push('--env', `${key}=${value}`);
+    }
     if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
       workerArgs.push('--timeout', String(timeoutSec));
     }
@@ -846,6 +895,9 @@ function cmdStart(options, prompt) {
       command: String(r.command),
       emoji: r.emoji ? String(r.emoji) : null,
       color: r.color ? String(r.color) : null,
+      model: r.model || null,
+      effort_level: r.effort_level || null,
+      output_format: r.output_format || null,
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
@@ -947,4 +999,6 @@ module.exports = {
   parseChunkReviewConfig,
   parseYamlSimple,
   computeStatus,
+  detectCliType,
+  buildAugmentedCommand,
 };
