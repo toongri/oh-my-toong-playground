@@ -1,17 +1,32 @@
 chunk-review:
   reviewers:
+    # --- Per-reviewer CLI configuration (all optional) ---
+    # model:         Model name passed to CLI (claude/gemini: --model, codex: -m)
+    # effort_level:  Thinking effort (low/medium/high)
+    #                claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag, gemini: ignored
+    # output_format: Output format (text/json/stream-json)
+    #                claude/gemini: --output-format, codex: --json, unknown: ignored
     - name: claude
       command: "claude -p"
       emoji: "\U0001F9E0"
       color: "CYAN"
+      # model: "claude-sonnet-4-20250514"
+      # effort_level: "high"
+      # output_format: "text"
     - name: gemini
       command: "gemini"
       emoji: "\U0001F48E"
       color: "GREEN"
+      # model: "gemini-2.5-pro"
+      # effort_level: "high"       # ignored for gemini
+      # output_format: "text"
     - name: codex
       command: "codex exec"
       emoji: "\U0001F916"
       color: "BLUE"
+      # model: "o3"
+      # effort_level: "high"
+      # output_format: "text"
   settings:
     timeout: 300
     mode: chairman
