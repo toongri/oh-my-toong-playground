@@ -10,6 +10,7 @@ agents:
     - momus
     - oracle
     - argus
+    - chunk-reviewer
     - spec-reviewer
     - component: sisyphus-junior
       add-skills:
