@@ -56,9 +56,11 @@ digraph prometheus_flow {
     "Interview Mode" [shape=box];
     "Research (explore/librarian)" [shape=box];
     "More questions needed?" [shape=diamond];
-    "User says 'generate plan'" [shape=diamond];
+    "Clearance + AC complete?" [shape=diamond];
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
+    "Present results\nAsk user 'generate plan?'" [shape=box];
+    "User approves?" [shape=diamond];
     "Write plan to .omt/plans/*.md" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
@@ -69,12 +71,15 @@ digraph prometheus_flow {
     "Interview Mode" -> "Research (explore/librarian)";
     "Research (explore/librarian)" -> "More questions needed?";
     "More questions needed?" -> "Interview Mode" [label="yes"];
-    "More questions needed?" -> "User says 'generate plan'" [label="no"];
-    "User says 'generate plan'" -> "Interview Mode" [label="no, keep interviewing"];
-    "User says 'generate plan'" -> "Metis consultation" [label="yes"];
+    "More questions needed?" -> "Clearance + AC complete?" [label="no"];
+    "Clearance + AC complete?" -> "Interview Mode" [label="no, keep interviewing"];
+    "Clearance + AC complete?" -> "Metis consultation" [label="yes"];
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
-    "Metis verdict?" -> "Write plan to .omt/plans/*.md" [label="APPROVE"];
+    "Metis verdict?" -> "Present results\nAsk user 'generate plan?'" [label="APPROVE"];
+    "Present results\nAsk user 'generate plan?'" -> "User approves?";
+    "User approves?" -> "Interview Mode" [label="no, more changes"];
+    "User approves?" -> "Write plan to .omt/plans/*.md" [label="yes"];
     "Write plan to .omt/plans/*.md" -> "Momus review";
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to .omt/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
@@ -89,7 +94,7 @@ digraph prometheus_flow {
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
-| Gap analysis | metis | **MANDATORY** before plan generation - catches missing questions |
+| Gap analysis | metis | Auto-invoked when Clearance + AC complete — catches missing questions before user is asked to generate plan |
 | Plan review | momus | **MANDATORY** after plan generation -- catches quality issues |
 
 ### Do vs Delegate Decision Matrix
@@ -335,7 +340,7 @@ When user explicitly defers ("skip", "I don't know", "your call", "you decide", 
 | 5 | Test/verification strategy identified? | YES |
 
 **All YES** -> READY for next phase. Proceed to Acceptance Criteria Drafting.
-Plan generation still requires explicit user trigger (see Plan Generation section).
+After AC is confirmed, proceed to Metis consultation automatically (see Metis Feedback Loop section).
 **Any NO** -> Continue interview. Do NOT proceed to AC Drafting.
 
 This checklist is internal -- do not present it to the user.
@@ -498,14 +503,25 @@ Overall structure:
 
 ## Plan Generation
 
-**Trigger phrases only:**
+**Trigger**: Metis consultation passes (APPROVE or COMMENT). Then present the validated results to the user and ask for confirmation to generate the plan.
+
+**User confirmation phrases (after Metis pass):**
 - "Make it into a work plan"
 - "Generate the plan"
 - "Save it as a file"
+- Or any affirmative response to "plan 생성할까요?"
 
-### Metis Feedback Loop (MANDATORY Before Generation)
+### Metis Feedback Loop (Auto-Invoked Before User Confirmation)
 
-**Before generating the plan**, invoke the metis skill to catch what you missed. **Metis must pass (APPROVE or COMMENT) to proceed to plan generation. REQUEST_CHANGES blocks until resolved.**
+**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before presenting results to the user. REQUEST_CHANGES blocks until resolved.**
+
+**TIMING: Metis is invoked when ALL of these conditions are met:**
+1. Clearance Checklist: all YES
+2. Acceptance Criteria: drafted and confirmed by user
+3. You judge the interview is complete
+
+**Do NOT wait for user to say "generate plan" — invoke metis as soon as you are ready.**
+**Do NOT invoke metis during interview phase or upon receiving the initial request.**
 
 **Metis Consultation Flow:**
 1. Summarize the planning session (user goal, interview findings, research results)
