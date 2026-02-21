@@ -1692,6 +1692,10 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       `Expected chairman "claude" to be included in reviewers, got: ${JSON.stringify(reviewerNames)}`,
     );
     assert.equal(output.settings.excludeChairmanFromReviewers, false);
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 
   it('--exclude-chairman (no value) DOES exclude the chairman reviewer', () => {
@@ -1730,6 +1734,10 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       `Expected chairman "claude" to be excluded from reviewers, got: ${JSON.stringify(reviewerNames)}`,
     );
     assert.equal(output.settings.excludeChairmanFromReviewers, true);
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 
   it('--exclude-chairman=true DOES exclude the chairman reviewer', () => {
@@ -1768,5 +1776,9 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       `Expected chairman "claude" to be excluded from reviewers, got: ${JSON.stringify(reviewerNames)}`,
     );
     assert.equal(output.settings.excludeChairmanFromReviewers, true);
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 });

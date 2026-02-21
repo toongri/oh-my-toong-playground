@@ -289,7 +289,7 @@ function runOnce(opts) {
 
     child.on('exit', (code, signal) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      const timedOut = Boolean(timeoutTriggered) && (signal === 'SIGTERM' || signal === 'SIGKILL');
+      const timedOut = Boolean(timeoutTriggered);
       const canceled = !timedOut && signal === 'SIGTERM';
       finalize({
         reviewer,
