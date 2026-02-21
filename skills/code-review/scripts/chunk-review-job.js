@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 
 const SCRIPT_DIR = __dirname;
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
+const PROJECT_ROOT = path.resolve(SKILL_DIR, '../..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'chunk-review-worker.js');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'chunk-review.config.yaml');
@@ -682,7 +683,7 @@ function cmdStop(_options, jobDir) {
 
 function cmdClean(options, jobDir) {
   const jobsDir = path.resolve(
-    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(SKILL_DIR, '.jobs')
+    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs')
   );
   const resolvedJobDir = path.resolve(jobDir);
 
@@ -864,7 +865,7 @@ Notes:
 function cmdStart(options, prompt) {
   const configPath = options.config || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(SKILL_DIR, '.jobs');
+    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
 
   ensureDir(jobsDir);
 

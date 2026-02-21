@@ -111,24 +111,23 @@ in_host_agent_context() {
 
 JOB_DIR="$("$JOB_SCRIPT" start "${PASSTHROUGH_ARGS[@]}")"
 
-# Host agents (Codex CLI / Claude Code) cannot update native TODO/plan UIs while a long-running
-# command is executing. If we're in a host agent context and --blocking is NOT set, return
-# immediately with a single `wait` JSON payload and let the host agent drive progress updates.
-if [ "$BLOCKING" = "false" ] && in_host_agent_context; then
-  exec "$JOB_SCRIPT" wait "$JOB_DIR"
-fi
-
-echo "chunk-review: started ${JOB_DIR}" >&2
-
-cleanup_on_signal() {
+cleanup() {
   if [ -n "${JOB_DIR:-}" ] && [ -d "$JOB_DIR" ]; then
     "$JOB_SCRIPT" stop "$JOB_DIR" >/dev/null 2>&1 || true
     "$JOB_SCRIPT" clean "$JOB_DIR" >/dev/null 2>&1 || true
   fi
-  exit 130
 }
+trap cleanup EXIT
 
-trap cleanup_on_signal INT TERM
+# Host agents (Codex CLI / Claude Code) cannot update native TODO/plan UIs while a long-running
+# command is executing. If we're in a host agent context and --blocking is NOT set, return
+# immediately with a single `wait` JSON payload and let the host agent drive progress updates.
+if [ "$BLOCKING" = "false" ] && in_host_agent_context; then
+  trap - EXIT
+  exec "$JOB_SCRIPT" wait "$JOB_DIR"
+fi
+
+echo "chunk-review: started ${JOB_DIR}" >&2
 
 while true; do
   WAIT_JSON="$("$JOB_SCRIPT" wait "$JOB_DIR")"
@@ -145,8 +144,4 @@ process.stdout.write(String(d.overallState||""));
   fi
 done
 
-trap - INT TERM
-
 "$JOB_SCRIPT" results --json "$JOB_DIR"
-
-"$JOB_SCRIPT" clean "$JOB_DIR" >/dev/null 2>&1 || true
