@@ -20,7 +20,7 @@
 
 **Files in this chunk:** {FILE_LIST}
 
-Run the following command to obtain the diff for this chunk:
+Execute the following command to obtain the diff for review. You MUST run this command and use the output as the basis for your review:
 
 ```
 {DIFF_COMMAND}
