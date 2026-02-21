@@ -193,13 +193,13 @@ function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent }) {
 function runOnce(opts) {
   const {
     program, args, prompt, reviewer, reviewerDir, command,
-    timeoutSec, attempt, spawnFn = spawn,
+    timeoutSec, attempt, spawnFn = spawn, promptsDir = PROMPTS_DIR,
   } = opts;
 
   // Prompt assembly: attempt structured prompt from role files
   let stdinPrompt = prompt;
   const { assembled, isStructured } = assemblePrompt({
-    promptsDir: PROMPTS_DIR, entityName: reviewer, rawPrompt: prompt,
+    promptsDir, entityName: reviewer, rawPrompt: prompt,
   });
   if (isStructured) {
     stdinPrompt = assembled;
@@ -262,7 +262,10 @@ function runOnce(opts) {
       timeoutHandle.unref();
     }
 
+    let finalized = false;
     const finalize = (payload) => {
+      if (finalized) return;
+      finalized = true;
       try { outStream.end(); errStream.end(); } catch { /* ignore */ }
       atomicWriteJson(statusPath, payload);
       resolve(payload);

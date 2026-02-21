@@ -820,6 +820,8 @@ function cmdStart(options, prompt) {
     return true;
   });
 
+  if (reviewers.length === 0) exitWithError('start: no reviewers remaining after filtering');
+
   const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
   const reviewersDir = path.join(jobDir, 'reviewers');
