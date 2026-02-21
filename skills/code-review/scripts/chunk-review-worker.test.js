@@ -834,6 +834,42 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// runOnce() — SIGKILL fallback after SIGTERM timeout
+// ---------------------------------------------------------------------------
+
+describe('runOnce - SIGKILL fallback after SIGTERM timeout', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('sends SIGKILL when child ignores SIGTERM after timeout grace period', { timeout: 15000 }, async () => {
+    // Spawn a node process that traps SIGTERM and ignores it
+    const result = await runOnce({
+      program: 'node',
+      args: ['-e', "process.on('SIGTERM', () => {}); setTimeout(() => {}, 60000)"],
+      prompt: '',
+      reviewer: paths.reviewer,
+      reviewerDir: paths.reviewerDir,
+      command: 'node -e "ignore SIGTERM"',
+      timeoutSec: 0.2,
+      attempt: 0,
+    });
+
+    // Child should still be marked as timed_out even though SIGKILL was the actual kill signal
+    assert.equal(result.state, 'timed_out');
+    assert.ok(result.message.includes('Timed out'), `expected timeout message, got: ${result.message}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOnce() — workerEnv injection
 // ---------------------------------------------------------------------------
 
