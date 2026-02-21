@@ -59,7 +59,7 @@
 
 **Input**: User provides branch: "main 대비 feature/auth 브랜치 리뷰해줘". Requirements는 이미 수집된 상태.
 
-**Primary Technique**: Step 1-2: Input Parsing + Context Gathering — 올바른 git 명령어, CLAUDE.md 수집, explore dispatch
+**Primary Technique**: Step 1-2: Input Parsing + Context Gathering — 올바른 git 명령어, CLAUDE.md 수집
 
 **Verification Points**:
 | ID | Expected Behavior |
@@ -67,7 +67,6 @@
 | V1 | `git diff main...feature/auth` 명령어 사용 |
 | V2 | `git diff --stat`, `git diff --name-only`, `git log` 병렬 수집 |
 | V3 | CLAUDE.md 파일 수집 (root + 변경 디렉토리) |
-| V4 | explore agent dispatch (코드베이스 패턴/관습 조사) |
 
 ---
 
@@ -100,7 +99,7 @@
 | V1 | chunk-reviewer-prompt.md 템플릿 읽기 |
 | V2 | {WHAT_WAS_IMPLEMENTED} 플레이스홀더 인터폴레이션 |
 | V3 | {DIFF_COMMAND}, {FILE_LIST}, {REQUIREMENTS} 등 필수 필드 채움 |
-| V4 | {CODEBASE_CONTEXT}, {CLAUDE_MD} 등 선택 필드 적절히 처리 |
+| V4 | {CLAUDE_MD} 등 선택 필드 적절히 처리 |
 
 ---
 
@@ -147,7 +146,7 @@
 | ID | Expected Behavior |
 |----|-------------------|
 | V1 | chunk-reviewer agent 출력에 Chunk Analysis 섹션 존재 (파일별 변경 분석) |
-| V2 | Orchestrator가 Chunk Analysis + Step 2 컨텍스트 기반으로 Walkthrough 직접 생성 |
+| V2 | Orchestrator가 Chunk Analysis + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반으로 Walkthrough 직접 생성 |
 | V3 | Walkthrough에 변경 요약, 핵심 로직 분석 포함 |
 | V4 | 구조적 변경이 있으면 아키텍처 다이어그램(Mermaid) 포함, 없으면 "구조적 변경 없음" |
 | V5 | 호출 흐름 변경이 있으면 시퀀스 다이어그램(Mermaid) 포함, 없으면 "호출 흐름 변경 없음" |
@@ -227,42 +226,37 @@
 
 ---
 
-### CR-14: 4-Field Explore Prompt Structure
+### CR-14: Phase 1a Conditional Explore Dispatch
 
-**Input**: Branch mode, 12개 파일 변경. Step 2 Context Gathering 진행.
+**Input**: Walkthrough synthesis phase (Step 5 Phase 1). Chunk analysis에서 cross-module gap 발견 — 변경된 모듈이 참조하는 외부 모듈의 관습/패턴 정보 부족.
 
-**Primary Technique**: Step 2: 4-Field Explore Prompt — [CONTEXT]/[GOAL]/[DOWNSTREAM]/[REQUEST] 구조 준수
+**Primary Technique**: Step 5 Phase 1a: Conditional Explore Dispatch — trigger 평가, targeted prompt, walkthrough enrichment
 
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | explore agent dispatch 시 [CONTEXT] 필드에 PR 변경 파일 목록 + PR 설명 포함 |
-| V2 | [GOAL] 필드에 "코드베이스 관습 파악" 목적 명시 |
-| V3 | [DOWNSTREAM] 필드에 {CODEBASE_CONTEXT} 주입 용도 명시 ("chunk-reviewer agent 보정" 맥락) |
-| V4 | [REQUEST] 필드에 구체적 검색 지시 (찾을 것, 반환 형식, 스킵할 것 포함) |
-| V5 | 4개 필드 모두 단일 문장이 아닌 substantive 내용 포함 |
+| V1 | Chunk analysis gap이 explore dispatch를 trigger (trigger condition matched) |
+| V2 | Explore prompt [CONTEXT] 필드가 specific chunk analysis findings를 참조 |
+| V3 | Explore prompt [DOWNSTREAM]이 "walkthrough synthesis enrichment" 용도 명시 (chunk-reviewer 보정이 아님) |
+| V4 | Explore prompt [REQUEST]가 identified gap 기반 targeted search 포함 |
+| V5 | Trivial diff (단순 rename, typo fix 등)는 explore dispatch를 trigger하지 않음 (no-dispatch condition matched) |
 
 ---
 
-### CR-15: Semantic Oracle Triggers — 5 Categories
+### CR-15: Phase 1a Conditional Oracle Dispatch
 
-**Input**: 4개의 독립적 세션에서 각각 다른 semantic oracle trigger 조건을 테스트.
-- Session A: diff에서 `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈에서 이 인터페이스를 구현/소비 (shared interface/contract modification)
-- Session B: 새로운 `NotificationService` 레이어 도입, 기존 `OrderService`→`EmailSender` 직접 호출을 `NotificationService` 경유로 변경 (new architectural layer)
-- Session C: Flyway migration 추가 (`V2024_002__add_audit_log.sql`), `AuditLog` 엔티티 신규, `OrderRepository`에서 audit 조회 추가 (schema change with downstream)
-- Session D: `InventoryLock` 도입, `ReservationService`에서 `SELECT FOR UPDATE` + Kafka consumer 간 분산 조율 (concurrency + distributed state)
+**Input**: Walkthrough synthesis phase (Step 5 Phase 1). chunk-reviewer Cross-File Concerns에서 architectural issue flag — 복잡한 의존성 또는 chunk 간 불일치 패턴 감지.
 
-**Primary Technique**: Step 2: Oracle Trigger Conditions — semantic 기반 5개 trigger 검증
+**Primary Technique**: Step 5 Phase 1a: Conditional Oracle Dispatch — chunk-reviewer 출력 기반 trigger 평가
 
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Session A: shared interface 변경으로 다른 모듈 영향 감지 → oracle dispatch (impact analysis) |
-| V2 | Session B: 새 architectural layer 도입 → oracle dispatch (design fitness, impact analysis) |
-| V3 | Session C: schema 변경 + downstream consumer 존재 → oracle dispatch (impact analysis) |
-| V4 | Session D: concurrency coordination + distributed state → oracle dispatch (hidden interaction) |
-| V5 | "When NOT to" 조건 해당 시 oracle dispatch 안 함 (simple refactoring, test-only, config-only, single-function logic) |
-| V6 | "Consulting Oracle for [reason]" 형식의 announcement 선행 |
+| V1 | Cross-File Concerns에서 complex dependency flag → oracle dispatch (trigger matched) |
+| V2 | 다수 chunk에서 inconsistent pattern flag → oracle dispatch (trigger matched) |
+| V3 | Empty Cross-File Concerns + simple change → oracle NOT dispatched (no-dispatch condition) |
+| V4 | "Consulting Oracle for [reason]" announcement가 dispatch 전 출력 |
+| V5 | Oracle이 specific chunk-reviewer findings를 수신 (generic diff metadata가 아님) |
 
 ---
 
