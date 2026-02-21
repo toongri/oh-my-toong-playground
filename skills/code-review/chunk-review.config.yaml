@@ -7,21 +7,21 @@ chunk-review:
     # output_format: Output format (text/json/stream-json)
     #                claude/gemini: --output-format, codex: --json, unknown: ignored
     - name: claude
-      command: "claude -p"
+      command: "claude -p --dangerously-skip-permissions"
       emoji: "\U0001F9E0"
       color: "CYAN"
       # model: "claude-sonnet-4-20250514"
       # effort_level: "high"
       # output_format: "text"
     - name: gemini
-      command: "gemini"
+      command: "gemini --yolo"
       emoji: "\U0001F48E"
       color: "GREEN"
       # model: "gemini-2.5-pro"
       # effort_level: "high"       # ignored for gemini
       # output_format: "text"
     - name: codex
-      command: "codex exec"
+      command: "codex exec --full-auto"
       emoji: "\U0001F916"
       color: "BLUE"
       # model: "o3"
