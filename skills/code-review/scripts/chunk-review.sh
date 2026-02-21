@@ -118,6 +118,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 # Host agents (Codex CLI / Claude Code) cannot update native TODO/plan UIs while a long-running
 # command is executing. If we're in a host agent context and --blocking is NOT set, return
@@ -130,7 +131,7 @@ fi
 echo "chunk-review: started ${JOB_DIR}" >&2
 
 while true; do
-  WAIT_JSON="$("$JOB_SCRIPT" wait "$JOB_DIR")"
+  WAIT_JSON="$("$JOB_SCRIPT" wait --timeout-ms 60000 "$JOB_DIR")"
   OVERALL="$(printf '%s' "$WAIT_JSON" | node -e '
 const fs=require("fs");
 const d=JSON.parse(fs.readFileSync(0,"utf8"));
@@ -140,6 +141,11 @@ process.stdout.write(String(d.overallState||""));
   "$JOB_SCRIPT" status --text "$JOB_DIR" >&2
 
   if [ "$OVERALL" = "done" ]; then
+    break
+  fi
+
+  if [ -z "$OVERALL" ]; then
+    echo "chunk-review: failed to parse overallState, aborting" >&2
     break
   fi
 done
