@@ -1454,6 +1454,10 @@ describe('buildAugmentedCommand', () => {
     assert.deepEqual(result.env, {});
   });
 
+  // CLAUDECODE: '' is intentional — it prevents Claude CLI nested session errors.
+  // buildAugmentedCommand always injects this env override for 'claude' CLI type
+  // (see job.js buildAugmentedCommand), so it is not an "extra" field but a
+  // required guard that must appear in every claude-type env expectation.
   it('no fields present: returns command unchanged with empty env', () => {
     const result = buildAugmentedCommand({ command: 'claude -p' }, 'claude');
     assert.equal(result.command, 'claude -p');
@@ -1463,6 +1467,15 @@ describe('buildAugmentedCommand', () => {
   it('falsy values (empty string, null): treated as absent', () => {
     const result = buildAugmentedCommand(
       { command: 'claude -p', model: '', effort_level: null },
+      'claude',
+    );
+    assert.equal(result.command, 'claude -p');
+    assert.deepEqual(result.env, { CLAUDECODE: '' });
+  });
+
+  it('falsy values (undefined): treated as absent', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', model: undefined, effort_level: undefined, output_format: undefined },
       'claude',
     );
     assert.equal(result.command, 'claude -p');
@@ -1624,5 +1637,136 @@ describe('spawnWorkers safe name collision detection', () => {
         return true;
       },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --exclude-chairman=false boolean parsing (Bug fix)
+// ---------------------------------------------------------------------------
+
+describe('--exclude-chairman=false keeps chairman in reviewers', () => {
+  const SCRIPT = path.join(__dirname, 'chunk-review-job.js');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('--exclude-chairman=false does NOT exclude the chairman reviewer', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: true',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--exclude-chairman=false',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    assert.ok(
+      reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be included in reviewers, got: ${JSON.stringify(reviewerNames)}`,
+    );
+    assert.equal(output.settings.excludeChairmanFromReviewers, false);
+  });
+
+  it('--exclude-chairman (no value) DOES exclude the chairman reviewer', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: false',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--exclude-chairman',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    assert.ok(
+      !reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be excluded from reviewers, got: ${JSON.stringify(reviewerNames)}`,
+    );
+    assert.equal(output.settings.excludeChairmanFromReviewers, true);
+  });
+
+  it('--exclude-chairman=true DOES exclude the chairman reviewer', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: false',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--exclude-chairman=true',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    assert.ok(
+      !reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be excluded from reviewers, got: ${JSON.stringify(reviewerNames)}`,
+    );
+    assert.equal(output.settings.excludeChairmanFromReviewers, true);
   });
 });

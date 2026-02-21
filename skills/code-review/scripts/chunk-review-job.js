@@ -875,7 +875,7 @@ function cmdStart(options, prompt) {
 
   const includeChairman = Boolean(options['include-chairman']);
   const excludeChairmanOverride =
-    options['exclude-chairman'] != null ? true : options['include-chairman'] != null ? false : null;
+    options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : options['include-chairman'] != null ? false : null;
 
   const excludeSetting = normalizeBool(config['chunk-review'].settings.exclude_chairman_from_reviewers);
   const excludeChairmanFromReviewers =
