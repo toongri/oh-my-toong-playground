@@ -64,7 +64,8 @@ skills:
     - momus
     - oracle
     - argus
-    - code-review
+    - component: code-review
+      platforms: [claude]
     - make-pr
     - spec-review
     - technical-writing
