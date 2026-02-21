@@ -1424,7 +1424,7 @@ describe('buildAugmentedCommand', () => {
       'claude',
     );
     assert.equal(result.command, 'claude -p --model opus --output-format json');
-    assert.deepEqual(result.env, { CLAUDE_CODE_EFFORT_LEVEL: 'high' });
+    assert.deepEqual(result.env, { CLAUDECODE: '', CLAUDE_CODE_EFFORT_LEVEL: 'high' });
   });
 
   it('codex: appends -m, -c for effort, --json for output_format', () => {
@@ -1457,7 +1457,7 @@ describe('buildAugmentedCommand', () => {
   it('no fields present: returns command unchanged with empty env', () => {
     const result = buildAugmentedCommand({ command: 'claude -p' }, 'claude');
     assert.equal(result.command, 'claude -p');
-    assert.deepEqual(result.env, {});
+    assert.deepEqual(result.env, { CLAUDECODE: '' });
   });
 
   it('falsy values (empty string, null): treated as absent', () => {
@@ -1466,7 +1466,7 @@ describe('buildAugmentedCommand', () => {
       'claude',
     );
     assert.equal(result.command, 'claude -p');
-    assert.deepEqual(result.env, {});
+    assert.deepEqual(result.env, { CLAUDECODE: '' });
   });
 
   it('unknown CLI type: only appends --model, ignores effort and output_format', () => {
@@ -1484,7 +1484,7 @@ describe('buildAugmentedCommand', () => {
       'claude',
     );
     assert.equal(result.command, 'claude -p');
-    assert.deepEqual(result.env, {});
+    assert.deepEqual(result.env, { CLAUDECODE: '' });
   });
 
   it('codex output_format non-json still appends --json', () => {
@@ -1494,6 +1494,16 @@ describe('buildAugmentedCommand', () => {
     );
     assert.equal(result.command, 'codex exec --json');
     assert.deepEqual(result.env, {});
+  });
+
+  it('claude: unsets CLAUDECODE env to prevent nested session error', () => {
+    const result = buildAugmentedCommand({ command: 'claude -p' }, 'claude');
+    assert.equal(result.env.CLAUDECODE, '');
+  });
+
+  it('non-claude: does not include CLAUDECODE in env', () => {
+    const result = buildAugmentedCommand({ command: 'gemini' }, 'gemini');
+    assert.equal(result.env.CLAUDECODE, undefined);
   });
 });
 
