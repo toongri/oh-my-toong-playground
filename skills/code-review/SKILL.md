@@ -180,7 +180,7 @@ git fetch origin ${BASE_REF}
 
 The range `origin/<baseRefName>...pr-<number>` uses three-dot syntax to show only changes introduced by the PR (not changes on the base branch since the PR branched).
 
-All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output.
+All subsequent steps use `{range}` from this table. The orchestrator constructs `{DIFF_COMMAND}` in the format `git diff {range} -- <files>` for delegation to chunk-reviewer (the orchestrator does NOT execute this command — see Context Budget).
 
 ## Early Exit
 
