@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { execFileSync } = require('child_process');
 
 const {
   detectHostRole,
@@ -1493,5 +1494,125 @@ describe('buildAugmentedCommand', () => {
     );
     assert.equal(result.command, 'codex exec --json');
     assert.deepEqual(result.env, {});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cmdClean — path traversal guard (Fix A)
+// ---------------------------------------------------------------------------
+
+describe('cmdClean path traversal guard', () => {
+  const SCRIPT = path.join(__dirname, 'chunk-review-job.js');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('rejects a path outside the configured jobs directory', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const outsidePath = path.join(tmpDir, 'not-jobs', 'evil');
+    fs.mkdirSync(outsidePath, { recursive: true });
+
+    assert.throws(
+      () => {
+        execFileSync(process.execPath, [
+          SCRIPT, 'clean', '--jobs-dir', jobsDir, outsidePath,
+        ], { stdio: 'pipe' });
+      },
+      (err) => {
+        assert.equal(err.status, 1);
+        assert.ok(
+          err.stderr.toString().includes('refusing to delete path outside jobs directory'),
+          `Expected stderr to mention path guard, got: ${err.stderr.toString()}`,
+        );
+        return true;
+      },
+    );
+
+    // The outside directory must still exist (not deleted)
+    assert.ok(fs.existsSync(outsidePath), 'outside path should NOT have been deleted');
+  });
+
+  it('accepts and cleans a path inside the configured jobs directory', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    const jobDir = path.join(jobsDir, 'chunk-review-test');
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'dummy.txt'), 'test');
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'clean', '--jobs-dir', jobsDir, jobDir,
+    ], { stdio: 'pipe' });
+
+    assert.ok(
+      result.toString().includes('cleaned:'),
+      `Expected stdout to include "cleaned:", got: ${result.toString()}`,
+    );
+    assert.ok(!fs.existsSync(jobDir), 'job directory should have been deleted');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// spawnWorkers — safe name collision detection (Fix B)
+// ---------------------------------------------------------------------------
+
+describe('spawnWorkers safe name collision detection', () => {
+  const SCRIPT = path.join(__dirname, 'chunk-review-job.js');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('exits with error when two reviewers produce the same safe name', () => {
+    // Create a config where two reviewers collide:
+    // "Alice!" and "alice?" both produce safe name "alice-"
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: none',
+      '  reviewers:',
+      '    - name: "Alice!"',
+      '      command: echo test1',
+      '    - name: "alice?"',
+      '      command: echo test2',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: false',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    assert.throws(
+      () => {
+        execFileSync(process.execPath, [
+          SCRIPT, 'start',
+          '--config', configPath,
+          '--jobs-dir', jobsDir,
+          '--chairman', 'none',
+          'test prompt',
+        ], { stdio: 'pipe' });
+      },
+      (err) => {
+        assert.equal(err.status, 1);
+        assert.ok(
+          err.stderr.toString().includes('reviewer name collision'),
+          `Expected stderr to mention collision, got: ${err.stderr.toString()}`,
+        );
+        return true;
+      },
+    );
   });
 });
