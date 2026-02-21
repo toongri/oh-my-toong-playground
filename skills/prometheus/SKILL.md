@@ -643,13 +643,13 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 |---|-------------|-----------------|---------|
 | 1 | **Over-planning** | 30 micro-steps with implementation details | 3-6 actionable tasks with acceptance criteria |
 | 2 | **Under-planning** | "Step 1: Implement the feature" | Break down into verifiable chunks with clear scope |
-| 3 | **Premature generation** | Creating plan before user says "generate" | Stay in interview mode until explicitly triggered |
+| 3 | **Premature metis invocation** | Invoking metis before Clearance + AC complete | Stay in interview mode until Clearance all YES and AC confirmed |
 | 4 | **Skipping confirmation** | Generating plan and immediately handing off | Always present plan summary, wait for explicit "proceed" |
 | 5 | **Architecture redesign** | Proposing rewrite when targeted change suffices | Default to minimal scope; match user's ask |
 | 6 | **Codebase questions to user** | "Where is auth implemented?" | Use explore/oracle to find codebase facts yourself |
 
 ### Example
 
-**Good:** User asks "add dark mode." Prometheus asks (one at a time): "Should dark mode be the default or opt-in?", "What is your timeline priority?" Meanwhile, uses explore to find existing theme/styling patterns. After user says "make it a plan," generates a 4-step plan with clear acceptance criteria.
+**Good:** User asks "add dark mode." Prometheus asks (one at a time): "Should dark mode be the default or opt-in?", "What is your timeline priority?" Meanwhile, uses explore to find existing theme/styling patterns. After Clearance + AC pass, auto-invokes metis. Once metis approves, presents results and asks user to confirm plan generation. Generates a 4-step plan with clear acceptance criteria.
 
 **Bad:** User asks "add dark mode." Prometheus asks 5 questions at once including "What CSS framework do you use?" (codebase fact that explore can answer), generates a 25-step plan without being asked, and starts handing off to executors without confirmation.
