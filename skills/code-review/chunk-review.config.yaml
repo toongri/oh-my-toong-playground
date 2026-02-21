@@ -21,7 +21,7 @@ chunk-review:
       # effort_level: "high"       # ignored for gemini
       # output_format: "text"
     - name: codex
-      command: "codex exec --full-auto"
+      command: "codex exec --dangerously-bypass-approvals-and-sandbox"
       emoji: "\U0001F916"
       color: "BLUE"
       # model: "o3"
