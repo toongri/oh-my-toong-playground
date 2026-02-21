@@ -29,63 +29,12 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 | Diff range determination & git | Yes | - |
 | Chunking decision | Yes | - |
 | Walkthrough/critique synthesis | Yes | - |
-| Project conventions calibration | NEVER | explore |
-| Cross-file impact / design fit | NEVER | oracle |
+| Walkthrough context enrichment | NEVER | explore |
+| Cross-file impact / design fit (Phase 1 only) | NEVER | oracle |
 | Individual chunk review | NEVER | chunk-reviewer |
 | Code modification | NEVER | (forbidden entirely) |
 
 **RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
-
-### Role Separation: YOU DO NOT REVIEW CODE
-
-**Code review is NOT your job. It is chunk-reviewer's job.**
-
-```dot
-digraph review_roles {
-    rankdir=LR;
-    "orchestrator" [shape=box, label="Code-Review\n(Orchestrator)"];
-    "chunk-reviewer" [shape=box, label="Chunk-Reviewer\n(Reviewer)"];
-
-    "orchestrator" -> "chunk-reviewer" [label="dispatch {DIFF_COMMAND}"];
-    "chunk-reviewer" -> "orchestrator" [label="review results"];
-}
-```
-
-**Your role as orchestrator:**
-- Dispatch chunks to chunk-reviewer with diff commands
-- Synthesize walkthrough and critique from chunk-reviewer results
-- Decide chunking strategy, severity normalization, final verdict
-
-**NOT your role:**
-- Reading raw diff output (no `git diff {range}` without `--stat` or `--name-only`)
-- Reviewing code quality, correctness, or patterns yourself
-- Running `git diff {range} -- <files>` to load changed file content
-
-**RULE**: When chunk-reviewer returns results, your ONLY actions are synthesis and verdict. Not "review then synthesize". Just synthesize.
-
-### Context Budget
-
-What you are **allowed** to load into context:
-
-| Allowed | Command / Source |
-|---------|-----------------|
-| Diff statistics | `git diff {range} --stat` |
-| Changed file list | `git diff {range} --name-only` |
-| Commit history | `git log {range} --oneline` |
-| Project conventions | CLAUDE.md files |
-| Codebase context | explore / oracle agent summaries |
-| Review results | chunk-reviewer agent output |
-
-What you are **forbidden** from loading:
-
-| Forbidden | Why |
-|-----------|-----|
-| `git diff {range}` (without `--stat` or `--name-only`) | Loads raw diff lines into orchestrator context |
-| `git diff {range} -- <files>` | Loads file-level diff into orchestrator context |
-| `Read` tool on diff target source files | Loads changed file content into orchestrator context |
-| Any tool that loads changed file content | Review responsibility belongs to chunk-reviewer |
-
-**RULE**: If a command would put diff lines or source code into your context, it is forbidden. Only metadata (stats, file names, commit messages) and agent outputs are allowed.
 
 ## Step 0: Requirements Context
 
@@ -152,7 +101,7 @@ Proceed to Step 1 when any of the following are met:
 
 **Context Brokering:**
 - DO NOT ask user about codebase facts (file locations, patterns, architecture)
-- USE explore/oracle in Step 2 for codebase context
+- USE explore/oracle in Step 5 Phase 1 for codebase context
 - ONLY ask user about: requirements, intent, specific concerns
 
 ## Step 1: Input Parsing
@@ -180,7 +129,7 @@ git fetch origin ${BASE_REF}
 
 The range `origin/<baseRefName>...pr-<number>` uses three-dot syntax to show only changes introduced by the PR (not changes on the base branch since the PR branched).
 
-All subsequent steps use `{range}` from this table. The orchestrator constructs `{DIFF_COMMAND}` in the format `git diff {range} -- <files>` for delegation to chunk-reviewer (the orchestrator does NOT execute this command — see Context Budget).
+All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output.
 
 ## Early Exit
 
@@ -199,94 +148,24 @@ Collect in parallel (using `{range}` from Step 1):
 3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
-Subagent context:
-
-### Subagent Selection Guide
-
-| Need | Agent | When |
-|------|-------|------|
-| Codebase convention baseline | explore | Find internal patterns, naming conventions, structure to calibrate chunk-reviewer |
-| Deep codebase analysis | oracle | Analyze cross-file impact, hidden dependencies, architectural fit |
-
-### Explore -- Codebase Convention Baseline
-
-Chunk-reviewer only sees the diff, so it has no baseline for judging "does this code follow project conventions?" Without explore's convention baseline, chunk-reviewer will:
-- Suggest new patterns while ignoring already-established ones (noise)
-- Misjudge convention-compliant code as "needs improvement" (false positive)
-- Miss code that violates project conventions (false negative)
-
-→ Always dispatch. Low cost (targeted grep level), high value (quality calibration for all chunk reviews).
-
-5. Dispatch explore agent (4-Field prompt):
-   ```
-   Task(subagent_type="explore", prompt="
-   [CONTEXT] Reviewing a PR that changes {file_list}. PR description: {DESCRIPTION}.
-   [GOAL] Understand existing codebase conventions to evaluate whether the PR follows established patterns.
-   [DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to calibrate chunk-reviewer agent against project norms.
-   [REQUEST] Find: naming conventions, error handling patterns, test structure, and related implementations for the changed modules. Return file paths with pattern descriptions. Skip unrelated directories.")
-   ```
-   → Always dispatch (lightweight, provides codebase context)
-
-### Oracle -- Deep Codebase Analysis
-
-Core principle: **Dispatch when the diff alone cannot determine the safety of this change.**
-
-A diff shows "what changed" but not "whether this change is safe for the existing system." Oracle reads the entire codebase and answers four types of questions:
-
-| Type | Question | Example |
-|------|----------|---------|
-| Impact analysis | "How far does this change's impact reach?" | Does the migration break existing queries? Does the cache key change invalidate other services? |
-| Consistency verification | "Is it consistent with existing patterns?" | Does the new error handling differ from the existing strategy? Does the new integration's retry policy mismatch existing ones? |
-| Hidden interaction | "Are there invisible dependencies?" | Does this lock create deadlocks with other locks? Does this event match consumer expectations? |
-| Design fitness | "Does it fit architectural principles?" | Does it violate layer boundaries? Does it bypass existing abstractions? |
-
-**When NOT to dispatch oracle:**
-- Simple refactoring (rename, extract method, move file) -- diff is sufficient
-- Test-only changes -- no production impact
-- Documentation/config-only changes -- no architecture analysis needed
-- Logic changes within a single function (external interface unchanged) -- no cross-file impact
-- Explore results already provide sufficient context
-
-**Oracle trigger conditions:**
-- Changes modify shared interfaces, base classes, contracts, event schemas, or extension points consumed by other modules → (impact analysis, hidden interaction)
-- New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)
-- Changes cross architectural layer boundaries or span multiple independent business modules → (consistency verification, design fitness)
-- Database schema or data model changes with downstream consumers → (impact analysis)
-- Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)
-
-6. Dispatch oracle agent (only if trigger conditions met):
-   Briefly announce "Consulting Oracle for [reason]" before invocation.
-   → Only if trigger conditions met (see above)
-
 ## Step 3: Chunking Decision
-
-### Diff Size Measurement
-
-Parse the `--stat` summary line (already collected in Step 2):
-
-```
- N files changed, X insertions(+), Y deletions(-)
-```
-
-Total changed lines = X + Y (insertions + deletions).
-
-### Threshold
 
 | Condition | Strategy |
 |-----------|----------|
-| Total < 1500 lines AND < 30 files | Single review |
-| Total >= 1500 lines OR >= 30 files | Multi-chunk review |
+| Changed files <= 15 | Single review — `git diff {range}` for full diff |
+| Changed files > 15 | Group into chunks of ~10-15 files by directory/module affinity |
 
-### Chunking Algorithm
+Chunking heuristic: group files sharing a directory prefix or import relationships.
 
-When multi-chunk is required:
+### Per-Chunk Diff Acquisition
 
-1. **Group by top-level directory prefix** from the `--name-only` file list (e.g., `src/order/`, `src/payment/`, `test/`)
-2. **Per-chunk cap: ~1500 lines** (soft guide). Walk groups in order:
-   - If adding the next group would exceed ~1500 lines, start a new chunk
-   - If a single file exceeds 1500 lines, it becomes a standalone chunk
-3. **Split oversized groups**: If a single directory group exceeds the cap, split by subdirectory prefix within that group
-4. **Flat structure fallback**: If subdirectory splitting still produces oversized chunks (flat directory with many files), batch alphabetically into groups of ~10-15 files each
+For each chunk, obtain the diff using git's native path filtering:
+
+```bash
+git diff {range} -- <file1> <file2> ... <fileN>
+```
+
+This produces a diff containing ONLY the files in that chunk. Do NOT parse a full diff output to extract per-file sections.
 
 ## Step 4: Agent Dispatch
 
@@ -295,21 +174,18 @@ When multi-chunk is required:
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
-   - {CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)
    - {FILE_LIST} ← Step 2 file list
-   - {DIFF_COMMAND} ← complete shell command string that the chunk-reviewer will execute to obtain the diff. Orchestrator constructs this from range (Step 1) and chunk file list (Step 3) but does NOT execute it. Examples: `git diff origin/main...HEAD` (single chunk) or `git diff origin/main...HEAD -- src/api/auth.ts src/api/router.ts` (multi-chunk)
+   - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
-
-> **Note:** chunk-reviewer internally dispatches to multiple models and returns consensus-annotated synthesis.
 
 **Dispatch rules:**
 
 | Scale | Action |
 |-------|--------|
 | Single chunk | 1 agent call |
-| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
+| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST} |
 
 ## Step 5: Walkthrough Synthesis + Result Synthesis
 
@@ -319,7 +195,7 @@ After all agents return, produce the final output in two phases.
 
 Orchestrator directly produces the Walkthrough from:
 - All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)
-- Step 2 context (explore/oracle output, CLAUDE.md, commit history)
+- Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)
 
 **Generate the following sections:**
 
@@ -345,30 +221,68 @@ Orchestrator directly produces the Walkthrough from:
 - Include actors, method calls, return values, and significant conditional branches
 - If no call flow changes (e.g., variable rename, config change): write "No call flow changes"
 
+### Phase 1a: Context Enrichment (Conditional)
+
+After reading all chunk Chunk Analysis sections, assess whether the available information is sufficient to write the Walkthrough. If gaps exist, dispatch explore/oracle before writing Phase 1 output.
+
+**When to dispatch:**
+
+| Trigger | Agent | Example |
+|---------|-------|---------|
+| Core Logic Analysis requires understanding cross-module relationships not visible from chunk analysis | explore | "Chunk A shows OrderService calling PaymentGateway, but the gateway's implementation and other consumers are in Chunk B's scope or outside the diff" |
+| Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff | explore | "New class extends BaseRepository but the base class and its other subclasses are not in any chunk" |
+| Chunk-reviewer Cross-File Concerns section flags architectural patterns requiring codebase investigation | oracle | "Cross-file concern: adapter error codes may not match controller expectations — need to verify existing error handling contract" |
+| Multiple chunks flag inconsistent patterns suggesting architectural misalignment | oracle | "Chunk A uses Result<T> for error handling, Chunk B uses exceptions — need to determine which is the project convention" |
+
+**When NOT to dispatch:**
+
+| Condition | Reason |
+|-----------|--------|
+| Simple changes (test-only, doc-only, config-only, single-function logic) | Chunk analysis is self-sufficient |
+| Chunk analysis provides complete understanding of all changed modules | No gaps to fill |
+| Trivial diff (< 5 files, < 100 lines) | Sparse analysis is expected, not a gap |
+| Cross-File Concerns section is empty across all chunks | No architectural investigation needed |
+
+**Dispatch rules:**
+- At most 1 explore and 1 oracle per review (never per-chunk)
+- explore and oracle may be dispatched in parallel if both are needed
+- If agent returns empty or times out, proceed with synthesis using available data
+
+**Explore prompt structure** (4-Field, chunk-analysis-aware):
+```
+Task(subagent_type="explore", prompt="
+[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_chunk_analysis}.
+[GOAL] Fill the context gap identified during walkthrough synthesis to produce accurate Core Logic Analysis and Architecture Diagram.
+[DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt.
+[REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories.")
+```
+
+**Oracle dispatch** (same trigger announcement pattern):
+```
+Consulting Oracle for [specific gap from chunk analysis].
+```
+Oracle receives the specific chunk-reviewer findings that triggered the dispatch, not generic diff metadata.
+
+**Data flow:**
+```
+Phase 1: Read all Chunk Analysis sections
+       → Assess: sufficient for Walkthrough? (check decision table)
+       → If gaps: dispatch explore/oracle (Phase 1a)
+       → Write Walkthrough using: Chunk Analysis + Step 2 metadata + Phase 1a results (if any)
+```
+
 ### Phase 2: Critique Synthesis
-
-Chunk-reviewer agents return consensus-annotated findings from multi-model review. Each issue carries a consensus level:
-
-- :red_circle: **Confirmed (3/3)** -- all models flagged this issue
-- :orange_circle: **High Confidence (2/3)** -- majority of models flagged this issue
-- :yellow_circle: **Needs Review (1/3)** -- single model flagged this issue
 
 For multi-chunk reviews:
 
 1. **Merge** all Strengths, Issues, Recommendations sections
-2. **Deduplicate** issues appearing in multiple chunks, applying **cross-chunk consensus promotion**:
-   - Same issue Confirmed in chunk A and Needs Review in chunk B → promote to Confirmed
-   - Same issue at different consensus levels across chunks → use the strongest (highest agreement) level
-3. **Carry issues by consensus level:**
-   - :red_circle: Confirmed (3/3): carry directly to final output
-   - :orange_circle: High Confidence (2/3): carry with consensus annotation preserved
-   - :yellow_circle: Needs Review (1/3): include with "single-model finding" note
-4. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
-5. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
-6. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
-7. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
+2. **Deduplicate** issues appearing in multiple chunks
+3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
+4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
+5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
+6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
-For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment), preserving consensus annotations.
+For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment).
 
 ### Final Output Format
 
