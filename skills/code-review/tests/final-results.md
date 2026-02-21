@@ -98,9 +98,9 @@
 | Group | Scenarios | 검증 영역 | VPs | Result |
 |-------|-----------|----------|-----|--------|
 | 1 | CR-1, CR-2, CR-3, CR-11, CR-12, CR-13 | Step 0 Requirements Interview | 28 | ALL PASS |
-| 2 | CR-4, CR-5, CR-18, CR-19 | Steps 1-3 Input Parsing, Chunking, Diff | 21 | ALL PASS |
+| 2 | CR-4, CR-5, CR-18, CR-19 | Steps 1-3 Input Parsing, Chunking, Diff | 20 | ALL PASS |
 | 3 | CR-6, CR-7, CR-9, CR-10 | Steps 4-5 Dispatch Template, Synthesis | 21 | ALL PASS |
-| 4 | CR-8, CR-14, CR-15, CR-17 | Early Exit, Explore/Oracle, Cross-File | 20 | ALL PASS (CR-17 retest) |
+| 4 | CR-8, CR-14, CR-15, CR-17 | Early Exit, Phase 1a Dispatch, Cross-File | 19 | ALL PASS (CR-17 retest) |
 
 > **CR-17 재검증 노트**: Group 4 초기 subagent가 `chunk-reviewer-prompt.md`(dispatch 템플릿)만 확인하고 `agents/chunk-reviewer.md`(agent 정의)를 누락하여 5/5 FAIL 보고. 별도 subagent로 agent 정의 파일 포함 재검증한 결과 5/5 PASS 확인.
 
@@ -109,7 +109,7 @@
 | CR-1 | PASS | Step 0 Auto-detect mode에 요구사항 질문, {REQUIREMENTS} 수집, Context Brokering 모두 정의 |
 | CR-2 | PASS | Step 0 PR mode에 metadata 추출, reference scanning, non-fetchable inquiry, 충분한 description 시 인터뷰 스킵 정의 |
 | CR-3 | PASS | Step 0 User deferral 경로에 "그냥 리뷰해줘" 수용, "N/A" 폴백, 블로킹 없이 진행 정의 |
-| CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md, explore dispatch 정의 (V5 oracle trigger는 CR-15 전용으로 이관, V5 제거) |
+| CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md 정의 (explore/oracle dispatch는 Step 5 Phase 1a로 이관, CR-14/CR-15 전용) |
 | CR-5 | PASS | Step 3-4에 chunking 기준, 템플릿 기반 dispatch, 병렬 발행 정의 |
 | CR-6 | PASS | Step 4에 템플릿 읽기, 모든 플레이스홀더 인터폴레이션, 필수/선택 필드 처리 정의 |
 | CR-7 | PASS | Step 5에 병합/중복제거/cross-file/verdict 정의 + agent에 Severity Definitions 추가 |
@@ -119,8 +119,8 @@
 | CR-11 | PASS | Step 0 Vague Answer Handling + 2-strike rule 정의 (English 텍스트로 i18n 반영) |
 | CR-12 | PASS | Step 0 Question Method, One Question Per Message, Question Quality Standard 모두 정의 |
 | CR-13 | PASS | Step 0 Exit Condition 3가지 경로 모두 정의 |
-| CR-14 | PASS | Step 2 explore dispatch 4-Field prompt 구조 정의 |
-| CR-15 | PASS | Step 2 Oracle trigger conditions → semantic 5개 카테고리로 재작성. Subagent GREEN 테스트 통과 |
+| CR-14 | PASS | Step 5 Phase 1a conditional explore dispatch — trigger 조건, chunk-analysis-aware prompt, walkthrough enrichment 정의 |
+| CR-15 | PASS | Step 5 Phase 1a conditional oracle dispatch — chunk-reviewer Cross-File Concerns 기반 trigger, announcement, specific findings 전달 정의 |
 | CR-16 | REMOVED | Librarian subagent가 code-review 오케스트레이터에서 제거됨 |
 | CR-17 | PASS | chunk-reviewer agent Chunk Review Mode에 Cross-File Concerns subsection 정의 |
 | CR-18 | PASS | Step 1 PR Mode Local Ref Setup — git fetch 기반, NO checkout, three-dot range 정의 |
@@ -169,8 +169,6 @@
 | V1 | PASS | SKILL.md Step 1 테이블: "`<base> <target>` -> `git diff <base>...<target>`" — "main feature/auth" 입력 시 `git diff main...feature/auth` 생성 |
 | V2 | PASS | SKILL.md Step 2: "Collect in parallel:" 하에 `git diff --stat`, `git diff --name-only`, `git log` 3개 명령어 나열 |
 | V3 | PASS | SKILL.md Step 2 항목 4: "CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)" |
-| V4 | PASS | SKILL.md Step 2 항목 5: "Dispatch explore agent" + "Always dispatch (lightweight, provides codebase context)" |
-| ~~V5~~ | REMOVED | Oracle trigger 검증은 CR-15 전용 시나리오로 이관. CR-4는 Input Parsing + Context Gathering 기본 파이프라인 검증에 집중 |
 
 ---
 
@@ -193,7 +191,7 @@
 | V1 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `skills/code-review/chunk-reviewer-prompt.md`에 존재 |
 | V2 | PASS | SKILL.md Step 4: "{WHAT_WAS_IMPLEMENTED} <- Step 0 description" + template 라인 6: "Review {WHAT_WAS_IMPLEMENTED}" |
 | V3 | PASS | SKILL.md Step 4: {DIFF} <- Step 1, {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
-| V4 | PASS | SKILL.md Step 4: "{CODEBASE_CONTEXT} <- Step 2 explore/oracle output (or empty)", "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
+| V4 | PASS | SKILL.md Step 4: "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
 
 ---
 
@@ -225,7 +223,7 @@
 | VP | Result | Evidence |
 |----|--------|----------|
 | V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a file-by-file change analysis for the files in your assigned chunk" — Role/Changes/Data Flow/Design Decisions/Side Effects 5개 항목 정의 |
-| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents) + Step 2 context" |
+| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents) + Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)" — Chunk Analysis + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반 |
 | V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Explain data flow, design decisions, and side effects" |
 | V4 | PASS | SKILL.md Step 5 "Architecture Diagram": "Mermaid class diagram or component diagram" + "If no structural changes: write 'No structural changes — existing architecture preserved'" |
 | V5 | PASS | SKILL.md Step 5 "Sequence Diagram": "Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes" + "If no call flow changes: write 'No call flow changes'" |
@@ -282,30 +280,27 @@
 
 ---
 
-#### CR-14: 4-Field Explore Prompt Structure
+#### CR-14: Phase 1a Conditional Explore Dispatch
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 2 explore prompt: "[CONTEXT] Reviewing a PR that changes {file_list}. PR description: {DESCRIPTION}." — 변경 파일 목록 + PR 설명 포함 |
-| V2 | PASS | SKILL.md Step 2 explore prompt: "[GOAL] Understand existing codebase conventions to evaluate whether the PR follows established patterns." — 코드베이스 관습 파악 목적 |
-| V3 | PASS | SKILL.md Step 2 explore prompt: "[DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to calibrate chunk-reviewer agent against project norms." — chunk-reviewer 보정 맥락 |
-| V4 | PASS | SKILL.md Step 2 explore prompt: "[REQUEST] Find: naming conventions, error handling patterns, test structure, and related implementations for the changed modules. Return file paths with pattern descriptions. Skip unrelated directories." — 구체적 검색 지시 |
-| V5 | PASS | SKILL.md Step 2 explore prompt: 4개 필드 모두 구체적 문장 포함 — [CONTEXT] 2개 변수, [GOAL] 1문장, [DOWNSTREAM] 1문장, [REQUEST] 3개 지시 (Find/Return/Skip) |
+| V1 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Core Logic Analysis requires understanding cross-module relationships not visible from chunk analysis → explore" + "Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff → explore" — chunk analysis gap이 explore dispatch를 trigger |
+| V2 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_chunk_analysis}." — specific chunk analysis findings를 참조 |
+| V3 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt." — walkthrough synthesis enrichment 용도 명시 (chunk-reviewer 보정이 아님) |
+| V4 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories." — identified gap 기반 targeted search |
+| V5 | PASS | SKILL.md Step 5 Phase 1a "When NOT to dispatch" 테이블: "Trivial diff (< 5 files, < 100 lines) → Sparse analysis is expected, not a gap" + "Simple changes (test-only, doc-only, config-only, single-function logic) → Chunk analysis is self-sufficient" — trivial diff는 explore를 trigger하지 않음 |
 
 ---
 
-#### CR-15: Semantic Oracle Triggers — 5 Categories
-
-> Oracle trigger가 glob 패턴에서 semantic 기반으로 전면 재작성됨 (2026-02-19). Catch-all trigger 제거, trigger 1에 event schemas/extension points 흡수 (2026-02-19). Subagent GREEN 테스트 통과.
+#### CR-15: Phase 1a Conditional Oracle Dispatch
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md: "Changes modify shared interfaces, base classes, contracts, event schemas, or extension points consumed by other modules → (impact analysis, hidden interaction)" — `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈 소비 → 직접 매칭. event schemas/extension points 추가로 커버리지 확대 |
-| V2 | PASS | SKILL.md: "New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)" — `NotificationService` 신규 레이어 도입 → 직접 매칭 |
-| V3 | PASS | SKILL.md: "Database schema or data model changes with downstream consumers → (impact analysis)" — Flyway migration + `ReportService` downstream consumer → 직접 매칭 |
-| V4 | PASS | SKILL.md: "Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)" — `SELECT FOR UPDATE` + HTTP/Kafka 이중 접근 경로 → 직접 매칭 |
-| V5 | PASS | SKILL.md: "Simple refactoring (rename, extract method, move file) -- diff is sufficient" — `getUserName()`→`getUsername()` rename → "When NOT to dispatch" 직접 매칭 |
-| V6 | PASS | SKILL.md: "Briefly announce 'Consulting Oracle for [reason]' before invocation." — dispatch 전 announcement 필수 |
+| V1 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Chunk-reviewer Cross-File Concerns section flags architectural patterns requiring codebase investigation → oracle" — Cross-File Concerns에서 complex dependency flag → oracle dispatch trigger |
+| V2 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Multiple chunks flag inconsistent patterns suggesting architectural misalignment → oracle" — 다수 chunk에서 inconsistent pattern flag → oracle dispatch trigger |
+| V3 | PASS | SKILL.md Step 5 Phase 1a "When NOT to dispatch" 테이블: "Cross-File Concerns section is empty across all chunks → No architectural investigation needed" — empty Cross-File Concerns + simple change → oracle NOT dispatched |
+| V4 | PASS | SKILL.md Step 5 Phase 1a "Oracle dispatch" 블록: "Consulting Oracle for [specific gap from chunk analysis]." — dispatch 전 announcement 출력 |
+| V5 | PASS | SKILL.md Step 5 Phase 1a: "Oracle receives the specific chunk-reviewer findings that triggered the dispatch, not generic diff metadata." — oracle가 specific chunk-reviewer findings를 수신 |
 
 ---
 
@@ -353,7 +348,7 @@
 
 ---
 
-**전체 결과**: 90/90 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED) — subagent 기반 검증 완료
+**전체 결과**: 88/88 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED) — subagent 기반 검증 완료
 
 > **변경 이력 (2026-02-19):**
 > - Oracle trigger conditions: glob 패턴 → semantic 기반으로 전면 재작성 (prometheus/spec과 패러다임 통일)
@@ -363,6 +358,15 @@
 > - Oracle trigger 3: "3+ top-level directories" → "multiple independent business modules"로 교체
 > - Librarian subagent 전체 제거 → CR-16 시나리오 REMOVED (7 VP 제거)
 > - CR-1~CR-19 전체 subagent 기반 GREEN 테스트 수행 (4개 병렬 그룹, 90 VP 검증)
+>
+> **변경 이력 (2026-02-21):**
+> - explore/oracle dispatch가 Step 2에서 Step 5 Phase 1a로 이관 (chunk analysis 기반 conditional dispatch)
+> - CR-4: V4 (explore dispatch) 제거 — Step 2는 git 명령어 + CLAUDE.md만 수집 (4→3 VPs)
+> - CR-6: V4에서 {CODEBASE_CONTEXT} 참조 제거 — 해당 필드가 템플릿에서 삭제됨
+> - CR-9: V2 walkthrough 소스를 "Chunk Analysis + Step 2 metadata + conditional Phase 1a results"로 수정
+> - CR-14: "4-Field Explore Prompt Structure" → "Phase 1a Conditional Explore Dispatch" 전면 재작성 (5 VPs)
+> - CR-15: "Semantic Oracle Triggers — 5 Categories" → "Phase 1a Conditional Oracle Dispatch" 전면 재작성 (6→5 VPs)
+> - 총 VP 수: 90 → 88 (CR-4 V4 제거, CR-15 V6 제거)
 
 **RED -> GREEN 개선 요약** (CR-1 ~ CR-8):
 
@@ -370,7 +374,7 @@
 |---|-----------|---------------|-------------|
 | 1 | **Step 0: Requirements Interview** — 3가지 입력 모드별 요구사항 수집, PR description 자동 추출, deferral 경로, Context Brokering | CR-1, CR-2, CR-3 | 11 |
 | 2 | **Early Exit** — 빈 diff/binary-only diff 감지, 메시지 출력, short-circuit 종료 | CR-8 | 4 |
-| 3 | **Subagent Orchestration** — explore (항상)/oracle (조건부) agent dispatch, trigger conditions | CR-4 | 1 |
+| 3 | **Subagent Orchestration** — Step 5 Phase 1a conditional explore/oracle dispatch (chunk analysis 기반 trigger) | CR-14, CR-15 | 10 |
 | 4 | **Dispatch Template** — chunk-reviewer-prompt.md 템플릿, 8개 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
 | 5 | **Severity Definitions** — agent에 Critical/Important/Minor 명시적 기준 + Example Output 추가 | CR-7 | 1 |
 
@@ -381,7 +385,7 @@
 | 6 | **Step 5 Walkthrough Synthesis** — Chunk Analysis 기반 Walkthrough 생성, 다이어그램, 출력 순서 | CR-9, CR-10 | 12 |
 | 7 | **Step 0 Vague Answer + Question Discipline** — 2-strike rule, Question Method/Quality, One Question Per Message | CR-11, CR-12 | 10 |
 | 8 | **Step 0 Exit Condition** — 3가지 종료 경로별 올바른 전환 | CR-13 | 5 |
-| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle semantic triggers | CR-14, CR-15 | 11 |
+| 9 | **Step 5 Phase 1a Conditional Dispatch** — explore chunk-analysis-aware prompt, oracle Cross-File Concerns 기반 trigger | CR-14, CR-15 | 10 |
 | 10 | **Chunk Review Cross-File** — chunk-reviewer agent Cross-File Concerns subsection | CR-17 | 5 |
 | 11 | **Step 1 PR Mode Ref Setup** — git fetch 기반 NO checkout, three-dot range | CR-18 | 6 |
 | 12 | **Step 3 Per-Chunk Diff** — path filter 기반 chunk별 diff 획득 | CR-19 | 6 |
