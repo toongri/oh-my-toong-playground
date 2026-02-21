@@ -73,6 +73,8 @@ digraph role_separation {
 - `Read` tool on diff target source files
 - Any tool that loads changed file content into orchestrator context
 
+**RULE**: If a command would put diff lines or source code into your context, it is forbidden. Only metadata (stats, file names, commit messages) and agent outputs are allowed.
+
 ## Step 0: Requirements Context
 
 Three-question gate — adapt by input mode:
@@ -322,6 +324,7 @@ For multi-chunk reviews:
 
 1. **Merge** all Strengths, Issues, Recommendations sections
 2. **Deduplicate** issues appearing in multiple chunks
+   - When the same issue appears across chunks at different consensus levels, promote to the strongest level (e.g., :orange_circle: in Chunk A + :red_circle: in Chunk B → :red_circle: Confirmed)
 3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
 4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
 5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")

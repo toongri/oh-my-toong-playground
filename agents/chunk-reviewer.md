@@ -95,6 +95,8 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 - Note which model's perspective is absent and what gap this may create
 - Do NOT extrapolate what the missing model "would have said"
 
+**Diff command failure:** If all reviewers report that the diff command failed (error or empty output), do NOT attempt synthesis. Report "Diff command failed for this chunk: [error details]" and return immediately.
+
 ## Synthesis Output Format
 
 ```
