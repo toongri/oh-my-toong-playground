@@ -258,6 +258,11 @@ function runOnce(opts) {
       timeoutHandle = setTimeout(() => {
         timeoutTriggered = true;
         try { process.kill(child.pid, 'SIGTERM'); } catch { /* ignore */ }
+        // SIGKILL escalation after 5s grace period
+        const killHandle = setTimeout(() => {
+          try { process.kill(child.pid, 'SIGKILL'); } catch { /* ignore */ }
+        }, 5000);
+        killHandle.unref();
       }, timeoutSec * 1000);
       timeoutHandle.unref();
     }
@@ -284,7 +289,7 @@ function runOnce(opts) {
 
     child.on('exit', (code, signal) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      const timedOut = Boolean(timeoutTriggered) && signal === 'SIGTERM';
+      const timedOut = Boolean(timeoutTriggered) && (signal === 'SIGTERM' || signal === 'SIGKILL');
       const canceled = !timedOut && signal === 'SIGTERM';
       finalize({
         reviewer,
