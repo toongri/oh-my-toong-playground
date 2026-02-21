@@ -180,7 +180,7 @@
 | V2 | PASS | SKILL.md Step 3: "Chunking heuristic: group files sharing a directory prefix or import relationships" |
 | V3 | PASS | SKILL.md Step 4 Dispatch rules: "Multiple chunks -> Parallel dispatch" — 각 chunk에 chunk-reviewer agent 병렬 dispatch |
 | V4 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" + "Interpolate placeholders" — 템플릿 기반 dispatch 명시. chunk-reviewer-prompt.md 파일 존재 확인 |
-| V5 | PASS | SKILL.md Step 4 Dispatch rules: "all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST}" |
+| V5 | PASS | SKILL.md Step 4 Dispatch rules: "all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST}" |
 
 ---
 
@@ -190,7 +190,7 @@
 |----|--------|----------|
 | V1 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `skills/code-review/chunk-reviewer-prompt.md`에 존재 |
 | V2 | PASS | SKILL.md Step 4: "{WHAT_WAS_IMPLEMENTED} <- Step 0 description" + template 라인 6: "Review {WHAT_WAS_IMPLEMENTED}" |
-| V3 | PASS | SKILL.md Step 4: {DIFF} <- Step 1, {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
+| V3 | PASS | SKILL.md Step 4: {DIFF_COMMAND} <- Step 4 (constructed from range + chunk file list), {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
 | V4 | PASS | SKILL.md Step 4: "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
 
 ---
@@ -344,7 +344,7 @@
 | V3 | PASS | SKILL.md Step 3 동일: Chunk B도 동일한 path filter 방식 적용 |
 | V4 | PASS | SKILL.md Step 3: "Do NOT parse a full diff output to extract per-file sections." — 전체 diff 파싱 금지 명시 |
 | V5 | PASS | SKILL.md Step 3 테이블: "Changed files <= 15 → Single review — `git diff {range}` for full diff" — 단일 chunk 시 path filter 없이 전체 diff |
-| V6 | PASS | SKILL.md Step 4: "{DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)" — chunk별 diff가 {DIFF} 플레이스홀더에 인터폴레이션 |
+| V6 | PASS | SKILL.md Step 4: "{DIFF_COMMAND} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)" — chunk별 diff가 {DIFF_COMMAND} 플레이스홀더에 인터폴레이션 |
 
 ---
 
