@@ -245,6 +245,11 @@ function buildAugmentedCommand(reviewer, cliType) {
     }
   }
 
+  // nested session guard
+  if (cliType === 'claude') {
+    env.CLAUDECODE = '';
+  }
+
   // effort_level
   if (reviewer.effort_level) {
     if (cliType === 'claude') {
