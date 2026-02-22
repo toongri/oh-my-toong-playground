@@ -523,3 +523,102 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 > - CH-1~CH-12 PENDING 섹션 추가 (60 VPs): Chairman multi-model aggregation scenarios
 > - CR-19 V1 evidence 현행화: "Changed files > 15" → "Total changed lines >= 1500 OR changed files >= 30" (SKILL.md Step 3 hybrid threshold 반영)
 > - 전체 결과 카운트 갱신: "88/88 VP PASS (18/18 시나리오) + CR-20~CR-24 (37 VPs), CH-1~CH-12 (60 VPs) PENDING"
+
+## Severity Rubric GREEN Phase — P0-P3 Classification Tests
+
+**테스트 일시**: 2026-02-23
+**테스트 방법**: Subagent 기반 GREEN 테스트 — reviewer.md/SKILL.md 프롬프트를 주입한 subagent가 mock 시나리오를 리뷰하여 P-level 분류 검증
+**검증 대상**: `skills/code-review/prompts/reviewer.md` (worker rubric), `skills/code-review/SKILL.md` (orchestrator adjudication/merge gate)
+
+**변경 사항**: P1 정의를 "demonstrable defect under today's realistic conditions"로 좁히고, P2를 3개 서브카테고리(a/b/c)로 확장. Worker "propose" → Orchestrator "adjudicate" 역할 분리. P1 soft block merge gate 추가.
+
+| Scenario | Verdict | VPs | Notes |
+|----------|---------|-----|-------|
+| SEV-1 (Session A) | PASS | 5 | Missing index, 50K rows, p99 > SLA → P1 (demonstrable defect under today's conditions) |
+| SEV-1 (Session B) | PASS | 5 | Missing index, 1K rows, <50ms → P2(b) (no defect today, predictable future failure) |
+| SEV-2 | PASS | 3 | Deprecated ES client, works on 8.x → P2(b) (no bug today, predictable failure at ES 9.0) |
+| SEV-3 | PASS | 4 | Currency no validation, weekly tickets → P1 (demonstrable defect, realistic trigger) |
+| SEV-4 | PASS | 4 | Generic exception catch, all current IOExceptions → P2(c) (no bug, maintainability) |
+| SEV-5 | PASS | 3 | Token no expiry → P1 not P0 (security degradation, not breach; requires leaked token) |
+| SEV-6 | PASS | 4 | Worker disagreement P1/P2, 500K rows 2.5s → adjudicated P1 (decision gate: defect manifests today) |
+| SEV-7 | PENDING | 4 | Merge gate P1 soft block override — 분석적 검증 대기 |
+| SEV-8 | PENDING | 3 | Worker "propose" language — 분석적 검증 대기 |
+
+### 시나리오별 VP 검증
+
+#### SEV-1: P1 vs P2(b) Boundary — Missing Index
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | Session A: subagent가 P1으로 propose. "demonstrable performance defect under today's conditions — p99 already above SLA" |
+| V2 | PASS | Session B: subagent가 P2(b)로 propose. "no defect today — <50ms is fine — but predictable failure as data grows" |
+| V3 | PASS | 양쪽 모두 6-field format 사용 |
+| V4 | PASS | Session A Probability: "Every search request triggers this path with the current dataset" 취지 |
+| V5 | PASS | Session B Probability: "No defect under today's conditions. Projected failure under realistic growth trajectory" 취지 |
+
+---
+
+#### SEV-2: P2(b) — Deprecated ES Client
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P2(b)로 propose. "no bug today, but predictable failure when ES 9.0 upgrade occurs" |
+| V2 | PASS | Impact: "works correctly with ES 8.x cluster" |
+| V3 | PASS | "NOT P1 because there is no demonstrable defect in the current code — the API works correctly today" |
+
+---
+
+#### SEV-3: P1 — Current Defect with Realistic Trigger
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P1으로 propose |
+| V2 | PASS | Problem: "currency field accepts any arbitrary string without validation" |
+| V3 | PASS | Probability: "confirmed by weekly support tickets" — 현재 realistic conditions에서 발현 |
+| V4 | PASS | 6-field format 완전 준수 |
+
+---
+
+#### SEV-4: P2(c) — No Bug, Maintainability
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P2(c)로 propose. "no bug, significant maintainability improvement" |
+| V2 | PASS | Impact: "No current failure. All current exceptions are retryable IOException" |
+| V3 | PASS | Maintainability: "narrowing catch scope makes retry behavior explicit and prevents future debugging confusion" |
+| V4 | PASS | "NOT P1 because P1 requires a demonstrable defect — all caught exceptions are in fact retryable" |
+
+---
+
+#### SEV-5: P0/P1 Boundary — Token Without Expiry
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P1으로 propose (P0가 아님) |
+| V2 | PASS | "NOT P0 because impact is security degradation, not immediate breach; exploitation requires leaked token" |
+| V3 | PASS | "P1 because: demonstrable defect (expiry not implemented), realistic trigger (token leakage vectors exist today)" |
+
+---
+
+#### SEV-6: Orchestrator Adjudication — Worker Disagreement
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | Orchestrator가 P1/P2 decision gate 적용: "Is there a demonstrable defect that manifests under today's conditions? YES" |
+| V2 | PASS | 최종 adjudicated P-level = P1. "2.5s vs 1s SLA at current 500K rows — demonstrable performance defect" |
+| V3 | PASS | Review Consensus: "Worker A ACCEPTED, Worker B REJECTED, Worker C REJECTED" with per-worker reasoning |
+| V4 | PASS | Worker B/C 기각 이유: "internal/non-critical describes project context but doesn't override a demonstrable defect manifesting today" |
+
+---
+
+#### SEV-7: Merge Gate P1 Soft Block (PENDING)
+#### SEV-8: Worker "propose" Language (PENDING)
+
+---
+
+**결과 요약**: 7/8 시나리오 PASS (SEV-1~SEV-6 subagent 기반 검증 완료), 2 PENDING (SEV-7, SEV-8 분석적 검증 대기)
+
+> **변경 이력 (2026-02-23):**
+> - P0-P3 rubric 재정의 (P1 좁히기, P2 확장) 후 GREEN 테스트 추가
+> - SEV-1~SEV-6: subagent 기반 실제 입력 테스트 — 전체 PASS
+> - SEV-7, SEV-8: PENDING (분석적 검증)
