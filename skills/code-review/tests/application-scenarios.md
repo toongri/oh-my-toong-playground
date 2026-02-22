@@ -451,3 +451,37 @@
 **Pass/Fail Criteria**:
 - **PASS**: V1-V10 모두 충족. Flat directory 구조에서 directory grouping이 불충분할 때 alphabetical file-batch grouping으로 정상 폴백하며, orchestrator context에 raw diff가 로드되지 않음
 - **FAIL (어느 하나라도)**: 전체 `src/`를 단일 chunk으로 dispatch (cap 무시), 임의 순서로 파일 분할 (비결정적), flat structure에서 subdirectory split을 반복 시도하여 무한 루프, 또는 orchestrator가 raw diff를 context에 로드
+
+---
+
+### CR-23: Result Scope Validation — Symbol-Level Header Matching
+
+**Input**: Step 5 시작 시점. chunk-reviewer agent가 symbol-level Chunk Analysis를 반환한 상태. Chunk FILE_LIST: `PaymentService.kt`, `OrderService.kt`, `config/payment.yaml`. chunk-reviewer 출력에 `PaymentService.kt:processPayment (modified)`, `PaymentService.kt:refund (added)`, `OrderService.kt:createOrder (modified)`, `config/payment.yaml (modified)` 포함. 추가로 `ExternalGateway.kt:charge (modified)` 항목이 잘못 포함됨 (FILE_LIST에 없는 파일).
+
+**Primary Technique**: Step 5 Result Scope Validation — Chunk Analysis entry header를 chunk FILE_LIST 대비 검증, `:symbol` suffix와 status tag를 무시하고 파일명만 매칭
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | `PaymentService.kt:processPayment (modified)` → `:processPayment` suffix와 `(modified)` tag 제거 후 `PaymentService.kt`가 FILE_LIST에 존재 → 매칭 성공 |
+| V2 | `PaymentService.kt:refund (added)` → 동일 파일의 다른 symbol도 매칭 성공 (같은 파일의 복수 symbol 허용) |
+| V3 | `config/payment.yaml (modified)` → file-level entry는 직접 매칭 (symbol suffix 없음) |
+| V4 | `ExternalGateway.kt:charge (modified)` → `ExternalGateway.kt`가 FILE_LIST에 없음 → scope violation 감지 |
+| V5 | Scope violation 감지 시 해당 chunk를 re-dispatch (동일 interpolated prompt 재사용) |
+
+---
+
+### CR-24: Change Identification — Symbol Fallback + Status Tag Constraint
+
+**Input**: 단일 chunk 리뷰. Diff에 4개 파일 포함: (a) `UserService.kt` — 명확한 함수 경계 (`registerUser` 수정, `deleteUser` 삭제), (b) `deploy.sh` — shell script (비코드 파일), (c) `build.gradle.kts` — Gradle 빌드 설정 파일, (d) `utils.min.js` — minified JS 파일 (symbol 경계 식별 불가).
+
+**Primary Technique**: Step 1 Change Identification — granularity 규칙 (코드 파일 `filename:symbol`, 비코드 파일 `filename`, symbol 식별 불가 시 filename fallback) + status tag 제약 (exactly `added`, `modified`, `deleted`)
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | `UserService.kt`는 symbol-level: `UserService.kt:registerUser (modified)`, `UserService.kt:deleteUser (deleted)` — 코드 파일 + 명확한 symbol 경계 |
+| V2 | `deploy.sh`는 file-level: `deploy.sh (modified)` — 비코드 파일 규칙 적용 (shell script) |
+| V3 | `build.gradle.kts`는 file-level: `build.gradle.kts (modified)` — 비코드 파일 규칙 적용 (config/build file) |
+| V4 | `utils.min.js`는 file-level fallback: `utils.min.js (modified)` — 코드 파일이지만 symbol 식별 불가 시 filename fallback |
+| V5 | 모든 entry의 status tag가 정확히 `added`, `modified`, `deleted` 중 하나 — `renamed`, `moved`, `updated` 등 사용 안 함 |
