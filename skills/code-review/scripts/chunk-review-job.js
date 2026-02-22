@@ -781,6 +781,9 @@ function parseChunkReviewConfig(configPath) {
   return merged;
 }
 
+// Limitations: Flat key-value pairs only. Does not support nested objects,
+// multi-line strings, YAML arrays, anchors, flow mappings, or block scalars.
+// Install the 'yaml' package for full YAML support.
 function parseYamlSimple(configPath, fallback) {
   try {
     const content = fs.readFileSync(configPath, 'utf8');
@@ -806,17 +809,17 @@ function parseYamlSimple(configPath, fallback) {
       }
 
       if (currentReviewer && currentSection === 'reviewers') {
-        const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
+        const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
         if (match) {
-          currentReviewer[match[1]] = match[2];
+          currentReviewer[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim();
         }
         continue;
       }
 
       if (currentSection === 'chairman' || currentSection === 'settings') {
-        const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
+        const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
         if (match) {
-          let value = match[2];
+          let value = match[2].replace(/^"(.*)"$/, '$1').trim();
           if (value === 'true') value = true;
           else if (value === 'false') value = false;
           else if (/^\d+$/.test(value)) value = parseInt(value, 10);
