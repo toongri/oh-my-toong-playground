@@ -215,19 +215,19 @@
 
 ---
 
-### CH-12: Chunk Analysis Merge — Richest Per-File Analysis Selected
+### CH-12: Chunk Analysis Merge — Most Detailed Entry Selected by Word Count
 
-**Description**: When multiple models produce per-file Chunk Analysis, the richest analysis for each file is selected across models. Richest = most fields populated (Role, Changes, Data Flow, Design Decisions, Side Effects); tiebreak by word count.
+**Description**: When multiple models produce change-unit-scoped Chunk Analysis (What Changed entries), the most detailed entry for each change-unit is selected across models. Selection criterion = highest word count in the What Changed field.
 
-**Setup/Given**: Three models produce Chunk Analysis for the same 5-file chunk. For `PaymentService.java`: Claude provides 3-line analysis, Gemini provides 8-line analysis with data flow details, Codex provides 5-line analysis. For `OrderController.java`: Claude provides 7-line analysis, Gemini provides 2-line analysis, Codex provides 4-line analysis.
+**Setup/Given**: Three models produce Chunk Analysis for the same 5-file chunk. For `PaymentService#processPayment`: Claude provides a 15-word What Changed entry, Gemini provides a 40-word entry with behavioral detail, Codex provides a 25-word entry. For `OrderController#createOrder`: Claude provides a 35-word entry, Gemini provides a 10-word entry, Codex provides a 20-word entry.
 
-**Expected Behavior/Then**: The Chairman selects the richest per-file analysis across models. `PaymentService.java` uses Gemini's 8-line analysis. `OrderController.java` uses Claude's 7-line analysis.
+**Expected Behavior/Then**: The Chairman selects the most detailed What Changed entry per change-unit across models. `PaymentService#processPayment` uses Gemini's 40-word entry. `OrderController#createOrder` uses Claude's 35-word entry.
 
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Per-file analysis selection is file-by-file, not all-from-one-model |
-| V2 | Richest analysis selected for each file (richest = most fields populated; tiebreak by word count) |
-| V3 | Selected analysis attributed to its source model |
-| V4 | No analysis content merged/blended across models for the same file — selection is atomic per file |
-| V5 | All files in the chunk have an analysis entry in the final output |
+| V1 | Per-entry selection is entry-by-entry (per change-unit), not all-from-one-model |
+| V2 | Most detailed entry selected for each change-unit (criterion = highest word count in What Changed field) |
+| V3 | Selected entry attributed to its source model |
+| V4 | No entry content merged/blended across models for the same change-unit — selection is atomic per entry |
+| V5 | All change-units in the chunk have an entry in the final output |

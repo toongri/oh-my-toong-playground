@@ -145,8 +145,8 @@
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | chunk-reviewer agent 출력에 Chunk Analysis 섹션 존재 (파일별 변경 분석) |
-| V2 | Orchestrator가 Chunk Analysis + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반으로 Walkthrough 직접 생성 |
+| V1 | chunk-reviewer agent 출력에 Chunk Analysis 섹션 존재 (per-symbol/per-file What Changed entries) |
+| V2 | Orchestrator가 What Changed entries + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반으로 Walkthrough 직접 생성 |
 | V3 | Walkthrough에 변경 요약, 핵심 로직 분석 포함 |
 | V4 | 구조적 변경이 있으면 아키텍처 다이어그램(Mermaid) 포함, 없으면 "구조적 변경 없음" |
 | V5 | 호출 흐름 변경이 있으면 시퀀스 다이어그램(Mermaid) 포함, 없으면 "호출 흐름 변경 없음" |
@@ -163,8 +163,8 @@
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | 4개 chunk의 Chunk Analysis가 모두 수집됨 |
-| V2 | Orchestrator가 4개 Chunk Analysis를 모듈/기능 단위로 재구성하여 통합 핵심 로직 분석 생성 |
+| V1 | 4개 chunk의 What Changed entries가 모두 수집됨 |
+| V2 | Orchestrator가 4개 chunk의 What Changed entries를 모듈/기능 단위로 재구성하여 통합 핵심 로직 분석 생성 |
 | V3 | 아키텍처 다이어그램이 모든 chunk의 구조적 변경을 통합하여 단일 다이어그램으로 생성 |
 | V4 | 시퀀스 다이어그램이 chunk 간 호출 관계를 포함하여 생성 |
 | V5 | Phase 2 critique 합성이 기존 로직대로 수행 (merge, dedup, cross-file, severity, verdict) |
@@ -235,8 +235,8 @@
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | Chunk analysis gap이 explore dispatch를 trigger (trigger condition matched) |
-| V2 | Explore prompt [CONTEXT] 필드가 specific chunk analysis findings를 참조 |
+| V1 | What Changed entries의 gap이 explore dispatch를 trigger (trigger condition matched) |
+| V2 | Explore prompt [CONTEXT] 필드가 specific What Changed entries findings를 참조 |
 | V3 | Explore prompt [DOWNSTREAM]이 "walkthrough synthesis enrichment" 용도 명시 (chunk-reviewer 보정이 아님) |
 | V4 | Explore prompt [REQUEST]가 identified gap 기반 targeted search 포함 |
 | V5 | Trivial diff (단순 rename, typo fix 등)는 explore dispatch를 trigger하지 않음 (no-dispatch condition matched) |
