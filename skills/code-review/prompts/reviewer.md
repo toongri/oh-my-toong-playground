@@ -14,16 +14,21 @@ Before starting any analysis, locate the `## Diff Command` section in the review
 - If the command fails or returns empty output, report the failure and stop. Do NOT fabricate or guess the diff.
 - Do NOT review code that is not part of the diff output.
 
-### Step 1: Intent Analysis
+### Step 1: Change Identification
 
-For each file in the diff, determine:
-- **Role**: What this file does in the system
-- **Changes**: What specifically changed and why
-- **Data Flow**: How data flows through the changed code
-- **Design Decisions**: Key design decisions made in this file
-- **Side Effects**: Side effects, implicit behaviors, or things callers should know
+For each change unit in the diff, determine:
+- **What Changed**: Describe what changed.
 
-Cover ALL files -- core changes AND supporting/peripheral changes. Produce enough detail for someone to understand the change WITHOUT reading the code.
+Only describe what is directly visible in the diff output. Do not infer the behavior of unchanged code.
+
+**Granularity:**
+- Code files: use `<filename>:<symbol>` (function, class, method) as the change unit.
+- Non-code files (config, markdown, shell, yaml, SQL, Dockerfile): use `<filename>` as the change unit.
+- If no enclosing symbol is identifiable from the diff context, use the filename as the unit.
+
+**Status tags:** Each entry is tagged exactly one of: `added`, `modified`, `deleted`.
+
+Cover ALL change units -- core changes AND supporting/peripheral changes.
 
 Step 1 output becomes the Chunk Analysis section of your final output.
 
@@ -113,15 +118,11 @@ Produce your review in exactly this structure:
 ```
 ### Chunk Analysis
 
-#### `<filename>`
-- **Role**: [what this file does in the system]
-- **Changes**: [what changed and why]
-- **Data Flow**: [data flow through changed code]
-- **Design Decisions**: [key design decisions]
-- **Side Effects**: [side effects, implicit behaviors]
+#### <filename>:<symbol> (<added|modified|deleted>)
+- **What Changed**: [description]
 
-#### `<filename>`
-...
+#### <filename> (<added|modified|deleted>)
+- **What Changed**: [description]
 
 ### Strengths
 [What's well done? Be specific with file:line references.]
@@ -290,7 +291,7 @@ If an issue exists in unchanged context lines (not in added/modified lines of th
 
 When reviewing a chunk (subset of a larger diff):
 
-1. **Produce chunk-scoped analysis** -- Chunk Analysis covers ONLY the files in your assigned chunk. Do not speculate about files outside your chunk.
+1. **Produce chunk-scoped analysis** -- Chunk Analysis covers ONLY the entries in your assigned chunk, per-entry. Do not speculate about files outside your chunk.
 2. **Focus on your chunk** -- review thoroughly within your assigned files.
 3. **Flag cross-file suspicions** -- if you see patterns that might conflict with files outside your chunk (e.g., interface changes, shared state mutations, inconsistent error conventions), note them under the `#### Cross-File Concerns` subsection within Issues.
 
@@ -319,19 +320,14 @@ If CLAUDE.md content is provided, verify the diff adheres to its conventions. Fl
 ```
 ### Chunk Analysis
 
-#### `UserService.kt`
-- **Role**: Domain service for user registration and profile management
-- **Changes**: Added email verification flow -- generates token on registration, validates on confirmation endpoint
-- **Data Flow**: Registration request -> generate verification token -> persist user (UNVERIFIED) + token -> send verification email. Confirmation: token lookup -> mark user VERIFIED -> delete token.
-- **Design Decisions**: Token stored in separate `verification_tokens` table rather than on user entity -- clean separation, tokens are transient
-- **Side Effects**: Email sent synchronously inside `@Transactional` -- holds DB connection during SMTP call
+#### UserService.kt:registerUser (modified)
+- **What Changed**: Added email verification flow -- generates token on registration, persists user as UNVERIFIED, sends verification email synchronously inside `@Transactional`
 
-#### `UserController.kt`
-- **Role**: REST API layer for user operations
-- **Changes**: Added `POST /verify-email` endpoint accepting token as query parameter
-- **Data Flow**: Token from query param -> UserService.verifyEmail() -> 200 OK or 404
-- **Design Decisions**: Token in query param rather than path variable -- acceptable for one-time-use tokens
-- **Side Effects**: No rate limiting on verification endpoint
+#### UserService.kt:verifyEmail (added)
+- **What Changed**: New method that looks up verification token, marks user as VERIFIED, and deletes the consumed token
+
+#### UserController.kt:verifyEmail (added)
+- **What Changed**: New `POST /verify-email` endpoint accepting token as query parameter, delegates to `UserService.verifyEmail()`
 
 ### Strengths
 - Clean token lifecycle: generated, used once, deleted -- no stale token accumulation (UserService.kt:45-62)
