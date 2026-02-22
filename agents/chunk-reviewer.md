@@ -90,7 +90,11 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 
 ```
 ### Chunk Analysis
-[Merged per-entry analysis -- match by filename:symbol across models; file-level entries match any symbol entry for that file]
+[Merged per-entry analysis -- match by filename:symbol across models.
+Symbol-level entries match when both file AND symbol name are identical.
+File-level entries match any symbol entry for the same file.
+When one model uses file-level and another uses symbol-level for the same file,
+list each model's entries separately under the file header without merging.]
 
 ### Strengths
 [Union of all models' strength observations, deduplicated]

@@ -125,6 +125,11 @@
 | CR-17 | PASS | chunk-reviewer agent Chunk Review Mode에 Cross-File Concerns subsection 정의 |
 | CR-18 | PASS | Step 1 PR Mode Local Ref Setup — git fetch 기반, NO checkout, three-dot range 정의 |
 | CR-19 | PASS | Step 3 Per-Chunk Diff Acquisition — path filter 기반 chunk별 diff 획득 정의 |
+| CR-20 | PENDING | Delegation Enforcement — {DIFF_COMMAND} Handoff (8 VPs) — 검증 대기 |
+| CR-21 | PENDING | Chunking Threshold Behavior — Size-Based Routing (9 VPs) — 검증 대기 |
+| CR-22 | PENDING | Flat Directory Fallback — File-Batch Grouping (10 VPs) — 검증 대기 |
+| CR-23 | PENDING | Result Scope Validation — Symbol-Level Header Matching (5 VPs) — 검증 대기 |
+| CR-24 | PENDING | Change Identification — Symbol Fallback + Status Tag Constraint (5 VPs) — 검증 대기 |
 
 ### 시나리오별 VP 검증
 
@@ -339,7 +344,7 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 3: "Changed files > 15 → Group into chunks of ~10-15 files by directory/module affinity" — 25개 > 15 → chunking 적용 |
+| V1 | PASS | SKILL.md Step 3: "Total changed lines >= 1500 OR changed files >= 30 → Group into chunks by directory/module affinity" — 2000줄 >= 1500 → chunking 적용 |
 | V2 | PASS | SKILL.md Step 3 Per-Chunk Diff Acquisition: "`git diff {range} -- <file1> <file2> ... <fileN>`" + "This produces a diff containing ONLY the files in that chunk" — Chunk A path filter 사용 |
 | V3 | PASS | SKILL.md Step 3 동일: Chunk B도 동일한 path filter 방식 적용 |
 | V4 | PASS | SKILL.md Step 3: "Do NOT parse a full diff output to extract per-file sections." — 전체 diff 파싱 금지 명시 |
@@ -348,7 +353,101 @@
 
 ---
 
-**전체 결과**: 88/88 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED) — subagent 기반 검증 완료
+#### CR-20: Delegation Enforcement — {DIFF_COMMAND} Handoff (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+| V6 | PENDING | 검증 대기 |
+| V7 | PENDING | 검증 대기 |
+| V8 | PENDING | 검증 대기 |
+
+---
+
+#### CR-21: Chunking Threshold Behavior — Size-Based Routing (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+| V6 | PENDING | 검증 대기 |
+| V7 | PENDING | 검증 대기 |
+| V8 | PENDING | 검증 대기 |
+| V9 | PENDING | 검증 대기 |
+
+---
+
+#### CR-22: Flat Directory Fallback — File-Batch Grouping (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+| V6 | PENDING | 검증 대기 |
+| V7 | PENDING | 검증 대기 |
+| V8 | PENDING | 검증 대기 |
+| V9 | PENDING | 검증 대기 |
+| V10 | PENDING | 검증 대기 |
+
+---
+
+#### CR-23: Result Scope Validation — Symbol-Level Header Matching (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+
+---
+
+#### CR-24: Change Identification — Symbol Fallback + Status Tag Constraint (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+
+---
+
+### Chairman Scenarios (CH-1 ~ CH-12) — PENDING
+
+**테스트 대상**: `agents/chunk-reviewer.md` (Chairman workflow + aggregation rules)
+**상태**: 전체 PENDING — 검증 미수행
+
+| Scenario | Verdict | VPs | Notes |
+|----------|---------|-----|-------|
+| CH-1 | PENDING | 5 | Full Agreement (3/3 Agree) — 검증 대기 |
+| CH-2 | PENDING | 5 | Partial Agreement (2/3 Agree) — 검증 대기 |
+| CH-3 | PENDING | 5 | Unique Finding (1/3) — 검증 대기 |
+| CH-4 | PENDING | 5 | P0 Severity Pass-through — 검증 대기 |
+| CH-5 | PENDING | 5 | Degradation 2/3 — One Model Fails — 검증 대기 |
+| CH-6 | PENDING | 5 | Degradation 1/3 — Two Models Fail — 검증 대기 |
+| CH-7 | PENDING | 5 | Degradation 0/3 — All Models Fail — 검증 대기 |
+| CH-8 | PENDING | 5 | Reviewer Count Independence — 검증 대기 |
+| CH-9 | PENDING | 5 | Verdict Disagreement — Per-Model Verdict Pass-through — 검증 대기 |
+| CH-10 | PENDING | 5 | Large Chunk Prompt Size — Context Window Safety — 검증 대기 |
+| CH-11 | PENDING | 5 | Chairman Boundaries — No Own Opinions — 검증 대기 |
+| CH-12 | PENDING | 5 | Chunk Analysis Merge — Most Detailed Entry Selected by Word Count — 검증 대기 |
+
+---
+
+**전체 결과**: 88/88 VP PASS (18/18 시나리오) + CR-20~CR-24 (37 VPs), CH-1~CH-12 (60 VPs) PENDING — CR-16 REMOVED
 
 > **변경 이력 (2026-02-19):**
 > - Oracle trigger conditions: glob 패턴 → semantic 기반으로 전면 재작성 (prometheus/spec과 패러다임 통일)
@@ -416,3 +515,11 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 | CR-8 | PASS | Early Exit가 Step 1 이후에 위치하여 diff 명령 참조가 논리적으로 올바름. V1-V4 모두 여전히 PASS |
 
 **결론**: REFACTOR로 1건의 논리적 순서 이슈 해결. 기능적 변경 없음, 모든 VP 유지.
+
+---
+
+> **변경 이력 (2026-02-23):**
+> - CR-20~CR-24 PENDING 마커 추가 (37 VPs): Delegation Enforcement, Chunking Threshold, Flat Directory Fallback, Result Scope Validation, Change Identification
+> - CH-1~CH-12 PENDING 섹션 추가 (60 VPs): Chairman multi-model aggregation scenarios
+> - CR-19 V1 evidence 현행화: "Changed files > 15" → "Total changed lines >= 1500 OR changed files >= 30" (SKILL.md Step 3 hybrid threshold 반영)
+> - 전체 결과 카운트 갱신: "88/88 VP PASS (18/18 시나리오) + CR-20~CR-24 (37 VPs), CH-1~CH-12 (60 VPs) PENDING"
