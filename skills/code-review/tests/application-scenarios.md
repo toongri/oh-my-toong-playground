@@ -115,7 +115,7 @@
 | V1 | 모든 chunk 리뷰 결과의 Strengths/Issues/Recommendations 병합 |
 | V2 | 중복 이슈 제거 |
 | V3 | Cross-file concerns 식별 |
-| V4 | severity 분류 (Critical/Important/Minor) |
+| V4 | severity 분류 (**P0**/**P1**/**P2**/**P3**) |
 | V5 | 최종 verdict는 가장 엄격한 chunk verdict 적용 (any "No" = overall "No") |
 
 ---
