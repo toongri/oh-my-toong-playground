@@ -132,11 +132,33 @@ Rule: Every question must include a default action in parentheses. Ensure progre
 **One Question Per Message:**
 One question at a time. Proceed to the next question only after receiving an answer. Never bundle multiple questions in a single message.
 
+**Project Profile Collection:**
+
+Collect project characteristics to calibrate severity assessment (especially probability axis). The profile captures facts about this specific project, not a category or type.
+
+Collection steps (in order):
+1. **Auto-extract from project files**: Read CLAUDE.md, README.md, and other instruction files in the repo root. Extract any statements about intended audience, deployment target, or operational requirements.
+2. **Infer from infrastructure files**: Check for existence of `.github/workflows/`, `Jenkinsfile`, `.gitlab-ci.yml`, `Dockerfile`, `docker-compose.yml`, `k8s/`, `terraform/`, deployment scripts. Their presence (or absence) reveals execution environment and operational maturity.
+3. **Ask user only if insufficient**: If steps 1-2 leave characteristics ambiguous, ask the user. Follow Context Brokering rule — only ask about intent and audience, never about codebase facts.
+
+Characteristics to collect:
+
+| Characteristic | Question | Examples |
+|----------------|----------|----------|
+| User scope | Who uses this software? | Self-only / team-internal / external users |
+| Input trust | Where do inputs come from? Are they trusted? | Self-generated / internal users / external untrusted |
+| Execution environment | Where does it run? | Local CLI / internal server / public-facing |
+| Availability requirement | What is the blast radius of downtime? | None (restart OK) / inconvenience / SLA violation |
+| Automation dependency | Do other systems depend on this? | Standalone / CI-integrated / depended on by other services |
+
+Compose collected characteristics into {PROJECT_PROFILE} for interpolation into the chunk-reviewer prompt template in Step 4.
+
 **Step 0 Exit Condition:**
 Proceed to Step 1 when any of the following are met:
 - Requirements captured (PR description, user input, or spec reference)
 - User explicitly deferred ("skip", "없어", "그냥 리뷰해줘")
 - 2-strike vague limit reached → proceed with code-quality-only review
+- Project profile collected (auto-detected or user-confirmed)
 
 **Context Brokering:**
 - DO NOT ask user about codebase facts (file locations, patterns, architecture)
@@ -186,6 +208,7 @@ Collect in parallel (using `{range}` from Step 1):
 2. `git diff {range} --name-only` (file list)
 3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
+5. {PROJECT_PROFILE} from Step 0 (project characteristics for severity calibration)
 
 ## Step 3: Chunking Decision
 
