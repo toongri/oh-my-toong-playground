@@ -525,36 +525,71 @@ Overall structure:
 **Do NOT invoke metis during interview phase or upon receiving the initial request.**
 
 **Metis Consultation Flow:**
-1. Summarize the planning session (user goal, interview findings, research results)
-2. Invoke metis to identify: missed questions, missing guardrails, scope creep risks, unvalidated assumptions, missing acceptance criteria, unaddressed edge cases
-3. Receive Metis verdict (APPROVE / REQUEST_CHANGES / COMMENT)
-4. Act on verdict per the table below
-5. **Repeat until APPROVE**
+1. Invoke metis with the 5-Section Invocation Template below
+2. Receive Metis verdict (APPROVE / REQUEST_CHANGES / COMMENT)
+3. Act on verdict per the table below
+4. **Repeat until APPROVE**
+
+**Metis Invocation Template (5-Section):**
+
+Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use the same structure with updated content — metis is stateless and reviews each submission independently. If a previous finding was reviewed but a different decision was made due to tradeoffs or constraints, reflect the decision and rationale in the relevant section (Key Decisions, Scope, or AC).
+
+```markdown
+## 1. USER GOAL
+- **Original Request**: [User's original request — verbatim or faithful paraphrase]
+- **Core Objective**: [Distilled core objective from interview]
+
+## 2. INTERVIEW FINDINGS
+### Key Decisions
+| Topic | Decision | Rationale |
+|-------|----------|-----------|
+| [Decision topic] | [User's choice] | [Rationale — preference, codebase constraint, best practice] |
+
+### User Deferrals
+| Topic | Autonomous Decision | Basis |
+|-------|-------------------|-------|
+| [Deferred topic] | [Selected approach] | [Codebase pattern / industry practice] |
+
+(If no deferrals, write "None")
+
+## 3. RESEARCH FINDINGS
+### Codebase (explore)
+- [Finding]: [Impact on planning]
+
+### External (librarian)
+- [Documentation / best practice]: [Impact on approach]
+
+### Oracle (if consulted)
+- [Feasibility / risk analysis result]: [Implication]
+
+(If agent not dispatched, write "Not dispatched")
+
+## 4. SCOPE & TECHNICAL APPROACH
+- **IN Scope**: [What will be built]
+- **OUT of Scope**: [What is excluded]
+- **Technical Approach**: [Decided approach]
+- **Approach Validation**: [Validation basis]
+
+## 5. ACCEPTANCE CRITERIA
+[Confirmed AC in full — paste verbatim. No summarizing.]
+```
+
+**Invocation Anti-Patterns:**
+
+| Anti-Pattern | Example | Problem |
+|-------------|---------|---------|
+| Summarized AC | "Logout feature AC" without full criteria | Metis cannot evaluate AC quality |
+| Omitted deferrals | User Deferrals section missing | Unvalidated assumptions undetectable |
+| Vague research | "Codebase explored" without specifics | Cannot judge if findings incorporated |
+| Abstract scope | "Build the feature" without IN/OUT | Scope creep risk unanalyzable |
 
 **Verdict Handling:**
 
 | Verdict | Action |
 |---------|--------|
-| **APPROVE** | Proceed to plan generation. Gate passed. |
-| **REQUEST_CHANGES** | Return to Interview Mode. Resolve all blocking items with the user. Then re-invoke metis with Re-review Context (see template below). **Loop until APPROVE.** |
-| **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
-
-**Re-review Context Template (MANDATORY on re-invocation):**
-
-When re-invoking metis after REQUEST_CHANGES, include this context so metis can verify resolution:
-
-```markdown
-## Re-review Context
-### Previous Verdict
-- **Verdict**: REQUEST_CHANGES
-- **Key Findings**: [Previous blocking items — paste original findings verbatim]
-### Changes Made
-| Finding | Change | Intent |
-|---------|--------|--------|
-| [Original finding] | [What was changed/resolved] | [Why this resolves the finding] |
-### Current State
-[Updated interview summary reflecting resolved gaps]
-```
+| **APPROVE** | Proceed to presenting results to user. Gate passed. |
+| **REQUEST_CHANGES** | Return to Interview Mode. Resolve blocking items with the user. Re-invoke metis with the same 5-Section template, content updated to reflect resolutions. **Loop until APPROVE.** |
+| **COMMENT** | Incorporate findings into the plan. Proceed to presenting results. |
 
 **Post-Metis Summary** (include in plan under Context section):
 - **Identified Gaps**: What Metis found (across all iterations)
@@ -568,35 +603,36 @@ When re-invoking metis after REQUEST_CHANGES, include this context so metis can 
 
 **Momus Review Flow:**
 1. Generate the plan to `.omt/plans/{name}.md`
-2. Invoke momus with the plan file path
+2. Invoke momus with the plan file path (see Invocation Format below)
 3. Receive Momus verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 4. Act on verdict per the table below
 5. **Repeat until APPROVE**
+
+**Momus Invocation Format:**
+
+Invoke momus with the plan file path only. Momus reads the file and reviews according to its own 4 Criteria. On re-invocation after REQUEST_CHANGES, send the same path — the plan file content is already updated. Momus is stateless and reviews each submission independently. If a finding was considered but intentionally not adopted, document the rationale in the relevant plan section (Work Objectives guardrails, TODO constraints).
+
+```
+.omt/plans/[name].md
+```
+
+All review context (original request, interview summary, metis results) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
+
+**Invocation Anti-Patterns:**
+
+| Anti-Pattern | Example | Problem |
+|-------------|---------|---------|
+| Repeating plan content | Restating plan text in prompt | Momus reads the file directly — token waste |
+| Separate metis results | "Metis found X" in prompt | Already in Plan Context + anchoring risk |
+| Adding review instructions | "Please check AC quality" | Momus has its own 4 Criteria |
 
 **Verdict Handling:**
 
 | Verdict | Action |
 |---------|--------|
 | **APPROVE** | Proceed to handoff. Gate passed. |
-| **REQUEST_CHANGES** | Revise the plan to address all [CERTAIN] findings. Then re-invoke momus with Re-review Context (see template below). **Loop until APPROVE.** |
+| **REQUEST_CHANGES** | Revise the plan to address all [CERTAIN] findings. Re-invoke momus with the same plan file path. **Loop until APPROVE.** |
 | **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Proceed to handoff. |
-
-**Re-review Context Template (MANDATORY on re-invocation):**
-
-When re-invoking momus after REQUEST_CHANGES, include this context so momus can verify resolution:
-
-```markdown
-## Re-review Context
-### Previous Verdict
-- **Verdict**: REQUEST_CHANGES
-- **Key Findings**: [Previous [CERTAIN] findings — paste original findings verbatim]
-### Changes Made
-| Finding | Change | Intent |
-|---------|--------|--------|
-| [Original finding] | [What was changed in the plan] | [Why this resolves the finding] |
-### Current State
-[Updated plan file path or summary of revisions made]
-```
 
 **Post-Momus Summary** (append to plan under Context section):
 - **Findings**: What Momus found (across all iterations)

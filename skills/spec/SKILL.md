@@ -574,7 +574,7 @@ digraph feedback_loop {
     present_feedback [label="Present feedback to user\n(context + recommendation)"];
     user_consensus [label="User reviews & agrees\non changes", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Apply changes\nUpdate design.md\nRecord decisions in records/"];
-    re_delegate [label="Re-delegate to spec-review\n(with Re-review Context)"];
+    re_delegate [label="Re-delegate to spec-review"];
 
     comment [label="COMMENT"];
     share_comment [label="Share COMMENT with user\n(create follow-up if needed)"];
@@ -652,49 +652,6 @@ Review the following design and provide multi-AI advisory feedback.
 
 The spec-review operates in a separate context and returns advisory feedback with a verdict. You must then handle the verdict accordingly and present it to the user.
 
-### Re-review Context (MANDATORY for Re-delegation)
-
-When re-delegating to spec-review after applying REQUEST_CHANGES feedback, the delegation prompt MUST include a Re-review Context section. This provides reviewers with full traceability of what was changed and why.
-
-**Re-review delegation prompt structure:**
-
-```markdown
-Review the following design and provide multi-AI advisory feedback.
-
-## Re-review Context
-
-### Previous Verdict
-- **Verdict**: REQUEST_CHANGES
-- **Key Findings**: [이전 리뷰에서 지적된 blocking concerns 원문]
-
-### Changes Made
-| Finding | Change | Intent |
-|---------|--------|--------|
-| [지적 사항] | [수정 내용] | [수정 의도] |
-
-### Current State
-[수정이 반영된 현재 Area design.md 내용]
-
----
-
-## 1. Current Design Under Review
-[위 Current State와 동일 — 수정 반영된 전체 design.md]
-
-### Key Decisions
-[Key decision points requiring review]
-
-### Questions for Reviewers
-[Specific questions — 특히 이전 지적사항 해소 여부에 대한 질문]
-
-## 2. Previously Finalized Designs (Constraints)
-[Summarize relevant decisions from earlier steps that constrain this design]
-
-## 3. Context
-[Project context, tech stack, constraints]
-```
-
-**Re-review Context omission = VIOLATION.** 리뷰어가 이전 지적사항과 수정 내용을 모르면 effective re-review가 불가능하다.
-
 ### Presenting Feedback to User
 
 After receiving spec-review feedback, YOU must:
@@ -723,15 +680,17 @@ After receiving spec-review feedback, YOU must:
 | Verdict | User Interaction | Next Action |
 |---------|-----------------|-------------|
 | **APPROVE** | "Area 넘어갈까요?" 질문 | User "Area complete" 선언 → 다음 Area |
-| **REQUEST_CHANGES** | Blocking concerns + 수정 제안 제시 | User 합의 → 수정 반영 → Re-review Context 포함하여 spec-review 재호출 |
+| **REQUEST_CHANGES** | Blocking concerns + 수정 제안 제시 | User 합의 → 수정 반영 → spec-review 재호출 |
 | **COMMENT** | Non-blocking 개선 권고 공유 | User 확인 → follow-up 생성 가능 → "Area 넘어갈까요?" 질문 |
 
 **REQUEST_CHANGES Loop:**
 1. Present blocking concerns and recommended changes to user
 2. User reviews and agrees on specific changes (user may modify recommendations)
 3. Apply agreed changes to design.md, record decisions in `records/`
-4. Re-delegate to spec-review with **Re-review Context** (MANDATORY)
+4. Re-delegate to spec-review
 5. Repeat until APPROVE received
+
+> **Note:** If a deliberate trade-off was made against previous review findings, note the decision rationale in `Key Decisions` or `Questions for Reviewers` within the re-delegation prompt. This helps reviewers understand intentional divergences but is not mandatory.
 
 **CRITICAL: spec-review가 pass(APPROVE 또는 COMMENT) 하지 않으면 Area complete 선언 불가.** REQUEST_CHANGES verdict가 반환된 상태에서 유저가 "Area complete"를 선언해도, pass할 때까지 Area를 완료할 수 없다.
 
@@ -891,7 +850,7 @@ digraph area_completion {
     present_feedback [label="Present blocking concerns\nto user with recommendation"];
     user_consensus [label="User agrees on\nchanges to make", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Apply changes\nUpdate design.md\nRecord decisions in records/"];
-    re_review [label="Re-delegate to spec-review\n(Re-review Context MANDATORY)"];
+    re_review [label="Re-delegate to spec-review"];
 
     comment [label="COMMENT"];
     share_comment [label="Share non-blocking\nconcerns with user"];
@@ -929,7 +888,7 @@ digraph area_completion {
 4. **MANDATORY spec-review**: Delegate Area results to spec-review
 5. **Verdict handling**:
    - **APPROVE** → Proceed to step 6
-   - **REQUEST_CHANGES** → Present blocking concerns to user with recommendation → User agrees on changes → Apply changes, update design.md, record decisions in `records/` → Re-delegate to spec-review with **Re-review Context** (MANDATORY) → Return to step 5
+   - **REQUEST_CHANGES** → Present blocking concerns to user with recommendation → User agrees on changes → Apply changes, update design.md, record decisions in `records/` → Re-delegate to spec-review → Return to step 5
    - **COMMENT** → Share non-blocking concerns with user, create follow-up if needed → Proceed to step 6
 6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
