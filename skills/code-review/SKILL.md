@@ -132,33 +132,17 @@ Rule: Every question must include a default action in parentheses. Ensure progre
 **One Question Per Message:**
 One question at a time. Proceed to the next question only after receiving an answer. Never bundle multiple questions in a single message.
 
-**Project Profile Collection:**
+**Project Context:**
 
-Collect project characteristics to calibrate severity assessment (especially probability axis). The profile captures facts about this specific project, not a category or type.
+Include project context when interpolating the chunk-reviewer prompt template in Step 4. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and other available information.
 
-Collection steps (in order):
-1. **Auto-extract from project files**: Read CLAUDE.md, README.md, and other instruction files in the repo root. Extract any statements about intended audience, deployment target, or operational requirements.
-2. **Infer from infrastructure files**: Check for existence of `.github/workflows/`, `Jenkinsfile`, `.gitlab-ci.yml`, `Dockerfile`, `docker-compose.yml`, `k8s/`, `terraform/`, deployment scripts. Their presence (or absence) reveals execution environment and operational maturity.
-3. **Ask user only if insufficient**: If steps 1-2 leave characteristics ambiguous, ask the user. Follow Context Brokering rule — only ask about intent and audience, never about codebase facts.
-
-Characteristics to collect:
-
-| Characteristic | Question | Examples |
-|----------------|----------|----------|
-| User scope | Who uses this software? | Self-only / team-internal / external users |
-| Input trust | Where do inputs come from? Are they trusted? | Self-generated / internal users / external untrusted |
-| Execution environment | Where does it run? | Local CLI / internal server / public-facing |
-| Availability requirement | What is the blast radius of downtime? | None (restart OK) / inconvenience / SLA violation |
-| Automation dependency | Do other systems depend on this? | Standalone / CI-integrated / depended on by other services |
-
-Compose collected characteristics into {PROJECT_PROFILE} for interpolation into the chunk-reviewer prompt template in Step 4.
+If the available context is insufficient to characterize the project, ask the user: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
 
 **Step 0 Exit Condition:**
 Proceed to Step 1 when any of the following are met:
 - Requirements captured (PR description, user input, or spec reference)
 - User explicitly deferred ("skip", "없어", "그냥 리뷰해줘")
 - 2-strike vague limit reached → proceed with code-quality-only review
-- Project profile collected (auto-detected or user-confirmed)
 
 **Context Brokering:**
 - DO NOT ask user about codebase facts (file locations, patterns, architecture)
@@ -208,7 +192,6 @@ Collect in parallel (using `{range}` from Step 1):
 2. `git diff {range} --name-only` (file list)
 3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
-5. {PROJECT_PROFILE} from Step 0 (project characteristics for severity calibration)
 
 ## Step 3: Chunking Decision
 
@@ -244,6 +227,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
+   - {PROJECT_CONTEXT} ← Step 0 project context
    - {FILE_LIST} ← Step 2 file list
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
@@ -372,7 +356,14 @@ For single-chunk reviews, Phase 2 still performs Final Adjudication (severity ad
 | All models agree on P-level | Adopt as-is |
 | Models disagree on P-level | Orchestrator evaluates each model's reasoning against P0-P3 rubric (3-axis: impact delta, probability, maintainability) and assigns final P-level with 1-2 sentence justification |
 
-**Project Profile Check:** When adjudicating probability-driven disagreements, reference the `{PROJECT_PROFILE}` collected in Step 0. AI models default to production-service threat models. If the project profile indicates characteristics that lower probability (e.g., single-user scope, all-trusted input, local execution, no availability requirements), re-evaluate whether the models' probability assessments are realistic for this specific project. A P1 assessed under production-service assumptions may warrant P2 or P3 for a single-user local CLI tool with no untrusted input.
+**Project Context Check:** When adjudicating, reference the project context from the review data. AI models default to production-service threat models — a SQL injection, a missing circuit breaker, or a resource leak are assessed as if the software serves external users under load. For many projects this is correct, but not all.
+
+Before finalizing each P-level, ask: "Is this probability and impact assessment realistic for THIS project?" Examples:
+
+- Shell command injection in a personal CLI tool where all inputs are self-generated → the "attacker" does not exist. P0 under production assumptions; P2-P3 for this project.
+- Missing connection pool timeout in a local dev tool with one user → connection exhaustion requires concurrent load that the usage pattern never produces. P0 under production assumptions; P2 for this project.
+- Flaky test in a project with no CI pipeline → no merge gate depends on it. P1 under team assumptions; P3 for this project.
+- Unbounded query result in an internal admin tool used by 3 people → dataset will never reach problematic size. P1 under growth assumptions; P2-P3 for this project.
 
 **P0 Protection Rule:** If ANY single model assigns P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
 
