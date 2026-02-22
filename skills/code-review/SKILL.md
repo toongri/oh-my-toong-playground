@@ -324,13 +324,45 @@ For multi-chunk reviews:
 
 1. **Merge** all Strengths, Issues, Recommendations sections
 2. **Deduplicate** issues appearing in multiple chunks
-   - When the same issue appears across chunks at different consensus levels, promote to the strongest level (e.g., :orange_circle: in Chunk A + :red_circle: in Chunk B → :red_circle: Confirmed)
+   - When the same issue appears across chunks at different P-levels, promote to the highest P-level (e.g., P1 in Chunk A + P0 in Chunk B → promote to P0)
 3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
-4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
-5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
+4. **Normalize severity labels** across chunks using P0 / P1 / P2 / P3 scale. When the same issue appears in multiple chunks at different P-levels, promote to the highest P-level and note the discrepancy.
+5. **Collect per-model verdicts** from all chunks for Final Adjudication
 6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
-For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment).
+For single-chunk reviews, Phase 2 still performs Final Adjudication (severity adjudication, P0 protection, verdict determination, Out of Scope classification) on the single chunk's results before producing final output.
+
+#### Step 7: Final Severity Adjudication
+
+**Order of operations:** Adjudicate per-model severity within each chunk FIRST. Then normalize across chunks by promoting to the highest adjudicated P-level.
+
+| Condition | Action |
+|-----------|--------|
+| All models agree on P-level | Adopt as-is |
+| Models disagree on P-level | Orchestrator evaluates each model's reasoning against P0-P3 rubric (3-axis: impact delta, probability, maintainability) and assigns final P-level with 1-2 sentence justification |
+
+**P0 Protection Rule:** If ANY single model assigns P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
+
+Under degradation (fewer responding models), P0 protection still applies — a single responding model's P0 is protected if rubric criteria are satisfied.
+
+#### Step 8: Final Verdict Determination
+
+| Condition | Verdict |
+|-----------|---------|
+| P0 issues unresolved | **No** |
+| Only P1 issues unresolved | Orchestrator discretion — **Yes with conditions** possible (justification required) |
+| Only P2/P3 issues | **Yes** |
+
+#### Step 9: Out of Scope Classification
+
+1. Collect issues tagged `[Pre-existing]` by reviewers
+2. Place in `### Out of Scope (Pre-existing Issues)` section
+3. Sort by P-level (P0 > P1 > P2 > P3), then by file path within same level
+4. These do NOT affect merge verdict
+
+**Exception:** If PR aggravates a pre-existing issue (increases blast radius, frequency, or severity), move to main issues section.
+
+**Cross-chunk rule:** If ANY model in ANY chunk flags an issue as non-pre-existing (on a changed line), treat as current issue in main section.
 
 ### Final Output Format
 
@@ -355,7 +387,31 @@ For single-chunk reviews, Phase 2 returns the agent's critique output directly (
 [Generated in Phase 2]
 
 ## Issues
-[Generated in Phase 2]
+
+### P0 (Must Fix)
+[Per-issue with 5-field format + Review Consensus]
+
+### P1 (Should Fix)
+[Per-issue with 5-field format + Review Consensus]
+
+### P2 (Consider Fix)
+[Per-issue with 5-field format + Review Consensus]
+
+### P3 (Optional)
+[Per-issue with 5-field format + Review Consensus]
+
+Per-issue format:
+**[P{X}] {issue title}**
+- **File**: {file}:{line}
+- **Problem**: ...
+- **Impact**: ...
+- **Probability**: ...
+- **Maintainability**: ...
+- **Fix**: ...
+- **Review Consensus**: {N}/3 models identified ({Model A} P{X}, {Model B} P{Y}; adjudicated P{Z} because {reason})
+
+## Out of Scope (Pre-existing Issues)
+[Issues in unchanged context lines, sorted by P-level then file path. Do not affect merge verdict.]
 
 ## Recommendations
 [Generated in Phase 2]
@@ -501,43 +557,111 @@ sequenceDiagram
 
 ## Issues
 
-### Critical (Must Fix)
-1. **`@Transactional` wrapping external HTTP call to Stripe**
-   - File: OrderPaymentController.kt:34-67
-   - Issue: `processPayment()` is `@Transactional` but includes `StripeGatewayAdapter.charge()` — an external HTTP round-trip (500ms-2s). The DB connection is held open for the entire network call. Under concurrent load, 10 in-flight payments saturate the HikariCP pool, blocking all DB operations including order browsing and cart.
-   - Fix: Split into two transactions: (1) validate + mark `PAYMENT_IN_PROGRESS`, (2) after Stripe call, persist result + update status. Use compensating job for stuck `PAYMENT_IN_PROGRESS` orders.
-   - Requirement trace: REQ-PAY-003 "Payment processing must not degrade order browsing or cart operations under load"
+### P0 (Must Fix)
 
-2. **No circuit breaker on Stripe API calls**
-   - File: StripeGatewayAdapter.kt:44-78
-   - Issue: No circuit breaker, bulkhead, or timeout override on `charge()` and `refund()`. Stripe SDK default timeout is 30s. Combined with the `@Transactional` issue, a Stripe degradation cascades into full system unavailability.
-   - Fix: Add Resilience4j `@CircuitBreaker` (50% failure threshold, 30s wait, 3 half-open calls). Set Stripe SDK timeout to 5s. Return `PaymentResult.TEMPORARILY_UNAVAILABLE` as fallback.
-   - Requirement trace: REQ-PAY-007 "System must gracefully degrade when third-party payment provider is unavailable"
+**[P0] `@Transactional` wrapping external HTTP call to Stripe**
+- **File**: OrderPaymentController.kt:34-67
+- **Problem**: `processPayment()` is `@Transactional` but includes `StripeGatewayAdapter.charge()` — an external HTTP round-trip (500ms-2s). The DB connection is held open for the entire network call.
+- **Impact**: Under concurrent load, 10 in-flight payments saturate the HikariCP pool, blocking all DB operations including order browsing and cart. Full system outage from DB connection exhaustion.
+- **Probability**: Triggered in normal operation — every payment request holds a DB connection for the duration of the Stripe call.
+- **Maintainability**: Tight coupling between transaction boundary and external call makes it impossible to tune DB pool and payment timeout independently.
+- **Fix**: Split into two transactions: (1) validate + mark `PAYMENT_IN_PROGRESS`, (2) after Stripe call, persist result + update status. Use compensating job for stuck `PAYMENT_IN_PROGRESS` orders.
+- **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P0; adjudicated P0 — unanimous)
 
-3. **HTTPS not validated on webhook callback URL**
-   - File: PaymentRequest.kt:8-12
-   - Issue: `callbackUrl: String` with only `@NotBlank` validation. Accepts `http://` scheme — payment confirmations could be sent over plaintext, interceptable via MITM.
-   - Fix: Custom `@ValidCallbackUrl` annotation: well-formed URL, `https` scheme, no private/loopback IP. Production: allowlist of registered callback domains.
-   - Requirement trace: REQ-SEC-012 "All payment-related data transmission must use TLS 1.2+"
+**[P0] No circuit breaker on Stripe API calls**
+- **File**: StripeGatewayAdapter.kt:44-78
+- **Problem**: No circuit breaker, bulkhead, or timeout override on `charge()` and `refund()`. Stripe SDK default timeout is 30s.
+- **Impact**: Combined with the `@Transactional` issue, a Stripe degradation cascades into full system unavailability. All DB connections blocked waiting on Stripe.
+- **Probability**: Stripe degradations occur multiple times per year; each occurrence triggers cascade failure in normal operation.
+- **Maintainability**: No isolation between external dependency failure and internal system health.
+- **Fix**: Add Resilience4j `@CircuitBreaker` (50% failure threshold, 30s wait, 3 half-open calls). Set Stripe SDK timeout to 5s. Return `PaymentResult.TEMPORARILY_UNAVAILABLE` as fallback.
+- **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P1; adjudicated P0 — Gemini's P1 reasoning did not account for cascade failure to unrelated endpoints, which satisfies outage criteria)
 
-### Important (Should Fix)
-1. **No dead letter queue for failed payment callbacks** — OrderPaymentController.kt:85-102. Failed webhook processing silently drops events. Stripe retries for 3 days then gives up permanently.
-2. **Currency field is unbounded String instead of ISO 4217 enum** — PaymentRequest.kt:6. Invalid currency codes reach Stripe, producing cryptic 400 errors surfaced as generic 500 to clients.
-3. **Missing index on `inventory_reservations.order_id`** — V2024_001__add_payment_and_inventory_tables.sql:28. Idempotency lookup on every Kafka message does a full table scan. Grows linearly with order volume.
-4. **No structured logging on payment events** — OrderPaymentController.kt:34-102, StripeGatewayAdapter.kt:44-78. No correlation ID, no MDC context. End-to-end payment debugging across sync and async flows requires manual log correlation.
-5. **Kafka message loss leaves orders stuck in PAID state** — PaymentEventProducer.kt:23-31, InventoryService.kt. If `PaymentConfirmedEvent` is lost (producer failure, Kafka outage, or consumer deserialization error), the order remains in `PAID` state indefinitely and never transitions to `FULFILLMENT_READY`. No compensating mechanism (scheduled reconciliation job, timeout-based retry) exists to detect and recover stuck orders. This is a cross-chunk gap: the order state machine (Chunk A) assumes the async inventory flow (Chunk C) always completes, but the messaging layer (Chunk C) has no delivery guarantee beyond Kafka's at-least-once semantics.
+**[P0] HTTPS not validated on webhook callback URL**
+- **File**: PaymentRequest.kt:8-12
+- **Problem**: `callbackUrl: String` with only `@NotBlank` validation. Accepts `http://` scheme — payment confirmations could be sent over plaintext.
+- **Impact**: Payment data interceptable via MITM attack in production environment. Security breach exposing payment confirmation details.
+- **Probability**: Any attacker on the network path can exploit; production environments route through public internet.
+- **Maintainability**: Simple validation gap — fix is additive with no architectural change.
+- **Fix**: Custom `@ValidCallbackUrl` annotation: well-formed URL, `https` scheme, no private/loopback IP. Production: allowlist of registered callback domains.
+- **Review Consensus**: 2/3 models identified (Opus P0, Sonnet P0; adjudicated P0 — Gemini did not flag but both flagging models' reasoning satisfies security + production criteria)
 
-### Minor (Nice to Have)
-1. **Missing OpenAPI annotations on payment endpoints** — OrderPaymentController.kt:28-33. API consumers have no contract documentation for payment flow.
-2. **Hardcoded retry count and timeout values** — StripeGatewayAdapter.kt:45, StripeGatewayAdapter.kt:52. Not configurable per environment.
+### P1 (Should Fix)
+
+**[P1] No dead letter queue for failed payment callbacks**
+- **File**: OrderPaymentController.kt:85-102
+- **Problem**: Failed webhook processing silently drops events. Stripe retries for 3 days then gives up permanently.
+- **Impact**: Data loss — payment confirmations permanently lost after Stripe retry exhaustion, leaving orders in inconsistent state.
+- **Probability**: Occurs under realistic failure conditions (deserialization errors, transient DB failures during webhook processing).
+- **Maintainability**: No observability into dropped events; debugging requires manual Stripe dashboard correlation.
+- **Fix**: Configure dead letter topic for the webhook consumer group. Add admin dashboard for manual reprocessing of failed events.
+- **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P1; adjudicated P1 — unanimous)
+
+**[P1] Currency field is unbounded String instead of ISO 4217 enum**
+- **File**: PaymentRequest.kt:6
+- **Problem**: Invalid currency codes reach Stripe, producing cryptic 400 errors surfaced as generic 500 to clients.
+- **Impact**: Data integrity violation — invalid currencies accepted at API boundary, causing downstream failures with misleading error messages.
+- **Probability**: Realistic with any non-trivial API consumer; typos and unsupported currency codes are common in integration testing and production.
+- **Maintainability**: Validation gap at API boundary forces debugging at Stripe integration layer instead of catching at input.
+- **Fix**: Replace `String` with `Currency` enum (ISO 4217 subset supported by business). Validate at DTO level with `@ValidCurrency`.
+- **Review Consensus**: 2/3 models identified (Opus P1, Gemini P1; adjudicated P1 — Sonnet flagged as P2 but data integrity impact under realistic input justifies P1)
+
+**[P1] Missing index on `inventory_reservations.order_id`**
+- **File**: V2024_001__add_payment_and_inventory_tables.sql:28
+- **Problem**: Idempotency lookup on every Kafka message does a full table scan. Grows linearly with order volume.
+- **Impact**: Performance degradation — inventory reservation latency increases linearly with order history, eventually causing Kafka consumer lag and order processing delays.
+- **Probability**: Guaranteed at scale; table grows monotonically with every order.
+- **Maintainability**: Missing index is a single-line fix but has compounding production impact if left unaddressed.
+- **Fix**: Add `CREATE INDEX idx_inventory_reservations_order_id ON inventory_reservations(order_id)` to migration.
+- **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P2; adjudicated P1 — performance degradation is guaranteed at scale, not speculative)
+
+**[P1] Kafka message loss leaves orders stuck in PAID state**
+- **File**: PaymentEventProducer.kt:23-31, InventoryService.kt
+- **Problem**: If `PaymentConfirmedEvent` is lost (producer failure, Kafka outage, or consumer deserialization error), the order remains in `PAID` state indefinitely and never transitions to `FULFILLMENT_READY`. No compensating mechanism exists.
+- **Impact**: Orders permanently stuck — customers charged but never fulfilled. Cross-chunk gap: order state machine (Chunk A) assumes async inventory flow (Chunk C) always completes.
+- **Probability**: Partial system failure under realistic conditions — Kafka producer failures, broker outages, and deserialization errors are well-documented operational scenarios.
+- **Maintainability**: No observability into stuck orders; requires manual DB queries to detect and resolve.
+- **Fix**: Implement scheduled reconciliation job that detects orders in `PAID` state beyond a threshold (e.g., 15 minutes) and either retries the event or alerts operations.
+- **Review Consensus**: 2/3 models identified (Opus P1, Sonnet P1; adjudicated P1 — partial system failure under realistic conditions with no recovery path)
+
+### P2 (Consider Fix)
+
+**[P2] No structured logging on payment events**
+- **File**: OrderPaymentController.kt:34-102, StripeGatewayAdapter.kt:44-78
+- **Problem**: No correlation ID, no MDC context across payment flow. End-to-end payment debugging across sync and async flows requires manual log correlation.
+- **Impact**: No direct bug or data loss. Significant increase in mean time to diagnose payment issues in production.
+- **Probability**: Every production debugging session for payment issues is affected.
+- **Maintainability**: Major maintainability gap — async flows spanning 3 services are effectively undebuggable without distributed tracing.
+- **Fix**: Implement distributed tracing with correlation ID propagated through HTTP headers, Kafka message headers, and consumer MDC context.
+- **Review Consensus**: 3/3 models identified (Opus P2, Sonnet P2, Gemini P2; adjudicated P2 — unanimous)
+
+### P3 (Optional)
+
+**[P3] Missing OpenAPI annotations on payment endpoints**
+- **File**: OrderPaymentController.kt:28-33
+- **Problem**: API consumers have no contract documentation for payment flow.
+- **Impact**: No runtime impact. Documentation gap affects API consumer onboarding and integration testing.
+- **Probability**: N/A — documentation issue, not a runtime concern.
+- **Maintainability**: Improves developer experience but no functional consequence.
+- **Fix**: Add `@Operation`, `@ApiResponse`, `@Schema` annotations to payment controller endpoints.
+- **Review Consensus**: 2/3 models identified (Opus P3, Gemini P3; adjudicated P3 — documentation improvement only)
+
+**[P3] Hardcoded retry count and timeout values**
+- **File**: StripeGatewayAdapter.kt:45, StripeGatewayAdapter.kt:52
+- **Problem**: Retry count and timeout values hardcoded in source. Not configurable per environment.
+- **Impact**: No runtime bug. Requires code change and redeployment to tune for different environments.
+- **Probability**: N/A — only triggered when operational tuning is needed.
+- **Maintainability**: Small configurability improvement; extract to `application.yml` properties.
+- **Fix**: Extract to Spring `@ConfigurationProperties` with sensible defaults. Allow per-environment override.
+- **Review Consensus**: 2/3 models identified (Sonnet P3, Gemini P3; adjudicated P3 — readability/configurability improvement)
 
 ## Recommendations
-- Introduce a `PaymentApplicationService` between controllers and adapters to own transaction boundaries — the controller handles HTTP, the adapter handles Stripe, and the service orchestrates the domain flow between them
-- Add Resilience4j circuit breaker as a cross-cutting concern via Spring AOP — any future payment gateway integration (PayPal, Toss) will need the same protection pattern
-- Implement distributed tracing with correlation ID propagated through HTTP headers → Kafka message headers → consumer MDC — critical for debugging the async payment confirmation flow that spans 3 services
-- Set up a dead letter topic with an admin dashboard for payment event reprocessing — failed webhook events and inventory shortage events both need manual intervention workflows
+- Introduce a `PaymentApplicationService` between controllers and adapters to own transaction boundaries — resolves the P0 `@Transactional` issue and establishes a pattern for future payment gateway integrations
+- Add Resilience4j circuit breaker as a cross-cutting concern via Spring AOP — resolves the P0 circuit breaker issue and any future payment gateway integration (PayPal, Toss) will need the same protection pattern
+- Implement distributed tracing with correlation ID propagated through HTTP headers → Kafka message headers → consumer MDC — addresses the P2 logging issue and is prerequisite for debugging the async payment confirmation flow that spans 3 services
+- Set up a dead letter topic with an admin dashboard for payment event reprocessing — resolves the P1 dead letter queue issue; failed webhook events and inventory shortage events both need manual intervention workflows
 
 ## Assessment
 **Ready to merge: No**
-**Reasoning:** Three Critical issues block merge — `@Transactional` spanning external HTTP calls risks connection pool starvation under load, missing circuit breaker enables cascading failures from Stripe outages, and unvalidated callback URL scheme violates transport security requirements. All three must be resolved before this code handles production payment traffic.
+**Reasoning:** Three P0 issues block merge — `@Transactional` spanning external HTTP calls risks connection pool starvation under load, missing circuit breaker enables cascading failures from Stripe outages, and unvalidated callback URL scheme violates transport security requirements. All P0 issues must be resolved before this code handles production payment traffic. Four P1 issues (dead letter queue, currency validation, missing index, stuck orders) should be addressed before or immediately after merge.
 ````
