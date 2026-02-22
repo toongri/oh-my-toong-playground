@@ -1,5 +1,11 @@
 chunk-review:
   reviewers:
+    # --- Security Model ---
+    # Reviewer CLIs operate on TRUSTED code only (local git working tree).
+    # Claude: --allowedTools restricts to read-only tools (Bash for git diff, Read/Glob/Grep for files).
+    # Gemini/Codex: No fine-grained permission control; --yolo / --dangerously-bypass flags
+    #   are required for headless execution. For untrusted PR review, additional sandboxing is recommended.
+    #
     # --- Per-reviewer CLI configuration (all optional) ---
     # model:         Model name passed to CLI (claude/gemini: --model, codex: -m)
     # effort_level:  Thinking effort (low/medium/high)
@@ -7,7 +13,7 @@ chunk-review:
     # output_format: Output format (text/json/stream-json)
     #                claude/gemini: --output-format, codex: --json, unknown: ignored
     - name: claude
-      command: "claude -p --dangerously-skip-permissions"
+      command: "claude -p --allowedTools Bash,Read,Glob,Grep"
       emoji: "\U0001F9E0"
       color: "CYAN"
       model: "claude-opus-4-6"
@@ -28,7 +34,7 @@ chunk-review:
       effort_level: "medium"
       output_format: "text"
   settings:
-    timeout: 300
+    timeout: 600
     # When true, the chairman model (claude) is excluded from the external reviewer list
     # to avoid reviewing its own orchestration output. CLI flags --exclude-chairman /
     # --include-chairman override this value. (Used in chunk-review-job.js)
