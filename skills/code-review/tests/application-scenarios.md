@@ -485,3 +485,138 @@
 | V3 | `build.gradle.kts`는 file-level: `build.gradle.kts (modified)` — 비코드 파일 규칙 적용 (config/build file) |
 | V4 | `utils.min.js`는 file-level fallback: `utils.min.js (modified)` — 코드 파일이지만 symbol 식별 불가 시 filename fallback |
 | V5 | 모든 entry의 status tag가 정확히 `added`, `modified`, `deleted` 중 하나 — `renamed`, `moved`, `updated` 등 사용 안 함 |
+
+---
+
+## Severity Rubric Scenarios (P0-P3 Classification)
+
+> Tests the P0-P3 severity rubric definitions and the orchestrator's adjudication/merge gate behavior. Exercises the P1/P2 boundary, worker "propose" language, and merge gate override protocol.
+
+### SEV-1: P1 vs P2(b) Boundary — Missing Index (Current Defect vs Future Risk)
+
+**Input**: 두 개의 독립적 세션. 동일한 코드 패턴 (missing index), 다른 project context.
+- Session A: `orders.order_date` 인덱스 없음. Project context: "Production SaaS with 50K rows. Dashboard date-range queries show p99 latency 3.2s (SLA: 1s)."
+- Session B: `orders.order_date` 인덱스 없음. Project context: "Production SaaS with 1K rows. Dashboard date-range queries complete in <50ms."
+
+**Primary Technique**: reviewer.md P1/P2 Decision Gate — "Is there a defect in the current code, and does it manifest under conditions that exist today?"
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Session A: Worker가 P1으로 propose (현재 데이터에서 이미 SLA 초과 → demonstrable defect under today's conditions) |
+| V2 | Session B: Worker가 P2(b)로 propose (현재 문제 없음, 미래 성장 시 예상되는 문제) |
+| V3 | 양쪽 모두 6-field format 사용 (P1/P2 모두 Probability, Maintainability 필수) |
+| V4 | Session A의 Probability 필드가 "현재 조건에서 이미 발현" 취지의 내용 포함 |
+| V5 | Session B의 Probability 필드가 "현재 조건에서 미발현, 성장 시 예상" 취지의 내용 포함 |
+
+---
+
+### SEV-2: P1 vs P2(b) — Deprecated API Usage
+
+**Input**: `RestHighLevelClient` 사용 코드. Project context: "ES 8.x cluster. Client is deprecated since ES 7.15, removal planned in ES 9.0. ES 9.0 upgrade planned next quarter."
+
+**Primary Technique**: reviewer.md P2(b) — "No bug today but code will predictably fail as the system grows/evolves"
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Worker가 P2(b)로 propose (현재 정상 동작, 미래 ES 9.0에서 제거 예정) |
+| V2 | Impact 필드가 "현재 정상 동작" 언급 |
+| V3 | P1이 아닌 이유가 명확 — "현재 코드에 defect 없음" |
+
+---
+
+### SEV-3: P1 — Current Defect with Realistic Trigger (Public API Validation)
+
+**Input**: `@PostMapping` endpoint에서 currency 필드가 plain String, 유효성 검증 없음. Project context: "Public-facing payment API. Support tickets confirm weekly invalid currency submissions."
+
+**Primary Technique**: reviewer.md P1 — "Demonstrable defect under realistic conditions that exist today"
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Worker가 P1으로 propose |
+| V2 | Problem 필드가 현재 코드의 결함을 기술 (유효성 검증 없음) |
+| V3 | Probability 필드가 "현재 realistic conditions에서 발현" 언급 (weekly support tickets) |
+| V4 | 6-field format 완전 준수 (P1이므로 모든 필드 필수) |
+
+---
+
+### SEV-4: P2(c) — No Bug, Maintainability Improvement
+
+**Input**: `catch (e: Exception)` in retry logic. 현재 이 경로에서 발생하는 모든 예외는 `IOException` (retryable). Project context: "Internal service."
+
+**Primary Technique**: reviewer.md P2(c) — "No bug but maintainability significantly improves"
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Worker가 P2(c) 또는 P2로 propose (현재 버그 없음, 유지보수성 개선) |
+| V2 | Impact 필드가 "현재 failure 없음" 언급 |
+| V3 | Maintainability 필드가 "미래 디버깅 어려움" 또는 "non-retryable exception masking" 언급 |
+| V4 | P1이 아닌 이유: 현재 조건에서 incorrect behavior 없음 |
+
+---
+
+### SEV-5: P0/P1 Boundary — Token Without Expiry
+
+**Input**: Verification token이 만료 없이 영구 유효. Project context: "Public-facing web app with user registration."
+
+**Primary Technique**: reviewer.md P0/P1 boundary — Negative Example "Token has no expiry is NOT P0"
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Worker가 P1으로 propose (P0가 아님) |
+| V2 | P0가 아닌 이유: "immediate breach"가 아닌 "security degradation", 유출 조건 필요 |
+| V3 | P1인 이유: demonstrable defect (만료 미구현), realistic trigger (토큰 유출 경로 현실적) |
+
+---
+
+### SEV-6: Orchestrator Adjudication — Worker Disagreement on P1 vs P2
+
+**Input**: 3개 worker 결과. Issue: "Missing index on user_logs.created_at". Project context: "Internal monitoring dashboard, 500K rows, queries take 2.5s."
+- Worker A: P1 ("demonstrable perf defect, current queries exceed acceptable latency")
+- Worker B: P2(b) ("monitoring data, users can wait")
+- Worker C: P2 ("low priority, dashboard is internal")
+
+**Primary Technique**: SKILL.md Step 7 — Worker proposals adjudication using P1/P2 decision gate
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Orchestrator가 P1/P2 decision gate 적용: "현재 코드에 defect이 있는가? 현재 조건에서 발현하는가?" |
+| V2 | 최종 adjudicated P-level이 P1 (500K rows에서 2.5s는 demonstrable perf defect) |
+| V3 | Review Consensus에 각 worker의 제안과 adjudication 근거 기재 |
+| V4 | Worker B/C의 P2 reasoning이 기각되는 이유 명시 (project context가 "internal"이라도 현재 latency가 demonstrable defect) |
+
+---
+
+### SEV-7: Orchestrator Merge Gate — P1 Soft Block Override
+
+**Input**: 리뷰 결과 P0 없음, P1 1건 (missing DLQ), P2 2건, P3 1건.
+
+**Primary Technique**: SKILL.md Step 8 — P1 soft block with override protocol
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | 기본 verdict가 "No" (P1이 있으므로 soft block) |
+| V2 | "Yes with conditions" override가 가능하다면: per-P1 justification + tracking artifact + fix timeline 포함 |
+| V3 | Override 없이 "Yes"만 단독으로 나오지 않음 (P1 있는데 무조건 pass 불가) |
+| V4 | P2/P3는 verdict에 영향 없음 |
+
+---
+
+### SEV-8: Worker "propose" Language Verification
+
+**Input**: 아무 코드 리뷰.
+
+**Primary Technique**: reviewer.md Step 7 — "propose a severity level" 언어 사용
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Worker output에서 severity를 "propose"하는 맥락 (Step 7: "propose a severity level (P0-P3) for every issue found") |
+| V2 | Worker가 "classify" 또는 "assign"을 최종 결정 언어로 사용하지 않음 |
+| V3 | Per-issue format에서 P-level이 제안으로 표현 (worker 관점에서 제안, orchestrator가 최종 결정) |
