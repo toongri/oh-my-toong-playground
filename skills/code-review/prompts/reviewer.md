@@ -74,7 +74,7 @@ Check the changes against project conventions:
 
 ### Step 7: Verdict
 
-Based on Steps 1-6, classify every issue found by severity (P0-P3) and produce the final merge assessment. Apply severity definitions strictly -- not everything is P0.
+Based on Steps 1-6, propose a severity level (P0-P3) for every issue found and produce the final merge assessment. Apply severity definitions strictly -- not everything is P0.
 
 ## Review Checklist
 
@@ -133,10 +133,10 @@ Produce your review in exactly this structure:
 [Issues that block merge: outage, data loss, security vulnerabilities triggered in normal operation]
 
 #### P1 (Should Fix)
-[Issues that cause partial failure, performance degradation, or requirement mismatch under realistic conditions]
+[Demonstrable defects in the current code that cause partial failure, incorrect behavior, or security weakness under realistic conditions that exist today]
 
 #### P2 (Consider Fix)
-[Low-probability bugs OR no-bug maintainability improvements with significant impact]
+[Bugs with unrealistic triggers today, OR no bug today but predictable failure under growth/evolution, OR significant maintainability improvement]
 
 #### P3 (Optional)
 [Quality, readability, consistency improvements with no correctness or maintainability concern]
@@ -179,41 +179,48 @@ Assess probability and impact based on the actual project context, not generic a
 | P-Level | Impact Delta | Probability | Maintainability |
 |---------|-------------|-------------|-----------------|
 | **P0** (must-fix) | Outage, data loss, or security breach | Triggered during normal operation | System inoperable if unfixed |
-| **P1** (should-fix) | Partial failure, performance degradation, or requirement mismatch | Occurs under realistic conditions | Fix yields significant quality improvement |
-| **P2** (consider-fix) | (a) Bug exists but trigger probability is unrealistic, OR (b) No bug but maintainability significantly improves | Low or N/A | Maintainability improvement is significant |
-| **P3** (optional) | No correctness issue | N/A | Readability, consistency, or style improvement only |
+| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, or security weakness in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
+| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
+| **P3** (optional) | No correctness issue, no projected failure | N/A | Readability, consistency, or style improvement only |
 
 ### Boundary Cases
 
-Use the three axes to resolve ambiguous classifications:
+Use the three axes to resolve ambiguous classifications. The core question for P1 vs P2: **"Is there a defect in the current code, and does it manifest under conditions that exist today?"** Both must be yes for P1.
+
+- Both yes --> **P1**: defect exists and manifests under today's conditions.
+- Defect exists but trigger conditions are unrealistic today --> **P2(a)**: bug with unrealistic trigger.
+- No defect today but predictable failure under growth/change --> **P2(b)**: future risk.
+- No defect and no projected failure, but significant maintainability gain --> **P2(c)**: maintainability.
 
 1. **SQL injection via admin-only internal endpoint** -- Impact is security breach (P0-level), but probability requires compromised internal network. The Impact axis dominates: **P0**, because a single exploitation causes irreversible damage regardless of probability.
 
-2. **Missing null check on a field that is always non-null by DB constraint** -- Impact would be NPE (P0-level if triggered), but probability is near-zero because the DB enforces non-null. Probability axis dominates: **P2**, because the bug exists but the trigger is unrealistic under current schema.
+2. **Missing null check on a field that is always non-null by DB constraint** -- The defect exists (null dereference path is reachable in code), but the trigger is unrealistic because the DB enforces non-null. **P2(a)**: bug exists but trigger probability is unrealistic under current schema.
 
-3. **No connection pool timeout configured, default is infinite** -- Impact is connection pool starvation under load (outage-level), probability depends on traffic patterns. If the service handles external traffic: **P0** (normal operation triggers it). If it is an internal batch job with controlled concurrency: **P1** (realistic but not normal-path).
+3. **No connection pool timeout configured, default is infinite** -- The defect is demonstrable: infinite timeout means any slow query or network hiccup holds a connection indefinitely. If the service handles external traffic: **P0** (normal operation triggers connection pool starvation). If it is an internal batch job with controlled concurrency: **P1** (the defect -- infinite hold on connections -- exists in current code, and slow-query conditions are realistic even for batch jobs, causing partial failure when the pool eventually exhausts).
 
-4. **Catching generic `Exception` instead of specific types** -- No bug today, but masks future bugs and makes debugging harder. Impact is zero now; maintainability improvement is significant. **P2** (no bug, significant maintainability gain).
+4. **Catching generic `Exception` instead of specific types** -- No defect today; all current exceptions are retryable. But the broad catch will mask future non-retryable exceptions. **P2(c)**: no bug, but significant maintainability gain by narrowing catch scope.
 
 5. **Method named `process()` instead of `validateAndPersistOrder()`** -- No bug, no maintainability risk beyond readability. **P3** (style/readability only).
 
-6. **Race condition in cache invalidation that causes stale reads for ~100ms** -- Impact is serving stale data briefly, probability is high under concurrent writes. If stale data causes incorrect business decisions: **P1**. If the data is display-only and eventual consistency is acceptable: **P2**.
+6. **Race condition in cache invalidation that causes stale reads for ~100ms** -- The defect is demonstrable: concurrent writes produce stale reads in the current code. The condition (concurrent writes) exists in today's production traffic. If stale data causes incorrect business decisions: **P1** (current defect, realistic trigger, meaningful impact). If the data is display-only and eventual consistency is acceptable: **P2(c)** (defect exists but impact is negligible; improvement is maintainability/correctness hygiene).
+
+7. **Missing index on a frequently queried column** -- If current production queries on this column already show measurable latency (e.g., p99 > SLA) with the existing dataset: **P1** (demonstrable performance defect under today's conditions). If the current dataset is small enough that full scans complete within SLA but the table grows predictably: **P2(b)** (no defect today, but predictable failure as data grows).
 
 ### Project Context Examples
 
 The following examples show how project context shifts severity — in both directions. Context can lower severity (threat doesn't apply) or raise it (domain amplifies impact).
 
-7. **Missing input validation on user-supplied parameter** -- If the project is a public API accepting untrusted external input: **P0-P1** (normal operation triggers it; impact ranges from data corruption to injection, and any internet user can exploit it). If the project is a team-internal service where inputs come from other trusted services via well-defined contracts: **P1-P2** (malformed input is possible through bugs in upstream services, but there is no external attacker; blast radius is contained within the internal network). If the project is a personal CLI tool where all inputs are self-generated: **P2-P3** (the only user is the developer themselves, so the trigger requires self-sabotage).
+8. **Missing input validation on user-supplied parameter** -- If the project is a public API accepting untrusted external input: **P0-P1** (the defect is demonstrable -- invalid input passes through unchecked -- and any internet user triggers it during normal operation; impact ranges from data corruption to injection). If the project is a team-internal service where inputs come from other trusted services via well-defined contracts: **P1-P2** (the defect exists in the current code, and malformed input from upstream bugs is a realistic condition; but blast radius is contained within the internal network). If the project is a personal CLI tool where all inputs are self-generated: **P2(a)-P3** (the defect exists but the trigger requires self-sabotage -- unrealistic).
 
-8. **No rate limiting on API endpoint** -- If the project is a public-facing API with external users: **P0** (bots, scrapers, and abuse are normal operation; a single client can exhaust backend resources and cause outage for all users). If the project is an internal admin tool behind VPN used by 5 people: **P3** (those 5 users cannot produce meaningful load even if they tried; the threat model that rate limiting addresses does not apply).
+9. **No rate limiting on API endpoint** -- If the project is a public-facing API with external users: **P0** (bots, scrapers, and abuse are normal operation; a single client can exhaust backend resources and cause outage for all users). If the project is an internal admin tool behind VPN used by 5 people: **P3** (those 5 users cannot produce meaningful load even if they tried; the threat model that rate limiting addresses does not apply).
 
-9. **No circuit breaker on external API call** -- If the project is a real-time payment service calling a payment gateway: **P0** (the gateway's intermittent failures are guaranteed during normal operation; without a circuit breaker, all request threads block on the failing dependency, cascading into full service outage for unrelated endpoints). If the project is a nightly batch ETL pipeline: **P1** (failure causes the current batch to stall, but the pipeline detects this and retries in the next scheduled run; data is delayed but not lost). If the project is a local dev tool calling an optional analytics endpoint: **P3** (the call is fire-and-forget; failure is invisible to the user and affects nothing downstream).
+10. **No circuit breaker on external API call** -- If the project is a real-time payment service calling a payment gateway: **P0** (the gateway's intermittent failures are guaranteed during normal operation; without a circuit breaker, all request threads block on the failing dependency, cascading into full service outage for unrelated endpoints). If the project is a nightly batch ETL pipeline: **P1** (the defect is demonstrable -- a gateway timeout stalls the entire batch with no fallback -- and gateway timeouts are a realistic condition even for batch workloads; impact is data delay and partial failure of the current run). If the project is a local dev tool calling an optional analytics endpoint: **P3** (the call is fire-and-forget; failure is invisible to the user and affects nothing downstream).
 
-10. **Behavioral change in public API response format without versioning** -- If the project is a shared library or API consumed by 10+ services: **P0** (every consumer silently receives data in an unexpected format; parsing failures or incorrect behavior propagate across all dependent services, and the maintainer cannot coordinate all consumers simultaneously). If the project is an internal service with one consumer that you also own: **P2** (you control both sides and can coordinate the migration; the risk is a forgotten update, not an uncontrollable cascade). If the project is a standalone application with no external consumers: **P3** (no one else consumes this output; the format change is an internal detail).
+11. **Behavioral change in public API response format without versioning** -- If the project is a shared library or API consumed by 10+ services: **P0** (every consumer silently receives data in an unexpected format; parsing failures or incorrect behavior propagate across all dependent services, and the maintainer cannot coordinate all consumers simultaneously). If the project is an internal service with one consumer that you also own: **P2** (you control both sides and can coordinate the migration; the risk is a forgotten update, not an uncontrollable cascade). If the project is a standalone application with no external consumers: **P3** (no one else consumes this output; the format change is an internal detail).
 
-11. **Data integrity issue — silent truncation of numeric field** -- If the project processes financial transactions or medical records: **P0** (truncated values produce incorrect calculations with regulatory, legal, or patient-safety consequences; even rare occurrences are unacceptable). If the project is a content management dashboard: **P2** (truncated display values are a cosmetic bug noticed and corrected by content editors; no downstream system depends on precision).
+12. **Data integrity issue -- silent truncation of numeric field** -- If the project processes financial transactions or medical records: **P0** (truncated values produce incorrect calculations with regulatory, legal, or patient-safety consequences; even rare occurrences are unacceptable). If the project is a content management dashboard: **P2(a)** (the defect exists -- truncation can occur -- but the trigger is unrealistic because content editors review values visually and correct errors before they propagate; no downstream system depends on precision).
 
-12. **Flaky test that intermittently fails** -- If the project is CI-gated with merge protection and multiple contributors: **P1** (the flake triggers on every PR, blocks merges, and erodes team trust in the test suite — "just rerun it" becomes culture). If the project is a personal project with no CI and no other contributors: **P3** (the sole developer reruns manually when needed; no process depends on green builds).
+13. **Flaky test that intermittently fails** -- If the project is CI-gated with merge protection and multiple contributors: **P1** (the defect is demonstrable -- the test produces false failures -- and the trigger is realistic -- it fires on every PR run; impact is blocked merges and eroded trust in the test suite). If the project is a personal project with no CI and no other contributors: **P3** (the sole developer reruns manually when needed; no process depends on green builds).
 
 ### Negative Examples
 
@@ -222,8 +229,9 @@ The following examples show how project context shifts severity — in both dire
 - "Error message leaks stack trace to client" is NOT P0 because it exposes internal structure but does not directly enable data loss or unauthorized access. This is **P1**.
 
 **P1/P2 boundary (what is NOT P1):**
-- "Deprecated API usage that still functions correctly" is NOT P1 because there is no current failure or degradation -- only future maintenance risk. This is **P2**.
-- "Missing index on a column queried only by nightly batch job processing <1000 rows" is NOT P1 because performance impact is negligible at current scale and probability of degradation is unrealistic. This is **P2**.
+- "Deprecated API usage that still functions correctly" is NOT P1 because there is no demonstrable defect in the current code -- the API works correctly today. The risk is future removal, not current failure. This is **P2(b)** (no bug today, predictable failure when the dependency drops support).
+- "Missing index on a column queried only by nightly batch job processing <1000 rows" is NOT P1 because there is no demonstrable performance defect under today's conditions -- the query completes well within SLA at current data volume. The risk is future growth. This is **P2(b)** (no defect today, predictable failure as data scales).
+- "Generic exception catch in code that currently only throws IOException" is NOT P1 because no incorrect behavior occurs under today's conditions -- all caught exceptions are in fact retryable. The risk is future code changes introducing non-retryable exceptions. This is **P2(c)** (no bug, significant maintainability improvement).
 
 **P2/P3 boundary (what is NOT P2):**
 - "Variable named `x` instead of `count`" is NOT P2 because renaming improves readability but does not significantly affect maintainability -- the scope is limited and the logic is clear from context. This is **P3**.
@@ -253,37 +261,77 @@ The following examples show how project context shifts severity — in both dire
 
 **[P1] No expiry on verification tokens**
 - **File**: UserService.kt:38
-- **Problem**: Verification tokens persist indefinitely in `verification_tokens` table. A leaked or intercepted token remains valid forever.
-- **Impact**: Attacker with a leaked token can verify arbitrary accounts at any future time. If fixed, tokens expire after 24h, limiting the attack window.
-- **Probability**: Requires token leakage (email forwarding, log exposure, URL in browser history) -- realistic but not normal-path.
+- **Problem**: Verification tokens persist indefinitely in `verification_tokens` table. Token expiry is not implemented -- this is a defect in the current security model, not a future concern.
+- **Impact**: A leaked token (via email forwarding, log exposure, browser history) grants permanent account verification capability. If fixed, tokens expire after 24h, limiting the attack window to hours instead of forever.
+- **Probability**: Token leakage vectors (email forwarding, shared browser, log aggregation) are realistic conditions that exist today -- not hypothetical.
 - **Maintainability**: Adding expiry requires schema change (`expires_at` column) and a cleanup job, but establishes a reusable pattern for all future token types.
 - **Fix**: Add `expires_at` column, validate on verification, add scheduled cleanup job.
 
-**[P1] Unbounded list returned from search endpoint**
+**[P1] Unbounded list returned from search endpoint already causing slow responses**
 - **File**: SearchController.kt:27
-- **Problem**: `findAll()` returns entire result set without pagination. Current dataset is small but growing.
-- **Impact**: At 10x data volume, responses exceed 10MB, causing client timeouts and server memory pressure. If fixed, paginated responses keep memory bounded.
-- **Probability**: Realistic as data grows -- production dataset doubles every 6 months.
+- **Problem**: `findAll()` returns entire result set without pagination. With current production data (~50K records), response payloads exceed 5MB and p95 latency is already above SLA.
+- **Impact**: Clients experience timeouts and the server allocates excessive memory per request. If fixed, paginated responses keep memory and latency bounded.
+- **Probability**: Every search request triggers this path with the current dataset -- the defect manifests today, not at future scale.
 - **Maintainability**: Adding pagination later requires API versioning or breaking change. Fixing now avoids that cost.
 - **Fix**: Add `Pageable` parameter with default page size of 20.
 
+**[P1] Currency field accepts arbitrary strings without validation**
+- **File**: PaymentRequest.kt:15
+- **Problem**: `currency` is a plain `String` field with no validation. When an API consumer sends an invalid currency code (e.g., "US" instead of "USD"), the Stripe API returns a 400 error that propagates as an unhandled exception.
+- **Impact**: Invalid currency codes cause payment failures with cryptic Stripe error messages. If fixed, validation rejects bad input at the API boundary with a clear error.
+- **Probability**: API consumers making typos in currency codes is a realistic condition -- support tickets confirm this happens weekly.
+- **Maintainability**: Adding an enum or ISO 4217 validation aligns with existing input validation patterns in the codebase.
+- **Fix**: Validate `currency` against ISO 4217 codes at the controller layer, returning 400 with a descriptive message.
+
+**[P1] No dead-letter queue for Kafka consumer -- failed messages lost permanently**
+- **File**: OrderEventConsumer.kt:42
+- **Problem**: When message deserialization fails, the consumer logs the error and commits the offset. The failed message is permanently lost with no recovery path.
+- **Impact**: Deserialization errors (schema evolution mismatches, corrupted payloads) silently drop order events. If fixed, failed messages route to a DLQ for inspection and replay.
+- **Probability**: Schema evolution mismatches between producer and consumer are a realistic condition -- the order schema changed twice in the last quarter. Deserialization failures are confirmed in current logs.
+- **Maintainability**: DLQ pattern is already established for other consumers in the codebase; this consumer is the exception.
+- **Fix**: Configure a dead-letter topic and route deserialization failures to it instead of swallowing them.
+
 **P2 examples:**
 
-**[P2] Catching generic Exception in retry logic**
-- **File**: RetryHandler.kt:45
-- **Problem**: `catch (e: Exception)` catches all exceptions including `OutOfMemoryError` (via its superclass). No bug today, but masks unexpected errors.
-- **Impact**: No current failure. If a non-retryable exception occurs in the future, it will be silently retried instead of failing fast.
-- **Probability**: [N/A]
-- **Maintainability**: Narrowing to specific exception types makes retry behavior explicit and prevents future debugging confusion.
-- **Fix**: Catch only `IOException` and `TimeoutException` (the retryable cases).
-
-**[P2] Missing null check on optional configuration property**
+**[P2(a)] Missing null check on DB-constrained non-null field**
 - **File**: AppConfig.kt:23
 - **Problem**: `config.getProperty("cache.ttl")` returns null if property is missing. Currently always set via environment, but no code-level guard.
 - **Impact**: NPE if property is ever removed from environment config. Currently unrealistic because deployment scripts enforce it.
-- **Probability**: [N/A] -- deployment pipeline guarantees the property exists.
+- **Probability**: [N/A] -- deployment pipeline guarantees the property exists. The bug exists but the trigger is unrealistic today.
 - **Maintainability**: Adding a default value or explicit null check makes the code self-documenting and resilient to deployment changes.
 - **Fix**: Use `config.getProperty("cache.ttl") ?: "3600"` with a default value.
+
+**[P2(b)] Missing index on order_date column -- no performance issue today**
+- **File**: V20240115__create_orders.sql:8
+- **Problem**: `orders.order_date` column has no index. Dashboard queries filter by date range on this column.
+- **Impact**: No performance issue today with ~1K rows. At projected 100K rows in 6 months, date-range queries will degrade to full table scans, causing dashboard timeouts.
+- **Probability**: No defect under today's conditions. Projected failure under realistic growth trajectory (order volume doubles quarterly).
+- **Maintainability**: Adding the index now is trivial; adding it later requires a migration on a large table with potential locking.
+- **Fix**: Add index: `CREATE INDEX idx_orders_order_date ON orders (order_date)`.
+
+**[P2(b)] Deprecated Elasticsearch RestHighLevelClient still functions correctly**
+- **File**: SearchRepository.kt:12
+- **Problem**: Uses `RestHighLevelClient` deprecated since ES 7.15, scheduled for removal in ES 9.0. Current cluster runs ES 8.x.
+- **Impact**: No failure today -- the client works correctly with ES 8.x. When the cluster upgrades to ES 9.0, the client will stop compiling.
+- **Probability**: No defect under today's conditions. Predictable failure when ES 9.0 upgrade occurs (planned for next quarter per infra roadmap).
+- **Maintainability**: Migration to `ElasticsearchClient` aligns with the official migration path and unblocks the ES 9.0 upgrade.
+- **Fix**: Migrate to `co.elastic.clients:elasticsearch-java` `ElasticsearchClient`.
+
+**[P2(b)] No circuit breaker on optional analytics endpoint**
+- **File**: AnalyticsClient.kt:28
+- **Problem**: Fire-and-forget call to analytics service has no circuit breaker or timeout. The analytics service is optional -- its failure should not affect the main request path.
+- **Impact**: No failure today because the analytics service is stable. If the analytics service experiences latency spikes, request threads will block on the HTTP call, degrading main request throughput.
+- **Probability**: Analytics service instability is a realistic future condition (shared infrastructure, no SLA guarantee), but not occurring today.
+- **Maintainability**: Adding a circuit breaker isolates the optional dependency and prevents cascading failure when conditions change.
+- **Fix**: Add a circuit breaker with 500ms timeout and fallback to no-op.
+
+**[P2(c)] Catching generic Exception in retry logic**
+- **File**: RetryHandler.kt:45
+- **Problem**: `catch (e: Exception)` catches all exceptions including `OutOfMemoryError` (via its superclass). No bug today -- all current exceptions in this path are retryable `IOException`.
+- **Impact**: No current failure. If a non-retryable exception is introduced in the future, it will be silently retried instead of failing fast.
+- **Probability**: [N/A] -- no incorrect behavior under today's conditions.
+- **Maintainability**: Narrowing to specific exception types makes retry behavior explicit and prevents future debugging confusion.
+- **Fix**: Catch only `IOException` and `TimeoutException` (the retryable cases).
 
 **P3 examples:**
 
