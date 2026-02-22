@@ -886,8 +886,6 @@ function cmdStart(options, prompt) {
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
   const timeoutSec = Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : timeoutSetting > 0 ? timeoutSetting : 0;
 
-  const modeSetting = config['chunk-review'].settings.mode || null;
-
   const requestedReviewers = config['chunk-review'].reviewers || [];
   const reviewers = requestedReviewers.filter((r) => {
     if (!r || !r.name || !r.command) return false;
@@ -911,11 +909,9 @@ function cmdStart(options, prompt) {
     configPath,
     hostRole,
     chairmanRole,
-    mode: modeSetting,
     settings: {
       excludeChairmanFromReviewers,
       timeoutSec: timeoutSec || null,
-      mode: modeSetting,
     },
     reviewers: reviewers.map((r) => ({
       name: String(r.name),

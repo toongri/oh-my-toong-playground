@@ -29,7 +29,6 @@ chunk-review:
       output_format: "text"
   settings:
     timeout: 300
-    mode: chairman
     # When true, the chairman model (claude) is excluded from the external reviewer list
     # to avoid reviewing its own orchestration output. CLI flags --exclude-chairman /
     # --include-chairman override this value. (Used in chunk-review-job.js)
