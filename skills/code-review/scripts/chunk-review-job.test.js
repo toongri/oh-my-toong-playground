@@ -887,6 +887,48 @@ describe('parseYamlSimple', () => {
     const result = parseYamlSimple(configPath, fallback);
     assert.strictEqual(result['chunk-review'].settings.verbose, true);
   });
+
+  it('parses hyphen keys in settings section', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  settings:',
+      '    bucket-size: 50',
+      '    exclude-chairman: true',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.strictEqual(result['chunk-review'].settings['bucket-size'], 50);
+    assert.strictEqual(result['chunk-review'].settings['exclude-chairman'], true);
+  });
+
+  it('parses hyphen keys in reviewer properties', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  reviewers:',
+      '    - name: alice',
+      '      effort-level: high',
+      '      output-format: json',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['chunk-review'].reviewers[0]['effort-level'], 'high');
+    assert.equal(result['chunk-review'].reviewers[0]['output-format'], 'json');
+  });
+
+  it('parses values containing colons', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    command: gemini --flag=value:123',
+      '  reviewers:',
+      '    - name: alice',
+      '      command: claude --endpoint=http://localhost:8080',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    assert.equal(result['chunk-review'].chairman.command, 'gemini --flag=value:123');
+    assert.equal(result['chunk-review'].reviewers[0].command, 'claude --endpoint=http://localhost:8080');
+  });
 });
 
 // ---------------------------------------------------------------------------
