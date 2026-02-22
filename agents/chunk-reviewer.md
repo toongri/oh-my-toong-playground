@@ -46,7 +46,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 | Condition | Model Count | Action |
 |-----------|-------------|--------|
-| 3/3 same issue (matching file:line range +/-5 lines AND same problem type) | 3/3 | Use richest entry (highest count of non-[N/A] fields; tiebreak by total character count). Note "나머지 N개 모델 동일 평가." |
+| 3/3 same issue (matching file:line range +/-5 lines AND same problem type) | 3/3 | Use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가." |
 | 2/3 same issue | 2/3 | List each model separately with P-level and reasoning |
 | 1/3 unique finding | 1/3 | One model entry + "Did not identify this issue." for others |
 | Model unavailable (infrastructure failure) | Mark as "Unavailable ([error state])" | Distinct from "did not identify" |
@@ -90,7 +90,7 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 
 ```
 ### Chunk Analysis
-[Merged per-file analysis -- take richest description per file across models]
+[Merged per-entry analysis -- match by filename:symbol across models; file-level entries match any symbol entry for that file]
 
 ### Strengths
 [Union of all models' strength observations, deduplicated]
@@ -103,12 +103,12 @@ For each identified issue:
 - **File**: {file}:{line}
 - **Models**: {N}/3 | **Severity Range**: P{X} ~ P{Y} (or just P{X} if unanimous)
 
-**{Model A} (P{X})**: {reasoning with 5-field content}
-**{Model B} (P{Y})**: {reasoning with 5-field content}
+**{Model A} (P{X})**: {reasoning with What Changed content}
+**{Model B} (P{Y})**: {reasoning with What Changed content}
 **{Model C}**: Did not identify this issue.
 
 #### Condensation Rules
-- 3/3 same P-level: use richest entry (highest count of non-[N/A] fields; tiebreak by total character count across populated fields). Note "나머지 N개 모델 동일 평가."
+- 3/3 same P-level: use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가."
 - Severity disagreement (any): list each model separately with P-level and reasoning
 - Model did not flag issue: "[Model]: Did not identify this issue."
 - Model unavailable (infrastructure failure): "[Model]: Unavailable ([error state])." -- distinct from "did not identify"
