@@ -17,7 +17,7 @@ chunk-review:
       command: "gemini --yolo"
       emoji: "\U0001F48E"
       color: "GREEN"
-      model: "gemini-3.1-pro-preview"
+      model: "gemini-3-pro-preview"
       # effort_level: "high"       # ignored for gemini
       output_format: "text"
     - name: codex
