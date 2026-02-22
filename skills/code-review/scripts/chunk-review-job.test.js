@@ -1415,6 +1415,74 @@ describe('computeStatus', () => {
     assert.equal(result.counts.retrying, 1);
     assert.equal(result.counts.done, 1);
   });
+
+  it('transitions stale queued reviewer to error when queuedAt exceeds threshold', () => {
+    const jobDir = path.join(tmpDir, 'job-stale');
+    const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
+    setupJob(jobDir, { id: 'test-stale', settings: { timeoutSec: 30 } }, {
+      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+    });
+    // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    assert.equal(alice.state, 'error');
+    assert.equal(result.counts.error, 1);
+    assert.equal(result.counts.queued, 0);
+  });
+
+  it('does not transition queued reviewer that is within staleness threshold', () => {
+    const jobDir = path.join(tmpDir, 'job-fresh');
+    const freshTime = new Date(Date.now() - 10_000).toISOString(); // 10s ago
+    setupJob(jobDir, { id: 'test-fresh', settings: { timeoutSec: 30 } }, {
+      alice: { reviewer: 'alice', state: 'queued', queuedAt: freshTime },
+    });
+    // threshold = Math.max(2 * 30, 120) = 120s; 10s < 120s → not stale
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    assert.equal(alice.state, 'queued');
+    assert.equal(result.counts.queued, 1);
+  });
+
+  it('uses 120s minimum threshold when timeoutSec is 0', () => {
+    const jobDir = path.join(tmpDir, 'job-zero-timeout');
+    const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
+    setupJob(jobDir, { id: 'test-zero', settings: { timeoutSec: 0 } }, {
+      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+    });
+    // threshold = Math.max(2 * 0, 120) = 120s; 200s > 120s → stale
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    assert.equal(alice.state, 'error');
+  });
+
+  it('uses file mtime as fallback when queuedAt is missing', () => {
+    const jobDir = path.join(tmpDir, 'job-no-queued-at');
+    setupJob(jobDir, { id: 'test-mtime', settings: { timeoutSec: 30 } }, {
+      alice: { reviewer: 'alice', state: 'queued' },
+    });
+    // Force the file mtime to be old
+    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const oldTime = new Date(Date.now() - 200_000);
+    fs.utimesSync(statusPath, oldTime, oldTime);
+    // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    assert.equal(alice.state, 'error');
+  });
+
+  it('writes error details to status.json on staleness transition', () => {
+    const jobDir = path.join(tmpDir, 'job-stale-write');
+    const staleTime = new Date(Date.now() - 200_000).toISOString();
+    setupJob(jobDir, { id: 'test-write', settings: { timeoutSec: 30 } }, {
+      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+    });
+    computeStatus(jobDir);
+    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    assert.equal(written.state, 'error');
+    assert.ok(written.error.includes('stale'), `Expected error message to contain "stale", got: ${written.error}`);
+  });
 });
 
 // ---------------------------------------------------------------------------

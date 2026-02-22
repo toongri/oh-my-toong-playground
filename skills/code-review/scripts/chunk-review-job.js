@@ -343,11 +343,47 @@ function computeStatus(jobDir) {
   const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
   if (!fs.existsSync(reviewersRoot)) exitWithError(`reviewers folder not found: ${reviewersRoot}`);
 
+  // Staleness threshold: Math.max(2 * timeoutSec, 120) seconds
+  const timeoutSec = (jobMeta.settings && Number.isFinite(Number(jobMeta.settings.timeoutSec)))
+    ? Number(jobMeta.settings.timeoutSec)
+    : 0;
+  const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
+
   const reviewers = [];
   for (const entry of fs.readdirSync(reviewersRoot)) {
     const statusPath = path.join(reviewersRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath);
-    if (status) reviewers.push({ safeName: entry, ...status });
+    let status = readJsonIfExists(statusPath);
+    if (!status) continue;
+
+    // Staleness check for queued reviewers
+    if (status.state === 'queued') {
+      let queuedTs;
+      if (status.queuedAt) {
+        queuedTs = new Date(status.queuedAt).getTime();
+      } else {
+        // Fallback to file mtime
+        try { queuedTs = fs.statSync(statusPath).mtimeMs; } catch { queuedTs = Date.now(); }
+      }
+      const elapsed = Date.now() - queuedTs;
+      if (elapsed > stalenessThresholdMs) {
+        // CAS pattern: sleep then re-read to avoid race with worker startup
+        sleepMs(250);
+        const recheck = readJsonIfExists(statusPath);
+        if (recheck && recheck.state === 'queued') {
+          const errorPayload = {
+            ...recheck,
+            state: 'error',
+            error: `Worker stale: no progress for ${Math.round(elapsed / 1000)} seconds`,
+          };
+          atomicWriteJson(statusPath, errorPayload);
+          status = errorPayload;
+        } else if (recheck) {
+          status = recheck;
+        }
+      }
+    }
+
+    reviewers.push({ safeName: entry, ...status });
   }
 
   const totals = { queued: 0, running: 0, retrying: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
@@ -547,7 +583,7 @@ function cmdWait(options, jobDir) {
   const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
 
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 0;
+  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 600000;
   const timeoutMs = Math.trunc(Number(timeoutMsRaw));
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
 

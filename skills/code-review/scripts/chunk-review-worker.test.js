@@ -118,7 +118,7 @@ describe('atomicWriteJson', () => {
     tmpDir = makeTmpDir();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -185,7 +185,7 @@ describe('runOnce - stdin pipe', () => {
     paths = setupJobDir(tmpDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -240,7 +240,7 @@ describe('runOnce - exit states', () => {
     paths = setupJobDir(tmpDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -397,7 +397,7 @@ describe('runWithRetry', () => {
     paths = setupJobDir(tmpDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -753,8 +753,6 @@ describe('runOnce - synchronous spawnFn throw', () => {
   });
 
   afterEach(async () => {
-    // Allow async stream cleanup to complete before removing tmpDir
-    await sleepMs(50);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -954,8 +952,6 @@ describe('runOnce - workerEnv injection', () => {
   });
 
   afterEach(async () => {
-    // Allow async stream cleanup to complete before removing tmpDir
-    await sleepMs(50);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -1046,5 +1042,71 @@ describe('runOnce - workerEnv injection', () => {
     assert.equal(captured.options.env.HOME, '/override/home');
     // Other process.env vars should still be present
     assert.equal(captured.options.env.PATH, process.env.PATH);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce() — stream close guarantee
+// ---------------------------------------------------------------------------
+
+describe('runOnce - stream close guarantee', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  it('does not resolve before outStream/errStream close events fire', async () => {
+    // Track close events on the real file write streams by monkey-patching
+    // fs.createWriteStream for this test.
+    const originalCreateWriteStream = fs.createWriteStream;
+    const streamCloseTimestamps = [];
+    let resolveTimestamp = 0;
+
+    fs.createWriteStream = function (...args) {
+      const stream = originalCreateWriteStream.apply(this, args);
+      stream.on('close', () => {
+        streamCloseTimestamps.push(Date.now());
+      });
+      return stream;
+    };
+
+    try {
+      const { mockSpawn } = createCapturingSpawnFn();
+
+      const result = await runOnce({
+        program: 'test-program',
+        args: [],
+        prompt: '',
+        reviewer: paths.reviewer,
+        reviewerDir: paths.reviewerDir,
+        command: 'test-program',
+        timeoutSec: 0,
+        attempt: 0,
+        spawnFn: mockSpawn,
+      });
+      resolveTimestamp = Date.now();
+
+      assert.equal(result.state, 'done');
+
+      // Give a tick for any pending close events to fire
+      await new Promise((r) => setTimeout(r, 50));
+
+      // Both outStream and errStream should have closed BEFORE (or at) resolve
+      assert.equal(streamCloseTimestamps.length, 2,
+        `expected 2 stream close events, got ${streamCloseTimestamps.length}`);
+      for (const ts of streamCloseTimestamps) {
+        assert.ok(ts <= resolveTimestamp,
+          `stream closed at ${ts} but resolve fired at ${resolveTimestamp} — stream closed AFTER resolve`);
+      }
+    } finally {
+      fs.createWriteStream = originalCreateWriteStream;
+    }
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

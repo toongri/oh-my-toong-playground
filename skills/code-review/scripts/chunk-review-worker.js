@@ -232,8 +232,19 @@ function runOnce(opts) {
         finishedAt: new Date().toISOString(), command, attempt,
       };
       atomicWriteJson(statusPath, result);
+      // Wait for streams to close before resolving (same pattern as finalize)
+      let closed = 0;
+      const total = 2;
+      const safetyTimeout = setTimeout(() => resolve(result), 500);
+      const onClose = () => {
+        if (++closed === total) {
+          clearTimeout(safetyTimeout);
+          resolve(result);
+        }
+      };
+      if (outStream.closed || outStream.destroyed) { onClose(); } else { outStream.on('close', onClose); }
+      if (errStream.closed || errStream.destroyed) { onClose(); } else { errStream.on('close', onClose); }
       try { outStream.end(); errStream.end(); } catch { /* ignore */ }
-      resolve(result);
       return;
     }
 
@@ -271,9 +282,21 @@ function runOnce(opts) {
     const finalize = (payload) => {
       if (finalized) return;
       finalized = true;
-      try { outStream.end(); errStream.end(); } catch { /* ignore */ }
       atomicWriteJson(statusPath, payload);
-      resolve(payload);
+      let closed = 0;
+      const total = 2;
+      const safetyTimeout = setTimeout(() => resolve(payload), 500);
+      const onClose = () => {
+        if (++closed === total) {
+          clearTimeout(safetyTimeout);
+          resolve(payload);
+        }
+      };
+      // Stream may already be closed (pipe ended it before finalize ran)
+      if (outStream.closed || outStream.destroyed) { onClose(); } else { outStream.on('close', onClose); }
+      if (errStream.closed || errStream.destroyed) { onClose(); } else { errStream.on('close', onClose); }
+      outStream.end();
+      errStream.end();
     };
 
     child.on('error', (error) => {
