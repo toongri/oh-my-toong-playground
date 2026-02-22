@@ -223,8 +223,8 @@
 | VP | Result | Evidence |
 |----|--------|----------|
 | V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a change-unit-scoped analysis for the files in your assigned chunk" — What Changed 단일 필드의 change-unit-scoped 형식 정의 |
-| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents) + Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)" — Chunk Analysis + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반 |
-| V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Explain data flow, design decisions, and side effects" |
+| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (per-symbol/per-file What Changed descriptions from chunk-reviewer agents) + Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)" — What Changed entries + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반 |
+| V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all What Changed entries into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Enrich with Step 2 metadata (commit messages, PR description, CLAUDE.md) and Phase 1a results when available" + "Explain data flow, design decisions, and side effects" |
 | V4 | PASS | SKILL.md Step 5 "Architecture Diagram": "Mermaid class diagram or component diagram" + "If no structural changes: write 'No structural changes — existing architecture preserved'" |
 | V5 | PASS | SKILL.md Step 5 "Sequence Diagram": "Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes" + "If no call flow changes: write 'No call flow changes'" |
 | V6 | PASS | SKILL.md Step 5 Final Output Format: Walkthrough (Change Summary → Core Logic → Architecture → Sequence) → Strengths → Issues → Recommendations → Assessment — Walkthrough가 critique 앞에 배치 |
@@ -235,8 +235,8 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 5 Phase 1: "All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)" — 모든 chunk 분석 수집 명시 |
-| V2 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" — 모듈/기능 단위 재구성 |
+| V1 | PASS | SKILL.md Step 5 Phase 1: "All chunk Chunk Analysis sections (per-symbol/per-file What Changed descriptions from chunk-reviewer agents)" — 모든 chunk What Changed entries 수집 명시 |
+| V2 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all What Changed entries into a unified module/feature-level narrative" — 모듈/기능 단위 재구성 |
 | V3 | PASS | SKILL.md Step 5 "Architecture Diagram": "Show changed classes/modules and their relationships (inheritance, composition, dependency)" + "Distinguish new vs modified elements" — multi-chunk 구조적 변경 통합 |
 | V4 | PASS | SKILL.md Step 5 "Sequence Diagram": "Include actors, method calls, return values, and significant conditional branches" — chunk 간 호출 관계 포함 |
 | V5 | PASS | SKILL.md Step 5 Phase 2 항목 1-5: "Merge all Strengths, Issues, Recommendations" + "Deduplicate" + "Identify cross-file concerns" + "Normalize severity labels" + "Determine final verdict" — 기존 합성 로직 그대로 |
@@ -284,8 +284,8 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Core Logic Analysis requires understanding cross-module relationships not visible from chunk analysis → explore" + "Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff → explore" — chunk analysis gap이 explore dispatch를 trigger |
-| V2 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_chunk_analysis}." — specific chunk analysis findings를 참조 |
+| V1 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Core Logic Analysis requires understanding cross-module relationships not visible from What Changed entries → explore" + "Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff → explore" — What Changed entries gap이 explore dispatch를 trigger |
+| V2 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_what_changed}." — specific What Changed entries findings를 참조 |
 | V3 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt." — walkthrough synthesis enrichment 용도 명시 (chunk-reviewer 보정이 아님) |
 | V4 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories." — identified gap 기반 targeted search |
 | V5 | PASS | SKILL.md Step 5 Phase 1a "When NOT to dispatch" 테이블: "Trivial diff (< 5 files, < 100 lines) → Sparse analysis is expected, not a gap" + "Simple changes (test-only, doc-only, config-only, single-function logic) → Chunk analysis is self-sufficient" — trivial diff는 explore를 trigger하지 않음 |
