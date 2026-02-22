@@ -372,6 +372,8 @@ For single-chunk reviews, Phase 2 still performs Final Adjudication (severity ad
 | All models agree on P-level | Adopt as-is |
 | Models disagree on P-level | Orchestrator evaluates each model's reasoning against P0-P3 rubric (3-axis: impact delta, probability, maintainability) and assigns final P-level with 1-2 sentence justification |
 
+**Project Profile Check:** When adjudicating probability-driven disagreements, reference the `{PROJECT_PROFILE}` collected in Step 0. AI models default to production-service threat models. If the project profile indicates characteristics that lower probability (e.g., single-user scope, all-trusted input, local execution, no availability requirements), re-evaluate whether the models' probability assessments are realistic for this specific project. A P1 assessed under production-service assumptions may warrant P2 or P3 for a single-user local CLI tool with no untrusted input.
+
 **P0 Protection Rule:** If ANY single model assigns P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
 
 Under degradation (fewer responding models), P0 protection still applies — a single responding model's P0 is protected if rubric criteria are satisfied.
