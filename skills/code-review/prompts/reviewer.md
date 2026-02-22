@@ -69,7 +69,7 @@ Check the changes against project conventions:
 
 ### Step 7: Verdict
 
-Based on Steps 1-6, classify every issue found by severity and produce the final merge assessment. Apply severity definitions strictly -- not everything is Critical.
+Based on Steps 1-6, classify every issue found by severity (P0-P3) and produce the final merge assessment. Apply severity definitions strictly -- not everything is P0.
 
 ## Review Checklist
 
@@ -128,14 +128,17 @@ Produce your review in exactly this structure:
 
 ### Issues
 
-#### Critical (Must Fix)
-[Bugs, security issues, data loss risks, broken functionality]
+#### P0 (Must Fix)
+[Issues that block merge: outage, data loss, security vulnerabilities triggered in normal operation]
 
-#### Important (Should Fix)
-[Architecture problems, missing features, poor error handling, test gaps]
+#### P1 (Should Fix)
+[Issues that cause partial failure, performance degradation, or requirement mismatch under realistic conditions]
 
-#### Minor (Nice to Have)
-[Code style, optimization opportunities, documentation improvements]
+#### P2 (Consider Fix)
+[Low-probability bugs OR no-bug maintainability improvements with significant impact]
+
+#### P3 (Optional)
+[Quality, readability, consistency improvements with no correctness or maintainability concern]
 
 #### Cross-File Concerns
 [Issues spanning multiple files in this chunk, or patterns that might conflict with files outside your chunk]
@@ -148,17 +151,140 @@ Produce your review in exactly this structure:
 **Reasoning:** [Technical assessment in 1-2 sentences]
 ```
 
-**For each issue, provide:**
-- File:line reference
-- What's wrong
-- Why it matters
-- How to fix (if not obvious)
+**Per-issue format:**
 
-## Severity Definitions
+```
+**[P{0-3}] {issue title}**
+- **File**: {file}:{line}
+- **Problem**: What is wrong. Current code state.
+- **Impact**: What happens if unfixed vs fixed.
+- **Probability**: Under what conditions and how frequently.
+- **Maintainability**: How fix affects long-term maintenance.
+- **Fix**: How to fix.
+```
 
-- **Critical**: Blocks merge. Security vulnerabilities, data loss risks, broken functionality.
-- **Important**: Should fix before merge. Architecture problems, missing error handling, test gaps.
-- **Minor**: Nice to have. Code style, optimization opportunities, documentation.
+- P0/P1: All 6 fields are mandatory.
+- P2/P3: Probability and Maintainability may be `[N/A]`.
+- Fix is always mandatory (P3 may use a single line).
+
+## Severity Definitions (P0-P3)
+
+Each issue is classified by three axes: **Impact Delta**, **Probability**, and **Maintainability**.
+
+| P-Level | Impact Delta | Probability | Maintainability |
+|---------|-------------|-------------|-----------------|
+| **P0** (must-fix) | Outage, data loss, or security breach | Triggered during normal operation | System inoperable if unfixed |
+| **P1** (should-fix) | Partial failure, performance degradation, or requirement mismatch | Occurs under realistic conditions | Fix yields significant quality improvement |
+| **P2** (consider-fix) | (a) Bug exists but trigger probability is unrealistic, OR (b) No bug but maintainability significantly improves | Low or N/A | Maintainability improvement is significant |
+| **P3** (optional) | No correctness issue | N/A | Readability, consistency, or style improvement only |
+
+### Boundary Cases
+
+Use the three axes to resolve ambiguous classifications:
+
+1. **SQL injection via admin-only internal endpoint** -- Impact is security breach (P0-level), but probability requires compromised internal network. The Impact axis dominates: **P0**, because a single exploitation causes irreversible damage regardless of probability.
+
+2. **Missing null check on a field that is always non-null by DB constraint** -- Impact would be NPE (P0-level if triggered), but probability is near-zero because the DB enforces non-null. Probability axis dominates: **P2**, because the bug exists but the trigger is unrealistic under current schema.
+
+3. **No connection pool timeout configured, default is infinite** -- Impact is connection pool starvation under load (outage-level), probability depends on traffic patterns. If the service handles external traffic: **P0** (normal operation triggers it). If it is an internal batch job with controlled concurrency: **P1** (realistic but not normal-path).
+
+4. **Catching generic `Exception` instead of specific types** -- No bug today, but masks future bugs and makes debugging harder. Impact is zero now; maintainability improvement is significant. **P2** (no bug, significant maintainability gain).
+
+5. **Method named `process()` instead of `validateAndPersistOrder()`** -- No bug, no maintainability risk beyond readability. **P3** (style/readability only).
+
+6. **Race condition in cache invalidation that causes stale reads for ~100ms** -- Impact is serving stale data briefly, probability is high under concurrent writes. If stale data causes incorrect business decisions: **P1**. If the data is display-only and eventual consistency is acceptable: **P2**.
+
+### Negative Examples
+
+**P0/P1 boundary (what is NOT P0):**
+- "Token has no expiry" is NOT P0 because the impact is security degradation (not immediate breach) and exploitation requires a leaked token -- a realistic but not normal-operation condition. This is **P1**.
+- "Error message leaks stack trace to client" is NOT P0 because it exposes internal structure but does not directly enable data loss or unauthorized access. This is **P1**.
+
+**P1/P2 boundary (what is NOT P1):**
+- "Deprecated API usage that still functions correctly" is NOT P1 because there is no current failure or degradation -- only future maintenance risk. This is **P2**.
+- "Missing index on a column queried only by nightly batch job processing <1000 rows" is NOT P1 because performance impact is negligible at current scale and probability of degradation is unrealistic. This is **P2**.
+
+**P2/P3 boundary (what is NOT P2):**
+- "Variable named `x` instead of `count`" is NOT P2 because renaming improves readability but does not significantly affect maintainability -- the scope is limited and the logic is clear from context. This is **P3**.
+- "Missing blank line between method groups" is NOT P2 because formatting has no effect on maintainability or correctness. This is **P3**.
+
+### Per-Level Examples
+
+**P0 examples:**
+
+**[P0] Email sent inside `@Transactional` blocks DB connection during SMTP**
+- **File**: UserService.kt:34
+- **Problem**: `registerUser()` is `@Transactional` and calls `emailService.sendVerification()` synchronously. SMTP calls take 1-5s, holding the DB connection open.
+- **Impact**: Under registration load, DB connection pool exhausts within minutes, causing full service outage. If fixed, connections are released immediately after DB writes.
+- **Probability**: Every user registration triggers this path -- normal operation.
+- **Maintainability**: Current coupling forces all future email changes to consider transaction scope.
+- **Fix**: Move email sending after transaction commit using `@TransactionalEventListener(phase = AFTER_COMMIT)`.
+
+**[P0] Unsanitized user input in SQL query string concatenation**
+- **File**: ReportDao.kt:112
+- **Problem**: `query = "SELECT * FROM reports WHERE name = '" + userName + "'"` -- direct string concatenation with user-supplied input.
+- **Impact**: Full SQL injection: data exfiltration, modification, or deletion. If fixed, parameterized queries prevent injection entirely.
+- **Probability**: Any user with access to the search form can trigger this.
+- **Maintainability**: Parameterized queries are the standard pattern; fixing aligns with existing DAO conventions.
+- **Fix**: Use parameterized query: `jdbcTemplate.query("SELECT * FROM reports WHERE name = ?", userName)`.
+
+**P1 examples:**
+
+**[P1] No expiry on verification tokens**
+- **File**: UserService.kt:38
+- **Problem**: Verification tokens persist indefinitely in `verification_tokens` table. A leaked or intercepted token remains valid forever.
+- **Impact**: Attacker with a leaked token can verify arbitrary accounts at any future time. If fixed, tokens expire after 24h, limiting the attack window.
+- **Probability**: Requires token leakage (email forwarding, log exposure, URL in browser history) -- realistic but not normal-path.
+- **Maintainability**: Adding expiry requires schema change (`expires_at` column) and a cleanup job, but establishes a reusable pattern for all future token types.
+- **Fix**: Add `expires_at` column, validate on verification, add scheduled cleanup job.
+
+**[P1] Unbounded list returned from search endpoint**
+- **File**: SearchController.kt:27
+- **Problem**: `findAll()` returns entire result set without pagination. Current dataset is small but growing.
+- **Impact**: At 10x data volume, responses exceed 10MB, causing client timeouts and server memory pressure. If fixed, paginated responses keep memory bounded.
+- **Probability**: Realistic as data grows -- production dataset doubles every 6 months.
+- **Maintainability**: Adding pagination later requires API versioning or breaking change. Fixing now avoids that cost.
+- **Fix**: Add `Pageable` parameter with default page size of 20.
+
+**P2 examples:**
+
+**[P2] Catching generic Exception in retry logic**
+- **File**: RetryHandler.kt:45
+- **Problem**: `catch (e: Exception)` catches all exceptions including `OutOfMemoryError` (via its superclass). No bug today, but masks unexpected errors.
+- **Impact**: No current failure. If a non-retryable exception occurs in the future, it will be silently retried instead of failing fast.
+- **Probability**: [N/A]
+- **Maintainability**: Narrowing to specific exception types makes retry behavior explicit and prevents future debugging confusion.
+- **Fix**: Catch only `IOException` and `TimeoutException` (the retryable cases).
+
+**[P2] Missing null check on optional configuration property**
+- **File**: AppConfig.kt:23
+- **Problem**: `config.getProperty("cache.ttl")` returns null if property is missing. Currently always set via environment, but no code-level guard.
+- **Impact**: NPE if property is ever removed from environment config. Currently unrealistic because deployment scripts enforce it.
+- **Probability**: [N/A] -- deployment pipeline guarantees the property exists.
+- **Maintainability**: Adding a default value or explicit null check makes the code self-documenting and resilient to deployment changes.
+- **Fix**: Use `config.getProperty("cache.ttl") ?: "3600"` with a default value.
+
+**P3 examples:**
+
+**[P3] Magic number for token byte length**
+- **File**: UserService.kt:36
+- **Problem**: `SecureRandom().nextBytes(32)` -- 32 is an unexplained literal.
+- **Impact**: [N/A]
+- **Probability**: [N/A]
+- **Maintainability**: [N/A]
+- **Fix**: Extract to named constant `VERIFICATION_TOKEN_BYTES = 32`.
+
+**[P3] Inconsistent parameter ordering in service methods**
+- **File**: UserService.kt:15-28
+- **Problem**: `createUser(name, email, role)` vs `updateUser(role, name, email)` -- parameter order is inconsistent across methods.
+- **Impact**: [N/A]
+- **Probability**: [N/A]
+- **Maintainability**: [N/A]
+- **Fix**: Standardize parameter order to `(name, email, role)` across all methods.
+
+### Pre-existing Issue Tagging
+
+If an issue exists in unchanged context lines (not in added/modified lines of the diff), mark it with `[Pre-existing]` prefix in the issue title. This indicates the issue was not introduced by this PR. Example: `**[P1] [Pre-existing] Unbounded list returned from search endpoint**`
 
 ## Chunk Review Mode
 
@@ -175,7 +301,7 @@ If CLAUDE.md content is provided, verify the diff adheres to its conventions. Fl
 ## Critical Rules
 
 **DO:**
-- Categorize by actual severity (not everything is Critical)
+- Categorize by actual severity using P0-P3 rubric (not everything is P0)
 - Be specific (file:line, not vague)
 - Explain WHY issues matter
 - Acknowledge strengths before issues
@@ -183,7 +309,7 @@ If CLAUDE.md content is provided, verify the diff adheres to its conventions. Fl
 
 **DO NOT:**
 - Say "looks good" without thorough review
-- Mark nitpicks as Critical
+- Mark nitpicks as P0
 - Give feedback on code you did not review
 - Be vague ("improve error handling" without specifics)
 - Avoid giving a clear verdict
@@ -213,23 +339,38 @@ If CLAUDE.md content is provided, verify the diff adheres to its conventions. Fl
 
 ### Issues
 
-#### Critical (Must Fix)
-1. **Email sent inside `@Transactional` blocks DB connection during SMTP**
-   - File: UserService.kt:34-52
-   - Issue: `registerUser()` is `@Transactional` and calls `emailService.sendVerification()` synchronously. SMTP calls take 1-5s, holding the DB connection open.
-   - Fix: Move email sending after transaction commit using `@TransactionalEventListener(phase = AFTER_COMMIT)`.
+#### P0 (Must Fix)
 
-#### Important (Should Fix)
-1. **No expiry on verification tokens**
-   - File: UserService.kt:38
-   - Issue: Tokens persist indefinitely. A leaked token remains valid forever.
-   - Fix: Add `expires_at` column, validate on verification, add scheduled cleanup job.
+**[P0] Email sent inside `@Transactional` blocks DB connection during SMTP**
+- **File**: UserService.kt:34
+- **Problem**: `registerUser()` is `@Transactional` and calls `emailService.sendVerification()` synchronously. SMTP calls take 1-5s, holding the DB connection open.
+- **Impact**: Under registration load, DB connection pool exhausts within minutes, causing full service outage. If fixed, connections are released immediately after DB writes.
+- **Probability**: Every user registration triggers this path -- normal operation.
+- **Maintainability**: Current coupling forces all future email changes to consider transaction scope.
+- **Fix**: Move email sending after transaction commit using `@TransactionalEventListener(phase = AFTER_COMMIT)`.
 
-#### Minor (Nice to Have)
-1. **Magic number for token length**
-   - File: UserService.kt:36
-   - Issue: `SecureRandom().nextBytes(32)` -- 32 is unexplained.
-   - Fix: Extract to named constant `VERIFICATION_TOKEN_BYTES = 32`.
+#### P1 (Should Fix)
+
+**[P1] No expiry on verification tokens**
+- **File**: UserService.kt:38
+- **Problem**: Verification tokens persist indefinitely in `verification_tokens` table. A leaked or intercepted token remains valid forever.
+- **Impact**: Attacker with a leaked token can verify arbitrary accounts at any future time. If fixed, tokens expire after 24h, limiting the attack window.
+- **Probability**: Requires token leakage (email forwarding, log exposure, URL in browser history) -- realistic but not normal-path.
+- **Maintainability**: Adding expiry requires schema change (`expires_at` column) and a cleanup job, but establishes a reusable pattern for all future token types.
+- **Fix**: Add `expires_at` column, validate on verification, add scheduled cleanup job.
+
+#### P2 (Consider Fix)
+[None]
+
+#### P3 (Optional)
+
+**[P3] Magic number for token byte length**
+- **File**: UserService.kt:36
+- **Problem**: `SecureRandom().nextBytes(32)` -- 32 is an unexplained literal.
+- **Impact**: [N/A]
+- **Probability**: [N/A]
+- **Maintainability**: [N/A]
+- **Fix**: Extract to named constant `VERIFICATION_TOKEN_BYTES = 32`.
 
 #### Cross-File Concerns
 1. **No rate limiting on verification endpoint**: UserController.kt exposes `/verify-email` without throttling. An attacker could brute-force short tokens. If other endpoints use rate limiting middleware, this one should too.
@@ -240,5 +381,5 @@ If CLAUDE.md content is provided, verify the diff adheres to its conventions. Fl
 
 ### Assessment
 **Ready to merge?** No
-**Reasoning:** The `@Transactional` wrapping synchronous SMTP is a Critical issue that will cause DB connection pool starvation under registration load. Must decouple email sending from the transaction.
+**Reasoning:** The `@Transactional` wrapping synchronous SMTP is a P0 issue that will cause DB connection pool starvation under registration load. Must decouple email sending from the transaction.
 ```
