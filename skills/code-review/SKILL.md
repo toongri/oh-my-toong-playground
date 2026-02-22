@@ -333,6 +333,19 @@ Phase 1: Read all What Changed entries from Chunk Analysis
 - Include actors, method calls, return values, and significant conditional branches
 - If no call flow changes (e.g., variable rename, config change): write "No call flow changes"
 
+### Severity Rubric (P0-P3)
+
+Workers **propose** P-levels with supporting evidence. The orchestrator **adjudicates** the final P-level based on worker proposals and their reasoning.
+
+| P-Level | Impact Delta | Probability | Maintainability |
+|---------|-------------|-------------|-----------------|
+| **P0** (must-fix) | Outage, data loss, or security breach | Triggered during normal operation | System inoperable if unfixed |
+| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, or security weakness in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
+| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
+| **P3** (optional) | No correctness issue, no projected failure | N/A | Readability, consistency, or style improvement only |
+
+**P1 vs P2 Decision Gate:** "Is there a defect in the current code, AND does it manifest under conditions that exist today?" Both must be yes for P1. If the defect's trigger is unrealistic → P2(a). If no defect today but predictable future failure → P2(b). If no defect and no projected failure but significant maintainability gain → P2(c).
+
 ### Phase 2: Critique Synthesis
 
 For multi-chunk reviews:
@@ -341,22 +354,24 @@ For multi-chunk reviews:
 2. **Deduplicate** issues appearing in multiple chunks
    - When the same issue appears across chunks at different P-levels, promote to the highest P-level (e.g., P1 in Chunk A + P0 in Chunk B → promote to P0)
 3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
-4. **Normalize severity labels** across chunks using P0 / P1 / P2 / P3 scale. When the same issue appears in multiple chunks at different P-levels, promote to the highest P-level and note the discrepancy.
-5. **Collect per-model verdicts** from all chunks for Final Adjudication
+4. **Normalize severity labels** across chunks using the P0-P3 rubric. When the same issue appears in multiple chunks at different P-levels, promote to the highest P-level and note the discrepancy.
+5. **Collect per-worker verdicts** from all chunks for Final Adjudication
 6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
 For single-chunk reviews, Phase 2 still performs Final Adjudication (severity adjudication, P0 protection, verdict determination, Out of Scope classification) on the single chunk's results before producing final output.
 
 #### Step 7: Final Severity Adjudication
 
-**Order of operations:** Adjudicate per-model severity within each chunk FIRST. Then normalize across chunks by promoting to the highest adjudicated P-level.
+Workers **propose** severity levels; the orchestrator makes the **final determination** by evaluating each worker's reasoning against the P0-P3 rubric.
+
+**Order of operations:** Adjudicate per-worker severity within each chunk FIRST. Then normalize across chunks by promoting to the highest adjudicated P-level.
 
 | Condition | Action |
 |-----------|--------|
-| All models agree on P-level | Adopt as-is |
-| Models disagree on P-level | Orchestrator evaluates each model's reasoning against P0-P3 rubric (3-axis: impact delta, probability, maintainability) and assigns final P-level with 1-2 sentence justification |
+| All workers agree on P-level | Adopt as-is |
+| Workers disagree on P-level | Orchestrator evaluates each worker's reasoning against the P0-P3 rubric (3-axis: impact delta, probability, maintainability). Apply the P1/P2 decision gate: "Is there a demonstrable defect that manifests under today's conditions?" Assign final P-level with 1-2 sentence justification citing the decisive axis. |
 
-**Project Context Check:** Before finalizing each P-level, verify that the models' probability and impact assessments are realistic for the actual project context. Ask: "Does the threat model these models assumed match this project?"
+**Project Context Check:** Before finalizing each P-level, verify that the workers' probability and impact assessments are realistic for the actual project context. Ask: "Does the threat model these workers assumed match this project?"
 
 Examples of context-driven recalibration (both directions — context can lower OR raise severity):
 
@@ -366,19 +381,26 @@ Examples of context-driven recalibration (both directions — context can lower 
 
 - **Models assess P1 for no circuit breaker. Project is a utility library.** — Models flag missing circuit breaker as a resilience gap. But the project context shows this is a utility library that does not make network calls — its consumers do. The library cannot implement a circuit breaker because it does not control the network layer. This is not a lower-severity issue; it is a **false positive** — the concern is misapplied to the wrong architectural layer. Recalibrate: **dismiss** (not applicable to this codebase; if worth noting, add as a recommendation for consumers, not as an issue in this code).
 
-- **Models assess P3 for missing pagination. Project is a rapidly growing SaaS.** — Models treat unbounded queries as a style issue because the current dataset is small. But the project context shows user growth of 10x per quarter with no ceiling. What is 1,000 rows today will be 100,000 in 6 months. The probability axis shifts from "current data is fine" to "inevitable within the project's growth trajectory." Recalibrate **upward to P1** (the timeline makes the theoretical concern a practical certainty).
+- **Models assess P3 for missing pagination. Project is a rapidly growing SaaS.** — Models treat unbounded queries as a style issue because the current dataset is small. But the project context shows user growth of 10x per quarter with no ceiling. If current queries already show measurable latency degradation at today's data volume: recalibrate **upward to P1** (demonstrable defect under today's conditions -- the defect exists and manifests now). If current dataset is still within SLA but growth trajectory makes future degradation certain: recalibrate **upward to P2(b)** (no defect today, but predictable failure under realistic growth).
 
-**P0 Protection Rule:** If ANY single model assigns P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
+**P0 Protection Rule:** If ANY single worker proposes P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
 
-Under degradation (fewer responding models), P0 protection still applies — a single responding model's P0 is protected if rubric criteria are satisfied.
+Under degradation (fewer responding workers), P0 protection still applies — a single responding worker's P0 is protected if rubric criteria are satisfied.
 
 #### Step 8: Final Verdict Determination
 
-| Condition | Verdict |
-|-----------|---------|
-| P0 issues unresolved | **No** |
-| Only P1 issues unresolved | Orchestrator discretion — **Yes with conditions** possible (justification required) |
-| Only P2/P3 issues | **Yes** |
+| Condition | Verdict | Merge Gate |
+|-----------|---------|------------|
+| P0 issues unresolved | **No** | Hard block -- no exceptions |
+| Only P1 issues unresolved | **No** (default) / **Yes with conditions** (override) | Soft block -- override requires: (1) explicit justification per P1 issue, (2) tracking artifact (issue number, TODO with ticket), and (3) confirmation that fix timeline is committed |
+| Only P2/P3 issues | **Yes** | Non-blocking |
+
+**Override Protocol for P1 Soft Block:**
+When the orchestrator determines "Yes with conditions" for P1 issues, the Assessment section must include:
+- Per-P1 justification: why deferral is acceptable for this specific issue
+- Tracking artifact: issue number or TODO with ticket reference
+- Fix timeline: when the fix will be delivered (e.g., "next sprint", "follow-up PR")
+- Conditions without tracking artifacts are not valid overrides
 
 #### Step 9: Out of Scope Classification
 
@@ -389,7 +411,7 @@ Under degradation (fewer responding models), P0 protection still applies — a s
 
 **Exception:** If PR aggravates a pre-existing issue (increases blast radius, frequency, or severity), move to main issues section.
 
-**Cross-chunk rule:** If ANY model in ANY chunk flags an issue as non-pre-existing (on a changed line), treat as current issue in main section.
+**Cross-chunk rule:** If ANY worker in ANY chunk flags an issue as non-pre-existing (on a changed line), treat as current issue in main section.
 
 ### Final Output Format
 
@@ -416,16 +438,16 @@ Under degradation (fewer responding models), P0 protection still applies — a s
 ## Issues
 
 ### P0 (Must Fix)
-[Per-issue with 5-field format + Review Consensus]
+[Issues that block merge: outage, data loss, security vulnerabilities triggered in normal operation]
 
 ### P1 (Should Fix)
-[Per-issue with 5-field format + Review Consensus]
+[Demonstrable defects: partial failure, incorrect behavior, data corruption, or security weakness under today's realistic conditions]
 
 ### P2 (Consider Fix)
-[Per-issue with 5-field format + Review Consensus]
+[Bugs with unrealistic triggers today, OR predictable future failures, OR significant maintainability improvements]
 
 ### P3 (Optional)
-[Per-issue with 5-field format + Review Consensus]
+[Quality, readability, consistency improvements with no correctness or maintainability concern]
 
 Per-issue format:
 **[P{X}] {issue title}**
