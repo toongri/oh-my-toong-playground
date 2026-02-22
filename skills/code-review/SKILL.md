@@ -234,6 +234,13 @@ The orchestrator constructs this command string but does NOT execute it. The com
 | Single chunk | 1 agent call |
 | Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
 
+### Result Scope Validation
+
+After all agents return, before proceeding to Step 5, validate that each chunk-reviewer analyzed the correct files:
+
+1. Compare each agent's **Chunk Analysis section headers** (file names) against the chunk's **{FILE_LIST}**
+2. If an agent analyzed files outside its assigned chunk, **re-dispatch** that chunk with the same interpolated prompt
+
 ## Step 5: Walkthrough Synthesis + Result Synthesis
 
 After all agents return, produce the final output in two phases.
