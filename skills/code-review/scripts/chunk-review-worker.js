@@ -287,17 +287,26 @@ function runOnce(opts) {
       });
     });
 
+    // Capture exit code/signal first — stdio may not be fully drained yet
+    let exitCode = null;
+    let exitSignal = null;
+
     child.on('exit', (code, signal) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      exitCode = typeof code === 'number' ? code : null;
+      exitSignal = signal || null;
+    });
+
+    // Finalize after all stdio streams are drained
+    child.on('close', () => {
       const timedOut = Boolean(timeoutTriggered);
-      const canceled = !timedOut && signal === 'SIGTERM';
+      const canceled = !timedOut && exitSignal === 'SIGTERM';
       finalize({
         reviewer,
-        state: timedOut ? 'timed_out' : canceled ? 'canceled' : code === 0 ? 'done' : 'error',
+        state: timedOut ? 'timed_out' : canceled ? 'canceled' : exitCode === 0 ? 'done' : 'error',
         message: timedOut ? `Timed out after ${timeoutSec}s` : canceled ? 'Canceled' : null,
         finishedAt: new Date().toISOString(), command,
-        exitCode: typeof code === 'number' ? code : null,
-        signal: signal || null, pid: child.pid, attempt,
+        exitCode, signal: exitSignal, pid: child.pid, attempt,
       });
     });
   });

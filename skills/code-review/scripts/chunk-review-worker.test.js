@@ -933,8 +933,11 @@ function createCapturingSpawnFn() {
     child.stderr.pipe = () => {};
     child.pid = 99999;
 
-    // Simulate successful exit on next tick
-    process.nextTick(() => child.emit('exit', 0, null));
+    // Simulate successful exit on next tick, then close after stdio drains
+    process.nextTick(() => {
+      child.emit('exit', 0, null);
+      process.nextTick(() => child.emit('close', 0, null));
+    });
     return child;
   }
 
@@ -950,7 +953,9 @@ describe('runOnce - workerEnv injection', () => {
     paths = setupJobDir(tmpDir);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Allow async stream cleanup to complete before removing tmpDir
+    await sleepMs(50);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
