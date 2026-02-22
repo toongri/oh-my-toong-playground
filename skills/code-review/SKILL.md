@@ -356,14 +356,17 @@ For single-chunk reviews, Phase 2 still performs Final Adjudication (severity ad
 | All models agree on P-level | Adopt as-is |
 | Models disagree on P-level | Orchestrator evaluates each model's reasoning against P0-P3 rubric (3-axis: impact delta, probability, maintainability) and assigns final P-level with 1-2 sentence justification |
 
-**Project Context Check:** When adjudicating, reference the project context from the review data. AI models default to production-service threat models — a SQL injection, a missing circuit breaker, or a resource leak are assessed as if the software serves external users under load. For many projects this is correct, but not all.
+**Project Context Check:** Before finalizing each P-level, verify that the models' probability and impact assessments are realistic for the actual project context. Ask: "Does the threat model these models assumed match this project?"
 
-Before finalizing each P-level, ask: "Is this probability and impact assessment realistic for THIS project?" Examples:
+Examples of context-driven recalibration (both directions — context can lower OR raise severity):
 
-- Shell command injection in a personal CLI tool where all inputs are self-generated → the "attacker" does not exist. P0 under production assumptions; P2-P3 for this project.
-- Missing connection pool timeout in a local dev tool with one user → connection exhaustion requires concurrent load that the usage pattern never produces. P0 under production assumptions; P2 for this project.
-- Flaky test in a project with no CI pipeline → no merge gate depends on it. P1 under team assumptions; P3 for this project.
-- Unbounded query result in an internal admin tool used by 3 people → dataset will never reach problematic size. P1 under growth assumptions; P2-P3 for this project.
+- **Models assess P2 for silent numeric truncation. Project processes financial transactions.** — Models may treat truncation as a minor data quality issue because the field is rarely at boundary values. But the project context shows this service calculates payment amounts subject to regulatory audit. Even rare truncation produces incorrect financial records with legal consequences. The impact axis shifts from "cosmetic data issue" to "regulatory violation." Recalibrate **upward to P0** (the domain amplifies impact beyond what the code pattern alone suggests).
+
+- **Models assess P0 for missing auth on endpoint. Project is a localhost-only dev tool.** — Models flag any unauthenticated endpoint as a security breach. But the project context shows the tool binds to localhost only, has no network exposure, and is used by a single developer. There is no remote attacker who can reach this endpoint. The probability axis shifts from "any network user can access" to "requires local access that the developer already has." Recalibrate **downward to P3** (the security pattern is real but the attack surface does not exist).
+
+- **Models assess P1 for no circuit breaker. Project is a utility library.** — Models flag missing circuit breaker as a resilience gap. But the project context shows this is a utility library that does not make network calls — its consumers do. The library cannot implement a circuit breaker because it does not control the network layer. This is not a lower-severity issue; it is a **false positive** — the concern is misapplied to the wrong architectural layer. Recalibrate: **dismiss** (not applicable to this codebase; if worth noting, add as a recommendation for consumers, not as an issue in this code).
+
+- **Models assess P3 for missing pagination. Project is a rapidly growing SaaS.** — Models treat unbounded queries as a style issue because the current dataset is small. But the project context shows user growth of 10x per quarter with no ceiling. What is 1,000 rows today will be 100,000 in 6 months. The probability axis shifts from "current data is fine" to "inevitable within the project's growth trajectory." Recalibrate **upward to P1** (the timeline makes the theoretical concern a practical certainty).
 
 **P0 Protection Rule:** If ANY single model assigns P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
 
