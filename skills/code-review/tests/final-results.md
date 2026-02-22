@@ -222,7 +222,7 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a file-by-file change analysis for the files in your assigned chunk" — Role/Changes/Data Flow/Design Decisions/Side Effects 5개 항목 정의 |
+| V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a change-unit-scoped analysis for the files in your assigned chunk" — What Changed 단일 필드의 change-unit-scoped 형식 정의 |
 | V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents) + Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)" — Chunk Analysis + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반 |
 | V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Explain data flow, design decisions, and side effects" |
 | V4 | PASS | SKILL.md Step 5 "Architecture Diagram": "Mermaid class diagram or component diagram" + "If no structural changes: write 'No structural changes — existing architecture preserved'" |

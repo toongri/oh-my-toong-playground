@@ -238,7 +238,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 After all agents return, before proceeding to Step 5, validate that each chunk-reviewer analyzed the correct files:
 
-1. Compare each agent's **Chunk Analysis section headers** (file names) against the chunk's **{FILE_LIST}**
+1. Compare each agent's **Chunk Analysis entry headers** (file names, ignoring `:symbol` suffixes and status tags) against the chunk's **{FILE_LIST}**
 2. If an agent analyzed files outside its assigned chunk, **re-dispatch** that chunk with the same interpolated prompt
 
 ## Step 5: Walkthrough Synthesis + Result Synthesis
@@ -248,20 +248,20 @@ After all agents return, produce the final output in two phases.
 ### Phase 1: Walkthrough Synthesis (MANDATORY)
 
 Orchestrator directly produces the Walkthrough from:
-- All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)
+- All chunk Chunk Analysis sections (per-symbol/per-file What Changed descriptions from chunk-reviewer agents)
 - Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)
 
 **Execution order:** First evaluate Phase 1a (context enrichment). Then generate the sections below.
 
 ### Phase 1a: Context Enrichment (Conditional)
 
-After reading all chunk Chunk Analysis sections, assess whether the available information is sufficient to write the Walkthrough. If gaps exist, dispatch explore/oracle before writing Phase 1 output.
+After reading all chunk Chunk Analysis sections (What Changed entries), assess whether the available information is sufficient to write the Walkthrough. If gaps exist, dispatch explore/oracle before writing Phase 1 output.
 
 **When to dispatch:**
 
 | Trigger | Agent | Example |
 |---------|-------|---------|
-| Core Logic Analysis requires understanding cross-module relationships not visible from chunk analysis | explore | "Chunk A shows OrderService calling PaymentGateway, but the gateway's implementation and other consumers are in Chunk B's scope or outside the diff" |
+| Core Logic Analysis requires understanding cross-module relationships not visible from What Changed entries | explore | "Chunk A shows OrderService calling PaymentGateway, but the gateway's implementation and other consumers are in Chunk B's scope or outside the diff" |
 | Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff | explore | "New class extends BaseRepository but the base class and its other subclasses are not in any chunk" |
 | Chunk-reviewer Cross-File Concerns section flags architectural patterns requiring codebase investigation | oracle | "Cross-file concern: adapter error codes may not match controller expectations — need to verify existing error handling contract" |
 | Multiple chunks flag inconsistent patterns suggesting architectural misalignment | oracle | "Chunk A uses Result<T> for error handling, Chunk B uses exceptions — need to determine which is the project convention" |
@@ -283,7 +283,7 @@ After reading all chunk Chunk Analysis sections, assess whether the available in
 **Explore prompt structure** (4-Field, chunk-analysis-aware):
 ```
 Task(subagent_type="explore", prompt="
-[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_chunk_analysis}.
+[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_what_changed}.
 [GOAL] Fill the context gap identified during walkthrough synthesis to produce accurate Core Logic Analysis and Architecture Diagram.
 [DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt.
 [REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories.")
@@ -297,10 +297,10 @@ Oracle receives the specific chunk-reviewer findings that triggered the dispatch
 
 **Data flow:**
 ```
-Phase 1: Read all Chunk Analysis sections
+Phase 1: Read all What Changed entries from Chunk Analysis
        → Assess: sufficient for Walkthrough? (check decision table)
        → If gaps: dispatch explore/oracle (Phase 1a)
-       → Write Walkthrough using: Chunk Analysis + Step 2 metadata + Phase 1a results (if any)
+       → Write Walkthrough using: What Changed entries + Step 2 metadata + Phase 1a results (if any)
 ```
 
 #### Change Summary
@@ -309,8 +309,9 @@ Phase 1: Read all Chunk Analysis sections
 - Written for someone unfamiliar with the code to understand the change
 
 #### Core Logic Analysis
-- Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative
+- Consolidate all What Changed entries into a unified module/feature-level narrative
 - Cover both core changes AND supporting/peripheral changes
+- Enrich with Step 2 metadata (commit messages, PR description, CLAUDE.md) and Phase 1a results when available
 - Explain data flow, design decisions, and side effects from the perspective of inter-module relationships
 - Level of detail: enough to understand the full change WITHOUT reading the code
 
