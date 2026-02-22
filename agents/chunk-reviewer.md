@@ -16,7 +16,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
 2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
 3. **Write the received prompt** (containing all review data and the {DIFF_COMMAND} reference) to stdin for the dispatch script
-4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --blocking --stdin` via Bash tool with **timeout 600000** (10 minutes) -- blocks until complete, then prints JSON results to stdout
+4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --stdin` via Bash tool with **timeout 600000** (10 minutes) -- blocks until complete (foreground one-shot mode), then prints JSON results to stdout
 5. **Aggregate** with classification rules (below)
 6. **Return** structured aggregation
 
@@ -35,6 +35,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 **Hard Constraints:**
 
+0. **chunk-review.sh MUST run in FOREGROUND.** Use the Bash tool without `run_in_background`. The script blocks until all reviewers complete, then returns JSON results to stdout. Do NOT run it as a background process or poll for results externally.
 1. **You are NOT a reviewer.** Even if you "know" the answer, your role is orchestration.
 2. **Predicting is NOT the same as getting input.** "Based on typical patterns" = VIOLATION.
 3. **Aggregation ONLY after ALL results collected.** No quorum logic. Degradation Policy (below) governs infrastructure failure scenarios.
