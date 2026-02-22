@@ -10,18 +10,19 @@
 #   chunk-review.sh stop JOB_DIR                   # best-effort stop running reviewers
 #   chunk-review.sh clean JOB_DIR                  # remove job directory
 #
-# One-shot:
+# One-shot (DEFAULT):
 #   chunk-review.sh "question"
-#   (in a real terminal: starts a job, waits for completion, prints results, cleans up)
-#   (in host-agent tool UIs: returns a single `wait` JSON payload immediately; host drives progress + results)
+#   chunk-review.sh --stdin
+#   (starts a job, waits for completion, prints results, cleans up — foreground blocking)
+#
+# Host-agent mode (opt-in only):
+#   chunk-review.sh --host-agent "question"
+#   CHUNK_REVIEW_HOST_AGENT=1 chunk-review.sh "question"
+#   (returns a single `wait` JSON payload immediately; caller drives progress + results)
 #
 # Stdin mode:
 #   chunk-review.sh --stdin
 #   chunk-review.sh start --stdin
-#
-# Blocking mode:
-#   chunk-review.sh --blocking --stdin
-#   (forces blocking wait behavior, bypassing host agent context detection)
 #
 
 set -euo pipefail
@@ -46,9 +47,9 @@ Usage:
 
 Options:
   --stdin          Read question from stdin
-  --blocking       Force blocking wait (bypass host agent context detection)
+  --host-agent     Enable host-agent mode (immediate return + external polling)
 
-One-shot:
+One-shot (default):
   $(basename "$0") "question"
   $(basename "$0") --stdin
 EOF
@@ -81,32 +82,25 @@ case "$1" in
     ;;
 esac
 
-# Check for --blocking flag
-BLOCKING=false
+# Check for --host-agent flag (opt-in for host-agent mode)
+HOST_AGENT="${CHUNK_REVIEW_HOST_AGENT:-0}"
 PASSTHROUGH_ARGS=()
 for arg in "$@"; do
-  if [ "$arg" = "--blocking" ]; then
-    BLOCKING=true
+  if [ "$arg" = "--host-agent" ]; then
+    HOST_AGENT=1
+  elif [ "$arg" = "--blocking" ]; then
+    # Legacy flag: --blocking is now a no-op (one-shot foreground is the default).
+    true
   else
     PASSTHROUGH_ARGS+=("$arg")
   fi
 done
 
+# Host-agent mode is opt-in only.
+# Activate with: --host-agent flag or CHUNK_REVIEW_HOST_AGENT=1 env var.
+# Default path is one-shot foreground (start → wait → results → cleanup).
 in_host_agent_context() {
-  if [ -n "${CODEX_CACHE_FILE:-}" ]; then
-    return 0
-  fi
-
-  case "$SCRIPT_DIR" in
-    */.codex/skills/*|*/.claude/skills/*)
-      # Tool-call environments typically do not provide a real TTY on stdout/stderr.
-      if [ ! -t 1 ] && [ ! -t 2 ]; then
-        return 0
-      fi
-      ;;
-  esac
-
-  return 1
+  [ "$HOST_AGENT" = "1" ]
 }
 
 JOB_DIR="$("$JOB_SCRIPT" start "${PASSTHROUGH_ARGS[@]}")"
@@ -120,10 +114,9 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# Host agents (Codex CLI / Claude Code) cannot update native TODO/plan UIs while a long-running
-# command is executing. If we're in a host agent context and --blocking is NOT set, return
-# immediately with a single `wait` JSON payload and let the host agent drive progress updates.
-if [ "$BLOCKING" = "false" ] && in_host_agent_context; then
+# Host-agent mode (opt-in): return immediately with a `wait` JSON payload and let the
+# caller drive progress updates. Only activated by --host-agent flag or CHUNK_REVIEW_HOST_AGENT=1.
+if in_host_agent_context; then
   trap - EXIT
   exec "$JOB_SCRIPT" wait "$JOB_DIR"
 fi
