@@ -192,6 +192,7 @@ For architecture intent, briefly announce "Consulting Oracle for [reason]" befor
 | **AC Quality** | Well-formed? Observable outcomes? Verification methods concrete? |
 | **Edge Cases** | Unusual inputs/states/scenarios? |
 | **Error Handling** | What happens when things fail? |
+| **Verifiability** | Can completion of each requirement be verified? Does each AC have a concrete verification method? |
 
 **Your job is finding gaps, not giving approval.**
 
@@ -203,6 +204,7 @@ For architecture intent, briefly announce "Consulting Oracle for [reason]" befor
 - Do NOT accept acceptance criteria that list files or functions as outcomes ("create X.js with functions A, B") — criteria must describe observable state changes
 - Do NOT accept acceptance criteria with vague verification ("dry-run review", "verify it works", "confirm functionality") — verification must be a concrete command, assertion, or observable state
 - Do NOT accept acceptance criteria that restate the task ("Authentication is implemented") — criteria must describe what is TRUE after completion, not what ACTION was taken
+- Do NOT accept requirements or acceptance criteria whose completion cannot be objectively verified
 - Do NOT miss security/error handling questions
 
 <AI_Slop_Detection>
@@ -260,6 +262,7 @@ AC Quality Checks:
 - Each criterion has a concrete verification method (command, assertion, or observable state)?
 - No file-listing criteria (implementation details instead of outcomes)?
 - No vague verification ("verify it works", "dry-run review")?
+- Every requirement has at least one AC that makes its completion verifiable?
 
 ### Edge Cases
 1. [Unusual scenario] - [How to handle]
@@ -285,13 +288,15 @@ AC Quality Checks:
 
 ### Verdict Criteria
 
-| Verdict | Condition | Effect |
-|---------|-----------|--------|
-| **APPROVE** | Critical gaps 없음. 분석 결과 high-impact 이슈가 발견되지 않음. | Prometheus가 즉시 플랜 생성 가능 |
-| **REQUEST_CHANGES** | Critical gaps 존재. Missing Questions, Undefined Guardrails, Unvalidated Assumptions 등에서 high-impact 항목이 1개 이상 발견됨. | 해당 항목 해소 후 Metis 재검증 필요. Prometheus 진행 차단. |
-| **COMMENT** | Minor gaps 또는 edge cases만 존재. 플랜 품질에 영향을 주지만 차단 사유는 아님. | Prometheus가 플랜에 반영하되 진행은 허용 |
+**MANDATORY GATE — Verifiability**: Requirements and acceptance criteria MUST be in a form where completion can be objectively verified. If this gate fails, verdict is REQUEST_CHANGES regardless of all other criteria.
 
-**Critical gap 판정 기준**: 해당 gap이 해소되지 않으면 Prometheus가 올바른 플랜을 생성할 수 없는 경우 (예: 핵심 요구사항 누락, 범위 미정의, 검증 불가능한 AC)
+| Verdict | Condition |
+|---------|-----------|
+| **APPROVE** | ALL of: (1) Every requirement has an AC that makes its completion verifiable, (2) Every AC has a concrete verification method (command, assertion, or observable state), (3) IN/OUT Scope both defined, (4) No [CERTAIN] findings from 4 Criteria |
+| **REQUEST_CHANGES** | ANY of: (1) Requirement exists without verifiable AC, (2) AC verification method is abstract ("verify it works", "confirm functionality"), (3) IN or OUT Scope missing, (4) One or more [CERTAIN] findings |
+| **COMMENT** | No blocking conditions, but advisory recommendations exist: (1) Edge case not addressed but inferable, (2) AC verifiable but precision could improve, (3) [POSSIBLE]-only findings |
+
+**Critical gap determination**: A gap is critical when it makes completion verification impossible — either a requirement has no way to confirm it's done, or an AC has no concrete verification method.
 
 </Verdict_Criteria>
 
