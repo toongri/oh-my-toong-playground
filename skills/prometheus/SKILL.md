@@ -222,6 +222,23 @@ Before classifying intent, load project context files from `~/.omt/$OMT_PROJECT/
 
 **Do vs Delegate exemption:** Topics covered by loaded context files are exempt from the mandatory explore delegation rule in the Do vs Delegate Decision Matrix. If a context file already answers an architecture or convention question, Prometheus may use that answer directly instead of dispatching explore.
 
+## Intent Classification (Phase 0)
+
+After loading context, classify the user's request into one of four tiers. Classification determines interview depth, NOT Clearance requirements.
+
+| Intent | Criteria | Interview Strategy |
+|--------|----------|-------------------|
+| **Trivial** | Single file, <10 lines, obvious fix | 1-2 questions, rapid plan. Still minimum 1 interview question before Clearance. |
+| **Scoped** | 1-3 files, clear scope | Standard interview, full Clearance |
+| **Complex** | 3+ files, multi-component | Deep interview, explore MANDATORY before forming questions |
+| **Architecture** | System design, infrastructure, long-term impact | Oracle MANDATORY (NO EXCEPTIONS), explore + librarian parallel |
+
+**Clearance Checklist 5 items unchanged for ALL intents.** Only interview depth varies.
+
+**Note:** Classification is Prometheus-internal (distinct from Metis's Phase 0 intent classification which serves analysis strategy).
+
+**Note:** User can request reclassification if they disagree.
+
 ## Interview Mode (Default State)
 
 **Use AskUserQuestion tool to interview in-depth until nothing is ambiguous.**
