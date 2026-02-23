@@ -23,6 +23,11 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-5 | Parallel isolation | Agent isolation | 병렬 Junior 오염 방지 |
 | A-6 | Pattern prohibition | Content search | 파일 내용 패턴 검색 |
 | A-7 | Fast-Path | No git diff needed | trivial 변경도 파일 읽기 |
+| A-8 | API endpoint → curl 검증 | Applicability detection (API) | API 신호 인식 + curl 시도 |
+| A-9 | Internal refactoring → Stage 3 스킵 | Skip logic | 내부 변경 스킵 + 문서화 |
+| A-10 | CLI command → interactive_bash | Applicability detection (CLI) | CLI 신호 인식 + bash 시도 |
+| A-11 | API + Frontend → 복합 검증 | Multi-type handling | 복합 변경 각각 독립 검증 |
+| A-12 | Server start 실패 → REQUEST_CHANGES | Lifecycle failure | 서버 기동 실패 처리 |
 
 > **Note:** Confidence Scoring, Rich Feedback Protocol, YAGNI Detection, Verdict Classification, Output Format 등 기존 기법 테스트(이전 A-5~A-10)는 2026-02-10에 전부 GREEN PASS 확인됨. 해당 기법들은 이번 변경에 영향받지 않으므로 이 파일에서 제외. 기법 자체가 변경될 경우 별도 시나리오 추가 필요.
 
@@ -195,12 +200,142 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: README.md
 - Junior's summary: "Fixed typo: authenication → authentication"
 
-**Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). Stage 1 skip, Stage 3 brief quality check만 수행. git diff 불필요.
+**Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). Stage 1 and Stage 3 skip, Stage 4 brief quality check만 수행. git diff 불필요.
 
 **Verification Points:**
-1. Fast-Path로 분류하여 Stage 1을 skip한다
+1. Fast-Path로 분류하여 Stage 1과 Stage 3을 skip한다
 2. git diff 없이 README.md를 읽어서 오타 수정 확인
-3. Stage 3 brief quality check만 수행한다
+3. Stage 4 brief quality check만 수행한다
+
+---
+
+## A-8: API endpoint → curl 검증
+
+**Context:** Junior가 user-api.ts에 GET /api/users/:id 엔드포인트를 추가함.
+
+**6-Section Input:**
+- TASK: Add user detail API endpoint
+- EXPECTED OUTCOME: Files to modify: [src/routes/user-api.ts]. GET /api/users/:id returns user object with 200.
+- REQUIRED TOOLS: Serena find_symbol (user-api.ts의 route handler 탐색)
+- MUST DO: Return 404 for non-existent user
+- MUST NOT DO: Do NOT modify existing user list endpoint
+- CONTEXT: User detail endpoint needed for profile page
+
+**REVIEW REQUEST:**
+- Changed files: src/routes/user-api.ts
+- Junior's summary: "Added GET /api/users/:id endpoint"
+
+**Expected Behavior:** Stage 3 Applicability에서 "API endpoint" 신호 감지 → curl 검증 선택. 서버 기동 → curl로 200 응답 확인 + 404 케이스 확인 → 서버 종료. Stage 3 출력 포맷에 맞게 결과 기록.
+
+**Verification Points:**
+1. 6-Section의 TASK/EXPECTED OUTCOME에서 API 신호를 감지한다
+2. curl을 사용한 검증을 시도한다
+3. 서버 라이프사이클(start→test→stop)을 따른다
+4. Stage 3 출력 포맷이 stage3-handson.md의 형식과 일치한다
+
+---
+
+## A-9: Internal refactoring → Stage 3 스킵
+
+**Context:** Junior가 utils/formatter.ts의 내부 유틸리티 함수를 리팩토링함. 외부 API나 UI 영향 없음.
+
+**6-Section Input:**
+- TASK: Refactor date formatting utility
+- EXPECTED OUTCOME: Files to modify: [utils/formatter.ts]. Simplify date formatting logic.
+- REQUIRED TOOLS: Serena find_symbol (formatter.ts의 기존 함수 구조 탐색)
+- MUST DO: Maintain existing function signatures
+- MUST NOT DO: Do NOT change return types
+- CONTEXT: Date formatting utility has complex nested logic
+
+**REVIEW REQUEST:**
+- Changed files: utils/formatter.ts
+- Junior's summary: "Simplified date formatting logic while keeping signatures"
+
+**Expected Behavior:** Stage 3 Applicability에서 "refactoring, internal logic, utility" 신호 감지 → Stage 3 SKIP. 출력에 "Stage 3 Result: SKIPPED (internal logic only)" 기록. Stage 4로 직접 진행.
+
+**Verification Points:**
+1. "Refactor" + "utility" 신호에서 internal 유형으로 분류한다
+2. Stage 3을 스킵한다
+3. 스킵 사유를 출력에 문서화한다
+4. Stage 4(Code Quality)로 직접 진행한다
+
+---
+
+## A-10: CLI command → interactive_bash
+
+**Context:** Junior가 cli/export.ts에 `--format json` 옵션을 추가함.
+
+**6-Section Input:**
+- TASK: Add JSON format option to export CLI command
+- EXPECTED OUTCOME: Files to modify: [cli/export.ts]. `export --format json` outputs JSON instead of CSV.
+- REQUIRED TOOLS: Serena find_symbol (export.ts의 옵션 파싱 로직 탐색)
+- MUST DO: Default format remains CSV
+- MUST NOT DO: Do NOT break existing CSV output
+- CONTEXT: Users need JSON export for automation
+
+**REVIEW REQUEST:**
+- Changed files: cli/export.ts
+- Junior's summary: "Added --format json option to export command"
+
+**Expected Behavior:** Stage 3 Applicability에서 "CLI command, terminal output" 신호 감지 → interactive_bash 검증 선택. `export --format json` 실행 → JSON 출력 확인 + 기본 CSV 출력 확인.
+
+**Verification Points:**
+1. "CLI command" + "terminal output" 신호에서 CLI 유형으로 분류한다
+2. interactive_bash를 사용한 검증을 시도한다
+3. 양성(JSON) 및 기본(CSV) 케이스 모두 확인한다
+4. 서버 기동이 불필요한 경우 라이프사이클을 스킵한다
+
+---
+
+## A-11: API + Frontend → 복합 검증
+
+**Context:** Junior가 API 엔드포인트와 이를 사용하는 프론트엔드 컴포넌트를 함께 추가함.
+
+**6-Section Input:**
+- TASK: Add user profile page with API
+- EXPECTED OUTCOME: Files to modify: [src/api/profile.ts, src/pages/ProfilePage.tsx]. GET /api/profile returns user profile. ProfilePage renders user profile data.
+- REQUIRED TOOLS: Serena find_symbol (profile.ts, ProfilePage.tsx 구조 탐색)
+- MUST DO: Handle loading and error states in UI
+- MUST NOT DO: Do NOT modify existing navigation
+- CONTEXT: Profile page needed for user dashboard
+
+**REVIEW REQUEST:**
+- Changed files: src/api/profile.ts, src/pages/ProfilePage.tsx
+- Junior's summary: "Added profile API and profile page"
+
+**Expected Behavior:** Stage 3 Applicability에서 API + Frontend 복합 신호 감지 → curl과 playwright 모두 사용. 서버 기동 → curl로 API 확인 → playwright로 UI 확인 → 서버 종료. 각각 독립적으로 결과 기록.
+
+**Verification Points:**
+1. API와 Frontend 신호를 모두 감지한다
+2. curl과 playwright 두 가지 검증을 모두 수행한다
+3. 각 검증 결과를 독립적으로 기록한다
+4. 하나라도 실패하면 REQUEST_CHANGES
+
+---
+
+## A-12: Server start 실패 → REQUEST_CHANGES
+
+**Context:** Junior가 API 엔드포인트를 추가했지만, 서버 기동 시 포트 충돌로 실패함.
+
+**6-Section Input:**
+- TASK: Add health check endpoint
+- EXPECTED OUTCOME: Files to modify: [src/routes/health.ts]. GET /health returns 200 OK.
+- REQUIRED TOOLS: Serena find_symbol (health.ts의 route handler 탐색)
+- MUST DO: Return { status: 'ok' } JSON body
+- MUST NOT DO: Do NOT modify server configuration
+- CONTEXT: Health check needed for load balancer
+
+**REVIEW REQUEST:**
+- Changed files: src/routes/health.ts
+- Junior's summary: "Added health check endpoint"
+
+**Expected Behavior:** Stage 3 Applicability에서 API 신호 감지 → curl 검증 선택 → 서버 기동 시도 → 기동 실패 → 즉시 REQUEST_CHANGES. Stage 4로 진행하지 않음.
+
+**Verification Points:**
+1. 서버 기동 실패를 Stage 3 FAIL로 판정한다
+2. Stage 4(Code Quality)로 진행하지 않는다
+3. REQUEST_CHANGES 판정을 내린다
+4. 실패 원인을 출력에 포함한다
 
 ---
 
@@ -223,3 +358,8 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-5 | 병렬 Junior — 격리된 검증 | | | |
 | A-6 | MUST NOT DO — 파일 내용의 패턴 금지 | | | |
 | A-7 | Fast-Path — git diff 없이 동작 | | | |
+| A-8 | API endpoint → curl 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API 신호 감지, curl 절차, 서버 라이프사이클, 출력 포맷 모두 정확. |
+| A-9 | Internal refactoring → Stage 3 스킵 | PASS | 2026-02-23 | 4VP 전부 충족. internal 분류, Stage 3 스킵, "SKIPPED (internal logic only)" 문서화, Stage 4 진행 확인. |
+| A-10 | CLI command → interactive_bash | | | A-8과 동일 패턴 (적용 조건 분기). 미테스트. |
+| A-11 | API + Frontend → 복합 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API+Frontend 양 타입 감지, curl+playwright 독립 검증, 공유 라이프사이클. |
+| A-12 | Server start 실패 → REQUEST_CHANGES | | | 실제 서버 환경 필요. 미테스트. |
