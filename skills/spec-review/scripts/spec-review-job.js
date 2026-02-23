@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 
@@ -808,6 +809,27 @@ function findProjectRoot() {
   return null;
 }
 
+function resolveContextDir(rawPath, projectRoot) {
+  let resolved = rawPath;
+
+  // Expand ${OMT_PROJECT} if present in path
+  if (resolved.includes('${OMT_PROJECT}')) {
+    const omtProject = process.env.OMT_PROJECT;
+    if (!omtProject) return null;
+    resolved = resolved.replace(/\$\{OMT_PROJECT\}/g, omtProject);
+  }
+
+  // Expand ~ to home directory
+  if (resolved.startsWith('~/')) {
+    resolved = path.join(os.homedir(), resolved.slice(2));
+  } else if (!path.isAbsolute(resolved)) {
+    // Relative path: join with projectRoot
+    resolved = path.join(projectRoot, resolved);
+  }
+
+  return resolved;
+}
+
 function gatherSpecContext(specName, config) {
   const parts = [];
   const projectRoot = findProjectRoot();
@@ -817,10 +839,10 @@ function gatherSpecContext(specName, config) {
   }
 
   const contextConfig = config['spec-review'].context || {};
-  const sharedContextDir = contextConfig.shared_context_dir || '.omt/specs/context';
+  const sharedContextDirRaw = contextConfig.shared_context_dir || '~/.omt/${OMT_PROJECT}/context';
   const specsDir = contextConfig.specs_dir || '.omt/specs';
 
-  const contextDir = path.join(projectRoot, sharedContextDir);
+  const contextDir = resolveContextDir(sharedContextDirRaw, projectRoot);
   const specDir = path.join(projectRoot, specsDir, specName);
 
   const files = [];
@@ -1085,4 +1107,5 @@ module.exports = {
   parseSpecReviewConfig,
   parseYamlSimple,
   computeStatus,
+  resolveContextDir,
 };
