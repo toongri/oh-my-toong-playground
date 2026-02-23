@@ -1,6 +1,6 @@
 ---
 name: momus
-description: Work plan review expert and critic
+description: Use when delegating work plan critique — returns simulation-based review with certainty-classified findings and verdict
 model: opus
 skills: momus
 ---
