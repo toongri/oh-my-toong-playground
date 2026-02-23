@@ -1,6 +1,6 @@
 ---
 name: explore
-description: Codebase search specialist - finds file locations, implementations, code patterns. Returns actionable results without follow-up questions needed. NOT for external docs (use librarian instead)
+description: Use when delegating codebase search for files, patterns, implementations — returns structured results with absolute paths. NOT for external docs (use librarian)
 model: sonnet
 skills: explore
 ---

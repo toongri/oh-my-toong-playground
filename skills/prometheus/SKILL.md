@@ -53,21 +53,25 @@ digraph prometheus_flow {
     rankdir=TB;
     "User Request" [shape=ellipse];
     "Interpret as planning request" [shape=box];
+    "Context Loading" [shape=box];
+    "Intent Classification" [shape=box];
     "Interview Mode" [shape=box];
     "Research (explore/librarian)" [shape=box];
     "More questions needed?" [shape=diamond];
     "Clearance + AC complete?" [shape=diamond];
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
-    "Present results\nAsk user 'generate plan?'" [shape=box];
-    "User approves?" [shape=diamond];
     "Write plan to .omt/plans/*.md" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
-    "Handoff: Tell user to run /start-work" [shape=ellipse];
+    "Present full plan\nAsk user to finalize" [shape=box];
+    "User approves?" [shape=diamond];
+    "Handoff: Tell user to run /sisyphus" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
-    "Interpret as planning request" -> "Interview Mode";
+    "Interpret as planning request" -> "Context Loading";
+    "Context Loading" -> "Intent Classification";
+    "Intent Classification" -> "Interview Mode";
     "Interview Mode" -> "Research (explore/librarian)";
     "Research (explore/librarian)" -> "More questions needed?";
     "More questions needed?" -> "Interview Mode" [label="yes"];
@@ -76,14 +80,14 @@ digraph prometheus_flow {
     "Clearance + AC complete?" -> "Metis consultation" [label="yes"];
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
-    "Metis verdict?" -> "Present results\nAsk user 'generate plan?'" [label="APPROVE"];
-    "Present results\nAsk user 'generate plan?'" -> "User approves?";
-    "User approves?" -> "Interview Mode" [label="no, more changes"];
-    "User approves?" -> "Write plan to .omt/plans/*.md" [label="yes"];
+    "Metis verdict?" -> "Write plan to .omt/plans/*.md" [label="APPROVE"];
     "Write plan to .omt/plans/*.md" -> "Momus review";
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to .omt/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Momus verdict?" -> "Handoff: Tell user to run /start-work" [label="APPROVE"];
+    "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE"];
+    "Present full plan\nAsk user to finalize" -> "User approves?";
+    "User approves?" -> "Interview Mode" [label="no, more changes"];
+    "User approves?" -> "Handoff: Tell user to run /sisyphus" [label="yes"];
 }
 ```
 
@@ -94,7 +98,7 @@ digraph prometheus_flow {
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
-| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete. Catches missing questions before user is asked to generate plan |
+| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete. Catches missing questions before plan generation |
 | Plan review | momus | **MANDATORY** after plan generation -- catches quality issues |
 
 ### Do vs Delegate Decision Matrix
@@ -194,6 +198,48 @@ Task(subagent_type="explore", prompt="I'm planning a new authentication feature 
 // Pre-interview research (external)
 Task(subagent_type="librarian", prompt="I'm planning to implement OAuth 2.0 and need authoritative guidance for the work plan. I'll use this to recommend the right approach during the interview. Find official docs: setup, flow types (authorization code, PKCE), security considerations, common pitfalls. Skip beginner tutorials — production patterns only.")
 ```
+
+## Context Loading
+
+Before classifying intent, load project context files from `~/.omt/$OMT_PROJECT/context/`.
+
+**Context files:**
+
+| File | Contents |
+|------|----------|
+| `project.md` | Project overview, tech stack, module boundaries |
+| `conventions.md` | Naming conventions, code style, architectural patterns |
+| `decisions.md` | Past architectural decisions and their rationale |
+| `gotchas.md` | Known pitfalls, workarounds, non-obvious constraints |
+
+**$OMT_PROJECT resolution:** The `$OMT_PROJECT` variable is resolved by the SessionStart hook, which sets it via `CLAUDE_ENV_FILE`. By the time Prometheus runs, the variable is already available in the environment.
+
+**Graceful skip:** If `~/.omt/$OMT_PROJECT/context/` does not exist, or any file is missing or empty, skip silently. Do NOT error, warn, or ask the user about missing context files.
+
+**Trust level:** Architecture-level and convention-level topics from context files are authoritative -- use them directly without explore verification. File-level and line-level facts (specific implementations, exact line numbers, current state of code) still require explore delegation to confirm.
+
+**Recommended size:** Keep each context file under ~2KB to avoid prompt budget bloat.
+
+**Do vs Delegate exemption:** Topics covered by loaded context files are exempt from the mandatory explore delegation rule in the Do vs Delegate Decision Matrix. If a context file already answers an architecture or convention question, Prometheus may use that answer directly instead of dispatching explore.
+
+## Intent Classification (Phase 0)
+
+After loading context, classify the user's request into one of four tiers. Classification determines interview depth, NOT Clearance requirements.
+
+| Intent | Criteria | Interview Strategy |
+|--------|----------|-------------------|
+| **Trivial** | Single file, <10 lines, obvious fix | 1-2 questions, rapid plan. Still minimum 1 interview question before Clearance. |
+| **Scoped** | 1-3 files, clear scope | Standard interview, full Clearance |
+| **Complex** | 3+ files, multi-component | Deep interview, explore MANDATORY before forming questions |
+| **Architecture** | System design, infrastructure, long-term impact | Oracle MANDATORY (NO EXCEPTIONS), explore + librarian parallel |
+
+**Clearance Checklist 5 items unchanged for ALL intents.** Only interview depth varies.
+
+**Note:** Classification is Prometheus-internal (distinct from Metis's Phase 0 intent classification which serves analysis strategy).
+
+**Note:** User can request reclassification if they disagree.
+
+**Classification boundary rule:** File count takes precedence over per-file complexity. A request touching 3 files with trivial per-file changes is Scoped, not Trivial. A request touching 1 file with complex logic is still Trivial if confined to <10 lines.
 
 ## Interview Mode (Default State)
 
@@ -503,17 +549,22 @@ Overall structure:
 
 ## Plan Generation
 
-**Trigger**: Metis consultation passes (APPROVE or COMMENT). Then present the validated results to the user and ask for confirmation to generate the plan.
+**Trigger**: Metis consultation passes (APPROVE or COMMENT). Proceed directly to plan generation — do NOT ask the user for confirmation at this stage. The user will review the complete plan after Momus approval.
 
-**User confirmation phrases (after Metis pass):**
-- "Make it into a work plan"
-- "Generate the plan"
-- "Save it as a file"
-- Or any affirmative response to "plan 생성할까요?"
+### Metis Feedback Loop (Auto-Invoked Before Plan Generation)
 
-### Metis Feedback Loop (Auto-Invoked Before User Confirmation)
+<CRITICAL_GATE>
 
-**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before presenting results to the user. REQUEST_CHANGES blocks until resolved.**
+**MANDATORY: Metis MUST approve before proceeding to plan generation.**
+
+- Do NOT proceed to the next step (plan generation) until Metis returns APPROVE or COMMENT
+- On REQUEST_CHANGES, you MUST incorporate the feedback, revise, and re-invoke Metis
+- This loop repeats indefinitely until Metis returns APPROVE
+- Skipping or bypassing this gate is NEVER permitted
+
+</CRITICAL_GATE>
+
+**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before writing the plan. REQUEST_CHANGES blocks until resolved.**
 
 **TIMING: Metis is invoked when BOTH conditions are met:**
 1. Clearance Checklist: all YES
@@ -525,52 +576,25 @@ Overall structure:
 **Do NOT invoke metis during interview phase or upon receiving the initial request.**
 
 **Metis Consultation Flow:**
-1. Invoke metis with the 5-Section Invocation Template below
+1. Invoke metis with the 3-Section Invocation Template below
 2. Receive Metis verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 3. Act on verdict per the table below
 4. **Repeat until APPROVE**
 
-**Metis Invocation Template (5-Section):**
+**Metis Invocation Template (3-Section):**
 
-Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use the same structure with updated content — metis is stateless and reviews each submission independently. If a previous finding was reviewed but a different decision was made due to tradeoffs or constraints, reflect the decision and rationale in the relevant section (Key Decisions, Scope, or AC).
+Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use the same structure with updated content — metis is stateless and reviews each submission independently. If a previous finding was reviewed but a different decision was made, reflect it in the relevant section (Scope or AC).
 
 ```markdown
 ## 1. USER GOAL
 - **Original Request**: [User's original request — verbatim or faithful paraphrase]
 - **Core Objective**: [Distilled core objective from interview]
 
-## 2. INTERVIEW FINDINGS
-### Key Decisions
-| Topic | Decision | Rationale |
-|-------|----------|-----------|
-| [Decision topic] | [User's choice] | [Rationale — preference, codebase constraint, best practice] |
-
-### User Deferrals
-| Topic | Autonomous Decision | Basis |
-|-------|-------------------|-------|
-| [Deferred topic] | [Selected approach] | [Codebase pattern / industry practice] |
-
-(If no deferrals, write "None")
-
-## 3. RESEARCH FINDINGS
-### Codebase (explore)
-- [Finding]: [Impact on planning]
-
-### External (librarian)
-- [Documentation / best practice]: [Impact on approach]
-
-### Oracle (if consulted)
-- [Feasibility / risk analysis result]: [Implication]
-
-(If agent not dispatched, write "Not dispatched")
-
-## 4. SCOPE & TECHNICAL APPROACH
+## 2. SCOPE
 - **IN Scope**: [What will be built]
 - **OUT of Scope**: [What is excluded]
-- **Technical Approach**: [Decided approach]
-- **Approach Validation**: [Validation basis]
 
-## 5. ACCEPTANCE CRITERIA
+## 3. ACCEPTANCE CRITERIA
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
 
@@ -578,18 +602,17 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 
 | Anti-Pattern | Example | Problem |
 |-------------|---------|---------|
-| Summarized AC | "Logout feature AC" without full criteria | Metis cannot evaluate AC quality |
-| Omitted deferrals | User Deferrals section missing | Unvalidated assumptions undetectable |
-| Vague research | "Codebase explored" without specifics | Cannot judge if findings incorporated |
-| Abstract scope | "Build the feature" without IN/OUT | Scope creep risk unanalyzable |
+| Summarized AC | "Logout feature AC" without full criteria | Metis cannot evaluate AC verifiability |
+| Abstract scope | "Build the feature" without IN/OUT | Scope completeness uncheckable |
+| Missing user goal | Sending AC without original request context | Metis cannot classify intent |
 
 **Verdict Handling:**
 
 | Verdict | Action |
 |---------|--------|
-| **APPROVE** | Proceed to presenting results to user. Gate passed. |
-| **REQUEST_CHANGES** | Return to Interview Mode. Resolve blocking items with the user. Re-invoke metis with the same 5-Section template, content updated to reflect resolutions. **Loop until APPROVE.** |
-| **COMMENT** | Incorporate findings into the plan. Proceed to presenting results. |
+| **APPROVE** | Proceed directly to plan generation. Gate passed. |
+| **REQUEST_CHANGES** | **MANDATORY**: Return to Interview Mode. Resolve ALL blocking items. Modify content to address feedback. Re-invoke metis with updated 3-Section template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
+| **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
 
 **Post-Metis Summary** (include in plan under Context section):
 - **Identified Gaps**: What Metis found (across all iterations)
@@ -597,9 +620,20 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 - **Incorporated**: What was folded into the plan
 - **Iterations**: Number of metis invocations before APPROVE
 
-### Momus Feedback Loop (MANDATORY Before Handoff)
+### Momus Feedback Loop (MANDATORY Before User Presentation)
 
-**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus must pass (APPROVE or COMMENT) to proceed to handoff. REQUEST_CHANGES blocks until resolved.**
+<CRITICAL_GATE>
+
+**MANDATORY: Momus MUST approve before presenting the plan to the user.**
+
+- Do NOT proceed to the next step (user presentation) until Momus returns APPROVE or COMMENT
+- On REQUEST_CHANGES, you MUST incorporate the feedback, revise the plan, and re-invoke Momus
+- This loop repeats indefinitely until Momus returns APPROVE
+- Skipping or bypassing this gate is NEVER permitted
+
+</CRITICAL_GATE>
+
+**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus must pass (APPROVE or COMMENT) to proceed to user presentation. REQUEST_CHANGES blocks until resolved.**
 
 **Momus Review Flow:**
 1. Generate the plan to `.omt/plans/{name}.md`
@@ -630,14 +664,29 @@ All review context (original request, interview summary, metis results) is alrea
 
 | Verdict | Action |
 |---------|--------|
-| **APPROVE** | Proceed to handoff. Gate passed. |
-| **REQUEST_CHANGES** | Revise the plan to address all [CERTAIN] findings. Re-invoke momus with the same plan file path. **Loop until APPROVE.** |
-| **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Proceed to handoff. |
+| **APPROVE** | Present the full plan to the user. Show the complete plan content and ask to finalize. Gate passed. |
+| **REQUEST_CHANGES** | **MANDATORY**: Revise the plan to address ALL [CERTAIN] findings. Re-invoke momus with the same plan file path. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
+| **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Present the full plan to the user. |
 
 **Post-Momus Summary** (append to plan under Context section):
 - **Findings**: What Momus found (across all iterations)
 - **How Resolved**: Changes made to address each finding
 - **Iterations**: Number of momus invocations before APPROVE
+
+### Plan Presentation (After Momus Approval)
+
+After Momus approves the plan:
+
+1. **Present the full plan** — Show the complete content of `.omt/plans/{name}.md` to the user
+2. **Ask to finalize** — Ask the user if they want to proceed with this plan
+3. **Handle response:**
+
+| User Response | Action |
+|---------------|--------|
+| Approves / "Looks good" / "Proceed" | Handoff: Tell user to run `/sisyphus` |
+| Requests changes | Return to Interview Mode to address concerns, then re-run through Metis → Plan → Momus pipeline |
+
+This is the ONLY point where the user sees and confirms the plan. All internal quality gates (Metis, Momus) run automatically before this step.
 
 ### Plan Output
 
@@ -661,14 +710,90 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
 | **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved), Momus review (findings and how resolved) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
-| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands, final checklist |
+| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
+| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them |
 
 **TODO Task Format:**
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
 - Include file/pattern references -- executor has NO interview context
-- 3-6 tasks is the sweet spot (not 30 micro-steps, not 1 vague step)
+- 3-6 tasks is the total plan task count (not 30 micro-steps, not 1 vague step); Wave is the execution ordering within that count
+- **Parallelization** -- every TODO must include:
+  - `Blocked By`: list of TODO numbers this task depends on (empty if none)
+  - `Blocks`: list of TODO numbers that depend on this task (empty if none)
+  - `Wave`: execution wave number (1-based). Tasks in the same wave can run in parallel
+- **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically.
+- **Anti-pattern**: Assigning Wave 2 to an independent task because "it makes sense to do X before Y." If there is a real dependency, add `Blocked By`. If there is no dependency, the task goes in Wave 1.
+- **Wave integrity**: Every wave must reference numbered TODOs only. Do not add administrative stages (Verification, Merge, Deploy) as waves — argus handles verification, mnemosyne handles commits.
+- **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
+  - Each scenario has 4 fields: **Tool** / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
+  - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
+    Reference examples by project type:
+    | Project Type | Tool Example |
+    |---|---|
+    | HTTP API verification | `curl` |
+    | File content verification | `grep` |
+    | General shell script | `bash` |
+    | Node.js / Bun | `bun test` or `jest` |
+    | Python | `pytest` |
+    | Go | `go test` |
+    | Kotlin/Java (Gradle) | `./gradlew test` |
+    | Browser UI | `playwright` |
+    Anti-patterns (INVALID Tool values):
+    | WRONG | WHY | RIGHT |
+    |---|---|---|
+    | "Header validation" | Test description, not a command | `curl` or `bun test` |
+    | "Concurrency stress test" | Test category, not executable | `bash` |
+    | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
+  - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
+  - Non-code TODOs (docs, config) may use simplified format: Preconditions + Expected only
+
+**Execution Strategy & QA Scenarios Example:**
+
+```
+Wave Visualization:
+  Wave 1: TODO 1 (DB schema) | TODO 2 (API types)
+  Wave 2: TODO 3 (service layer, blocked by 1,2) | TODO 4 (validation, blocked by 2)
+  Wave 3: TODO 5 (integration wiring, blocked by 3,4)
+
+Critical Path: TODO 1 → TODO 3 → TODO 5
+
+--- TODO 3: Implement UserService ---
+- What to do: Create UserService with CRUD operations
+- Must NOT do: Add caching or event publishing
+- Files: src/service/user-service.ts (create), src/service/index.ts (export)
+- Blocked By: TODO 1, TODO 2
+- Blocks: TODO 5
+- Wave: 2
+- Acceptance Criteria:
+  - UserService implements create, read, update, delete
+  - All methods return typed responses
+  - QA Scenarios:
+    | # | Tool | Preconditions | Steps | Expected |
+    |---|------|---------------|-------|----------|
+    | 1 | jest | DB migrated, test user seed | Run `npm test -- user-service` | All CRUD tests pass, coverage >90% |
+    | 2 | jest | DB migrated, no seed data | Call create() with missing required field | Throws ValidationError with field name |
+```
+
+**Non-code TODO Example (simplified format):**
+
+```
+--- TODO 6: Update API Documentation ---
+- What to do: Add rate limiting section to API docs
+- Must NOT do: Change existing endpoint documentation
+- Files: docs/api-reference.md (update)
+- Blocked By: TODO 3
+- Blocks: None
+- Wave: 2
+- Acceptance Criteria:
+  - Rate limiting section documents limits, headers, and error responses
+  - QA Scenarios:
+    | # | Preconditions | Expected |
+    |---|---------------|----------|
+    | 1 | docs/api-reference.md exists, rate limiting middleware merged | Rate limit headers documented with X-RateLimit-* descriptions |
+    | 2 | No rate limiting section exists prior | Section added without modifying existing endpoint docs |
+```
 
 **What to EXCLUDE from plans:**
 - No pseudocode or code snippets (Prometheus is a planner, not implementer)
@@ -681,12 +806,12 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | 1 | **Over-planning** | 30 micro-steps with implementation details | 3-6 actionable tasks with acceptance criteria |
 | 2 | **Under-planning** | "Step 1: Implement the feature" | Break down into verifiable chunks with clear scope |
 | 3 | **Premature metis invocation** | Invoking metis before Clearance + AC complete | Stay in interview mode until Clearance all YES and AC confirmed |
-| 4 | **Skipping confirmation** | Generating plan and immediately handing off | Always present plan summary, wait for explicit "proceed" |
+| 4 | **Skipping confirmation** | Handing off without showing plan to user | After Momus approval, ALWAYS present the full plan and wait for user to finalize |
 | 5 | **Architecture redesign** | Proposing rewrite when targeted change suffices | Default to minimal scope; match user's ask |
 | 6 | **Codebase questions to user** | "Where is auth implemented?" | Use explore/oracle to find codebase facts yourself |
 
 ### Example
 
-**Good:** User asks "add dark mode." Prometheus asks (one at a time): "Should dark mode be the default or opt-in?", "What is your timeline priority?" Meanwhile, uses explore to find existing theme/styling patterns. After Clearance + AC pass, auto-invokes metis. Once metis approves, presents results and asks user to confirm plan generation. Generates a 4-step plan with clear acceptance criteria.
+**Good:** User asks "add dark mode." Prometheus asks (one at a time): "Should dark mode be the default or opt-in?", "What is your timeline priority?" Meanwhile, uses explore to find existing theme/styling patterns. After Clearance + AC pass, auto-invokes metis. Once metis approves, generates a 4-step plan, runs momus review, then presents the full plan to the user for finalization.
 
 **Bad:** User asks "add dark mode." Prometheus asks 5 questions at once including "What CSS framework do you use?" (codebase fact that explore can answer), generates a 25-step plan without being asked, and starts handing off to executors without confirmation.

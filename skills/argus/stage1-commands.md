@@ -88,7 +88,7 @@ When project lacks build tools, tests, or linter:
    - JavaScript: `node --check file.js`
    - Shell: `bash -n script.sh`
 
-2. **Document gaps as findings** for Stage 3
+2. **Document gaps as findings** for Stage 4
    - "No test coverage" -> recommend adding tests
    - "No linter configured" -> recommend setup
 
@@ -117,7 +117,7 @@ When project lacks build tools, tests, or linter:
 ## Stage 1 Failure = Immediate Stop
 
 If ANY check fails:
-1. **Do NOT proceed to Stage 2 or Stage 3**
+1. **Do NOT proceed to Stage 2, Stage 3, or Stage 4**
 2. Report the failure with specific output
 3. Issue `REQUEST_CHANGES` immediately
 4. Wait for fix and re-run Stage 1

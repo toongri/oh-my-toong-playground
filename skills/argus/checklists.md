@@ -1,6 +1,6 @@
 # Code Quality Checklists
 
-Quality review checklists organized by severity level. Use during Stage 3 of the code review process.
+Quality review checklists organized by severity level. Use during Stage 4 of the code review process.
 
 ---
 

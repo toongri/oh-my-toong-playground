@@ -183,7 +183,7 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 
 #### 4.1 Save Approved Items
 
-- Create: `.omt/specs/context/` directory if needed
+- Create: `~/.omt/$OMT_PROJECT/context/` directory if needed
 - Write: Approved content to appropriate files
 - Format: Append to existing files or create new ones
 

@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: External documentation researcher - searches official docs, GitHub, package registries, Stack Overflow. NOT for internal codebase (use explore agent instead)
+description: Use when delegating external documentation research — returns findings with mandatory source URLs. NOT for internal codebase (use explore)
 model: sonnet
 skills: librarian
 ---
