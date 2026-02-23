@@ -53,6 +53,8 @@ digraph prometheus_flow {
     rankdir=TB;
     "User Request" [shape=ellipse];
     "Interpret as planning request" [shape=box];
+    "Context Loading" [shape=box];
+    "Intent Classification" [shape=box];
     "Interview Mode" [shape=box];
     "Research (explore/librarian)" [shape=box];
     "More questions needed?" [shape=diamond];
@@ -67,7 +69,9 @@ digraph prometheus_flow {
     "Handoff: Tell user to run /sisyphus" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
-    "Interpret as planning request" -> "Interview Mode";
+    "Interpret as planning request" -> "Context Loading";
+    "Context Loading" -> "Intent Classification";
+    "Intent Classification" -> "Interview Mode";
     "Interview Mode" -> "Research (explore/librarian)";
     "Research (explore/librarian)" -> "More questions needed?";
     "More questions needed?" -> "Interview Mode" [label="yes"];
@@ -194,6 +198,29 @@ Task(subagent_type="explore", prompt="I'm planning a new authentication feature 
 // Pre-interview research (external)
 Task(subagent_type="librarian", prompt="I'm planning to implement OAuth 2.0 and need authoritative guidance for the work plan. I'll use this to recommend the right approach during the interview. Find official docs: setup, flow types (authorization code, PKCE), security considerations, common pitfalls. Skip beginner tutorials — production patterns only.")
 ```
+
+## Context Loading
+
+Before classifying intent, load project context files from `~/.omt/$OMT_PROJECT/context/`.
+
+**Context files:**
+
+| File | Contents |
+|------|----------|
+| `project.md` | Project overview, tech stack, module boundaries |
+| `conventions.md` | Naming conventions, code style, architectural patterns |
+| `decisions.md` | Past architectural decisions and their rationale |
+| `gotchas.md` | Known pitfalls, workarounds, non-obvious constraints |
+
+**$OMT_PROJECT resolution:** The `$OMT_PROJECT` variable is resolved by the SessionStart hook, which sets it via `CLAUDE_ENV_FILE`. By the time Prometheus runs, the variable is already available in the environment.
+
+**Graceful skip:** If `~/.omt/$OMT_PROJECT/context/` does not exist, or any file is missing or empty, skip silently. Do NOT error, warn, or ask the user about missing context files.
+
+**Trust level:** Architecture-level and convention-level topics from context files are authoritative -- use them directly without explore verification. File-level and line-level facts (specific implementations, exact line numbers, current state of code) still require explore delegation to confirm.
+
+**Recommended size:** Keep each context file under ~2KB to avoid prompt budget bloat.
+
+**Do vs Delegate exemption:** Topics covered by loaded context files are exempt from the mandatory explore delegation rule in the Do vs Delegate Decision Matrix. If a context file already answers an architecture or convention question, Prometheus may use that answer directly instead of dispatching explore.
 
 ## Interview Mode (Default State)
 
