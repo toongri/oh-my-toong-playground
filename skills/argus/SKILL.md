@@ -19,7 +19,7 @@ Guardian agent. Verifies project stability and quality after code changes.
 
 </Role>
 
-## Three-Stage Mandatory Review
+## Four-Stage Mandatory Review
 
 ```dot
 digraph review_stages {
@@ -31,7 +31,9 @@ digraph review_stages {
     verify_pass [label="All pass?" shape=diamond];
     stage2 [label="Stage 2: Spec Compliance" shape=box style=filled fillcolor=lightblue];
     spec_pass [label="Spec met?" shape=diamond];
-    stage3 [label="Stage 3: Code Quality" shape=box style=filled fillcolor=lightgreen];
+    stage3 [label="Stage 3: Hands-On QA" shape=box style=filled fillcolor=lightorange];
+    handson_pass [label="QA pass?" shape=diamond];
+    stage4 [label="Stage 4: Code Quality" shape=box style=filled fillcolor=lightgreen];
     quality_pass [label="Quality pass?" shape=diamond];
     approve [label="APPROVE" shape=ellipse style=filled fillcolor=green fontcolor=white];
     fix [label="FIX -> RE-REVIEW" shape=box style=filled fillcolor=red fontcolor=white];
@@ -43,7 +45,10 @@ digraph review_stages {
     stage2 -> spec_pass;
     spec_pass -> fix [label="NO"];
     spec_pass -> stage3 [label="YES"];
-    stage3 -> quality_pass;
+    stage3 -> handson_pass;
+    handson_pass -> fix [label="NO"];
+    handson_pass -> stage4 [label="YES"];
+    stage4 -> quality_pass;
     quality_pass -> fix [label="NO"];
     quality_pass -> approve [label="YES"];
 }
@@ -51,7 +56,7 @@ digraph review_stages {
 
 ### Fast-Path Exception
 
-Single-line edits, obvious typos, or changes with no functional behavior modification skip Stage 1, receiving only a brief Stage 3 quality check.
+Single-line edits, obvious typos, or changes with no functional behavior modification skip Stage 1 and Stage 3, receiving only a brief Stage 4 quality check.
 
 ---
 
@@ -118,7 +123,36 @@ Changed files list is the Single Source of Truth. Do NOT use `git diff` to indep
 
 ---
 
-## Stage 3: Code Quality (After Stage 2 Passes)
+## Stage 3: Hands-On QA (After Stage 2 Passes, Conditional)
+
+**Conditionally verify user-facing behavior by actually running the changed code.**
+
+This stage applies only when changes affect externally observable behavior. Internal-only changes (refactoring, logic without user-facing surface) skip this stage.
+
+### Applicability
+
+| Change Type | Verification Method | Tool |
+|-------------|---------------------|------|
+| API endpoint | HTTP request verification | `curl` |
+| Frontend / UI | Browser interaction verification | `playwright` |
+| CLI / TUI | Command execution verification | Interactive Bash |
+| Internal logic only | N/A (skip Stage 3) | - |
+
+### Lifecycle
+
+1. **Start** the server/application in background
+2. **Execute** verification against the running instance
+3. **Stop** the server/application after verification completes
+
+### Failure Handling
+
+ANY hands-on verification failure = immediate `REQUEST_CHANGES`. Do NOT proceed to Stage 4.
+
+**See** [stage3-handson.md] **for details** on applicability logic, lifecycle management, verification procedures, and output format.
+
+---
+
+## Stage 4: Code Quality (After Stage 3 Passes)
 
 Review code against quality checklists by severity level.
 
@@ -187,7 +221,8 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 |-----------|---------|
 | Stage 1 FAIL | **REQUEST_CHANGES** (build/test broken) |
 | Stage 2 FAIL | **REQUEST_CHANGES** (spec not met) |
-| Stage 3 CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
+| Stage 3 FAIL | **REQUEST_CHANGES** (hands-on verification failed) |
+| Stage 4 CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
 | MEDIUM only | **COMMENT** (conditional merge approval) |
 | LOW only or no issues | **APPROVE** |
 
@@ -198,9 +233,11 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 ```
 Stage 1: Automated Verification (Build, Test, Lint)
 Stage 2: Spec Compliance (vs 6-Section prompt)
-Stage 3: Code Quality (Security, Architecture, Performance, Maintainability, YAGNI)
+Stage 3: Hands-On QA (API->curl, Frontend->playwright, CLI->interactive_bash)
+Stage 4: Code Quality (Security, Architecture, Performance, Maintainability, YAGNI)
 
 STAGE 1: See stage1-commands.md
+STAGE 3: See stage3-handson.md
 CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
 FEEDBACK: What + Why + How (2+ options) + Benefit
 SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)
