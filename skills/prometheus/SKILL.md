@@ -239,6 +239,8 @@ After loading context, classify the user's request into one of four tiers. Class
 
 **Note:** User can request reclassification if they disagree.
 
+**Classification boundary rule:** File count takes precedence over per-file complexity. A request touching 3 files with trivial per-file changes is Scoped, not Trivial. A request touching 1 file with complex logic is still Trivial if confined to <10 lines.
+
 ## Interview Mode (Default State)
 
 **Use AskUserQuestion tool to interview in-depth until nothing is ambiguous.**
@@ -709,7 +711,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved), Momus review (findings and how resolved) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
-| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them |
 
 **TODO Task Format:**
@@ -721,8 +723,29 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
   - `Blocked By`: list of TODO numbers this task depends on (empty if none)
   - `Blocks`: list of TODO numbers that depend on this task (empty if none)
   - `Wave`: execution wave number (1-based). Tasks in the same wave can run in parallel
+- **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically.
+- **Anti-pattern**: Assigning Wave 2 to an independent task because "it makes sense to do X before Y." If there is a real dependency, add `Blocked By`. If there is no dependency, the task goes in Wave 1.
+- **Wave integrity**: Every wave must reference numbered TODOs only. Do not add administrative stages (Verification, Merge, Deploy) as waves — argus handles verification, mnemosyne handles commits.
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
-  - Each scenario has 4 fields: **Tool** (test runner, CLI, curl, etc.) / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
+  - Each scenario has 4 fields: **Tool** / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
+  - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
+    Reference examples by project type:
+    | Project Type | Tool Example |
+    |---|---|
+    | HTTP API verification | `curl` |
+    | File content verification | `grep` |
+    | General shell script | `bash` |
+    | Node.js / Bun | `bun test` or `jest` |
+    | Python | `pytest` |
+    | Go | `go test` |
+    | Kotlin/Java (Gradle) | `./gradlew test` |
+    | Browser UI | `playwright` |
+    Anti-patterns (INVALID Tool values):
+    | WRONG | WHY | RIGHT |
+    |---|---|---|
+    | "Header validation" | Test description, not a command | `curl` or `bun test` |
+    | "Concurrency stress test" | Test category, not executable | `bash` |
+    | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
   - Non-code TODOs (docs, config) may use simplified format: Preconditions + Expected only
 
@@ -751,6 +774,25 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
     |---|------|---------------|-------|----------|
     | 1 | jest | DB migrated, test user seed | Run `npm test -- user-service` | All CRUD tests pass, coverage >90% |
     | 2 | jest | DB migrated, no seed data | Call create() with missing required field | Throws ValidationError with field name |
+```
+
+**Non-code TODO Example (simplified format):**
+
+```
+--- TODO 6: Update API Documentation ---
+- What to do: Add rate limiting section to API docs
+- Must NOT do: Change existing endpoint documentation
+- Files: docs/api-reference.md (update)
+- Blocked By: TODO 3
+- Blocks: None
+- Wave: 2
+- Acceptance Criteria:
+  - Rate limiting section documents limits, headers, and error responses
+  - QA Scenarios:
+    | # | Preconditions | Expected |
+    |---|---------------|----------|
+    | 1 | docs/api-reference.md exists, rate limiting middleware merged | Rate limit headers documented with X-RateLimit-* descriptions |
+    | 2 | No rate limiting section exists prior | Section added without modifying existing endpoint docs |
 ```
 
 **What to EXCLUDE from plans:**

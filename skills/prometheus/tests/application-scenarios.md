@@ -396,7 +396,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 **Prompt (boundary — Trivial vs Scoped):**
 ```
-에러 메시지 3곳에서 한글화해줘
+auth.ts, payment.ts, user.ts 3개 파일에서 에러 메시지 한글화해줘
 ```
 
 **Prompt (boundary — Scoped vs Complex):**
@@ -456,7 +456,7 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 | V1 | Steps are agent-executable | Steps field contains concrete commands or actions (e.g., `curl -X POST /api/resource 101 times`, `grep 'rate-limit' README.md`) — NOT vague statements like "verify the feature works" or "check that limiting is applied" |
 | V2 | Failure scenario is non-trivial | Edge case scenario tests an actual failure mode specific to the task (e.g., "rate limit counter resets after window expires", "concurrent requests from same IP handled correctly") — NOT generic "invalid input returns error" |
 | V3 | Non-code TODO uses simplified format | Documentation update TODO uses simplified QA format (Preconditions + Expected only, no Tool/Steps) — NOT forced into full 4-field structure that doesn't make sense for docs |
-| V4 | Tool field is specific | Names the actual verification tool (jest, curl, grep, bash) — NOT generic "test runner" or "testing tool". The tool choice matches what the Steps actually use |
+| V4 | Tool field is executable CLI command | Names an executable CLI command (e.g., `bun test`, `curl`, `grep`, `./gradlew test`), NOT a test description ("Header validation") or generic label ("test runner"). The named command must match what Steps actually invoke |
 
 ---
 
