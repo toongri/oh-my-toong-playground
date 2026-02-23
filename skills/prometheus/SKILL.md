@@ -525,52 +525,25 @@ Overall structure:
 **Do NOT invoke metis during interview phase or upon receiving the initial request.**
 
 **Metis Consultation Flow:**
-1. Invoke metis with the 5-Section Invocation Template below
+1. Invoke metis with the 3-Section Invocation Template below
 2. Receive Metis verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 3. Act on verdict per the table below
 4. **Repeat until APPROVE**
 
-**Metis Invocation Template (5-Section):**
+**Metis Invocation Template (3-Section):**
 
-Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use the same structure with updated content — metis is stateless and reviews each submission independently. If a previous finding was reviewed but a different decision was made due to tradeoffs or constraints, reflect the decision and rationale in the relevant section (Key Decisions, Scope, or AC).
+Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use the same structure with updated content — metis is stateless and reviews each submission independently. If a previous finding was reviewed but a different decision was made, reflect it in the relevant section (Scope or AC).
 
 ```markdown
 ## 1. USER GOAL
 - **Original Request**: [User's original request — verbatim or faithful paraphrase]
 - **Core Objective**: [Distilled core objective from interview]
 
-## 2. INTERVIEW FINDINGS
-### Key Decisions
-| Topic | Decision | Rationale |
-|-------|----------|-----------|
-| [Decision topic] | [User's choice] | [Rationale — preference, codebase constraint, best practice] |
-
-### User Deferrals
-| Topic | Autonomous Decision | Basis |
-|-------|-------------------|-------|
-| [Deferred topic] | [Selected approach] | [Codebase pattern / industry practice] |
-
-(If no deferrals, write "None")
-
-## 3. RESEARCH FINDINGS
-### Codebase (explore)
-- [Finding]: [Impact on planning]
-
-### External (librarian)
-- [Documentation / best practice]: [Impact on approach]
-
-### Oracle (if consulted)
-- [Feasibility / risk analysis result]: [Implication]
-
-(If agent not dispatched, write "Not dispatched")
-
-## 4. SCOPE & TECHNICAL APPROACH
+## 2. SCOPE
 - **IN Scope**: [What will be built]
 - **OUT of Scope**: [What is excluded]
-- **Technical Approach**: [Decided approach]
-- **Approach Validation**: [Validation basis]
 
-## 5. ACCEPTANCE CRITERIA
+## 3. ACCEPTANCE CRITERIA
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
 
@@ -578,17 +551,16 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 
 | Anti-Pattern | Example | Problem |
 |-------------|---------|---------|
-| Summarized AC | "Logout feature AC" without full criteria | Metis cannot evaluate AC quality |
-| Omitted deferrals | User Deferrals section missing | Unvalidated assumptions undetectable |
-| Vague research | "Codebase explored" without specifics | Cannot judge if findings incorporated |
-| Abstract scope | "Build the feature" without IN/OUT | Scope creep risk unanalyzable |
+| Summarized AC | "Logout feature AC" without full criteria | Metis cannot evaluate AC verifiability |
+| Abstract scope | "Build the feature" without IN/OUT | Scope completeness uncheckable |
+| Missing user goal | Sending AC without original request context | Metis cannot classify intent |
 
 **Verdict Handling:**
 
 | Verdict | Action |
 |---------|--------|
 | **APPROVE** | Proceed to presenting results to user. Gate passed. |
-| **REQUEST_CHANGES** | Return to Interview Mode. Resolve blocking items with the user. Re-invoke metis with the same 5-Section template, content updated to reflect resolutions. **Loop until APPROVE.** |
+| **REQUEST_CHANGES** | Return to Interview Mode. Resolve blocking items with the user. Re-invoke metis with the same 3-Section template, content updated to reflect resolutions. **Loop until APPROVE.** |
 | **COMMENT** | Incorporate findings into the plan. Proceed to presenting results. |
 
 **Post-Metis Summary** (include in plan under Context section):
