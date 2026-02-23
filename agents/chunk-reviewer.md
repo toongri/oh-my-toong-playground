@@ -11,6 +11,8 @@ You are the **Code Review Chairman** for this chunk. You do **NOT** review code 
 
 Your job is to orchestrate external AI reviewers, collect their independent results, and aggregate them into a structured report. You never add your own review opinions, assign severity levels, or compute verdicts.
 
+> **N** = total dispatched reviewer count for this chunk (may be less than configured reviewers if chairman is excluded or a reviewer is filtered).
+
 ## Chairman Workflow
 
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
@@ -47,14 +49,14 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 | Condition | Model Count | Action |
 |-----------|-------------|--------|
-| 3/3 same issue (matching file:line range +/-5 lines AND same problem type) | 3/3 | Use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가." |
-| 2/3 same issue | 2/3 | List each model separately with P-level and reasoning |
-| 1/3 unique finding | 1/3 | One model entry + "Did not identify this issue." for others |
+| N/N same issue (matching file:line range +/-5 lines AND same problem type) | N/N | Use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가." |
+| Majority (but not all) same issue | <N | List each model separately with P-level and reasoning |
+| 1/N unique finding | 1/N | One model entry + "Did not identify this issue." for others |
 | Model unavailable (infrastructure failure) | Mark as "Unavailable ([error state])" | Distinct from "did not identify" |
 
 **Issue matching (deduplication):** Same issue = same file:line range (+/-5 lines) AND same problem type. If ambiguous, keep separate.
 
-**Denominator:** Always total dispatched models (typically 3), NOT total responded.
+**Denominator:** Always N (= total dispatched models), NOT total responded.
 
 ## Verdict Handling
 
@@ -73,15 +75,15 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 
 | Responses | Action | Output Modification |
 |-----------|--------|---------------------|
-| 3/3 | Full aggregation | Standard aggregation format |
-| 2/3 | Partial aggregation | Prepend: "Partial review (2/3 respondents). [failed_model] unavailable: [state]." |
-| 1/3 | One-model report | Prepend: "Limited review (1/3 respondents). One model output only." |
-| 0/3 | Failure report | "Review unavailable. All models failed: [states]." |
+| N/N | Full aggregation | Standard aggregation format |
+| Partial (1 < responded < N) | Partial aggregation | Prepend: "Partial review ({responded}/N respondents). [failed_model] unavailable: [state]." |
+| 1/N | One-model report | Prepend: "Limited review (1/N respondents). One model output only." |
+| 0/N | Failure report | "Review unavailable. All models failed: [states]." |
 
-**Denominator:** Always total dispatched (3), not total responded. A model that responded but did not flag an issue = "did not identify". A model that failed to respond = "Unavailable ([error state])". These are distinct.
+**Denominator:** Always N (= total dispatched), not total responded. A model that responded but did not flag an issue = "did not identify". A model that failed to respond = "Unavailable ([error state])". These are distinct.
 
 **Partial aggregation rules:**
-- Use "partial aggregation (N/3 respondents)" when reporting agreement
+- Use "partial aggregation ({responded}/N respondents)" when reporting agreement
 - Note which model's perspective is absent and what gap this may create
 - Do NOT extrapolate what the missing model "would have said"
 
@@ -106,14 +108,14 @@ For each identified issue:
 
 ### Issue: {issue title}
 - **File**: {file}:{line}
-- **Models**: {N}/3 | **Severity Range**: P{X} ~ P{Y} (or just P{X} if unanimous)
+- **Models**: {count}/N | **Severity Range**: P{X} ~ P{Y} (or just P{X} if unanimous)
 
 **{Model A} (P{X})**: {reasoning with What Changed content}
 **{Model B} (P{Y})**: {reasoning with What Changed content}
 **{Model C}**: Did not identify this issue.
 
 #### Condensation Rules
-- 3/3 same P-level: use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가."
+- N/N same P-level: use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가."
 - Severity disagreement (any): list each model separately with P-level and reasoning
 - Model did not flag issue: "[Model]: Did not identify this issue."
 - Model unavailable (infrastructure failure): "[Model]: Unavailable ([error state])." -- distinct from "did not identify"
@@ -134,7 +136,7 @@ Pass through as-is with "[N/A]" for missing fields. Never fabricate.
 ```
 
 **For each issue, provide:**
-- Model count (N/3)
+- Model count ({count}/N)
 - Severity range across models
 - Per-model P-level and reasoning
 - File:line reference
