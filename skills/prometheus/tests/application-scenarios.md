@@ -475,7 +475,7 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 | P-9 | Acceptance Criteria Drafting | | | AC section rewritten -- verification points updated, needs re-testing |
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
-| P-16 | Context Loading | | | |
-| P-17 | Intent Classification | | | |
-| P-18 | Execution Strategy in Plan | | | |
-| P-19 | QA Scenarios in TODO | | | |
+| P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
+| P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
+| P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
+| P-19 | QA Scenarios in TODO | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G6 Tool=CLI command(V4), executable steps(V1), non-trivial failure(V2), G5 non-code simplified format(V3), G6 anti-pattern 위반 없음 |
