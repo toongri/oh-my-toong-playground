@@ -1041,7 +1041,7 @@ spec.md = requirements/design.md
         + {custom-concern}/design.md (if promoted via Emergent Concern Protocol)
 ```
 
-**Note**: Wrapup produces context files (`.omt/specs/context/`), not spec content.
+**Note**: Wrapup produces context files (`~/.omt/$OMT_PROJECT/context/`), not spec content.
 
 ### Record Naming
 

@@ -130,7 +130,7 @@ digraph spec_review_decision {
 ## Process
 
 1. Receive design content from caller
-2. Gather shared context from .omt/specs/context/ (if --spec flag provided)
+2. Gather shared context from ~/.omt/$OMT_PROJECT/context/ (if --spec flag provided)
 3. Format structured prompt with design content + context
 4. Dispatch to claude, gemini, codex in parallel
 5. Collect independent opinions
@@ -181,10 +181,10 @@ Context files are **automatically included if they exist, silently skipped if th
 
 | File | Included When |
 |------|---------------|
-| `.omt/specs/context/project.md` | File exists |
-| `.omt/specs/context/conventions.md` | File exists |
-| `.omt/specs/context/decisions.md` | File exists |
-| `.omt/specs/context/gotchas.md` | File exists |
+| `~/.omt/$OMT_PROJECT/context/project.md` | File exists |
+| `~/.omt/$OMT_PROJECT/context/conventions.md` | File exists |
+| `~/.omt/$OMT_PROJECT/context/decisions.md` | File exists |
+| `~/.omt/$OMT_PROJECT/context/gotchas.md` | File exists |
 
 **No context files yet?** That's fine - the review proceeds without them.
 
@@ -315,7 +315,7 @@ We propose using Event Sourcing for order state management because...
 EOF
 ```
 
-**Context (Section 3)**: Automatically populated from `.omt/specs/context/` if files exist. Omit from your request.
+**Context (Section 3)**: Automatically populated from `~/.omt/$OMT_PROJECT/context/` if files exist. Omit from your request.
 
 **Custom context needed?** Just add it to your request content directly - no special flag required.
 
