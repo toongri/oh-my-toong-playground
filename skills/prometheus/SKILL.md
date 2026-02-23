@@ -59,12 +59,12 @@ digraph prometheus_flow {
     "Clearance + AC complete?" [shape=diamond];
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
-    "Present results\nAsk user 'generate plan?'" [shape=box];
-    "User approves?" [shape=diamond];
     "Write plan to .omt/plans/*.md" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
-    "Handoff: Tell user to run /start-work" [shape=ellipse];
+    "Present full plan\nAsk user to finalize" [shape=box];
+    "User approves?" [shape=diamond];
+    "Handoff: Tell user to run /sisyphus" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Interview Mode";
@@ -76,14 +76,14 @@ digraph prometheus_flow {
     "Clearance + AC complete?" -> "Metis consultation" [label="yes"];
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
-    "Metis verdict?" -> "Present results\nAsk user 'generate plan?'" [label="APPROVE"];
-    "Present results\nAsk user 'generate plan?'" -> "User approves?";
-    "User approves?" -> "Interview Mode" [label="no, more changes"];
-    "User approves?" -> "Write plan to .omt/plans/*.md" [label="yes"];
+    "Metis verdict?" -> "Write plan to .omt/plans/*.md" [label="APPROVE"];
     "Write plan to .omt/plans/*.md" -> "Momus review";
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to .omt/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Momus verdict?" -> "Handoff: Tell user to run /start-work" [label="APPROVE"];
+    "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE"];
+    "Present full plan\nAsk user to finalize" -> "User approves?";
+    "User approves?" -> "Interview Mode" [label="no, more changes"];
+    "User approves?" -> "Handoff: Tell user to run /sisyphus" [label="yes"];
 }
 ```
 
@@ -94,7 +94,7 @@ digraph prometheus_flow {
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
-| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete. Catches missing questions before user is asked to generate plan |
+| Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete. Catches missing questions before plan generation |
 | Plan review | momus | **MANDATORY** after plan generation -- catches quality issues |
 
 ### Do vs Delegate Decision Matrix
@@ -503,17 +503,22 @@ Overall structure:
 
 ## Plan Generation
 
-**Trigger**: Metis consultation passes (APPROVE or COMMENT). Then present the validated results to the user and ask for confirmation to generate the plan.
+**Trigger**: Metis consultation passes (APPROVE or COMMENT). Proceed directly to plan generation — do NOT ask the user for confirmation at this stage. The user will review the complete plan after Momus approval.
 
-**User confirmation phrases (after Metis pass):**
-- "Make it into a work plan"
-- "Generate the plan"
-- "Save it as a file"
-- Or any affirmative response to "plan 생성할까요?"
+### Metis Feedback Loop (Auto-Invoked Before Plan Generation)
 
-### Metis Feedback Loop (Auto-Invoked Before User Confirmation)
+<CRITICAL_GATE>
 
-**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before presenting results to the user. REQUEST_CHANGES blocks until resolved.**
+**MANDATORY: Metis MUST approve before proceeding to plan generation.**
+
+- Do NOT proceed to the next step (plan generation) until Metis returns APPROVE or COMMENT
+- On REQUEST_CHANGES, you MUST incorporate the feedback, revise, and re-invoke Metis
+- This loop repeats indefinitely until Metis returns APPROVE
+- Skipping or bypassing this gate is NEVER permitted
+
+</CRITICAL_GATE>
+
+**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before writing the plan. REQUEST_CHANGES blocks until resolved.**
 
 **TIMING: Metis is invoked when BOTH conditions are met:**
 1. Clearance Checklist: all YES
@@ -559,9 +564,9 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 
 | Verdict | Action |
 |---------|--------|
-| **APPROVE** | Proceed to presenting results to user. Gate passed. |
-| **REQUEST_CHANGES** | Return to Interview Mode. Resolve blocking items with the user. Re-invoke metis with the same 3-Section template, content updated to reflect resolutions. **Loop until APPROVE.** |
-| **COMMENT** | Incorporate findings into the plan. Proceed to presenting results. |
+| **APPROVE** | Proceed directly to plan generation. Gate passed. |
+| **REQUEST_CHANGES** | **MANDATORY**: Return to Interview Mode. Resolve ALL blocking items. Modify content to address feedback. Re-invoke metis with updated 3-Section template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
+| **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
 
 **Post-Metis Summary** (include in plan under Context section):
 - **Identified Gaps**: What Metis found (across all iterations)
@@ -569,9 +574,20 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 - **Incorporated**: What was folded into the plan
 - **Iterations**: Number of metis invocations before APPROVE
 
-### Momus Feedback Loop (MANDATORY Before Handoff)
+### Momus Feedback Loop (MANDATORY Before User Presentation)
 
-**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus must pass (APPROVE or COMMENT) to proceed to handoff. REQUEST_CHANGES blocks until resolved.**
+<CRITICAL_GATE>
+
+**MANDATORY: Momus MUST approve before presenting the plan to the user.**
+
+- Do NOT proceed to the next step (user presentation) until Momus returns APPROVE or COMMENT
+- On REQUEST_CHANGES, you MUST incorporate the feedback, revise the plan, and re-invoke Momus
+- This loop repeats indefinitely until Momus returns APPROVE
+- Skipping or bypassing this gate is NEVER permitted
+
+</CRITICAL_GATE>
+
+**After generating the plan**, invoke the momus skill to review the plan for quality. **Momus must pass (APPROVE or COMMENT) to proceed to user presentation. REQUEST_CHANGES blocks until resolved.**
 
 **Momus Review Flow:**
 1. Generate the plan to `.omt/plans/{name}.md`
@@ -602,14 +618,29 @@ All review context (original request, interview summary, metis results) is alrea
 
 | Verdict | Action |
 |---------|--------|
-| **APPROVE** | Proceed to handoff. Gate passed. |
-| **REQUEST_CHANGES** | Revise the plan to address all [CERTAIN] findings. Re-invoke momus with the same plan file path. **Loop until APPROVE.** |
-| **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Proceed to handoff. |
+| **APPROVE** | Present the full plan to the user. Show the complete plan content and ask to finalize. Gate passed. |
+| **REQUEST_CHANGES** | **MANDATORY**: Revise the plan to address ALL [CERTAIN] findings. Re-invoke momus with the same plan file path. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
+| **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Present the full plan to the user. |
 
 **Post-Momus Summary** (append to plan under Context section):
 - **Findings**: What Momus found (across all iterations)
 - **How Resolved**: Changes made to address each finding
 - **Iterations**: Number of momus invocations before APPROVE
+
+### Plan Presentation (After Momus Approval)
+
+After Momus approves the plan:
+
+1. **Present the full plan** — Show the complete content of `.omt/plans/{name}.md` to the user
+2. **Ask to finalize** — Ask the user if they want to proceed with this plan
+3. **Handle response:**
+
+| User Response | Action |
+|---------------|--------|
+| Approves / "Looks good" / "Proceed" | Handoff: Tell user to run `/sisyphus` |
+| Requests changes | Return to Interview Mode to address concerns, then re-run through Metis → Plan → Momus pipeline |
+
+This is the ONLY point where the user sees and confirms the plan. All internal quality gates (Metis, Momus) run automatically before this step.
 
 ### Plan Output
 
@@ -653,12 +684,12 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | 1 | **Over-planning** | 30 micro-steps with implementation details | 3-6 actionable tasks with acceptance criteria |
 | 2 | **Under-planning** | "Step 1: Implement the feature" | Break down into verifiable chunks with clear scope |
 | 3 | **Premature metis invocation** | Invoking metis before Clearance + AC complete | Stay in interview mode until Clearance all YES and AC confirmed |
-| 4 | **Skipping confirmation** | Generating plan and immediately handing off | Always present plan summary, wait for explicit "proceed" |
+| 4 | **Skipping confirmation** | Handing off without showing plan to user | After Momus approval, ALWAYS present the full plan and wait for user to finalize |
 | 5 | **Architecture redesign** | Proposing rewrite when targeted change suffices | Default to minimal scope; match user's ask |
 | 6 | **Codebase questions to user** | "Where is auth implemented?" | Use explore/oracle to find codebase facts yourself |
 
 ### Example
 
-**Good:** User asks "add dark mode." Prometheus asks (one at a time): "Should dark mode be the default or opt-in?", "What is your timeline priority?" Meanwhile, uses explore to find existing theme/styling patterns. After Clearance + AC pass, auto-invokes metis. Once metis approves, presents results and asks user to confirm plan generation. Generates a 4-step plan with clear acceptance criteria.
+**Good:** User asks "add dark mode." Prometheus asks (one at a time): "Should dark mode be the default or opt-in?", "What is your timeline priority?" Meanwhile, uses explore to find existing theme/styling patterns. After Clearance + AC pass, auto-invokes metis. Once metis approves, generates a 4-step plan, runs momus review, then presents the full plan to the user for finalization.
 
 **Bad:** User asks "add dark mode." Prometheus asks 5 questions at once including "What CSS framework do you use?" (codebase fact that explore can answer), generates a 25-step plan without being asked, and starts handing off to executors without confirmation.
