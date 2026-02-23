@@ -616,9 +616,54 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 
 ---
 
-**결과 요약**: 7/8 시나리오 PASS (SEV-1~SEV-6 subagent 기반 검증 완료), 2 PENDING (SEV-7, SEV-8 분석적 검증 대기)
+#### SEV-9: Orchestrator Context-Validated Adopt — Unanimous + Context Mismatch
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | Orchestrator가 만장일치(P0)에도 "Per adjudication rules, this triggers the Project Context Check rather than automatic adoption" 명시 |
+| V2 | PASS | "The threat model is wrong. Workers assumed an internet-facing service with untrusted clients. The actual system is air-gapped from external threat actors by a VPN boundary." |
+| V3 | PASS | "Workers' probability and impact assumptions contradict the actual project context. Full rubric adjudication is required." + 3축 전체 분석 수행 |
+| V4 | PASS | 최종 P-level: P2(b) — P0보다 대폭 하향. 예상 P3 대신 P2(b)("no bug today but predictable failure if access model changes"). 핵심 요건(P0보다 낮음) 충족. P2(b)는 방어 가능한 분류 |
+| V5 | PASS | "The decisive axis is **probability**. All three workers assumed external, untrusted, or automated traffic — a threat model that does not match a VPN-isolated internal tool." |
+
+---
+
+#### SEV-10: Orchestrator Context-Validated Adopt — Unanimous + Context Validates
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | "Step 2 — Project Context Check" 섹션에서 workers 가정 vs 실제 context 비교 수행 |
+| V2 | PASS | "Workers' probability and impact assumptions are **consistent** with the actual project context. The threat model matches." |
+| V3 | PASS | "Final P-level: P1" — workers와 동일 |
+| V4 | PASS | "Unanimous worker assessment is adopted." — brief confirmation 형태 |
+| V5 | PASS | "Adoption Decision" 프레이밍, brief rubric verification 후 confirm. Full adjudication이 아닌 확인 형태 |
+
+---
+
+#### SEV-11: Worker Decision Gate Traversal — Explicit 3-Axis Reasoning
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | "**Impact**: Double-spend in a payment system. A user with balance 100 can successfully execute two concurrent payments of 100 each, leaving a balance of -100. This is direct financial data corruption." |
+| V2 | PASS | "**Probability**: Multi-device concurrent requests are confirmed in access logs per the project context. This is not a hypothetical — the trigger condition exists and is observed in production today." |
+| V3 | PASS | "**Maintainability**: The fix requires adding a pessimistic or optimistic lock; both are well-supported in Spring Data JPA." |
+| V4 | FAIL | Worker가 P0으로 propose (예상: P1). 근거: "financial data loss in a payment system, making this P0." Worker는 double-charge를 "data loss"(P0)로 해석했으나, Decision Gate Walkthrough 예시는 "data corruption"(P1)으로 분류. Rubric의 P0/P1 경계에서 "data corruption" vs "data loss" 구분이 재무 도메인에서 불충분 — rubric gap 신호 |
+| V5 | PASS | 6-field format 완전 준수: Problem, Impact, Probability, Maintainability, Fix + Decisive axis 모두 존재 |
+
+> **SEV-11 V4 실패 분석**: Decision Gate Walkthrough의 핵심 목표(3축 명시적 라벨링 + decision gate 순회 + 결정적 축 식별)는 V1-V3, V5에서 검증 완료. V4 실패는 P0/P1 경계의 rubric gap — "data corruption"(복원 가능한 잘못된 값)과 "data loss"(비가역적 손실)의 구분이 재무 도메인에서 모호. 향후 REFACTOR 후보.
+
+---
+
+**결과 요약**: SEV-1~SEV-6 + SEV-9 + SEV-10 PASS (8/11), SEV-11 4/5 VP PASS (1 FAIL: V4 — P0/P1 rubric gap), SEV-7 + SEV-8 PENDING
 
 > **변경 이력 (2026-02-23):**
 > - P0-P3 rubric 재정의 (P1 좁히기, P2 확장) 후 GREEN 테스트 추가
 > - SEV-1~SEV-6: subagent 기반 실제 입력 테스트 — 전체 PASS
 > - SEV-7, SEV-8: PENDING (분석적 검증)
+>
+> **변경 이력 (2026-02-23, adjudication/examples 강화):**
+> - SKILL.md: "Adopt as-is" → context-validated adopt 교체, adjudication worked examples 3개 추가
+> - reviewer.md: Decision Gate Walkthrough 섹션 추가 (3축 명시적 라벨링 + decision gate 순회 예시 3개)
+> - SEV-9 (context mismatch override): 5/5 VP PASS — 만장일치 P0을 context 불일치로 P2(b)까지 하향
+> - SEV-10 (context validates confirm): 5/5 VP PASS — 만장일치 P1을 context 검증 후 brief confirmation으로 채택
+> - SEV-11 (decision gate traversal): 4/5 VP PASS, 1 FAIL (V4) — 3축 라벨링/decision gate 순회 성공, P-level 분류에서 P0/P1 rubric gap 발견 (재무 도메인 "data corruption" vs "data loss")
