@@ -664,14 +664,50 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
 | **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved), Momus review (findings and how resolved) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
-| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands, final checklist |
+| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan |
+| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them |
 
 **TODO Task Format:**
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
 - Include file/pattern references -- executor has NO interview context
-- 3-6 tasks is the sweet spot (not 30 micro-steps, not 1 vague step)
+- 3-6 tasks is the total plan task count (not 30 micro-steps, not 1 vague step); Wave is the execution ordering within that count
+- **Parallelization** -- every TODO must include:
+  - `Blocked By`: list of TODO numbers this task depends on (empty if none)
+  - `Blocks`: list of TODO numbers that depend on this task (empty if none)
+  - `Wave`: execution wave number (1-based). Tasks in the same wave can run in parallel
+- **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
+  - Each scenario has 4 fields: **Tool** (test runner, CLI, curl, etc.) / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
+  - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
+  - Non-code TODOs (docs, config) may use simplified format: Preconditions + Expected only
+
+**Execution Strategy & QA Scenarios Example:**
+
+```
+Wave Visualization:
+  Wave 1: TODO 1 (DB schema) | TODO 2 (API types)
+  Wave 2: TODO 3 (service layer, blocked by 1,2) | TODO 4 (validation, blocked by 2)
+  Wave 3: TODO 5 (integration wiring, blocked by 3,4)
+
+Critical Path: TODO 1 → TODO 3 → TODO 5
+
+--- TODO 3: Implement UserService ---
+- What to do: Create UserService with CRUD operations
+- Must NOT do: Add caching or event publishing
+- Files: src/service/user-service.ts (create), src/service/index.ts (export)
+- Blocked By: TODO 1, TODO 2
+- Blocks: TODO 5
+- Wave: 2
+- Acceptance Criteria:
+  - UserService implements create, read, update, delete
+  - All methods return typed responses
+  - QA Scenarios:
+    | # | Tool | Preconditions | Steps | Expected |
+    |---|------|---------------|-------|----------|
+    | 1 | jest | DB migrated, test user seed | Run `npm test -- user-service` | All CRUD tests pass, coverage >90% |
+    | 2 | jest | DB migrated, no seed data | Call create() with missing required field | Throws ValidationError with field name |
+```
 
 **What to EXCLUDE from plans:**
 - No pseudocode or code snippets (Prometheus is a planner, not implementer)
