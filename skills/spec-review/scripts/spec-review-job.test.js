@@ -26,6 +26,7 @@ const {
   parseSpecReviewConfig,
   parseYamlSimple,
   computeStatus,
+  resolveContextDir,
 } = require('./spec-review-job.js');
 
 // ---------------------------------------------------------------------------
@@ -1409,5 +1410,59 @@ describe('computeStatus', () => {
     assert.equal(result.overallState, 'running');
     assert.equal(result.counts.retrying, 1);
     assert.equal(result.counts.done, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveContextDir
+// ---------------------------------------------------------------------------
+
+describe('resolveContextDir', () => {
+  const savedEnv = {};
+
+  beforeEach(() => {
+    savedEnv.OMT_PROJECT = process.env.OMT_PROJECT;
+    savedEnv.HOME = process.env.HOME;
+  });
+
+  afterEach(() => {
+    if (savedEnv.OMT_PROJECT === undefined) delete process.env.OMT_PROJECT;
+    else process.env.OMT_PROJECT = savedEnv.OMT_PROJECT;
+    if (savedEnv.HOME === undefined) delete process.env.HOME;
+    else process.env.HOME = savedEnv.HOME;
+  });
+
+  it('expands ~ to os.homedir() for tilde-prefixed path', () => {
+    process.env.OMT_PROJECT = 'myproject';
+    const result = resolveContextDir('~/.omt/${OMT_PROJECT}/context', '/some/root');
+    assert.equal(result, path.join(os.homedir(), '.omt', 'myproject', 'context'));
+  });
+
+  it('expands ${OMT_PROJECT} to env var value', () => {
+    process.env.OMT_PROJECT = 'test-proj';
+    const result = resolveContextDir('~/.omt/${OMT_PROJECT}/context', '/some/root');
+    assert.ok(result.includes('test-proj'));
+  });
+
+  it('returns null when OMT_PROJECT env var is not set and path contains ${OMT_PROJECT}', () => {
+    delete process.env.OMT_PROJECT;
+    const result = resolveContextDir('~/.omt/${OMT_PROJECT}/context', '/some/root');
+    assert.equal(result, null);
+  });
+
+  it('joins relative path with projectRoot when path does not start with ~', () => {
+    const result = resolveContextDir('.omt/specs/context', '/my/project');
+    assert.equal(result, path.join('/my/project', '.omt/specs/context'));
+  });
+
+  it('returns absolute path unchanged when path starts with /', () => {
+    const result = resolveContextDir('/absolute/path/context', '/some/root');
+    assert.equal(result, '/absolute/path/context');
+  });
+
+  it('handles path without ${OMT_PROJECT} placeholder (no env var needed)', () => {
+    delete process.env.OMT_PROJECT;
+    const result = resolveContextDir('~/.omt/fixed/context', '/some/root');
+    assert.equal(result, path.join(os.homedir(), '.omt', 'fixed', 'context'));
   });
 });

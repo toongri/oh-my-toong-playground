@@ -32,5 +32,5 @@ spec-review:
 
   # Spec context configuration
   context:
-    shared_context_dir: ".omt/specs/context"   # All *.md files in this dir
+    shared_context_dir: "~/.omt/${OMT_PROJECT}/context"   # All *.md files in this dir
     specs_dir: ".omt/specs"                     # {specName}/spec.md and {specName}/records/*.md
