@@ -29,12 +29,51 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 | Diff range determination & git | Yes | - |
 | Chunking decision | Yes | - |
 | Walkthrough/critique synthesis | Yes | - |
-| Project conventions calibration | NEVER | explore |
-| Cross-file impact / design fit | NEVER | oracle |
+| Walkthrough context enrichment | NEVER | explore |
+| Cross-file impact / design fit (Phase 1 only) | NEVER | oracle |
 | Individual chunk review | NEVER | chunk-reviewer |
 | Code modification | NEVER | (forbidden entirely) |
 
 **RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
+
+### Role Separation
+
+```dot
+digraph role_separation {
+    rankdir=LR;
+    "Orchestrator" [shape=box];
+    "chunk-reviewer" [shape=box];
+    "Orchestrator" -> "chunk-reviewer" [label="dispatch with {DIFF_COMMAND}"];
+    "chunk-reviewer" -> "Orchestrator" [label="chunk analysis results"];
+}
+```
+
+**Your role as orchestrator:**
+- Dispatch chunk-reviewer agents with diff command strings
+- Synthesize chunk analysis results into walkthrough + critique
+- Make chunking decisions and determine final verdict
+
+**NOT your role:**
+- Reading raw diff content (never run `git diff` without `--stat` or `--name-only`)
+- Reviewing code directly
+- Loading changed file content via Read tool
+
+### Context Budget
+
+**Allowed in orchestrator context:**
+- `git diff {range} --stat` output
+- `git diff {range} --name-only` output
+- `git log {range} --oneline` output
+- CLAUDE.md file content
+- explore/oracle agent summaries (Phase 1a)
+- chunk-reviewer results
+
+**Forbidden in orchestrator context:**
+- Raw diff lines (`git diff` without `--stat`/`--name-only`)
+- `Read` tool on diff target source files
+- Any tool that loads changed file content into orchestrator context
+
+**RULE**: If a command would put diff lines or source code into your context, it is forbidden. Only metadata (stats, file names, commit messages) and agent outputs are allowed.
 
 ## Step 0: Requirements Context
 
@@ -93,6 +132,12 @@ Rule: Every question must include a default action in parentheses. Ensure progre
 **One Question Per Message:**
 One question at a time. Proceed to the next question only after receiving an answer. Never bundle multiple questions in a single message.
 
+**Project Context:**
+
+Include project context when interpolating the chunk-reviewer prompt template in Step 4. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and other available information.
+
+If the available context is insufficient to characterize the project, ask the user: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
+
 **Step 0 Exit Condition:**
 Proceed to Step 1 when any of the following are met:
 - Requirements captured (PR description, user input, or spec reference)
@@ -101,7 +146,7 @@ Proceed to Step 1 when any of the following are met:
 
 **Context Brokering:**
 - DO NOT ask user about codebase facts (file locations, patterns, architecture)
-- USE explore/oracle in Step 2 for codebase context
+- USE explore/oracle in Step 5 Phase 1 for codebase context
 - ONLY ask user about: requirements, intent, specific concerns
 
 ## Step 1: Input Parsing
@@ -148,83 +193,32 @@ Collect in parallel (using `{range}` from Step 1):
 3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
-Subagent context:
-
-### Subagent Selection Guide
-
-| Need | Agent | When |
-|------|-------|------|
-| Codebase convention baseline | explore | Find internal patterns, naming conventions, structure to calibrate chunk-reviewer |
-| Deep codebase analysis | oracle | Analyze cross-file impact, hidden dependencies, architectural fit |
-
-### Explore -- Codebase Convention Baseline
-
-Chunk-reviewer only sees the diff, so it has no baseline for judging "does this code follow project conventions?" Without explore's convention baseline, chunk-reviewer will:
-- Suggest new patterns while ignoring already-established ones (noise)
-- Misjudge convention-compliant code as "needs improvement" (false positive)
-- Miss code that violates project conventions (false negative)
-
-→ Always dispatch. Low cost (targeted grep level), high value (quality calibration for all chunk reviews).
-
-5. Dispatch explore agent (4-Field prompt):
-   ```
-   Task(subagent_type="explore", prompt="
-   [CONTEXT] Reviewing a PR that changes {file_list}. PR description: {DESCRIPTION}.
-   [GOAL] Understand existing codebase conventions to evaluate whether the PR follows established patterns.
-   [DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to calibrate chunk-reviewer agent against project norms.
-   [REQUEST] Find: naming conventions, error handling patterns, test structure, and related implementations for the changed modules. Return file paths with pattern descriptions. Skip unrelated directories.")
-   ```
-   → Always dispatch (lightweight, provides codebase context)
-
-### Oracle -- Deep Codebase Analysis
-
-Core principle: **Dispatch when the diff alone cannot determine the safety of this change.**
-
-A diff shows "what changed" but not "whether this change is safe for the existing system." Oracle reads the entire codebase and answers four types of questions:
-
-| Type | Question | Example |
-|------|----------|---------|
-| Impact analysis | "How far does this change's impact reach?" | Does the migration break existing queries? Does the cache key change invalidate other services? |
-| Consistency verification | "Is it consistent with existing patterns?" | Does the new error handling differ from the existing strategy? Does the new integration's retry policy mismatch existing ones? |
-| Hidden interaction | "Are there invisible dependencies?" | Does this lock create deadlocks with other locks? Does this event match consumer expectations? |
-| Design fitness | "Does it fit architectural principles?" | Does it violate layer boundaries? Does it bypass existing abstractions? |
-
-**When NOT to dispatch oracle:**
-- Simple refactoring (rename, extract method, move file) -- diff is sufficient
-- Test-only changes -- no production impact
-- Documentation/config-only changes -- no architecture analysis needed
-- Logic changes within a single function (external interface unchanged) -- no cross-file impact
-- Explore results already provide sufficient context
-
-**Oracle trigger conditions:**
-- Changes modify shared interfaces, base classes, contracts, event schemas, or extension points consumed by other modules → (impact analysis, hidden interaction)
-- New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)
-- Changes cross architectural layer boundaries or span multiple independent business modules → (consistency verification, design fitness)
-- Database schema or data model changes with downstream consumers → (impact analysis)
-- Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)
-
-6. Dispatch oracle agent (only if trigger conditions met):
-   Briefly announce "Consulting Oracle for [reason]" before invocation.
-   → Only if trigger conditions met (see above)
-
 ## Step 3: Chunking Decision
+
+Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`):
 
 | Condition | Strategy |
 |-----------|----------|
-| Changed files <= 15 | Single review — `git diff {range}` for full diff |
-| Changed files > 15 | Group into chunks of ~10-15 files by directory/module affinity |
+| Total changed lines (insertions + deletions) < 1500 AND changed files < 30 | Single review |
+| Total changed lines >= 1500 OR changed files >= 30 | Group into chunks by directory/module affinity |
 
 Chunking heuristic: group files sharing a directory prefix or import relationships.
 
-### Per-Chunk Diff Acquisition
+**Per-chunk size guide:**
+- Target ~1500 lines per chunk (soft guide — files are the atomic unit)
+- If adding the next file exceeds ~1500 lines, start a new chunk
+- If a single file alone exceeds ~1500 lines, it becomes its own chunk
+- If a directory group is oversized, split by subdirectory; if still oversized (flat structure), batch alphabetically (~10-15 files per chunk)
 
-For each chunk, obtain the diff using git's native path filtering:
+### Per-Chunk Diff Command Construction
+
+For each chunk, construct the diff command string using git's native path filtering:
 
 ```bash
 git diff {range} -- <file1> <file2> ... <fileN>
 ```
 
-This produces a diff containing ONLY the files in that chunk. Do NOT parse a full diff output to extract per-file sections.
+The orchestrator constructs this command string but does NOT execute it. The command is passed to the chunk-reviewer via {DIFF_COMMAND}, and each reviewer CLI executes it independently.
 
 ## Step 4: Agent Dispatch
 
@@ -233,9 +227,9 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
-   - {CODEBASE_CONTEXT} ← Step 2 explore/oracle output (or empty)
+   - {PROJECT_CONTEXT} ← Step 0 project context
    - {FILE_LIST} ← Step 2 file list
-   - {DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)
+   - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
@@ -245,7 +239,14 @@ This produces a diff containing ONLY the files in that chunk. Do NOT parse a ful
 | Scale | Action |
 |-------|--------|
 | Single chunk | 1 agent call |
-| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST} |
+| Multiple chunks | Parallel dispatch -- all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST} |
+
+### Result Scope Validation
+
+After all agents return, before proceeding to Step 5, validate that each chunk-reviewer analyzed the correct files:
+
+1. Compare each agent's **Chunk Analysis entry headers** (file names, ignoring `:symbol` suffixes and status tags) against the chunk's **{FILE_LIST}**
+2. If an agent analyzed files outside its assigned chunk, **re-dispatch** that chunk with the same interpolated prompt
 
 ## Step 5: Walkthrough Synthesis + Result Synthesis
 
@@ -254,10 +255,60 @@ After all agents return, produce the final output in two phases.
 ### Phase 1: Walkthrough Synthesis (MANDATORY)
 
 Orchestrator directly produces the Walkthrough from:
-- All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)
-- Step 2 context (explore/oracle output, CLAUDE.md, commit history)
+- All chunk Chunk Analysis sections (per-symbol/per-file What Changed descriptions from chunk-reviewer agents)
+- Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)
 
-**Generate the following sections:**
+**Execution order:** First evaluate Phase 1a (context enrichment). Then generate the sections below.
+
+### Phase 1a: Context Enrichment (Conditional)
+
+After reading all chunk Chunk Analysis sections (What Changed entries), assess whether the available information is sufficient to write the Walkthrough. If gaps exist, dispatch explore/oracle before writing Phase 1 output.
+
+**When to dispatch:**
+
+| Trigger | Agent | Example |
+|---------|-------|---------|
+| Core Logic Analysis requires understanding cross-module relationships not visible from What Changed entries | explore | "Chunk A shows OrderService calling PaymentGateway, but the gateway's implementation and other consumers are in Chunk B's scope or outside the diff" |
+| Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff | explore | "New class extends BaseRepository but the base class and its other subclasses are not in any chunk" |
+| Chunk-reviewer Cross-File Concerns section flags architectural patterns requiring codebase investigation | oracle | "Cross-file concern: adapter error codes may not match controller expectations — need to verify existing error handling contract" |
+| Multiple chunks flag inconsistent patterns suggesting architectural misalignment | oracle | "Chunk A uses Result<T> for error handling, Chunk B uses exceptions — need to determine which is the project convention" |
+
+**When NOT to dispatch:**
+
+| Condition | Reason |
+|-----------|--------|
+| Simple changes (test-only, doc-only, config-only, single-function logic) | Chunk analysis is self-sufficient |
+| Chunk analysis provides complete understanding of all changed modules | No gaps to fill |
+| Trivial diff (< 5 files, < 100 lines) | Sparse analysis is expected, not a gap |
+| Cross-File Concerns section is empty across all chunks | No architectural investigation needed |
+
+**Dispatch rules:**
+- At most 1 explore and 1 oracle per review (never per-chunk)
+- explore and oracle may be dispatched in parallel if both are needed
+- If agent returns empty or times out, proceed with synthesis using available data
+
+**Explore prompt structure** (4-Field, chunk-analysis-aware):
+```
+Task(subagent_type="explore", prompt="
+[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_what_changed}.
+[GOAL] Fill the context gap identified during walkthrough synthesis to produce accurate Core Logic Analysis and Architecture Diagram.
+[DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt.
+[REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories.")
+```
+
+**Oracle dispatch** (same trigger announcement pattern):
+```
+Consulting Oracle for [specific gap from chunk analysis].
+```
+Oracle receives the specific chunk-reviewer findings that triggered the dispatch, not generic diff metadata.
+
+**Data flow:**
+```
+Phase 1: Read all What Changed entries from Chunk Analysis
+       → Assess: sufficient for Walkthrough? (check decision table)
+       → If gaps: dispatch explore/oracle (Phase 1a)
+       → Write Walkthrough using: What Changed entries + Step 2 metadata + Phase 1a results (if any)
+```
 
 #### Change Summary
 - 1-2 paragraph prose summary of the entire change's purpose and context
@@ -265,8 +316,9 @@ Orchestrator directly produces the Walkthrough from:
 - Written for someone unfamiliar with the code to understand the change
 
 #### Core Logic Analysis
-- Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative
+- Consolidate all What Changed entries into a unified module/feature-level narrative
 - Cover both core changes AND supporting/peripheral changes
+- Enrich with Step 2 metadata (commit messages, PR description, CLAUDE.md) and Phase 1a results when available
 - Explain data flow, design decisions, and side effects from the perspective of inter-module relationships
 - Level of detail: enough to understand the full change WITHOUT reading the code
 
@@ -281,18 +333,93 @@ Orchestrator directly produces the Walkthrough from:
 - Include actors, method calls, return values, and significant conditional branches
 - If no call flow changes (e.g., variable rename, config change): write "No call flow changes"
 
+### Severity Rubric (P0-P3)
+
+Workers **propose** P-levels with supporting evidence. The orchestrator **adjudicates** the final P-level based on worker proposals and their reasoning.
+
+| P-Level | Impact Delta | Probability | Maintainability |
+|---------|-------------|-------------|-----------------|
+| **P0** (must-fix) | Outage, data loss, or security breach | Triggered during normal operation | System inoperable if unfixed |
+| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, or security weakness in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
+| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
+| **P3** (optional) | No correctness issue, no projected failure | N/A | Readability, consistency, or style improvement only |
+
+**P1 vs P2 Decision Gate:** "Is there a defect in the current code, AND does it manifest under conditions that exist today?" Both must be yes for P1. If the defect's trigger is unrealistic → P2(a). If no defect today but predictable future failure → P2(b). If no defect and no projected failure but significant maintainability gain → P2(c).
+
 ### Phase 2: Critique Synthesis
 
 For multi-chunk reviews:
 
 1. **Merge** all Strengths, Issues, Recommendations sections
 2. **Deduplicate** issues appearing in multiple chunks
+   - When the same issue appears across chunks at different P-levels, promote to the highest P-level (e.g., P1 in Chunk A + P0 in Chunk B → promote to P0)
 3. **Identify cross-file concerns** -- issues spanning chunk boundaries (e.g., interface contract mismatches, inconsistent error handling patterns)
-4. **Normalize severity labels** across chunks using Critical / Important / Minor scale -- reconcile inconsistent labels for same-type issues across chunks; escalate recurring cross-chunk issues
-5. **Determine final verdict** -- "Ready to merge?" is the STRICTEST of all chunk verdicts (any "No" = overall "No")
+4. **Normalize severity labels** across chunks using the P0-P3 rubric. When the same issue appears in multiple chunks at different P-levels, promote to the highest P-level and note the discrepancy.
+5. **Collect per-worker verdicts** from all chunks for Final Adjudication
 6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
-For single-chunk reviews, Phase 2 returns the agent's critique output directly (Strengths through Assessment).
+For single-chunk reviews, Phase 2 still performs Final Adjudication (severity adjudication, P0 protection, verdict determination, Out of Scope classification) on the single chunk's results before producing final output.
+
+#### Step 7: Final Severity Adjudication
+
+Workers **propose** severity levels with supporting evidence; the orchestrator **adjudicates** the final P-level. Workers are evidence providers — their analyses are inputs to the orchestrator's judgment, not substitutes for it. Unanimous agreement among workers does not exempt the orchestrator from deliberation.
+
+**Order of operations:** Adjudicate per-worker severity within each chunk FIRST. Then normalize across chunks by promoting to the highest adjudicated P-level.
+
+| Condition | Action |
+|-----------|--------|
+| All workers agree on P-level | Apply Project Context Check. If workers' probability and impact assumptions are consistent with the actual project context → adopt with brief confirmation (e.g., "Workers' P1 assessment aligns with project context: the defect manifests under today's traffic conditions."). If project context contradicts workers' assumptions → perform full rubric adjudication with justification citing the decisive axis. |
+| Workers disagree on P-level | Orchestrator evaluates each worker's reasoning against the P0-P3 rubric (3-axis: impact delta, probability, maintainability). Apply the P1/P2 decision gate: "Is there a demonstrable defect that manifests under today's conditions?" Assign final P-level with 1-2 sentence justification citing the decisive axis. |
+
+**Project Context Check:** Before finalizing each P-level, verify that the workers' probability and impact assessments are realistic for the actual project context. Ask: "Does the threat model these workers assumed match this project?"
+
+Examples of context-driven recalibration (both directions — context can lower OR raise severity):
+
+- **Models assess P2 for silent numeric truncation. Project processes financial transactions.** — Models may treat truncation as a minor data quality issue because the field is rarely at boundary values. But the project context shows this service calculates payment amounts subject to regulatory audit. Even rare truncation produces incorrect financial records with legal consequences. The impact axis shifts from "cosmetic data issue" to "regulatory violation." Recalibrate **upward to P0** (the domain amplifies impact beyond what the code pattern alone suggests).
+
+- **Models assess P0 for missing auth on endpoint. Project is a localhost-only dev tool.** — Models flag any unauthenticated endpoint as a security breach. But the project context shows the tool binds to localhost only, has no network exposure, and is used by a single developer. There is no remote attacker who can reach this endpoint. The probability axis shifts from "any network user can access" to "requires local access that the developer already has." Recalibrate **downward to P3** (the security pattern is real but the attack surface does not exist).
+
+- **Models assess P1 for no circuit breaker. Project is a utility library.** — Models flag missing circuit breaker as a resilience gap. But the project context shows this is a utility library that does not make network calls — its consumers do. The library cannot implement a circuit breaker because it does not control the network layer. This is not a lower-severity issue; it is a **false positive** — the concern is misapplied to the wrong architectural layer. Recalibrate: **dismiss** (not applicable to this codebase; if worth noting, add as a recommendation for consumers, not as an issue in this code).
+
+- **Models assess P3 for missing pagination. Project is a rapidly growing SaaS.** — Models treat unbounded queries as a style issue because the current dataset is small. But the project context shows user growth of 10x per quarter with no ceiling. If current queries already show measurable latency degradation at today's data volume: recalibrate **upward to P1** (demonstrable defect under today's conditions -- the defect exists and manifests now). If current dataset is still within SLA but growth trajectory makes future degradation certain: recalibrate **upward to P2(b)** (no defect today, but predictable failure under realistic growth).
+
+**P0 Protection Rule:** If ANY single worker proposes P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
+
+Under degradation (fewer responding workers), P0 protection still applies — a single responding worker's P0 is protected if rubric criteria are satisfied.
+
+**Adjudication examples:**
+
+- **Unanimous agreement, context validates.** Three workers assess P1 for "no dead-letter queue on Kafka consumer." Workers cite: deserialization failures in current logs, schema changed twice last quarter, failed messages permanently lost. Project context: production order processing service with active schema evolution. — Orchestrator confirms: workers' probability assessment ("schema changes cause deserialization failures today") is consistent with project context. **Adopt P1.** Confirmation: "Workers' P1 aligns with project context — deserialization failures are confirmed in current logs, not hypothetical."
+
+- **Unanimous agreement, context contradicts.** Three workers assess P0 for "no rate limiting on API endpoint." Workers cite: any user can exhaust resources, causing outage for all users. Project context: internal admin dashboard behind corporate VPN, used by 3 team members. — Orchestrator overrides: workers assumed a public-facing threat model, but the project context shows no external access. The 3 internal users cannot produce meaningful load. The probability axis shifts from "normal operation" to "impossible under current deployment." **Recalibrate to P3.** Decisive axis: probability — the threat model workers assumed does not match this project.
+
+- **Worker disagreement.** Worker A assesses P1 for "deprecated Elasticsearch RestHighLevelClient." Reasoning: "deprecated API is a defect; ES upgrade is planned next quarter." Worker B assesses P2(b). Reasoning: "the client works correctly with current ES 8.x; failure is future, not today." — Orchestrator applies P1/P2 decision gate: (1) Is there a defect in the current code? The client functions correctly — no incorrect behavior today. (2) Does it manifest under today's conditions? No — the deprecation has no runtime effect on ES 8.x. Worker A conflated "deprecated" with "defective." **Adjudicated P2(b).** Decisive axis: probability — the trigger (ES 9.0 removal) does not exist under today's conditions.
+
+#### Step 8: Final Verdict Determination
+
+| Condition | Verdict | Merge Gate |
+|-----------|---------|------------|
+| P0 issues unresolved | **No** | Hard block -- no exceptions |
+| Only P1 issues unresolved | **No** (default) / **Yes with conditions** (override) | Soft block -- override requires: (1) explicit justification per P1 issue, (2) tracking artifact (issue number, TODO with ticket), and (3) confirmation that fix timeline is committed |
+| Only P2/P3 issues | **Yes** | Non-blocking |
+
+**Override Protocol for P1 Soft Block:**
+When the orchestrator determines "Yes with conditions" for P1 issues, the Assessment section must include:
+- Per-P1 justification: why deferral is acceptable for this specific issue
+- Tracking artifact: issue number or TODO with ticket reference
+- Fix timeline: when the fix will be delivered (e.g., "next sprint", "follow-up PR")
+- Conditions without tracking artifacts are not valid overrides
+
+#### Step 9: Out of Scope Classification
+
+1. Collect issues tagged `[Pre-existing]` by reviewers
+2. Place in `### Out of Scope (Pre-existing Issues)` section
+3. Sort by P-level (P0 > P1 > P2 > P3), then by file path within same level
+4. These do NOT affect merge verdict
+
+**Exception:** If PR aggravates a pre-existing issue (increases blast radius, frequency, or severity), move to main issues section.
+
+**Cross-chunk rule:** If ANY worker in ANY chunk flags an issue as non-pre-existing (on a changed line), treat as current issue in main section.
 
 ### Final Output Format
 
@@ -317,7 +444,31 @@ For single-chunk reviews, Phase 2 returns the agent's critique output directly (
 [Generated in Phase 2]
 
 ## Issues
-[Generated in Phase 2]
+
+### P0 (Must Fix)
+[Issues that block merge: outage, data loss, security vulnerabilities triggered in normal operation]
+
+### P1 (Should Fix)
+[Demonstrable defects: partial failure, incorrect behavior, data corruption, or security weakness under today's realistic conditions]
+
+### P2 (Consider Fix)
+[Bugs with unrealistic triggers today, OR predictable future failures, OR significant maintainability improvements]
+
+### P3 (Optional)
+[Quality, readability, consistency improvements with no correctness or maintainability concern]
+
+Per-issue format:
+**[P{X}] {issue title}**
+- **File**: {file}:{line}
+- **Problem**: ...
+- **Impact**: ...
+- **Probability**: ...
+- **Maintainability**: ...
+- **Fix**: ...
+- **Review Consensus**: {N}/3 models identified ({Model A} P{X}, {Model B} P{Y}; adjudicated P{Z} because {reason})
+
+## Out of Scope (Pre-existing Issues)
+[Issues in unchanged context lines, sorted by P-level then file path. Do not affect merge verdict.]
 
 ## Recommendations
 [Generated in Phase 2]
@@ -463,43 +614,111 @@ sequenceDiagram
 
 ## Issues
 
-### Critical (Must Fix)
-1. **`@Transactional` wrapping external HTTP call to Stripe**
-   - File: OrderPaymentController.kt:34-67
-   - Issue: `processPayment()` is `@Transactional` but includes `StripeGatewayAdapter.charge()` — an external HTTP round-trip (500ms-2s). The DB connection is held open for the entire network call. Under concurrent load, 10 in-flight payments saturate the HikariCP pool, blocking all DB operations including order browsing and cart.
-   - Fix: Split into two transactions: (1) validate + mark `PAYMENT_IN_PROGRESS`, (2) after Stripe call, persist result + update status. Use compensating job for stuck `PAYMENT_IN_PROGRESS` orders.
-   - Requirement trace: REQ-PAY-003 "Payment processing must not degrade order browsing or cart operations under load"
+### P0 (Must Fix)
 
-2. **No circuit breaker on Stripe API calls**
-   - File: StripeGatewayAdapter.kt:44-78
-   - Issue: No circuit breaker, bulkhead, or timeout override on `charge()` and `refund()`. Stripe SDK default timeout is 30s. Combined with the `@Transactional` issue, a Stripe degradation cascades into full system unavailability.
-   - Fix: Add Resilience4j `@CircuitBreaker` (50% failure threshold, 30s wait, 3 half-open calls). Set Stripe SDK timeout to 5s. Return `PaymentResult.TEMPORARILY_UNAVAILABLE` as fallback.
-   - Requirement trace: REQ-PAY-007 "System must gracefully degrade when third-party payment provider is unavailable"
+**[P0] `@Transactional` wrapping external HTTP call to Stripe**
+- **File**: OrderPaymentController.kt:34-67
+- **Problem**: `processPayment()` is `@Transactional` but includes `StripeGatewayAdapter.charge()` — an external HTTP round-trip (500ms-2s). The DB connection is held open for the entire network call.
+- **Impact**: Under concurrent load, 10 in-flight payments saturate the HikariCP pool, blocking all DB operations including order browsing and cart. Full system outage from DB connection exhaustion.
+- **Probability**: Triggered in normal operation — every payment request holds a DB connection for the duration of the Stripe call.
+- **Maintainability**: Tight coupling between transaction boundary and external call makes it impossible to tune DB pool and payment timeout independently.
+- **Fix**: Split into two transactions: (1) validate + mark `PAYMENT_IN_PROGRESS`, (2) after Stripe call, persist result + update status. Use compensating job for stuck `PAYMENT_IN_PROGRESS` orders.
+- **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P0; adjudicated P0 — unanimous)
 
-3. **HTTPS not validated on webhook callback URL**
-   - File: PaymentRequest.kt:8-12
-   - Issue: `callbackUrl: String` with only `@NotBlank` validation. Accepts `http://` scheme — payment confirmations could be sent over plaintext, interceptable via MITM.
-   - Fix: Custom `@ValidCallbackUrl` annotation: well-formed URL, `https` scheme, no private/loopback IP. Production: allowlist of registered callback domains.
-   - Requirement trace: REQ-SEC-012 "All payment-related data transmission must use TLS 1.2+"
+**[P0] No circuit breaker on Stripe API calls**
+- **File**: StripeGatewayAdapter.kt:44-78
+- **Problem**: No circuit breaker, bulkhead, or timeout override on `charge()` and `refund()`. Stripe SDK default timeout is 30s.
+- **Impact**: Combined with the `@Transactional` issue, a Stripe degradation cascades into full system unavailability. All DB connections blocked waiting on Stripe.
+- **Probability**: Stripe degradations occur multiple times per year; each occurrence triggers cascade failure in normal operation.
+- **Maintainability**: No isolation between external dependency failure and internal system health.
+- **Fix**: Add Resilience4j `@CircuitBreaker` (50% failure threshold, 30s wait, 3 half-open calls). Set Stripe SDK timeout to 5s. Return `PaymentResult.TEMPORARILY_UNAVAILABLE` as fallback.
+- **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P1; adjudicated P0 — Gemini's P1 reasoning did not account for cascade failure to unrelated endpoints, which satisfies outage criteria)
 
-### Important (Should Fix)
-1. **No dead letter queue for failed payment callbacks** — OrderPaymentController.kt:85-102. Failed webhook processing silently drops events. Stripe retries for 3 days then gives up permanently.
-2. **Currency field is unbounded String instead of ISO 4217 enum** — PaymentRequest.kt:6. Invalid currency codes reach Stripe, producing cryptic 400 errors surfaced as generic 500 to clients.
-3. **Missing index on `inventory_reservations.order_id`** — V2024_001__add_payment_and_inventory_tables.sql:28. Idempotency lookup on every Kafka message does a full table scan. Grows linearly with order volume.
-4. **No structured logging on payment events** — OrderPaymentController.kt:34-102, StripeGatewayAdapter.kt:44-78. No correlation ID, no MDC context. End-to-end payment debugging across sync and async flows requires manual log correlation.
-5. **Kafka message loss leaves orders stuck in PAID state** — PaymentEventProducer.kt:23-31, InventoryService.kt. If `PaymentConfirmedEvent` is lost (producer failure, Kafka outage, or consumer deserialization error), the order remains in `PAID` state indefinitely and never transitions to `FULFILLMENT_READY`. No compensating mechanism (scheduled reconciliation job, timeout-based retry) exists to detect and recover stuck orders. This is a cross-chunk gap: the order state machine (Chunk A) assumes the async inventory flow (Chunk C) always completes, but the messaging layer (Chunk C) has no delivery guarantee beyond Kafka's at-least-once semantics.
+**[P0] HTTPS not validated on webhook callback URL**
+- **File**: PaymentRequest.kt:8-12
+- **Problem**: `callbackUrl: String` with only `@NotBlank` validation. Accepts `http://` scheme — payment confirmations could be sent over plaintext.
+- **Impact**: Payment data interceptable via MITM attack in production environment. Security breach exposing payment confirmation details.
+- **Probability**: Any attacker on the network path can exploit; production environments route through public internet.
+- **Maintainability**: Simple validation gap — fix is additive with no architectural change.
+- **Fix**: Custom `@ValidCallbackUrl` annotation: well-formed URL, `https` scheme, no private/loopback IP. Production: allowlist of registered callback domains.
+- **Review Consensus**: 2/3 models identified (Opus P0, Sonnet P0; adjudicated P0 — Gemini did not flag but both flagging models' reasoning satisfies security + production criteria)
 
-### Minor (Nice to Have)
-1. **Missing OpenAPI annotations on payment endpoints** — OrderPaymentController.kt:28-33. API consumers have no contract documentation for payment flow.
-2. **Hardcoded retry count and timeout values** — StripeGatewayAdapter.kt:45, StripeGatewayAdapter.kt:52. Not configurable per environment.
+### P1 (Should Fix)
+
+**[P1] No dead letter queue for failed payment callbacks**
+- **File**: OrderPaymentController.kt:85-102
+- **Problem**: Failed webhook processing silently drops events. Stripe retries for 3 days then gives up permanently.
+- **Impact**: Data loss — payment confirmations permanently lost after Stripe retry exhaustion, leaving orders in inconsistent state.
+- **Probability**: Occurs under realistic failure conditions (deserialization errors, transient DB failures during webhook processing).
+- **Maintainability**: No observability into dropped events; debugging requires manual Stripe dashboard correlation.
+- **Fix**: Configure dead letter topic for the webhook consumer group. Add admin dashboard for manual reprocessing of failed events.
+- **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P1; adjudicated P1 — unanimous)
+
+**[P1] Currency field is unbounded String instead of ISO 4217 enum**
+- **File**: PaymentRequest.kt:6
+- **Problem**: Invalid currency codes reach Stripe, producing cryptic 400 errors surfaced as generic 500 to clients.
+- **Impact**: Data integrity violation — invalid currencies accepted at API boundary, causing downstream failures with misleading error messages.
+- **Probability**: Realistic with any non-trivial API consumer; typos and unsupported currency codes are common in integration testing and production.
+- **Maintainability**: Validation gap at API boundary forces debugging at Stripe integration layer instead of catching at input.
+- **Fix**: Replace `String` with `Currency` enum (ISO 4217 subset supported by business). Validate at DTO level with `@ValidCurrency`.
+- **Review Consensus**: 2/3 models identified (Opus P1, Gemini P1; adjudicated P1 — Sonnet flagged as P2 but data integrity impact under realistic input justifies P1)
+
+**[P1] Missing index on `inventory_reservations.order_id`**
+- **File**: V2024_001__add_payment_and_inventory_tables.sql:28
+- **Problem**: Idempotency lookup on every Kafka message does a full table scan. Grows linearly with order volume.
+- **Impact**: Performance degradation — inventory reservation latency increases linearly with order history, eventually causing Kafka consumer lag and order processing delays.
+- **Probability**: Guaranteed at scale; table grows monotonically with every order.
+- **Maintainability**: Missing index is a single-line fix but has compounding production impact if left unaddressed.
+- **Fix**: Add `CREATE INDEX idx_inventory_reservations_order_id ON inventory_reservations(order_id)` to migration.
+- **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P2; adjudicated P1 — performance degradation is guaranteed at scale, not speculative)
+
+**[P1] Kafka message loss leaves orders stuck in PAID state**
+- **File**: PaymentEventProducer.kt:23-31, InventoryService.kt
+- **Problem**: If `PaymentConfirmedEvent` is lost (producer failure, Kafka outage, or consumer deserialization error), the order remains in `PAID` state indefinitely and never transitions to `FULFILLMENT_READY`. No compensating mechanism exists.
+- **Impact**: Orders permanently stuck — customers charged but never fulfilled. Cross-chunk gap: order state machine (Chunk A) assumes async inventory flow (Chunk C) always completes.
+- **Probability**: Partial system failure under realistic conditions — Kafka producer failures, broker outages, and deserialization errors are well-documented operational scenarios.
+- **Maintainability**: No observability into stuck orders; requires manual DB queries to detect and resolve.
+- **Fix**: Implement scheduled reconciliation job that detects orders in `PAID` state beyond a threshold (e.g., 15 minutes) and either retries the event or alerts operations.
+- **Review Consensus**: 2/3 models identified (Opus P1, Sonnet P1; adjudicated P1 — partial system failure under realistic conditions with no recovery path)
+
+### P2 (Consider Fix)
+
+**[P2] No structured logging on payment events**
+- **File**: OrderPaymentController.kt:34-102, StripeGatewayAdapter.kt:44-78
+- **Problem**: No correlation ID, no MDC context across payment flow. End-to-end payment debugging across sync and async flows requires manual log correlation.
+- **Impact**: No direct bug or data loss. Significant increase in mean time to diagnose payment issues in production.
+- **Probability**: Every production debugging session for payment issues is affected.
+- **Maintainability**: Major maintainability gap — async flows spanning 3 services are effectively undebuggable without distributed tracing.
+- **Fix**: Implement distributed tracing with correlation ID propagated through HTTP headers, Kafka message headers, and consumer MDC context.
+- **Review Consensus**: 3/3 models identified (Opus P2, Sonnet P2, Gemini P2; adjudicated P2 — unanimous)
+
+### P3 (Optional)
+
+**[P3] Missing OpenAPI annotations on payment endpoints**
+- **File**: OrderPaymentController.kt:28-33
+- **Problem**: API consumers have no contract documentation for payment flow.
+- **Impact**: No runtime impact. Documentation gap affects API consumer onboarding and integration testing.
+- **Probability**: N/A — documentation issue, not a runtime concern.
+- **Maintainability**: Improves developer experience but no functional consequence.
+- **Fix**: Add `@Operation`, `@ApiResponse`, `@Schema` annotations to payment controller endpoints.
+- **Review Consensus**: 2/3 models identified (Opus P3, Gemini P3; adjudicated P3 — documentation improvement only)
+
+**[P3] Hardcoded retry count and timeout values**
+- **File**: StripeGatewayAdapter.kt:45, StripeGatewayAdapter.kt:52
+- **Problem**: Retry count and timeout values hardcoded in source. Not configurable per environment.
+- **Impact**: No runtime bug. Requires code change and redeployment to tune for different environments.
+- **Probability**: N/A — only triggered when operational tuning is needed.
+- **Maintainability**: Small configurability improvement; extract to `application.yml` properties.
+- **Fix**: Extract to Spring `@ConfigurationProperties` with sensible defaults. Allow per-environment override.
+- **Review Consensus**: 2/3 models identified (Sonnet P3, Gemini P3; adjudicated P3 — readability/configurability improvement)
 
 ## Recommendations
-- Introduce a `PaymentApplicationService` between controllers and adapters to own transaction boundaries — the controller handles HTTP, the adapter handles Stripe, and the service orchestrates the domain flow between them
-- Add Resilience4j circuit breaker as a cross-cutting concern via Spring AOP — any future payment gateway integration (PayPal, Toss) will need the same protection pattern
-- Implement distributed tracing with correlation ID propagated through HTTP headers → Kafka message headers → consumer MDC — critical for debugging the async payment confirmation flow that spans 3 services
-- Set up a dead letter topic with an admin dashboard for payment event reprocessing — failed webhook events and inventory shortage events both need manual intervention workflows
+- Introduce a `PaymentApplicationService` between controllers and adapters to own transaction boundaries — resolves the P0 `@Transactional` issue and establishes a pattern for future payment gateway integrations
+- Add Resilience4j circuit breaker as a cross-cutting concern via Spring AOP — resolves the P0 circuit breaker issue and any future payment gateway integration (PayPal, Toss) will need the same protection pattern
+- Implement distributed tracing with correlation ID propagated through HTTP headers → Kafka message headers → consumer MDC — addresses the P2 logging issue and is prerequisite for debugging the async payment confirmation flow that spans 3 services
+- Set up a dead letter topic with an admin dashboard for payment event reprocessing — resolves the P1 dead letter queue issue; failed webhook events and inventory shortage events both need manual intervention workflows
 
 ## Assessment
 **Ready to merge: No**
-**Reasoning:** Three Critical issues block merge — `@Transactional` spanning external HTTP calls risks connection pool starvation under load, missing circuit breaker enables cascading failures from Stripe outages, and unvalidated callback URL scheme violates transport security requirements. All three must be resolved before this code handles production payment traffic.
+**Reasoning:** Three P0 issues block merge — `@Transactional` spanning external HTTP calls risks connection pool starvation under load, missing circuit breaker enables cascading failures from Stripe outages, and unvalidated callback URL scheme violates transport security requirements. All P0 issues must be resolved before this code handles production payment traffic. Four P1 issues (dead letter queue, currency validation, missing index, stuck orders) should be addressed before or immediately after merge.
 ````
