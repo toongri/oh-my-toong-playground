@@ -913,9 +913,10 @@ function cmdStart(options, prompt) {
   const chairmanRoleRaw = options.chairman || process.env.CHUNK_REVIEW_CHAIRMAN || config['chunk-review'].chairman.role || 'auto';
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
-  const includeChairman = Boolean(options['include-chairman']);
+  const includeChairmanValue = normalizeBool(options['include-chairman']);
+  const includeChairman = includeChairmanValue === true;
   const excludeChairmanOverride =
-    options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : options['include-chairman'] != null ? false : null;
+    options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : includeChairmanValue === true ? false : null;
 
   const excludeSetting = normalizeBool(config['chunk-review'].settings.exclude_chairman_from_reviewers);
   const excludeChairmanFromReviewers =

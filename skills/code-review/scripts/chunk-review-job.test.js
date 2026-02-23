@@ -1850,6 +1850,53 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 
+  it('--exclude-chairman=false with --include-chairman=false falls back to config default', () => {
+    // Both flags explicitly set to false — config says exclude, so chairman should be excluded
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: true',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--exclude-chairman=false',
+      '--include-chairman=false',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    // --exclude-chairman=false overrides config to false (don't exclude)
+    // --include-chairman=false means no force-include
+    // So excludeChairmanFromReviewers=false, includeChairman=false → chairman included
+    assert.ok(
+      reviewerNames.includes('claude'),
+      `Expected chairman "claude" included (exclude=false override), got: ${JSON.stringify(reviewerNames)}`,
+    );
+    assert.equal(output.settings.excludeChairmanFromReviewers, false);
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+
   it('--exclude-chairman=true DOES exclude the chairman reviewer', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
@@ -1886,6 +1933,194 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       `Expected chairman "claude" to be excluded from reviewers, got: ${JSON.stringify(reviewerNames)}`,
     );
     assert.equal(output.settings.excludeChairmanFromReviewers, true);
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+});
+
+// ---------------------------------------------------------------------------
+// --include-chairman=false boolean parsing (Bug fix: Boolean("false")===true)
+// ---------------------------------------------------------------------------
+
+describe('--include-chairman=false normalizeBool parsing', () => {
+  const SCRIPT = path.join(__dirname, 'chunk-review-job.js');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('--include-chairman=false does NOT force-include chairman (config exclude=true respected)', () => {
+    // Config says exclude chairman. --include-chairman=false should NOT override that.
+    // Bug: Boolean("false") === true, so chairman was incorrectly force-included.
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: true',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--include-chairman=false',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    // --include-chairman=false → includeChairman should be false
+    // excludeChairmanOverride should be null (fallback to config default: true)
+    // So chairman should be excluded
+    assert.ok(
+      !reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be EXCLUDED when --include-chairman=false, got: ${JSON.stringify(reviewerNames)}`,
+    );
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  it('--include-chairman=true force-includes chairman even when config excludes', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: true',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--include-chairman=true',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    // --include-chairman=true → includeChairman=true, force-include chairman
+    assert.ok(
+      reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be INCLUDED when --include-chairman=true, got: ${JSON.stringify(reviewerNames)}`,
+    );
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  it('--include-chairman (no value) force-includes chairman', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: true',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--include-chairman',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    // --include-chairman (boolean flag) → true → force-include
+    assert.ok(
+      reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be INCLUDED when --include-chairman (no value), got: ${JSON.stringify(reviewerNames)}`,
+    );
+
+    // cleanup spawned workers
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  it('(no --include-chairman) falls back to config default for exclusion', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: claude',
+      '  reviewers:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: true',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const reviewerNames = output.reviewers.map(r => r.name);
+    // No flag → config default (exclude=true), no force-include → chairman excluded
+    assert.ok(
+      !reviewerNames.includes('claude'),
+      `Expected chairman "claude" to be EXCLUDED when no --include-chairman flag, got: ${JSON.stringify(reviewerNames)}`,
+    );
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
