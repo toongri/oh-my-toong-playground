@@ -1,6 +1,6 @@
 ---
 name: oracle
-description: Strategic Architecture & Debugging Advisor (READ-ONLY consultant) - analyzes, diagnoses, recommends but NEVER implements
+description: Use when delegating architecture analysis or debugging diagnosis — returns root cause + prioritized recommendations with file:line citations. Never modifies files
 model: opus
 skills: oracle
 ---

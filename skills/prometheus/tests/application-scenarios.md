@@ -23,6 +23,10 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-13 | Clearance Checklist | Clearance Checklist | Sequential Interview |
 | P-14 | Metis Feedback Loop | Metis Feedback Loop | Plan Generation + Gap Classification |
 | P-15 | Failure Mode Avoidance | Failure Mode Avoidance | Sequential Interview + Plan Generation |
+| P-16 | Context Loading | Context Loading | Context Brokering Protocol |
+| P-17 | Intent Classification | Intent Classification | Interview Mode |
+| P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
+| P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 
 ---
 
@@ -360,6 +364,102 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 ---
 
+## Scenario P-16: Context Loading
+
+**Primary Technique:** Context Loading — trust level 경계에서의 올바른 판단 (아키텍처 vs 파일-레벨 사실)
+
+**Prompt (context available):**
+```
+기존 JWT 인증을 OAuth 2.0으로 마이그레이션해줘
+```
+
+**Prompt (context absent):**
+```
+기존 JWT 인증을 OAuth 2.0으로 마이그레이션해줘
+```
+(Same prompt, but `~/.omt/$OMT_PROJECT/context/` does not exist)
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Trust level boundary judgment | Context file says "JWT auth in auth/ module" — skill uses this directly for architecture-level question (does NOT dispatch explore for "what auth method do we use?"). But for "auth middleware 정확한 파일 위치", skill dispatches explore (file-level fact requires verification) |
+| V2 | Partial context handling | If only project.md and decisions.md exist but conventions.md and gotchas.md are missing — skill reads available files, skips missing ones silently, does NOT ask user about missing files |
+| V3 | Context ≠ ground truth for specifics | Even when context file covers "auth architecture", specific implementation details (exact function signatures, current line numbers) are verified via explore. Context informs the question, explore confirms the facts |
+| V4 | Graceful degradation | When context directory does not exist, skill proceeds directly to Intent Classification without error message, without mentioning missing context to user, without asking user to create context files |
+
+---
+
+## Scenario P-17: Intent Classification
+
+**Primary Technique:** Intent Classification — 경계 케이스와 스코프 불확실성에서의 정확한 분류 판단
+
+**Prompt (boundary — Trivial vs Scoped):**
+```
+auth.ts, payment.ts, user.ts 3개 파일에서 에러 메시지 한글화해줘
+```
+
+**Prompt (boundary — Scoped vs Complex):**
+```
+결제 모듈에 환불 기능 추가해줘
+```
+
+**Prompt (Architecture — clear):**
+```
+마이크로서비스 아키텍처로 모노리스 분해 계획 세워줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Boundary judgment: multi-file simple change | "에러 메시지 3곳 한글화" involves 3 files but trivial per-file changes — classified as Scoped (multi-file = not Trivial), NOT Complex (each change is simple). Interview is standard depth, not deep |
+| V2 | Scope-unknown triggers explore before classification | "환불 기능 추가" — scope unclear from request alone (could be 1 file or 10). Skill dispatches explore to understand current payment module structure BEFORE committing to a classification |
+| V3 | Architecture triggers Oracle MANDATORY | "마이크로서비스 분해" classified as Architecture regardless of how user frames it. Oracle dispatched with NO EXCEPTIONS. explore + librarian dispatched in parallel |
+| V4 | Classification affects depth, NOT Clearance | Scoped request ("한글화") gets standard interview (3-5 questions). Architecture request ("모노리스 분해") gets deep interview with explore mandatory before questions. But BOTH go through identical 5-item Clearance Checklist |
+
+---
+
+## Scenario P-18: Execution Strategy in Plan
+
+**Primary Technique:** Execution Strategy — 의존성 모델링과 Wave 배정의 정확성
+
+**Prompt:**
+```
+사용자 인증 시스템 구현해줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Dependency accuracy | Blocked By/Blocks correctly reflect actual task dependencies — e.g., "API endpoint creation" blocks "integration test" but is NOT blocked by "DB schema" if the endpoint can be stubbed. Dependencies are causal, not sequential by convention |
+| V2 | Wave assignment correctness | Tasks sharing no dependencies are in the same wave. No task is assigned to a wave later than (blocker's wave + 1). Independent tasks are NOT artificially serialized into separate waves |
+| V3 | Critical Path is longest chain | Critical Path follows the longest dependency chain through the task graph — not the first path found or an arbitrary selection. If Task A→C→E and Task B→D→E, and path A→C→E is longer, it is the Critical Path |
+| V4 | Rule compliance | Minimum 2 tasks per wave (except final wave), max 3-4 waves for a 3-6 task plan, no circular dependencies. If plan has 4 independent tasks, they should be in 1-2 waves, NOT spread across 4 |
+
+---
+
+## Scenario P-19: QA Scenarios in TODO
+
+**Primary Technique:** QA Scenarios — 실행 가능하고 의미있는 검증 시나리오 작성 품질
+
+**Prompt (mixed code + non-code):**
+```
+API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Steps are agent-executable | Steps field contains concrete commands or actions (e.g., `curl -X POST /api/resource 101 times`, `grep 'rate-limit' README.md`) — NOT vague statements like "verify the feature works" or "check that limiting is applied" |
+| V2 | Failure scenario is non-trivial | Edge case scenario tests an actual failure mode specific to the task (e.g., "rate limit counter resets after window expires", "concurrent requests from same IP handled correctly") — NOT generic "invalid input returns error" |
+| V3 | Non-code TODO uses simplified format | Documentation update TODO uses simplified QA format (Preconditions + Expected only, no Tool/Steps) — NOT forced into full 4-field structure that doesn't make sense for docs |
+| V4 | Tool field is executable CLI command | Names an executable CLI command (e.g., `bun test`, `curl`, `grep`, `./gradlew test`), NOT a test description ("Header validation") or generic label ("test runner"). The named command must match what Steps actually invoke |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -375,3 +475,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | P-9 | Acceptance Criteria Drafting | | | AC section rewritten -- verification points updated, needs re-testing |
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
+| P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
+| P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
+| P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
+| P-19 | QA Scenarios in TODO | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G6 Tool=CLI command(V4), executable steps(V1), non-trivial failure(V2), G5 non-code simplified format(V3), G6 anti-pattern 위반 없음 |
