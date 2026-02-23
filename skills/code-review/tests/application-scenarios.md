@@ -620,3 +620,60 @@
 | V1 | Worker output에서 severity를 "propose"하는 맥락 (Step 7: "propose a severity level (P0-P3) for every issue found") |
 | V2 | Worker가 "classify" 또는 "assign"을 최종 결정 언어로 사용하지 않음 |
 | V3 | Per-issue format에서 P-level이 제안으로 표현 (worker 관점에서 제안, orchestrator가 최종 결정) |
+
+---
+
+### SEV-9: Orchestrator Context-Validated Adopt — Unanimous Agreement + Context Mismatch
+
+**Input**: 3개 worker 결과. Issue: "No rate limiting on API endpoint." Project context: "Internal admin dashboard behind corporate VPN, accessed by 3 team members only."
+- Worker A: P0 ("any user can exhaust backend resources, causing outage for all users")
+- Worker B: P0 ("missing rate limiting is a security vulnerability, normal operation triggers abuse")
+- Worker C: P0 ("bots and scrapers cause outage during normal operation")
+
+**Primary Technique**: SKILL.md Step 7 — Context-validated adopt on unanimous agreement. Orchestrator MUST apply Project Context Check even when all workers agree.
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Orchestrator가 3개 worker 만장일치(P0)에도 불구하고 Project Context Check 수행 |
+| V2 | Context mismatch 감지: workers의 threat model(public-facing, bots/scrapers)이 project context(internal VPN, 3 users)와 불일치 |
+| V3 | Orchestrator가 full rubric adjudication 수행 (adopt as-is가 아님) |
+| V4 | 최종 P-level이 P0보다 낮음 (P3 예상 — 3명의 내부 사용자가 의미 있는 부하를 생성할 수 없음) |
+| V5 | Justification에 결정적 축 명시: probability — workers가 가정한 threat model이 이 프로젝트에 적용되지 않음 |
+
+---
+
+### SEV-10: Orchestrator Context-Validated Adopt — Unanimous Agreement + Context Validates
+
+**Input**: 3개 worker 결과. Issue: "No dead-letter queue for Kafka consumer — failed messages lost permanently." Project context: "Production order processing service. Schema changed twice last quarter. Deserialization failures confirmed in current logs."
+- Worker A: P1 ("demonstrable defect, messages permanently lost, schema changes cause failures today")
+- Worker B: P1 ("realistic trigger confirmed in logs, data loss on every deserialization failure")
+- Worker C: P1 ("current logs show failures, DLQ pattern already established for other consumers")
+
+**Primary Technique**: SKILL.md Step 7 — Context-validated adopt on unanimous agreement. When context validates workers' assumptions, adopt with brief confirmation.
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Orchestrator가 3개 worker 만장일치(P1)에도 Project Context Check 수행 |
+| V2 | Context validation 통과: workers의 probability 평가("schema changes cause deserialization failures today")가 project context와 일치 |
+| V3 | 최종 P-level이 P1로 확정 (workers와 동일) |
+| V4 | Brief confirmation 포함: "Workers' P1 aligns with project context" 취지의 문장 존재 |
+| V5 | Full adjudication이 아닌 confirmation 형태 (context mismatch가 없으므로 full adjudication 불필요) |
+
+---
+
+### SEV-11: Worker Decision Gate Traversal — Explicit 3-Axis Reasoning
+
+**Input**: Worker가 리뷰할 코드. Issue: Race condition in `deductBalance()` — reads balance, checks sufficiency, writes new balance without concurrency control. Project context: "Public-facing payment API. Mobile and web clients access concurrently. Multi-device concurrent requests confirmed in access logs."
+
+**Primary Technique**: reviewer.md Decision Gate Walkthrough — Worker가 3축을 명시적으로 라벨링하고, Decision Gate를 step-by-step으로 순회하며, 결정적 축을 식별하는지 검증
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Worker output에서 Impact Delta가 명시적으로 라벨링됨 (e.g., "Impact: double-charge, data corruption with financial impact") |
+| V2 | Worker output에서 Probability가 명시적으로 라벨링됨 (e.g., "Probability: concurrent access is a normal traffic pattern") |
+| V3 | Worker output에서 Maintainability가 명시적으로 라벨링됨 (e.g., "Maintainability: requires optimistic locking") |
+| V4 | Worker가 P1으로 propose (demonstrable defect under today's conditions) |
+| V5 | 6-field format 완전 준수 (Problem, Impact, Probability, Maintainability, Fix 모두 존재) |
