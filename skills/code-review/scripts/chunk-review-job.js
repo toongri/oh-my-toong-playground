@@ -718,15 +718,23 @@ function cmdStop(_options, jobDir) {
 }
 
 function cmdClean(options, jobDir) {
-  const jobsDir = path.resolve(
-    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs')
-  );
   const resolvedJobDir = path.resolve(jobDir);
 
-  // Path traversal guard: ensure target is under the configured jobs directory
-  const relative = path.relative(jobsDir, resolvedJobDir);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    exitWithError(`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${jobsDir})`);
+  // Primary: use explicit jobs-dir from options/env/default
+  const configuredJobsDir = path.resolve(
+    options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs')
+  );
+
+  // Path traversal guard: check if target is under the configured jobs directory
+  const relative = path.relative(configuredJobsDir, resolvedJobDir);
+  const isUnderConfigured = !relative.startsWith('..') && !path.isAbsolute(relative);
+
+  if (!isUnderConfigured) {
+    // Fallback: accept if jobDir contains job.json (proves it's a real job directory)
+    const jobJsonPath = path.join(resolvedJobDir, 'job.json');
+    if (!fs.existsSync(jobJsonPath)) {
+      exitWithError(`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${configuredJobsDir})`);
+    }
   }
 
   fs.rmSync(resolvedJobDir, { recursive: true, force: true });
