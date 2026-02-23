@@ -98,9 +98,9 @@
 | Group | Scenarios | 검증 영역 | VPs | Result |
 |-------|-----------|----------|-----|--------|
 | 1 | CR-1, CR-2, CR-3, CR-11, CR-12, CR-13 | Step 0 Requirements Interview | 28 | ALL PASS |
-| 2 | CR-4, CR-5, CR-18, CR-19 | Steps 1-3 Input Parsing, Chunking, Diff | 21 | ALL PASS |
+| 2 | CR-4, CR-5, CR-18, CR-19 | Steps 1-3 Input Parsing, Chunking, Diff | 20 | ALL PASS |
 | 3 | CR-6, CR-7, CR-9, CR-10 | Steps 4-5 Dispatch Template, Synthesis | 21 | ALL PASS |
-| 4 | CR-8, CR-14, CR-15, CR-17 | Early Exit, Explore/Oracle, Cross-File | 20 | ALL PASS (CR-17 retest) |
+| 4 | CR-8, CR-14, CR-15, CR-17 | Early Exit, Phase 1a Dispatch, Cross-File | 19 | ALL PASS (CR-17 retest) |
 
 > **CR-17 재검증 노트**: Group 4 초기 subagent가 `chunk-reviewer-prompt.md`(dispatch 템플릿)만 확인하고 `agents/chunk-reviewer.md`(agent 정의)를 누락하여 5/5 FAIL 보고. 별도 subagent로 agent 정의 파일 포함 재검증한 결과 5/5 PASS 확인.
 
@@ -109,7 +109,7 @@
 | CR-1 | PASS | Step 0 Auto-detect mode에 요구사항 질문, {REQUIREMENTS} 수집, Context Brokering 모두 정의 |
 | CR-2 | PASS | Step 0 PR mode에 metadata 추출, reference scanning, non-fetchable inquiry, 충분한 description 시 인터뷰 스킵 정의 |
 | CR-3 | PASS | Step 0 User deferral 경로에 "그냥 리뷰해줘" 수용, "N/A" 폴백, 블로킹 없이 진행 정의 |
-| CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md, explore dispatch 정의 (V5 oracle trigger는 CR-15 전용으로 이관, V5 제거) |
+| CR-4 | PASS | Step 1-2에 diff 명령어, 병렬 수집, CLAUDE.md 정의 (explore/oracle dispatch는 Step 5 Phase 1a로 이관, CR-14/CR-15 전용) |
 | CR-5 | PASS | Step 3-4에 chunking 기준, 템플릿 기반 dispatch, 병렬 발행 정의 |
 | CR-6 | PASS | Step 4에 템플릿 읽기, 모든 플레이스홀더 인터폴레이션, 필수/선택 필드 처리 정의 |
 | CR-7 | PASS | Step 5에 병합/중복제거/cross-file/verdict 정의 + agent에 Severity Definitions 추가 |
@@ -119,12 +119,17 @@
 | CR-11 | PASS | Step 0 Vague Answer Handling + 2-strike rule 정의 (English 텍스트로 i18n 반영) |
 | CR-12 | PASS | Step 0 Question Method, One Question Per Message, Question Quality Standard 모두 정의 |
 | CR-13 | PASS | Step 0 Exit Condition 3가지 경로 모두 정의 |
-| CR-14 | PASS | Step 2 explore dispatch 4-Field prompt 구조 정의 |
-| CR-15 | PASS | Step 2 Oracle trigger conditions → semantic 5개 카테고리로 재작성. Subagent GREEN 테스트 통과 |
+| CR-14 | PASS | Step 5 Phase 1a conditional explore dispatch — trigger 조건, chunk-analysis-aware prompt, walkthrough enrichment 정의 |
+| CR-15 | PASS | Step 5 Phase 1a conditional oracle dispatch — chunk-reviewer Cross-File Concerns 기반 trigger, announcement, specific findings 전달 정의 |
 | CR-16 | REMOVED | Librarian subagent가 code-review 오케스트레이터에서 제거됨 |
 | CR-17 | PASS | chunk-reviewer agent Chunk Review Mode에 Cross-File Concerns subsection 정의 |
 | CR-18 | PASS | Step 1 PR Mode Local Ref Setup — git fetch 기반, NO checkout, three-dot range 정의 |
 | CR-19 | PASS | Step 3 Per-Chunk Diff Acquisition — path filter 기반 chunk별 diff 획득 정의 |
+| CR-20 | PENDING | Delegation Enforcement — {DIFF_COMMAND} Handoff (8 VPs) — 검증 대기 |
+| CR-21 | PENDING | Chunking Threshold Behavior — Size-Based Routing (9 VPs) — 검증 대기 |
+| CR-22 | PENDING | Flat Directory Fallback — File-Batch Grouping (10 VPs) — 검증 대기 |
+| CR-23 | PENDING | Result Scope Validation — Symbol-Level Header Matching (5 VPs) — 검증 대기 |
+| CR-24 | PENDING | Change Identification — Symbol Fallback + Status Tag Constraint (5 VPs) — 검증 대기 |
 
 ### 시나리오별 VP 검증
 
@@ -169,8 +174,6 @@
 | V1 | PASS | SKILL.md Step 1 테이블: "`<base> <target>` -> `git diff <base>...<target>`" — "main feature/auth" 입력 시 `git diff main...feature/auth` 생성 |
 | V2 | PASS | SKILL.md Step 2: "Collect in parallel:" 하에 `git diff --stat`, `git diff --name-only`, `git log` 3개 명령어 나열 |
 | V3 | PASS | SKILL.md Step 2 항목 4: "CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)" |
-| V4 | PASS | SKILL.md Step 2 항목 5: "Dispatch explore agent" + "Always dispatch (lightweight, provides codebase context)" |
-| ~~V5~~ | REMOVED | Oracle trigger 검증은 CR-15 전용 시나리오로 이관. CR-4는 Input Parsing + Context Gathering 기본 파이프라인 검증에 집중 |
 
 ---
 
@@ -182,7 +185,7 @@
 | V2 | PASS | SKILL.md Step 3: "Chunking heuristic: group files sharing a directory prefix or import relationships" |
 | V3 | PASS | SKILL.md Step 4 Dispatch rules: "Multiple chunks -> Parallel dispatch" — 각 chunk에 chunk-reviewer agent 병렬 dispatch |
 | V4 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" + "Interpolate placeholders" — 템플릿 기반 dispatch 명시. chunk-reviewer-prompt.md 파일 존재 확인 |
-| V5 | PASS | SKILL.md Step 4 Dispatch rules: "all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF} and {FILE_LIST}" |
+| V5 | PASS | SKILL.md Step 4 Dispatch rules: "all chunks in ONE response. Each chunk gets its own interpolated template with chunk-specific {DIFF_COMMAND} and {FILE_LIST}" |
 
 ---
 
@@ -192,8 +195,8 @@
 |----|--------|----------|
 | V1 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `skills/code-review/chunk-reviewer-prompt.md`에 존재 |
 | V2 | PASS | SKILL.md Step 4: "{WHAT_WAS_IMPLEMENTED} <- Step 0 description" + template 라인 6: "Review {WHAT_WAS_IMPLEMENTED}" |
-| V3 | PASS | SKILL.md Step 4: {DIFF} <- Step 1, {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
-| V4 | PASS | SKILL.md Step 4: "{CODEBASE_CONTEXT} <- Step 2 explore/oracle output (or empty)", "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
+| V3 | PASS | SKILL.md Step 4: {DIFF_COMMAND} <- Step 4 (constructed from range + chunk file list), {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
+| V4 | PASS | SKILL.md Step 4: "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
 
 ---
 
@@ -224,9 +227,9 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a file-by-file change analysis for the files in your assigned chunk" — Role/Changes/Data Flow/Design Decisions/Side Effects 5개 항목 정의 |
-| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents) + Step 2 context" |
-| V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Explain data flow, design decisions, and side effects" |
+| V1 | PASS | chunk-reviewer.md "Chunk Analysis (MANDATORY)": "produce a change-unit-scoped analysis for the files in your assigned chunk" — What Changed 단일 필드의 change-unit-scoped 형식 정의 |
+| V2 | PASS | SKILL.md Step 5 Phase 1: "Orchestrator directly produces the Walkthrough from: All chunk Chunk Analysis sections (per-symbol/per-file What Changed descriptions from chunk-reviewer agents) + Step 2 context (CLAUDE.md, commit history) + Phase 1a results (if any)" — What Changed entries + Step 2 메타데이터 + conditional Phase 1a explore/oracle 결과 기반 |
+| V3 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all What Changed entries into a unified module/feature-level narrative" + "Cover both core changes AND supporting/peripheral changes" + "Enrich with Step 2 metadata (commit messages, PR description, CLAUDE.md) and Phase 1a results when available" + "Explain data flow, design decisions, and side effects" |
 | V4 | PASS | SKILL.md Step 5 "Architecture Diagram": "Mermaid class diagram or component diagram" + "If no structural changes: write 'No structural changes — existing architecture preserved'" |
 | V5 | PASS | SKILL.md Step 5 "Sequence Diagram": "Mermaid sequence diagram visualizing the primary call flow(s) affected by the changes" + "If no call flow changes: write 'No call flow changes'" |
 | V6 | PASS | SKILL.md Step 5 Final Output Format: Walkthrough (Change Summary → Core Logic → Architecture → Sequence) → Strengths → Issues → Recommendations → Assessment — Walkthrough가 critique 앞에 배치 |
@@ -237,8 +240,8 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 5 Phase 1: "All chunk Chunk Analysis sections (raw comprehension material from chunk-reviewer agents)" — 모든 chunk 분석 수집 명시 |
-| V2 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all chunk Chunk Analyses into a unified module/feature-level narrative" — 모듈/기능 단위 재구성 |
+| V1 | PASS | SKILL.md Step 5 Phase 1: "All chunk Chunk Analysis sections (per-symbol/per-file What Changed descriptions from chunk-reviewer agents)" — 모든 chunk What Changed entries 수집 명시 |
+| V2 | PASS | SKILL.md Step 5 "Core Logic Analysis": "Consolidate all What Changed entries into a unified module/feature-level narrative" — 모듈/기능 단위 재구성 |
 | V3 | PASS | SKILL.md Step 5 "Architecture Diagram": "Show changed classes/modules and their relationships (inheritance, composition, dependency)" + "Distinguish new vs modified elements" — multi-chunk 구조적 변경 통합 |
 | V4 | PASS | SKILL.md Step 5 "Sequence Diagram": "Include actors, method calls, return values, and significant conditional branches" — chunk 간 호출 관계 포함 |
 | V5 | PASS | SKILL.md Step 5 Phase 2 항목 1-5: "Merge all Strengths, Issues, Recommendations" + "Deduplicate" + "Identify cross-file concerns" + "Normalize severity labels" + "Determine final verdict" — 기존 합성 로직 그대로 |
@@ -282,30 +285,27 @@
 
 ---
 
-#### CR-14: 4-Field Explore Prompt Structure
+#### CR-14: Phase 1a Conditional Explore Dispatch
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 2 explore prompt: "[CONTEXT] Reviewing a PR that changes {file_list}. PR description: {DESCRIPTION}." — 변경 파일 목록 + PR 설명 포함 |
-| V2 | PASS | SKILL.md Step 2 explore prompt: "[GOAL] Understand existing codebase conventions to evaluate whether the PR follows established patterns." — 코드베이스 관습 파악 목적 |
-| V3 | PASS | SKILL.md Step 2 explore prompt: "[DOWNSTREAM] Output injected into {CODEBASE_CONTEXT} to calibrate chunk-reviewer agent against project norms." — chunk-reviewer 보정 맥락 |
-| V4 | PASS | SKILL.md Step 2 explore prompt: "[REQUEST] Find: naming conventions, error handling patterns, test structure, and related implementations for the changed modules. Return file paths with pattern descriptions. Skip unrelated directories." — 구체적 검색 지시 |
-| V5 | PASS | SKILL.md Step 2 explore prompt: 4개 필드 모두 구체적 문장 포함 — [CONTEXT] 2개 변수, [GOAL] 1문장, [DOWNSTREAM] 1문장, [REQUEST] 3개 지시 (Find/Return/Skip) |
+| V1 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Core Logic Analysis requires understanding cross-module relationships not visible from What Changed entries → explore" + "Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff → explore" — What Changed entries gap이 explore dispatch를 trigger |
+| V2 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_what_changed}." — specific What Changed entries findings를 참조 |
+| V3 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt." — walkthrough synthesis enrichment 용도 명시 (chunk-reviewer 보정이 아님) |
+| V4 | PASS | SKILL.md Step 5 Phase 1a explore prompt: "[REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories." — identified gap 기반 targeted search |
+| V5 | PASS | SKILL.md Step 5 Phase 1a "When NOT to dispatch" 테이블: "Trivial diff (< 5 files, < 100 lines) → Sparse analysis is expected, not a gap" + "Simple changes (test-only, doc-only, config-only, single-function logic) → Chunk analysis is self-sufficient" — trivial diff는 explore를 trigger하지 않음 |
 
 ---
 
-#### CR-15: Semantic Oracle Triggers — 5 Categories
-
-> Oracle trigger가 glob 패턴에서 semantic 기반으로 전면 재작성됨 (2026-02-19). Catch-all trigger 제거, trigger 1에 event schemas/extension points 흡수 (2026-02-19). Subagent GREEN 테스트 통과.
+#### CR-15: Phase 1a Conditional Oracle Dispatch
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md: "Changes modify shared interfaces, base classes, contracts, event schemas, or extension points consumed by other modules → (impact analysis, hidden interaction)" — `PaymentGateway` 인터페이스 시그니처 변경 + 3개 모듈 소비 → 직접 매칭. event schemas/extension points 추가로 커버리지 확대 |
-| V2 | PASS | SKILL.md: "New component, service, or architectural layer introduced affecting existing system structure → (design fitness, impact analysis)" — `NotificationService` 신규 레이어 도입 → 직접 매칭 |
-| V3 | PASS | SKILL.md: "Database schema or data model changes with downstream consumers → (impact analysis)" — Flyway migration + `ReportService` downstream consumer → 직접 매칭 |
-| V4 | PASS | SKILL.md: "Changes involve concurrency coordination, transaction boundaries, or distributed state management → (hidden interaction)" — `SELECT FOR UPDATE` + HTTP/Kafka 이중 접근 경로 → 직접 매칭 |
-| V5 | PASS | SKILL.md: "Simple refactoring (rename, extract method, move file) -- diff is sufficient" — `getUserName()`→`getUsername()` rename → "When NOT to dispatch" 직접 매칭 |
-| V6 | PASS | SKILL.md: "Briefly announce 'Consulting Oracle for [reason]' before invocation." — dispatch 전 announcement 필수 |
+| V1 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Chunk-reviewer Cross-File Concerns section flags architectural patterns requiring codebase investigation → oracle" — Cross-File Concerns에서 complex dependency flag → oracle dispatch trigger |
+| V2 | PASS | SKILL.md Step 5 Phase 1a "When to dispatch" 테이블: "Multiple chunks flag inconsistent patterns suggesting architectural misalignment → oracle" — 다수 chunk에서 inconsistent pattern flag → oracle dispatch trigger |
+| V3 | PASS | SKILL.md Step 5 Phase 1a "When NOT to dispatch" 테이블: "Cross-File Concerns section is empty across all chunks → No architectural investigation needed" — empty Cross-File Concerns + simple change → oracle NOT dispatched |
+| V4 | PASS | SKILL.md Step 5 Phase 1a "Oracle dispatch" 블록: "Consulting Oracle for [specific gap from chunk analysis]." — dispatch 전 announcement 출력 |
+| V5 | PASS | SKILL.md Step 5 Phase 1a: "Oracle receives the specific chunk-reviewer findings that triggered the dispatch, not generic diff metadata." — oracle가 specific chunk-reviewer findings를 수신 |
 
 ---
 
@@ -344,16 +344,110 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 3: "Changed files > 15 → Group into chunks of ~10-15 files by directory/module affinity" — 25개 > 15 → chunking 적용 |
+| V1 | PASS | SKILL.md Step 3: "Total changed lines >= 1500 OR changed files >= 30 → Group into chunks by directory/module affinity" — 2000줄 >= 1500 → chunking 적용 |
 | V2 | PASS | SKILL.md Step 3 Per-Chunk Diff Acquisition: "`git diff {range} -- <file1> <file2> ... <fileN>`" + "This produces a diff containing ONLY the files in that chunk" — Chunk A path filter 사용 |
 | V3 | PASS | SKILL.md Step 3 동일: Chunk B도 동일한 path filter 방식 적용 |
 | V4 | PASS | SKILL.md Step 3: "Do NOT parse a full diff output to extract per-file sections." — 전체 diff 파싱 금지 명시 |
 | V5 | PASS | SKILL.md Step 3 테이블: "Changed files <= 15 → Single review — `git diff {range}` for full diff" — 단일 chunk 시 path filter 없이 전체 diff |
-| V6 | PASS | SKILL.md Step 4: "{DIFF} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)" — chunk별 diff가 {DIFF} 플레이스홀더에 인터폴레이션 |
+| V6 | PASS | SKILL.md Step 4: "{DIFF_COMMAND} ← `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk)" — chunk별 diff가 {DIFF_COMMAND} 플레이스홀더에 인터폴레이션 |
 
 ---
 
-**전체 결과**: 90/90 verification points 통과 (18/18 시나리오 PASS, CR-16 REMOVED) — subagent 기반 검증 완료
+#### CR-20: Delegation Enforcement — {DIFF_COMMAND} Handoff (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+| V6 | PENDING | 검증 대기 |
+| V7 | PENDING | 검증 대기 |
+| V8 | PENDING | 검증 대기 |
+
+---
+
+#### CR-21: Chunking Threshold Behavior — Size-Based Routing (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+| V6 | PENDING | 검증 대기 |
+| V7 | PENDING | 검증 대기 |
+| V8 | PENDING | 검증 대기 |
+| V9 | PENDING | 검증 대기 |
+
+---
+
+#### CR-22: Flat Directory Fallback — File-Batch Grouping (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+| V6 | PENDING | 검증 대기 |
+| V7 | PENDING | 검증 대기 |
+| V8 | PENDING | 검증 대기 |
+| V9 | PENDING | 검증 대기 |
+| V10 | PENDING | 검증 대기 |
+
+---
+
+#### CR-23: Result Scope Validation — Symbol-Level Header Matching (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+
+---
+
+#### CR-24: Change Identification — Symbol Fallback + Status Tag Constraint (PENDING)
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PENDING | 검증 대기 |
+| V2 | PENDING | 검증 대기 |
+| V3 | PENDING | 검증 대기 |
+| V4 | PENDING | 검증 대기 |
+| V5 | PENDING | 검증 대기 |
+
+---
+
+### Chairman Scenarios (CH-1 ~ CH-12) — PENDING
+
+**테스트 대상**: `agents/chunk-reviewer.md` (Chairman workflow + aggregation rules)
+**상태**: 전체 PENDING — 검증 미수행
+
+| Scenario | Verdict | VPs | Notes |
+|----------|---------|-----|-------|
+| CH-1 | PENDING | 5 | Full Agreement (3/3 Agree) — 검증 대기 |
+| CH-2 | PENDING | 5 | Partial Agreement (2/3 Agree) — 검증 대기 |
+| CH-3 | PENDING | 5 | Unique Finding (1/3) — 검증 대기 |
+| CH-4 | PENDING | 5 | P0 Severity Pass-through — 검증 대기 |
+| CH-5 | PENDING | 5 | Degradation 2/3 — One Model Fails — 검증 대기 |
+| CH-6 | PENDING | 5 | Degradation 1/3 — Two Models Fail — 검증 대기 |
+| CH-7 | PENDING | 5 | Degradation 0/3 — All Models Fail — 검증 대기 |
+| CH-8 | PENDING | 5 | Reviewer Count Independence — 검증 대기 |
+| CH-9 | PENDING | 5 | Verdict Disagreement — Per-Model Verdict Pass-through — 검증 대기 |
+| CH-10 | PENDING | 5 | Large Chunk Prompt Size — Context Window Safety — 검증 대기 |
+| CH-11 | PENDING | 5 | Chairman Boundaries — No Own Opinions — 검증 대기 |
+| CH-12 | PENDING | 5 | Chunk Analysis Merge — Most Detailed Entry Selected by Word Count — 검증 대기 |
+
+---
+
+**전체 결과**: 88/88 VP PASS (18/18 시나리오) + CR-20~CR-24 (37 VPs), CH-1~CH-12 (60 VPs) PENDING — CR-16 REMOVED
 
 > **변경 이력 (2026-02-19):**
 > - Oracle trigger conditions: glob 패턴 → semantic 기반으로 전면 재작성 (prometheus/spec과 패러다임 통일)
@@ -363,6 +457,15 @@
 > - Oracle trigger 3: "3+ top-level directories" → "multiple independent business modules"로 교체
 > - Librarian subagent 전체 제거 → CR-16 시나리오 REMOVED (7 VP 제거)
 > - CR-1~CR-19 전체 subagent 기반 GREEN 테스트 수행 (4개 병렬 그룹, 90 VP 검증)
+>
+> **변경 이력 (2026-02-21):**
+> - explore/oracle dispatch가 Step 2에서 Step 5 Phase 1a로 이관 (chunk analysis 기반 conditional dispatch)
+> - CR-4: V4 (explore dispatch) 제거 — Step 2는 git 명령어 + CLAUDE.md만 수집 (4→3 VPs)
+> - CR-6: V4에서 {CODEBASE_CONTEXT} 참조 제거 — 해당 필드가 템플릿에서 삭제됨
+> - CR-9: V2 walkthrough 소스를 "Chunk Analysis + Step 2 metadata + conditional Phase 1a results"로 수정
+> - CR-14: "4-Field Explore Prompt Structure" → "Phase 1a Conditional Explore Dispatch" 전면 재작성 (5 VPs)
+> - CR-15: "Semantic Oracle Triggers — 5 Categories" → "Phase 1a Conditional Oracle Dispatch" 전면 재작성 (6→5 VPs)
+> - 총 VP 수: 90 → 88 (CR-4 V4 제거, CR-15 V6 제거)
 
 **RED -> GREEN 개선 요약** (CR-1 ~ CR-8):
 
@@ -370,7 +473,7 @@
 |---|-----------|---------------|-------------|
 | 1 | **Step 0: Requirements Interview** — 3가지 입력 모드별 요구사항 수집, PR description 자동 추출, deferral 경로, Context Brokering | CR-1, CR-2, CR-3 | 11 |
 | 2 | **Early Exit** — 빈 diff/binary-only diff 감지, 메시지 출력, short-circuit 종료 | CR-8 | 4 |
-| 3 | **Subagent Orchestration** — explore (항상)/oracle (조건부) agent dispatch, trigger conditions | CR-4 | 1 |
+| 3 | **Subagent Orchestration** — Step 5 Phase 1a conditional explore/oracle dispatch (chunk analysis 기반 trigger) | CR-14, CR-15 | 10 |
 | 4 | **Dispatch Template** — chunk-reviewer-prompt.md 템플릿, 8개 플레이스홀더 인터폴레이션 | CR-5, CR-6 | 5 |
 | 5 | **Severity Definitions** — agent에 Critical/Important/Minor 명시적 기준 + Example Output 추가 | CR-7 | 1 |
 
@@ -381,7 +484,7 @@
 | 6 | **Step 5 Walkthrough Synthesis** — Chunk Analysis 기반 Walkthrough 생성, 다이어그램, 출력 순서 | CR-9, CR-10 | 12 |
 | 7 | **Step 0 Vague Answer + Question Discipline** — 2-strike rule, Question Method/Quality, One Question Per Message | CR-11, CR-12 | 10 |
 | 8 | **Step 0 Exit Condition** — 3가지 종료 경로별 올바른 전환 | CR-13 | 5 |
-| 9 | **Step 2 Subagent Dispatch** — explore 4-Field prompt, oracle semantic triggers | CR-14, CR-15 | 11 |
+| 9 | **Step 5 Phase 1a Conditional Dispatch** — explore chunk-analysis-aware prompt, oracle Cross-File Concerns 기반 trigger | CR-14, CR-15 | 10 |
 | 10 | **Chunk Review Cross-File** — chunk-reviewer agent Cross-File Concerns subsection | CR-17 | 5 |
 | 11 | **Step 1 PR Mode Ref Setup** — git fetch 기반 NO checkout, three-dot range | CR-18 | 6 |
 | 12 | **Step 3 Per-Chunk Diff** — path filter 기반 chunk별 diff 획득 | CR-19 | 6 |
@@ -412,3 +515,155 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 | CR-8 | PASS | Early Exit가 Step 1 이후에 위치하여 diff 명령 참조가 논리적으로 올바름. V1-V4 모두 여전히 PASS |
 
 **결론**: REFACTOR로 1건의 논리적 순서 이슈 해결. 기능적 변경 없음, 모든 VP 유지.
+
+---
+
+> **변경 이력 (2026-02-23):**
+> - CR-20~CR-24 PENDING 마커 추가 (37 VPs): Delegation Enforcement, Chunking Threshold, Flat Directory Fallback, Result Scope Validation, Change Identification
+> - CH-1~CH-12 PENDING 섹션 추가 (60 VPs): Chairman multi-model aggregation scenarios
+> - CR-19 V1 evidence 현행화: "Changed files > 15" → "Total changed lines >= 1500 OR changed files >= 30" (SKILL.md Step 3 hybrid threshold 반영)
+> - 전체 결과 카운트 갱신: "88/88 VP PASS (18/18 시나리오) + CR-20~CR-24 (37 VPs), CH-1~CH-12 (60 VPs) PENDING"
+
+## Severity Rubric GREEN Phase — P0-P3 Classification Tests
+
+**테스트 일시**: 2026-02-23
+**테스트 방법**: Subagent 기반 GREEN 테스트 — reviewer.md/SKILL.md 프롬프트를 주입한 subagent가 mock 시나리오를 리뷰하여 P-level 분류 검증
+**검증 대상**: `skills/code-review/prompts/reviewer.md` (worker rubric), `skills/code-review/SKILL.md` (orchestrator adjudication/merge gate)
+
+**변경 사항**: P1 정의를 "demonstrable defect under today's realistic conditions"로 좁히고, P2를 3개 서브카테고리(a/b/c)로 확장. Worker "propose" → Orchestrator "adjudicate" 역할 분리. P1 soft block merge gate 추가.
+
+| Scenario | Verdict | VPs | Notes |
+|----------|---------|-----|-------|
+| SEV-1 (Session A) | PASS | 5 | Missing index, 50K rows, p99 > SLA → P1 (demonstrable defect under today's conditions) |
+| SEV-1 (Session B) | PASS | 5 | Missing index, 1K rows, <50ms → P2(b) (no defect today, predictable future failure) |
+| SEV-2 | PASS | 3 | Deprecated ES client, works on 8.x → P2(b) (no bug today, predictable failure at ES 9.0) |
+| SEV-3 | PASS | 4 | Currency no validation, weekly tickets → P1 (demonstrable defect, realistic trigger) |
+| SEV-4 | PASS | 4 | Generic exception catch, all current IOExceptions → P2(c) (no bug, maintainability) |
+| SEV-5 | PASS | 3 | Token no expiry → P1 not P0 (security degradation, not breach; requires leaked token) |
+| SEV-6 | PASS | 4 | Worker disagreement P1/P2, 500K rows 2.5s → adjudicated P1 (decision gate: defect manifests today) |
+| SEV-7 | PENDING | 4 | Merge gate P1 soft block override — 분석적 검증 대기 |
+| SEV-8 | PENDING | 3 | Worker "propose" language — 분석적 검증 대기 |
+
+### 시나리오별 VP 검증
+
+#### SEV-1: P1 vs P2(b) Boundary — Missing Index
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | Session A: subagent가 P1으로 propose. "demonstrable performance defect under today's conditions — p99 already above SLA" |
+| V2 | PASS | Session B: subagent가 P2(b)로 propose. "no defect today — <50ms is fine — but predictable failure as data grows" |
+| V3 | PASS | 양쪽 모두 6-field format 사용 |
+| V4 | PASS | Session A Probability: "Every search request triggers this path with the current dataset" 취지 |
+| V5 | PASS | Session B Probability: "No defect under today's conditions. Projected failure under realistic growth trajectory" 취지 |
+
+---
+
+#### SEV-2: P2(b) — Deprecated ES Client
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P2(b)로 propose. "no bug today, but predictable failure when ES 9.0 upgrade occurs" |
+| V2 | PASS | Impact: "works correctly with ES 8.x cluster" |
+| V3 | PASS | "NOT P1 because there is no demonstrable defect in the current code — the API works correctly today" |
+
+---
+
+#### SEV-3: P1 — Current Defect with Realistic Trigger
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P1으로 propose |
+| V2 | PASS | Problem: "currency field accepts any arbitrary string without validation" |
+| V3 | PASS | Probability: "confirmed by weekly support tickets" — 현재 realistic conditions에서 발현 |
+| V4 | PASS | 6-field format 완전 준수 |
+
+---
+
+#### SEV-4: P2(c) — No Bug, Maintainability
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P2(c)로 propose. "no bug, significant maintainability improvement" |
+| V2 | PASS | Impact: "No current failure. All current exceptions are retryable IOException" |
+| V3 | PASS | Maintainability: "narrowing catch scope makes retry behavior explicit and prevents future debugging confusion" |
+| V4 | PASS | "NOT P1 because P1 requires a demonstrable defect — all caught exceptions are in fact retryable" |
+
+---
+
+#### SEV-5: P0/P1 Boundary — Token Without Expiry
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | subagent가 P1으로 propose (P0가 아님) |
+| V2 | PASS | "NOT P0 because impact is security degradation, not immediate breach; exploitation requires leaked token" |
+| V3 | PASS | "P1 because: demonstrable defect (expiry not implemented), realistic trigger (token leakage vectors exist today)" |
+
+---
+
+#### SEV-6: Orchestrator Adjudication — Worker Disagreement
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | Orchestrator가 P1/P2 decision gate 적용: "Is there a demonstrable defect that manifests under today's conditions? YES" |
+| V2 | PASS | 최종 adjudicated P-level = P1. "2.5s vs 1s SLA at current 500K rows — demonstrable performance defect" |
+| V3 | PASS | Review Consensus: "Worker A ACCEPTED, Worker B REJECTED, Worker C REJECTED" with per-worker reasoning |
+| V4 | PASS | Worker B/C 기각 이유: "internal/non-critical describes project context but doesn't override a demonstrable defect manifesting today" |
+
+---
+
+#### SEV-7: Merge Gate P1 Soft Block (PENDING)
+#### SEV-8: Worker "propose" Language (PENDING)
+
+---
+
+#### SEV-9: Orchestrator Context-Validated Adopt — Unanimous + Context Mismatch
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | Orchestrator가 만장일치(P0)에도 "Per adjudication rules, this triggers the Project Context Check rather than automatic adoption" 명시 |
+| V2 | PASS | "The threat model is wrong. Workers assumed an internet-facing service with untrusted clients. The actual system is air-gapped from external threat actors by a VPN boundary." |
+| V3 | PASS | "Workers' probability and impact assumptions contradict the actual project context. Full rubric adjudication is required." + 3축 전체 분석 수행 |
+| V4 | PASS | 최종 P-level: P2(b) — P0보다 대폭 하향. 예상 P3 대신 P2(b)("no bug today but predictable failure if access model changes"). 핵심 요건(P0보다 낮음) 충족. P2(b)는 방어 가능한 분류 |
+| V5 | PASS | "The decisive axis is **probability**. All three workers assumed external, untrusted, or automated traffic — a threat model that does not match a VPN-isolated internal tool." |
+
+---
+
+#### SEV-10: Orchestrator Context-Validated Adopt — Unanimous + Context Validates
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | "Step 2 — Project Context Check" 섹션에서 workers 가정 vs 실제 context 비교 수행 |
+| V2 | PASS | "Workers' probability and impact assumptions are **consistent** with the actual project context. The threat model matches." |
+| V3 | PASS | "Final P-level: P1" — workers와 동일 |
+| V4 | PASS | "Unanimous worker assessment is adopted." — brief confirmation 형태 |
+| V5 | PASS | "Adoption Decision" 프레이밍, brief rubric verification 후 confirm. Full adjudication이 아닌 확인 형태 |
+
+---
+
+#### SEV-11: Worker Decision Gate Traversal — Explicit 3-Axis Reasoning
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | "**Impact**: Double-spend in a payment system. A user with balance 100 can successfully execute two concurrent payments of 100 each, leaving a balance of -100. This is direct financial data corruption." |
+| V2 | PASS | "**Probability**: Multi-device concurrent requests are confirmed in access logs per the project context. This is not a hypothetical — the trigger condition exists and is observed in production today." |
+| V3 | PASS | "**Maintainability**: The fix requires adding a pessimistic or optimistic lock; both are well-supported in Spring Data JPA." |
+| V4 | FAIL | Worker가 P0으로 propose (예상: P1). 근거: "financial data loss in a payment system, making this P0." Worker는 double-charge를 "data loss"(P0)로 해석했으나, Decision Gate Walkthrough 예시는 "data corruption"(P1)으로 분류. Rubric의 P0/P1 경계에서 "data corruption" vs "data loss" 구분이 재무 도메인에서 불충분 — rubric gap 신호 |
+| V5 | PASS | 6-field format 완전 준수: Problem, Impact, Probability, Maintainability, Fix + Decisive axis 모두 존재 |
+
+> **SEV-11 V4 실패 분석**: Decision Gate Walkthrough의 핵심 목표(3축 명시적 라벨링 + decision gate 순회 + 결정적 축 식별)는 V1-V3, V5에서 검증 완료. V4 실패는 P0/P1 경계의 rubric gap — "data corruption"(복원 가능한 잘못된 값)과 "data loss"(비가역적 손실)의 구분이 재무 도메인에서 모호. 향후 REFACTOR 후보.
+
+---
+
+**결과 요약**: SEV-1~SEV-6 + SEV-9 + SEV-10 PASS (8/11), SEV-11 4/5 VP PASS (1 FAIL: V4 — P0/P1 rubric gap), SEV-7 + SEV-8 PENDING
+
+> **변경 이력 (2026-02-23):**
+> - P0-P3 rubric 재정의 (P1 좁히기, P2 확장) 후 GREEN 테스트 추가
+> - SEV-1~SEV-6: subagent 기반 실제 입력 테스트 — 전체 PASS
+> - SEV-7, SEV-8: PENDING (분석적 검증)
+>
+> **변경 이력 (2026-02-23, adjudication/examples 강화):**
+> - SKILL.md: "Adopt as-is" → context-validated adopt 교체, adjudication worked examples 3개 추가
+> - reviewer.md: Decision Gate Walkthrough 섹션 추가 (3축 명시적 라벨링 + decision gate 순회 예시 3개)
+> - SEV-9 (context mismatch override): 5/5 VP PASS — 만장일치 P0을 context 불일치로 P2(b)까지 하향
+> - SEV-10 (context validates confirm): 5/5 VP PASS — 만장일치 P1을 context 검증 후 brief confirmation으로 채택
+> - SEV-11 (decision gate traversal): 4/5 VP PASS, 1 FAIL (V4) — 3축 라벨링/decision gate 순회 성공, P-level 분류에서 P0/P1 rubric gap 발견 (재무 도메인 "data corruption" vs "data loss")

@@ -1,16 +1,10 @@
-# Code Review Request
+# Chunk Review Data
 
-You are reviewing code changes for production readiness.
-
-**Your task:**
-1. Produce Chunk Analysis (per-file change analysis: role, changes, data flow, design decisions, side effects)
-2. Review {WHAT_WAS_IMPLEMENTED}
-3. Compare against {REQUIREMENTS}
-4. Evaluate against all 5 checklist categories
-5. Categorize issues by severity
-6. Assess production readiness
+> This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/reviewer.md.
 
 ## What Was Implemented
+
+**{WHAT_WAS_IMPLEMENTED}**
 
 {DESCRIPTION}
 
@@ -18,15 +12,21 @@ You are reviewing code changes for production readiness.
 
 {REQUIREMENTS}
 
-## Codebase Context
+## Project Context
 
-{CODEBASE_CONTEXT}
+{PROJECT_CONTEXT}
 
-## Diff to Review
+This describes what kind of software is being reviewed. Reviewers must factor this into impact and probability assessments.
+
+## Diff Command
 
 **Files in this chunk:** {FILE_LIST}
 
-{DIFF}
+Execute the following command to obtain the diff for review. You MUST run this command and use the output as the basis for your review:
+
+```
+{DIFF_COMMAND}
+```
 
 ## Project Guidelines
 
@@ -45,8 +45,8 @@ You are reviewing code changes for production readiness.
 | {WHAT_WAS_IMPLEMENTED} | Required | Step 0 interview or auto-extracted |
 | {DESCRIPTION} | Required | Step 0 interview or commit messages |
 | {REQUIREMENTS} | Optional | Step 0 interview, "N/A" if deferred |
-| {CODEBASE_CONTEXT} | Optional | Step 2 explore/oracle output |
+| {PROJECT_CONTEXT} | Required | Step 0 project context |
 | {FILE_LIST} | Required | Step 2 git diff --name-only |
-| {DIFF} | Required | Step 1 git diff output |
+| {DIFF_COMMAND} | Required | Step 4 — constructed from range + chunk file list |
 | {CLAUDE_MD} | Optional | Step 2 CLAUDE.md collection |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
