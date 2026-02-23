@@ -1689,6 +1689,53 @@ describe('cmdClean path traversal guard', () => {
     );
     assert.ok(!fs.existsSync(jobDir), 'job directory should have been deleted');
   });
+
+  it('cleans a custom jobs-dir job without --jobs-dir flag when job.json exists', () => {
+    // Simulate a job created with --jobs-dir /custom: the job directory is NOT
+    // under the default jobs directory, but it contains job.json proving it's real.
+    const customJobsDir = path.join(tmpDir, 'custom-jobs');
+    const jobDir = path.join(customJobsDir, 'chunk-review-test');
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-custom' }));
+    fs.writeFileSync(path.join(jobDir, 'dummy.txt'), 'test');
+
+    // Clean WITHOUT --jobs-dir (simulates chunk-review.sh cleanup behavior)
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'clean', jobDir,
+    ], { stdio: 'pipe' });
+
+    assert.ok(
+      result.toString().includes('cleaned:'),
+      `Expected stdout to include "cleaned:", got: ${result.toString()}`,
+    );
+    assert.ok(!fs.existsSync(jobDir), 'job directory should have been deleted');
+  });
+
+  it('rejects a path outside jobs directory without job.json', () => {
+    // An arbitrary directory without job.json should still be rejected
+    const outsidePath = path.join(tmpDir, 'not-a-job');
+    fs.mkdirSync(outsidePath, { recursive: true });
+    fs.writeFileSync(path.join(outsidePath, 'important.txt'), 'do not delete');
+
+    assert.throws(
+      () => {
+        execFileSync(process.execPath, [
+          SCRIPT, 'clean', outsidePath,
+        ], { stdio: 'pipe' });
+      },
+      (err) => {
+        assert.equal(err.status, 1);
+        assert.ok(
+          err.stderr.toString().includes('refusing to delete path outside jobs directory'),
+          `Expected stderr to mention path guard, got: ${err.stderr.toString()}`,
+        );
+        return true;
+      },
+    );
+
+    // The directory must still exist
+    assert.ok(fs.existsSync(outsidePath), 'directory without job.json should NOT have been deleted');
+  });
 });
 
 // ---------------------------------------------------------------------------
