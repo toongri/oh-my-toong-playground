@@ -366,34 +366,45 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 ## Scenario P-16: Context Loading
 
-**Primary Technique:** Context Loading — 프로젝트 컨텍스트 사전 로딩으로 인터뷰 전 배경 지식 확보
+**Primary Technique:** Context Loading — trust level 경계에서의 올바른 판단 (아키텍처 vs 파일-레벨 사실)
 
-**Prompt:**
+**Prompt (context available):**
 ```
-우리 프로젝트에 OAuth 2.0 인증 추가해줘
+기존 JWT 인증을 OAuth 2.0으로 마이그레이션해줘
 ```
+
+**Prompt (context absent):**
+```
+기존 JWT 인증을 OAuth 2.0으로 마이그레이션해줘
+```
+(Same prompt, but `~/.omt/$OMT_PROJECT/context/` does not exist)
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Context files loaded pre-interview | Skill reads `~/.omt/$OMT_PROJECT/context/` files (project.md, conventions.md, decisions.md, gotchas.md) before starting interview |
-| V2 | Context-covered topics skip explore | For architecture/convention questions covered by context files, skill does NOT dispatch explore agent (trust level rule) |
-| V3 | $OMT_PROJECT resolution referenced | Context Loading section references $OMT_PROJECT resolved by SessionStart hook |
-| V4 | Graceful skip on missing context | If context directory doesn't exist, skill proceeds to interview without error or user prompt |
+| V1 | Trust level boundary judgment | Context file says "JWT auth in auth/ module" — skill uses this directly for architecture-level question (does NOT dispatch explore for "what auth method do we use?"). But for "auth middleware 정확한 파일 위치", skill dispatches explore (file-level fact requires verification) |
+| V2 | Partial context handling | If only project.md and decisions.md exist but conventions.md and gotchas.md are missing — skill reads available files, skips missing ones silently, does NOT ask user about missing files |
+| V3 | Context ≠ ground truth for specifics | Even when context file covers "auth architecture", specific implementation details (exact function signatures, current line numbers) are verified via explore. Context informs the question, explore confirms the facts |
+| V4 | Graceful degradation | When context directory does not exist, skill proceeds directly to Intent Classification without error message, without mentioning missing context to user, without asking user to create context files |
 
 ---
 
 ## Scenario P-17: Intent Classification
 
-**Primary Technique:** Intent Classification — 요청 규모별 4-tier 분류로 인터뷰 깊이 조절
+**Primary Technique:** Intent Classification — 경계 케이스와 스코프 불확실성에서의 정확한 분류 판단
 
-**Prompt (Trivial intent):**
+**Prompt (boundary — Trivial vs Scoped):**
 ```
-헤더 텍스트 "Welcome"을 "Hello"로 변경해줘
+에러 메시지 3곳에서 한글화해줘
 ```
 
-**Prompt (Architecture intent):**
+**Prompt (boundary — Scoped vs Complex):**
+```
+결제 모듈에 환불 기능 추가해줘
+```
+
+**Prompt (Architecture — clear):**
 ```
 마이크로서비스 아키텍처로 모노리스 분해 계획 세워줘
 ```
@@ -402,16 +413,16 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Trivial classified correctly | Simple text change classified as Trivial with 1-2 questions only |
-| V2 | Architecture classified correctly | Monolith decomposition classified as Architecture with Oracle MANDATORY |
-| V3 | Clearance unchanged for all intents | Both Trivial and Architecture requests go through same 5-item Clearance Checklist |
-| V4 | User can request reclassification | If user disagrees with classification, skill accepts reclassification request |
+| V1 | Boundary judgment: multi-file simple change | "에러 메시지 3곳 한글화" involves 3 files but trivial per-file changes — classified as Scoped (multi-file = not Trivial), NOT Complex (each change is simple). Interview is standard depth, not deep |
+| V2 | Scope-unknown triggers explore before classification | "환불 기능 추가" — scope unclear from request alone (could be 1 file or 10). Skill dispatches explore to understand current payment module structure BEFORE committing to a classification |
+| V3 | Architecture triggers Oracle MANDATORY | "마이크로서비스 분해" classified as Architecture regardless of how user frames it. Oracle dispatched with NO EXCEPTIONS. explore + librarian dispatched in parallel |
+| V4 | Classification affects depth, NOT Clearance | Scoped request ("한글화") gets standard interview (3-5 questions). Architecture request ("모노리스 분해") gets deep interview with explore mandatory before questions. But BOTH go through identical 5-item Clearance Checklist |
 
 ---
 
 ## Scenario P-18: Execution Strategy in Plan
 
-**Primary Technique:** Execution Strategy — Wave 기반 병렬 실행 전략 생성
+**Primary Technique:** Execution Strategy — 의존성 모델링과 Wave 배정의 정확성
 
 **Prompt:**
 ```
@@ -422,30 +433,30 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Wave visualization present | Generated plan includes Wave visualization format showing parallel execution groups |
-| V2 | Dependency Matrix present | Plan includes abbreviated Dependency Matrix with Blocked By / Blocks columns |
-| V3 | Critical Path identified | Plan states the critical path through dependent tasks |
-| V4 | TODO Parallelization fields | Each TODO contains Blocked By / Blocks / Wave fields |
+| V1 | Dependency accuracy | Blocked By/Blocks correctly reflect actual task dependencies — e.g., "API endpoint creation" blocks "integration test" but is NOT blocked by "DB schema" if the endpoint can be stubbed. Dependencies are causal, not sequential by convention |
+| V2 | Wave assignment correctness | Tasks sharing no dependencies are in the same wave. No task is assigned to a wave later than (blocker's wave + 1). Independent tasks are NOT artificially serialized into separate waves |
+| V3 | Critical Path is longest chain | Critical Path follows the longest dependency chain through the task graph — not the first path found or an arbitrary selection. If Task A→C→E and Task B→D→E, and path A→C→E is longer, it is the Critical Path |
+| V4 | Rule compliance | Minimum 2 tasks per wave (except final wave), max 3-4 waves for a 3-6 task plan, no circular dependencies. If plan has 4 independent tasks, they should be in 1-2 waves, NOT spread across 4 |
 
 ---
 
 ## Scenario P-19: QA Scenarios in TODO
 
-**Primary Technique:** QA Scenarios — TODO별 MANDATORY QA 시나리오 포함
+**Primary Technique:** QA Scenarios — 실행 가능하고 의미있는 검증 시나리오 작성 품질
 
-**Prompt:**
+**Prompt (mixed code + non-code):**
 ```
-API rate limiting 기능 추가해줘
+API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | QA Scenarios present in every TODO | Each TODO item in the plan contains a QA Scenarios subsection |
-| V2 | 4-field structure | Each QA Scenario has Tool, Preconditions, Steps, Expected fields |
-| V3 | Minimum 2 scenarios per TODO | At least Happy path + Failure/edge case for each TODO |
-| V4 | Verification Strategy references QA | Plan's Verification Strategy section references per-TODO QA Scenarios as primary mechanism |
+| V1 | Steps are agent-executable | Steps field contains concrete commands or actions (e.g., `curl -X POST /api/resource 101 times`, `grep 'rate-limit' README.md`) — NOT vague statements like "verify the feature works" or "check that limiting is applied" |
+| V2 | Failure scenario is non-trivial | Edge case scenario tests an actual failure mode specific to the task (e.g., "rate limit counter resets after window expires", "concurrent requests from same IP handled correctly") — NOT generic "invalid input returns error" |
+| V3 | Non-code TODO uses simplified format | Documentation update TODO uses simplified QA format (Preconditions + Expected only, no Tool/Steps) — NOT forced into full 4-field structure that doesn't make sense for docs |
+| V4 | Tool field is specific | Names the actual verification tool (jest, curl, grep, bash) — NOT generic "test runner" or "testing tool". The tool choice matches what the Steps actually use |
 
 ---
 
