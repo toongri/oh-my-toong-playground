@@ -46,6 +46,29 @@ get_project_root() {
 # Get project root
 PROJECT_ROOT=$(get_project_root "$DIRECTORY")
 
+# Derive OMT_PROJECT name (main repo name, not worktree branch name)
+PROJECT_NAME=""
+if command -v git &> /dev/null; then
+  GIT_COMMON_DIR=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)
+  if [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_COMMON_DIR" != ".git" ]; then
+    # Worktree: git-common-dir returns absolute path like /path/to/repo/.git
+    PROJECT_NAME=$(basename "$(dirname "$GIT_COMMON_DIR")")
+  elif [ "$GIT_COMMON_DIR" = ".git" ]; then
+    # Standard repo: use toplevel directory name
+    PROJECT_NAME=$(basename "$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null)")
+  fi
+fi
+
+# Final fallback: use PROJECT_ROOT basename
+if [ -z "$PROJECT_NAME" ]; then
+  PROJECT_NAME=$(basename "$PROJECT_ROOT")
+fi
+
+# Export OMT_PROJECT via Claude env file
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  echo "export OMT_PROJECT=$PROJECT_NAME" >> "$CLAUDE_ENV_FILE"
+fi
+
 MESSAGES=""
 
 # Cleanup stale ralph-state files (older than 3 hours)
