@@ -206,6 +206,37 @@ Use the three axes to resolve ambiguous classifications. The core question for P
 
 7. **Missing index on a frequently queried column** -- If current production queries on this column already show measurable latency (e.g., p99 > SLA) with the existing dataset: **P1** (demonstrable performance defect under today's conditions). If the current dataset is small enough that full scans complete within SLA but the table grows predictably: **P2(b)** (no defect today, but predictable failure as data grows).
 
+#### Decision Gate Walkthrough
+
+The following examples explicitly trace the 3-axis evaluation and the P1/P2 decision gate to show how each axis contributes to the final classification. Use this reasoning chain when classifying ambiguous issues.
+
+**[P1] Missing index on frequently queried column — current p99 exceeds SLA**
+- Scenario: `orders` table has 50K rows. `order_date` column has no index. Dashboard queries filter by date range.
+- **Impact Delta**: p99 latency (480ms) exceeds SLA (200ms) → partial failure. Users experience dashboard timeouts.
+- **Probability**: Occurs on every date-range query with the current 50K-row dataset → today's realistic conditions, not hypothetical.
+- **Maintainability**: Adding the index is a single migration; delaying requires SLA exception process.
+- **Decision Gate**: (1) Defect in current code? → **Yes** — missing index causes full table scans. (2) Manifests under today's conditions? → **Yes** — 50K rows already produce SLA violations in production.
+- **Decisive axis**: Probability — the trigger condition (dataset size causing SLA breach) exists today.
+- **Verdict: P1**
+
+**[P2(b)] Same pattern, different data scale — current performance within SLA**
+- Scenario: Same `orders` table, same missing index. But the table has 1K rows, and p99 is 12ms (well within 200ms SLA). Order volume doubles quarterly.
+- **Impact Delta**: Same as above — full table scans without index.
+- **Probability**: No SLA violation at current 1K rows. At projected 100K rows (6 months), full scans will exceed SLA.
+- **Maintainability**: Same — trivial migration now vs. locking migration on large table later.
+- **Decision Gate**: (1) Defect in current code? → **Yes** — missing index is the same code defect. (2) Manifests under today's conditions? → **No** — 1K rows complete within SLA. Future growth makes failure predictable, not current.
+- **Decisive axis**: Probability — the trigger condition (dataset size) does not exist today but is projected under realistic growth.
+- **Verdict: P2(b)**
+
+**[P1] Race condition in payment deduction — concurrent requests cause double-charge**
+- Scenario: `deductBalance()` reads balance, checks sufficiency, then writes new balance. No optimistic locking or atomic operation.
+- **Impact Delta**: Two concurrent requests for the same user both pass the balance check and both deduct → user is double-charged. Data corruption with financial impact.
+- **Probability**: The payment API handles concurrent requests from mobile and web clients for the same user account. Concurrent access is a normal traffic pattern, not an edge case.
+- **Maintainability**: Fix requires adding optimistic locking (`version` column) or atomic DB operation. Establishes concurrency-safe pattern for other financial operations.
+- **Decision Gate**: (1) Defect in current code? → **Yes** — no concurrency control on a concurrent-access path. (2) Manifests under today's conditions? → **Yes** — multi-device users making near-simultaneous requests is confirmed in access logs.
+- **Decisive axis**: Probability — concurrent access is a normal traffic pattern, confirmed in production.
+- **Verdict: P1**
+
 ### Project Context Examples
 
 The following examples show how project context shifts severity — in both directions. Context can lower severity (threat doesn't apply) or raise it (domain amplifies impact).
