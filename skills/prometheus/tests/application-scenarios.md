@@ -23,6 +23,10 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-13 | Clearance Checklist | Clearance Checklist | Sequential Interview |
 | P-14 | Metis Feedback Loop | Metis Feedback Loop | Plan Generation + Gap Classification |
 | P-15 | Failure Mode Avoidance | Failure Mode Avoidance | Sequential Interview + Plan Generation |
+| P-16 | Context Loading | Context Loading | Context Brokering Protocol |
+| P-17 | Intent Classification | Intent Classification | Interview Mode |
+| P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
+| P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 
 ---
 
@@ -360,6 +364,91 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 ---
 
+## Scenario P-16: Context Loading
+
+**Primary Technique:** Context Loading — 프로젝트 컨텍스트 사전 로딩으로 인터뷰 전 배경 지식 확보
+
+**Prompt:**
+```
+우리 프로젝트에 OAuth 2.0 인증 추가해줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Context files loaded pre-interview | Skill reads `~/.omt/$OMT_PROJECT/context/` files (project.md, conventions.md, decisions.md, gotchas.md) before starting interview |
+| V2 | Context-covered topics skip explore | For architecture/convention questions covered by context files, skill does NOT dispatch explore agent (trust level rule) |
+| V3 | $OMT_PROJECT resolution referenced | Context Loading section references $OMT_PROJECT resolved by SessionStart hook |
+| V4 | Graceful skip on missing context | If context directory doesn't exist, skill proceeds to interview without error or user prompt |
+
+---
+
+## Scenario P-17: Intent Classification
+
+**Primary Technique:** Intent Classification — 요청 규모별 4-tier 분류로 인터뷰 깊이 조절
+
+**Prompt (Trivial intent):**
+```
+헤더 텍스트 "Welcome"을 "Hello"로 변경해줘
+```
+
+**Prompt (Architecture intent):**
+```
+마이크로서비스 아키텍처로 모노리스 분해 계획 세워줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Trivial classified correctly | Simple text change classified as Trivial with 1-2 questions only |
+| V2 | Architecture classified correctly | Monolith decomposition classified as Architecture with Oracle MANDATORY |
+| V3 | Clearance unchanged for all intents | Both Trivial and Architecture requests go through same 5-item Clearance Checklist |
+| V4 | User can request reclassification | If user disagrees with classification, skill accepts reclassification request |
+
+---
+
+## Scenario P-18: Execution Strategy in Plan
+
+**Primary Technique:** Execution Strategy — Wave 기반 병렬 실행 전략 생성
+
+**Prompt:**
+```
+사용자 인증 시스템 구현해줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Wave visualization present | Generated plan includes Wave visualization format showing parallel execution groups |
+| V2 | Dependency Matrix present | Plan includes abbreviated Dependency Matrix with Blocked By / Blocks columns |
+| V3 | Critical Path identified | Plan states the critical path through dependent tasks |
+| V4 | TODO Parallelization fields | Each TODO contains Blocked By / Blocks / Wave fields |
+
+---
+
+## Scenario P-19: QA Scenarios in TODO
+
+**Primary Technique:** QA Scenarios — TODO별 MANDATORY QA 시나리오 포함
+
+**Prompt:**
+```
+API rate limiting 기능 추가해줘
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | QA Scenarios present in every TODO | Each TODO item in the plan contains a QA Scenarios subsection |
+| V2 | 4-field structure | Each QA Scenario has Tool, Preconditions, Steps, Expected fields |
+| V3 | Minimum 2 scenarios per TODO | At least Happy path + Failure/edge case for each TODO |
+| V4 | Verification Strategy references QA | Plan's Verification Strategy section references per-TODO QA Scenarios as primary mechanism |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -375,3 +464,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | P-9 | Acceptance Criteria Drafting | | | AC section rewritten -- verification points updated, needs re-testing |
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
+| P-16 | Context Loading | | | |
+| P-17 | Intent Classification | | | |
+| P-18 | Execution Strategy in Plan | | | |
+| P-19 | QA Scenarios in TODO | | | |
