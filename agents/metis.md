@@ -1,6 +1,6 @@
 ---
 name: metis
-description: Pre-planning consultant - reviews plans, specs, requirements before implementation to catch missing questions, undefined guardrails, unvalidated assumptions, scope risks
+description: Use when delegating pre-implementation review of plans, specs, or requirements — returns structured gap analysis with verdict
 model: opus
 skills: metis
 ---
