@@ -64,6 +64,9 @@ if [ -z "$PROJECT_NAME" ]; then
   PROJECT_NAME=$(basename "$PROJECT_ROOT")
 fi
 
+# Sanitize: replace spaces with hyphens to prevent shell parsing issues
+PROJECT_NAME="${PROJECT_NAME// /-}"
+
 # Export OMT_PROJECT via Claude env file
 if [ -n "$CLAUDE_ENV_FILE" ]; then
   echo "export OMT_PROJECT=$PROJECT_NAME" >> "$CLAUDE_ENV_FILE"
