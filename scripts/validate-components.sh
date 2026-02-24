@@ -430,6 +430,24 @@ validate_components() {
         fi
     fi
 
+    # mcps 검증 (새 형식만 지원, .yaml 확장자)
+    field_exists=$(yq '.mcps' "$yaml_file")
+    if [[ "$field_exists" != "null" ]]; then
+        local count=$(yq '.mcps.items | length // 0' "$yaml_file")
+        if [[ $count -gt 0 ]]; then
+            for i in $(seq 0 $((count - 1))); do
+                local component
+                component=$(get_item_component "$yaml_file" "mcps" "$i")
+
+                if [[ -n "$component" && "$component" != "null" ]]; then
+                    validate_scoped_component "mcps" "$component" ".yaml" || true
+                fi
+            done
+        fi
+    fi
+
+    # plugins 검증 건너뜀 (외부 패키지 - 소스 파일 없음)
+
     return 0
 }
 

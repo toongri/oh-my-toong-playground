@@ -35,7 +35,7 @@ log_success() {
 # 유효한 값 정의
 # =============================================================================
 
-VALID_TOP_LEVEL_FIELDS="name path agents commands hooks skills scripts rules platforms"
+VALID_TOP_LEVEL_FIELDS="name path agents commands hooks skills scripts rules mcps plugins config platforms"
 
 # Section-level fields (new format: object with items)
 VALID_AGENT_SECTION_FIELDS="platforms items"
@@ -52,6 +52,11 @@ VALID_SKILL_ITEM_FIELDS="component platforms"
 VALID_SCRIPT_ITEM_FIELDS="component platforms"
 VALID_RULE_SECTION_FIELDS="platforms items"
 VALID_RULE_ITEM_FIELDS="component platforms"
+
+VALID_MCP_SECTION_FIELDS="platforms items"
+VALID_MCP_ITEM_FIELDS="component platforms"
+VALID_PLUGIN_SECTION_FIELDS="platforms items"
+VALID_PLUGIN_ITEM_FIELDS="name platforms"
 
 VALID_ADD_HOOK_ITEM_FIELDS="event component command type matcher timeout prompt"
 
@@ -583,6 +588,251 @@ validate_rules() {
     done
 }
 
+validate_mcps() {
+    local yaml_file="$1"
+    local platforms_json="$2"
+
+    local field_exists=$(yq '.mcps' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    # Reject old array format
+    if ! check_new_format "$yaml_file" "mcps"; then
+        return 0
+    fi
+
+    # New format: object with platforms and items
+    check_unknown_fields "$yaml_file" ".mcps" "$VALID_MCP_SECTION_FIELDS" "mcps"
+    check_platforms_values "$yaml_file" ".mcps.platforms" "mcps.platforms"
+
+    local section_platforms=$(yq -o=json '.mcps.platforms // null' "$yaml_file")
+    if [[ "$section_platforms" == "null" ]]; then
+        section_platforms="$platforms_json"
+    fi
+
+    local count=$(yq '.mcps.items | length // 0' "$yaml_file")
+    for i in $(seq 0 $((count - 1))); do
+        # Check item type directly (not in subshell)
+        local item_type=$(yq ".mcps.items[$i] | type" "$yaml_file")
+        local component
+        local is_object_item=false
+
+        if [[ "$item_type" == "!!str" ]]; then
+            component=$(yq ".mcps.items[$i]" "$yaml_file")
+        else
+            is_object_item=true
+            component=$(yq ".mcps.items[$i].component // \"\"" "$yaml_file")
+        fi
+
+        if [[ "$is_object_item" == "true" ]]; then
+            check_unknown_fields "$yaml_file" ".mcps.items[$i]" "$VALID_MCP_ITEM_FIELDS" "mcps.items[$i]"
+
+            if [[ -n "$component" && "$component" != "null" ]]; then
+                check_project_component_format "$component" "mcps.items[$i].component"
+            fi
+
+            check_platforms_values "$yaml_file" ".mcps.items[$i].platforms" "mcps.items[$i].platforms"
+        else
+            if [[ -n "$component" && "$component" != "null" ]]; then
+                check_project_component_format "$component" "mcps.items[$i]"
+            fi
+        fi
+    done
+}
+
+validate_plugins() {
+    local yaml_file="$1"
+    local platforms_json="$2"
+
+    local field_exists=$(yq '.plugins' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    # Reject old array format
+    if ! check_new_format "$yaml_file" "plugins"; then
+        return 0
+    fi
+
+    # New format: object with platforms and items
+    check_unknown_fields "$yaml_file" ".plugins" "$VALID_PLUGIN_SECTION_FIELDS" "plugins"
+    check_platforms_values "$yaml_file" ".plugins.platforms" "plugins.platforms"
+
+    local count=$(yq '.plugins.items | length // 0' "$yaml_file")
+    for i in $(seq 0 $((count - 1))); do
+        # Check item type directly (not in subshell)
+        local item_type=$(yq ".plugins.items[$i] | type" "$yaml_file")
+        local name
+        local is_object_item=false
+
+        if [[ "$item_type" == "!!str" ]]; then
+            # String shorthand: string = name
+            name=$(yq ".plugins.items[$i]" "$yaml_file")
+        else
+            is_object_item=true
+            name=$(yq ".plugins.items[$i].name // \"\"" "$yaml_file")
+        fi
+
+        if [[ "$is_object_item" == "true" ]]; then
+            check_unknown_fields "$yaml_file" ".plugins.items[$i]" "$VALID_PLUGIN_ITEM_FIELDS" "plugins.items[$i]"
+
+            # name is required for object items
+            if [[ -z "$name" || "$name" == "null" ]]; then
+                log_error "plugins.items[$i]: 'name' 필드가 필요합니다"
+            fi
+
+            check_platforms_values "$yaml_file" ".plugins.items[$i].platforms" "plugins.items[$i].platforms"
+        fi
+    done
+}
+
+# =============================================================================
+# Config known-fields definitions (case statements for Bash 3.2 compatibility)
+# =============================================================================
+
+# Returns expected type for a known Claude config field, or "" if unknown
+# Source: https://code.claude.com/docs/en/settings
+get_claude_field_type() {
+    local field="$1"
+    case "$field" in
+        language|model|outputStyle|autoUpdatesChannel|plansDirectory|teammateMode)
+            echo "string" ;;
+        skipDangerousModePermissionPrompt|disableAllHooks|enableAllProjectMcpServers|showTurnDuration|terminalProgressBarEnabled|respectGitignore|alwaysThinkingEnabled)
+            echo "boolean" ;;
+        cleanupPeriodDays)
+            echo "number" ;;
+        permissions|env|sandbox|attribution)
+            echo "object" ;;
+        enabledPlugins|enabledMcpjsonServers|disabledMcpjsonServers|availableModels)
+            echo "array" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
+# Returns expected type for a known Gemini config field, or "" if unknown
+# Source: https://google-gemini.github.io/gemini-cli/docs/get-started/configuration.html
+get_gemini_field_type() {
+    local field="$1"
+    case "$field" in
+        general|ui|model|context|tools|mcp|security|privacy|telemetry|advanced)
+            echo "object" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
+# Returns expected type for a known Codex config field, or "" if unknown
+# Source: https://github.com/openai/codex/blob/main/docs/config.md
+get_codex_field_type() {
+    local field="$1"
+    case "$field" in
+        model|approval_policy|sandbox_mode|personality|model_reasoning_effort|shell_environment_policy)
+            echo "string" ;;
+        features)
+            echo "object" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
+# Check if a field is reserved for a given platform
+is_reserved_field() {
+    local platform="$1"
+    local field="$2"
+    case "$platform:$field" in
+        claude:hooks|claude:statusLine)
+            return 0 ;;
+        gemini:mcpServers)
+            return 0 ;;
+        codex:mcp_servers|codex:projects)
+            return 0 ;;
+        *)
+            return 1 ;;
+    esac
+}
+
+# Map yq type output to our type names
+normalize_yq_type() {
+    local yq_type="$1"
+    case "$yq_type" in
+        '!!str')    echo "string" ;;
+        '!!bool')   echo "boolean" ;;
+        '!!int')    echo "number" ;;
+        '!!float')  echo "number" ;;
+        '!!map')    echo "object" ;;
+        '!!seq')    echo "array" ;;
+        *)          echo "unknown" ;;
+    esac
+}
+
+validate_config() {
+    local yaml_file="$1"
+    local platforms_json="$2"
+
+    local field_exists=$(yq '.config' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    # config must be a map
+    local config_type=$(yq '.config | type' "$yaml_file")
+    if [[ "$config_type" != "!!map" ]]; then
+        log_error "config: map 형식이어야 합니다 (현재: $config_type)"
+        return 0
+    fi
+
+    # Iterate platform keys under config
+    local platform_keys=$(yq '.config | keys | .[]' "$yaml_file" 2>/dev/null || echo "")
+    for platform in $platform_keys; do
+        # Validate platform key
+        if [[ ! " $VALID_TARGETS " =~ " $platform " ]]; then
+            log_error "config: 잘못된 플랫폼 '$platform' (지원: $VALID_TARGETS)"
+            continue
+        fi
+
+        # Platform value must be a map
+        local platform_type=$(yq ".config.$platform | type" "$yaml_file")
+        if [[ "$platform_type" != "!!map" ]]; then
+            log_error "config.$platform: map 형식이어야 합니다 (현재: $platform_type)"
+            continue
+        fi
+
+        # Iterate fields under each platform
+        local field_keys=$(yq ".config.$platform | keys | .[]" "$yaml_file" 2>/dev/null || echo "")
+        for field in $field_keys; do
+            # Check reserved fields first (warning)
+            if is_reserved_field "$platform" "$field"; then
+                log_warn "config.$platform.$field: 예약된 필드입니다 (sync에서 관리하지 않음)"
+                continue
+            fi
+
+            # Get expected type for known fields
+            local expected_type=""
+            case "$platform" in
+                claude) expected_type=$(get_claude_field_type "$field") ;;
+                gemini) expected_type=$(get_gemini_field_type "$field") ;;
+                codex)  expected_type=$(get_codex_field_type "$field") ;;
+            esac
+
+            if [[ -z "$expected_type" ]]; then
+                # Unknown field - warning
+                log_warn "config.$platform.$field: 알 수 없는 필드입니다"
+                continue
+            fi
+
+            # Type check for known fields
+            local actual_yq_type=$(yq ".config.$platform.$field | type" "$yaml_file")
+            local actual_type=$(normalize_yq_type "$actual_yq_type")
+
+            if [[ "$actual_type" != "$expected_type" ]]; then
+                log_error "config.$platform.$field: 타입 불일치 (기대: $expected_type, 실제: $actual_type)"
+            fi
+        done
+    done
+}
+
 validate_yaml_schema() {
     local yaml_file="$1"
     local yaml_name=$(basename "$yaml_file")
@@ -608,6 +858,9 @@ validate_yaml_schema() {
     validate_skills "$yaml_file" "$platforms_json"
     validate_scripts "$yaml_file" "$platforms_json"
     validate_rules "$yaml_file" "$platforms_json"
+    validate_mcps "$yaml_file" "$platforms_json"
+    validate_plugins "$yaml_file" "$platforms_json"
+    validate_config "$yaml_file" "$platforms_json"
 
     return 0
 }
