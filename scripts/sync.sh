@@ -974,22 +974,21 @@ sync_mcps() {
             case "$target" in
                 claude)
                     if [[ "$prepared_claude" == false && "$DRY_RUN" != true ]]; then
-                        local mcp_file="$target_path/.mcp.json"
-                        if [[ -f "$mcp_file" ]]; then
+                        local claude_config="${CLAUDE_USER_CONFIG:-$HOME/.claude.json}"
+                        if [[ -f "$claude_config" ]]; then
                             local backup_base="$ROOT_DIR/.sync-backup/$CURRENT_BACKUP_SESSION"
-                            local backup_path
-                            if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
-                                backup_path="$backup_base/.mcp.json"
-                            else
-                                backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/.mcp.json"
-                            fi
+                            local backup_path="$backup_base/claude-user.json"
                             mkdir -p "$(dirname "$backup_path")"
-                            cp "$mcp_file" "$backup_path"
+                            cp "$claude_config" "$backup_path"
                             log_info "백업 완료: $backup_path"
                         fi
                         prepared_claude=true
                     fi
-                    claude_sync_mcps_merge "$target_path" "$server_name" "$server_json" "$DRY_RUN"
+                    local scope="user"
+                    if [[ -n "$CURRENT_PROJECT_NAME" ]]; then
+                        scope="local"
+                    fi
+                    claude_sync_mcps_merge "$target_path" "$server_name" "$server_json" "$DRY_RUN" "$scope" "$target_path"
                     ;;
                 gemini)
                     if [[ "$prepared_gemini" == false && "$DRY_RUN" != true ]]; then
