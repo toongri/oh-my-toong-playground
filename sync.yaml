@@ -45,3 +45,9 @@ path: /Users/toong
 # skills:
 #   - component: prometheus              # 글로벌: skills/prometheus/
 #   - component: my-project:testing      # 프로젝트: projects/my-project/skills/testing/
+
+# 설정 동기화 (settings.local.json으로 머지)
+config:
+  claude:
+    language: "한국어"
+    outputStyle: "Explanatory"
