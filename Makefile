@@ -1,4 +1,4 @@
-.PHONY: sync sync-dry validate validate-schema validate-components validate-tests test migrate help
+.PHONY: sync sync-dry validate validate-schema validate-components validate-tests test help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -8,7 +8,6 @@ help:
 	@echo "  make validate-schema    - 스키마 검증 (필드, 값 유효성)"
 	@echo "  make validate-components - 컴포넌트 검증 (파일 존재 여부)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
-	@echo "  make migrate            - settings.json 개인 필드를 settings.local.json으로 이동"
 
 sync: validate validate-tests
 	@./scripts/sync.sh
@@ -28,6 +27,3 @@ validate-tests:
 	@./scripts/run-tests.sh
 
 test: validate-tests
-
-migrate:
-	@./scripts/migrate-settings.sh
