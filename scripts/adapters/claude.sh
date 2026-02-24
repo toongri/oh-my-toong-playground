@@ -63,7 +63,7 @@ claude_supports_feature() {
     local feature="$1"
 
     case "$feature" in
-        agents|commands|hooks|skills|rules)
+        agents|commands|hooks|skills|rules|plugins|mcps|config)
             return 0
             ;;
         *)
@@ -502,6 +502,72 @@ claude_sync_rules_direct() {
 }
 
 # =============================================================================
+# Plugin Install
+# =============================================================================
+
+# Install a plugin via Claude CLI
+# Arguments:
+#   $1 - plugin_name: Plugin package name
+#   $2 - dry_run: "true" or "false"
+claude_sync_plugin_install() {
+    local plugin_name="$1"
+    local dry_run="${2:-false}"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "claude plugin install $plugin_name"
+        return 0
+    fi
+
+    if ! claude_is_available; then
+        log_warn "Claude CLI가 사용 불가합니다. 플러그인 설치 스킵: $plugin_name"
+        return 0
+    fi
+
+    log_info "플러그인 설치: $plugin_name"
+    if ! claude plugin install "$plugin_name" 2>&1; then
+        log_warn "플러그인 설치 실패 (계속 진행): $plugin_name"
+    fi
+}
+
+# =============================================================================
+# MCP Server Sync
+# =============================================================================
+
+# Merge an MCP server definition into .mcp.json
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - server_name: MCP server name (used as key in mcpServers)
+#   $3 - server_json: JSON content of the MCP server definition
+#   $4 - dry_run: "true" or "false"
+claude_sync_mcps_merge() {
+    local target_path="$1"
+    local server_name="$2"
+    local server_json="$3"
+    local dry_run="${4:-false}"
+
+    local mcp_file="$target_path/.mcp.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "MCP merge: $server_name -> $mcp_file"
+        log_dry "Server config: $server_json"
+        return 0
+    fi
+
+    # Read existing .mcp.json or create default structure
+    local current_content='{"mcpServers": {}}'
+    if [[ -f "$mcp_file" ]]; then
+        current_content=$(cat "$mcp_file")
+    fi
+
+    # Deep merge: set .mcpServers.<name> to server_json
+    local new_content
+    new_content=$(echo "$current_content" | jq --arg name "$server_name" --argjson server "$server_json" '.mcpServers[$name] = $server')
+
+    echo "$new_content" | jq '.' > "$mcp_file"
+    log_info "MCP merged: $server_name -> $mcp_file"
+}
+
+# =============================================================================
 # Settings Update
 # =============================================================================
 
@@ -538,6 +604,40 @@ claude_update_settings() {
 
     echo "$new_settings" | jq '.' > "$settings_file"
     log_info "Updated settings.json: $settings_file"
+}
+
+# =============================================================================
+# Config Sync
+# =============================================================================
+
+# Sync config by deep merging into settings.local.json
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - config_json: JSON object with config fields
+#   $3 - dry_run: "true" or "false"
+claude_sync_config() {
+    local target_path="$1"
+    local config_json="$2"
+    local dry_run="${3:-false}"
+
+    local settings_file="$target_path/.claude/settings.local.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Config merge: $config_json -> $settings_file"
+        return 0
+    fi
+
+    mkdir -p "$target_path/.claude"
+
+    local current="{}"
+    if [[ -f "$settings_file" ]]; then
+        current=$(cat "$settings_file")
+    fi
+
+    # Deep merge: existing * new (new wins on conflict)
+    local merged=$(echo "$current" | jq --argjson new "$config_json" '. * $new')
+    echo "$merged" | jq '.' > "$settings_file"
+    log_info "Config merged: $settings_file"
 }
 
 # =============================================================================

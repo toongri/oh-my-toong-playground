@@ -66,7 +66,7 @@ gemini_supports_feature() {
         agents)
             return 1  # No native subagent support
             ;;
-        commands|hooks|skills)
+        commands|hooks|skills|config|mcps)
             return 0
             ;;
         *)
@@ -402,6 +402,47 @@ gemini_sync_scripts_direct() {
 }
 
 # =============================================================================
+# MCP Server Sync
+# =============================================================================
+
+# Merge an MCP server definition into .gemini/settings.json
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - server_name: MCP server name (used as key in mcpServers)
+#   $3 - server_json: JSON content of the MCP server definition
+#   $4 - dry_run: "true" or "false"
+gemini_sync_mcps_merge() {
+    local target_path="$1"
+    local server_name="$2"
+    local server_json="$3"
+    local dry_run="${4:-false}"
+
+    local settings_file="$target_path/.gemini/settings.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "MCP merge: $server_name -> $settings_file"
+        log_dry "Server config: $server_json"
+        return 0
+    fi
+
+    # Ensure .gemini directory exists
+    mkdir -p "$target_path/.gemini"
+
+    # Read existing settings.json or create empty object
+    local current_settings="{}"
+    if [[ -f "$settings_file" ]]; then
+        current_settings=$(cat "$settings_file")
+    fi
+
+    # Merge: set .mcpServers.<name> to server_json, preserving all other keys
+    local new_settings
+    new_settings=$(echo "$current_settings" | jq --arg name "$server_name" --argjson server "$server_json" '.mcpServers[$name] = $server')
+
+    echo "$new_settings" | jq '.' > "$settings_file"
+    log_info "MCP merged: $server_name -> $settings_file"
+}
+
+# =============================================================================
 # Settings Update
 # =============================================================================
 
@@ -437,6 +478,40 @@ gemini_update_settings() {
 
     echo "$new_settings" | jq '.' > "$settings_file"
     log_info "Updated settings.json: $settings_file"
+}
+
+# =============================================================================
+# Config Sync
+# =============================================================================
+
+# Sync config by deep merging into settings.json
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - config_json: JSON object with config fields
+#   $3 - dry_run: "true" or "false"
+gemini_sync_config() {
+    local target_path="$1"
+    local config_json="$2"
+    local dry_run="${3:-false}"
+
+    local settings_file="$target_path/.gemini/settings.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Config merge: $config_json -> $settings_file"
+        return 0
+    fi
+
+    mkdir -p "$target_path/.gemini"
+
+    local current="{}"
+    if [[ -f "$settings_file" ]]; then
+        current=$(cat "$settings_file")
+    fi
+
+    # Deep merge: existing * new (preserves hooks, mcpServers, etc.)
+    local merged=$(echo "$current" | jq --argjson new "$config_json" '. * $new')
+    echo "$merged" | jq '.' > "$settings_file"
+    log_info "Config merged: $settings_file"
 }
 
 # =============================================================================
