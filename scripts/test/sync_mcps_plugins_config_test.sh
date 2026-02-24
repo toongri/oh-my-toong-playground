@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # Sync MCP/Plugin/Config E2E Tests
-# Tests for MCP server merge, plugin install, config passthrough, and migration
+# Tests for MCP server merge, plugin install, and config passthrough
 # =============================================================================
 set -euo pipefail
 
@@ -420,171 +420,6 @@ test_config_missing_platform_skip() {
 }
 
 # =============================================================================
-# Tests: Migration
-# Source migrate_path function from migrate-settings.sh
-# =============================================================================
-
-# Reserved keys used by migrate_path (same as migrate-settings.sh)
-MIGRATE_RESERVED_KEYS='["hooks", "statusLine"]'
-
-# Inline migrate_path function (extracted from migrate-settings.sh)
-# Tests call this directly instead of running the full script
-_test_migrate_path() {
-    local target_path="$1"
-    local dry_run="${2:-false}"
-    local settings_file="$target_path/.claude/settings.json"
-
-    if [[ ! -f "$settings_file" ]]; then
-        return 0
-    fi
-
-    local settings
-    settings=$(jq '.' "$settings_file")
-
-    local personal_fields
-    personal_fields=$(echo "$settings" | jq --argjson reserved "$MIGRATE_RESERVED_KEYS" '
-        to_entries | map(select(.key as $k | $reserved | index($k) | not)) | from_entries
-    ')
-
-    if [[ "$personal_fields" == "{}" ]]; then
-        return 0
-    fi
-
-    if [[ "$dry_run" == "true" ]]; then
-        local field_keys
-        field_keys=$(echo "$personal_fields" | jq -r 'keys[]')
-        echo "$field_keys" | while IFS= read -r key; do
-            log_dry "  이동 대상 필드: $key"
-        done
-        return 0
-    fi
-
-    # Deep merge into settings.local.json
-    local local_settings_file="$target_path/.claude/settings.local.json"
-    local existing_local="{}"
-    if [[ -f "$local_settings_file" ]]; then
-        existing_local=$(jq '.' "$local_settings_file")
-    fi
-
-    local merged_local
-    merged_local=$(echo "$existing_local" "$personal_fields" | jq -s '.[0] * .[1]')
-
-    # Clean settings.json (keep only reserved keys)
-    local cleaned_settings
-    cleaned_settings=$(echo "$settings" | jq --argjson reserved "$MIGRATE_RESERVED_KEYS" '
-        to_entries | map(select(.key as $k | $reserved | index($k) | not | not)) | from_entries
-    ')
-
-    echo "$merged_local" | jq '.' > "$local_settings_file"
-    echo "$cleaned_settings" | jq '.' > "$settings_file"
-}
-
-test_migration_field_move() {
-    # fields moved from settings.json to settings.local.json
-    local target_path="$TEST_TMP_DIR/target"
-    mkdir -p "$target_path/.claude"
-
-    # Create settings.json with both managed and personal fields
-    cat > "$target_path/.claude/settings.json" << 'EOF'
-{
-  "hooks": {"PreToolUse": []},
-  "language": "Korean",
-  "model": "claude-opus-4"
-}
-EOF
-
-    # Call test migrate_path directly
-    _test_migrate_path "$target_path" "false"
-
-    # settings.json should only have hooks
-    local has_language
-    has_language=$(jq 'has("language")' "$target_path/.claude/settings.json")
-    if [[ "$has_language" == "true" ]]; then
-        echo "ASSERTION FAILED: language should be moved out of settings.json"
-        return 1
-    fi
-
-    # settings.local.json should have the personal fields
-    if [[ ! -f "$target_path/.claude/settings.local.json" ]]; then
-        echo "ASSERTION FAILED: settings.local.json should be created"
-        return 1
-    fi
-
-    local local_lang
-    local_lang=$(jq -r '.language' "$target_path/.claude/settings.local.json")
-    if [[ "$local_lang" != "Korean" ]]; then
-        echo "ASSERTION FAILED: language should be in settings.local.json, got '$local_lang'"
-        return 1
-    fi
-
-    return 0
-}
-
-test_migration_idempotent() {
-    # second run -> "nothing to migrate" (no fields to move)
-    local target_path="$TEST_TMP_DIR/target"
-    mkdir -p "$target_path/.claude"
-
-    # Create settings.json with ONLY managed fields
-    cat > "$target_path/.claude/settings.json" << 'EOF'
-{
-  "hooks": {"PreToolUse": []}
-}
-EOF
-
-    # Call test migrate_path directly
-    _test_migrate_path "$target_path" "false"
-
-    # settings.local.json should NOT be created (nothing to move)
-    if [[ -f "$target_path/.claude/settings.local.json" ]]; then
-        echo "ASSERTION FAILED: settings.local.json should NOT be created when nothing to migrate"
-        return 1
-    fi
-
-    return 0
-}
-
-test_migration_dry_run() {
-    # --dry-run shows fields without modifying
-    local target_path="$TEST_TMP_DIR/target"
-    mkdir -p "$target_path/.claude"
-
-    # Create settings.json with personal fields
-    cat > "$target_path/.claude/settings.json" << 'EOF'
-{
-  "hooks": {"PreToolUse": []},
-  "language": "Korean"
-}
-EOF
-
-    # Call test migrate_path with dry-run
-    local output
-    output=$(_test_migrate_path "$target_path" "true" 2>&1) || true
-
-    # settings.json should NOT be modified (language should still be there)
-    local has_language
-    has_language=$(jq 'has("language")' "$target_path/.claude/settings.json")
-    if [[ "$has_language" != "true" ]]; then
-        echo "ASSERTION FAILED: settings.json should NOT be modified in dry-run mode"
-        return 1
-    fi
-
-    # settings.local.json should NOT be created
-    if [[ -f "$target_path/.claude/settings.local.json" ]]; then
-        echo "ASSERTION FAILED: settings.local.json should NOT be created in dry-run mode"
-        return 1
-    fi
-
-    # Output should mention dry-run
-    if echo "$output" | grep -qi "DRY-RUN\|dry.run"; then
-        return 0
-    else
-        echo "ASSERTION FAILED: Output should mention dry-run, got: $output"
-        return 1
-    fi
-}
-
-# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -610,11 +445,6 @@ main() {
     run_test test_config_gemini_merge
     run_test test_config_codex_toml
     run_test test_config_missing_platform_skip
-
-    # Migration Tests
-    run_test test_migration_field_move
-    run_test test_migration_idempotent
-    run_test test_migration_dry_run
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
