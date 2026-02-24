@@ -245,7 +245,7 @@ validate_cli_project_files() {
     # 각 CLI에 대해 프로젝트 파일 존재 확인
     if [[ "$used_claude" == true ]]; then
         local project_file=$(get_cli_project_file "claude")
-        if [[ ! -f "$target_path/$project_file" ]]; then
+        if [[ ! -f "$target_path/$project_file" && ! -f "$target_path/.claude/$project_file" ]]; then
             echo -e "${RED}[ERROR]${NC} CLI 프로젝트 파일 없음: $project_file (대상: $target_path)" >&2
             echo -e "        먼저 'init'을 실행하여 프로젝트를 초기화하세요." >&2
             ((ERROR_COUNT++)) || true
