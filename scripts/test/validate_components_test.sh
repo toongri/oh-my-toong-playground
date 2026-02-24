@@ -1126,6 +1126,80 @@ EOF
 }
 
 # =============================================================================
+# Tests: MCP Component Validation
+# =============================================================================
+
+test_mcps_component_found() {
+    # MCP component validation should pass when mcps/test.yaml exists
+    cat > "$TEST_TMP_DIR/sync.yaml" << EOF
+name: root
+path: $TEST_TMP_DIR/target
+platforms:
+  - claude
+mcps:
+  items:
+    - test-server
+EOF
+
+    # Create target CLAUDE.md
+    echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
+
+    # Create mcps source file
+    mkdir -p "$TEST_TMP_DIR/mcps"
+    cat > "$TEST_TMP_DIR/mcps/test-server.yaml" << 'MCPEOF'
+command: echo
+args:
+  - "test"
+MCPEOF
+
+    # Reset error count
+    ERROR_COUNT=0
+
+    # Run validation
+    validate_components "$TEST_TMP_DIR/sync.yaml" 2>/dev/null
+
+    # Should have no errors
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "MCP component validation should pass when .yaml file exists"
+        return 1
+    fi
+}
+
+test_mcps_component_missing() {
+    # MCP component validation should fail when mcps/nonexistent.yaml does not exist
+    cat > "$TEST_TMP_DIR/sync.yaml" << EOF
+name: root
+path: $TEST_TMP_DIR/target
+platforms:
+  - claude
+mcps:
+  items:
+    - nonexistent-server
+EOF
+
+    # Create target CLAUDE.md
+    echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
+
+    # No mcps/ directory or file created
+    # Reset error count
+    ERROR_COUNT=0
+
+    # Run validation, capture output
+    local output_file="$TEST_TMP_DIR/output.txt"
+    validate_components "$TEST_TMP_DIR/sync.yaml" > "$output_file" 2>&1
+
+    # Should have errors
+    if [[ $ERROR_COUNT -gt 0 ]]; then
+        return 0
+    else
+        echo "MCP component validation should fail when .yaml file does not exist"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1196,6 +1270,10 @@ main() {
     run_test test_rules_validation_fails_with_missing_rule
     run_test test_rules_validation_project_upward_search
     run_test test_rules_validation_falls_back_to_global
+
+    # MCP component validation
+    run_test test_mcps_component_found
+    run_test test_mcps_component_missing
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

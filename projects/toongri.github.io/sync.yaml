@@ -70,3 +70,7 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
+
+config:
+  claude:
+    enableAllProjectMcpServers: true

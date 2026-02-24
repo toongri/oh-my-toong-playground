@@ -76,3 +76,11 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
+
+mcps:
+  items:
+    - context7
+
+config:
+  claude:
+    enableAllProjectMcpServers: true

@@ -487,6 +487,236 @@ EOF
 }
 
 # =============================================================================
+# Tests: mcps Section Validation
+# =============================================================================
+
+test_mcps_valid() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+mcps:
+  items:
+    - context7
+    - component: custom-server
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass for valid mcps section"
+        return 1
+    fi
+}
+
+test_mcps_string_shorthand() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+mcps:
+  items:
+    - my-server
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass for string shorthand in mcps items"
+        return 1
+    fi
+}
+
+test_mcps_invalid_item_field() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+mcps:
+  items:
+    - component: test-server
+      unknown_field: value
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for unknown field in mcps item"
+        return 1
+    else
+        return 0
+    fi
+}
+
+# =============================================================================
+# Tests: plugins Section Validation
+# =============================================================================
+
+test_plugins_valid() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      platforms:
+        - claude
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass for valid plugins section"
+        return 1
+    fi
+}
+
+test_plugins_string_shorthand() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - my-plugin
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass for string shorthand in plugins items"
+        return 1
+    fi
+}
+
+test_plugins_missing_name() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - platforms:
+        - claude
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for plugin object without name"
+        return 1
+    else
+        return 0
+    fi
+}
+
+# =============================================================================
+# Tests: config Section Validation
+# =============================================================================
+
+test_config_valid_platforms() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+config:
+  claude:
+    language: "Korean"
+  gemini:
+    general:
+      model: "gemini-2.5-pro"
+  codex:
+    model: "o3"
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass for valid config with claude/gemini/codex"
+        return 1
+    fi
+}
+
+test_config_invalid_platform() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+config:
+  vscode:
+    theme: "dark"
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for invalid platform in config"
+        return 1
+    else
+        return 0
+    fi
+}
+
+test_config_unknown_field_warns() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+config:
+  claude:
+    unknownSettingsField: "value"
+EOF
+
+    # Unknown field should produce warning but exit 0
+    local output
+    output=$("$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>&1)
+    local exit_code=$?
+
+    if [[ $exit_code -eq 0 ]]; then
+        if echo "$output" | grep -q "알 수 없는 필드"; then
+            return 0
+        else
+            echo "Should warn about unknown field, got: $output"
+            return 1
+        fi
+    else
+        echo "Should exit 0 for unknown field warning, exited: $exit_code"
+        return 1
+    fi
+}
+
+test_config_type_mismatch_errors() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+config:
+  claude:
+    language: 123
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for type mismatch (language should be string)"
+        return 1
+    else
+        return 0
+    fi
+}
+
+test_config_reserved_field_warns() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+config:
+  claude:
+    hooks:
+      PreToolUse: []
+EOF
+
+    # Reserved field should produce warning but exit 0
+    local output
+    output=$("$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>&1)
+    local exit_code=$?
+
+    if [[ $exit_code -eq 0 ]]; then
+        if echo "$output" | grep -q "예약된 필드"; then
+            return 0
+        else
+            echo "Should warn about reserved field, got: $output"
+            return 1
+        fi
+    else
+        echo "Should exit 0 for reserved field warning, exited: $exit_code"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -528,6 +758,23 @@ main() {
 
     # Backward compatibility
     run_test test_sync_yaml_without_platforms_valid
+
+    # MCP section validation
+    run_test test_mcps_valid
+    run_test test_mcps_string_shorthand
+    run_test test_mcps_invalid_item_field
+
+    # Plugin section validation
+    run_test test_plugins_valid
+    run_test test_plugins_string_shorthand
+    run_test test_plugins_missing_name
+
+    # Config section validation
+    run_test test_config_valid_platforms
+    run_test test_config_invalid_platform
+    run_test test_config_unknown_field_warns
+    run_test test_config_type_mismatch_errors
+    run_test test_config_reserved_field_warns
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
