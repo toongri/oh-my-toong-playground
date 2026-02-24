@@ -51,3 +51,26 @@ config:
   claude:
     language: "한국어"
     outputStyle: "Explanatory"
+    includeCoAuthoredBy: false
+    skipDangerousModePermissionPrompt: true
+    permissions:
+      deny:
+        - "Bash(git push --force*)"
+        - "Bash(git push * --force*)"
+        - "Bash(git push * -f*)"
+        - "Bash(rm -rf *)"
+
+# 플러그인 동기화 (claude plugin install <name>)
+plugins:
+  items:
+    - context7
+    - serena
+    - superpowers
+    - code-review
+
+# MCP 서버 동기화
+mcps:
+  platforms: [gemini, codex]
+  items:
+    - context7
+    - serena
