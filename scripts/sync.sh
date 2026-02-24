@@ -57,6 +57,131 @@ get_item_info() {
 # 동기화 함수들 (Adapter Dispatch)
 # =============================================================================
 
+# ============================================================
+# Config 동기화 (no items array — direct platform sub-keys)
+# ============================================================
+sync_config() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    # 필드 자체가 없으면 스킵
+    local field_exists=$(yq '.config' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    log_info "Config 동기화 시작"
+
+    # Platform cascade: feature-platforms > use-platforms > hardcoded [claude]
+    # Config has no section-level or item-level platforms — only default + feature
+    local default_platforms=$(get_default_platforms)
+    local feature_platforms=$(get_feature_platforms "config")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml (overrides feature-platforms)
+    local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
+    if [[ "$sync_platforms" == "null" ]]; then
+        sync_platforms="$feature_platforms"
+    fi
+
+    # Iterate platform sub-keys under .config
+    local platform_keys
+    platform_keys=$(yq '.config | keys | .[]' "$yaml_file")
+
+    for platform in $platform_keys; do
+        # Validate platform name
+        case "$platform" in
+            claude|gemini|codex)
+                ;;
+            *)
+                log_warn "Config: 알 수 없는 platform '$platform' (스킵)"
+                continue
+                ;;
+        esac
+
+        # Check if platform is in resolved platforms list
+        local is_in_platforms
+        is_in_platforms=$(echo "$sync_platforms" | jq --arg p "$platform" '[.[] | select(. == $p)] | length')
+        if [[ "$is_in_platforms" -eq 0 ]]; then
+            log_info "Config: platform '$platform'이 활성 플랫폼 목록에 없음 (스킵)"
+            continue
+        fi
+
+        # Extract config JSON for this platform
+        local config_json
+        config_json=$(yq -o=json ".config.$platform" "$yaml_file")
+
+        # Backup target file before merge
+        local backup_base="$ROOT_DIR/.sync-backup/$CURRENT_BACKUP_SESSION"
+        case "$platform" in
+            claude)
+                local target_file="$target_path/.claude/settings.local.json"
+                if [[ -f "$target_file" ]]; then
+                    local backup_path
+                    if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+                        backup_path="$backup_base/settings.local.json"
+                    else
+                        backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/settings.local.json"
+                    fi
+
+                    if [[ "$DRY_RUN" == true ]]; then
+                        log_dry "백업: $target_file -> $backup_path"
+                    else
+                        mkdir -p "$(dirname "$backup_path")"
+                        cp "$target_file" "$backup_path"
+                        log_info "백업 완료: $backup_path"
+                    fi
+                fi
+                claude_sync_config "$target_path" "$config_json" "$DRY_RUN"
+                ;;
+            gemini)
+                local target_file="$target_path/.gemini/settings.json"
+                if [[ -f "$target_file" ]]; then
+                    local backup_path
+                    if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+                        backup_path="$backup_base/gemini-settings.json"
+                    else
+                        backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/gemini-settings.json"
+                    fi
+
+                    if [[ "$DRY_RUN" == true ]]; then
+                        log_dry "백업: $target_file -> $backup_path"
+                    else
+                        mkdir -p "$(dirname "$backup_path")"
+                        cp "$target_file" "$backup_path"
+                        log_info "백업 완료: $backup_path"
+                    fi
+                fi
+                gemini_sync_config "$target_path" "$config_json" "$DRY_RUN"
+                ;;
+            codex)
+                local target_file="$target_path/.codex/config.toml"
+                if [[ -f "$target_file" ]]; then
+                    local backup_path
+                    if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+                        backup_path="$backup_base/codex-config.toml"
+                    else
+                        backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/codex-config.toml"
+                    fi
+
+                    if [[ "$DRY_RUN" == true ]]; then
+                        log_dry "백업: $target_file -> $backup_path"
+                    else
+                        mkdir -p "$(dirname "$backup_path")"
+                        cp "$target_file" "$backup_path"
+                        log_info "백업 완료: $backup_path"
+                    fi
+                fi
+                codex_sync_config "$target_path" "$config_json" "$DRY_RUN"
+                ;;
+        esac
+    done
+
+    log_success "Config 동기화 완료"
+}
+
 sync_agents() {
     local target_path="$1"
     local yaml_file="$2"
@@ -758,6 +883,152 @@ sync_scripts() {
 }
 
 # ============================================================
+# MCPs 동기화
+# ============================================================
+sync_mcps() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    # 필드 자체가 없으면 스킵
+    local field_exists=$(yq '.mcps' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    # items 필드 확인
+    local items_exists=$(yq '.mcps.items' "$yaml_file")
+    if [[ "$items_exists" == "null" ]]; then
+        log_warn "mcps.items가 없음, 스킵"
+        return 0
+    fi
+
+    # Get default platforms (use-platforms from config.yaml)
+    local default_platforms=$(get_default_platforms)
+
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "mcps")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
+    local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
+    if [[ "$sync_platforms" == "null" ]]; then
+        sync_platforms="$feature_platforms"
+    fi
+
+    # Track which CLIs need preparation (Bash 3.2 compatible)
+    local prepared_claude=false
+    local prepared_gemini=false
+    local prepared_codex=false
+
+    # Reset Codex MCP accumulator
+    CODEX_MCP_SERVERS_JSON="{}"
+
+    # Section-level platforms
+    local section_platforms=$(yq -o=json '.mcps.platforms // null' "$yaml_file")
+    if [[ "$section_platforms" == "null" ]]; then
+        section_platforms="$sync_platforms"
+    fi
+
+    local count=$(yq '.mcps.items | length // 0' "$yaml_file")
+    log_info "MCPs 동기화 시작 ($count 개)"
+
+    for i in $(seq 0 $((count - 1))); do
+        get_item_info "$yaml_file" "mcps" "$i"
+        local component="$ITEM_COMPONENT"
+
+        local item_platforms
+        if [[ "$ITEM_IS_OBJECT" == "true" ]]; then
+            item_platforms=$(yq -o=json ".mcps.items[$i].platforms // null" "$yaml_file")
+            if [[ "$item_platforms" == "null" ]]; then
+                item_platforms="$section_platforms"
+            fi
+        else
+            item_platforms="$section_platforms"
+        fi
+
+        if [[ -z "$component" || "$component" == "null" ]]; then
+            continue
+        fi
+
+        resolve_scoped_source_path "mcps" "$component" ".yaml"
+        if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
+            log_warn "$SCOPED_RESOLUTION_ERROR"
+            continue
+        fi
+
+        # Convert YAML source to JSON
+        local server_json
+        server_json=$(yq -o=json '.' "$SCOPED_SOURCE_PATH")
+        if [[ -z "$server_json" || "$server_json" == "null" ]]; then
+            log_warn "MCP YAML→JSON 변환 실패: $SCOPED_SOURCE_PATH"
+            continue
+        fi
+
+        # Server name = component name (filename without .yaml)
+        local server_name="$SCOPED_DISPLAY_NAME"
+
+        # Dispatch to each target adapter
+        for target in $(echo "$item_platforms" | jq -r '.[]'); do
+            case "$target" in
+                claude)
+                    if [[ "$prepared_claude" == false && "$DRY_RUN" != true ]]; then
+                        local mcp_file="$target_path/.mcp.json"
+                        if [[ -f "$mcp_file" ]]; then
+                            local backup_base="$ROOT_DIR/.sync-backup/$CURRENT_BACKUP_SESSION"
+                            local backup_path
+                            if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+                                backup_path="$backup_base/.mcp.json"
+                            else
+                                backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/.mcp.json"
+                            fi
+                            mkdir -p "$(dirname "$backup_path")"
+                            cp "$mcp_file" "$backup_path"
+                            log_info "백업 완료: $backup_path"
+                        fi
+                        prepared_claude=true
+                    fi
+                    claude_sync_mcps_merge "$target_path" "$server_name" "$server_json" "$DRY_RUN"
+                    ;;
+                gemini)
+                    if [[ "$prepared_gemini" == false && "$DRY_RUN" != true ]]; then
+                        local gemini_settings="$target_path/.gemini/settings.json"
+                        if [[ -f "$gemini_settings" ]]; then
+                            local backup_base="$ROOT_DIR/.sync-backup/$CURRENT_BACKUP_SESSION"
+                            local backup_path
+                            if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+                                backup_path="$backup_base/gemini-settings.json"
+                            else
+                                backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/gemini-settings.json"
+                            fi
+                            mkdir -p "$(dirname "$backup_path")"
+                            cp "$gemini_settings" "$backup_path"
+                            log_info "백업 완료: $backup_path"
+                        fi
+                        prepared_gemini=true
+                    fi
+                    gemini_sync_mcps_merge "$target_path" "$server_name" "$server_json" "$DRY_RUN"
+                    ;;
+                codex)
+                    codex_sync_mcps_merge "$target_path" "$server_name" "$server_json" "$DRY_RUN"
+                    ;;
+                *)
+                    log_warn "MCPs: platform '$target'는 mcps 동기화를 지원하지 않습니다 (스킵)"
+                    ;;
+            esac
+        done
+    done
+
+    # Flush Codex accumulated MCP servers
+    if [[ "$CODEX_MCP_SERVERS_JSON" != "{}" ]]; then
+        codex_write_mcp_managed_block "$target_path" "$DRY_RUN"
+    fi
+
+    log_success "MCPs 동기화 완료"
+}
+
+# ============================================================
 # Rules 동기화
 # ============================================================
 sync_rules() {
@@ -848,6 +1119,92 @@ sync_rules() {
     log_success "Rules 동기화 완료"
 }
 
+sync_plugins() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    # 필드 자체가 없으면 스킵
+    local field_exists=$(yq '.plugins' "$yaml_file")
+    if [[ "$field_exists" == "null" ]]; then
+        return 0
+    fi
+
+    # items 필드 확인
+    local items_exists=$(yq '.plugins.items' "$yaml_file")
+    if [[ "$items_exists" == "null" ]]; then
+        log_warn "plugins.items가 없음, 스킵"
+        return 0
+    fi
+
+    # Get default platforms (use-platforms from config.yaml)
+    local default_platforms=$(get_default_platforms)
+
+    # Get feature-specific platforms for this category
+    local feature_platforms=$(get_feature_platforms "plugins")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    # Get top-level platforms from sync.yaml
+    local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
+    if [[ "$sync_platforms" == "null" ]]; then
+        sync_platforms="$feature_platforms"
+    fi
+
+    # Section-level platforms
+    local section_platforms=$(yq -o=json '.plugins.platforms // null' "$yaml_file")
+    if [[ "$section_platforms" == "null" ]]; then
+        section_platforms="$sync_platforms"
+    fi
+
+    local count=$(yq '.plugins.items | length // 0' "$yaml_file")
+    log_info "Plugins 동기화 시작 ($count 개)"
+
+    for i in $(seq 0 $((count - 1))); do
+        # Extract plugin name (string → name directly, object → .name field)
+        local item_type=$(yq ".plugins.items[$i] | type" "$yaml_file")
+        local plugin_name=""
+
+        if [[ "$item_type" == "!!str" ]]; then
+            plugin_name=$(yq ".plugins.items[$i]" "$yaml_file")
+            local item_platforms="$section_platforms"
+        else
+            plugin_name=$(yq ".plugins.items[$i].name // \"\"" "$yaml_file")
+            if [[ -z "$plugin_name" || "$plugin_name" == "null" ]]; then
+                log_warn "plugins.items[$i].name이 없음, 스킵"
+                continue
+            fi
+
+            local item_platforms
+            item_platforms=$(yq -o=json ".plugins.items[$i].platforms // null" "$yaml_file")
+            if [[ "$item_platforms" == "null" ]]; then
+                item_platforms="$section_platforms"
+            fi
+        fi
+
+        if [[ -z "$plugin_name" || "$plugin_name" == "null" ]]; then
+            continue
+        fi
+
+        # Dispatch to each target adapter
+        for target in $(echo "$item_platforms" | jq -r '.[]'); do
+            case "$target" in
+                claude)
+                    claude_sync_plugin_install "$plugin_name" "$DRY_RUN"
+                    ;;
+                gemini|codex)
+                    log_warn "plugins는 ${target}에서 지원되지 않습니다. 스킵: $plugin_name"
+                    ;;
+                *)
+                    log_warn "Plugins: platform '$target'는 plugins 동기화를 지원하지 않습니다 (스킵)"
+                    ;;
+            esac
+        done
+    done
+
+    log_success "Plugins 동기화 완료"
+}
+
 # =============================================================================
 # YAML 처리
 # =============================================================================
@@ -893,13 +1250,16 @@ process_yaml() {
         mkdir -p "$target_path/.claude"
     fi
 
-    # 각 카테고리 동기화 (hooks를 먼저 처리: rm -rf 후 재생성하므로 agents의 add-hooks 파일이 삭제되지 않도록)
+    # 각 카테고리 동기화 (config → mcps → hooks → agents → commands → skills → scripts → rules → plugins)
+    sync_config "$target_path" "$yaml_file"
+    sync_mcps "$target_path" "$yaml_file"
     sync_hooks "$target_path" "$yaml_file"
     sync_agents "$target_path" "$yaml_file"
     sync_commands "$target_path" "$yaml_file"
     sync_skills "$target_path" "$yaml_file"
     sync_scripts "$target_path" "$yaml_file"
     sync_rules "$target_path" "$yaml_file"
+    sync_plugins "$target_path" "$yaml_file"
 
     log_success "완료: $yaml_file"
 }
@@ -975,7 +1335,7 @@ main() {
             if [[ "$processed_paths" != *"|${path}|"* ]]; then
                 process_yaml "$root_yaml" "true"
             else
-                log_warn "$path는 projects/에서 이미 처리됨, 스킵"
+                log_warn "${path}는 projects/에서 이미 처리됨, 스킵"
             fi
         else
             log_info "루트 sync.yaml에 path가 정의되지 않음 (템플릿 상태)"

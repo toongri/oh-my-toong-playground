@@ -72,8 +72,8 @@ codex_supports_feature() {
         hooks)
             echo "partial"  # Notify only
             ;;
-        skills)
-            echo "true"  # Via directory copy
+        skills|config|mcps)
+            echo "true"  # Via directory copy / TOML managed block
             ;;
         *)
             echo "false"
@@ -347,6 +347,347 @@ codex_sync_scripts_direct() {
     mkdir -p "$target_dir"
     cp "$source_path" "$target_file"
     log_info "Copied: ${display_name}"
+}
+
+# =============================================================================
+# TOML Helpers
+# =============================================================================
+
+# Convert a JSON value to TOML value format
+# Arguments:
+#   $1 - json_value: Raw JSON value (string, number, boolean, etc.)
+# Returns: TOML-formatted value via stdout
+codex_json_to_toml_value() {
+    local json_value="$1"
+
+    # Detect type via jq
+    local jq_type
+    jq_type=$(echo "$json_value" | jq -r 'type' 2>/dev/null) || {
+        # Fallback: treat as string
+        echo "\"$json_value\""
+        return 0
+    }
+
+    case "$jq_type" in
+        string)
+            # Output as quoted TOML string
+            echo "$json_value" | jq -r '"\"\(.)\"" '
+            ;;
+        number|boolean)
+            # Output raw value
+            echo "$json_value" | jq -r '.'
+            ;;
+        *)
+            # Arrays/objects not supported as scalar TOML values
+            echo "\"$json_value\""
+            ;;
+    esac
+}
+
+# =============================================================================
+# Config Sync
+# =============================================================================
+
+# Sync config by writing a managed block into config.toml
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - config_json: JSON object with config fields
+#   $3 - dry_run: "true" or "false"
+codex_sync_config() {
+    local target_path="$1"
+    local config_json="$2"
+    local dry_run="${3:-false}"
+
+    local config_file="$target_path/.codex/config.toml"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Config managed block: $config_json -> $config_file"
+        return 0
+    fi
+
+    mkdir -p "$target_path/.codex"
+
+    # Read existing content
+    local existing_content=""
+    if [[ -f "$config_file" ]]; then
+        existing_content=$(cat "$config_file")
+    fi
+
+    # Strip existing omt:config managed block
+    local stripped_content
+    if [[ -n "$existing_content" ]]; then
+        stripped_content=$(echo "$existing_content" | sed '/^# --- omt:config ---$/,/^# --- end omt:config ---$/d')
+    else
+        stripped_content=""
+    fi
+
+    # Build managed block content
+    local managed_block=""
+    managed_block="# --- omt:config ---"
+
+    # Separate scalar keys and object keys
+    local scalar_keys
+    scalar_keys=$(echo "$config_json" | jq -r 'to_entries[] | select(.value | type != "object") | .key')
+
+    local object_keys
+    object_keys=$(echo "$config_json" | jq -r 'to_entries[] | select(.value | type == "object") | .key')
+
+    # Write scalar keys first
+    local key
+    for key in $scalar_keys; do
+        local raw_value
+        raw_value=$(echo "$config_json" | jq ".${key}")
+        local toml_value
+        toml_value=$(codex_json_to_toml_value "$raw_value")
+        managed_block="$managed_block
+$key = $toml_value"
+    done
+
+    # Write object keys as [section] blocks
+    for key in $object_keys; do
+        managed_block="$managed_block
+
+[$key]"
+        # Iterate sub-keys
+        local sub_keys
+        sub_keys=$(echo "$config_json" | jq -r ".${key} | keys[]")
+        local sub_key
+        for sub_key in $sub_keys; do
+            local raw_value
+            raw_value=$(echo "$config_json" | jq ".${key}.${sub_key}")
+            # Skip nested objects (3+ levels deep) — not supported in TOML passthrough
+            local sub_value_type
+            sub_value_type=$(echo "$raw_value" | jq -r 'type' 2>/dev/null) || sub_value_type="unknown"
+            if [[ "$sub_value_type" == "object" ]]; then
+                log_warn "Config: nested object 미지원 (${key}.${sub_key}), 스킵"
+                continue
+            fi
+            local toml_value
+            toml_value=$(codex_json_to_toml_value "$raw_value")
+            managed_block="$managed_block
+$sub_key = $toml_value"
+        done
+    done
+
+    managed_block="$managed_block
+# --- end omt:config ---"
+
+    # Write result: stripped content + managed block appended
+    if [[ -n "$stripped_content" ]]; then
+        # Remove trailing blank lines (macOS compatible)
+        while [[ "$stripped_content" == *$'\n' ]]; do
+            stripped_content="${stripped_content%$'\n'}"
+        done
+        printf '%s\n\n%s\n' "$stripped_content" "$managed_block" > "$config_file"
+    else
+        printf '%s\n' "$managed_block" > "$config_file"
+    fi
+
+    log_info "Config managed block: $config_file"
+}
+
+# =============================================================================
+# MCP Server Sync
+# =============================================================================
+
+# Global accumulator for MCP server TOML content (reset per sync_mcps call)
+CODEX_MCP_SERVERS_JSON="{}"
+
+# Accumulate an MCP server for later writing
+# Arguments:
+#   $1 - server_name: MCP server name
+#   $2 - server_json: JSON content of the MCP server definition
+codex_accumulate_mcp_server() {
+    local server_name="$1"
+    local server_json="$2"
+
+    CODEX_MCP_SERVERS_JSON=$(echo "$CODEX_MCP_SERVERS_JSON" | jq --arg name "$server_name" --argjson server "$server_json" '.[$name] = $server')
+}
+
+# Write all accumulated MCP servers as a managed block in config.toml
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - dry_run: "true" or "false"
+codex_write_mcp_managed_block() {
+    local target_path="$1"
+    local dry_run="${2:-false}"
+
+    local config_file="$target_path/.codex/config.toml"
+
+    # Check if there are any servers to write
+    local server_count
+    server_count=$(echo "$CODEX_MCP_SERVERS_JSON" | jq 'length')
+    if [[ "$server_count" -eq 0 ]]; then
+        return 0
+    fi
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "MCP managed block: $CODEX_MCP_SERVERS_JSON -> $config_file"
+        return 0
+    fi
+
+    mkdir -p "$target_path/.codex"
+
+    # Backup config.toml before merge
+    if [[ -f "$config_file" ]]; then
+        local backup_base="$ROOT_DIR/.sync-backup/$CURRENT_BACKUP_SESSION"
+        local backup_path
+        if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
+            backup_path="$backup_base/codex-config.toml"
+        else
+            backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/codex-config.toml"
+        fi
+
+        mkdir -p "$(dirname "$backup_path")"
+        cp "$config_file" "$backup_path"
+        log_info "백업 완료: $backup_path"
+    fi
+
+    # Read existing content
+    local existing_content=""
+    if [[ -f "$config_file" ]]; then
+        existing_content=$(cat "$config_file")
+    fi
+
+    # Strip existing omt:mcp managed block
+    local stripped_content
+    if [[ -n "$existing_content" ]]; then
+        stripped_content=$(echo "$existing_content" | sed '/^# --- omt:mcp ---$/,/^# --- end omt:mcp ---$/d')
+    else
+        stripped_content=""
+    fi
+
+    # Build managed block content
+    local managed_block="# --- omt:mcp ---"
+
+    # Iterate each server
+    local server_names
+    server_names=$(echo "$CODEX_MCP_SERVERS_JSON" | jq -r 'keys[]')
+
+    local name
+    for name in $server_names; do
+        local server_obj
+        server_obj=$(echo "$CODEX_MCP_SERVERS_JSON" | jq ".\"$name\"")
+
+        # Write [mcp_servers.<name>] section header
+        managed_block="$managed_block
+[mcp_servers.$name]"
+
+        # Write scalar keys (non-object, non-array-of-objects)
+        local scalar_keys
+        scalar_keys=$(echo "$server_obj" | jq -r 'to_entries[] | select(.value | type != "object") | .key')
+
+        local key
+        for key in $scalar_keys; do
+            local raw_value
+            raw_value=$(echo "$server_obj" | jq ".$key")
+            local value_type
+            value_type=$(echo "$raw_value" | jq -r 'type')
+
+            case "$value_type" in
+                string)
+                    local toml_val
+                    toml_val=$(echo "$raw_value" | jq -r '.')
+                    managed_block="$managed_block
+$key = \"$toml_val\""
+                    ;;
+                number|boolean)
+                    local toml_val
+                    toml_val=$(echo "$raw_value" | jq -r '.')
+                    managed_block="$managed_block
+$key = $toml_val"
+                    ;;
+                array)
+                    # Array of strings: ["a", "b"]
+                    local arr_str
+                    arr_str=$(echo "$raw_value" | jq -c '[.[] | "\"\(.)\""] | join(", ")')
+                    # Remove outer quotes from jq output
+                    arr_str=$(echo "$arr_str" | jq -r '.')
+                    managed_block="$managed_block
+$key = [$arr_str]"
+                    ;;
+            esac
+        done
+
+        # Write object sub-keys as sub-tables (e.g., [mcp_servers.<name>.env])
+        local object_keys
+        object_keys=$(echo "$server_obj" | jq -r 'to_entries[] | select(.value | type == "object") | .key')
+
+        for key in $object_keys; do
+            managed_block="$managed_block
+
+[mcp_servers.$name.$key]"
+            local sub_keys
+            sub_keys=$(echo "$server_obj" | jq -r ".\"$key\" | keys[]")
+            local sub_key
+            for sub_key in $sub_keys; do
+                local sub_value
+                sub_value=$(echo "$server_obj" | jq ".\"$key\".\"$sub_key\"")
+                local sub_type
+                sub_type=$(echo "$sub_value" | jq -r 'type')
+
+                case "$sub_type" in
+                    string)
+                        local toml_val
+                        toml_val=$(echo "$sub_value" | jq -r '.')
+                        managed_block="$managed_block
+$sub_key = \"$toml_val\""
+                        ;;
+                    number|boolean)
+                        local toml_val
+                        toml_val=$(echo "$sub_value" | jq -r '.')
+                        managed_block="$managed_block
+$sub_key = $toml_val"
+                        ;;
+                    array)
+                        local arr_str
+                        arr_str=$(echo "$sub_value" | jq -c '[.[] | "\"\(.)\""] | join(", ")')
+                        arr_str=$(echo "$arr_str" | jq -r '.')
+                        managed_block="$managed_block
+$sub_key = [$arr_str]"
+                        ;;
+                esac
+            done
+        done
+    done
+
+    managed_block="$managed_block
+# --- end omt:mcp ---"
+
+    # Write result: stripped content + managed block appended
+    if [[ -n "$stripped_content" ]]; then
+        # Remove trailing blank lines (macOS compatible)
+        while [[ "$stripped_content" == *$'\n' ]]; do
+            stripped_content="${stripped_content%$'\n'}"
+        done
+        printf '%s\n\n%s\n' "$stripped_content" "$managed_block" > "$config_file"
+    else
+        printf '%s\n' "$managed_block" > "$config_file"
+    fi
+
+    log_info "MCP managed block: $config_file"
+}
+
+# Merge an MCP server definition into Codex config.toml via accumulator
+# Call codex_write_mcp_managed_block() after all items to flush
+# Arguments:
+#   $1 - target_path: Target project path (unused, kept for API consistency)
+#   $2 - server_name: MCP server name
+#   $3 - server_json: JSON content of the MCP server definition
+#   $4 - dry_run: "true" or "false"
+codex_sync_mcps_merge() {
+    local target_path="$1"
+    local server_name="$2"
+    local server_json="$3"
+    local dry_run="${4:-false}"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "MCP accumulate: $server_name"
+        return 0
+    fi
+
+    codex_accumulate_mcp_server "$server_name" "$server_json"
+    log_info "MCP accumulated: $server_name"
 }
 
 # =============================================================================
