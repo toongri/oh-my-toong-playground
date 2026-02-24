@@ -698,7 +698,7 @@ get_claude_field_type() {
     case "$field" in
         language|model|outputStyle|autoUpdatesChannel|plansDirectory|teammateMode)
             echo "string" ;;
-        skipDangerousModePermissionPrompt|disableAllHooks|enableAllProjectMcpServers|showTurnDuration|terminalProgressBarEnabled|respectGitignore|alwaysThinkingEnabled)
+        skipDangerousModePermissionPrompt|disableAllHooks|enableAllProjectMcpServers|showTurnDuration|terminalProgressBarEnabled|respectGitignore|alwaysThinkingEnabled|includeCoAuthoredBy)
             echo "boolean" ;;
         cleanupPeriodDays)
             echo "number" ;;
