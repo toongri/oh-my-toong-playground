@@ -27,9 +27,13 @@ setup_test_env() {
 
     # Create source structure
     mkdir -p "$TEST_TMP_DIR/mcps"
+
+    # Isolate Claude user config to temp dir (never touch real ~/.claude.json)
+    export CLAUDE_USER_CONFIG="$TEST_TMP_DIR/claude.json"
 }
 
 teardown_test_env() {
+    unset CLAUDE_USER_CONFIG
     if [[ -d "$TEST_TMP_DIR" ]]; then
         rm -rf "$TEST_TMP_DIR"
     fi
@@ -57,21 +61,21 @@ run_test() {
 # =============================================================================
 
 test_mcp_claude_mcp_json_creation() {
-    # .mcp.json created from scratch with correct structure
+    # ~/.claude.json created from scratch with correct structure (user scope)
     local target_path="$TEST_TMP_DIR/target"
     local server_json='{"command":"npx","args":["-y","@upstash/context7-mcp@latest"]}'
 
-    claude_sync_mcps_merge "$target_path" "context7" "$server_json" "false"
+    claude_sync_mcps_merge "$target_path" "context7" "$server_json" "false" "user" ""
 
-    # Verify .mcp.json exists
-    if [[ ! -f "$target_path/.mcp.json" ]]; then
-        echo "ASSERTION FAILED: .mcp.json should be created"
+    # Verify ~/.claude.json (CLAUDE_USER_CONFIG) exists
+    if [[ ! -f "$CLAUDE_USER_CONFIG" ]]; then
+        echo "ASSERTION FAILED: \$CLAUDE_USER_CONFIG should be created"
         return 1
     fi
 
     # Verify structure
     local server_cmd
-    server_cmd=$(jq -r '.mcpServers.context7.command' "$target_path/.mcp.json")
+    server_cmd=$(jq -r '.mcpServers.context7.command' "$CLAUDE_USER_CONFIG")
     if [[ "$server_cmd" != "npx" ]]; then
         echo "ASSERTION FAILED: Expected command 'npx', got '$server_cmd'"
         return 1
@@ -81,12 +85,13 @@ test_mcp_claude_mcp_json_creation() {
 }
 
 test_mcp_claude_merge_preserves_existing() {
-    # existing non-sync servers preserved
+    # existing non-MCP keys and servers preserved in ~/.claude.json (user scope)
     local target_path="$TEST_TMP_DIR/target"
 
-    # Create existing .mcp.json with a pre-existing server
-    cat > "$target_path/.mcp.json" << 'EOF'
+    # Create existing ~/.claude.json with a pre-existing server and non-MCP key
+    cat > "$CLAUDE_USER_CONFIG" << 'EOF'
 {
+  "oauthAccount": "test",
   "mcpServers": {
     "existing-server": {
       "command": "node",
@@ -97,18 +102,27 @@ test_mcp_claude_merge_preserves_existing() {
 EOF
 
     local server_json='{"command":"npx","args":["-y","@upstash/context7-mcp@latest"]}'
-    claude_sync_mcps_merge "$target_path" "context7" "$server_json" "false"
+    claude_sync_mcps_merge "$target_path" "context7" "$server_json" "false" "user" ""
 
-    # Verify both servers exist
+    # Verify non-MCP key preserved
+    local oauth
+    oauth=$(jq -r '.oauthAccount' "$CLAUDE_USER_CONFIG")
+    if [[ "$oauth" != "test" ]]; then
+        echo "ASSERTION FAILED: oauthAccount should be preserved, got '$oauth'"
+        return 1
+    fi
+
+    # Verify existing server preserved
     local existing_cmd
-    existing_cmd=$(jq -r '.mcpServers."existing-server".command' "$target_path/.mcp.json")
+    existing_cmd=$(jq -r '.mcpServers."existing-server".command' "$CLAUDE_USER_CONFIG")
     if [[ "$existing_cmd" != "node" ]]; then
         echo "ASSERTION FAILED: Existing server should be preserved, got command '$existing_cmd'"
         return 1
     fi
 
+    # Verify new server added
     local new_cmd
-    new_cmd=$(jq -r '.mcpServers.context7.command' "$target_path/.mcp.json")
+    new_cmd=$(jq -r '.mcpServers.context7.command' "$CLAUDE_USER_CONFIG")
     if [[ "$new_cmd" != "npx" ]]; then
         echo "ASSERTION FAILED: New server should be added, got command '$new_cmd'"
         return 1
@@ -212,11 +226,11 @@ test_mcp_dry_run() {
     local target_path="$TEST_TMP_DIR/target"
 
     local output
-    output=$(claude_sync_mcps_merge "$target_path" "context7" '{"command":"npx"}' "true" 2>&1)
+    output=$(claude_sync_mcps_merge "$target_path" "context7" '{"command":"npx"}' "true" "user" "" 2>&1)
 
-    # .mcp.json should NOT be created
-    if [[ -f "$target_path/.mcp.json" ]]; then
-        echo "ASSERTION FAILED: .mcp.json should NOT be created in dry-run mode"
+    # ~/.claude.json should NOT be created
+    if [[ -f "$CLAUDE_USER_CONFIG" ]]; then
+        echo "ASSERTION FAILED: \$CLAUDE_USER_CONFIG should NOT be created in dry-run mode"
         return 1
     fi
 
@@ -227,6 +241,47 @@ test_mcp_dry_run() {
         echo "ASSERTION FAILED: Output should contain dry-run marker, got: $output"
         return 1
     fi
+}
+
+# =============================================================================
+# Tests: MCP - Claude Local Scope
+# =============================================================================
+
+test_mcp_claude_local_scope() {
+    # local scope writes to .projects[$path].mcpServers and preserves existing project keys
+    local target_path="$TEST_TMP_DIR/target"
+
+    # Pre-create ~/.claude.json with existing project config
+    cat > "$CLAUDE_USER_CONFIG" << 'EOF'
+{
+  "projects": {
+    "/tmp/proj": {
+      "allowedTools": ["Bash"]
+    }
+  }
+}
+EOF
+
+    local server_json='{"command":"npx","args":["-y","@upstash/context7-mcp@latest"]}'
+    claude_sync_mcps_merge "" "context7" "$server_json" "false" "local" "/tmp/proj"
+
+    # Verify MCP server added under project path
+    local server_cmd
+    server_cmd=$(jq -r '.projects["/tmp/proj"].mcpServers.context7.command' "$CLAUDE_USER_CONFIG")
+    if [[ "$server_cmd" != "npx" ]]; then
+        echo "ASSERTION FAILED: Expected command 'npx' under project path, got '$server_cmd'"
+        return 1
+    fi
+
+    # Verify existing project keys preserved
+    local allowed_tool
+    allowed_tool=$(jq -r '.projects["/tmp/proj"].allowedTools[0]' "$CLAUDE_USER_CONFIG")
+    if [[ "$allowed_tool" != "Bash" ]]; then
+        echo "ASSERTION FAILED: allowedTools should be preserved, got '$allowed_tool'"
+        return 1
+    fi
+
+    return 0
 }
 
 # =============================================================================
@@ -434,6 +489,7 @@ main() {
     run_test test_mcp_gemini_merge
     run_test test_mcp_codex_toml_write
     run_test test_mcp_dry_run
+    run_test test_mcp_claude_local_scope
 
     # Plugin Tests
     run_test test_plugin_dry_run

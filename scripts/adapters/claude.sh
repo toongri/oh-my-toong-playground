@@ -533,38 +533,63 @@ claude_sync_plugin_install() {
 # MCP Server Sync
 # =============================================================================
 
-# Merge an MCP server definition into .mcp.json
+# Merge an MCP server definition into ~/.claude.json (user or local scope)
 # Arguments:
-#   $1 - target_path: Target project path
+#   $1 - target_path: Target project path (unused, kept for cross-adapter signature consistency)
 #   $2 - server_name: MCP server name (used as key in mcpServers)
 #   $3 - server_json: JSON content of the MCP server definition
 #   $4 - dry_run: "true" or "false"
+#   $5 - scope: "user" (default) or "local"
+#   $6 - project_path: Absolute path to project (required for local scope)
 claude_sync_mcps_merge() {
     local target_path="$1"
     local server_name="$2"
     local server_json="$3"
     local dry_run="${4:-false}"
+    local scope="${5:-user}"
+    local project_path="${6:-}"
 
-    local mcp_file="$target_path/.mcp.json"
+    local claude_config="${CLAUDE_USER_CONFIG:-$HOME/.claude.json}"
 
     if [[ "$dry_run" == "true" ]]; then
-        log_dry "MCP merge: $server_name -> $mcp_file"
+        if [[ "$scope" == "local" ]]; then
+            log_dry "MCP merge: $server_name -> ~/.claude.json (local: $project_path)"
+        else
+            log_dry "MCP merge: $server_name -> ~/.claude.json (user scope)"
+        fi
         log_dry "Server config: $server_json"
         return 0
     fi
 
-    # Read existing .mcp.json or create default structure
-    local current_content='{"mcpServers": {}}'
-    if [[ -f "$mcp_file" ]]; then
-        current_content=$(cat "$mcp_file")
+    # Read existing ~/.claude.json or start with empty object
+    local current_content='{}'
+    if [[ -f "$claude_config" ]]; then
+        current_content=$(cat "$claude_config")
     fi
 
-    # Deep merge: set .mcpServers.<name> to server_json
     local new_content
-    new_content=$(echo "$current_content" | jq --arg name "$server_name" --argjson server "$server_json" '.mcpServers[$name] = $server')
+    if [[ "$scope" == "local" ]]; then
+        # Local scope: .projects[$path].mcpServers[$name] = $server
+        # Preserve existing keys (e.g. allowedTools) by merging into existing project object
+        new_content=$(echo "$current_content" | jq \
+            --arg name "$server_name" \
+            --argjson server "$server_json" \
+            --arg path "$project_path" \
+            '.projects[$path] = ((.projects[$path] // {}) | .mcpServers[$name] = $server)')
+    else
+        # User scope: .mcpServers[$name] = $server
+        new_content=$(echo "$current_content" | jq \
+            --arg name "$server_name" \
+            --argjson server "$server_json" \
+            '.mcpServers[$name] = $server')
+    fi
 
-    echo "$new_content" | jq '.' > "$mcp_file"
-    log_info "MCP merged: $server_name -> $mcp_file"
+    echo "$new_content" | jq '.' > "$claude_config"
+    if [[ "$scope" == "local" ]]; then
+        log_info "MCP merged: $server_name -> ~/.claude.json (local: $project_path)"
+    else
+        log_info "MCP merged: $server_name -> ~/.claude.json (user scope)"
+    fi
 }
 
 # =============================================================================
