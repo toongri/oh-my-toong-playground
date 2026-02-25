@@ -35,6 +35,12 @@ hooks:
     - component: session-start.sh
       event: SessionStart
       timeout: 10
+    - component: persistent-mode
+      event: Stop
+      timeout: 15
+    - component: skill-catalog
+      event: SessionStart
+      timeout: 10
     # Kotlin project-specific hooks (file-based)
     - component: pre-commit-gate.sh
       event: PreToolUse
@@ -61,6 +67,10 @@ skills:
     - make-pr
     - spec-review
     - technical-writing
+
+scripts:
+  items:
+    - hud
 
 rules:
   items:

@@ -371,7 +371,16 @@ resolve_scoped_source_path() {
     # === Upward Search Logic ===
     # Note: extension="" means check for both file and directory (hooks have extension in name)
     if [[ "$IS_ROOT_YAML_CONTEXT" == true ]]; then
-        # Root yaml: global only
+        # Root yaml: src/ first, then global
+        # 1. Try src/
+        local src_path="$ROOT_DIR/src/$category/${parsed_item}${extension}"
+        if [[ -n "$extension" ]]; then
+            [[ -f "$src_path" ]] && { SCOPED_SOURCE_PATH="$src_path"; return 0; }
+        else
+            [[ -f "$src_path" || -d "$src_path" ]] && { SCOPED_SOURCE_PATH="$src_path"; return 0; }
+        fi
+
+        # 2. Fall back to global
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
         local exists=false
         if [[ -n "$extension" ]]; then
@@ -387,7 +396,7 @@ resolve_scoped_source_path() {
         SCOPED_RESOLUTION_ERROR="Component not found in global: $category/${parsed_item}${extension}"
         return 1
     else
-        # Project yaml: own project first, then global
+        # Project yaml: own project first, then src/, then global
         # Use CURRENT_PROJECT_DIR (directory name) for file path resolution
         # 1. Try own project
         local project_path="$ROOT_DIR/projects/$CURRENT_PROJECT_DIR/$category/${parsed_item}${extension}"
@@ -397,7 +406,15 @@ resolve_scoped_source_path() {
             [[ -f "$project_path" || -d "$project_path" ]] && { SCOPED_SOURCE_PATH="$project_path"; return 0; }
         fi
 
-        # 2. Fall back to global
+        # 2. Try src/
+        local src_path="$ROOT_DIR/src/$category/${parsed_item}${extension}"
+        if [[ -n "$extension" ]]; then
+            [[ -f "$src_path" ]] && { SCOPED_SOURCE_PATH="$src_path"; return 0; }
+        else
+            [[ -f "$src_path" || -d "$src_path" ]] && { SCOPED_SOURCE_PATH="$src_path"; return 0; }
+        fi
+
+        # 3. Fall back to global
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
         if [[ -n "$extension" ]]; then
             [[ -f "$global_path" ]] && { SCOPED_SOURCE_PATH="$global_path"; return 0; }

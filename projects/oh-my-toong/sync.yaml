@@ -31,6 +31,12 @@ hooks:
     - component: session-start.sh
       event: SessionStart
       timeout: 10
+    - component: persistent-mode
+      event: Stop
+      timeout: 15
+    - component: skill-catalog
+      event: SessionStart
+      timeout: 10
     - component: oh-my-toong:sync-schema-validator.sh
       event: PostToolUse
       matcher: "Edit(**/sync.yaml)"
@@ -59,6 +65,10 @@ skills:
     - spec-review
     - technical-writing
     - technical-copywriting
+
+scripts:
+  items:
+    - hud
 
 rules:
   items:
