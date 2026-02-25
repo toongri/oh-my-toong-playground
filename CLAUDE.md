@@ -95,7 +95,6 @@ skills:
 | momus | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | oracle | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
 | clarify | Requirements clarification | MANDATORY gate before implementation |
-| metis | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | git-committer | Git commit workflow | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
 | argus | Verification guardian | Verifies Junior's work - nothing escapes |
@@ -149,6 +148,7 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | External documentation | librarian |
 | Task planning | prometheus |
 | Code implementation | sisyphus-junior |
+| Pre-planning analysis | metis |
 | Plan review | momus |
 | Code verification | argus |
 
