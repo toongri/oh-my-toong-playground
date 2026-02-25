@@ -613,6 +613,7 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 | **APPROVE** | Proceed directly to plan generation. Gate passed. |
 | **REQUEST_CHANGES** | **MANDATORY**: Return to Interview Mode. Resolve ALL blocking items. Modify content to address feedback. Re-invoke metis with updated 3-Section template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
+
 ### Momus Feedback Loop (MANDATORY Before User Presentation)
 
 <CRITICAL_GATE>
@@ -643,7 +644,7 @@ Invoke momus with the plan file path only. Momus reads the file and reviews acco
 .omt/plans/[name].md
 ```
 
-All review context (original request, interview summary, metis results) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
+All review context (interview summary) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
 
 **Invocation Anti-Patterns:**
 
@@ -660,6 +661,7 @@ All review context (original request, interview summary, metis results) is alrea
 | **APPROVE** | Present the full plan to the user. Show the complete plan content and ask to finalize. Gate passed. |
 | **REQUEST_CHANGES** | **MANDATORY**: Revise the plan to address ALL [CERTAIN] findings. Re-invoke momus with the same plan file path. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Present the full plan to the user. |
+
 ### Plan Presentation (After Momus Approval)
 
 After Momus approves the plan:
