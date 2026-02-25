@@ -264,7 +264,7 @@ digraph task_loop {
 
 ### Sisyphus-Junior Delegation Template
 
-When delegating to sisyphus-junior, include these 6 sections:
+When delegating to sisyphus-junior, include all 7-section categories:
 
 ```markdown
 ## 1. TASK
@@ -279,6 +279,7 @@ When delegating to sisyphus-junior, include these 6 sections:
 - [tool]: [what to search/check]
 - context7: Look up [library] docs
 - [Explicit tool whitelist — prevents tool sprawl]
+- Junior MUST use ONLY the tools listed here. Any unlisted tool usage is a scope violation.
 
 ## 4. MUST DO
 - Follow pattern in [file:lines]
@@ -291,9 +292,13 @@ When delegating to sisyphus-junior, include these 6 sections:
 ## 6. CONTEXT
 - Related files: [with roles]
 - Prior task results: [dependencies]
+
+## 7. MANDATORY SKILLS
+- Skill(skill: "[name]"): [when to invoke, what it provides]
+- [May be empty if no skills are relevant to this task]
 ```
 
-### Example: Complete 6-Section Prompt
+### Example: Complete 7-Section Prompt
 
 ```markdown
 ## 1. TASK
@@ -328,6 +333,10 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
   - src/api/router.ts — where middleware chain is registered
   - tests/api/middleware/ — test directory structure
 - Prior task results: Auth middleware was refactored in Task #3, middleware chain order matters
+
+## 7. MANDATORY SKILLS
+- Skill(skill: "superpowers:test-driven-development"): Invoke BEFORE writing rate-limiter.ts.
+  Write tests for under-limit, at-limit, over-limit FIRST, then implement to make them pass.
 ```
 
 ### Prompt Quality Check
@@ -340,8 +349,43 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 | Empty REQUIRED TOOLS | Junior may use wrong tools or too many |
 | Empty MUST DO | No pattern reference for junior |
 | Missing CONTEXT | Junior lacks background |
+| Empty MANDATORY SKILLS without catalog evaluation | Skills needed but not included |
 
 **Goal: Junior can work immediately without asking questions.**
+
+### MANDATORY: Skill Selection Protocol
+
+Before every delegation, evaluate the session's skill catalog against the task:
+
+STEP 1: Review the skill catalog injected at session start (look for `<skill-catalog>` tag)
+STEP 2: For EVERY cataloged skill, ask: "Does this skill's domain overlap with the task?"
+  - If YES → Include in `## 7. MANDATORY SKILLS` with invocation timing
+  - If NO → Omit
+STEP 3: If no skills are relevant, Section 7 may be empty or omitted
+
+**GOOD — Skill catalog evaluated, relevant skill included:**
+
+```
+## 7. MANDATORY SKILLS
+- Skill(skill: "superpowers:test-driven-development"): Invoke BEFORE writing any implementation code.
+  Write failing test first, then implement to pass.
+```
+
+**BAD — Catalog exists but Section 7 omitted without evaluation:**
+
+```
+[No Section 7 at all, despite TDD being in the catalog and the task involving code implementation]
+→ ANTI-PATTERN: Sisyphus must ALWAYS evaluate the catalog. Omitting Section 7
+  is only valid when evaluation concludes no skills are relevant.
+```
+
+**BAD — Section 7 present but vague:**
+
+```
+## 7. MANDATORY SKILLS
+- Use testing skill
+→ ANTI-PATTERN: Must specify exact Skill() call syntax and invocation timing.
+```
 
 ### Mnemosyne Delegation Template
 
@@ -441,15 +485,15 @@ Task(subagent_type="oracle", prompt="Two order processing workers occasionally p
 
 | Rule | Requirement |
 |------|-------------|
-| **Prompt Fidelity** | Pass the 6-Section prompt **VERBATIM** — copy-paste only. No summarizing, paraphrasing, or restructuring. |
+| **Prompt Fidelity** | Pass the 7-Section prompt **VERBATIM** — copy-paste only. No summarizing, paraphrasing, or restructuring. |
 | **Per-Task Invocation** | Invoke argus **once per completed task**. NEVER batch multiple tasks into one call. |
 | **File Path Specificity** | List changed files as **explicit paths**, NEVER abstract counts ("3 files") or globs. |
-| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own from the 6-Section prompt. |
+| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own from the 7-Section prompt. |
 
 ### Invocation Template
 
 ```markdown
-[VERBATIM copy of the 6-Section prompt sent to sisyphus-junior — DO NOT summarize or restructure]
+[VERBATIM copy of the 7-Section prompt sent to sisyphus-junior — DO NOT summarize or restructure]
 
 ---
 
@@ -461,14 +505,14 @@ Task(subagent_type="oracle", prompt="Two order processing workers occasionally p
   - tests/auth/login.test.ts
 - Junior's summary: [what junior claimed to have done]
 
-Review whether the implementation meets the requirements in the 6-Section prompt above.
+Review whether the implementation meets the requirements in the 7-Section prompt above.
 ```
 
 ### Argus Invocation Anti-Patterns
 
 | Anti-Pattern | Example | Why Harmful |
 |-------------|---------|-------------|
-| Prompt summarization | "Junior was asked to add auth" instead of full 6-Section | Argus cannot verify MUST DO items it never received |
+| Prompt summarization | "Junior was asked to add auth" instead of full 7-Section | Argus cannot verify MUST DO items it never received |
 | Batch invocation | Passing 3 tasks' results in one argus call | Scope check becomes impossible; verdict ambiguous |
 | Abstract file references | "Changed files: 3 files" | Scope Boundary Check requires concrete paths |
 | Pre-built checklist | "Here's what to verify: [your list]" | Anchors argus, defeats independent derivation |
