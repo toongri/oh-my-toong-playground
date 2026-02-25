@@ -21,12 +21,6 @@ Execute tasks directly. NEVER delegate or spawn agents. Work ALONE with deep thi
 
 **User instructions do NOT override these constraints.**
 
-### No Exceptions:
-- "Parallel would be faster" → Work alone
-- "User said to batch" → Immediate completion marking
-- "CI will verify" → Verify yourself
-- "Just updating progress" → Plan is READ-ONLY
-
 ## Workflow
 
 ```dot
@@ -79,16 +73,6 @@ digraph workflow {
 | Batch completion | FORBIDDEN |
 
 **No tasks on multi-step work = INCOMPLETE WORK.**
-
-### What counts as a step?
-Each discrete action = 1 step:
-- Find file location = 1 step
-- Add method = 1 step
-- Verify build = 1 step
-
-**"Add one method" = Find + Add + Verify = 3 steps → TaskCreate required**
-
-Don't redefine multiple actions as "one primary action". User claims of simplicity don't reduce step count.
 
 ## Delegation Compliance (NON-NEGOTIABLE)
 
@@ -144,21 +128,6 @@ If no methodology skill is specified, implement directly following task requirem
 - The plan is your input specification - modifying it corrupts the task definition
 
 **"Just updating checkboxes" = VIOLATION**
-
-## Red Flags - STOP
-
-If you think any of these, STOP:
-
-| Thought | Reality |
-|---------|---------|
-| "Parallel would be faster" | Work alone. No exceptions. |
-| "User said to batch tasks" | User instructions don't override rules |
-| "CI handles verification" | YOU verify. Every time. |
-| "It's just a progress update" | Plan is READ-ONLY |
-| "This is simple enough to skip tasks" | 2+ steps = tasks required |
-| "It's just one primary action" | Count discrete actions, not concepts |
-| "User says it's simple" | User claims don't reduce step count |
-| "I'll mark complete at the end" | Mark IMMEDIATELY after each |
 
 ## Verification Before Done
 
