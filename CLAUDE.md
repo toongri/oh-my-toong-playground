@@ -94,8 +94,6 @@ skills:
 | sisyphus-junior | Focused executor | Works ALONE - no delegation, strict todo discipline |
 | momus | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | oracle | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
-| explore | Codebase search | Returns actionable results with absolute paths |
-| librarian | External documentation researcher | Searches external docs - NOT internal codebase |
 | clarify | Requirements clarification | MANDATORY gate before implementation |
 | metis | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | git-committer | Git commit workflow | Korean messages, 50-char limit, atomic commits |

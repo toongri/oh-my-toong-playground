@@ -11,7 +11,6 @@ path: /Users/toong
 # agents:
 #   - component: oracle
 #     add-skills:
-#       - explore
 #   - component: sisyphus-junior
 
 # 동기화할 commands
