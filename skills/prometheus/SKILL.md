@@ -613,13 +613,6 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 | **APPROVE** | Proceed directly to plan generation. Gate passed. |
 | **REQUEST_CHANGES** | **MANDATORY**: Return to Interview Mode. Resolve ALL blocking items. Modify content to address feedback. Re-invoke metis with updated 3-Section template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
-
-**Post-Metis Summary** (include in plan under Context section):
-- **Identified Gaps**: What Metis found (across all iterations)
-- **How Resolved**: Classification applied to each gap
-- **Incorporated**: What was folded into the plan
-- **Iterations**: Number of metis invocations before APPROVE
-
 ### Momus Feedback Loop (MANDATORY Before User Presentation)
 
 <CRITICAL_GATE>
@@ -667,12 +660,6 @@ All review context (original request, interview summary, metis results) is alrea
 | **APPROVE** | Present the full plan to the user. Show the complete plan content and ask to finalize. Gate passed. |
 | **REQUEST_CHANGES** | **MANDATORY**: Revise the plan to address ALL [CERTAIN] findings. Re-invoke momus with the same plan file path. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Present the full plan to the user. |
-
-**Post-Momus Summary** (append to plan under Context section):
-- **Findings**: What Momus found (across all iterations)
-- **How Resolved**: Changes made to address each finding
-- **Iterations**: Number of momus invocations before APPROVE
-
 ### Plan Presentation (After Momus Approval)
 
 After Momus approves the plan:
@@ -708,7 +695,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | Section | Contents |
 |---------|----------|
 | **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
-| **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved), Momus review (findings and how resolved) |
+| **Context** | Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
