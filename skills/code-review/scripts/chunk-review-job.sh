@@ -6,6 +6,5 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JOB_JS="$SCRIPT_DIR/chunk-review-job.js"
 
-exec node "$JOB_JS" "$@"
+exec bun run "$SCRIPT_DIR/chunk-review-job.ts" "$@"
