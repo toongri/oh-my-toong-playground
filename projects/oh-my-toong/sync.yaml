@@ -39,6 +39,10 @@ hooks:
     - component: session-start.sh
       event: SessionStart
       timeout: 10
+    - component: skill-catalog.js
+      event: SessionStart
+      timeout: 10
+      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/skill-catalog.js"
     - component: oh-my-toong:sync-schema-validator.sh
       event: PostToolUse
       matcher: "Edit(**/sync.yaml)"
