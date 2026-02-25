@@ -45,6 +45,10 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | Mnemosyne Delegation Template | 5-Section format |
 | S-28 | Full Task Loop with Commit Step | Task Execution Loop (전체 사이클) | mnemosyne in loop |
 | S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | Verdict Response Protocol | APPROVE → mnemosyne → complete |
+| S-30 | Skill Selection Protocol — Relevant Skill Included | Skill Selection Protocol | Section 7 with exact Skill() syntax |
+| S-31 | Skill Selection Protocol — No Relevant Skills | Skill Selection Protocol | Legitimate empty Section 7 |
+| S-32 | Skill Selection Protocol — Multiple Relevant Skills | Skill Selection Protocol | Multi-skill evaluation |
+| S-33 | REQUIRED TOOLS Whitelist Enforcement | Delegation Prompt (REQUIRED TOOLS) | Tool scope violation language |
 
 ---
 
@@ -799,6 +803,116 @@ Three argus verdicts received for different tasks:
 
 ---
 
+## Scenario S-30: Skill Selection Protocol — Relevant Skill Included
+
+**Primary Technique:** Skill Selection Protocol — evaluate skill catalog before every delegation, include relevant skills in Section 7
+
+**Input:**
+```
+Task: "Add input validation to the registration API endpoint"
+Skill catalog injected at session start contains:
+- superpowers:test-driven-development
+- superpowers:systematic-debugging
+- superpowers:verification-before-completion
+
+Sisyphus is about to delegate this code implementation task to sisyphus-junior.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Evaluates skill catalog before delegation | Sisyphus reviews the skill catalog (looks for `<skill-catalog>` or session skill list) BEFORE constructing the delegation prompt |
+| V2 | Identifies TDD as relevant to code implementation | Recognizes that superpowers:test-driven-development overlaps with a code implementation task — writing new validation code |
+| V3 | Section 7 includes TDD with exact Skill() syntax | Section 7 contains `Skill(skill: "superpowers:test-driven-development")` — not vague "use testing skill" |
+| V4 | Section 7 includes invocation timing | The entry specifies WHEN to invoke (e.g., "Invoke BEFORE writing implementation code") — not just the skill name |
+| V5 | Non-relevant skills correctly omitted | systematic-debugging and verification-before-completion are NOT included — they don't overlap with the implementation task |
+
+---
+
+## Scenario S-31: Skill Selection Protocol — No Relevant Skills
+
+**Primary Technique:** Skill Selection Protocol — Section 7 may be empty when evaluation concludes no skills are relevant
+
+**Input:**
+```
+Task: "Update the README.md with new API endpoint documentation"
+Skill catalog contains:
+- superpowers:test-driven-development
+- superpowers:systematic-debugging
+
+Sisyphus is about to delegate this documentation-only task to sisyphus-junior.
+No code changes involved — purely updating markdown documentation.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Evaluates skill catalog before delegation | Sisyphus reviews the skill catalog even for documentation tasks — evaluation is MANDATORY for every delegation |
+| V2 | Correctly determines no skills are relevant | TDD is for code implementation, systematic-debugging is for bugs — neither overlaps with documentation writing |
+| V3 | Section 7 is empty or omitted WITH evaluation | Section 7 is explicitly empty or omitted — but only because evaluation concluded no skills are relevant, not because evaluation was skipped |
+| V4 | Does NOT force-include TDD for non-code task | Does NOT rationalize "documentation needs testing too" to include TDD — the skill is specifically for code implementation |
+
+---
+
+## Scenario S-32: Skill Selection Protocol — Multiple Relevant Skills
+
+**Primary Technique:** Skill Selection Protocol — when multiple cataloged skills overlap with task domain, all are included
+
+**Input:**
+```
+Task: "Fix the flaky test in payment.test.ts that intermittently fails with timeout"
+Skill catalog contains:
+- superpowers:test-driven-development
+- superpowers:systematic-debugging
+- superpowers:verification-before-completion
+
+The task involves debugging an intermittent test failure AND modifying test code.
+Root cause is UNKNOWN — no prior oracle diagnosis has been performed.
+The failure is intermittent (passes sometimes, fails with timeout other times).
+Junior must investigate the root cause AND implement the fix.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Evaluates ALL cataloged skills against the task | Each skill in the catalog is evaluated — not just the first match |
+| V2 | systematic-debugging included for flaky bug investigation | Recognizes flaky/intermittent test failure with unknown root cause as a debugging scenario that overlaps with systematic-debugging |
+| V3 | TDD included for test code modification | Recognizes that modifying test code overlaps with test-driven-development |
+| V4 | Each skill has exact Skill() syntax and timing | Both entries use `Skill(skill: "...")` format with specific invocation timing (e.g., "systematic-debugging FIRST to diagnose, then TDD for fix") |
+| V5 | Invocation order reflects logical sequence | Debugging skill is specified to invoke BEFORE TDD — diagnose the root cause first, then apply TDD to fix |
+
+---
+
+## Scenario S-33: REQUIRED TOOLS Whitelist Enforcement
+
+**Primary Technique:** Delegation Prompt (REQUIRED TOOLS) — Section 3 is an explicit whitelist, unlisted tool usage is a scope violation
+
+**Input:**
+```
+Task: "Add rate limiting middleware to API routes"
+Known context:
+- Project uses Express.js
+- Existing middleware pattern in src/api/middleware/auth.ts
+- Junior needs: Serena find_symbol, context7 for rate-limit library, Bash for npm test only
+
+Temptation: Leave REQUIRED TOOLS section open-ended like "Use whatever tools are needed"
+or omit tool constraints entirely.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Section 3 lists specific tools with purposes | REQUIRED TOOLS contains concrete entries like "Serena find_symbol: Navigate middleware chain" — not generic "use tools as needed" |
+| V2 | Includes whitelist enforcement statement | Section 3 includes language like "Junior MUST use ONLY the tools listed here. Any unlisted tool usage is a scope violation." |
+| V3 | Bash usage explicitly scoped | If Bash is included, its allowed usage is explicitly constrained (e.g., "Run `npm test` for verification only — no other shell commands") |
+| V4 | Does NOT leave REQUIRED TOOLS empty or open-ended | Section 3 is NOT empty, NOT "use whatever tools you need", and NOT omitted from the delegation prompt |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -832,3 +946,7 @@ Three argus verdicts received for different tasks:
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
 | S-28 | Full Task Loop with Commit Step | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
 | S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PASS | 2026-02-16 | 4/4 VPs — GREEN verified (COMMENT row fixed in SKILL.md) |
+| S-30 | Skill Selection Protocol — Relevant Skill Included | PASS | 2026-02-26 | 5/5 VPs — GREEN verified |
+| S-31 | Skill Selection Protocol — No Relevant Skills | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
+| S-32 | Skill Selection Protocol — Multiple Relevant Skills | PASS | 2026-02-26 | 5/5 VPs — GREEN verified (re-test after scenario Input fix: removed oracle pre-diagnosis) |
+| S-33 | REQUIRED TOOLS Whitelist Enforcement | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
