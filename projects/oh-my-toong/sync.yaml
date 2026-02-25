@@ -20,29 +20,17 @@ commands:
     - hud
     - ralph
 
-scripts:
-  items:
-    - hud.js
-
 hooks:
   items:
     - component: keyword-detector.sh
       event: UserPromptSubmit
       timeout: 10
-    - component: persistent-mode.js
-      event: Stop
-      timeout: 15
-      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/persistent-mode.js"
     - component: pre-tool-enforcer.sh
       event: PreToolUse
       timeout: 5
     - component: session-start.sh
       event: SessionStart
       timeout: 10
-    - component: skill-catalog.js
-      event: SessionStart
-      timeout: 10
-      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/skill-catalog.js"
     - component: oh-my-toong:sync-schema-validator.sh
       event: PostToolUse
       matcher: "Edit(**/sync.yaml)"
