@@ -57,9 +57,7 @@ skills:
       platforms: [claude]
     - agent-council
     - clarify
-    - explore
     - git-committer
-    - librarian
     - metis
     - momus
     - oracle

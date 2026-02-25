@@ -254,8 +254,6 @@ oh-my-toong/
 | **prometheus** | Strategic planning consultant | Planner only - NEVER implements |
 | **sisyphus** | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
 | **oracle** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
-| **explore** | Codebase search | Returns actionable results with absolute paths |
-| **librarian** | External documentation researcher | Searches external docs - NOT internal codebase |
 | **clarify** | Requirements clarification | MANDATORY gate before implementation |
 | **metis** | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
