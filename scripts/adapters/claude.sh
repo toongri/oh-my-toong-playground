@@ -524,7 +524,7 @@ claude_sync_plugin_install() {
     fi
 
     log_info "플러그인 설치: $plugin_name"
-    if ! claude plugin install "$plugin_name" 2>&1; then
+    if ! CLAUDECODE= claude plugin install "$plugin_name" 2>&1; then
         log_warn "플러그인 설치 실패 (계속 진행): $plugin_name"
     fi
 }
