@@ -31,6 +31,12 @@ hooks:
     - component: session-start.sh
       event: SessionStart
       timeout: 10
+    - component: persistent-mode
+      event: Stop
+      timeout: 15
+    - component: skill-catalog
+      event: SessionStart
+      timeout: 10
 
 skills:
   items:
@@ -53,6 +59,10 @@ skills:
     - technical-writing
     - make-resume
     - review-resume
+
+scripts:
+  items:
+    - hud
 
 rules:
   items:

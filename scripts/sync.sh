@@ -558,8 +558,12 @@ sync_hooks() {
                         if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
                             cmd_path="$custom_command"
                         elif [[ -n "$component" && "$component" != "null" ]]; then
-                            # Use $CLAUDE_PROJECT_DIR for portable paths across subdirectories
-                            cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
+                            # Check if source is directory (bun run) or file (direct path)
+                            if [[ -d "$scoped_source" ]]; then
+                                cmd_path="bun run \$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}/index.ts"
+                            else
+                                cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
+                            fi
                         else
                             log_warn "Hook command가 정의되지 않음: event=$hook_event (스킵)"
                             continue
@@ -591,7 +595,11 @@ sync_hooks() {
                         if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
                             cmd_path="$custom_command"
                         elif [[ -n "$component" && "$component" != "null" ]]; then
-                            cmd_path=".gemini/hooks/${display_name}"
+                            if [[ -d "$scoped_source" ]]; then
+                                cmd_path="bun run .gemini/hooks/${display_name}/index.ts"
+                            else
+                                cmd_path=".gemini/hooks/${display_name}"
+                            fi
                         else
                             continue
                         fi
@@ -1205,6 +1213,34 @@ sync_plugins() {
 }
 
 # =============================================================================
+# Shared Lib Deployment
+# =============================================================================
+
+sync_lib() {
+    local target_path="$1"
+
+    if [[ ! -d "$ROOT_DIR/src/lib" ]]; then
+        return 0
+    fi
+
+    # Deploy to each platform that has a directory
+    for platform_dir in ".claude" ".gemini" ".codex"; do
+        local platform_path="$target_path/$platform_dir"
+        if [[ -d "$platform_path" ]]; then
+            local lib_dir="$platform_path/lib"
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_dry "Deploy lib: src/lib/ -> $lib_dir/"
+            else
+                rm -rf "$lib_dir"
+                mkdir -p "$lib_dir"
+                rsync -a --exclude '*.test.ts' "$ROOT_DIR/src/lib/" "$lib_dir/"
+                log_info "Deployed shared lib to $platform_dir/lib/"
+            fi
+        fi
+    done
+}
+
+# =============================================================================
 # YAML 처리
 # =============================================================================
 
@@ -1259,6 +1295,7 @@ process_yaml() {
     sync_scripts "$target_path" "$yaml_file"
     sync_rules "$target_path" "$yaml_file"
     sync_plugins "$target_path" "$yaml_file"
+    sync_lib "$target_path"
 
     log_success "완료: $yaml_file"
 }

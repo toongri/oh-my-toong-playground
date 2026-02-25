@@ -115,13 +115,17 @@ validate_scoped_component() {
     # Existence check with upward search
     # Note: extension="" means check for both file and directory (hooks have extension in name)
     if [[ "$IS_ROOT_YAML_CONTEXT" == true ]]; then
+        # Root yaml: src/ first, then global
+        local src_path="$ROOT_DIR/src/$category/${parsed_item}${extension}"
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
         local exists=false
         if [[ -n "$extension" ]]; then
-            [[ -f "$global_path" ]] && exists=true
+            [[ -f "$src_path" ]] && exists=true
+            [[ "$exists" == false && -f "$global_path" ]] && exists=true
         else
             # Check both file and directory when extension is empty
-            [[ -f "$global_path" || -d "$global_path" ]] && exists=true
+            [[ -f "$src_path" || -d "$src_path" ]] && exists=true
+            [[ "$exists" == false && ( -f "$global_path" || -d "$global_path" ) ]] && exists=true
         fi
         if [[ "$exists" == false ]]; then
             log_error "Component not found: $name -> $global_path"
@@ -130,22 +134,26 @@ validate_scoped_component() {
     else
         # Use CURRENT_PROJECT_DIR (directory name) for file path resolution
         local project_path="$ROOT_DIR/projects/$CURRENT_PROJECT_DIR/$category/${parsed_item}${extension}"
+        local src_path="$ROOT_DIR/src/$category/${parsed_item}${extension}"
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
 
         local found=false
         if [[ -n "$extension" ]]; then
             # Extension provided - check files only
             [[ -f "$project_path" ]] && found=true
+            [[ "$found" == false && -f "$src_path" ]] && found=true
             [[ "$found" == false && -f "$global_path" ]] && found=true
         else
             # No extension - check both files and directories
             [[ -f "$project_path" || -d "$project_path" ]] && found=true
+            [[ "$found" == false && ( -f "$src_path" || -d "$src_path" ) ]] && found=true
             [[ "$found" == false && ( -f "$global_path" || -d "$global_path" ) ]] && found=true
         fi
 
         if [[ "$found" == false ]]; then
             log_error "Component not found in project '$CURRENT_PROJECT_DIR' or global: $name"
             log_info "  Searched: $project_path"
+            log_info "  Searched: $src_path"
             log_info "  Searched: $global_path"
             return 1
         fi
