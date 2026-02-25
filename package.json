@@ -1,0 +1,12 @@
+{
+  "name": "oh-my-toong",
+  "version": "1.0.0",
+  "description": "Multi-AI skills and configuration management system",
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
