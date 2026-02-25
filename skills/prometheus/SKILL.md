@@ -564,7 +564,7 @@ Overall structure:
 
 </CRITICAL_GATE>
 
-**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before writing the plan. REQUEST_CHANGES blocks until resolved.**
+**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis agent to validate your work. **Metis must pass (APPROVE or COMMENT) before writing the plan. REQUEST_CHANGES blocks until resolved.**
 
 **TIMING: Metis is invoked when BOTH conditions are met:**
 1. Clearance Checklist: all YES
