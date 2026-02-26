@@ -28,6 +28,7 @@ import {
   computeStatus,
   detectCliType,
   buildAugmentedCommand,
+  gcStaleJobs,
 } from './chunk-review-job.ts';
 
 // ---------------------------------------------------------------------------
@@ -1696,6 +1697,120 @@ describe('buildAugmentedCommand', () => {
 });
 
 // ---------------------------------------------------------------------------
+// gcStaleJobs
+// ---------------------------------------------------------------------------
+
+describe('gcStaleJobs', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('deletes chunk-review-* directories older than 1 hour', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const staleDir = path.join(jobsDir, 'chunk-review-stale-001');
+    fs.mkdirSync(staleDir, { recursive: true });
+    const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    fs.writeFileSync(
+      path.join(staleDir, 'job.json'),
+      JSON.stringify({ id: 'chunk-review-stale-001', createdAt: twoHoursAgo }),
+    );
+
+    gcStaleJobs(jobsDir);
+
+    expect(fs.existsSync(staleDir)).toBe(false);
+  });
+
+  test('preserves chunk-review-* directories younger than 1 hour', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const freshDir = path.join(jobsDir, 'chunk-review-fresh-001');
+    fs.mkdirSync(freshDir, { recursive: true });
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    fs.writeFileSync(
+      path.join(freshDir, 'job.json'),
+      JSON.stringify({ id: 'chunk-review-fresh-001', createdAt: fiveMinutesAgo }),
+    );
+
+    gcStaleJobs(jobsDir);
+
+    expect(fs.existsSync(freshDir)).toBe(true);
+  });
+
+  test('skips directories with missing job.json', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const noJsonDir = path.join(jobsDir, 'chunk-review-nojson-001');
+    fs.mkdirSync(noJsonDir, { recursive: true });
+    // No job.json written
+
+    gcStaleJobs(jobsDir);
+
+    expect(fs.existsSync(noJsonDir)).toBe(true);
+  });
+
+  test('skips directories with malformed job.json', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const badJsonDir = path.join(jobsDir, 'chunk-review-badjson-001');
+    fs.mkdirSync(badJsonDir, { recursive: true });
+    fs.writeFileSync(path.join(badJsonDir, 'job.json'), '{{not valid json}}');
+
+    gcStaleJobs(jobsDir);
+
+    expect(fs.existsSync(badJsonDir)).toBe(true);
+  });
+
+  test('skips non-chunk-review directories', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const otherDir = path.join(jobsDir, 'spec-review-other-001');
+    fs.mkdirSync(otherDir, { recursive: true });
+    const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    fs.writeFileSync(
+      path.join(otherDir, 'job.json'),
+      JSON.stringify({ id: 'spec-review-other-001', createdAt: twoHoursAgo }),
+    );
+
+    gcStaleJobs(jobsDir);
+
+    expect(fs.existsSync(otherDir)).toBe(true);
+  });
+
+  test('path traversal guard prevents deletion outside jobsDir', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    // Create a target directory outside jobsDir
+    const outsideDir = path.join(tmpDir, 'outside-target');
+    fs.mkdirSync(outsideDir, { recursive: true });
+    const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    fs.writeFileSync(
+      path.join(outsideDir, 'job.json'),
+      JSON.stringify({ id: 'chunk-review-symlink', createdAt: twoHoursAgo }),
+    );
+
+    // Create a symlink inside jobsDir that points outside
+    const symlinkPath = path.join(jobsDir, 'chunk-review-symlink');
+    fs.symlinkSync(outsideDir, symlinkPath);
+
+    gcStaleJobs(jobsDir);
+
+    // The outside directory must still exist
+    expect(fs.existsSync(outsideDir)).toBe(true);
+  });
+});
 // cmdClean — path traversal guard (Fix A)
 // ---------------------------------------------------------------------------
 
