@@ -20,8 +20,8 @@ make sync               # Deploy to target projects (runs validate + tests first
 ### Running Individual Tests
 
 ```bash
-bash hooks/test/keyword_detector_test.sh   # Single shell test
-bash scripts/test/sync_test.sh             # Sync orchestrator tests
+bash hooks/keyword-detector_test.sh        # Single shell test (colocated next to source)
+bash scripts/sync_test.sh                  # Sync orchestrator tests (colocated next to source)
 bun test                                   # All TypeScript tests
 ```
 
@@ -131,7 +131,7 @@ skills:
 - **TypeScript**: ESM modules, bun:test for testing. No build step required.
 - **YAML**: 2-space indentation
 - **Naming**: `skills/<greek-name>/`, `agents/<name>.md`, `hooks/<purpose>.(sh|js|py)`
-- **Shell tests**: Standalone scripts using `mktemp -d` with cleanup; naming convention `*_test.sh` or `test_*.sh`
+- **Shell tests**: Colocated next to source files with `_test.sh` suffix (e.g., `hooks/keyword-detector_test.sh`, `scripts/sync_test.sh`); use `mktemp -d` with cleanup
 
 ## Critical Patterns
 
