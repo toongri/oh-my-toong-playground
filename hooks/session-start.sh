@@ -105,7 +105,7 @@ if [ -f "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" ]; then
   if command -v jq &> /dev/null; then
     IS_ACTIVE=$(echo "$RALPH_STATE" | jq -r '.active // false' 2>/dev/null)
     if [ "$IS_ACTIVE" = "true" ]; then
-      ITERATION=$(echo "$RALPH_STATE" | jq -r '.iteration // 1' 2>/dev/null)
+      ITERATION=$(echo "$RALPH_STATE" | jq -r '.iteration // 0' 2>/dev/null)
       MAX_ITER=$(echo "$RALPH_STATE" | jq -r '.max_iterations // 10' 2>/dev/null)
       PROMPT=$(echo "$RALPH_STATE" | jq -r '.prompt // "Task in progress"' 2>/dev/null)
       ORACLE_FEEDBACK=$(echo "$RALPH_STATE" | jq -r '.oracle_feedback // [] | join("\n")' 2>/dev/null)

@@ -210,21 +210,21 @@ test_ralph_keyword_detected_case_insensitive() {
     # When "ralph" keyword is in prompt (case-insensitive), should be detected
     local output=$(run_keyword_detector "Please ralph this task" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode message"
+    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode message" || return 1
 }
 
 test_ralph_keyword_detected_uppercase() {
     # When "RALPH" keyword is in prompt, should be detected
     local output=$(run_keyword_detector "RALPH complete this task" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode for uppercase RALPH"
+    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode for uppercase RALPH" || return 1
 }
 
 test_ralph_keyword_detected_mixed_case() {
     # When "Ralph" keyword is in prompt, should be detected
     local output=$(run_keyword_detector "Ralph please finish" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode for mixed case Ralph"
+    assert_output_contains "$output" "ralph-mode" "Should output ralph-mode for mixed case Ralph" || return 1
 }
 
 test_ralph_keyword_not_detected_in_code_block() {
@@ -265,7 +265,7 @@ test_ralph_creates_ralph_state_json() {
     # When ralph keyword detected, should create ralph-state-default.json
     run_keyword_detector "ralph complete this" "$TEST_TMP_DIR" > /dev/null
 
-    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-default.json" "Should create ralph-state-default.json"
+    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-default.json" "Should create ralph-state-default.json" || return 1
 }
 
 test_ralph_state_has_correct_structure() {
@@ -274,10 +274,10 @@ test_ralph_state_has_correct_structure() {
 
     local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
 
-    assert_json_field "$state_file" ".active" "true" "active should be true"
-    assert_json_field "$state_file" ".iteration" "1" "iteration should be 1"
-    assert_json_field "$state_file" ".max_iterations" "10" "max_iterations should be 10"
-    assert_json_field "$state_file" ".completion_promise" "DONE" "completion_promise should be DONE"
+    assert_json_field "$state_file" ".active" "true" "active should be true" || return 1
+    assert_json_field "$state_file" ".iteration" "0" "iteration should be 0" || return 1
+    assert_json_field "$state_file" ".max_iterations" "10" "max_iterations should be 10" || return 1
+    assert_json_field "$state_file" ".completion_promise" "DONE" "completion_promise should be DONE" || return 1
 }
 
 test_ralph_state_contains_prompt() {
@@ -323,7 +323,7 @@ test_ralph_does_not_overwrite_existing_ultrawork_state() {
     local state_file="$TEST_TMP_DIR/.omt/ultrawork-state-default.json"
 
     # Should preserve original content
-    assert_json_field "$state_file" ".original_prompt" "existing task" "Should preserve existing ultrawork state"
+    assert_json_field "$state_file" ".original_prompt" "existing task" "Should preserve existing ultrawork state" || return 1
 }
 
 # =============================================================================
@@ -334,7 +334,7 @@ test_ralph_takes_priority_over_ultrawork() {
     # When both "ralph" and "ultrawork" are in prompt, ralph should win
     local output=$(run_keyword_detector "ralph ultrawork complete this" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "ralph-mode" "ralph should take priority"
+    assert_output_contains "$output" "ralph-mode" "ralph should take priority" || return 1
 
     # Should NOT contain ultrawork-mode
     if echo "$output" | grep -q "ultrawork-mode"; then
@@ -352,21 +352,21 @@ test_ralph_output_contains_iteration_info() {
     # Output should contain iteration information
     local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "Iteration 1/10" "Should show iteration 1/10"
+    assert_output_contains "$output" "Iteration 0/10" "Should show iteration 0/10" || return 1
 }
 
 test_ralph_output_contains_ralph_loop_activated() {
     # Output should contain activation message
     local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should show RALPH LOOP ACTIVATED"
+    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should show RALPH LOOP ACTIVATED" || return 1
 }
 
 test_ralph_output_contains_done_promise_instruction() {
     # Output should mention the DONE promise
     local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "DONE" "Should mention DONE promise"
+    assert_output_contains "$output" "DONE" "Should mention DONE promise" || return 1
 }
 
 # =============================================================================
@@ -378,7 +378,7 @@ test_ultrawork_output_contains_certainty_gate() {
     # EXPECTED: 출력 JSON의 additionalContext에 CERTAINTY GATE 섹션 포함
     local output=$(run_keyword_detector "ultrawork implement the feature" "$TEST_TMP_DIR")
     assert_output_contains "$output" "CERTAINTY GATE" \
-        "Ultrawork output should contain CERTAINTY GATE section"
+        "Ultrawork output should contain CERTAINTY GATE section" || return 1
 }
 
 test_ultrawork_certainty_gate_has_explore_directive() {
@@ -386,7 +386,7 @@ test_ultrawork_certainty_gate_has_explore_directive() {
     # EXPECTED: explore 에이전트 선행 호출 지시 포함
     local output=$(run_keyword_detector "ultrawork fix the bug" "$TEST_TMP_DIR")
     assert_output_contains "$output" "spawn explore agent FIRST" \
-        "CERTAINTY GATE should direct to spawn explore agent"
+        "CERTAINTY GATE should direct to spawn explore agent" || return 1
 }
 
 test_ultrawork_certainty_gate_has_oracle_directive() {
@@ -394,7 +394,7 @@ test_ultrawork_certainty_gate_has_oracle_directive() {
     # EXPECTED: oracle 에이전트 선행 호출 지시 포함
     local output=$(run_keyword_detector "ultrawork refactor this" "$TEST_TMP_DIR")
     assert_output_contains "$output" "spawn oracle agent FIRST" \
-        "CERTAINTY GATE should direct to spawn oracle agent"
+        "CERTAINTY GATE should direct to spawn oracle agent" || return 1
 }
 
 test_ultrawork_certainty_gate_has_assumptions_warning() {
@@ -402,7 +402,7 @@ test_ultrawork_certainty_gate_has_assumptions_warning() {
     # EXPECTED: 가정 경고 포함
     local output=$(run_keyword_detector "ulw add new feature" "$TEST_TMP_DIR")
     assert_output_contains "$output" "Assumptions = bugs" \
-        "CERTAINTY GATE should warn about assumptions"
+        "CERTAINTY GATE should warn about assumptions" || return 1
 }
 
 # =============================================================================
@@ -414,7 +414,7 @@ test_ultrawork_output_contains_blocked_excuses() {
     # EXPECTED: BLOCKED EXCUSES 섹션 포함
     local output=$(run_keyword_detector "ultrawork implement auth" "$TEST_TMP_DIR")
     assert_output_contains "$output" "BLOCKED EXCUSES" \
-        "Ultrawork output should contain BLOCKED EXCUSES section"
+        "Ultrawork output should contain BLOCKED EXCUSES section" || return 1
 }
 
 test_ultrawork_blocked_excuses_has_simplified_pattern() {
@@ -422,7 +422,7 @@ test_ultrawork_blocked_excuses_has_simplified_pattern() {
     # EXPECTED: "simplified version" 변명 패턴 차단 포함
     local output=$(run_keyword_detector "ultrawork build the system" "$TEST_TMP_DIR")
     assert_output_contains "$output" "simplified version" \
-        "Should block 'simplified version' excuse pattern"
+        "Should block 'simplified version' excuse pattern" || return 1
 }
 
 test_ultrawork_blocked_excuses_has_cant_verify_pattern() {
@@ -430,7 +430,7 @@ test_ultrawork_blocked_excuses_has_cant_verify_pattern() {
     # EXPECTED: 검증 불가 변명 차단 + argus 대체 행동 포함
     local output=$(run_keyword_detector "ultrawork test the hooks" "$TEST_TMP_DIR")
     assert_output_contains "$output" "argus" \
-        "Should reference argus as recovery action for can't-verify excuse"
+        "Should reference argus as recovery action for can't-verify excuse" || return 1
 }
 
 test_ultrawork_blocked_excuses_has_leave_for_user_pattern() {
@@ -438,7 +438,7 @@ test_ultrawork_blocked_excuses_has_leave_for_user_pattern() {
     # EXPECTED: 사용자 위임 변명 차단 포함
     local output=$(run_keyword_detector "ultrawork set up CI" "$TEST_TMP_DIR")
     assert_output_contains "$output" "leave this for the user" \
-        "Should block 'leave for user' excuse pattern"
+        "Should block 'leave for user' excuse pattern" || return 1
 }
 
 test_ultrawork_blocked_excuses_has_complexity_pattern() {
@@ -446,7 +446,7 @@ test_ultrawork_blocked_excuses_has_complexity_pattern() {
     # EXPECTED: 복잡도 구실 차단 포함
     local output=$(run_keyword_detector "ulw refactor everything" "$TEST_TMP_DIR")
     assert_output_contains "$output" "complexity" \
-        "Should block 'due to complexity' excuse pattern"
+        "Should block 'due to complexity' excuse pattern" || return 1
 }
 
 # =============================================================================
@@ -505,7 +505,7 @@ some code
 ultrawork implement this feature'
     local output=$(run_keyword_detector "$prompt" "$TEST_TMP_DIR")
     assert_output_contains "$output" "ultrawork-mode" \
-        "ultrawork outside code block should be detected"
+        "ultrawork outside code block should be detected" || return 1
 }
 
 test_ulw_abbreviation_detected() {
@@ -513,7 +513,7 @@ test_ulw_abbreviation_detected() {
     # EXPECTED: ultrawork-mode 출력 (동일 처리)
     local output=$(run_keyword_detector "ulw fix this quickly" "$TEST_TMP_DIR")
     assert_output_contains "$output" "ultrawork-mode" \
-        "ulw abbreviation should trigger ultrawork mode"
+        "ulw abbreviation should trigger ultrawork mode" || return 1
 }
 
 test_ultrawork_case_insensitive() {
@@ -521,7 +521,7 @@ test_ultrawork_case_insensitive() {
     # EXPECTED: ultrawork-mode 출력
     local output=$(run_keyword_detector "ULTRAWORK complete the task" "$TEST_TMP_DIR")
     assert_output_contains "$output" "ultrawork-mode" \
-        "ULTRAWORK (uppercase) should trigger ultrawork mode"
+        "ULTRAWORK (uppercase) should trigger ultrawork mode" || return 1
 }
 
 test_ultrawork_not_detected_as_substring() {
@@ -556,7 +556,7 @@ test_ultrawork_output_has_correct_hook_event() {
     # EXPECTED: hookEventName이 "UserPromptSubmit"
     local output=$(run_keyword_detector "ultrawork do this" "$TEST_TMP_DIR")
     local event=$(echo "$output" | jq -r '.hookSpecificOutput.hookEventName')
-    assert_equals "UserPromptSubmit" "$event" "hookEventName should be UserPromptSubmit"
+    assert_equals "UserPromptSubmit" "$event" "hookEventName should be UserPromptSubmit" || return 1
 }
 
 test_ultrawork_output_has_continue_true() {
@@ -564,7 +564,7 @@ test_ultrawork_output_has_continue_true() {
     # EXPECTED: continue가 true
     local output=$(run_keyword_detector "ultrawork do this" "$TEST_TMP_DIR")
     local cont=$(echo "$output" | jq -r '.continue')
-    assert_equals "true" "$cont" "continue should be true"
+    assert_equals "true" "$cont" "continue should be true" || return 1
 }
 
 # =============================================================================
@@ -897,6 +897,61 @@ and a newline'
     return 0
 }
 
+test_ralph_state_prompt_is_truncated_when_too_long() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local long_text
+    long_text=$(perl -e 'print "x" x 3500')
+    local long_prompt="ralph ${long_text}"
+
+    run_keyword_detector "$long_prompt" "$TEST_TMP_DIR" > /dev/null
+
+    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
+    assert_file_exists "$state_file" "Ralph state file should exist for truncation test" || return 1
+
+    local stored_prompt
+    stored_prompt=$(jq -r '.prompt' "$state_file" 2>/dev/null)
+
+    if [[ "$stored_prompt" != *"[truncated from "* ]]; then
+        echo "ASSERTION FAILED: state prompt should include truncation suffix"
+        return 1
+    fi
+
+    if [[ ${#stored_prompt} -gt 1300 ]]; then
+        echo "ASSERTION FAILED: state prompt should be bounded after truncation"
+        echo "  Actual length: ${#stored_prompt}"
+        return 1
+    fi
+
+    return 0
+}
+
+test_ralph_nested_loop_prevention() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local nested_prompt="ralph <ralph-loop-continuation>Previous ralph task</ralph-loop-continuation> new task"
+
+    run_keyword_detector "$nested_prompt" "$TEST_TMP_DIR" > /dev/null
+
+    local state_file="$TEST_TMP_DIR/.omt/ralph-state-default.json"
+    assert_file_exists "$state_file" "Ralph state file should exist" || return 1
+
+    local stored_prompt
+    stored_prompt=$(jq -r '.prompt' "$state_file" 2>/dev/null)
+
+    if [[ "$stored_prompt" == *"<ralph-loop-"* ]]; then
+        echo "ASSERTION FAILED: nested ralph tags should be stripped"
+        return 1
+    fi
+
+    if [[ "$stored_prompt" != *"new task" ]]; then
+        echo "ASSERTION FAILED: original task should be preserved"
+        return 1
+    fi
+
+    return 0
+}
+
 # =============================================================================
 # Main Test Runner
 # =============================================================================
@@ -988,6 +1043,8 @@ main() {
 
     # Special Characters JSON Safety
     run_test test_ralph_special_characters_produce_valid_json
+    run_test test_ralph_state_prompt_is_truncated_when_too_long
+    run_test test_ralph_nested_loop_prevention
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

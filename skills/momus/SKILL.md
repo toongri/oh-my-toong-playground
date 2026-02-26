@@ -145,6 +145,22 @@ Classify every finding by certainty before it affects the verdict.
 | Task dependencies | Order specified? Parallel or sequential? |
 | Scope boundaries | What's explicitly OUT of scope? |
 
+### 5. AI-Slop Detection (Implementation Level)
+
+Detect patterns where LLM agents introduce unnecessary complexity during implementation planning. Flag these when reviewing TODO/plan tasks.
+
+#### Premature Abstraction
+
+- **Signal**: Plan introduces interfaces, base classes, factory patterns, or configuration layers for code that has exactly one consumer. Abstractions appear before a second use case exists.
+- **Example**: A plan for "add CSV export to the reports page" includes: create `ExportStrategy` interface, `CsvExportStrategy` implements it, `ExportStrategyFactory` to resolve strategies — when only CSV export was requested and no other format is in scope.
+- **Why It's Slop**: LLM agents default to "extensible" architecture because training data rewards it. But abstraction without a second use case is speculative complexity. It increases cognitive load, adds indirection, and solves a problem that may never materialize.
+
+#### Over-Validation
+
+- **Signal**: Plan includes error handling, type guards, or validation logic for inputs that are structurally impossible given the call site. Defensive code appears where the type system or caller already guarantees correctness.
+- **Example**: A TypeScript function receives a `string` parameter from a validated form input, but the plan includes: null check, undefined check, empty string check, regex format validation, and a try-catch wrapping — when the caller already validates and the type signature excludes null/undefined.
+- **Why It's Slop**: LLM agents treat defensive programming as universally safe. But validating impossible states creates noise: it obscures real error handling, inflates line count, and signals distrust in the type system. Every unnecessary guard is a line that must be read, maintained, and tested for a scenario that cannot occur.
+
 <Output_Format>
 
 ## Final Verdict Format

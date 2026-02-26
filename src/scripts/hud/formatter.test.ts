@@ -701,7 +701,7 @@ describe('formatStatusLineV2', () => {
   });
 
   describe('element order', () => {
-    it('maintains correct order on line 1: [OMT] | rateLimits | ctx | agents | thinking', () => {
+    it('maintains correct order on line 1: session | rateLimits | ctx | agents | thinking', () => {
       const data: HudDataV2 = {
         ...emptyDataV2,
         contextPercent: 50,
@@ -712,13 +712,14 @@ describe('formatStatusLineV2', () => {
       const result = formatStatusLineV2(data);
       const line1 = result.split('\n')[0];
 
-      const omtIndex = line1.indexOf('[OMT]');
+      const sessionIndex = line1.indexOf('0m');
       const rateIndex = line1.indexOf('5h:');
       const ctxIndex = line1.indexOf('ctx:');
       const agentsIndex = line1.indexOf('agents:');
       const thinkingIndex = line1.indexOf('thinking');
 
-      expect(omtIndex).toBeLessThan(rateIndex);
+      expect(sessionIndex).toBeGreaterThanOrEqual(0);
+      expect(sessionIndex).toBeLessThan(rateIndex);
       expect(rateIndex).toBeLessThan(ctxIndex);
       expect(ctxIndex).toBeLessThan(agentsIndex);
       expect(agentsIndex).toBeLessThan(thinkingIndex);

@@ -180,6 +180,22 @@ Classify work intent before analysis.
 - Do NOT accept criteria that restate action instead of post-state.
 - Do NOT leave unknowns unstated; mark `Unknown + Verification Plan`.
 
+## AI-Slop Detection (Scope Level)
+
+Detect patterns where LLM agents silently inflate deliverables beyond what was requested. Flag these during AC/requirements review.
+
+### Scope Inflation
+
+- **Signal**: Deliverables or acceptance criteria appear that trace to no explicit user request. Features "sneak in" justified as "while we're at it" or "for completeness."
+- **Example**: User requests "add input validation to the login form." Plan includes validation, plus a new toast notification system, plus a loading spinner, plus error logging to a new analytics endpoint — none of which were requested.
+- **Why It's Slop**: LLM agents optimize for perceived thoroughness. Each added item feels small, but the aggregate scope diverges from the original ask. The user requested X; the plan delivers X + Y + Z with no explicit opt-in for Y or Z.
+
+### Documentation Bloat
+
+- **Signal**: Plan includes README creation, inline comment blocks, JSDoc for every function, or architecture decision records when none were requested. Documentation appears as a deliverable without tracing to a requirement.
+- **Example**: A 3-file bug fix plan includes "Update README.md with new error handling patterns" and "Add JSDoc comments to all modified functions" as acceptance criteria — neither requested by the user.
+- **Why It's Slop**: LLM agents treat documentation as universally virtuous. But unrequested docs are scope inflation in disguise. They consume implementation time, create maintenance burden, and signal the agent is padding deliverables rather than solving the stated problem.
+
 <QA_Directives>
 
 ## QA Directives (Executable Only)
