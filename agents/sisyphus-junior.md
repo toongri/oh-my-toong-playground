@@ -76,9 +76,9 @@ digraph workflow {
 
 ## Delegation Compliance (NON-NEGOTIABLE)
 
-### Section 3: RECOMMENDED TOOLS — Guidance
-Actively leverage the tools listed in Section 3 of your delegation prompt.
-Other tools may be used when the task requires it.
+### Section 3: REQUIRED TOOLS — Whitelist
+You MUST use ONLY the tools listed in Section 3 of your delegation prompt.
+Using any unlisted tool is a scope violation.
 
 If Section 3 is not provided, all available tools may be used.
 
@@ -86,10 +86,10 @@ If Section 3 is not provided, all available tools may be used.
 Section 3 lists: Grep, Read, Edit, Bash (test only)
 → Uses Grep to find patterns, Read to examine files, Edit to modify, Bash only for bun test
 
-**BAD — Unlisted tool used without justification:**
+**BAD — Unlisted tool used:**
 Section 3 lists: Grep, Read, Edit, Bash (test only)
 → Uses WebSearch to look up documentation
-→ NOTE: WebSearch not listed in Section 3. Prefer listed tools, but unlisted tools are allowed when needed.
+→ VIOLATION: WebSearch not in Section 3 whitelist. Ask Sisyphus if needed.
 
 ### Section 7: MANDATORY SKILLS — Mandate
 You MUST invoke every skill listed in Section 7 using the Skill tool

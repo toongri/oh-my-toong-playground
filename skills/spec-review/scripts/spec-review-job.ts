@@ -619,8 +619,26 @@ function cmdStop(_options, jobDir) {
   process.stdout.write(stoppedAny ? `stop: sent SIGTERM to running reviewers\n` : `stop: no running reviewers\n`);
 }
 
-function cmdClean(_options, jobDir) {
+function cmdClean(options, jobDir) {
   const resolvedJobDir = path.resolve(jobDir);
+
+  // Primary: use explicit jobs-dir from options/env/default
+  const configuredJobsDir = path.resolve(
+    options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(SKILL_DIR, '.jobs')
+  );
+
+  // Path traversal guard: check if target is under the configured jobs directory
+  const relative = path.relative(configuredJobsDir, resolvedJobDir);
+  const isUnderConfigured = !relative.startsWith('..') && !path.isAbsolute(relative);
+
+  if (!isUnderConfigured) {
+    // Fallback: accept if jobDir contains job.json (proves it's a real job directory)
+    const jobJsonPath = path.join(resolvedJobDir, 'job.json');
+    if (!fs.existsSync(jobJsonPath)) {
+      exitWithError(`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${configuredJobsDir})`);
+    }
+  }
+
   fs.rmSync(resolvedJobDir, { recursive: true, force: true });
   process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
 }
@@ -943,7 +961,7 @@ async function cmdStart(options, prompt) {
   const chairmanRoleRaw = options.chairman || process.env.SPEC_REVIEW_CHAIRMAN || config['spec-review'].chairman.role || 'auto';
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
-  const includeChairman = Boolean(options['include-chairman']);
+  const includeChairman = normalizeBool(options['include-chairman']);
   const excludeChairmanOverride =
     options['exclude-chairman'] != null ? true : options['include-chairman'] != null ? false : null;
 

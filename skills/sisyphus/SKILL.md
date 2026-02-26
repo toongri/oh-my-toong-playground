@@ -308,11 +308,11 @@ When delegating to sisyphus-junior, include all 7-section categories:
 - Expected behavior: [specific]
 - Verification: `[command]`
 
-## 3. RECOMMENDED TOOLS
+## 3. REQUIRED TOOLS
 - [tool]: [what to search/check]
 - context7: Look up [library] docs
-- [Explicit tool list — guides tool selection]
-- Actively leverage these tools for this task. Other tools may be used when the task requires it.
+- [Explicit tool list — Junior MUST use ONLY the tools listed here]
+- Any unlisted tool usage is a scope violation.
 
 ## 4. MUST DO
 - Follow pattern in [file:lines]
@@ -343,7 +343,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 - Expected behavior: All /api/* routes enforce 100 req/min per IP, returning 429 with Retry-After header
 - Verification: `npm test -- --grep "rate limit"` passes
 
-## 3. RECOMMENDED TOOLS
+## 3. REQUIRED TOOLS
 - Serena find_symbol: Navigate to router setup and existing middleware chain in src/api/router.ts
 - Serena get_symbols_overview: Understand middleware structure in src/api/middleware/
 - context7: Look up rate limiting library docs for configuration options
@@ -379,7 +379,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 | Symptom | Problem |
 |---------|---------|
 | One-line EXPECTED OUTCOME | Unclear verification criteria |
-| Empty RECOMMENDED TOOLS | Junior may miss useful tools for the task |
+| Empty REQUIRED TOOLS | Junior may miss useful tools for the task |
 | Empty MUST DO | No pattern reference for junior |
 | Missing CONTEXT | Junior lacks background |
 | Empty MANDATORY SKILLS without catalog evaluation | Skills needed but not included |
