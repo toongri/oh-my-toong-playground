@@ -13,15 +13,43 @@ const ORACLE_REJECTION_PATTERNS = [
 ];
 const FEEDBACK_PATTERN = /(issue|problem|reason):\s*([^\n]+)/gi;
 
-export function detectCompletionPromise(transcriptPath: string | null): boolean {
+export function detectCompletionPromise(transcriptPath: string | null, startedAt?: string): boolean {
   if (!transcriptPath) return false;
   const content = readFileOrNull(transcriptPath);
   if (!content) return false;
-  const detected = PROMISE_PATTERN.test(content);
-  if (detected) {
-    logDebug('detected completion promise <promise>DONE</promise>');
+
+  // If no started_at, fall back to full content scan (backward compat)
+  if (!startedAt) {
+    const detected = PROMISE_PATTERN.test(content);
+    if (detected) {
+      logDebug('detected completion promise <promise>DONE</promise>');
+    }
+    return detected;
   }
-  return detected;
+
+  // JSONL-aware filtering: only check lines after started_at
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let entry: { timestamp?: string };
+    try {
+      entry = JSON.parse(trimmed);
+    } catch {
+      continue; // Skip unparseable lines
+    }
+
+    // Skip lines without timestamp or before started_at
+    if (!entry.timestamp || entry.timestamp < startedAt) continue;
+
+    if (PROMISE_PATTERN.test(trimmed)) {
+      logDebug('detected completion promise <promise>DONE</promise> (after started_at)');
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function detectOracleApproval(transcriptPath: string | null, startedAt?: string): boolean {
@@ -91,9 +119,8 @@ export function detectOracleRejection(transcriptPath: string | null): string | n
 
 export function analyzeTranscript(transcriptPath: string | null, ralphState?: RalphState | null): TranscriptDetection {
   return {
-    hasCompletionPromise: detectCompletionPromise(transcriptPath),
+    hasCompletionPromise: detectCompletionPromise(transcriptPath, ralphState?.started_at),
     hasOracleApproval: detectOracleApproval(transcriptPath, ralphState?.started_at),
     oracleRejectionFeedback: detectOracleRejection(transcriptPath),
-    incompleteTodoCount: 0  // Deprecated: now using file-based task counting
   };
 }

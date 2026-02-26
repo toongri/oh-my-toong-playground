@@ -583,34 +583,34 @@ test_ralph_message_json_valid() {
     return 0
 }
 
-test_ralph_message_completion_guide_present() {
+test_ralph_message_must_keyword_present() {
     local message
     message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
 
-    if [[ "$message" != *"COMPLETION SEQUENCE (MANDATORY)"* ]]; then
-        echo "FAIL: Message does not contain 'COMPLETION SEQUENCE (MANDATORY)'"
+    if [[ "$message" != *"MUST"* ]]; then
+        echo "FAIL: Message does not contain 'MUST'"
         return 1
     fi
     return 0
 }
 
-test_ralph_message_verification_requirements_present() {
+test_ralph_message_promise_done_present() {
     local message
     message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
 
-    if [[ "$message" != *"VERIFICATION REQUIREMENTS"* ]]; then
-        echo "FAIL: Message does not contain 'VERIFICATION REQUIREMENTS'"
+    if [[ "$message" != *'<promise>DONE</promise>'* ]]; then
+        echo "FAIL: Message does not contain '<promise>DONE</promise>'"
         return 1
     fi
     return 0
 }
 
-test_ralph_message_red_flags_present() {
+test_ralph_message_no_oracle_or_verified_complete() {
     local message
     message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
 
-    if [[ "$message" != *"Red Flags"* ]]; then
-        echo "FAIL: Message does not contain 'Red Flags'"
+    if [[ "$message" == *"Oracle"* ]] || [[ "$message" == *"VERIFIED_COMPLETE"* ]]; then
+        echo "FAIL: Message should not contain 'Oracle' or 'VERIFIED_COMPLETE'"
         return 1
     fi
     return 0
@@ -959,9 +959,9 @@ main() {
 
     # Ralph activation message validation (from hooks/tests/)
     run_test test_ralph_message_json_valid
-    run_test test_ralph_message_completion_guide_present
-    run_test test_ralph_message_verification_requirements_present
-    run_test test_ralph_message_red_flags_present
+    run_test test_ralph_message_must_keyword_present
+    run_test test_ralph_message_promise_done_present
+    run_test test_ralph_message_no_oracle_or_verified_complete
     run_test test_ralph_message_core_rules_present
     run_test test_ralph_message_variable_expansion
     run_test test_ralph_message_file_references
