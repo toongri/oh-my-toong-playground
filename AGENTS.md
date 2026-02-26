@@ -5,7 +5,7 @@
 - `skills/`: Skill definitions (each in its own folder, typically `skills/<name>/SKILL.md`; some include `tests/` docs).
 - `agents/`: Sub-agent prompt definitions used for delegation (e.g., `agents/oracle.md`).
 - `commands/`: Slash-command docs (e.g., `commands/hud.md`).
-- `hooks/`: Claude Code lifecycle hooks (`*.sh`, `*.js`, `*.py`) plus `hooks/test/` for shell-based tests.
+- `hooks/`: Claude Code lifecycle hooks (`*.sh`) plus `hooks/test/` for shell-based tests.
 - `scripts/`: Sync/validation tooling and utilities.
 - `src/`: TypeScript source packages:
   - `src/hooks/persistent-mode/`: Stop-hook TypeScript package.

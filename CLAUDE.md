@@ -106,7 +106,7 @@ skills:
 
 - **session-start.sh**: Restores persistent mode states (ralph-loop, incomplete todos)
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
-- **persistent-mode.js**: Prevents stopping when work remains incomplete (Stop hook, Node.js)
+- **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
 
 ### Key Workflows
