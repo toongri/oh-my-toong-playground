@@ -36,6 +36,49 @@ const WORKER_PATH = path.join(SCRIPT_DIR, 'chunk-review-worker.ts');
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'chunk-review.config.yaml');
 const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'chunk-review.config.yaml');
 
+const GC_MAX_AGE_MS = 3_600_000; // 1 hour
+
+function gcStaleJobs(jobsDir: string): void {
+  try {
+    const resolvedJobsDir = fs.realpathSync(jobsDir);
+    const entries = fs.readdirSync(jobsDir);
+    for (const entry of entries) {
+      if (!/^chunk-review-/.test(entry)) continue;
+
+      const candidatePath = path.join(jobsDir, entry);
+
+      // Path traversal guard — resolve symlinks before comparing
+      let realCandidatePath: string;
+      try {
+        realCandidatePath = fs.realpathSync(candidatePath);
+      } catch {
+        continue;
+      }
+      const relative = path.relative(resolvedJobsDir, realCandidatePath);
+      const isUnder = !relative.startsWith('..') && !path.isAbsolute(relative);
+      if (!isUnder) continue;
+
+      let jobMeta: any;
+      try {
+        jobMeta = readJsonIfExists(path.join(candidatePath, 'job.json'));
+      } catch {
+        continue;
+      }
+      if (!jobMeta || !jobMeta.createdAt) continue;
+
+      const createdAtMs = new Date(jobMeta.createdAt).getTime();
+      if (Number.isNaN(createdAtMs)) continue;
+
+      const age = Date.now() - createdAtMs;
+      if (age > GC_MAX_AGE_MS) {
+        fs.rmSync(candidatePath, { recursive: true, force: true });
+      }
+    }
+  } catch {
+    // GC is best-effort — never block cmdStart
+  }
+}
+
 const UI_STRINGS = {
   dispatch: {
     completed: 'Dispatched review prompts',
@@ -773,6 +816,7 @@ async function cmdStart(options, prompt) {
     options['jobs-dir'] || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
 
   ensureDir(jobsDir);
+  gcStaleJobs(jobsDir);
 
   const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseChunkReviewConfig(configPath);
@@ -934,4 +978,5 @@ export {
   computeStatus,
   detectCliType,
   buildAugmentedCommand,
+  gcStaleJobs,
 };
