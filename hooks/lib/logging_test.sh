@@ -6,8 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOKS_DIR="$(dirname "$SCRIPT_DIR")"
-LOGGING_LIB="$HOOKS_DIR/lib/logging.sh"
+LOGGING_LIB="$SCRIPT_DIR/logging.sh"
 
 # Test utilities
 TESTS_PASSED=0
