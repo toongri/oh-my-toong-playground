@@ -21,6 +21,7 @@ export interface RalphState {
   completion_promise: string;
   prompt: string;
   oracle_feedback?: string[];
+  started_at?: string;
 }
 
 // Hook output format

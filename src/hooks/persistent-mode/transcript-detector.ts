@@ -1,4 +1,4 @@
-import { TranscriptDetection } from './types.ts';
+import { TranscriptDetection, RalphState } from './types.ts';
 import { readFileOrNull } from './utils.ts';
 import { logDebug } from '../../lib/logging.ts';
 
@@ -24,15 +24,43 @@ export function detectCompletionPromise(transcriptPath: string | null): boolean 
   return detected;
 }
 
-export function detectOracleApproval(transcriptPath: string | null): boolean {
+export function detectOracleApproval(transcriptPath: string | null, startedAt?: string): boolean {
   if (!transcriptPath) return false;
   const content = readFileOrNull(transcriptPath);
   if (!content) return false;
-  const detected = ORACLE_APPROVED_PATTERN.test(content);
-  if (detected) {
-    logDebug('detected oracle approval <oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
+
+  // If no started_at, fall back to full content scan (backward compat)
+  if (!startedAt) {
+    const detected = ORACLE_APPROVED_PATTERN.test(content);
+    if (detected) {
+      logDebug('detected oracle approval <oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
+    }
+    return detected;
   }
-  return detected;
+
+  // JSONL-aware filtering: only check lines after started_at
+  const lines = content.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let entry: { timestamp?: string };
+    try {
+      entry = JSON.parse(trimmed);
+    } catch {
+      continue; // Skip unparseable lines
+    }
+
+    // Skip lines without timestamp or before started_at
+    if (!entry.timestamp || entry.timestamp < startedAt) continue;
+
+    if (ORACLE_APPROVED_PATTERN.test(trimmed)) {
+      logDebug('detected oracle approval <oracle-approved>VERIFIED_COMPLETE</oracle-approved> (after started_at)');
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function detectOracleRejection(transcriptPath: string | null): string | null {
@@ -61,10 +89,10 @@ export function detectOracleRejection(transcriptPath: string | null): string | n
   return feedbackMatches.length > 0 ? feedbackMatches.join(' ') : '';
 }
 
-export function analyzeTranscript(transcriptPath: string | null): TranscriptDetection {
+export function analyzeTranscript(transcriptPath: string | null, ralphState?: RalphState | null): TranscriptDetection {
   return {
     hasCompletionPromise: detectCompletionPromise(transcriptPath),
-    hasOracleApproval: detectOracleApproval(transcriptPath),
+    hasOracleApproval: detectOracleApproval(transcriptPath, ralphState?.started_at),
     oracleRejectionFeedback: detectOracleRejection(transcriptPath),
     incompleteTodoCount: 0  // Deprecated: now using file-based task counting
   };

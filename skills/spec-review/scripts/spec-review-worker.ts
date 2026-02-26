@@ -207,6 +207,8 @@ function runOnce(opts) {
 
     const outStream = fs.createWriteStream(outPath, { flags: 'w' });
     const errStream = fs.createWriteStream(errPath, { flags: 'w' });
+    outStream.on('error', () => { /* ignore */ });
+    errStream.on('error', () => { /* ignore */ });
 
     let child;
     try {
@@ -220,7 +222,7 @@ function runOnce(opts) {
         message: error && error.message ? error.message : 'Failed to spawn command',
         finishedAt: new Date().toISOString(), command, attempt,
       };
-      atomicWriteJson(statusPath, result);
+      try { atomicWriteJson(statusPath, result); } catch { /* ignore */ }
       try { outStream.end(); errStream.end(); } catch { /* ignore */ }
       resolve(result);
       return;
@@ -233,10 +235,12 @@ function runOnce(opts) {
       child.stdin.end();
     }
 
-    atomicWriteJson(statusPath, {
-      reviewer, state: 'running', startedAt: new Date().toISOString(),
-      command, pid: child.pid, attempt,
-    });
+    try {
+      atomicWriteJson(statusPath, {
+        reviewer, state: 'running', startedAt: new Date().toISOString(),
+        command, pid: child.pid, attempt,
+      });
+    } catch { /* ignore */ }
 
     if (child.stdout) child.stdout.pipe(outStream);
     if (child.stderr) child.stderr.pipe(errStream);
@@ -247,14 +251,34 @@ function runOnce(opts) {
       timeoutHandle = setTimeout(() => {
         timeoutTriggered = true;
         try { process.kill(child.pid, 'SIGTERM'); } catch { /* ignore */ }
+        // SIGKILL escalation after 5s grace period
+        const killHandle = setTimeout(() => {
+          try { process.kill(child.pid, 'SIGKILL'); } catch { /* ignore */ }
+        }, 5000);
+        killHandle.unref();
       }, timeoutSec * 1000);
       timeoutHandle.unref();
     }
 
+    let isFinalized = false;
     const finalize = (payload) => {
-      try { outStream.end(); errStream.end(); } catch { /* ignore */ }
-      atomicWriteJson(statusPath, payload);
-      resolve(payload);
+      if (isFinalized) return;
+      isFinalized = true;
+      try { atomicWriteJson(statusPath, payload); } catch { /* ignore */ }
+      let closed = 0;
+      const total = 2;
+      const safetyTimeout = setTimeout(() => resolve(payload), 500);
+      const onClose = () => {
+        if (++closed === total) {
+          clearTimeout(safetyTimeout);
+          resolve(payload);
+        }
+      };
+      // Stream may already be closed (pipe ended it before finalize ran)
+      if (outStream.closed || outStream.destroyed) { onClose(); } else { outStream.on('close', onClose); }
+      if (errStream.closed || errStream.destroyed) { onClose(); } else { errStream.on('close', onClose); }
+      outStream.end();
+      errStream.end();
     };
 
     child.on('error', (error) => {
@@ -268,17 +292,26 @@ function runOnce(opts) {
       });
     });
 
+    // Capture exit code/signal first — stdio may not be fully drained yet
+    let exitCode = null;
+    let exitSignal = null;
+
     child.on('exit', (code, signal) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      const timedOut = Boolean(timeoutTriggered) && signal === 'SIGTERM';
-      const canceled = !timedOut && signal === 'SIGTERM';
+      exitCode = typeof code === 'number' ? code : null;
+      exitSignal = signal || null;
+    });
+
+    // Finalize after all stdio streams are drained
+    child.on('close', () => {
+      const timedOut = Boolean(timeoutTriggered);
+      const canceled = !timedOut && exitSignal === 'SIGTERM';
       finalize({
         reviewer,
-        state: timedOut ? 'timed_out' : canceled ? 'canceled' : code === 0 ? 'done' : 'error',
+        state: timedOut ? 'timed_out' : canceled ? 'canceled' : exitCode === 0 ? 'done' : 'error',
         message: timedOut ? `Timed out after ${timeoutSec}s` : canceled ? 'Canceled' : null,
         finishedAt: new Date().toISOString(), command,
-        exitCode: typeof code === 'number' ? code : null,
-        signal: signal || null, pid: child.pid, attempt,
+        exitCode, signal: exitSignal, pid: child.pid, attempt,
       });
     });
   });

@@ -98,12 +98,25 @@ create_ralph_state() {
   local prompt="$2"
   local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
 
-  # Escape prompt for JSON (basic escaping)
-  local escaped_prompt=$(echo "$prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
-
   # Create local .omt directory
   mkdir -p "$dir/.omt" 2>/dev/null
-  cat > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null << EOF
+
+  if command -v jq &> /dev/null; then
+    jq -n \
+      --arg prompt "$prompt" \
+      --arg started_at "$timestamp" \
+      '{
+        active: true,
+        iteration: 1,
+        max_iterations: 10,
+        completion_promise: "DONE",
+        prompt: $prompt,
+        started_at: $started_at
+      }' > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null
+  else
+    # Fallback: basic escaping when jq is unavailable
+    local escaped_prompt=$(printf '%s' "$prompt" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+    cat > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null << RALPH_STATE_EOF
 {
   "active": true,
   "iteration": 1,
@@ -112,7 +125,8 @@ create_ralph_state() {
   "prompt": "$escaped_prompt",
   "started_at": "$timestamp"
 }
-EOF
+RALPH_STATE_EOF
+  fi
 }
 
 # Check for ralph keyword (highest priority) - ralph loop activation
@@ -120,10 +134,24 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   # Create ralph state file
   create_ralph_state "$PROJECT_ROOT" "$PROMPT_CLEAN"
 
+  # Pre-escape PROMPT_CLEAN for safe JSON embedding via jq
+  if command -v jq &> /dev/null; then
+    PROMPT_JSON_ESCAPED=$(printf '%s' "$PROMPT_CLEAN" | jq -Rs '.')
+  else
+    # Fallback: basic escaping
+    PROMPT_JSON_ESCAPED="\"$(printf '%s' "$PROMPT_CLEAN" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')\""
+  fi
+  # Strip surrounding quotes for embedding inside the JSON string
+  PROMPT_FOR_TEMPLATE="${PROMPT_JSON_ESCAPED%\"}"
+  PROMPT_FOR_TEMPLATE="${PROMPT_FOR_TEMPLATE#\"}"
+
   # Output ralph activation message
-  cat << EOF
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode with MANDATORY VERIFICATION GATES.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When ALL tasks complete, output <promise>DONE</promise> to trigger Oracle verification\n4. After Oracle approves, output <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n5. Do NOT stop until Oracle approves\n\n## COMPLETION SEQUENCE (MANDATORY)\n\n1. **Complete all tasks** - Check TODO list is empty\n2. **Run verification** - Build, test, lint as applicable\n3. **Output promise** - <promise>DONE</promise>\n4. **Stop hook triggers** - Oracle verification will be requested\n5. **Spawn Oracle** - Verify completion with oracle agent\n6. **Output approval tag** - <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n7. **Done** - Session can end\n\n## VERIFICATION REQUIREMENTS\n\n- [ ] Build: Fresh run showing SUCCESS\n- [ ] Tests: Fresh run showing ALL PASS\n- [ ] TODO LIST: Zero pending/in_progress tasks\n- [ ] Oracle: Verification approved\n\n### Red Flags (STOP if you catch yourself)\n- Using 'should work', 'probably passes'\n- Skipping build/test because 'nothing changed'\n- Forgetting to output <promise>DONE</promise> when complete\n\nOriginal task: ${PROMPT_CLEAN}\n</ralph-mode>\n\n---\n"}}
-EOF
+  # Uses quoted heredoc for the static template, then replaces placeholder with jq-escaped prompt
+  RALPH_TEMPLATE=$(cat << 'RALPH_OUTPUT_EOF'
+{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode with MANDATORY VERIFICATION GATES.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When ALL tasks complete, output <promise>DONE</promise> to trigger Oracle verification\n4. After Oracle approves, output <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n5. Do NOT stop until Oracle approves\n\n## COMPLETION SEQUENCE (MANDATORY)\n\n1. **Complete all tasks** - Check TODO list is empty\n2. **Run verification** - Build, test, lint as applicable\n3. **Output promise** - <promise>DONE</promise>\n4. **Stop hook triggers** - Oracle verification will be requested\n5. **Spawn Oracle** - Verify completion with oracle agent\n6. **Output approval tag** - <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n7. **Done** - Session can end\n\n## VERIFICATION REQUIREMENTS\n\n- [ ] Build: Fresh run showing SUCCESS\n- [ ] Tests: Fresh run showing ALL PASS\n- [ ] TODO LIST: Zero pending/in_progress tasks\n- [ ] Oracle: Verification approved\n\n### Red Flags (STOP if you catch yourself)\n- Using 'should work', 'probably passes'\n- Skipping build/test because 'nothing changed'\n- Forgetting to output <promise>DONE</promise> when complete\n\nOriginal task: __PROMPT_PLACEHOLDER__\n</ralph-mode>\n\n---\n"}}
+RALPH_OUTPUT_EOF
+  )
+  echo "${RALPH_TEMPLATE//__PROMPT_PLACEHOLDER__/$PROMPT_FOR_TEMPLATE}"
   exit 0
 fi
 

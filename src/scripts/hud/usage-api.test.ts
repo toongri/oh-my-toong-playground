@@ -117,6 +117,44 @@ describe('fetchRateLimits', () => {
     });
   });
 
+  describe('when API returns valid data', () => {
+    let originalFetch: typeof global.fetch;
+
+    beforeEach(() => {
+      originalFetch = global.fetch;
+      mockGetCached.mockReturnValue(null);
+      mockGetOAuthToken.mockResolvedValue('test-token');
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2024-01-15T10:00:00Z'));
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+      jest.useRealTimers();
+    });
+
+    it('converts fractional utilization to percentage', async () => {
+      global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          five_hour: { utilization: 0.75, resets_at: '2024-01-15T12:30:00Z' },
+          seven_day: { utilization: 0.25, resets_at: '2024-01-17T15:00:00Z' },
+          seven_day_oauth_apps: null,
+          seven_day_opus: null,
+        }),
+      } as Response);
+
+      const result = await fetchRateLimits();
+
+      expect(result).not.toBeNull();
+      expect(result!.fiveHour!.percent).toBe(75);
+      expect(result!.sevenDay!.percent).toBe(25);
+      expect(result!.fiveHour!.resetIn).toBe('2h30m');
+      expect(result!.sevenDay!.resetIn).toBe('2d5h');
+      expect(mockSetCache).toHaveBeenCalled();
+    });
+  });
+
   describe('when API errors occur', () => {
     let originalFetch: typeof global.fetch;
 
