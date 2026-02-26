@@ -84,7 +84,7 @@ If Section 3 is not provided, all available tools may be used.
 
 **GOOD — Only whitelisted tools used:**
 Section 3 lists: Grep, Read, Edit, Bash (test only)
-→ Uses Grep to find patterns, Read to examine files, Edit to modify, Bash only for npm test
+→ Uses Grep to find patterns, Read to examine files, Edit to modify, Bash only for bun test
 
 **BAD — Unlisted tool used:**
 Section 3 lists: Grep, Read, Edit, Bash (test only)

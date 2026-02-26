@@ -22,13 +22,12 @@ make sync               # Deploy to target projects (runs validate + tests first
 ```bash
 bash hooks/test/keyword_detector_test.sh   # Single shell test
 bash scripts/test/sync_test.sh             # Sync orchestrator tests
-cd scripts/hud && npm test                 # HUD TypeScript tests
-cd scripts/lib && npm test                 # Shared library TypeScript tests
+bun test                                   # All TypeScript tests
 ```
 
 ### Prerequisites
 
-`yq`, `jq`, `node` (v18+), `bash` (macOS 3.2 compatible)
+`yq`, `jq`, `bun`, `bash` (macOS 3.2 compatible)
 
 ## Architecture
 
@@ -42,10 +41,14 @@ oh-my-toong/
 ├── hooks/           # Session lifecycle scripts (sh/js/py)
 ├── rules/           # Behavioral rules synced as .claude/rules/
 ├── scripts/         # Sync tooling, adapters, and utilities
-│   ├── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
-│   ├── lib/         # Shared TypeScript helpers (ESM, Jest)
-│   ├── hud/         # HUD TypeScript package (builds to scripts/hud.js)
-│   └── persistent-mode/  # Stop-hook TypeScript package
+│   └── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
+├── src/             # TypeScript source packages
+│   ├── hooks/
+│   │   ├── persistent-mode/   # Stop-hook TypeScript package
+│   │   └── skill-catalog/     # Skill catalog hook
+│   ├── lib/                   # Shared TypeScript helpers (ESM, bun:test)
+│   └── scripts/
+│       └── hud/               # HUD TypeScript package (deployed as directory)
 ├── projects/        # Project-specific overrides (skills, hooks per project)
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
@@ -125,7 +128,7 @@ skills:
 ## Coding Conventions
 
 - **Bash**: `set -euo pipefail`, macOS Bash 3.2 compatible (no associative arrays, no `declare -A`), quote all variables
-- **TypeScript**: ESM modules, Jest for testing. Rebuild generated output after changes (`npm run build` in `scripts/hud/`)
+- **TypeScript**: ESM modules, bun:test for testing. No build step required.
 - **YAML**: 2-space indentation
 - **Naming**: `skills/<greek-name>/`, `agents/<name>.md`, `hooks/<purpose>.(sh|js|py)`
 - **Shell tests**: Standalone scripts using `mktemp -d` with cleanup; naming convention `*_test.sh` or `test_*.sh`
