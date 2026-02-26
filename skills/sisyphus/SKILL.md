@@ -29,12 +29,10 @@ RULE 4: NEVER complete without argus verification
 | Action | YOU Do Directly | DELEGATE to Agent |
 |--------|-----------------|-------------------|
 | Read files for context | Yes | - |
-| Quick status checks | Yes | - |
 | Create/update todos | Yes | - |
-| Communicate with user | Yes | - |
-| Answer simple questions | Yes | - |
-| **Single-line code change** | NEVER | sisyphus-junior |
 | **Multi-file changes** | NEVER | sisyphus-junior |
+| **Test writing** | NEVER | sisyphus-junior |
+| **Documentation writing** | NEVER | sisyphus-junior |
 | **Complex debugging** | NEVER | oracle |
 | **Deep analysis** | NEVER | oracle |
 | **Codebase exploration** | NEVER | explore |
@@ -219,6 +217,41 @@ Results from oracle, explore, librarian, and argus are:
 
 ---
 
+## Task Planning
+
+When a task has 2+ steps, IMMEDIATELY create the full task list via TaskCreate. No announcements, no preamble — just create tasks.
+
+### Atomic Decomposition
+
+Each task must be completable in a single sisyphus-junior delegation.
+
+| Smell | Action |
+|-------|--------|
+| Task needs sequential delegations | Break into separate tasks |
+| Task touches unrelated files | Split by concern |
+| Task has "and" in description | Split at the conjunction |
+| Task mixes read + write work | Read yourself, delegate writes |
+
+**RULE**: If you can't write a single-sentence delegation prompt, the task isn't atomic enough.
+
+### Parallelization Analysis
+
+Before entering the Task Execution Loop, classify every task:
+
+1. **Map dependencies** — Which tasks produce outputs consumed by others? Set `addBlockedBy` links.
+2. **Detect file conflicts** — Tasks touching the same files CANNOT run in parallel (merge conflicts).
+3. **Identify parallel groups** — Independent tasks with no file overlap form a parallel batch.
+
+| Dependency Type | Example | Resolution |
+|-----------------|---------|------------|
+| Data dependency | Task B reads Task A's output | `addBlockedBy: [A]` |
+| File conflict | Both tasks edit `config.yaml` | Sequential ordering |
+| No dependency | Task A edits `foo.ts`, Task B edits `bar.ts` | Parallel dispatch |
+
+**RULE**: Default to parallel. Only serialize when dependencies or file conflicts exist.
+
+---
+
 ## Task Execution Loop
 
 After creating task list, execute with this loop:
@@ -275,11 +308,11 @@ When delegating to sisyphus-junior, include all 7-section categories:
 - Expected behavior: [specific]
 - Verification: `[command]`
 
-## 3. REQUIRED TOOLS
+## 3. RECOMMENDED TOOLS
 - [tool]: [what to search/check]
 - context7: Look up [library] docs
-- [Explicit tool whitelist — prevents tool sprawl]
-- Junior MUST use ONLY the tools listed here. Any unlisted tool usage is a scope violation.
+- [Explicit tool list — guides tool selection]
+- Actively leverage these tools for this task. Other tools may be used when the task requires it.
 
 ## 4. MUST DO
 - Follow pattern in [file:lines]
@@ -310,7 +343,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 - Expected behavior: All /api/* routes enforce 100 req/min per IP, returning 429 with Retry-After header
 - Verification: `npm test -- --grep "rate limit"` passes
 
-## 3. REQUIRED TOOLS
+## 3. RECOMMENDED TOOLS
 - Serena find_symbol: Navigate to router setup and existing middleware chain in src/api/router.ts
 - Serena get_symbols_overview: Understand middleware structure in src/api/middleware/
 - context7: Look up rate limiting library docs for configuration options
@@ -346,7 +379,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 | Symptom | Problem |
 |---------|---------|
 | One-line EXPECTED OUTCOME | Unclear verification criteria |
-| Empty REQUIRED TOOLS | Junior may use wrong tools or too many |
+| Empty RECOMMENDED TOOLS | Junior may miss useful tools for the task |
 | Empty MUST DO | No pattern reference for junior |
 | Missing CONTEXT | Junior lacks background |
 | Empty MANDATORY SKILLS without catalog evaluation | Skills needed but not included |

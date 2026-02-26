@@ -120,11 +120,6 @@ skills:
 - State file at `.omt/ralph-state.json`
 - Cancel with `/cancel-ralph`
 
-**Planning → Execution Flow**:
-1. `/prometheus <task>` - Creates work plan in `.omt/plans/*.md`
-2. `/sisyphus` - Orchestrates plan execution via subagents
-3. `sisyphus-junior` - Executes individual tasks with strict todo discipline
-
 ## Coding Conventions
 
 - **Bash**: `set -euo pipefail`, macOS Bash 3.2 compatible (no associative arrays, no `declare -A`), quote all variables
@@ -149,7 +144,6 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | Architecture/debugging analysis | oracle |
 | Codebase search | explore |
 | External documentation | librarian |
-| Task planning | prometheus |
 | Code implementation | sisyphus-junior |
 | Pre-planning analysis | metis |
 | Plan review | momus |
