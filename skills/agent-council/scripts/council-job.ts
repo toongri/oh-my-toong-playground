@@ -2,8 +2,26 @@
 
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { spawn } from 'child_process';
+
+import {
+  exitWithError,
+  detectHostRole,
+  normalizeBool,
+  resolveAutoRole,
+  ensureDir,
+  safeFileName,
+  atomicWriteJson,
+  readJsonIfExists,
+  sleepMs,
+  computeTerminalDoneCount,
+  asCodexStepStatus,
+  parseArgs,
+  parseWaitCursor,
+  formatWaitCursor,
+  resolveBucketSize,
+  generateJobId,
+} from '../../../lib/job-utils';
 
 const SCRIPT_DIR = import.meta.dirname;
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
@@ -23,202 +41,6 @@ const UI_STRINGS = {
     pending: 'Waiting to synthesize',
   },
 };
-
-// ---------------------------------------------------------------------------
-// Pure utility functions
-// ---------------------------------------------------------------------------
-
-function exitWithError(message) {
-  process.stderr.write(`${message}\n`);
-  process.exit(1);
-}
-
-function detectHostRole(skillDir) {
-  const normalized = skillDir.replace(/\\/g, '/');
-  if (normalized.includes('/.claude/skills/')) return 'claude';
-  if (normalized.includes('/.codex/skills/')) return 'codex';
-  return 'unknown';
-}
-
-function normalizeBool(value) {
-  if (value == null) return null;
-  const v = String(value).trim().toLowerCase();
-  if (['1', 'true', 'yes', 'y', 'on'].includes(v)) return true;
-  if (['0', 'false', 'no', 'n', 'off'].includes(v)) return false;
-  return null;
-}
-
-function resolveAutoRole(role, hostRole) {
-  const roleLc = String(role || '').trim().toLowerCase();
-  if (roleLc && roleLc !== 'auto') return roleLc;
-  if (hostRole === 'codex') return 'codex';
-  if (hostRole === 'claude') return 'claude';
-  return 'claude';
-}
-
-function ensureDir(dirPath) {
-  fs.mkdirSync(dirPath, { recursive: true });
-}
-
-function safeFileName(name, fallback) {
-  const cleaned = String(name || '').trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-');
-  return cleaned || (fallback || 'member');
-}
-
-function atomicWriteJson(filePath, payload) {
-  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-  fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
-  fs.renameSync(tmpPath, filePath);
-}
-
-function readJsonIfExists(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function sleepMs(ms) {
-  const msNum = Number(ms);
-  if (!Number.isFinite(msNum) || msNum <= 0) return;
-  const sab = new SharedArrayBuffer(4);
-  const view = new Int32Array(sab);
-  Atomics.wait(view, 0, 0, Math.trunc(msNum));
-}
-
-function computeTerminalDoneCount(counts) {
-  const c = counts || {};
-  return (
-    Number(c.done || 0) +
-    Number(c.missing_cli || 0) +
-    Number(c.error || 0) +
-    Number(c.timed_out || 0) +
-    Number(c.canceled || 0)
-  );
-}
-
-function asCodexStepStatus(value) {
-  const v = String(value || '');
-  if (v === 'pending' || v === 'in_progress' || v === 'completed') return v;
-  return 'pending';
-}
-
-// ---------------------------------------------------------------------------
-// Argument parsing
-// ---------------------------------------------------------------------------
-
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const out = { _: [] };
-  const booleanFlags = new Set([
-    'json',
-    'text',
-    'checklist',
-    'help',
-    'h',
-    'verbose',
-    'include-chairman',
-    'exclude-chairman',
-    'stdin',
-  ]);
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--') {
-      out._.push(...args.slice(i + 1));
-      break;
-    }
-    if (!a.startsWith('--')) {
-      out._.push(a);
-      continue;
-    }
-
-    const eqIdx = a.indexOf('=');
-    if (eqIdx !== -1) {
-      out[a.slice(2, eqIdx)] = a.slice(eqIdx + 1);
-      continue;
-    }
-
-    const normalizedKey = a.slice(2);
-    if (booleanFlags.has(normalizedKey)) {
-      out[normalizedKey] = true;
-      continue;
-    }
-
-    const next = args[i + 1];
-    if (next == null || next.startsWith('--')) {
-      out[normalizedKey] = true;
-      continue;
-    }
-    out[normalizedKey] = next;
-    i++;
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// Wait cursor utilities
-// ---------------------------------------------------------------------------
-
-function parseWaitCursor(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return null;
-  const parts = raw.split(':');
-  const version = parts[0];
-  if (version === 'v1' && parts.length === 4) {
-    const bucketSize = Number(parts[1]);
-    const doneBucket = Number(parts[2]);
-    const isDone = parts[3] === '1';
-    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
-    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
-    return { version, bucketSize, dispatchBucket: 0, doneBucket, isDone };
-  }
-  if (version === 'v2' && parts.length === 5) {
-    const bucketSize = Number(parts[1]);
-    const dispatchBucket = Number(parts[2]);
-    const doneBucket = Number(parts[3]);
-    const isDone = parts[4] === '1';
-    if (!Number.isFinite(bucketSize) || bucketSize <= 0) return null;
-    if (!Number.isFinite(dispatchBucket) || dispatchBucket < 0) return null;
-    if (!Number.isFinite(doneBucket) || doneBucket < 0) return null;
-    return { version, bucketSize, dispatchBucket, doneBucket, isDone };
-  }
-  return null;
-}
-
-function formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone) {
-  return `v2:${bucketSize}:${dispatchBucket}:${doneBucket}:${isDone ? 1 : 0}`;
-}
-
-function resolveBucketSize(options, total, prevCursor) {
-  const raw = options.bucket != null ? options.bucket : options['bucket-size'];
-
-  if (raw == null || raw === true) {
-    if (prevCursor && prevCursor.bucketSize) return prevCursor.bucketSize;
-  } else {
-    const asString = String(raw).trim().toLowerCase();
-    if (asString !== 'auto') {
-      const num = Number(asString);
-      if (!Number.isFinite(num) || num <= 0) exitWithError(`wait: invalid --bucket: ${raw}`);
-      return Math.trunc(num);
-    }
-  }
-
-  const totalNum = Number(total || 0);
-  if (!Number.isFinite(totalNum) || totalNum <= 0) return 1;
-  return Math.max(1, Math.ceil(totalNum / 5));
-}
-
-// ---------------------------------------------------------------------------
-// Job ID generation
-// ---------------------------------------------------------------------------
-
-function generateJobId() {
-  return `${new Date().toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15)}-${crypto
-    .randomBytes(3)
-    .toString('hex')}`;
-}
 
 // ---------------------------------------------------------------------------
 // Worker spawning
@@ -954,6 +776,9 @@ export {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
+} from '../../../lib/job-utils';
+
+export {
   buildUiPayload,
   parseCouncilConfig,
   parseYamlSimple,
