@@ -82,7 +82,7 @@ describe('main entry point', () => {
       expect(output.continue).toBe(true);
     });
 
-    it('should output block decision when ralph is active', async () => {
+    it('should output block decision with oracle verification when ralph detects DONE', async () => {
       // Set up ralph state
       await writeFile(
         join(omtDir, 'ralph-state-ralph-session.json'),
@@ -95,10 +95,15 @@ describe('main entry point', () => {
         })
       );
 
+      // Create transcript with DONE promise so branch 5 fires
+      // (tasks complete + DONE detected + no VERIFIED_COMPLETE -> oracle verification block)
+      const transcriptPath = join(testDir, 'ralph-transcript.jsonl');
+      await writeFile(transcriptPath, '<promise>DONE</promise>\n');
+
       const input = JSON.stringify({
         sessionId: 'ralph-session',
         cwd: projectRoot,
-        transcript_path: null,
+        transcript_path: transcriptPath,
       });
 
       const mockStdin = createMockStdin(input);
@@ -113,7 +118,7 @@ describe('main entry point', () => {
       expect(capturedOutput.length).toBeGreaterThan(0);
       const output = JSON.parse(capturedOutput[capturedOutput.length - 1]);
       expect(output.decision).toBe('block');
-      expect(output.reason).toContain('<ralph-loop-continuation>');
+      expect(output.reason).toContain('<ralph-oracle-verification>');
     });
   });
 
