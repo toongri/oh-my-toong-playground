@@ -218,6 +218,8 @@ function runOnce(opts) {
 
     const outStream = fs.createWriteStream(outPath, { flags: 'w' });
     const errStream = fs.createWriteStream(errPath, { flags: 'w' });
+    outStream.on('error', () => { /* ignore */ });
+    errStream.on('error', () => { /* ignore */ });
 
     let child;
     try {
@@ -231,7 +233,7 @@ function runOnce(opts) {
         message: error && error.message ? error.message : 'Failed to spawn command',
         finishedAt: new Date().toISOString(), command, attempt,
       };
-      atomicWriteJson(statusPath, result);
+      try { atomicWriteJson(statusPath, result); } catch { /* ignore */ }
       // Wait for streams to close before resolving (same pattern as finalize)
       let closed = 0;
       const total = 2;
@@ -255,10 +257,12 @@ function runOnce(opts) {
       child.stdin.end();
     }
 
-    atomicWriteJson(statusPath, {
-      reviewer, state: 'running', startedAt: new Date().toISOString(),
-      command, pid: child.pid, attempt,
-    });
+    try {
+      atomicWriteJson(statusPath, {
+        reviewer, state: 'running', startedAt: new Date().toISOString(),
+        command, pid: child.pid, attempt,
+      });
+    } catch { /* ignore */ }
 
     if (child.stdout) child.stdout.pipe(outStream);
     if (child.stderr) child.stderr.pipe(errStream);
@@ -282,7 +286,7 @@ function runOnce(opts) {
     const finalize = (payload) => {
       if (finalized) return;
       finalized = true;
-      atomicWriteJson(statusPath, payload);
+      try { atomicWriteJson(statusPath, payload); } catch { /* ignore */ }
       let closed = 0;
       const total = 2;
       const safetyTimeout = setTimeout(() => resolve(payload), 500);
