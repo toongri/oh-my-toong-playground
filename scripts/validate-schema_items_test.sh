@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
+SCRIPTS_DIR="$SCRIPT_DIR"
 ROOT_DIR="$(dirname "$SCRIPTS_DIR")"
 
 VALIDATE_SCHEMA="$ROOT_DIR/scripts/validate-schema.sh"
