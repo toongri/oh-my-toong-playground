@@ -380,7 +380,7 @@ describe('runWithRetry', () => {
       sleepFn: () => Promise.resolve(),
     });
     expect(result.state).toBe('error');
-    expect(result.attempt).toBe(2); // 0, 1, 2 = 3 attempts
+    expect(result.attempt).toBe(1); // 0, 1 = 2 attempts
   });
 
   test('does not retry on missing_cli', async () => {
@@ -504,14 +504,11 @@ describe('runWithRetry', () => {
       sleepFn,
     });
 
-    // 2 retries = 2 delays
-    expect(delays.length).toBe(2);
+    // 1 retry = 1 delay
+    expect(delays.length).toBe(1);
     // First delay: base * 2^0 + jitter = 1000..2000
     expect(delays[0] >= 1000).toBe(true);
     expect(delays[0] < 2000).toBe(true);
-    // Second delay: base * 2^1 + jitter = 2000..3000
-    expect(delays[1] >= 2000).toBe(true);
-    expect(delays[1] < 3000).toBe(true);
   });
 
   test('writes retrying status before backoff sleep', async () => {

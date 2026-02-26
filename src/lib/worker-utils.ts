@@ -14,7 +14,7 @@ import { spawn, type ChildProcess } from 'child_process';
 // Constants
 // ---------------------------------------------------------------------------
 
-export const MAX_RETRIES = 2;
+export const MAX_RETRIES = 1;
 export const BASE_DELAY_MS = 1000;
 
 // ---------------------------------------------------------------------------
