@@ -844,6 +844,60 @@ test_keyword_detector_uses_project_root_variable() {
 }
 
 # =============================================================================
+# Tests: Special Characters JSON Safety
+# =============================================================================
+
+test_ralph_special_characters_produce_valid_json() {
+    # When prompt contains quotes, $, backticks, and newlines,
+    # both stdout JSON and ralph-state JSON must be valid via jq
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Prompt with special characters: double quotes, $variable, backticks, newline
+    local special_prompt='ralph fix "this" with $HOME and `echo hi`
+and a newline'
+
+    # Build properly escaped JSON input using jq
+    local input_json
+    input_json=$(jq -n --arg p "$special_prompt" --arg d "$TEST_TMP_DIR" \
+      '{prompt: $p, cwd: $d, sessionId: "special-test"}')
+
+    local output
+    output=$(echo "$input_json" | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    # Validate stdout JSON is parseable by jq
+    if ! echo "$output" | jq . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: stdout output is not valid JSON with special characters"
+        echo "  Output (first 500 chars): ${output:0:500}"
+        return 1
+    fi
+
+    # Validate ralph-state file exists and is valid JSON
+    local state_file="$TEST_TMP_DIR/.omt/ralph-state-special-test.json"
+    assert_file_exists "$state_file" "Ralph state file should exist for special chars test" || return 1
+
+    if ! jq . "$state_file" > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: ralph-state JSON is not valid with special characters"
+        echo "  File contents: $(cat "$state_file")"
+        return 1
+    fi
+
+    # Verify the prompt field in state file preserved special characters
+    local stored_prompt
+    stored_prompt=$(jq -r '.prompt' "$state_file" 2>/dev/null)
+    if [[ -z "$stored_prompt" || "$stored_prompt" == "null" ]]; then
+        echo "ASSERTION FAILED: prompt should be preserved in ralph-state file"
+        return 1
+    fi
+
+    # Verify stdout JSON has correct structure
+    local hook_event
+    hook_event=$(echo "$output" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)
+    assert_equals "UserPromptSubmit" "$hook_event" "hookEventName should be UserPromptSubmit with special chars" || return 1
+
+    return 0
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -931,6 +985,9 @@ main() {
     run_test test_think_output_uses_hook_specific_output_format
     run_test test_search_output_uses_hook_specific_output_format
     run_test test_analyze_output_uses_hook_specific_output_format
+
+    # Special Characters JSON Safety
+    run_test test_ralph_special_characters_produce_valid_json
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

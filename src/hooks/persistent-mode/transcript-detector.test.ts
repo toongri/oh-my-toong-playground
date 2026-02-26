@@ -5,7 +5,7 @@ import {
   detectOracleRejection,
   analyzeTranscript,
 } from './transcript-detector.ts';
-import type { TranscriptDetection } from './types.ts';
+import type { TranscriptDetection, RalphState } from './types.ts';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -117,6 +117,50 @@ describe('transcript-detector', () => {
       const result = detectOracleApproval(transcriptPath);
 
       expect(result).toBe(false);
+    });
+
+    it('started_at 이전 oracle 태그는 false 반환', async () => {
+      const lines = [
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T09:00:00.000Z', message: { content: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' } }),
+        JSON.stringify({ type: 'user', timestamp: '2024-01-15T11:00:00.000Z', message: { content: 'some later message' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(false);
+    });
+
+    it('started_at 이후 oracle 태그는 true 반환', async () => {
+      const lines = [
+        JSON.stringify({ type: 'user', timestamp: '2024-01-15T09:00:00.000Z', message: { content: 'some early message' } }),
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(true);
+    });
+
+    it('started_at 미지정 시 전체 스캔으로 폴백 (하위 호환)', async () => {
+      await writeFile(transcriptPath, '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
+
+      const result = detectOracleApproval(transcriptPath);
+
+      expect(result).toBe(true);
+    });
+
+    it('should skip unparseable JSONL lines gracefully', async () => {
+      const lines = [
+        '{ invalid json }',
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(true);
     });
   });
 

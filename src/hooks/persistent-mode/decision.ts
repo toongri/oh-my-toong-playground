@@ -104,11 +104,11 @@ export function makeDecision(context: DecisionContext): HookOutput {
   // Ensure state directory exists
   ensureDir(stateDir);
 
-  // Analyze transcript for completion markers
-  const transcript = analyzeTranscript(transcriptPath);
-
   // Priority 1: Ralph Loop with Oracle Verification
   const ralphState = readRalphState(projectRoot, sessionId);
+
+  // Analyze transcript for completion markers (pass ralphState for started_at filtering)
+  const transcript = analyzeTranscript(transcriptPath, ralphState);
   if (ralphState && ralphState.active) {
     // 1. Max iteration check FIRST (escape hatch, regardless of tasks)
     if (ralphState.iteration >= ralphState.max_iterations) {
