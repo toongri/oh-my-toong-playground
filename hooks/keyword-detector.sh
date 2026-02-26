@@ -107,7 +107,7 @@ create_ralph_state() {
       --arg started_at "$timestamp" \
       '{
         active: true,
-        iteration: 1,
+        iteration: 0,
         max_iterations: 10,
         completion_promise: "DONE",
         prompt: $prompt,
@@ -119,7 +119,7 @@ create_ralph_state() {
     cat > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null << RALPH_STATE_EOF
 {
   "active": true,
-  "iteration": 1,
+  "iteration": 0,
   "max_iterations": 10,
   "completion_promise": "DONE",
   "prompt": "$escaped_prompt",

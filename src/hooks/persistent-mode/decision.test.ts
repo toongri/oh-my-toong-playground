@@ -51,7 +51,7 @@ describe('makeDecision', () => {
   });
 
   describe('Priority 1: Ralph Loop with Oracle Verification', () => {
-    it('should continue when ralph active but DONE not detected (branch 6)', async () => {
+    it('should block when ralph active but DONE not detected (branch 5)', async () => {
       const ralphState = {
         active: true,
         iteration: 1,
@@ -65,11 +65,13 @@ describe('makeDecision', () => {
 
       const result = makeDecision(context);
 
-      // Branch 6: no transcript = no DONE detected → continue
-      expect(result).toEqual({ continue: true });
+      // Branch 5: no transcript = no DONE detected → block
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<ralph-loop-continuation>');
+      expect(result.reason).toContain('DONE not detected');
     });
 
-    it('should continue without state change when DONE not detected (branch 6)', async () => {
+    it('should increment iteration when DONE not detected (branch 5)', async () => {
       const ralphState = {
         active: true,
         iteration: 3,
@@ -83,11 +85,11 @@ describe('makeDecision', () => {
 
       const result = makeDecision(context);
 
-      // Branch 6: no transcript = no DONE → continue, state persists unchanged
-      expect(result).toEqual({ continue: true });
+      // Branch 5: no transcript = no DONE → block, iteration incremented
+      expect(result.decision).toBe('block');
       const { readFileSync } = await import('fs');
       const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-      expect(updatedState.iteration).toBe(3);
+      expect(updatedState.iteration).toBe(4);
     });
 
     it('should allow stop when max iterations reached', async () => {
@@ -165,57 +167,6 @@ describe('makeDecision', () => {
 
       const { existsSync } = await import('fs');
       expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
-    });
-
-    it('should include previous oracle feedback in oracle verification message (branch 5)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-        oracle_feedback: ['Missing unit tests', 'Code not refactored'],
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      // Transcript with DONE but no VERIFIED_COMPLETE
-      const transcriptPath = join(testDir, 'done-with-feedback-transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
-
-      const result = makeDecision(context);
-
-      expect(result.decision).toBe('block');
-      expect(result.reason).toContain('<ralph-oracle-verification>');
-      expect(result.reason).toContain('Previous Oracle Feedback');
-      expect(result.reason).toContain('Missing unit tests');
-      expect(result.reason).toContain('Code not refactored');
-    });
-
-    it('should capture new rejection feedback when DONE and rejection detected (branch 4)', async () => {
-      const ralphState = {
-        active: true,
-        iteration: 2,
-        max_iterations: 10,
-        completion_promise: 'DONE',
-        prompt: 'Test task',
-        oracle_feedback: [],
-      };
-      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-      // Create transcript with DONE and oracle rejection
-      const transcriptPath = join(testDir, 'rejection-transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>\nOracle rejected because: issue: Tests are failing');
-
-      const context = createContext({ transcriptPath });
-
-      makeDecision(context);
-
-      // Check that feedback was captured
-      const { readFileSync } = await import('fs');
-      const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-      expect(updatedState.oracle_feedback).toContain('Tests are failing');
     });
 
     describe('tasks completion check before Oracle approval', () => {
@@ -304,7 +255,7 @@ describe('makeDecision', () => {
         expect(result).toEqual({ continue: true });
       });
 
-      it('should block when tasks complete and DONE detected but Oracle not called yet (branch 5)', async () => {
+      it('should block when tasks complete and DONE detected but Oracle not called yet (branch 4)', async () => {
         const ralphState = {
           active: true,
           iteration: 3,
@@ -322,12 +273,12 @@ describe('makeDecision', () => {
 
         const result = makeDecision(context);
 
-        // Should block with oracle verification message (branch 5)
+        // Should block with oracle verification message (branch 4)
         expect(result.decision).toBe('block');
         expect(result.reason).toContain('<ralph-oracle-verification>');
       });
 
-      it('should NOT increment iteration when DONE detected but no rejection (branch 5)', async () => {
+      it('should ALWAYS increment iteration when DONE detected but no VERIFIED_COMPLETE (branch 4)', async () => {
         const ralphState = {
           active: true,
           iteration: 3,
@@ -337,65 +288,38 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        // DONE detected, no rejection feedback
-        const transcriptPath = join(testDir, 'done-no-rejection-transcript.jsonl');
+        // DONE detected, no VERIFIED_COMPLETE
+        const transcriptPath = join(testDir, 'done-no-verified-transcript.jsonl');
         await writeFile(transcriptPath, '<promise>DONE</promise>');
 
         const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
 
         makeDecision(context);
 
-        // Branch 5: iteration should NOT increment - just Oracle verification prompt
+        // Branch 4: iteration ALWAYS increments
         const { readFileSync } = await import('fs');
         const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-        expect(updatedState.iteration).toBe(3); // Should stay the same
-      });
-
-      it('should capture Oracle rejection feedback when DONE detected and Oracle rejected (branch 4)', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 3,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-          oracle_feedback: [],
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        // DONE detected + Oracle rejected
-        const transcriptPath = join(testDir, 'oracle-rejected-transcript.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>\nOracle rejected because: issue: Code needs cleanup');
-
-        const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
-
-        makeDecision(context);
-
-        const { readFileSync } = await import('fs');
-        const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-        expect(updatedState.oracle_feedback).toContain('Code needs cleanup');
         expect(updatedState.iteration).toBe(4);
       });
 
-      it('should INCREMENT iteration when DONE detected and Oracle rejected (branch 4)', async () => {
+      it('should increment iteration from higher value when DONE but no VERIFIED_COMPLETE (branch 4)', async () => {
         const ralphState = {
           active: true,
           iteration: 5,
           max_iterations: 10,
           completion_promise: 'DONE',
           prompt: 'Test task',
-          oracle_feedback: [],
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        // DONE detected + Oracle called but rejected
-        const transcriptPath = join(testDir, 'oracle-rejected-transcript2.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>\nOracle rejected because: issue: Missing documentation');
+        const transcriptPath = join(testDir, 'done-no-verified-transcript2.jsonl');
+        await writeFile(transcriptPath, '<promise>DONE</promise>');
 
         const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
 
         makeDecision(context);
 
-        // Branch 4: Iteration SHOULD increment because DONE detected + Oracle rejected
+        // Branch 4: Iteration ALWAYS increments
         const { readFileSync } = await import('fs');
         const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
         expect(updatedState.iteration).toBe(6);
@@ -470,7 +394,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        // Need DONE in transcript to hit branch 5 (oracle verification)
+        // Need DONE in transcript to hit branch 4 (oracle verification)
         const transcriptPath = join(testDir, 'trunc-prompt-long.jsonl');
         await writeFile(transcriptPath, '<promise>DONE</promise>');
 
@@ -533,106 +457,6 @@ describe('makeDecision', () => {
         expect(result.reason).toContain('<ralph-oracle-verification>');
         expect(result.reason).toContain(exactPrompt);
         expect(result.reason).not.toContain('...[truncated from');
-      });
-    });
-
-    describe('oracleFeedback truncation', () => {
-      it('should truncate each feedback item to 500 characters with structural suffix', async () => {
-        const longFeedback = 'B'.repeat(600); // 600 chars, exceeds 500 limit
-        const ralphState = {
-          active: true,
-          iteration: 2,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-          oracle_feedback: [longFeedback],
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const transcriptPath = join(testDir, 'trunc-feedback-long.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        // Should contain truncated feedback (500 chars + '...[truncated from 600 chars]')
-        const truncatedFeedback = 'B'.repeat(500) + '...[truncated from 600 chars]';
-        expect(result.reason).toContain(truncatedFeedback);
-        // Should NOT contain full 600 char feedback
-        expect(result.reason).not.toContain(longFeedback);
-      });
-
-      it('should keep only the most recent 3 feedback items', async () => {
-        const ralphState = {
-          active: true,
-          iteration: 5,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-          oracle_feedback: [
-            'Feedback 1 - oldest',
-            'Feedback 2 - old',
-            'Feedback 3 - recent',
-            'Feedback 4 - more recent',
-            'Feedback 5 - most recent',
-          ],
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const transcriptPath = join(testDir, 'trunc-feedback-limit.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        // Should NOT contain oldest feedback items (1 and 2)
-        expect(result.reason).not.toContain('Feedback 1 - oldest');
-        expect(result.reason).not.toContain('Feedback 2 - old');
-        // Should contain only the 3 most recent
-        expect(result.reason).toContain('Feedback 3 - recent');
-        expect(result.reason).toContain('Feedback 4 - more recent');
-        expect(result.reason).toContain('Feedback 5 - most recent');
-      });
-
-      it('should handle both truncation and limit together', async () => {
-        const longFeedback1 = 'X'.repeat(600);
-        const longFeedback2 = 'Y'.repeat(700);
-        const ralphState = {
-          active: true,
-          iteration: 4,
-          max_iterations: 10,
-          completion_promise: 'DONE',
-          prompt: 'Test task',
-          oracle_feedback: [
-            'Old feedback - should be dropped',
-            longFeedback1,
-            'Short feedback',
-            longFeedback2,
-          ],
-        };
-        await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
-
-        const transcriptPath = join(testDir, 'trunc-feedback-both.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
-
-        const result = makeDecision(context);
-
-        expect(result.decision).toBe('block');
-        expect(result.reason).toContain('<ralph-oracle-verification>');
-        // Oldest should be dropped (only 3 kept)
-        expect(result.reason).not.toContain('Old feedback - should be dropped');
-        // Kept items should be truncated with structural suffix
-        expect(result.reason).toContain('X'.repeat(500) + '...[truncated from 600 chars]');
-        expect(result.reason).toContain('Short feedback');
-        expect(result.reason).toContain('Y'.repeat(500) + '...[truncated from 700 chars]');
       });
     });
 
@@ -708,7 +532,7 @@ describe('makeDecision', () => {
     });
   });
 
-  describe('6-branch decision tree (branches 3-6)', () => {
+  describe('5-branch decision tree (branches 3-5)', () => {
     it('should continue and cleanup state when DONE and VERIFIED_COMPLETE detected (branch 3)', async () => {
       const ralphState = {
         active: true,
@@ -733,7 +557,7 @@ describe('makeDecision', () => {
       expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
     });
 
-    it('should block with oracle verification message when DONE detected but no VERIFIED_COMPLETE (branch 5)', async () => {
+    it('should block with oracle verification message when DONE detected but no VERIFIED_COMPLETE (branch 4)', async () => {
       const ralphState = {
         active: true,
         iteration: 2,
@@ -743,7 +567,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'branch5-transcript.jsonl');
+      const transcriptPath = join(testDir, 'branch4-transcript.jsonl');
       await writeFile(transcriptPath, '<promise>DONE</promise>');
 
       const context = createContext({ transcriptPath });
@@ -756,7 +580,7 @@ describe('makeDecision', () => {
       expect(result.reason).toContain('Spawn Oracle');
     });
 
-    it('should continue without cleanup when DONE not detected (branch 6)', async () => {
+    it('should block with continuation when DONE not detected (branch 5)', async () => {
       const ralphState = {
         active: true,
         iteration: 2,
@@ -771,39 +595,45 @@ describe('makeDecision', () => {
 
       const result = makeDecision(context);
 
-      expect(result).toEqual({ continue: true });
+      // Branch 5: no DONE → block with continuation
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<ralph-loop-continuation>');
+      expect(result.reason).toContain('DONE not detected');
 
-      // State should still exist (no cleanup)
+      // State should still exist
       const { existsSync } = await import('fs');
       expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(true);
     });
 
-    it('should not modify ralph state when DONE not detected (branch 6)', async () => {
+    it('should increment iteration and include original task when DONE not detected (branch 5)', async () => {
       const ralphState = {
         active: true,
         iteration: 4,
         max_iterations: 10,
         completion_promise: 'DONE',
         prompt: 'Test task',
-        oracle_feedback: ['previous feedback'],
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
       // Transcript without DONE
-      const transcriptPath = join(testDir, 'branch6-no-done.jsonl');
+      const transcriptPath = join(testDir, 'branch5-no-done.jsonl');
       await writeFile(transcriptPath, 'some random content without promise tag');
 
       const context = createContext({ transcriptPath });
 
       const result = makeDecision(context);
 
-      expect(result).toEqual({ continue: true });
+      // Branch 5: no DONE → block, iteration incremented
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<ralph-loop-continuation>');
+      expect(result.reason).toContain('ITERATION 5/10');
+      expect(result.reason).toContain('DONE not detected');
+      expect(result.reason).toContain('<promise>DONE</promise>');
+      expect(result.reason).toContain('Original task: Test task');
 
-      // State should be unchanged
       const { readFileSync } = await import('fs');
       const updatedState = JSON.parse(readFileSync(join(omtDir, 'ralph-state-test-session.json'), 'utf8'));
-      expect(updatedState.iteration).toBe(4);
-      expect(updatedState.oracle_feedback).toEqual(['previous feedback']);
+      expect(updatedState.iteration).toBe(5);
     });
   });
 
@@ -907,7 +737,8 @@ describe('makeDecision', () => {
 
       const result = makeDecision(context);
 
-      expect(result.reason).toContain('ITERATION 3/10');
+      // Branch 4 always increments: 3 → 4
+      expect(result.reason).toContain('ITERATION 4/10');
     });
 
     it('should contain prompt in Oracle spawn instruction', async () => {

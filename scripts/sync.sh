@@ -1239,24 +1239,35 @@ sync_plugins() {
 
 sync_lib() {
     local target_path="$1"
+    local yaml_file="$2"
 
     if [[ ! -d "$ROOT_DIR/src/lib" ]]; then
         return 0
     fi
 
-    # Deploy to each platform that has a directory
-    for platform_dir in ".claude" ".gemini" ".codex"; do
-        local platform_path="$target_path/$platform_dir"
-        if [[ -d "$platform_path" ]]; then
-            local lib_dir="$platform_path/lib"
-            if [[ "$DRY_RUN" == "true" ]]; then
-                log_dry "Deploy lib: src/lib/ -> $lib_dir/"
-            else
-                rm -rf "$lib_dir"
-                mkdir -p "$lib_dir"
-                rsync -a --exclude '*.test.ts' "$ROOT_DIR/src/lib/" "$lib_dir/"
-                log_info "Deployed shared lib to $platform_dir/lib/"
-            fi
+    # Platform cascade: get_default_platforms > get_feature_platforms("lib") > yaml top-level .platforms
+    local default_platforms=$(get_default_platforms)
+    local feature_platforms=$(get_feature_platforms "lib")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
+    if [[ "$sync_platforms" == "null" ]]; then
+        sync_platforms="$feature_platforms"
+    fi
+
+    # Deploy to each resolved platform
+    for platform in $(echo "$sync_platforms" | jq -r '.[]'); do
+        local platform_dir=".$platform"
+        local lib_dir="$target_path/$platform_dir/lib"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_dry "Deploy lib: src/lib/ -> $lib_dir/"
+        else
+            rm -rf "$lib_dir"
+            mkdir -p "$lib_dir"
+            rsync -a --exclude '*.test.ts' "$ROOT_DIR/src/lib/" "$lib_dir/"
+            log_info "Deployed shared lib to $platform_dir/lib/"
         fi
     done
 }
@@ -1317,7 +1328,7 @@ process_yaml() {
     sync_statusline "$target_path" "$yaml_file"
     sync_rules "$target_path" "$yaml_file"
     sync_plugins "$target_path" "$yaml_file"
-    sync_lib "$target_path"
+    sync_lib "$target_path" "$yaml_file"
 
     log_success "완료: $yaml_file"
 }

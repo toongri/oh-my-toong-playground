@@ -26,8 +26,6 @@ function formatContinueOutput(): HookOutput {
 }
 
 const MAX_PROMPT_LENGTH = 2000;
-const MAX_FEEDBACK_LENGTH = 500;
-const MAX_FEEDBACK_COUNT = 3;
 
 function truncateText(text: string, maxLength: number): string {
   if (text.length > maxLength) {
@@ -40,28 +38,17 @@ function buildRalphContinuationMessage(
   iteration: number,
   maxIterations: number,
   prompt: string,
-  promise: string,
-  oracleFeedback: string[]
+  promise: string
 ): string {
   // Truncate prompt to prevent message explosion
   const truncatedPrompt = truncateText(prompt, MAX_PROMPT_LENGTH);
-
-  // Keep only the most recent feedback items and truncate each
-  const limitedFeedback = oracleFeedback
-    .slice(-MAX_FEEDBACK_COUNT)
-    .map(fb => truncateText(fb, MAX_FEEDBACK_LENGTH));
-
-  let feedbackSection = '';
-  if (limitedFeedback.length > 0) {
-    feedbackSection = `\n**Previous Oracle Feedback:**\n${limitedFeedback.join('\n')}\n`;
-  }
 
   return `<ralph-loop-continuation>
 
 [RALPH LOOP - ITERATION ${iteration}/${maxIterations}]
 
 Your previous attempt did not include oracle approval. The work is NOT verified complete yet.
-${feedbackSection}
+
 CRITICAL INSTRUCTIONS:
 1. Review your progress and the original task below
 2. Check your todo list - are ALL items marked complete?
@@ -79,32 +66,49 @@ CRITICAL INSTRUCTIONS:
 function buildOracleVerificationMessage(
   iteration: number,
   maxIterations: number,
-  prompt: string,
-  oracleFeedback: string[]
+  prompt: string
 ): string {
   const truncatedPrompt = truncateText(prompt, MAX_PROMPT_LENGTH);
-
-  const limitedFeedback = oracleFeedback
-    .slice(-MAX_FEEDBACK_COUNT)
-    .map(fb => truncateText(fb, MAX_FEEDBACK_LENGTH));
-
-  let feedbackSection = '';
-  if (limitedFeedback.length > 0) {
-    feedbackSection = `\n**Previous Oracle Feedback:**\n${limitedFeedback.join('\n')}\n`;
-  }
 
   return `<ralph-oracle-verification>
 
 [RALPH LOOP - ITERATION ${iteration}/${maxIterations}]
 
 DONE detected. Spawn Oracle to verify completion.
-${feedbackSection}
+
 CRITICAL INSTRUCTIONS:
 1. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify task completion: ${truncatedPrompt}")
 2. When Oracle approves, output: <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
 3. Do NOT stop until verified by Oracle
 
 </ralph-oracle-verification>
+
+---
+`;
+}
+
+function buildNoDoneMessage(
+  iteration: number,
+  maxIterations: number,
+  prompt: string,
+  promise: string
+): string {
+  const truncatedPrompt = truncateText(prompt, MAX_PROMPT_LENGTH);
+
+  return `<ralph-loop-continuation>
+
+[RALPH LOOP - ITERATION ${iteration}/${maxIterations}]
+
+DONE not detected. You have not yet signaled task completion.
+
+CRITICAL INSTRUCTIONS:
+1. Review the original task below and check your progress
+2. Complete any remaining work
+3. When finished, output: <promise>${promise}</promise>
+
+Original task: ${truncatedPrompt}
+
+</ralph-loop-continuation>
 
 ---
 `;
@@ -144,22 +148,20 @@ export function makeDecision(context: DecisionContext): HookOutput {
   // Analyze transcript for completion markers (pass ralphState for started_at filtering)
   const transcript = analyzeTranscript(transcriptPath, ralphState);
   if (ralphState && ralphState.active) {
-    // 1. Max iteration check FIRST (escape hatch, regardless of tasks)
+    // Branch 1: Max iteration check (escape hatch, regardless of tasks)
     if (ralphState.iteration >= ralphState.max_iterations) {
       cleanupRalphState(projectRoot, sessionId);
       cleanupBlockCountFiles(stateDir, attemptId);
       return formatContinueOutput();
     }
 
-    // 2. Tasks incomplete check SECOND (before Oracle check)
+    // Branch 2: Tasks incomplete → block with continuation
     if (incompleteTodoCount > 0) {
       const newIteration = ralphState.iteration + 1;
-      const oracleFeedback = ralphState.oracle_feedback || [];
 
       const updatedState: RalphState = {
         ...ralphState,
         iteration: newIteration,
-        oracle_feedback: oracleFeedback
       };
       updateRalphState(projectRoot, sessionId, updatedState);
 
@@ -167,50 +169,53 @@ export function makeDecision(context: DecisionContext): HookOutput {
         newIteration,
         ralphState.max_iterations,
         ralphState.prompt,
-        ralphState.completion_promise || 'DONE',
-        oracleFeedback
+        ralphState.completion_promise || 'DONE'
       );
       return formatBlockOutput(message);
     }
 
-    // 3-6: Tasks complete path - check DONE detection
+    // Branches 3-5: Tasks complete path - check DONE detection
     if (transcript.hasCompletionPromise) {
-      // 3. DONE detected + VERIFIED_COMPLETE → continue (cleanup)
+      // Branch 3: DONE + VERIFIED_COMPLETE → cleanup → exit
       if (transcript.hasOracleApproval) {
         cleanupRalphState(projectRoot, sessionId);
         cleanupBlockCountFiles(stateDir, attemptId);
         return formatContinueOutput();
       }
 
-      // 4 & 5: DONE detected, no VERIFIED_COMPLETE → Oracle verification
-      const oracleFeedback = ralphState.oracle_feedback || [];
-      let newIteration = ralphState.iteration;
-
-      // 4. With rejection → increment iteration
-      if (transcript.oracleRejectionFeedback) {
-        oracleFeedback.push(transcript.oracleRejectionFeedback);
-        newIteration = ralphState.iteration + 1;
-      }
-      // 5. No rejection → preserve iteration
+      // Branch 4: DONE + no VERIFIED_COMPLETE → increment iteration → oracle verification
+      const newIteration = ralphState.iteration + 1;
 
       const updatedState: RalphState = {
         ...ralphState,
         iteration: newIteration,
-        oracle_feedback: oracleFeedback
       };
       updateRalphState(projectRoot, sessionId, updatedState);
 
       const message = buildOracleVerificationMessage(
         newIteration,
         ralphState.max_iterations,
-        ralphState.prompt,
-        oracleFeedback
+        ralphState.prompt
       );
       return formatBlockOutput(message);
     }
 
-    // 6. Tasks complete + DONE not detected → continue (let it go)
-    return formatContinueOutput();
+    // Branch 5: No DONE detected → increment iteration → block with continuation
+    const newIteration = ralphState.iteration + 1;
+
+    const updatedState: RalphState = {
+      ...ralphState,
+      iteration: newIteration,
+    };
+    updateRalphState(projectRoot, sessionId, updatedState);
+
+    const message = buildNoDoneMessage(
+      newIteration,
+      ralphState.max_iterations,
+      ralphState.prompt,
+      ralphState.completion_promise || 'DONE'
+    );
+    return formatBlockOutput(message);
   }
 
   // Priority 2: Baseline todo-continuation (incomplete tasks from file-based counting)

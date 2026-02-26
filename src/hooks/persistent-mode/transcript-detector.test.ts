@@ -286,7 +286,6 @@ describe('transcript-detector', () => {
       expect(result).toEqual({
         hasCompletionPromise: false,
         hasOracleApproval: false,
-        oracleRejectionFeedback: null,
       });
     });
 
@@ -305,14 +304,6 @@ describe('transcript-detector', () => {
       const result = analyzeTranscript(transcriptPath);
 
       expect(result.hasOracleApproval).toBe(true);
-    });
-
-    it('should analyze transcript with rejection feedback', async () => {
-      await writeFile(transcriptPath, 'Oracle rejected this.\nIssue: Test failure');
-
-      const result = analyzeTranscript(transcriptPath);
-
-      expect(result.oracleRejectionFeedback).not.toBeNull();
     });
 
     it('should combine all detection results', async () => {

@@ -121,6 +121,5 @@ export function analyzeTranscript(transcriptPath: string | null, ralphState?: Ra
   return {
     hasCompletionPromise: detectCompletionPromise(transcriptPath, ralphState?.started_at),
     hasOracleApproval: detectOracleApproval(transcriptPath, ralphState?.started_at),
-    oracleRejectionFeedback: detectOracleRejection(transcriptPath),
   };
 }

@@ -496,10 +496,10 @@ describe('parseArgs', () => {
     expect(result.config).toBe('');
   });
 
-  test('handles --key=value where value contains = (splits on first =)', () => {
+  test('handles --key=value where value contains = (preserves full value)', () => {
     const result = parse('--config=a=b');
-    // JS split('=', 2) yields ['config', 'a'], truncating after limit
-    expect(result.config).toBe('a');
+    // indexOf('=') + slice() preserves everything after the first =
+    expect(result.config).toBe('a=b');
   });
 });
 

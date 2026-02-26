@@ -20,7 +20,6 @@ export interface RalphState {
   max_iterations: number;
   completion_promise: string;
   prompt: string;
-  oracle_feedback?: string[];
   started_at?: string;
 }
 
@@ -41,5 +40,4 @@ export interface TodoItem {
 export interface TranscriptDetection {
   hasCompletionPromise: boolean;
   hasOracleApproval: boolean;
-  oracleRejectionFeedback: string | null;
 }
