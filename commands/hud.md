@@ -18,13 +18,12 @@ This command configures the Oh-My-Toong HUD to display in Claude Code's status b
 
 When user runs `/hud setup`:
 
-1. **Check Node.js availability**
-   - Run `node --version` to verify Node.js is installed
-   - Require v18+ for ESM support
+1. **Check Bun availability**
+   - Run `bun --version` to verify Bun is installed
    - If not available, inform user and stop
 
 2. **Check synced script exists**
-   - Verify `.claude/scripts/hud.js` exists
+   - Verify `.claude/scripts/hud/index.ts` exists
    - If not exists, inform user to run sync first
 
 3. **Backup existing statusLine config**
@@ -39,7 +38,7 @@ When user runs `/hud setup`:
    {
      "statusLine": {
        "type": "command",
-       "command": "node .claude/scripts/hud.js"
+       "command": "bun run .claude/scripts/hud/index.ts"
      }
    }
    ```
@@ -88,6 +87,6 @@ After setup, the HUD shows:
 
 ## Requirements
 
-- Node.js v18+
+- Bun
 - Claude Code with statusLine support
 - macOS or Linux (Windows untested)
