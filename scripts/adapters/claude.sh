@@ -655,6 +655,40 @@ claude_update_settings() {
 }
 
 # =============================================================================
+# StatusLine
+# =============================================================================
+
+# Set statusLine in settings.json for HUD script
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - command: The statusLine command string
+#   $3 - dry_run: "true" or "false"
+claude_set_statusline() {
+    local target_path="$1"
+    local command="$2"
+    local dry_run="${3:-false}"
+
+    local settings_file="$target_path/.claude/settings.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Set statusLine: $command -> $settings_file"
+        return 0
+    fi
+
+    # settings.json must exist (created by sync_hooks earlier)
+    if [[ ! -f "$settings_file" ]]; then
+        log_warn "statusLine 설정 실패: $settings_file 없음"
+        return 0
+    fi
+
+    local current=$(cat "$settings_file")
+    local statusline_json=$(jq -n --arg cmd "$command" '{"statusLine": {"type": "command", "command": $cmd}}')
+    local merged=$(echo "$current" | jq --argjson sl "$statusline_json" '. * $sl')
+    echo "$merged" | jq '.' > "$settings_file"
+    log_info "statusLine 설정 완료: $settings_file"
+}
+
+# =============================================================================
 # Config Sync
 # =============================================================================
 

@@ -890,6 +890,27 @@ sync_scripts() {
     log_success "Scripts 동기화 완료"
 }
 
+sync_statusline() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    # Check if hud script component exists in scripts.items
+    local has_hud=$(yq '.scripts.items[] | select(. == "hud" or .component == "hud")' "$yaml_file" 2>/dev/null)
+    if [[ -z "$has_hud" ]]; then
+        return 0
+    fi
+
+    # Check if claude is in resolved platforms for scripts
+    # (simplified: if hud was synced, .claude/scripts/hud/index.ts should exist)
+    local hud_target="$target_path/.claude/scripts/hud/index.ts"
+    if [[ ! -f "$hud_target" ]]; then
+        return 0
+    fi
+
+    log_info "HUD statusLine 동기화"
+    claude_set_statusline "$target_path" "bun run .claude/scripts/hud/index.ts" "$DRY_RUN"
+}
+
 # ============================================================
 # MCPs 동기화
 # ============================================================
@@ -1293,6 +1314,7 @@ process_yaml() {
     sync_commands "$target_path" "$yaml_file"
     sync_skills "$target_path" "$yaml_file"
     sync_scripts "$target_path" "$yaml_file"
+    sync_statusline "$target_path" "$yaml_file"
     sync_rules "$target_path" "$yaml_file"
     sync_plugins "$target_path" "$yaml_file"
     sync_lib "$target_path"
