@@ -218,6 +218,29 @@ function computeStatus(jobDir) {
       }
     }
 
+    // Staleness check for running reviewers
+    if (status.state === 'running' && status.startedAt) {
+      const startedTs = new Date(status.startedAt).getTime();
+      const runningElapsed = Date.now() - startedTs;
+      const runningThresholdMs = (timeoutSec + 60) * 1000;
+      if (runningElapsed > runningThresholdMs) {
+        // CAS pattern: sleep then re-read to avoid race with legitimate completion
+        sleepMs(250);
+        const recheck = readJsonIfExists(statusPath);
+        if (recheck && recheck.state === 'running') {
+          const errorPayload = {
+            ...recheck,
+            state: 'error',
+            error: `Worker stale: running for ${Math.round(runningElapsed / 1000)} seconds without completion`,
+          };
+          atomicWriteJson(statusPath, errorPayload);
+          status = errorPayload;
+        } else if (recheck) {
+          status = recheck;
+        }
+      }
+    }
+
     reviewers.push({ safeName: entry, ...status });
   }
 

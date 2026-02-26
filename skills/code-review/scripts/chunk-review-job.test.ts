@@ -1482,6 +1482,72 @@ describe('computeStatus', () => {
     expect(written.state).toBe('error');
     expect(written.error.includes('stale')).toBe(true);
   });
+
+  // ---- Running worker staleness ----
+
+  test('preserves normal running worker within threshold', () => {
+    const jobDir = path.join(tmpDir, 'job-run-fresh');
+    const recentStart = new Date(Date.now() - 10_000).toISOString(); // 10s ago
+    setupJob(jobDir, { id: 'test-run-fresh', settings: { timeoutSec: 60 } }, {
+      alice: { reviewer: 'alice', state: 'running', startedAt: recentStart },
+    });
+    // running threshold = (60 + 60) * 1000 = 120_000ms; 10s < 120s → not stale
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    expect(alice.state).toBe('running');
+    expect(result.counts.running).toBe(1);
+    expect(result.counts.error).toBe(0);
+  });
+
+  test('transitions stale running worker to error when startedAt exceeds threshold', () => {
+    const jobDir = path.join(tmpDir, 'job-run-stale');
+    const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
+    setupJob(jobDir, { id: 'test-run-stale', settings: { timeoutSec: 60 } }, {
+      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+    });
+    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    expect(alice.state).toBe('error');
+    expect(result.counts.error).toBe(1);
+    expect(result.counts.running).toBe(0);
+  });
+
+  test('CAS guard: does not transition if running worker changed state during re-read', () => {
+    const jobDir = path.join(tmpDir, 'job-run-cas');
+    const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
+    setupJob(jobDir, { id: 'test-run-cas', settings: { timeoutSec: 60 } }, {
+      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+    });
+    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    // Simulate race: spawn a background process that overwrites the file to 'done'
+    // during the 250ms CAS sleep window (Atomics.wait blocks the event loop,
+    // so setTimeout won't fire — only an external process can write the file).
+    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const donePayload = JSON.stringify({ reviewer: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
+    Bun.spawn(['bash', '-c', `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
+    const result = computeStatus(jobDir);
+    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    // CAS re-read sees 'done' → preserves 'done', does NOT overwrite with error
+    expect(alice.state).toBe('done');
+    expect(result.counts.error).toBe(0);
+  });
+
+  test('writes error details to status.json on running staleness transition', () => {
+    const jobDir = path.join(tmpDir, 'job-run-stale-write');
+    const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
+    setupJob(jobDir, { id: 'test-run-stale-write', settings: { timeoutSec: 60 } }, {
+      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+    });
+    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    computeStatus(jobDir);
+    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    expect(written.state).toBe('error');
+    expect(written.error).toContain('running for');
+    expect(written.error).toContain('seconds');
+  });
 });
 
 // ---------------------------------------------------------------------------
