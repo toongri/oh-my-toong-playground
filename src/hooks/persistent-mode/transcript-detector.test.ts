@@ -72,6 +72,50 @@ describe('transcript-detector', () => {
 
       expect(result).toBe(false);
     });
+
+    it('started_at 이전 DONE 태그는 false 반환', async () => {
+      const lines = [
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T09:00:00.000Z', message: { content: '<promise>DONE</promise>' } }),
+        JSON.stringify({ type: 'user', timestamp: '2024-01-15T11:00:00.000Z', message: { content: 'some later message' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectCompletionPromise(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(false);
+    });
+
+    it('started_at 이후 DONE 태그는 true 반환', async () => {
+      const lines = [
+        JSON.stringify({ type: 'user', timestamp: '2024-01-15T09:00:00.000Z', message: { content: 'some early message' } }),
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<promise>DONE</promise>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectCompletionPromise(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(true);
+    });
+
+    it('started_at 미지정 시 전체 스캔으로 폴백 (하위 호환)', async () => {
+      await writeFile(transcriptPath, '<promise>DONE</promise>');
+
+      const result = detectCompletionPromise(transcriptPath);
+
+      expect(result).toBe(true);
+    });
+
+    it('should skip unparseable JSONL lines gracefully', async () => {
+      const lines = [
+        '{ invalid json }',
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<promise>DONE</promise>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectCompletionPromise(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(true);
+    });
   });
 
   describe('detectOracleApproval', () => {
@@ -243,7 +287,6 @@ describe('transcript-detector', () => {
         hasCompletionPromise: false,
         hasOracleApproval: false,
         oracleRejectionFeedback: null,
-        incompleteTodoCount: 0,
       });
     });
 
@@ -283,8 +326,6 @@ describe('transcript-detector', () => {
 
       expect(result.hasCompletionPromise).toBe(true);
       expect(result.hasOracleApproval).toBe(true);
-      // incompleteTodoCount is deprecated - always returns 0
-      expect(result.incompleteTodoCount).toBe(0);
     });
   });
 });

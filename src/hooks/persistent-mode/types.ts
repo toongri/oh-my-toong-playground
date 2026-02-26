@@ -42,5 +42,4 @@ export interface TranscriptDetection {
   hasCompletionPromise: boolean;
   hasOracleApproval: boolean;
   oracleRejectionFeedback: string | null;
-  incompleteTodoCount: number;
 }
