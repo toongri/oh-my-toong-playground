@@ -18,7 +18,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
 2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
 3. **Write the received prompt** (containing all review data and the {DIFF_COMMAND} reference) to stdin for the dispatch script
-4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --stdin` via Bash tool with **timeout 600000** (10 minutes) -- blocks until complete (foreground one-shot mode), then prints JSON results to stdout
+4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --stdin` via Bash tool with **timeout 1200000** (10 minutes) -- blocks until complete (foreground one-shot mode), then prints JSON results to stdout
 5. **Aggregate** with classification rules (below)
 6. **Return** structured aggregation
 

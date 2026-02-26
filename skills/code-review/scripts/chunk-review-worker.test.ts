@@ -442,7 +442,7 @@ describe('runWithRetry', () => {
     });
 
     expect(result.state).toBe('error');
-    expect(result.attempt).toBe(2); // 0, 1, 2 = 3 attempts
+    expect(result.attempt).toBe(1); // 0, 1 = 2 attempts
   });
 
   test('does NOT retry on missing_cli (ENOENT)', async () => {
@@ -526,16 +526,12 @@ describe('runWithRetry', () => {
       },
     });
 
-    // Should have 2 delays (retry after attempt 0 and attempt 1)
-    expect(delays.length).toBe(2);
+    // Should have 1 delay (retry after attempt 0)
+    expect(delays.length).toBe(1);
 
     // First delay: BASE_DELAY_MS * 2^0 + jitter(0~BASE_DELAY_MS) = 1000..2000
     expect(delays[0] >= BASE_DELAY_MS).toBe(true);
     expect(delays[0] < BASE_DELAY_MS * 3).toBe(true);
-
-    // Second delay: BASE_DELAY_MS * 2^1 + jitter(0~BASE_DELAY_MS) = 2000..3000
-    expect(delays[1] >= BASE_DELAY_MS * 2).toBe(true);
-    expect(delays[1] < BASE_DELAY_MS * 4).toBe(true);
   });
 
   test('overwrites output.txt and error.txt on retry', async () => {
@@ -604,8 +600,8 @@ describe('runWithRetry', () => {
 // ---------------------------------------------------------------------------
 
 describe('constants', () => {
-  test('MAX_RETRIES is 2', () => {
-    expect(MAX_RETRIES).toBe(2);
+  test('MAX_RETRIES is 1', () => {
+    expect(MAX_RETRIES).toBe(1);
   });
 
   test('BASE_DELAY_MS is 1000', () => {
