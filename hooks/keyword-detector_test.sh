@@ -117,6 +117,62 @@ assert_output_contains() {
     fi
 }
 
+assert_output_not_contains() {
+    local output="$1"
+    local pattern="$2"
+    local msg="${3:-Output should NOT contain pattern}"
+
+    if ! echo "$output" | grep -q "$pattern"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: $msg"
+        echo "  Pattern: '$pattern'"
+        return 1
+    fi
+}
+
+assert_json_has_hook_specific_output() {
+    local output="$1"
+    local mode_name="$2"
+    local msg="${3:-Output should have hookSpecificOutput format}"
+
+    # Check for hookSpecificOutput structure
+    if echo "$output" | grep -q '"hookSpecificOutput"'; then
+        # Check for hookEventName: UserPromptSubmit
+        if echo "$output" | grep -q '"hookEventName".*:.*"UserPromptSubmit"'; then
+            # Check for additionalContext field
+            if echo "$output" | grep -q '"additionalContext"'; then
+                return 0
+            else
+                echo "ASSERTION FAILED: $msg - missing additionalContext"
+                echo "  Output (first 500 chars): ${output:0:500}"
+                return 1
+            fi
+        else
+            echo "ASSERTION FAILED: $msg - hookEventName should be UserPromptSubmit"
+            echo "  Output (first 500 chars): ${output:0:500}"
+            return 1
+        fi
+    else
+        echo "ASSERTION FAILED: $msg - missing hookSpecificOutput"
+        echo "  Output (first 500 chars): ${output:0:500}"
+        return 1
+    fi
+}
+
+assert_no_message_field() {
+    local output="$1"
+    local msg="${2:-Output should NOT have message field at top level}"
+
+    # Check that "message" is not at the top level (directly after "continue")
+    if echo "$output" | grep -q '"continue".*"message"'; then
+        echo "ASSERTION FAILED: $msg"
+        echo "  Output (first 500 chars): ${output:0:500}"
+        return 1
+    fi
+    return 0
+}
+
 run_test() {
     local test_name="$1"
     CURRENT_TEST="$test_name"
@@ -512,6 +568,282 @@ test_ultrawork_output_has_continue_true() {
 }
 
 # =============================================================================
+# Tests: Ralph activation message validation (from hooks/tests/)
+# =============================================================================
+
+test_ralph_message_json_valid() {
+    local result
+    result=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
+
+    if ! echo "$result" | jq . > /dev/null 2>&1; then
+        echo "FAIL: Output is not valid JSON"
+        echo "Output was: $result"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_completion_guide_present() {
+    local message
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"COMPLETION SEQUENCE (MANDATORY)"* ]]; then
+        echo "FAIL: Message does not contain 'COMPLETION SEQUENCE (MANDATORY)'"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_verification_requirements_present() {
+    local message
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"VERIFICATION REQUIREMENTS"* ]]; then
+        echo "FAIL: Message does not contain 'VERIFICATION REQUIREMENTS'"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_red_flags_present() {
+    local message
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"Red Flags"* ]]; then
+        echo "FAIL: Message does not contain 'Red Flags'"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_core_rules_present() {
+    local message
+    message=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"CORE RULES"* ]]; then
+        echo "FAIL: Message does not contain 'CORE RULES'"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_variable_expansion() {
+    local message
+    message=$(echo '{"prompt": "ralph implement feature X", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"Original task: ralph implement feature X"* ]]; then
+        echo "FAIL: PROMPT variable not expanded correctly"
+        echo "Message excerpt: $(echo "$message" | grep -o 'Original task:.*' | head -1)"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_file_references() {
+    local output
+    output=$(echo '{"parts": [{"type": "text", "text": "ralph fix this"}, {"type": "file", "file_path": "src/main.kt"}], "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
+
+    local message
+    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"[referenced files: src/main.kt]"* ]]; then
+        echo "FAIL: File reference not found in message"
+        echo "Message excerpt: $(echo "$message" | grep -o 'referenced files:.*' | head -1)"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_multiple_file_references() {
+    local output
+    output=$(echo '{"parts": [{"type": "text", "text": "ralph refactor these"}, {"type": "file", "file_path": "src/Foo.kt"}, {"type": "file", "file_path": "test/FooTest.kt"}], "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
+
+    local message
+    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" != *"[referenced files: src/Foo.kt, test/FooTest.kt]"* ]]; then
+        echo "FAIL: Multiple file references not found"
+        echo "Message excerpt: $(echo "$message" | grep -o 'referenced files:.*' | head -1)"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_code_blocks_preserved() {
+    local output
+    output=$(printf '{"prompt": "ralph fix this ```kotlin\\nfun foo() = 42\\n```", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
+
+    # Note: Code blocks with newlines produce raw newlines in output,
+    # which breaks JSON parsing. Check raw output instead of jq.
+    if [[ "$output" != *'```kotlin'* ]]; then
+        echo "FAIL: Code block not preserved in message"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_system_reminder_removed() {
+    local output
+    output=$(echo '{"prompt": "ralph fix this <system-reminder>noise</system-reminder> please", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
+
+    local message
+    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" == *"system-reminder"* ]]; then
+        echo "FAIL: System-reminder tag not removed"
+        return 1
+    fi
+    if [[ "$message" != *"ralph fix this"* ]]; then
+        echo "FAIL: Non-reminder content was lost"
+        return 1
+    fi
+    return 0
+}
+
+test_ralph_message_no_file_annotation_without_files() {
+    local output
+    output=$(echo '{"prompt": "ralph fix the bug", "cwd": "/tmp"}' | "$SCRIPT_DIR/keyword-detector.sh")
+
+    local message
+    message=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+
+    if [[ "$message" == *"referenced files"* ]]; then
+        echo "FAIL: File annotation present without file parts"
+        return 1
+    fi
+    return 0
+}
+
+# =============================================================================
+# Tests: Session-based ralph state file creation (from hooks/test/)
+# =============================================================================
+
+test_ralph_keyword_creates_session_specific_state_file() {
+    # Setup: Create project marker
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Run with sessionId in input
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session-123", "prompt": "ralph do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    # Verify output contains ralph activation
+    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should activate ralph loop" || return 1
+
+    # Verify session-specific state file was created
+    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-test-session-123.json" "Session-specific ralph state file should exist" || return 1
+
+    # Verify old non-session file was NOT created
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/ralph-state.json" "Non-session ralph state file should NOT exist" || return 1
+}
+
+test_ralph_keyword_uses_default_when_no_session_id() {
+    # Setup: Create project marker
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Run without sessionId in input
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "prompt": "ralph do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    # Verify output contains ralph activation
+    assert_output_contains "$output" "RALPH LOOP ACTIVATED" "Should activate ralph loop" || return 1
+
+    # Verify default session state file was created
+    assert_file_exists "$TEST_TMP_DIR/.omt/ralph-state-default.json" "Default ralph state file should exist" || return 1
+}
+
+test_ralph_verification_uses_session_id() {
+    # This test verifies that ralph-verification also uses session ID
+    # The verification file is created by persistent-mode.sh, not keyword-detector
+    # So we just check that keyword-detector extracts session ID correctly
+
+    # Check that keyword-detector.sh has SESSION_ID extraction code
+    if grep -q 'SESSION_ID.*jq.*sessionId' "$SCRIPT_DIR/keyword-detector.sh"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: keyword-detector.sh should extract SESSION_ID"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Tests: JSON output format validation - hookSpecificOutput (from hooks/test/)
+# =============================================================================
+
+test_ralph_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "ralph do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "ralph" "Ralph mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Ralph mode should not use message field" || return 1
+}
+
+test_ultrawork_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "ultrawork do the task"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "ultrawork" "Ultrawork mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Ultrawork mode should not use message field" || return 1
+}
+
+test_think_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "think about this problem"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "think" "Think mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Think mode should not use message field" || return 1
+}
+
+test_search_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "search for files"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "search" "Search mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Search mode should not use message field" || return 1
+}
+
+test_analyze_output_uses_hook_specific_output_format() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "test-session", "prompt": "analyze this code"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_json_has_hook_specific_output "$output" "analyze" "Analyze mode should use hookSpecificOutput format" || return 1
+    assert_no_message_field "$output" "Analyze mode should not use message field" || return 1
+}
+
+# =============================================================================
+# Tests: Project root detection - keyword-detector (from hooks/test/project_root_test.sh)
+# =============================================================================
+
+test_get_project_root_function_exists_in_keyword_detector() {
+    # keyword-detector.sh should define get_project_root function
+    if grep -E '^get_project_root\(\)' "$SCRIPT_DIR/keyword-detector.sh" >/dev/null 2>&1; then
+        return 0
+    else
+        echo "ASSERTION FAILED: get_project_root() should be defined in keyword-detector.sh"
+        return 1
+    fi
+}
+
+test_keyword_detector_uses_project_root_variable() {
+    # keyword-detector.sh should set and use PROJECT_ROOT variable
+    if grep -q 'PROJECT_ROOT=.*get_project_root' "$SCRIPT_DIR/keyword-detector.sh"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: keyword-detector.sh should set PROJECT_ROOT from get_project_root"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -570,6 +902,35 @@ main() {
     run_test test_ultrawork_output_is_valid_json
     run_test test_ultrawork_output_has_correct_hook_event
     run_test test_ultrawork_output_has_continue_true
+
+    # Ralph activation message validation (from hooks/tests/)
+    run_test test_ralph_message_json_valid
+    run_test test_ralph_message_completion_guide_present
+    run_test test_ralph_message_verification_requirements_present
+    run_test test_ralph_message_red_flags_present
+    run_test test_ralph_message_core_rules_present
+    run_test test_ralph_message_variable_expansion
+    run_test test_ralph_message_file_references
+    run_test test_ralph_message_multiple_file_references
+    run_test test_ralph_message_code_blocks_preserved
+    run_test test_ralph_message_system_reminder_removed
+    run_test test_ralph_message_no_file_annotation_without_files
+
+    # Session-based ralph state file creation (from hooks/test/)
+    run_test test_ralph_keyword_creates_session_specific_state_file
+    run_test test_ralph_keyword_uses_default_when_no_session_id
+    run_test test_ralph_verification_uses_session_id
+
+    # Project root detection - keyword-detector (from hooks/test/project_root_test.sh)
+    run_test test_get_project_root_function_exists_in_keyword_detector
+    run_test test_keyword_detector_uses_project_root_variable
+
+    # JSON output format validation - hookSpecificOutput (from hooks/test/)
+    run_test test_ralph_output_uses_hook_specific_output_format
+    run_test test_ultrawork_output_uses_hook_specific_output_format
+    run_test test_think_output_uses_hook_specific_output_format
+    run_test test_search_output_uses_hook_specific_output_format
+    run_test test_analyze_output_uses_hook_specific_output_format
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
