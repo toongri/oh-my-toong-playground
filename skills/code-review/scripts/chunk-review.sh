@@ -30,6 +30,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JOB_SCRIPT="$SCRIPT_DIR/chunk-review-job.sh"
 
+# --- Logging setup (graceful fallback) ---
+LOGGING_SH="$SCRIPT_DIR/../../../hooks/lib/logging.sh"
+if [ -f "$LOGGING_SH" ]; then
+  # shellcheck source=../../../hooks/lib/logging.sh
+  source "$LOGGING_SH"
+  omt_log_init "chunk-review"
+else
+  # No-op fallback when logging is unavailable
+  omt_log_info() { :; }
+  omt_log_warn() { :; }
+  omt_log_error() { :; }
+fi
+
 usage() {
   cat <<EOF
 Chunk Review
@@ -107,8 +120,22 @@ JOB_DIR="$("$JOB_SCRIPT" start "${PASSTHROUGH_ARGS[@]}")"
 
 cleanup() {
   if [ -n "${JOB_DIR:-}" ] && [ -d "$JOB_DIR" ]; then
-    "$JOB_SCRIPT" stop "$JOB_DIR" >/dev/null 2>&1 || true
-    "$JOB_SCRIPT" clean "$JOB_DIR" >/dev/null 2>&1 || true
+    omt_log_info "cleanup: start JOB_DIR=$JOB_DIR"
+
+    local stop_rc=0
+    "$JOB_SCRIPT" stop "$JOB_DIR" >/dev/null 2>&1 || stop_rc=$?
+    omt_log_info "cleanup: cmdStop exit_code=$stop_rc"
+
+    local clean_rc=0
+    "$JOB_SCRIPT" clean "$JOB_DIR" >/dev/null 2>&1 || clean_rc=$?
+    omt_log_info "cleanup: cmdClean exit_code=$clean_rc"
+
+    if [ "$clean_rc" -ne 0 ]; then
+      omt_log_warn "cleanup: cmdClean failed, falling back to rm -rf $JOB_DIR"
+      rm -rf "$JOB_DIR" 2>/dev/null || true
+    fi
+
+    omt_log_info "cleanup: done"
   fi
 }
 trap cleanup EXIT
