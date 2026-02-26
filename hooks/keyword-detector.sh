@@ -67,13 +67,12 @@ if [ -z "$PROMPT" ]; then
   exit 0
 fi
 
-# Remove code blocks before checking keywords
-# First convert newlines to a placeholder, then remove multi-line code blocks, then restore newlines
-# This handles both single-line and multi-line code blocks properly
-PROMPT_NO_CODE=$(echo "$PROMPT" | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
+# Remove code blocks AND hook output tags before checking keywords
+# Also strip all mode tags to prevent nested activation loops
+PROMPT_NO_CODE=$(echo "$PROMPT" | perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' | perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' | perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' | perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' | perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' | perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
 
-# Remove system-reminder tags
-PROMPT_CLEAN=$(echo "$PROMPT" | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+# Remove hook output tags and system reminders from cleaned prompt
+PROMPT_CLEAN=$(echo "$PROMPT" | perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' | perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' | perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' | perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' | perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' | perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
 
 # Extract file paths from non-text parts (e.g., @file mentions)
 FILE_PATHS=""
@@ -90,6 +89,25 @@ fi
 
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
+
+RALPH_STATE_PROMPT_MAX=1200
+RALPH_CONTEXT_PROMPT_MAX=2000
+
+truncate_prompt_text() {
+  local text="$1"
+  local max_chars="$2"
+  local normalized
+  normalized=$(printf '%s' "$text" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ *//; s/ *$//')
+  local text_len=${#normalized}
+
+  if [ "$text_len" -le "$max_chars" ]; then
+    printf '%s' "$normalized"
+    return 0
+  fi
+
+  local truncated="${normalized:0:$max_chars}"
+  printf '%s...[truncated from %s chars]' "$truncated" "$text_len"
+}
 
 # Function to create ralph state file
 # Uses SESSION_ID for session-specific file naming
@@ -131,27 +149,33 @@ RALPH_STATE_EOF
 
 # Check for ralph keyword (highest priority) - ralph loop activation
 if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
+  RALPH_STATE_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_STATE_PROMPT_MAX")
+  RALPH_CONTEXT_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_CONTEXT_PROMPT_MAX")
+
   # Create ralph state file
-  create_ralph_state "$PROJECT_ROOT" "$PROMPT_CLEAN"
+  create_ralph_state "$PROJECT_ROOT" "$RALPH_STATE_PROMPT"
 
-  # Pre-escape PROMPT_CLEAN for safe JSON embedding via jq
+  # Build ralph activation JSON safely using jq --arg to escape prompt
   if command -v jq &> /dev/null; then
-    PROMPT_JSON_ESCAPED=$(printf '%s' "$PROMPT_CLEAN" | jq -Rs '.')
-  else
-    # Fallback: basic escaping
-    PROMPT_JSON_ESCAPED="\"$(printf '%s' "$PROMPT_CLEAN" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')\""
-  fi
-  # Strip surrounding quotes for embedding inside the JSON string
-  PROMPT_FOR_TEMPLATE="${PROMPT_JSON_ESCAPED%\"}"
-  PROMPT_FOR_TEMPLATE="${PROMPT_FOR_TEMPLATE#\"}"
+    RALPH_CONTEXT="<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 0/10\n\nYou are in Ralph Loop mode.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. You MUST output \`<promise>DONE</promise>\` when ALL tasks are complete\n\nOriginal task: "
+    RALPH_SUFFIX="\n</ralph-mode>\n\n---\n"
 
-  # Output ralph activation message
-  # Uses quoted heredoc for the static template, then replaces placeholder with jq-escaped prompt
-  RALPH_TEMPLATE=$(cat << 'RALPH_OUTPUT_EOF'
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. You MUST output `<promise>DONE</promise>` when ALL tasks are complete\n\nOriginal task: __PROMPT_PLACEHOLDER__\n</ralph-mode>\n\n---\n"}}
-RALPH_OUTPUT_EOF
-  )
-  echo "${RALPH_TEMPLATE//__PROMPT_PLACEHOLDER__/$PROMPT_FOR_TEMPLATE}"
+    jq -n \
+      --arg prefix "$RALPH_CONTEXT" \
+      --arg prompt "$RALPH_CONTEXT_PROMPT" \
+      --arg suffix "$RALPH_SUFFIX" \
+      '{
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext: ($prefix + $prompt + $suffix)
+        }
+      }'
+  else
+    # Fallback: basic escaping when jq is unavailable
+    local escaped_prompt=$(printf '%s' "$RALPH_CONTEXT_PROMPT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+    echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"<ralph-mode>\\n**RALPH LOOP ACTIVATED** - Iteration 0/10\\n\\nYou are in Ralph Loop mode.\\n\\n## CORE RULES\\n1. Work until ALL requirements are met\\n2. Track progress with TodoWrite tool\\n3. You MUST output \\\`<promise>DONE</promise>\\\` when ALL tasks are complete\\n\\nOriginal task: ${escaped_prompt}\\n</ralph-mode>\\n\\n---\\n\"}}"
+  fi
   exit 0
 fi
 

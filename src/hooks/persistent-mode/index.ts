@@ -58,4 +58,6 @@ export async function main(): Promise<void> {
 }
 
 // Run main when executed directly
-main();
+if (import.meta.main) {
+  main();
+}
