@@ -578,9 +578,6 @@ function cmdResults(options, jobDir) {
         {
           jobDir: resolvedJobDir,
           id: jobMeta ? jobMeta.id : null,
-          prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
-            ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
-            : null,
           reviewers: reviewers
             .map((r) => ({
               reviewer: r.reviewer,
@@ -588,7 +585,6 @@ function cmdResults(options, jobDir) {
               exitCode: r.exitCode != null ? r.exitCode : null,
               message: r.message || null,
               output: r.output,
-              stderr: r.stderr,
             }))
             .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
         },
