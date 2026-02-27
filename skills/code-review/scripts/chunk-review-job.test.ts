@@ -2415,7 +2415,7 @@ describe('cmdResults', () => {
     expect(stdout).not.toContain('hidden-stderr-content');
   });
 
-  test('--manifest: done reviewer의 outputFile이 /tmp에 존재하고 내용 일치', () => {
+  test('--manifest: done reviewer의 outputFilePath가 job dir 내 output.txt 참조', () => {
     const jobDir = path.join(tmpDir, 'job-manifest1');
     setupJobFixture(jobDir, {
       'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'claude review output here', stderr: '' },
@@ -2427,19 +2427,16 @@ describe('cmdResults', () => {
     expect(parsed.id).toBe('test-results');
     expect(parsed.reviewers).toHaveLength(1);
     expect(parsed.reviewers[0].reviewer).toBe('claude');
-    expect(parsed.reviewers[0].state).toBe('done');
-    expect(parsed.reviewers[0].exitCode).toBe(0);
-    expect(parsed.reviewers[0].outputFile).toBeTruthy();
-    expect(parsed.reviewers[0].outputFile).toMatch(/^\/.*chunk-review-.*\.txt$/);
+    expect(parsed.reviewers[0].outputFilePath).toBeTruthy();
+    expect(parsed.reviewers[0].outputFilePath).toContain('output.txt');
+    expect(parsed.reviewers[0].outputFilePath).toContain(path.join('reviewers', 'claude-0'));
+    expect(parsed.reviewers[0].errorMessage).toBeNull();
 
-    const fileContent = fs.readFileSync(parsed.reviewers[0].outputFile, 'utf8');
+    const fileContent = fs.readFileSync(parsed.reviewers[0].outputFilePath, 'utf8');
     expect(fileContent).toBe('claude review output here');
-
-    // Cleanup tmp file
-    fs.unlinkSync(parsed.reviewers[0].outputFile);
   });
 
-  test('--manifest: failed/non_retryable reviewer의 outputFile이 null', () => {
+  test('--manifest: failed/non_retryable reviewer의 outputFilePath가 null + errorMessage 존재', () => {
     const jobDir = path.join(tmpDir, 'job-manifest2');
     setupJobFixture(jobDir, {
       'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'valid output', stderr: '' },
@@ -2456,12 +2453,12 @@ describe('cmdResults', () => {
     const codex = parsed.reviewers.find((r: any) => r.reviewer === 'codex');
     const gemini = parsed.reviewers.find((r: any) => r.reviewer === 'gemini');
 
-    expect(claude.outputFile).toBeTruthy();
-    expect(codex.outputFile).toBeNull();
-    expect(gemini.outputFile).toBeNull();
-
-    // Cleanup tmp file
-    fs.unlinkSync(claude.outputFile);
+    expect(claude.outputFilePath).toBeTruthy();
+    expect(claude.errorMessage).toBeNull();
+    expect(codex.outputFilePath).toBeNull();
+    expect(codex.errorMessage).toBeTruthy();
+    expect(gemini.outputFilePath).toBeNull();
+    expect(gemini.errorMessage).toBeTruthy();
   });
 
   test('--manifest: JSON schema 검증 (id, reviewers 필드 구조)', () => {
@@ -2482,24 +2479,22 @@ describe('cmdResults', () => {
     // Must NOT have jobDir (unlike --json mode)
     expect(parsed).not.toHaveProperty('jobDir');
 
-    // Each reviewer must have exactly the expected fields
+    // Each reviewer must have exactly 3 fields (reviewer, outputFilePath, errorMessage)
     for (const r of parsed.reviewers) {
       expect(r).toHaveProperty('reviewer');
-      expect(r).toHaveProperty('state');
-      expect(r).toHaveProperty('exitCode');
-      expect(r).toHaveProperty('message');
-      expect(r).toHaveProperty('outputFile');
+      expect(r).toHaveProperty('outputFilePath');
+      expect(r).toHaveProperty('errorMessage');
+      // Must NOT have legacy fields
+      expect(r).not.toHaveProperty('state');
+      expect(r).not.toHaveProperty('exitCode');
+      expect(r).not.toHaveProperty('message');
+      expect(r).not.toHaveProperty('outputFile');
       // Must NOT have output inline (unlike --json mode)
       expect(r).not.toHaveProperty('output');
     }
-
-    // Cleanup tmp files
-    for (const r of parsed.reviewers) {
-      if (r.outputFile) fs.unlinkSync(r.outputFile);
-    }
   });
 
-  test('--manifest: stdout가 경량 (30KB 미만, output 인라인 없음)', () => {
+  test('--manifest: stdout가 경량 (2KB 미만, output 인라인 없음)', () => {
     const jobDir = path.join(tmpDir, 'job-manifest4');
     const largeOutput = 'x'.repeat(50000);
     setupJobFixture(jobDir, {
@@ -2517,12 +2512,12 @@ describe('cmdResults', () => {
     const parsed = JSON.parse(output);
     expect(parsed.reviewers).toHaveLength(3);
 
-    // Each outputFile must contain the large output
+    // Each outputFilePath must point to job dir and contain the large output
     for (const r of parsed.reviewers) {
-      expect(r.outputFile).toBeTruthy();
-      const content = fs.readFileSync(r.outputFile, 'utf8');
+      expect(r.outputFilePath).toBeTruthy();
+      expect(r.outputFilePath).toContain('output.txt');
+      const content = fs.readFileSync(r.outputFilePath, 'utf8');
       expect(content.length).toBe(50000);
-      fs.unlinkSync(r.outputFile);
     }
   });
 });

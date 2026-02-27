@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
 
@@ -577,19 +576,13 @@ function cmdResults(options, jobDir) {
     const jobId = jobMeta ? jobMeta.id : 'unknown';
     const manifestReviewers = reviewers
       .map((r) => {
-        let outputFile: string | null = null;
-        if (r.output) {
-          const safeName = safeFileName(r.safeName || r.reviewer, 'reviewer');
-          const tmpPath = path.join(os.tmpdir(), `chunk-review-${jobId}-${safeName}.txt`);
-          fs.writeFileSync(tmpPath, r.output, 'utf8');
-          outputFile = tmpPath;
-        }
+        const outputPath = r.output
+          ? path.join(reviewersRoot, r.safeName, 'output.txt')
+          : null;
         return {
           reviewer: r.reviewer,
-          state: r.state,
-          exitCode: r.exitCode != null ? r.exitCode : null,
-          message: r.message || null,
-          outputFile,
+          outputFilePath: outputPath,
+          errorMessage: outputPath ? null : (r.message || r.state),
         };
       })
       .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)));

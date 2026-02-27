@@ -231,3 +231,146 @@
 | V3 | Selected entry attributed to its source model |
 | V4 | No entry content merged/blended across models for the same change-unit — selection is atomic per entry |
 | V5 | All change-units in the chunk have an entry in the final output |
+
+---
+
+## Manifest Workflow Scenarios
+
+> Phase 3 of code-review Application TDD — tests the manifest data acquisition mechanism (start→poll→results manifest→Read outputFile→aggregate).
+>
+> The CH-1~CH-12 scenarios above test **aggregation logic** (what to do with results). The MA scenarios below test the **data acquisition mechanism** (multi-step subcommand workflow that keeps each Bash call under the 120-second default timeout).
+
+### MA-1: Full Success — Multi-Step Workflow + Read (3/3)
+
+**Description**: All three reviewers complete successfully. The Chairman must start the job, poll until done, get the manifest JSON, read each reviewer's `outputFilePath`, and proceed to aggregation.
+
+**Setup/Given**: `chunk-review.sh start` creates a job. After 2-3 polling cycles via `wait`, `overallState` becomes `"done"`. `results --manifest` returns manifest JSON with 3 reviewers, all with non-null `outputFilePath` paths pointing to job directory `output.txt` files.
+
+**Manifest JSON (Bash stdout)**:
+```json
+{
+  "id": "job-test-ma1",
+  "reviewers": [
+    { "reviewer": "claude", "outputFilePath": ".omt/jobs/job-test-ma1/reviewers/claude-0/output.txt", "errorMessage": null },
+    { "reviewer": "codex", "outputFilePath": ".omt/jobs/job-test-ma1/reviewers/codex-0/output.txt", "errorMessage": null },
+    { "reviewer": "gemini", "outputFilePath": ".omt/jobs/job-test-ma1/reviewers/gemini-0/output.txt", "errorMessage": null }
+  ]
+}
+```
+
+**Expected Behavior/Then**: Chairman uses start→poll→results multi-step workflow, then issues 3 Read tool calls for each outputFilePath, collects all review content, and proceeds to standard aggregation (CH-1~CH-12 logic).
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | `start` 서브커맨드 1회 실행 → JOB_DIR 경로 추출 |
+| V2 | `wait --timeout-ms 100000` 반복 호출 → `overallState: "done"` 확인 후 진행 |
+| V3 | `results --manifest` 1회 실행 → manifest JSON에서 `id` + `reviewers` 배열 추출 |
+| V4 | 3개 reviewer 각각의 `outputFilePath` 추출, Read tool 3회 호출 (Bash로 cat하지 않음) |
+| V5 | `outputFilePath` null 여부 확인, non-null만 Read 시도 |
+| V6 | 3개 reviewer 내용 수집 후 표준 aggregation (CH-1~CH-12) 진입 |
+| V7 | `start` 서브커맨드는 정확히 1회 (exactly-once job start 준수) |
+
+---
+
+### MA-2: Partial Success — Mixed States (2/3 Available)
+
+**Description**: Two reviewers succeed, one fails with `non_retryable`. The Chairman must complete the multi-step workflow, read only the two available outputFiles, skip the null outputFile, and apply Degradation Policy (partial aggregation).
+
+**Setup/Given**: Job completes via start→poll→results. Manifest JSON has 3 reviewers: claude and codex with non-null outputFilePath, gemini with `outputFilePath: null` + errorMessage.
+
+**Manifest JSON (Bash stdout)**:
+```json
+{
+  "id": "job-test-ma2",
+  "reviewers": [
+    { "reviewer": "claude", "outputFilePath": ".omt/jobs/job-test-ma2/reviewers/claude-0/output.txt", "errorMessage": null },
+    { "reviewer": "codex", "outputFilePath": ".omt/jobs/job-test-ma2/reviewers/codex-0/output.txt", "errorMessage": null },
+    { "reviewer": "gemini", "outputFilePath": null, "errorMessage": "NON_RETRYABLE: TerminalQuotaError" }
+  ]
+}
+```
+
+**Expected Behavior/Then**: Chairman reads 2 outputFilePaths (claude, codex), skips gemini (outputFilePath null, errorMessage explains why), applies partial aggregation with degradation notice.
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Manifest에서 `outputFilePath: null`인 gemini를 식별 — Read 시도하지 않음 |
+| V2 | `outputFilePath`이 non-null인 claude, codex에 대해서만 Read tool 호출 (2회) |
+| V3 | Degradation Policy 적용: "Partial review (2/3 respondents)" 접두 |
+| V4 | gemini를 "Unavailable (NON_RETRYABLE: TerminalQuotaError)"로 표기 — errorMessage를 직접 사용 |
+| V5 | 분모(denominator)가 3 (총 dispatched) — 응답 수가 아님 |
+| V6 | start 서브커맨드 재실행하지 않음 (degradation이어도 exactly-once job start 준수) |
+
+---
+
+### MA-3: Total Failure — All outputFiles Null (0/3)
+
+**Description**: All three reviewers fail. All outputFilePaths are null. The Chairman must recognize that no review content is available and return a failure report without attempting any Read calls.
+
+**Setup/Given**: Job completes via start→poll→results. Manifest JSON has 3 reviewers, all with `outputFilePath: null` and errorMessage present.
+
+**Manifest JSON (Bash stdout)**:
+```json
+{
+  "id": "job-test-ma3",
+  "reviewers": [
+    { "reviewer": "claude", "outputFilePath": null, "errorMessage": "Process exited with code 1" },
+    { "reviewer": "codex", "outputFilePath": null, "errorMessage": "Timed out after 480s" },
+    { "reviewer": "gemini", "outputFilePath": null, "errorMessage": "NON_RETRYABLE: TerminalQuotaError" }
+  ]
+}
+```
+
+**Expected Behavior/Then**: Chairman does NOT attempt any Read tool calls. Returns failure report immediately.
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Read tool 호출 0회 — 모든 outputFilePath가 null이므로 읽을 파일 없음 |
+| V2 | 즉시 failure report 반환: "Review unavailable. All models failed: [errorMessages]." |
+| V3 | 각 model의 errorMessage 포함 (claude: "Process exited with code 1", codex: "Timed out after 480s", gemini: "NON_RETRYABLE: TerminalQuotaError") |
+| V4 | Aggregation 섹션(Chunk Analysis, Strengths, Issues 등) 없음 — failure report만 반환 |
+| V5 | start 서브커맨드 재실행하지 않음 (exactly-once job start) |
+| V6 | Chairman이 자체 리뷰 의견을 생성하지 않음 (CH-11 Boundaries 준수) |
+
+---
+
+### MA-4: Manifest Stdout Size Safety + Timeout Safety
+
+**Description**: Verifies the manifest mode's two design invariants: (1) `results --manifest` stdout contains only the lightweight manifest JSON (~500B for 3 reviewers), not the full review content (which can be 50-100KB); (2) each individual Bash call (start, wait, results) completes well under the 120-second default Bash tool timeout.
+
+**Setup/Given**: Three reviewers each produce 30KB+ of review output. Workers take ~3 minutes total. The multi-step workflow (start→poll→results) ensures no single Bash call blocks for the full duration.
+
+**Expected Behavior/Then**: Each Bash call completes under 105 seconds. The `results --manifest` output is well under 2KB. Each outputFile contains the full review content retrievable via Read tool.
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | `start` 호출 < 5초, 각 `wait` 호출 ≤ 100초, `results` 호출 < 2초 — 120초 기본 timeout 미도달 |
+| V2 | `results --manifest` stdout가 2KB 미만 — 30KB output limit에 도달하지 않음 |
+| V3 | Manifest JSON이 truncation 없이 완전한 상태로 agent에 도달 |
+| V4 | JSON에 `output` 필드 없음 — review content가 inline되지 않음 (`--json` 모드와의 핵심 차이) |
+| V5 | 각 outputFilePath를 Read tool로 읽으면 완전한 review content 획득 (30KB+도 손실 없음) |
+| V6 | manifest JSON의 reviewer 순서가 알파벳순 (결정적 순서) |
+
+---
+
+### MA-5: Tool Allowlist Enforcement — Read + Bash Only
+
+**Description**: The chunk-reviewer agent is constrained to `tools: Bash, Read` in frontmatter. This scenario verifies the agent uses ONLY these two tools during the multi-step manifest workflow — no Grep, Glob, WebSearch, or other tools.
+
+**Setup/Given**: Normal multi-step manifest workflow with 3/3 success. Agent executes start→poll→results→Read→aggregate.
+
+**Expected Behavior/Then**: Agent's tool usage follows exactly: (1) Bash for start, wait (polling), results, (2) Read for each outputFile. No other tools used.
+
+**Verification Points**:
+| ID | Expected Behavior |
+|----|-------------------|
+| V1 | Bash 사용: start 1회 + wait N회 + results 1회 (mktemp+write는 start와 결합 가능) |
+| V2 | Read 사용 횟수: outputFile 개수와 동일 (3/3 성공 시 3회) |
+| V3 | Glob, Grep, WebSearch 등 다른 tool 호출 없음 |
+| V4 | git 명령어 실행 없음 (Bash 내에서도 금지) |
+| V5 | 소스 코드 파일 Read 없음 — outputFilePath 경로만 Read |
+| V6 | 총 turn 수가 maxTurns(12) 이내: start+init(1) + poll(2-3) + results(1) + Read×3(1) + aggregate(1) = ~7턴 |
