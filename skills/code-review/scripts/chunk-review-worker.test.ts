@@ -534,7 +534,7 @@ describe('runWithRetry', () => {
     expect(delays[0] < BASE_DELAY_MS * 3).toBe(true);
   });
 
-  test('overwrites output.txt and error.txt on retry', async () => {
+  test('appends output with attempt marker on retry', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
     const result = await runWithRetry({
       program: 'sh',
@@ -548,8 +548,9 @@ describe('runWithRetry', () => {
     });
 
     const out = await waitForFileContent(paths.outPath, 'attempt2');
+    expect(out.includes('attempt1')).toBe(true);
+    expect(out.includes('--- attempt 1 ---')).toBe(true);
     expect(out.includes('attempt2')).toBe(true);
-    expect(!out.includes('attempt1')).toBe(true);
   });
 
   test('includes attempt field in final status.json', async () => {
