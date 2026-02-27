@@ -2414,4 +2414,115 @@ describe('cmdResults', () => {
     expect(stdout).toContain('primary-output-content');
     expect(stdout).not.toContain('hidden-stderr-content');
   });
+
+  test('--manifest: done reviewer의 outputFile이 /tmp에 존재하고 내용 일치', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest1');
+    setupJobFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'claude review output here', stderr: '' },
+    });
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.id).toBe('test-results');
+    expect(parsed.reviewers).toHaveLength(1);
+    expect(parsed.reviewers[0].reviewer).toBe('claude');
+    expect(parsed.reviewers[0].state).toBe('done');
+    expect(parsed.reviewers[0].exitCode).toBe(0);
+    expect(parsed.reviewers[0].outputFile).toBeTruthy();
+    expect(parsed.reviewers[0].outputFile).toMatch(/^\/.*chunk-review-.*\.txt$/);
+
+    const fileContent = fs.readFileSync(parsed.reviewers[0].outputFile, 'utf8');
+    expect(fileContent).toBe('claude review output here');
+
+    // Cleanup tmp file
+    fs.unlinkSync(parsed.reviewers[0].outputFile);
+  });
+
+  test('--manifest: failed/non_retryable reviewer의 outputFile이 null', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest2');
+    setupJobFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'valid output', stderr: '' },
+      'codex-0': { reviewer: 'codex', state: 'error', exitCode: 1, output: '', stderr: 'some error' },
+      'gemini-0': { reviewer: 'gemini', state: 'non_retryable', exitCode: 42, output: '', stderr: 'quota exceeded' },
+    });
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.reviewers).toHaveLength(3);
+
+    const claude = parsed.reviewers.find((r: any) => r.reviewer === 'claude');
+    const codex = parsed.reviewers.find((r: any) => r.reviewer === 'codex');
+    const gemini = parsed.reviewers.find((r: any) => r.reviewer === 'gemini');
+
+    expect(claude.outputFile).toBeTruthy();
+    expect(codex.outputFile).toBeNull();
+    expect(gemini.outputFile).toBeNull();
+
+    // Cleanup tmp file
+    fs.unlinkSync(claude.outputFile);
+  });
+
+  test('--manifest: JSON schema 검증 (id, reviewers 필드 구조)', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest3');
+    setupJobFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'output A', stderr: '' },
+      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'output B', stderr: '' },
+    });
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    // Top-level schema
+    expect(parsed).toHaveProperty('id');
+    expect(parsed).toHaveProperty('reviewers');
+    expect(Array.isArray(parsed.reviewers)).toBe(true);
+
+    // Must NOT have jobDir (unlike --json mode)
+    expect(parsed).not.toHaveProperty('jobDir');
+
+    // Each reviewer must have exactly the expected fields
+    for (const r of parsed.reviewers) {
+      expect(r).toHaveProperty('reviewer');
+      expect(r).toHaveProperty('state');
+      expect(r).toHaveProperty('exitCode');
+      expect(r).toHaveProperty('message');
+      expect(r).toHaveProperty('outputFile');
+      // Must NOT have output inline (unlike --json mode)
+      expect(r).not.toHaveProperty('output');
+    }
+
+    // Cleanup tmp files
+    for (const r of parsed.reviewers) {
+      if (r.outputFile) fs.unlinkSync(r.outputFile);
+    }
+  });
+
+  test('--manifest: stdout가 경량 (30KB 미만, output 인라인 없음)', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest4');
+    const largeOutput = 'x'.repeat(50000);
+    setupJobFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
+      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
+      'gemini-0': { reviewer: 'gemini', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
+    });
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
+    const output = result.toString();
+
+    // Manifest stdout must be tiny regardless of output size
+    expect(output.length).toBeLessThan(2000);
+
+    const parsed = JSON.parse(output);
+    expect(parsed.reviewers).toHaveLength(3);
+
+    // Each outputFile must contain the large output
+    for (const r of parsed.reviewers) {
+      expect(r.outputFile).toBeTruthy();
+      const content = fs.readFileSync(r.outputFile, 'utf8');
+      expect(content.length).toBe(50000);
+      fs.unlinkSync(r.outputFile);
+    }
+  });
 });

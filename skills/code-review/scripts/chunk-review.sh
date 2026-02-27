@@ -195,4 +195,4 @@ process.stdout.write(String(d.overallState||""));
 done
 
 omt_log_info "printing results"
-"$JOB_SCRIPT" results --json "$JOB_DIR"
+"$JOB_SCRIPT" results --manifest "$JOB_DIR"
