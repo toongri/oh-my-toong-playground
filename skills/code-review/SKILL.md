@@ -243,10 +243,21 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 ### Result Scope Validation
 
-After all agents return, before proceeding to Step 5, validate that each chunk-reviewer analyzed the correct files:
+After all agents return, before proceeding to Step 5, validate each chunk-reviewer covered its assigned files:
 
-1. Compare each agent's **Chunk Analysis entry headers** (file names, ignoring `:symbol` suffixes and status tags) against the chunk's **{FILE_LIST}**
-2. If an agent analyzed files outside its assigned chunk, **re-dispatch** that chunk with the same interpolated prompt
+**Trigger:** FILE_LIST의 파일 중 하나라도 해당 chunk-reviewer의 Chunk Analysis 헤더에 등장하지 않는 경우 (cross-reference mentions는 무시 — 헤더 형식 `### path/to/file.ts` 기준).
+
+**Examples:**
+
+| Scenario | FILE_LIST | Chunk Analysis Headers | Result |
+|----------|-----------|----------------------|--------|
+| OK | [a.ts, b.ts] | [a.ts, b.ts, c.ts(cross-ref)] | PASS — all FILE_LIST files covered |
+| FAIL | [a.ts, b.ts] | [a.ts] | FAIL — b.ts missing |
+
+**Re-dispatch rules:**
+1. Extract missing files only → create new chunk with only the missing files
+2. Dispatch new Task(chunk-reviewer) with the missing-files chunk
+3. **Cap: maximum 1 re-dispatch per original chunk.** If the re-dispatched chunk also fails validation, accept partial coverage and proceed to Step 5.
 
 ## Step 5: Walkthrough Synthesis + Result Synthesis
 
