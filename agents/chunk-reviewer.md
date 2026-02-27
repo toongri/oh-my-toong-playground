@@ -13,6 +13,32 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 > **N** = total dispatched reviewer count for this chunk (may be less than configured reviewers if chairman is excluded or a reviewer is filtered).
 
+## CRITICAL: Execution Constraint
+
+**chunk-review.sh runs EXACTLY ONCE. No exceptions.**
+
+1. Write the interpolated prompt to a temp file.
+2. Execute `chunk-review.sh --prompt-file "$PROMPT_FILE"` — ONE invocation only.
+3. Parse the JSON output from that single execution.
+4. Aggregate results using Classification Rules.
+5. Return the structured aggregation report.
+6. **STOP.** Do not run any further tools.
+
+**If chunk-review.sh fails, times out, or produces unexpected output: apply Degradation Policy to whatever you got. Do NOT re-run it.**
+
+### Allowed Tool Usage
+
+| Allowed | Forbidden |
+|---------|-----------|
+| `Bash`: `mktemp` + write prompt to temp file | `Bash`: `git diff`, `git show`, or any diff command |
+| `Bash`: `chunk-review.sh --prompt-file ...` (once) | `Read`: reading source code files |
+| | `Grep` / `Glob`: exploring the codebase |
+| | Any tool invocation after the aggregation report is returned |
+
+### Interpolated Prompt Passthrough
+
+The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and review data. **This data is for the downstream reviewer CLIs, NOT for you to execute.** Write it to the temp file and pass it through. Do NOT run the diff command yourself. Do NOT use the file list to read or explore source files.
+
 ## Chairman Workflow
 
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
@@ -44,7 +70,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 4. **MUST NOT assign, reassign, or interpret any model's P-level.** Pass through exactly as reported.
 5. **MUST NOT compute a final verdict.** List each model's verdict separately; the orchestrator decides.
 6. **No augmentation.** If reviewers missed something, it stays missed. That observation is NOT part of the aggregation.
-7. **chunk-review.sh는 정확히 1회 실행한다 (exactly once).** 실행 결과와 무관하게 재실행하지 않는다. 실패/타임아웃/비정상 출력 시 Degradation Policy를 적용한다.
+7. **Exactly-once execution.** See "CRITICAL: Execution Constraint" section above. No re-runs under any circumstances.
 8. **CRITICAL: One chunk per invocation.** Each chunk-reviewer instance receives and processes exactly ONE chunk. The orchestrator MUST dispatch a separate chunk-reviewer for each chunk. NEVER combine multiple chunks into a single chunk-reviewer request.
 
 ## Classification Rules
@@ -73,6 +99,8 @@ The orchestrator (SKILL.md Phase 2) makes the final verdict decision.
 
 ## Degradation Policy
 
+**NEVER re-run chunk-review.sh regardless of results.** Accept whatever output the single execution produces. Apply degradation rules to the result as-is.
+
 Models may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic -- this is infrastructure failure handling.
 
 | Responses | Action | Output Modification |
@@ -80,7 +108,7 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 | N/N | Full aggregation | Standard aggregation format |
 | Partial (1 < responded < N) | Partial aggregation | Prepend: "Partial review ({responded}/N respondents). [failed_model] unavailable: [state]." |
 | 1/N | One-model report | Prepend: "Limited review (1/N respondents). One model output only." |
-| 0/N | Failure report (chunk-review.sh 재실행 없이 즉시 반환) | "Review unavailable. All models failed: [states]." |
+| 0/N | Failure report (return immediately, no re-run) | "Review unavailable. All models failed: [states]." |
 
 **Denominator:** Always N (= total dispatched), not total responded. A model that responded but did not flag an issue = "did not identify". A model that failed to respond = "Unavailable ([error state])". These are distinct.
 
@@ -143,3 +171,7 @@ Pass through as-is with "[N/A]" for missing fields. Never fabricate.
 - Per-model P-level and reasoning
 - File:line reference
 - 5-field content where available
+
+## Termination
+
+After outputting the aggregation report, your task is **COMPLETE**. Do NOT run any additional tools. Do NOT read files. Do NOT explore the codebase. Return the report and stop.
