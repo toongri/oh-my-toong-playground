@@ -667,3 +667,67 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 > - SEV-9 (context mismatch override): 5/5 VP PASS — 만장일치 P0을 context 불일치로 P2(b)까지 하향
 > - SEV-10 (context validates confirm): 5/5 VP PASS — 만장일치 P1을 context 검증 후 brief confirmation으로 채택
 > - SEV-11 (decision gate traversal): 4/5 VP PASS, 1 FAIL (V4) — 3축 라벨링/decision gate 순회 성공, P-level 분류에서 P0/P1 rubric gap 발견 (재무 도메인 "data corruption" vs "data loss")
+
+---
+
+## Worker Prompt GREEN Phase — CLI Output Format Tests
+
+**테스트 일시**: 2026-02-27
+**테스트 방법**: production `assemblePrompt` 파이프라인 재현 — reviewer.md/gemini.md를 `<system-instructions>`로 래핑, inline diff + review scope를 `--- REVIEW CONTENT ---`로 래핑, HEADLESS SESSION + EXECUTION_INSTRUCTION 추가. stdin으로 CLI에 전달.
+**검증 대상**: `skills/code-review/prompts/reviewer.md` (claude/codex fallback), `skills/code-review/prompts/gemini.md` (gemini 전용)
+**테스트 입력**: JWT Auth 구현 diff — `src/auth/login.ts` (42줄, login+register), `src/auth/middleware.ts` (22줄, authGuard). 의도적으로 P1 이슈 3개(hardcoded secret, user enumeration, missing validation) + P2 2개 + cross-file concern 포함.
+
+| Scenario | CLI | Prompt | Verdict | VPs | Notes |
+|----------|-----|--------|---------|-----|-------|
+| WP-1 (Claude) | `claude -p --allowedTools Bash,Read,Glob,Grep` | reviewer.md | PASS | 5/5 | 테스트 일시: 2026-02-26 (이전 세션) |
+| WP-2 (Codex) | `codex exec --dangerously-bypass-approvals-and-sandbox` | reviewer.md | PASS | 5/5 | 테스트 일시: 2026-02-27 |
+| WP-3 (Gemini) | `gemini -p ' ' --yolo --model gemini-3-pro-preview` | gemini.md | DEFERRED | — | quota 소진 (TerminalQuotaError) |
+| WP-4 (Codex stdin) | codex exec | reviewer.md | PASS | 3/3 | stdin 정상 수신 확인 |
+
+### WP-1: Claude (reviewer.md) — 2026-02-26
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | `login.ts`, `middleware.ts`만 리뷰. scope 외 파일 없음 |
+| V2 | PASS | Chunk Analysis, Strengths, Issues, Recommendations, Assessment 전부 존재 |
+| V3 | PASS | P1(hardcoded secret, user enumeration), P2(validation), P3(style) — 적절한 분류 |
+| V4 | PASS | 5-field format 준수 |
+| V5 | PASS | "No" + P1 이슈 근거 |
+
+### WP-2: Codex (reviewer.md) — 2026-02-27
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | `login.ts`, `middleware.ts`만 리뷰. scope 외 파일 참조 없음 |
+| V2 | PASS | 5개 섹션 전부: Chunk Analysis (symbol-level), Strengths (3개), Issues (P1×3 + P2×2 + P3×1), Recommendations (5개), Assessment |
+| V3 | PASS | P1: hardcoded secret, missing validation/error handling, user enumeration. P2: uniqueness conflict, any cast. P3: scope creep. 모두 rubric에 부합 |
+| V4 | PASS | 모든 P1 이슈에 Problem/Impact/Probability/Maintainability/Fix 완전 존재. P2/P3은 일부 [N/A] — 허용 범위 |
+| V5 | PASS | "No" — "P1 security and reliability defects...should be fixed before release" |
+
+### WP-3: Gemini (gemini.md) — DEFERRED
+
+gemini-3-pro-preview quota 소진 (TerminalQuotaError). `-p ' '` 문법 수정 완료 후 quota 리셋 시 재테스트 필요.
+
+### WP-4: Codex stdin delivery — 2026-02-27
+
+| VP | Result | Evidence |
+|----|--------|----------|
+| V1 | PASS | stdout에 Chunk Analysis 섹션 존재 (95줄, 7.3KB 출력) — 프롬프트 정상 수신 |
+| V2 | PASS | exitCode=0 |
+| V3 | PASS | stderr: "Reading prompt from stdin..." 메시지 존재 |
+
+> **이전 세션 codex stdin 이슈 해소**: 이전 세션(2026-02-26)에서 `cat | codex exec`이 "2"만 전달하는 문제가 관찰됐으나, 동일한 방식(cat prompt | codex exec)으로 재테스트한 결과 32KB 프롬프트가 정상 수신됨. codex CLI 버전 차이 또는 일시적 환경 이슈였던 것으로 추정.
+
+---
+
+### Worker Prompt 결론
+
+- **`prompts/codex.md` 생성 불필요**: codex가 `reviewer.md` fallback만으로 5/5 VP PASS. 형식 준수도, P-level 정확도 모두 충분.
+- **`prompts/gemini.md` 효과 미검증**: quota 리셋 후 E2E 테스트에서 검증 예정.
+- **codex stdin**: production spawn+stdin.write 경로와 shell `cat | codex exec` 경로 모두 정상 동작 확인.
+
+> **변경 이력 (2026-02-27):**
+> - Worker prompt 테스트 시나리오 정리 (`worker-prompt-scenarios.md` 신규 생성)
+> - WP-2 (Codex): 5/5 VP PASS — reviewer.md fallback으로 충분
+> - WP-4 (Codex stdin): 3/3 VP PASS — stdin 정상 수신, 이전 세션 이슈 재현 안 됨
+> - `prompts/codex.md` 생성 불필요 결론
