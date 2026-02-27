@@ -3,6 +3,8 @@ name: chunk-reviewer
 description: |
   Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards.
 model: sonnet
+tools: Bash
+maxTurns: 8
 ---
 
 ## Role Declaration
