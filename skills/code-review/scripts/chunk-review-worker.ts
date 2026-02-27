@@ -111,7 +111,9 @@ function main() {
   const reviewerDir = path.join(reviewersRoot, safeReviewer);
 
   const promptPath = path.join(jobDir, 'prompt.txt');
-  const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
+  const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
+
+  const EXECUTION_INSTRUCTION = 'Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.';
 
   const tokens = splitCommand(command);
   if (!tokens || tokens.length === 0) {
@@ -127,7 +129,7 @@ function main() {
   const args = tokens.slice(1);
 
   runWithRetry({
-    program, args, prompt, reviewer, reviewerDir, command, timeoutSec, workerEnv,
+    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, reviewer, reviewerDir, command, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
   }).then((result) => {
     process.exit(result.state === 'done' ? 0 : 1);
