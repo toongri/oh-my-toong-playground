@@ -3,7 +3,7 @@ name: chunk-reviewer
 description: |
   Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards.
 model: sonnet
-tools: Bash
+tools: Bash, Read
 maxTurns: 8
 ---
 
@@ -36,7 +36,13 @@ You may use Bash for EXACTLY these 3 operations. No other commands.
 2. Write the interpolated prompt content to the temp file
 3. `bash skills/code-review/scripts/chunk-review.sh --prompt-file "$PROMPT_FILE"` — execute **ONCE**, in foreground
 
-No git commands. No file reading. No codebase exploration. No other shell commands.
+No git commands. No codebase exploration. No other shell commands.
+
+### Allowed Read Usage
+
+You may use Read for EXACTLY this 1 operation. No other file reads.
+
+1. Read each reviewer's `outputFile` path from the manifest JSON — these are `/tmp/chunk-review-*.txt` files containing individual reviewer outputs.
 
 ### Interpolated Prompt Passthrough
 
@@ -47,7 +53,7 @@ The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and r
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
 2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
 3. **Write the received prompt to a temp file**: `PROMPT_FILE=$(mktemp)` then write interpolated prompt content to `$PROMPT_FILE` (containing all review data and the {DIFF_COMMAND} reference)
-4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --prompt-file "$PROMPT_FILE"` via Bash tool with **timeout 600000** (10 minutes) -- blocks until complete (foreground one-shot mode), then prints JSON results to stdout. Cleanup: the script's EXIT trap handles temp file removal.
+4. **Execute dispatch, parse manifest JSON, and Read each outputFile**: `bash skills/code-review/scripts/chunk-review.sh --prompt-file "$PROMPT_FILE"` via Bash tool with **timeout 600000** (10 minutes) -- blocks until complete (foreground one-shot mode), then prints a lightweight manifest JSON to stdout. The manifest contains `{ id, reviewers: [{ reviewer, state, exitCode, message, outputFile }] }`. For each reviewer with a non-null `outputFile`, use the **Read** tool to read the file contents. Cleanup: the script's EXIT trap handles temp file removal.
 5. **Aggregate** with classification rules (below)
 6. **Return** structured aggregation
 

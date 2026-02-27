@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawn } from 'child_process';
 
@@ -98,7 +99,7 @@ const UI_STRINGS = {
 // ---------------------------------------------------------------------------
 
 const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
-  'json', 'text', 'checklist', 'help', 'h', 'verbose',
+  'json', 'text', 'checklist', 'help', 'h', 'verbose', 'manifest',
   'include-chairman', 'exclude-chairman', 'stdin', 'blocking',
 ]);
 
@@ -572,6 +573,33 @@ function cmdResults(options, jobDir) {
     }
   }
 
+  if (options.manifest) {
+    const jobId = jobMeta ? jobMeta.id : 'unknown';
+    const manifestReviewers = reviewers
+      .map((r) => {
+        let outputFile: string | null = null;
+        if (r.output) {
+          const safeName = safeFileName(r.safeName || r.reviewer, 'reviewer');
+          const tmpPath = path.join(os.tmpdir(), `chunk-review-${jobId}-${safeName}.txt`);
+          fs.writeFileSync(tmpPath, r.output, 'utf8');
+          outputFile = tmpPath;
+        }
+        return {
+          reviewer: r.reviewer,
+          state: r.state,
+          exitCode: r.exitCode != null ? r.exitCode : null,
+          message: r.message || null,
+          outputFile,
+        };
+      })
+      .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)));
+
+    process.stdout.write(
+      `${JSON.stringify({ id: jobId, reviewers: manifestReviewers }, null, 2)}\n`
+    );
+    return;
+  }
+
   if (options.json) {
     process.stdout.write(
       `${JSON.stringify(
@@ -816,7 +844,7 @@ Usage:
   chunk-review-job.sh start --stdin
   chunk-review-job.sh status [--json|--text|--checklist] [--verbose] <jobDir>
   chunk-review-job.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
-  chunk-review-job.sh results [--json] <jobDir>
+  chunk-review-job.sh results [--json|--manifest] <jobDir>
   chunk-review-job.sh stop <jobDir>
   chunk-review-job.sh clean <jobDir>
 
