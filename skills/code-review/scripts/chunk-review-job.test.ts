@@ -2306,3 +2306,112 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 });
+
+// ---------------------------------------------------------------------------
+// cmdResults
+// ---------------------------------------------------------------------------
+
+describe('cmdResults', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  let tmpDir: string;
+
+  function setupJobFixture(
+    jobDir: string,
+    reviewers: Record<string, { reviewer: string; state: string; exitCode: number; output: string; stderr: string }>,
+    opts?: { prompt?: string },
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-results' }));
+    if (opts?.prompt) {
+      fs.writeFileSync(path.join(jobDir, 'prompt.txt'), opts.prompt);
+    }
+    const reviewersDir = path.join(jobDir, 'reviewers');
+    fs.mkdirSync(reviewersDir, { recursive: true });
+    for (const [name, data] of Object.entries(reviewers)) {
+      const dir = path.join(reviewersDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'status.json'),
+        JSON.stringify({ reviewer: data.reviewer, state: data.state, exitCode: data.exitCode }),
+      );
+      fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      fs.writeFileSync(path.join(dir, 'error.txt'), data.stderr);
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('--json 출력에서 prompt, stderr 필드가 제거됨', () => {
+    const jobDir = path.join(tmpDir, 'job-qa1');
+    const largeStderr = 'x'.repeat(33000);
+    const largePrompt = 'p'.repeat(30000);
+    setupJobFixture(
+      jobDir,
+      { 'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'review output', stderr: largeStderr } },
+      { prompt: largePrompt },
+    );
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--json', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed).not.toHaveProperty('prompt');
+    expect(parsed.reviewers[0]).not.toHaveProperty('stderr');
+    expect(parsed.reviewers[0].output).toBe('review output');
+    expect(parsed.reviewers[0].reviewer).toBe('claude');
+    expect(parsed.reviewers[0].state).toBe('done');
+    expect(parsed.reviewers[0].exitCode).toBe(0);
+    expect(parsed.id).toBe('test-results');
+    expect(parsed.jobDir).toBe(path.resolve(jobDir));
+  });
+
+  test('3 reviewers --json 출력이 30000자 미만', () => {
+    const jobDir = path.join(tmpDir, 'job-qa2');
+    setupJobFixture(
+      jobDir,
+      {
+        'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'claude review', stderr: 'x'.repeat(33000) },
+        'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'codex review', stderr: 'x'.repeat(33000) },
+        'gemini-0': { reviewer: 'gemini', state: 'error', exitCode: 1, output: 'gemini review', stderr: 'x'.repeat(33000) },
+      },
+      { prompt: 'p'.repeat(30000) },
+    );
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--json', jobDir], { stdio: 'pipe' });
+    const output = result.toString();
+
+    expect(output.length).toBeLessThan(30000);
+    const parsed = JSON.parse(output);
+    expect(parsed.reviewers).toHaveLength(3);
+  });
+
+  test('non-JSON: output 비어있으면 stderr fallback 출력', () => {
+    const jobDir = path.join(tmpDir, 'job-qa3');
+    setupJobFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'error', exitCode: 1, output: '', stderr: 'stderr-fallback-content' },
+    });
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', jobDir], { stdio: 'pipe' });
+    const stdout = result.toString();
+
+    expect(stdout).toContain('stderr-fallback-content');
+  });
+
+  test('non-JSON: output 있으면 output 출력, stderr 미포함', () => {
+    const jobDir = path.join(tmpDir, 'job-qa4');
+    setupJobFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'primary-output-content', stderr: 'hidden-stderr-content' },
+    });
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', jobDir], { stdio: 'pipe' });
+    const stdout = result.toString();
+
+    expect(stdout).toContain('primary-output-content');
+    expect(stdout).not.toContain('hidden-stderr-content');
+  });
+});
