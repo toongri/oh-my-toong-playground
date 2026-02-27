@@ -287,7 +287,7 @@ function computeStatus(jobDir) {
     reviewers.push({ safeName: entry, ...status });
   }
 
-  const totals = { queued: 0, running: 0, retrying: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
+  const totals = { queued: 0, running: 0, retrying: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0, non_retryable: 0 };
   for (const r of reviewers) {
     const state = String(r.state || 'unknown');
     if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
@@ -338,7 +338,7 @@ function buildUiPayload(statusPayload) {
     .filter((r) => r.entity)
     .sort((a, b) => a.entity.localeCompare(b.entity));
 
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled']);
+  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable']);
   const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
   let hasInProgress = dispatchStatus === 'in_progress';
 

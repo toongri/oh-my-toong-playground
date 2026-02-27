@@ -44,6 +44,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 4. **MUST NOT assign, reassign, or interpret any model's P-level.** Pass through exactly as reported.
 5. **MUST NOT compute a final verdict.** List each model's verdict separately; the orchestrator decides.
 6. **No augmentation.** If reviewers missed something, it stays missed. That observation is NOT part of the aggregation.
+7. **chunk-review.sh는 정확히 1회 실행한다 (exactly once).** 실행 결과와 무관하게 재실행하지 않는다. 실패/타임아웃/비정상 출력 시 Degradation Policy를 적용한다.
 
 ## Classification Rules
 
@@ -78,7 +79,7 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 | N/N | Full aggregation | Standard aggregation format |
 | Partial (1 < responded < N) | Partial aggregation | Prepend: "Partial review ({responded}/N respondents). [failed_model] unavailable: [state]." |
 | 1/N | One-model report | Prepend: "Limited review (1/N respondents). One model output only." |
-| 0/N | Failure report | "Review unavailable. All models failed: [states]." |
+| 0/N | Failure report (chunk-review.sh 재실행 없이 즉시 반환) | "Review unavailable. All models failed: [states]." |
 
 **Denominator:** Always N (= total dispatched), not total responded. A model that responded but did not flag an issue = "did not identify". A model that failed to respond = "Unavailable ([error state])". These are distinct.
 

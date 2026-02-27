@@ -17,6 +17,13 @@ import { spawn, type ChildProcess } from 'child_process';
 export const MAX_RETRIES = 1;
 export const BASE_DELAY_MS = 1000;
 
+export const NON_RETRYABLE_PATTERNS: string[] = [
+  'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
+  'upgrade to Plus', 'Selected model is at capacity', 'ran out of room',
+  'authentication_error', 'attempt 10/10',
+];
+export const NON_RETRYABLE_EXIT_CODES = new Set([41, 42, 52, 130]);
+
 // ---------------------------------------------------------------------------
 // Command parsing
 // ---------------------------------------------------------------------------
@@ -181,6 +188,7 @@ export interface RunOnceOpts {
   promptsDir?: string;
   workerEnv?: Record<string, string>;
   fallbackFile?: string;
+  reviewContent?: string;
 }
 
 /**
@@ -191,14 +199,14 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
   const {
     program, args, prompt, reviewer, reviewerDir, command,
     timeoutSec, attempt, spawnFn = spawn, promptsDir, workerEnv,
-    fallbackFile,
+    fallbackFile, reviewContent,
   } = opts;
 
   // Prompt assembly: attempt structured prompt from role files
   let stdinPrompt = prompt;
   if (promptsDir) {
     const { assembled, isStructured } = assemblePrompt({
-      promptsDir, entityName: reviewer, rawPrompt: prompt, fallbackFile,
+      promptsDir, entityName: reviewer, rawPrompt: prompt, reviewContent, fallbackFile,
     });
     if (isStructured) {
       stdinPrompt = assembled;
@@ -344,7 +352,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 // runWithRetry
 // ---------------------------------------------------------------------------
 
-const NON_RETRYABLE_STATES = new Set(['missing_cli', 'timed_out', 'canceled']);
+const NON_RETRYABLE_STATES = new Set(['missing_cli', 'timed_out', 'canceled', 'non_retryable']);
 
 export interface RunWithRetryOpts extends Omit<RunOnceOpts, 'attempt'> {
   sleepFn?: (ms: number) => Promise<void>;
@@ -359,6 +367,29 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     result = await runOnce({ ...runOpts, attempt });
+
+    // Check for non-retryable error patterns
+    if (result.state === 'error') {
+      const exitCode = result.exitCode as number | undefined;
+      let isNonRetryable = exitCode != null && NON_RETRYABLE_EXIT_CODES.has(exitCode);
+
+      if (!isNonRetryable) {
+        try {
+          const errorContent = fs.readFileSync(path.join(runOpts.reviewerDir, 'error.txt'), 'utf8');
+          isNonRetryable = NON_RETRYABLE_PATTERNS.some(
+            p => errorContent.toLowerCase().includes(p.toLowerCase())
+          );
+        } catch { /* missing/unreadable → retryable */ }
+      }
+
+      if (isNonRetryable) {
+        result.state = 'non_retryable';
+        atomicWriteJsonAsync(path.join(runOpts.reviewerDir, 'status.json'), {
+          ...result, state: 'non_retryable',
+        });
+        return result;
+      }
+    }
 
     if (result.state === 'done' || NON_RETRYABLE_STATES.has(result.state as string)) {
       return result;
