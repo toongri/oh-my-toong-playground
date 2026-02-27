@@ -47,7 +47,7 @@ The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and r
 1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
 2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
 3. **Write the received prompt to a temp file**: `PROMPT_FILE=$(mktemp)` then write interpolated prompt content to `$PROMPT_FILE` (containing all review data and the {DIFF_COMMAND} reference)
-4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --prompt-file "$PROMPT_FILE"` via Bash tool with **timeout 1200000** (20 minutes) -- blocks until complete (foreground one-shot mode), then prints JSON results to stdout. Cleanup: the script's EXIT trap handles temp file removal.
+4. **Execute dispatch and parse JSON results**: `bash skills/code-review/scripts/chunk-review.sh --prompt-file "$PROMPT_FILE"` via Bash tool with **timeout 600000** (10 minutes) -- blocks until complete (foreground one-shot mode), then prints JSON results to stdout. Cleanup: the script's EXIT trap handles temp file removal.
 5. **Aggregate** with classification rules (below)
 6. **Return** structured aggregation
 
