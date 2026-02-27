@@ -20,7 +20,7 @@ chunk-review:
       effort_level: "medium"
       output_format: "text"
     - name: gemini
-      command: "gemini -p --yolo"
+      command: "gemini -p ' ' --yolo"
       emoji: "\U0001F48E"
       color: "GREEN"
       model: "gemini-3-pro-preview"
