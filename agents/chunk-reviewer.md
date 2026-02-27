@@ -28,14 +28,15 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 **If chunk-review.sh fails, times out, or produces unexpected output: apply Degradation Policy to whatever you got. Do NOT re-run it.**
 
-### Allowed Tool Usage
+### Allowed Bash Usage
 
-| Allowed | Forbidden |
-|---------|-----------|
-| `Bash`: `mktemp` + write prompt to temp file | `Bash`: `git diff`, `git show`, or any diff command |
-| `Bash`: `chunk-review.sh --prompt-file ...` (once) | `Read`: reading source code files |
-| | `Grep` / `Glob`: exploring the codebase |
-| | Any tool invocation after the aggregation report is returned |
+You may use Bash for EXACTLY these 3 operations. No other commands.
+
+1. `mktemp` — create a temp file for the prompt
+2. Write the interpolated prompt content to the temp file
+3. `bash skills/code-review/scripts/chunk-review.sh --prompt-file "$PROMPT_FILE"` — execute **ONCE**, in foreground
+
+No git commands. No file reading. No codebase exploration. No other shell commands.
 
 ### Interpolated Prompt Passthrough
 
