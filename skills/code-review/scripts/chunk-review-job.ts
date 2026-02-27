@@ -23,6 +23,8 @@ import {
   generateJobId,
 } from '../../../lib/job-utils';
 
+import { initLogger, logInfo, logStart, logEnd } from '../../../lib/logging';
+
 // Chunk-review default fallback is 'reviewer' (shared module defaults to 'member')
 function safeFileName(name, fallback) {
   return _safeFileName(name, fallback || 'reviewer');
@@ -424,10 +426,21 @@ function asWaitPayload(statusPayload) {
 }
 
 // ---------------------------------------------------------------------------
+// Logging helper for non-start commands (extract jobId from jobDir path)
+// ---------------------------------------------------------------------------
+
+function initLoggerFromJobDir(jobDir: string): void {
+  const jobId = path.basename(jobDir).replace(/^chunk-review-/, '');
+  initLogger('chunk-review-job', PROJECT_ROOT, jobId);
+}
+
+// ---------------------------------------------------------------------------
 // Command implementations
 // ---------------------------------------------------------------------------
 
 function cmdStatus(options, jobDir) {
+  initLoggerFromJobDir(jobDir);
+  logInfo(`status: ${path.resolve(jobDir)}`);
   const payload = computeStatus(jobDir);
 
   const wantChecklist = Boolean(options.checklist) && !options.json;
@@ -470,6 +483,8 @@ function cmdStatus(options, jobDir) {
 }
 
 function cmdWait(options, jobDir) {
+  initLoggerFromJobDir(jobDir);
+  logInfo(`wait: ${path.resolve(jobDir)}`);
   const resolvedJobDir = path.resolve(jobDir);
   const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
   const prevCursorRaw =
@@ -537,6 +552,8 @@ function cmdWait(options, jobDir) {
 }
 
 function cmdResults(options, jobDir) {
+  initLoggerFromJobDir(jobDir);
+  logInfo(`results: ${path.resolve(jobDir)}`);
   const resolvedJobDir = path.resolve(jobDir);
   const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
   const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
@@ -595,6 +612,8 @@ function cmdResults(options, jobDir) {
 }
 
 function cmdStop(_options, jobDir) {
+  initLoggerFromJobDir(jobDir);
+  logInfo(`stop: ${path.resolve(jobDir)}`);
   const resolvedJobDir = path.resolve(jobDir);
   const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
   if (!fs.existsSync(reviewersRoot)) exitWithError(`No reviewers folder found: ${reviewersRoot}`);
@@ -619,6 +638,8 @@ function cmdStop(_options, jobDir) {
 }
 
 function cmdClean(options, jobDir) {
+  initLoggerFromJobDir(jobDir);
+  logInfo(`clean: ${path.resolve(jobDir)}`);
   const resolvedJobDir = path.resolve(jobDir);
 
   // Primary: use explicit jobs-dir from options/env/default
@@ -847,6 +868,11 @@ async function cmdStart(options, prompt) {
   if (reviewers.length === 0) exitWithError('start: no reviewers remaining after filtering');
 
   const jobId = generateJobId();
+  initLogger('chunk-review-job', PROJECT_ROOT, jobId);
+  logStart();
+  logInfo(`GC: stale jobs cleaned`);
+  logInfo(`config: ${configPath}, chairman: ${chairmanRole}, reviewers: ${reviewers.length}`);
+
   const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
   const reviewersDir = path.join(jobDir, 'reviewers');
   ensureDir(reviewersDir);
@@ -882,12 +908,14 @@ async function cmdStart(options, prompt) {
     reviewersDir,
     timeoutSec,
   });
+  logInfo(`workers spawned: ${reviewers.map(r => String(r.name)).join(', ')}`);
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
   } else {
     process.stdout.write(`${jobDir}\n`);
   }
+  logEnd();
 }
 
 // ---------------------------------------------------------------------------

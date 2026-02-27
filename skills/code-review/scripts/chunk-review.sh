@@ -127,6 +127,11 @@ in_host_agent_context() {
 
 JOB_DIR="$("$JOB_SCRIPT" start "${PASSTHROUGH_ARGS[@]}")"
 
+# Re-initialize logging with job-specific ID for per-job log isolation
+JOB_ID="$(basename "$JOB_DIR" | sed 's/^chunk-review-//')"
+omt_log_init "chunk-review" "" "$JOB_ID"
+omt_log_info "job started: JOB_DIR=$JOB_DIR"
+
 cleanup() {
   if [ -n "${JOB_DIR:-}" ] && [ -d "$JOB_DIR" ]; then
     omt_log_info "cleanup: start JOB_DIR=$JOB_DIR"
@@ -158,11 +163,13 @@ trap 'exit 130' INT TERM
 # Host-agent mode (opt-in): return immediately with a `wait` JSON payload and let the
 # caller drive progress updates. Only activated by --host-agent flag or CHUNK_REVIEW_HOST_AGENT=1.
 if in_host_agent_context; then
+  omt_log_info "host-agent mode: returning wait payload"
   trap - EXIT
   exec "$JOB_SCRIPT" wait "$JOB_DIR"
 fi
 
 echo "chunk-review: started ${JOB_DIR}" >&2
+omt_log_info "one-shot mode: polling started"
 
 while true; do
   WAIT_JSON="$("$JOB_SCRIPT" wait --timeout-ms 60000 "$JOB_DIR")"
@@ -173,15 +180,19 @@ process.stdout.write(String(d.overallState||""));
 ')"
 
   "$JOB_SCRIPT" status --text "$JOB_DIR" >&2
+  omt_log_info "polling: overallState=$OVERALL"
 
   if [ "$OVERALL" = "done" ]; then
+    omt_log_info "polling: all reviewers done"
     break
   fi
 
   if [ -z "$OVERALL" ]; then
+    omt_log_error "polling: failed to parse overallState, aborting"
     echo "chunk-review: failed to parse overallState, aborting" >&2
     break
   fi
 done
 
+omt_log_info "printing results"
 "$JOB_SCRIPT" results --json "$JOB_DIR"

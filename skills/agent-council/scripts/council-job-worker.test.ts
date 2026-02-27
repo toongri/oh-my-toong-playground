@@ -452,7 +452,7 @@ describe('runWithRetry', () => {
     expect(result.attempt).toBe(0);
   });
 
-  test('overwrites output.txt and error.txt on retry', async () => {
+  test('appends output with attempt marker on retry', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
     // First attempt: echo "attempt1" and exit 1; second: echo "attempt2" and exit 0
     const script = `sh -c 'if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi'`;
@@ -468,9 +468,10 @@ describe('runWithRetry', () => {
     });
 
     const output = fs.readFileSync(paths.outPath, 'utf8');
-    // Should contain only the last attempt's output
+    // Should contain both attempts with marker separator
+    expect(output.includes('attempt1')).toBe(true);
+    expect(output.includes('--- attempt 1 ---')).toBe(true);
     expect(output.includes('attempt2')).toBe(true);
-    expect(!output.includes('attempt1')).toBe(true);
   });
 
   test('status.json contains attempt field after completion', async () => {

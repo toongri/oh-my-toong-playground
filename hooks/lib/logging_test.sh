@@ -496,6 +496,49 @@ test_log_format_includes_level() {
 }
 
 # =============================================================================
+# Tests: session_id parameter in omt_log_init
+# =============================================================================
+
+test_session_id_produces_suffixed_log_file() {
+    # shellcheck disable=SC1090
+    source "$LOGGING_LIB"
+
+    omt_log_init "chunk-review" "$TEST_TMP_DIR" "abc123"
+    omt_log_info "job-specific message"
+
+    local log_file="$TEST_TMP_DIR/.omt/logs/chunk-review-abc123.log"
+    assert_file_exists "$log_file" "Log file should include session_id suffix" || return 1
+    assert_file_contains "$log_file" "job-specific message" "Message should be in suffixed log file" || return 1
+}
+
+test_no_session_id_preserves_default_log_file() {
+    # shellcheck disable=SC1090
+    source "$LOGGING_LIB"
+
+    omt_log_init "chunk-review" "$TEST_TMP_DIR"
+    omt_log_info "default message"
+
+    local log_file="$TEST_TMP_DIR/.omt/logs/chunk-review.log"
+    assert_file_exists "$log_file" "Log file should use default name without session_id" || return 1
+    assert_file_contains "$log_file" "default message" "Message should be in default log file" || return 1
+
+    local suffixed="$TEST_TMP_DIR/.omt/logs/chunk-review-.log"
+    assert_file_not_exists "$suffixed" "No suffixed log file should be created" || return 1
+}
+
+test_session_id_special_chars_sanitized() {
+    # shellcheck disable=SC1090
+    source "$LOGGING_LIB"
+
+    omt_log_init "test-hook" "$TEST_TMP_DIR" "job@123/foo bar"
+    omt_log_info "sanitized message"
+
+    local log_file="$TEST_TMP_DIR/.omt/logs/test-hook-job-123-foo-bar.log"
+    assert_file_exists "$log_file" "Special chars in session_id should be replaced with hyphens" || return 1
+    assert_file_contains "$log_file" "sanitized message" "Message should be in sanitized log file" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -549,6 +592,11 @@ main() {
     # Log format tests
     run_test test_log_format_includes_timestamp
     run_test test_log_format_includes_level
+
+    # session_id parameter tests
+    run_test test_session_id_produces_suffixed_log_file
+    run_test test_no_session_id_preserves_default_log_file
+    run_test test_session_id_special_chars_sanitized
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { initLogger, logInfo, logError, logStart, logEnd } from '../../../lib/logging';
 import {
   splitCommand,
   atomicWriteJsonAsync,
@@ -89,6 +90,12 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
+  // Initialize persistent logging
+  const projectRoot = path.resolve(import.meta.dirname, '../../..');
+  const jobId = jobDir ? path.basename(jobDir).replace(/^chunk-review-/, '') : 'unknown';
+  initLogger('chunk-review-worker', projectRoot, jobId);
+  logStart();
+
   // Parse --env args: collect KEY=VALUE pairs
   const workerEnv = {};
   const rawArgs = process.argv.slice(2);
@@ -102,10 +109,12 @@ function main() {
     }
   }
 
-  if (!jobDir) exitWithError('worker: missing --job-dir');
-  if (!reviewer) exitWithError('worker: missing --reviewer');
-  if (!safeReviewer) exitWithError('worker: missing --safe-reviewer');
-  if (!command) exitWithError('worker: missing --command');
+  if (!jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
+  if (!reviewer) { logError('missing --reviewer'); logEnd(); exitWithError('worker: missing --reviewer'); }
+  if (!safeReviewer) { logError('missing --safe-reviewer'); logEnd(); exitWithError('worker: missing --safe-reviewer'); }
+  if (!command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
+
+  logInfo(`worker start: reviewer=${reviewer} command=${command} timeout=${timeoutSec}`);
 
   const reviewersRoot = path.join(jobDir, 'reviewers');
   const reviewerDir = path.join(reviewersRoot, safeReviewer);
@@ -117,11 +126,13 @@ function main() {
 
   const tokens = splitCommand(command);
   if (!tokens || tokens.length === 0) {
+    logError(`invalid command string: ${command}`);
     const statusPath = path.join(reviewerDir, 'status.json');
     atomicWriteJsonAsync(statusPath, {
       reviewer, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     });
+    logEnd();
     process.exit(1);
   }
 
@@ -132,6 +143,8 @@ function main() {
     program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, reviewer, reviewerDir, command, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
   }).then((result) => {
+    logInfo(`worker done: reviewer=${reviewer} state=${result.state} exitCode=${result.exitCode}`);
+    logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });
 }

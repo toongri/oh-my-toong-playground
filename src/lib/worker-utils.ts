@@ -224,8 +224,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
       command, pid: null, attempt,
     });
 
-    const outStream = fs.createWriteStream(outPath, { flags: 'w' });
-    const errStream = fs.createWriteStream(errPath, { flags: 'w' });
+    const outStream = fs.createWriteStream(outPath, { flags: 'a' });
+    const errStream = fs.createWriteStream(errPath, { flags: 'a' });
     outStream.on('error', () => { /* ignore */ });
     errStream.on('error', () => { /* ignore */ });
 
@@ -272,6 +272,13 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
         command, pid: child.pid, attempt,
       });
     } catch { /* ignore */ }
+
+    // Write attempt separator before piping output (preserves previous attempts)
+    if (attempt > 0) {
+      const marker = `\n--- attempt ${attempt} ---\n`;
+      outStream.write(marker);
+      errStream.write(marker);
+    }
 
     if (child.stdout) child.stdout.pipe(outStream);
     if (child.stderr) child.stderr.pipe(errStream);

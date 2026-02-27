@@ -163,10 +163,11 @@ _omt_log() {
 # =============================================================================
 
 # Initialize logging for a hook
-# Usage: omt_log_init <hook-name> <project-root>
+# Usage: omt_log_init <hook-name> [project-root] [session-id]
 omt_log_init() {
     local hook_name="$1"
     local project_root="${2:-}"
+    local session_id="${3:-}"
 
     # Auto-detect project root if not provided
     if [[ -z "$project_root" ]]; then
@@ -180,8 +181,14 @@ omt_log_init() {
     local log_dir="$OMT_PROJECT_ROOT/.omt/logs"
     mkdir -p "$log_dir" 2>/dev/null
 
-    # Set log file path
-    OMT_LOG_FILE="$log_dir/${hook_name}.log"
+    # Set log file path (with optional session ID suffix)
+    if [[ -n "$session_id" ]]; then
+        # Sanitize session_id: replace non-alphanumeric chars with hyphens
+        session_id=$(echo "$session_id" | sed 's/[^a-zA-Z0-9]/-/g')
+        OMT_LOG_FILE="$log_dir/${hook_name}-${session_id}.log"
+    else
+        OMT_LOG_FILE="$log_dir/${hook_name}.log"
+    fi
 
     OMT_LOG_INITIALIZED=1
 }

@@ -45,6 +45,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 5. **MUST NOT compute a final verdict.** List each model's verdict separately; the orchestrator decides.
 6. **No augmentation.** If reviewers missed something, it stays missed. That observation is NOT part of the aggregation.
 7. **chunk-review.sh는 정확히 1회 실행한다 (exactly once).** 실행 결과와 무관하게 재실행하지 않는다. 실패/타임아웃/비정상 출력 시 Degradation Policy를 적용한다.
+8. **CRITICAL: One chunk per invocation.** Each chunk-reviewer instance receives and processes exactly ONE chunk. The orchestrator MUST dispatch a separate chunk-reviewer for each chunk. NEVER combine multiple chunks into a single chunk-reviewer request.
 
 ## Classification Rules
 
