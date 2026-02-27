@@ -134,27 +134,9 @@ omt_log_info "job started: JOB_DIR=$JOB_DIR"
 
 cleanup() {
   if [ -n "${JOB_DIR:-}" ] && [ -d "$JOB_DIR" ]; then
-    omt_log_info "cleanup: start JOB_DIR=$JOB_DIR"
-
     local stop_rc=0
     "$JOB_SCRIPT" stop "$JOB_DIR" >/dev/null 2>&1 || stop_rc=$?
-    omt_log_info "cleanup: cmdStop exit_code=$stop_rc"
-
-    local clean_rc=0
-    "$JOB_SCRIPT" clean "$JOB_DIR" >/dev/null 2>&1 || clean_rc=$?
-    omt_log_info "cleanup: cmdClean exit_code=$clean_rc"
-
-    if [ "$clean_rc" -ne 0 ]; then
-      omt_log_warn "cleanup: cmdClean failed, falling back to rm -rf $JOB_DIR"
-      rm -rf "$JOB_DIR" 2>/dev/null || true
-    fi
-
-    if [ -n "${PROMPT_FILE:-}" ] && [ -f "$PROMPT_FILE" ]; then
-      rm -f "$PROMPT_FILE" 2>/dev/null || true
-      omt_log_info "cleanup: removed prompt file $PROMPT_FILE"
-    fi
-
-    omt_log_info "cleanup: done"
+    omt_log_info "cleanup: stopped workers (exit_code=$stop_rc), files preserved"
   fi
 }
 trap cleanup EXIT
