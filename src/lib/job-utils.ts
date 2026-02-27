@@ -97,7 +97,8 @@ export function computeTerminalDoneCount(counts: Record<string, number | undefin
     Number(c.missing_cli || 0) +
     Number(c.error || 0) +
     Number(c.timed_out || 0) +
-    Number(c.canceled || 0)
+    Number(c.canceled || 0) +
+    Number(c.non_retryable || 0)
   );
 }
 
