@@ -98,12 +98,21 @@ esac
 # Check for --host-agent flag (opt-in for host-agent mode)
 HOST_AGENT="${CHUNK_REVIEW_HOST_AGENT:-0}"
 PASSTHROUGH_ARGS=()
+PROMPT_FILE=""
+PREV_WAS_PROMPT_FILE=0
 for arg in "$@"; do
-  if [ "$arg" = "--host-agent" ]; then
+  if [ "$PREV_WAS_PROMPT_FILE" = "1" ]; then
+    PROMPT_FILE="$arg"
+    PASSTHROUGH_ARGS+=("$arg")
+    PREV_WAS_PROMPT_FILE=0
+  elif [ "$arg" = "--host-agent" ]; then
     HOST_AGENT=1
   elif [ "$arg" = "--blocking" ]; then
     # Legacy flag: --blocking is now a no-op (one-shot foreground is the default).
     true
+  elif [ "$arg" = "--prompt-file" ]; then
+    PASSTHROUGH_ARGS+=("$arg")
+    PREV_WAS_PROMPT_FILE=1
   else
     PASSTHROUGH_ARGS+=("$arg")
   fi
@@ -133,6 +142,11 @@ cleanup() {
     if [ "$clean_rc" -ne 0 ]; then
       omt_log_warn "cleanup: cmdClean failed, falling back to rm -rf $JOB_DIR"
       rm -rf "$JOB_DIR" 2>/dev/null || true
+    fi
+
+    if [ -n "${PROMPT_FILE:-}" ] && [ -f "$PROMPT_FILE" ]; then
+      rm -f "$PROMPT_FILE" 2>/dev/null || true
+      omt_log_info "cleanup: removed prompt file $PROMPT_FILE"
     fi
 
     omt_log_info "cleanup: done"

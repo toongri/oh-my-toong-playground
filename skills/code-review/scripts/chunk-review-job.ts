@@ -905,7 +905,14 @@ async function main() {
 
   if (command === 'start') {
     let prompt;
-    if (options.stdin) {
+    if (options['prompt-file']) {
+      const filePath = String(options['prompt-file']);
+      try {
+        prompt = fs.readFileSync(filePath, 'utf8');
+      } catch (e) {
+        exitWithError(`start: cannot read --prompt-file: ${filePath}`);
+      }
+    } else if (options.stdin) {
       prompt = fs.readFileSync(0, 'utf8');
     } else {
       prompt = rest.join(' ').trim();
