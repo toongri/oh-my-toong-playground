@@ -890,14 +890,14 @@ function printHelp() {
   process.stdout.write(`Chunk Review (job mode)
 
 Usage:
-  scripts/chunk-review/job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
-  scripts/chunk-review/job.ts start --stdin
-  scripts/chunk-review/job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
-  scripts/chunk-review/job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
-  scripts/chunk-review/job.ts collect [--timeout-ms N] <jobDir>
-  scripts/chunk-review/job.ts results [--json|--manifest] <jobDir>
-  scripts/chunk-review/job.ts stop <jobDir>
-  scripts/chunk-review/job.ts clean <jobDir>
+  .claude/scripts/chunk-review/job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  .claude/scripts/chunk-review/job.ts start --stdin
+  .claude/scripts/chunk-review/job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
+  .claude/scripts/chunk-review/job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  .claude/scripts/chunk-review/job.ts collect [--timeout-ms N] <jobDir>
+  .claude/scripts/chunk-review/job.ts results [--json|--manifest] <jobDir>
+  .claude/scripts/chunk-review/job.ts stop <jobDir>
+  .claude/scripts/chunk-review/job.ts clean <jobDir>
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
