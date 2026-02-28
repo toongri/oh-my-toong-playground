@@ -15,7 +15,7 @@ import {
   assemblePrompt,
   MAX_RETRIES,
   BASE_DELAY_MS,
-} from './chunk-review-worker.ts';
+} from './worker.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
