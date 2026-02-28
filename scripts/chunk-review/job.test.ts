@@ -1871,7 +1871,7 @@ describe('cmdClean path traversal guard', () => {
     fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-custom' }));
     fs.writeFileSync(path.join(jobDir, 'dummy.txt'), 'test');
 
-    // Clean WITHOUT --jobs-dir (simulates chunk-review.sh cleanup behavior)
+    // Clean WITHOUT --jobs-dir (direct jobDir argument)
     const result = execFileSync(process.execPath, [
       SCRIPT, 'clean', jobDir,
     ], { stdio: 'pipe' });
