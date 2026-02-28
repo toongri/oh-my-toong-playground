@@ -20,26 +20,22 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 **The `start` subcommand runs EXACTLY ONCE. No exceptions.**
 
 1. Write the interpolated prompt to a temp file.
-2. Start job: `chunk-review.sh start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Poll: `chunk-review.sh wait --timeout-ms 100000 "$JOB_DIR"` — repeat until `overallState` is `"done"`.
-4. Get manifest: `chunk-review.sh results --manifest "$JOB_DIR"` — ONE invocation only.
-5. Read each reviewer's output file via the Read tool.
-6. Aggregate results using Classification Rules.
-7. Return the structured aggregation report.
-8. **STOP.** Do not run any further tools.
+2. Start job: `bun scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
+3. Collect: `bun scripts/chunk-review/job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+4. Read each reviewer's output file via the Read tool.
+5. Aggregate results using Classification Rules.
+6. Return the structured aggregation report.
+7. **STOP.** Do not run any further tools.
 
 **If a reviewer fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
 
 ### Allowed Bash Usage
 
-You may use Bash for EXACTLY these operations. No other commands.
+You may ONLY execute these commands via Bash:
+- `bun scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
+- `bun scripts/chunk-review/job.ts collect "$JOB_DIR"` — collect results (poll internally)
 
-1. `mktemp` + write interpolated prompt content to the temp file
-2. `bash skills/code-review/scripts/chunk-review.sh start --prompt-file "$PROMPT_FILE"` — start job **ONCE**. Returns `JOB_DIR` path on stdout.
-3. `bash skills/code-review/scripts/chunk-review.sh wait --timeout-ms 100000 "$JOB_DIR"` — poll progress. Returns JSON with `overallState`. Repeat until `overallState` is `"done"`. Each call blocks **up to 100 seconds**.
-4. `bash skills/code-review/scripts/chunk-review.sh results --manifest "$JOB_DIR"` — get manifest JSON **ONCE**, after overallState is done.
-
-No git commands. No codebase exploration. No other shell commands.
+**CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
 ### Allowed Read Usage
 
@@ -53,32 +49,38 @@ The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and r
 
 ## Chairman Workflow
 
-1. **Receive interpolated prompt** from code-review SKILL.md (contains diff command reference, context, requirements via `chunk-reviewer-prompt.md`)
-2. **Extract review data** from the received prompt (file list, requirements, context, diff command reference). Do NOT execute the diff command — each reviewer CLI will execute it independently.
-3. **Write prompt + start job + initial poll** (single Bash call):
-   ```bash
-   PROMPT_FILE=$(mktemp)
-   cat > "$PROMPT_FILE" << 'PROMPT_EOF'
-   [interpolated prompt content here]
-   PROMPT_EOF
-   JOB_DIR=$(bash skills/code-review/scripts/chunk-review.sh start --prompt-file "$PROMPT_FILE")
-   echo "JOB_DIR=$JOB_DIR"
-   bash skills/code-review/scripts/chunk-review.sh wait --timeout-ms 100000 "$JOB_DIR"
-   ```
-   Extract `JOB_DIR` from the output. Check `overallState` in the JSON response.
-4. **Poll until done**: If `overallState` is `"running"`, poll again (separate Bash call each time):
-   ```bash
-   bash skills/code-review/scripts/chunk-review.sh wait --timeout-ms 100000 "$JOB_DIR"
-   ```
-   Repeat until `overallState` is `"done"`. Each call blocks up to 100 seconds.
-5. **Get manifest**: Once `overallState` is `"done"`:
-   ```bash
-   bash skills/code-review/scripts/chunk-review.sh results --manifest "$JOB_DIR"
-   ```
-   Returns `{ id, reviewers: [{ reviewer, outputFilePath, errorMessage }] }`.
-6. **Read output files**: For each reviewer with non-null `outputFilePath`, use the **Read** tool to read the file contents. If `outputFilePath` is null, `errorMessage` explains the failure (use it for Degradation Policy reporting). Read all files in parallel (multiple Read calls in one response).
-7. **Aggregate** with classification rules (below)
-8. **Return** structured aggregation
+**2-Phase Protocol: Request → Collect → Read → Report**
+
+### Step 1 — Request (Bash, timeout: 180000)
+Create a temporary file with the classification prompt, then start the review job:
+```bash
+PROMPT_FILE=$(mktemp)
+cat > "$PROMPT_FILE" << 'PROMPT_EOF'
+[Your classification prompt here]
+PROMPT_EOF
+bun scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"
+```
+Output: JOB_DIR path (one line on stdout)
+
+### Step 2 — Collect (Bash, timeout: 180000)
+Poll until all reviewers complete. Re-run this step if not done.
+```bash
+bun scripts/chunk-review/job.ts collect "$JOB_DIR"
+```
+Response JSON (done):
+```json
+{ "overallState": "done", "id": "...", "reviewers": [{ "reviewer": "claude", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
+```
+Response JSON (not done — re-run this step):
+```json
+{ "overallState": "running", "id": "...", "counts": { "total": 3, "done": 1, "running": 2, "queued": 0 } }
+```
+
+### Step 3 — Read Outputs
+Use the Read tool to read each reviewer's `outputFilePath` from the manifest.
+
+### Step 4 — Aggregate & Report
+Aggregate all reviewer outputs, produce the final report, then STOP.
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
@@ -86,7 +88,7 @@ The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and r
 
 | Chairman Does | Chairman Does NOT |
 |---------------|-------------------|
-| Execute `start`, `wait`, `results` subcommands | Review code directly |
+| Execute `start`, `collect` subcommands | Review code directly |
 | Poll until ALL reviewer responses collected | Predict what reviewers would say |
 | Aggregate reviewer feedback faithfully | Add own opinions to aggregation |
 | Report dissent accurately | Minimize or reframe disagreement |
@@ -95,14 +97,14 @@ The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and r
 
 **Hard Constraints:**
 
-0. **Each Bash call MUST run in FOREGROUND.** All subcommands (start, wait, results) run synchronously. No background execution.
+0. **Each Bash call MUST run in FOREGROUND.** All subcommands (start, collect) run synchronously. No background execution.
 1. **You are NOT a reviewer.** Even if you "know" the answer, your role is orchestration.
 2. **Predicting is NOT the same as getting input.** "Based on typical patterns" = VIOLATION.
 3. **Aggregation ONLY after ALL results collected.** No quorum logic. Degradation Policy (below) governs infrastructure failure scenarios.
 4. **MUST NOT assign, reassign, or interpret any model's P-level.** Pass through exactly as reported.
 5. **MUST NOT compute a final verdict.** List each model's verdict separately; the orchestrator decides.
 6. **No augmentation.** If reviewers missed something, it stays missed. That observation is NOT part of the aggregation.
-7. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`wait`) may repeat. `results` runs ONCE. No job re-creation under any circumstances.
+7. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`collect`) may repeat. No job re-creation under any circumstances.
 8. **CRITICAL: One chunk per invocation.** Each chunk-reviewer instance receives and processes exactly ONE chunk. The orchestrator MUST dispatch a separate chunk-reviewer for each chunk. NEVER combine multiple chunks into a single chunk-reviewer request.
 
 ## Classification Rules
