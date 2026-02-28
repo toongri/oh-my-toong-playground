@@ -244,7 +244,7 @@
 
 **Description**: All three reviewers complete successfully. The Chairman must start the job, collect until done (manifest JSON returned directly), read each reviewer's `outputFilePath`, and proceed to aggregation.
 
-**Setup/Given**: `bun scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` creates a job and returns the JOB_DIR path. `collect "$JOB_DIR"` polls internally (5s interval) and returns done manifest JSON with 3 reviewers, all with non-null `outputFilePath` paths pointing to job directory `output.txt` files.
+**Setup/Given**: `bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` creates a job and returns the JOB_DIR path. `collect "$JOB_DIR"` polls internally (5s interval) and returns done manifest JSON with 3 reviewers, all with non-null `outputFilePath` paths pointing to job directory `output.txt` files.
 
 **Manifest JSON (collect stdout when done)**:
 ```json

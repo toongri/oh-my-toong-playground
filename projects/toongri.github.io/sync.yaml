@@ -63,6 +63,7 @@ skills:
 scripts:
   items:
     - hud
+    - chunk-review
 
 rules:
   items:
