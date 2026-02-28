@@ -15,7 +15,7 @@ import {
   BASE_DELAY_MS,
 } from '../../lib/worker-utils';
 
-const PROMPTS_DIR = path.join(path.resolve(import.meta.dirname, '../..'), 'skills', 'code-review', 'prompts');
+const PROMPTS_DIR = path.resolve(import.meta.dirname, '../../skills/code-review/prompts');
 const FALLBACK_FILE = 'reviewer.md';
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ function main() {
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
   // Initialize persistent logging
-  const projectRoot = path.resolve(import.meta.dirname, '../..');
+  const projectRoot = path.resolve(import.meta.dirname, '../../..');
   const jobId = jobDir ? path.basename(jobDir).replace(/^chunk-review-/, '') : 'unknown';
   initLogger('chunk-review-worker', projectRoot, jobId);
   logStart();
