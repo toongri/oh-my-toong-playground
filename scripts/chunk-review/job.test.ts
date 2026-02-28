@@ -2746,3 +2746,160 @@ describe('cmdCollect', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// start + collect integration
+// ---------------------------------------------------------------------------
+
+describe('start + collect integration', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeTestConfig(dir: string): string {
+    const configPath = path.join(dir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: none',
+      '  reviewers:',
+      '    - name: r1',
+      '      command: echo r1',
+      '    - name: r2',
+      '      command: echo r2',
+      '  settings:',
+      '    exclude_chairman_from_reviewers: false',
+      '    timeout: 10',
+    ].join('\n'));
+    return configPath;
+  }
+
+  function cleanupJob(jobDir: string) {
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir], { stdio: 'pipe' }); } catch {}
+  }
+
+  test('전체 파이프라인: start --prompt-file → mock done → collect → manifest JSON', () => {
+    const configPath = writeTestConfig(tmpDir);
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    // Write prompt file
+    const promptFile = path.join(tmpDir, 'prompt.txt');
+    fs.writeFileSync(promptFile, 'Review this code for bugs');
+
+    // start: create job via --prompt-file
+    const startResult = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'none',
+      '--prompt-file', promptFile,
+    ], { stdio: 'pipe', timeout: 15000 });
+    const jobDir = startResult.toString().trim();
+    expect(fs.existsSync(jobDir)).toBe(true);
+
+    try {
+      // Verify job structure was created
+      const jobJson = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8'));
+      expect(jobJson.reviewers).toHaveLength(2);
+      const reviewerNames = jobJson.reviewers.map((r: any) => r.name);
+      expect(reviewerNames).toContain('r1');
+      expect(reviewerNames).toContain('r2');
+
+      // Verify prompt was stored
+      const storedPrompt = fs.readFileSync(path.join(jobDir, 'prompt.txt'), 'utf8');
+      expect(storedPrompt).toBe('Review this code for bugs');
+
+      // Mock done status for each reviewer
+      const reviewersDir = path.join(jobDir, 'reviewers');
+      for (const entry of fs.readdirSync(reviewersDir)) {
+        const statusPath = path.join(reviewersDir, entry, 'status.json');
+        const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        fs.writeFileSync(statusPath, JSON.stringify({
+          reviewer: status.reviewer,
+          state: 'done',
+          exitCode: 0,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+        }));
+        fs.writeFileSync(
+          path.join(reviewersDir, entry, 'output.txt'),
+          `Review output from ${status.reviewer}`,
+        );
+      }
+
+      // collect: poll until done and return manifest
+      const collectResult = execFileSync(process.execPath, [
+        SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+      ], { stdio: 'pipe', timeout: 15000 });
+      const manifest = JSON.parse(collectResult.toString());
+
+      expect(manifest.overallState).toBe('done');
+      expect(manifest.reviewers).toHaveLength(2);
+      for (const reviewer of manifest.reviewers) {
+        expect(reviewer.outputFilePath).toBeTruthy();
+        expect(fs.existsSync(reviewer.outputFilePath)).toBe(true);
+        expect(reviewer.errorMessage).toBeNull();
+      }
+    } finally {
+      cleanupJob(jobDir);
+    }
+  }, 30000);
+
+  test('0ms timeout: queued 상태에서 즉시 not-done 반환', () => {
+    const configPath = writeTestConfig(tmpDir);
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    // Write prompt file
+    const promptFile = path.join(tmpDir, 'prompt.txt');
+    fs.writeFileSync(promptFile, 'Review this code');
+
+    // start: create job
+    const startResult = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'none',
+      '--prompt-file', promptFile,
+    ], { stdio: 'pipe', timeout: 15000 });
+    const jobDir = startResult.toString().trim();
+
+    try {
+      // Do NOT write any done status files — leave reviewers in queued state
+      // But we need to ensure the queuedAt timestamps are fresh to avoid staleness CAS
+      const reviewersDir = path.join(jobDir, 'reviewers');
+      const now = new Date().toISOString();
+      for (const entry of fs.readdirSync(reviewersDir)) {
+        const statusPath = path.join(reviewersDir, entry, 'status.json');
+        const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        fs.writeFileSync(statusPath, JSON.stringify({
+          ...status,
+          queuedAt: now,
+        }));
+      }
+
+      // collect with 0ms timeout: should return immediately without waiting
+      const collectResult = execFileSync(process.execPath, [
+        SCRIPT, 'collect', '--timeout-ms', '0', jobDir,
+      ], { stdio: 'pipe', timeout: 10000 });
+      const parsed = JSON.parse(collectResult.toString());
+
+      expect(parsed.overallState).not.toBe('done');
+      expect(parsed).toHaveProperty('counts');
+      expect(parsed.counts.total).toBe(2);
+      // Should NOT have reviewers array (that's manifest-only, returned only when done)
+      expect(parsed).not.toHaveProperty('reviewers');
+    } finally {
+      cleanupJob(jobDir);
+    }
+  }, 30000);
+});
