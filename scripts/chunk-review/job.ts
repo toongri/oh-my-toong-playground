@@ -21,9 +21,9 @@ import {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
-} from '../../../lib/job-utils';
+} from '../../lib/job-utils';
 
-import { initLogger, logInfo, logStart, logEnd } from '../../../lib/logging';
+import { initLogger, logInfo, logStart, logEnd } from '../../lib/logging';
 
 // Chunk-review default fallback is 'reviewer' (shared module defaults to 'member')
 function safeFileName(name, fallback) {
@@ -31,12 +31,12 @@ function safeFileName(name, fallback) {
 }
 
 const SCRIPT_DIR = import.meta.dirname;
-const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
-const PROJECT_ROOT = path.resolve(SKILL_DIR, '../..');
-const WORKER_PATH = path.join(SCRIPT_DIR, 'chunk-review-worker.ts');
+const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../..');
+const SKILL_DIR = path.join(PROJECT_ROOT, 'skills', 'code-review');
+const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'chunk-review.config.yaml');
-const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'chunk-review.config.yaml');
+const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'chunk-review.config.yaml');
 
 const GC_MAX_AGE_MS = 3_600_000; // 1 hour
 
@@ -890,14 +890,14 @@ function printHelp() {
   process.stdout.write(`Chunk Review (job mode)
 
 Usage:
-  chunk-review-job.sh start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
-  chunk-review-job.sh start --stdin
-  chunk-review-job.sh status [--json|--text|--checklist] [--verbose] <jobDir>
-  chunk-review-job.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
-  chunk-review-job.sh collect [--timeout-ms N] <jobDir>
-  chunk-review-job.sh results [--json|--manifest] <jobDir>
-  chunk-review-job.sh stop <jobDir>
-  chunk-review-job.sh clean <jobDir>
+  scripts/chunk-review/job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  scripts/chunk-review/job.ts start --stdin
+  scripts/chunk-review/job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
+  scripts/chunk-review/job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  scripts/chunk-review/job.ts collect [--timeout-ms N] <jobDir>
+  scripts/chunk-review/job.ts results [--json|--manifest] <jobDir>
+  scripts/chunk-review/job.ts stop <jobDir>
+  scripts/chunk-review/job.ts clean <jobDir>
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
@@ -1083,7 +1083,7 @@ export {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
-} from '../../../lib/job-utils';
+} from '../../lib/job-utils';
 
 export { safeFileName };
 

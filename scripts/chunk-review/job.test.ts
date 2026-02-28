@@ -30,7 +30,7 @@ import {
   detectCliType,
   buildAugmentedCommand,
   gcStaleJobs,
-} from './chunk-review-job.ts';
+} from './job.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1816,7 +1816,7 @@ describe('gcStaleJobs', () => {
 // ---------------------------------------------------------------------------
 
 describe('cmdClean path traversal guard', () => {
-  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir;
 
   beforeEach(() => {
@@ -1906,7 +1906,7 @@ describe('cmdClean path traversal guard', () => {
 // ---------------------------------------------------------------------------
 
 describe('spawnWorkers safe name collision detection', () => {
-  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir;
 
   beforeEach(() => {
@@ -1959,7 +1959,7 @@ describe('spawnWorkers safe name collision detection', () => {
 // ---------------------------------------------------------------------------
 
 describe('--exclude-chairman=false keeps chairman in reviewers', () => {
-  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir;
 
   beforeEach(() => {
@@ -2137,7 +2137,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
 // ---------------------------------------------------------------------------
 
 describe('--include-chairman=false normalizeBool parsing', () => {
-  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir;
 
   beforeEach(() => {
@@ -2313,7 +2313,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
 // ---------------------------------------------------------------------------
 
 describe('cmdResults', () => {
-  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir: string;
 
   function setupJobFixture(
@@ -2625,7 +2625,7 @@ describe('buildManifest', () => {
 // ---------------------------------------------------------------------------
 
 describe('cmdCollect', () => {
-  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir: string;
 
   function setupCollectFixture(
