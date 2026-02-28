@@ -551,6 +551,41 @@ function cmdWait(options, jobDir) {
   process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload), cursor: finalCursor }, null, 2)}\n`);
 }
 
+// ---------------------------------------------------------------------------
+// Manifest builder (shared by cmdResults --manifest and cmdCollect)
+// ---------------------------------------------------------------------------
+
+function buildManifest(jobDir) {
+  const resolvedJobDir = path.resolve(jobDir);
+  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
+  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
+
+  const jobId = jobMeta ? jobMeta.id : 'unknown';
+  const reviewers = [];
+  if (fs.existsSync(reviewersRoot)) {
+    for (const entry of fs.readdirSync(reviewersRoot)) {
+      const statusPath = path.join(reviewersRoot, entry, 'status.json');
+      const status = readJsonIfExists(statusPath);
+      if (!status) continue;
+      const outputPath = path.join(reviewersRoot, entry, 'output.txt');
+      const hasOutput = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
+      reviewers.push({
+        reviewer: status.reviewer,
+        outputFilePath: hasOutput ? outputPath : null,
+        errorMessage: hasOutput ? null : (status.message || status.state),
+        _safeName: entry,
+      });
+    }
+  }
+
+  return {
+    id: jobId,
+    reviewers: reviewers
+      .map(({ _safeName, ...rest }) => rest)
+      .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
+  };
+}
+
 function cmdResults(options, jobDir) {
   initLoggerFromJobDir(jobDir);
   logInfo(`results: ${path.resolve(jobDir)}`);
@@ -573,23 +608,8 @@ function cmdResults(options, jobDir) {
   }
 
   if (options.manifest) {
-    const jobId = jobMeta ? jobMeta.id : 'unknown';
-    const manifestReviewers = reviewers
-      .map((r) => {
-        const outputPath = r.output
-          ? path.join(reviewersRoot, r.safeName, 'output.txt')
-          : null;
-        return {
-          reviewer: r.reviewer,
-          outputFilePath: outputPath,
-          errorMessage: outputPath ? null : (r.message || r.state),
-        };
-      })
-      .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)));
-
-    process.stdout.write(
-      `${JSON.stringify({ id: jobId, reviewers: manifestReviewers }, null, 2)}\n`
-    );
+    const manifest = buildManifest(jobDir);
+    process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
     return;
   }
 
@@ -625,6 +645,43 @@ function cmdResults(options, jobDir) {
       process.stdout.write(r.stderr);
     }
     process.stdout.write('\n');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Collect: poll until done then return manifest
+// ---------------------------------------------------------------------------
+
+const COLLECT_POLL_INTERVAL_MS = 5000;
+const COLLECT_TIMEOUT_HARDCAP_MS = 300000;
+
+function cmdCollect(options, jobDir) {
+  initLoggerFromJobDir(jobDir);
+  logInfo(`collect: ${path.resolve(jobDir)}`);
+
+  const timeoutMsRaw = options['timeout-ms'] != null ? Number(options['timeout-ms']) : 150000;
+  const timeoutMs = Math.min(
+    Math.max(0, Number.isFinite(timeoutMsRaw) ? Math.trunc(timeoutMsRaw) : 150000),
+    COLLECT_TIMEOUT_HARDCAP_MS,
+  );
+
+  const start = Date.now();
+  while (true) {
+    const status = computeStatus(jobDir);
+    if (status.overallState === 'done') {
+      const manifest = buildManifest(jobDir);
+      process.stdout.write(
+        `${JSON.stringify({ overallState: 'done', ...manifest }, null, 2)}\n`,
+      );
+      return;
+    }
+    if (Date.now() - start >= timeoutMs) {
+      process.stdout.write(
+        `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,
+      );
+      return;
+    }
+    sleepMs(COLLECT_POLL_INTERVAL_MS);
   }
 }
 
@@ -837,6 +894,7 @@ Usage:
   chunk-review-job.sh start --stdin
   chunk-review-job.sh status [--json|--text|--checklist] [--verbose] <jobDir>
   chunk-review-job.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  chunk-review-job.sh collect [--timeout-ms N] <jobDir>
   chunk-review-job.sh results [--json|--manifest] <jobDir>
   chunk-review-job.sh stop <jobDir>
   chunk-review-job.sh clean <jobDir>
@@ -978,6 +1036,12 @@ async function main() {
     cmdWait(options, jobDir);
     return;
   }
+  if (command === 'collect') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('collect: missing jobDir');
+    cmdCollect(options, jobDir);
+    return;
+  }
   if (command === 'results') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('results: missing jobDir');
@@ -1025,6 +1089,7 @@ export { safeFileName };
 
 export {
   buildUiPayload,
+  buildManifest,
   parseChunkReviewConfig,
   parseYamlSimple,
   computeStatus,

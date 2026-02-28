@@ -23,6 +23,7 @@ import {
   resolveBucketSize,
   generateJobId,
   buildUiPayload,
+  buildManifest,
   parseChunkReviewConfig,
   parseYamlSimple,
   computeStatus,
@@ -2518,6 +2519,230 @@ describe('cmdResults', () => {
       expect(r.outputFilePath).toContain('output.txt');
       const content = fs.readFileSync(r.outputFilePath, 'utf8');
       expect(content.length).toBe(50000);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildManifest (unit)
+// ---------------------------------------------------------------------------
+
+describe('buildManifest', () => {
+  let tmpDir: string;
+
+  function setupManifestFixture(
+    jobDir: string,
+    reviewers: Record<string, { reviewer: string; state: string; exitCode: number; output: string }>,
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'manifest-test' }));
+    const reviewersDir = path.join(jobDir, 'reviewers');
+    fs.mkdirSync(reviewersDir, { recursive: true });
+    for (const [name, data] of Object.entries(reviewers)) {
+      const dir = path.join(reviewersDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'status.json'),
+        JSON.stringify({ reviewer: data.reviewer, state: data.state, exitCode: data.exitCode, message: data.state === 'error' ? 'failed' : undefined }),
+      );
+      if (data.output) {
+        fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      }
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('올바른 manifest 구조 반환 (done 리뷰어)', () => {
+    const jobDir = path.join(tmpDir, 'job-bm1');
+    setupManifestFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'review A' },
+      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'review B' },
+    });
+
+    const manifest = buildManifest(jobDir);
+
+    expect(manifest.id).toBe('manifest-test');
+    expect(manifest.reviewers).toHaveLength(2);
+    // Sorted alphabetically
+    expect(manifest.reviewers[0].reviewer).toBe('claude');
+    expect(manifest.reviewers[1].reviewer).toBe('codex');
+    // Done reviewers have outputFilePath and null errorMessage
+    for (const r of manifest.reviewers) {
+      expect(r.outputFilePath).toBeTruthy();
+      expect(r.outputFilePath).toContain('output.txt');
+      expect(r.errorMessage).toBeNull();
+    }
+  });
+
+  test('output 없는 리뷰어는 outputFilePath=null, errorMessage 설정', () => {
+    const jobDir = path.join(tmpDir, 'job-bm2');
+    setupManifestFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'has output' },
+      'gemini-0': { reviewer: 'gemini', state: 'error', exitCode: 1, output: '' },
+    });
+
+    const manifest = buildManifest(jobDir);
+    const claude = manifest.reviewers.find((r: any) => r.reviewer === 'claude');
+    const gemini = manifest.reviewers.find((r: any) => r.reviewer === 'gemini');
+
+    expect(claude.outputFilePath).toBeTruthy();
+    expect(claude.errorMessage).toBeNull();
+    expect(gemini.outputFilePath).toBeNull();
+    expect(gemini.errorMessage).toBeTruthy();
+  });
+
+  test('job.json 없으면 id=unknown', () => {
+    const jobDir = path.join(tmpDir, 'job-bm3');
+    fs.mkdirSync(jobDir, { recursive: true });
+    // No job.json, no reviewers
+    const manifest = buildManifest(jobDir);
+    expect(manifest.id).toBe('unknown');
+    expect(manifest.reviewers).toHaveLength(0);
+  });
+
+  test('_safeName 내부 필드가 외부에 노출되지 않음', () => {
+    const jobDir = path.join(tmpDir, 'job-bm4');
+    setupManifestFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'data' },
+    });
+
+    const manifest = buildManifest(jobDir);
+    for (const r of manifest.reviewers) {
+      expect(r).not.toHaveProperty('_safeName');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cmdCollect (process-level)
+// ---------------------------------------------------------------------------
+
+describe('cmdCollect', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'chunk-review-job.ts');
+  let tmpDir: string;
+
+  function setupCollectFixture(
+    jobDir: string,
+    reviewers: Record<string, { reviewer: string; state: string; exitCode: number; output: string }>,
+    opts?: { timeoutSec?: number },
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(jobDir, 'job.json'),
+      JSON.stringify({ id: 'collect-test', settings: { timeoutSec: opts?.timeoutSec ?? 60 } }),
+    );
+    const reviewersDir = path.join(jobDir, 'reviewers');
+    fs.mkdirSync(reviewersDir, { recursive: true });
+    for (const [name, data] of Object.entries(reviewers)) {
+      const dir = path.join(reviewersDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'status.json'),
+        JSON.stringify({ reviewer: data.reviewer, state: data.state, exitCode: data.exitCode }),
+      );
+      if (data.output) {
+        fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      }
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('done 상태: manifest JSON 반환', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-done');
+    setupCollectFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'review output A' },
+      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'review output B' },
+    });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+    ], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).toBe('done');
+    expect(parsed.id).toBe('collect-test');
+    expect(parsed.reviewers).toHaveLength(2);
+    expect(parsed.reviewers[0].reviewer).toBe('claude');
+    expect(parsed.reviewers[0].outputFilePath).toBeTruthy();
+    expect(parsed.reviewers[0].errorMessage).toBeNull();
+  });
+
+  test('timeout: not-done JSON 반환 (overallState, id, counts)', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-timeout');
+    setupCollectFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'running', exitCode: 0, output: '' },
+      'codex-0': { reviewer: 'codex', state: 'queued', exitCode: 0, output: '' },
+    });
+    // Set startedAt/queuedAt to avoid staleness CAS sleep
+    const reviewersDir = path.join(jobDir, 'reviewers');
+    const now = new Date().toISOString();
+    fs.writeFileSync(
+      path.join(reviewersDir, 'claude-0', 'status.json'),
+      JSON.stringify({ reviewer: 'claude', state: 'running', exitCode: 0, startedAt: now }),
+    );
+    fs.writeFileSync(
+      path.join(reviewersDir, 'codex-0', 'status.json'),
+      JSON.stringify({ reviewer: 'codex', state: 'queued', exitCode: 0, queuedAt: now }),
+    );
+
+    // timeout-ms=0 exits immediately after first poll without sleeping
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '0', jobDir,
+    ], { stdio: 'pipe', timeout: 10000 });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).not.toBe('done');
+    expect(parsed.id).toBe('collect-test');
+    expect(parsed).toHaveProperty('counts');
+    expect(parsed.counts).toHaveProperty('total');
+    expect(parsed.counts).toHaveProperty('running');
+    expect(parsed.counts).toHaveProperty('queued');
+    // Must NOT have reviewers array (that's manifest-only)
+    expect(parsed).not.toHaveProperty('reviewers');
+  });
+
+  test('hardcap: timeout-ms=999999 → 300000 이하로 클램프', () => {
+    // We can't easily verify the internal clamp value directly, but we can verify
+    // the command completes within a reasonable time (not 999 seconds).
+    // With all reviewers done, it should return immediately regardless of timeout.
+    const jobDir = path.join(tmpDir, 'job-collect-hardcap');
+    setupCollectFixture(jobDir, {
+      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'data' },
+    });
+
+    const start = Date.now();
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '999999', jobDir,
+    ], { stdio: 'pipe', timeout: 10000 });
+    const elapsed = Date.now() - start;
+    const parsed = JSON.parse(result.toString());
+
+    // Should return immediately since all reviewers are done
+    expect(parsed.overallState).toBe('done');
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  test('collect: jobDir 누락 시 에러', () => {
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'collect'], { stdio: 'pipe' });
+      throw new Error('Expected execFileSync to throw');
+    } catch (err: any) {
+      expect(err.status).toBe(1);
+      expect(err.stderr.toString()).toContain('collect: missing jobDir');
     }
   });
 });
