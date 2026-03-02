@@ -102,6 +102,23 @@ describe('non-retryable 에러 분류', () => {
     expect(result.attempt).toBe(1);
   });
 
+  it('attempt 0의 non-retryable stderr가 attempt 1 판정에 영향 없음', async () => {
+    const subDir = join(testDir, 'cross-attempt-isolation');
+    const opts = makeOpts(subDir, {
+      args: ['-c', 'echo "Connection refused" >&2; exit 1'],
+      command: '/bin/sh -c "exit 1"',
+    });
+
+    // Pre-seed error.txt with a non-retryable pattern (simulating previous attempt residue)
+    writeFileSync(join(opts.reviewerDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
+
+    const result = await runWithRetry(opts);
+
+    // With offset tracking: pre-seeded content is ignored → retryable → state='error'
+    // Without offset tracking: pre-seeded content included → non_retryable (BUG)
+    expect(result.state).toBe('error');
+  });
+
   it('status.json이 non_retryable로 업데이트됨', async () => {
     const subDir = join(testDir, 'status-update');
     const reviewerDir = join(subDir, 'reviewer');
