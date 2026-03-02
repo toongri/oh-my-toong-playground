@@ -6,13 +6,9 @@ import path from 'path';
 import os from 'os';
 
 import {
-  splitCommand,
-  atomicWriteJson,
   runOnce,
   runWithRetry,
   sleepMs,
-  assemblePrompt,
-  MAX_RETRIES,
   BASE_DELAY_MS,
 } from './spec-review-worker.ts';
 
@@ -39,118 +35,6 @@ function setupJobDir(tmpDir) {
 function readStatus(statusPath) {
   return JSON.parse(fs.readFileSync(statusPath, 'utf8'));
 }
-
-// ---------------------------------------------------------------------------
-// splitCommand() tests
-// ---------------------------------------------------------------------------
-
-describe('splitCommand', () => {
-  test('splits simple space-separated tokens', () => {
-    expect(splitCommand('echo hello world')).toEqual(['echo', 'hello', 'world']);
-  });
-
-  test('handles single-quoted strings', () => {
-    expect(splitCommand("echo 'hello world'")).toEqual(['echo', 'hello world']);
-  });
-
-  test('handles double-quoted strings', () => {
-    expect(splitCommand('echo "hello world"')).toEqual(['echo', 'hello world']);
-  });
-
-  test('handles escaped characters', () => {
-    expect(splitCommand('echo hello\\ world')).toEqual(['echo', 'hello world']);
-  });
-
-  test('returns empty array for empty string', () => {
-    expect(splitCommand('')).toEqual([]);
-  });
-
-  test('returns null for null/undefined input', () => {
-    expect(splitCommand(null)).toEqual([]);
-    expect(splitCommand(undefined)).toEqual([]);
-  });
-
-  test('returns null for unmatched single quote', () => {
-    expect(splitCommand("echo 'hello")).toBe(null);
-  });
-
-  test('returns null for unmatched double quote', () => {
-    expect(splitCommand('echo "hello')).toBe(null);
-  });
-
-  test('handles multiple spaces between tokens', () => {
-    expect(splitCommand('echo   hello   world')).toEqual(['echo', 'hello', 'world']);
-  });
-
-  test('handles mixed quotes', () => {
-    expect(splitCommand(`echo "hello 'world'"`)).toEqual(['echo', "hello 'world'"]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// atomicWriteJson() tests
-// ---------------------------------------------------------------------------
-
-describe('atomicWriteJson', () => {
-  let tmpDir;
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('writes valid JSON to the target path', () => {
-    const filePath = path.join(tmpDir, 'test.json');
-    const payload = { state: 'done', exitCode: 0 };
-    atomicWriteJson(filePath, payload);
-    const result = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    expect(result).toEqual(payload);
-  });
-
-  test('overwrites existing file atomically', () => {
-    const filePath = path.join(tmpDir, 'test.json');
-    atomicWriteJson(filePath, { v: 1 });
-    atomicWriteJson(filePath, { v: 2 });
-    const result = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    expect(result.v).toBe(2);
-  });
-
-  test('formats JSON with 2-space indentation', () => {
-    const filePath = path.join(tmpDir, 'test.json');
-    atomicWriteJson(filePath, { a: 1 });
-    const raw = fs.readFileSync(filePath, 'utf8');
-    expect(raw).toBe(JSON.stringify({ a: 1 }, null, 2));
-  });
-
-  test('does not leave tmp files on success', () => {
-    const filePath = path.join(tmpDir, 'test.json');
-    atomicWriteJson(filePath, { ok: true });
-    const files = fs.readdirSync(tmpDir);
-    expect(files.length).toBe(1);
-    expect(files[0]).toBe('test.json');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// sleepMs() tests
-// ---------------------------------------------------------------------------
-
-describe('sleepMs', () => {
-  test('resolves after the specified delay', async () => {
-    const start = Date.now();
-    await sleepMs(50);
-    const elapsed = Date.now() - start;
-    expect(elapsed >= 40).toBe(true);
-  });
-
-  test('returns a promise', () => {
-    const result = sleepMs(1);
-    expect(result instanceof Promise).toBeTruthy();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // runOnce() — stdin pipe tests
@@ -574,97 +458,6 @@ describe('runWithRetry', () => {
     expect(capturedStatus).toBeTruthy();
     expect(capturedStatus.state).toBe('retrying');
     expect(capturedStatus.attempt).toBe(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Constants tests
-// ---------------------------------------------------------------------------
-
-describe('constants', () => {
-  test('MAX_RETRIES is 1', () => {
-    expect(MAX_RETRIES).toBe(1);
-  });
-
-  test('BASE_DELAY_MS is 1000', () => {
-    expect(BASE_DELAY_MS).toBe(1000);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assemblePrompt() tests (H-2)
-// ---------------------------------------------------------------------------
-
-describe('assemblePrompt', () => {
-  let tmpDir;
-  let promptsDir;
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-    promptsDir = path.join(tmpDir, 'prompts');
-    fs.mkdirSync(promptsDir, { recursive: true });
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('returns structured prompt with REVIEW CONTENT when role file exists and reviewContent provided', () => {
-    fs.writeFileSync(path.join(promptsDir, 'claude.md'), 'You are a reviewer.', 'utf8');
-
-    const result = assemblePrompt({
-      promptsDir,
-      entityName: 'claude',
-      rawPrompt: 'Review this code',
-      reviewContent: 'function add(a,b) { return a+b; }',
-    });
-
-    expect(result.isStructured).toBe(true);
-    expect(result.assembled.includes('You are a reviewer.')).toBe(true);
-    expect(result.assembled.includes('--- REVIEW CONTENT ---')).toBe(true);
-    expect(result.assembled.includes('function add(a,b) { return a+b; }')).toBe(true);
-    expect(result.assembled.includes('--- END REVIEW CONTENT ---')).toBe(true);
-    expect(result.assembled.includes('Review this code')).toBe(true);
-    expect(result.assembled.includes('<system-instructions>')).toBe(true);
-    expect(result.assembled.includes('[HEADLESS SESSION]')).toBe(true);
-  });
-
-  test('returns structured prompt without REVIEW CONTENT when role file exists but no reviewContent', () => {
-    fs.writeFileSync(path.join(promptsDir, 'claude.md'), 'You are a reviewer.', 'utf8');
-
-    const result = assemblePrompt({
-      promptsDir,
-      entityName: 'claude',
-      rawPrompt: 'Review this code',
-    });
-
-    expect(result.isStructured).toBe(true);
-    expect(result.assembled.includes('You are a reviewer.')).toBe(true);
-    expect(!result.assembled.includes('--- REVIEW CONTENT ---')).toBe(true);
-    expect(result.assembled.includes('Review this code')).toBe(true);
-  });
-
-  test('returns rawPrompt with isStructured=false when role file does not exist', () => {
-    const result = assemblePrompt({
-      promptsDir,
-      entityName: 'nonexistent',
-      rawPrompt: 'Review this code',
-    });
-
-    expect(result.isStructured).toBe(false);
-    expect(result.assembled).toBe('Review this code');
-  });
-
-  test('returns rawPrompt with isStructured=false when role file missing even with reviewContent', () => {
-    const result = assemblePrompt({
-      promptsDir,
-      entityName: 'nonexistent',
-      rawPrompt: 'Review this code',
-      reviewContent: 'some content to review',
-    });
-
-    expect(result.isStructured).toBe(false);
-    expect(result.assembled).toBe('Review this code');
   });
 });
 

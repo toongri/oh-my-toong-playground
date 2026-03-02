@@ -6,7 +6,7 @@ import path from 'path';
 import { initLogger, logInfo, logError, logStart, logEnd } from '../../lib/logging';
 import {
   splitCommand,
-  atomicWriteJsonAsync,
+  atomicWriteJson,
   sleepMsAsync,
   assemblePrompt as sharedAssemblePrompt,
   runOnce as sharedRunOnce,
@@ -128,7 +128,7 @@ function main() {
   if (!tokens || tokens.length === 0) {
     logError(`invalid command string: ${command}`);
     const statusPath = path.join(reviewerDir, 'status.json');
-    atomicWriteJsonAsync(statusPath, {
+    atomicWriteJson(statusPath, {
       reviewer, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     });
@@ -155,7 +155,7 @@ if (import.meta.main) {
 
 export {
   splitCommand,
-  atomicWriteJsonAsync as atomicWriteJson,
+  atomicWriteJson as atomicWriteJson,
   assemblePrompt,
   runOnce,
   runWithRetry,

@@ -14,7 +14,7 @@ export function getProjectRoot(directory: string): string {
   }
 
   // Fallback
-  return directory.replace(/\/.omt$/, '');
+  return directory.replace(/\/.omt$/, '').replace(/\/.claude$/, '');
 }
 
 export function ensureDir(path: string): void {

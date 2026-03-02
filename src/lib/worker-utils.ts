@@ -2,7 +2,7 @@
  * Shared utility functions for job worker scripts.
  *
  * Extracted from council-job-worker.ts, chunk-review-worker.ts, spec-review-worker.ts.
- * Async counterparts are distinguished by name: atomicWriteJsonAsync, sleepMsAsync.
+ * Sync helpers: atomicWriteJson. Async helpers: sleepMsAsync.
  */
 
 import fs from 'fs';
@@ -72,10 +72,10 @@ export function splitCommand(command: string): string[] | null {
 }
 
 // ---------------------------------------------------------------------------
-// Async filesystem helpers
+// Filesystem helpers
 // ---------------------------------------------------------------------------
 
-export function atomicWriteJsonAsync(filePath: string, payload: unknown): void {
+export function atomicWriteJson(filePath: string, payload: unknown): void {
   const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2), 'utf8');
   fs.renameSync(tmpPath, filePath);
@@ -219,7 +219,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
   const errPath = path.join(reviewerDir, 'error.txt');
 
   return new Promise((resolve) => {
-    atomicWriteJsonAsync(statusPath, {
+    atomicWriteJson(statusPath, {
       reviewer, state: 'running', startedAt: new Date().toISOString(),
       command, pid: null, attempt,
     });
@@ -242,7 +242,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
         message: err && err.message ? err.message : 'Failed to spawn command',
         finishedAt: new Date().toISOString(), command, attempt,
       };
-      try { atomicWriteJsonAsync(statusPath, result); } catch { /* ignore */ }
+      try { atomicWriteJson(statusPath, result); } catch { /* ignore */ }
       // Wait for streams to close before resolving (same pattern as finalize)
       let closed = 0;
       const total = 2;
@@ -267,7 +267,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     }
 
     try {
-      atomicWriteJsonAsync(statusPath, {
+      atomicWriteJson(statusPath, {
         reviewer, state: 'running', startedAt: new Date().toISOString(),
         command, pid: child.pid, attempt,
       });
@@ -302,7 +302,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     const finalize = (payload: Record<string, unknown>) => {
       if (finalized) return;
       finalized = true;
-      try { atomicWriteJsonAsync(statusPath, payload); } catch { /* ignore */ }
+      try { atomicWriteJson(statusPath, payload); } catch { /* ignore */ }
       let closed = 0;
       const total = 2;
       const safetyTimeout = setTimeout(() => resolve(payload), 500);
@@ -391,7 +391,7 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
 
       if (isNonRetryable) {
         result.state = 'non_retryable';
-        atomicWriteJsonAsync(path.join(runOpts.reviewerDir, 'status.json'), {
+        atomicWriteJson(path.join(runOpts.reviewerDir, 'status.json'), {
           ...result, state: 'non_retryable',
         });
         return result;
@@ -404,7 +404,7 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
 
     if (attempt < MAX_RETRIES) {
       const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * BASE_DELAY_MS;
-      atomicWriteJsonAsync(path.join(runOpts.reviewerDir, 'status.json'), {
+      atomicWriteJson(path.join(runOpts.reviewerDir, 'status.json'), {
         reviewer: runOpts.reviewer,
         state: 'retrying',
         attempt: attempt + 1,

@@ -5,7 +5,7 @@ import path from 'path';
 
 import {
   splitCommand,
-  atomicWriteJsonAsync,
+  atomicWriteJson,
   sleepMsAsync,
   assemblePrompt,
   runOnce as sharedRunOnce,
@@ -63,7 +63,7 @@ async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec
       member, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command, attempt,
     };
-    atomicWriteJsonAsync(statusPath, payload);
+    atomicWriteJson(statusPath, payload);
     return payload;
   }
 
@@ -92,7 +92,7 @@ async function runWithRetry(opts) {
       member, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     };
-    atomicWriteJsonAsync(statusPath, payload);
+    atomicWriteJson(statusPath, payload);
     return payload;
   }
 
@@ -107,7 +107,7 @@ async function runWithRetry(opts) {
       const status = JSON.parse(raw);
       if (status.state === 'retrying' && status.member === undefined) {
         status.member = member;
-        atomicWriteJsonAsync(statusPath, status);
+        atomicWriteJson(statusPath, status);
       }
     } catch { /* ignore */ }
     return sleepFn ? sleepFn(ms) : sleepMsAsync(ms);
@@ -155,4 +155,4 @@ if (import.meta.main) {
   main();
 }
 
-export { splitCommand, atomicWriteJsonAsync as atomicWriteJson, sleepMsAsync as sleepMs, assemblePrompt, runOnce, runWithRetry };
+export { splitCommand, atomicWriteJson, sleepMsAsync as sleepMs, assemblePrompt, runOnce, runWithRetry };

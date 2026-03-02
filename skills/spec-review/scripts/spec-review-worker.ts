@@ -5,7 +5,7 @@ import path from 'path';
 
 import {
   splitCommand,
-  atomicWriteJsonAsync,
+  atomicWriteJson,
   sleepMsAsync,
   assemblePrompt,
   runOnce as sharedRunOnce,
@@ -86,7 +86,7 @@ function main() {
   const tokens = splitCommand(command);
   if (!tokens || tokens.length === 0) {
     const statusPath = path.join(reviewerDir, 'status.json');
-    atomicWriteJsonAsync(statusPath, {
+    atomicWriteJson(statusPath, {
       reviewer, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     });
@@ -110,7 +110,7 @@ if (import.meta.main) {
 
 export {
   splitCommand,
-  atomicWriteJsonAsync as atomicWriteJson,
+  atomicWriteJson,
   assemblePrompt,
   runOnce,
   runWithRetry,

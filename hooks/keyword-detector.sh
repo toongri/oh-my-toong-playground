@@ -38,7 +38,9 @@ get_project_root() {
   done
 
   # Fallback: return the stripped directory
-  echo "${1%/.omt}"
+  local _fallback="${1%/.omt}"
+  _fallback="${_fallback%/.claude}"
+  echo "$_fallback"
 }
 
 # Get project root
@@ -67,12 +69,22 @@ if [ -z "$PROMPT" ]; then
   exit 0
 fi
 
+# Strip all mode tags to prevent nested activation loops
+strip_mode_tags() {
+  perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' |
+  perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' |
+  perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' |
+  perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' |
+  perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' |
+  perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' |
+  perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs'
+}
+
 # Remove code blocks AND hook output tags before checking keywords
-# Also strip all mode tags to prevent nested activation loops
-PROMPT_NO_CODE=$(echo "$PROMPT" | perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' | perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' | perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' | perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' | perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' | perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
+PROMPT_NO_CODE=$(echo "$PROMPT" | strip_mode_tags | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
 
 # Remove hook output tags and system reminders from cleaned prompt
-PROMPT_CLEAN=$(echo "$PROMPT" | perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' | perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' | perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' | perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' | perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' | perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+PROMPT_CLEAN=$(echo "$PROMPT" | strip_mode_tags | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
 
 # Extract file paths from non-text parts (e.g., @file mentions)
 FILE_PATHS=""
@@ -173,7 +185,7 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
       }'
   else
     # Fallback: basic escaping when jq is unavailable
-    local escaped_prompt=$(printf '%s' "$RALPH_CONTEXT_PROMPT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+    escaped_prompt=$(printf '%s' "$RALPH_CONTEXT_PROMPT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
     echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"<ralph-mode>\\n**RALPH LOOP ACTIVATED** - Iteration 0/10\\n\\nYou are in Ralph Loop mode.\\n\\n## CORE RULES\\n1. Work until ALL requirements are met\\n2. Track progress with TodoWrite tool\\n3. You MUST output \\\`<promise>DONE</promise>\\\` when ALL tasks are complete\\n\\nOriginal task: ${escaped_prompt}\\n</ralph-mode>\\n\\n---\\n\"}}"
   fi
   exit 0
