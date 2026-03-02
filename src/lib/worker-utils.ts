@@ -372,7 +372,12 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
   const { sleepFn = sleepMsAsync, ...runOpts } = opts;
   let result: Record<string, unknown> = {};
 
+  const errPath = path.join(runOpts.reviewerDir, 'error.txt');
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // Record current error.txt size so we only check NEW stderr from this attempt
+    const errOffset = (() => { try { return fs.statSync(errPath).size; } catch { return 0; } })();
+
     result = await runOnce({ ...runOpts, attempt });
 
     // Check for non-retryable error patterns
@@ -382,10 +387,19 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
 
       if (!isNonRetryable) {
         try {
-          const errorContent = fs.readFileSync(path.join(runOpts.reviewerDir, 'error.txt'), 'utf8');
-          isNonRetryable = NON_RETRYABLE_PATTERNS.some(
-            p => errorContent.toLowerCase().includes(p.toLowerCase())
-          );
+          const fd = fs.openSync(errPath, 'r');
+          try {
+            const totalSize = fs.fstatSync(fd).size;
+            const newSize = totalSize - errOffset;
+            if (newSize > 0) {
+              const buf = Buffer.alloc(newSize);
+              fs.readSync(fd, buf, 0, newSize, errOffset);
+              const errorContent = buf.toString('utf8');
+              isNonRetryable = NON_RETRYABLE_PATTERNS.some(
+                p => errorContent.toLowerCase().includes(p.toLowerCase())
+              );
+            }
+          } finally { fs.closeSync(fd); }
         } catch { /* missing/unreadable → retryable */ }
       }
 
