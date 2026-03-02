@@ -348,11 +348,11 @@ test_ralph_takes_priority_over_ultrawork() {
 # Tests: Ralph Output Message
 # =============================================================================
 
-test_ralph_output_contains_iteration_info() {
-    # Output should contain iteration information
+test_ralph_output_contains_behavioral_expressions() {
+    # Output should contain behavioral expressions
     local output=$(run_keyword_detector "ralph complete this" "$TEST_TMP_DIR")
 
-    assert_output_contains "$output" "Iteration 0/10" "Should show iteration 0/10" || return 1
+    assert_output_contains "$output" "truly done" "Should show 'truly done' behavioral expression" || return 1
 }
 
 test_ralph_output_contains_ralph_loop_activated() {
@@ -917,7 +917,7 @@ test_ralph_state_prompt_is_truncated_when_too_long() {
         return 1
     fi
 
-    if [[ ${#stored_prompt} -gt 1300 ]]; then
+    if [[ ${#stored_prompt} -gt 2100 ]]; then
         echo "ASSERTION FAILED: state prompt should be bounded after truncation"
         echo "  Actual length: ${#stored_prompt}"
         return 1
@@ -981,7 +981,7 @@ main() {
     run_test test_ralph_takes_priority_over_ultrawork
 
     # Ralph Output Message
-    run_test test_ralph_output_contains_iteration_info
+    run_test test_ralph_output_contains_behavioral_expressions
     run_test test_ralph_output_contains_ralph_loop_activated
     run_test test_ralph_output_contains_done_promise_instruction
 

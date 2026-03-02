@@ -102,7 +102,7 @@ fi
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
 
-RALPH_STATE_PROMPT_MAX=1200
+RALPH_STATE_PROMPT_MAX=2000
 RALPH_CONTEXT_PROMPT_MAX=2000
 
 truncate_prompt_text() {
@@ -169,7 +169,7 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
 
   # Build ralph activation JSON safely using jq --arg to escape prompt
   if command -v jq &> /dev/null; then
-    RALPH_CONTEXT="<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 0/10\n\nYou are in Ralph Loop mode.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. You MUST output \`<promise>DONE</promise>\` when ALL tasks are complete\n\nOriginal task: "
+    RALPH_CONTEXT="<ralph-mode>\n**RALPH LOOP ACTIVATED**\n\nYou are in Ralph Loop mode.\n\n## CORE RULES\n1. Work until ALL requirements are truly done — not just technically complete\n2. Track progress with tasks\n3. Make meaningful progress toward the goal each iteration\n4. If stuck, try different approaches rather than repeating what failed\n5. You MUST output \`<promise>DONE</promise>\` when ALL tasks are complete\n\nOriginal task: "
     RALPH_SUFFIX="\n</ralph-mode>\n\n---\n"
 
     jq -n \
@@ -186,7 +186,7 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   else
     # Fallback: basic escaping when jq is unavailable
     escaped_prompt=$(printf '%s' "$RALPH_CONTEXT_PROMPT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
-    echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"<ralph-mode>\\n**RALPH LOOP ACTIVATED** - Iteration 0/10\\n\\nYou are in Ralph Loop mode.\\n\\n## CORE RULES\\n1. Work until ALL requirements are met\\n2. Track progress with TodoWrite tool\\n3. You MUST output \\\`<promise>DONE</promise>\\\` when ALL tasks are complete\\n\\nOriginal task: ${escaped_prompt}\\n</ralph-mode>\\n\\n---\\n\"}}"
+    echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"<ralph-mode>\\n**RALPH LOOP ACTIVATED**\\n\\nYou are in Ralph Loop mode.\\n\\n## CORE RULES\\n1. Work until ALL requirements are truly done — not just technically complete\\n2. Track progress with tasks\\n3. Make meaningful progress toward the goal each iteration\\n4. If stuck, try different approaches rather than repeating what failed\\n5. You MUST output \\\`<promise>DONE</promise>\\\` when ALL tasks are complete\\n\\nOriginal task: ${escaped_prompt}\\n</ralph-mode>\\n\\n---\\n\"}}"
   fi
   exit 0
 fi
