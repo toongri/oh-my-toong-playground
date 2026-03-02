@@ -287,7 +287,7 @@ function cmdStatus(options, jobDir) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function cmdWait(options, jobDir) {
+async function cmdWait(options, jobDir) {
   const resolvedJobDir = path.resolve(jobDir);
   const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
   const prevCursorRaw =
@@ -326,7 +326,7 @@ function cmdWait(options, jobDir) {
   const start = Date.now();
   while (cursor === prevCursorRaw) {
     if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
-    sleepMs(intervalMs);
+    await sleepMs(intervalMs);
     payload = computeStatus(jobDir);
     const d = computeTerminalDoneCount(payload.counts);
     const doneFlag = payload.overallState === 'done';
@@ -731,7 +731,7 @@ async function main() {
   if (command === 'wait') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('wait: missing jobDir');
-    cmdWait(options, jobDir);
+    await cmdWait(options, jobDir);
     return;
   }
   if (command === 'results') {

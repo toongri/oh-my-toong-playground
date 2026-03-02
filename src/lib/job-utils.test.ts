@@ -353,42 +353,42 @@ describe('readJsonIfExists', () => {
 // ---------------------------------------------------------------------------
 
 describe('sleepMs', () => {
-  test('blocks for approximately the specified duration', () => {
+  test('waits for approximately the specified duration', async () => {
     const start = Date.now();
-    sleepMs(50);
+    await sleepMs(50);
     const elapsed = Date.now() - start;
     expect(elapsed >= 40).toBe(true);
     expect(elapsed < 200).toBe(true);
   });
 
-  test('returns immediately for 0', () => {
+  test('returns immediately for 0', async () => {
     const start = Date.now();
-    sleepMs(0);
+    await sleepMs(0);
     const elapsed = Date.now() - start;
     expect(elapsed < 50).toBe(true);
   });
 
-  test('returns immediately for negative values', () => {
+  test('returns immediately for negative values', async () => {
     const start = Date.now();
-    sleepMs(-100);
+    await sleepMs(-100);
     const elapsed = Date.now() - start;
     expect(elapsed < 50).toBe(true);
   });
 
-  test('returns immediately for NaN', () => {
+  test('returns immediately for NaN', async () => {
     const start = Date.now();
-    sleepMs(NaN);
+    await sleepMs(NaN);
     const elapsed = Date.now() - start;
     expect(elapsed < 50).toBe(true);
   });
 
-  test('returns undefined (synchronous, not a promise)', () => {
+  test('returns a Promise', () => {
     const result = sleepMs(1);
-    expect(result).toBe(undefined);
+    expect(result).toBeInstanceOf(Promise);
   });
 
-  test('returns immediately for Infinity', () => {
-    sleepMs(Infinity); // should not hang
+  test('returns immediately for Infinity', async () => {
+    await sleepMs(Infinity); // should not hang
   });
 });
 
