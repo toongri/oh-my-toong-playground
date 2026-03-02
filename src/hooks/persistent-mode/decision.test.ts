@@ -336,7 +336,7 @@ describe('makeDecision', () => {
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<todo-continuation>');
       expect(result.reason).toContain('INCOMPLETE TASKS DETECTED - 5 remaining');
-      expect(result.reason).toContain('Check your todo list with TaskList');
+      expect(result.reason).toContain('Review your remaining tasks');
     });
 
     it('should create attempt files when blocking for baseline todos', async () => {
