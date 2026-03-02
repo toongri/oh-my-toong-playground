@@ -15,6 +15,10 @@ function toNonBreakingSpaces(text: string): string {
   return text.replace(/ /g, '\u00A0');
 }
 
+function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfilledResult<T> {
+  return result.status === 'fulfilled';
+}
+
 export async function main(): Promise<void> {
   try {
     // Read stdin JSON from Claude Code
@@ -34,16 +38,12 @@ export async function main(): Promise<void> {
     logStart();
     logInfo(`Input: transcript_path=${input.transcript_path}, cwd=${cwd}`);
 
-    // Gather data from all sources in parallel
-    const [
-      ralph,
-      backgroundTasks,
-      transcriptData,
-      rateLimits,
-      thinkingActive,
-      todos,
-      inProgressTodo,
-    ] = await Promise.all([
+    // Gather data from all sources in parallel (individual failures don't block others)
+    const functionNames = [
+      'readRalphState', 'readBackgroundTasks', 'parseTranscript',
+      'fetchRateLimits', 'isThinkingEnabled', 'readTasks', 'getActiveTaskForm',
+    ];
+    const results = await Promise.allSettled([
       readRalphState(cwd, sessionId),
       readBackgroundTasks(),
       input.transcript_path
@@ -54,6 +54,24 @@ export async function main(): Promise<void> {
       readTasks(sessionId),
       getActiveTaskForm(sessionId),
     ]);
+
+    // Log rejected results with function names
+    results.forEach((result, index) => {
+      if (!isFulfilled(result)) {
+        logError(`HUD data source failed: ${functionNames[index]} - ${result.reason}`);
+      }
+    });
+
+    // Extract values with type-safe fallbacks for rejected promises
+    const ralph = isFulfilled(results[0]) ? results[0].value : null;
+    const backgroundTasks = isFulfilled(results[1]) ? results[1].value : 0;
+    const transcriptData = isFulfilled(results[2])
+      ? results[2].value
+      : { runningAgents: 0, activeSkill: null, agents: [], sessionStartedAt: null };
+    const rateLimits = isFulfilled(results[3]) ? results[3].value : null;
+    const thinkingActive = isFulfilled(results[4]) ? results[4].value : false;
+    const todos = isFulfilled(results[5]) ? results[5].value : null;
+    const inProgressTodo = isFulfilled(results[6]) ? results[6].value : null;
 
     // Log transcript parsing results
     logInfo(`Transcript parsed: runningAgents=${transcriptData.runningAgents}`);
