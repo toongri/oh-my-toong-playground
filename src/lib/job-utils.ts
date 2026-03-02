@@ -75,15 +75,13 @@ export function readJsonIfExists(filePath: string): unknown {
 }
 
 // ---------------------------------------------------------------------------
-// Timing (synchronous — blocks the thread via SharedArrayBuffer)
+// Timing (async — non-blocking setTimeout)
 // ---------------------------------------------------------------------------
 
-export function sleepMs(ms: number): void {
+export function sleepMs(ms: number): Promise<void> {
   const msNum = Number(ms);
-  if (!Number.isFinite(msNum) || msNum <= 0) return;
-  const sab = new SharedArrayBuffer(4);
-  const view = new Int32Array(sab);
-  Atomics.wait(view, 0, 0, Math.trunc(msNum));
+  if (!Number.isFinite(msNum) || msNum <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, Math.trunc(msNum)));
 }
 
 // ---------------------------------------------------------------------------

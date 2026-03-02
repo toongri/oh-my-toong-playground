@@ -573,80 +573,80 @@ describe('computeStatus', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('returns done overallState when all reviewers are terminal', () => {
+  test('returns done overallState when all reviewers are terminal', async () => {
     const jobDir = path.join(tmpDir, 'job1');
     setupJob(jobDir, { id: 'test-1' }, {
       alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
       bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
     expect(result.counts.total).toBe(2);
     expect(result.counts.done).toBe(2);
     expect(result.counts.running).toBe(0);
   });
 
-  test('returns running overallState when some reviewers are running', () => {
+  test('returns running overallState when some reviewers are running', async () => {
     const jobDir = path.join(tmpDir, 'job2');
     setupJob(jobDir, { id: 'test-2' }, {
       alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
       bob: { reviewer: 'bob', state: 'running' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
     expect(result.counts.running).toBe(1);
     expect(result.counts.done).toBe(1);
   });
 
-  test('returns queued overallState when only queued (no running)', () => {
+  test('returns queued overallState when only queued (no running)', async () => {
     const jobDir = path.join(tmpDir, 'job3');
     setupJob(jobDir, { id: 'test-3' }, {
       alice: { reviewer: 'alice', state: 'queued' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('queued');
     expect(result.counts.queued).toBe(1);
   });
 
-  test('counts error states correctly', () => {
+  test('counts error states correctly', async () => {
     const jobDir = path.join(tmpDir, 'job4');
     setupJob(jobDir, { id: 'test-4' }, {
       alice: { reviewer: 'alice', state: 'error', exitCode: 1 },
       bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
       carol: { reviewer: 'carol', state: 'missing_cli' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
     expect(result.counts.error).toBe(1);
     expect(result.counts.missing_cli).toBe(1);
     expect(result.counts.done).toBe(1);
   });
 
-  test('skips reviewer directories without status.json', () => {
+  test('skips reviewer directories without status.json', async () => {
     const jobDir = path.join(tmpDir, 'job7');
     setupJob(jobDir, { id: 'test-7' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
     fs.mkdirSync(path.join(jobDir, 'reviewers', 'bob'));
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.counts.total).toBe(1);
     expect(result.reviewers.length).toBe(1);
   });
 
-  test('sorts reviewers alphabetically by name', () => {
+  test('sorts reviewers alphabetically by name', async () => {
     const jobDir = path.join(tmpDir, 'job8');
     setupJob(jobDir, { id: 'test-8' }, {
       carol: { reviewer: 'carol', state: 'done' },
       alice: { reviewer: 'alice', state: 'done' },
       bob: { reviewer: 'bob', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.reviewers[0].reviewer).toBe('alice');
     expect(result.reviewers[1].reviewer).toBe('bob');
     expect(result.reviewers[2].reviewer).toBe('carol');
   });
 
-  test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', () => {
+  test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', async () => {
     const jobDir = path.join(tmpDir, 'job9');
     setupJob(jobDir, { id: 'test-9' }, {
       alice: {
@@ -658,57 +658,57 @@ describe('computeStatus', () => {
         message: 'success',
       },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.reviewers[0].startedAt).toBe('2026-01-01T00:00:00Z');
     expect(result.reviewers[0].finishedAt).toBe('2026-01-01T00:01:00Z');
     expect(result.reviewers[0].exitCode).toBe(0);
     expect(result.reviewers[0].message).toBe('success');
   });
 
-  test('returns null for missing reviewer metadata fields', () => {
+  test('returns null for missing reviewer metadata fields', async () => {
     const jobDir = path.join(tmpDir, 'job10');
     setupJob(jobDir, { id: 'test-10' }, {
       alice: { reviewer: 'alice', state: 'running' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.reviewers[0].startedAt).toBe(null);
     expect(result.reviewers[0].finishedAt).toBe(null);
     expect(result.reviewers[0].exitCode).toBe(null);
     expect(result.reviewers[0].message).toBe(null);
   });
 
-  test('includes jobDir and id in result', () => {
+  test('includes jobDir and id in result', async () => {
     const jobDir = path.join(tmpDir, 'job11');
     setupJob(jobDir, { id: 'test-11' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.id).toBe('test-11');
     expect(result.jobDir.endsWith('job11')).toBeTruthy();
   });
 
-  test('includes chairmanRole from job.json', () => {
+  test('includes chairmanRole from job.json', async () => {
     const jobDir = path.join(tmpDir, 'job12');
     setupJob(jobDir, { id: 'test-12', chairmanRole: 'claude' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.chairmanRole).toBe('claude');
   });
 
-  test('treats retrying reviewer as non-terminal (running)', () => {
+  test('treats retrying reviewer as non-terminal (running)', async () => {
     const jobDir = path.join(tmpDir, 'job13');
     setupJob(jobDir, { id: 'test-13' }, {
       alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
       bob: { reviewer: 'bob', state: 'retrying' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
     expect(result.counts.retrying).toBe(1);
     expect(result.counts.done).toBe(1);
   });
 
-  test('transitions stale queued reviewer to error when queuedAt exceeds threshold', () => {
+  test('transitions stale queued reviewer to error when queuedAt exceeds threshold', async () => {
     const jobDir = path.join(tmpDir, 'job-stale');
     const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-stale', settings: { timeoutSec: 30 } }, {
@@ -716,39 +716,39 @@ describe('computeStatus', () => {
       bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
     });
     // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     expect(alice.state).toBe('error');
     expect(result.counts.error).toBe(1);
     expect(result.counts.queued).toBe(0);
   });
 
-  test('does not transition queued reviewer that is within staleness threshold', () => {
+  test('does not transition queued reviewer that is within staleness threshold', async () => {
     const jobDir = path.join(tmpDir, 'job-fresh');
     const freshTime = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-fresh', settings: { timeoutSec: 30 } }, {
       alice: { reviewer: 'alice', state: 'queued', queuedAt: freshTime },
     });
     // threshold = Math.max(2 * 30, 120) = 120s; 10s < 120s → not stale
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     expect(alice.state).toBe('queued');
     expect(result.counts.queued).toBe(1);
   });
 
-  test('uses 120s minimum threshold when timeoutSec is 0', () => {
+  test('uses 120s minimum threshold when timeoutSec is 0', async () => {
     const jobDir = path.join(tmpDir, 'job-zero-timeout');
     const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-zero', settings: { timeoutSec: 0 } }, {
       alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
     });
     // threshold = Math.max(2 * 0, 120) = 120s; 200s > 120s → stale
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     expect(alice.state).toBe('error');
   });
 
-  test('uses file mtime as fallback when queuedAt is missing', () => {
+  test('uses file mtime as fallback when queuedAt is missing', async () => {
     const jobDir = path.join(tmpDir, 'job-no-queued-at');
     setupJob(jobDir, { id: 'test-mtime', settings: { timeoutSec: 30 } }, {
       alice: { reviewer: 'alice', state: 'queued' },
@@ -758,18 +758,18 @@ describe('computeStatus', () => {
     const oldTime = new Date(Date.now() - 200_000);
     fs.utimesSync(statusPath, oldTime, oldTime);
     // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     expect(alice.state).toBe('error');
   });
 
-  test('writes error details to status.json on staleness transition', () => {
+  test('writes error details to status.json on staleness transition', async () => {
     const jobDir = path.join(tmpDir, 'job-stale-write');
     const staleTime = new Date(Date.now() - 200_000).toISOString();
     setupJob(jobDir, { id: 'test-write', settings: { timeoutSec: 30 } }, {
       alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
     });
-    computeStatus(jobDir);
+    await computeStatus(jobDir);
     const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
     const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
     expect(written.state).toBe('error');
@@ -778,21 +778,21 @@ describe('computeStatus', () => {
 
   // ---- Running worker staleness ----
 
-  test('preserves normal running worker within threshold', () => {
+  test('preserves normal running worker within threshold', async () => {
     const jobDir = path.join(tmpDir, 'job-run-fresh');
     const recentStart = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-run-fresh', settings: { timeoutSec: 60 } }, {
       alice: { reviewer: 'alice', state: 'running', startedAt: recentStart },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 10s < 120s → not stale
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     expect(alice.state).toBe('running');
     expect(result.counts.running).toBe(1);
     expect(result.counts.error).toBe(0);
   });
 
-  test('transitions stale running worker to error when startedAt exceeds threshold', () => {
+  test('transitions stale running worker to error when startedAt exceeds threshold', async () => {
     const jobDir = path.join(tmpDir, 'job-run-stale');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-stale', settings: { timeoutSec: 60 } }, {
@@ -800,14 +800,14 @@ describe('computeStatus', () => {
       bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     expect(alice.state).toBe('error');
     expect(result.counts.error).toBe(1);
     expect(result.counts.running).toBe(0);
   });
 
-  test('CAS guard: does not transition if running worker changed state during re-read', () => {
+  test('CAS guard: does not transition if running worker changed state during re-read', async () => {
     const jobDir = path.join(tmpDir, 'job-run-cas');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-cas', settings: { timeoutSec: 60 } }, {
@@ -820,21 +820,21 @@ describe('computeStatus', () => {
     const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
     const donePayload = JSON.stringify({ reviewer: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
     Bun.spawn(['bash', '-c', `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     const alice = result.reviewers.find(r => r.reviewer === 'alice');
     // CAS re-read sees 'done' → preserves 'done', does NOT overwrite with error
     expect(alice.state).toBe('done');
     expect(result.counts.error).toBe(0);
   });
 
-  test('writes error details to status.json on running staleness transition', () => {
+  test('writes error details to status.json on running staleness transition', async () => {
     const jobDir = path.join(tmpDir, 'job-run-stale-write');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-stale-write', settings: { timeoutSec: 60 } }, {
       alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
-    computeStatus(jobDir);
+    await computeStatus(jobDir);
     const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
     const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
     expect(written.state).toBe('error');

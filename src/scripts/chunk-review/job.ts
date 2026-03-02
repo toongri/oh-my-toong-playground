@@ -213,7 +213,7 @@ function spawnWorkers({ reviewers, workerPath, jobDir, reviewersDir, timeoutSec 
 // Status computation
 // ---------------------------------------------------------------------------
 
-function computeStatus(jobDir) {
+async function computeStatus(jobDir) {
   const resolvedJobDir = path.resolve(jobDir);
   if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
 
@@ -247,7 +247,7 @@ function computeStatus(jobDir) {
       const elapsed = Date.now() - queuedTs;
       if (elapsed > stalenessThresholdMs) {
         // CAS pattern: sleep then re-read to avoid race with worker startup
-        sleepMs(250);
+        await sleepMs(250);
         const recheck = readJsonIfExists(statusPath);
         if (recheck && recheck.state === 'queued') {
           const errorPayload = {
@@ -270,7 +270,7 @@ function computeStatus(jobDir) {
       const runningThresholdMs = (timeoutSec + 60) * 1000;
       if (runningElapsed > runningThresholdMs) {
         // CAS pattern: sleep then re-read to avoid race with legitimate completion
-        sleepMs(250);
+        await sleepMs(250);
         const recheck = readJsonIfExists(statusPath);
         if (recheck && recheck.state === 'running') {
           const errorPayload = {
@@ -438,10 +438,10 @@ function initLoggerFromJobDir(jobDir: string): void {
 // Command implementations
 // ---------------------------------------------------------------------------
 
-function cmdStatus(options, jobDir) {
+async function cmdStatus(options, jobDir) {
   initLoggerFromJobDir(jobDir);
   logInfo(`status: ${path.resolve(jobDir)}`);
-  const payload = computeStatus(jobDir);
+  const payload = await computeStatus(jobDir);
 
   const wantChecklist = Boolean(options.checklist) && !options.json;
   if (wantChecklist) {
@@ -482,7 +482,7 @@ function cmdStatus(options, jobDir) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-function cmdWait(options, jobDir) {
+async function cmdWait(options, jobDir) {
   initLoggerFromJobDir(jobDir);
   logInfo(`wait: ${path.resolve(jobDir)}`);
   const resolvedJobDir = path.resolve(jobDir);
@@ -503,7 +503,7 @@ function cmdWait(options, jobDir) {
   const timeoutMs = Math.trunc(Number(timeoutMsRaw));
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
 
-  let payload = computeStatus(jobDir);
+  let payload = await computeStatus(jobDir);
   const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
 
   const doneCount = computeTerminalDoneCount(payload.counts);
@@ -523,8 +523,8 @@ function cmdWait(options, jobDir) {
   const start = Date.now();
   while (cursor === prevCursorRaw) {
     if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
-    sleepMs(intervalMs);
-    payload = computeStatus(jobDir);
+    await sleepMs(intervalMs);
+    payload = await computeStatus(jobDir);
     const d = computeTerminalDoneCount(payload.counts);
     const doneFlag = payload.overallState === 'done';
     const totalCount = Number(payload.counts.total || 0);
@@ -539,7 +539,7 @@ function cmdWait(options, jobDir) {
     }
   }
 
-  const finalPayload = computeStatus(jobDir);
+  const finalPayload = await computeStatus(jobDir);
   const finalDone = computeTerminalDoneCount(finalPayload.counts);
   const finalDoneFlag = finalPayload.overallState === 'done';
   const finalTotal = Number(finalPayload.counts.total || 0);
@@ -655,7 +655,7 @@ function cmdResults(options, jobDir) {
 const COLLECT_POLL_INTERVAL_MS = 5000;
 const COLLECT_TIMEOUT_HARDCAP_MS = 300000;
 
-function cmdCollect(options, jobDir) {
+async function cmdCollect(options, jobDir) {
   initLoggerFromJobDir(jobDir);
   logInfo(`collect: ${path.resolve(jobDir)}`);
 
@@ -667,7 +667,7 @@ function cmdCollect(options, jobDir) {
 
   const start = Date.now();
   while (true) {
-    const status = computeStatus(jobDir);
+    const status = await computeStatus(jobDir);
     if (status.overallState === 'done') {
       const manifest = buildManifest(jobDir);
       process.stdout.write(
@@ -681,7 +681,7 @@ function cmdCollect(options, jobDir) {
       );
       return;
     }
-    sleepMs(COLLECT_POLL_INTERVAL_MS);
+    await sleepMs(COLLECT_POLL_INTERVAL_MS);
   }
 }
 
@@ -1027,19 +1027,19 @@ async function main() {
   if (command === 'status') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('status: missing jobDir');
-    cmdStatus(options, jobDir);
+    await cmdStatus(options, jobDir);
     return;
   }
   if (command === 'wait') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('wait: missing jobDir');
-    cmdWait(options, jobDir);
+    await cmdWait(options, jobDir);
     return;
   }
   if (command === 'collect') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('collect: missing jobDir');
-    cmdCollect(options, jobDir);
+    await cmdCollect(options, jobDir);
     return;
   }
   if (command === 'results') {
