@@ -26,7 +26,7 @@ export function detectCompletionPromise(transcriptPath: string | null, startedAt
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let entry: { timestamp?: string };
+    let entry: { timestamp?: string; type?: string };
     try {
       entry = JSON.parse(trimmed);
     } catch {
@@ -35,6 +35,9 @@ export function detectCompletionPromise(transcriptPath: string | null, startedAt
 
     // Skip lines without timestamp or before started_at
     if (!entry.timestamp || entry.timestamp < startedAt) continue;
+
+    // Only check assistant messages (skip system/user to avoid false positives)
+    if (entry.type !== 'assistant') continue;
 
     if (PROMISE_PATTERN.test(trimmed)) {
       logDebug('detected completion promise <promise>DONE</promise> (after started_at)');
@@ -65,7 +68,7 @@ export function detectOracleApproval(transcriptPath: string | null, startedAt?: 
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let entry: { timestamp?: string };
+    let entry: { timestamp?: string; type?: string };
     try {
       entry = JSON.parse(trimmed);
     } catch {
@@ -74,6 +77,9 @@ export function detectOracleApproval(transcriptPath: string | null, startedAt?: 
 
     // Skip lines without timestamp or before started_at
     if (!entry.timestamp || entry.timestamp < startedAt) continue;
+
+    // Only check assistant messages (skip system/user to avoid false positives)
+    if (entry.type !== 'assistant') continue;
 
     if (ORACLE_APPROVED_PATTERN.test(trimmed)) {
       logDebug('detected oracle approval <oracle-approved>VERIFIED_COMPLETE</oracle-approved> (after started_at)');
