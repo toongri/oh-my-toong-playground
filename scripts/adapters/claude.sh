@@ -681,10 +681,27 @@ claude_set_statusline() {
         return 0
     fi
 
-    local current=$(cat "$settings_file")
-    local statusline_json=$(jq -n --arg cmd "$command" '{"statusLine": {"type": "command", "command": $cmd}}')
-    local merged=$(echo "$current" | jq --argjson sl "$statusline_json" '. * $sl')
-    echo "$merged" | jq '.' > "$settings_file"
+    local current
+    current=$(cat "$settings_file") || { log_warn "settings.json 읽기 실패: $settings_file"; return 1; }
+
+    local statusline_json
+    statusline_json=$(jq -n --arg cmd "$command" '{"statusLine": {"type": "command", "command": $cmd}}')
+
+    local merged
+    if ! merged=$(echo "$current" | jq --argjson sl "$statusline_json" '. * $sl'); then
+        log_warn "statusLine JSON merge 실패: $settings_file"
+        return 1
+    fi
+
+    local tmp_file
+    tmp_file=$(mktemp "${settings_file}.XXXXXX")
+    if echo "$merged" | jq '.' > "$tmp_file" && [[ -s "$tmp_file" ]]; then
+        mv "$tmp_file" "$settings_file"
+    else
+        rm -f "$tmp_file"
+        log_warn "statusLine 쓰기 실패: $settings_file"
+        return 1
+    fi
     log_info "statusLine 설정 완료: $settings_file"
 }
 
