@@ -131,13 +131,24 @@ describe('main entry point', () => {
         configurable: true,
       });
 
-      await main();
+      // Isolate from real environment:
+      // - HOME → testDir so readTasksFromDirectory reads from empty dir
+      // - cwd → projectRoot so getProjectRoot finds no ralph state
+      const savedHome = process.env.HOME;
+      process.env.HOME = testDir;
+      process.cwd = () => projectRoot;
+      try {
+        await main();
 
-      // Should output continue: true even on error
-      expect(capturedOutput.length).toBeGreaterThan(0);
-      const lastOutput = capturedOutput[capturedOutput.length - 1];
-      const output = JSON.parse(lastOutput);
-      expect(output.continue).toBe(true);
+        // Should output continue: true even on error
+        expect(capturedOutput.length).toBeGreaterThan(0);
+        const lastOutput = capturedOutput[capturedOutput.length - 1];
+        const output = JSON.parse(lastOutput);
+        expect(output.continue).toBe(true);
+      } finally {
+        process.env.HOME = savedHome;
+        process.cwd = originalCwd;
+      }
     });
 
     it('should fail open when cwd directory does not exist', async () => {

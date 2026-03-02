@@ -121,7 +121,7 @@ function buildTodoContinuationMessage(incompleteCount: number): string {
 Your task list still has incomplete items. Please review and complete them.
 
 INSTRUCTIONS:
-1. Check your todo list with TaskList
+1. Review your remaining tasks
 2. Complete remaining tasks
 3. Mark each task as completed when done
 
