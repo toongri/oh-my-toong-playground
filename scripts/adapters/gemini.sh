@@ -345,7 +345,7 @@ gemini_sync_hooks_direct() {
             log_dry "Copy (directory): $source_path -> $target_dir/${display_name}/"
         else
             mkdir -p "$target_dir/${display_name}"
-            rsync -a --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
+            rsync -a --delete --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
             log_info "Copied: ${display_name}/"
         fi
     elif [[ -f "$source_path" ]]; then
@@ -401,7 +401,7 @@ gemini_sync_scripts_direct() {
             log_dry "Copy (directory): $source_path -> $target_dir/${display_name}/"
         else
             mkdir -p "$target_dir/${display_name}"
-            rsync -a --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
+            rsync -a --delete --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
             log_info "Copied: ${display_name}/"
         fi
     elif [[ -f "$source_path" ]]; then
