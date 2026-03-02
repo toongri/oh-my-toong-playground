@@ -363,8 +363,86 @@ describe('main', () => {
 
       await main();
 
-      // Should still output something
-      expect(consoleLogSpy).toHaveBeenCalled();
+      // Promise.allSettled: individual failure falls back to default, formatStatusLineV2 still called
+      expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
+        expect.objectContaining({ ralph: null })
+      );
+      expect(mockFormatMinimalStatus).not.toHaveBeenCalled();
+    });
+
+    it('partially degrades when individual data source fails', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      mockReadRalphState.mockRejectedValue(new Error('File not found'));
+
+      await main();
+
+      // ralph falls back to null; other fields use beforeEach defaults
+      expect(mockFormatStatusLineV2).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ralph: null,
+          backgroundTasks: 0,
+          runningAgents: 0,
+          rateLimits: null,
+          thinkingActive: false,
+          todos: null,
+          inProgressTodo: null,
+        })
+      );
+      expect(mockFormatMinimalStatus).not.toHaveBeenCalled();
+    });
+
+    it('logs error with function name when data source rejects', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      mockReadRalphState.mockRejectedValue(new Error('File not found'));
+
+      await main();
+
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('readRalphState'));
+    });
+
+    it('degrades gracefully when multiple data sources fail', async () => {
+      mockReadStdin.mockResolvedValue({
+        hook_event_name: 'Status',
+        session_id: 'test-session',
+        transcript_path: '/path/to/transcript.jsonl',
+        cwd: '/test/cwd',
+        context_window: {
+          used_percentage: 50,
+          total_input_tokens: 10000,
+          context_window_size: 200000,
+        },
+      });
+      mockReadRalphState.mockRejectedValue(new Error('ralph error'));
+      mockReadTasks.mockRejectedValue(new Error('tasks error'));
+      mockFetchRateLimits.mockRejectedValue(new Error('rate limit error'));
+
+      await main();
+
+      // formatStatusLineV2 still called (not formatMinimalStatus)
+      expect(mockFormatStatusLineV2).toHaveBeenCalled();
+      expect(mockFormatMinimalStatus).not.toHaveBeenCalled();
+      // Each failure logged individually
+      expect(mockLogError).toHaveBeenCalledTimes(3);
     });
   });
 
