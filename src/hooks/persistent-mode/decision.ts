@@ -99,12 +99,11 @@ function buildNoDoneMessage(
 
 [RALPH LOOP - ITERATION ${iteration}/${maxIterations}]
 
-DONE not detected. You have not yet signaled task completion.
+The loop continues. You have not yet signaled that you are truly done.
 
-CRITICAL INSTRUCTIONS:
-1. Review the original task below and check your progress
-2. Complete any remaining work
-3. When finished, output: <promise>${promise}</promise>
+- Make meaningful progress toward the goal each iteration
+- If stuck, try different approaches rather than repeating what failed
+- When ALL work is complete, output: <promise>${promise}</promise>
 
 Original task: ${truncatedPrompt}
 
