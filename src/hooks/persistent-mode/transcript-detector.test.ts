@@ -115,6 +115,28 @@ describe('transcript-detector', () => {
 
       expect(result).toBe(true);
     });
+
+    it('system 타입 entry의 DONE 패턴은 무시 (false positive 방지)', async () => {
+      const lines = [
+        JSON.stringify({ type: 'system', timestamp: '2024-01-15T11:00:00.000Z', message: { content: 'skill 정의: <promise>DONE</promise> 예시' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectCompletionPromise(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(false);
+    });
+
+    it('user 타입 entry의 DONE 패턴은 무시 (false positive 방지)', async () => {
+      const lines = [
+        JSON.stringify({ type: 'user', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<promise>DONE</promise>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectCompletionPromise(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(false);
+    });
   });
 
   describe('detectOracleApproval', () => {
@@ -204,6 +226,28 @@ describe('transcript-detector', () => {
       const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
 
       expect(result).toBe(true);
+    });
+
+    it('system 타입 entry의 oracle 패턴은 무시 (false positive 방지)', async () => {
+      const lines = [
+        JSON.stringify({ type: 'system', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(false);
+    });
+
+    it('user 타입 entry의 oracle 패턴은 무시 (false positive 방지)', async () => {
+      const lines = [
+        JSON.stringify({ type: 'user', timestamp: '2024-01-15T11:00:00.000Z', message: { content: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
+
+      expect(result).toBe(false);
     });
   });
 
