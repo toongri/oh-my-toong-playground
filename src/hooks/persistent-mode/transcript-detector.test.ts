@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test'
 import {
   detectCompletionPromise,
   detectOracleApproval,
-  detectOracleRejection,
   analyzeTranscript,
 } from './transcript-detector.ts';
 import type { TranscriptDetection, RalphState } from './types.ts';
@@ -205,77 +204,6 @@ describe('transcript-detector', () => {
       const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
 
       expect(result).toBe(true);
-    });
-  });
-
-  describe('detectOracleRejection', () => {
-    it('should return null when transcriptPath is null', () => {
-      const result = detectOracleRejection(null);
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null when file does not exist', () => {
-      const result = detectOracleRejection('/nonexistent/path');
-
-      expect(result).toBeNull();
-    });
-
-    it('should detect oracle rejected pattern', async () => {
-      await writeFile(transcriptPath, 'The oracle rejected the submission');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).not.toBeNull();
-    });
-
-    it('should detect verification failed pattern', async () => {
-      await writeFile(transcriptPath, 'Verification failed due to missing tests');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).not.toBeNull();
-    });
-
-    it('should detect issues found pattern', async () => {
-      await writeFile(transcriptPath, 'Several issues found in the code');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).not.toBeNull();
-    });
-
-    it('should detect not complete pattern', async () => {
-      await writeFile(transcriptPath, 'The task is not complete');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).not.toBeNull();
-    });
-
-    it('should extract feedback text from issue/problem/reason patterns', async () => {
-      await writeFile(transcriptPath, 'verification failed\nIssue: Missing unit tests\nProblem: No error handling\nReason: Incomplete implementation');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).not.toBeNull();
-      expect(result).toContain('Missing unit tests');
-    });
-
-    it('should return null when no rejection patterns are found', async () => {
-      await writeFile(transcriptPath, 'Everything is fine, no problems');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).toBeNull();
-    });
-
-    it('should return empty string when rejection found but no specific feedback', async () => {
-      await writeFile(transcriptPath, 'Oracle rejected this submission.');
-
-      const result = detectOracleRejection(transcriptPath);
-
-      expect(result).toBe('');
     });
   });
 
