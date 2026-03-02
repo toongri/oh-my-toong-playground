@@ -68,7 +68,7 @@ describe('makeDecision', () => {
       // Branch 5: no transcript = no DONE detected → block
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).toContain('DONE not detected');
+      expect(result.reason).toContain('truly done');
     });
 
     it('should increment iteration when DONE not detected (branch 5)', async () => {
@@ -598,7 +598,7 @@ describe('makeDecision', () => {
       // Branch 5: no DONE → block with continuation
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<ralph-loop-continuation>');
-      expect(result.reason).toContain('DONE not detected');
+      expect(result.reason).toContain('truly done');
 
       // State should still exist
       const { existsSync } = await import('fs');
@@ -627,7 +627,9 @@ describe('makeDecision', () => {
       expect(result.decision).toBe('block');
       expect(result.reason).toContain('<ralph-loop-continuation>');
       expect(result.reason).toContain('ITERATION 5/10');
-      expect(result.reason).toContain('DONE not detected');
+      expect(result.reason).toContain('truly done');
+      expect(result.reason).toContain('meaningful progress');
+      expect(result.reason).toContain('different approaches');
       expect(result.reason).toContain('<promise>DONE</promise>');
       expect(result.reason).toContain('Original task: Test task');
 
