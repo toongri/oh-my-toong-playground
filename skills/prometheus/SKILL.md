@@ -724,9 +724,9 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | Section | Contents |
 |---------|----------|
 | **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
-| **Context** | Interview summary (key decisions from extended interview — the WHY behind each TODO) |
+| **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
-| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
+| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
 | **Final Verification Wave** | Post-TODO plan-level verification. F1 (Plan Compliance Audit), F2 (Code Quality Review), F3 (Full QA Re-execution), F4 (Scope Fidelity Check) — all run in parallel after the last execution wave completes. Required for Scoped+ intent, optional for Trivial |
@@ -735,7 +735,19 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 **TODO Task Format:**
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
-- Include file/pattern references -- executor has NO interview context
+- **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths with action (create/update/delete).
+- **References (CRITICAL)** -- executor has NO interview context. Provide the context they need:
+  - **Pattern References**: `file:line-range` — existing code patterns to follow.
+    WHY explains what pattern to adopt.
+  - **API/Type References**: types, interfaces, APIs to use.
+    WHY explains why this type/API matters.
+  - **Test References**: existing test patterns to match.
+    WHY explains what test style to follow.
+  - **External References**: official docs, library specs, RFCs.
+    WHY explains what decision this informs.
+  - Each reference: `path-or-url — description` on first line, `WHY: explanation` on next line.
+  - Files vs References: Files = what this TODO creates/modifies (deliverables). References = what existing files/resources to consult (context). Both coexist — References does NOT replace Files.
+  - Per-category: include when the category has relevant existing artifacts; skip when no applicable artifact exists. Not all 4 categories need to be filled. Soft limit: 1-3 references per category.
 - 3-6 tasks is the total plan task count (not 30 micro-steps, not 1 vague step); Wave is the execution ordering within that count
 - **Parallelization** -- every TODO must include:
   - `Blocked By`: list of TODO numbers this task depends on (empty if none)
@@ -792,7 +804,21 @@ Smell-action table — common signs a TODO is not atomic:
 Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `.omt/evidence/{plan-name}/` so that downstream verification agents (argus) can audit results independently.
 
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
-  - Each scenario has 4 fields: **Tool** / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
+  - Each scenario uses a structured block format with 7 fields:
+    - **Scenario**: `{Name} — {Purpose}` (e.g., "Happy path — requests under limit")
+    - **Tool**: CLI command (see reference table below)
+    - **Preconditions**: Setup state required before execution
+    - **Steps**: Numbered list of exact commands/actions
+    - **Expected**: Observable outcome on success
+    - **Failure**: Specific failure symptoms — NOT the negation of Expected, but concrete observable indicators
+    - **Evidence**: Per-scenario path following Evidence Convention below
+  - **Failure field guideline**:
+    | WRONG | RIGHT |
+    |-------|-------|
+    | "Expected does not happen" | "Returns 500 with stack trace in response body" |
+    | "Test fails" | "Process exits with code 1 and prints 'Config not found'" |
+    | "No output" | "Response missing X-RateLimit-Remaining header" |
+    The Failure field describes the specific observable symptoms of failure, not the absence of success.
   - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
     Reference examples by project type:
     | Project Type | Tool Example |
@@ -812,7 +838,7 @@ Every QA scenario must be executable by an agent without human involvement. Veri
     | "Concurrency stress test" | Test category, not executable | `bash` |
     | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
-  - Non-code TODOs (docs, config) may use simplified format: Preconditions + Expected only
+  - Non-code TODOs (docs, config) may use simplified block format: Scenario Name + Preconditions + Expected + Failure (Tool/Steps/Evidence optional)
   - **Evidence Convention**: Each QA scenario execution MUST save its output as an evidence artifact. Evidence path format:
     ```
     .omt/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}
