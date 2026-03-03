@@ -1,6 +1,6 @@
-# Application Scenarios for Argus
+# Application Scenarios for Argus QA
 
-Argus의 핵심 기법(Three-Stage Review, Spec Compliance, Scope Boundary)을 파일 읽기 기반 검증으로 테스트하는 Application 시나리오.
+Argus QA의 핵심 기법(Composable Verification Layers, Spec Compliance, Scope Boundary)을 파일 읽기 기반 검증으로 테스트하는 Application 시나리오.
 
 ## 변경 배경
 
@@ -8,7 +8,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 1. **누적 diff**: `git diff main`이 이전 커밋의 변경까지 포함
 2. **병렬 오염**: 여러 Junior가 동시 작업 시 git diff가 모든 Junior의 변경을 섞어서 표시
 
-해결: Sisyphus가 전달하는 **Changed files 목록 + 6-Section prompt**를 Single Source of Truth로 삼고, 파일을 직접 읽어서 검증.
+해결: Sisyphus가 전달하는 **Changed files 목록 + QA REQUEST**를 Single Source of Truth로 삼고, 파일을 직접 읽어서 검증.
 
 ---
 
@@ -28,6 +28,11 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-10 | CLI command → interactive_bash | Applicability detection (CLI) | CLI 신호 인식 + bash 시도 |
 | A-11 | API + Frontend → 복합 검증 | Multi-type handling | 복합 변경 각각 독립 검증 |
 | A-12 | Server start 실패 → REQUEST_CHANGES | Lifecycle failure | 서버 기동 실패 처리 |
+| A-13 | Plan verification | Plan file reading + AC extraction | 계획 전체 검증 |
+| A-14 | Instruction verification | Instruction element matching | 지시 이행 검증 |
+| A-15 | Composable layer activation | Layer selection logic | 레이어 조합 결정 |
+| A-16 | Self-discovery | Command discovery protocol | 검증 방법 자동 발견 |
+| A-17 | Mixed request | Plan + code combined | 복합 요청 처리 |
 
 > **Note:** Confidence Scoring, Rich Feedback Protocol, YAGNI Detection, Verdict Classification, Output Format 등 기존 기법 테스트(이전 A-5~A-10)는 2026-02-10에 전부 GREEN PASS 확인됨. 해당 기법들은 이번 변경에 영향받지 않으므로 이 파일에서 제외. 기법 자체가 변경될 경우 별도 시나리오 추가 필요.
 
@@ -37,7 +42,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 auth/login.ts에 JWT validation을 추가하라는 task를 완료함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add JWT validation to login endpoint
 - EXPECTED OUTCOME: Files to modify: [auth/login.ts]. JWT token validation logic added.
 - REQUIRED TOOLS: Serena find_symbol (auth/login.ts의 login 함수 탐색)
@@ -45,7 +50,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT modify auth/middleware.ts
 - CONTEXT: Existing auth flow in auth/login.ts
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: auth/login.ts
 - Junior's summary: "Added JWT validation using jsonwebtoken library in login endpoint"
 
@@ -62,7 +67,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 user-service.ts에서 userId에 대한 null check를 추가하라는 task를 완료함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add null check for userId parameter
 - EXPECTED OUTCOME: Files to modify: [service/user-service.ts]. Null check added before DB query.
 - REQUIRED TOOLS: Serena find_symbol (user-service.ts의 userId 파라미터 사용 위치 탐색)
@@ -70,7 +75,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT change the DB query logic itself
 - CONTEXT: user-service.ts handles user CRUD operations
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: service/user-service.ts
 - Junior's summary: "Added null check for userId with BadRequestError"
 
@@ -87,7 +92,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 auth/login.ts만 수정하라는 task를 완료함. MUST NOT DO에 auth/config.ts 수정 금지가 있음.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Fix login validation bug
 - EXPECTED OUTCOME: Files to modify: [auth/login.ts]
 - REQUIRED TOOLS: Serena find_symbol (auth/login.ts의 validation 로직 탐색)
@@ -95,7 +100,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT touch auth/config.ts
 - CONTEXT: Bug report: email validation accepts invalid formats
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: auth/login.ts
 - Junior's summary: "Fixed email regex pattern in login validation"
 
@@ -112,7 +117,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 A.ts, B.ts를 수정함. 동시에 다른 Junior가 C.ts를 수정 중이라 working tree에 C.ts 변경도 존재함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Refactor data access layer
 - EXPECTED OUTCOME: Files to modify: [src/A.ts, src/B.ts]
 - REQUIRED TOOLS: Serena find_symbol (A.ts, B.ts의 query 로직 탐색)
@@ -120,7 +125,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT modify controller files
 - CONTEXT: A.ts and B.ts contain duplicated query logic
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: src/A.ts, src/B.ts
 - Junior's summary: "Extracted shared query method into both files"
 
@@ -137,7 +142,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Sisyphus가 두 Junior를 병렬 실행. Junior A는 auth.ts 수정, Junior B는 payment.ts 수정. Junior A가 먼저 완료되어 Argus 검증 시작. Working tree에는 Junior B의 payment.ts 변경도 존재함.
 
-**6-Section Input (Junior A의 task):**
+**QA REQUEST Spec (Junior A의 task):**
 - TASK: Add rate limiting to auth endpoint
 - EXPECTED OUTCOME: Files to modify: [auth.ts]
 - REQUIRED TOOLS: Serena find_symbol (auth.ts의 endpoint 구조 탐색)
@@ -145,7 +150,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT modify payment routes
 - CONTEXT: Auth endpoint needs rate limiting for security
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: auth.ts
 - Junior's summary: "Added rate limiting middleware to auth endpoint"
 
@@ -163,7 +168,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 types.ts를 수정함. TypeScript `any` 타입 사용 금지 규칙이 있음.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add type definitions for API responses
 - EXPECTED OUTCOME: Files to modify: [types.ts]
 - REQUIRED TOOLS: Serena get_symbols_overview (types.ts의 기존 타입 구조 파악)
@@ -171,7 +176,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT use `any` type anywhere
 - CONTEXT: Project enforces strict TypeScript typing
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: types.ts
 - Junior's summary: "Added typed interfaces for all API response types"
 
@@ -188,7 +193,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 README.md의 오타를 수정함. 기능 변경 없음.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Fix typo in README.md
 - EXPECTED OUTCOME: Files to modify: [README.md]. Typo "authenication" → "authentication" corrected.
 - REQUIRED TOOLS: None (단순 오타 수정)
@@ -196,7 +201,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT change any other content
 - CONTEXT: Typo reported in README
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: README.md
 - Junior's summary: "Fixed typo: authenication → authentication"
 
@@ -213,7 +218,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 user-api.ts에 GET /api/users/:id 엔드포인트를 추가함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add user detail API endpoint
 - EXPECTED OUTCOME: Files to modify: [src/routes/user-api.ts]. GET /api/users/:id returns user object with 200.
 - REQUIRED TOOLS: Serena find_symbol (user-api.ts의 route handler 탐색)
@@ -221,14 +226,14 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT modify existing user list endpoint
 - CONTEXT: User detail endpoint needed for profile page
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: src/routes/user-api.ts
 - Junior's summary: "Added GET /api/users/:id endpoint"
 
 **Expected Behavior:** Stage 3 Applicability에서 "API endpoint" 신호 감지 → curl 검증 선택. 서버 기동 → curl로 200 응답 확인 + 404 케이스 확인 → 서버 종료. Stage 3 출력 포맷에 맞게 결과 기록.
 
 **Verification Points:**
-1. 6-Section의 TASK/EXPECTED OUTCOME에서 API 신호를 감지한다
+1. QA REQUEST Spec의 TASK/EXPECTED OUTCOME에서 API 신호를 감지한다
 2. curl을 사용한 검증을 시도한다
 3. 서버 라이프사이클(start→test→stop)을 따른다
 4. Stage 3 출력 포맷이 stage3-handson.md의 형식과 일치한다
@@ -239,7 +244,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 utils/formatter.ts의 내부 유틸리티 함수를 리팩토링함. 외부 API나 UI 영향 없음.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Refactor date formatting utility
 - EXPECTED OUTCOME: Files to modify: [utils/formatter.ts]. Simplify date formatting logic.
 - REQUIRED TOOLS: Serena find_symbol (formatter.ts의 기존 함수 구조 탐색)
@@ -247,7 +252,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT change return types
 - CONTEXT: Date formatting utility has complex nested logic
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: utils/formatter.ts
 - Junior's summary: "Simplified date formatting logic while keeping signatures"
 
@@ -265,7 +270,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 cli/export.ts에 `--format json` 옵션을 추가함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add JSON format option to export CLI command
 - EXPECTED OUTCOME: Files to modify: [cli/export.ts]. `export --format json` outputs JSON instead of CSV.
 - REQUIRED TOOLS: Serena find_symbol (export.ts의 옵션 파싱 로직 탐색)
@@ -273,7 +278,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT break existing CSV output
 - CONTEXT: Users need JSON export for automation
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: cli/export.ts
 - Junior's summary: "Added --format json option to export command"
 
@@ -291,7 +296,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 API 엔드포인트와 이를 사용하는 프론트엔드 컴포넌트를 함께 추가함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add user profile page with API
 - EXPECTED OUTCOME: Files to modify: [src/api/profile.ts, src/pages/ProfilePage.tsx]. GET /api/profile returns user profile. ProfilePage renders user profile data.
 - REQUIRED TOOLS: Serena find_symbol (profile.ts, ProfilePage.tsx 구조 탐색)
@@ -299,7 +304,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT modify existing navigation
 - CONTEXT: Profile page needed for user dashboard
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: src/api/profile.ts, src/pages/ProfilePage.tsx
 - Junior's summary: "Added profile API and profile page"
 
@@ -317,7 +322,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 **Context:** Junior가 API 엔드포인트를 추가했지만, 서버 기동 시 포트 충돌로 실패함.
 
-**6-Section Input:**
+**QA REQUEST Spec:**
 - TASK: Add health check endpoint
 - EXPECTED OUTCOME: Files to modify: [src/routes/health.ts]. GET /health returns 200 OK.
 - REQUIRED TOOLS: Serena find_symbol (health.ts의 route handler 탐색)
@@ -325,7 +330,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - MUST NOT DO: Do NOT modify server configuration
 - CONTEXT: Health check needed for load balancer
 
-**REVIEW REQUEST:**
+**QA REQUEST Scope:**
 - Changed files: src/routes/health.ts
 - Junior's summary: "Added health check endpoint"
 
@@ -336,6 +341,132 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 2. Stage 4(Code Quality)로 진행하지 않는다
 3. REQUEST_CHANGES 판정을 내린다
 4. 실패 원인을 출력에 포함한다
+
+---
+
+## A-13: Plan Verification — 계획 파일 기반 전체 검증
+
+**Context:** 모든 개별 task가 완료된 후, 전체 계획의 Acceptance Criteria와 QA Scenarios를 검증하는 최종 검증.
+
+**QA REQUEST Spec:**
+- Plan file: `.omt/plans/feature-auth.md`
+- Verify all TODO Acceptance Criteria
+- Execute all QA Scenarios defined in plan
+
+**QA REQUEST Scope:**
+- Changed files: src/auth/login.ts, src/auth/middleware.ts, src/auth/config.ts, tests/auth/login.test.ts
+- Summary: "All 4 tasks completed — JWT auth implementation with login, middleware, config, and tests"
+
+**Expected Behavior:** Argus reads the plan file directly, identifies all TODO ACs and QA Scenarios, executes each scenario, and verifies all ACs are met. Layer F (Completeness Check) activates. Layer A (Automated Verification) also runs.
+
+**Verification Points:**
+1. Argus가 계획 파일을 직접 읽어 TODO별 AC를 추출한다
+2. 계획에 정의된 QA Scenarios를 실행한다 (Layer C)
+3. Layer F에서 모든 요구사항의 완전성을 확인한다
+4. 누락된 요구사항이 있으면 REQUEST_CHANGES를 발행한다
+
+---
+
+## A-14: Instruction Verification — 지시 이행 검증
+
+**Context:** 계획 파일 없이 사용자의 원래 지시사항에 대한 이행 여부를 검증하는 최종 검증.
+
+**QA REQUEST Spec:**
+- Original instructions: "Add user authentication with JWT, rate limiting, and audit logging"
+- Completed tasks:
+  1. JWT auth implementation
+  2. Rate limiting middleware
+  3. Audit logging service
+
+**QA REQUEST Scope:**
+- Changed files: src/auth/jwt.ts, src/middleware/rate-limit.ts, src/services/audit-log.ts, tests/
+- Summary: "All 3 tasks completed per user instructions"
+
+**Expected Behavior:** Argus verifies each instruction element is addressed. Layer F (Completeness Check) activates. Checks that JWT, rate limiting, AND audit logging are all implemented — missing any one triggers REQUEST_CHANGES.
+
+**Verification Points:**
+1. 원래 지시사항의 각 요소를 개별적으로 검증한다
+2. 완료된 task 목록과 지시사항을 대조한다
+3. Layer F에서 지시사항 전체의 이행 완전성을 확인한다
+4. 부분 이행(예: audit logging 누락)이면 REQUEST_CHANGES를 발행한다
+
+---
+
+## A-15: Composable Layer Activation — 레이어 조합 결정
+
+**Context:** QA REQUEST 내용에 따라 올바른 레이어 조합이 활성화되는지 검증.
+
+**Scenario 15a: Task spec + changed files (기본 조합)**
+- QA REQUEST에 task spec과 changed files가 포함
+- Expected layers: A → B → D → E
+- Layer C 미활성 (QA scenarios 미제공)
+- Layer F 미활성 (plan/instruction verification 미요청)
+
+**Scenario 15b: Plan TODO with QA Scenarios (시나리오 기반 조합)**
+- QA REQUEST에 plan TODO의 AC, QA Scenarios, changed files가 포함
+- Expected layers: A → B → C → E
+- Layer D 미활성 (QA scenarios가 제공되어 D 대신 C 활성)
+
+**Scenario 15c: Full plan verification (계획 전체 검증)**
+- QA REQUEST에 plan file path와 전체 검증 요청이 포함
+- Expected layers: A → F → C
+- Layer B 미활성 (개별 spec이 아닌 전체 계획 검증)
+
+**Scenario 15d: AC only, no QA methods (자율 QA)**
+- QA REQUEST에 AC만 제공, QA scenarios 없음, user-facing 변경 있음
+- Expected layers: A → B → D → E
+- Layer D 활성 (scenarios 미제공이므로 자율 hands-on QA)
+
+**Verification Points:**
+1. QA REQUEST 내용을 파싱하여 올바른 레이어를 선택한다
+2. 불필요한 레이어를 활성화하지 않는다
+3. QA Scenarios 유무에 따라 Layer C/D를 올바르게 선택한다
+4. Plan/instruction verification 요청 시 Layer F를 활성화한다
+
+---
+
+## A-16: Self-Discovery — 검증 방법 자동 발견
+
+**Context:** QA REQUEST에 검증 방법이 명시되지 않았을 때, Argus가 프로젝트 파일에서 검증 명령을 자동으로 발견하는지 검증.
+
+**QA REQUEST Spec:**
+- Task: Add user profile endpoint
+- AC: GET /api/profile returns user data
+
+**QA REQUEST Scope:**
+- Changed files: src/routes/profile.ts
+- Summary: "Added profile endpoint"
+
+**Expected Behavior:** Argus가 Self-Discovery Protocol을 따라 `.omt/argus/project-commands.md` → `CLAUDE.md` → `package.json` 순서로 검증 명령을 발견하고 Layer A를 실행한다.
+
+**Verification Points:**
+1. 검증 방법이 명시되지 않았을 때 Self-Discovery Protocol을 따른다
+2. `.omt/argus/project-commands.md` 캐시를 먼저 확인한다
+3. 캐시 미스 시 프로젝트 문서에서 명령을 발견한다
+4. 발견된 명령으로 Layer A를 정상 실행한다
+
+---
+
+## A-17: Mixed Request — 계획 경로 + 코드 변경 복합
+
+**Context:** QA REQUEST에 계획 파일 경로와 코드 변경이 모두 포함된 복합 요청의 처리를 검증.
+
+**QA REQUEST Spec:**
+- Plan file: `.omt/plans/feature-search.md`
+- Verify TODO 3 AC specifically
+- QA Scenarios from plan TODO 3
+
+**QA REQUEST Scope:**
+- Changed files: src/search/indexer.ts, src/search/query.ts, tests/search/
+- Summary: "Search indexer and query implementation complete"
+
+**Expected Behavior:** Argus가 계획 파일에서 TODO 3의 AC와 QA Scenarios를 추출하여 검증하고, 코드 변경에 대해 Layer A와 Layer E도 실행한다. Applied layers: A → B → C → E.
+
+**Verification Points:**
+1. 계획 파일에서 특정 TODO의 AC와 QA Scenarios를 추출한다
+2. 코드 변경이 있으므로 Layer A (Automated)와 Layer E (Code Quality)를 실행한다
+3. QA Scenarios가 제공되므로 Layer C (Layer D 아닌)를 실행한다
+4. 개별 TODO 검증과 코드 품질 검증을 모두 수행한다
 
 ---
 
@@ -363,3 +494,8 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-10 | CLI command → interactive_bash | | | A-8과 동일 패턴 (적용 조건 분기). 미테스트. |
 | A-11 | API + Frontend → 복합 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API+Frontend 양 타입 감지, curl+playwright 독립 검증, 공유 라이프사이클. |
 | A-12 | Server start 실패 → REQUEST_CHANGES | | | 실제 서버 환경 필요. 미테스트. |
+| A-13 | Plan Verification — 계획 파일 기반 전체 검증 | | | |
+| A-14 | Instruction Verification — 지시 이행 검증 | | | |
+| A-15 | Composable Layer Activation — 레이어 조합 결정 | | | |
+| A-16 | Self-Discovery — 검증 방법 자동 발견 | | | |
+| A-17 | Mixed Request — 계획 경로 + 코드 변경 복합 | | | |
