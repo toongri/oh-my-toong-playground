@@ -72,6 +72,11 @@ For each task in the plan:
 2. Find ALL ambiguities (missing info, unclear references)
 3. Check if plan provides resolution for each
 
+**Decomposition Simulation** (apply to plans with multiple TODOs):
+- **Overlap test**: Would implementing TODO X also partially complete TODO Y? If yes → [CERTAIN] MECE violation.
+- **Gap test**: After all TODOs are simulated, is there any AC not addressed? If yes → [CERTAIN] coverage gap.
+- **Atomicity test**: Can each TODO be delegated as a single unit? If you'd need to say "first do A, then do B" within one TODO → [CERTAIN] not atomic.
+
 Unresolved ambiguities → list as blocking gaps in verdict.
 
 **Simulation Guards:**
@@ -121,6 +126,8 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 - ✅ "Task 3 references `auth/login.ts` but the file doesn't exist in the codebase" — verifiable, implementation-blocking
 - ✅ "Task 2 says 'follow existing payment flow' but doesn't specify which method in PaymentService" — missing information, cannot execute
 - ✅ "No acceptance criteria for the error case — executor cannot verify when done" — missing verification, blocks completion
+- ✅ "TODO 2 and TODO 4 both modify authentication middleware's error handling — MECE overlap" — duplicate scope, blocks parallel delegation
+- ✅ "TODO 3 requires modifying 5 unrelated modules across 3 layers — exceeds atomicity threshold" — not single-delegation completable, needs decomposition
 
 ## Four Criteria (All Must Pass)
 
@@ -131,6 +138,7 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 | Acceptance testable | Are acceptance criteria measurable and verifiable? |
 | Constraints explicit | Are constraints (supported scope, error cases, tech stack) explicitly stated? |
 | No ambiguous requirements | Can requirements be answered with "exactly this"? (judge requirements, not implementation approach) |
+| MECE decomposition | Are TODOs mutually exclusive (no overlap) and collectively exhaustive (no gaps)? |
 
 **Plan Scope:** A plan defines WHAT (requirements), WHEN (acceptance criteria), and WHY (business reason). HOW (file structure, function signatures, internal patterns) is at the executor's discretion and is NOT subject to plan evaluation.
 
@@ -158,6 +166,8 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 | WHY explained | Business reason documented? |
 | Task dependencies | Order specified? Parallel or sequential? |
 | Scope boundaries | What's explicitly OUT of scope? |
+| Task atomicity | Is each TODO completable in a single delegation? (complexity moderate, file scope ≤ 3 groups, single-delegation) |
+| Dependency validity | Are Blocked By / Blocks relationships consistent? No circular deps, no phantom deps? |
 
 ## Review Scope Boundaries
 
