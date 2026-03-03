@@ -10,7 +10,7 @@ import { generateAttemptId, ensureDir } from './utils.ts';
 export interface DecisionContext {
   projectRoot: string;
   sessionId: string;
-  transcriptPath: string | null;
+  lastAssistantMessage: string | null;
   incompleteTodoCount: number;
 }
 
@@ -134,7 +134,7 @@ Do NOT stop until all tasks are completed.
 }
 
 export function makeDecision(context: DecisionContext): HookOutput {
-  const { projectRoot, sessionId, transcriptPath, incompleteTodoCount } = context;
+  const { projectRoot, sessionId, lastAssistantMessage, incompleteTodoCount } = context;
   const stateDir = `${projectRoot}/.omt/state`;
   const attemptId = generateAttemptId(sessionId, projectRoot);
 
@@ -144,8 +144,8 @@ export function makeDecision(context: DecisionContext): HookOutput {
   // Priority 1: Ralph Loop with Oracle Verification
   const ralphState = readRalphState(projectRoot, sessionId);
 
-  // Analyze transcript for completion markers (pass ralphState for started_at filtering)
-  const transcript = analyzeTranscript(transcriptPath, ralphState);
+  // Analyze last assistant message for completion markers
+  const transcript = analyzeTranscript(lastAssistantMessage);
   if (ralphState && ralphState.active) {
     // Branch 1: Max iteration check (escape hatch, regardless of tasks)
     if (ralphState.iteration >= ralphState.max_iterations) {

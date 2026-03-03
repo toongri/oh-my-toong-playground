@@ -30,7 +30,7 @@ export async function main(): Promise<void> {
     const context: DecisionContext = {
       projectRoot,
       sessionId: input.sessionId,
-      transcriptPath: input.transcriptPath,
+      lastAssistantMessage: input.lastAssistantMessage,
       incompleteTodoCount
     };
 

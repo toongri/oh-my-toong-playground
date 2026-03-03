@@ -4,13 +4,14 @@ export interface HookInput {
   session_id?: string;
   cwd?: string;
   transcript_path?: string;
+  last_assistant_message?: string;
 }
 
 // Parsed hook input
 export interface ParsedInput {
   sessionId: string;
   directory: string;
-  transcriptPath: string | null;
+  lastAssistantMessage: string | null;
 }
 
 // Ralph state file structure
