@@ -865,6 +865,11 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 - What to do: Create UserService with CRUD operations
 - Must NOT do: Add caching or event publishing
 - Files: src/service/user-service.ts (create), src/service/index.ts (export)
+- References (CRITICAL):
+  - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
+    WHY: Follow the same repository injection, error handling, and return type conventions
+  - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
+    WHY: Match describe/it nesting, mock setup, and assertion style
 - Blocked By: TODO 1, TODO 2
 - Blocks: TODO 5
 - Wave: 2
@@ -872,10 +877,24 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
   - UserService implements create, read, update, delete
   - All methods return typed responses
   - QA Scenarios:
-    | # | Tool | Preconditions | Steps | Expected |
-    |---|------|---------------|-------|----------|
-    | 1 | jest | DB migrated, test user seed | Run `npm test -- user-service` | All CRUD tests pass, coverage >90% |
-    | 2 | jest | DB migrated, no seed data | Call create() with missing required field | Throws ValidationError with field name |
+
+    Scenario: Happy path — CRUD operations work correctly
+      Tool: jest
+      Preconditions: DB migrated, test user seed
+      Steps:
+        1. Run `npm test -- user-service`
+      Expected: All CRUD tests pass, coverage >90%
+      Failure: Test runner reports failing assertions or coverage below 90%
+      Evidence: .omt/evidence/{plan-name}/task-3-crud-happy.txt
+
+    Scenario: Validation failure — missing required field rejected
+      Tool: jest
+      Preconditions: DB migrated, no seed data
+      Steps:
+        1. Call create() with missing required field
+      Expected: Throws ValidationError with field name
+      Failure: No error thrown, or error type is not ValidationError, or field name missing from message
+      Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.txt
 ```
 
 **Non-code TODO Example (simplified format):**
@@ -891,10 +910,16 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 - Acceptance Criteria:
   - Rate limiting section documents limits, headers, and error responses
   - QA Scenarios:
-    | # | Preconditions | Expected |
-    |---|---------------|----------|
-    | 1 | docs/api-reference.md exists, rate limiting middleware merged | Rate limit headers documented with X-RateLimit-* descriptions |
-    | 2 | No rate limiting section exists prior | Section added without modifying existing endpoint docs |
+
+    Scenario: Rate limit headers documented
+      Preconditions: docs/api-reference.md exists, rate limiting middleware merged
+      Expected: Rate limit headers documented with X-RateLimit-* descriptions
+      Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
+
+    Scenario: Existing docs preserved
+      Preconditions: No rate limiting section exists prior
+      Expected: Section added without modifying existing endpoint docs
+      Failure: Existing endpoint documentation sections altered or removed
 ```
 
 **Final Verification Wave:**
