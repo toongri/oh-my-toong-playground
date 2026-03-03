@@ -137,6 +137,20 @@ describe('transcript-detector', () => {
 
       expect(result).toBe(false);
     });
+
+    it('타임존 혼합 시 올바른 비교 (KST started_at, UTC entry)', async () => {
+      // started_at: 2024-01-15T19:00:00+09:00 = 2024-01-15T10:00:00Z
+      // entry:      2024-01-15T10:30:00.000Z   = 10:30 UTC (AFTER started_at)
+      // String comparison would incorrectly skip ("10:30" < "19:00")
+      const lines = [
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T10:30:00.000Z', message: { content: '<promise>DONE</promise>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectCompletionPromise(transcriptPath, '2024-01-15T19:00:00.000+09:00');
+
+      expect(result).toBe(true);
+    });
   });
 
   describe('detectOracleApproval', () => {
@@ -248,6 +262,20 @@ describe('transcript-detector', () => {
       const result = detectOracleApproval(transcriptPath, '2024-01-15T10:00:00.000Z');
 
       expect(result).toBe(false);
+    });
+
+    it('타임존 혼합 시 올바른 비교 (KST started_at, UTC entry)', async () => {
+      // started_at: 2024-01-15T19:00:00+09:00 = 2024-01-15T10:00:00Z
+      // entry:      2024-01-15T10:30:00.000Z   = 10:30 UTC (AFTER started_at)
+      // String comparison would incorrectly skip ("10:30" < "19:00")
+      const lines = [
+        JSON.stringify({ type: 'assistant', timestamp: '2024-01-15T10:30:00.000Z', message: { content: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' } }),
+      ];
+      await writeFile(transcriptPath, lines.join('\n'));
+
+      const result = detectOracleApproval(transcriptPath, '2024-01-15T19:00:00.000+09:00');
+
+      expect(result).toBe(true);
     });
   });
 
