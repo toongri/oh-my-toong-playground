@@ -15,7 +15,7 @@ export interface ParsedInput {
 export interface HashmapSkillEntry {
   description: string;
   criteria: string;
-  alwaysAvailable: boolean;
+  pluginId?: string;
   examples: string[];
 }
 

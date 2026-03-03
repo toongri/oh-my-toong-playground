@@ -1,6 +1,12 @@
 ---
 name: sisyphus
 description: Use when orchestrating complex multi-step tasks requiring delegation, parallelization, or systematic completion verification - especially when tempted to do everything yourself or ask user codebase questions
+hooks:
+  SessionStart:
+    - hooks:
+        - type: command
+          command: "bun run $CLAUDE_PROJECT_DIR/.claude/hooks/skill-catalog/index.ts"
+          timeout: 10
 ---
 
 ## The Iron Law

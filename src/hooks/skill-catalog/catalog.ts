@@ -7,7 +7,7 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
     {
       description: 'Test-Driven Development methodology — write failing tests first, then implement to pass',
       criteria: 'Implementation task that produces testable code',
-      alwaysAvailable: true,
+      pluginId: 'superpowers@claude-plugins-official',
       examples: [
         'Add rate limiting middleware → TDD: write limit-exceeded test first',
         'Create user service CRUD → TDD: write each operation\'s test before implementation',
@@ -18,13 +18,13 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
 ]);
 
 // Build catalog entries from hashmap + discovered skill names
-export function buildCatalog(discoveredSkillNames: string[]): CatalogEntry[] {
+export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: Set<string>): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
   const seen = new Set<string>();
 
-  // 1. Add all hashmap skills that are alwaysAvailable (regardless of scan)
+  // 1. Add hashmap skills whose plugin is enabled (regardless of scan)
   for (const [name, entry] of SKILL_HASHMAP) {
-    if (entry.alwaysAvailable) {
+    if (entry.pluginId && enabledPluginIds.has(entry.pluginId)) {
       entries.push({
         name,
         description: entry.description,

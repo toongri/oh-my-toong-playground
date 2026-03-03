@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { parseInput, main } from './index.ts';
-import { mkdtemp, mkdir, rm } from 'fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { Readable } from 'stream';
@@ -67,7 +67,8 @@ describe('main (integration)', () => {
     await mkdir(join(skillsDir, 'my-skill'), { recursive: true });
 
     const fakeHome = join(tempDir, 'fakehome');
-    await mkdir(fakeHome, { recursive: true });
+    await mkdir(join(fakeHome, '.claude'), { recursive: true });
+    await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
     process.env.HOME = fakeHome;
 
     const mockStdin = createMockStdin(JSON.stringify({ sessionId: 'test', cwd: projectDir }));
@@ -90,9 +91,10 @@ describe('main (integration)', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('my-skill');
   });
 
-  it('outputs continue:true with alwaysAvailable skills when no skills directories exist', async () => {
+  it('플러그인 활성화 시 스킬 디렉토리 없어도 plugin 스킬 포함', async () => {
     const fakeHome = join(tempDir, 'fakehome');
-    await mkdir(fakeHome, { recursive: true });
+    await mkdir(join(fakeHome, '.claude'), { recursive: true });
+    await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
     process.env.HOME = fakeHome;
 
     const mockStdin = createMockStdin(JSON.stringify({ sessionId: 'test', cwd: join(tempDir, 'nonexistent') }));

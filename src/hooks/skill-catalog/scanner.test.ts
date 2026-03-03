@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { scanSkillDirectories } from './scanner.ts';
+import { scanSkillDirectories, readEnabledPlugins } from './scanner.ts';
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
+import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -93,5 +94,82 @@ describe('scanSkillDirectories', () => {
 
     const skills = await scanSkillDirectories(projectDir);
     expect(skills).toEqual(['real-skill']);
+  });
+});
+
+describe('readEnabledPlugins', () => {
+  let tempDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'enabled-plugins-test-'));
+    originalHome = process.env.HOME;
+  });
+
+  afterEach(async () => {
+    process.env.HOME = originalHome;
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it('settings.json 없을 때 빈 Set 반환', () => {
+    const fakeHome = join(tempDir, 'fakehome');
+    mkdirSync(fakeHome, { recursive: true });
+    process.env.HOME = fakeHome;
+
+    const result = readEnabledPlugins();
+    expect(result.size).toBe(0);
+  });
+
+  it('enabledPlugins 키 없을 때 빈 Set 반환', () => {
+    const fakeHome = join(tempDir, 'fakehome');
+    const claudeDir = join(fakeHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify({ otherKey: true }));
+    process.env.HOME = fakeHome;
+
+    const result = readEnabledPlugins();
+    expect(result.size).toBe(0);
+  });
+
+  it('정상 케이스: 활성화된 플러그인 ID Set 반환', () => {
+    const fakeHome = join(tempDir, 'fakehome');
+    const claudeDir = join(fakeHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(
+      join(claudeDir, 'settings.json'),
+      JSON.stringify({
+        enabledPlugins: {
+          'superpowers@claude-plugins-official': true,
+          'other-plugin@vendor': true,
+        },
+      }),
+    );
+    process.env.HOME = fakeHome;
+
+    const result = readEnabledPlugins();
+    expect(result.size).toBe(2);
+    expect(result.has('superpowers@claude-plugins-official')).toBe(true);
+    expect(result.has('other-plugin@vendor')).toBe(true);
+  });
+
+  it('비활성화(false) 플러그인은 제외', () => {
+    const fakeHome = join(tempDir, 'fakehome');
+    const claudeDir = join(fakeHome, '.claude');
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(
+      join(claudeDir, 'settings.json'),
+      JSON.stringify({
+        enabledPlugins: {
+          'superpowers@claude-plugins-official': true,
+          'disabled-plugin@vendor': false,
+        },
+      }),
+    );
+    process.env.HOME = fakeHome;
+
+    const result = readEnabledPlugins();
+    expect(result.size).toBe(1);
+    expect(result.has('superpowers@claude-plugins-official')).toBe(true);
+    expect(result.has('disabled-plugin@vendor')).toBe(false);
   });
 });

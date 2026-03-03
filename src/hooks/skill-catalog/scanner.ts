@@ -1,4 +1,5 @@
 import { readdir } from 'fs/promises';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 
 // Scan a single directory for skill subdirectories
@@ -39,4 +40,30 @@ export async function scanSkillDirectories(cwd: string): Promise<string[]> {
   }
 
   return result;
+}
+
+// Read enabled plugin IDs from ~/.claude/settings.json
+export function readEnabledPlugins(): Set<string> {
+  try {
+    const homeDir = process.env.HOME || '/tmp';
+    const settingsPath = join(homeDir, '.claude', 'settings.json');
+    const raw = readFileSync(settingsPath, 'utf8');
+    const settings = JSON.parse(raw);
+    const enabledPlugins = settings.enabledPlugins;
+
+    if (!enabledPlugins || typeof enabledPlugins !== 'object') {
+      return new Set();
+    }
+
+    const result = new Set<string>();
+    for (const [pluginId, enabled] of Object.entries(enabledPlugins)) {
+      if (enabled === true) {
+        result.add(pluginId);
+      }
+    }
+    return result;
+  } catch {
+    // File missing, parse error, or any other issue — return empty Set
+    return new Set();
+  }
 }
