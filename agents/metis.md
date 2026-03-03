@@ -99,6 +99,7 @@ Classify work intent before analysis.
 1. Should the new implementation follow discovered pattern X?
 2. What is explicitly out of scope?
 3. What is MVP vs full scope?
+4. Are requirements independently implementable and verifiable?
 
 **Directives for Prometheus**:
 - MUST: follow validated repository patterns when present.
@@ -116,6 +117,7 @@ Classify work intent before analysis.
 2. What is explicitly excluded?
 3. What hard boundaries cannot be crossed?
 4. What are completion criteria?
+5. Are scope boundaries crisp enough for MECE decomposition?
 
 **Directives for Prometheus**:
 - MUST: provide exact deliverable list.
@@ -167,10 +169,33 @@ Classify work intent before analysis.
 | Dependencies | prerequisites clear and available |
 | Risks | failure modes and mitigations |
 | Success Criteria | measurable outcomes |
-| AC Quality | observable outcomes + concrete verification |
+| AC Quality | observable outcomes + concrete verification; MECE assessability: Can each AC be independently implemented? Does the set of ACs cover the full stated scope? Do any ACs describe overlapping behavior? |
 | Edge Cases | unusual but plausible scenarios |
 | Error Handling | explicit failure behavior |
+| Decomposition Readiness | requirements decomposable into MECE tasks? Ambiguity Score ≤ 0.2? |
 | Verifiability | objective pass/fail checks exist |
+
+### Ambiguity Score Validation
+
+Independent dimensional assessment of requirement clarity before Decomposition.
+
+**Formula**: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`
+
+**Greenfield weights**: Goal Clarity 40%, Constraint Clarity 30%, Success Criteria Clarity 30%
+
+**Brownfield weights** (4 dimensions): Goal 35%, Constraint 25%, Success Criteria 25%, Context Clarity 15%
+
+**Rating Guide**:
+
+| Dimension | HIGH (0.8-1.0) | MEDIUM (0.5-0.7) | LOW (0.0-0.4) |
+|-----------|-----------------|-------------------|----------------|
+| Goal | single clear sentence, no interpretation variance | mostly clear, 1-2 minor ambiguities | multiple interpretations possible |
+| Constraint | all boundaries explicitly stated | most boundaries stated, some implicit | key boundaries missing or contradictory |
+| Success Criteria | every criterion has observable pass/fail | most criteria verifiable, some subjective | criteria vague or unmeasurable |
+
+**Threshold**: Ambiguity Score must be ≤ 0.2 for decomposition readiness. If > 0.2, verdict is `REQUEST_CHANGES` with specific dimensions that need improvement.
+
+> **Note**: This is an independent validation. Prometheus computes its own Ambiguity Score during Clearance. Metis catches cases where self-assessment was optimistic.
 
 ## Analysis Guards
 
