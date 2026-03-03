@@ -150,6 +150,7 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 | Measurable success | Can you objectively verify completion? (not "works properly") |
 | Edge cases covered | Errors, empty states, invalid input addressed? |
 | Test strategy defined | Unit? Integration? Manual? Specific commands to run? |
+| Evidence paths defined | Do QA Scenarios include `.omt/evidence/` paths for evidence capture? |
 
 ### 3. Context Completeness (90% confidence required)
 | Check | Question |
@@ -168,6 +169,7 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 | Scope boundaries | What's explicitly OUT of scope? |
 | Task atomicity | Is each TODO completable in a single delegation? (complexity moderate, file scope ≤ 3 groups, single-delegation) |
 | Dependency validity | Are Blocked By / Blocks relationships consistent? No circular deps, no phantom deps? |
+| Final Verification Wave | For Scoped+ intent: F1-F4 section exists with role definitions? Trivial intent exempt. |
 
 ## Review Scope Boundaries
 
