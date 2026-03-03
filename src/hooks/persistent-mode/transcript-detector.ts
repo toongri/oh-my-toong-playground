@@ -34,7 +34,7 @@ export function detectCompletionPromise(transcriptPath: string | null, startedAt
     }
 
     // Skip lines without timestamp or before started_at
-    if (!entry.timestamp || entry.timestamp < startedAt) continue;
+    if (!entry.timestamp || new Date(entry.timestamp) < new Date(startedAt)) continue;
 
     // Only check assistant messages (skip system/user to avoid false positives)
     if (entry.type !== 'assistant') continue;
@@ -76,7 +76,7 @@ export function detectOracleApproval(transcriptPath: string | null, startedAt?: 
     }
 
     // Skip lines without timestamp or before started_at
-    if (!entry.timestamp || entry.timestamp < startedAt) continue;
+    if (!entry.timestamp || new Date(entry.timestamp) < new Date(startedAt)) continue;
 
     // Only check assistant messages (skip system/user to avoid false positives)
     if (entry.type !== 'assistant') continue;
