@@ -557,6 +557,30 @@ describe('makeDecision', () => {
       expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
     });
 
+    it('should continue and cleanup state when VERIFIED_COMPLETE detected without DONE (branch 3)', async () => {
+      const ralphState = {
+        active: true,
+        iteration: 3,
+        max_iterations: 10,
+        completion_promise: 'DONE',
+        prompt: 'Test task',
+      };
+      await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
+
+      const transcriptPath = join(testDir, 'branch3-verified-only-transcript.jsonl');
+      await writeFile(transcriptPath, '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
+
+      const context = createContext({ transcriptPath });
+
+      const result = makeDecision(context);
+
+      expect(result).toEqual({ continue: true });
+
+      // State should be cleaned up
+      const { existsSync } = await import('fs');
+      expect(existsSync(join(omtDir, 'ralph-state-test-session.json'))).toBe(false);
+    });
+
     it('should block with oracle verification message when DONE detected but no VERIFIED_COMPLETE (branch 4)', async () => {
       const ralphState = {
         active: true,
