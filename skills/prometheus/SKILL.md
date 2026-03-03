@@ -233,7 +233,18 @@ After loading context, classify the user's request into one of four tiers. Class
 | **Complex** | 3+ files, multi-component | Deep interview, explore MANDATORY before forming questions |
 | **Architecture** | System design, infrastructure, long-term impact | Oracle MANDATORY (NO EXCEPTIONS), explore + librarian parallel |
 
-**Clearance Checklist 5 items unchanged for ALL intents.** Only interview depth varies.
+### Decomposition Formalism by Intent
+
+Each intent tier determines which decomposition checks apply and at what rigor. Higher tiers require stricter validation.
+
+| Intent | Ambiguity Score | MECE | Atomicity |
+|--------|----------------|------|-----------|
+| **Trivial** | Skip (assume low ambiguity) | Quick-check: confirm tasks do not overlap and cover the request | Quick-check: confirm each task is single-delegation completable |
+| **Scoped** | Compute using Greenfield or Brownfield formula | Full MECE validation with self-check questions | Full Atomicity check against all 3 conditions |
+| **Complex** | Compute + review anti-pattern table for hidden ambiguity | Full MECE + cross-check anti-pattern table (Overlap, Gap, False MECE) | Full Atomicity check + smell-action table review |
+| **Architecture** | Brownfield variant + oracle validation of Context Clarity dimension | Full MECE validation | Full Atomicity check against all 3 conditions |
+
+**Clearance Checklist 6 items (including Ambiguity Score) apply to ALL intents.** Only interview depth and decomposition rigor vary.
 
 **Note:** Classification is Prometheus-internal (distinct from Metis's Phase 0 intent classification which serves analysis strategy).
 
@@ -384,10 +395,26 @@ When user explicitly defers ("skip", "I don't know", "your call", "you decide", 
 | 3 | No critical ambiguities remaining? | YES |
 | 4 | Technical approach validated? | YES |
 | 5 | Test/verification strategy identified? | YES |
+| 6 | Ambiguity Score ≤ 0.2? | YES |
 
-**All YES** -> READY for next phase. Proceed to Acceptance Criteria Drafting.
+**Ambiguity Score** — quantifies remaining uncertainty across interview dimensions.
+
+Formula: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`
+
+Each clarity dimension is rated 0.0 (fully ambiguous) to 1.0 (fully clear) based on interview answers.
+
+| Variant | Dimensions | Weights |
+|---------|-----------|---------|
+| **Greenfield** (new feature, no existing code) | Goal Clarity, Constraint Clarity, Success Criteria Clarity | Goal 0.4, Constraint 0.3, Success 0.3 |
+| **Brownfield** (modifying existing system) | Goal Clarity, Constraint Clarity, Success Criteria Clarity, Context Clarity | Goal 0.35, Constraint 0.25, Success 0.25, Context 0.15 |
+
+- Use Greenfield when no existing code is involved. Use Brownfield when modifying or extending existing systems.
+- Context Clarity (Brownfield only) measures understanding of the existing codebase, dependencies, and constraints discovered via explore/oracle.
+- Threshold: **≤ 0.2** (equivalent to overall clarity ≥ 0.8). If above threshold, continue interviewing to reduce ambiguity.
+
+**All YES (items 1-5) AND Ambiguity ≤ 0.2** -> READY for next phase. Proceed to Acceptance Criteria Drafting.
 After AC is confirmed, proceed to Metis consultation automatically (see Metis Feedback Loop section).
-**Any NO** -> Continue interview. Do NOT proceed to AC Drafting.
+**Any NO in items 1-5 OR Ambiguity > 0.2** -> Continue interview. Do NOT proceed to AC Drafting.
 
 This checklist is internal -- do not present it to the user.
 
@@ -715,6 +742,45 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 - **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically.
 - **Anti-pattern**: Assigning Wave 2 to an independent task because "it makes sense to do X before Y." If there is a real dependency, add `Blocked By`. If there is no dependency, the task goes in Wave 1.
 - **Wave integrity**: Every wave must reference numbered TODOs only. Do not add administrative stages (Verification, Merge, Deploy) as waves — argus handles verification, mnemosyne handles commits.
+
+**MECE Decomposition Principle**
+
+Mutually Exclusive, Collectively Exhaustive — tasks should not overlap in scope and should collectively cover the entire requirement. When decomposing work into TODOs, each task must own a distinct responsibility with no shared territory, and the union of all tasks must fully satisfy the acceptance criteria.
+
+Self-check questions (run after drafting TODOs):
+
+1. **Overlap**: Do any two TODOs modify the same file for the same purpose? If yes, merge or redraw boundaries.
+2. **Coverage**: If every TODO is completed perfectly, is the entire requirement fulfilled? If not, identify the gap and add a TODO.
+3. **Hidden coupling**: Do any TODOs appear independent but share implicit state, ordering assumptions, or undeclared data dependencies? If yes, make the dependency explicit via `Blocked By` or merge into one TODO.
+
+| Anti-Pattern | Example | Fix |
+|-------------|---------|-----|
+| **Overlap** | TODO 1 "Add validation to UserService" and TODO 2 "Add input validation to user endpoints" — both validate user input | Merge into one TODO that owns all user input validation, or split by layer (service vs controller) with explicit boundary |
+| **Gap** | TODOs cover create/read/update but no TODO handles delete — yet AC requires full CRUD | Add a TODO for delete, or expand an existing TODO's scope to include it |
+| **False MECE** | TODOs are labeled "frontend" and "backend" but the API contract is owned by neither — each assumes the other defines it | Add explicit TODO for API contract definition, or assign contract ownership to one TODO and make the other depend on it |
+
+**Atomicity Heuristic**
+
+Each TODO must be atomic — completable by a single executor (sisyphus-junior) in one delegation pass without requiring mid-task coordination. If a TODO fails the atomicity check, decompose it further.
+
+| # | Condition | Threshold | Question |
+|---|-----------|-----------|----------|
+| 1 | Complexity | Moderate or below | Can a single agent understand the full context and implement this without specialized domain knowledge beyond what the plan provides? |
+| 2 | File scope | ≤ 3 logically distinct file groups | Does this task touch more than 3 unrelated file groups (where a group is files that change together for one reason)? |
+| 3 | Single-delegation completable | One pass | Can sisyphus-junior finish this TODO in one delegation without needing to pause, ask questions, or wait for external input? |
+
+**Rule**: If ANY condition fails, decompose the TODO further until all sub-tasks pass all 3 conditions.
+
+Smell-action table — common signs a TODO is not atomic:
+
+| Smell | Example | Action |
+|-------|---------|--------|
+| "and" in the task description | "Create the service and update all consumers" | Split into: (1) create service, (2) update consumers (blocked by 1) |
+| File groups span unrelated modules | "Update auth middleware, user model, and email templates" | Split by module boundary — one TODO per logically distinct group |
+| Task requires sequential phases | "Design the schema, implement migrations, seed test data" | Each phase becomes its own TODO with `Blocked By` chain |
+| Estimated changes exceed ~200 lines | A TODO that touches 5+ files with non-trivial logic in each | Decompose by responsibility — find natural seams in the work |
+| Task requires domain knowledge not in the plan | "Optimize the query based on production usage patterns" | Either add the domain context to the plan's TODO description, or split into (1) gather metrics, (2) optimize based on findings |
+
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
   - Each scenario has 4 fields: **Tool** / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
   - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
