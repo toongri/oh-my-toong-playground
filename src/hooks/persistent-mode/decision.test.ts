@@ -27,7 +27,7 @@ describe('makeDecision', () => {
   const createContext = (overrides: Partial<DecisionContext> = {}): DecisionContext => ({
     projectRoot,
     sessionId: 'test-session',
-    transcriptPath: null,
+    lastAssistantMessage: null,
     incompleteTodoCount: 0,
     ...overrides,
   });
@@ -137,11 +137,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      // Create transcript with both DONE and oracle approval
-      const transcriptPath = join(testDir, 'transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
 
       const result = makeDecision(context);
 
@@ -158,10 +154,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
 
       makeDecision(context);
 
@@ -180,12 +173,8 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        // Create transcript with DONE and oracle approval
-        const transcriptPath = join(testDir, 'oracle-approved-transcript.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-
         // But tasks are incomplete
-        const context = createContext({ transcriptPath, incompleteTodoCount: 3 });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>', incompleteTodoCount: 3 });
 
         const result = makeDecision(context);
 
@@ -244,10 +233,7 @@ describe('makeDecision', () => {
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
         // DONE + Oracle approved AND tasks complete
-        const transcriptPath = join(testDir, 'tasks-complete-oracle-approved.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-
-        const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>', incompleteTodoCount: 0 });
 
         const result = makeDecision(context);
 
@@ -266,10 +252,7 @@ describe('makeDecision', () => {
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
         // DONE detected but no VERIFIED_COMPLETE
-        const transcriptPath = join(testDir, 'done-no-oracle-transcript.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>', incompleteTodoCount: 0 });
 
         const result = makeDecision(context);
 
@@ -289,10 +272,7 @@ describe('makeDecision', () => {
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
         // DONE detected, no VERIFIED_COMPLETE
-        const transcriptPath = join(testDir, 'done-no-verified-transcript.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>', incompleteTodoCount: 0 });
 
         makeDecision(context);
 
@@ -312,10 +292,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        const transcriptPath = join(testDir, 'done-no-verified-transcript2.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath, incompleteTodoCount: 0 });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>', incompleteTodoCount: 0 });
 
         makeDecision(context);
 
@@ -394,11 +371,8 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        // Need DONE in transcript to hit branch 4 (oracle verification)
-        const transcriptPath = join(testDir, 'trunc-prompt-long.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
+        // Need DONE in message to hit branch 4 (oracle verification)
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
         const result = makeDecision(context);
 
@@ -422,10 +396,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        const transcriptPath = join(testDir, 'trunc-prompt-short.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
         const result = makeDecision(context);
 
@@ -446,10 +417,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        const transcriptPath = join(testDir, 'trunc-prompt-exact.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
         const result = makeDecision(context);
 
@@ -472,10 +440,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        const transcriptPath = join(testDir, 'trunc-dedup.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
         const result = makeDecision(context);
 
@@ -496,10 +461,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        const transcriptPath = join(testDir, 'trunc-no-original.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
         const result = makeDecision(context);
 
@@ -518,10 +480,7 @@ describe('makeDecision', () => {
         };
         await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-        const transcriptPath = join(testDir, 'trunc-verify-prefix.jsonl');
-        await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-        const context = createContext({ transcriptPath });
+        const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
         const result = makeDecision(context);
 
@@ -543,10 +502,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'branch3-transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>\n<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
 
       const result = makeDecision(context);
 
@@ -567,10 +523,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'branch3-verified-only-transcript.jsonl');
-      await writeFile(transcriptPath, '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<oracle-approved>VERIFIED_COMPLETE</oracle-approved>' });
 
       const result = makeDecision(context);
 
@@ -591,10 +544,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'branch4-transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 
@@ -639,11 +589,8 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      // Transcript without DONE
-      const transcriptPath = join(testDir, 'branch5-no-done.jsonl');
-      await writeFile(transcriptPath, 'some random content without promise tag');
-
-      const context = createContext({ transcriptPath });
+      // Message without DONE
+      const context = createContext({ lastAssistantMessage: 'some random content without promise tag' });
 
       const result = makeDecision(context);
 
@@ -674,10 +621,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'ovm-wrapper.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 
@@ -696,10 +640,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'ovm-done.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 
@@ -716,10 +657,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'ovm-spawn.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 
@@ -736,10 +674,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'ovm-verified.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 
@@ -756,10 +691,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'ovm-iteration.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 
@@ -777,10 +709,7 @@ describe('makeDecision', () => {
       };
       await writeFile(join(omtDir, 'ralph-state-test-session.json'), JSON.stringify(ralphState));
 
-      const transcriptPath = join(testDir, 'ovm-prompt.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>');
-
-      const context = createContext({ transcriptPath });
+      const context = createContext({ lastAssistantMessage: '<promise>DONE</promise>' });
 
       const result = makeDecision(context);
 

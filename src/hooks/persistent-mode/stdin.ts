@@ -20,7 +20,7 @@ export function parseInput(raw: string): ParsedInput {
 
   const sessionId = input.sessionId || input.session_id || 'default';
   const directory = input.cwd || process.cwd();
-  const transcriptPath = input.transcript_path || null;
+  const lastAssistantMessage = input.last_assistant_message || null;
 
-  return { sessionId, directory, transcriptPath };
+  return { sessionId, directory, lastAssistantMessage };
 }

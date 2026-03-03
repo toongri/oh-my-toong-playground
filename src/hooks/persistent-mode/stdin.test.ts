@@ -71,14 +71,14 @@ describe('parseInput', () => {
     const input: HookInput = {
       sessionId: 'session-123',
       cwd: '/test/dir',
-      transcript_path: '/path/to/transcript.jsonl',
+      last_assistant_message: 'some assistant message',
     };
 
     const result = parseInput(JSON.stringify(input));
 
     expect(result.sessionId).toBe('session-123');
     expect(result.directory).toBe('/test/dir');
-    expect(result.transcriptPath).toBe('/path/to/transcript.jsonl');
+    expect(result.lastAssistantMessage).toBe('some assistant message');
   });
 
   it('should support snake_case session_id', () => {
@@ -124,7 +124,7 @@ describe('parseInput', () => {
     expect(result.directory).toBe(process.cwd());
   });
 
-  it('should set transcriptPath to null when not provided', () => {
+  it('should set lastAssistantMessage to null when not provided', () => {
     const input: HookInput = {
       sessionId: 'session-123',
       cwd: '/test/dir',
@@ -132,7 +132,7 @@ describe('parseInput', () => {
 
     const result = parseInput(JSON.stringify(input));
 
-    expect(result.transcriptPath).toBeNull();
+    expect(result.lastAssistantMessage).toBeNull();
   });
 
   it('should handle invalid JSON gracefully with defaults', () => {
@@ -140,7 +140,7 @@ describe('parseInput', () => {
 
     expect(result.sessionId).toBe('default');
     expect(result.directory).toBe(process.cwd());
-    expect(result.transcriptPath).toBeNull();
+    expect(result.lastAssistantMessage).toBeNull();
   });
 
   it('should handle empty string with defaults', () => {
@@ -148,6 +148,6 @@ describe('parseInput', () => {
 
     expect(result.sessionId).toBe('default');
     expect(result.directory).toBe(process.cwd());
-    expect(result.transcriptPath).toBeNull();
+    expect(result.lastAssistantMessage).toBeNull();
   });
 });

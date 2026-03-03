@@ -63,7 +63,7 @@ describe('main entry point', () => {
       const input = JSON.stringify({
         sessionId: 'test-session-123',
         cwd: projectRoot,
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       // Mock stdin
@@ -95,15 +95,12 @@ describe('main entry point', () => {
         })
       );
 
-      // Create transcript with DONE promise so branch 5 fires
+      // Pass DONE promise via last_assistant_message so branch 4 fires
       // (tasks complete + DONE detected + no VERIFIED_COMPLETE -> oracle verification block)
-      const transcriptPath = join(testDir, 'ralph-transcript.jsonl');
-      await writeFile(transcriptPath, '<promise>DONE</promise>\n');
-
       const input = JSON.stringify({
         sessionId: 'ralph-session',
         cwd: projectRoot,
-        transcript_path: transcriptPath,
+        last_assistant_message: '<promise>DONE</promise>',
       });
 
       const mockStdin = createMockStdin(input);
@@ -155,7 +152,7 @@ describe('main entry point', () => {
       const input = JSON.stringify({
         sessionId: 'test-session',
         cwd: '/nonexistent/path/that/does/not/exist',
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -181,45 +178,10 @@ describe('main entry point', () => {
 
   describe('transcript-based todo counting (removed)', () => {
     it('should NOT block when incomplete todos exist without ralph/ultrawork', async () => {
-      // Create transcript with TaskCreate calls
-      const transcriptPath = join(testDir, 'todos-transcript.jsonl');
-      const transcriptContent = [
-        JSON.stringify({
-          type: 'assistant',
-          message: {
-            content: [
-              { type: 'tool_use', id: 'task1', name: 'TaskCreate', input: { subject: 'Task 1' } },
-            ],
-          },
-        }),
-        JSON.stringify({
-          type: 'user',
-          message: {
-            content: [{ type: 'tool_result', tool_use_id: 'task1', content: 'Task #1 created successfully' }],
-          },
-          toolUseResult: { task: { id: '1', subject: 'Task 1' } },
-        }),
-        JSON.stringify({
-          type: 'assistant',
-          message: {
-            content: [
-              { type: 'tool_use', id: 'task2', name: 'TaskCreate', input: { subject: 'Task 2' } },
-            ],
-          },
-        }),
-        JSON.stringify({
-          type: 'user',
-          message: {
-            content: [{ type: 'tool_result', tool_use_id: 'task2', content: 'Task #2 created successfully' }],
-          },
-        }),
-      ].join('\n');
-      await writeFile(transcriptPath, transcriptContent);
-
       const input = JSON.stringify({
         sessionId: 'todo-session',
         cwd: projectRoot,
-        transcript_path: transcriptPath,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -289,7 +251,7 @@ describe('main entry point', () => {
       const input = JSON.stringify({
         sessionId: sessionId,
         cwd: taskProjectRoot,
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -345,7 +307,7 @@ describe('main entry point', () => {
       const input = JSON.stringify({
         sessionId: 'logging-test-session',
         cwd: loggingProjectRoot,
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -371,7 +333,7 @@ describe('main entry point', () => {
       const input = JSON.stringify({
         sessionId: 'log-session-info',
         cwd: loggingProjectRoot,
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -393,7 +355,7 @@ describe('main entry point', () => {
       const input = JSON.stringify({
         sessionId: 'log-decision-test',
         cwd: loggingProjectRoot,
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -411,12 +373,11 @@ describe('main entry point', () => {
     });
 
     it('should log errors when they occur', async () => {
-      // Force an error by providing an invalid transcript path with permission issues
       // Note: This test verifies error logging path exists even if triggering is complex
       const input = JSON.stringify({
         sessionId: 'log-error-test',
         cwd: loggingProjectRoot,
-        transcript_path: null,
+        last_assistant_message: null,
       });
 
       const mockStdin = createMockStdin(input);
@@ -434,19 +395,10 @@ describe('main entry point', () => {
     });
 
     it('should log transcript detection details at DEBUG level', async () => {
-      // Create a transcript file with patterns to detect
-      const transcriptPath = join(loggingTestDir, 'logging-transcript.jsonl');
-      const transcriptContent = `
-        Task #1 created successfully
-        Task #2 created successfully
-        {"name": "TaskUpdate", "parameters": {"taskId": "1", "status": "completed"}}
-      `;
-      await writeFile(transcriptPath, transcriptContent);
-
       const input = JSON.stringify({
         sessionId: 'log-detection-test',
         cwd: loggingProjectRoot,
-        transcript_path: transcriptPath,
+        last_assistant_message: 'Task #1 created successfully\nTask #2 created successfully',
       });
 
       const mockStdin = createMockStdin(input);
