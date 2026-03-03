@@ -728,7 +728,9 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them |
+| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
+| **Final Verification Wave** | Post-TODO plan-level verification. F1 (Plan Compliance Audit), F2 (Code Quality Review), F3 (Full QA Re-execution), F4 (Scope Fidelity Check) — all run in parallel after the last execution wave completes. Required for Scoped+ intent, optional for Trivial |
+| **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
 **TODO Task Format:**
 - Each task = implementation + test combined (never separate)
@@ -781,6 +783,14 @@ Smell-action table — common signs a TODO is not atomic:
 | Estimated changes exceed ~200 lines | A TODO that touches 5+ files with non-trivial logic in each | Decompose by responsibility — find natural seams in the work |
 | Task requires domain knowledge not in the plan | "Optimize the query based on production usage patterns" | Either add the domain context to the plan's TODO description, or split into (1) gather metrics, (2) optimize based on findings |
 
+**Zero Human Intervention Principle:**
+
+> **ZERO HUMAN INTERVENTION** — ALL verification is agent-executed. No exceptions.
+
+> Acceptance criteria requiring "user manually tests/confirms" are FORBIDDEN.
+
+Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `.omt/evidence/{plan-name}/` so that downstream verification agents (argus) can audit results independently.
+
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
   - Each scenario has 4 fields: **Tool** / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
   - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
@@ -803,6 +813,17 @@ Smell-action table — common signs a TODO is not atomic:
     | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
   - Non-code TODOs (docs, config) may use simplified format: Preconditions + Expected only
+  - **Evidence Convention**: Each QA scenario execution MUST save its output as an evidence artifact. Evidence path format:
+    ```
+    .omt/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}
+    ```
+    Evidence type by domain:
+    | Domain | Extension | Example |
+    |--------|-----------|---------|
+    | UI (screenshot) | `.png` | `task-2-login-form-renders.png` |
+    | CLI (command output) | `.txt` | `task-1-build-passes.txt` |
+    | API (response body) | `.json` | `task-3-create-user-201.json` |
+    | Test runner | `.txt` | `task-4-unit-tests-pass.txt` |
 
 **Execution Strategy & QA Scenarios Example:**
 
@@ -848,6 +869,116 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
     |---|---------------|----------|
     | 1 | docs/api-reference.md exists, rate limiting middleware merged | Rate limit headers documented with X-RateLimit-* descriptions |
     | 2 | No rate limiting section exists prior | Section added without modifying existing endpoint docs |
+```
+
+**Final Verification Wave:**
+
+> This section is OUTSIDE the execution wave system — it does not conflict with the Wave integrity rule ("Every wave must reference numbered TODOs only. Do not add administrative stages as waves"). F1-F4 are post-execution verification checks, not TODO waves.
+
+> Trivial intent may omit this section.
+
+After the last execution wave completes, run F1-F4 in parallel as a plan-level verification pass:
+
+**F1: Plan Compliance Audit**
+- Read the plan file (`.omt/plans/{name}.md`)
+- Verify every Must Have requirement is implemented
+- Verify every Must NOT Have / Guardrail is absent
+- Verify evidence files exist for all QA scenarios in `.omt/evidence/{plan-name}/`
+
+Output format:
+```
+F1: Plan Compliance Audit
+- Must Have:
+  - [x] {requirement 1} — implemented in {file}
+  - [x] {requirement 2} — implemented in {file}
+- Must NOT Have:
+  - [x] {guardrail 1} — confirmed absent
+- Evidence:
+  - [x] task-1-*.{ext} — {count} files found
+  - [x] task-2-*.{ext} — {count} files found
+- Result: PASS / FAIL
+```
+
+**F2: Code Quality Review**
+- Run build, lint, and test commands
+- Review changed files for anti-patterns (dead code, hardcoded values, missing error handling)
+
+Output format:
+```
+F2: Code Quality Review
+- Build: PASS / FAIL ({command})
+- Lint: PASS / FAIL ({command})
+- Tests: PASS / FAIL ({count} passed, {count} failed)
+- Anti-pattern review:
+  - {file}: {finding or "clean"}
+- Result: PASS / FAIL
+```
+
+**F3: Full QA Re-execution**
+- Re-execute ALL QA scenarios from every TODO (not just the last wave)
+- Run cross-task integration tests if multiple TODOs interact
+- Save re-execution evidence to `.omt/evidence/{plan-name}/`
+
+Output format:
+```
+F3: Full QA Re-execution
+- TODO 1: {count}/{total} scenarios passed
+- TODO 2: {count}/{total} scenarios passed
+- Cross-task integration: PASS / FAIL
+- Evidence saved: .omt/evidence/{plan-name}/
+- Result: PASS / FAIL
+```
+
+**F4: Scope Fidelity Check**
+- Compare spec (acceptance criteria + Must Have) vs actual implementation 1:1
+- Detect scope creep: any functionality added beyond what the plan specified
+- Detect scope gap: any planned functionality missing from implementation
+
+Output format:
+```
+F4: Scope Fidelity Check
+- Spec items: {count}
+- Implemented: {count}
+- Scope creep: {list or "none"}
+- Scope gap: {list or "none"}
+- Result: PASS / FAIL
+```
+
+**Success Criteria Template:**
+
+The Success Criteria section defines the binary pass/fail end state of the plan. It is distinct from Verification Strategy (which defines the testing methodology) — Success Criteria is the concrete "are we done?" checklist.
+
+```
+## Success Criteria
+
+### Verification Commands
+
+\`\`\`bash
+# Build
+{build-command}
+# Expected: exit 0, no errors
+
+# Tests
+{test-command}
+# Expected: all tests pass
+
+# Lint
+{lint-command}
+# Expected: no warnings or errors
+
+# Domain-specific checks
+{domain-check-command}
+# Expected: {expected-output}
+\`\`\`
+
+### Final Checklist
+
+- [ ] All TODOs marked completed
+- [ ] All QA scenarios pass (F3 re-execution)
+- [ ] Evidence artifacts saved to `.omt/evidence/{plan-name}/`
+- [ ] No scope creep detected (F4)
+- [ ] Build + lint + tests green (F2)
+- [ ] Plan compliance verified (F1)
 ```
 
 **What to EXCLUDE from plans:**
