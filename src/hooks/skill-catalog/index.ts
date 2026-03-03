@@ -1,6 +1,6 @@
 import { ParsedInput, HookInput, HookOutput } from './types.ts';
 import { buildCatalog, formatCatalog } from './catalog.ts';
-import { scanSkillDirectories } from './scanner.ts';
+import { scanSkillDirectories, readEnabledPlugins } from './scanner.ts';
 
 export async function readStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -31,11 +31,14 @@ export async function main(): Promise<void> {
     const rawInput = await readStdin();
     const input = parseInput(rawInput);
 
+    // Read enabled plugins from user settings
+    const enabledPlugins = readEnabledPlugins();
+
     // Scan skill directories
     const discoveredSkills = await scanSkillDirectories(input.cwd);
 
     // Build catalog from hashmap + discovered skills
-    const entries = buildCatalog(discoveredSkills);
+    const entries = buildCatalog(discoveredSkills, enabledPlugins);
 
     // Format catalog text
     const additionalContext = formatCatalog(entries);
