@@ -124,6 +124,7 @@ INSTRUCTIONS:
 1. Review your remaining tasks
 2. Complete remaining tasks
 3. Mark each task as completed when done
+4. If you are waiting for user input (e.g., after asking a question), use the AskUserQuestion tool to prompt the user — do NOT stop to wait
 
 Do NOT stop until all tasks are completed.
 
