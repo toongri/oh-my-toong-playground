@@ -173,47 +173,27 @@ export function makeDecision(context: DecisionContext): HookOutput {
       return formatBlockOutput(message);
     }
 
-    // Branches 3-5: Tasks complete path - check DONE detection
+    // Branch 3: VERIFIED_COMPLETE detected → cleanup → exit (regardless of DONE)
+    if (transcript.hasOracleApproval) {
+      cleanupRalphState(projectRoot, sessionId);
+      cleanupBlockCountFiles(stateDir, attemptId);
+      return formatContinueOutput();
+    }
+
+    // Branch 4: DONE detected + no VERIFIED → increment iteration → oracle verification
     if (transcript.hasCompletionPromise) {
-      // Branch 3: DONE + VERIFIED_COMPLETE → cleanup → exit
-      if (transcript.hasOracleApproval) {
-        cleanupRalphState(projectRoot, sessionId);
-        cleanupBlockCountFiles(stateDir, attemptId);
-        return formatContinueOutput();
-      }
-
-      // Branch 4: DONE + no VERIFIED_COMPLETE → increment iteration → oracle verification
       const newIteration = ralphState.iteration + 1;
-
-      const updatedState: RalphState = {
-        ...ralphState,
-        iteration: newIteration,
-      };
+      const updatedState: RalphState = { ...ralphState, iteration: newIteration };
       updateRalphState(projectRoot, sessionId, updatedState);
-
-      const message = buildOracleVerificationMessage(
-        newIteration,
-        ralphState.max_iterations,
-        ralphState.prompt
-      );
+      const message = buildOracleVerificationMessage(newIteration, ralphState.max_iterations, ralphState.prompt);
       return formatBlockOutput(message);
     }
 
-    // Branch 5: No DONE detected → increment iteration → block with continuation
+    // Branch 5: No DONE detected → increment iteration → DONE reminder
     const newIteration = ralphState.iteration + 1;
-
-    const updatedState: RalphState = {
-      ...ralphState,
-      iteration: newIteration,
-    };
+    const updatedState: RalphState = { ...ralphState, iteration: newIteration };
     updateRalphState(projectRoot, sessionId, updatedState);
-
-    const message = buildNoDoneMessage(
-      newIteration,
-      ralphState.max_iterations,
-      ralphState.prompt,
-      ralphState.completion_promise || 'DONE'
-    );
+    const message = buildNoDoneMessage(newIteration, ralphState.max_iterations, ralphState.prompt, ralphState.completion_promise || 'DONE');
     return formatBlockOutput(message);
   }
 
