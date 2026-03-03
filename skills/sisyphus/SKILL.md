@@ -43,7 +43,7 @@ RULE 4: NEVER complete without argus verification
 | **Deep analysis** | NEVER | oracle |
 | **Codebase exploration** | NEVER | explore |
 | **External documentation research** | NEVER | librarian |
-| **Technical verification** | NEVER | argus |
+| **Quality Assurance** | NEVER | argus |
 
 **RULE**: ANY code change = DELEGATE. No exceptions. Reading/searching/status = Do directly.
 
@@ -92,7 +92,7 @@ Trust protocols, role separation, and verification flow for subagent management.
 | Codebase search | explore | Finding files, patterns, implementations |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Implementation | sisyphus-junior | Actual code changes |
-| Verification | argus | After code changes to maintain project stability and quality |
+| Quality Assurance | argus | Comprehensive quality verification |
 | Git commit | mnemosyne | After argus approval, atomic commits in isolated context |
 
 ### Subagent Trust Protocol
@@ -119,7 +119,7 @@ digraph verification_roles {
     rankdir=LR;
     "sisyphus" [shape=box, label="Sisyphus\n(Orchestrator)"];
     "sisyphus-junior" [shape=box, label="Sisyphus-Junior\n(Implementer)"];
-    "argus" [shape=box, label="Argus\n(Verifier)"];
+    "argus" [shape=box, label="Argus\n(QA Guardian)"];
 
     "sisyphus" -> "sisyphus-junior" [label="delegate implementation"];
     "sisyphus-junior" -> "sisyphus" [label="reports 'done'"];
@@ -314,6 +314,39 @@ digraph task_loop {
 - Multiple unblocked independent tasks → dispatch in parallel
 - Each junior completion → immediately invoke argus
 - Each argus approval → immediately invoke mnemosyne to commit
+
+### Final Verification Trigger
+
+After all individual tasks are completed and approved by argus:
+
+```dot
+digraph final_verification {
+    rankdir=TB;
+    "All tasks completed\n& per-task argus APPROVE" [shape=ellipse];
+    "Plan exists?" [shape=diamond];
+    "Recipe 3\n(full plan verification)" [shape=box];
+    "Recipe 4\n(instruction fulfillment)" [shape=box];
+    "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "APPROVE?" [shape=diamond];
+    "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
+    "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
+    "Create fix task" [shape=box];
+    "Re-enter loop" [shape=box];
+
+    "All tasks completed\n& per-task argus APPROVE" -> "Plan exists?";
+    "Plan exists?" -> "Recipe 3\n(full plan verification)" [label="YES"];
+    "Plan exists?" -> "Recipe 4\n(instruction fulfillment)" [label="NO"];
+    "Recipe 3\n(full plan verification)" -> "argus";
+    "Recipe 4\n(instruction fulfillment)" -> "argus";
+    "argus" -> "APPROVE?";
+    "APPROVE?" -> "mnemosyne" [label="yes"];
+    "APPROVE?" -> "Create fix task" [label="no"];
+    "mnemosyne" -> "Done";
+    "Create fix task" -> "Re-enter loop";
+}
+```
+
+This ensures holistic verification beyond individual task approval — the complete work product is verified against the original plan or instructions.
 
 ---
 
@@ -536,44 +569,64 @@ Task(subagent_type="oracle", prompt="Two order processing workers occasionally p
 
 ---
 
-## Argus Invocation
+## QA REQUEST Composition
+
+### QA REQUEST Format
+
+All verification requests to argus use the QA REQUEST format:
+
+```
+# QA REQUEST
+
+## Spec
+[Verification criteria — see recipes below for what goes here]
+
+## Scope
+- Changed files:
+  - [explicit file paths]
+- Summary: [what the implementer claimed]
+```
+
+### Composition Recipes
+
+**Recipe 1: After task completion (no plan)**
+
+Compose the QA REQUEST from the 7-Section delegation prompt:
+- Put the full 7-Section prompt content under `## Spec` (each section becomes a `###` heading)
+- List changed files and implementer's summary under `## Scope`
+
+**Recipe 2: After task completion (plan-based)**
+
+Compose the QA REQUEST from the relevant plan TODO:
+- Put the TODO's spec content (What to do, Must NOT do, Acceptance Criteria, QA Scenarios) under `## Spec`
+- List changed files and implementer's summary under `## Scope`
+
+**Recipe 3: Plan completion — final verification**
+
+After all individual tasks are complete, verify the entire plan:
+- Put the plan file path and request to verify all TODO Acceptance Criteria and QA Scenarios under `## Spec`
+- List all changed files across all tasks and all completed task subjects under `## Scope`
+
+**Recipe 4: Instruction fulfillment — final verification**
+
+When no plan exists, verify against original user instructions:
+- Put the original user instructions and list of completed tasks under `## Spec`
+- List all changed files and completed task summaries under `## Scope`
+
+**Recipe 5: AC/QA Scenario verification with explicit methods**
+
+When acceptance criteria and QA scenarios are explicitly provided:
+- Put acceptance criteria and QA scenarios verbatim under `## Spec`
+- List changed files and summary under `## Scope`
 
 ### Invocation Rules
 
 | Rule | Requirement |
 |------|-------------|
-| **Prompt Fidelity** | Pass the 7-Section prompt **VERBATIM** — copy-paste only. No summarizing, paraphrasing, or restructuring. |
-| **Per-Task Invocation** | Invoke argus **once per completed task**. NEVER batch multiple tasks into one call. |
-| **File Path Specificity** | List changed files as **explicit paths**, NEVER abstract counts ("3 files") or globs. |
-| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own from the 7-Section prompt. |
-
-### Invocation Template
-
-```markdown
-[VERBATIM copy of the 7-Section prompt sent to sisyphus-junior — DO NOT summarize or restructure]
-
----
-
-## REVIEW REQUEST
-- Task: [exact task subject from todo list]
-- Changed files:
-  - src/auth/login.ts
-  - src/auth/middleware.ts
-  - tests/auth/login.test.ts
-- Junior's summary: [what junior claimed to have done]
-
-Review whether the implementation meets the requirements in the 7-Section prompt above.
-```
-
-### Argus Invocation Anti-Patterns
-
-| Anti-Pattern | Example | Why Harmful |
-|-------------|---------|-------------|
-| Prompt summarization | "Junior was asked to add auth" instead of full 7-Section | Argus cannot verify MUST DO items it never received |
-| Batch invocation | Passing 3 tasks' results in one argus call | Scope check becomes impossible; verdict ambiguous |
-| Abstract file references | "Changed files: 3 files" | Scope Boundary Check requires concrete paths |
-| Pre-built checklist | "Here's what to verify: [your list]" | Anchors argus, defeats independent derivation |
-| Selective prompt sections | Omitting MUST NOT DO | Argus cannot detect violations of rules it doesn't see |
+| **Prompt Fidelity** | Pass the verification criteria **VERBATIM** — copy-paste only. No summarizing. |
+| **Per-Task Invocation** | Invoke argus **once per completed task**. NEVER batch multiple tasks. |
+| **File Path Specificity** | List changed files as **explicit paths**, NEVER abstract counts. |
+| **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own. |
 
 ### Verdict Response Protocol
 
@@ -583,7 +636,7 @@ Review whether the implementation meets the requirements in the 7-Section prompt
 | **REQUEST_CHANGES** (Critical/High) | Create fix task, re-delegate to sisyphus-junior |
 | **COMMENT** (Medium only) | Invoke mnemosyne to commit, then mark completed. Create follow-up task if warranted |
 
-**Note on deliberate trade-offs**: If a previous review finding was intentionally not addressed due to a deliberate trade-off, the decision rationale can optionally be noted in `## 6. CONTEXT` (Prior task results) or in the REVIEW REQUEST (Junior's summary). Argus will independently re-evaluate on re-review; this is informational, not mandatory.
+**Note on deliberate trade-offs**: If a previous review finding was intentionally not addressed due to a deliberate trade-off, the decision rationale can optionally be noted in `## 6. CONTEXT` (Prior task results) or in the QA REQUEST Scope (Summary). Argus will independently re-evaluate on re-review; this is informational, not mandatory.
 
 ### Fix Task from REQUEST_CHANGES
 
