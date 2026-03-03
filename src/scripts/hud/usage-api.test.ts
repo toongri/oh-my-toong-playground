@@ -133,12 +133,12 @@ describe('fetchRateLimits', () => {
       jest.useRealTimers();
     });
 
-    it('converts fractional utilization to percentage', async () => {
+    it('uses utilization value directly as percentage', async () => {
       global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
         ok: true,
         json: async () => ({
-          five_hour: { utilization: 0.75, resets_at: '2024-01-15T12:30:00Z' },
-          seven_day: { utilization: 0.25, resets_at: '2024-01-17T15:00:00Z' },
+          five_hour: { utilization: 75.0, resets_at: '2024-01-15T12:30:00Z' },
+          seven_day: { utilization: 25.0, resets_at: '2024-01-17T15:00:00Z' },
           seven_day_oauth_apps: null,
           seven_day_opus: null,
         }),

@@ -56,11 +56,11 @@ export async function fetchRateLimits(): Promise<RateLimitData | null> {
 
     const result: RateLimitData = {
       fiveHour: data.five_hour ? {
-        percent: Math.round(data.five_hour.utilization * 100),
+        percent: Math.round(data.five_hour.utilization),
         resetIn: formatResetTime(data.five_hour.resets_at),
       } : null,
       sevenDay: data.seven_day ? {
-        percent: Math.round(data.seven_day.utilization * 100),
+        percent: Math.round(data.seven_day.utilization),
         resetIn: formatResetTime(data.seven_day.resets_at),
       } : null,
     };
