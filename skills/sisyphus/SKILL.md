@@ -225,14 +225,32 @@ When a task has 2+ steps, IMMEDIATELY create the full task list via TaskCreate. 
 
 Each task must be completable in a single sisyphus-junior delegation.
 
+Apply **MECE decomposition** as a lightweight sanity check: tasks should be **Mutually Exclusive** (no two tasks modify the same concern or responsibility) and **Collectively Exhaustive** (the full set of tasks covers every requirement with no gaps). Overlapping tasks cause merge conflicts and duplicated work; missing tasks leave requirements unimplemented. This is a quick smell-check — for full MECE methodology with Ambiguity Scoring and detailed verification, see the prometheus planning workflow.
+
 | Smell | Action |
 |-------|--------|
 | Task needs sequential delegations | Break into separate tasks |
 | Task touches unrelated files | Split by concern |
 | Task has "and" in description | Split at the conjunction |
 | Task mixes read + write work | Read yourself, delegate writes |
+| Two tasks modify same function/module | MECE violation — merge or split by responsibility |
+| Completed tasks wouldn't cover a requirement | Coverage gap — add missing task |
+| Task touches 4+ unrelated file groups | Atomicity violation — split by module group |
 
 **RULE**: If you can't write a single-sentence delegation prompt, the task isn't atomic enough.
+
+### Atomicity Quick-Check
+
+Before delegating, verify each task passes all three conditions:
+
+1. **Is the complexity moderate or below?** — Can a single agent understand and implement it without needing broader architectural context?
+2. **Does it touch 3 or fewer logically distinct file groups?** — A file group is a set of closely related files (e.g., a module and its tests).
+3. **Is it single-delegation completable?** — Can sisyphus-junior finish the entire task in one pass without handing back partial work?
+
+**All YES** → the task is atomic. Delegate it.
+**Any NO** → decompose further before delegating.
+
+For full methodology (Ambiguity Score, detailed MECE verification), see the prometheus planning workflow.
 
 ### Parallelization Analysis
 
