@@ -5,7 +5,7 @@ hooks:
   SessionStart:
     - hooks:
         - type: command
-          command: "bun run $CLAUDE_PROJECT_DIR/.claude/hooks/skill-catalog/index.ts"
+          command: "bun run $CLAUDE_PROJECT_DIR/.claude/skills/sisyphus/hooks/skill-catalog/index.ts"
           timeout: 10
 ---
 

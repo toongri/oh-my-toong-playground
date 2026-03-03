@@ -34,9 +34,6 @@ hooks:
     - component: persistent-mode
       event: Stop
       timeout: 15
-    - component: skill-catalog
-      event: SessionStart
-      timeout: 10
 
 skills:
   items:

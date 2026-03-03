@@ -34,9 +34,6 @@ hooks:
     - component: persistent-mode
       event: Stop
       timeout: 15
-    - component: skill-catalog
-      event: SessionStart
-      timeout: 10
     - component: oh-my-toong:sync-schema-validator.sh
       event: PostToolUse
       matcher: "Edit(**/sync.yaml)"
@@ -76,10 +73,6 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
-
-mcps:
-  items:
-    - context7
 
 config:
   claude:

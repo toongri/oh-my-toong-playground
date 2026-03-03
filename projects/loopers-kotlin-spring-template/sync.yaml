@@ -38,9 +38,6 @@ hooks:
     - component: persistent-mode
       event: Stop
       timeout: 15
-    - component: skill-catalog
-      event: SessionStart
-      timeout: 10
     # Kotlin project-specific hooks (file-based)
     - component: pre-commit-gate.sh
       event: PreToolUse
@@ -81,7 +78,7 @@ rules:
 
 mcps:
   items:
-    - context7
+    - playwright
 
 plugins:
   items:
