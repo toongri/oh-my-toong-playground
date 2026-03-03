@@ -338,9 +338,19 @@ gemini_sync_hooks_direct() {
     local dry_run="${4:-false}"
 
     local target_dir="$target_path/.gemini/hooks"
-    local target_file="$target_dir/${display_name}"
 
-    if [[ -f "$source_path" ]]; then
+    if [[ -d "$source_path" ]]; then
+        # Directory hook
+        if [[ "$dry_run" == "true" ]]; then
+            log_dry "Copy (directory): $source_path -> $target_dir/${display_name}/"
+        else
+            mkdir -p "$target_dir/${display_name}"
+            rsync -a --delete --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
+            log_info "Copied: ${display_name}/"
+        fi
+    elif [[ -f "$source_path" ]]; then
+        # File hook
+        local target_file="$target_dir/${display_name}"
         if [[ "$dry_run" == "true" ]]; then
             log_dry "Copy: $source_path -> $target_file"
         else
@@ -350,7 +360,7 @@ gemini_sync_hooks_direct() {
             log_info "Copied: ${display_name}"
         fi
     else
-        log_warn "Hook file not found: $source_path"
+        log_warn "Hook not found: $source_path"
     fi
 }
 
@@ -384,21 +394,29 @@ gemini_sync_scripts_direct() {
     local dry_run="${4:-false}"
 
     local target_dir="$target_path/.gemini/scripts"
-    local target_file="$target_dir/${display_name}"
 
-    if [[ ! -f "$source_path" ]]; then
-        log_warn "Script file not found: $source_path"
-        return 0
+    if [[ -d "$source_path" ]]; then
+        # Directory script
+        if [[ "$dry_run" == "true" ]]; then
+            log_dry "Copy (directory): $source_path -> $target_dir/${display_name}/"
+        else
+            mkdir -p "$target_dir/${display_name}"
+            rsync -a --delete --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
+            log_info "Copied: ${display_name}/"
+        fi
+    elif [[ -f "$source_path" ]]; then
+        # File script
+        local target_file="$target_dir/${display_name}"
+        if [[ "$dry_run" == "true" ]]; then
+            log_dry "Copy: $source_path -> $target_file"
+        else
+            mkdir -p "$target_dir"
+            cp "$source_path" "$target_file"
+            log_info "Copied: ${display_name}"
+        fi
+    else
+        log_warn "Script not found: $source_path"
     fi
-
-    if [[ "$dry_run" == "true" ]]; then
-        log_dry "Copy: $source_path -> $target_file"
-        return 0
-    fi
-
-    mkdir -p "$target_dir"
-    cp "$source_path" "$target_file"
-    log_info "Copied: ${display_name}"
 }
 
 # =============================================================================

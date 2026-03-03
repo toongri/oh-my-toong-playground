@@ -20,23 +20,21 @@ commands:
     - hud
     - ralph
 
-scripts:
-  items:
-    - hud.js
-
 hooks:
   items:
     - component: keyword-detector.sh
       event: UserPromptSubmit
       timeout: 10
-    - component: persistent-mode.js
-      event: Stop
-      timeout: 15
-      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/persistent-mode.js"
     - component: pre-tool-enforcer.sh
       event: PreToolUse
       timeout: 5
     - component: session-start.sh
+      event: SessionStart
+      timeout: 10
+    - component: persistent-mode
+      event: Stop
+      timeout: 15
+    - component: skill-catalog
       event: SessionStart
       timeout: 10
 
@@ -50,10 +48,7 @@ skills:
       platforms: [claude]
     - agent-council
     - clarify
-    - explore
     - git-committer
-    - librarian
-    - metis
     - momus
     - oracle
     - argus
@@ -64,6 +59,11 @@ skills:
     - technical-writing
     - make-resume
     - review-resume
+
+scripts:
+  items:
+    - hud
+    - chunk-review
 
 rules:
   items:

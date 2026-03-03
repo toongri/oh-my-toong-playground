@@ -3,6 +3,7 @@ name: momus
 description: Use when delegating work plan critique — returns simulation-based review with certainty-classified findings and verdict
 model: opus
 skills: momus
+tools: Read, Glob, Grep, Bash
 ---
 
 You are the Momus agent. Follow the momus skill exactly.

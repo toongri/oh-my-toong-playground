@@ -65,6 +65,25 @@ assert_file_contains() {
     fi
 }
 
+assert_json_equals() {
+    local expected="$1"
+    local actual="$2"
+    local msg="${3:-}"
+
+    # Normalize JSON for comparison
+    local normalized_expected=$(echo "$expected" | jq -S '.')
+    local normalized_actual=$(echo "$actual" | jq -S '.')
+
+    if [[ "$normalized_expected" == "$normalized_actual" ]]; then
+        return 0
+    else
+        echo "ASSERTION FAILED: $msg"
+        echo "  Expected: $normalized_expected"
+        echo "  Actual:   $normalized_actual"
+        return 1
+    fi
+}
+
 run_test() {
     local test_name="$1"
     CURRENT_TEST="$test_name"
@@ -534,6 +553,110 @@ EOF
 }
 
 # =============================================================================
+# Tests: Update Settings - Bug Case (hooks wrapper cleanup)
+# =============================================================================
+
+test_update_settings_cleans_existing_hooks_wrapper() {
+    # Given: Settings file with hooks wrapper (corrupted state)
+    cat > "$TEST_TMP_DIR/.claude/settings.json" << 'EOF'
+{
+  "hooks": {
+    "PreToolUse": [{"matcher": "old", "hooks": []}]
+  },
+  "someOtherSetting": true
+}
+EOF
+
+    # When: Update with new hooks at top level
+    local hooks_json='{"PreToolUse": [{"matcher": "new", "hooks": []}]}'
+    claude_update_settings "$TEST_TMP_DIR" "$hooks_json" "false"
+
+    # Then: Result should have new hooks under .hooks key and old hooks replaced
+    local result=$(cat "$TEST_TMP_DIR/.claude/settings.json")
+
+    # Should have PreToolUse under .hooks
+    local has_pre_tool_use=$(echo "$result" | jq '.hooks | has("PreToolUse")')
+    assert_equals "true" "$has_pre_tool_use" "Should have PreToolUse under .hooks"
+
+    # Should have .hooks key
+    local has_hooks_key=$(echo "$result" | jq 'has("hooks")')
+    assert_equals "true" "$has_hooks_key" "Should have hooks key"
+
+    # Should preserve other settings
+    local has_other_setting=$(echo "$result" | jq '.someOtherSetting')
+    assert_equals "true" "$has_other_setting" "Should preserve other settings"
+}
+
+# =============================================================================
+# Tests: Feature Support - Rules
+# =============================================================================
+
+test_supports_feature_rules() {
+    claude_supports_feature "rules"
+    local result=$?
+    assert_equals "0" "$result" "rules should be a supported feature"
+}
+
+# =============================================================================
+# Tests: Sync Rules Direct
+# =============================================================================
+
+test_sync_rules_direct_copies_file() {
+    # Given: A source rule file
+    local source_file="$TEST_TMP_DIR/source-rule.md"
+    echo "# Tool Usage Policy" > "$source_file"
+    echo "Do not use Bash for file reads." >> "$source_file"
+
+    # When: Sync rule to target
+    claude_sync_rules_direct "$TEST_TMP_DIR" "tool-usage-policy" "$source_file" "false"
+
+    # Then: File should be copied to .claude/rules/
+    local target_file="$TEST_TMP_DIR/.claude/rules/tool-usage-policy.md"
+    if [[ ! -f "$target_file" ]]; then
+        echo "ASSERTION FAILED: Target file does not exist: $target_file"
+        return 1
+    fi
+
+    local content=$(cat "$target_file")
+    local expected_first_line="# Tool Usage Policy"
+    local actual_first_line=$(head -1 "$target_file")
+    assert_equals "$expected_first_line" "$actual_first_line" "Rule file content should match"
+}
+
+test_sync_rules_direct_missing_source() {
+    # Given: A non-existent source file
+    local source_file="$TEST_TMP_DIR/nonexistent-rule.md"
+
+    # When: Sync rule with missing source
+    claude_sync_rules_direct "$TEST_TMP_DIR" "missing-rule" "$source_file" "false"
+    local result=$?
+
+    # Then: Should return 0 (graceful handling)
+    assert_equals "0" "$result" "Should return 0 for missing source file"
+
+    # And: Target file should NOT exist
+    if [[ -f "$TEST_TMP_DIR/.claude/rules/missing-rule.md" ]]; then
+        echo "ASSERTION FAILED: Target file should not exist for missing source"
+        return 1
+    fi
+}
+
+test_sync_rules_direct_dry_run() {
+    # Given: A source rule file
+    local source_file="$TEST_TMP_DIR/dry-rule.md"
+    echo "# Dry Run Rule" > "$source_file"
+
+    # When: Sync in dry run mode
+    claude_sync_rules_direct "$TEST_TMP_DIR" "dry-rule" "$source_file" "true"
+
+    # Then: Target file should NOT exist
+    if [[ -f "$TEST_TMP_DIR/.claude/rules/dry-rule.md" ]]; then
+        echo "ASSERTION FAILED: Dry run should not create target file"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -582,6 +705,17 @@ main() {
     run_test test_claude_sync_agents_direct_empty_command_uses_fallback_path
     run_test test_claude_sync_agents_direct_null_command_uses_fallback_path
     run_test test_claude_sync_agents_direct_explicit_command_preserved
+
+    # Settings Update - Bug Case (hooks wrapper cleanup)
+    run_test test_update_settings_cleans_existing_hooks_wrapper
+
+    # Feature Support - Rules
+    run_test test_supports_feature_rules
+
+    # Sync Rules Direct
+    run_test test_sync_rules_direct_copies_file
+    run_test test_sync_rules_direct_missing_source
+    run_test test_sync_rules_direct_dry_run
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

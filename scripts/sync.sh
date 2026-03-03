@@ -558,8 +558,12 @@ sync_hooks() {
                         if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
                             cmd_path="$custom_command"
                         elif [[ -n "$component" && "$component" != "null" ]]; then
-                            # Use $CLAUDE_PROJECT_DIR for portable paths across subdirectories
-                            cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
+                            # Check if source is directory (bun run) or file (direct path)
+                            if [[ -d "$scoped_source" ]]; then
+                                cmd_path="bun run \$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}/index.ts"
+                            else
+                                cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
+                            fi
                         else
                             log_warn "Hook command가 정의되지 않음: event=$hook_event (스킵)"
                             continue
@@ -591,7 +595,11 @@ sync_hooks() {
                         if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
                             cmd_path="$custom_command"
                         elif [[ -n "$component" && "$component" != "null" ]]; then
-                            cmd_path=".gemini/hooks/${display_name}"
+                            if [[ -d "$scoped_source" ]]; then
+                                cmd_path="bun run .gemini/hooks/${display_name}/index.ts"
+                            else
+                                cmd_path=".gemini/hooks/${display_name}"
+                            fi
                         else
                             continue
                         fi
@@ -880,6 +888,27 @@ sync_scripts() {
     done
 
     log_success "Scripts 동기화 완료"
+}
+
+sync_statusline() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    # Check if hud script component exists in scripts.items
+    local has_hud=$(yq '.scripts.items[] | select(. == "hud" or .component == "hud")' "$yaml_file" 2>/dev/null)
+    if [[ -z "$has_hud" ]]; then
+        return 0
+    fi
+
+    # Check if claude is in resolved platforms for scripts
+    # (simplified: if hud was synced, .claude/scripts/hud/index.ts should exist)
+    local hud_target="$target_path/.claude/scripts/hud/index.ts"
+    if [[ ! -f "$hud_target" ]]; then
+        return 0
+    fi
+
+    log_info "HUD statusLine 동기화"
+    claude_set_statusline "$target_path" "bun run .claude/scripts/hud/index.ts" "$DRY_RUN"
 }
 
 # ============================================================
@@ -1205,6 +1234,45 @@ sync_plugins() {
 }
 
 # =============================================================================
+# Shared Lib Deployment
+# =============================================================================
+
+sync_lib() {
+    local target_path="$1"
+    local yaml_file="$2"
+
+    if [[ ! -d "$ROOT_DIR/src/lib" ]]; then
+        return 0
+    fi
+
+    # Platform cascade: get_default_platforms > get_feature_platforms("lib") > yaml top-level .platforms
+    local default_platforms=$(get_default_platforms)
+    local feature_platforms=$(get_feature_platforms "lib")
+    if [[ -z "$feature_platforms" ]]; then
+        feature_platforms="$default_platforms"
+    fi
+
+    local sync_platforms=$(yq -o=json '.platforms // null' "$yaml_file")
+    if [[ "$sync_platforms" == "null" ]]; then
+        sync_platforms="$feature_platforms"
+    fi
+
+    # Deploy to each resolved platform
+    for platform in $(echo "$sync_platforms" | jq -r '.[]'); do
+        local platform_dir=".$platform"
+        local lib_dir="$target_path/$platform_dir/lib"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            log_dry "Deploy lib: src/lib/ -> $lib_dir/"
+        else
+            rm -rf "$lib_dir"
+            mkdir -p "$lib_dir"
+            rsync -a --exclude '*.test.ts' "$ROOT_DIR/src/lib/" "$lib_dir/"
+            log_info "Deployed shared lib to $platform_dir/lib/"
+        fi
+    done
+}
+
+# =============================================================================
 # YAML 처리
 # =============================================================================
 
@@ -1257,8 +1325,10 @@ process_yaml() {
     sync_commands "$target_path" "$yaml_file"
     sync_skills "$target_path" "$yaml_file"
     sync_scripts "$target_path" "$yaml_file"
+    sync_statusline "$target_path" "$yaml_file"
     sync_rules "$target_path" "$yaml_file"
     sync_plugins "$target_path" "$yaml_file"
+    sync_lib "$target_path" "$yaml_file"
 
     log_success "완료: $yaml_file"
 }

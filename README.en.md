@@ -210,7 +210,6 @@ oh-my-toong/
 │   ├── explore/               # Codebase search and navigation
 │   ├── librarian/             # External documentation researcher
 │   ├── clarify/               # Requirements clarification gate
-│   ├── metis/                 # Pre-planning gap analysis
 │   ├── momus/                 # Work plan reviewer
 │   ├── git-committer/         # Git commit workflow
 │   ├── agent-council/         # Multi-AI advisory body
@@ -254,10 +253,7 @@ oh-my-toong/
 | **prometheus** | Strategic planning consultant | Planner only - NEVER implements |
 | **sisyphus** | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
 | **oracle** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
-| **explore** | Codebase search | Returns actionable results with absolute paths |
-| **librarian** | External documentation researcher | Searches external docs - NOT internal codebase |
 | **clarify** | Requirements clarification | MANDATORY gate before implementation |
-| **metis** | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | **git-committer** | Git commit workflow | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |

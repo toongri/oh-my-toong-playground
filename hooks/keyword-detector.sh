@@ -38,7 +38,9 @@ get_project_root() {
   done
 
   # Fallback: return the stripped directory
-  echo "${1%/.omt}"
+  local _fallback="${1%/.omt}"
+  _fallback="${_fallback%/.claude}"
+  echo "$_fallback"
 }
 
 # Get project root
@@ -67,13 +69,22 @@ if [ -z "$PROMPT" ]; then
   exit 0
 fi
 
-# Remove code blocks before checking keywords
-# First convert newlines to a placeholder, then remove multi-line code blocks, then restore newlines
-# This handles both single-line and multi-line code blocks properly
-PROMPT_NO_CODE=$(echo "$PROMPT" | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
+# Strip all mode tags to prevent nested activation loops
+strip_mode_tags() {
+  perl -0pe 's/<ralph-loop-continuation>.*?<\/ralph-loop-continuation>//gs' |
+  perl -0pe 's/<ralph-mode>.*?<\/ralph-mode>//gs' |
+  perl -0pe 's/<search-mode>.*?<\/search-mode>//gs' |
+  perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' |
+  perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' |
+  perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' |
+  perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs'
+}
 
-# Remove system-reminder tags
-PROMPT_CLEAN=$(echo "$PROMPT" | perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs' | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
+# Remove code blocks AND hook output tags before checking keywords
+PROMPT_NO_CODE=$(echo "$PROMPT" | strip_mode_tags | tr '\n' '\r' | sed 's/```[^`]*```//g' | sed 's/`[^`]*`//g' | tr '\r' '\n')
+
+# Remove hook output tags and system reminders from cleaned prompt
+PROMPT_CLEAN=$(echo "$PROMPT" | strip_mode_tags | sed 's/  */ /g' | sed 's/^ *//;s/ *$//')
 
 # Extract file paths from non-text parts (e.g., @file mentions)
 FILE_PATHS=""
@@ -91,6 +102,25 @@ fi
 # Convert to lowercase
 PROMPT_LOWER=$(echo "$PROMPT_NO_CODE" | tr '[:upper:]' '[:lower:]')
 
+RALPH_STATE_PROMPT_MAX=2000
+RALPH_CONTEXT_PROMPT_MAX=2000
+
+truncate_prompt_text() {
+  local text="$1"
+  local max_chars="$2"
+  local normalized
+  normalized=$(printf '%s' "$text" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g; s/^ *//; s/ *$//')
+  local text_len=${#normalized}
+
+  if [ "$text_len" -le "$max_chars" ]; then
+    printf '%s' "$normalized"
+    return 0
+  fi
+
+  local truncated="${normalized:0:$max_chars}"
+  printf '%s...[truncated from %s chars]' "$truncated" "$text_len"
+}
+
 # Function to create ralph state file
 # Uses SESSION_ID for session-specific file naming
 create_ralph_state() {
@@ -98,32 +128,66 @@ create_ralph_state() {
   local prompt="$2"
   local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
 
-  # Escape prompt for JSON (basic escaping)
-  local escaped_prompt=$(echo "$prompt" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | tr '\n' ' ')
-
   # Create local .omt directory
   mkdir -p "$dir/.omt" 2>/dev/null
-  cat > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null << EOF
+
+  if command -v jq &> /dev/null; then
+    jq -n \
+      --arg prompt "$prompt" \
+      --arg started_at "$timestamp" \
+      '{
+        active: true,
+        iteration: 0,
+        max_iterations: 10,
+        completion_promise: "DONE",
+        prompt: $prompt,
+        started_at: $started_at
+      }' > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null
+  else
+    # Fallback: basic escaping when jq is unavailable
+    local escaped_prompt=$(printf '%s' "$prompt" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+    cat > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null << RALPH_STATE_EOF
 {
   "active": true,
-  "iteration": 1,
+  "iteration": 0,
   "max_iterations": 10,
   "completion_promise": "DONE",
   "prompt": "$escaped_prompt",
   "started_at": "$timestamp"
 }
-EOF
+RALPH_STATE_EOF
+  fi
 }
 
 # Check for ralph keyword (highest priority) - ralph loop activation
 if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
-  # Create ralph state file
-  create_ralph_state "$PROJECT_ROOT" "$PROMPT_CLEAN"
+  RALPH_STATE_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_STATE_PROMPT_MAX")
+  RALPH_CONTEXT_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_CONTEXT_PROMPT_MAX")
 
-  # Output ralph activation message
-  cat << EOF
-{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ralph-mode>\n**RALPH LOOP ACTIVATED** - Iteration 1/10\n\nYou are in Ralph Loop mode with MANDATORY VERIFICATION GATES.\n\n## CORE RULES\n1. Work until ALL requirements are met\n2. Track progress with TodoWrite tool\n3. When ALL tasks complete, output <promise>DONE</promise> to trigger Oracle verification\n4. After Oracle approves, output <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n5. Do NOT stop until Oracle approves\n\n## COMPLETION SEQUENCE (MANDATORY)\n\n1. **Complete all tasks** - Check TODO list is empty\n2. **Run verification** - Build, test, lint as applicable\n3. **Output promise** - <promise>DONE</promise>\n4. **Stop hook triggers** - Oracle verification will be requested\n5. **Spawn Oracle** - Verify completion with oracle agent\n6. **Output approval tag** - <oracle-approved>VERIFIED_COMPLETE</oracle-approved>\n7. **Done** - Session can end\n\n## VERIFICATION REQUIREMENTS\n\n- [ ] Build: Fresh run showing SUCCESS\n- [ ] Tests: Fresh run showing ALL PASS\n- [ ] TODO LIST: Zero pending/in_progress tasks\n- [ ] Oracle: Verification approved\n\n### Red Flags (STOP if you catch yourself)\n- Using 'should work', 'probably passes'\n- Skipping build/test because 'nothing changed'\n- Forgetting to output <promise>DONE</promise> when complete\n\nOriginal task: ${PROMPT_CLEAN}\n</ralph-mode>\n\n---\n"}}
-EOF
+  # Create ralph state file
+  create_ralph_state "$PROJECT_ROOT" "$RALPH_STATE_PROMPT"
+
+  # Build ralph activation JSON safely using jq --arg to escape prompt
+  if command -v jq &> /dev/null; then
+    RALPH_CONTEXT="<ralph-mode>\n**RALPH LOOP ACTIVATED**\n\nYou are in Ralph Loop mode.\n\n## CORE RULES\n1. Work until ALL requirements are truly done — not just technically complete\n2. Track progress with tasks\n3. Make meaningful progress toward the goal each cycle\n4. If stuck, try different approaches rather than repeating what failed\n5. You MUST output \`<promise>DONE</promise>\` when ALL tasks are complete\n\nOriginal task: "
+    RALPH_SUFFIX="\n</ralph-mode>\n\n---\n"
+
+    jq -n \
+      --arg prefix "$RALPH_CONTEXT" \
+      --arg prompt "$RALPH_CONTEXT_PROMPT" \
+      --arg suffix "$RALPH_SUFFIX" \
+      '{
+        continue: true,
+        hookSpecificOutput: {
+          hookEventName: "UserPromptSubmit",
+          additionalContext: ($prefix + $prompt + $suffix)
+        }
+      }'
+  else
+    # Fallback: basic escaping when jq is unavailable
+    escaped_prompt=$(printf '%s' "$RALPH_CONTEXT_PROMPT" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+    echo "{\"continue\": true, \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", \"additionalContext\": \"<ralph-mode>\\n**RALPH LOOP ACTIVATED**\\n\\nYou are in Ralph Loop mode.\\n\\n## CORE RULES\\n1. Work until ALL requirements are truly done — not just technically complete\\n2. Track progress with tasks\\n3. Make meaningful progress toward the goal each cycle\\n4. If stuck, try different approaches rather than repeating what failed\\n5. You MUST output \\\`<promise>DONE</promise>\\\` when ALL tasks are complete\\n\\nOriginal task: ${escaped_prompt}\\n</ralph-mode>\\n\\n---\\n\"}}"
+  fi
   exit 0
 fi
 

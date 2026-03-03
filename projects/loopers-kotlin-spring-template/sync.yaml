@@ -23,24 +23,22 @@ commands:
     - hud
     - ralph
 
-scripts:
-  items:
-    - hud.js
-
 hooks:
   items:
     # Common hooks
     - component: keyword-detector.sh
       event: UserPromptSubmit
       timeout: 10
-    - component: persistent-mode.js
-      event: Stop
-      timeout: 15
-      command: "node $CLAUDE_PROJECT_DIR/.claude/hooks/persistent-mode.js"
     - component: pre-tool-enforcer.sh
       event: PreToolUse
       timeout: 5
     - component: session-start.sh
+      event: SessionStart
+      timeout: 10
+    - component: persistent-mode
+      event: Stop
+      timeout: 15
+    - component: skill-catalog
       event: SessionStart
       timeout: 10
     # Kotlin project-specific hooks (file-based)
@@ -59,10 +57,7 @@ skills:
       platforms: [claude]
     - agent-council
     - clarify
-    - explore
     - git-committer
-    - librarian
-    - metis
     - momus
     - oracle
     - testing
@@ -72,6 +67,11 @@ skills:
     - make-pr
     - spec-review
     - technical-writing
+
+scripts:
+  items:
+    - hud
+    - chunk-review
 
 rules:
   items:

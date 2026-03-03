@@ -2,6 +2,12 @@
 
 > This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/reviewer.md.
 
+## Review Scope
+
+**Review ONLY these files:** {FILE_LIST}
+
+Do NOT review files outside this list. Cross-references to other files are acceptable for context, but findings must be limited to the files listed above.
+
 ## What Was Implemented
 
 **{WHAT_WAS_IMPLEMENTED}**

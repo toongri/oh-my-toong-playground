@@ -20,15 +20,14 @@ make sync               # Deploy to target projects (runs validate + tests first
 ### Running Individual Tests
 
 ```bash
-bash hooks/test/keyword_detector_test.sh   # Single shell test
-bash scripts/test/sync_test.sh             # Sync orchestrator tests
-cd scripts/hud && npm test                 # HUD TypeScript tests
-cd scripts/lib && npm test                 # Shared library TypeScript tests
+bash hooks/keyword-detector_test.sh        # Single shell test (colocated next to source)
+bash scripts/sync_test.sh                  # Sync orchestrator tests (colocated next to source)
+bun test                                   # All TypeScript tests
 ```
 
 ### Prerequisites
 
-`yq`, `jq`, `node` (v18+), `bash` (macOS 3.2 compatible)
+`yq`, `jq`, `bun`, `bash` (macOS 3.2 compatible)
 
 ## Architecture
 
@@ -42,10 +41,14 @@ oh-my-toong/
 ├── hooks/           # Session lifecycle scripts (sh/js/py)
 ├── rules/           # Behavioral rules synced as .claude/rules/
 ├── scripts/         # Sync tooling, adapters, and utilities
-│   ├── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
-│   ├── lib/         # Shared TypeScript helpers (ESM, Jest)
-│   ├── hud/         # HUD TypeScript package (builds to scripts/hud.js)
-│   └── persistent-mode/  # Stop-hook TypeScript package
+│   └── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
+├── src/             # TypeScript source packages
+│   ├── hooks/
+│   │   ├── persistent-mode/   # Stop-hook TypeScript package
+│   │   └── skill-catalog/     # Skill catalog hook
+│   ├── lib/                   # Shared TypeScript helpers (ESM, bun:test)
+│   └── scripts/
+│       └── hud/               # HUD TypeScript package (deployed as directory)
 ├── projects/        # Project-specific overrides (skills, hooks per project)
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
@@ -94,10 +97,7 @@ skills:
 | sisyphus-junior | Focused executor | Works ALONE - no delegation, strict todo discipline |
 | momus | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | oracle | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
-| explore | Codebase search | Returns actionable results with absolute paths |
-| librarian | External documentation researcher | Searches external docs - NOT internal codebase |
 | clarify | Requirements clarification | MANDATORY gate before implementation |
-| metis | Pre-planning analysis | Catches missing questions, undefined guardrails |
 | git-committer | Git commit workflow | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
 | argus | Verification guardian | Verifies Junior's work - nothing escapes |
@@ -106,7 +106,7 @@ skills:
 
 - **session-start.sh**: Restores persistent mode states (ralph-loop, incomplete todos)
 - **keyword-detector.sh**: Detects keywords (ultrawork/uw, think, search, analyze) and injects mode context
-- **persistent-mode.js**: Prevents stopping when work remains incomplete (Stop hook, Node.js)
+- **persistent-mode/**: Prevents stopping when work remains incomplete (Stop hook, TypeScript directory)
 - **pre-tool-enforcer.sh**: Tool execution gate (TaskOutput blocking)
 
 ### Key Workflows
@@ -120,18 +120,13 @@ skills:
 - State file at `.omt/ralph-state.json`
 - Cancel with `/cancel-ralph`
 
-**Planning → Execution Flow**:
-1. `/prometheus <task>` - Creates work plan in `.omt/plans/*.md`
-2. `/sisyphus` - Orchestrates plan execution via subagents
-3. `sisyphus-junior` - Executes individual tasks with strict todo discipline
-
 ## Coding Conventions
 
 - **Bash**: `set -euo pipefail`, macOS Bash 3.2 compatible (no associative arrays, no `declare -A`), quote all variables
-- **TypeScript**: ESM modules, Jest for testing. Rebuild generated output after changes (`npm run build` in `scripts/hud/`)
+- **TypeScript**: ESM modules, bun:test for testing. No build step required.
 - **YAML**: 2-space indentation
 - **Naming**: `skills/<greek-name>/`, `agents/<name>.md`, `hooks/<purpose>.(sh|js|py)`
-- **Shell tests**: Standalone scripts using `mktemp -d` with cleanup; naming convention `*_test.sh` or `test_*.sh`
+- **Shell tests**: Colocated next to source files with `_test.sh` suffix (e.g., `hooks/keyword-detector_test.sh`, `scripts/sync_test.sh`); use `mktemp -d` with cleanup
 
 ## Critical Patterns
 
@@ -149,8 +144,8 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | Architecture/debugging analysis | oracle |
 | Codebase search | explore |
 | External documentation | librarian |
-| Task planning | prometheus |
 | Code implementation | sisyphus-junior |
+| Pre-planning analysis | metis |
 | Plan review | momus |
 | Code verification | argus |
 

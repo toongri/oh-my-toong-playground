@@ -233,7 +233,18 @@ After loading context, classify the user's request into one of four tiers. Class
 | **Complex** | 3+ files, multi-component | Deep interview, explore MANDATORY before forming questions |
 | **Architecture** | System design, infrastructure, long-term impact | Oracle MANDATORY (NO EXCEPTIONS), explore + librarian parallel |
 
-**Clearance Checklist 5 items unchanged for ALL intents.** Only interview depth varies.
+### Decomposition Formalism by Intent
+
+Each intent tier determines which decomposition checks apply and at what rigor. Higher tiers require stricter validation.
+
+| Intent | Ambiguity Score | MECE | Atomicity |
+|--------|----------------|------|-----------|
+| **Trivial** | Skip (assume low ambiguity) | Quick-check: confirm tasks do not overlap and cover the request | Quick-check: confirm each task is single-delegation completable |
+| **Scoped** | Compute using Greenfield or Brownfield formula | Full MECE validation with self-check questions | Full Atomicity check against all 3 conditions |
+| **Complex** | Compute + review anti-pattern table for hidden ambiguity | Full MECE + cross-check anti-pattern table (Overlap, Gap, False MECE) | Full Atomicity check + smell-action table review |
+| **Architecture** | Brownfield variant + oracle validation of Context Clarity dimension | Full MECE validation | Full Atomicity check against all 3 conditions |
+
+**Clearance Checklist 6 items (including Ambiguity Score) apply to ALL intents.** Only interview depth and decomposition rigor vary.
 
 **Note:** Classification is Prometheus-internal (distinct from Metis's Phase 0 intent classification which serves analysis strategy).
 
@@ -384,10 +395,26 @@ When user explicitly defers ("skip", "I don't know", "your call", "you decide", 
 | 3 | No critical ambiguities remaining? | YES |
 | 4 | Technical approach validated? | YES |
 | 5 | Test/verification strategy identified? | YES |
+| 6 | Ambiguity Score ≤ 0.2? | YES |
 
-**All YES** -> READY for next phase. Proceed to Acceptance Criteria Drafting.
+**Ambiguity Score** — quantifies remaining uncertainty across interview dimensions.
+
+Formula: `Ambiguity = 1 − Σ(clarityᵢ × weightᵢ)`
+
+Each clarity dimension is rated 0.0 (fully ambiguous) to 1.0 (fully clear) based on interview answers.
+
+| Variant | Dimensions | Weights |
+|---------|-----------|---------|
+| **Greenfield** (new feature, no existing code) | Goal Clarity, Constraint Clarity, Success Criteria Clarity | Goal 0.4, Constraint 0.3, Success 0.3 |
+| **Brownfield** (modifying existing system) | Goal Clarity, Constraint Clarity, Success Criteria Clarity, Context Clarity | Goal 0.35, Constraint 0.25, Success 0.25, Context 0.15 |
+
+- Use Greenfield when no existing code is involved. Use Brownfield when modifying or extending existing systems.
+- Context Clarity (Brownfield only) measures understanding of the existing codebase, dependencies, and constraints discovered via explore/oracle.
+- Threshold: **≤ 0.2** (equivalent to overall clarity ≥ 0.8). If above threshold, continue interviewing to reduce ambiguity.
+
+**All YES (items 1-5) AND Ambiguity ≤ 0.2** -> READY for next phase. Proceed to Acceptance Criteria Drafting.
 After AC is confirmed, proceed to Metis consultation automatically (see Metis Feedback Loop section).
-**Any NO** -> Continue interview. Do NOT proceed to AC Drafting.
+**Any NO in items 1-5 OR Ambiguity > 0.2** -> Continue interview. Do NOT proceed to AC Drafting.
 
 This checklist is internal -- do not present it to the user.
 
@@ -564,7 +591,7 @@ Overall structure:
 
 </CRITICAL_GATE>
 
-**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis skill to validate your work. **Metis must pass (APPROVE or COMMENT) before writing the plan. REQUEST_CHANGES blocks until resolved.**
+**When you feel ready to write the plan** (Clearance Checklist all YES + AC confirmed), invoke the metis agent to validate your work. **Metis must pass (APPROVE or COMMENT) before writing the plan. REQUEST_CHANGES blocks until resolved.**
 
 **TIMING: Metis is invoked when BOTH conditions are met:**
 1. Clearance Checklist: all YES
@@ -614,12 +641,6 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 | **REQUEST_CHANGES** | **MANDATORY**: Return to Interview Mode. Resolve ALL blocking items. Modify content to address feedback. Re-invoke metis with updated 3-Section template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
 
-**Post-Metis Summary** (include in plan under Context section):
-- **Identified Gaps**: What Metis found (across all iterations)
-- **How Resolved**: Classification applied to each gap
-- **Incorporated**: What was folded into the plan
-- **Iterations**: Number of metis invocations before APPROVE
-
 ### Momus Feedback Loop (MANDATORY Before User Presentation)
 
 <CRITICAL_GATE>
@@ -650,7 +671,7 @@ Invoke momus with the plan file path only. Momus reads the file and reviews acco
 .omt/plans/[name].md
 ```
 
-All review context (original request, interview summary, metis results) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
+All review context (interview summary) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
 
 **Invocation Anti-Patterns:**
 
@@ -667,11 +688,6 @@ All review context (original request, interview summary, metis results) is alrea
 | **APPROVE** | Present the full plan to the user. Show the complete plan content and ask to finalize. Gate passed. |
 | **REQUEST_CHANGES** | **MANDATORY**: Revise the plan to address ALL [CERTAIN] findings. Re-invoke momus with the same plan file path. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate [POSSIBLE] findings into the plan. Present the full plan to the user. |
-
-**Post-Momus Summary** (append to plan under Context section):
-- **Findings**: What Momus found (across all iterations)
-- **How Resolved**: Changes made to address each finding
-- **Iterations**: Number of momus invocations before APPROVE
 
 ### Plan Presentation (After Momus Approval)
 
@@ -708,16 +724,30 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | Section | Contents |
 |---------|----------|
 | **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
-| **Context** | Original request, interview summary (key decisions), research findings, Metis review (identified gaps and how resolved), Momus review (findings and how resolved) |
+| **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
-| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, file/pattern references, acceptance criteria, parallelization fields, QA scenarios |
+| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them |
+| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
+| **Final Verification Wave** | Post-TODO plan-level verification. F1 (Plan Compliance Audit), F2 (Code Quality Review), F3 (Full QA Re-execution), F4 (Scope Fidelity Check) — all run in parallel after the last execution wave completes. Required for Scoped+ intent, optional for Trivial |
+| **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
 **TODO Task Format:**
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
-- Include file/pattern references -- executor has NO interview context
+- **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths with action (create/update/delete).
+- **References (CRITICAL)** -- executor has NO interview context. Provide the context they need:
+  - **Pattern References**: `file:line-range` — existing code patterns to follow.
+    WHY explains what pattern to adopt.
+  - **API/Type References**: types, interfaces, APIs to use.
+    WHY explains why this type/API matters.
+  - **Test References**: existing test patterns to match.
+    WHY explains what test style to follow.
+  - **External References**: official docs, library specs, RFCs.
+    WHY explains what decision this informs.
+  - Each reference: `path-or-url — description` on first line, `WHY: explanation` on next line.
+  - Files vs References: Files = what this TODO creates/modifies (deliverables). References = what existing files/resources to consult (context). Both coexist — References does NOT replace Files.
+  - Per-category: include when the category has relevant existing artifacts; skip when no applicable artifact exists. Not all 4 categories need to be filled. Soft limit: 1-3 references per category.
 - 3-6 tasks is the total plan task count (not 30 micro-steps, not 1 vague step); Wave is the execution ordering within that count
 - **Parallelization** -- every TODO must include:
   - `Blocked By`: list of TODO numbers this task depends on (empty if none)
@@ -726,8 +756,69 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 - **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically.
 - **Anti-pattern**: Assigning Wave 2 to an independent task because "it makes sense to do X before Y." If there is a real dependency, add `Blocked By`. If there is no dependency, the task goes in Wave 1.
 - **Wave integrity**: Every wave must reference numbered TODOs only. Do not add administrative stages (Verification, Merge, Deploy) as waves — argus handles verification, mnemosyne handles commits.
+
+**MECE Decomposition Principle**
+
+Mutually Exclusive, Collectively Exhaustive — tasks should not overlap in scope and should collectively cover the entire requirement. When decomposing work into TODOs, each task must own a distinct responsibility with no shared territory, and the union of all tasks must fully satisfy the acceptance criteria.
+
+Self-check questions (run after drafting TODOs):
+
+1. **Overlap**: Do any two TODOs modify the same file for the same purpose? If yes, merge or redraw boundaries.
+2. **Coverage**: If every TODO is completed perfectly, is the entire requirement fulfilled? If not, identify the gap and add a TODO.
+3. **Hidden coupling**: Do any TODOs appear independent but share implicit state, ordering assumptions, or undeclared data dependencies? If yes, make the dependency explicit via `Blocked By` or merge into one TODO.
+
+| Anti-Pattern | Example | Fix |
+|-------------|---------|-----|
+| **Overlap** | TODO 1 "Add validation to UserService" and TODO 2 "Add input validation to user endpoints" — both validate user input | Merge into one TODO that owns all user input validation, or split by layer (service vs controller) with explicit boundary |
+| **Gap** | TODOs cover create/read/update but no TODO handles delete — yet AC requires full CRUD | Add a TODO for delete, or expand an existing TODO's scope to include it |
+| **False MECE** | TODOs are labeled "frontend" and "backend" but the API contract is owned by neither — each assumes the other defines it | Add explicit TODO for API contract definition, or assign contract ownership to one TODO and make the other depend on it |
+
+**Atomicity Heuristic**
+
+Each TODO must be atomic — completable by a single executor (sisyphus-junior) in one delegation pass without requiring mid-task coordination. If a TODO fails the atomicity check, decompose it further.
+
+| # | Condition | Threshold | Question |
+|---|-----------|-----------|----------|
+| 1 | Complexity | Moderate or below | Can a single agent understand the full context and implement this without specialized domain knowledge beyond what the plan provides? |
+| 2 | File scope | ≤ 3 logically distinct file groups | Does this task touch more than 3 unrelated file groups (where a group is files that change together for one reason)? |
+| 3 | Single-delegation completable | One pass | Can sisyphus-junior finish this TODO in one delegation without needing to pause, ask questions, or wait for external input? |
+
+**Rule**: If ANY condition fails, decompose the TODO further until all sub-tasks pass all 3 conditions.
+
+Smell-action table — common signs a TODO is not atomic:
+
+| Smell | Example | Action |
+|-------|---------|--------|
+| "and" in the task description | "Create the service and update all consumers" | Split into: (1) create service, (2) update consumers (blocked by 1) |
+| File groups span unrelated modules | "Update auth middleware, user model, and email templates" | Split by module boundary — one TODO per logically distinct group |
+| Task requires sequential phases | "Design the schema, implement migrations, seed test data" | Each phase becomes its own TODO with `Blocked By` chain |
+| Estimated changes exceed ~200 lines | A TODO that touches 5+ files with non-trivial logic in each | Decompose by responsibility — find natural seams in the work |
+| Task requires domain knowledge not in the plan | "Optimize the query based on production usage patterns" | Either add the domain context to the plan's TODO description, or split into (1) gather metrics, (2) optimize based on findings |
+
+**Zero Human Intervention Principle:**
+
+> **ZERO HUMAN INTERVENTION** — ALL verification is agent-executed. No exceptions.
+
+> Acceptance criteria requiring "user manually tests/confirms" are FORBIDDEN.
+
+Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `.omt/evidence/{plan-name}/` so that downstream verification agents (argus) can audit results independently.
+
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
-  - Each scenario has 4 fields: **Tool** / **Preconditions** (setup state) / **Steps** (exact commands or actions) / **Expected** (observable outcome)
+  - Each scenario uses a structured block format with 7 fields:
+    - **Scenario**: `{Name} — {Purpose}` (e.g., "Happy path — requests under limit")
+    - **Tool**: CLI command (see reference table below)
+    - **Preconditions**: Setup state required before execution
+    - **Steps**: Numbered list of exact commands/actions
+    - **Expected**: Observable outcome on success
+    - **Failure**: Specific failure symptoms — NOT the negation of Expected, but concrete observable indicators
+    - **Evidence**: Per-scenario path following Evidence Convention below
+  - **Failure field guideline**:
+    | WRONG | RIGHT |
+    |-------|-------|
+    | "Expected does not happen" | "Returns 500 with stack trace in response body" |
+    | "Test fails" | "Process exits with code 1 and prints 'Config not found'" |
+    | "No output" | "Response missing X-RateLimit-Remaining header" |
+    The Failure field describes the specific observable symptoms of failure, not the absence of success.
   - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
     Reference examples by project type:
     | Project Type | Tool Example |
@@ -747,7 +838,18 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
     | "Concurrency stress test" | Test category, not executable | `bash` |
     | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
-  - Non-code TODOs (docs, config) may use simplified format: Preconditions + Expected only
+  - Non-code TODOs (docs, config) may use simplified block format: Scenario Name + Preconditions + Expected + Failure (Tool/Steps/Evidence optional)
+  - **Evidence Convention**: Each QA scenario execution MUST save its output as an evidence artifact. Evidence path format:
+    ```
+    .omt/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}
+    ```
+    Evidence type by domain:
+    | Domain | Extension | Example |
+    |--------|-----------|---------|
+    | UI (screenshot) | `.png` | `task-2-login-form-renders.png` |
+    | CLI (command output) | `.txt` | `task-1-build-passes.txt` |
+    | API (response body) | `.json` | `task-3-create-user-201.json` |
+    | Test runner | `.txt` | `task-4-unit-tests-pass.txt` |
 
 **Execution Strategy & QA Scenarios Example:**
 
@@ -763,6 +865,11 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 - What to do: Create UserService with CRUD operations
 - Must NOT do: Add caching or event publishing
 - Files: src/service/user-service.ts (create), src/service/index.ts (export)
+- References (CRITICAL):
+  - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
+    WHY: Follow the same repository injection, error handling, and return type conventions
+  - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
+    WHY: Match describe/it nesting, mock setup, and assertion style
 - Blocked By: TODO 1, TODO 2
 - Blocks: TODO 5
 - Wave: 2
@@ -770,10 +877,24 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
   - UserService implements create, read, update, delete
   - All methods return typed responses
   - QA Scenarios:
-    | # | Tool | Preconditions | Steps | Expected |
-    |---|------|---------------|-------|----------|
-    | 1 | jest | DB migrated, test user seed | Run `npm test -- user-service` | All CRUD tests pass, coverage >90% |
-    | 2 | jest | DB migrated, no seed data | Call create() with missing required field | Throws ValidationError with field name |
+
+    Scenario: Happy path — CRUD operations work correctly
+      Tool: jest
+      Preconditions: DB migrated, test user seed
+      Steps:
+        1. Run `npm test -- user-service`
+      Expected: All CRUD tests pass, coverage >90%
+      Failure: Test runner reports failing assertions or coverage below 90%
+      Evidence: .omt/evidence/{plan-name}/task-3-crud-happy.txt
+
+    Scenario: Validation failure — missing required field rejected
+      Tool: jest
+      Preconditions: DB migrated, no seed data
+      Steps:
+        1. Call create() with missing required field
+      Expected: Throws ValidationError with field name
+      Failure: No error thrown, or error type is not ValidationError, or field name missing from message
+      Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.txt
 ```
 
 **Non-code TODO Example (simplified format):**
@@ -789,10 +910,126 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 - Acceptance Criteria:
   - Rate limiting section documents limits, headers, and error responses
   - QA Scenarios:
-    | # | Preconditions | Expected |
-    |---|---------------|----------|
-    | 1 | docs/api-reference.md exists, rate limiting middleware merged | Rate limit headers documented with X-RateLimit-* descriptions |
-    | 2 | No rate limiting section exists prior | Section added without modifying existing endpoint docs |
+
+    Scenario: Rate limit headers documented
+      Preconditions: docs/api-reference.md exists, rate limiting middleware merged
+      Expected: Rate limit headers documented with X-RateLimit-* descriptions
+      Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
+
+    Scenario: Existing docs preserved
+      Preconditions: No rate limiting section exists prior
+      Expected: Section added without modifying existing endpoint docs
+      Failure: Existing endpoint documentation sections altered or removed
+```
+
+**Final Verification Wave:**
+
+> This section is OUTSIDE the execution wave system — it does not conflict with the Wave integrity rule ("Every wave must reference numbered TODOs only. Do not add administrative stages as waves"). F1-F4 are post-execution verification checks, not TODO waves.
+
+> Trivial intent may omit this section.
+
+After the last execution wave completes, run F1-F4 in parallel as a plan-level verification pass:
+
+**F1: Plan Compliance Audit**
+- Read the plan file (`.omt/plans/{name}.md`)
+- Verify every Must Have requirement is implemented
+- Verify every Must NOT Have / Guardrail is absent
+- Verify evidence files exist for all QA scenarios in `.omt/evidence/{plan-name}/`
+
+Output format:
+```
+F1: Plan Compliance Audit
+- Must Have:
+  - [x] {requirement 1} — implemented in {file}
+  - [x] {requirement 2} — implemented in {file}
+- Must NOT Have:
+  - [x] {guardrail 1} — confirmed absent
+- Evidence:
+  - [x] task-1-*.{ext} — {count} files found
+  - [x] task-2-*.{ext} — {count} files found
+- Result: PASS / FAIL
+```
+
+**F2: Code Quality Review**
+- Run build, lint, and test commands
+- Review changed files for anti-patterns (dead code, hardcoded values, missing error handling)
+
+Output format:
+```
+F2: Code Quality Review
+- Build: PASS / FAIL ({command})
+- Lint: PASS / FAIL ({command})
+- Tests: PASS / FAIL ({count} passed, {count} failed)
+- Anti-pattern review:
+  - {file}: {finding or "clean"}
+- Result: PASS / FAIL
+```
+
+**F3: Full QA Re-execution**
+- Re-execute ALL QA scenarios from every TODO (not just the last wave)
+- Run cross-task integration tests if multiple TODOs interact
+- Save re-execution evidence to `.omt/evidence/{plan-name}/`
+
+Output format:
+```
+F3: Full QA Re-execution
+- TODO 1: {count}/{total} scenarios passed
+- TODO 2: {count}/{total} scenarios passed
+- Cross-task integration: PASS / FAIL
+- Evidence saved: .omt/evidence/{plan-name}/
+- Result: PASS / FAIL
+```
+
+**F4: Scope Fidelity Check**
+- Compare spec (acceptance criteria + Must Have) vs actual implementation 1:1
+- Detect scope creep: any functionality added beyond what the plan specified
+- Detect scope gap: any planned functionality missing from implementation
+
+Output format:
+```
+F4: Scope Fidelity Check
+- Spec items: {count}
+- Implemented: {count}
+- Scope creep: {list or "none"}
+- Scope gap: {list or "none"}
+- Result: PASS / FAIL
+```
+
+**Success Criteria Template:**
+
+The Success Criteria section defines the binary pass/fail end state of the plan. It is distinct from Verification Strategy (which defines the testing methodology) — Success Criteria is the concrete "are we done?" checklist.
+
+```
+## Success Criteria
+
+### Verification Commands
+
+\`\`\`bash
+# Build
+{build-command}
+# Expected: exit 0, no errors
+
+# Tests
+{test-command}
+# Expected: all tests pass
+
+# Lint
+{lint-command}
+# Expected: no warnings or errors
+
+# Domain-specific checks
+{domain-check-command}
+# Expected: {expected-output}
+\`\`\`
+
+### Final Checklist
+
+- [ ] All TODOs marked completed
+- [ ] All QA scenarios pass (F3 re-execution)
+- [ ] Evidence artifacts saved to `.omt/evidence/{plan-name}/`
+- [ ] No scope creep detected (F4)
+- [ ] Build + lint + tests green (F2)
+- [ ] Plan compliance verified (F1)
 ```
 
 **What to EXCLUDE from plans:**

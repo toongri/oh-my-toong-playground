@@ -410,9 +410,19 @@ claude_sync_hooks_direct() {
     local dry_run="${4:-false}"
 
     local target_dir="$target_path/.claude/hooks"
-    local target_file="$target_dir/${display_name}"
 
-    if [[ -f "$source_path" ]]; then
+    if [[ -d "$source_path" ]]; then
+        # Directory hook (e.g., persistent-mode/)
+        if [[ "$dry_run" == "true" ]]; then
+            log_dry "Copy (directory): $source_path -> $target_dir/${display_name}/"
+        else
+            mkdir -p "$target_dir/${display_name}"
+            rsync -a --delete --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
+            log_info "Copied: ${display_name}/"
+        fi
+    elif [[ -f "$source_path" ]]; then
+        # File hook (e.g., session-start.sh)
+        local target_file="$target_dir/${display_name}"
         if [[ "$dry_run" == "true" ]]; then
             log_dry "Copy: $source_path -> $target_file"
         else
@@ -422,7 +432,7 @@ claude_sync_hooks_direct() {
             log_info "Copied: ${display_name}"
         fi
     else
-        log_warn "Hook file not found: $source_path"
+        log_warn "Hook not found: $source_path"
     fi
 }
 
@@ -459,10 +469,23 @@ claude_sync_scripts_direct() {
     local dry_run="${4:-false}"
 
     local target_dir="$target_path/.claude/scripts"
+
+    if [[ -d "$source_path" ]]; then
+        # Directory script (e.g., hud/)
+        if [[ "$dry_run" == "true" ]]; then
+            log_dry "Copy (directory): $source_path -> $target_dir/${display_name}/"
+        else
+            mkdir -p "$target_dir/${display_name}"
+            rsync -a --delete --exclude '*.test.ts' "$source_path/" "$target_dir/${display_name}/"
+            log_info "Copied: ${display_name}/"
+        fi
+        return 0
+    fi
+
     local target_file="$target_dir/${display_name}"
 
     if [[ ! -f "$source_path" ]]; then
-        log_warn "Script file not found: $source_path"
+        log_warn "Script not found: $source_path"
         return 0
     fi
 
@@ -524,7 +547,7 @@ claude_sync_plugin_install() {
     fi
 
     log_info "플러그인 설치: $plugin_name"
-    if ! claude plugin install "$plugin_name" 2>&1; then
+    if ! CLAUDECODE= claude plugin install "$plugin_name" 2>&1; then
         log_warn "플러그인 설치 실패 (계속 진행): $plugin_name"
     fi
 }
@@ -629,6 +652,57 @@ claude_update_settings() {
 
     echo "$new_settings" | jq '.' > "$settings_file"
     log_info "Updated settings.json: $settings_file"
+}
+
+# =============================================================================
+# StatusLine
+# =============================================================================
+
+# Set statusLine in settings.json for HUD script
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - command: The statusLine command string
+#   $3 - dry_run: "true" or "false"
+claude_set_statusline() {
+    local target_path="$1"
+    local command="$2"
+    local dry_run="${3:-false}"
+
+    local settings_file="$target_path/.claude/settings.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Set statusLine: $command -> $settings_file"
+        return 0
+    fi
+
+    # settings.json must exist (created by sync_hooks earlier)
+    if [[ ! -f "$settings_file" ]]; then
+        log_warn "statusLine 설정 실패: $settings_file 없음"
+        return 0
+    fi
+
+    local current
+    current=$(cat "$settings_file") || { log_warn "settings.json 읽기 실패: $settings_file"; return 1; }
+
+    local statusline_json
+    statusline_json=$(jq -n --arg cmd "$command" '{"statusLine": {"type": "command", "command": $cmd}}')
+
+    local merged
+    if ! merged=$(echo "$current" | jq --argjson sl "$statusline_json" '. * $sl'); then
+        log_warn "statusLine JSON merge 실패: $settings_file"
+        return 1
+    fi
+
+    local tmp_file
+    tmp_file=$(mktemp "${settings_file}.XXXXXX")
+    if echo "$merged" | jq '.' > "$tmp_file" && [[ -s "$tmp_file" ]]; then
+        mv "$tmp_file" "$settings_file"
+    else
+        rm -f "$tmp_file"
+        log_warn "statusLine 쓰기 실패: $settings_file"
+        return 1
+    fi
+    log_info "statusLine 설정 완료: $settings_file"
 }
 
 # =============================================================================

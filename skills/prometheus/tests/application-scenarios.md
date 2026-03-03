@@ -284,7 +284,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V1 | TL;DR section exists | Plan begins with a TL;DR section containing Quick Summary, Deliverables, and Estimated Effort fields |
 | V2 | Must NOT Have section exists | Plan contains a "Must NOT Have (Guardrails)" section with explicit exclusions and scope boundaries |
 | V3 | TODOs have acceptance criteria | Every TODO item includes concrete, agent-executable acceptance criteria (not vague "verify it works" descriptions) |
-| V4 | Context section with Interview Summary and Metis Review | Plan includes Context section containing Original Request, Interview Summary (Key Discussions + Research Findings), and Metis Review (Identified Gaps) |
+| V4 | Context section with Interview Summary | Plan includes Context section containing Interview Summary (key decisions from extended interview) |
 | V5 | Verification Strategy section present | Plan includes Verification Strategy with Test Decision, and Agent-Executed QA Scenarios for each TODO |
 
 ---
@@ -333,7 +333,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Metis invoked before plan generation | Metis agent is summoned BEFORE the plan is written, with interview context (user's goal, key discussions, research findings) passed to Metis |
-| V2 | Metis gaps addressed in plan | Gaps identified by Metis are incorporated into the generated plan (in Metis Review section and reflected in guardrails/TODOs) — not ignored or deferred |
+| V2 | Metis gaps addressed in plan | Gaps identified by Metis are incorporated into the generated plan (reflected in guardrails/TODOs) — not ignored or deferred |
 | V3 | Gap Classification applied | Post-plan self-review classifies each identified gap as CRITICAL (requires user input), MINOR (self-resolve), or AMBIGUOUS (apply default) — each type handled per its protocol |
 | V4 | Self-Review Checklist executed | After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, zero human-intervention criteria |
 
