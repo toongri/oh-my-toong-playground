@@ -55,7 +55,7 @@ skills:
     - git-committer
     - momus
     - oracle
-    - argus
+    - qa
     - component: code-review
       platforms: [claude]
     - make-pr

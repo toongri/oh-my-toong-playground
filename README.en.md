@@ -57,7 +57,7 @@ oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collab
 | Planning | prometheus | Transforms requirements into executable work plans |
 | Execution | sisyphus | Orchestrates implementation via specialized agents |
 | Implementation | sisyphus-junior | Writes code (delegated by sisyphus) |
-| Verification | argus | Validates all implementations |
+| Quality Assurance | argus | Validates implementation quality, plan compliance, and instruction fulfillment |
 
 **The Core Principle**: Separation of concerns prevents premature implementation and ensures quality through mandatory verification.
 
@@ -214,7 +214,7 @@ oh-my-toong/
 │   ├── git-committer/         # Git commit workflow
 │   ├── agent-council/         # Multi-AI advisory body
 │   ├── spec/                  # Specification writing
-│   ├── argus/                 # The hundred-eyed guardian
+│   ├── qa/                    # Quality Assurance guardian
 │   ├── spec-review/           # Multi-AI spec review service
 │   └── performance-optimizer/ # Performance analysis and optimization
 ├── agents/                    # Subagent definitions for Task tool delegation
@@ -258,7 +258,7 @@ oh-my-toong/
 | **git-committer** | Git commit workflow | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
 | **spec** | Specification writing | Structured spec creation workflow |
-| **argus** | The hundred-eyed guardian | Verifies Junior's work - nothing escapes |
+| **argus** | Quality Assurance guardian | Validates implementation quality, plan compliance, and instruction fulfillment |
 | **spec-review** | Spec review | Multi-AI advisory service |
 | **performance-optimizer** | Performance optimization | Systematic analysis with Before/After verification |
 
@@ -274,7 +274,7 @@ Agents are specialized subagent definitions used with Claude Code's Task tool fo
 | **librarian** | Documentation researcher | Researching external APIs, libraries, best practices |
 | **momus** | Plan critic | Reviewing work plans before execution |
 | **metis** | Pre-planning analyst | Catching gaps before plan generation |
-| **argus** | The hundred-eyed guardian | Verifying code changes |
+| **argus** | Quality Assurance guardian | Quality assurance verification |
 | **spec-reviewer** | Spec reviewer | Getting multi-AI feedback on designs |
 
 ## Commands

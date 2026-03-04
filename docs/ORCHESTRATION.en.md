@@ -41,7 +41,7 @@ Oh-My-Toong solves this by clearly separating roles:
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
 | **Implementation** | sisyphus-junior | Writes code (delegated by sisyphus) |
-| **Verification** | argus | Validates all implementations |
+| **Quality Assurance** | argus | Validates implementation quality, plan compliance, and instruction fulfillment |
 
 ---
 
@@ -71,9 +71,9 @@ flowchart TD
     subgraph Execution Phase
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior --> CodeReviewer[argus]
-        CodeReviewer -->|Pass| Done((Done))
-        CodeReviewer -->|Fail| Junior
+        Junior --> QA[argus<br/>Quality Assurance]
+        QA -->|Pass| Done((Done))
+        QA -->|Fail| Junior
     end
 ```
 
@@ -108,10 +108,10 @@ flowchart TD
 - **Constraint**: Works ALONE. No delegation to other agents.
 - **Discipline**: Strict task focus, immediate completion marking
 
-### argus (The Hundred-Eyed Guardian)
+### argus (Quality Assurance Guardian)
 
-- **Role**: Validates all implementations - nothing escapes
-- **Function**: Runs build/test/lint, evaluates code quality
+- **Role**: Validates implementation quality, plan compliance, and instruction fulfillment
+- **Function**: Runs build/test/lint, evaluates code quality, verifies plan completion
 - **Verdict**: APPROVE, REQUEST_CHANGES, or COMMENT
 
 ---
@@ -142,7 +142,7 @@ With a plan ready, use `/sisyphus`:
 
 1. **Task Creation**: Breaks plan into TaskCreate items
 2. **Delegation**: Assigns tasks to sisyphus-junior
-3. **Verification**: argus validates EVERY completion
+3. **Quality Assurance**: argus validates EVERY completion
 4. **Iteration**: Continues until all tasks pass review
 
 ---
