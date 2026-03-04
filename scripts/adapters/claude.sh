@@ -709,7 +709,7 @@ claude_set_statusline() {
 # Config Sync
 # =============================================================================
 
-# Sync config by deep merging into settings.local.json
+# Sync config by deep merging into settings.json
 # Arguments:
 #   $1 - target_path: Target project path
 #   $2 - config_json: JSON object with config fields
@@ -719,7 +719,7 @@ claude_sync_config() {
     local config_json="$2"
     local dry_run="${3:-false}"
 
-    local settings_file="$target_path/.claude/settings.local.json"
+    local settings_file="$target_path/.claude/settings.json"
 
     if [[ "$dry_run" == "true" ]]; then
         log_dry "Config merge: $config_json -> $settings_file"
