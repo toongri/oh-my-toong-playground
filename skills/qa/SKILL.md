@@ -36,82 +36,36 @@ The caller composes a QA REQUEST using this structure:
 ```
 
 - `#` QA REQUEST → `##` Spec/Scope → `###` internal subsections
-- No mode field — the content of Spec determines which verification layers activate
+- No mode field — the content of Spec determines which verification triggers activate
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
 ---
 
-## Composable Verification Layers
+## Composable Verification Triggers
 
-```dot
-digraph review_layers {
-    rankdir=TB;
+### Trigger Activation Table
 
-    start [label="Start Review" shape=ellipse];
-    parse [label="Parse QA REQUEST\nDetermine active layers"];
-    layerA [label="Layer A: Automated Verification" shape=box style=filled fillcolor=lightyellow];
-    layerB [label="Layer B: Spec/AC Compliance" shape=box style=filled fillcolor=lightblue];
-    layerC [label="Layer C: QA Scenarios Execution" shape=box style=filled fillcolor=lightorange];
-    layerD [label="Layer D: Hands-On QA" shape=box style=filled fillcolor=lightorange];
-    layerE [label="Layer E: Code Quality" shape=box style=filled fillcolor=lightgreen];
-    layerF [label="Layer F: Completeness Check" shape=box style=filled fillcolor=lightpurple];
-    approve [label="APPROVE" shape=ellipse style=filled fillcolor=green fontcolor=white];
-    fix [label="FIX -> RE-REVIEW" shape=box style=filled fillcolor=red fontcolor=white];
-
-    start -> parse -> layerA;
-    layerA -> layerB [label="if spec provided"];
-    layerA -> layerD [label="if user-facing, no scenarios"];
-    layerA -> layerF [label="if plan/instruction verification"];
-    layerB -> layerC [label="if scenarios provided"];
-    layerB -> layerD [label="if user-facing, no scenarios"];
-    layerB -> layerE [label="if code changes"];
-    layerC -> layerE [label="if code changes"];
-    layerD -> layerE [label="if code changes"];
-    layerE -> layerF [label="if completeness check needed"];
-    layerF -> approve [label="all pass"];
-    layerA -> fix [label="any fail"];
-    layerB -> fix [label="any fail"];
-    layerC -> fix [label="any fail"];
-    layerD -> fix [label="any fail"];
-    layerE -> fix [label="critical/high"];
-    layerF -> fix [label="any fail"];
-}
-```
-
-### Layer Activation Table
-
-| Layer | Name | Activation Condition | Content |
-|-------|------|---------------------|---------|
-| **A** | Automated Verification | Code changes present | build → test → lint (see stage1-commands.md) |
-| **B** | Spec/AC Compliance | Spec or AC provided in request | Verify implementation against provided criteria |
-| **C** | QA Scenarios Execution | QA scenarios provided in request | Execute scenarios as specified, collect evidence |
-| **D** | Hands-on QA | User-facing changes AND no scenarios provided | Self-determined curl/playwright/bash (see stage3-handson.md) |
-| **E** | Code Quality | Code changes present | checklists.md-based review |
-| **F** | Completeness Check | Plan or instruction verification requested | All requirements fulfilled, nothing missing |
+| Trigger | Activation Condition | Actions |
+|---------|---------------------|---------|
+| **code changes present** | Code changes present | Automated checks (build/test/lint) + Code quality (checklists.md) |
+| **spec or AC provided** | Spec or AC provided in request | Verify implementation against provided criteria |
+| **QA scenarios provided** | QA scenarios provided in request | Execute scenarios as specified, collect evidence |
+| **user-facing changes, no scenarios** | User-facing changes AND no scenarios provided | Self-determined curl/playwright/bash (see stage3-handson.md) |
+| **completeness verification requested** | Plan or instruction verification requested | Requirement fulfillment verification (results only, NOT scenario execution) |
 
 ### Composition Examples
 
-| QA REQUEST Content | Applied Layers |
-|-------------------|---------------|
-| Task spec + changed files | A → B → D → E |
-| Plan TODO with AC + QA Scenarios + changed files | A → B → C → E |
-| Full plan verification | A → F → C |
-| Instruction fulfillment verification | A → F |
-| AC only, no QA methods + changed files | A → B → D → E |
-
-### Stage-to-Layer Backward Mapping
-
-```
-Stage 1 (Automated)    → Layer A (unchanged)
-Stage 2 (Spec)         → Layer B (expanded: includes AC)
-Stage 3 (Hands-on QA)  → Layer C + D (split: scenarios → C, self-determined → D)
-Stage 4 (Code Quality) → Layer E (unchanged)
-                       + Layer F (new: completeness check)
-```
+| QA REQUEST Content | Active Triggers |
+|-------------------|----------------|
+| Task spec + changed files | code changes present + spec or AC provided + user-facing changes, no scenarios |
+| Plan TODO with AC + QA Scenarios + changed files | code changes present + spec or AC provided + QA scenarios provided |
+| Full plan verification | code changes present + completeness verification requested |
+| Instruction fulfillment verification | completeness verification requested |
+| AC only, no QA methods + changed files | code changes present + spec or AC provided + user-facing changes, no scenarios |
 
 ### Fast-Path Exception
 
-Single-line edits, obvious typos, or changes with no functional behavior modification skip Layer A and Layer D, receiving only a brief Layer E quality check.
+Single-line edits, obvious typos, or changes with no functional behavior modification skip automated checks and hands-on QA, receiving only a brief code quality check.
 
 ---
 
@@ -124,11 +78,13 @@ When verification methods are NOT specified in the request:
 
 When verification methods ARE specified:
 - Execute them as described
-- Still apply Layer A (automated) and Layer E (code quality) if code changes exist
+- Still apply automated checks and code quality review if code changes exist
 
 ---
 
-## Layer A: Automated Verification
+## When: code changes present
+
+### Automated Checks
 
 **Before ANY code analysis, run automated checks.**
 
@@ -138,11 +94,33 @@ When verification methods ARE specified:
 
 **See** [stage1-commands.md] **for details** on command discovery, special cases, and output format.
 
+### Code Quality
+
+Review code against quality checklists by severity level.
+
+**See** [checklists.md] **for details** on Security, Data Integrity, Architecture, Performance, Maintainability, and YAGNI checks.
+
+#### Signal Quality
+
+**Only Flag If:**
+- Code will **fail to compile/parse**
+- Code will **definitely produce wrong results**
+- **Clear** violation of documented architecture/design principles
+
+**Never Flag:**
+- Pre-existing issues (not introduced by this change)
+- Linter-catchable problems (let tools handle these)
+- Style preferences without documented standard
+- Code not in the Changed files list
+- "Could be better" without concrete problem
+
+**When Uncertain:** Flag as nitpick - better to catch than miss. Missed issues escape forever.
+
 ---
 
-## Layer B: Spec/AC Compliance
+## When: spec or AC provided
 
-**Before reviewing code quality, verify the implementation meets the provided specification.**
+**Verify the implementation meets the provided specification.**
 
 The Spec section of the QA REQUEST defines what was asked. Verify each section.
 
@@ -191,11 +169,11 @@ Changed files list is the Single Source of Truth. Do NOT use `git diff` to indep
 
 ---
 
-## Layer C: QA Scenarios Execution
+## When: QA scenarios provided
 
 **Execute provided QA scenarios as specified.**
 
-This layer activates when QA scenarios are included in the QA REQUEST Spec.
+This trigger activates when QA scenarios are included in the QA REQUEST Spec.
 
 1. Execute each scenario as specified (tool, steps, expected output)
 2. Collect evidence for each scenario result
@@ -204,11 +182,11 @@ This layer activates when QA scenarios are included in the QA REQUEST Spec.
 
 ---
 
-## Layer D: Hands-On QA
+## When: user-facing changes, no scenarios
 
 **Conditionally verify user-facing behavior by actually running the changed code.**
 
-This layer activates when changes affect user-facing behavior AND no QA scenarios are provided in the request. Internal-only changes (refactoring, logic without user-facing surface) skip this layer.
+This trigger activates when changes affect user-facing behavior AND no QA scenarios are provided in the request. Internal-only changes (refactoring, logic without user-facing surface) skip this trigger.
 
 ### Applicability
 
@@ -217,7 +195,7 @@ This layer activates when changes affect user-facing behavior AND no QA scenario
 | API endpoint | HTTP request verification | `curl` |
 | Frontend / UI | Browser interaction verification | `playwright` |
 | CLI / TUI | Command execution verification | Interactive Bash |
-| Internal logic only | N/A (skip Layer D) | - |
+| Internal logic only | N/A (skip this trigger) | - |
 
 ### Lifecycle
 
@@ -229,39 +207,15 @@ This layer activates when changes affect user-facing behavior AND no QA scenario
 
 ---
 
-## Layer E: Code Quality
-
-Review code against quality checklists by severity level.
-
-**See** [checklists.md] **for details** on Security, Data Integrity, Architecture, Performance, Maintainability, and YAGNI checks.
-
-### Signal Quality
-
-**Only Flag If:**
-- Code will **fail to compile/parse**
-- Code will **definitely produce wrong results**
-- **Clear** violation of documented architecture/design principles
-
-**Never Flag:**
-- Pre-existing issues (not introduced by this change)
-- Linter-catchable problems (let tools handle these)
-- Style preferences without documented standard
-- Code not in the Changed files list
-- "Could be better" without concrete problem
-
-**When Uncertain:** Flag as nitpick - better to catch than miss. Missed issues escape forever.
-
----
-
-## Layer F: Completeness Check
+## When: completeness verification requested
 
 **Verify that all plan requirements or instructions are fully fulfilled.**
 
-This layer activates when the QA REQUEST Spec requests plan or instruction fulfillment verification.
+This trigger activates when the QA REQUEST Spec requests plan or instruction fulfillment verification.
 
 1. Read the plan file or instruction summary from the QA REQUEST Spec
 2. For each TODO/requirement: verify all Acceptance Criteria are met
-3. Execute all QA Scenarios defined in the plan
+3. Verify QA scenario results are present and passed (do NOT execute scenarios — that is the responsibility of the "QA scenarios provided" trigger)
 4. Verify no requirements were missed or partially implemented
 5. Cross-check: are all changed files accounted for in the plan?
 
@@ -310,12 +264,12 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 
 | Condition | Verdict |
 |-----------|---------|
-| Layer A FAIL | **REQUEST_CHANGES** (build/test broken) |
-| Layer B FAIL | **REQUEST_CHANGES** (spec not met) |
-| Layer C FAIL | **REQUEST_CHANGES** (QA scenario failed) |
-| Layer D FAIL | **REQUEST_CHANGES** (hands-on verification failed) |
-| Layer E CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
-| Layer F FAIL | **REQUEST_CHANGES** (completeness check failed) |
+| Automated checks FAIL | **REQUEST_CHANGES** (build/test broken) |
+| Spec/AC compliance FAIL | **REQUEST_CHANGES** (spec not met) |
+| QA scenario FAIL | **REQUEST_CHANGES** (QA scenario failed) |
+| Hands-on verification FAIL | **REQUEST_CHANGES** (hands-on verification failed) |
+| Code quality CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
+| Completeness verification FAIL | **REQUEST_CHANGES** (completeness check failed) |
 | MEDIUM only | **COMMENT** (conditional approval) |
 | LOW only or no issues | **APPROVE** |
 
@@ -324,15 +278,15 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 ## Quick Reference
 
 ```
-Layer A: Automated Verification (Build, Test, Lint)
-Layer B: Spec/AC Compliance (vs QA REQUEST Spec)
-Layer C: QA Scenarios Execution (execute provided scenarios)
-Layer D: Hands-On QA (API→curl, Frontend→playwright, CLI→interactive_bash)
-Layer E: Code Quality (Security, Architecture, Performance, Maintainability, YAGNI)
-Layer F: Completeness Check (plan/instruction fulfillment)
+code changes present:              Automated checks (Build, Test, Lint) + Code Quality
+spec or AC provided:               Spec/AC compliance (vs QA REQUEST Spec)
+QA scenarios provided:             Execute provided scenarios + collect evidence
+user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, CLI→interactive_bash)
+completeness verification requested: Requirement fulfillment (results only, no scenario execution)
 
-LAYER A: See stage1-commands.md
-LAYER D: See stage3-handson.md
+Automated checks: See stage1-commands.md
+Hands-On QA:      See stage3-handson.md
+Code Quality:     See checklists.md
 CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
 FEEDBACK: What + Why + How (2+ options) + Benefit
 SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)

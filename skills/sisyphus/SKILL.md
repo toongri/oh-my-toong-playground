@@ -329,7 +329,6 @@ digraph final_verification {
     "Recipe 4\n(instruction fulfillment)" [shape=box];
     "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "APPROVE?" [shape=diamond];
-    "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
     "Create fix task" [shape=box];
     "Re-enter loop" [shape=box];
@@ -340,16 +339,13 @@ digraph final_verification {
     "Recipe 3\n(full plan verification)" -> "argus";
     "Recipe 4\n(instruction fulfillment)" -> "argus";
     "argus" -> "APPROVE?";
-    "APPROVE?" -> "mnemosyne" [label="yes"];
+    "APPROVE?" -> "Done" [label="yes"];
     "APPROVE?" -> "Create fix task" [label="no"];
-    "mnemosyne" -> "Done";
     "Create fix task" -> "Re-enter loop";
 }
 ```
 
 This ensures holistic verification beyond individual task approval — the complete work product is verified against the original plan or instructions.
-
-- After each F-item passes verification, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding F-item checkbox (direct sisyphus action, not delegated)
 
 ---
 
