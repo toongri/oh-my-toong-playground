@@ -316,24 +316,24 @@ test_plugin_string_shorthand() {
 }
 
 # =============================================================================
-# Tests: Config - Claude (settings.local.json)
+# Tests: Config - Claude (settings.json)
 # =============================================================================
 
 test_config_claude_settings_local() {
-    # config merged into .claude/settings.local.json
+    # config merged into .claude/settings.json
     local target_path="$TEST_TMP_DIR/target"
 
     local config_json='{"language":"Korean","outputStyle":"Explanatory"}'
     claude_sync_config "$target_path" "$config_json" "false"
 
-    # Verify settings.local.json exists
-    if [[ ! -f "$target_path/.claude/settings.local.json" ]]; then
-        echo "ASSERTION FAILED: settings.local.json should be created"
+    # Verify settings.json exists
+    if [[ ! -f "$target_path/.claude/settings.json" ]]; then
+        echo "ASSERTION FAILED: settings.json should be created"
         return 1
     fi
 
     local lang
-    lang=$(jq -r '.language' "$target_path/.claude/settings.local.json")
+    lang=$(jq -r '.language' "$target_path/.claude/settings.json")
     if [[ "$lang" != "Korean" ]]; then
         echo "ASSERTION FAILED: Expected language 'Korean', got '$lang'"
         return 1
@@ -343,18 +343,18 @@ test_config_claude_settings_local() {
 }
 
 test_config_claude_preserves_existing() {
-    # existing fields preserved in settings.local.json
+    # existing fields preserved in settings.json
     local target_path="$TEST_TMP_DIR/target"
 
     mkdir -p "$target_path/.claude"
-    echo '{"model":"claude-3-opus","language":"English"}' > "$target_path/.claude/settings.local.json"
+    echo '{"model":"claude-3-opus","language":"English"}' > "$target_path/.claude/settings.json"
 
     local config_json='{"language":"Korean"}'
     claude_sync_config "$target_path" "$config_json" "false"
 
     # Verify model is preserved
     local model
-    model=$(jq -r '.model' "$target_path/.claude/settings.local.json")
+    model=$(jq -r '.model' "$target_path/.claude/settings.json")
     if [[ "$model" != "claude-3-opus" ]]; then
         echo "ASSERTION FAILED: Existing model should be preserved, got '$model'"
         return 1
@@ -362,7 +362,7 @@ test_config_claude_preserves_existing() {
 
     # Verify language is overwritten by new config
     local lang
-    lang=$(jq -r '.language' "$target_path/.claude/settings.local.json")
+    lang=$(jq -r '.language' "$target_path/.claude/settings.json")
     if [[ "$lang" != "Korean" ]]; then
         echo "ASSERTION FAILED: Language should be overwritten to 'Korean', got '$lang'"
         return 1
@@ -465,9 +465,9 @@ test_config_missing_platform_skip() {
         return 1
     fi
 
-    # But .claude/settings.local.json should exist
-    if [[ ! -f "$target_path/.claude/settings.local.json" ]]; then
-        echo "ASSERTION FAILED: .claude/settings.local.json should be created"
+    # But .claude/settings.json should exist
+    if [[ ! -f "$target_path/.claude/settings.json" ]]; then
+        echo "ASSERTION FAILED: .claude/settings.json should be created"
         return 1
     fi
 
