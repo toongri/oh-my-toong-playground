@@ -464,6 +464,73 @@ The criterion is the **contract between planner and executor**.
 The executor has NO interview context. If the criterion cannot be verified
 by someone who only reads the plan, it is incomplete.
 
+### Verification Thinking Checklist
+
+When writing Verification for each criterion, run this checklist iteratively until PASS:
+
+| # | Question | On Failure |
+|---|----------|------------|
+| 1 | **What concrete state is intended?** | Rewrite vague outcomes (e.g., "improve") as specific desired states (e.g., "X exists in Y form") |
+| 2 | **If all verifications pass, is AC fulfillment guaranteed?** | Add missing checks, return to Check 1 |
+
+**Loop**: Check 2 fails → revise verification → restart from Check 1.
+
+<example>
+AC: "Separate scenario execution from completeness check into an independent condition"
+
+========== Round 1 ==========
+
+--- Verification draft ---
+  No "execute.*scenario" pattern in plan/instruction verification section
+
+--- Check 1: What concrete state is intended? ---
+  "Separate into an independent condition"
+  → scenario execution exists as an independent heading outside completeness check
+  → i.e., (a) independent heading exists + (b) removed from original location
+
+--- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
+  Current verification: only 1 absence check
+  → Deleting the entire section would also pass
+  → Cannot confirm independent heading actually exists
+  → FAIL — missing presence check
+
+========== Round 2 ==========
+
+--- Revised verification ---
+  (1) "Execute QA Scenarios" exists as an independent condition heading
+  (2) No "execute.*scenario" pattern in completeness check section
+
+--- Check 1: What concrete state is intended? ---
+  (a) Independent heading exists → (1) covers this
+  (b) Removed from original location → (2) covers this
+  → Both sides of intended state covered
+
+--- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
+  (1) passes → heading exists
+  (2) passes → removed from original location
+  → Both pass guarantees "separated into independent condition"?
+  → Not yet — heading could be empty
+
+========== Round 3 ==========
+
+--- Check 1 re-entry: What concrete state is intended? ---
+  "Improved as independent condition"
+  → Not just the heading, but verification actions must exist underneath
+  → i.e., (a) independent heading exists + (b) verification items exist under it + (c) removed from original location
+
+--- Revised verification ---
+  (1) "Execute QA Scenarios" exists as an independent condition heading
+  (2) At least one verification action (checklist/sub-item) exists under Execute QA Scenarios
+  (3) No "execute.*scenario" pattern in completeness check section
+
+--- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
+  (1) passes → heading exists
+  (2) passes → content exists (prevents empty heading)
+  (3) passes → removed from original location
+  → "Separated into independent condition with content" guaranteed
+  → PASS
+</example>
+
 ### Proposal Format
 
 When proposing acceptance criteria to user, organize by **work item** (not by functional/technical category):
@@ -489,6 +556,7 @@ Overall structure:
 | **Vague verification** | "Verify it works", "dry-run review", "confirm functionality" | Not executable. No one can run "verify it works" | Name the command, the observable state, or the assertion. If you can't, the criterion is incomplete |
 | **Task restatement** | "Authentication is implemented" | Restates the task. Criterion must describe a STATE that is TRUE after, not the ACTION | "Unauthenticated requests to /api/* return 401. Verification: curl without token returns 401 status" |
 | **Universal truths** | "All tests pass", "No console errors" | Always true, not plan-specific. Belongs in Verification Strategy | Move to plan's Verification Strategy section |
+| **Absence-only verification** | "X not found in grep" — verifying removal only | Deletion alone passes. Does not confirm intended state exists | Apply Verification Thinking Checklist: write presence checks for desired state first, then add absence checks as supplementary |
 
 ### Example
 
