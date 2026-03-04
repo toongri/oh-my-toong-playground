@@ -51,6 +51,9 @@ config:
     language: "한국어"
     outputStyle: "Explanatory"
     includeCoAuthoredBy: false
+    attribution:
+      commit: ""
+      pr: ""
     skipDangerousModePermissionPrompt: true
     permissions:
       deny:
