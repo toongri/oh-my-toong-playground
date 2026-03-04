@@ -314,6 +314,7 @@ digraph task_loop {
 - Multiple unblocked independent tasks → dispatch in parallel
 - Each junior completion → immediately invoke argus
 - Each argus approval → immediately invoke mnemosyne to commit
+- After marking task completed, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
 
 ### Final Verification Trigger
 
@@ -347,6 +348,8 @@ digraph final_verification {
 ```
 
 This ensures holistic verification beyond individual task approval — the complete work product is verified against the original plan or instructions.
+
+- After each F-item passes verification, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding F-item checkbox (direct sisyphus action, not delegated)
 
 ---
 
