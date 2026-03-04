@@ -476,58 +476,40 @@ When writing Verification for each criterion, run this checklist iteratively unt
 **Loop**: Check 2 fails → revise verification → restart from Check 1.
 
 <example>
-AC: "Separate scenario execution from completeness check into an independent condition"
+AC: "Extract duplicate validation logic from UserService and OrderService into a shared ValidationModule"
 
 ========== Round 1 ==========
 
 --- Verification draft ---
-  No "execute.*scenario" pattern in plan/instruction verification section
+  No duplicate validation functions in UserService and OrderService
 
 --- Check 1: What concrete state is intended? ---
-  "Separate into an independent condition"
-  → scenario execution exists as an independent heading outside completeness check
-  → i.e., (a) independent heading exists + (b) removed from original location
+  "Extract into shared module"
+  → (a) ValidationModule exists with the shared logic
+  → (b) Both services use it
+  → (c) Duplicate code removed from both services
 
 --- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
-  Current verification: only 1 absence check
-  → Deleting the entire section would also pass
-  → Cannot confirm independent heading actually exists
-  → FAIL — missing presence check
+  Current: 1 absence check
+  → Deleting validation from both services also passes
+  → FAIL — no presence check for shared module
 
 ========== Round 2 ==========
 
 --- Revised verification ---
-  (1) "Execute QA Scenarios" exists as an independent condition heading
-  (2) No "execute.*scenario" pattern in completeness check section
+  (1) ValidationModule exports shared validation functions
+  (2) UserService and OrderService import from ValidationModule
+  (3) No inline validation logic duplicated across services
 
 --- Check 1: What concrete state is intended? ---
-  (a) Independent heading exists → (1) covers this
-  (b) Removed from original location → (2) covers this
-  → Both sides of intended state covered
+  (a) Shared module exists with logic → (1) covers
+  (b) Both services use it → (2) covers
+  (c) Duplicates removed → (3) covers
 
 --- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
-  (1) passes → heading exists
-  (2) passes → removed from original location
-  → Both pass guarantees "separated into independent condition"?
-  → Not yet — heading could be empty
-
-========== Round 3 ==========
-
---- Check 1 re-entry: What concrete state is intended? ---
-  "Improved as independent condition"
-  → Not just the heading, but verification actions must exist underneath
-  → i.e., (a) independent heading exists + (b) verification items exist under it + (c) removed from original location
-
---- Revised verification ---
-  (1) "Execute QA Scenarios" exists as an independent condition heading
-  (2) At least one verification action (checklist/sub-item) exists under Execute QA Scenarios
-  (3) No "execute.*scenario" pattern in completeness check section
-
---- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
-  (1) passes → heading exists
-  (2) passes → content exists (prevents empty heading)
-  (3) passes → removed from original location
-  → "Separated into independent condition with content" guaranteed
+  (1) passes → module exists with exports
+  (2) passes → services actually use it
+  (3) passes → no duplication remains
   → PASS
 </example>
 
