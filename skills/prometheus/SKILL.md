@@ -723,16 +723,19 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 
 | Section | Contents |
 |---------|----------|
-| **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
+| **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL), Parallel Execution (YES/NO — wave description), Critical Path (dependency chain or "None") |
 | **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
-| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
+| **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
 | **Final Verification Wave** | Post-TODO plan-level verification. F1 (Plan Compliance Audit), F2 (Code Quality Review), F3 (Full QA Re-execution), F4 (Scope Fidelity Check) — all run in parallel after the last execution wave completes. Required for Scoped+ intent, optional for Trivial |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
 **TODO Task Format:**
+
+Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Must NOT do, Files, References, etc.) indented under the checkbox line.
+
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
 - **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths with action (create/update/delete).
@@ -861,22 +864,22 @@ Wave Visualization:
 
 Critical Path: TODO 1 → TODO 3 → TODO 5
 
---- TODO 3: Implement UserService ---
-- What to do: Create UserService with CRUD operations
-- Must NOT do: Add caching or event publishing
-- Files: src/service/user-service.ts (create), src/service/index.ts (export)
-- References (CRITICAL):
-  - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
-    WHY: Follow the same repository injection, error handling, and return type conventions
-  - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
-    WHY: Match describe/it nesting, mock setup, and assertion style
-- Blocked By: TODO 1, TODO 2
-- Blocks: TODO 5
-- Wave: 2
-- Acceptance Criteria:
-  - UserService implements create, read, update, delete
-  - All methods return typed responses
-  - QA Scenarios:
+- [ ] 3. Implement UserService
+  - What to do: Create UserService with CRUD operations
+  - Must NOT do: Add caching or event publishing
+  - Files: src/service/user-service.ts (create), src/service/index.ts (export)
+  - References (CRITICAL):
+    - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
+      WHY: Follow the same repository injection, error handling, and return type conventions
+    - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
+      WHY: Match describe/it nesting, mock setup, and assertion style
+  - Blocked By: TODO 1, TODO 2
+  - Blocks: TODO 5
+  - Wave: 2
+  - Acceptance Criteria:
+    - UserService implements create, read, update, delete
+    - All methods return typed responses
+    - QA Scenarios:
 
     Scenario: Happy path — CRUD operations work correctly
       Tool: jest
@@ -900,26 +903,26 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 **Non-code TODO Example (simplified format):**
 
 ```
---- TODO 6: Update API Documentation ---
-- What to do: Add rate limiting section to API docs
-- Must NOT do: Change existing endpoint documentation
-- Files: docs/api-reference.md (update)
-- Blocked By: TODO 3
-- Blocks: None
-- Wave: 2
-- Acceptance Criteria:
-  - Rate limiting section documents limits, headers, and error responses
-  - QA Scenarios:
+- [ ] 6. Update API Documentation
+  - What to do: Add rate limiting section to API docs
+  - Must NOT do: Change existing endpoint documentation
+  - Files: docs/api-reference.md (update)
+  - Blocked By: TODO 3
+  - Blocks: None
+  - Wave: 2
+  - Acceptance Criteria:
+    - Rate limiting section documents limits, headers, and error responses
+    - QA Scenarios:
 
-    Scenario: Rate limit headers documented
-      Preconditions: docs/api-reference.md exists, rate limiting middleware merged
-      Expected: Rate limit headers documented with X-RateLimit-* descriptions
-      Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
+      Scenario: Rate limit headers documented
+        Preconditions: docs/api-reference.md exists, rate limiting middleware merged
+        Expected: Rate limit headers documented with X-RateLimit-* descriptions
+        Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
 
-    Scenario: Existing docs preserved
-      Preconditions: No rate limiting section exists prior
-      Expected: Section added without modifying existing endpoint docs
-      Failure: Existing endpoint documentation sections altered or removed
+      Scenario: Existing docs preserved
+        Preconditions: No rate limiting section exists prior
+        Expected: Section added without modifying existing endpoint docs
+        Failure: Existing endpoint documentation sections altered or removed
 ```
 
 **Final Verification Wave:**
@@ -930,7 +933,7 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 
 After the last execution wave completes, run F1-F4 in parallel as a plan-level verification pass:
 
-**F1: Plan Compliance Audit**
+- [ ] F1. Plan Compliance Audit
 - Read the plan file (`.omt/plans/{name}.md`)
 - Verify every Must Have requirement is implemented
 - Verify every Must NOT Have / Guardrail is absent
@@ -950,7 +953,7 @@ F1: Plan Compliance Audit
 - Result: PASS / FAIL
 ```
 
-**F2: Code Quality Review**
+- [ ] F2. Code Quality Review
 - Run build, lint, and test commands
 - Review changed files for anti-patterns (dead code, hardcoded values, missing error handling)
 
@@ -965,7 +968,7 @@ F2: Code Quality Review
 - Result: PASS / FAIL
 ```
 
-**F3: Full QA Re-execution**
+- [ ] F3. Full QA Re-execution
 - Re-execute ALL QA scenarios from every TODO (not just the last wave)
 - Run cross-task integration tests if multiple TODOs interact
 - Save re-execution evidence to `.omt/evidence/{plan-name}/`
@@ -980,7 +983,7 @@ F3: Full QA Re-execution
 - Result: PASS / FAIL
 ```
 
-**F4: Scope Fidelity Check**
+- [ ] F4. Scope Fidelity Check
 - Compare spec (acceptance criteria + Must Have) vs actual implementation 1:1
 - Detect scope creep: any functionality added beyond what the plan specified
 - Detect scope gap: any planned functionality missing from implementation
@@ -994,6 +997,8 @@ F4: Scope Fidelity Check
 - Scope gap: {list or "none"}
 - Result: PASS / FAIL
 ```
+
+**Rejection Loop:** Any F-item FAIL → create fix tasks for failed items → re-execute failed F items only → repeat until all PASS.
 
 **Success Criteria Template:**
 
