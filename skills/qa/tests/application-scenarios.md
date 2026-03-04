@@ -24,13 +24,13 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-6 | Pattern prohibition | Content search | 파일 내용 패턴 검색 |
 | A-7 | Fast-Path | No git diff needed | trivial 변경도 파일 읽기 |
 | A-8 | API endpoint → curl 검증 | Applicability detection (API) | API 신호 인식 + curl 시도 |
-| A-9 | Internal refactoring → Stage 3 스킵 | Skip logic | 내부 변경 스킵 + 문서화 |
+| A-9 | Internal refactoring → "user-facing changes, no scenarios" 스킵 | Skip logic | 내부 변경 스킵 + 문서화 |
 | A-10 | CLI command → interactive_bash | Applicability detection (CLI) | CLI 신호 인식 + bash 시도 |
 | A-11 | API + Frontend → 복합 검증 | Multi-type handling | 복합 변경 각각 독립 검증 |
 | A-12 | Server start 실패 → REQUEST_CHANGES | Lifecycle failure | 서버 기동 실패 처리 |
 | A-13 | Plan verification | Plan file reading + AC extraction | 계획 전체 검증 |
 | A-14 | Instruction verification | Instruction element matching | 지시 이행 검증 |
-| A-15 | Composable layer activation | Layer selection logic | 레이어 조합 결정 |
+| A-15 | Composable trigger activation | Trigger selection logic | 트리거 조합 결정 |
 | A-16 | Self-discovery | Command discovery protocol | 검증 방법 자동 발견 |
 | A-17 | Mixed request | Plan + code combined | 복합 요청 처리 |
 
@@ -205,12 +205,12 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: README.md
 - Junior's summary: "Fixed typo: authenication → authentication"
 
-**Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). Stage 1 and Stage 3 skip, Stage 4 brief quality check만 수행. git diff 불필요.
+**Expected Behavior:** Fast-Path Exception 적용 (single-line edit, no functional behavior modification). automated checks와 "user-facing changes, no scenarios" skip, code quality brief check만 수행. git diff 불필요.
 
 **Verification Points:**
-1. Fast-Path로 분류하여 Stage 1과 Stage 3을 skip한다
+1. Fast-Path로 분류하여 automated checks와 "user-facing changes, no scenarios"를 skip한다
 2. git diff 없이 README.md를 읽어서 오타 수정 확인
-3. Stage 4 brief quality check만 수행한다
+3. code quality brief check만 수행한다
 
 ---
 
@@ -230,17 +230,17 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/routes/user-api.ts
 - Junior's summary: "Added GET /api/users/:id endpoint"
 
-**Expected Behavior:** Stage 3 Applicability에서 "API endpoint" 신호 감지 → curl 검증 선택. 서버 기동 → curl로 200 응답 확인 + 404 케이스 확인 → 서버 종료. Stage 3 출력 포맷에 맞게 결과 기록.
+**Expected Behavior:** "user-facing changes, no scenarios" 트리거에서 "API endpoint" 신호 감지 → curl 검증 선택. 서버 기동 → curl로 200 응답 확인 + 404 케이스 확인 → 서버 종료. "user-facing changes, no scenarios" 출력 포맷에 맞게 결과 기록.
 
 **Verification Points:**
 1. QA REQUEST Spec의 TASK/EXPECTED OUTCOME에서 API 신호를 감지한다
 2. curl을 사용한 검증을 시도한다
 3. 서버 라이프사이클(start→test→stop)을 따른다
-4. Stage 3 출력 포맷이 stage3-handson.md의 형식과 일치한다
+4. "user-facing changes, no scenarios" 출력 포맷이 stage3-handson.md의 형식과 일치한다
 
 ---
 
-## A-9: Internal refactoring → Stage 3 스킵
+## A-9: Internal refactoring → "user-facing changes, no scenarios" 스킵
 
 **Context:** Junior가 utils/formatter.ts의 내부 유틸리티 함수를 리팩토링함. 외부 API나 UI 영향 없음.
 
@@ -256,13 +256,13 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: utils/formatter.ts
 - Junior's summary: "Simplified date formatting logic while keeping signatures"
 
-**Expected Behavior:** Stage 3 Applicability에서 "refactoring, internal logic, utility" 신호 감지 → Stage 3 SKIP. 출력에 "Stage 3 Result: SKIPPED (internal logic only)" 기록. Stage 4로 직접 진행.
+**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 "refactoring, internal logic, utility" 신호 감지 → "user-facing changes, no scenarios" SKIP. 출력에 "Stage 3 Result: SKIPPED (internal logic only)" 기록. code quality check로 직접 진행.
 
 **Verification Points:**
 1. "Refactor" + "utility" 신호에서 internal 유형으로 분류한다
-2. Stage 3을 스킵한다
+2. "user-facing changes, no scenarios"를 스킵한다
 3. 스킵 사유를 출력에 문서화한다
-4. Stage 4(Code Quality)로 직접 진행한다
+4. code quality check로 직접 진행한다
 
 ---
 
@@ -282,7 +282,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: cli/export.ts
 - Junior's summary: "Added --format json option to export command"
 
-**Expected Behavior:** Stage 3 Applicability에서 "CLI command, terminal output" 신호 감지 → interactive_bash 검증 선택. `export --format json` 실행 → JSON 출력 확인 + 기본 CSV 출력 확인.
+**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 "CLI command, terminal output" 신호 감지 → interactive_bash 검증 선택. `export --format json` 실행 → JSON 출력 확인 + 기본 CSV 출력 확인.
 
 **Verification Points:**
 1. "CLI command" + "terminal output" 신호에서 CLI 유형으로 분류한다
@@ -308,7 +308,7 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/api/profile.ts, src/pages/ProfilePage.tsx
 - Junior's summary: "Added profile API and profile page"
 
-**Expected Behavior:** Stage 3 Applicability에서 API + Frontend 복합 신호 감지 → curl과 playwright 모두 사용. 서버 기동 → curl로 API 확인 → playwright로 UI 확인 → 서버 종료. 각각 독립적으로 결과 기록.
+**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 API + Frontend 복합 신호 감지 → curl과 playwright 모두 사용. 서버 기동 → curl로 API 확인 → playwright로 UI 확인 → 서버 종료. 각각 독립적으로 결과 기록.
 
 **Verification Points:**
 1. API와 Frontend 신호를 모두 감지한다
@@ -334,11 +334,11 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/routes/health.ts
 - Junior's summary: "Added health check endpoint"
 
-**Expected Behavior:** Stage 3 Applicability에서 API 신호 감지 → curl 검증 선택 → 서버 기동 시도 → 기동 실패 → 즉시 REQUEST_CHANGES. Stage 4로 진행하지 않음.
+**Expected Behavior:** "user-facing changes, no scenarios" 트리거 적용 조건에서 API 신호 감지 → curl 검증 선택 → 서버 기동 시도 → 기동 실패 → 즉시 REQUEST_CHANGES. code quality check로 진행하지 않음.
 
 **Verification Points:**
-1. 서버 기동 실패를 Stage 3 FAIL로 판정한다
-2. Stage 4(Code Quality)로 진행하지 않는다
+1. 서버 기동 실패를 "user-facing changes, no scenarios" FAIL로 판정한다
+2. code quality check로 진행하지 않는다
 3. REQUEST_CHANGES 판정을 내린다
 4. 실패 원인을 출력에 포함한다
 
@@ -357,12 +357,12 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/auth/login.ts, src/auth/middleware.ts, src/auth/config.ts, tests/auth/login.test.ts
 - Summary: "All 4 tasks completed — JWT auth implementation with login, middleware, config, and tests"
 
-**Expected Behavior:** Argus reads the plan file directly, identifies all TODO ACs and QA Scenarios, executes each scenario, and verifies all ACs are met. Layer F (Completeness Check) activates. Layer A (Automated Verification) also runs.
+**Expected Behavior:** Argus reads the plan file directly, identifies all TODO ACs and QA Scenarios, executes each scenario, and verifies all ACs are met. "completeness verification requested" activates. "code changes present" (automated checks) also runs.
 
 **Verification Points:**
 1. Argus가 계획 파일을 직접 읽어 TODO별 AC를 추출한다
-2. 계획에 정의된 QA Scenarios를 실행한다 (Layer C)
-3. Layer F에서 모든 요구사항의 완전성을 확인한다
+2. 계획에 정의된 QA Scenarios를 실행한다 ("QA scenarios provided")
+3. "completeness verification requested"에서 모든 요구사항의 완전성을 확인한다
 4. 누락된 요구사항이 있으면 REQUEST_CHANGES를 발행한다
 
 ---
@@ -382,46 +382,46 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/auth/jwt.ts, src/middleware/rate-limit.ts, src/services/audit-log.ts, tests/
 - Summary: "All 3 tasks completed per user instructions"
 
-**Expected Behavior:** Argus verifies each instruction element is addressed. Layer F (Completeness Check) activates. Checks that JWT, rate limiting, AND audit logging are all implemented — missing any one triggers REQUEST_CHANGES.
+**Expected Behavior:** Argus verifies each instruction element is addressed. "completeness verification requested" activates. Checks that JWT, rate limiting, AND audit logging are all implemented — missing any one triggers REQUEST_CHANGES.
 
 **Verification Points:**
 1. 원래 지시사항의 각 요소를 개별적으로 검증한다
 2. 완료된 task 목록과 지시사항을 대조한다
-3. Layer F에서 지시사항 전체의 이행 완전성을 확인한다
+3. "completeness verification requested"에서 지시사항 전체의 이행 완전성을 확인한다
 4. 부분 이행(예: audit logging 누락)이면 REQUEST_CHANGES를 발행한다
 
 ---
 
-## A-15: Composable Layer Activation — 레이어 조합 결정
+## A-15: Composable Trigger Activation — 트리거 조합 결정
 
-**Context:** QA REQUEST 내용에 따라 올바른 레이어 조합이 활성화되는지 검증.
+**Context:** QA REQUEST 내용에 따라 올바른 트리거 조합이 활성화되는지 검증.
 
 **Scenario 15a: Task spec + changed files (기본 조합)**
 - QA REQUEST에 task spec과 changed files가 포함
-- Expected layers: A → B → D → E
-- Layer C 미활성 (QA scenarios 미제공)
-- Layer F 미활성 (plan/instruction verification 미요청)
+- Active triggers: code changes present → spec or AC provided → user-facing changes, no scenarios → code changes present (code quality)
+- "QA scenarios provided" 미활성 (QA scenarios 미제공)
+- "completeness verification requested" 미활성 (plan/instruction verification 미요청)
 
 **Scenario 15b: Plan TODO with QA Scenarios (시나리오 기반 조합)**
 - QA REQUEST에 plan TODO의 AC, QA Scenarios, changed files가 포함
-- Expected layers: A → B → C → E
-- Layer D 미활성 (QA scenarios가 제공되어 D 대신 C 활성)
+- Active triggers: code changes present → spec or AC provided → QA scenarios provided → code changes present (code quality)
+- "user-facing changes, no scenarios" 미활성 (QA scenarios가 제공되어 "user-facing changes, no scenarios" 대신 "QA scenarios provided" 활성)
 
 **Scenario 15c: Full plan verification (계획 전체 검증)**
 - QA REQUEST에 plan file path와 전체 검증 요청이 포함
-- Expected layers: A → F → C
-- Layer B 미활성 (개별 spec이 아닌 전체 계획 검증)
+- Active triggers: code changes present → completeness verification requested → QA scenarios provided
+- "spec or AC provided" 미활성 (개별 spec이 아닌 전체 계획 검증)
 
 **Scenario 15d: AC only, no QA methods (자율 QA)**
 - QA REQUEST에 AC만 제공, QA scenarios 없음, user-facing 변경 있음
-- Expected layers: A → B → D → E
-- Layer D 활성 (scenarios 미제공이므로 자율 hands-on QA)
+- Active triggers: code changes present → spec or AC provided → user-facing changes, no scenarios → code changes present (code quality)
+- "user-facing changes, no scenarios" 활성 (scenarios 미제공이므로 자율 hands-on QA)
 
 **Verification Points:**
-1. QA REQUEST 내용을 파싱하여 올바른 레이어를 선택한다
-2. 불필요한 레이어를 활성화하지 않는다
-3. QA Scenarios 유무에 따라 Layer C/D를 올바르게 선택한다
-4. Plan/instruction verification 요청 시 Layer F를 활성화한다
+1. QA REQUEST 내용을 파싱하여 올바른 트리거를 선택한다
+2. 불필요한 트리거를 활성화하지 않는다
+3. QA Scenarios 유무에 따라 "QA scenarios provided"/"user-facing changes, no scenarios"를 올바르게 선택한다
+4. Plan/instruction verification 요청 시 "completeness verification requested"를 활성화한다
 
 ---
 
@@ -437,13 +437,13 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/routes/profile.ts
 - Summary: "Added profile endpoint"
 
-**Expected Behavior:** Argus가 Self-Discovery Protocol을 따라 `.omt/argus/project-commands.md` → `CLAUDE.md` → `package.json` 순서로 검증 명령을 발견하고 Layer A를 실행한다.
+**Expected Behavior:** Argus가 Self-Discovery Protocol을 따라 `.omt/argus/project-commands.md` → `CLAUDE.md` → `package.json` 순서로 검증 명령을 발견하고 "code changes present" (automated checks)를 실행한다.
 
 **Verification Points:**
 1. 검증 방법이 명시되지 않았을 때 Self-Discovery Protocol을 따른다
 2. `.omt/argus/project-commands.md` 캐시를 먼저 확인한다
 3. 캐시 미스 시 프로젝트 문서에서 명령을 발견한다
-4. 발견된 명령으로 Layer A를 정상 실행한다
+4. 발견된 명령으로 "code changes present" (automated checks)를 정상 실행한다
 
 ---
 
@@ -460,12 +460,12 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/search/indexer.ts, src/search/query.ts, tests/search/
 - Summary: "Search indexer and query implementation complete"
 
-**Expected Behavior:** Argus가 계획 파일에서 TODO 3의 AC와 QA Scenarios를 추출하여 검증하고, 코드 변경에 대해 Layer A와 Layer E도 실행한다. Applied layers: A → B → C → E.
+**Expected Behavior:** Argus가 계획 파일에서 TODO 3의 AC와 QA Scenarios를 추출하여 검증하고, 코드 변경에 대해 "code changes present" (automated checks와 code quality)도 실행한다. Active triggers: code changes present → spec or AC provided → QA scenarios provided → code changes present (code quality).
 
 **Verification Points:**
 1. 계획 파일에서 특정 TODO의 AC와 QA Scenarios를 추출한다
-2. 코드 변경이 있으므로 Layer A (Automated)와 Layer E (Code Quality)를 실행한다
-3. QA Scenarios가 제공되므로 Layer C (Layer D 아닌)를 실행한다
+2. 코드 변경이 있으므로 "code changes present" (automated checks와 code quality)를 실행한다
+3. QA Scenarios가 제공되므로 "QA scenarios provided"를 실행한다 ("user-facing changes, no scenarios" 아닌)
 4. 개별 TODO 검증과 코드 품질 검증을 모두 수행한다
 
 ---
@@ -490,12 +490,12 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-6 | MUST NOT DO — 파일 내용의 패턴 금지 | | | |
 | A-7 | Fast-Path — git diff 없이 동작 | | | |
 | A-8 | API endpoint → curl 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API 신호 감지, curl 절차, 서버 라이프사이클, 출력 포맷 모두 정확. |
-| A-9 | Internal refactoring → Stage 3 스킵 | PASS | 2026-02-23 | 4VP 전부 충족. internal 분류, Stage 3 스킵, "SKIPPED (internal logic only)" 문서화, Stage 4 진행 확인. |
+| A-9 | Internal refactoring → "user-facing changes, no scenarios" 스킵 | PASS | 2026-02-23 | 4VP 전부 충족. internal 분류, "user-facing changes, no scenarios" 스킵, "SKIPPED (internal logic only)" 문서화, code quality check 진행 확인. |
 | A-10 | CLI command → interactive_bash | | | A-8과 동일 패턴 (적용 조건 분기). 미테스트. |
 | A-11 | API + Frontend → 복합 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API+Frontend 양 타입 감지, curl+playwright 독립 검증, 공유 라이프사이클. |
 | A-12 | Server start 실패 → REQUEST_CHANGES | | | 실제 서버 환경 필요. 미테스트. |
 | A-13 | Plan Verification — 계획 파일 기반 전체 검증 | | | |
 | A-14 | Instruction Verification — 지시 이행 검증 | | | |
-| A-15 | Composable Layer Activation — 레이어 조합 결정 | | | |
+| A-15 | Composable Trigger Activation — 트리거 조합 결정 | | | |
 | A-16 | Self-Discovery — 검증 방법 자동 발견 | | | |
 | A-17 | Mixed Request — 계획 경로 + 코드 변경 복합 | | | |
