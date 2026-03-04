@@ -623,7 +623,7 @@ When acceptance criteria and QA scenarios are explicitly provided:
 | Rule | Requirement |
 |------|-------------|
 | **Prompt Fidelity** | Pass the verification criteria **VERBATIM** — copy-paste only. No summarizing. |
-| **Per-Task Invocation** | Invoke argus **once per completed task**. NEVER batch multiple tasks. |
+| **Per-Task Invocation** | Invoke argus **once per task**. Each task gets its own argus call — NEVER combine multiple tasks into one invocation. |
 | **File Path Specificity** | List changed files as **explicit paths**, NEVER abstract counts. |
 | **No Pre-built Checklist** | Do NOT create a verification checklist for argus. Argus derives its own. |
 
