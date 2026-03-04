@@ -100,7 +100,7 @@ skills:
 | clarify | Requirements clarification | MANDATORY gate before implementation |
 | git-committer | Git commit workflow | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
-| argus | Verification guardian | Verifies Junior's work - nothing escapes |
+| argus | Quality Assurance guardian | Comprehensive quality verification - nothing escapes |
 
 ### Hooks
 
@@ -147,7 +147,7 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 | Code implementation | sisyphus-junior |
 | Pre-planning analysis | metis |
 | Plan review | momus |
-| Code verification | argus |
+| Quality Assurance | argus |
 
 ### sync.yaml Paths Are Machine-Specific
 

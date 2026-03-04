@@ -41,7 +41,7 @@ Oh-My-Toong은 역할을 명확히 분리하여 이를 해결합니다:
 | **기획** | prometheus | 전략적 기획, 절대 코드 작성 안 함 |
 | **실행** | sisyphus | 위임을 통한 조율, 절대 단독 작업 안 함 |
 | **구현** | sisyphus-junior | 코드 작성 (sisyphus가 위임) |
-| **검증** | argus | 모든 구현 검증 |
+| **품질 보증** | argus | 구현 품질, 계획 준수, 지시 이행 검증 |
 
 ---
 
@@ -71,9 +71,9 @@ flowchart TD
     subgraph 실행 단계
         PlanFile --> Sisyphus["/sisyphus"]
         Sisyphus --> Junior[sisyphus-junior]
-        Junior --> CodeReviewer[argus]
-        CodeReviewer -->|통과| Done((완료))
-        CodeReviewer -->|실패| Junior
+        Junior --> QA[argus<br/>품질 보증]
+        QA -->|통과| Done((완료))
+        QA -->|실패| Junior
     end
 ```
 
@@ -108,10 +108,10 @@ flowchart TD
 - **제약**: 단독 작업. 다른 에이전트에 위임 안 함.
 - **규율**: 엄격한 태스크 집중, 즉시 완료 표시
 
-### argus (백눈의 감시자)
+### argus (품질 보증 가디언)
 
-- **역할**: 모든 구현 검증 - 잠들지 않는 눈
-- **기능**: 빌드/테스트/린트 실행, 코드 품질 평가
+- **역할**: 구현 품질, 계획 준수, 지시 이행 검증
+- **기능**: 빌드/테스트/린트 실행, 코드 품질 평가, 계획 완수 확인
 - **판정**: APPROVE, REQUEST_CHANGES, 또는 COMMENT
 
 ---
@@ -142,7 +142,7 @@ flowchart TD
 
 1. **태스크 생성**: 계획을 TaskCreate 항목으로 분해
 2. **위임**: sisyphus-junior에 태스크 할당
-3. **검증**: argus가 모든 완료 검증
+3. **품질 보증**: argus가 모든 완료 품질 검증
 4. **반복**: 모든 태스크가 리뷰 통과할 때까지 계속
 
 ---

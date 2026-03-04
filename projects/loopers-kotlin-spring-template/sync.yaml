@@ -58,7 +58,7 @@ skills:
     - momus
     - oracle
     - testing
-    - argus
+    - qa
     - component: code-review
       platforms: [claude]
     - make-pr

@@ -1,12 +1,14 @@
 # Stage 3: Hands-On QA
 
+> **Layer D applicability**: This guide applies when changes affect user-facing behavior AND no QA scenarios are provided in the QA REQUEST. When QA scenarios are provided, Layer C (QA Scenarios Execution) is used instead.
+
 Verify user-facing behavior by actually running the changed code. This is not optional when applicable.
 
 ---
 
 ## Step 3.1: Determine Applicability
 
-**Infer change type from the 6-Section prompt's TASK and EXPECTED OUTCOME sections.**
+**Infer change type from the QA REQUEST's Spec and Scope sections.**
 
 ### Decision Logic
 

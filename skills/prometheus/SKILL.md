@@ -464,6 +464,55 @@ The criterion is the **contract between planner and executor**.
 The executor has NO interview context. If the criterion cannot be verified
 by someone who only reads the plan, it is incomplete.
 
+### Verification Thinking Checklist
+
+When writing Verification for each criterion, run this checklist iteratively until PASS:
+
+| # | Question | On Failure |
+|---|----------|------------|
+| 1 | **What concrete state is intended?** | Rewrite vague outcomes (e.g., "improve") as specific desired states (e.g., "X exists in Y form") |
+| 2 | **If all verifications pass, is AC fulfillment guaranteed?** | Add missing checks, return to Check 1 |
+
+**Loop**: Check 2 fails → revise verification → restart from Check 1.
+
+<example>
+AC: "Extract duplicate validation logic from UserService and OrderService into a shared ValidationModule"
+
+========== Round 1 ==========
+
+--- Verification draft ---
+  No duplicate validation functions in UserService and OrderService
+
+--- Check 1: What concrete state is intended? ---
+  "Extract into shared module"
+  → (a) ValidationModule exists with the shared logic
+  → (b) Both services use it
+  → (c) Duplicate code removed from both services
+
+--- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
+  Current: 1 absence check
+  → Deleting validation from both services also passes
+  → FAIL — no presence check for shared module
+
+========== Round 2 ==========
+
+--- Revised verification ---
+  (1) ValidationModule exports shared validation functions
+  (2) UserService and OrderService import from ValidationModule
+  (3) No inline validation logic duplicated across services
+
+--- Check 1: What concrete state is intended? ---
+  (a) Shared module exists with logic → (1) covers
+  (b) Both services use it → (2) covers
+  (c) Duplicates removed → (3) covers
+
+--- Check 2: If all verifications pass, is AC fulfillment guaranteed? ---
+  (1) passes → module exists with exports
+  (2) passes → services actually use it
+  (3) passes → no duplication remains
+  → PASS
+</example>
+
 ### Proposal Format
 
 When proposing acceptance criteria to user, organize by **work item** (not by functional/technical category):
@@ -489,6 +538,7 @@ Overall structure:
 | **Vague verification** | "Verify it works", "dry-run review", "confirm functionality" | Not executable. No one can run "verify it works" | Name the command, the observable state, or the assertion. If you can't, the criterion is incomplete |
 | **Task restatement** | "Authentication is implemented" | Restates the task. Criterion must describe a STATE that is TRUE after, not the ACTION | "Unauthenticated requests to /api/* return 401. Verification: curl without token returns 401 status" |
 | **Universal truths** | "All tests pass", "No console errors" | Always true, not plan-specific. Belongs in Verification Strategy | Move to plan's Verification Strategy section |
+| **Absence-only verification** | "X not found in grep" — verifying removal only | Deletion alone passes. Does not confirm intended state exists | Apply Verification Thinking Checklist: write presence checks for desired state first, then add absence checks as supplementary |
 
 ### Example
 
@@ -723,16 +773,18 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 
 | Section | Contents |
 |---------|----------|
-| **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL) |
+| **TL;DR** | Quick summary (1-2 sentences), deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL), Parallel Execution (YES/NO — wave description), Critical Path (dependency chain or "None") |
 | **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
-| **TODOs** | Numbered tasks -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
+| **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
-| **Final Verification Wave** | Post-TODO plan-level verification. F1 (Plan Compliance Audit), F2 (Code Quality Review), F3 (Full QA Re-execution), F4 (Scope Fidelity Check) — all run in parallel after the last execution wave completes. Required for Scoped+ intent, optional for Trivial |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
 **TODO Task Format:**
+
+Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Must NOT do, Files, References, etc.) indented under the checkbox line.
+
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
 - **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths with action (create/update/delete).
@@ -861,22 +913,22 @@ Wave Visualization:
 
 Critical Path: TODO 1 → TODO 3 → TODO 5
 
---- TODO 3: Implement UserService ---
-- What to do: Create UserService with CRUD operations
-- Must NOT do: Add caching or event publishing
-- Files: src/service/user-service.ts (create), src/service/index.ts (export)
-- References (CRITICAL):
-  - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
-    WHY: Follow the same repository injection, error handling, and return type conventions
-  - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
-    WHY: Match describe/it nesting, mock setup, and assertion style
-- Blocked By: TODO 1, TODO 2
-- Blocks: TODO 5
-- Wave: 2
-- Acceptance Criteria:
-  - UserService implements create, read, update, delete
-  - All methods return typed responses
-  - QA Scenarios:
+- [ ] 3. Implement UserService
+  - What to do: Create UserService with CRUD operations
+  - Must NOT do: Add caching or event publishing
+  - Files: src/service/user-service.ts (create), src/service/index.ts (export)
+  - References (CRITICAL):
+    - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
+      WHY: Follow the same repository injection, error handling, and return type conventions
+    - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
+      WHY: Match describe/it nesting, mock setup, and assertion style
+  - Blocked By: TODO 1, TODO 2
+  - Blocks: TODO 5
+  - Wave: 2
+  - Acceptance Criteria:
+    - UserService implements create, read, update, delete
+    - All methods return typed responses
+    - QA Scenarios:
 
     Scenario: Happy path — CRUD operations work correctly
       Tool: jest
@@ -900,99 +952,26 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 **Non-code TODO Example (simplified format):**
 
 ```
---- TODO 6: Update API Documentation ---
-- What to do: Add rate limiting section to API docs
-- Must NOT do: Change existing endpoint documentation
-- Files: docs/api-reference.md (update)
-- Blocked By: TODO 3
-- Blocks: None
-- Wave: 2
-- Acceptance Criteria:
-  - Rate limiting section documents limits, headers, and error responses
-  - QA Scenarios:
+- [ ] 6. Update API Documentation
+  - What to do: Add rate limiting section to API docs
+  - Must NOT do: Change existing endpoint documentation
+  - Files: docs/api-reference.md (update)
+  - Blocked By: TODO 3
+  - Blocks: None
+  - Wave: 2
+  - Acceptance Criteria:
+    - Rate limiting section documents limits, headers, and error responses
+    - QA Scenarios:
 
-    Scenario: Rate limit headers documented
-      Preconditions: docs/api-reference.md exists, rate limiting middleware merged
-      Expected: Rate limit headers documented with X-RateLimit-* descriptions
-      Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
+      Scenario: Rate limit headers documented
+        Preconditions: docs/api-reference.md exists, rate limiting middleware merged
+        Expected: Rate limit headers documented with X-RateLimit-* descriptions
+        Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
 
-    Scenario: Existing docs preserved
-      Preconditions: No rate limiting section exists prior
-      Expected: Section added without modifying existing endpoint docs
-      Failure: Existing endpoint documentation sections altered or removed
-```
-
-**Final Verification Wave:**
-
-> This section is OUTSIDE the execution wave system — it does not conflict with the Wave integrity rule ("Every wave must reference numbered TODOs only. Do not add administrative stages as waves"). F1-F4 are post-execution verification checks, not TODO waves.
-
-> Trivial intent may omit this section.
-
-After the last execution wave completes, run F1-F4 in parallel as a plan-level verification pass:
-
-**F1: Plan Compliance Audit**
-- Read the plan file (`.omt/plans/{name}.md`)
-- Verify every Must Have requirement is implemented
-- Verify every Must NOT Have / Guardrail is absent
-- Verify evidence files exist for all QA scenarios in `.omt/evidence/{plan-name}/`
-
-Output format:
-```
-F1: Plan Compliance Audit
-- Must Have:
-  - [x] {requirement 1} — implemented in {file}
-  - [x] {requirement 2} — implemented in {file}
-- Must NOT Have:
-  - [x] {guardrail 1} — confirmed absent
-- Evidence:
-  - [x] task-1-*.{ext} — {count} files found
-  - [x] task-2-*.{ext} — {count} files found
-- Result: PASS / FAIL
-```
-
-**F2: Code Quality Review**
-- Run build, lint, and test commands
-- Review changed files for anti-patterns (dead code, hardcoded values, missing error handling)
-
-Output format:
-```
-F2: Code Quality Review
-- Build: PASS / FAIL ({command})
-- Lint: PASS / FAIL ({command})
-- Tests: PASS / FAIL ({count} passed, {count} failed)
-- Anti-pattern review:
-  - {file}: {finding or "clean"}
-- Result: PASS / FAIL
-```
-
-**F3: Full QA Re-execution**
-- Re-execute ALL QA scenarios from every TODO (not just the last wave)
-- Run cross-task integration tests if multiple TODOs interact
-- Save re-execution evidence to `.omt/evidence/{plan-name}/`
-
-Output format:
-```
-F3: Full QA Re-execution
-- TODO 1: {count}/{total} scenarios passed
-- TODO 2: {count}/{total} scenarios passed
-- Cross-task integration: PASS / FAIL
-- Evidence saved: .omt/evidence/{plan-name}/
-- Result: PASS / FAIL
-```
-
-**F4: Scope Fidelity Check**
-- Compare spec (acceptance criteria + Must Have) vs actual implementation 1:1
-- Detect scope creep: any functionality added beyond what the plan specified
-- Detect scope gap: any planned functionality missing from implementation
-
-Output format:
-```
-F4: Scope Fidelity Check
-- Spec items: {count}
-- Implemented: {count}
-- Scope creep: {list or "none"}
-- Scope gap: {list or "none"}
-- Result: PASS / FAIL
+      Scenario: Existing docs preserved
+        Preconditions: No rate limiting section exists prior
+        Expected: Section added without modifying existing endpoint docs
+        Failure: Existing endpoint documentation sections altered or removed
 ```
 
 **Success Criteria Template:**
@@ -1025,11 +1004,11 @@ The Success Criteria section defines the binary pass/fail end state of the plan.
 ### Final Checklist
 
 - [ ] All TODOs marked completed
-- [ ] All QA scenarios pass (F3 re-execution)
+- [ ] All QA scenarios pass
 - [ ] Evidence artifacts saved to `.omt/evidence/{plan-name}/`
-- [ ] No scope creep detected (F4)
-- [ ] Build + lint + tests green (F2)
-- [ ] Plan compliance verified (F1)
+- [ ] No scope creep detected
+- [ ] Build + lint + tests green
+- [ ] Plan compliance verified
 ```
 
 **What to EXCLUDE from plans:**
