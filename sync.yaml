@@ -56,8 +56,13 @@ config:
       deny:
         - "Bash(git push --force*)"
         - "Bash(git push * --force*)"
+        - "Bash(git push -f*)"
         - "Bash(git push * -f*)"
         - "Bash(rm -rf *)"
+        - "Bash(rm -fr *)"
+        - "Bash(rm -Rf *)"
+        - "Bash(rm -r -f *)"
+        - "Bash(rm -f -r *)"
 
 # 플러그인 동기화 (claude plugin install <name>)
 plugins:
