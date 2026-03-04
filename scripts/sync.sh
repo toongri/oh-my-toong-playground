@@ -117,13 +117,13 @@ sync_config() {
         local backup_base="$ROOT_DIR/.sync-backup/$CURRENT_BACKUP_SESSION"
         case "$platform" in
             claude)
-                local target_file="$target_path/.claude/settings.local.json"
+                local target_file="$target_path/.claude/settings.json"
                 if [[ -f "$target_file" ]]; then
                     local backup_path
                     if [[ -z "$CURRENT_PROJECT_NAME" ]]; then
-                        backup_path="$backup_base/settings.local.json"
+                        backup_path="$backup_base/settings.json"
                     else
-                        backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/settings.local.json"
+                        backup_path="$backup_base/projects/$CURRENT_PROJECT_NAME/settings.json"
                     fi
 
                     if [[ "$DRY_RUN" == true ]]; then
