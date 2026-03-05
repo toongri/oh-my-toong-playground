@@ -197,6 +197,22 @@ All files implement the single "포인트 적립" feature. PointController depen
 
 ---
 
+## Scenario GC-12: 기능적 마크다운 파일 — docs가 아닌 feat/refactor 분류
+
+**Input**: `git status` shows staged changes:
+- `skills/git-committer/SKILL.md` — 커밋 타입 분류 기준 추가
+- `rules/coding-discipline.md` — 기존 규칙 표현 개선
+
+**Primary Technique**: Type Classification — 파일 확장자가 아니라 "시스템 동작을 정의하는가, 인간 독자를 위한 참조 정보인가"로 판단
+
+**Verification**:
+- V1: `.md` 파일임에도 불구하고 시스템 동작 정의 파일 → `docs` 미사용 판단
+- V2: SKILL.md 변경 (새 분류 기준 추가) → `feat:` 분류
+- V3: rules/*.md 변경 (동작 규칙 표현 개선) → `refactor:` 분류
+- V4: README.md나 API 명세서 같은 인간 독자용 참조 문서와 구별
+
+---
+
 ## Test Results
 
 ### GREEN Test — 2026-02-17
