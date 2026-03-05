@@ -777,7 +777,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
-| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge"). Final Verification Wave is mandatory for Scoped+ intent and contains F1-F4 verification tasks dispatched to argus. |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge"). Final Verification Wave is mandatory for Scoped+ intent and contains F1-F4 verification tasks dispatched for verification. |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
@@ -853,7 +853,7 @@ Smell-action table — common signs a TODO is not atomic:
 
 > Acceptance criteria requiring "user manually tests/confirms" are FORBIDDEN.
 
-Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `.omt/evidence/{plan-name}/` so that downstream verification agents (argus) can audit results independently.
+Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `.omt/evidence/{plan-name}/` so that downstream verification agents can audit results independently.
 
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
   - Each scenario uses a structured block format with 7 fields:
@@ -945,10 +945,10 @@ Wave Visualization:
   +-- Task 24: Git cleanup + tagging (depends: 21)
 
   Wave FINAL (After ALL implementation tasks — independent review, 4 parallel):
-  +-- F1: Plan Compliance Audit (Role: argus)
-  +-- F2: Code Quality Review (Role: argus)
-  +-- F3: QA Scenario Execution (Role: argus)
-  +-- F4: Scope Fidelity Check (Role: argus)
+  +-- F1: Plan Compliance Audit
+  +-- F2: Code Quality Review
+  +-- F3: QA Scenario Execution
+  +-- F4: Scope Fidelity Check
 
 Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Task 23 -> F1-F4
 
@@ -1017,17 +1017,16 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
 
 Every plan with Scoped or higher intent MUST include a Final Verification Wave after all implementation TODOs. Trivial intent is exempt.
 
-> All implementation tasks must be completed before the Final Wave executes. ALL F-tasks must APPROVE. Rejection on any F-task -> create fix task -> re-enter implementation loop -> re-run ALL F1-F4 after fix.
+> All implementation tasks must be completed before the Final Wave executes. ALL verification items (F1-F4) must APPROVE. Rejection on any F1-F4 -> create fix task -> re-enter implementation loop -> re-run ALL F1-F4 after fix.
 
 Template:
 
 ## Final Verification Wave
 
 > All implementation tasks completed. ALL must APPROVE.
-> Rejection -> fix task -> implementation loop re-entry -> full F1-F4 re-run.
+> Rejection on any F1-F4 -> fix task -> implementation loop re-entry -> full F1-F4 re-run.
 
 - [ ] F1. Plan Compliance Audit
-  Role: argus
   What to verify:
     - Read plan end-to-end
     - For each "Must Have": verify implementation exists
@@ -1036,7 +1035,6 @@ Template:
   Expected Output: Must Have [N/N] | Must NOT Have [N/N] | VERDICT
 
 - [ ] F2. Code Quality Review
-  Role: argus
   What to verify:
     - Run build + linter + tests
     - Review changed files for: as any, empty catches, console.log, unused imports
@@ -1044,7 +1042,6 @@ Template:
   Expected Output: Build [PASS/FAIL] | Tests [N/N] | VERDICT
 
 - [ ] F3. QA Scenario Execution
-  Role: argus
   What to verify:
     - Execute EVERY QA scenario from EVERY task
     - Test cross-task integration
@@ -1052,7 +1049,6 @@ Template:
   Expected Output: Scenarios [N/N pass] | Integration [N/N] | VERDICT
 
 - [ ] F4. Scope Fidelity Check
-  Role: argus
   What to verify:
     - For each task: read spec, read actual diff
     - Verify 1:1 correspondence (no missing, no creep)
@@ -1060,9 +1056,7 @@ Template:
     - Detect cross-task contamination
   Expected Output: Tasks [N/N compliant] | VERDICT
 
-**Trigger mapping**: Each F-task's "What to verify" serves as the QA REQUEST Spec, activating argus's `spec or AC provided` trigger. No dedicated completeness trigger needed.
-
-**Wave field convention**: F-tasks use `Wave: FINAL` (literal string). The numeric Wave Assignment Rule (`max(wave of each blocker) + 1`) applies only to implementation tasks.
+**Wave field convention**: Final Verification items (F1-F4) use `Wave: FINAL` (literal string). The numeric Wave Assignment Rule (`max(wave of each blocker) + 1`) applies only to implementation tasks.
 
 **Success Criteria Template:**
 
