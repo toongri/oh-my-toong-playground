@@ -11,7 +11,7 @@ import {
   parseYamlSimple,
   computeStatus,
   resolveContextDir,
-} from './spec-review-job.ts';
+} from './job.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers

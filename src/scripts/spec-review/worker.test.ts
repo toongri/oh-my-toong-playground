@@ -11,7 +11,7 @@ import {
   runWithRetry,
   sleepMs,
   BASE_DELAY_MS,
-} from './spec-review-worker.ts';
+} from './worker.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -695,7 +695,7 @@ describe('runOnce - workerEnv injection', () => {
 // ---------------------------------------------------------------------------
 
 describe('main - logging lifecycle', () => {
-  const WORKER_PATH = path.join(import.meta.dirname, 'spec-review-worker.ts');
+  const WORKER_PATH = path.join(import.meta.dirname, 'worker.ts');
 
   test('creates a log file in .omt/logs/ after successful run', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-log-test-'));
