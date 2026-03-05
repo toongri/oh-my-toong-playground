@@ -16,6 +16,7 @@ import { spawn, type ChildProcess } from 'child_process';
 
 export const MAX_RETRIES = 1;
 export const BASE_DELAY_MS = 1000;
+export const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export const NON_RETRYABLE_PATTERNS: string[] = [
   'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
@@ -189,6 +190,7 @@ export interface RunOnceOpts {
   workerEnv?: Record<string, string>;
   fallbackFile?: string;
   reviewContent?: string;
+  heartbeatIntervalMs?: number;
 }
 
 /**
@@ -199,7 +201,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
   const {
     program, args, prompt, member, memberDir, command,
     timeoutSec, attempt, spawnFn = spawn, promptsDir, workerEnv,
-    fallbackFile, reviewContent,
+    fallbackFile, reviewContent, heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
   } = opts;
 
   // Prompt assembly: attempt structured prompt from role files
@@ -273,6 +275,14 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
       });
     } catch { /* ignore */ }
 
+    let heartbeatHandle: ReturnType<typeof setInterval> | null = setInterval(() => {
+      try {
+        const current = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+        atomicWriteJson(statusPath, { ...current, lastHeartbeat: new Date().toISOString() });
+      } catch { /* ignore */ }
+    }, heartbeatIntervalMs);
+    heartbeatHandle.unref();
+
     // Write attempt separator before piping output (preserves previous attempts)
     if (attempt > 0) {
       const marker = `\n--- attempt ${attempt} ---\n`;
@@ -302,6 +312,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     const finalize = (payload: Record<string, unknown>) => {
       if (finalized) return;
       finalized = true;
+      if (heartbeatHandle) { clearInterval(heartbeatHandle); heartbeatHandle = null; }
       try { atomicWriteJson(statusPath, payload); } catch { /* ignore */ }
       let closed = 0;
       const total = 2;
