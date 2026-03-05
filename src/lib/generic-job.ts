@@ -502,7 +502,7 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
     chairmanRole: statusPayload.chairmanRole,
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
-    reviewers: reviewersArray.map((r: any) => ({
+    [config.entityPlural]: reviewersArray.map((r: any) => ({
       member: r.member,
       state: r.state,
       exitCode: r.exitCode != null ? r.exitCode : null,
@@ -519,13 +519,13 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
 export function buildManifest(
   jobDir: string,
   config: JobConfig,
-): { id: string; reviewers: any[] } {
+): { id: string; [key: string]: any } {
   const resolvedJobDir = path.resolve(jobDir);
   const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
   const entitiesRoot = path.join(resolvedJobDir, config.entityDirName);
 
   const jobId = jobMeta ? jobMeta.id : 'unknown';
-  const reviewers: any[] = [];
+  const entities: any[] = [];
   if (fs.existsSync(entitiesRoot)) {
     for (const entry of fs.readdirSync(entitiesRoot)) {
       const statusPath = path.join(entitiesRoot, entry, 'status.json');
@@ -533,7 +533,7 @@ export function buildManifest(
       if (!status) continue;
       const outputPath = path.join(entitiesRoot, entry, 'output.txt');
       const hasOutput = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-      reviewers.push({
+      entities.push({
         member: status.member,
         outputFilePath: hasOutput ? outputPath : null,
         errorMessage: hasOutput ? null : (status.message || status.state),
@@ -544,7 +544,7 @@ export function buildManifest(
 
   return {
     id: jobId,
-    reviewers: reviewers
+    [config.entityPlural]: entities
       .map(({ _safeName, ...rest }: any) => rest)
       .sort((a: any, b: any) => String(a.member).localeCompare(String(b.member))),
   };
@@ -664,7 +664,7 @@ export function cmdResults(
         {
           jobDir: resolvedJobDir,
           id: jobMeta ? jobMeta.id : null,
-          reviewers: reviewers
+          [config.entityPlural]: reviewers
             .map((r) => ({
               member: r.member,
               state: r.state,
