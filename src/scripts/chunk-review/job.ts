@@ -142,7 +142,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
               ? '[!]'
               : '[ ]';
       const exitInfo = r.exitCode != null ? ` (exit ${r.exitCode})` : '';
-      process.stdout.write(`${mark} ${r.reviewer} \u2014 ${state}${exitInfo}\n`);
+      process.stdout.write(`${mark} ${r.member} \u2014 ${state}${exitInfo}\n`);
     }
     return;
   }
@@ -153,7 +153,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
     process.stdout.write(`reviewers ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
       for (const r of payload.reviewers) {
-        process.stdout.write(`- ${r.reviewer}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
+        process.stdout.write(`- ${r.member}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
       }
     }
     return;
