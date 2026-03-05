@@ -34,7 +34,7 @@ The chairman orchestrates external AI reviewers. The chairman does NOT provide r
 
 | Chairman Does | Chairman Does NOT |
 |---------------|-------------------|
-| Execute `bun .claude/scripts/spec-review/job.ts` | Review designs directly |
+| Execute `bun .claude/scripts/spec-reviewer/job.ts` | Review designs directly |
 | Wait for ALL reviewer responses | Predict what reviewers would say |
 | Synthesize reviewer feedback faithfully | Add own opinions to synthesis |
 | Report dissent accurately | Minimize or reframe disagreement |
@@ -143,7 +143,7 @@ digraph spec_review_decision {
 
 | Requirement | Enforcement |
 |-------------|-------------|
-| Execute `bun .claude/scripts/spec-review/job.ts` | MUST invoke script, no fabricated reviews |
+| Execute `bun .claude/scripts/spec-reviewer/job.ts` | MUST invoke script, no fabricated reviews |
 | Wait for ALL reviewers | No synthesis until `overallState === 'done'` |
 | No quorum logic | "2/3 responded" is NOT sufficient |
 | No predictions | "Based on typical patterns" = VIOLATION |
@@ -275,14 +275,14 @@ You are reviewing a design specification. Approach this review with:
 
 ## How to Call
 
-Execute `bun .claude/scripts/spec-review/job.ts` from this skill directory:
+Execute `bun .claude/scripts/spec-reviewer/job.ts` from this skill directory:
 
 > Note: Always write prompts in English for consistent cross-model communication.
 
 ### Usage
 
 ```bash
-bun .claude/scripts/spec-review/job.ts start --spec {spec-name} --stdin <<'EOF'
+bun .claude/scripts/spec-reviewer/job.ts start --spec {spec-name} --stdin <<'EOF'
 ## 1. Current Design Under Review
 
 ### Design Summary

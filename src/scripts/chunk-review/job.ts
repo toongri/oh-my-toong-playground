@@ -47,10 +47,9 @@ import {
 
 const SCRIPT_DIR = import.meta.dirname;
 const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../../..');
-const SKILL_DIR = path.resolve(SCRIPT_DIR, '../../skills/code-review');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
-const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'chunk-review.config.yaml');
+const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'chunk-review.config.yaml');
 const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'chunk-review.config.yaml');
 
 const DEFAULT_JOBS_DIR = process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
@@ -311,7 +310,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir);
 
-  const hostRole = detectHostRole(SKILL_DIR);
+  const hostRole = detectHostRole(path.resolve(SCRIPT_DIR, '../../skills/code-review'));
   const config = await parseChunkReviewConfig(configPath);
   const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.CHUNK_REVIEW_CHAIRMAN || config['chunk-review'].chairman.role || 'auto';
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);

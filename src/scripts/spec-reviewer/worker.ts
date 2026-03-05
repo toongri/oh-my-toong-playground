@@ -16,7 +16,7 @@ import {
   BASE_DELAY_MS,
 } from '../../lib/worker-utils';
 
-const PROMPTS_DIR = path.resolve(import.meta.dirname, '../../skills/spec-review/prompts');
+const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 
 // Wrappers that default promptsDir to this worker's PROMPTS_DIR
 function runOnce(opts) {

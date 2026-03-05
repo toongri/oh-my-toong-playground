@@ -671,7 +671,7 @@ describe('runOnce - assembled-prompt.txt', () => {
     // We need to place a role file at that location for the member name.
     // Instead, use a unique member name with a role file in the real prompts dir.
     // Actually, the PROMPTS_DIR is hardcoded. Let's check if prompts dir has files.
-    const promptsDir = path.resolve(import.meta.dirname, '../prompts');
+    const promptsDir = path.resolve(import.meta.dirname, '../../skills/agent-council/prompts');
 
     // Find any existing role file in the prompts dir
     let entityName = null;

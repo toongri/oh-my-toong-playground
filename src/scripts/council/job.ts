@@ -47,7 +47,7 @@ const COUNCIL_CONFIG: JobConfig = {
 };
 
 const SCRIPT_DIR = import.meta.dirname;
-const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
+const SKILL_DIR = path.resolve(SCRIPT_DIR, '../../skills/agent-council');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'council.config.yaml');

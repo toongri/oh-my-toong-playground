@@ -15,7 +15,7 @@ import {
   BASE_DELAY_MS,
 } from '../../lib/worker-utils';
 
-const PROMPTS_DIR = path.resolve(import.meta.dirname, '../../skills/code-review/prompts');
+const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 const FALLBACK_FILE = 'reviewer.md';
 
 // ---------------------------------------------------------------------------
