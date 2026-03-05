@@ -9,22 +9,37 @@ council:
   #   - command: CLI command to execute (prompt will be appended)
   #   - emoji: display emoji (optional)
   #   - color: ANSI color (RED, GREEN, BLUE, YELLOW, CYAN)
+  #
+  # Per-member CLI configuration (all optional):
+  #   model:         Model name passed to CLI (claude/gemini: --model, codex: -m)
+  #   effort_level:  Thinking effort (low/medium/high)
+  #                  claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag, gemini: ignored
+  #   output_format: Output format (text/json/stream-json)
+  #                  claude/gemini: --output-format, codex: --json, unknown: ignored
 
   members:
     - name: claude
       command: "claude -p"
       emoji: "🧠"
       color: "CYAN"
+      model: "claude-opus-4-6"
+      effort_level: "medium"
+      output_format: "text"
 
     - name: codex
       command: "codex exec"
       emoji: "🤖"
       color: "BLUE"
+      # model: "gpt-5.3-codex"
+      effort_level: "medium"
+      output_format: "text"
 
     - name: gemini
       command: "gemini"
       emoji: "💎"
       color: "GREEN"
+      # effort_level: "high"       # ignored for gemini
+      output_format: "text"
 
   # Execution settings
   settings:

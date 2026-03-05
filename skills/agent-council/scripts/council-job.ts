@@ -2,7 +2,6 @@
 
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
 
 import {
   exitWithError,
@@ -10,18 +9,42 @@ import {
   normalizeBool,
   resolveAutoRole,
   ensureDir,
-  safeFileName,
   atomicWriteJson,
   readJsonIfExists,
-  sleepMs,
-  computeTerminalDoneCount,
-  asCodexStepStatus,
   parseArgs,
-  parseWaitCursor,
-  formatWaitCursor,
-  resolveBucketSize,
   generateJobId,
 } from '../../../lib/job-utils';
+
+import {
+  type JobConfig,
+  computeStatus as frameworkComputeStatus,
+  buildUiPayload as frameworkBuildUiPayload,
+  spawnWorkers as frameworkSpawnWorkers,
+  cmdWait as frameworkCmdWait,
+  cmdResults as frameworkCmdResults,
+  cmdStop as frameworkCmdStop,
+  cmdClean as frameworkCmdClean,
+  cmdCollect as frameworkCmdCollect,
+  gcStaleJobs,
+  buildAugmentedCommand,
+  detectCliType,
+  parseYamlSimple as frameworkParseYamlSimple,
+  buildManifest,
+  safeFileName,
+} from '../../../src/lib/generic-job';
+
+// ---------------------------------------------------------------------------
+// Council JobConfig
+// ---------------------------------------------------------------------------
+
+const COUNCIL_CONFIG: JobConfig = {
+  entitySingular: 'member',
+  entityPlural: 'members',
+  entityDirName: 'members',
+  jobPrefix: 'council-',
+  uiLabel: '[Council]',
+  configTopLevelKey: 'council',
+};
 
 const SCRIPT_DIR = import.meta.dirname;
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
@@ -30,438 +53,8 @@ const WORKER_PATH = path.join(SCRIPT_DIR, 'council-job-worker.ts');
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'council.config.yaml');
 const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'council.config.yaml');
 
-const UI_STRINGS = {
-  dispatch: {
-    completed: 'Dispatched council prompts',
-    inProgress: 'Dispatching council prompts',
-  },
-  synthesize: {
-    completed: 'Council results ready',
-    inProgress: 'Ready to synthesize',
-    pending: 'Waiting to synthesize',
-  },
-};
-
 // ---------------------------------------------------------------------------
-// Worker spawning
-// ---------------------------------------------------------------------------
-
-function spawnWorkers({ members, workerPath, jobDir, membersDir, timeoutSec }) {
-  for (const member of members) {
-    const name = String(member.name);
-    const safeName = safeFileName(name, 'member');
-    const memberDir = path.join(membersDir, safeName);
-    ensureDir(memberDir);
-
-    atomicWriteJson(path.join(memberDir, 'status.json'), {
-      member: name,
-      state: 'queued',
-      queuedAt: new Date().toISOString(),
-      command: String(member.command),
-    });
-
-    const workerArgs = [
-      workerPath,
-      '--job-dir',
-      jobDir,
-      '--member',
-      name,
-      '--safe-member',
-      safeName,
-      '--command',
-      String(member.command),
-    ];
-    if (timeoutSec && Number.isFinite(timeoutSec) && timeoutSec > 0) {
-      workerArgs.push('--timeout', String(timeoutSec));
-    }
-
-    const child = spawn(process.execPath, workerArgs, {
-      detached: true,
-      stdio: 'ignore',
-      env: process.env,
-    });
-    child.unref();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Status computation
-// ---------------------------------------------------------------------------
-
-function computeStatus(jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
-
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
-  if (!jobMeta) exitWithError(`job.json not found: ${path.join(resolvedJobDir, 'job.json')}`);
-
-  const membersRoot = path.join(resolvedJobDir, 'members');
-  if (!fs.existsSync(membersRoot)) exitWithError(`members folder not found: ${membersRoot}`);
-
-  const members = [];
-  for (const entry of fs.readdirSync(membersRoot)) {
-    const statusPath = path.join(membersRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath);
-    if (status) members.push({ safeName: entry, ...status });
-  }
-
-  const totals = { queued: 0, running: 0, retrying: 0, done: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 };
-  for (const m of members) {
-    const state = String(m.state || 'unknown');
-    if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
-  }
-
-  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0;
-  const overallState = allDone ? 'done' : (totals.running > 0 || totals.retrying > 0) ? 'running' : 'queued';
-
-  return {
-    jobDir: resolvedJobDir,
-    id: jobMeta.id || null,
-    chairmanRole: jobMeta.chairmanRole || null,
-    overallState,
-    counts: { total: members.length, ...totals },
-    members: members
-      .map((m) => ({
-        member: m.member,
-        state: m.state,
-        startedAt: m.startedAt || null,
-        finishedAt: m.finishedAt || null,
-        exitCode: m.exitCode != null ? m.exitCode : null,
-        message: m.message || null,
-      }))
-      .sort((a, b) => String(a.member).localeCompare(String(b.member))),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// UI payload
-// ---------------------------------------------------------------------------
-
-function buildUiPayload(statusPayload) {
-  const counts = statusPayload.counts || {};
-  const done = computeTerminalDoneCount(counts);
-  const total = Number(counts.total || 0);
-  const isDone = String(statusPayload.overallState || '') === 'done';
-
-  const queued = Number(counts.queued || 0);
-  const running = Number(counts.running || 0);
-
-  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
-  const sortedMembers = membersArray
-    .map((m) => ({
-      entity: m && m.member != null ? String(m.member) : '',
-      state: m && m.state != null ? String(m.state) : 'unknown',
-      exitCode: m && m.exitCode != null ? m.exitCode : null,
-    }))
-    .filter((m) => m.entity)
-    .sort((a, b) => a.entity.localeCompare(b.entity));
-
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled']);
-  const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
-  let hasInProgress = dispatchStatus === 'in_progress';
-
-  const memberSteps = sortedMembers.map((m) => {
-    const state = m.state || 'unknown';
-    const isTerminal = terminalStates.has(state);
-
-    let status;
-    if (isTerminal) {
-      status = 'completed';
-    } else if (!hasInProgress && running > 0 && state === 'running') {
-      status = 'in_progress';
-      hasInProgress = true;
-    } else {
-      status = 'pending';
-    }
-
-    const label = `[Council] Ask ${m.entity}`;
-    return { label, status: asCodexStepStatus(status) };
-  });
-
-  const synthStatus = asCodexStepStatus(isDone ? (hasInProgress ? 'pending' : 'in_progress') : 'pending');
-
-  const codexPlan = [
-    { step: '[Council] Prompt dispatch', status: dispatchStatus },
-    ...memberSteps.map((s) => ({ step: s.label, status: s.status })),
-    { step: '[Council] Synthesize', status: synthStatus },
-  ];
-
-  const claudeTodos = [
-    {
-      content: '[Council] Prompt dispatch',
-      status: dispatchStatus,
-      activeForm: dispatchStatus === 'completed'
-        ? UI_STRINGS.dispatch.completed
-        : UI_STRINGS.dispatch.inProgress,
-    },
-    ...memberSteps.map((s) => ({
-      content: s.label,
-      status: s.status,
-      activeForm: s.status === 'completed' ? 'Finished' : 'Awaiting response',
-    })),
-    {
-      content: '[Council] Synthesize',
-      status: synthStatus,
-      activeForm:
-        synthStatus === 'completed'
-          ? UI_STRINGS.synthesize.completed
-          : synthStatus === 'in_progress'
-            ? UI_STRINGS.synthesize.inProgress
-            : UI_STRINGS.synthesize.pending,
-    },
-  ];
-
-  return {
-    progress: { done, total, overallState: String(statusPayload.overallState || '') },
-    codex: { update_plan: { plan: codexPlan } },
-    claude: { todo_write: { todos: claudeTodos } },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Wait payload
-// ---------------------------------------------------------------------------
-
-function asWaitPayload(statusPayload) {
-  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
-
-  return {
-    jobDir: statusPayload.jobDir,
-    id: statusPayload.id,
-    chairmanRole: statusPayload.chairmanRole,
-    overallState: statusPayload.overallState,
-    counts: statusPayload.counts,
-    members: membersArray.map((m) => ({
-      member: m.member,
-      state: m.state,
-      exitCode: m.exitCode != null ? m.exitCode : null,
-      message: m.message || null,
-    })),
-    ui: buildUiPayload(statusPayload),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Command implementations
-// ---------------------------------------------------------------------------
-
-function cmdStatus(options, jobDir) {
-  const payload = computeStatus(jobDir);
-
-  const wantChecklist = Boolean(options.checklist) && !options.json;
-  if (wantChecklist) {
-    const done = computeTerminalDoneCount(payload.counts);
-    const headerId = payload.id ? ` (${payload.id})` : '';
-    process.stdout.write(`Agent Council${headerId}\n`);
-    process.stdout.write(
-      `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
-    );
-    for (const m of payload.members) {
-      const state = String(m.state || '');
-      const mark =
-        state === 'done'
-          ? '[x]'
-          : state === 'running' || state === 'queued'
-            ? '[ ]'
-            : state
-              ? '[!]'
-              : '[ ]';
-      const exitInfo = m.exitCode != null ? ` (exit ${m.exitCode})` : '';
-      process.stdout.write(`${mark} ${m.member} \u2014 ${state}${exitInfo}\n`);
-    }
-    return;
-  }
-
-  const wantText = Boolean(options.text) && !options.json;
-  if (wantText) {
-    const done = computeTerminalDoneCount(payload.counts);
-    process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
-    if (options.verbose) {
-      for (const m of payload.members) {
-        process.stdout.write(`- ${m.member}: ${m.state}${m.exitCode != null ? ` (exit ${m.exitCode})` : ''}\n`);
-      }
-    }
-    return;
-  }
-
-  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-}
-
-async function cmdWait(options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
-  const prevCursorRaw =
-    options.cursor != null
-      ? String(options.cursor)
-      : fs.existsSync(cursorFilePath)
-        ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
-        : '';
-  const prevCursor = parseWaitCursor(prevCursorRaw);
-
-  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
-  const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
-
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 0;
-  const timeoutMs = Math.trunc(Number(timeoutMsRaw));
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
-
-  let payload = computeStatus(jobDir);
-  const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
-
-  const doneCount = computeTerminalDoneCount(payload.counts);
-  const isDone = payload.overallState === 'done';
-  const total = Number(payload.counts.total || 0);
-  const queued = Number(payload.counts.queued || 0);
-  const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
-  const doneBucket = Math.floor(doneCount / bucketSize);
-  const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
-
-  if (!prevCursor) {
-    fs.writeFileSync(cursorFilePath, cursor, 'utf8');
-    process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor }, null, 2)}\n`);
-    return;
-  }
-
-  const start = Date.now();
-  while (cursor === prevCursorRaw) {
-    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
-    await sleepMs(intervalMs);
-    payload = computeStatus(jobDir);
-    const d = computeTerminalDoneCount(payload.counts);
-    const doneFlag = payload.overallState === 'done';
-    const totalCount = Number(payload.counts.total || 0);
-    const queuedCount = Number(payload.counts.queued || 0);
-    const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
-    const doneB = Math.floor(d / bucketSize);
-    const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
-    if (nextCursor !== prevCursorRaw) {
-      fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
-      process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor: nextCursor }, null, 2)}\n`);
-      return;
-    }
-  }
-
-  const finalPayload = computeStatus(jobDir);
-  const finalDone = computeTerminalDoneCount(finalPayload.counts);
-  const finalDoneFlag = finalPayload.overallState === 'done';
-  const finalTotal = Number(finalPayload.counts.total || 0);
-  const finalQueued = Number(finalPayload.counts.queued || 0);
-  const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
-  const finalDoneBucket = Math.floor(finalDone / bucketSize);
-  const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
-  fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
-  process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload), cursor: finalCursor }, null, 2)}\n`);
-}
-
-function cmdResults(options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json'));
-  const membersRoot = path.join(resolvedJobDir, 'members');
-
-  const members = [];
-  if (fs.existsSync(membersRoot)) {
-    for (const entry of fs.readdirSync(membersRoot)) {
-      const statusPath = path.join(membersRoot, entry, 'status.json');
-      const outputPath = path.join(membersRoot, entry, 'output.txt');
-      const errorPath = path.join(membersRoot, entry, 'error.txt');
-      const status = readJsonIfExists(statusPath);
-      if (!status) continue;
-      const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-      const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
-      members.push({ safeName: entry, ...status, output, stderr });
-    }
-  }
-
-  if (options.json) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          jobDir: resolvedJobDir,
-          id: jobMeta ? jobMeta.id : null,
-          prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
-            ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
-            : null,
-          members: members
-            .map((m) => ({
-              member: m.member,
-              state: m.state,
-              exitCode: m.exitCode != null ? m.exitCode : null,
-              message: m.message || null,
-              output: m.output,
-              stderr: m.stderr,
-            }))
-            .sort((a, b) => String(a.member).localeCompare(String(b.member))),
-        },
-        null,
-        2
-      )}\n`
-    );
-    return;
-  }
-
-  for (const m of members.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
-    process.stdout.write(`\n=== ${m.member} (${m.state}) ===\n`);
-    if (m.message) process.stdout.write(`${m.message}\n`);
-    process.stdout.write(m.output || '');
-    if (!m.output && m.stderr) {
-      process.stdout.write('\n');
-      process.stdout.write(m.stderr);
-    }
-    process.stdout.write('\n');
-  }
-}
-
-function cmdStop(_options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-  const membersRoot = path.join(resolvedJobDir, 'members');
-  if (!fs.existsSync(membersRoot)) exitWithError(`No members folder found: ${membersRoot}`);
-
-  let stoppedAny = false;
-  for (const entry of fs.readdirSync(membersRoot)) {
-    const statusPath = path.join(membersRoot, entry, 'status.json');
-    const status = readJsonIfExists(statusPath);
-    if (!status) continue;
-    if (status.state !== 'running') continue;
-    if (!status.pid) continue;
-
-    try {
-      process.kill(Number(status.pid), 'SIGTERM');
-      stoppedAny = true;
-    } catch {
-      // ignore
-    }
-  }
-
-  process.stdout.write(stoppedAny ? `stop: sent SIGTERM to running members\n` : `stop: no running members\n`);
-}
-
-function cmdClean(options, jobDir) {
-  const resolvedJobDir = path.resolve(jobDir);
-
-  // Primary: use explicit jobs-dir from options/env/default
-  const configuredJobsDir = path.resolve(
-    options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(SKILL_DIR, '.jobs')
-  );
-
-  // Path traversal guard: check if target is under the configured jobs directory
-  const relative = path.relative(configuredJobsDir, resolvedJobDir);
-  const isUnderConfigured = !relative.startsWith('..') && !path.isAbsolute(relative);
-
-  if (!isUnderConfigured) {
-    // Fallback: accept if jobDir contains job.json (proves it's a real job directory)
-    const jobJsonPath = path.join(resolvedJobDir, 'job.json');
-    if (!fs.existsSync(jobJsonPath)) {
-      exitWithError(`clean: refusing to delete path outside jobs directory: ${resolvedJobDir} (jobsDir: ${configuredJobsDir})`);
-    }
-  }
-
-  fs.rmSync(resolvedJobDir, { recursive: true, force: true });
-  process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
-}
-
-// ---------------------------------------------------------------------------
-// Council-specific config parsing
+// Council-specific config parsing (preserved)
 // ---------------------------------------------------------------------------
 
 function resolveDefaultConfigFile() {
@@ -489,7 +82,22 @@ async function parseCouncilConfig(configPath) {
   try {
     YAML = await import('yaml').then(m => m.default);
   } catch {
-    return parseYamlSimple(configPath, fallback);
+    // Fallback: use framework parseYamlSimple, then map reviewers -> members
+    const raw = frameworkParseYamlSimple(configPath, {
+      council: {
+        chairman: fallback.council.chairman,
+        reviewers: fallback.council.members,
+        settings: fallback.council.settings,
+      },
+    }, COUNCIL_CONFIG);
+    const rawCouncil = raw.council as any;
+    return {
+      council: {
+        chairman: rawCouncil.chairman || fallback.council.chairman,
+        members: rawCouncil.reviewers || fallback.council.members,
+        settings: rawCouncil.settings || fallback.council.settings,
+      },
+    };
   }
 
   let parsed;
@@ -544,63 +152,117 @@ async function parseCouncilConfig(configPath) {
   return merged;
 }
 
-function parseYamlSimple(configPath, fallback) {
-  try {
-    const content = fs.readFileSync(configPath, 'utf8');
-    const lines = content.split('\n');
-
-    const result = { council: { chairman: {}, members: [], settings: {} } };
-    let currentSection = null;
-    let currentMember = null;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      if (trimmed === 'council:') continue;
-      if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'members:') { currentSection = 'members'; continue; }
-      if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
-
-      if (currentSection === 'members' && trimmed.startsWith('- name:')) {
-        if (currentMember) result.council.members.push(currentMember);
-        currentMember = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
-        continue;
-      }
-
-      if (currentMember && currentSection === 'members') {
-        const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
-        if (match) {
-          currentMember[match[1]] = match[2];
-        }
-        continue;
-      }
-
-      if (currentSection === 'chairman' || currentSection === 'settings') {
-        const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
-        if (match) {
-          let value = match[2];
-          if (value === 'true') value = true;
-          else if (value === 'false') value = false;
-          else if (/^\d+$/.test(value)) value = parseInt(value, 10);
-          result.council[currentSection][match[1]] = value;
-        }
-      }
-    }
-
-    if (currentMember) result.council.members.push(currentMember);
-
-    if (result.council.members.length === 0) {
-      result.council.members = fallback.council.members;
-    }
-    result.council.chairman = { ...fallback.council.chairman, ...result.council.chairman };
-    result.council.settings = { ...fallback.council.settings, ...result.council.settings };
-
-    return result;
-  } catch (e) {
-    return fallback;
-  }
+// Council-specific parseYamlSimple wrapper: adapts members <-> reviewers terminology
+function parseYamlSimple(configPath: string, fallback: Record<string, any>): Record<string, any> {
+  // Framework uses 'reviewers' internally; translate council's 'members' in fallback
+  const councilFallback = fallback[COUNCIL_CONFIG.configTopLevelKey] || {};
+  const adaptedFallback = {
+    [COUNCIL_CONFIG.configTopLevelKey]: {
+      chairman: councilFallback.chairman || {},
+      reviewers: councilFallback.members || councilFallback.reviewers || [],
+      settings: councilFallback.settings || {},
+    },
+  };
+  const raw = frameworkParseYamlSimple(configPath, adaptedFallback, COUNCIL_CONFIG);
+  // Map result back: reviewers -> members
+  const rawSection = raw[COUNCIL_CONFIG.configTopLevelKey] as any;
+  return {
+    [COUNCIL_CONFIG.configTopLevelKey]: {
+      chairman: rawSection.chairman,
+      members: rawSection.reviewers,
+      settings: rawSection.settings,
+    },
+  };
 }
+
+// ---------------------------------------------------------------------------
+// Council-specific computeStatus wrapper (maps reviewers -> members in output)
+// ---------------------------------------------------------------------------
+
+// Arrow function wrapping framework's computeStatus — adapts `reviewers` field to council's `members`.
+const computeStatus = async (jobDir: string): Promise<{
+  jobDir: string;
+  id: string | null;
+  chairmanRole: string | null;
+  overallState: string;
+  counts: Record<string, number>;
+  members: any[];
+}> => {
+  const result = await frameworkComputeStatus(jobDir, COUNCIL_CONFIG);
+  // Framework returns `reviewers` array — remap to `members` for council terminology.
+  // The `reviewer` field in the framework output comes from status.json's `reviewer` key.
+  // Council status.json may also have `member` field (backward compat).
+  const { reviewers, ...rest } = result as any;
+  return {
+    ...rest,
+    members: (reviewers || []).map((r: any) => ({
+      member: r.reviewer != null ? r.reviewer : (r as any).member,
+      state: r.state,
+      startedAt: r.startedAt,
+      finishedAt: r.finishedAt,
+      exitCode: r.exitCode,
+      message: r.message,
+    })),
+  };
+};
+
+// Council-specific UI strings
+const COUNCIL_UI_STRINGS = {
+  dispatch: {
+    completed: 'Dispatched council prompts',
+    inProgress: 'Dispatching council prompts',
+  },
+  synthesize: {
+    completed: 'Council results ready',
+    inProgress: 'Ready to synthesize',
+    pending: 'Waiting to synthesize',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Council-specific buildUiPayload wrapper (accepts members[] in statusPayload)
+// ---------------------------------------------------------------------------
+
+// Arrow function wrapping framework's buildUiPayload — adapts `members` field and patches UI strings.
+const buildUiPayload = (statusPayload: {
+  overallState?: string;
+  counts?: Record<string, number>;
+  members?: any[];
+}): {
+  progress: { done: number; total: number; overallState: string };
+  codex: { update_plan: { plan: any[] } };
+  claude: { todo_write: { todos: any[] } };
+} => {
+  // Framework expects `reviewers` field; map council's `members` -> `reviewers`
+  const adapted = {
+    overallState: statusPayload.overallState,
+    counts: statusPayload.counts,
+    reviewers: (statusPayload.members || []).map((m: any) => ({
+      reviewer: m && m.member != null ? m.member : m && m.reviewer != null ? m.reviewer : null,
+      state: m && m.state != null ? m.state : 'unknown',
+      exitCode: m && m.exitCode != null ? m.exitCode : null,
+    })),
+  };
+  const result = frameworkBuildUiPayload(adapted, COUNCIL_CONFIG);
+
+  // Patch dispatch and synth activeForm strings with council-specific wording
+  const todos = result.claude.todo_write.todos;
+  if (todos.length > 0) {
+    const dispatchTodo = todos[0];
+    if (dispatchTodo.activeForm === 'Dispatched review prompts') {
+      dispatchTodo.activeForm = COUNCIL_UI_STRINGS.dispatch.completed;
+    } else if (dispatchTodo.activeForm === 'Dispatching review prompts') {
+      dispatchTodo.activeForm = COUNCIL_UI_STRINGS.dispatch.inProgress;
+    }
+    const synthTodo = todos[todos.length - 1];
+    if (synthTodo.activeForm === 'Results ready') {
+      synthTodo.activeForm = COUNCIL_UI_STRINGS.synthesize.completed;
+    }
+    // 'Ready to synthesize' and 'Waiting to synthesize' match between framework and council
+  }
+
+  return result;
+};
 
 // ---------------------------------------------------------------------------
 // Council-specific start command
@@ -614,6 +276,7 @@ Usage:
   council-job.sh start --stdin
   council-job.sh status [--json|--text|--checklist] [--verbose] <jobDir>
   council-job.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  council-job.sh collect [--timeout-ms N] <jobDir>
   council-job.sh results [--json] <jobDir>
   council-job.sh stop <jobDir>
   council-job.sh clean <jobDir>
@@ -625,12 +288,57 @@ Notes:
 `);
 }
 
+async function cmdStatus(options, jobDir) {
+  const payload = await computeStatus(jobDir);
+
+  const wantChecklist = Boolean(options.checklist) && !options.json;
+  if (wantChecklist) {
+    const { computeTerminalDoneCount } = await import('../../../lib/job-utils');
+    const done = computeTerminalDoneCount(payload.counts);
+    const headerId = payload.id ? ` (${payload.id})` : '';
+    process.stdout.write(`Agent Council${headerId}\n`);
+    process.stdout.write(
+      `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
+    );
+    for (const m of payload.members) {
+      const state = String(m.state || '');
+      const mark =
+        state === 'done'
+          ? '[x]'
+          : state === 'running' || state === 'queued'
+            ? '[ ]'
+            : state
+              ? '[!]'
+              : '[ ]';
+      const exitInfo = m.exitCode != null ? ` (exit ${m.exitCode})` : '';
+      process.stdout.write(`${mark} ${m.member} \u2014 ${state}${exitInfo}\n`);
+    }
+    return;
+  }
+
+  const wantText = Boolean(options.text) && !options.json;
+  if (wantText) {
+    const { computeTerminalDoneCount } = await import('../../../lib/job-utils');
+    const done = computeTerminalDoneCount(payload.counts);
+    process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
+    if (options.verbose) {
+      for (const m of payload.members) {
+        process.stdout.write(`- ${m.member}: ${m.state}${m.exitCode != null ? ` (exit ${m.exitCode})` : ''}\n`);
+      }
+    }
+    return;
+  }
+
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+}
+
 async function cmdStart(options, prompt) {
   const configPath = options.config || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
     options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(SKILL_DIR, '.jobs');
 
   ensureDir(jobsDir);
+  gcStaleJobs(jobsDir, COUNCIL_CONFIG);
 
   const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseCouncilConfig(configPath);
@@ -679,16 +387,21 @@ async function cmdStart(options, prompt) {
       command: String(m.command),
       emoji: m.emoji ? String(m.emoji) : null,
       color: m.color ? String(m.color) : null,
+      model: m.model || null,
+      effort_level: m.effort_level || null,
+      output_format: m.output_format || null,
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
 
-  spawnWorkers({
-    members,
+  // Use framework spawnWorkers — it calls detectCliType + buildAugmentedCommand internally
+  frameworkSpawnWorkers({
+    entities: members,
     workerPath: WORKER_PATH,
     jobDir,
-    membersDir,
+    entitiesDir: membersDir,
     timeoutSec,
+    config: COUNCIL_CONFIG,
   });
 
   if (options.json) {
@@ -725,31 +438,40 @@ async function main() {
   if (command === 'status') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('status: missing jobDir');
-    cmdStatus(options, jobDir);
+    await cmdStatus(options, jobDir);
     return;
   }
   if (command === 'wait') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('wait: missing jobDir');
-    await cmdWait(options, jobDir);
+    await frameworkCmdWait(options, jobDir, COUNCIL_CONFIG);
+    return;
+  }
+  if (command === 'collect') {
+    const jobDir = rest[0];
+    if (!jobDir) exitWithError('collect: missing jobDir');
+    await frameworkCmdCollect(options, jobDir, COUNCIL_CONFIG);
     return;
   }
   if (command === 'results') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('results: missing jobDir');
-    cmdResults(options, jobDir);
+    frameworkCmdResults(options, jobDir, COUNCIL_CONFIG);
     return;
   }
   if (command === 'stop') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('stop: missing jobDir');
-    cmdStop(options, jobDir);
+    frameworkCmdStop(options, jobDir, COUNCIL_CONFIG);
     return;
   }
   if (command === 'clean') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('clean: missing jobDir');
-    cmdClean(options, jobDir);
+    const defaultJobsDir = options['jobs-dir'] as string | undefined
+      || process.env.COUNCIL_JOBS_DIR
+      || path.join(SKILL_DIR, '.jobs');
+    frameworkCmdClean(options, jobDir, COUNCIL_CONFIG, defaultJobsDir);
     return;
   }
 
@@ -768,13 +490,7 @@ export {
   safeFileName,
   atomicWriteJson,
   readJsonIfExists,
-  sleepMs,
-  computeTerminalDoneCount,
-  asCodexStepStatus,
   parseArgs,
-  parseWaitCursor,
-  formatWaitCursor,
-  resolveBucketSize,
   generateJobId,
 } from '../../../lib/job-utils';
 
@@ -783,4 +499,5 @@ export {
   parseCouncilConfig,
   parseYamlSimple,
   computeStatus,
+  COUNCIL_CONFIG,
 };
