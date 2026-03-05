@@ -31,6 +31,7 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 | Walkthrough/critique synthesis | Yes | - |
 | Walkthrough context enrichment | NEVER | explore |
 | Cross-file impact / design fit (Phase 1 only) | NEVER | oracle |
+| Worker claim fact-check (Phase 2) | NEVER | explore/oracle |
 | Individual chunk review | NEVER | chunk-reviewer |
 | Code modification | NEVER | (forbidden entirely) |
 
@@ -358,7 +359,7 @@ For multi-chunk reviews:
 5. **Collect per-worker verdicts** from all chunks for Final Adjudication
 6. **Produce unified critique** (Strengths / Issues / Recommendations / Assessment)
 
-For single-chunk reviews, Phase 2 still performs Final Adjudication (severity adjudication, P0 protection, verdict determination, Out of Scope classification) on the single chunk's results before producing final output.
+For single-chunk reviews, Phase 2 still performs Final Adjudication (severity adjudication, verdict determination, Out of Scope classification) on the single chunk's results before producing final output.
 
 #### Step 7: Final Severity Adjudication
 
@@ -383,9 +384,7 @@ Examples of context-driven recalibration (both directions — context can lower 
 
 - **Models assess P3 for missing pagination. Project is a rapidly growing SaaS.** — Models treat unbounded queries as a style issue because the current dataset is small. But the project context shows user growth of 10x per quarter with no ceiling. If current queries already show measurable latency degradation at today's data volume: recalibrate **upward to P1** (demonstrable defect under today's conditions -- the defect exists and manifests now). If current dataset is still within SLA but growth trajectory makes future degradation certain: recalibrate **upward to P2(b)** (no defect today, but predictable failure under realistic growth).
 
-**P0 Protection Rule:** If ANY single worker proposes P0 AND its reasoning satisfies the P0 rubric criteria (outage/data loss/security + triggered in normal operation), the final P-level MUST NOT be lower than P0. If reasoning does NOT satisfy P0 criteria, orchestrator may downgrade with explicit justification.
-
-Under degradation (fewer responding workers), P0 protection still applies — a single responding worker's P0 is protected if rubric criteria are satisfied.
+**Low-Consensus Fact Verification:** When only 1 out of N workers reports an issue, the factual premise may be wrong — the worker may have misunderstood how the code works. Before adjudicating severity, dispatch explore or oracle to verify the factual claim against the actual code. If the premise is false, dismiss as false positive.
 
 **Adjudication examples:**
 
