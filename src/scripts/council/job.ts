@@ -13,7 +13,7 @@ import {
   readJsonIfExists,
   parseArgs,
   generateJobId,
-} from '../../../lib/job-utils';
+} from '../../lib/job-utils';
 
 import {
   type JobConfig,
@@ -31,7 +31,7 @@ import {
   parseYamlSimple as frameworkParseYamlSimple,
   buildManifest,
   safeFileName,
-} from '../../../lib/generic-job';
+} from '../../lib/generic-job';
 
 // ---------------------------------------------------------------------------
 // Council JobConfig
@@ -48,7 +48,7 @@ const COUNCIL_CONFIG: JobConfig = {
 
 const SCRIPT_DIR = import.meta.dirname;
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
-const WORKER_PATH = path.join(SCRIPT_DIR, 'council-job-worker.ts');
+const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'council.config.yaml');
 const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'council.config.yaml');
@@ -291,7 +291,7 @@ async function cmdStatus(options, jobDir) {
 
   const wantChecklist = Boolean(options.checklist) && !options.json;
   if (wantChecklist) {
-    const { computeTerminalDoneCount } = await import('../../../lib/job-utils');
+    const { computeTerminalDoneCount } = await import('../../lib/job-utils');
     const done = computeTerminalDoneCount(payload.counts);
     const headerId = payload.id ? ` (${payload.id})` : '';
     process.stdout.write(`Agent Council${headerId}\n`);
@@ -316,7 +316,7 @@ async function cmdStatus(options, jobDir) {
 
   const wantText = Boolean(options.text) && !options.json;
   if (wantText) {
-    const { computeTerminalDoneCount } = await import('../../../lib/job-utils');
+    const { computeTerminalDoneCount } = await import('../../lib/job-utils');
     const done = computeTerminalDoneCount(payload.counts);
     process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
@@ -490,7 +490,7 @@ export {
   readJsonIfExists,
   parseArgs,
   generateJobId,
-} from '../../../lib/job-utils';
+} from '../../lib/job-utils';
 
 export {
   buildUiPayload,

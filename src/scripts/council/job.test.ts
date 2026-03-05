@@ -11,7 +11,7 @@ import {
   parseCouncilConfig,
   parseYamlSimple,
   computeStatus,
-} from './council-job.ts';
+} from './job.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -507,7 +507,7 @@ describe('parseCouncilConfig', () => {
     fs.writeFileSync(configPath, 'other_key: true\n', 'utf8');
 
     const scriptContent = `
-      const { parseCouncilConfig } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
+      const { parseCouncilConfig } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
       await parseCouncilConfig('${configPath.replace(/'/g, "\\'")}');
     `;
 
@@ -692,7 +692,7 @@ describe('computeStatus', () => {
   test('exits with error for nonexistent jobDir via subprocess', () => {
     const fakePath = path.join(tmpDir, 'does-not-exist');
     const scriptContent = `
-      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
+      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
       await computeStatus('${fakePath.replace(/'/g, "\\'")}');
     `;
 
@@ -713,7 +713,7 @@ describe('computeStatus', () => {
     // No job.json created
 
     const scriptContent = `
-      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
+      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
       await computeStatus('${jobDir.replace(/'/g, "\\'")}');
     `;
 
@@ -735,7 +735,7 @@ describe('computeStatus', () => {
     // No members/ directory created
 
     const scriptContent = `
-      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
+      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
       await computeStatus('${jobDir.replace(/'/g, "\\'")}');
     `;
 
