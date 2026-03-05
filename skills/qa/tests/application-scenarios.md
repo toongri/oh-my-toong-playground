@@ -28,8 +28,6 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-10 | CLI command → interactive_bash | Applicability detection (CLI) | CLI 신호 인식 + bash 시도 |
 | A-11 | API + Frontend → 복합 검증 | Multi-type handling | 복합 변경 각각 독립 검증 |
 | A-12 | Server start 실패 → REQUEST_CHANGES | Lifecycle failure | 서버 기동 실패 처리 |
-| A-13 | Plan verification | Plan file reading + AC extraction | 계획 전체 검증 |
-| A-14 | Instruction verification | Instruction element matching | 지시 이행 검증 |
 | A-15 | Composable trigger activation | Trigger selection logic | 트리거 조합 결정 |
 | A-16 | Self-discovery | Command discovery protocol | 검증 방법 자동 발견 |
 | A-17 | Mixed request | Plan + code combined | 복합 요청 처리 |
@@ -344,54 +342,6 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 ---
 
-## A-13: Plan Verification — 계획 파일 기반 전체 검증
-
-**Context:** 모든 개별 task가 완료된 후, 전체 계획의 Acceptance Criteria와 QA Scenarios를 검증하는 최종 검증.
-
-**QA REQUEST Spec:**
-- Plan file: `.omt/plans/feature-auth.md`
-- Verify all TODO Acceptance Criteria
-- Execute all QA Scenarios defined in plan
-
-**QA REQUEST Scope:**
-- Changed files: src/auth/login.ts, src/auth/middleware.ts, src/auth/config.ts, tests/auth/login.test.ts
-- Summary: "All 4 tasks completed — JWT auth implementation with login, middleware, config, and tests"
-
-**Expected Behavior:** Argus reads the plan file directly, identifies all TODO ACs and QA Scenarios, executes each scenario, and verifies all ACs are met. "completeness verification requested" activates. "code changes present" (automated checks) also runs.
-
-**Verification Points:**
-1. Argus가 계획 파일을 직접 읽어 TODO별 AC를 추출한다
-2. 계획에 정의된 QA Scenarios를 실행한다 ("QA scenarios provided")
-3. "completeness verification requested"에서 모든 요구사항의 완전성을 확인한다
-4. 누락된 요구사항이 있으면 REQUEST_CHANGES를 발행한다
-
----
-
-## A-14: Instruction Verification — 지시 이행 검증
-
-**Context:** 계획 파일 없이 사용자의 원래 지시사항에 대한 이행 여부를 검증하는 최종 검증.
-
-**QA REQUEST Spec:**
-- Original instructions: "Add user authentication with JWT, rate limiting, and audit logging"
-- Completed tasks:
-  1. JWT auth implementation
-  2. Rate limiting middleware
-  3. Audit logging service
-
-**QA REQUEST Scope:**
-- Changed files: src/auth/jwt.ts, src/middleware/rate-limit.ts, src/services/audit-log.ts, tests/
-- Summary: "All 3 tasks completed per user instructions"
-
-**Expected Behavior:** Argus verifies each instruction element is addressed. "completeness verification requested" activates. Checks that JWT, rate limiting, AND audit logging are all implemented — missing any one triggers REQUEST_CHANGES.
-
-**Verification Points:**
-1. 원래 지시사항의 각 요소를 개별적으로 검증한다
-2. 완료된 task 목록과 지시사항을 대조한다
-3. "completeness verification requested"에서 지시사항 전체의 이행 완전성을 확인한다
-4. 부분 이행(예: audit logging 누락)이면 REQUEST_CHANGES를 발행한다
-
----
-
 ## A-15: Composable Trigger Activation — 트리거 조합 결정
 
 **Context:** QA REQUEST 내용에 따라 올바른 트리거 조합이 활성화되는지 검증.
@@ -400,17 +350,18 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - QA REQUEST에 task spec과 changed files가 포함
 - Active triggers: code changes present → spec or AC provided → user-facing changes, no scenarios → code changes present (code quality)
 - "QA scenarios provided" 미활성 (QA scenarios 미제공)
-- "completeness verification requested" 미활성 (plan/instruction verification 미요청)
 
 **Scenario 15b: Plan TODO with QA Scenarios (시나리오 기반 조합)**
 - QA REQUEST에 plan TODO의 AC, QA Scenarios, changed files가 포함
 - Active triggers: code changes present → spec or AC provided → QA scenarios provided → code changes present (code quality)
 - "user-facing changes, no scenarios" 미활성 (QA scenarios가 제공되어 "user-facing changes, no scenarios" 대신 "QA scenarios provided" 활성)
 
-**Scenario 15c: Full plan verification (계획 전체 검증)**
-- QA REQUEST에 plan file path와 전체 검증 요청이 포함
-- Active triggers: code changes present → completeness verification requested → QA scenarios provided
-- "spec or AC provided" 미활성 (개별 spec이 아닌 전체 계획 검증)
+**Scenario 15c: Targeted verification spec (검증 spec 직접 전달)**
+- orchestrator가 Final Verification Wave의 F1-F4 항목에서 "What to verify" spec을 QA REQUEST Spec으로 직접 전달 (plan file 전체가 아닌 targeted spec)
+- 예: "What to verify: Read plan end-to-end, verify Must Have items are all implemented"
+- Active triggers: code changes present → spec or AC provided → code changes present (code quality)
+- "QA scenarios provided" 미활성 (F1-F4 항목의 "What to verify"는 검증 지시이지 QA scenario(Tool/Steps/Expected 구조)가 아님)
+- "user-facing changes, no scenarios" 미활성 (검증 spec은 user-facing 변경 기술이 아님)
 
 **Scenario 15d: AC only, no QA methods (자율 QA)**
 - QA REQUEST에 AC만 제공, QA scenarios 없음, user-facing 변경 있음
@@ -421,7 +372,6 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 1. QA REQUEST 내용을 파싱하여 올바른 트리거를 선택한다
 2. 불필요한 트리거를 활성화하지 않는다
 3. QA Scenarios 유무에 따라 "QA scenarios provided"/"user-facing changes, no scenarios"를 올바르게 선택한다
-4. Plan/instruction verification 요청 시 "completeness verification requested"를 활성화한다
 
 ---
 
@@ -494,8 +444,6 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 | A-10 | CLI command → interactive_bash | | | A-8과 동일 패턴 (적용 조건 분기). 미테스트. |
 | A-11 | API + Frontend → 복합 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API+Frontend 양 타입 감지, curl+playwright 독립 검증, 공유 라이프사이클. |
 | A-12 | Server start 실패 → REQUEST_CHANGES | | | 실제 서버 환경 필요. 미테스트. |
-| A-13 | Plan Verification — 계획 파일 기반 전체 검증 | | | |
-| A-14 | Instruction Verification — 지시 이행 검증 | | | |
 | A-15 | Composable Trigger Activation — 트리거 조합 결정 | | | |
 | A-16 | Self-Discovery — 검증 방법 자동 발견 | | | |
 | A-17 | Mixed Request — 계획 경로 + 코드 변경 복합 | | | |

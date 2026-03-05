@@ -285,9 +285,12 @@ digraph task_loop {
     rankdir=TB;
     "Get unblocked tasks" [shape=box];
     "Any unblocked?" [shape=diamond];
-    "Dispatch to junior(s)" [shape=box];
-    "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "Delegate to agent\n(per Do vs Delegate)" [shape=diamond];
+    "sisyphus-junior" [shape=box];
+    "argus directly" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "argus QA" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "Pass?" [shape=diamond];
+    "APPROVE?" [shape=diamond];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "Mark completed" [shape=box, style=filled, fillcolor=green];
     "Create fix task" [shape=box];
@@ -295,13 +298,18 @@ digraph task_loop {
     "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
 
     "Get unblocked tasks" -> "Any unblocked?";
-    "Any unblocked?" -> "Dispatch to junior(s)" [label="yes"];
+    "Any unblocked?" -> "Delegate to agent\n(per Do vs Delegate)" [label="yes"];
     "Any unblocked?" -> "Done" [label="no"];
-    "Dispatch to junior(s)" -> "argus";
-    "argus" -> "Pass?";
+    "Delegate to agent\n(per Do vs Delegate)" -> "sisyphus-junior" [label="implementation"];
+    "Delegate to agent\n(per Do vs Delegate)" -> "argus directly" [label="verification"];
+    "sisyphus-junior" -> "argus QA";
+    "argus QA" -> "Pass?";
     "Pass?" -> "mnemosyne" [label="yes"];
     "Pass?" -> "Create fix task" [label="no"];
     "mnemosyne" -> "Mark completed";
+    "argus directly" -> "APPROVE?";
+    "APPROVE?" -> "Mark completed" [label="yes"];
+    "APPROVE?" -> "Create fix task" [label="no"];
     "Mark completed" -> "More tasks?";
     "Create fix task" -> "More tasks?";
     "More tasks?" -> "Get unblocked tasks" [label="yes"];
@@ -312,40 +320,11 @@ digraph task_loop {
 **Execution Rules:**
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
-- Each junior completion → immediately invoke argus
-- Each argus approval → immediately invoke mnemosyne to commit
+- Delegate each task per the Do vs Delegate Decision Matrix
+- sisyphus-junior path: each junior completion → immediately invoke argus for QA
+- sisyphus-junior path: each argus approval → immediately invoke mnemosyne to commit
+- argus direct path: each argus approval → immediately mark completed (no mnemosyne — no code changes to commit)
 - After marking task completed, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
-
-### Final Verification Trigger
-
-After all individual tasks are completed and approved by argus:
-
-```dot
-digraph final_verification {
-    rankdir=TB;
-    "All tasks completed\n& per-task argus APPROVE" [shape=ellipse];
-    "Plan exists?" [shape=diamond];
-    "Recipe 3\n(full plan verification)" [shape=box];
-    "Recipe 4\n(instruction fulfillment)" [shape=box];
-    "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
-    "APPROVE?" [shape=diamond];
-    "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
-    "Create fix task" [shape=box];
-    "Re-enter loop" [shape=box];
-
-    "All tasks completed\n& per-task argus APPROVE" -> "Plan exists?";
-    "Plan exists?" -> "Recipe 3\n(full plan verification)" [label="YES"];
-    "Plan exists?" -> "Recipe 4\n(instruction fulfillment)" [label="NO"];
-    "Recipe 3\n(full plan verification)" -> "argus";
-    "Recipe 4\n(instruction fulfillment)" -> "argus";
-    "argus" -> "APPROVE?";
-    "APPROVE?" -> "Done" [label="yes"];
-    "APPROVE?" -> "Create fix task" [label="no"];
-    "Create fix task" -> "Re-enter loop";
-}
-```
-
-This ensures holistic verification beyond individual task approval — the complete work product is verified against the original plan or instructions.
 
 ---
 
@@ -578,7 +557,10 @@ All verification requests to argus use the QA REQUEST format:
 # QA REQUEST
 
 ## Spec
-[Verification criteria — see recipes below for what goes here]
+[WHAT to verify — requirements, criteria, constraints — see recipes below for what goes here]
+
+## Required Verification
+[HOW to verify — verification commands, QA scenarios to execute, evidence to collect — see recipes below for what goes here]
 
 ## Scope
 - Changed files:
@@ -592,30 +574,21 @@ All verification requests to argus use the QA REQUEST format:
 
 Compose the QA REQUEST from the 7-Section delegation prompt:
 - Put the full 7-Section prompt content under `## Spec` (each section becomes a `###` heading)
+- Put the EXPECTED OUTCOME verification commands and MUST DO assertions under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
 
 **Recipe 2: After task completion (plan-based)**
 
 Compose the QA REQUEST from the relevant plan TODO:
 - Put the TODO's spec content (What to do, Must NOT do, Acceptance Criteria, QA Scenarios) under `## Spec`
+- Put the TODO's QA Scenarios and Acceptance Criteria verification methods under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
 
-**Recipe 3: Plan completion — final verification**
-
-After all individual tasks are complete, verify the entire plan:
-- Put the plan file path and request to verify all TODO Acceptance Criteria and QA Scenarios under `## Spec`
-- List all changed files across all tasks and all completed task subjects under `## Scope`
-
-**Recipe 4: Instruction fulfillment — final verification**
-
-When no plan exists, verify against original user instructions:
-- Put the original user instructions and list of completed tasks under `## Spec`
-- List all changed files and completed task summaries under `## Scope`
-
-**Recipe 5: AC/QA Scenario verification with explicit methods**
+**Recipe 3: AC/QA Scenario verification with explicit methods**
 
 When acceptance criteria and QA scenarios are explicitly provided:
 - Put acceptance criteria and QA scenarios verbatim under `## Spec`
+- Put QA scenarios verbatim under `## Required Verification` — they ARE the required verification
 - List changed files and summary under `## Scope`
 
 ### Invocation Rules
