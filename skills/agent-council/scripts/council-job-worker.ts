@@ -17,7 +17,7 @@ import {
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
 
 // ---------------------------------------------------------------------------
-// Backward-compatible wrappers (council uses member/safeMember/jobDir interface)
+// Wrappers (council uses member/jobDir interface)
 // ---------------------------------------------------------------------------
 
 async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec, attempt }) {
@@ -37,15 +37,10 @@ async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec
   const program = tokens[0];
   const args = tokens.slice(1);
 
-  const result = await sharedRunOnce({
-    program, args, prompt, reviewer: member, reviewerDir: memberDir,
+  return sharedRunOnce({
+    program, args, prompt, member, memberDir,
     command, timeoutSec, attempt, promptsDir: PROMPTS_DIR,
   });
-  // Add backward-compatible 'member' alias for 'reviewer'
-  if (result.reviewer !== undefined && result.member === undefined) {
-    result.member = result.reviewer;
-  }
-  return result;
 }
 
 async function runWithRetry(opts) {
@@ -66,31 +61,12 @@ async function runWithRetry(opts) {
   const program = tokens[0];
   const args = tokens.slice(1);
 
-  // Wrap sleepFn to patch retrying status.json with backward-compatible 'member' field
-  const statusPath = path.join(memberDir, 'status.json');
-  const patchedSleepFn = async (ms) => {
-    try {
-      const raw = fs.readFileSync(statusPath, 'utf8');
-      const status = JSON.parse(raw);
-      if (status.state === 'retrying' && status.member === undefined) {
-        status.member = member;
-        atomicWriteJson(statusPath, status);
-      }
-    } catch { /* ignore */ }
-    return sleepFn ? sleepFn(ms) : sleepMsAsync(ms);
-  };
-
-  const result = await sharedRunWithRetry({
-    program, args, reviewer: member, reviewerDir: memberDir,
+  return sharedRunWithRetry({
+    program, args, member, memberDir,
     command, timeoutSec, promptsDir: PROMPTS_DIR,
-    sleepFn: patchedSleepFn,
+    sleepFn: sleepFn ?? sleepMsAsync,
     ...rest,
   });
-  // Add backward-compatible 'member' alias
-  if (result.reviewer !== undefined && result.member === undefined) {
-    result.member = result.reviewer;
-  }
-  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -101,7 +77,6 @@ function main() {
   const options = parseArgs(process.argv);
   const jobDir = options['job-dir'];
   const member = options.member;
-  const safeMember = options['safe-member'];
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
@@ -126,7 +101,6 @@ function main() {
 
   if (!jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
   if (!member) { logError('missing --member'); logEnd(); exitWithError('worker: missing --member'); }
-  if (!safeMember) { logError('missing --safe-member'); logEnd(); exitWithError('worker: missing --safe-member'); }
   if (!command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
 
   logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
@@ -134,7 +108,7 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  runWithRetry({ command: command as string, prompt, member: member as string, safeMember: safeMember as string, jobDir: jobDir as string, timeoutSec, workerEnv }).then((result) => {
+  runWithRetry({ command: command as string, prompt, member: member as string, safeMember: member as string, jobDir: jobDir as string, timeoutSec, workerEnv }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);

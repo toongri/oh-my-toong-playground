@@ -22,15 +22,14 @@ function makeTmpDir() {
 }
 
 function setupJobDir(tmpDir) {
-  const reviewer = 'test-reviewer';
-  const safeReviewer = 'test-reviewer';
+  const member = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
-  const reviewerDir = path.join(jobDir, 'reviewers', safeReviewer);
-  fs.mkdirSync(reviewerDir, { recursive: true });
-  const statusPath = path.join(reviewerDir, 'status.json');
-  const outPath = path.join(reviewerDir, 'output.txt');
-  const errPath = path.join(reviewerDir, 'error.txt');
-  return { jobDir, reviewer, safeReviewer, reviewerDir, statusPath, outPath, errPath };
+  const memberDir = path.join(jobDir, 'reviewers', member);
+  fs.mkdirSync(memberDir, { recursive: true });
+  const statusPath = path.join(memberDir, 'status.json');
+  const outPath = path.join(memberDir, 'output.txt');
+  const errPath = path.join(memberDir, 'error.txt');
+  return { jobDir, member, memberDir, statusPath, outPath, errPath };
 }
 
 function readStatus(statusPath) {
@@ -59,8 +58,8 @@ describe('runOnce - stdin pipe', () => {
       program: 'cat',
       args: [],
       prompt: 'hello from stdin',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'cat',
       timeoutSec: 5,
       attempt: 0,
@@ -76,8 +75,8 @@ describe('runOnce - stdin pipe', () => {
       program: 'echo',
       args: ['fixed-output'],
       prompt: 'THIS_SHOULD_NOT_APPEAR',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'echo fixed-output',
       timeoutSec: 5,
       attempt: 0,
@@ -111,8 +110,8 @@ describe('runOnce - exit states', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 0,
       attempt: 0,
@@ -126,8 +125,8 @@ describe('runOnce - exit states', () => {
       program: 'false',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 0,
       attempt: 0,
@@ -141,8 +140,8 @@ describe('runOnce - exit states', () => {
       program: 'nonexistent-command-xyz-abc-123',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'nonexistent-command-xyz-abc-123',
       timeoutSec: 0,
       attempt: 0,
@@ -155,8 +154,8 @@ describe('runOnce - exit states', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0.2,
       attempt: 0,
@@ -169,8 +168,8 @@ describe('runOnce - exit states', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0,
       attempt: 0,
@@ -200,8 +199,8 @@ describe('runOnce - exit states', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 0,
       attempt: 2,
@@ -215,8 +214,8 @@ describe('runOnce - exit states', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 0,
       attempt: 0,
@@ -224,7 +223,7 @@ describe('runOnce - exit states', () => {
     const status = readStatus(paths.statusPath);
     expect(status.state).toBe('done');
     expect(status.attempt).toBe(0);
-    expect(status.reviewer).toBe(paths.reviewer);
+    expect(status.member).toBe(paths.member);
   });
 
   test('writes output.txt and error.txt', async () => {
@@ -232,8 +231,8 @@ describe('runOnce - exit states', () => {
       program: 'sh',
       args: ['-c', 'echo stdout-data; echo stderr-data >&2'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c "echo stdout-data; echo stderr-data >&2"',
       timeoutSec: 5,
       attempt: 0,
@@ -268,8 +267,8 @@ describe('runWithRetry', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 5,
     });
@@ -284,8 +283,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -300,8 +299,8 @@ describe('runWithRetry', () => {
       program: 'false',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -316,8 +315,8 @@ describe('runWithRetry', () => {
       program: 'nonexistent-command-xyz-abc-123',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'nonexistent-command-xyz-abc-123',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -332,8 +331,8 @@ describe('runWithRetry', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0.2,
       sleepFn: () => Promise.resolve(),
@@ -348,8 +347,8 @@ describe('runWithRetry', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0,
       sleepFn: () => Promise.resolve(),
@@ -382,8 +381,8 @@ describe('runWithRetry', () => {
       program: 'false',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 5,
       sleepFn: (ms) => {
@@ -406,8 +405,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -425,8 +424,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -449,8 +448,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn,
@@ -488,8 +487,8 @@ describe('runOnce - synchronous spawnFn throw', () => {
       program: 'anything',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'anything',
       timeoutSec: 0,
       attempt: 0,
@@ -527,8 +526,8 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0,
       attempt: 0,
@@ -615,8 +614,8 @@ describe('runOnce - workerEnv injection', () => {
       program: 'test-program',
       args: ['--arg1'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'test-program --arg1',
       timeoutSec: 0,
       attempt: 0,
@@ -635,8 +634,8 @@ describe('runOnce - workerEnv injection', () => {
       program: 'test-program',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'test-program',
       timeoutSec: 0,
       attempt: 0,
@@ -657,8 +656,8 @@ describe('runOnce - workerEnv injection', () => {
       program: 'test-program',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'test-program',
       timeoutSec: 0,
       attempt: 0,
@@ -677,8 +676,8 @@ describe('runOnce - workerEnv injection', () => {
       program: 'sh',
       args: ['-c', 'echo "VAL=$MY_WORKER_VAR"'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c echo VAL=$MY_WORKER_VAR',
       timeoutSec: 5,
       attempt: 0,
@@ -702,8 +701,8 @@ describe('main - logging lifecycle', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-log-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
-      const reviewerDir = path.join(jobDir, 'reviewers', 'claude');
-      fs.mkdirSync(reviewerDir, { recursive: true });
+      const memberDir = path.join(jobDir, 'reviewers', 'claude');
+      fs.mkdirSync(memberDir, { recursive: true });
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt', 'utf8');
 
       // Spawn the worker as a subprocess — logging writes to .omt/logs/ inside tmpDir (projectRoot)
@@ -712,7 +711,7 @@ describe('main - logging lifecycle', () => {
       // by mocking — but for subprocess, we check process exits cleanly with logStart/logEnd behavior.
       // A simpler check: worker must exit 0 when command succeeds.
       const proc = Bun.spawn(
-        ['bun', WORKER_PATH, '--job-dir', jobDir, '--reviewer', 'claude', '--safe-reviewer', 'claude', '--command', 'true'],
+        ['bun', WORKER_PATH, '--job-dir', jobDir, '--member', 'claude', '--command', 'true'],
         { stdout: 'pipe', stderr: 'pipe' },
       );
       const exitCode = await proc.exited;
@@ -727,9 +726,9 @@ describe('main - logging lifecycle', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-env-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
-      const reviewerDir = path.join(jobDir, 'reviewers', 'claude');
+      const memberDir = path.join(jobDir, 'reviewers', 'claude');
       const outFile = path.join(tmpDir, 'env-output.txt');
-      fs.mkdirSync(reviewerDir, { recursive: true });
+      fs.mkdirSync(memberDir, { recursive: true });
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), '', 'utf8');
 
       // Command writes MY_ENV_VAR value to outFile
@@ -739,8 +738,7 @@ describe('main - logging lifecycle', () => {
         [
           'bun', WORKER_PATH,
           '--job-dir', jobDir,
-          '--reviewer', 'claude',
-          '--safe-reviewer', 'claude',
+          '--member', 'claude',
           '--command', command,
           '--env', 'MY_ENV_VAR=env-test-value',
         ],
@@ -787,15 +785,15 @@ describe('runOnce - assembled-prompt.txt creation', () => {
       program: 'true',
       args: [],
       prompt: 'test prompt',
-      reviewer: 'claude',
-      reviewerDir: paths.reviewerDir,
+      member: 'claude',
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 5,
       attempt: 0,
     });
 
     expect(result.state).toBe('done');
-    const assembledPath = path.join(paths.reviewerDir, 'assembled-prompt.txt');
+    const assembledPath = path.join(paths.memberDir, 'assembled-prompt.txt');
     expect(fs.existsSync(assembledPath)).toBe(true);
     const content = fs.readFileSync(assembledPath, 'utf8');
     expect(content.includes('test prompt')).toBe(true);

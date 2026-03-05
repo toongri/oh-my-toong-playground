@@ -410,7 +410,7 @@ function asWaitPayload(statusPayload: any): any {
     counts: statusPayload.counts,
     specName: statusPayload.specName,
     reviewers: reviewersArray.map((r: any) => ({
-      reviewer: r.reviewer,
+      member: r.member,
       state: r.state,
       exitCode: r.exitCode != null ? r.exitCode : null,
       message: r.message || null,
@@ -545,7 +545,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
               ? '[!]'
               : '[ ]';
       const exitInfo = r.exitCode != null ? ` (exit ${r.exitCode})` : '';
-      process.stdout.write(`${mark} ${r.reviewer} \u2014 ${state}${exitInfo}\n`);
+      process.stdout.write(`${mark} ${r.member} \u2014 ${state}${exitInfo}\n`);
     }
     return;
   }
@@ -556,7 +556,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
     process.stdout.write(`reviewers ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
       for (const r of payload.reviewers) {
-        process.stdout.write(`- ${r.reviewer}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
+        process.stdout.write(`- ${r.member}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
       }
     }
     return;
@@ -675,14 +675,14 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
             : null,
           reviewers: reviewers
             .map((r) => ({
-              reviewer: r.reviewer,
+              member: r.member,
               state: r.state,
               exitCode: r.exitCode != null ? r.exitCode : null,
               message: r.message || null,
               output: r.output,
               stderr: r.stderr,
             }))
-            .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
+            .sort((a, b) => String(a.member).localeCompare(String(b.member))),
         },
         null,
         2
@@ -691,8 +691,8 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
     return;
   }
 
-  for (const r of reviewers.sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)))) {
-    process.stdout.write(`\n=== ${r.reviewer} (${r.state}) ===\n`);
+  for (const r of reviewers.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
+    process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
     if (r.message) process.stdout.write(`${r.message}\n`);
     process.stdout.write(r.output || '');
     if (!r.output && r.stderr) {
