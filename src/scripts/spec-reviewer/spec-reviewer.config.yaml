@@ -17,7 +17,7 @@ spec-review:
   # output_format: Output format (text/json/stream-json)
   #                claude/gemini: --output-format, codex: --json, unknown: ignored
 
-  reviewers:
+  members:
     - name: claude
       command: "claude -p"
       emoji: "🧠"

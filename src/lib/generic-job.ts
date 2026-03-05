@@ -261,7 +261,7 @@ export async function computeStatus(
   chairmanRole: string | null;
   overallState: string;
   counts: Record<string, number>;
-  reviewers: any[];
+  members: any[];
 }> {
   const resolvedJobDir = path.resolve(jobDir);
   if (!fs.existsSync(resolvedJobDir)) exitWithError(`jobDir not found: ${resolvedJobDir}`);
@@ -278,7 +278,7 @@ export async function computeStatus(
     : 0;
   const stalenessThresholdMs = Math.max(2 * timeoutSec, 120) * 1000;
 
-  const reviewers: any[] = [];
+  const members: any[] = [];
   for (const entry of fs.readdirSync(entitiesRoot)) {
     const statusPath = path.join(entitiesRoot, entry, 'status.json');
     let status = readJsonIfExists(statusPath) as any;
@@ -315,13 +315,14 @@ export async function computeStatus(
     // Staleness check for running entities (heartbeat-based)
     if (status.state === 'running') {
       let isStale = false;
+      let startTs: number;
       if (status.lastHeartbeat) {
         // heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
         const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
         isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
+        startTs = new Date(status.lastHeartbeat).getTime();
       } else {
         // no heartbeat yet: grace period based on startedAt or file mtime
-        let startTs: number;
         if (status.startedAt) {
           startTs = new Date(status.startedAt).getTime();
         } else {
@@ -335,13 +336,20 @@ export async function computeStatus(
         await sleepMs(250);
         const recheck = readJsonIfExists(statusPath) as any;
         if (recheck && recheck.state === 'running') {
-          const elapsed = status.lastHeartbeat
-            ? Math.round((Date.now() - new Date(status.lastHeartbeat).getTime()) / 1000)
-            : Math.round((Date.now() - new Date(status.startedAt || Date.now()).getTime()) / 1000);
+          // Recompute elapsed using recheck fields (post-CAS)
+          let recheckStartTs: number;
+          if (recheck.lastHeartbeat) {
+            recheckStartTs = new Date(recheck.lastHeartbeat).getTime();
+          } else if (recheck.startedAt) {
+            recheckStartTs = new Date(recheck.startedAt).getTime();
+          } else {
+            try { recheckStartTs = fs.statSync(statusPath).mtimeMs; } catch { recheckStartTs = startTs; }
+          }
+          const elapsed = Math.round((Date.now() - recheckStartTs) / 1000);
           const errorPayload = {
             ...recheck,
             state: 'error',
-            error: status.lastHeartbeat
+            error: recheck.lastHeartbeat
               ? `Worker stale: no heartbeat for ${elapsed} seconds`
               : `Worker stale: running for ${elapsed} seconds without heartbeat`,
           };
@@ -353,14 +361,14 @@ export async function computeStatus(
       }
     }
 
-    reviewers.push({ safeName: entry, ...status });
+    members.push({ safeName: entry, ...status });
   }
 
   const totals: Record<string, number> = {
     queued: 0, running: 0, retrying: 0, done: 0, error: 0,
     missing_cli: 0, timed_out: 0, canceled: 0, non_retryable: 0,
   };
-  for (const r of reviewers) {
+  for (const r of members) {
     const state = String(r.state || 'unknown');
     if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
   }
@@ -373,8 +381,8 @@ export async function computeStatus(
     id: jobMeta.id || null,
     chairmanRole: jobMeta.chairmanRole || null,
     overallState,
-    counts: { total: reviewers.length, ...totals },
-    reviewers: reviewers
+    counts: { total: members.length, ...totals },
+    members: members
       .map((r) => ({
         member: r.member,
         state: r.state,
@@ -407,7 +415,7 @@ export function buildUiPayload(
   statusPayload: {
     overallState?: string;
     counts?: Record<string, number>;
-    reviewers?: any[];
+    members?: any[];
   },
   config: JobConfig,
 ): {
@@ -423,7 +431,7 @@ export function buildUiPayload(
   const queued = Number(counts.queued || 0);
   const running = Number(counts.running || 0);
 
-  const reviewersArray = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
+  const reviewersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
   const sortedReviewers = reviewersArray
     .map((r) => ({
       entity: r && r.member != null ? String(r.member) : '',
@@ -500,7 +508,7 @@ export function buildUiPayload(
 // ---------------------------------------------------------------------------
 
 function asWaitPayload(statusPayload: any, config: JobConfig): any {
-  const reviewersArray = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
+  const reviewersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
 
   return {
     jobDir: statusPayload.jobDir,
@@ -820,10 +828,10 @@ export function parseYamlSimple(
     const lines = content.split('\n');
 
     const result: Record<string, any> = {
-      [topKey]: { chairman: {}, reviewers: [], settings: {} },
+      [topKey]: { chairman: {}, members: [], settings: {} },
     };
     let currentSection: string | null = null;
-    let currentReviewer: Record<string, unknown> | null = null;
+    let currentMember: Record<string, unknown> | null = null;
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -831,19 +839,19 @@ export function parseYamlSimple(
 
       if (trimmed === `${topKey}:`) continue;
       if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'reviewers:' || trimmed === 'members:') { currentSection = 'reviewers'; continue; }
+      if (trimmed === 'reviewers:' || trimmed === 'members:') { currentSection = 'members'; continue; }
       if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
 
-      if (currentSection === 'reviewers' && trimmed.startsWith('- name:')) {
-        if (currentReviewer) result[topKey].reviewers.push(currentReviewer);
-        currentReviewer = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
+      if (currentSection === 'members' && trimmed.startsWith('- name:')) {
+        if (currentMember) result[topKey].members.push(currentMember);
+        currentMember = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
         continue;
       }
 
-      if (currentReviewer && currentSection === 'reviewers') {
+      if (currentMember && currentSection === 'members') {
         const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
         if (match) {
-          currentReviewer[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim();
+          currentMember[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim();
         }
         continue;
       }
@@ -860,11 +868,11 @@ export function parseYamlSimple(
       }
     }
 
-    if (currentReviewer) result[topKey].reviewers.push(currentReviewer);
+    if (currentMember) result[topKey].members.push(currentMember);
 
     const fallbackSection = fallback[topKey] || {};
-    if (result[topKey].reviewers.length === 0) {
-      result[topKey].reviewers = fallbackSection.reviewers || [];
+    if (result[topKey].members.length === 0) {
+      result[topKey].members = fallbackSection.members || [];
     }
     result[topKey].chairman = { ...(fallbackSection.chairman || {}), ...result[topKey].chairman };
     result[topKey].settings = { ...(fallbackSection.settings || {}), ...result[topKey].settings };

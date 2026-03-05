@@ -114,8 +114,8 @@ function main() {
 
   logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
 
-  const reviewersRoot = path.join(jobDir, 'reviewers');
-  const memberDir = path.join(reviewersRoot, member);
+  const membersRoot = path.join(jobDir, 'members');
+  const memberDir = path.join(membersRoot, member);
 
   const promptPath = path.join(jobDir, 'prompt.txt');
   const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';

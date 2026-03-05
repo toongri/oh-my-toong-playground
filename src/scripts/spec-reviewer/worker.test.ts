@@ -24,7 +24,7 @@ function makeTmpDir() {
 function setupJobDir(tmpDir) {
   const member = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
-  const memberDir = path.join(jobDir, 'reviewers', member);
+  const memberDir = path.join(jobDir, 'members', member);
   fs.mkdirSync(memberDir, { recursive: true });
   const statusPath = path.join(memberDir, 'status.json');
   const outPath = path.join(memberDir, 'output.txt');
@@ -701,7 +701,7 @@ describe('main - logging lifecycle', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-log-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
-      const memberDir = path.join(jobDir, 'reviewers', 'claude');
+      const memberDir = path.join(jobDir, 'members', 'claude');
       fs.mkdirSync(memberDir, { recursive: true });
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt', 'utf8');
 
@@ -728,7 +728,7 @@ describe('main - logging lifecycle', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-env-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
-      const memberDir = path.join(jobDir, 'reviewers', 'claude');
+      const memberDir = path.join(jobDir, 'members', 'claude');
       const outFile = path.join(tmpDir, 'env-output.txt');
       fs.mkdirSync(memberDir, { recursive: true });
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), '', 'utf8');
