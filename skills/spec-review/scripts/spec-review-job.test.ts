@@ -549,98 +549,98 @@ describe('computeStatus', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('returns done overallState when all reviewers are terminal', () => {
+  test('returns done overallState when all reviewers are terminal', async () => {
     const jobDir = path.join(tmpDir, 'job1');
     setupJob(jobDir, { id: 'test-1', specName: 'my-spec' }, {
       alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
       bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
     expect(result.counts.total).toBe(2);
     expect(result.counts.done).toBe(2);
     expect(result.counts.running).toBe(0);
   });
 
-  test('returns running overallState when some reviewers are running', () => {
+  test('returns running overallState when some reviewers are running', async () => {
     const jobDir = path.join(tmpDir, 'job2');
     setupJob(jobDir, { id: 'test-2' }, {
       alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
       bob: { reviewer: 'bob', state: 'running' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
     expect(result.counts.running).toBe(1);
     expect(result.counts.done).toBe(1);
   });
 
-  test('returns queued overallState when only queued (no running)', () => {
+  test('returns queued overallState when only queued (no running)', async () => {
     const jobDir = path.join(tmpDir, 'job3');
     setupJob(jobDir, { id: 'test-3' }, {
       alice: { reviewer: 'alice', state: 'queued' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('queued');
     expect(result.counts.queued).toBe(1);
   });
 
-  test('counts error states correctly', () => {
+  test('counts error states correctly', async () => {
     const jobDir = path.join(tmpDir, 'job4');
     setupJob(jobDir, { id: 'test-4' }, {
       alice: { reviewer: 'alice', state: 'error', exitCode: 1 },
       bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
       carol: { reviewer: 'carol', state: 'missing_cli' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
     expect(result.counts.error).toBe(1);
     expect(result.counts.missing_cli).toBe(1);
     expect(result.counts.done).toBe(1);
   });
 
-  test('includes specName from job.json', () => {
+  test('includes specName from job.json', async () => {
     const jobDir = path.join(tmpDir, 'job5');
     setupJob(jobDir, { id: 'test-5', specName: 'auth-flow' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.specName).toBe('auth-flow');
   });
 
-  test('returns null specName when not in job.json', () => {
+  test('returns null specName when not in job.json', async () => {
     const jobDir = path.join(tmpDir, 'job6');
     setupJob(jobDir, { id: 'test-6' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.specName).toBe(null);
   });
 
-  test('skips reviewer directories without status.json', () => {
+  test('skips reviewer directories without status.json', async () => {
     const jobDir = path.join(tmpDir, 'job7');
     setupJob(jobDir, { id: 'test-7' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
     fs.mkdirSync(path.join(jobDir, 'reviewers', 'bob'));
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.counts.total).toBe(1);
     expect(result.reviewers.length).toBe(1);
   });
 
-  test('sorts reviewers alphabetically by name', () => {
+  test('sorts reviewers alphabetically by name', async () => {
     const jobDir = path.join(tmpDir, 'job8');
     setupJob(jobDir, { id: 'test-8' }, {
       carol: { reviewer: 'carol', state: 'done' },
       alice: { reviewer: 'alice', state: 'done' },
       bob: { reviewer: 'bob', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.reviewers[0].reviewer).toBe('alice');
     expect(result.reviewers[1].reviewer).toBe('bob');
     expect(result.reviewers[2].reviewer).toBe('carol');
   });
 
-  test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', () => {
+  test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', async () => {
     const jobDir = path.join(tmpDir, 'job9');
     setupJob(jobDir, { id: 'test-9' }, {
       alice: {
@@ -652,51 +652,51 @@ describe('computeStatus', () => {
         message: 'success',
       },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.reviewers[0].startedAt).toBe('2026-01-01T00:00:00Z');
     expect(result.reviewers[0].finishedAt).toBe('2026-01-01T00:01:00Z');
     expect(result.reviewers[0].exitCode).toBe(0);
     expect(result.reviewers[0].message).toBe('success');
   });
 
-  test('returns null for missing reviewer metadata fields', () => {
+  test('returns null for missing reviewer metadata fields', async () => {
     const jobDir = path.join(tmpDir, 'job10');
     setupJob(jobDir, { id: 'test-10' }, {
       alice: { reviewer: 'alice', state: 'running' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.reviewers[0].startedAt).toBe(null);
     expect(result.reviewers[0].finishedAt).toBe(null);
     expect(result.reviewers[0].exitCode).toBe(null);
     expect(result.reviewers[0].message).toBe(null);
   });
 
-  test('includes jobDir and id in result', () => {
+  test('includes jobDir and id in result', async () => {
     const jobDir = path.join(tmpDir, 'job11');
     setupJob(jobDir, { id: 'test-11' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.id).toBe('test-11');
     expect(result.jobDir.endsWith('job11')).toBeTruthy();
   });
 
-  test('includes chairmanRole from job.json', () => {
+  test('includes chairmanRole from job.json', async () => {
     const jobDir = path.join(tmpDir, 'job12');
     setupJob(jobDir, { id: 'test-12', chairmanRole: 'claude' }, {
       alice: { reviewer: 'alice', state: 'done' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.chairmanRole).toBe('claude');
   });
 
-  test('treats retrying reviewer as non-terminal (running)', () => {
+  test('treats retrying reviewer as non-terminal (running)', async () => {
     const jobDir = path.join(tmpDir, 'job13');
     setupJob(jobDir, { id: 'test-13' }, {
       alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
       bob: { reviewer: 'bob', state: 'retrying' },
     });
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
     expect(result.counts.retrying).toBe(1);
     expect(result.counts.done).toBe(1);
