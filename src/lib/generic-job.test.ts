@@ -426,8 +426,8 @@ describe('computeStatus', () => {
   test('returns done overallState when all entities are terminal (reviewer config)', async () => {
     const jobDir = path.join(tmpDir, 'job1');
     setupJob(jobDir, { id: 'test-1' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     }, chunkReviewConfig);
     const result = await computeStatus(jobDir, chunkReviewConfig);
     expect(result.overallState).toBe('done');
@@ -439,8 +439,8 @@ describe('computeStatus', () => {
   test('returns running overallState when some entities are running', async () => {
     const jobDir = path.join(tmpDir, 'job2');
     setupJob(jobDir, { id: 'test-2' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'running' },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'running' },
     }, chunkReviewConfig);
     const result = await computeStatus(jobDir, chunkReviewConfig);
     expect(result.overallState).toBe('running');
@@ -451,7 +451,7 @@ describe('computeStatus', () => {
   test('returns queued overallState when only queued (no running)', async () => {
     const jobDir = path.join(tmpDir, 'job3');
     setupJob(jobDir, { id: 'test-3' }, {
-      alice: { reviewer: 'alice', state: 'queued' },
+      alice: { member: 'alice', state: 'queued' },
     }, chunkReviewConfig);
     const result = await computeStatus(jobDir, chunkReviewConfig);
     expect(result.overallState).toBe('queued');
@@ -461,9 +461,9 @@ describe('computeStatus', () => {
   test('counts error states correctly', async () => {
     const jobDir = path.join(tmpDir, 'job4');
     setupJob(jobDir, { id: 'test-4' }, {
-      alice: { reviewer: 'alice', state: 'error', exitCode: 1 },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
-      carol: { reviewer: 'carol', state: 'missing_cli' },
+      alice: { member: 'alice', state: 'error', exitCode: 1 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
+      carol: { member: 'carol', state: 'missing_cli' },
     }, chunkReviewConfig);
     const result = await computeStatus(jobDir, chunkReviewConfig);
     expect(result.overallState).toBe('done');
@@ -475,7 +475,7 @@ describe('computeStatus', () => {
   test('uses members/ directory with council config', async () => {
     const jobDir = path.join(tmpDir, 'job-council');
     setupJob(jobDir, { id: 'council-test' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
     }, councilConfig);
     const result = await computeStatus(jobDir, councilConfig);
     expect(result.overallState).toBe('done');
@@ -486,12 +486,12 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-stale');
     const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-stale', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'queued', queuedAt: staleTime },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     }, chunkReviewConfig);
     // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
     expect(result.counts.error).toBe(1);
     expect(result.counts.queued).toBe(0);
@@ -501,11 +501,11 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-fresh');
     const freshTime = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-fresh', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: freshTime },
+      alice: { member: 'alice', state: 'queued', queuedAt: freshTime },
     }, chunkReviewConfig);
     // threshold = Math.max(2 * 30, 120) = 120s; 10s < 120s → not stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('queued');
     expect(result.counts.queued).toBe(1);
   });
@@ -514,11 +514,11 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-zero-timeout');
     const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-zero', settings: { timeoutSec: 0 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+      alice: { member: 'alice', state: 'queued', queuedAt: staleTime },
     }, chunkReviewConfig);
     // threshold = Math.max(2 * 0, 120) = 120s; 200s > 120s → stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
   });
 
@@ -526,12 +526,12 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-stale');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-stale', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'running', startedAt: staleStart },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     }, chunkReviewConfig);
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
     expect(result.counts.error).toBe(1);
     expect(result.counts.running).toBe(0);
@@ -541,11 +541,11 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-fresh');
     const recentStart = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-run-fresh', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: recentStart },
+      alice: { member: 'alice', state: 'running', startedAt: recentStart },
     }, chunkReviewConfig);
     // running threshold = (60 + 60) * 1000 = 120_000ms; 10s < 120s → not stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('running');
     expect(result.counts.running).toBe(1);
     expect(result.counts.error).toBe(0);
@@ -555,7 +555,7 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-stale-write');
     const staleTime = new Date(Date.now() - 200_000).toISOString();
     setupJob(jobDir, { id: 'test-write', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+      alice: { member: 'alice', state: 'queued', queuedAt: staleTime },
     }, chunkReviewConfig);
     await computeStatus(jobDir, chunkReviewConfig);
     const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
@@ -568,7 +568,7 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-stale-write');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-stale-write', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+      alice: { member: 'alice', state: 'running', startedAt: staleStart },
     }, chunkReviewConfig);
     await computeStatus(jobDir, chunkReviewConfig);
     const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
@@ -582,14 +582,14 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-cas');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-cas', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+      alice: { member: 'alice', state: 'running', startedAt: staleStart },
     }, chunkReviewConfig);
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
     const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
-    const donePayload = JSON.stringify({ reviewer: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
+    const donePayload = JSON.stringify({ member: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
     Bun.spawn(['bash', '-c', `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
     const result = await computeStatus(jobDir, chunkReviewConfig);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.reviewers.find(r => r.member === 'alice');
     // CAS re-read sees 'done' → preserves 'done', does NOT overwrite with error
     expect(alice.state).toBe('done');
     expect(result.counts.error).toBe(0);
@@ -605,7 +605,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0, error: 0 },
-      reviewers: [{ reviewer: 'alice', state: 'done', exitCode: 0 }],
+      reviewers: [{ member: 'alice', state: 'done', exitCode: 0 }],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
     expect(result.progress).toBeTruthy();
@@ -618,9 +618,9 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 3, done: 1, error: 1, queued: 0, running: 1, missing_cli: 0, timed_out: 0, canceled: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'error' },
-        { reviewer: 'carol', state: 'running' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'error' },
+        { member: 'carol', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -632,7 +632,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      reviewers: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
     const reviewerStep = result.codex.update_plan.plan[1];
@@ -643,7 +643,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      reviewers: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload, councilConfig);
     const reviewerStep = result.codex.update_plan.plan[1];
@@ -654,7 +654,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      reviewers: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload, specReviewConfig);
     const reviewerStep = result.codex.update_plan.plan[1];
@@ -666,8 +666,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -679,8 +679,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'queued' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'queued' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -692,9 +692,9 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 3, done: 1, error: 1, missing_cli: 1, queued: 0, running: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'error' },
-        { reviewer: 'carol', state: 'missing_cli' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'error' },
+        { member: 'carol', state: 'missing_cli' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -709,8 +709,8 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 2, done: 2, queued: 0, running: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'done' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'done' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -724,8 +724,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -738,7 +738,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0 },
-      reviewers: [{ reviewer: 'alice', state: 'done' }],
+      reviewers: [{ member: 'alice', state: 'done' }],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
     for (const todo of result.claude.todo_write.todos) {
@@ -753,9 +753,9 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 3, done: 0, queued: 0, running: 3 },
       reviewers: [
-        { reviewer: 'carol', state: 'running' },
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'carol', state: 'running' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -770,8 +770,8 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 2, done: 1, queued: 0, running: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: null, state: 'done' },
+        { member: 'alice', state: 'done' },
+        { member: null, state: 'done' },
       ],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
@@ -802,7 +802,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      reviewers: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
     expect(result.progress.overallState).toBe('running');
@@ -842,7 +842,7 @@ describe('buildManifest', () => {
   test('returns id and reviewers array with chunk-review config', () => {
     const jobDir = path.join(tmpDir, 'job-manifest');
     setupManifestJob(jobDir, chunkReviewConfig, {
-      alice: { status: { reviewer: 'alice', state: 'done' }, hasOutput: true },
+      alice: { status: { member: 'alice', state: 'done' }, hasOutput: true },
     });
     const result = buildManifest(jobDir, chunkReviewConfig);
     expect(result.id).toBe('test-manifest-job');
@@ -853,7 +853,7 @@ describe('buildManifest', () => {
   test('returns outputFilePath when output.txt exists', () => {
     const jobDir = path.join(tmpDir, 'job-manifest-output');
     setupManifestJob(jobDir, chunkReviewConfig, {
-      alice: { status: { reviewer: 'alice', state: 'done' }, hasOutput: true },
+      alice: { status: { member: 'alice', state: 'done' }, hasOutput: true },
     });
     const result = buildManifest(jobDir, chunkReviewConfig);
     expect(result.reviewers[0].outputFilePath).toBeTruthy();
@@ -863,7 +863,7 @@ describe('buildManifest', () => {
   test('returns errorMessage when no output.txt', () => {
     const jobDir = path.join(tmpDir, 'job-manifest-err');
     setupManifestJob(jobDir, chunkReviewConfig, {
-      alice: { status: { reviewer: 'alice', state: 'error', message: 'failed' }, hasOutput: false },
+      alice: { status: { member: 'alice', state: 'error', message: 'failed' }, hasOutput: false },
     });
     const result = buildManifest(jobDir, chunkReviewConfig);
     expect(result.reviewers[0].outputFilePath).toBe(null);
@@ -873,20 +873,20 @@ describe('buildManifest', () => {
   test('sorts reviewers alphabetically', () => {
     const jobDir = path.join(tmpDir, 'job-manifest-sort');
     setupManifestJob(jobDir, chunkReviewConfig, {
-      carol: { status: { reviewer: 'carol', state: 'done' }, hasOutput: true },
-      alice: { status: { reviewer: 'alice', state: 'done' }, hasOutput: true },
-      bob: { status: { reviewer: 'bob', state: 'done' }, hasOutput: true },
+      carol: { status: { member: 'carol', state: 'done' }, hasOutput: true },
+      alice: { status: { member: 'alice', state: 'done' }, hasOutput: true },
+      bob: { status: { member: 'bob', state: 'done' }, hasOutput: true },
     });
     const result = buildManifest(jobDir, chunkReviewConfig);
-    expect(result.reviewers[0].reviewer).toBe('alice');
-    expect(result.reviewers[1].reviewer).toBe('bob');
-    expect(result.reviewers[2].reviewer).toBe('carol');
+    expect(result.reviewers[0].member).toBe('alice');
+    expect(result.reviewers[1].member).toBe('bob');
+    expect(result.reviewers[2].member).toBe('carol');
   });
 
   test('uses members directory with council config', () => {
     const jobDir = path.join(tmpDir, 'job-manifest-council');
     setupManifestJob(jobDir, councilConfig, {
-      alice: { status: { reviewer: 'alice', state: 'done' }, hasOutput: true },
+      alice: { status: { member: 'alice', state: 'done' }, hasOutput: true },
     });
     const result = buildManifest(jobDir, councilConfig);
     expect(result.id).toBe('test-manifest-job');

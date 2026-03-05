@@ -16,7 +16,7 @@ Your job is to orchestrate external AI reviewers via `spec-review-job.ts`, colle
 
 | Chairman Does | Chairman Does NOT |
 |---------------|-------------------|
-| Execute `bun $SKILL_DIR/scripts/spec-review-job.ts start` | Review designs directly |
+| Execute `bun .claude/skills/spec-review/scripts/spec-review-job.ts start` | Review designs directly |
 | Wait for ALL reviewer responses | Predict what reviewers would say |
 | Synthesize reviewer feedback faithfully | Override reviewer P-levels |
 | Add contextual commentary and recommendations | Override reviewer verdicts |
@@ -63,8 +63,8 @@ Proceed with implementation.
 **The `start` subcommand runs EXACTLY ONCE. No exceptions.**
 
 1. Write the review prompt to a temp file.
-2. Start job: `bun $SKILL_DIR/scripts/spec-review-job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun $SKILL_DIR/scripts/spec-review-job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+2. Start job: `bun .claude/skills/spec-review/scripts/spec-review-job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
+3. Collect: `bun .claude/skills/spec-review/scripts/spec-review-job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
 4. Read each reviewer's output file via the Read tool.
 5. Synthesize using the Advisory Output Format below.
 6. **STOP.** Do not run any further tools.
@@ -74,8 +74,8 @@ Proceed with implementation.
 ### Allowed Bash Usage
 
 You may ONLY execute these commands via Bash:
-- `bun $SKILL_DIR/scripts/spec-review-job.ts start --prompt-file "$PROMPT_FILE" [--spec <spec-name>]` — start a review job
-- `bun $SKILL_DIR/scripts/spec-review-job.ts collect "$JOB_DIR"` — collect results (polls internally until done)
+- `bun .claude/skills/spec-review/scripts/spec-review-job.ts start --prompt-file "$PROMPT_FILE" [--spec <spec-name>]` — start a review job
+- `bun .claude/skills/spec-review/scripts/spec-review-job.ts collect "$JOB_DIR"` — collect results (polls internally until done)
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -148,7 +148,7 @@ You are reviewing a design specification. Approach this review with:
 
 [Related feedback records]
 PROMPT_EOF
-bun $SKILL_DIR/scripts/spec-review-job.ts start --prompt-file "$PROMPT_FILE"
+bun .claude/skills/spec-review/scripts/spec-review-job.ts start --prompt-file "$PROMPT_FILE"
 ```
 
 Output: JOB_DIR path (one line on stdout).
@@ -162,7 +162,7 @@ Output: JOB_DIR path (one line on stdout).
 Poll until all reviewers complete. Re-run this step if not done.
 
 ```bash
-bun $SKILL_DIR/scripts/spec-review-job.ts collect "$JOB_DIR"
+bun .claude/skills/spec-review/scripts/spec-review-job.ts collect "$JOB_DIR"
 ```
 
 Response JSON (done):
@@ -264,7 +264,9 @@ Synthesize all reviewer outputs into the Advisory Output Format below. Apply sof
 
 ## Synthesis Accuracy Rules (NON-NEGOTIABLE)
 
-**Synthesize ONLY what reviewers actually said. No additions. No interpretations.**
+**In Consensus, Divergence, and Concerns Raised sections: Synthesize ONLY what reviewers actually said. No additions. No interpretations.**
+
+**In the Recommendation section only: Chairman may add contextual commentary, clearly labeled as Chairman commentary.**
 
 **Consensus = ALL three reviewers agree on the SAME recommendation.**
 

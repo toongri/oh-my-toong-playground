@@ -19,14 +19,14 @@ import {
 const noopSleep = async () => {};
 
 function makeOpts(testDir: string, overrides: Partial<RunWithRetryOpts> = {}): RunWithRetryOpts {
-  const reviewerDir = join(testDir, 'reviewer');
-  mkdirSync(reviewerDir, { recursive: true });
+  const memberDir = join(testDir, 'member');
+  mkdirSync(memberDir, { recursive: true });
   return {
     program: '/bin/sh',
     args: ['-c', 'exit 1'],
     prompt: 'test prompt',
-    reviewer: 'test-reviewer',
-    reviewerDir,
+    member: 'test-member',
+    memberDir,
     command: '/bin/sh -c "exit 1"',
     timeoutSec: 10,
     sleepFn: noopSleep,
@@ -110,7 +110,7 @@ describe('non-retryable 에러 분류', () => {
     });
 
     // Pre-seed error.txt with a non-retryable pattern (simulating previous attempt residue)
-    writeFileSync(join(opts.reviewerDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
+    writeFileSync(join(opts.memberDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
 
     const result = await runWithRetry(opts);
 
@@ -121,7 +121,7 @@ describe('non-retryable 에러 분류', () => {
 
   it('status.json이 non_retryable로 업데이트됨', async () => {
     const subDir = join(testDir, 'status-update');
-    const reviewerDir = join(subDir, 'reviewer');
+    const memberDir = join(subDir, 'member');
     const opts = makeOpts(subDir, {
       args: ['-c', 'echo "QUOTA_EXHAUSTED" >&2; exit 1'],
       command: '/bin/sh -c "exit 1"',
@@ -129,7 +129,7 @@ describe('non-retryable 에러 분류', () => {
 
     await runWithRetry(opts);
 
-    const statusPath = join(reviewerDir, 'status.json');
+    const statusPath = join(memberDir, 'status.json');
     expect(existsSync(statusPath)).toBe(true);
     const status = JSON.parse(readFileSync(statusPath, 'utf8'));
     expect(status.state).toBe('non_retryable');
