@@ -11,9 +11,9 @@ import {
   runOnce,
   runWithRetry,
   assemblePrompt,
-} from './council-job-worker.ts';
+} from './worker.ts';
 
-const WORKER_PATH = path.join(import.meta.dirname, 'council-job-worker.ts');
+const WORKER_PATH = path.join(import.meta.dirname, 'worker.ts');
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -582,7 +582,7 @@ describe('runWithRetry - workerEnv injection', () => {
 // ---------------------------------------------------------------------------
 
 describe('main - --env passthrough', () => {
-  const WORKER_PATH = path.join(import.meta.dirname, 'council-job-worker.ts');
+  const WORKER_PATH = path.join(import.meta.dirname, 'worker.ts');
 
   test('passes --env KEY=VALUE to spawned subprocess environment', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-env-test-'));

@@ -67,6 +67,7 @@ scripts:
   items:
     - hud
     - chunk-review
+    - council
 
 rules:
   items:
