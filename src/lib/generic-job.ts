@@ -183,27 +183,32 @@ export function spawnWorkers({
   timeoutSec: number;
   config: JobConfig;
 }): void {
-  // Detect safe name collisions before spawning
-  const safeNames = new Map<string, string>();
+  // Validate names and detect case-insensitive collisions before spawning
+  const namePattern = /\s|[\/!$&|;><()'"\\\`]/;
+  const seenLower = new Map<string, string>();
   for (const entity of entities) {
     const name = String(entity.name);
-    const safeName = _safeFileName(name, config.entitySingular);
-    if (safeNames.has(safeName)) {
+    if (namePattern.test(name)) {
       exitWithError(
-        `start: ${config.entitySingular} name collision — "${name}" and "${safeNames.get(safeName)}" both map to safe name "${safeName}"`,
+        `start: ${config.entitySingular} name contains invalid characters: "${name}"`,
       );
     }
-    safeNames.set(safeName, name);
+    const lower = name.toLowerCase();
+    if (seenLower.has(lower)) {
+      exitWithError(
+        `start: ${config.entitySingular} name collision (case-insensitive) — "${name}" and "${seenLower.get(lower)}"`,
+      );
+    }
+    seenLower.set(lower, name);
   }
 
   for (const entity of entities) {
     const name = String(entity.name);
-    const safeName = _safeFileName(name, config.entitySingular);
-    const entityDir = path.join(entitiesDir, safeName);
+    const entityDir = path.join(entitiesDir, name);
     ensureDir(entityDir);
 
     atomicWriteJson(path.join(entityDir, 'status.json'), {
-      reviewer: name,
+      member: name,
       state: 'queued',
       queuedAt: new Date().toISOString(),
       command: String(entity.command),
@@ -215,8 +220,7 @@ export function spawnWorkers({
     const workerArgs = [
       workerPath,
       '--job-dir', jobDir,
-      '--reviewer', name,
-      '--safe-reviewer', safeName,
+      '--member', name,
       '--command', augmented.command,
     ];
     for (const [key, value] of Object.entries(augmented.env)) {
@@ -345,14 +349,14 @@ export async function computeStatus(
     counts: { total: reviewers.length, ...totals },
     reviewers: reviewers
       .map((r) => ({
-        reviewer: r.reviewer,
+        member: r.member,
         state: r.state,
         startedAt: r.startedAt || null,
         finishedAt: r.finishedAt || null,
         exitCode: r.exitCode != null ? r.exitCode : null,
         message: r.message || null,
       }))
-      .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
+      .sort((a, b) => String(a.member).localeCompare(String(b.member))),
   };
 }
 
@@ -395,7 +399,7 @@ export function buildUiPayload(
   const reviewersArray = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
   const sortedReviewers = reviewersArray
     .map((r) => ({
-      entity: r && r.reviewer != null ? String(r.reviewer) : '',
+      entity: r && r.member != null ? String(r.member) : '',
       state: r && r.state != null ? String(r.state) : 'unknown',
       exitCode: r && r.exitCode != null ? r.exitCode : null,
     }))
@@ -478,7 +482,7 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
     reviewers: reviewersArray.map((r: any) => ({
-      reviewer: r.reviewer,
+      member: r.member,
       state: r.state,
       exitCode: r.exitCode != null ? r.exitCode : null,
       message: r.message || null,
@@ -509,7 +513,7 @@ export function buildManifest(
       const outputPath = path.join(entitiesRoot, entry, 'output.txt');
       const hasOutput = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
       reviewers.push({
-        reviewer: status.reviewer,
+        member: status.member,
         outputFilePath: hasOutput ? outputPath : null,
         errorMessage: hasOutput ? null : (status.message || status.state),
         _safeName: entry,
@@ -521,7 +525,7 @@ export function buildManifest(
     id: jobId,
     reviewers: reviewers
       .map(({ _safeName, ...rest }: any) => rest)
-      .sort((a: any, b: any) => String(a.reviewer).localeCompare(String(b.reviewer))),
+      .sort((a: any, b: any) => String(a.member).localeCompare(String(b.member))),
   };
 }
 
@@ -641,13 +645,13 @@ export function cmdResults(
           id: jobMeta ? jobMeta.id : null,
           reviewers: reviewers
             .map((r) => ({
-              reviewer: r.reviewer,
+              member: r.member,
               state: r.state,
               exitCode: r.exitCode != null ? r.exitCode : null,
               message: r.message || null,
               output: r.output,
             }))
-            .sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer))),
+            .sort((a, b) => String(a.member).localeCompare(String(b.member))),
         },
         null,
         2,
@@ -656,8 +660,8 @@ export function cmdResults(
     return;
   }
 
-  for (const r of reviewers.sort((a, b) => String(a.reviewer).localeCompare(String(b.reviewer)))) {
-    process.stdout.write(`\n=== ${r.reviewer} (${r.state}) ===\n`);
+  for (const r of reviewers.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
+    process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
     if (r.message) process.stdout.write(`${r.message}\n`);
     process.stdout.write(r.output || '');
     if (!r.output && r.stderr) {
