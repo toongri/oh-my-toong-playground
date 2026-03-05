@@ -242,6 +242,16 @@ export function spawnWorkers({
 // Status computation
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Heartbeat staleness thresholds
+// ---------------------------------------------------------------------------
+
+/** Running entity is stale if lastHeartbeat is older than this. */
+export const HEARTBEAT_STALE_THRESHOLD_MS = 60_000;
+
+/** Grace period for running entity with no heartbeat yet (startedAt/mtime fallback). */
+export const HEARTBEAT_GRACE_PERIOD_MS = 120_000;
+
 export async function computeStatus(
   jobDir: string,
   config: JobConfig,
@@ -302,42 +312,38 @@ export async function computeStatus(
       }
     }
 
-    // Staleness check for running entities
-    if (status.state === 'running' && status.startedAt) {
-      const startedTs = new Date(status.startedAt).getTime();
-      const runningElapsed = Date.now() - startedTs;
-      const runningThresholdMs = (timeoutSec + 60) * 1000;
-      if (runningElapsed > runningThresholdMs) {
-        // CAS pattern: sleep then re-read to avoid race with legitimate completion
-        await sleepMs(250);
-        const recheck = readJsonIfExists(statusPath) as any;
-        if (recheck && recheck.state === 'running') {
-          const errorPayload = {
-            ...recheck,
-            state: 'error',
-            error: `Worker stale: running for ${Math.round(runningElapsed / 1000)} seconds without completion`,
-          };
-          atomicWriteJson(statusPath, errorPayload);
-          status = errorPayload;
-        } else if (recheck) {
-          status = recheck;
+    // Staleness check for running entities (heartbeat-based)
+    if (status.state === 'running') {
+      let isStale = false;
+      if (status.lastHeartbeat) {
+        // heartbeat present: stale if older than HEARTBEAT_STALE_THRESHOLD_MS
+        const heartbeatAge = Date.now() - new Date(status.lastHeartbeat).getTime();
+        isStale = heartbeatAge > HEARTBEAT_STALE_THRESHOLD_MS;
+      } else {
+        // no heartbeat yet: grace period based on startedAt or file mtime
+        let startTs: number;
+        if (status.startedAt) {
+          startTs = new Date(status.startedAt).getTime();
+        } else {
+          try { startTs = fs.statSync(statusPath).mtimeMs; } catch { startTs = Date.now(); }
         }
+        isStale = (Date.now() - startTs) > HEARTBEAT_GRACE_PERIOD_MS;
       }
-    } else if (status.state === 'running' && !status.startedAt) {
-      // Fallback: worker crashed before writing startedAt — use file mtime
-      let mtimeMs: number;
-      try { mtimeMs = fs.statSync(statusPath).mtimeMs; } catch { mtimeMs = Date.now(); }
-      const runningElapsed = Date.now() - mtimeMs;
-      const runningThresholdMs = (timeoutSec + 60) * 1000;
-      if (runningElapsed > runningThresholdMs) {
+
+      if (isStale) {
         // CAS pattern: sleep then re-read to avoid race with legitimate completion
         await sleepMs(250);
         const recheck = readJsonIfExists(statusPath) as any;
         if (recheck && recheck.state === 'running') {
+          const elapsed = status.lastHeartbeat
+            ? Math.round((Date.now() - new Date(status.lastHeartbeat).getTime()) / 1000)
+            : Math.round((Date.now() - new Date(status.startedAt || Date.now()).getTime()) / 1000);
           const errorPayload = {
             ...recheck,
             state: 'error',
-            error: `Worker stale: running for ${Math.round(runningElapsed / 1000)} seconds without completion`,
+            error: status.lastHeartbeat
+              ? `Worker stale: no heartbeat for ${elapsed} seconds`
+              : `Worker stale: running for ${elapsed} seconds without heartbeat`,
           };
           atomicWriteJson(statusPath, errorPayload);
           status = errorPayload;

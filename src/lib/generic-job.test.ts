@@ -20,6 +20,8 @@ import {
   cmdStop,
   cmdClean,
   cmdCollect,
+  HEARTBEAT_STALE_THRESHOLD_MS,
+  HEARTBEAT_GRACE_PERIOD_MS,
 } from './generic-job.ts';
 
 // ---------------------------------------------------------------------------
@@ -529,7 +531,7 @@ describe('computeStatus', () => {
       alice: { member: 'alice', state: 'running', startedAt: staleStart },
       bob: { member: 'bob', state: 'done', exitCode: 0 },
     }, chunkReviewConfig);
-    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    // no heartbeat: grace period = HEARTBEAT_GRACE_PERIOD_MS (120s); 200s > 120s → stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
     const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
@@ -539,11 +541,11 @@ describe('computeStatus', () => {
 
   test('preserves normal running entity within running threshold', async () => {
     const jobDir = path.join(tmpDir, 'job-run-fresh');
-    const recentStart = new Date(Date.now() - 10_000).toISOString(); // 10s ago
+    const recentHeartbeat = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-run-fresh', settings: { timeoutSec: 60 } }, {
-      alice: { member: 'alice', state: 'running', startedAt: recentStart },
+      alice: { member: 'alice', state: 'running', lastHeartbeat: recentHeartbeat },
     }, chunkReviewConfig);
-    // running threshold = (60 + 60) * 1000 = 120_000ms; 10s < 120s → not stale
+    // heartbeat 10s ago: HEARTBEAT_STALE_THRESHOLD_MS = 60s; 10s < 60s → not stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
     const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('running');
@@ -574,7 +576,7 @@ describe('computeStatus', () => {
     const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
     const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
     expect(written.state).toBe('error');
-    expect(written.error).toContain('running for');
+    expect(written.error).toContain('heartbeat');
     expect(written.error).toContain('seconds');
   });
 
@@ -584,7 +586,7 @@ describe('computeStatus', () => {
     setupJob(jobDir, { id: 'test-run-cas', settings: { timeoutSec: 60 } }, {
       alice: { member: 'alice', state: 'running', startedAt: staleStart },
     }, chunkReviewConfig);
-    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    // no heartbeat: grace period = HEARTBEAT_GRACE_PERIOD_MS (120s); 200s > 120s → stale
     const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
     const donePayload = JSON.stringify({ member: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
     Bun.spawn(['bash', '-c', `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
@@ -598,13 +600,69 @@ describe('computeStatus', () => {
   test('transitions running entity to error using mtime fallback when startedAt is missing', async () => {
     const jobDir = path.join(tmpDir, 'job-run-mtime-stale');
     setupJob(jobDir, { id: 'test-run-mtime', settings: { timeoutSec: 60 } }, {
-      alice: { member: 'alice', state: 'running' }, // no startedAt
+      alice: { member: 'alice', state: 'running' }, // no startedAt, no heartbeat
     }, chunkReviewConfig);
     // Set file mtime to 200s ago (stale)
     const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
     const staleMtime = new Date(Date.now() - 200_000); // 200s ago
     fs.utimesSync(statusPath, staleMtime, staleMtime);
-    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    // no heartbeat, no startedAt: mtime fallback, grace period = HEARTBEAT_GRACE_PERIOD_MS (120s); 200s > 120s → stale
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const alice = result.reviewers.find(r => r.member === 'alice');
+    expect(alice.state).toBe('error');
+    expect(result.counts.error).toBe(1);
+    expect(result.counts.running).toBe(0);
+  });
+
+  test('running entity with recent lastHeartbeat is not stale', async () => {
+    const jobDir = path.join(tmpDir, 'job-run-hb-fresh');
+    const recentHeartbeat = new Date(Date.now() - 5_000).toISOString(); // 5s ago
+    setupJob(jobDir, { id: 'test-run-hb-fresh', settings: { timeoutSec: 60 } }, {
+      alice: { member: 'alice', state: 'running', lastHeartbeat: recentHeartbeat },
+    }, chunkReviewConfig);
+    // heartbeat 5s ago: HEARTBEAT_STALE_THRESHOLD_MS = 60s; 5s < 60s → not stale
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const alice = result.reviewers.find(r => r.member === 'alice');
+    expect(alice.state).toBe('running');
+    expect(result.counts.running).toBe(1);
+    expect(result.counts.error).toBe(0);
+  });
+
+  test('running entity with old lastHeartbeat is stale', async () => {
+    const jobDir = path.join(tmpDir, 'job-run-hb-old');
+    const oldHeartbeat = new Date(Date.now() - 90_000).toISOString(); // 90s ago
+    setupJob(jobDir, { id: 'test-run-hb-old', settings: { timeoutSec: 60 } }, {
+      alice: { member: 'alice', state: 'running', lastHeartbeat: oldHeartbeat },
+    }, chunkReviewConfig);
+    // heartbeat 90s ago: HEARTBEAT_STALE_THRESHOLD_MS = 60s; 90s > 60s → stale
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const alice = result.reviewers.find(r => r.member === 'alice');
+    expect(alice.state).toBe('error');
+    expect(result.counts.error).toBe(1);
+    expect(result.counts.running).toBe(0);
+  });
+
+  test('running entity without heartbeat within grace period is not stale', async () => {
+    const jobDir = path.join(tmpDir, 'job-run-no-hb-grace');
+    const recentStart = new Date(Date.now() - 60_000).toISOString(); // 60s ago
+    setupJob(jobDir, { id: 'test-run-no-hb-grace', settings: { timeoutSec: 60 } }, {
+      alice: { member: 'alice', state: 'running', startedAt: recentStart },
+    }, chunkReviewConfig);
+    // no heartbeat, startedAt 60s ago: HEARTBEAT_GRACE_PERIOD_MS = 120s; 60s < 120s → not stale
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const alice = result.reviewers.find(r => r.member === 'alice');
+    expect(alice.state).toBe('running');
+    expect(result.counts.running).toBe(1);
+    expect(result.counts.error).toBe(0);
+  });
+
+  test('running entity without heartbeat beyond grace period is stale', async () => {
+    const jobDir = path.join(tmpDir, 'job-run-no-hb-stale');
+    const oldStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
+    setupJob(jobDir, { id: 'test-run-no-hb-stale', settings: { timeoutSec: 60 } }, {
+      alice: { member: 'alice', state: 'running', startedAt: oldStart },
+    }, chunkReviewConfig);
+    // no heartbeat, startedAt 200s ago: HEARTBEAT_GRACE_PERIOD_MS = 120s; 200s > 120s → stale
     const result = await computeStatus(jobDir, chunkReviewConfig);
     const alice = result.reviewers.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
