@@ -531,24 +531,34 @@ claude_sync_rules_direct() {
 # Install a plugin via Claude CLI
 # Arguments:
 #   $1 - plugin_name: Plugin package name
-#   $2 - dry_run: "true" or "false"
+#   $2 - scope: "user" or "project" (default: "user")
+#   $3 - target_path: Target project path (required when scope=project)
+#   $4 - dry_run: "true" or "false"
 claude_sync_plugin_install() {
     local plugin_name="$1"
-    local dry_run="${2:-false}"
+    local scope="${2:-user}"
+    local target_path="${3:-}"
+    local dry_run="${4:-false}"
 
     if [[ "$dry_run" == "true" ]]; then
-        log_dry "claude plugin install $plugin_name"
+        log_dry "claude plugin install --scope $scope $plugin_name"
         return 0
     fi
 
     if ! claude_is_available; then
-        log_warn "Claude CLI가 사용 불가합니다. 플러그인 설치 스킵: $plugin_name"
+        log_warn "Claude CLI가 사용 불가합니다. 플러그인 설치 스킵 (scope=$scope): $plugin_name"
         return 0
     fi
 
-    log_info "플러그인 설치: $plugin_name"
-    if ! CLAUDECODE= claude plugin install "$plugin_name" 2>&1; then
-        log_warn "플러그인 설치 실패 (계속 진행): $plugin_name"
+    log_info "플러그인 설치 (scope=$scope): $plugin_name"
+    if [[ "$scope" == "project" ]] && [[ -n "$target_path" ]]; then
+        if ! ( cd "$target_path" && CLAUDECODE= claude plugin install --scope "$scope" "$plugin_name" 2>&1 ); then
+            log_warn "플러그인 설치 실패 (계속 진행, scope=$scope): $plugin_name"
+        fi
+    else
+        if ! CLAUDECODE= claude plugin install --scope "$scope" "$plugin_name" 2>&1; then
+            log_warn "플러그인 설치 실패 (계속 진행, scope=$scope): $plugin_name"
+        fi
     fi
 }
 
