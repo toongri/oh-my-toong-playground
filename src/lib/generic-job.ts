@@ -324,6 +324,28 @@ export async function computeStatus(
           status = recheck;
         }
       }
+    } else if (status.state === 'running' && !status.startedAt) {
+      // Fallback: worker crashed before writing startedAt — use file mtime
+      let mtimeMs: number;
+      try { mtimeMs = fs.statSync(statusPath).mtimeMs; } catch { mtimeMs = Date.now(); }
+      const runningElapsed = Date.now() - mtimeMs;
+      const runningThresholdMs = (timeoutSec + 60) * 1000;
+      if (runningElapsed > runningThresholdMs) {
+        // CAS pattern: sleep then re-read to avoid race with legitimate completion
+        await sleepMs(250);
+        const recheck = readJsonIfExists(statusPath) as any;
+        if (recheck && recheck.state === 'running') {
+          const errorPayload = {
+            ...recheck,
+            state: 'error',
+            error: `Worker stale: running for ${Math.round(runningElapsed / 1000)} seconds without completion`,
+          };
+          atomicWriteJson(statusPath, errorPayload);
+          status = errorPayload;
+        } else if (recheck) {
+          status = recheck;
+        }
+      }
     }
 
     reviewers.push({ safeName: entry, ...status });

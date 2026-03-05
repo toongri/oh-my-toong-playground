@@ -81,7 +81,9 @@ function main() {
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
   // Initialize persistent logging
-  const projectRoot = path.resolve(import.meta.dirname, '../../..');
+  const projectRoot = options['project-root']
+    ? String(options['project-root'])
+    : path.resolve(import.meta.dirname, '../../..');
   const jobId = jobDir ? path.basename(String(jobDir)).replace(/^council-/, '') : 'unknown';
   initLogger('council-job-worker', projectRoot, jobId);
   logStart();
