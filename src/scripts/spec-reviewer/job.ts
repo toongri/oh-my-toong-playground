@@ -48,11 +48,10 @@ const JOB_CONFIG: JobConfig = {
 // ---------------------------------------------------------------------------
 
 const SCRIPT_DIR = import.meta.dirname;
-const SKILL_DIR = path.resolve(SCRIPT_DIR, '../../skills/spec-review');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
-const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'spec-review.config.yaml');
-const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'spec-review.config.yaml');
+const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'spec-reviewer.config.yaml');
+const REPO_CONFIG_FILE = path.join(path.resolve(SCRIPT_DIR, '../../..'), 'spec-reviewer.config.yaml');
 
 // ---------------------------------------------------------------------------
 // Spec-review wrappers — pre-apply JOB_CONFIG so callers/tests need no config arg
@@ -242,7 +241,7 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
 // ---------------------------------------------------------------------------
 
 function findProjectRoot(): string | null {
-  let current = SKILL_DIR;
+  let current = SCRIPT_DIR;
   const root = path.parse(current).root;
 
   while (current !== root) {
@@ -259,10 +258,10 @@ function findProjectRoot(): string | null {
     current = path.dirname(current);
   }
 
-  const normalized = SKILL_DIR.replace(/\\/g, '/');
-  const skillsMatch = normalized.match(/^(.+?)\/.claude\/skills\//);
-  if (skillsMatch) {
-    return skillsMatch[1];
+  const normalized = SCRIPT_DIR.replace(/\\/g, '/');
+  const scriptsMatch = normalized.match(/^(.+?)\/.claude\/scripts\//);
+  if (scriptsMatch) {
+    return scriptsMatch[1];
   }
 
   return null;
@@ -418,12 +417,12 @@ function asWaitPayload(statusPayload: any): any {
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
   const configPath = (options.config || process.env.SPEC_REVIEW_CONFIG || resolveDefaultConfigFile()) as string;
   const jobsDir =
-    (options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(SKILL_DIR, '.jobs')) as string;
+    (options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(SCRIPT_DIR, '.jobs')) as string;
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, JOB_CONFIG);
 
-  const hostRole = detectHostRole(SKILL_DIR);
+  const hostRole = detectHostRole(SCRIPT_DIR);
   const config = await parseSpecReviewConfig(configPath);
   const chairmanRoleRaw = (options.chairman || process.env.SPEC_REVIEW_CHAIRMAN || config['spec-review'].chairman.role || 'auto') as string;
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
@@ -763,7 +762,7 @@ async function main(): Promise<void> {
   if (command === 'clean') {
     const jobDir = rest[0] as string;
     if (!jobDir) exitWithError('clean: missing jobDir');
-    _cmdClean(options, jobDir, JOB_CONFIG, path.join(SKILL_DIR, '.jobs'));
+    _cmdClean(options, jobDir, JOB_CONFIG, path.join(SCRIPT_DIR, '.jobs'));
     return;
   }
 

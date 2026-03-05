@@ -14,7 +14,7 @@ import {
   runWithRetry as sharedRunWithRetry,
 } from '../../lib/worker-utils';
 
-const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
+const PROMPTS_DIR = path.resolve(import.meta.dirname, '../../skills/agent-council/prompts');
 
 // ---------------------------------------------------------------------------
 // Wrappers (council uses member/jobDir interface)

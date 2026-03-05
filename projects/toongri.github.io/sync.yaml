@@ -62,7 +62,7 @@ scripts:
     - hud
     - chunk-review
     - council
-    - spec-review
+    - spec-reviewer
 
 rules:
   items:
