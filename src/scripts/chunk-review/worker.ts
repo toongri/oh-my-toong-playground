@@ -85,8 +85,7 @@ function runWithRetry(opts) {
 function main() {
   const options = parseArgs(process.argv);
   const jobDir = options['job-dir'];
-  const reviewer = options.reviewer;
-  const safeReviewer = options['safe-reviewer'];
+  const member = options.member;
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
@@ -110,14 +109,13 @@ function main() {
   }
 
   if (!jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
-  if (!reviewer) { logError('missing --reviewer'); logEnd(); exitWithError('worker: missing --reviewer'); }
-  if (!safeReviewer) { logError('missing --safe-reviewer'); logEnd(); exitWithError('worker: missing --safe-reviewer'); }
+  if (!member) { logError('missing --member'); logEnd(); exitWithError('worker: missing --member'); }
   if (!command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
 
-  logInfo(`worker start: reviewer=${reviewer} command=${command} timeout=${timeoutSec}`);
+  logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
 
   const reviewersRoot = path.join(jobDir, 'reviewers');
-  const reviewerDir = path.join(reviewersRoot, safeReviewer);
+  const memberDir = path.join(reviewersRoot, member);
 
   const promptPath = path.join(jobDir, 'prompt.txt');
   const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
@@ -127,9 +125,9 @@ function main() {
   const tokens = splitCommand(command);
   if (!tokens || tokens.length === 0) {
     logError(`invalid command string: ${command}`);
-    const statusPath = path.join(reviewerDir, 'status.json');
+    const statusPath = path.join(memberDir, 'status.json');
     atomicWriteJson(statusPath, {
-      reviewer, state: 'error', message: 'Invalid command string',
+      member, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     });
     logEnd();
@@ -140,10 +138,10 @@ function main() {
   const args = tokens.slice(1);
 
   runWithRetry({
-    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, reviewer, reviewerDir, command, timeoutSec, workerEnv,
+    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member, memberDir, command, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
   }).then((result) => {
-    logInfo(`worker done: reviewer=${reviewer} state=${result.state} exitCode=${result.exitCode}`);
+    logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });
