@@ -158,3 +158,29 @@ feat: 환불 기능 구현
 - Bug fix는 즉시 배포 가능해야 함 (cherry-pick 용이)
 - 새 기능은 별도 리뷰/롤백 가능해야 함
 - Linux kernel: "Bug fixes must come first, then new features"
+
+## Example 10: 기능적 마크다운 파일 변경 — feat/refactor (docs 아님)
+
+**Situation**: oh-my-toong 프로젝트에서 스킬 동작 변경
+
+Changed files:
+- `skills/git-committer/SKILL.md` — 커밋 타입 분류 기준 추가 (feat)
+- `agents/sisyphus-junior.md` — 위임 금지 규칙 강화 (refactor)
+
+**판단 기준**: "시스템 동작을 정의하면 기능, 인간 독자를 위한 참조/공유 정보면 문서"
+- SKILL.md는 AI가 읽고 동작을 결정하는 기능적 파일 → `feat`
+- agents/*.md는 서브에이전트 프롬프트를 정의하는 기능적 파일 → `refactor`
+
+**Split result:**
+
+```
+# Commit 1
+feat: git-committer 스킬에 기능 vs 문서 분류 기준 추가
+
+# Commit 2
+refactor: sisyphus-junior 위임 금지 규칙 강화
+```
+
+**Why NOT docs?**
+- README.md, API 명세서 → 인간 독자를 위한 참조 정보 → `docs`
+- SKILL.md, agents/*.md, rules/*.md → 시스템 동작을 정의 → `feat`/`fix`/`refactor`
