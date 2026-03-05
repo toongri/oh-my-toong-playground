@@ -442,8 +442,7 @@ async function main() {
   if (command === 'wait') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('wait: missing jobDir');
-    const waitOptions = { ...options, 'timeout-ms': options['timeout-ms'] ?? 0 };
-    await frameworkCmdWait(waitOptions, jobDir, COUNCIL_CONFIG);
+    await frameworkCmdWait(options, jobDir, COUNCIL_CONFIG);
     return;
   }
   if (command === 'collect') {
