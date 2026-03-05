@@ -356,8 +356,9 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Active triggers: code changes present → spec or AC provided → QA scenarios provided → code changes present (code quality)
 - "user-facing changes, no scenarios" 미활성 (QA scenarios가 제공되어 "user-facing changes, no scenarios" 대신 "QA scenarios provided" 활성)
 
-**Scenario 15c: Full plan verification (계획 전체 검증)**
-- QA REQUEST에 plan file path와 전체 검증 요청이 포함
+**Scenario 15c: Targeted verification spec (검증 spec 직접 전달)**
+- orchestrator가 Final Verification Wave의 F-task에서 "What to verify" spec을 QA REQUEST Spec으로 직접 전달 (plan file 전체가 아닌 targeted spec)
+- 예: "What to verify: Read plan end-to-end, verify Must Have items are all implemented"
 - Active triggers: code changes present + spec or AC provided + QA scenarios provided
 - "user-facing changes, no scenarios" 미활성 (QA scenarios가 제공되어 대체)
 

@@ -807,7 +807,7 @@ Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Mu
   - `Wave`: execution wave number (1-based). Tasks in the same wave can run in parallel
 - **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically. Note: this formula applies to implementation tasks only. Final Verification Wave tasks use `Wave: FINAL` (literal string) — see Final Verification Wave section.
 - **Anti-pattern**: Assigning Wave 2 to an independent task because "it makes sense to do X before Y." If there is a real dependency, add `Blocked By`. If there is no dependency, the task goes in Wave 1.
-- **Wave integrity**: Every implementation wave must reference numbered TODOs only. Do not add administrative stages (Merge, Deploy) as waves — mnemosyne handles commits. The exception is Final Verification Wave, which contains F1-F4 verification tasks (see Final Verification Wave section).
+- **Wave integrity**: Every implementation wave must reference numbered TODOs only. Do not add administrative stages (Merge, Deploy) as separate waves. The exception is Final Verification Wave, which contains verification tasks (see Final Verification Wave section).
 
 **MECE Decomposition Principle**
 
@@ -921,22 +921,26 @@ Wave Visualization:
   +-- Task 8: Core business logic (depends: 3, 5, 7)
   +-- Task 9: API endpoints (depends: 4, 5)
   +-- Task 10: Secondary storage impl (depends: 5)
-  +-- Task 11: Retry/fallback logic (depends: 8)
   +-- Task 12: UI layout + navigation (depends: 2)
   +-- Task 13: API client + hooks (depends: 4)
-  +-- Task 14: Telemetry middleware (depends: 5, 10)
 
-  Wave 3 (After Wave 2 — integration + UI):
-  +-- Task 15: Main route combining modules (depends: 6, 11, 14)
+  Wave 3 (After Wave 2 — extended modules):
+  +-- Task 11: Retry/fallback logic (depends: 8)
+  +-- Task 14: Telemetry middleware (depends: 5, 10)
   +-- Task 16: UI data visualization (depends: 12, 13)
+
+  Wave 4 (After Wave 3 — integration):
+  +-- Task 15: Main route combining modules (depends: 6, 11, 14)
+  +-- Task 20: UI request log + build (depends: 16)
+
+  Wave 5 (After Wave 4 — deployment + QA):
   +-- Task 17: Deployment config A (depends: 15)
   +-- Task 18: Deployment config B (depends: 15)
   +-- Task 19: Deployment config C (depends: 15)
-  +-- Task 20: UI request log + build (depends: 16)
-
-  Wave 4 (After Wave 3 — verification):
   +-- Task 21: Integration tests (depends: 15)
   +-- Task 22: UI QA - Playwright (depends: 20)
+
+  Wave 6 (After Wave 5 — final verification):
   +-- Task 23: E2E QA (depends: 21)
   +-- Task 24: Git cleanup + tagging (depends: 21)
 
@@ -946,7 +950,7 @@ Wave Visualization:
   +-- F3: QA Scenario Execution (Role: argus)
   +-- F4: Scope Fidelity Check (Role: argus)
 
-Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> F1-F4
+Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Task 23 -> F1-F4
 
 - [ ] 3. Implement UserService
   - What to do: Create UserService with CRUD operations

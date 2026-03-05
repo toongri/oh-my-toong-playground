@@ -285,9 +285,12 @@ digraph task_loop {
     rankdir=TB;
     "Get unblocked tasks" [shape=box];
     "Any unblocked?" [shape=diamond];
-    "Dispatch to junior(s)" [shape=box];
-    "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "Delegate to agent\n(per Do vs Delegate)" [shape=diamond];
+    "sisyphus-junior" [shape=box];
+    "argus directly" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "argus QA" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "Pass?" [shape=diamond];
+    "APPROVE?" [shape=diamond];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "Mark completed" [shape=box, style=filled, fillcolor=green];
     "Create fix task" [shape=box];
@@ -295,13 +298,18 @@ digraph task_loop {
     "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
 
     "Get unblocked tasks" -> "Any unblocked?";
-    "Any unblocked?" -> "Dispatch to junior(s)" [label="yes"];
+    "Any unblocked?" -> "Delegate to agent\n(per Do vs Delegate)" [label="yes"];
     "Any unblocked?" -> "Done" [label="no"];
-    "Dispatch to junior(s)" -> "argus";
-    "argus" -> "Pass?";
+    "Delegate to agent\n(per Do vs Delegate)" -> "sisyphus-junior" [label="implementation"];
+    "Delegate to agent\n(per Do vs Delegate)" -> "argus directly" [label="verification"];
+    "sisyphus-junior" -> "argus QA";
+    "argus QA" -> "Pass?";
     "Pass?" -> "mnemosyne" [label="yes"];
     "Pass?" -> "Create fix task" [label="no"];
     "mnemosyne" -> "Mark completed";
+    "argus directly" -> "APPROVE?";
+    "APPROVE?" -> "Mark completed" [label="yes"];
+    "APPROVE?" -> "Create fix task" [label="no"];
     "Mark completed" -> "More tasks?";
     "Create fix task" -> "More tasks?";
     "More tasks?" -> "Get unblocked tasks" [label="yes"];
@@ -312,45 +320,11 @@ digraph task_loop {
 **Execution Rules:**
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
-- Each junior completion → immediately invoke argus
-- Each argus approval → immediately invoke mnemosyne to commit
+- Delegate each task per the Do vs Delegate Decision Matrix
+- sisyphus-junior path: each junior completion → immediately invoke argus for QA
+- sisyphus-junior path: each argus approval → immediately invoke mnemosyne to commit
+- argus direct path: each argus completion → immediately mark completed (no mnemosyne — no code changes to commit)
 - After marking task completed, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
-
-### Verification Task Dispatch (Final Wave)
-
-When the plan includes a Final Verification Wave (F1-F4 tasks):
-
-```dot
-digraph verification_dispatch {
-    rankdir=TB;
-    "All implementation tasks\ncompleted & approved" [shape=ellipse];
-    "Is task a verification task?\n(Final Wave F1-F4)" [shape=diamond];
-    "Dispatch to sisyphus-junior" [shape=box];
-    "Dispatch to argus directly\n(F-task spec = QA REQUEST Spec)" [shape=box, style=filled, fillcolor=red, fontcolor=white];
-    "Per-task argus QA" [shape=box];
-    "argus result" [shape=diamond];
-    "mnemosyne commit" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
-    "Mark completed" [shape=box, style=filled, fillcolor=green];
-    "Create fix task\n→ re-enter implementation loop\n→ full F1-F4 re-run" [shape=box];
-
-    "All implementation tasks\ncompleted & approved" -> "Is task a verification task?\n(Final Wave F1-F4)";
-    "Is task a verification task?\n(Final Wave F1-F4)" -> "Dispatch to sisyphus-junior" [label="NO\n(implementation)"];
-    "Is task a verification task?\n(Final Wave F1-F4)" -> "Dispatch to argus directly\n(F-task spec = QA REQUEST Spec)" [label="YES\n(F1-F4)"];
-    "Dispatch to sisyphus-junior" -> "Per-task argus QA";
-    "Per-task argus QA" -> "mnemosyne commit" [label="APPROVE"];
-    "Dispatch to argus directly\n(F-task spec = QA REQUEST Spec)" -> "argus result";
-    "argus result" -> "Mark completed" [label="APPROVE"];
-    "argus result" -> "Create fix task\n→ re-enter implementation loop\n→ full F1-F4 re-run" [label="REQUEST_CHANGES"];
-}
-```
-
-**Rules:**
-- Implementation tasks → sisyphus-junior → argus per-task QA → mnemosyne commit
-- Verification tasks (Final Wave F1-F4) → argus directly (executor not needed)
-- F-task's "What to verify" spec is passed as the QA REQUEST Spec to argus
-- Verification tasks do NOT require separate QA (verifying IS the purpose)
-- On F-task REQUEST_CHANGES: create fix task → re-enter implementation loop → after fix, re-run ALL F1-F4 (not just the failed one)
-- F1-F4 tasks run in parallel (4 concurrent argus invocations)
 
 ---
 
