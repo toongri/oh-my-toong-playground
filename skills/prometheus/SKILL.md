@@ -777,7 +777,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
-| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge"). Final Verification Wave is mandatory for Scoped+ intent and contains F1-F4 verification tasks dispatched to argus. |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
@@ -907,11 +907,46 @@ Every QA scenario must be executable by an agent without human involvement. Veri
 
 ```
 Wave Visualization:
-  Wave 1: TODO 1 (DB schema) | TODO 2 (API types)
-  Wave 2: TODO 3 (service layer, blocked by 1,2) | TODO 4 (validation, blocked by 2)
-  Wave 3: TODO 5 (integration wiring, blocked by 3,4)
 
-Critical Path: TODO 1 → TODO 3 → TODO 5
+  Wave 1 (Start Immediately — foundation + scaffolding):
+  +-- Task 1: Project scaffolding + config
+  +-- Task 2: Design system tokens
+  +-- Task 3: Type definitions
+  +-- Task 4: Schema definitions
+  +-- Task 5: Storage interface + in-memory impl
+  +-- Task 6: Auth middleware
+  +-- Task 7: Client module
+
+  Wave 2 (After Wave 1 — core modules, MAX PARALLEL):
+  +-- Task 8: Core business logic (depends: 3, 5, 7)
+  +-- Task 9: API endpoints (depends: 4, 5)
+  +-- Task 10: Secondary storage impl (depends: 5)
+  +-- Task 11: Retry/fallback logic (depends: 8)
+  +-- Task 12: UI layout + navigation (depends: 2)
+  +-- Task 13: API client + hooks (depends: 4)
+  +-- Task 14: Telemetry middleware (depends: 5, 10)
+
+  Wave 3 (After Wave 2 — integration + UI):
+  +-- Task 15: Main route combining modules (depends: 6, 11, 14)
+  +-- Task 16: UI data visualization (depends: 12, 13)
+  +-- Task 17: Deployment config A (depends: 15)
+  +-- Task 18: Deployment config B (depends: 15)
+  +-- Task 19: Deployment config C (depends: 15)
+  +-- Task 20: UI request log + build (depends: 16)
+
+  Wave 4 (After Wave 3 — verification):
+  +-- Task 21: Integration tests (depends: 15)
+  +-- Task 22: UI QA - Playwright (depends: 20)
+  +-- Task 23: E2E QA (depends: 21)
+  +-- Task 24: Git cleanup + tagging (depends: 21)
+
+  Wave FINAL (After ALL implementation tasks — independent review, 4 parallel):
+  +-- F1: Plan Compliance Audit (Role: argus)
+  +-- F2: Code Quality Review (Role: argus)
+  +-- F3: QA Scenario Execution (Role: argus)
+  +-- F4: Scope Fidelity Check (Role: argus)
+
+Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> F1-F4
 
 - [ ] 3. Implement UserService
   - What to do: Create UserService with CRUD operations
@@ -973,6 +1008,57 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
         Expected: Section added without modifying existing endpoint docs
         Failure: Existing endpoint documentation sections altered or removed
 ```
+
+**Final Verification Wave**
+
+Every plan with Scoped or higher intent MUST include a Final Verification Wave after all implementation TODOs. Trivial intent is exempt.
+
+> All implementation tasks must be completed before the Final Wave executes. ALL F-tasks must APPROVE. Rejection on any F-task -> create fix task -> re-enter implementation loop -> re-run ALL F1-F4 after fix.
+
+Template:
+
+## Final Verification Wave
+
+> All implementation tasks completed. ALL must APPROVE.
+> Rejection -> fix task -> implementation loop re-entry -> full F1-F4 re-run.
+
+- [ ] F1. Plan Compliance Audit
+  Role: argus
+  What to verify:
+    - Read plan end-to-end
+    - For each "Must Have": verify implementation exists
+    - For each "Must NOT Have": search for forbidden patterns
+    - Check evidence files exist in .omt/evidence/
+  Expected Output: Must Have [N/N] | Must NOT Have [N/N] | VERDICT
+
+- [ ] F2. Code Quality Review
+  Role: argus
+  What to verify:
+    - Run build + linter + tests
+    - Review changed files for: as any, empty catches, console.log, unused imports
+    - Check AI slop: excessive comments, over-abstraction, generic names
+  Expected Output: Build [PASS/FAIL] | Tests [N/N] | VERDICT
+
+- [ ] F3. QA Scenario Execution
+  Role: argus
+  What to verify:
+    - Execute EVERY QA scenario from EVERY task
+    - Test cross-task integration
+    - Save evidence to .omt/evidence/{plan-name}/final-qa/
+  Expected Output: Scenarios [N/N pass] | Integration [N/N] | VERDICT
+
+- [ ] F4. Scope Fidelity Check
+  Role: argus
+  What to verify:
+    - For each task: read spec, read actual diff
+    - Verify 1:1 correspondence (no missing, no creep)
+    - Check "Must NOT do" compliance
+    - Detect cross-task contamination
+  Expected Output: Tasks [N/N compliant] | VERDICT
+
+**Trigger mapping**: Each F-task's "What to verify" serves as the QA REQUEST Spec, activating argus's `spec or AC provided` trigger. No dedicated completeness trigger needed.
+
+**Wave field convention**: F-tasks use `Wave: FINAL` (literal string). The numeric Wave Assignment Rule (`max(wave of each blocker) + 1`) applies only to implementation tasks.
 
 **Success Criteria Template:**
 
