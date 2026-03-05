@@ -283,7 +283,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0, error: 0 },
-      reviewers: [{ reviewer: 'alice', state: 'done', exitCode: 0 }],
+      reviewers: [{ member: 'alice', state: 'done', exitCode: 0 }],
     };
     const result = buildUiPayload(payload);
     expect(result.progress).toBeTruthy();
@@ -296,9 +296,9 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 3, done: 1, error: 1, queued: 0, running: 1, missing_cli: 0, timed_out: 0, canceled: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'error' },
-        { reviewer: 'carol', state: 'running' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'error' },
+        { member: 'carol', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -311,8 +311,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -324,8 +324,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'queued' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'queued' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -337,9 +337,9 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 3, done: 1, error: 1, missing_cli: 1, queued: 0, running: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'error' },
-        { reviewer: 'carol', state: 'missing_cli' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'error' },
+        { member: 'carol', state: 'missing_cli' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -354,8 +354,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 0, running: 2 },
       reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -381,8 +381,8 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 2, done: 2, queued: 0, running: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'done' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'done' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -396,8 +396,8 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 2, done: 0, queued: 0, running: 0, error: 2 },
       reviewers: [
-        { reviewer: 'alice', state: 'error' },
-        { reviewer: 'bob', state: 'error' },
+        { member: 'alice', state: 'error' },
+        { member: 'bob', state: 'error' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -411,8 +411,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -425,7 +425,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0 },
-      reviewers: [{ reviewer: 'alice', state: 'done' }],
+      reviewers: [{ member: 'alice', state: 'done' }],
     };
     const result = buildUiPayload(payload);
     for (const todo of result.claude.todo_write.todos) {
@@ -439,7 +439,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      reviewers: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload);
     const reviewerStep = result.codex.update_plan.plan[1];
@@ -451,9 +451,9 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 3, done: 0, queued: 0, running: 3 },
       reviewers: [
-        { reviewer: 'carol', state: 'running' },
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'running' },
+        { member: 'carol', state: 'running' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -468,8 +468,8 @@ describe('buildUiPayload', () => {
       overallState: 'done',
       counts: { total: 2, done: 1, queued: 0, running: 0 },
       reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: null, state: 'done' },
+        { member: 'alice', state: 'done' },
+        { member: null, state: 'done' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -501,8 +501,8 @@ describe('buildUiPayload', () => {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
       reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'queued' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'queued' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -515,7 +515,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      reviewers: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.overallState).toBe('running');
@@ -552,8 +552,8 @@ describe('computeStatus', () => {
   test('returns done overallState when all reviewers are terminal', async () => {
     const jobDir = path.join(tmpDir, 'job1');
     setupJob(jobDir, { id: 'test-1', specName: 'my-spec' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
@@ -565,8 +565,8 @@ describe('computeStatus', () => {
   test('returns running overallState when some reviewers are running', async () => {
     const jobDir = path.join(tmpDir, 'job2');
     setupJob(jobDir, { id: 'test-2' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'running' },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'running' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
@@ -577,7 +577,7 @@ describe('computeStatus', () => {
   test('returns queued overallState when only queued (no running)', async () => {
     const jobDir = path.join(tmpDir, 'job3');
     setupJob(jobDir, { id: 'test-3' }, {
-      alice: { reviewer: 'alice', state: 'queued' },
+      alice: { member: 'alice', state: 'queued' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('queued');
@@ -587,9 +587,9 @@ describe('computeStatus', () => {
   test('counts error states correctly', async () => {
     const jobDir = path.join(tmpDir, 'job4');
     setupJob(jobDir, { id: 'test-4' }, {
-      alice: { reviewer: 'alice', state: 'error', exitCode: 1 },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
-      carol: { reviewer: 'carol', state: 'missing_cli' },
+      alice: { member: 'alice', state: 'error', exitCode: 1 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
+      carol: { member: 'carol', state: 'missing_cli' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
@@ -601,7 +601,7 @@ describe('computeStatus', () => {
   test('includes specName from job.json', async () => {
     const jobDir = path.join(tmpDir, 'job5');
     setupJob(jobDir, { id: 'test-5', specName: 'auth-flow' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     const result = await computeStatus(jobDir);
     expect(result.specName).toBe('auth-flow');
@@ -610,7 +610,7 @@ describe('computeStatus', () => {
   test('returns null specName when not in job.json', async () => {
     const jobDir = path.join(tmpDir, 'job6');
     setupJob(jobDir, { id: 'test-6' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     const result = await computeStatus(jobDir);
     expect(result.specName).toBe(null);
@@ -619,7 +619,7 @@ describe('computeStatus', () => {
   test('skips reviewer directories without status.json', async () => {
     const jobDir = path.join(tmpDir, 'job7');
     setupJob(jobDir, { id: 'test-7' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     fs.mkdirSync(path.join(jobDir, 'reviewers', 'bob'));
     const result = await computeStatus(jobDir);
@@ -630,21 +630,21 @@ describe('computeStatus', () => {
   test('sorts reviewers alphabetically by name', async () => {
     const jobDir = path.join(tmpDir, 'job8');
     setupJob(jobDir, { id: 'test-8' }, {
-      carol: { reviewer: 'carol', state: 'done' },
-      alice: { reviewer: 'alice', state: 'done' },
-      bob: { reviewer: 'bob', state: 'done' },
+      carol: { member: 'carol', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
+      bob: { member: 'bob', state: 'done' },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].reviewer).toBe('alice');
-    expect(result.reviewers[1].reviewer).toBe('bob');
-    expect(result.reviewers[2].reviewer).toBe('carol');
+    expect(result.reviewers[0].member).toBe('alice');
+    expect(result.reviewers[1].member).toBe('bob');
+    expect(result.reviewers[2].member).toBe('carol');
   });
 
   test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', async () => {
     const jobDir = path.join(tmpDir, 'job9');
     setupJob(jobDir, { id: 'test-9' }, {
       alice: {
-        reviewer: 'alice',
+        member: 'alice',
         state: 'done',
         startedAt: '2026-01-01T00:00:00Z',
         finishedAt: '2026-01-01T00:01:00Z',
@@ -662,7 +662,7 @@ describe('computeStatus', () => {
   test('returns null for missing reviewer metadata fields', async () => {
     const jobDir = path.join(tmpDir, 'job10');
     setupJob(jobDir, { id: 'test-10' }, {
-      alice: { reviewer: 'alice', state: 'running' },
+      alice: { member: 'alice', state: 'running' },
     });
     const result = await computeStatus(jobDir);
     expect(result.reviewers[0].startedAt).toBe(null);
@@ -674,7 +674,7 @@ describe('computeStatus', () => {
   test('includes jobDir and id in result', async () => {
     const jobDir = path.join(tmpDir, 'job11');
     setupJob(jobDir, { id: 'test-11' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     const result = await computeStatus(jobDir);
     expect(result.id).toBe('test-11');
@@ -684,7 +684,7 @@ describe('computeStatus', () => {
   test('includes chairmanRole from job.json', async () => {
     const jobDir = path.join(tmpDir, 'job12');
     setupJob(jobDir, { id: 'test-12', chairmanRole: 'claude' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     const result = await computeStatus(jobDir);
     expect(result.chairmanRole).toBe('claude');
@@ -693,8 +693,8 @@ describe('computeStatus', () => {
   test('treats retrying reviewer as non-terminal (running)', async () => {
     const jobDir = path.join(tmpDir, 'job13');
     setupJob(jobDir, { id: 'test-13' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'retrying' },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'retrying' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');

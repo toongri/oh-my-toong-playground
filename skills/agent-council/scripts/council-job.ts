@@ -190,13 +190,11 @@ const computeStatus = async (jobDir: string): Promise<{
 }> => {
   const result = await frameworkComputeStatus(jobDir, COUNCIL_CONFIG);
   // Framework returns `reviewers` array — remap to `members` for council terminology.
-  // The `reviewer` field in the framework output comes from status.json's `reviewer` key.
-  // Council status.json may also have `member` field (backward compat).
   const { reviewers, ...rest } = result as any;
   return {
     ...rest,
     members: (reviewers || []).map((r: any) => ({
-      member: r.reviewer != null ? r.reviewer : (r as any).member,
+      member: r.member,
       state: r.state,
       startedAt: r.startedAt,
       finishedAt: r.finishedAt,
@@ -238,7 +236,7 @@ const buildUiPayload = (statusPayload: {
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
     reviewers: (statusPayload.members || []).map((m: any) => ({
-      reviewer: m && m.member != null ? m.member : m && m.reviewer != null ? m.reviewer : null,
+      member: m && m.member != null ? m.member : null,
       state: m && m.state != null ? m.state : 'unknown',
       exitCode: m && m.exitCode != null ? m.exitCode : null,
     })),
