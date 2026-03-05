@@ -31,7 +31,7 @@ import {
   parseYamlSimple as frameworkParseYamlSimple,
   buildManifest,
   safeFileName,
-} from '../../../src/lib/generic-job';
+} from '../../../lib/generic-job';
 
 // ---------------------------------------------------------------------------
 // Council JobConfig
