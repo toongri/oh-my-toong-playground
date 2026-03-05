@@ -629,12 +629,20 @@ describe('main - --env passthrough', () => {
           '--job-dir', jobDir,
           '--member', 'test-member',
           '--command', 'true',
+          '--project-root', tmpDir,
         ],
         { stdout: 'pipe', stderr: 'pipe' },
       );
       const exitCode = await proc.exited;
-      // Worker exits 0 on successful run — confirms main() completes with logging
       expect(exitCode).toBe(0);
+
+      // Log file should exist in tmpDir/.omt/logs/
+      // jobId = basename('job').replace(/^council-/, '') = 'job'
+      const logFile = path.join(tmpDir, '.omt', 'logs', 'council-job-worker-job.log');
+      expect(fs.existsSync(logFile)).toBe(true);
+      const content = fs.readFileSync(logFile, 'utf8');
+      expect(content.includes('========== START ==========')).toBe(true);
+      expect(content.includes('========== END ==========')).toBe(true);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

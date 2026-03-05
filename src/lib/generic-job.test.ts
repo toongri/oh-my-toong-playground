@@ -594,6 +594,23 @@ describe('computeStatus', () => {
     expect(alice.state).toBe('done');
     expect(result.counts.error).toBe(0);
   });
+
+  test('transitions running entity to error using mtime fallback when startedAt is missing', async () => {
+    const jobDir = path.join(tmpDir, 'job-run-mtime-stale');
+    setupJob(jobDir, { id: 'test-run-mtime', settings: { timeoutSec: 60 } }, {
+      alice: { member: 'alice', state: 'running' }, // no startedAt
+    }, chunkReviewConfig);
+    // Set file mtime to 200s ago (stale)
+    const statusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
+    const staleMtime = new Date(Date.now() - 200_000); // 200s ago
+    fs.utimesSync(statusPath, staleMtime, staleMtime);
+    // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const alice = result.reviewers.find(r => r.member === 'alice');
+    expect(alice.state).toBe('error');
+    expect(result.counts.error).toBe(1);
+    expect(result.counts.running).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

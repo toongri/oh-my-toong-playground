@@ -705,18 +705,20 @@ describe('main - logging lifecycle', () => {
       fs.mkdirSync(memberDir, { recursive: true });
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt', 'utf8');
 
-      // Spawn the worker as a subprocess — logging writes to .omt/logs/ inside tmpDir (projectRoot)
-      // The worker computes projectRoot = path.resolve(import.meta.dirname, '../../..')
-      // which is the repo root, not tmpDir. Log file creation is a side effect we can observe
-      // by mocking — but for subprocess, we check process exits cleanly with logStart/logEnd behavior.
-      // A simpler check: worker must exit 0 when command succeeds.
       const proc = Bun.spawn(
-        ['bun', WORKER_PATH, '--job-dir', jobDir, '--member', 'claude', '--command', 'true'],
+        ['bun', WORKER_PATH, '--job-dir', jobDir, '--member', 'claude', '--command', 'true', '--project-root', tmpDir],
         { stdout: 'pipe', stderr: 'pipe' },
       );
       const exitCode = await proc.exited;
-      // Worker exits 0 on successful run — confirms main() completes with logging
       expect(exitCode).toBe(0);
+
+      // Log file should exist in tmpDir/.omt/logs/
+      // jobId = basename('job').replace(/^spec-review-/, '') = 'job'
+      const logFile = path.join(tmpDir, '.omt', 'logs', 'spec-review-worker-job.log');
+      expect(fs.existsSync(logFile)).toBe(true);
+      const content = fs.readFileSync(logFile, 'utf8');
+      expect(content.includes('========== START ==========')).toBe(true);
+      expect(content.includes('========== END ==========')).toBe(true);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
