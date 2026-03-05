@@ -907,7 +907,7 @@ describe('buildManifest', () => {
     });
     const result = buildManifest(jobDir, councilConfig);
     expect(result.id).toBe('test-manifest-job');
-    expect(result.reviewers.length).toBe(1);
+    expect(result.members.length).toBe(1);
   });
 });
 
