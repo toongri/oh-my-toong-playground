@@ -15,7 +15,7 @@ import {
   computeTerminalDoneCount,
   parseArgs,
   generateJobId,
-} from '../../../lib/job-utils';
+} from '../../lib/job-utils';
 
 import {
   type JobConfig,
@@ -28,7 +28,7 @@ import {
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
   gcStaleJobs,
-} from '../../../lib/generic-job';
+} from '../../lib/generic-job';
 
 // ---------------------------------------------------------------------------
 // Job configuration
@@ -48,8 +48,8 @@ const JOB_CONFIG: JobConfig = {
 // ---------------------------------------------------------------------------
 
 const SCRIPT_DIR = import.meta.dirname;
-const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
-const WORKER_PATH = path.join(SCRIPT_DIR, 'spec-review-worker.ts');
+const SKILL_DIR = path.resolve(SCRIPT_DIR, '../../skills/spec-review');
+const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'spec-review.config.yaml');
 const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'spec-review.config.yaml');
@@ -568,7 +568,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
 async function cmdWait(options: Record<string, unknown>, jobDir: string): Promise<void> {
   // We override the wait payload to include specName, so we implement our own cmdWait
   // rather than delegating to the framework's cmdWait.
-  const { parseWaitCursor, formatWaitCursor, resolveBucketSize, sleepMs } = await import('../../../lib/job-utils');
+  const { parseWaitCursor, formatWaitCursor, resolveBucketSize, sleepMs } = await import('../../lib/job-utils');
 
   const resolvedJobDir = path.resolve(jobDir);
   const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
@@ -784,6 +784,6 @@ export {
   computeTerminalDoneCount,
   parseArgs,
   generateJobId,
-} from '../../../lib/job-utils';
+} from '../../lib/job-utils';
 
 export { buildUiPayload, parseSpecReviewConfig, parseYamlSimple, computeStatus, resolveContextDir };

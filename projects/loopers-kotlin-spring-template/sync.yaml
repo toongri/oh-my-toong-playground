@@ -70,6 +70,7 @@ scripts:
     - hud
     - chunk-review
     - council
+    - spec-review
 
 rules:
   items:
