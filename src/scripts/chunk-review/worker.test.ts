@@ -24,7 +24,7 @@ function makeTmpDir() {
 function setupJobDir(tmpDir) {
   const member = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
-  const memberDir = path.join(jobDir, 'reviewers', member);
+  const memberDir = path.join(jobDir, 'members', member);
   fs.mkdirSync(memberDir, { recursive: true });
   const statusPath = path.join(memberDir, 'status.json');
   const outPath = path.join(memberDir, 'output.txt');

@@ -59,9 +59,9 @@ const DEFAULT_JOBS_DIR = process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_
 // ---------------------------------------------------------------------------
 
 const CHUNK_REVIEW_JOB_CONFIG: JobConfig = {
-  entitySingular: 'reviewer',
-  entityPlural: 'reviewers',
-  entityDirName: 'reviewers',
+  entitySingular: 'member',
+  entityPlural: 'members',
+  entityDirName: 'members',
   jobPrefix: 'chunk-review-',
   uiLabel: '[Chunk Review]',
   configTopLevelKey: 'chunk-review',
@@ -81,7 +81,7 @@ const CHUNK_REVIEW_BOOLEAN_FLAGS = new Set([
 // ---------------------------------------------------------------------------
 
 function safeFileName(name: string, fallback?: string): string {
-  return _safeFileName(name, fallback || 'reviewer');
+  return _safeFileName(name, fallback || 'member');
 }
 
 function gcStaleJobs(jobsDir: string): void {
@@ -130,7 +130,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
     process.stdout.write(
       `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
     );
-    for (const r of payload.reviewers) {
+    for (const r of payload.members) {
       const state = String(r.state || '');
       const mark =
         state === 'done'
@@ -149,9 +149,9 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
   const wantText = Boolean(options.text) && !options.json;
   if (wantText) {
     const done = computeTerminalDoneCount(payload.counts);
-    process.stdout.write(`reviewers ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
+    process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
-      for (const r of payload.reviewers) {
+      for (const r of payload.members) {
         process.stdout.write(`- ${r.member}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
       }
     }
@@ -208,7 +208,7 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
   const fallback = {
     'chunk-review': {
       chairman: { role: 'auto' },
-      reviewers: [
+      members: [
         { name: 'claude', command: 'claude -p', emoji: '\u{1F9E0}', color: 'CYAN' },
         { name: 'codex', command: 'codex exec', emoji: '\u{1F916}', color: 'BLUE' },
         { name: 'gemini', command: 'gemini', emoji: '\u{1F48E}', color: 'GREEN' },
@@ -247,7 +247,7 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
   const merged = {
     'chunk-review': {
       chairman: { ...fallback['chunk-review'].chairman },
-      reviewers: Array.isArray(fallback['chunk-review'].reviewers) ? [...fallback['chunk-review'].reviewers] : [],
+      members: Array.isArray(fallback['chunk-review'].members) ? [...fallback['chunk-review'].members] : [],
       settings: { ...fallback['chunk-review'].settings },
     },
   };
@@ -261,11 +261,11 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
     merged['chunk-review'].chairman = { ...merged['chunk-review'].chairman, ...chunkReview.chairman };
   }
 
-  if (Object.prototype.hasOwnProperty.call(chunkReview, 'reviewers')) {
-    if (!Array.isArray(chunkReview.reviewers)) {
-      exitWithError(`Invalid config in ${configPath}: 'chunk-review.reviewers' must be a list/array`);
+  if (Object.prototype.hasOwnProperty.call(chunkReview, 'members')) {
+    if (!Array.isArray(chunkReview.members)) {
+      exitWithError(`Invalid config in ${configPath}: 'chunk-review.members' must be a list/array`);
     }
-    merged['chunk-review'].reviewers = chunkReview.reviewers;
+    merged['chunk-review'].members = chunkReview.members;
   }
 
   if (chunkReview.settings != null) {
@@ -328,25 +328,25 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
   const timeoutSec = Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : timeoutSetting > 0 ? timeoutSetting : 0;
 
-  const requestedReviewers = config['chunk-review'].reviewers || [];
-  const reviewers = requestedReviewers.filter((r: any) => {
+  const requestedMembers = config['chunk-review'].members || [];
+  const members = requestedMembers.filter((r: any) => {
     if (!r || !r.name || !r.command) return false;
     const nameLc = String(r.name).toLowerCase();
     if (excludeChairmanFromReviewers && !includeChairman && nameLc === chairmanRole) return false;
     return true;
   });
 
-  if (reviewers.length === 0) exitWithError('start: no reviewers remaining after filtering');
+  if (members.length === 0) exitWithError('start: no members remaining after filtering');
 
   const jobId = generateJobId();
   initLogger('chunk-review-job', PROJECT_ROOT, jobId);
   logStart();
   logInfo(`GC: stale jobs cleaned`);
-  logInfo(`config: ${configPath}, chairman: ${chairmanRole}, reviewers: ${reviewers.length}`);
+  logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);
 
   const jobDir = path.join(jobsDir, `chunk-review-${jobId}`);
-  const reviewersDir = path.join(jobDir, 'reviewers');
-  ensureDir(reviewersDir);
+  const membersDir = path.join(jobDir, 'members');
+  ensureDir(membersDir);
 
   fs.writeFileSync(path.join(jobDir, 'prompt.txt'), String(prompt), 'utf8');
 
@@ -360,7 +360,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
       excludeChairmanFromReviewers,
       timeoutSec: timeoutSec || null,
     },
-    reviewers: reviewers.map((r: any) => ({
+    members: members.map((r: any) => ({
       name: String(r.name),
       command: String(r.command),
       emoji: r.emoji ? String(r.emoji) : null,
@@ -373,14 +373,14 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
 
   _spawnWorkers({
-    entities: reviewers,
+    entities: members,
     workerPath: WORKER_PATH,
     jobDir,
-    entitiesDir: reviewersDir,
+    entitiesDir: membersDir,
     timeoutSec,
     config: CHUNK_REVIEW_JOB_CONFIG,
   });
-  logInfo(`workers spawned: ${reviewers.map((r: any) => String(r.name)).join(', ')}`);
+  logInfo(`workers spawned: ${members.map((r: any) => String(r.name)).join(', ')}`);
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);

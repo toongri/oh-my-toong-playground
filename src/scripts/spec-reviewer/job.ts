@@ -35,9 +35,9 @@ import {
 // ---------------------------------------------------------------------------
 
 const JOB_CONFIG: JobConfig = {
-  entitySingular: 'reviewer',
-  entityPlural: 'reviewers',
-  entityDirName: 'reviewers',
+  entitySingular: 'member',
+  entityPlural: 'members',
+  entityDirName: 'members',
   jobPrefix: 'spec-review-',
   uiLabel: '[Spec Review]',
   configTopLevelKey: 'spec-review',
@@ -87,9 +87,9 @@ function _parseYamlSimpleWithContext(configPath: string, fallback: Record<string
     const content = fs.readFileSync(configPath, 'utf8');
     const lines = content.split('\n');
 
-    const result: Record<string, any> = { 'spec-review': { chairman: {}, reviewers: [], context: {}, settings: {} } };
+    const result: Record<string, any> = { 'spec-review': { chairman: {}, members: [], context: {}, settings: {} } };
     let currentSection: string | null = null;
-    let currentReviewer: Record<string, unknown> | null = null;
+    let currentMember: Record<string, unknown> | null = null;
 
     for (const line of lines) {
       const trimmed = line.trim();
@@ -97,20 +97,20 @@ function _parseYamlSimpleWithContext(configPath: string, fallback: Record<string
 
       if (trimmed === 'spec-review:') continue;
       if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'reviewers:' || trimmed === 'members:') { currentSection = 'reviewers'; continue; }
+      if (trimmed === 'reviewers:' || trimmed === 'members:') { currentSection = 'members'; continue; }
       if (trimmed === 'context:') { currentSection = 'context'; continue; }
       if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
 
-      if (currentSection === 'reviewers' && trimmed.startsWith('- name:')) {
-        if (currentReviewer) result['spec-review'].reviewers.push(currentReviewer);
-        currentReviewer = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
+      if (currentSection === 'members' && trimmed.startsWith('- name:')) {
+        if (currentMember) result['spec-review'].members.push(currentMember);
+        currentMember = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
         continue;
       }
 
-      if (currentReviewer && currentSection === 'reviewers') {
+      if (currentMember && currentSection === 'members') {
         const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
         if (match) {
-          currentReviewer[match[1]] = match[2];
+          currentMember[match[1]] = match[2];
         }
         continue;
       }
@@ -127,11 +127,11 @@ function _parseYamlSimpleWithContext(configPath: string, fallback: Record<string
       }
     }
 
-    if (currentReviewer) result['spec-review'].reviewers.push(currentReviewer);
+    if (currentMember) result['spec-review'].members.push(currentMember);
 
     const fallbackSection = fallback['spec-review'] || {};
-    if (result['spec-review'].reviewers.length === 0) {
-      result['spec-review'].reviewers = fallbackSection.reviewers || [];
+    if (result['spec-review'].members.length === 0) {
+      result['spec-review'].members = fallbackSection.members || [];
     }
     result['spec-review'].chairman = { ...(fallbackSection.chairman || {}), ...result['spec-review'].chairman };
     result['spec-review'].settings = { ...(fallbackSection.settings || {}), ...result['spec-review'].settings };
@@ -157,7 +157,7 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
   const fallback: Record<string, any> = {
     'spec-review': {
       chairman: { role: 'auto' },
-      reviewers: [
+      members: [
         { name: 'claude', command: 'claude -p', emoji: '🧠', color: 'CYAN' },
         { name: 'codex', command: 'codex exec', emoji: '🤖', color: 'BLUE' },
         { name: 'gemini', command: 'gemini', emoji: '💎', color: 'GREEN' },
@@ -197,7 +197,7 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
   const merged: Record<string, any> = {
     'spec-review': {
       chairman: { ...fallback['spec-review'].chairman },
-      reviewers: Array.isArray(fallback['spec-review'].reviewers) ? [...fallback['spec-review'].reviewers] : [],
+      members: Array.isArray(fallback['spec-review'].members) ? [...fallback['spec-review'].members] : [],
       context: { ...fallback['spec-review'].context },
       settings: { ...fallback['spec-review'].settings },
     },
@@ -212,11 +212,12 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
     merged['spec-review'].chairman = { ...merged['spec-review'].chairman, ...specReview.chairman };
   }
 
-  if (Object.prototype.hasOwnProperty.call(specReview, 'reviewers')) {
-    if (!Array.isArray(specReview.reviewers)) {
-      exitWithError(`Invalid config in ${configPath}: 'spec-review.reviewers' must be a list/array`);
+  const specReviewMembers = specReview.members ?? specReview.reviewers;
+  if (specReviewMembers !== undefined) {
+    if (!Array.isArray(specReviewMembers)) {
+      exitWithError(`Invalid config in ${configPath}: 'spec-review.members' must be a list/array`);
     }
-    merged['spec-review'].reviewers = specReview.reviewers;
+    merged['spec-review'].members = specReviewMembers;
   }
 
   if (specReview.context != null) {
@@ -395,7 +396,7 @@ Notes:
 // ---------------------------------------------------------------------------
 
 function asWaitPayload(statusPayload: any): any {
-  const reviewersArray = Array.isArray(statusPayload.reviewers) ? statusPayload.reviewers : [];
+  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
 
   return {
     jobDir: statusPayload.jobDir,
@@ -404,7 +405,7 @@ function asWaitPayload(statusPayload: any): any {
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
     specName: statusPayload.specName,
-    reviewers: reviewersArray.map((r: any) => ({
+    members: membersArray.map((r: any) => ({
       member: r.member,
       state: r.state,
       exitCode: r.exitCode != null ? r.exitCode : null,
@@ -439,8 +440,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
   const timeoutSec = Number.isFinite(timeoutOverride!) && timeoutOverride! > 0 ? timeoutOverride! : timeoutSetting > 0 ? timeoutSetting : 0;
 
-  const requestedReviewers = config['spec-review'].reviewers || [];
-  const reviewers = requestedReviewers.filter((r: any) => {
+  const requestedMembers = config['spec-review'].members || [];
+  const members = requestedMembers.filter((r: any) => {
     if (!r || !r.name || !r.command) return false;
     const nameLc = String(r.name).toLowerCase();
     if (excludeChairmanFromReviewers && !includeChairman && nameLc === chairmanRole) return false;
@@ -468,8 +469,8 @@ ${prompt}`;
 
   const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `spec-review-${jobId}`);
-  const reviewersDir = path.join(jobDir, 'reviewers');
-  ensureDir(reviewersDir);
+  const membersDir = path.join(jobDir, 'members');
+  ensureDir(membersDir);
 
   fs.writeFileSync(path.join(jobDir, 'prompt.txt'), String(finalPrompt), 'utf8');
 
@@ -485,7 +486,7 @@ ${prompt}`;
       excludeChairmanFromReviewers,
       timeoutSec: timeoutSec || null,
     },
-    reviewers: reviewers.map((r: any) => ({
+    members: members.map((r: any) => ({
       name: String(r.name),
       command: String(r.command),
       emoji: r.emoji ? String(r.emoji) : null,
@@ -498,10 +499,10 @@ ${prompt}`;
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
 
   _spawnWorkers({
-    entities: reviewers,
+    entities: members,
     workerPath: WORKER_PATH,
     jobDir,
-    entitiesDir: reviewersDir,
+    entitiesDir: membersDir,
     timeoutSec,
     config: JOB_CONFIG,
   });
@@ -529,7 +530,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
     process.stdout.write(
       `Progress: ${done}/${payload.counts.total} done  (running ${payload.counts.running}, queued ${payload.counts.queued})\n`
     );
-    for (const r of payload.reviewers) {
+    for (const r of payload.members) {
       const state = String(r.state || '');
       const mark =
         state === 'done'
@@ -548,9 +549,9 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
   const wantText = Boolean(options.text) && !options.json;
   if (wantText) {
     const done = computeTerminalDoneCount(payload.counts);
-    process.stdout.write(`reviewers ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
+    process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
-      for (const r of payload.reviewers) {
+      for (const r of payload.members) {
         process.stdout.write(`- ${r.member}: ${r.state}${r.exitCode != null ? ` (exit ${r.exitCode})` : ''}\n`);
       }
     }
@@ -642,19 +643,19 @@ async function cmdWait(options: Record<string, unknown>, jobDir: string): Promis
 function cmdResults(options: Record<string, unknown>, jobDir: string): void {
   const resolvedJobDir = path.resolve(jobDir);
   const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
-  const reviewersRoot = path.join(resolvedJobDir, 'reviewers');
+  const membersRoot = path.join(resolvedJobDir, 'members');
 
-  const reviewers: any[] = [];
-  if (fs.existsSync(reviewersRoot)) {
-    for (const entry of fs.readdirSync(reviewersRoot)) {
-      const statusPath = path.join(reviewersRoot, entry, 'status.json');
-      const outputPath = path.join(reviewersRoot, entry, 'output.txt');
-      const errorPath = path.join(reviewersRoot, entry, 'error.txt');
+  const members: any[] = [];
+  if (fs.existsSync(membersRoot)) {
+    for (const entry of fs.readdirSync(membersRoot)) {
+      const statusPath = path.join(membersRoot, entry, 'status.json');
+      const outputPath = path.join(membersRoot, entry, 'output.txt');
+      const errorPath = path.join(membersRoot, entry, 'error.txt');
       const status = readJsonIfExists(statusPath) as any;
       if (!status) continue;
       const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
       const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
-      reviewers.push({ safeName: entry, ...status, output, stderr });
+      members.push({ safeName: entry, ...status, output, stderr });
     }
   }
 
@@ -668,7 +669,7 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
           prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
             ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
             : null,
-          reviewers: reviewers
+          members: members
             .map((r) => ({
               member: r.member,
               state: r.state,
@@ -686,7 +687,7 @@ function cmdResults(options: Record<string, unknown>, jobDir: string): void {
     return;
   }
 
-  for (const r of reviewers.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
+  for (const r of members.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
     process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
     if (r.message) process.stdout.write(`${r.message}\n`);
     process.stdout.write(r.output || '');

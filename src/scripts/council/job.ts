@@ -82,11 +82,11 @@ async function parseCouncilConfig(configPath) {
   try {
     YAML = await import('yaml').then(m => m.default);
   } catch {
-    // Fallback: use framework parseYamlSimple, then map reviewers -> members
+    // Fallback: use framework parseYamlSimple (returns members key)
     const raw = frameworkParseYamlSimple(configPath, {
       council: {
         chairman: fallback.council.chairman,
-        reviewers: fallback.council.members,
+        members: fallback.council.members,
         settings: fallback.council.settings,
       },
     }, COUNCIL_CONFIG);
@@ -94,7 +94,7 @@ async function parseCouncilConfig(configPath) {
     return {
       council: {
         chairman: rawCouncil.chairman || fallback.council.chairman,
-        members: rawCouncil.reviewers || fallback.council.members,
+        members: rawCouncil.members || fallback.council.members,
         settings: rawCouncil.settings || fallback.council.settings,
       },
     };
@@ -152,34 +152,25 @@ async function parseCouncilConfig(configPath) {
   return merged;
 }
 
-// Council-specific parseYamlSimple wrapper: adapts members <-> reviewers terminology
+// Council-specific parseYamlSimple wrapper: passes through members terminology
 function parseYamlSimple(configPath: string, fallback: Record<string, any>): Record<string, any> {
-  // Framework uses 'reviewers' internally; translate council's 'members' in fallback
+  // Framework now uses 'members' internally — pass fallback directly
   const councilFallback = fallback[COUNCIL_CONFIG.configTopLevelKey] || {};
   const adaptedFallback = {
     [COUNCIL_CONFIG.configTopLevelKey]: {
       chairman: councilFallback.chairman || {},
-      reviewers: councilFallback.members || councilFallback.reviewers || [],
+      members: councilFallback.members || [],
       settings: councilFallback.settings || {},
     },
   };
-  const raw = frameworkParseYamlSimple(configPath, adaptedFallback, COUNCIL_CONFIG);
-  // Map result back: reviewers -> members
-  const rawSection = raw[COUNCIL_CONFIG.configTopLevelKey] as any;
-  return {
-    [COUNCIL_CONFIG.configTopLevelKey]: {
-      chairman: rawSection.chairman,
-      members: rawSection.reviewers,
-      settings: rawSection.settings,
-    },
-  };
+  return frameworkParseYamlSimple(configPath, adaptedFallback, COUNCIL_CONFIG);
 }
 
 // ---------------------------------------------------------------------------
 // Council-specific computeStatus wrapper (maps reviewers -> members in output)
 // ---------------------------------------------------------------------------
 
-// Arrow function wrapping framework's computeStatus — adapts `reviewers` field to council's `members`.
+// Arrow function wrapping framework's computeStatus — framework now returns `members` directly.
 const computeStatus = async (jobDir: string): Promise<{
   jobDir: string;
   id: string | null;
@@ -189,19 +180,7 @@ const computeStatus = async (jobDir: string): Promise<{
   members: any[];
 }> => {
   const result = await frameworkComputeStatus(jobDir, COUNCIL_CONFIG);
-  // Framework returns `reviewers` array — remap to `members` for council terminology.
-  const { reviewers, ...rest } = result as any;
-  return {
-    ...rest,
-    members: (reviewers || []).map((r: any) => ({
-      member: r.member,
-      state: r.state,
-      startedAt: r.startedAt,
-      finishedAt: r.finishedAt,
-      exitCode: r.exitCode,
-      message: r.message,
-    })),
-  };
+  return result as any;
 };
 
 // Council-specific UI strings
@@ -231,11 +210,11 @@ const buildUiPayload = (statusPayload: {
   codex: { update_plan: { plan: any[] } };
   claude: { todo_write: { todos: any[] } };
 } => {
-  // Framework expects `reviewers` field; map council's `members` -> `reviewers`
+  // Pass members directly to framework
   const adapted = {
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
-    reviewers: (statusPayload.members || []).map((m: any) => ({
+    members: (statusPayload.members || []).map((m: any) => ({
       member: m && m.member != null ? m.member : null,
       state: m && m.state != null ? m.state : 'unknown',
       exitCode: m && m.exitCode != null ? m.exitCode : null,

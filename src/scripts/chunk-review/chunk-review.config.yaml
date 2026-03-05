@@ -1,5 +1,5 @@
 chunk-review:
-  reviewers:
+  members:
     # --- Security Model ---
     # Reviewer CLIs operate on TRUSTED code only (local git working tree).
     # Claude: --allowedTools restricts to read-only tools (Bash for git diff, Read/Glob/Grep for files).

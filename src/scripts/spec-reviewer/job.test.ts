@@ -30,7 +30,7 @@ describe('parseYamlSimple', () => {
   const fallback = {
     'spec-review': {
       chairman: { role: 'auto' },
-      reviewers: [
+      members: [
         { name: 'claude', command: 'claude -p', emoji: '🧠', color: 'CYAN' },
       ],
       context: {},
@@ -68,10 +68,10 @@ describe('parseYamlSimple', () => {
       '      command: bob-cli',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['spec-review'].reviewers.length).toBe(2);
-    expect(result['spec-review'].reviewers[0].name).toBe('alice');
-    expect(result['spec-review'].reviewers[0].command).toBe('alice-cli');
-    expect(result['spec-review'].reviewers[1].name).toBe('bob');
+    expect(result['spec-review'].members.length).toBe(2);
+    expect(result['spec-review'].members[0].name).toBe('alice');
+    expect(result['spec-review'].members[0].command).toBe('alice-cli');
+    expect(result['spec-review'].members[1].name).toBe('bob');
   });
 
   test('parses context section', () => {
@@ -121,7 +121,7 @@ describe('parseYamlSimple', () => {
       '    role: auto',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['spec-review'].reviewers).toEqual(fallback['spec-review'].reviewers);
+    expect(result['spec-review'].members).toEqual(fallback['spec-review'].members);
   });
 
   test('returns fallback on read error (non-existent file)', () => {
@@ -141,7 +141,7 @@ describe('parseYamlSimple', () => {
     expect(result['spec-review'].chairman.role).toBe('auto');
   });
 
-  test('handles "members:" as alias for reviewers section', () => {
+  test('handles "reviewers:" as alias for members section', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'spec-review:',
@@ -150,8 +150,8 @@ describe('parseYamlSimple', () => {
       '      command: alice-cli',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['spec-review'].reviewers.length).toBe(1);
-    expect(result['spec-review'].reviewers[0].name).toBe('alice');
+    expect(result['spec-review'].members.length).toBe(1);
+    expect(result['spec-review'].members[0].name).toBe('alice');
   });
 
   test('strips quotes from reviewer name values', () => {
@@ -163,7 +163,7 @@ describe('parseYamlSimple', () => {
       '      command: some-cmd',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['spec-review'].reviewers[0].name).toBe('quoted-name');
+    expect(result['spec-review'].members[0].name).toBe('quoted-name');
   });
 
   test('skips empty lines', () => {
@@ -209,14 +209,14 @@ describe('parseSpecReviewConfig', () => {
   test('returns fallback when config file does not exist', async () => {
     const result = await parseSpecReviewConfig(path.join(tmpDir, 'missing.yaml'));
     expect(result['spec-review']).toBeTruthy();
-    expect(Array.isArray(result['spec-review'].reviewers)).toBeTruthy();
-    expect(result['spec-review'].reviewers.length > 0).toBeTruthy();
+    expect(Array.isArray(result['spec-review'].members)).toBeTruthy();
+    expect(result['spec-review'].members.length > 0).toBeTruthy();
     expect(result['spec-review'].chairman.role).toBe('auto');
   });
 
   test('fallback contains default reviewers (claude, codex, gemini)', async () => {
     const result = await parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    const names = result['spec-review'].reviewers.map(r => r.name);
+    const names = result['spec-review'].members.map(r => r.name);
     expect(names.includes('claude')).toBeTruthy();
     expect(names.includes('codex')).toBeTruthy();
     expect(names.includes('gemini')).toBeTruthy();
@@ -249,8 +249,8 @@ describe('parseSpecReviewConfig', () => {
     ].join('\n'));
     const result = await parseSpecReviewConfig(configPath);
     expect(result['spec-review'].chairman.role).toBe('gemini');
-    expect(result['spec-review'].reviewers.length).toBe(1);
-    expect(result['spec-review'].reviewers[0].name).toBe('alice');
+    expect(result['spec-review'].members.length).toBe(1);
+    expect(result['spec-review'].members[0].name).toBe('alice');
     expect(result['spec-review'].context.shared_context_dir).toBe('.omt/custom-ctx');
     expect(result['spec-review'].settings.timeout).toBe(600);
   });
@@ -283,7 +283,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0, error: 0 },
-      reviewers: [{ member: 'alice', state: 'done', exitCode: 0 }],
+      members: [{ member: 'alice', state: 'done', exitCode: 0 }],
     };
     const result = buildUiPayload(payload);
     expect(result.progress).toBeTruthy();
@@ -295,7 +295,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 3, done: 1, error: 1, queued: 0, running: 1, missing_cli: 0, timed_out: 0, canceled: 0 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'done' },
         { member: 'bob', state: 'error' },
         { member: 'carol', state: 'running' },
@@ -310,7 +310,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'done' },
         { member: 'bob', state: 'running' },
       ],
@@ -323,7 +323,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'running' },
         { member: 'bob', state: 'queued' },
       ],
@@ -336,7 +336,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 3, done: 1, error: 1, missing_cli: 1, queued: 0, running: 0 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'done' },
         { member: 'bob', state: 'error' },
         { member: 'carol', state: 'missing_cli' },
@@ -353,7 +353,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 0, running: 2 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'running' },
         { member: 'bob', state: 'running' },
       ],
@@ -368,7 +368,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 0, done: 0, queued: 0, running: 0 },
-      reviewers: [],
+      members: [],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.done).toBe(0);
@@ -380,7 +380,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 2, done: 2, queued: 0, running: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'done' },
         { member: 'bob', state: 'done' },
       ],
@@ -395,7 +395,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 2, done: 0, queued: 0, running: 0, error: 2 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'error' },
         { member: 'bob', state: 'error' },
       ],
@@ -410,7 +410,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'done' },
         { member: 'bob', state: 'running' },
       ],
@@ -425,7 +425,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0 },
-      reviewers: [{ member: 'alice', state: 'done' }],
+      members: [{ member: 'alice', state: 'done' }],
     };
     const result = buildUiPayload(payload);
     for (const todo of result.claude.todo_write.todos) {
@@ -439,7 +439,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ member: 'alice', state: 'running' }],
+      members: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload);
     const reviewerStep = result.codex.update_plan.plan[1];
@@ -450,7 +450,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 3, done: 0, queued: 0, running: 3 },
-      reviewers: [
+      members: [
         { member: 'carol', state: 'running' },
         { member: 'alice', state: 'running' },
         { member: 'bob', state: 'running' },
@@ -467,7 +467,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 2, done: 1, queued: 0, running: 0 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'done' },
         { member: null, state: 'done' },
       ],
@@ -480,7 +480,7 @@ describe('buildUiPayload', () => {
   test('handles missing counts gracefully', () => {
     const payload = {
       overallState: 'done',
-      reviewers: [],
+      members: [],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.done).toBe(0);
@@ -500,7 +500,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
-      reviewers: [
+      members: [
         { member: 'alice', state: 'running' },
         { member: 'bob', state: 'queued' },
       ],
@@ -515,7 +515,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ member: 'alice', state: 'running' }],
+      members: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.overallState).toBe('running');
@@ -529,13 +529,13 @@ describe('buildUiPayload', () => {
 describe('computeStatus', () => {
   let tmpDir;
 
-  function setupJob(jobDir, jobJson, reviewers) {
+  function setupJob(jobDir, jobJson, members) {
     fs.mkdirSync(jobDir, { recursive: true });
     fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(jobJson));
-    const reviewersDir = path.join(jobDir, 'reviewers');
-    fs.mkdirSync(reviewersDir, { recursive: true });
-    for (const [name, status] of Object.entries(reviewers)) {
-      const dir = path.join(reviewersDir, name);
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, status] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
     }
@@ -621,10 +621,10 @@ describe('computeStatus', () => {
     setupJob(jobDir, { id: 'test-7' }, {
       alice: { member: 'alice', state: 'done' },
     });
-    fs.mkdirSync(path.join(jobDir, 'reviewers', 'bob'));
+    fs.mkdirSync(path.join(jobDir, 'members', 'bob'));
     const result = await computeStatus(jobDir);
     expect(result.counts.total).toBe(1);
-    expect(result.reviewers.length).toBe(1);
+    expect(result.members.length).toBe(1);
   });
 
   test('sorts reviewers alphabetically by name', async () => {
@@ -635,9 +635,9 @@ describe('computeStatus', () => {
       bob: { member: 'bob', state: 'done' },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].member).toBe('alice');
-    expect(result.reviewers[1].member).toBe('bob');
-    expect(result.reviewers[2].member).toBe('carol');
+    expect(result.members[0].member).toBe('alice');
+    expect(result.members[1].member).toBe('bob');
+    expect(result.members[2].member).toBe('carol');
   });
 
   test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', async () => {
@@ -653,10 +653,10 @@ describe('computeStatus', () => {
       },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].startedAt).toBe('2026-01-01T00:00:00Z');
-    expect(result.reviewers[0].finishedAt).toBe('2026-01-01T00:01:00Z');
-    expect(result.reviewers[0].exitCode).toBe(0);
-    expect(result.reviewers[0].message).toBe('success');
+    expect(result.members[0].startedAt).toBe('2026-01-01T00:00:00Z');
+    expect(result.members[0].finishedAt).toBe('2026-01-01T00:01:00Z');
+    expect(result.members[0].exitCode).toBe(0);
+    expect(result.members[0].message).toBe('success');
   });
 
   test('returns null for missing reviewer metadata fields', async () => {
@@ -665,10 +665,10 @@ describe('computeStatus', () => {
       alice: { member: 'alice', state: 'running' },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].startedAt).toBe(null);
-    expect(result.reviewers[0].finishedAt).toBe(null);
-    expect(result.reviewers[0].exitCode).toBe(null);
-    expect(result.reviewers[0].message).toBe(null);
+    expect(result.members[0].startedAt).toBe(null);
+    expect(result.members[0].finishedAt).toBe(null);
+    expect(result.members[0].exitCode).toBe(null);
+    expect(result.members[0].message).toBe(null);
   });
 
   test('includes jobDir and id in result', async () => {
