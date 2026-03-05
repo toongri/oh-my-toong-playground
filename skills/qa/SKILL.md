@@ -48,9 +48,9 @@ The caller composes a QA REQUEST using this structure:
 | Trigger | Activation Condition | Actions |
 |---------|---------------------|---------|
 | **code changes present** | Code changes present | Automated checks (build/test/lint) + Code quality (checklists.md) |
-| **spec or AC provided** | Spec or AC provided in request | Verify implementation against provided criteria |
-| **QA scenarios provided** | QA scenarios provided in request | Execute scenarios as specified, collect evidence |
-| **user-facing changes, no scenarios** | User-facing changes AND no scenarios provided | Self-determined curl/playwright/bash (see stage3-handson.md) |
+| **spec or AC provided** | Request content includes specification or acceptance criteria | Verify implementation against provided criteria |
+| **QA scenarios provided** | Request content includes executable test scenarios | Execute scenarios as specified, collect evidence |
+| **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/bash (see stage3-handson.md) |
 
 ### Composition Examples
 
@@ -170,7 +170,7 @@ Changed files list is the Single Source of Truth. Do NOT use `git diff` to indep
 
 **Execute provided QA scenarios as specified.**
 
-This trigger activates when QA scenarios are included in the QA REQUEST Spec.
+This trigger activates when the request content includes executable QA scenarios with steps and expected outcomes.
 
 1. Execute each scenario as specified (tool, steps, expected output)
 2. Collect evidence for each scenario result
@@ -183,7 +183,7 @@ This trigger activates when QA scenarios are included in the QA REQUEST Spec.
 
 **Conditionally verify user-facing behavior by actually running the changed code.**
 
-This trigger activates when changes affect user-facing behavior AND no QA scenarios are provided in the request. Internal-only changes (refactoring, logic without user-facing surface) skip this trigger.
+This trigger activates when changes affect user-facing behavior AND the request content contains no executable test scenarios. Internal-only changes (refactoring, logic without user-facing surface) skip this trigger.
 
 ### Applicability
 
