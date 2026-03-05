@@ -760,7 +760,7 @@ This is the ONLY point where the user sees and confirms the plan. All internal q
 
 **Language:** Plans MUST be written in English. This ensures:
 - Consistency across all plan files
-- Compatibility with all executors (sisyphus, sisyphus-junior)
+- Compatibility with all executors
 - Clear technical communication regardless of user's language
 
 **Required in every plan:**
@@ -777,7 +777,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
-| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, max 3-4 waves for a 3-6 task plan, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge") |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
@@ -787,7 +787,7 @@ Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Mu
 
 - Each task = implementation + test combined (never separate)
 - Acceptance criteria must be agent-executable (no human intervention)
-- **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths with action (create/update/delete).
+- **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths.
 - **References (CRITICAL)** -- executor has NO interview context. Provide the context they need:
   - **Pattern References**: `file:line-range` — existing code patterns to follow.
     WHY explains what pattern to adopt.
@@ -800,14 +800,14 @@ Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Mu
   - Each reference: `path-or-url — description` on first line, `WHY: explanation` on next line.
   - Files vs References: Files = what this TODO creates/modifies (deliverables). References = what existing files/resources to consult (context). Both coexist — References does NOT replace Files.
   - Per-category: include when the category has relevant existing artifacts; skip when no applicable artifact exists. Not all 4 categories need to be filled. Soft limit: 1-3 references per category.
-- 3-6 tasks is the total plan task count (not 30 micro-steps, not 1 vague step); Wave is the execution ordering within that count
+- Task count is determined by the Atomicity Heuristic — decompose until each TODO passes all 3 atomicity conditions. Wave is the execution ordering within that count
 - **Parallelization** -- every TODO must include:
   - `Blocked By`: list of TODO numbers this task depends on (empty if none)
   - `Blocks`: list of TODO numbers that depend on this task (empty if none)
   - `Wave`: execution wave number (1-based). Tasks in the same wave can run in parallel
-- **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically.
+- **Wave Assignment Rule**: Wave = `max(wave of each blocker) + 1`. If `Blocked By` is empty, Wave = 1. This formula is MANDATORY — do not manually override Wave numbers based on "logical ordering" intuition. If a task genuinely depends on another, express it as a `Blocked By` relationship, and the Wave follows automatically. Note: this formula applies to implementation tasks only. Final Verification Wave tasks use `Wave: FINAL` (literal string) — see Final Verification Wave section.
 - **Anti-pattern**: Assigning Wave 2 to an independent task because "it makes sense to do X before Y." If there is a real dependency, add `Blocked By`. If there is no dependency, the task goes in Wave 1.
-- **Wave integrity**: Every wave must reference numbered TODOs only. Do not add administrative stages (Verification, Merge, Deploy) as waves — argus handles verification, mnemosyne handles commits.
+- **Wave integrity**: Every implementation wave must reference numbered TODOs only. Do not add administrative stages (Merge, Deploy) as waves — mnemosyne handles commits. The exception is Final Verification Wave, which contains F1-F4 verification tasks (see Final Verification Wave section).
 
 **MECE Decomposition Principle**
 
@@ -827,13 +827,13 @@ Self-check questions (run after drafting TODOs):
 
 **Atomicity Heuristic**
 
-Each TODO must be atomic — completable by a single executor (sisyphus-junior) in one delegation pass without requiring mid-task coordination. If a TODO fails the atomicity check, decompose it further.
+Each TODO must be atomic — completable by a single executor in one delegation pass without requiring mid-task coordination. If a TODO fails the atomicity check, decompose it further.
 
 | # | Condition | Threshold | Question |
 |---|-----------|-----------|----------|
 | 1 | Complexity | Moderate or below | Can a single agent understand the full context and implement this without specialized domain knowledge beyond what the plan provides? |
 | 2 | File scope | ≤ 3 logically distinct file groups | Does this task touch more than 3 unrelated file groups (where a group is files that change together for one reason)? |
-| 3 | Single-delegation completable | One pass | Can sisyphus-junior finish this TODO in one delegation without needing to pause, ask questions, or wait for external input? |
+| 3 | Single-delegation completable | One pass | Can the executor finish this TODO in one delegation without needing to pause, ask questions, or wait for external input? |
 
 **Rule**: If ANY condition fails, decompose the TODO further until all sub-tasks pass all 3 conditions.
 
@@ -916,7 +916,7 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 - [ ] 3. Implement UserService
   - What to do: Create UserService with CRUD operations
   - Must NOT do: Add caching or event publishing
-  - Files: src/service/user-service.ts (create), src/service/index.ts (export)
+  - Files: src/service/user-service.ts, src/service/index.ts
   - References (CRITICAL):
     - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
       WHY: Follow the same repository injection, error handling, and return type conventions
@@ -955,7 +955,7 @@ Critical Path: TODO 1 → TODO 3 → TODO 5
 - [ ] 6. Update API Documentation
   - What to do: Add rate limiting section to API docs
   - Must NOT do: Change existing endpoint documentation
-  - Files: docs/api-reference.md (update)
+  - Files: docs/api-reference.md
   - Blocked By: TODO 3
   - Blocks: None
   - Wave: 2
@@ -1019,7 +1019,7 @@ The Success Criteria section defines the binary pass/fail end state of the plan.
 
 | # | Anti-Pattern | What Goes Wrong | Instead |
 |---|-------------|-----------------|---------|
-| 1 | **Over-planning** | 30 micro-steps with implementation details | 3-6 actionable tasks with acceptance criteria |
+| 1 | **Over-planning** | TODOs filled with implementation details (code snippets, pseudocode, line-by-line instructions) | Outcome-oriented TODOs with acceptance criteria — describe WHAT, not HOW |
 | 2 | **Under-planning** | "Step 1: Implement the feature" | Break down into verifiable chunks with clear scope |
 | 3 | **Premature metis invocation** | Invoking metis before Clearance + AC complete | Stay in interview mode until Clearance all YES and AC confirmed |
 | 4 | **Skipping confirmation** | Handing off without showing plan to user | After Momus approval, ALWAYS present the full plan and wait for user to finalize |

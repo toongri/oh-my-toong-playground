@@ -316,36 +316,41 @@ digraph task_loop {
 - Each argus approval → immediately invoke mnemosyne to commit
 - After marking task completed, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
 
-### Final Verification Trigger
+### Verification Task Dispatch (Final Wave)
 
-After all individual tasks are completed and approved by argus:
+When the plan includes a Final Verification Wave (F1-F4 tasks):
 
 ```dot
-digraph final_verification {
+digraph verification_dispatch {
     rankdir=TB;
-    "All tasks completed\n& per-task argus APPROVE" [shape=ellipse];
-    "Plan exists?" [shape=diamond];
-    "Recipe 3\n(full plan verification)" [shape=box];
-    "Recipe 4\n(instruction fulfillment)" [shape=box];
-    "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
-    "APPROVE?" [shape=diamond];
-    "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
-    "Create fix task" [shape=box];
-    "Re-enter loop" [shape=box];
+    "All implementation tasks\ncompleted & approved" [shape=ellipse];
+    "Is task a verification task?\n(Final Wave F1-F4)" [shape=diamond];
+    "Dispatch to sisyphus-junior" [shape=box];
+    "Dispatch to argus directly\n(F-task spec = QA REQUEST Spec)" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "Per-task argus QA" [shape=box];
+    "argus result" [shape=diamond];
+    "mnemosyne commit" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
+    "Mark completed" [shape=box, style=filled, fillcolor=green];
+    "Create fix task\n→ re-enter implementation loop\n→ full F1-F4 re-run" [shape=box];
 
-    "All tasks completed\n& per-task argus APPROVE" -> "Plan exists?";
-    "Plan exists?" -> "Recipe 3\n(full plan verification)" [label="YES"];
-    "Plan exists?" -> "Recipe 4\n(instruction fulfillment)" [label="NO"];
-    "Recipe 3\n(full plan verification)" -> "argus";
-    "Recipe 4\n(instruction fulfillment)" -> "argus";
-    "argus" -> "APPROVE?";
-    "APPROVE?" -> "Done" [label="yes"];
-    "APPROVE?" -> "Create fix task" [label="no"];
-    "Create fix task" -> "Re-enter loop";
+    "All implementation tasks\ncompleted & approved" -> "Is task a verification task?\n(Final Wave F1-F4)";
+    "Is task a verification task?\n(Final Wave F1-F4)" -> "Dispatch to sisyphus-junior" [label="NO\n(implementation)"];
+    "Is task a verification task?\n(Final Wave F1-F4)" -> "Dispatch to argus directly\n(F-task spec = QA REQUEST Spec)" [label="YES\n(F1-F4)"];
+    "Dispatch to sisyphus-junior" -> "Per-task argus QA";
+    "Per-task argus QA" -> "mnemosyne commit" [label="APPROVE"];
+    "Dispatch to argus directly\n(F-task spec = QA REQUEST Spec)" -> "argus result";
+    "argus result" -> "Mark completed" [label="APPROVE"];
+    "argus result" -> "Create fix task\n→ re-enter implementation loop\n→ full F1-F4 re-run" [label="REQUEST_CHANGES"];
 }
 ```
 
-This ensures holistic verification beyond individual task approval — the complete work product is verified against the original plan or instructions.
+**Rules:**
+- Implementation tasks → sisyphus-junior → argus per-task QA → mnemosyne commit
+- Verification tasks (Final Wave F1-F4) → argus directly (executor not needed)
+- F-task's "What to verify" spec is passed as the QA REQUEST Spec to argus
+- Verification tasks do NOT require separate QA (verifying IS the purpose)
+- On F-task REQUEST_CHANGES: create fix task → re-enter implementation loop → after fix, re-run ALL F1-F4 (not just the failed one)
+- F1-F4 tasks run in parallel (4 concurrent argus invocations)
 
 ---
 
@@ -600,19 +605,7 @@ Compose the QA REQUEST from the relevant plan TODO:
 - Put the TODO's spec content (What to do, Must NOT do, Acceptance Criteria, QA Scenarios) under `## Spec`
 - List changed files and implementer's summary under `## Scope`
 
-**Recipe 3: Plan completion — final verification**
-
-After all individual tasks are complete, verify the entire plan:
-- Put the plan file path and request to verify all TODO Acceptance Criteria and QA Scenarios under `## Spec`
-- List all changed files across all tasks and all completed task subjects under `## Scope`
-
-**Recipe 4: Instruction fulfillment — final verification**
-
-When no plan exists, verify against original user instructions:
-- Put the original user instructions and list of completed tasks under `## Spec`
-- List all changed files and completed task summaries under `## Scope`
-
-**Recipe 5: AC/QA Scenario verification with explicit methods**
+**Recipe 3: AC/QA Scenario verification with explicit methods**
 
 When acceptance criteria and QA scenarios are explicitly provided:
 - Put acceptance criteria and QA scenarios verbatim under `## Spec`
