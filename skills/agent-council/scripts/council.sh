@@ -6,6 +6,7 @@
 #   council.sh start [options] "question"     # returns JOB_DIR immediately
 #   council.sh status [--json|--text|--checklist] JOB_DIR # poll progress
 #   council.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] JOB_DIR
+#   council.sh collect JOB_DIR                 # block until done, print manifest
 #   council.sh results [--json] JOB_DIR       # print collected outputs
 #   council.sh stop JOB_DIR                   # best-effort stop running members
 #   council.sh clean JOB_DIR                  # remove job directory
@@ -13,7 +14,7 @@
 # One-shot:
 #   council.sh "question"
 #   (in a real terminal: starts a job, waits for completion, prints results, cleans up)
-#   (in host-agent tool UIs: returns a single `wait` JSON payload immediately; host drives progress + results)
+#   (in host-agent tool UIs: returns JOB_DIR immediately; host calls collect + reads output files directly)
 #
 # Stdin mode:
 #   council.sh --stdin
@@ -36,6 +37,7 @@ Usage:
   $(basename "$0") start --stdin
   $(basename "$0") status [--json|--text|--checklist] <jobDir>
   $(basename "$0") wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  $(basename "$0") collect <jobDir>
   $(basename "$0") results [--json] <jobDir>
   $(basename "$0") stop <jobDir>
   $(basename "$0") clean <jobDir>
@@ -68,7 +70,7 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 case "$1" in
-  start|status|wait|results|stop|clean)
+  start|status|wait|collect|results|stop|clean)
     exec "$JOB_SCRIPT" "$@"
     ;;
 esac
@@ -92,12 +94,11 @@ in_host_agent_context() {
 
 JOB_DIR="$("$JOB_SCRIPT" start "$@")"
 
-# Host agents (Codex CLI / Claude Code) cannot update native TODO/plan UIs while a long-running
-# command is executing. If we're in a host agent context, return immediately with a single `wait`
-# JSON payload (includes `.ui.codex.update_plan.plan` / `.ui.claude.todo_write.todos`) and let the
-# host agent drive progress updates with repeated short `wait` calls + native UI updates.
+# Host agents (Codex CLI / Claude Code) drive their own polling. Return JOB_DIR immediately so the
+# host agent can call `collect` and read output files directly.
 if in_host_agent_context; then
-  exec "$JOB_SCRIPT" wait "$JOB_DIR"
+  echo "$JOB_DIR"
+  exit 0
 fi
 
 echo "council: started ${JOB_DIR}" >&2
@@ -112,20 +113,7 @@ cleanup_on_signal() {
 
 trap cleanup_on_signal INT TERM
 
-while true; do
-  WAIT_JSON="$("$JOB_SCRIPT" wait "$JOB_DIR")"
-  OVERALL="$(printf '%s' "$WAIT_JSON" | node -e '
-const fs=require("fs");
-const d=JSON.parse(fs.readFileSync(0,"utf8"));
-process.stdout.write(String(d.overallState||""));
-')"
-
-  "$JOB_SCRIPT" status --text "$JOB_DIR" >&2
-
-  if [ "$OVERALL" = "done" ]; then
-    break
-  fi
-done
+"$JOB_SCRIPT" collect "$JOB_DIR" >/dev/null
 
 trap - INT TERM
 

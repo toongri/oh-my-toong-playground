@@ -60,8 +60,8 @@ digraph council_decision {
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
 3. Council members provide independent opinions (raw outputs)
-4. **Poll until `overallState === "done"`**
-5. **Fetch results**: `council.sh results JOB_DIR`
+4. **Collect**: `council.sh collect JOB_DIR` — repeat until `overallState` is `"done"`
+5. **Read each member's output file** via the Read tool
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
 8. **Cleanup**: `council.sh clean JOB_DIR`
@@ -107,9 +107,12 @@ EOF
 
 For programmatic use within Claude Code sessions:
 
-**1. Start council (returns immediately with job directory)**
+**CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
+
+**1. Start council (Bash, timeout: 180000)**
 ```bash
-JOB_DIR=$(scripts/council.sh --stdin <<'EOF'
+PROMPT_FILE=$(mktemp)
+cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 ## Evaluation Criteria
 [Key principles - in English]
 
@@ -121,33 +124,51 @@ JOB_DIR=$(scripts/council.sh --stdin <<'EOF'
 
 ## Question
 [Specific points needing judgment - in English]
-EOF
-)
+PROMPT_EOF
+JOB_DIR=$(scripts/council.sh start --stdin < "$PROMPT_FILE")
+```
+Output: JOB_DIR path (one line on stdout).
+
+> **Important**: Write prompts in English for consistent cross-model communication.
+
+**2. Collect results (Bash, timeout: 180000)**
+
+Poll until all members complete. Re-run this step if not done.
+```bash
+scripts/council.sh collect "$JOB_DIR"
 ```
 
-**2. Poll until completion**
-```bash
-scripts/council.sh wait "$JOB_DIR"
-# Returns JSON with overallState field
-# Keep polling until: overallState === "done"
+Response JSON (done):
+```json
+{
+  "overallState": "done",
+  "id": "...",
+  "members": [
+    { "member": "claude", "outputFilePath": "/path/to/output.txt", "errorMessage": null },
+    { "member": "gemini", "outputFilePath": "/path/to/output.txt", "errorMessage": null },
+    { "member": "codex", "outputFilePath": null, "errorMessage": "timed_out" }
+  ]
+}
 ```
 
-**3. Fetch raw results**
-```bash
-scripts/council.sh results "$JOB_DIR"
-# Returns raw opinions from each council member
+Response JSON (not done — re-run this step):
+```json
+{ "overallState": "running", "id": "...", "counts": { "total": 3, "done": 1, "running": 2, "queued": 0 } }
 ```
+
+**3. Read raw outputs**
+
+Use the Read tool to read each member's `outputFilePath` from the manifest.
+Only read entries where `outputFilePath` is non-null (null = infrastructure failure; see Degradation Policy).
 
 **4. Synthesize (caller responsibility)**
 
 You as the Chairman must synthesize raw outputs into the Advisory Format (see below). The council does NOT produce a synthesized advisory automatically.
 
-**5. Cleanup**
+**5. Cleanup (Bash, timeout: 180000)**
 ```bash
 scripts/council.sh clean "$JOB_DIR"
 ```
-
-> **Important:** Check `overallState === "done"` in the wait JSON before fetching results.
 
 ### Synthesis Protocol
 
