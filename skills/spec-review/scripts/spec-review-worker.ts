@@ -3,6 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { initLogger, logInfo, logError, logStart, logEnd } from '../../../src/lib/logging';
+import { parseArgs, exitWithError } from '../../../src/lib/job-utils';
 import {
   splitCommand,
   atomicWriteJson,
@@ -26,41 +28,6 @@ function runWithRetry(opts) {
 }
 
 // ---------------------------------------------------------------------------
-// Utility functions
-// ---------------------------------------------------------------------------
-
-function exitWithError(message) {
-  process.stderr.write(`${message}\n`);
-  process.exit(1);
-}
-
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const out = { _: [] };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (!a.startsWith('--')) {
-      out._.push(a);
-      continue;
-    }
-
-    const [key, rawValue] = a.split('=', 2);
-    if (rawValue != null) {
-      out[key.slice(2)] = rawValue;
-      continue;
-    }
-    const next = args[i + 1];
-    if (next == null || next.startsWith('--')) {
-      out[key.slice(2)] = true;
-      continue;
-    }
-    out[key.slice(2)] = next;
-    i++;
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -72,24 +39,47 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-  if (!jobDir) exitWithError('worker: missing --job-dir');
-  if (!reviewer) exitWithError('worker: missing --reviewer');
-  if (!safeReviewer) exitWithError('worker: missing --safe-reviewer');
-  if (!command) exitWithError('worker: missing --command');
+  // Initialize persistent logging
+  const projectRoot = path.resolve(import.meta.dirname, '../../..');
+  const jobId = jobDir ? path.basename(String(jobDir)).replace(/^spec-review-/, '') : 'unknown';
+  initLogger('spec-review-worker', projectRoot, jobId);
+  logStart();
 
-  const reviewersRoot = path.join(jobDir, 'reviewers');
-  const reviewerDir = path.join(reviewersRoot, safeReviewer);
+  // Parse --env args: collect KEY=VALUE pairs
+  const workerEnv: Record<string, string> = {};
+  const rawArgs = process.argv.slice(2);
+  for (let i = 0; i < rawArgs.length; i++) {
+    if (rawArgs[i] === '--env' && i + 1 < rawArgs.length) {
+      const eqIdx = rawArgs[i + 1].indexOf('=');
+      if (eqIdx > 0) {
+        workerEnv[rawArgs[i + 1].slice(0, eqIdx)] = rawArgs[i + 1].slice(eqIdx + 1);
+      }
+      i++;
+    }
+  }
 
-  const promptPath = path.join(jobDir, 'prompt.txt');
+  if (!jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
+  if (!reviewer) { logError('missing --reviewer'); logEnd(); exitWithError('worker: missing --reviewer'); }
+  if (!safeReviewer) { logError('missing --safe-reviewer'); logEnd(); exitWithError('worker: missing --safe-reviewer'); }
+  if (!command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
+
+  logInfo(`worker start: reviewer=${reviewer} command=${command} timeout=${timeoutSec}`);
+
+  const reviewersRoot = path.join(jobDir as string, 'reviewers');
+  const reviewerDir = path.join(reviewersRoot, safeReviewer as string);
+
+  const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  const tokens = splitCommand(command);
+  const tokens = splitCommand(command as string);
   if (!tokens || tokens.length === 0) {
+    logError(`invalid command string: ${command}`);
     const statusPath = path.join(reviewerDir, 'status.json');
     atomicWriteJson(statusPath, {
       reviewer, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     });
+    logEnd();
     process.exit(1);
   }
 
@@ -97,9 +87,11 @@ function main() {
   const args = tokens.slice(1);
 
   runWithRetry({
-    program, args, prompt, reviewer, reviewerDir, command, timeoutSec,
+    program, args, prompt, reviewer: reviewer as string, reviewerDir, command: command as string, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
   }).then((result) => {
+    logInfo(`worker done: reviewer=${reviewer} state=${result.state} exitCode=${result.exitCode}`);
+    logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });
 }

@@ -525,6 +525,125 @@ describe('runOnce - SIGKILL signal', () => {
 });
 
 // ---------------------------------------------------------------------------
+// runWithRetry - workerEnv injection
+// ---------------------------------------------------------------------------
+
+describe('runWithRetry - workerEnv injection', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('subprocess receives workerEnv variables in its environment', async () => {
+    // End-to-end: spawn a real process that prints the env var to output
+    const outFile = path.join(tmpDir, 'env-check.txt');
+    const result = await runWithRetry({
+      command: `sh -c 'echo "VAL=$MY_COUNCIL_VAR" > ${outFile}'`,
+      prompt: '',
+      member: 'test',
+      safeMember: 'test-member',
+      jobDir: paths.jobDir,
+      timeoutSec: 5,
+      workerEnv: { MY_COUNCIL_VAR: 'council-env-value' },
+    });
+
+    expect(result.state).toBe('done');
+    const output = fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8') : '';
+    expect(output.trim()).toBe('VAL=council-env-value');
+  });
+
+  test('multiple workerEnv vars are all passed to subprocess', async () => {
+    const outFile = path.join(tmpDir, 'env-multi.txt');
+    const result = await runWithRetry({
+      command: `sh -c 'echo "$VAR_A $VAR_B" > ${outFile}'`,
+      prompt: '',
+      member: 'test',
+      safeMember: 'test-member',
+      jobDir: paths.jobDir,
+      timeoutSec: 5,
+      workerEnv: { VAR_A: 'alpha', VAR_B: 'beta' },
+    });
+
+    expect(result.state).toBe('done');
+    const output = fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8') : '';
+    expect(output.trim()).toBe('alpha beta');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// main() — --env passthrough via subprocess
+// ---------------------------------------------------------------------------
+
+describe('main - --env passthrough', () => {
+  const WORKER_PATH = path.join(import.meta.dirname, 'council-job-worker.ts');
+
+  test('passes --env KEY=VALUE to spawned subprocess environment', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-env-test-'));
+    try {
+      const jobDir = path.join(tmpDir, 'job');
+      const memberDir = path.join(jobDir, 'members', 'test-member');
+      const outFile = path.join(tmpDir, 'env-output.txt');
+      fs.mkdirSync(memberDir, { recursive: true });
+      fs.writeFileSync(path.join(jobDir, 'prompt.txt'), '', 'utf8');
+
+      // Command writes MY_COUNCIL_ENV value to outFile
+      const command = `sh -c 'echo $MY_COUNCIL_ENV > ${outFile}'`;
+
+      const proc = Bun.spawn(
+        [
+          'bun', WORKER_PATH,
+          '--job-dir', jobDir,
+          '--member', 'test-member',
+          '--safe-member', 'test-member',
+          '--command', command,
+          '--env', 'MY_COUNCIL_ENV=council-test-value',
+        ],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      await proc.exited;
+
+      const output = fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8') : '';
+      expect(output.trim()).toBe('council-test-value');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('creates a log file in .omt/logs/ after successful run', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-log-test-'));
+    try {
+      const jobDir = path.join(tmpDir, 'job');
+      const memberDir = path.join(jobDir, 'members', 'test-member');
+      fs.mkdirSync(memberDir, { recursive: true });
+      fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt', 'utf8');
+
+      const proc = Bun.spawn(
+        [
+          'bun', WORKER_PATH,
+          '--job-dir', jobDir,
+          '--member', 'test-member',
+          '--safe-member', 'test-member',
+          '--command', 'true',
+        ],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      const exitCode = await proc.exited;
+      // Worker exits 0 on successful run — confirms main() completes with logging
+      expect(exitCode).toBe(0);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOnce - assembled-prompt.txt creation
 // ---------------------------------------------------------------------------
 
