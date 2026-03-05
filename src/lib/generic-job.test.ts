@@ -1076,3 +1076,82 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].chairman.role).toBe('codex');
   });
 });
+
+// ---------------------------------------------------------------------------
+// spawnWorkers — name validation (whitelist regex)
+// ---------------------------------------------------------------------------
+
+describe('spawnWorkers 이름 유효성 검사', () => {
+  let tmpDir: string;
+  let originalExit: typeof process.exit;
+  let exitError: string | null;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    exitError = null;
+    // exitWithError calls process.exit(1) — intercept it
+    originalExit = process.exit;
+    (process as any).exit = (code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    };
+  });
+
+  afterEach(() => {
+    process.exit = originalExit;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function trySpawn(name: string): string | null {
+    try {
+      spawnWorkers({
+        entities: [{ name, command: 'echo test' }],
+        workerPath: '/nonexistent/worker.ts',
+        jobDir: tmpDir,
+        entitiesDir: path.join(tmpDir, 'members'),
+        timeoutSec: 30,
+        config: councilConfig,
+      });
+      return null;
+    } catch (e: any) {
+      return String(e.message || e);
+    }
+  }
+
+  test('"." 은 화이트리스트 거부', () => {
+    const err = trySpawn('.');
+    expect(err).not.toBeNull();
+  });
+
+  test('".." 은 화이트리스트 거부', () => {
+    const err = trySpawn('..');
+    expect(err).not.toBeNull();
+  });
+
+  test('"a b" (공백 포함) 은 화이트리스트 거부', () => {
+    const err = trySpawn('a b');
+    expect(err).not.toBeNull();
+  });
+
+  test('"test!" (특수문자 포함) 은 화이트리스트 거부', () => {
+    const err = trySpawn('test!');
+    expect(err).not.toBeNull();
+  });
+
+  test('"valid-name" 은 허용 (하이픈)', () => {
+    fs.mkdirSync(path.join(tmpDir, 'members'), { recursive: true });
+    const err = trySpawn('valid-name');
+    expect(err).toBeNull();
+  });
+
+  test('"valid_name" 은 허용 (언더스코어)', () => {
+    fs.mkdirSync(path.join(tmpDir, 'members'), { recursive: true });
+    const err = trySpawn('valid_name');
+    expect(err).toBeNull();
+  });
+
+  test('"validName123" 은 허용 (영문+숫자)', () => {
+    fs.mkdirSync(path.join(tmpDir, 'members'), { recursive: true });
+    const err = trySpawn('validName123');
+    expect(err).toBeNull();
+  });
+});
