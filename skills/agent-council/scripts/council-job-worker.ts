@@ -3,6 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { initLogger, logInfo, logError, logStart, logEnd } from '../../../src/lib/logging';
+import { parseArgs, exitWithError } from '../../../src/lib/job-utils';
 import {
   splitCommand,
   atomicWriteJson,
@@ -13,41 +15,6 @@ import {
 } from '../../../lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
-
-// ---------------------------------------------------------------------------
-// Utility functions
-// ---------------------------------------------------------------------------
-
-function exitWithError(message) {
-  process.stderr.write(`${message}\n`);
-  process.exit(1);
-}
-
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const out = { _: [] };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (!a.startsWith('--')) {
-      out._.push(a);
-      continue;
-    }
-
-    const [key, rawValue] = a.split('=', 2);
-    if (rawValue != null) {
-      out[key.slice(2)] = rawValue;
-      continue;
-    }
-    const next = args[i + 1];
-    if (next == null || next.startsWith('--')) {
-      out[key.slice(2)] = true;
-      continue;
-    }
-    out[key.slice(2)] = next;
-    i++;
-  }
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // Backward-compatible wrappers (council uses member/safeMember/jobDir interface)
@@ -138,15 +105,38 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-  if (!jobDir) exitWithError('worker: missing --job-dir');
-  if (!member) exitWithError('worker: missing --member');
-  if (!safeMember) exitWithError('worker: missing --safe-member');
-  if (!command) exitWithError('worker: missing --command');
+  // Initialize persistent logging
+  const projectRoot = path.resolve(import.meta.dirname, '../../..');
+  const jobId = jobDir ? path.basename(String(jobDir)).replace(/^council-/, '') : 'unknown';
+  initLogger('council-job-worker', projectRoot, jobId);
+  logStart();
 
-  const promptPath = path.join(jobDir, 'prompt.txt');
+  // Parse --env args: collect KEY=VALUE pairs
+  const workerEnv: Record<string, string> = {};
+  const rawArgs = process.argv.slice(2);
+  for (let i = 0; i < rawArgs.length; i++) {
+    if (rawArgs[i] === '--env' && i + 1 < rawArgs.length) {
+      const eqIdx = rawArgs[i + 1].indexOf('=');
+      if (eqIdx > 0) {
+        workerEnv[rawArgs[i + 1].slice(0, eqIdx)] = rawArgs[i + 1].slice(eqIdx + 1);
+      }
+      i++;
+    }
+  }
+
+  if (!jobDir) { logError('missing --job-dir'); logEnd(); exitWithError('worker: missing --job-dir'); }
+  if (!member) { logError('missing --member'); logEnd(); exitWithError('worker: missing --member'); }
+  if (!safeMember) { logError('missing --safe-member'); logEnd(); exitWithError('worker: missing --safe-member'); }
+  if (!command) { logError('missing --command'); logEnd(); exitWithError('worker: missing --command'); }
+
+  logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
+
+  const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  runWithRetry({ command, prompt, member, safeMember, jobDir, timeoutSec }).then((result) => {
+  runWithRetry({ command: command as string, prompt, member: member as string, safeMember: safeMember as string, jobDir: jobDir as string, timeoutSec, workerEnv }).then((result) => {
+    logInfo(`worker done: member=${member} state=${result.state}`);
+    logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });
 }
