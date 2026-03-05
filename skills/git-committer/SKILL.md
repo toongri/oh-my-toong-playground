@@ -208,6 +208,9 @@ If any match → Unstage them before proceeding.
 - Code restructured without behavior change → `refactor`
 - Only tests → `test`
 - Only docs → `docs`
+  - **기능 vs 문서 판단**: "시스템 동작을 정의하면 기능, 인간 독자를 위한 참조/공유 정보면 문서"
+  - 기능적 파일 (SKILL.md, agents/*.md, rules/*.md, hooks/*) 변경 → `feat`/`fix`/`refactor`
+  - 문서 파일 (README.md, API 명세서, 가이드) 변경 → `docs`
 - Build/config → `chore`
 - Performance → `perf`
 
