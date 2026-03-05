@@ -1188,6 +1188,11 @@ sync_plugins() {
     local count=$(yq '.plugins.items | length // 0' "$yaml_file")
     log_info "Plugins 동기화 시작 ($count 개)"
 
+    local plugin_scope="user"
+    if [[ -n "$CURRENT_PROJECT_NAME" ]]; then
+        plugin_scope="project"
+    fi
+
     for i in $(seq 0 $((count - 1))); do
         # Extract plugin name (string → name directly, object → .name field)
         local item_type=$(yq ".plugins.items[$i] | type" "$yaml_file")
@@ -1218,7 +1223,7 @@ sync_plugins() {
         for target in $(echo "$item_platforms" | jq -r '.[]'); do
             case "$target" in
                 claude)
-                    claude_sync_plugin_install "$plugin_name" "$DRY_RUN"
+                    claude_sync_plugin_install "$plugin_name" "$plugin_scope" "$target_path" "$DRY_RUN"
                     ;;
                 gemini|codex)
                     log_warn "plugins는 ${target}에서 지원되지 않습니다. 스킵: $plugin_name"

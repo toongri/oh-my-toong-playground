@@ -291,7 +291,7 @@ EOF
 test_plugin_dry_run() {
     # dry-run outputs "claude plugin install" log without actually running
     local output
-    output=$(claude_sync_plugin_install "my-awesome-plugin" "true" 2>&1)
+    output=$(claude_sync_plugin_install "my-awesome-plugin" "user" "" "true" 2>&1)
 
     # Output should contain dry-run marker with plugin name
     if echo "$output" | grep -qi "DRY-RUN.*plugin.*my-awesome-plugin\|DRY-RUN.*my-awesome-plugin"; then
@@ -305,12 +305,38 @@ test_plugin_dry_run() {
 test_plugin_string_shorthand() {
     # string item works as plugin name (test the dry-run path only)
     local output
-    output=$(claude_sync_plugin_install "string-shorthand-plugin" "true" 2>&1)
+    output=$(claude_sync_plugin_install "string-shorthand-plugin" "user" "" "true" 2>&1)
 
     if echo "$output" | grep -q "string-shorthand-plugin"; then
         return 0
     else
         echo "ASSERTION FAILED: Output should contain plugin name, got: $output"
+        return 1
+    fi
+}
+
+test_plugin_scope_user() {
+    # dry-run output contains --scope user when scope is user
+    local output
+    output=$(claude_sync_plugin_install "my-awesome-plugin" "user" "" "true" 2>&1)
+
+    if echo "$output" | grep -q "\-\-scope user"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Dry-run output should contain '--scope user', got: $output"
+        return 1
+    fi
+}
+
+test_plugin_scope_project() {
+    # dry-run output contains --scope project when scope is project
+    local output
+    output=$(claude_sync_plugin_install "my-awesome-plugin" "project" "$TEST_TMP_DIR/target" "true" 2>&1)
+
+    if echo "$output" | grep -q "\-\-scope project"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: Dry-run output should contain '--scope project', got: $output"
         return 1
     fi
 }
@@ -494,6 +520,8 @@ main() {
     # Plugin Tests
     run_test test_plugin_dry_run
     run_test test_plugin_string_shorthand
+    run_test test_plugin_scope_user
+    run_test test_plugin_scope_project
 
     # Config Tests
     run_test test_config_claude_settings_local
