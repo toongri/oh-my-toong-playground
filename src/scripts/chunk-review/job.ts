@@ -190,7 +190,7 @@ function cmdClean(options: Record<string, unknown>, jobDir: string): void {
   initLoggerFromJobDir(jobDir);
   logInfo(`clean: ${path.resolve(jobDir)}`);
   const configuredJobsDir = path.resolve(
-    (options['jobs-dir'] as string | undefined) || DEFAULT_JOBS_DIR,
+    (options['jobs-dir'] as string | undefined) || process.env.CHUNK_REVIEW_JOBS_DIR || DEFAULT_JOBS_DIR,
   );
   _cmdClean(options, jobDir, CHUNK_REVIEW_JOB_CONFIG, configuredJobsDir);
 }

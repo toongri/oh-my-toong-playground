@@ -28,10 +28,6 @@ import {
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
   gcStaleJobs,
-  buildAugmentedCommand,
-  detectCliType,
-  parseYamlSimple as _parseYamlSimple,
-  buildManifest,
 } from '../../../lib/generic-job';
 
 // ---------------------------------------------------------------------------

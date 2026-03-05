@@ -184,13 +184,12 @@ export function spawnWorkers({
   config: JobConfig;
 }): void {
   // Validate names and detect case-insensitive collisions before spawning
-  const namePattern = /\s|[\/!$&|;><()'"\\\`]/;
   const seenLower = new Map<string, string>();
   for (const entity of entities) {
     const name = String(entity.name);
-    if (namePattern.test(name)) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
       exitWithError(
-        `start: ${config.entitySingular} name contains invalid characters: "${name}"`,
+        `start: ${config.entitySingular} name must contain only alphanumeric, underscore, or hyphen characters: "${name}"`,
       );
     }
     const lower = name.toLowerCase();
