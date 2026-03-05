@@ -331,6 +331,10 @@ Reviewers may fail due to CLI unavailability, timeout, or errors. This is NOT qu
 - In Divergence section, note which model's perspective is absent and what gap this may create (referencing Model Characteristics)
 - Do NOT extrapolate what the missing model "would have said"
 
+## Long Context Discipline
+
+Volume of context does NOT change input handling. Context is reference material — don't invent scope from it. Follow input handling regardless of how much you've read.
+
 ## Termination
 
 After outputting the advisory, your task is **COMPLETE**. Do NOT run any additional tools. Return the advisory and stop.
