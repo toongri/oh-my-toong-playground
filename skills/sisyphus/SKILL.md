@@ -323,7 +323,7 @@ digraph task_loop {
 - Delegate each task per the Do vs Delegate Decision Matrix
 - sisyphus-junior path: each junior completion → immediately invoke argus for QA
 - sisyphus-junior path: each argus approval → immediately invoke mnemosyne to commit
-- argus direct path: each argus completion → immediately mark completed (no mnemosyne — no code changes to commit)
+- argus direct path: each argus approval → immediately mark completed (no mnemosyne — no code changes to commit)
 - After marking task completed, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
 
 ---
@@ -557,7 +557,10 @@ All verification requests to argus use the QA REQUEST format:
 # QA REQUEST
 
 ## Spec
-[Verification criteria — see recipes below for what goes here]
+[WHAT to verify — requirements, criteria, constraints — see recipes below for what goes here]
+
+## Required Verification
+[HOW to verify — verification commands, QA scenarios to execute, evidence to collect — see recipes below for what goes here]
 
 ## Scope
 - Changed files:
@@ -571,18 +574,21 @@ All verification requests to argus use the QA REQUEST format:
 
 Compose the QA REQUEST from the 7-Section delegation prompt:
 - Put the full 7-Section prompt content under `## Spec` (each section becomes a `###` heading)
+- Put the EXPECTED OUTCOME verification commands and MUST DO assertions under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
 
 **Recipe 2: After task completion (plan-based)**
 
 Compose the QA REQUEST from the relevant plan TODO:
 - Put the TODO's spec content (What to do, Must NOT do, Acceptance Criteria, QA Scenarios) under `## Spec`
+- Put the TODO's QA Scenarios and Acceptance Criteria verification methods under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
 
 **Recipe 3: AC/QA Scenario verification with explicit methods**
 
 When acceptance criteria and QA scenarios are explicitly provided:
 - Put acceptance criteria and QA scenarios verbatim under `## Spec`
+- Put QA scenarios verbatim under `## Required Verification` — they ARE the required verification
 - List changed files and summary under `## Scope`
 
 ### Invocation Rules
