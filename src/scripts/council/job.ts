@@ -47,6 +47,7 @@ const COUNCIL_CONFIG: JobConfig = {
 };
 
 const SCRIPT_DIR = import.meta.dirname;
+const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../../..');
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '../../skills/agent-council');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
@@ -249,14 +250,14 @@ function printHelp() {
   process.stdout.write(`Agent Council (job mode)
 
 Usage:
-  council-job.sh start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
-  council-job.sh start --stdin
-  council-job.sh status [--json|--text|--checklist] [--verbose] <jobDir>
-  council-job.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
-  council-job.sh collect [--timeout-ms N] <jobDir>
-  council-job.sh results [--json] <jobDir>
-  council-job.sh stop <jobDir>
-  council-job.sh clean <jobDir>
+  job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  job.ts start --stdin
+  job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
+  job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  job.ts collect [--timeout-ms N] <jobDir>
+  job.ts results [--json] <jobDir>
+  job.ts stop <jobDir>
+  job.ts clean <jobDir>
 
 Notes:
   - start returns immediately and runs members in parallel via detached Node workers
@@ -312,7 +313,7 @@ async function cmdStatus(options, jobDir) {
 async function cmdStart(options, prompt) {
   const configPath = options.config || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(SKILL_DIR, '.jobs');
+    options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, COUNCIL_CONFIG);
@@ -447,7 +448,7 @@ async function main() {
     if (!jobDir) exitWithError('clean: missing jobDir');
     const defaultJobsDir = options['jobs-dir'] as string | undefined
       || process.env.COUNCIL_JOBS_DIR
-      || path.join(SKILL_DIR, '.jobs');
+      || path.join(PROJECT_ROOT, '.omt', 'jobs');
     frameworkCmdClean(options, jobDir, COUNCIL_CONFIG, defaultJobsDir);
     return;
   }

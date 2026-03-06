@@ -213,7 +213,7 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
         { name: 'codex', command: 'codex exec', emoji: '\u{1F916}', color: 'BLUE' },
         { name: 'gemini', command: 'gemini', emoji: '\u{1F48E}', color: 'GREEN' },
       ],
-      settings: { exclude_chairman_from_reviewers: true, timeout: 300 },
+      settings: { exclude_chairman_from_members: true, timeout: 300 },
     },
   };
 
@@ -286,14 +286,14 @@ function printHelp(): void {
   process.stdout.write(`Chunk Review (job mode)
 
 Usage:
-  .claude/scripts/chunk-review/job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
-  .claude/scripts/chunk-review/job.ts start --stdin
-  .claude/scripts/chunk-review/job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
-  .claude/scripts/chunk-review/job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
-  .claude/scripts/chunk-review/job.ts collect [--timeout-ms N] <jobDir>
-  .claude/scripts/chunk-review/job.ts results [--json|--manifest] <jobDir>
-  .claude/scripts/chunk-review/job.ts stop <jobDir>
-  .claude/scripts/chunk-review/job.ts clean <jobDir>
+  job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
+  job.ts start --stdin
+  job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
+  job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  job.ts collect [--timeout-ms N] <jobDir>
+  job.ts results [--json|--manifest] <jobDir>
+  job.ts stop <jobDir>
+  job.ts clean <jobDir>
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
@@ -320,8 +320,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const excludeChairmanOverride =
     options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : includeChairmanValue === true ? false : null;
 
-  const excludeSetting = normalizeBool(config['chunk-review'].settings.exclude_chairman_from_reviewers);
-  const excludeChairmanFromReviewers =
+  const excludeSetting = normalizeBool(config['chunk-review'].settings.exclude_chairman_from_members);
+  const excludeChairmanFromMembers =
     excludeChairmanOverride != null ? excludeChairmanOverride : excludeSetting != null ? excludeSetting : true;
 
   const timeoutSetting = Number(config['chunk-review'].settings.timeout || 0);
@@ -332,7 +332,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const members = requestedMembers.filter((r: any) => {
     if (!r || !r.name || !r.command) return false;
     const nameLc = String(r.name).toLowerCase();
-    if (excludeChairmanFromReviewers && !includeChairman && nameLc === chairmanRole) return false;
+    if (excludeChairmanFromMembers && !includeChairman && nameLc === chairmanRole) return false;
     return true;
   });
 
@@ -357,7 +357,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
     hostRole,
     chairmanRole,
     settings: {
-      excludeChairmanFromReviewers,
+      excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
     },
     members: members.map((r: any) => ({
