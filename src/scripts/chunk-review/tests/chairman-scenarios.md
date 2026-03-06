@@ -244,17 +244,17 @@
 
 **Description**: All three reviewers complete successfully. The Chairman must start the job, collect until done (manifest JSON returned directly), read each reviewer's `outputFilePath`, and proceed to aggregation.
 
-**Setup/Given**: `bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` creates a job and returns the JOB_DIR path. `collect "$JOB_DIR"` polls internally (5s interval) and returns done manifest JSON with 3 reviewers, all with non-null `outputFilePath` paths pointing to job directory `output.txt` files.
+**Setup/Given**: `SCRIPTS_DIR=$(ls -d .{claude,gemini,codex,opencode}/scripts 2>/dev/null | head -1)` then `bun $SCRIPTS_DIR/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` creates a job and returns the JOB_DIR path. `collect "$JOB_DIR"` polls internally (5s interval) and returns done manifest JSON with 3 reviewers, all with non-null `outputFilePath` paths pointing to job directory `output.txt` files.
 
 **Manifest JSON (collect stdout when done)**:
 ```json
 {
   "overallState": "done",
   "id": "job-test-ma1",
-  "reviewers": [
-    { "reviewer": "claude", "outputFilePath": ".omt/jobs/job-test-ma1/reviewers/claude-0/output.txt", "errorMessage": null },
-    { "reviewer": "codex", "outputFilePath": ".omt/jobs/job-test-ma1/reviewers/codex-0/output.txt", "errorMessage": null },
-    { "reviewer": "gemini", "outputFilePath": ".omt/jobs/job-test-ma1/reviewers/gemini-0/output.txt", "errorMessage": null }
+  "members": [
+    { "member": "claude", "outputFilePath": ".omt/jobs/job-test-ma1/members/claude-0/output.txt", "errorMessage": null },
+    { "member": "codex", "outputFilePath": ".omt/jobs/job-test-ma1/members/codex-0/output.txt", "errorMessage": null },
+    { "member": "gemini", "outputFilePath": ".omt/jobs/job-test-ma1/members/gemini-0/output.txt", "errorMessage": null }
   ]
 }
 ```
@@ -284,10 +284,10 @@
 {
   "overallState": "done",
   "id": "job-test-ma2",
-  "reviewers": [
-    { "reviewer": "claude", "outputFilePath": ".omt/jobs/job-test-ma2/reviewers/claude-0/output.txt", "errorMessage": null },
-    { "reviewer": "codex", "outputFilePath": ".omt/jobs/job-test-ma2/reviewers/codex-0/output.txt", "errorMessage": null },
-    { "reviewer": "gemini", "outputFilePath": null, "errorMessage": "NON_RETRYABLE: TerminalQuotaError" }
+  "members": [
+    { "member": "claude", "outputFilePath": ".omt/jobs/job-test-ma2/members/claude-0/output.txt", "errorMessage": null },
+    { "member": "codex", "outputFilePath": ".omt/jobs/job-test-ma2/members/codex-0/output.txt", "errorMessage": null },
+    { "member": "gemini", "outputFilePath": null, "errorMessage": "NON_RETRYABLE: TerminalQuotaError" }
   ]
 }
 ```
@@ -317,10 +317,10 @@
 {
   "overallState": "done",
   "id": "job-test-ma3",
-  "reviewers": [
-    { "reviewer": "claude", "outputFilePath": null, "errorMessage": "Process exited with code 1" },
-    { "reviewer": "codex", "outputFilePath": null, "errorMessage": "Timed out after 480s" },
-    { "reviewer": "gemini", "outputFilePath": null, "errorMessage": "NON_RETRYABLE: TerminalQuotaError" }
+  "members": [
+    { "member": "claude", "outputFilePath": null, "errorMessage": "Process exited with code 1" },
+    { "member": "codex", "outputFilePath": null, "errorMessage": "Timed out after 480s" },
+    { "member": "gemini", "outputFilePath": null, "errorMessage": "NON_RETRYABLE: TerminalQuotaError" }
   ]
 }
 ```

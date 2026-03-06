@@ -16,6 +16,7 @@ import { spawn, type ChildProcess } from 'child_process';
 
 export const MAX_RETRIES = 1;
 export const BASE_DELAY_MS = 1000;
+export const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export const NON_RETRYABLE_PATTERNS: string[] = [
   'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
@@ -179,8 +180,8 @@ export interface RunOnceOpts {
   program: string;
   args: string[];
   prompt: string;
-  reviewer: string;
-  reviewerDir: string;
+  member: string;
+  memberDir: string;
   command: string;
   timeoutSec: number;
   attempt: number;
@@ -189,6 +190,7 @@ export interface RunOnceOpts {
   workerEnv?: Record<string, string>;
   fallbackFile?: string;
   reviewContent?: string;
+  heartbeatIntervalMs?: number;
 }
 
 /**
@@ -197,30 +199,30 @@ export interface RunOnceOpts {
  */
 export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
   const {
-    program, args, prompt, reviewer, reviewerDir, command,
+    program, args, prompt, member, memberDir, command,
     timeoutSec, attempt, spawnFn = spawn, promptsDir, workerEnv,
-    fallbackFile, reviewContent,
+    fallbackFile, reviewContent, heartbeatIntervalMs = HEARTBEAT_INTERVAL_MS,
   } = opts;
 
   // Prompt assembly: attempt structured prompt from role files
   let stdinPrompt = prompt;
   if (promptsDir) {
     const { assembled, isStructured } = assemblePrompt({
-      promptsDir, entityName: reviewer, rawPrompt: prompt, reviewContent, fallbackFile,
+      promptsDir, entityName: member, rawPrompt: prompt, reviewContent, fallbackFile,
     });
     if (isStructured) {
       stdinPrompt = assembled;
-      fs.writeFileSync(path.join(reviewerDir, 'assembled-prompt.txt'), assembled, 'utf8');
+      fs.writeFileSync(path.join(memberDir, 'assembled-prompt.txt'), assembled, 'utf8');
     }
   }
 
-  const statusPath = path.join(reviewerDir, 'status.json');
-  const outPath = path.join(reviewerDir, 'output.txt');
-  const errPath = path.join(reviewerDir, 'error.txt');
+  const statusPath = path.join(memberDir, 'status.json');
+  const outPath = path.join(memberDir, 'output.txt');
+  const errPath = path.join(memberDir, 'error.txt');
 
   return new Promise((resolve) => {
     atomicWriteJson(statusPath, {
-      reviewer, state: 'running', startedAt: new Date().toISOString(),
+      member, state: 'running', startedAt: new Date().toISOString(),
       command, pid: null, attempt,
     });
 
@@ -238,7 +240,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     } catch (error: unknown) {
       const err = error as Error | undefined;
       const result = {
-        reviewer, state: 'error',
+        member, state: 'error',
         message: err && err.message ? err.message : 'Failed to spawn command',
         finishedAt: new Date().toISOString(), command, attempt,
       };
@@ -268,10 +270,19 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 
     try {
       atomicWriteJson(statusPath, {
-        reviewer, state: 'running', startedAt: new Date().toISOString(),
+        member, state: 'running', startedAt: new Date().toISOString(),
         command, pid: child.pid, attempt,
       });
     } catch { /* ignore */ }
+
+    let heartbeatHandle: ReturnType<typeof setInterval> | null = setInterval(() => {
+      try {
+        const current = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+        if (current.state !== 'running') return;
+        atomicWriteJson(statusPath, { ...current, lastHeartbeat: new Date().toISOString() });
+      } catch { /* ignore */ }
+    }, heartbeatIntervalMs);
+    heartbeatHandle.unref();
 
     // Write attempt separator before piping output (preserves previous attempts)
     if (attempt > 0) {
@@ -302,6 +313,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     const finalize = (payload: Record<string, unknown>) => {
       if (finalized) return;
       finalized = true;
+      if (heartbeatHandle) { clearInterval(heartbeatHandle); heartbeatHandle = null; }
       try { atomicWriteJson(statusPath, payload); } catch { /* ignore */ }
       let closed = 0;
       const total = 2;
@@ -323,7 +335,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       const isMissing = error && error.code === 'ENOENT';
       finalize({
-        reviewer, state: isMissing ? 'missing_cli' : 'error',
+        member, state: isMissing ? 'missing_cli' : 'error',
         message: error && error.message ? error.message : 'Process error',
         finishedAt: new Date().toISOString(), command,
         exitCode: null, pid: child.pid, attempt,
@@ -345,7 +357,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
       const timedOut = Boolean(timeoutTriggered);
       const canceled = !timedOut && exitSignal === 'SIGTERM';
       finalize({
-        reviewer,
+        member,
         state: timedOut ? 'timed_out' : canceled ? 'canceled' : exitCode === 0 ? 'done' : 'error',
         message: timedOut ? `Timed out after ${timeoutSec}s` : canceled ? 'Canceled' : null,
         finishedAt: new Date().toISOString(), command,
@@ -372,7 +384,7 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
   const { sleepFn = sleepMsAsync, ...runOpts } = opts;
   let result: Record<string, unknown> = {};
 
-  const errPath = path.join(runOpts.reviewerDir, 'error.txt');
+  const errPath = path.join(runOpts.memberDir, 'error.txt');
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     // Record current error.txt size so we only check NEW stderr from this attempt
@@ -405,7 +417,7 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
 
       if (isNonRetryable) {
         result.state = 'non_retryable';
-        atomicWriteJson(path.join(runOpts.reviewerDir, 'status.json'), {
+        atomicWriteJson(path.join(runOpts.memberDir, 'status.json'), {
           ...result, state: 'non_retryable',
         });
         return result;
@@ -418,8 +430,8 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
 
     if (attempt < MAX_RETRIES) {
       const delay = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * BASE_DELAY_MS;
-      atomicWriteJson(path.join(runOpts.reviewerDir, 'status.json'), {
-        reviewer: runOpts.reviewer,
+      atomicWriteJson(path.join(runOpts.memberDir, 'status.json'), {
+        member: runOpts.member,
         state: 'retrying',
         attempt: attempt + 1,
         message: `Retrying after attempt ${attempt} failure`,

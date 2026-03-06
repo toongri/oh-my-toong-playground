@@ -1,5 +1,5 @@
 chunk-review:
-  reviewers:
+  members:
     # --- Security Model ---
     # Reviewer CLIs operate on TRUSTED code only (local git working tree).
     # Claude: --allowedTools restricts to read-only tools (Bash for git diff, Read/Glob/Grep for files).
@@ -38,4 +38,4 @@ chunk-review:
     # When true, the chairman model (claude) is excluded from the external reviewer list
     # to avoid reviewing its own orchestration output. CLI flags --exclude-chairman /
     # --include-chairman override this value. (Used in chunk-review-job.js)
-    exclude_chairman_from_reviewers: false
+    exclude_chairman_from_members: false

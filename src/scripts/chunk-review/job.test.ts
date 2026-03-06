@@ -34,10 +34,10 @@ describe('parseYamlSimple', () => {
   const fallback = {
     'chunk-review': {
       chairman: { role: 'auto' },
-      reviewers: [
+      members: [
         { name: 'claude', command: 'claude -p', emoji: '\u{1F9E0}', color: 'CYAN' },
       ],
-      settings: { exclude_chairman_from_reviewers: true, timeout: 300 },
+      settings: { exclude_chairman_from_members: true, timeout: 300 },
     },
   };
 
@@ -60,21 +60,21 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].chairman.role).toBe('gemini');
   });
 
-  test('parses reviewers array with multiple entries', () => {
+  test('parses members array with multiple entries', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
-      '  reviewers:',
+      '  members:',
       '    - name: alice',
       '      command: alice-cli',
       '    - name: bob',
       '      command: bob-cli',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].reviewers.length).toBe(2);
-    expect(result['chunk-review'].reviewers[0].name).toBe('alice');
-    expect(result['chunk-review'].reviewers[0].command).toBe('alice-cli');
-    expect(result['chunk-review'].reviewers[1].name).toBe('bob');
+    expect(result['chunk-review'].members.length).toBe(2);
+    expect(result['chunk-review'].members[0].name).toBe('alice');
+    expect(result['chunk-review'].members[0].command).toBe('alice-cli');
+    expect(result['chunk-review'].members[1].name).toBe('bob');
   });
 
   test('parses settings section with type coercion', () => {
@@ -83,11 +83,11 @@ describe('parseYamlSimple', () => {
       'chunk-review:',
       '  settings:',
       '    timeout: 300',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
     expect(result['chunk-review'].settings.timeout).toBe(300);
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(false);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(false);
   });
 
   test('skips comment lines', () => {
@@ -103,7 +103,7 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].chairman.role).toBe('codex');
   });
 
-  test('falls back to default reviewers when none defined', () => {
+  test('falls back to default members when none defined', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
@@ -111,7 +111,7 @@ describe('parseYamlSimple', () => {
       '    role: auto',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].reviewers).toEqual(fallback['chunk-review'].reviewers);
+    expect(result['chunk-review'].members).toEqual(fallback['chunk-review'].members);
   });
 
   test('returns fallback on read error (non-existent file)', () => {
@@ -131,7 +131,7 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].chairman.role).toBe('auto');
   });
 
-  test('handles "members:" as alias for reviewers section', () => {
+  test('parses members: section correctly', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
@@ -140,20 +140,20 @@ describe('parseYamlSimple', () => {
       '      command: alice-cli',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].reviewers.length).toBe(1);
-    expect(result['chunk-review'].reviewers[0].name).toBe('alice');
+    expect(result['chunk-review'].members.length).toBe(1);
+    expect(result['chunk-review'].members[0].name).toBe('alice');
   });
 
-  test('strips quotes from reviewer name values', () => {
+  test('strips quotes from member name values', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
-      '  reviewers:',
+      '  members:',
       '    - name: "quoted-name"',
       '      command: some-cmd',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].reviewers[0].name).toBe('quoted-name');
+    expect(result['chunk-review'].members[0].name).toBe('quoted-name');
   });
 
   test('skips empty lines', () => {
@@ -193,18 +193,18 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].settings['exclude-chairman']).toBe(true);
   });
 
-  test('parses hyphen keys in reviewer properties', () => {
+  test('parses hyphen keys in member properties', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
-      '  reviewers:',
+      '  members:',
       '    - name: alice',
       '      effort-level: high',
       '      output-format: json',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].reviewers[0]['effort-level']).toBe('high');
-    expect(result['chunk-review'].reviewers[0]['output-format']).toBe('json');
+    expect(result['chunk-review'].members[0]['effort-level']).toBe('high');
+    expect(result['chunk-review'].members[0]['output-format']).toBe('json');
   });
 
   test('parses values containing colons', () => {
@@ -213,13 +213,13 @@ describe('parseYamlSimple', () => {
       'chunk-review:',
       '  chairman:',
       '    command: gemini --flag=value:123',
-      '  reviewers:',
+      '  members:',
       '    - name: alice',
       '      command: claude --endpoint=http://localhost:8080',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
     expect(result['chunk-review'].chairman.command).toBe('gemini --flag=value:123');
-    expect(result['chunk-review'].reviewers[0].command).toBe('claude --endpoint=http://localhost:8080');
+    expect(result['chunk-review'].members[0].command).toBe('claude --endpoint=http://localhost:8080');
   });
 });
 
@@ -241,14 +241,14 @@ describe('parseChunkReviewConfig', () => {
   test('returns fallback when config file does not exist', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'missing.yaml'));
     expect(result['chunk-review']).toBeTruthy();
-    expect(Array.isArray(result['chunk-review'].reviewers)).toBeTruthy();
-    expect(result['chunk-review'].reviewers.length > 0).toBeTruthy();
+    expect(Array.isArray(result['chunk-review'].members)).toBeTruthy();
+    expect(result['chunk-review'].members.length > 0).toBeTruthy();
     expect(result['chunk-review'].chairman.role).toBe('auto');
   });
 
-  test('fallback contains default reviewers (claude, codex, gemini)', async () => {
+  test('fallback contains default members (claude, codex, gemini)', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    const names = result['chunk-review'].reviewers.map(r => r.name);
+    const names = result['chunk-review'].members.map(r => r.name);
     expect(names.includes('claude')).toBeTruthy();
     expect(names.includes('codex')).toBeTruthy();
     expect(names.includes('gemini')).toBeTruthy();
@@ -256,7 +256,7 @@ describe('parseChunkReviewConfig', () => {
 
   test('fallback contains default settings', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(true);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(true);
     expect(result['chunk-review'].settings.timeout).toBe(300);
   });
 
@@ -266,7 +266,7 @@ describe('parseChunkReviewConfig', () => {
       'chunk-review:',
       '  chairman:',
       '    role: gemini',
-      '  reviewers:',
+      '  members:',
       '    - name: alice',
       '      command: alice-cli',
       '  settings:',
@@ -274,8 +274,8 @@ describe('parseChunkReviewConfig', () => {
     ].join('\n'));
     const result = await parseChunkReviewConfig(configPath);
     expect(result['chunk-review'].chairman.role).toBe('gemini');
-    expect(result['chunk-review'].reviewers.length).toBe(1);
-    expect(result['chunk-review'].reviewers[0].name).toBe('alice');
+    expect(result['chunk-review'].members.length).toBe(1);
+    expect(result['chunk-review'].members[0].name).toBe('alice');
     expect(result['chunk-review'].settings.timeout).toBe(600);
   });
 
@@ -288,7 +288,7 @@ describe('parseChunkReviewConfig', () => {
     ].join('\n'));
     const result = await parseChunkReviewConfig(configPath);
     expect(result['chunk-review'].settings.timeout).toBe(999);
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(true);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(true);
   });
 
   test('returns structure with chunk-review top-level key', async () => {
@@ -307,7 +307,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0, error: 0 },
-      reviewers: [{ reviewer: 'alice', state: 'done', exitCode: 0 }],
+      members: [{ member: 'alice', state: 'done', exitCode: 0 }],
     };
     const result = buildUiPayload(payload);
     expect(result.progress).toBeTruthy();
@@ -319,10 +319,10 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 3, done: 1, error: 1, queued: 0, running: 1, missing_cli: 0, timed_out: 0, canceled: 0 },
-      reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'error' },
-        { reviewer: 'carol', state: 'running' },
+      members: [
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'error' },
+        { member: 'carol', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -334,9 +334,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
-      reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'running' },
+      members: [
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -347,9 +347,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
-      reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'queued' },
+      members: [
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'queued' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -360,10 +360,10 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 3, done: 1, error: 1, missing_cli: 1, queued: 0, running: 0 },
-      reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'error' },
-        { reviewer: 'carol', state: 'missing_cli' },
+      members: [
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'error' },
+        { member: 'carol', state: 'missing_cli' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -377,9 +377,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 0, running: 2 },
-      reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'running' },
+      members: [
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -392,7 +392,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 0, done: 0, queued: 0, running: 0 },
-      reviewers: [],
+      members: [],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.done).toBe(0);
@@ -404,9 +404,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 2, done: 2, queued: 0, running: 0, error: 0, missing_cli: 0, timed_out: 0, canceled: 0 },
-      reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'done' },
+      members: [
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'done' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -419,9 +419,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 2, done: 0, queued: 0, running: 0, error: 2 },
-      reviewers: [
-        { reviewer: 'alice', state: 'error' },
-        { reviewer: 'bob', state: 'error' },
+      members: [
+        { member: 'alice', state: 'error' },
+        { member: 'bob', state: 'error' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -434,9 +434,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 1, queued: 0, running: 1 },
-      reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: 'bob', state: 'running' },
+      members: [
+        { member: 'alice', state: 'done' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -449,7 +449,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 1, done: 1, queued: 0, running: 0 },
-      reviewers: [{ reviewer: 'alice', state: 'done' }],
+      members: [{ member: 'alice', state: 'done' }],
     };
     const result = buildUiPayload(payload);
     for (const todo of result.claude.todo_write.todos) {
@@ -463,7 +463,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      members: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload);
     const reviewerStep = result.codex.update_plan.plan[1];
@@ -474,10 +474,10 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 3, done: 0, queued: 0, running: 3 },
-      reviewers: [
-        { reviewer: 'carol', state: 'running' },
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'running' },
+      members: [
+        { member: 'carol', state: 'running' },
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'running' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -491,9 +491,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'done',
       counts: { total: 2, done: 1, queued: 0, running: 0 },
-      reviewers: [
-        { reviewer: 'alice', state: 'done' },
-        { reviewer: null, state: 'done' },
+      members: [
+        { member: 'alice', state: 'done' },
+        { member: null, state: 'done' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -504,7 +504,7 @@ describe('buildUiPayload', () => {
   test('handles missing counts gracefully', () => {
     const payload = {
       overallState: 'done',
-      reviewers: [],
+      members: [],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.done).toBe(0);
@@ -524,9 +524,9 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 2, done: 0, queued: 1, running: 1 },
-      reviewers: [
-        { reviewer: 'alice', state: 'running' },
-        { reviewer: 'bob', state: 'queued' },
+      members: [
+        { member: 'alice', state: 'running' },
+        { member: 'bob', state: 'queued' },
       ],
     };
     const result = buildUiPayload(payload);
@@ -539,7 +539,7 @@ describe('buildUiPayload', () => {
     const payload = {
       overallState: 'running',
       counts: { total: 1, done: 0, queued: 0, running: 1 },
-      reviewers: [{ reviewer: 'alice', state: 'running' }],
+      members: [{ member: 'alice', state: 'running' }],
     };
     const result = buildUiPayload(payload);
     expect(result.progress.overallState).toBe('running');
@@ -553,13 +553,13 @@ describe('buildUiPayload', () => {
 describe('computeStatus', () => {
   let tmpDir;
 
-  function setupJob(jobDir, jobJson, reviewers) {
+  function setupJob(jobDir, jobJson, members) {
     fs.mkdirSync(jobDir, { recursive: true });
     fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(jobJson));
-    const reviewersDir = path.join(jobDir, 'reviewers');
-    fs.mkdirSync(reviewersDir, { recursive: true });
-    for (const [name, status] of Object.entries(reviewers)) {
-      const dir = path.join(reviewersDir, name);
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, status] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
     }
@@ -576,8 +576,8 @@ describe('computeStatus', () => {
   test('returns done overallState when all reviewers are terminal', async () => {
     const jobDir = path.join(tmpDir, 'job1');
     setupJob(jobDir, { id: 'test-1' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
@@ -589,8 +589,8 @@ describe('computeStatus', () => {
   test('returns running overallState when some reviewers are running', async () => {
     const jobDir = path.join(tmpDir, 'job2');
     setupJob(jobDir, { id: 'test-2' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'running' },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'running' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
@@ -601,7 +601,7 @@ describe('computeStatus', () => {
   test('returns queued overallState when only queued (no running)', async () => {
     const jobDir = path.join(tmpDir, 'job3');
     setupJob(jobDir, { id: 'test-3' }, {
-      alice: { reviewer: 'alice', state: 'queued' },
+      alice: { member: 'alice', state: 'queued' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('queued');
@@ -611,9 +611,9 @@ describe('computeStatus', () => {
   test('counts error states correctly', async () => {
     const jobDir = path.join(tmpDir, 'job4');
     setupJob(jobDir, { id: 'test-4' }, {
-      alice: { reviewer: 'alice', state: 'error', exitCode: 1 },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
-      carol: { reviewer: 'carol', state: 'missing_cli' },
+      alice: { member: 'alice', state: 'error', exitCode: 1 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
+      carol: { member: 'carol', state: 'missing_cli' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('done');
@@ -625,32 +625,32 @@ describe('computeStatus', () => {
   test('skips reviewer directories without status.json', async () => {
     const jobDir = path.join(tmpDir, 'job7');
     setupJob(jobDir, { id: 'test-7' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
-    fs.mkdirSync(path.join(jobDir, 'reviewers', 'bob'));
+    fs.mkdirSync(path.join(jobDir, 'members', 'bob'));
     const result = await computeStatus(jobDir);
     expect(result.counts.total).toBe(1);
-    expect(result.reviewers.length).toBe(1);
+    expect(result.members.length).toBe(1);
   });
 
   test('sorts reviewers alphabetically by name', async () => {
     const jobDir = path.join(tmpDir, 'job8');
     setupJob(jobDir, { id: 'test-8' }, {
-      carol: { reviewer: 'carol', state: 'done' },
-      alice: { reviewer: 'alice', state: 'done' },
-      bob: { reviewer: 'bob', state: 'done' },
+      carol: { member: 'carol', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
+      bob: { member: 'bob', state: 'done' },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].reviewer).toBe('alice');
-    expect(result.reviewers[1].reviewer).toBe('bob');
-    expect(result.reviewers[2].reviewer).toBe('carol');
+    expect(result.members[0].member).toBe('alice');
+    expect(result.members[1].member).toBe('bob');
+    expect(result.members[2].member).toBe('carol');
   });
 
   test('includes reviewer metadata (startedAt, finishedAt, exitCode, message)', async () => {
     const jobDir = path.join(tmpDir, 'job9');
     setupJob(jobDir, { id: 'test-9' }, {
       alice: {
-        reviewer: 'alice',
+        member: 'alice',
         state: 'done',
         startedAt: '2026-01-01T00:00:00Z',
         finishedAt: '2026-01-01T00:01:00Z',
@@ -659,28 +659,28 @@ describe('computeStatus', () => {
       },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].startedAt).toBe('2026-01-01T00:00:00Z');
-    expect(result.reviewers[0].finishedAt).toBe('2026-01-01T00:01:00Z');
-    expect(result.reviewers[0].exitCode).toBe(0);
-    expect(result.reviewers[0].message).toBe('success');
+    expect(result.members[0].startedAt).toBe('2026-01-01T00:00:00Z');
+    expect(result.members[0].finishedAt).toBe('2026-01-01T00:01:00Z');
+    expect(result.members[0].exitCode).toBe(0);
+    expect(result.members[0].message).toBe('success');
   });
 
   test('returns null for missing reviewer metadata fields', async () => {
     const jobDir = path.join(tmpDir, 'job10');
     setupJob(jobDir, { id: 'test-10' }, {
-      alice: { reviewer: 'alice', state: 'running' },
+      alice: { member: 'alice', state: 'running' },
     });
     const result = await computeStatus(jobDir);
-    expect(result.reviewers[0].startedAt).toBe(null);
-    expect(result.reviewers[0].finishedAt).toBe(null);
-    expect(result.reviewers[0].exitCode).toBe(null);
-    expect(result.reviewers[0].message).toBe(null);
+    expect(result.members[0].startedAt).toBe(null);
+    expect(result.members[0].finishedAt).toBe(null);
+    expect(result.members[0].exitCode).toBe(null);
+    expect(result.members[0].message).toBe(null);
   });
 
   test('includes jobDir and id in result', async () => {
     const jobDir = path.join(tmpDir, 'job11');
     setupJob(jobDir, { id: 'test-11' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     const result = await computeStatus(jobDir);
     expect(result.id).toBe('test-11');
@@ -690,7 +690,7 @@ describe('computeStatus', () => {
   test('includes chairmanRole from job.json', async () => {
     const jobDir = path.join(tmpDir, 'job12');
     setupJob(jobDir, { id: 'test-12', chairmanRole: 'claude' }, {
-      alice: { reviewer: 'alice', state: 'done' },
+      alice: { member: 'alice', state: 'done' },
     });
     const result = await computeStatus(jobDir);
     expect(result.chairmanRole).toBe('claude');
@@ -699,8 +699,8 @@ describe('computeStatus', () => {
   test('treats retrying reviewer as non-terminal (running)', async () => {
     const jobDir = path.join(tmpDir, 'job13');
     setupJob(jobDir, { id: 'test-13' }, {
-      alice: { reviewer: 'alice', state: 'done', exitCode: 0 },
-      bob: { reviewer: 'bob', state: 'retrying' },
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'retrying' },
     });
     const result = await computeStatus(jobDir);
     expect(result.overallState).toBe('running');
@@ -712,12 +712,12 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-stale');
     const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-stale', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'queued', queuedAt: staleTime },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     });
     // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
     expect(result.counts.error).toBe(1);
     expect(result.counts.queued).toBe(0);
@@ -727,11 +727,11 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-fresh');
     const freshTime = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-fresh', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: freshTime },
+      alice: { member: 'alice', state: 'queued', queuedAt: freshTime },
     });
     // threshold = Math.max(2 * 30, 120) = 120s; 10s < 120s → not stale
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     expect(alice.state).toBe('queued');
     expect(result.counts.queued).toBe(1);
   });
@@ -740,26 +740,26 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-zero-timeout');
     const staleTime = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-zero', settings: { timeoutSec: 0 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+      alice: { member: 'alice', state: 'queued', queuedAt: staleTime },
     });
     // threshold = Math.max(2 * 0, 120) = 120s; 200s > 120s → stale
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
   });
 
   test('uses file mtime as fallback when queuedAt is missing', async () => {
     const jobDir = path.join(tmpDir, 'job-no-queued-at');
     setupJob(jobDir, { id: 'test-mtime', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued' },
+      alice: { member: 'alice', state: 'queued' },
     });
     // Force the file mtime to be old
-    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const statusPath = path.join(jobDir, 'members', 'alice', 'status.json');
     const oldTime = new Date(Date.now() - 200_000);
     fs.utimesSync(statusPath, oldTime, oldTime);
     // threshold = Math.max(2 * 30, 120) = 120s; 200s > 120s → stale
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
   });
 
@@ -767,10 +767,10 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-stale-write');
     const staleTime = new Date(Date.now() - 200_000).toISOString();
     setupJob(jobDir, { id: 'test-write', settings: { timeoutSec: 30 } }, {
-      alice: { reviewer: 'alice', state: 'queued', queuedAt: staleTime },
+      alice: { member: 'alice', state: 'queued', queuedAt: staleTime },
     });
     await computeStatus(jobDir);
-    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const statusPath = path.join(jobDir, 'members', 'alice', 'status.json');
     const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
     expect(written.state).toBe('error');
     expect(written.error.includes('stale')).toBe(true);
@@ -782,11 +782,11 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-fresh');
     const recentStart = new Date(Date.now() - 10_000).toISOString(); // 10s ago
     setupJob(jobDir, { id: 'test-run-fresh', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: recentStart },
+      alice: { member: 'alice', state: 'running', startedAt: recentStart },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 10s < 120s → not stale
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     expect(alice.state).toBe('running');
     expect(result.counts.running).toBe(1);
     expect(result.counts.error).toBe(0);
@@ -796,12 +796,12 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-stale');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-stale', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
-      bob: { reviewer: 'bob', state: 'done', exitCode: 0 },
+      alice: { member: 'alice', state: 'running', startedAt: staleStart },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     expect(alice.state).toBe('error');
     expect(result.counts.error).toBe(1);
     expect(result.counts.running).toBe(0);
@@ -811,17 +811,17 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-cas');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-cas', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+      alice: { member: 'alice', state: 'running', startedAt: staleStart },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
     // Simulate race: spawn a background process that overwrites the file to 'done'
     // during the 250ms CAS sleep window (Atomics.wait blocks the event loop,
     // so setTimeout won't fire — only an external process can write the file).
-    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
-    const donePayload = JSON.stringify({ reviewer: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
+    const statusPath = path.join(jobDir, 'members', 'alice', 'status.json');
+    const donePayload = JSON.stringify({ member: 'alice', state: 'done', startedAt: staleStart, exitCode: 0 });
     Bun.spawn(['bash', '-c', `sleep 0.1 && printf '%s' '${donePayload}' > "${statusPath}"`]);
     const result = await computeStatus(jobDir);
-    const alice = result.reviewers.find(r => r.reviewer === 'alice');
+    const alice = result.members.find(r => r.member === 'alice');
     // CAS re-read sees 'done' → preserves 'done', does NOT overwrite with error
     expect(alice.state).toBe('done');
     expect(result.counts.error).toBe(0);
@@ -831,11 +831,11 @@ describe('computeStatus', () => {
     const jobDir = path.join(tmpDir, 'job-run-stale-write');
     const staleStart = new Date(Date.now() - 200_000).toISOString(); // 200s ago
     setupJob(jobDir, { id: 'test-run-stale-write', settings: { timeoutSec: 60 } }, {
-      alice: { reviewer: 'alice', state: 'running', startedAt: staleStart },
+      alice: { member: 'alice', state: 'running', startedAt: staleStart },
     });
     // running threshold = (60 + 60) * 1000 = 120_000ms; 200s > 120s → stale
     await computeStatus(jobDir);
-    const statusPath = path.join(jobDir, 'reviewers', 'alice', 'status.json');
+    const statusPath = path.join(jobDir, 'members', 'alice', 'status.json');
     const written = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
     expect(written.state).toBe('error');
     expect(written.error).toContain('running for');
@@ -1209,20 +1209,20 @@ describe('spawnWorkers safe name collision detection', () => {
   });
 
   test('exits with error when two reviewers produce the same safe name', () => {
-    // Create a config where two reviewers collide:
-    // "Alice!" and "alice?" both produce safe name "alice-"
+    // Create a config where two reviewers collide case-insensitively:
+    // "Alice" and "alice" are the same name when lowercased
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
       '  chairman:',
       '    role: none',
-      '  reviewers:',
-      '    - name: "Alice!"',
+      '  members:',
+      '    - name: "Alice"',
       '      command: echo test1',
-      '    - name: "alice?"',
+      '    - name: "alice"',
       '      command: echo test2',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1240,7 +1240,7 @@ describe('spawnWorkers safe name collision detection', () => {
       throw new Error('Expected execFileSync to throw');
     } catch (err) {
       expect(err.status).toBe(1);
-      expect(err.stderr.toString().includes('reviewer name collision')).toBe(true);
+      expect(err.stderr.toString().includes('member name collision')).toBe(true);
     }
   });
 });
@@ -1267,13 +1267,13 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1291,9 +1291,9 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
-    expect(reviewerNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(false);
+    const memberNames = output.members.map(r => r.name);
+    expect(memberNames.includes('claude')).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(false);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1306,13 +1306,13 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1330,9 +1330,9 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
-    expect(!reviewerNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(true);
+    const memberNames = output.members.map(r => r.name);
+    expect(!memberNames.includes('claude')).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1346,13 +1346,13 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1371,12 +1371,12 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
+    const memberNames = output.members.map(r => r.name);
     // --exclude-chairman=false overrides config to false (don't exclude)
     // --include-chairman=false means no force-include
-    // So excludeChairmanFromReviewers=false, includeChairman=false → chairman included
-    expect(reviewerNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(false);
+    // So excludeChairmanFromMembers=false, includeChairman=false → chairman included
+    expect(memberNames.includes('claude')).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(false);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1389,13 +1389,13 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1413,9 +1413,9 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
-    expect(!reviewerNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(true);
+    const memberNames = output.members.map(r => r.name);
+    expect(!memberNames.includes('claude')).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1447,13 +1447,13 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1471,11 +1471,11 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
+    const memberNames = output.members.map(r => r.name);
     // --include-chairman=false → includeChairman should be false
     // excludeChairmanOverride should be null (fallback to config default: true)
     // So chairman should be excluded
-    expect(!reviewerNames.includes('claude')).toBe(true);
+    expect(!memberNames.includes('claude')).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1488,13 +1488,13 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1512,9 +1512,9 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
+    const memberNames = output.members.map(r => r.name);
     // --include-chairman=true → includeChairman=true, force-include chairman
-    expect(reviewerNames.includes('claude')).toBe(true);
+    expect(memberNames.includes('claude')).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1527,13 +1527,13 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1551,9 +1551,9 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
+    const memberNames = output.members.map(r => r.name);
     // --include-chairman (boolean flag) → true → force-include
-    expect(reviewerNames.includes('claude')).toBe(true);
+    expect(memberNames.includes('claude')).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1566,13 +1566,13 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       'chunk-review:',
       '  chairman:',
       '    role: claude',
-      '  reviewers:',
+      '  members:',
       '    - name: claude',
       '      command: echo claude',
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1589,9 +1589,9 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const reviewerNames = output.reviewers.map(r => r.name);
+    const memberNames = output.members.map(r => r.name);
     // No flag → config default (exclude=true), no force-include → chairman excluded
-    expect(!reviewerNames.includes('claude')).toBe(true);
+    expect(!memberNames.includes('claude')).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1609,7 +1609,7 @@ describe('cmdResults', () => {
 
   function setupJobFixture(
     jobDir: string,
-    reviewers: Record<string, { reviewer: string; state: string; exitCode: number; output: string; stderr: string }>,
+    members: Record<string, { member: string; state: string; exitCode: number; output: string; stderr: string }>,
     opts?: { prompt?: string },
   ) {
     fs.mkdirSync(jobDir, { recursive: true });
@@ -1617,16 +1617,18 @@ describe('cmdResults', () => {
     if (opts?.prompt) {
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), opts.prompt);
     }
-    const reviewersDir = path.join(jobDir, 'reviewers');
-    fs.mkdirSync(reviewersDir, { recursive: true });
-    for (const [name, data] of Object.entries(reviewers)) {
-      const dir = path.join(reviewersDir, name);
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, data] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(
         path.join(dir, 'status.json'),
-        JSON.stringify({ reviewer: data.reviewer, state: data.state, exitCode: data.exitCode }),
+        JSON.stringify({ member: data.member, state: data.state, exitCode: data.exitCode }),
       );
-      fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      if (data.output || data.state === 'done') {
+        fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      }
       fs.writeFileSync(path.join(dir, 'error.txt'), data.stderr);
     }
   }
@@ -1645,7 +1647,7 @@ describe('cmdResults', () => {
     const largePrompt = 'p'.repeat(30000);
     setupJobFixture(
       jobDir,
-      { 'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'review output', stderr: largeStderr } },
+      { 'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'review output', stderr: largeStderr } },
       { prompt: largePrompt },
     );
 
@@ -1653,11 +1655,11 @@ describe('cmdResults', () => {
     const parsed = JSON.parse(result.toString());
 
     expect(parsed).not.toHaveProperty('prompt');
-    expect(parsed.reviewers[0]).not.toHaveProperty('stderr');
-    expect(parsed.reviewers[0].output).toBe('review output');
-    expect(parsed.reviewers[0].reviewer).toBe('claude');
-    expect(parsed.reviewers[0].state).toBe('done');
-    expect(parsed.reviewers[0].exitCode).toBe(0);
+    expect(parsed.members[0]).not.toHaveProperty('stderr');
+    expect(parsed.members[0].output).toBe('review output');
+    expect(parsed.members[0].member).toBe('claude');
+    expect(parsed.members[0].state).toBe('done');
+    expect(parsed.members[0].exitCode).toBe(0);
     expect(parsed.id).toBe('test-results');
     expect(parsed.jobDir).toBe(path.resolve(jobDir));
   });
@@ -1667,9 +1669,9 @@ describe('cmdResults', () => {
     setupJobFixture(
       jobDir,
       {
-        'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'claude review', stderr: 'x'.repeat(33000) },
-        'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'codex review', stderr: 'x'.repeat(33000) },
-        'gemini-0': { reviewer: 'gemini', state: 'error', exitCode: 1, output: 'gemini review', stderr: 'x'.repeat(33000) },
+        'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'claude review', stderr: 'x'.repeat(33000) },
+        'codex-0': { member: 'codex', state: 'done', exitCode: 0, output: 'codex review', stderr: 'x'.repeat(33000) },
+        'gemini-0': { member: 'gemini', state: 'error', exitCode: 1, output: 'gemini review', stderr: 'x'.repeat(33000) },
       },
       { prompt: 'p'.repeat(30000) },
     );
@@ -1679,13 +1681,13 @@ describe('cmdResults', () => {
 
     expect(output.length).toBeLessThan(30000);
     const parsed = JSON.parse(output);
-    expect(parsed.reviewers).toHaveLength(3);
+    expect(parsed.members).toHaveLength(3);
   });
 
   test('non-JSON: output 비어있으면 stderr fallback 출력', () => {
     const jobDir = path.join(tmpDir, 'job-qa3');
     setupJobFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'error', exitCode: 1, output: '', stderr: 'stderr-fallback-content' },
+      'claude-0': { member: 'claude', state: 'error', exitCode: 1, output: '', stderr: 'stderr-fallback-content' },
     });
 
     const result = execFileSync(process.execPath, [SCRIPT, 'results', jobDir], { stdio: 'pipe' });
@@ -1697,7 +1699,7 @@ describe('cmdResults', () => {
   test('non-JSON: output 있으면 output 출력, stderr 미포함', () => {
     const jobDir = path.join(tmpDir, 'job-qa4');
     setupJobFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'primary-output-content', stderr: 'hidden-stderr-content' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'primary-output-content', stderr: 'hidden-stderr-content' },
     });
 
     const result = execFileSync(process.execPath, [SCRIPT, 'results', jobDir], { stdio: 'pipe' });
@@ -1710,40 +1712,40 @@ describe('cmdResults', () => {
   test('--manifest: done reviewer의 outputFilePath가 job dir 내 output.txt 참조', () => {
     const jobDir = path.join(tmpDir, 'job-manifest1');
     setupJobFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'claude review output here', stderr: '' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'claude review output here', stderr: '' },
     });
 
     const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
     const parsed = JSON.parse(result.toString());
 
     expect(parsed.id).toBe('test-results');
-    expect(parsed.reviewers).toHaveLength(1);
-    expect(parsed.reviewers[0].reviewer).toBe('claude');
-    expect(parsed.reviewers[0].outputFilePath).toBeTruthy();
-    expect(parsed.reviewers[0].outputFilePath).toContain('output.txt');
-    expect(parsed.reviewers[0].outputFilePath).toContain(path.join('reviewers', 'claude-0'));
-    expect(parsed.reviewers[0].errorMessage).toBeNull();
+    expect(parsed.members).toHaveLength(1);
+    expect(parsed.members[0].member).toBe('claude');
+    expect(parsed.members[0].outputFilePath).toBeTruthy();
+    expect(parsed.members[0].outputFilePath).toContain('output.txt');
+    expect(parsed.members[0].outputFilePath).toContain(path.join('members', 'claude-0'));
+    expect(parsed.members[0].errorMessage).toBeNull();
 
-    const fileContent = fs.readFileSync(parsed.reviewers[0].outputFilePath, 'utf8');
+    const fileContent = fs.readFileSync(parsed.members[0].outputFilePath, 'utf8');
     expect(fileContent).toBe('claude review output here');
   });
 
   test('--manifest: failed/non_retryable reviewer의 outputFilePath가 null + errorMessage 존재', () => {
     const jobDir = path.join(tmpDir, 'job-manifest2');
     setupJobFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'valid output', stderr: '' },
-      'codex-0': { reviewer: 'codex', state: 'error', exitCode: 1, output: '', stderr: 'some error' },
-      'gemini-0': { reviewer: 'gemini', state: 'non_retryable', exitCode: 42, output: '', stderr: 'quota exceeded' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'valid output', stderr: '' },
+      'codex-0': { member: 'codex', state: 'error', exitCode: 1, output: '', stderr: 'some error' },
+      'gemini-0': { member: 'gemini', state: 'non_retryable', exitCode: 42, output: '', stderr: 'quota exceeded' },
     });
 
     const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
     const parsed = JSON.parse(result.toString());
 
-    expect(parsed.reviewers).toHaveLength(3);
+    expect(parsed.members).toHaveLength(3);
 
-    const claude = parsed.reviewers.find((r: any) => r.reviewer === 'claude');
-    const codex = parsed.reviewers.find((r: any) => r.reviewer === 'codex');
-    const gemini = parsed.reviewers.find((r: any) => r.reviewer === 'gemini');
+    const claude = parsed.members.find((r: any) => r.member === 'claude');
+    const codex = parsed.members.find((r: any) => r.member === 'codex');
+    const gemini = parsed.members.find((r: any) => r.member === 'gemini');
 
     expect(claude.outputFilePath).toBeTruthy();
     expect(claude.errorMessage).toBeNull();
@@ -1756,8 +1758,8 @@ describe('cmdResults', () => {
   test('--manifest: JSON schema 검증 (id, reviewers 필드 구조)', () => {
     const jobDir = path.join(tmpDir, 'job-manifest3');
     setupJobFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'output A', stderr: '' },
-      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'output B', stderr: '' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'output A', stderr: '' },
+      'codex-0': { member: 'codex', state: 'done', exitCode: 0, output: 'output B', stderr: '' },
     });
 
     const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
@@ -1765,15 +1767,15 @@ describe('cmdResults', () => {
 
     // Top-level schema
     expect(parsed).toHaveProperty('id');
-    expect(parsed).toHaveProperty('reviewers');
-    expect(Array.isArray(parsed.reviewers)).toBe(true);
+    expect(parsed).toHaveProperty('members');
+    expect(Array.isArray(parsed.members)).toBe(true);
 
     // Must NOT have jobDir (unlike --json mode)
     expect(parsed).not.toHaveProperty('jobDir');
 
-    // Each reviewer must have exactly 3 fields (reviewer, outputFilePath, errorMessage)
-    for (const r of parsed.reviewers) {
-      expect(r).toHaveProperty('reviewer');
+    // Each reviewer must have exactly 3 fields (member, outputFilePath, errorMessage)
+    for (const r of parsed.members) {
+      expect(r).toHaveProperty('member');
       expect(r).toHaveProperty('outputFilePath');
       expect(r).toHaveProperty('errorMessage');
       // Must NOT have legacy fields
@@ -1790,9 +1792,9 @@ describe('cmdResults', () => {
     const jobDir = path.join(tmpDir, 'job-manifest4');
     const largeOutput = 'x'.repeat(50000);
     setupJobFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
-      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
-      'gemini-0': { reviewer: 'gemini', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
+      'codex-0': { member: 'codex', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
+      'gemini-0': { member: 'gemini', state: 'done', exitCode: 0, output: largeOutput, stderr: '' },
     });
 
     const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
@@ -1802,10 +1804,10 @@ describe('cmdResults', () => {
     expect(output.length).toBeLessThan(2000);
 
     const parsed = JSON.parse(output);
-    expect(parsed.reviewers).toHaveLength(3);
+    expect(parsed.members).toHaveLength(3);
 
     // Each outputFilePath must point to job dir and contain the large output
-    for (const r of parsed.reviewers) {
+    for (const r of parsed.members) {
       expect(r.outputFilePath).toBeTruthy();
       expect(r.outputFilePath).toContain('output.txt');
       const content = fs.readFileSync(r.outputFilePath, 'utf8');
@@ -1823,18 +1825,18 @@ describe('buildManifest', () => {
 
   function setupManifestFixture(
     jobDir: string,
-    reviewers: Record<string, { reviewer: string; state: string; exitCode: number; output: string }>,
+    members: Record<string, { member: string; state: string; exitCode: number; output: string }>,
   ) {
     fs.mkdirSync(jobDir, { recursive: true });
     fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'manifest-test' }));
-    const reviewersDir = path.join(jobDir, 'reviewers');
-    fs.mkdirSync(reviewersDir, { recursive: true });
-    for (const [name, data] of Object.entries(reviewers)) {
-      const dir = path.join(reviewersDir, name);
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, data] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(
         path.join(dir, 'status.json'),
-        JSON.stringify({ reviewer: data.reviewer, state: data.state, exitCode: data.exitCode, message: data.state === 'error' ? 'failed' : undefined }),
+        JSON.stringify({ member: data.member, state: data.state, exitCode: data.exitCode, message: data.state === 'error' ? 'failed' : undefined }),
       );
       if (data.output) {
         fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
@@ -1853,19 +1855,19 @@ describe('buildManifest', () => {
   test('올바른 manifest 구조 반환 (done 리뷰어)', () => {
     const jobDir = path.join(tmpDir, 'job-bm1');
     setupManifestFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'review A' },
-      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'review B' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'review A' },
+      'codex-0': { member: 'codex', state: 'done', exitCode: 0, output: 'review B' },
     });
 
     const manifest = buildManifest(jobDir);
 
     expect(manifest.id).toBe('manifest-test');
-    expect(manifest.reviewers).toHaveLength(2);
+    expect(manifest.members).toHaveLength(2);
     // Sorted alphabetically
-    expect(manifest.reviewers[0].reviewer).toBe('claude');
-    expect(manifest.reviewers[1].reviewer).toBe('codex');
+    expect(manifest.members[0].member).toBe('claude');
+    expect(manifest.members[1].member).toBe('codex');
     // Done reviewers have outputFilePath and null errorMessage
-    for (const r of manifest.reviewers) {
+    for (const r of manifest.members) {
       expect(r.outputFilePath).toBeTruthy();
       expect(r.outputFilePath).toContain('output.txt');
       expect(r.errorMessage).toBeNull();
@@ -1875,13 +1877,13 @@ describe('buildManifest', () => {
   test('output 없는 리뷰어는 outputFilePath=null, errorMessage 설정', () => {
     const jobDir = path.join(tmpDir, 'job-bm2');
     setupManifestFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'has output' },
-      'gemini-0': { reviewer: 'gemini', state: 'error', exitCode: 1, output: '' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'has output' },
+      'gemini-0': { member: 'gemini', state: 'error', exitCode: 1, output: '' },
     });
 
     const manifest = buildManifest(jobDir);
-    const claude = manifest.reviewers.find((r: any) => r.reviewer === 'claude');
-    const gemini = manifest.reviewers.find((r: any) => r.reviewer === 'gemini');
+    const claude = manifest.members.find((r: any) => r.member === 'claude');
+    const gemini = manifest.members.find((r: any) => r.member === 'gemini');
 
     expect(claude.outputFilePath).toBeTruthy();
     expect(claude.errorMessage).toBeNull();
@@ -1895,17 +1897,17 @@ describe('buildManifest', () => {
     // No job.json, no reviewers
     const manifest = buildManifest(jobDir);
     expect(manifest.id).toBe('unknown');
-    expect(manifest.reviewers).toHaveLength(0);
+    expect(manifest.members).toHaveLength(0);
   });
 
   test('_safeName 내부 필드가 외부에 노출되지 않음', () => {
     const jobDir = path.join(tmpDir, 'job-bm4');
     setupManifestFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'data' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'data' },
     });
 
     const manifest = buildManifest(jobDir);
-    for (const r of manifest.reviewers) {
+    for (const r of manifest.members) {
       expect(r).not.toHaveProperty('_safeName');
     }
   });
@@ -1921,7 +1923,7 @@ describe('cmdCollect', () => {
 
   function setupCollectFixture(
     jobDir: string,
-    reviewers: Record<string, { reviewer: string; state: string; exitCode: number; output: string }>,
+    members: Record<string, { member: string; state: string; exitCode: number; output: string }>,
     opts?: { timeoutSec?: number },
   ) {
     fs.mkdirSync(jobDir, { recursive: true });
@@ -1929,14 +1931,14 @@ describe('cmdCollect', () => {
       path.join(jobDir, 'job.json'),
       JSON.stringify({ id: 'collect-test', settings: { timeoutSec: opts?.timeoutSec ?? 60 } }),
     );
-    const reviewersDir = path.join(jobDir, 'reviewers');
-    fs.mkdirSync(reviewersDir, { recursive: true });
-    for (const [name, data] of Object.entries(reviewers)) {
-      const dir = path.join(reviewersDir, name);
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, data] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(
         path.join(dir, 'status.json'),
-        JSON.stringify({ reviewer: data.reviewer, state: data.state, exitCode: data.exitCode }),
+        JSON.stringify({ member: data.member, state: data.state, exitCode: data.exitCode }),
       );
       if (data.output) {
         fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
@@ -1955,8 +1957,8 @@ describe('cmdCollect', () => {
   test('done 상태: manifest JSON 반환', () => {
     const jobDir = path.join(tmpDir, 'job-collect-done');
     setupCollectFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'review output A' },
-      'codex-0': { reviewer: 'codex', state: 'done', exitCode: 0, output: 'review output B' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'review output A' },
+      'codex-0': { member: 'codex', state: 'done', exitCode: 0, output: 'review output B' },
     });
 
     const result = execFileSync(process.execPath, [
@@ -1966,33 +1968,36 @@ describe('cmdCollect', () => {
 
     expect(parsed.overallState).toBe('done');
     expect(parsed.id).toBe('collect-test');
-    expect(parsed.reviewers).toHaveLength(2);
-    expect(parsed.reviewers[0].reviewer).toBe('claude');
-    expect(parsed.reviewers[0].outputFilePath).toBeTruthy();
-    expect(parsed.reviewers[0].errorMessage).toBeNull();
+    expect(parsed.members).toHaveLength(2);
+    expect(parsed.members[0].member).toBe('claude');
+    expect(parsed.members[0].outputFilePath).toBeTruthy();
+    expect(parsed.members[0].errorMessage).toBeNull();
   });
 
   test('timeout: not-done JSON 반환 (overallState, id, counts)', () => {
     const jobDir = path.join(tmpDir, 'job-collect-timeout');
     setupCollectFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'running', exitCode: 0, output: '' },
-      'codex-0': { reviewer: 'codex', state: 'queued', exitCode: 0, output: '' },
+      'claude-0': { member: 'claude', state: 'running', exitCode: 0, output: '' },
+      'codex-0': { member: 'codex', state: 'queued', exitCode: 0, output: '' },
     });
-    // Set startedAt/queuedAt to avoid staleness CAS sleep
-    const reviewersDir = path.join(jobDir, 'reviewers');
+    // Set running member as stale (startedAt 200s ago) to trigger CAS sleep (~250ms) in
+    // computeStatus, making the timeout-ms check fire reliably after the first poll.
+    // Keep queuedAt fresh to prevent the queued member from also becoming stale.
+    const membersDir = path.join(jobDir, 'members');
+    const staleTs = new Date(Date.now() - 200_000).toISOString();
     const now = new Date().toISOString();
     fs.writeFileSync(
-      path.join(reviewersDir, 'claude-0', 'status.json'),
-      JSON.stringify({ reviewer: 'claude', state: 'running', exitCode: 0, startedAt: now }),
+      path.join(membersDir, 'claude-0', 'status.json'),
+      JSON.stringify({ member: 'claude', state: 'running', exitCode: 0, startedAt: staleTs }),
     );
     fs.writeFileSync(
-      path.join(reviewersDir, 'codex-0', 'status.json'),
-      JSON.stringify({ reviewer: 'codex', state: 'queued', exitCode: 0, queuedAt: now }),
+      path.join(membersDir, 'codex-0', 'status.json'),
+      JSON.stringify({ member: 'codex', state: 'queued', exitCode: 0, queuedAt: now }),
     );
 
-    // timeout-ms=0 exits immediately after first poll without sleeping
+    // timeout-ms=200: computeStatus sleeps ~250ms due to stale CAS, so elapsed >= 200 fires
     const result = execFileSync(process.execPath, [
-      SCRIPT, 'collect', '--timeout-ms', '0', jobDir,
+      SCRIPT, 'collect', '--timeout-ms', '200', jobDir,
     ], { stdio: 'pipe', timeout: 10000 });
     const parsed = JSON.parse(result.toString());
 
@@ -2003,7 +2008,7 @@ describe('cmdCollect', () => {
     expect(parsed.counts).toHaveProperty('running');
     expect(parsed.counts).toHaveProperty('queued');
     // Must NOT have reviewers array (that's manifest-only)
-    expect(parsed).not.toHaveProperty('reviewers');
+    expect(parsed).not.toHaveProperty('members');
   });
 
   test('hardcap: timeout-ms=999999 → 300000 이하로 클램프', () => {
@@ -2012,7 +2017,7 @@ describe('cmdCollect', () => {
     // With all reviewers done, it should return immediately regardless of timeout.
     const jobDir = path.join(tmpDir, 'job-collect-hardcap');
     setupCollectFixture(jobDir, {
-      'claude-0': { reviewer: 'claude', state: 'done', exitCode: 0, output: 'data' },
+      'claude-0': { member: 'claude', state: 'done', exitCode: 0, output: 'data' },
     });
 
     const start = Date.now();
@@ -2060,13 +2065,13 @@ describe('start + collect integration', () => {
       'chunk-review:',
       '  chairman:',
       '    role: none',
-      '  reviewers:',
+      '  members:',
       '    - name: r1',
       '      command: echo r1',
       '    - name: r2',
       '      command: echo r2',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
     return configPath;
@@ -2100,30 +2105,30 @@ describe('start + collect integration', () => {
     try {
       // Verify job structure was created
       const jobJson = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8'));
-      expect(jobJson.reviewers).toHaveLength(2);
-      const reviewerNames = jobJson.reviewers.map((r: any) => r.name);
-      expect(reviewerNames).toContain('r1');
-      expect(reviewerNames).toContain('r2');
+      expect(jobJson.members).toHaveLength(2);
+      const memberNames = jobJson.members.map((r: any) => r.name);
+      expect(memberNames).toContain('r1');
+      expect(memberNames).toContain('r2');
 
       // Verify prompt was stored
       const storedPrompt = fs.readFileSync(path.join(jobDir, 'prompt.txt'), 'utf8');
       expect(storedPrompt).toBe('Review this code for bugs');
 
       // Mock done status for each reviewer
-      const reviewersDir = path.join(jobDir, 'reviewers');
-      for (const entry of fs.readdirSync(reviewersDir)) {
-        const statusPath = path.join(reviewersDir, entry, 'status.json');
+      const membersDir = path.join(jobDir, 'members');
+      for (const entry of fs.readdirSync(membersDir)) {
+        const statusPath = path.join(membersDir, entry, 'status.json');
         const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
         fs.writeFileSync(statusPath, JSON.stringify({
-          reviewer: status.reviewer,
+          member: status.member,
           state: 'done',
           exitCode: 0,
           startedAt: new Date().toISOString(),
           finishedAt: new Date().toISOString(),
         }));
         fs.writeFileSync(
-          path.join(reviewersDir, entry, 'output.txt'),
-          `Review output from ${status.reviewer}`,
+          path.join(membersDir, entry, 'output.txt'),
+          `Review output from ${status.member}`,
         );
       }
 
@@ -2134,8 +2139,8 @@ describe('start + collect integration', () => {
       const manifest = JSON.parse(collectResult.toString());
 
       expect(manifest.overallState).toBe('done');
-      expect(manifest.reviewers).toHaveLength(2);
-      for (const reviewer of manifest.reviewers) {
+      expect(manifest.members).toHaveLength(2);
+      for (const reviewer of manifest.members) {
         expect(reviewer.outputFilePath).toBeTruthy();
         expect(fs.existsSync(reviewer.outputFilePath)).toBe(true);
         expect(reviewer.errorMessage).toBeNull();
@@ -2145,8 +2150,23 @@ describe('start + collect integration', () => {
     }
   }, 30000);
 
-  test('0ms timeout: queued 상태에서 즉시 not-done 반환', () => {
-    const configPath = writeTestConfig(tmpDir);
+  test('짧은 timeout: queued 상태에서 not-done 반환', () => {
+    // Use slow commands (sleep 60) so workers stay in running state and never
+    // complete before collect times out.
+    const configPath = path.join(tmpDir, 'config-slow.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: none',
+      '  members:',
+      '    - name: r1',
+      '      command: sleep 60',
+      '    - name: r2',
+      '      command: sleep 60',
+      '  settings:',
+      '    exclude_chairman_from_members: false',
+      '    timeout: 10',
+    ].join('\n'));
     const jobsDir = path.join(tmpDir, 'jobs');
     fs.mkdirSync(jobsDir, { recursive: true });
 
@@ -2165,22 +2185,26 @@ describe('start + collect integration', () => {
     const jobDir = startResult.toString().trim();
 
     try {
-      // Do NOT write any done status files — leave reviewers in queued state
-      // But we need to ensure the queuedAt timestamps are fresh to avoid staleness CAS
-      const reviewersDir = path.join(jobDir, 'reviewers');
+      // Workers run `sleep 60` — they are queued/running and will not complete during the test.
+      // collect with 200ms timeout: computeStatus returns quickly, timeout fires after first poll
+      // because elapsed time after I/O exceeds the short timeout.
+      const membersDir = path.join(jobDir, 'members');
       const now = new Date().toISOString();
-      for (const entry of fs.readdirSync(reviewersDir)) {
-        const statusPath = path.join(reviewersDir, entry, 'status.json');
+      for (const entry of fs.readdirSync(membersDir)) {
+        const statusPath = path.join(membersDir, entry, 'status.json');
         const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
         fs.writeFileSync(statusPath, JSON.stringify({
-          ...status,
+          member: status.member,
+          state: 'queued',
+          exitCode: 0,
           queuedAt: now,
         }));
       }
 
-      // collect with 0ms timeout: should return immediately without waiting
+      // collect with 1ms timeout: workers are running `sleep 60` and will not complete,
+      // so every poll returns not-done and the timeout fires quickly
       const collectResult = execFileSync(process.execPath, [
-        SCRIPT, 'collect', '--timeout-ms', '0', jobDir,
+        SCRIPT, 'collect', '--timeout-ms', '1', jobDir,
       ], { stdio: 'pipe', timeout: 10000 });
       const parsed = JSON.parse(collectResult.toString());
 
@@ -2188,7 +2212,7 @@ describe('start + collect integration', () => {
       expect(parsed).toHaveProperty('counts');
       expect(parsed.counts.total).toBe(2);
       // Should NOT have reviewers array (that's manifest-only, returned only when done)
-      expect(parsed).not.toHaveProperty('reviewers');
+      expect(parsed).not.toHaveProperty('members');
     } finally {
       cleanupJob(jobDir);
     }

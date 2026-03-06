@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -10,7 +11,7 @@ import {
   runWithRetry,
   sleepMs,
   BASE_DELAY_MS,
-} from './spec-review-worker.ts';
+} from './worker.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -21,15 +22,14 @@ function makeTmpDir() {
 }
 
 function setupJobDir(tmpDir) {
-  const reviewer = 'test-reviewer';
-  const safeReviewer = 'test-reviewer';
+  const member = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
-  const reviewerDir = path.join(jobDir, 'reviewers', safeReviewer);
-  fs.mkdirSync(reviewerDir, { recursive: true });
-  const statusPath = path.join(reviewerDir, 'status.json');
-  const outPath = path.join(reviewerDir, 'output.txt');
-  const errPath = path.join(reviewerDir, 'error.txt');
-  return { jobDir, reviewer, safeReviewer, reviewerDir, statusPath, outPath, errPath };
+  const memberDir = path.join(jobDir, 'members', member);
+  fs.mkdirSync(memberDir, { recursive: true });
+  const statusPath = path.join(memberDir, 'status.json');
+  const outPath = path.join(memberDir, 'output.txt');
+  const errPath = path.join(memberDir, 'error.txt');
+  return { jobDir, member, memberDir, statusPath, outPath, errPath };
 }
 
 function readStatus(statusPath) {
@@ -58,8 +58,8 @@ describe('runOnce - stdin pipe', () => {
       program: 'cat',
       args: [],
       prompt: 'hello from stdin',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'cat',
       timeoutSec: 5,
       attempt: 0,
@@ -75,8 +75,8 @@ describe('runOnce - stdin pipe', () => {
       program: 'echo',
       args: ['fixed-output'],
       prompt: 'THIS_SHOULD_NOT_APPEAR',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'echo fixed-output',
       timeoutSec: 5,
       attempt: 0,
@@ -110,8 +110,8 @@ describe('runOnce - exit states', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 0,
       attempt: 0,
@@ -125,8 +125,8 @@ describe('runOnce - exit states', () => {
       program: 'false',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 0,
       attempt: 0,
@@ -140,8 +140,8 @@ describe('runOnce - exit states', () => {
       program: 'nonexistent-command-xyz-abc-123',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'nonexistent-command-xyz-abc-123',
       timeoutSec: 0,
       attempt: 0,
@@ -154,8 +154,8 @@ describe('runOnce - exit states', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0.2,
       attempt: 0,
@@ -168,8 +168,8 @@ describe('runOnce - exit states', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0,
       attempt: 0,
@@ -199,8 +199,8 @@ describe('runOnce - exit states', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 0,
       attempt: 2,
@@ -214,8 +214,8 @@ describe('runOnce - exit states', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 0,
       attempt: 0,
@@ -223,7 +223,7 @@ describe('runOnce - exit states', () => {
     const status = readStatus(paths.statusPath);
     expect(status.state).toBe('done');
     expect(status.attempt).toBe(0);
-    expect(status.reviewer).toBe(paths.reviewer);
+    expect(status.member).toBe(paths.member);
   });
 
   test('writes output.txt and error.txt', async () => {
@@ -231,8 +231,8 @@ describe('runOnce - exit states', () => {
       program: 'sh',
       args: ['-c', 'echo stdout-data; echo stderr-data >&2'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c "echo stdout-data; echo stderr-data >&2"',
       timeoutSec: 5,
       attempt: 0,
@@ -267,8 +267,8 @@ describe('runWithRetry', () => {
       program: 'true',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 5,
     });
@@ -283,8 +283,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -299,8 +299,8 @@ describe('runWithRetry', () => {
       program: 'false',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -315,8 +315,8 @@ describe('runWithRetry', () => {
       program: 'nonexistent-command-xyz-abc-123',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'nonexistent-command-xyz-abc-123',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -331,8 +331,8 @@ describe('runWithRetry', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0.2,
       sleepFn: () => Promise.resolve(),
@@ -347,8 +347,8 @@ describe('runWithRetry', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0,
       sleepFn: () => Promise.resolve(),
@@ -381,8 +381,8 @@ describe('runWithRetry', () => {
       program: 'false',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 5,
       sleepFn: (ms) => {
@@ -405,8 +405,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -424,8 +424,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
@@ -448,8 +448,8 @@ describe('runWithRetry', () => {
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}"; exit 1; fi`],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sh -c marker-script',
       timeoutSec: 5,
       sleepFn,
@@ -487,8 +487,8 @@ describe('runOnce - synchronous spawnFn throw', () => {
       program: 'anything',
       args: [],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'anything',
       timeoutSec: 0,
       attempt: 0,
@@ -526,8 +526,8 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
       program: 'sleep',
       args: ['60'],
       prompt: '',
-      reviewer: paths.reviewer,
-      reviewerDir: paths.reviewerDir,
+      member: paths.member,
+      memberDir: paths.memberDir,
       command: 'sleep 60',
       timeoutSec: 0,
       attempt: 0,
@@ -552,6 +552,208 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
     expect(result.state).toBe('error');
     expect(result.exitCode).toBe(null);
     expect(result.signal).toBe('SIGKILL');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runOnce() — workerEnv injection
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a mock spawnFn that captures spawn options and simulates
+ * a successful child process (exit code 0).
+ */
+function createCapturingSpawnFn() {
+  const captured: Record<string, unknown> = {};
+
+  function mockSpawn(_program, _args, options) {
+    captured.program = _program;
+    captured.args = _args;
+    captured.options = options;
+
+    const child = new EventEmitter();
+    const stdin = new EventEmitter() as EventEmitter & { write: () => boolean; end: () => void };
+    stdin.write = () => true;
+    stdin.end = () => {};
+    (child as unknown as Record<string, unknown>).stdin = stdin;
+    const stdout = new EventEmitter();
+    (stdout as unknown as Record<string, unknown>).pipe = () => {};
+    (child as unknown as Record<string, unknown>).stdout = stdout;
+    const stderr = new EventEmitter();
+    (stderr as unknown as Record<string, unknown>).pipe = () => {};
+    (child as unknown as Record<string, unknown>).stderr = stderr;
+    (child as unknown as Record<string, unknown>).pid = 99999;
+
+    process.nextTick(() => {
+      child.emit('exit', 0, null);
+      process.nextTick(() => child.emit('close', 0, null));
+    });
+    return child;
+  }
+
+  return { mockSpawn, captured };
+}
+
+describe('runOnce - workerEnv injection', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('merges workerEnv into spawn env', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: ['--arg1'],
+      prompt: '',
+      member: paths.member,
+      memberDir: paths.memberDir,
+      command: 'test-program --arg1',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+      workerEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'high' },
+    });
+
+    expect((captured.options as Record<string, unknown> & { env: Record<string, string> }).env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high');
+    expect((captured.options as Record<string, unknown> & { env: Record<string, string> }).env.PATH).toBe(process.env.PATH);
+  });
+
+  test('merges multiple workerEnv vars into spawn env', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: [],
+      prompt: '',
+      member: paths.member,
+      memberDir: paths.memberDir,
+      command: 'test-program',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+      workerEnv: { VAR_A: '1', VAR_B: '2' },
+    });
+
+    const env = (captured.options as Record<string, unknown> & { env: Record<string, string> }).env;
+    expect(env.VAR_A).toBe('1');
+    expect(env.VAR_B).toBe('2');
+    expect(env.PATH).toBe(process.env.PATH);
+  });
+
+  test('workerEnv values override existing process.env values', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+
+    await runOnce({
+      program: 'test-program',
+      args: [],
+      prompt: '',
+      member: paths.member,
+      memberDir: paths.memberDir,
+      command: 'test-program',
+      timeoutSec: 0,
+      attempt: 0,
+      spawnFn: mockSpawn,
+      workerEnv: { HOME: '/override/home' },
+    });
+
+    const env = (captured.options as Record<string, unknown> & { env: Record<string, string> }).env;
+    expect(env.HOME).toBe('/override/home');
+    expect(env.PATH).toBe(process.env.PATH);
+  });
+
+  test('subprocess receives workerEnv variables in its environment', async () => {
+    // End-to-end: spawn a real process that prints the env var
+    const result = await runOnce({
+      program: 'sh',
+      args: ['-c', 'echo "VAL=$MY_WORKER_VAR"'],
+      prompt: '',
+      member: paths.member,
+      memberDir: paths.memberDir,
+      command: 'sh -c echo VAL=$MY_WORKER_VAR',
+      timeoutSec: 5,
+      attempt: 0,
+      workerEnv: { MY_WORKER_VAR: 'hello-env' },
+    });
+
+    expect(result.state).toBe('done');
+    const output = fs.readFileSync(paths.outPath, 'utf8');
+    expect(output.includes('VAL=hello-env')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// main() — logging lifecycle via subprocess
+// ---------------------------------------------------------------------------
+
+describe('main - logging lifecycle', () => {
+  const WORKER_PATH = path.join(import.meta.dirname, 'worker.ts');
+
+  test('creates a log file in .omt/logs/ after successful run', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-log-test-'));
+    try {
+      const jobDir = path.join(tmpDir, 'job');
+      const memberDir = path.join(jobDir, 'members', 'claude');
+      fs.mkdirSync(memberDir, { recursive: true });
+      fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt', 'utf8');
+
+      const proc = Bun.spawn(
+        ['bun', WORKER_PATH, '--job-dir', jobDir, '--member', 'claude', '--command', 'true', '--project-root', tmpDir],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      const exitCode = await proc.exited;
+      expect(exitCode).toBe(0);
+
+      // Log file should exist in tmpDir/.omt/logs/
+      // jobId = basename('job').replace(/^spec-review-/, '') = 'job'
+      const logFile = path.join(tmpDir, '.omt', 'logs', 'spec-review-worker-job.log');
+      expect(fs.existsSync(logFile)).toBe(true);
+      const content = fs.readFileSync(logFile, 'utf8');
+      expect(content.includes('========== START ==========')).toBe(true);
+      expect(content.includes('========== END ==========')).toBe(true);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('passes --env KEY=VALUE to spawned subprocess environment', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-env-test-'));
+    try {
+      const jobDir = path.join(tmpDir, 'job');
+      const memberDir = path.join(jobDir, 'members', 'claude');
+      const outFile = path.join(tmpDir, 'env-output.txt');
+      fs.mkdirSync(memberDir, { recursive: true });
+      fs.writeFileSync(path.join(jobDir, 'prompt.txt'), '', 'utf8');
+
+      // Command writes MY_ENV_VAR value to outFile
+      const command = `sh -c 'echo $MY_ENV_VAR > ${outFile}'`;
+
+      const proc = Bun.spawn(
+        [
+          'bun', WORKER_PATH,
+          '--job-dir', jobDir,
+          '--member', 'claude',
+          '--command', command,
+          '--env', 'MY_ENV_VAR=env-test-value',
+        ],
+        { stdout: 'pipe', stderr: 'pipe' },
+      );
+      await proc.exited;
+
+      // The env var should have been passed to the subprocess
+      const output = fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8') : '';
+      expect(output.trim()).toBe('env-test-value');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -585,15 +787,15 @@ describe('runOnce - assembled-prompt.txt creation', () => {
       program: 'true',
       args: [],
       prompt: 'test prompt',
-      reviewer: 'claude',
-      reviewerDir: paths.reviewerDir,
+      member: 'claude',
+      memberDir: paths.memberDir,
       command: 'true',
       timeoutSec: 5,
       attempt: 0,
     });
 
     expect(result.state).toBe('done');
-    const assembledPath = path.join(paths.reviewerDir, 'assembled-prompt.txt');
+    const assembledPath = path.join(paths.memberDir, 'assembled-prompt.txt');
     expect(fs.existsSync(assembledPath)).toBe(true);
     const content = fs.readFileSync(assembledPath, 'utf8');
     expect(content.includes('test prompt')).toBe(true);

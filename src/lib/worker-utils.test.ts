@@ -12,21 +12,24 @@ import {
   BASE_DELAY_MS,
   NON_RETRYABLE_PATTERNS,
   NON_RETRYABLE_EXIT_CODES,
+  HEARTBEAT_INTERVAL_MS,
+  runOnce,
   runWithRetry,
+  type RunOnceOpts,
   type RunWithRetryOpts,
 } from './worker-utils.ts';
 
 const noopSleep = async () => {};
 
 function makeOpts(testDir: string, overrides: Partial<RunWithRetryOpts> = {}): RunWithRetryOpts {
-  const reviewerDir = join(testDir, 'reviewer');
-  mkdirSync(reviewerDir, { recursive: true });
+  const memberDir = join(testDir, 'member');
+  mkdirSync(memberDir, { recursive: true });
   return {
     program: '/bin/sh',
     args: ['-c', 'exit 1'],
     prompt: 'test prompt',
-    reviewer: 'test-reviewer',
-    reviewerDir,
+    member: 'test-member',
+    memberDir,
     command: '/bin/sh -c "exit 1"',
     timeoutSec: 10,
     sleepFn: noopSleep,
@@ -110,7 +113,7 @@ describe('non-retryable 에러 분류', () => {
     });
 
     // Pre-seed error.txt with a non-retryable pattern (simulating previous attempt residue)
-    writeFileSync(join(opts.reviewerDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
+    writeFileSync(join(opts.memberDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
 
     const result = await runWithRetry(opts);
 
@@ -121,7 +124,7 @@ describe('non-retryable 에러 분류', () => {
 
   it('status.json이 non_retryable로 업데이트됨', async () => {
     const subDir = join(testDir, 'status-update');
-    const reviewerDir = join(subDir, 'reviewer');
+    const memberDir = join(subDir, 'member');
     const opts = makeOpts(subDir, {
       args: ['-c', 'echo "QUOTA_EXHAUSTED" >&2; exit 1'],
       command: '/bin/sh -c "exit 1"',
@@ -129,7 +132,7 @@ describe('non-retryable 에러 분류', () => {
 
     await runWithRetry(opts);
 
-    const statusPath = join(reviewerDir, 'status.json');
+    const statusPath = join(memberDir, 'status.json');
     expect(existsSync(statusPath)).toBe(true);
     const status = JSON.parse(readFileSync(statusPath, 'utf8'));
     expect(status.state).toBe('non_retryable');
@@ -371,5 +374,111 @@ describe('constants', () => {
 
   test('BASE_DELAY_MS is 1000', () => {
     expect(BASE_DELAY_MS).toBe(1000);
+  });
+
+  test('HEARTBEAT_INTERVAL_MS is 10000', () => {
+    expect(HEARTBEAT_INTERVAL_MS).toBe(10_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// heartbeat
+// ---------------------------------------------------------------------------
+
+describe('runOnce heartbeat', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'worker-heartbeat-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeRunOnceOpts(overrides: Partial<RunOnceOpts> = {}): RunOnceOpts {
+    const memberDir = join(tmpDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+    return {
+      program: '/bin/sh',
+      args: ['-c', 'sleep 1'],
+      prompt: 'test prompt',
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh -c "sleep 1"',
+      timeoutSec: 10,
+      attempt: 0,
+      heartbeatIntervalMs: 50,
+      ...overrides,
+    };
+  }
+
+  test('실행 중에 status.json에 lastHeartbeat을 기록함', async () => {
+    const opts = makeRunOnceOpts();
+    const statusPath = join(opts.memberDir, 'status.json');
+
+    const promise = runOnce(opts);
+
+    // Wait for at least 2 heartbeat cycles to fire
+    await sleepMsAsync(200);
+
+    const status = JSON.parse(readFileSync(statusPath, 'utf8'));
+    expect(status.lastHeartbeat).toBeDefined();
+    // lastHeartbeat should be a valid ISO8601 timestamp
+    expect(() => new Date(status.lastHeartbeat as string).toISOString()).not.toThrow();
+    // Other fields should still be present
+    expect(status.member).toBe('test-member');
+    expect(status.state).toBe('running');
+
+    await promise;
+  });
+
+  test('finalize 후 heartbeat interval이 정리되어 status.json이 갱신되지 않음', async () => {
+    const opts = makeRunOnceOpts({
+      args: ['-c', 'exit 0'],
+      command: '/bin/sh -c "exit 0"',
+    });
+    const statusPath = join(opts.memberDir, 'status.json');
+
+    await runOnce(opts);
+
+    // Read status immediately after resolve — should be terminal state
+    const statusAfterFinalize = JSON.parse(readFileSync(statusPath, 'utf8'));
+    expect(statusAfterFinalize.state).toBe('done');
+
+    // Wait for multiple heartbeat cycles that would fire if interval leaked
+    await sleepMsAsync(200);
+
+    // status.json should still not have lastHeartbeat (finalize wrote terminal payload without it)
+    const statusAfterWait = JSON.parse(readFileSync(statusPath, 'utf8'));
+    expect(statusAfterWait.lastHeartbeat).toBeUndefined();
+    expect(statusAfterWait.state).toBe('done');
+  });
+
+  test('state가 running이 아닌 경우 heartbeat가 status.json을 덮어쓰지 않음', async () => {
+    const opts = makeRunOnceOpts({
+      args: ['-c', 'sleep 0.5'],
+      command: '/bin/sh -c "sleep 0.5"',
+    });
+    const statusPath = join(opts.memberDir, 'status.json');
+
+    const promise = runOnce(opts);
+
+    // Wait for heartbeat to start writing
+    await sleepMsAsync(150);
+
+    // Manually overwrite status.json with a terminal state (simulating external finalize)
+    const terminalPayload = { member: 'test-member', state: 'done', exitCode: 0 };
+    writeFileSync(statusPath, JSON.stringify(terminalPayload));
+
+    // Wait for additional heartbeat cycles
+    await sleepMsAsync(200);
+
+    // status.json should remain the terminal state — heartbeat guard skipped the write
+    const statusAfterWait = JSON.parse(readFileSync(statusPath, 'utf8'));
+    expect(statusAfterWait.state).toBe('done');
+    expect(statusAfterWait.lastHeartbeat).toBeUndefined();
+
+    await promise;
   });
 });
