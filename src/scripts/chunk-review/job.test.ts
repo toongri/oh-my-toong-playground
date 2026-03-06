@@ -131,7 +131,7 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].chairman.role).toBe('auto');
   });
 
-  test('handles "reviewers:" as alias for members section', () => {
+  test('parses members: section correctly', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'chunk-review:',
