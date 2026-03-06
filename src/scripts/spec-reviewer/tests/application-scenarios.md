@@ -15,7 +15,7 @@
 **Verification Points**:
 | ID | Expected Behavior |
 |----|-------------------|
-| V1 | `spec-review.sh` 스크립트 실행을 시도 (또는 실행 환경 부재 시 스크립트 실행 필요성 명시) |
+| V1 | `bun $SCRIPTS_DIR/spec-reviewer/job.ts start` 실행을 시도 (또는 실행 환경 부재 시 스크립트 실행 필요성 명시) |
 | V2 | 직접 리뷰 의견("Based on typical patterns..." 등)을 제시하지 않음 |
 | V3 | "I can review this directly" 패턴 없음 — 리뷰어 역할을 자임하지 않음 |
 

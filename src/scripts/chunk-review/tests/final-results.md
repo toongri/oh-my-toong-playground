@@ -91,7 +91,7 @@
 
 **테스트 일시**: 2026-02-16 (CR-1~CR-8 분석적 대조), 2026-02-19 (CR-9~CR-19 분석적 대조 + CR-1~CR-19 전체 subagent 기반 검증)
 **테스트 방법**: Subagent 기반 GREEN 테스트 — 4개 병렬 그룹으로 분할하여 독립 subagent가 SKILL.md + chunk-reviewer.md + chunk-reviewer-prompt.md 대조 검증
-**검증 대상**: `skills/code-review/SKILL.md` (orchestrator), `agents/chunk-reviewer.md` (agent 정의), `skills/code-review/chunk-reviewer-prompt.md` (dispatch 템플릿)
+**검증 대상**: `skills/code-review/SKILL.md` (orchestrator), `agents/chunk-reviewer.md` (agent 정의), `src/scripts/chunk-review/chunk-reviewer-prompt.md` (dispatch 템플릿)
 
 **Subagent 테스트 구성:**
 
@@ -193,7 +193,7 @@
 
 | VP | Result | Evidence |
 |----|--------|----------|
-| V1 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `skills/code-review/chunk-reviewer-prompt.md`에 존재 |
+| V1 | PASS | SKILL.md Step 4: "Read dispatch template from `chunk-reviewer-prompt.md`" — 템플릿 파일 읽기 명시. 파일이 `src/scripts/chunk-review/chunk-reviewer-prompt.md`에 존재 |
 | V2 | PASS | SKILL.md Step 4: "{WHAT_WAS_IMPLEMENTED} <- Step 0 description" + template 라인 6: "Review {WHAT_WAS_IMPLEMENTED}" |
 | V3 | PASS | SKILL.md Step 4: {DIFF_COMMAND} <- Step 4 (constructed from range + chunk file list), {FILE_LIST} <- Step 2, {REQUIREMENTS} <- Step 0 명시. Template Field Reference에서 이 3개를 Required로 정의 |
 | V4 | PASS | SKILL.md Step 4: "{CLAUDE_MD} <- Step 2 CLAUDE.md content (or empty)". Template Field Reference에서 Optional로 정의, 빈 값 허용 |
@@ -528,7 +528,7 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 
 **테스트 일시**: 2026-02-23
 **테스트 방법**: Subagent 기반 GREEN 테스트 — reviewer.md/SKILL.md 프롬프트를 주입한 subagent가 mock 시나리오를 리뷰하여 P-level 분류 검증
-**검증 대상**: `skills/code-review/prompts/reviewer.md` (worker rubric), `skills/code-review/SKILL.md` (orchestrator adjudication/merge gate)
+**검증 대상**: `src/scripts/chunk-review/prompts/reviewer.md` (worker rubric), `skills/code-review/SKILL.md` (orchestrator adjudication/merge gate)
 
 **변경 사항**: P1 정의를 "demonstrable defect under today's realistic conditions"로 좁히고, P2를 3개 서브카테고리(a/b/c)로 확장. Worker "propose" → Orchestrator "adjudicate" 역할 분리. P1 soft block merge gate 추가.
 
@@ -674,7 +674,7 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 
 **테스트 일시**: 2026-02-27
 **테스트 방법**: production `assemblePrompt` 파이프라인 재현 — reviewer.md/gemini.md를 `<system-instructions>`로 래핑, inline diff + review scope를 `--- REVIEW CONTENT ---`로 래핑, HEADLESS SESSION + EXECUTION_INSTRUCTION 추가. stdin으로 CLI에 전달.
-**검증 대상**: `skills/code-review/prompts/reviewer.md` (claude/codex fallback), `skills/code-review/prompts/gemini.md` (gemini 전용)
+**검증 대상**: `src/scripts/chunk-review/prompts/reviewer.md` (claude/codex fallback), `src/scripts/chunk-review/prompts/gemini.md` (gemini 전용)
 **테스트 입력**: JWT Auth 구현 diff — `src/auth/login.ts` (42줄, login+register), `src/auth/middleware.ts` (22줄, authGuard). 의도적으로 P1 이슈 3개(hardcoded secret, user enumeration, missing validation) + P2 2개 + cross-file concern 포함.
 
 | Scenario | CLI | Prompt | Verdict | VPs | Notes |
