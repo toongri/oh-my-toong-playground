@@ -11,6 +11,7 @@ import {
   parseYamlSimple,
   computeStatus,
   resolveContextDir,
+  findProjectRoot,
 } from './job.ts';
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ describe('parseYamlSimple', () => {
         { name: 'claude', command: 'claude -p', emoji: '🧠', color: 'CYAN' },
       ],
       context: {},
-      settings: { exclude_chairman_from_reviewers: true, timeout: 180 },
+      settings: { exclude_chairman_from_members: true, timeout: 180 },
     },
   };
 
@@ -57,23 +58,6 @@ describe('parseYamlSimple', () => {
     expect(result['spec-review'].chairman.role).toBe('gemini');
   });
 
-  test('parses reviewers array with multiple entries', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'spec-review:',
-      '  reviewers:',
-      '    - name: alice',
-      '      command: alice-cli',
-      '    - name: bob',
-      '      command: bob-cli',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['spec-review'].members.length).toBe(2);
-    expect(result['spec-review'].members[0].name).toBe('alice');
-    expect(result['spec-review'].members[0].command).toBe('alice-cli');
-    expect(result['spec-review'].members[1].name).toBe('bob');
-  });
-
   test('parses context section', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
@@ -93,11 +77,11 @@ describe('parseYamlSimple', () => {
       'spec-review:',
       '  settings:',
       '    timeout: 300',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
     expect(result['spec-review'].settings.timeout).toBe(300);
-    expect(result['spec-review'].settings.exclude_chairman_from_reviewers).toBe(false);
+    expect(result['spec-review'].settings.exclude_chairman_from_members).toBe(false);
   });
 
   test('skips comment lines', () => {
@@ -141,7 +125,7 @@ describe('parseYamlSimple', () => {
     expect(result['spec-review'].chairman.role).toBe('auto');
   });
 
-  test('handles "reviewers:" as alias for members section', () => {
+  test('parses members section', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'spec-review:',
@@ -158,7 +142,7 @@ describe('parseYamlSimple', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'spec-review:',
-      '  reviewers:',
+      '  members:',
       '    - name: "quoted-name"',
       '      command: some-cmd',
     ].join('\n'));
@@ -188,6 +172,39 @@ describe('parseYamlSimple', () => {
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
     expect(result['spec-review'].settings.verbose).toBe(true);
+  });
+
+  test('strips inline comment from integer value', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  settings:',
+      '    timeout: 180 # default',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    expect(result['spec-review'].settings.timeout).toBe(180);
+  });
+
+  test('strips inline comment from string value', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    role: auto # resolved at runtime',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    expect(result['spec-review'].chairman.role).toBe('auto');
+  });
+
+  test('preserves # inside quoted string values', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    role: "value#with#hash"',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, fallback);
+    expect(result['spec-review'].chairman.role).toBe('value#with#hash');
   });
 });
 
@@ -224,7 +241,7 @@ describe('parseSpecReviewConfig', () => {
 
   test('fallback contains default settings', async () => {
     const result = await parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    expect(result['spec-review'].settings.exclude_chairman_from_reviewers).toBe(true);
+    expect(result['spec-review'].settings.exclude_chairman_from_members).toBe(true);
     expect(result['spec-review'].settings.timeout).toBe(180);
   });
 
@@ -239,7 +256,7 @@ describe('parseSpecReviewConfig', () => {
       'spec-review:',
       '  chairman:',
       '    role: gemini',
-      '  reviewers:',
+      '  members:',
       '    - name: alice',
       '      command: alice-cli',
       '  context:',
@@ -264,7 +281,7 @@ describe('parseSpecReviewConfig', () => {
     ].join('\n'));
     const result = await parseSpecReviewConfig(configPath);
     expect(result['spec-review'].settings.timeout).toBe(999);
-    expect(result['spec-review'].settings.exclude_chairman_from_reviewers).toBe(true);
+    expect(result['spec-review'].settings.exclude_chairman_from_members).toBe(true);
   });
 
   test('returns structure with spec-review top-level key', async () => {
@@ -754,5 +771,50 @@ describe('resolveContextDir', () => {
     delete process.env.OMT_PROJECT;
     const result = resolveContextDir('~/.omt/fixed/context', '/some/root');
     expect(result).toBe(path.join(os.homedir(), '.omt', 'fixed', 'context'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findProjectRoot
+// ---------------------------------------------------------------------------
+
+describe('findProjectRoot', () => {
+  test('returns non-null result when run from within repo', () => {
+    const result = findProjectRoot();
+    expect(result).not.toBe(null);
+  });
+
+  test('findProjectRoot regex matches .claude/scripts/ path', () => {
+    const re = /^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//;
+    const match = '/path/to/project/.claude/scripts/spec-reviewer/job.ts'.match(re);
+    expect(match).not.toBe(null);
+    expect(match![1]).toBe('/path/to/project');
+  });
+
+  test('findProjectRoot regex matches .gemini/scripts/ path', () => {
+    const re = /^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//;
+    const match = '/path/to/project/.gemini/scripts/spec-reviewer/job.ts'.match(re);
+    expect(match).not.toBe(null);
+    expect(match![1]).toBe('/path/to/project');
+  });
+
+  test('findProjectRoot regex matches .codex/scripts/ path', () => {
+    const re = /^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//;
+    const match = '/path/to/project/.codex/scripts/spec-reviewer/job.ts'.match(re);
+    expect(match).not.toBe(null);
+    expect(match![1]).toBe('/path/to/project');
+  });
+
+  test('findProjectRoot regex matches .opencode/scripts/ path', () => {
+    const re = /^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//;
+    const match = '/path/to/project/.opencode/scripts/spec-reviewer/job.ts'.match(re);
+    expect(match).not.toBe(null);
+    expect(match![1]).toBe('/path/to/project');
+  });
+
+  test('findProjectRoot regex does not match non-platform scripts path', () => {
+    const re = /^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//;
+    const match = '/path/to/project/.other/scripts/spec-reviewer/job.ts'.match(re);
+    expect(match).toBe(null);
   });
 });

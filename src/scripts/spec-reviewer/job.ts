@@ -48,6 +48,7 @@ const JOB_CONFIG: JobConfig = {
 // ---------------------------------------------------------------------------
 
 const SCRIPT_DIR = import.meta.dirname;
+const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../../..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'spec-reviewer.config.yaml');
@@ -97,7 +98,7 @@ function _parseYamlSimpleWithContext(configPath: string, fallback: Record<string
 
       if (trimmed === 'spec-review:') continue;
       if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'reviewers:' || trimmed === 'members:') { currentSection = 'members'; continue; }
+      if (trimmed === 'members:') { currentSection = 'members'; continue; }
       if (trimmed === 'context:') { currentSection = 'context'; continue; }
       if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
 
@@ -108,17 +109,17 @@ function _parseYamlSimpleWithContext(configPath: string, fallback: Record<string
       }
 
       if (currentMember && currentSection === 'members') {
-        const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
+        const match = trimmed.match(/^(\w+):\s*(?:"([^"]*)"|(.*))$/);
         if (match) {
-          currentMember[match[1]] = match[2];
+          currentMember[match[1]] = match[2] !== undefined ? match[2] : match[3].replace(/\s*#.*$/, '').trim();
         }
         continue;
       }
 
       if (currentSection === 'chairman' || currentSection === 'settings' || currentSection === 'context') {
-        const match = trimmed.match(/^(\w+):\s*"?([^"]*)"?$/);
+        const match = trimmed.match(/^(\w+):\s*(?:"([^"]*)"|(.*))$/);
         if (match) {
-          let value: unknown = match[2];
+          let value: unknown = match[2] !== undefined ? match[2] : match[3].replace(/\s*#.*$/, '').trim();
           if (value === 'true') value = true;
           else if (value === 'false') value = false;
           else if (/^\d+$/.test(value as string)) value = parseInt(value as string, 10);
@@ -163,7 +164,7 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
         { name: 'gemini', command: 'gemini', emoji: '💎', color: 'GREEN' },
       ],
       context: {},
-      settings: { exclude_chairman_from_reviewers: true, timeout: 180 },
+      settings: { exclude_chairman_from_members: true, timeout: 180 },
     },
   };
 
@@ -212,7 +213,7 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
     merged['spec-review'].chairman = { ...merged['spec-review'].chairman, ...specReview.chairman };
   }
 
-  const specReviewMembers = specReview.members ?? specReview.reviewers;
+  const specReviewMembers = specReview.members;
   if (specReviewMembers !== undefined) {
     if (!Array.isArray(specReviewMembers)) {
       exitWithError(`Invalid config in ${configPath}: 'spec-review.members' must be a list/array`);
@@ -260,7 +261,7 @@ function findProjectRoot(): string | null {
   }
 
   const normalized = SCRIPT_DIR.replace(/\\/g, '/');
-  const scriptsMatch = normalized.match(/^(.+?)\/.claude\/scripts\//);
+  const scriptsMatch = normalized.match(/^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//);
   if (scriptsMatch) {
     return scriptsMatch[1];
   }
@@ -374,14 +375,14 @@ function printHelp(): void {
   process.stdout.write(`Spec Review (job mode)
 
 Usage:
-  spec-review-job.sh start [--config path] [--chairman auto|claude|codex|...] [--spec <spec-name>] [--jobs-dir path] [--json] "question"
-  spec-review-job.sh start --stdin
-  spec-review-job.sh status [--json|--text|--checklist] [--verbose] <jobDir>
-  spec-review-job.sh wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
-  spec-review-job.sh collect [--timeout-ms N] <jobDir>
-  spec-review-job.sh results [--json] <jobDir>
-  spec-review-job.sh stop <jobDir>
-  spec-review-job.sh clean <jobDir>
+  job.ts start [--config path] [--chairman auto|claude|codex|...] [--spec <spec-name>] [--jobs-dir path] [--json] "question"
+  job.ts start --stdin
+  job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
+  job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
+  job.ts collect [--timeout-ms N] <jobDir>
+  job.ts results [--json] <jobDir>
+  job.ts stop <jobDir>
+  job.ts clean <jobDir>
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
@@ -418,7 +419,7 @@ function asWaitPayload(statusPayload: any): any {
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
   const configPath = (options.config || process.env.SPEC_REVIEW_CONFIG || resolveDefaultConfigFile()) as string;
   const jobsDir =
-    (options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(SCRIPT_DIR, '.jobs')) as string;
+    (options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs')) as string;
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, JOB_CONFIG);
@@ -432,8 +433,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const excludeChairmanOverride =
     options['exclude-chairman'] != null ? true : options['include-chairman'] != null ? false : null;
 
-  const excludeSetting = normalizeBool(config['spec-review'].settings.exclude_chairman_from_reviewers);
-  const excludeChairmanFromReviewers =
+  const excludeSetting = normalizeBool(config['spec-review'].settings.exclude_chairman_from_members);
+  const excludeChairmanFromMembers =
     excludeChairmanOverride != null ? excludeChairmanOverride : excludeSetting != null ? excludeSetting : true;
 
   const timeoutSetting = Number(config['spec-review'].settings.timeout || 0);
@@ -444,7 +445,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const members = requestedMembers.filter((r: any) => {
     if (!r || !r.name || !r.command) return false;
     const nameLc = String(r.name).toLowerCase();
-    if (excludeChairmanFromReviewers && !includeChairman && nameLc === chairmanRole) return false;
+    if (excludeChairmanFromMembers && !includeChairman && nameLc === chairmanRole) return false;
     return true;
   });
 
@@ -483,7 +484,7 @@ ${prompt}`;
     specName,
     specContextFiles: specContext.files,
     settings: {
-      excludeChairmanFromReviewers,
+      excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
     },
     members: members.map((r: any) => ({
@@ -763,7 +764,7 @@ async function main(): Promise<void> {
   if (command === 'clean') {
     const jobDir = rest[0] as string;
     if (!jobDir) exitWithError('clean: missing jobDir');
-    _cmdClean(options, jobDir, JOB_CONFIG, path.join(SCRIPT_DIR, '.jobs'));
+    _cmdClean(options, jobDir, JOB_CONFIG, path.join(PROJECT_ROOT, '.omt', 'jobs'));
     return;
   }
 
@@ -786,4 +787,4 @@ export {
   generateJobId,
 } from '../../lib/job-utils';
 
-export { buildUiPayload, parseSpecReviewConfig, parseYamlSimple, computeStatus, resolveContextDir };
+export { buildUiPayload, parseSpecReviewConfig, parseYamlSimple, computeStatus, resolveContextDir, findProjectRoot };
