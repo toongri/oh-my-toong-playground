@@ -3,8 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import { initLogger, logInfo, logError, logStart, logEnd } from '../../lib/logging';
-import { parseArgs, exitWithError } from '../../lib/job-utils';
+import { initLogger, logInfo, logError, logStart, logEnd } from '../../../src/lib/logging';
+import { parseArgs, exitWithError } from '../../../src/lib/job-utils';
 import {
   splitCommand,
   atomicWriteJson,
@@ -12,9 +12,9 @@ import {
   assemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
-} from '../../lib/worker-utils';
+} from '../../../src/lib/worker-utils';
 
-const PROMPTS_DIR = path.resolve(import.meta.dirname, '../../skills/agent-council/prompts');
+const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
 
 // ---------------------------------------------------------------------------
 // Wrappers (council uses member/jobDir interface)
