@@ -1227,3 +1227,62 @@ describe('spawnWorkers 이름 유효성 검사', () => {
     expect(err).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// cmdCollect — timeout-ms 0 is infinite wait
+// ---------------------------------------------------------------------------
+
+describe('cmdCollect', () => {
+  let tmpDir: string;
+
+  function setupCollectJob(jobDir: string, entities: Record<string, unknown>) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'collect-test' }));
+    const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+    fs.mkdirSync(entitiesDir, { recursive: true });
+    for (const [name, status] of Object.entries(entities)) {
+      const dir = path.join(entitiesDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('--timeout-ms 0은 즉시 종료하지 않고 done 상태까지 대기함', async () => {
+    const jobDir = path.join(tmpDir, 'job-collect-timeout0');
+    // Start with running state
+    setupCollectJob(jobDir, {
+      alice: { member: 'alice', state: 'running' },
+    });
+
+    const aliceStatusPath = path.join(jobDir, chunkReviewConfig.entityDirName, 'alice', 'status.json');
+
+    // Transition to done after COLLECT_POLL_INTERVAL_MS (5000ms) so the second poll sees 'done'
+    const donePayload = JSON.stringify({ member: 'alice', state: 'done', exitCode: 0 });
+    Bun.spawn(['bash', '-c', `sleep 1 && printf '%s' '${donePayload}' > "${aliceStatusPath}"`]);
+
+    const output: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+      if (typeof chunk === 'string') output.push(chunk);
+      return origWrite(chunk, ...(args as Parameters<typeof origWrite>));
+    };
+
+    try {
+      await cmdCollect({ 'timeout-ms': 0 }, jobDir, chunkReviewConfig);
+    } finally {
+      process.stdout.write = origWrite;
+    }
+
+    expect(output.length).toBeGreaterThan(0);
+    const result = JSON.parse(output[0]);
+    expect(result.overallState).toBe('done');
+  }, 15000);
+});

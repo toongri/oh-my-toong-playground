@@ -800,7 +800,7 @@ export async function cmdCollect(
       );
       return;
     }
-    if (Date.now() - start >= timeoutMs) {
+    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
       process.stdout.write(
         `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,
       );
