@@ -278,6 +278,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     let heartbeatHandle: ReturnType<typeof setInterval> | null = setInterval(() => {
       try {
         const current = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+        if (current.state !== 'running') return;
         atomicWriteJson(statusPath, { ...current, lastHeartbeat: new Date().toISOString() });
       } catch { /* ignore */ }
     }, heartbeatIntervalMs);

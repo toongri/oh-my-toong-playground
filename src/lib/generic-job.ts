@@ -431,8 +431,8 @@ export function buildUiPayload(
   const queued = Number(counts.queued || 0);
   const running = Number(counts.running || 0);
 
-  const reviewersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
-  const sortedReviewers = reviewersArray
+  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+  const sortedMembers = membersArray
     .map((r) => ({
       entity: r && r.member != null ? String(r.member) : '',
       state: r && r.state != null ? String(r.state) : 'unknown',
@@ -445,7 +445,7 @@ export function buildUiPayload(
   const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
   let hasInProgress = dispatchStatus === 'in_progress';
 
-  const reviewerSteps = sortedReviewers.map((r) => {
+  const memberSteps = sortedMembers.map((r) => {
     const state = r.state || 'unknown';
     const isTerminal = terminalStates.has(state);
 
@@ -467,7 +467,7 @@ export function buildUiPayload(
 
   const codexPlan = [
     { step: `${config.uiLabel} Prompt dispatch`, status: dispatchStatus },
-    ...reviewerSteps.map((s) => ({ step: s.label, status: s.status })),
+    ...memberSteps.map((s) => ({ step: s.label, status: s.status })),
     { step: `${config.uiLabel} Synthesize`, status: synthStatus },
   ];
 
@@ -479,7 +479,7 @@ export function buildUiPayload(
         ? UI_STRINGS.dispatch.completed
         : UI_STRINGS.dispatch.inProgress,
     },
-    ...reviewerSteps.map((s) => ({
+    ...memberSteps.map((s) => ({
       content: s.label,
       status: s.status,
       activeForm: s.status === 'completed' ? 'Finished' : 'Awaiting response',
@@ -508,7 +508,7 @@ export function buildUiPayload(
 // ---------------------------------------------------------------------------
 
 function asWaitPayload(statusPayload: any, config: JobConfig): any {
-  const reviewersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
 
   return {
     jobDir: statusPayload.jobDir,
@@ -516,7 +516,7 @@ function asWaitPayload(statusPayload: any, config: JobConfig): any {
     chairmanRole: statusPayload.chairmanRole,
     overallState: statusPayload.overallState,
     counts: statusPayload.counts,
-    [config.entityPlural]: reviewersArray.map((r: any) => ({
+    [config.entityPlural]: membersArray.map((r: any) => ({
       member: r.member,
       state: r.state,
       exitCode: r.exitCode != null ? r.exitCode : null,
@@ -546,11 +546,11 @@ export function buildManifest(
       const status = readJsonIfExists(statusPath) as any;
       if (!status) continue;
       const outputPath = path.join(entitiesRoot, entry, 'output.txt');
-      const hasOutput = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
+      const outputExists = fs.existsSync(outputPath);
       entities.push({
         member: status.member,
-        outputFilePath: hasOutput ? outputPath : null,
-        errorMessage: hasOutput ? null : (status.message || status.state),
+        outputFilePath: outputExists ? outputPath : null,
+        errorMessage: outputExists ? null : (status.message || status.state),
         _safeName: entry,
       });
     }
@@ -839,7 +839,7 @@ export function parseYamlSimple(
 
       if (trimmed === `${topKey}:`) continue;
       if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'reviewers:' || trimmed === 'members:') { currentSection = 'members'; continue; }
+      if (trimmed === 'members:') { currentSection = 'members'; continue; }
       if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
 
       if (currentSection === 'members' && trimmed.startsWith('- name:')) {
@@ -851,7 +851,7 @@ export function parseYamlSimple(
       if (currentMember && currentSection === 'members') {
         const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
         if (match) {
-          currentMember[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim();
+          currentMember[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim().replace(/\s+#.*$/, '');
         }
         continue;
       }
@@ -859,7 +859,7 @@ export function parseYamlSimple(
       if (currentSection === 'chairman' || currentSection === 'settings') {
         const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
         if (match) {
-          let value: unknown = match[2].replace(/^"(.*)"$/, '$1').trim();
+          let value: unknown = match[2].replace(/^"(.*)"$/, '$1').trim().replace(/\s+#.*$/, '');
           if (value === 'true') value = true;
           else if (value === 'false') value = false;
           else if (/^\d+$/.test(value as string)) value = parseInt(value as string, 10);
