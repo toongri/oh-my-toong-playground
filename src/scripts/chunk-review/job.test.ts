@@ -37,7 +37,7 @@ describe('parseYamlSimple', () => {
       members: [
         { name: 'claude', command: 'claude -p', emoji: '\u{1F9E0}', color: 'CYAN' },
       ],
-      settings: { exclude_chairman_from_reviewers: true, timeout: 300 },
+      settings: { exclude_chairman_from_members: true, timeout: 300 },
     },
   };
 
@@ -83,11 +83,11 @@ describe('parseYamlSimple', () => {
       'chunk-review:',
       '  settings:',
       '    timeout: 300',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
     expect(result['chunk-review'].settings.timeout).toBe(300);
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(false);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(false);
   });
 
   test('skips comment lines', () => {
@@ -256,7 +256,7 @@ describe('parseChunkReviewConfig', () => {
 
   test('fallback contains default settings', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(true);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(true);
     expect(result['chunk-review'].settings.timeout).toBe(300);
   });
 
@@ -288,7 +288,7 @@ describe('parseChunkReviewConfig', () => {
     ].join('\n'));
     const result = await parseChunkReviewConfig(configPath);
     expect(result['chunk-review'].settings.timeout).toBe(999);
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(true);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(true);
   });
 
   test('returns structure with chunk-review top-level key', async () => {
@@ -1222,7 +1222,7 @@ describe('spawnWorkers safe name collision detection', () => {
       '    - name: "alice"',
       '      command: echo test2',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1273,7 +1273,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1293,7 +1293,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     const output = JSON.parse(result.toString());
     const memberNames = output.members.map(r => r.name);
     expect(memberNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(false);
+    expect(output.settings.excludeChairmanFromMembers).toBe(false);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1312,7 +1312,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1332,7 +1332,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     const output = JSON.parse(result.toString());
     const memberNames = output.members.map(r => r.name);
     expect(!memberNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1352,7 +1352,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1374,9 +1374,9 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     const memberNames = output.members.map(r => r.name);
     // --exclude-chairman=false overrides config to false (don't exclude)
     // --include-chairman=false means no force-include
-    // So excludeChairmanFromReviewers=false, includeChairman=false → chairman included
+    // So excludeChairmanFromMembers=false, includeChairman=false → chairman included
     expect(memberNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(false);
+    expect(output.settings.excludeChairmanFromMembers).toBe(false);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1395,7 +1395,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1415,7 +1415,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     const output = JSON.parse(result.toString());
     const memberNames = output.members.map(r => r.name);
     expect(!memberNames.includes('claude')).toBe(true);
-    expect(output.settings.excludeChairmanFromReviewers).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(true);
 
     // cleanup spawned workers
     try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
@@ -1453,7 +1453,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1494,7 +1494,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1533,7 +1533,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -1572,7 +1572,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
       '    - name: gemini',
       '      command: echo gemini',
       '  settings:',
-      '    exclude_chairman_from_reviewers: true',
+      '    exclude_chairman_from_members: true',
       '    timeout: 10',
     ].join('\n'));
 
@@ -2066,7 +2066,7 @@ describe('start + collect integration', () => {
       '    - name: r2',
       '      command: echo r2',
       '  settings:',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
       '    timeout: 10',
     ].join('\n'));
     return configPath;
