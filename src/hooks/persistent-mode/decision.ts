@@ -52,7 +52,7 @@ Your previous attempt did not include oracle approval. The work is NOT verified 
 CRITICAL INSTRUCTIONS:
 1. Review your progress and the original task below
 2. Check your todo list - are ALL items marked complete?
-3. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify task completion: ${truncatedPrompt}")
+3. Spawn Oracle to verify: Agent(subagent_type="oracle", prompt="Verify task completion: ${truncatedPrompt}")
 4. If Oracle approves, output: <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
 5. Then output: <promise>${promise}</promise>
 6. Do NOT stop until verified by Oracle
@@ -77,7 +77,7 @@ function buildOracleVerificationMessage(
 DONE detected. Spawn Oracle to verify completion.
 
 CRITICAL INSTRUCTIONS:
-1. Spawn Oracle to verify: Task(subagent_type="oracle", prompt="Verify task completion: ${truncatedPrompt}")
+1. Spawn Oracle to verify: Agent(subagent_type="oracle", prompt="Verify task completion: ${truncatedPrompt}")
 2. When Oracle approves, output: <oracle-approved>VERIFIED_COMPLETE</oracle-approved>
 3. Do NOT stop until verified by Oracle
 

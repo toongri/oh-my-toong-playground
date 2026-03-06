@@ -48,11 +48,11 @@ describe('parseTranscript', () => {
     expect(result.activeSkill).toBe('sisyphus');
   });
 
-  it('should count running agents from Task tool calls', async () => {
+  it('should count running agents from Agent tool calls', async () => {
     const transcriptPath = join(testDir, 'agents-transcript.jsonl');
     const lines = [
-      JSON.stringify({ tool: 'Task', status: 'started', id: 'agent1' }),
-      JSON.stringify({ tool: 'Task', status: 'running', id: 'agent2' }),
+      JSON.stringify({ tool: 'Agent', status: 'started', id: 'agent1' }),
+      JSON.stringify({ tool: 'Agent', status: 'running', id: 'agent2' }),
     ];
     await writeFile(transcriptPath, lines.join('\n'));
 
@@ -155,15 +155,15 @@ describe('parseTranscript', () => {
     const result = await parseTranscript(transcriptPath);
 
     // Assistant messages are no longer tracked as agents
-    // Only running Task subagents are shown
+    // Only running subagents are shown
     expect(result.agents).toEqual([]);
   });
 
-  it('should extract subagent info from Task tool calls', async () => {
+  it('should extract subagent info from Agent tool calls', async () => {
     const transcriptPath = join(testDir, 'subagent.jsonl');
     const lines = [
       JSON.stringify({
-        tool: 'Task',
+        tool: 'Agent',
         status: 'started',
         toolUseId: 'task-456',
         model: 'claude-opus-4-20250514',
@@ -189,13 +189,13 @@ describe('parseTranscript', () => {
         uuid: 'main-1',
       }),
       JSON.stringify({
-        tool: 'Task',
+        tool: 'Agent',
         status: 'started',
         toolUseId: 'sub-1',
         model: 'claude-sonnet-4-20250514',
       }),
       JSON.stringify({
-        tool: 'Task',
+        tool: 'Agent',
         status: 'started',
         toolUseId: 'sub-2',
         model: 'claude-3-5-haiku-20241022',
@@ -215,19 +215,19 @@ describe('parseTranscript', () => {
     const transcriptPath = join(testDir, 'agent-completion.jsonl');
     const lines = [
       JSON.stringify({
-        tool: 'Task',
+        tool: 'Agent',
         status: 'started',
         toolUseId: 'task-1',
         model: 'claude-sonnet-4-20250514',
       }),
       JSON.stringify({
-        tool: 'Task',
+        tool: 'Agent',
         status: 'started',
         toolUseId: 'task-2',
         model: 'claude-haiku-3-20240307',
       }),
       JSON.stringify({
-        tool: 'Task',
+        tool: 'Agent',
         status: 'completed',
         toolUseId: 'task-1',
       }),
@@ -242,8 +242,8 @@ describe('parseTranscript', () => {
   });
 
   // Tests for actual Claude Code transcript structure
-  // Claude Code uses: { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Task', id: 'xxx', input: {...} }] } }
-  it('should detect Task agent from actual Claude Code transcript structure with message.content array', async () => {
+  // Claude Code uses: { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Agent', id: 'xxx', input: {...} }] } }
+  it('should detect agent from actual Claude Code transcript structure with message.content array', async () => {
     const transcriptPath = join(testDir, 'claude-code-structure.jsonl');
     const lines = [
       JSON.stringify({
@@ -255,7 +255,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_abc123',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Do something' },
             },
           ],
@@ -287,7 +287,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_task1',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Task 1' },
             },
           ],
@@ -303,7 +303,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_task2',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Task 2' },
             },
           ],
@@ -337,7 +337,7 @@ describe('parseTranscript', () => {
     });
   });
 
-  it('should detect multiple Task agents from single message with multiple tool_use items', async () => {
+  it('should detect multiple agents from single message with multiple tool_use items', async () => {
     const transcriptPath = join(testDir, 'claude-code-multiple-tools.jsonl');
     const lines = [
       JSON.stringify({
@@ -349,7 +349,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_task_a',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Task A' },
             },
             {
@@ -359,7 +359,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_task_b',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Task B' },
             },
           ],
@@ -409,7 +409,7 @@ describe('parseTranscript', () => {
     expect(result.activeSkill).toBe('prometheus');
   });
 
-  it('should extract subagent_type from Task tool input', async () => {
+  it('should extract subagent_type from Agent tool input', async () => {
     const transcriptPath = join(testDir, 'task-with-subagent-type.jsonl');
     const lines = [
       JSON.stringify({
@@ -421,7 +421,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_task_sisyphus',
-              name: 'Task',
+              name: 'Agent',
               input: {
                 prompt: 'Do something',
                 subagent_type: 'sisyphus-junior',
@@ -444,7 +444,7 @@ describe('parseTranscript', () => {
     });
   });
 
-  it('should extract multiple subagent_types from parallel Task calls', async () => {
+  it('should extract multiple subagent_types from parallel Agent calls', async () => {
     const transcriptPath = join(testDir, 'multiple-subagent-types.jsonl');
     const lines = [
       JSON.stringify({
@@ -456,13 +456,13 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_explore',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Search codebase', subagent_type: 'explore' },
             },
             {
               type: 'tool_use',
               id: 'toolu_oracle',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Analyze architecture', subagent_type: 'oracle' },
             },
           ],
@@ -488,7 +488,7 @@ describe('parseTranscript', () => {
     });
   });
 
-  it('should handle Task tool without subagent_type (name is undefined)', async () => {
+  it('should handle Agent tool without subagent_type (name is undefined)', async () => {
     const transcriptPath = join(testDir, 'task-no-subagent-type.jsonl');
     const lines = [
       JSON.stringify({
@@ -500,7 +500,7 @@ describe('parseTranscript', () => {
             {
               type: 'tool_use',
               id: 'toolu_legacy',
-              name: 'Task',
+              name: 'Agent',
               input: { prompt: 'Old style task call' },
             },
           ],

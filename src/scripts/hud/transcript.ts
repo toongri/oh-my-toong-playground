@@ -74,8 +74,8 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
           }
         }
 
-        // Track running Task agents (subagents) - legacy format
-        if (entry.tool === 'Task' || entry.toolName === 'Task') {
+        // Track running agents (subagents) - legacy format
+        if (entry.tool === 'Agent' || entry.toolName === 'Agent') {
           const agentId = entry.toolUseId;
           if (!agentId) continue;
 
@@ -106,7 +106,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
           for (const item of messageContent) {
             // Detect tool_use items (agent starts)
             if (item.type === 'tool_use' && item.id) {
-              if (item.name === 'Task') {
+              if (item.name === 'Agent') {
                 runningAgents.set(item.id, {
                   type: 'S',
                   model: modelToTier(modelId),
@@ -126,7 +126,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
         }
 
         // Note: We no longer track assistant messages as agents.
-        // Only subagents (Task tool) are shown in the HUD.
+        // Only subagents (Agent tool) are shown in the HUD.
       } catch (error) {
         // Skip malformed lines but log the error
         const errorMessage = error instanceof Error ? error.message : String(error);
