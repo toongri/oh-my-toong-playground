@@ -60,11 +60,11 @@ digraph council_decision {
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
 3. Council members provide independent opinions (raw outputs)
-4. **Poll until `overallState === "done"`**
-5. **Fetch results**: `council.sh results JOB_DIR`
+4. **Collect**: `bun $SCRIPTS_DIR/council/job.ts collect JOB_DIR` — repeat until `overallState` is `"done"`
+5. **Read each member's output file** via the Read tool
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
-8. **Cleanup**: `council.sh clean JOB_DIR`
+8. **Cleanup**: `bun $SCRIPTS_DIR/council/job.ts clean JOB_DIR`
 
 ## Context Synchronization
 
@@ -79,7 +79,11 @@ Council members do not share the caller's session context. The caller must expli
 
 ## How to Call
 
-Execute `scripts/council.sh` from this skill directory:
+```bash
+SCRIPTS_DIR=$(ls -d .{claude,gemini,codex,opencode}/scripts 2>/dev/null | head -1)
+```
+
+Execute `bun $SCRIPTS_DIR/council/job.ts` from the project root:
 
 > Note: Always write the council prompt in English for consistent cross-model communication.
 
@@ -88,28 +92,8 @@ Execute `scripts/council.sh` from this skill directory:
 For interactive terminal use where you wait for completion:
 
 ```bash
-scripts/council.sh --stdin <<'EOF'
-## Evaluation Criteria
-[Key principles - in English]
-
-## Project Context
-[Conventions and patterns - in English]
-
-## Target
-[Code or content under review]
-
-## Question
-[Specific points needing judgment - in English]
-EOF
-```
-
-### Host Agent Context (Claude Code)
-
-For programmatic use within Claude Code sessions:
-
-**1. Start council (returns immediately with job directory)**
-```bash
-JOB_DIR=$(scripts/council.sh --stdin <<'EOF'
+# 1. Start council — capture JOB_DIR
+JOB_DIR=$(bun $SCRIPTS_DIR/council/job.ts start --stdin <<'EOF'
 ## Evaluation Criteria
 [Key principles - in English]
 
@@ -123,31 +107,91 @@ JOB_DIR=$(scripts/council.sh --stdin <<'EOF'
 [Specific points needing judgment - in English]
 EOF
 )
+
+# 2. Collect — poll until overallState is "done"
+while true; do
+  RESULT=$(bun $SCRIPTS_DIR/council/job.ts collect "$JOB_DIR")
+  echo "$RESULT" | grep -q '"overallState":.*"done"' && break
+  echo "Still running... retrying in 10s"
+  sleep 10
+done
+echo "$RESULT"
+
+# 3. Read each member's output
+# Parse outputFilePath values from $RESULT and cat them, e.g.:
+#   cat /path/to/claude-output.txt
+#   cat /path/to/gemini-output.txt
+
+# 4. Clean up
+bun $SCRIPTS_DIR/council/job.ts clean "$JOB_DIR"
 ```
 
-**2. Poll until completion**
+### Host Agent Context (Claude Code)
+
+For programmatic use within Claude Code sessions:
+
+**CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
+
+**1. Start council (Bash, timeout: 180000)**
 ```bash
-scripts/council.sh wait "$JOB_DIR"
-# Returns JSON with overallState field
-# Keep polling until: overallState === "done"
+PROMPT_FILE=$(mktemp)
+cat > "$PROMPT_FILE" << 'PROMPT_EOF'
+## Evaluation Criteria
+[Key principles - in English]
+
+## Project Context
+[Conventions and patterns - in English]
+
+## Target
+[Code or content under review]
+
+## Question
+[Specific points needing judgment - in English]
+PROMPT_EOF
+JOB_DIR=$(bun $SCRIPTS_DIR/council/job.ts start --stdin < "$PROMPT_FILE")
+```
+Output: JOB_DIR path (one line on stdout).
+
+> **Important**: Write prompts in English for consistent cross-model communication.
+
+**2. Collect results (Bash, timeout: 180000)**
+
+Poll until all members complete. Re-run this step if not done.
+```bash
+bun $SCRIPTS_DIR/council/job.ts collect "$JOB_DIR"
 ```
 
-**3. Fetch raw results**
-```bash
-scripts/council.sh results "$JOB_DIR"
-# Returns raw opinions from each council member
+Response JSON (done):
+```json
+{
+  "overallState": "done",
+  "id": "...",
+  "members": [
+    { "member": "claude", "outputFilePath": "/path/to/output.txt", "errorMessage": null },
+    { "member": "gemini", "outputFilePath": "/path/to/output.txt", "errorMessage": null },
+    { "member": "codex", "outputFilePath": null, "errorMessage": "timed_out" }
+  ]
+}
 ```
+
+Response JSON (not done — re-run this step):
+```json
+{ "overallState": "running", "id": "...", "counts": { "total": 3, "done": 1, "running": 2, "queued": 0 } }
+```
+
+**3. Read raw outputs**
+
+Use the Read tool to read each member's `outputFilePath` from the manifest.
+Only read entries where `outputFilePath` is non-null (null = infrastructure failure; see Degradation Policy).
 
 **4. Synthesize (caller responsibility)**
 
 You as the Chairman must synthesize raw outputs into the Advisory Format (see below). The council does NOT produce a synthesized advisory automatically.
 
-**5. Cleanup**
+**5. Cleanup (Bash, timeout: 180000)**
 ```bash
-scripts/council.sh clean "$JOB_DIR"
+bun $SCRIPTS_DIR/council/job.ts clean "$JOB_DIR"
 ```
-
-> **Important:** Check `overallState === "done"` in the wait JSON before fetching results.
 
 ### Synthesis Protocol
 

@@ -61,6 +61,8 @@ scripts:
   items:
     - hud
     - chunk-review
+    - council
+    - spec-reviewer
 
 rules:
   items:

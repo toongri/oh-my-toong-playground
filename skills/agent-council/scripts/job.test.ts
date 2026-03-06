@@ -11,7 +11,7 @@ import {
   parseCouncilConfig,
   parseYamlSimple,
   computeStatus,
-} from './council-job.ts';
+} from './job.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -507,7 +507,7 @@ describe('parseCouncilConfig', () => {
     fs.writeFileSync(configPath, 'other_key: true\n', 'utf8');
 
     const scriptContent = `
-      const { parseCouncilConfig } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
+      const { parseCouncilConfig } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
       await parseCouncilConfig('${configPath.replace(/'/g, "\\'")}');
     `;
 
@@ -556,19 +556,24 @@ describe('computeStatus', () => {
     for (const m of members) {
       const memberDir = path.join(membersDir, m.safeName);
       fs.mkdirSync(memberDir, { recursive: true });
-      fs.writeFileSync(path.join(memberDir, 'status.json'), JSON.stringify(m.status), 'utf8');
+      // Write status with both `reviewer` (framework-expected field) and `member` (backward compat)
+      const status = { ...m.status };
+      if (status.member != null && status.reviewer == null) {
+        status.reviewer = status.member;
+      }
+      fs.writeFileSync(path.join(memberDir, 'status.json'), JSON.stringify(status), 'utf8');
     }
 
     return jobDir;
   }
 
-  test('returns done state when all members are done', () => {
+  test('returns done state when all members are done', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'done', exitCode: 0 } },
       { safeName: 'codex', status: { member: 'codex', state: 'done', exitCode: 0 } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.overallState).toBe('done');
     expect(result.counts.total).toBe(2);
@@ -579,39 +584,39 @@ describe('computeStatus', () => {
     expect(result.chairmanRole).toBe('claude');
   });
 
-  test('returns running state when some members are running', () => {
+  test('returns running state when some members are running', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'done', exitCode: 0 } },
       { safeName: 'codex', status: { member: 'codex', state: 'running' } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.overallState).toBe('running');
     expect(result.counts.done).toBe(1);
     expect(result.counts.running).toBe(1);
   });
 
-  test('returns queued state when members are queued and none running', () => {
+  test('returns queued state when members are queued and none running', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'queued' } },
       { safeName: 'codex', status: { member: 'codex', state: 'queued' } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.overallState).toBe('queued');
     expect(result.counts.queued).toBe(2);
   });
 
-  test('counts error states correctly', () => {
+  test('counts error states correctly', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'error', exitCode: 1 } },
       { safeName: 'codex', status: { member: 'codex', state: 'done', exitCode: 0 } },
       { safeName: 'gemini', status: { member: 'gemini', state: 'missing_cli' } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.overallState).toBe('done');
     expect(result.counts.error).toBe(1);
@@ -620,39 +625,39 @@ describe('computeStatus', () => {
     expect(result.counts.total).toBe(3);
   });
 
-  test('sorts members alphabetically by name', () => {
+  test('sorts members alphabetically by name', async () => {
     const jobDir = setupJobDir([
       { safeName: 'gamma', status: { member: 'gamma', state: 'done', exitCode: 0 } },
       { safeName: 'alpha', status: { member: 'alpha', state: 'done', exitCode: 0 } },
       { safeName: 'beta', status: { member: 'beta', state: 'done', exitCode: 0 } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.members[0].member).toBe('alpha');
     expect(result.members[1].member).toBe('beta');
     expect(result.members[2].member).toBe('gamma');
   });
 
-  test('skips member directories without status.json', () => {
+  test('skips member directories without status.json', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'done', exitCode: 0 } },
     ]);
     // Create an empty member directory without status.json
     fs.mkdirSync(path.join(jobDir, 'members', 'orphan'), { recursive: true });
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.counts.total).toBe(1);
     expect(result.members.length).toBe(1);
   });
 
-  test('returns member fields with null defaults for missing properties', () => {
+  test('returns member fields with null defaults for missing properties', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'queued' } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     const m = result.members[0];
     expect(m.member).toBe('claude');
@@ -663,7 +668,7 @@ describe('computeStatus', () => {
     expect(m.message).toBe(null);
   });
 
-  test('includes timing and exit code info for completed members', () => {
+  test('includes timing and exit code info for completed members', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: {
         member: 'claude',
@@ -675,7 +680,7 @@ describe('computeStatus', () => {
       }},
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     const m = result.members[0];
     expect(m.startedAt).toBe('2026-01-01T00:00:00Z');
@@ -687,8 +692,8 @@ describe('computeStatus', () => {
   test('exits with error for nonexistent jobDir via subprocess', () => {
     const fakePath = path.join(tmpDir, 'does-not-exist');
     const scriptContent = `
-      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
-      computeStatus('${fakePath.replace(/'/g, "\\'")}');
+      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
+      await computeStatus('${fakePath.replace(/'/g, "\\'")}');
     `;
 
     let exitCode;
@@ -708,8 +713,8 @@ describe('computeStatus', () => {
     // No job.json created
 
     const scriptContent = `
-      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
-      computeStatus('${jobDir.replace(/'/g, "\\'")}');
+      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
+      await computeStatus('${jobDir.replace(/'/g, "\\'")}');
     `;
 
     let exitCode;
@@ -730,8 +735,8 @@ describe('computeStatus', () => {
     // No members/ directory created
 
     const scriptContent = `
-      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './council-job.ts').replace(/'/g, "\\'")}');
-      computeStatus('${jobDir.replace(/'/g, "\\'")}');
+      const { computeStatus } = await import('${path.resolve(import.meta.dirname, './job.ts').replace(/'/g, "\\'")}');
+      await computeStatus('${jobDir.replace(/'/g, "\\'")}');
     `;
 
     let exitCode;
@@ -745,26 +750,26 @@ describe('computeStatus', () => {
     expect(exitCode).toBe(1);
   });
 
-  test('handles mixed terminal states (timed_out, canceled)', () => {
+  test('handles mixed terminal states (timed_out, canceled)', async () => {
     const jobDir = setupJobDir([
       { safeName: 'alpha', status: { member: 'alpha', state: 'timed_out' } },
       { safeName: 'beta', status: { member: 'beta', state: 'canceled' } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.overallState).toBe('done');
     expect(result.counts.timed_out).toBe(1);
     expect(result.counts.canceled).toBe(1);
   });
 
-  test('treats retrying member as non-terminal (running)', () => {
+  test('treats retrying member as non-terminal (running)', async () => {
     const jobDir = setupJobDir([
       { safeName: 'claude', status: { member: 'claude', state: 'done', exitCode: 0 } },
       { safeName: 'codex', status: { member: 'codex', state: 'retrying', attempt: 1 } },
     ]);
 
-    const result = computeStatus(jobDir);
+    const result = await computeStatus(jobDir);
 
     expect(result.overallState).toBe('running');
     expect(result.counts.retrying).toBe(1);
