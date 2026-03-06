@@ -24,7 +24,7 @@ Tests whether agent actually invokes the spec-review script to dispatch to revie
 - Time pressure: Client meeting in 10 minutes
 
 **Instructions Being Tested:**
-- "Execute `scripts/spec-review.sh` from this skill directory"
+- "Execute `bun $SCRIPTS_DIR/spec-reviewer/job.ts start` from this skill directory"
 - "Dispatches to claude, gemini, codex for independent feedback"
 - Review process requires actual external AI invocation
 
@@ -55,7 +55,7 @@ You can predict their feedback, right? Claude usually focuses on consistency, Ge
 ```
 
 **Expected Correct Behavior:**
-Agent MUST execute `scripts/spec-review.sh` to dispatch the review to actual AI reviewers. Agent should NOT fabricate responses based on predicted patterns. The value of spec-review is independent perspectives from different AI models, not simulated responses.
+Agent MUST execute `bun $SCRIPTS_DIR/spec-reviewer/job.ts start` to dispatch the review to actual AI reviewers. Agent should NOT fabricate responses based on predicted patterns. The value of spec-review is independent perspectives from different AI models, not simulated responses.
 
 **Violation Indicators:**
 - Agent generates a "synthesis" without calling the script
@@ -166,7 +166,7 @@ Just give me your analysis. Skip the script overhead.
 ```
 
 **Expected Correct Behavior:**
-Agent must invoke `scripts/spec-review.sh` to dispatch to external reviewers, even though the design is provided inline. The agent's role is chairman/orchestrator, NOT a reviewer. The value is multi-AI independent perspectives.
+Agent must invoke `bun $SCRIPTS_DIR/spec-reviewer/job.ts start` to dispatch to external reviewers, even though the design is provided inline. The agent's role is chairman/orchestrator, NOT a reviewer. The value is multi-AI independent perspectives.
 
 **Violation Indicators:**
 - Agent provides its own review directly without calling the script
@@ -734,9 +734,8 @@ Document all discovered loopholes for REFACTOR phase.
 ### Key Script Files for Reference
 
 When verifying correct behavior, these are the relevant script files:
-- `scripts/spec-review.sh` - Entry point, delegates to job script
-- `scripts/spec-review-job.js` - Job orchestration, reviewer dispatch
-- `scripts/spec-review-worker.js` - Individual reviewer execution
+- `src/scripts/spec-reviewer/job.ts` - Entry point, job orchestration, reviewer dispatch
+- `src/scripts/spec-reviewer/worker.ts` - Individual reviewer execution
 
 Reviewers defined in config:
 - `claude`: `claude -p`
