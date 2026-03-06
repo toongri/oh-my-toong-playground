@@ -92,7 +92,8 @@ Execute `bun $SCRIPTS_DIR/council/job.ts` from the project root:
 For interactive terminal use where you wait for completion:
 
 ```bash
-bun $SCRIPTS_DIR/council/job.ts start --stdin <<'EOF'
+# 1. Start council — capture JOB_DIR
+JOB_DIR=$(bun $SCRIPTS_DIR/council/job.ts start --stdin <<'EOF'
 ## Evaluation Criteria
 [Key principles - in English]
 
@@ -105,6 +106,24 @@ bun $SCRIPTS_DIR/council/job.ts start --stdin <<'EOF'
 ## Question
 [Specific points needing judgment - in English]
 EOF
+)
+
+# 2. Collect — poll until overallState is "done"
+while true; do
+  RESULT=$(bun $SCRIPTS_DIR/council/job.ts collect "$JOB_DIR")
+  echo "$RESULT" | grep -q '"overallState":.*"done"' && break
+  echo "Still running... retrying in 10s"
+  sleep 10
+done
+echo "$RESULT"
+
+# 3. Read each member's output
+# Parse outputFilePath values from $RESULT and cat them, e.g.:
+#   cat /path/to/claude-output.txt
+#   cat /path/to/gemini-output.txt
+
+# 4. Clean up
+bun $SCRIPTS_DIR/council/job.ts clean "$JOB_DIR"
 ```
 
 ### Host Agent Context (Claude Code)
