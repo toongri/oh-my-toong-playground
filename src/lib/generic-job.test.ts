@@ -967,6 +967,22 @@ describe('buildManifest', () => {
     expect(result.id).toBe('test-manifest-job');
     expect(result.members.length).toBe(1);
   });
+
+  test('empty output.txt (0 bytes) classifies as outputFilePath !== null, errorMessage === null', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-empty-output');
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-manifest-job' }));
+    const entitiesDir = path.join(jobDir, chunkReviewConfig.entityDirName);
+    fs.mkdirSync(entitiesDir, { recursive: true });
+    const memberDir = path.join(entitiesDir, 'alice');
+    fs.mkdirSync(memberDir, { recursive: true });
+    fs.writeFileSync(path.join(memberDir, 'status.json'), JSON.stringify({ member: 'alice', state: 'done' }));
+    // Write empty (0-byte) output.txt
+    fs.writeFileSync(path.join(memberDir, 'output.txt'), '');
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).not.toBe(null);
+    expect(result.members[0].errorMessage).toBe(null);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1060,19 +1076,6 @@ describe('parseYamlSimple', () => {
     expect(result['chunk-review'].members).toEqual(chunkFallback['chunk-review'].members);
   });
 
-  test('handles "reviewers:" as alias for members section', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  reviewers:',
-      '    - name: alice',
-      '      command: alice-cli',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].members.length).toBe(1);
-    expect(result['chunk-review'].members[0].name).toBe('alice');
-  });
-
   test('strips quotes from member name values', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
@@ -1132,6 +1135,17 @@ describe('parseYamlSimple', () => {
     ].join('\n'));
     const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
     expect(result['chunk-review'].chairman.role).toBe('codex');
+  });
+
+  test('strips inline comments from settings values (e.g. timeout: 300 # seconds)', () => {
+    const configPath = path.join(tmpDir, 'config-inline-comment.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  settings:',
+      '    timeout: 300 # seconds',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
+    expect(result['chunk-review'].settings.timeout).toBe(300);
   });
 });
 

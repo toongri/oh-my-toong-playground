@@ -454,4 +454,31 @@ describe('runOnce heartbeat', () => {
     expect(statusAfterWait.lastHeartbeat).toBeUndefined();
     expect(statusAfterWait.state).toBe('done');
   });
+
+  test('state가 running이 아닌 경우 heartbeat가 status.json을 덮어쓰지 않음', async () => {
+    const opts = makeRunOnceOpts({
+      args: ['-c', 'sleep 0.5'],
+      command: '/bin/sh -c "sleep 0.5"',
+    });
+    const statusPath = join(opts.memberDir, 'status.json');
+
+    const promise = runOnce(opts);
+
+    // Wait for heartbeat to start writing
+    await sleepMsAsync(150);
+
+    // Manually overwrite status.json with a terminal state (simulating external finalize)
+    const terminalPayload = { member: 'test-member', state: 'done', exitCode: 0 };
+    writeFileSync(statusPath, JSON.stringify(terminalPayload));
+
+    // Wait for additional heartbeat cycles
+    await sleepMsAsync(200);
+
+    // status.json should remain the terminal state — heartbeat guard skipped the write
+    const statusAfterWait = JSON.parse(readFileSync(statusPath, 'utf8'));
+    expect(statusAfterWait.state).toBe('done');
+    expect(statusAfterWait.lastHeartbeat).toBeUndefined();
+
+    await promise;
+  });
 });
