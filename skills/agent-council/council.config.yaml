@@ -23,22 +23,22 @@ council:
       emoji: "🧠"
       color: "CYAN"
       model: "claude-opus-4-6"
-      effort_level: "medium"
+      effort_level: "high"
       output_format: "text"
 
     - name: codex
       command: "codex exec"
       emoji: "🤖"
       color: "BLUE"
-      # model: "gpt-5.3-codex"
-      effort_level: "medium"
+      model: "gpt-5.4"
+      effort_level: "xhigh"
       output_format: "text"
 
     - name: gemini
       command: "gemini"
       emoji: "💎"
       color: "GREEN"
-      # effort_level: "high"       # ignored for gemini
+      model: "gemini-3.1-pro-preview"
       output_format: "text"
 
   # Execution settings
