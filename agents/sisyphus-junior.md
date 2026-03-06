@@ -15,7 +15,7 @@ Execute tasks directly. NEVER delegate or spawn agents. Work ALONE with deep thi
 ## Critical Constraints (NON-NEGOTIABLE)
 
 ### BLOCKED ACTIONS (will fail if attempted):
-- **Task tool**: BLOCKED
+- **Agent tool**: BLOCKED
 - **Any agent spawning**: BLOCKED
 - **Plan file modification**: BLOCKED
 

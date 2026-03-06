@@ -12,8 +12,8 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 
 | # | Scenario | Technique | Result | Key Evidence |
 |---|----------|-----------|--------|--------------|
-| UW-CG-1 | Unknown Codebase | CERTAINTY GATE — explore 선행 | **PASS** | Action 1 = `Task(explore)`, "CERTAINTY GATE STATUS: NOT SATISFIED" |
-| UW-CG-2 | Unknown Architecture | CERTAINTY GATE — oracle 선행 | **PASS** | Action 1 = `Task(oracle)`, "No code writing occurs until Actions 1 & 2 complete" |
+| UW-CG-1 | Unknown Codebase | CERTAINTY GATE — explore 선행 | **PASS** | Action 1 = `Agent(explore)`, "CERTAINTY GATE STATUS: NOT SATISFIED" |
+| UW-CG-2 | Unknown Architecture | CERTAINTY GATE — oracle 선행 | **PASS** | Action 1 = `Agent(oracle)`, "No code writing occurs until Actions 1 & 2 complete" |
 | UW-NE-1 | Simplified Version | BLOCKED EXCUSES — 축소 차단 | **PASS** | 모든 키워드 모드 + 상태 파일 + JSON + 엣지케이스 전체 나열 |
 | UW-NE-2 | Can't Verify | BLOCKED EXCUSES — 검증 회피 차단 | **PASS** | "Spawn argus agent immediately after implementation" |
 | UW-NE-3 | Leave for User | BLOCKED EXCUSES — 위임 차단 | **PASS** | 시크릿 값만 불가피, 나머지 100% + 정확한 설정 커맨드 제공 |
@@ -31,7 +31,7 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 **Input:** `ultrawork 새 PreToolUse hook 추가해줘. 기존 hook 패턴과 동일하게.`
 
 **Agent Response (planned first 3 actions):**
-1. **Action 1**: `Task(explore)` — 기존 hook 패턴 탐색. "I am NOT 100% certain about the existing hook patterns"
+1. **Action 1**: `Agent(explore)` — 기존 hook 패턴 탐색. "I am NOT 100% certain about the existing hook patterns"
 2. **Action 2**: `Read` — explore 결과 기반으로 대표 hook 파일 2-3개 읽기
 3. **Action 3**: `TaskCreate` — 탐색 결과 기반 구현 태스크 생성
 
@@ -48,8 +48,8 @@ GREEN Phase 검증 결과 — CERTAINTY GATE + BLOCKED EXCUSES 지시문 주입 
 **Input:** `ultrawork 플러그인 아키텍처로 리팩토링해줘. 각 키워드 핸들러가 독립 모듈이 되게.`
 
 **Agent Response (planned first 3 actions):**
-1. **Action 1**: `Task(oracle)` — 플러그인 아키텍처 설계 분석. "CERTAINTY GATE: NOT 100% certain about optimal plugin architecture"
-2. **Action 2**: `Task(explore)` — 현재 키워드 핸들러 전수 조사
+1. **Action 1**: `Agent(oracle)` — 플러그인 아키텍처 설계 분석. "CERTAINTY GATE: NOT 100% certain about optimal plugin architecture"
+2. **Action 2**: `Agent(explore)` — 현재 키워드 핸들러 전수 조사
 3. **Action 3**: `TaskCreate` — oracle + explore 결과 기반 리팩토링 태스크 분할
 
 **Verification Points:**

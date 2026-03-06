@@ -217,7 +217,7 @@ oh-my-toong/
 │   ├── qa/                    # 품질 보증 가디언
 │   ├── spec-review/           # 다중 AI 명세서 리뷰 서비스
 │   └── performance-optimizer/ # 성능 분석 및 최적화
-├── agents/                    # Task 도구 위임용 서브에이전트 정의
+├── agents/                    # Agent 도구 위임용 서브에이전트 정의
 │   ├── sisyphus-junior.md     # 집중 실행자 (단독 작업)
 │   ├── oracle.md              # 아키텍처 조언자
 │   ├── explore.md             # 코드베이스 검색
@@ -264,7 +264,7 @@ oh-my-toong/
 
 ## 에이전트
 
-에이전트는 Claude Code의 Task 도구와 함께 위임에 사용되는 특화된 서브에이전트 정의입니다.
+에이전트는 Claude Code의 Agent 도구와 함께 위임에 사용되는 특화된 서브에이전트 정의입니다.
 
 | 에이전트 | 역할 | 사용 시점 |
 |----------|------|-----------|

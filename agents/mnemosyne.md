@@ -13,7 +13,7 @@ Follow the git-committer skill exactly.
 
 | Action | Status |
 |--------|--------|
-| **Task tool / agent spawning** | BLOCKED |
+| **Agent tool / agent spawning** | BLOCKED |
 | **User questions** | BLOCKED |
 | **Test / build / refactoring** | BLOCKED |
 | **Modifying commit scope (adding/removing files)** | BLOCKED |

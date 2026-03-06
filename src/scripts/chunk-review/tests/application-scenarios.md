@@ -336,7 +336,7 @@
 2. Step 3에서 800줄 < 1500 AND 20 files < 30 → single chunk 결정
 3. Step 4에서 `{DIFF_COMMAND}` 문자열을 구성: `git diff main...feature/payment` (single chunk이므로 path filter 없음)
 4. Orchestrator가 `{DIFF_COMMAND}` 문자열을 실행하지 않음 — 문자열 자체를 chunk-reviewer-prompt.md 템플릿에 인터폴레이션
-5. chunk-reviewer agent에게 인터폴레이션된 프롬프트를 Task tool로 dispatch
+5. chunk-reviewer agent에게 인터폴레이션된 프롬프트를 Agent tool로 dispatch
 6. chunk-reviewer가 `{DIFF_COMMAND}`를 Bash tool로 실행하여 diff 획득
 7. chunk-reviewer 결과 반환 후, orchestrator가 Step 5 Walkthrough + Critique synthesis 생성
 
