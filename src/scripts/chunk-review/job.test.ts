@@ -1980,21 +1980,24 @@ describe('cmdCollect', () => {
       'claude-0': { member: 'claude', state: 'running', exitCode: 0, output: '' },
       'codex-0': { member: 'codex', state: 'queued', exitCode: 0, output: '' },
     });
-    // Set startedAt/queuedAt to avoid staleness CAS sleep
+    // Set running member as stale (startedAt 200s ago) to trigger CAS sleep (~250ms) in
+    // computeStatus, making the timeout-ms check fire reliably after the first poll.
+    // Keep queuedAt fresh to prevent the queued member from also becoming stale.
     const membersDir = path.join(jobDir, 'members');
+    const staleTs = new Date(Date.now() - 200_000).toISOString();
     const now = new Date().toISOString();
     fs.writeFileSync(
       path.join(membersDir, 'claude-0', 'status.json'),
-      JSON.stringify({ member: 'claude', state: 'running', exitCode: 0, startedAt: now }),
+      JSON.stringify({ member: 'claude', state: 'running', exitCode: 0, startedAt: staleTs }),
     );
     fs.writeFileSync(
       path.join(membersDir, 'codex-0', 'status.json'),
       JSON.stringify({ member: 'codex', state: 'queued', exitCode: 0, queuedAt: now }),
     );
 
-    // timeout-ms=0 exits immediately after first poll without sleeping
+    // timeout-ms=200: computeStatus sleeps ~250ms due to stale CAS, so elapsed >= 200 fires
     const result = execFileSync(process.execPath, [
-      SCRIPT, 'collect', '--timeout-ms', '0', jobDir,
+      SCRIPT, 'collect', '--timeout-ms', '200', jobDir,
     ], { stdio: 'pipe', timeout: 10000 });
     const parsed = JSON.parse(result.toString());
 
@@ -2147,8 +2150,23 @@ describe('start + collect integration', () => {
     }
   }, 30000);
 
-  test('0ms timeout: queued 상태에서 즉시 not-done 반환', () => {
-    const configPath = writeTestConfig(tmpDir);
+  test('짧은 timeout: queued 상태에서 not-done 반환', () => {
+    // Use slow commands (sleep 60) so workers stay in running state and never
+    // complete before collect times out.
+    const configPath = path.join(tmpDir, 'config-slow.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: none',
+      '  members:',
+      '    - name: r1',
+      '      command: sleep 60',
+      '    - name: r2',
+      '      command: sleep 60',
+      '  settings:',
+      '    exclude_chairman_from_members: false',
+      '    timeout: 10',
+    ].join('\n'));
     const jobsDir = path.join(tmpDir, 'jobs');
     fs.mkdirSync(jobsDir, { recursive: true });
 
@@ -2167,22 +2185,26 @@ describe('start + collect integration', () => {
     const jobDir = startResult.toString().trim();
 
     try {
-      // Do NOT write any done status files — leave reviewers in queued state
-      // But we need to ensure the queuedAt timestamps are fresh to avoid staleness CAS
+      // Workers run `sleep 60` — they are queued/running and will not complete during the test.
+      // collect with 200ms timeout: computeStatus returns quickly, timeout fires after first poll
+      // because elapsed time after I/O exceeds the short timeout.
       const membersDir = path.join(jobDir, 'members');
       const now = new Date().toISOString();
       for (const entry of fs.readdirSync(membersDir)) {
         const statusPath = path.join(membersDir, entry, 'status.json');
         const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
         fs.writeFileSync(statusPath, JSON.stringify({
-          ...status,
+          member: status.member,
+          state: 'queued',
+          exitCode: 0,
           queuedAt: now,
         }));
       }
 
-      // collect with 0ms timeout: should return immediately without waiting
+      // collect with 1ms timeout: workers are running `sleep 60` and will not complete,
+      // so every poll returns not-done and the timeout fires quickly
       const collectResult = execFileSync(process.execPath, [
-        SCRIPT, 'collect', '--timeout-ms', '0', jobDir,
+        SCRIPT, 'collect', '--timeout-ms', '1', jobDir,
       ], { stdio: 'pipe', timeout: 10000 });
       const parsed = JSON.parse(collectResult.toString());
 
