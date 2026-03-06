@@ -1626,7 +1626,9 @@ describe('cmdResults', () => {
         path.join(dir, 'status.json'),
         JSON.stringify({ member: data.member, state: data.state, exitCode: data.exitCode }),
       );
-      fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      if (data.output || data.state === 'done') {
+        fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      }
       fs.writeFileSync(path.join(dir, 'error.txt'), data.stderr);
     }
   }

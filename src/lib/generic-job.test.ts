@@ -998,7 +998,7 @@ describe('parseYamlSimple', () => {
       members: [
         { name: 'claude', command: 'claude -p' },
       ],
-      settings: { exclude_chairman_from_reviewers: true, timeout: 300 },
+      settings: { exclude_chairman_from_members: true, timeout: 300 },
     },
   };
 
@@ -1053,11 +1053,11 @@ describe('parseYamlSimple', () => {
       'chunk-review:',
       '  settings:',
       '    timeout: 300',
-      '    exclude_chairman_from_reviewers: false',
+      '    exclude_chairman_from_members: false',
     ].join('\n'));
     const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
     expect(result['chunk-review'].settings.timeout).toBe(300);
-    expect(result['chunk-review'].settings.exclude_chairman_from_reviewers).toBe(false);
+    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(false);
   });
 
   test('returns fallback on read error (non-existent file)', () => {
