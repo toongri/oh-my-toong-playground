@@ -20,8 +20,8 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 **The `start` subcommand runs EXACTLY ONCE. No exceptions.**
 
 1. Write the interpolated prompt to a temp file.
-2. Start job: `bun $SCRIPTS_DIR/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun $SCRIPTS_DIR/chunk-review/job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+2. Start job: `bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
+3. Collect: `bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
 4. Read each reviewer's output file via the Read tool.
 5. Aggregate results using Classification Rules.
 6. Return the structured aggregation report.
@@ -31,13 +31,9 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 ### Allowed Bash Usage
 
-```bash
-SCRIPTS_DIR=$(ls -d .{claude,gemini,codex,opencode}/scripts 2>/dev/null | head -1)
-```
-
 You may ONLY execute these commands via Bash:
-- `bun $SCRIPTS_DIR/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun $SCRIPTS_DIR/chunk-review/job.ts collect "$JOB_DIR"` — collect results (poll internally)
+- `bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
+- `bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"` — collect results (poll internally)
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -62,14 +58,14 @@ PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 [Your classification prompt here]
 PROMPT_EOF
-bun $SCRIPTS_DIR/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"
+bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"
 ```
 Output: JOB_DIR path (one line on stdout)
 
 ### Step 2 — Collect (Bash, timeout: 180000)
 Poll until all reviewers complete. Re-run this step if not done.
 ```bash
-bun $SCRIPTS_DIR/chunk-review/job.ts collect "$JOB_DIR"
+bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"
 ```
 Response JSON (done):
 ```json
