@@ -562,8 +562,11 @@ sync_hooks() {
                             if [[ -d "$scoped_source" ]]; then
                                 if [[ -f "$scoped_source/index.ts" ]]; then
                                     cmd_path="bun run \$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}/index.ts"
-                                else
+                                elif [[ -f "$scoped_source/index.sh" ]]; then
                                     cmd_path="bash \$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}/index.sh"
+                                else
+                                    log_error "Hook 디렉토리에 index.ts 또는 index.sh가 없음: $scoped_source"
+                                    return 1
                                 fi
                             else
                                 cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
@@ -602,8 +605,11 @@ sync_hooks() {
                             if [[ -d "$scoped_source" ]]; then
                                 if [[ -f "$scoped_source/index.ts" ]]; then
                                     cmd_path="bun run .gemini/hooks/${display_name}/index.ts"
-                                else
+                                elif [[ -f "$scoped_source/index.sh" ]]; then
                                     cmd_path="bash .gemini/hooks/${display_name}/index.sh"
+                                else
+                                    log_error "Hook 디렉토리에 index.ts 또는 index.sh가 없음: $scoped_source"
+                                    return 1
                                 fi
                             else
                                 cmd_path=".gemini/hooks/${display_name}"
