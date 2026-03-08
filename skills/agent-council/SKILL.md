@@ -79,10 +79,6 @@ Council members do not share the caller's session context. The caller must expli
 
 ## How to Call
 
-```bash
-SCRIPTS_DIR=$(ls -d .{claude,gemini,codex,opencode}/scripts 2>/dev/null | head -1)
-```
-
 Execute `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts` from the project root:
 
 > Note: Always write the council prompt in English for consistent cross-model communication.
