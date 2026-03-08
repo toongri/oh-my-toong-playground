@@ -46,7 +46,7 @@ AskUserQuestion:
 
 **Custom Concerns**: The AskUserQuestion options above are defaults. If the user identifies
 additional design concerns (e.g., "마이그레이션 전략", "보안 모델"), apply the Emergent Concern
-Protocol triage from SKILL.md. Custom concerns are not constrained to the predefined 6 Areas.
+Protocol triage from SKILL.md. Custom concerns are not constrained to the predefined Design Areas.
 
 ### Recommendation Criteria
 
