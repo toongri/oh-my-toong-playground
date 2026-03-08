@@ -1,12 +1,12 @@
 /**
  * Generic job orchestration framework.
  *
- * Extracted from src/scripts/chunk-review/job.ts (the most mature implementation).
+ * Extracted from scripts/chunk-review/job.ts (the most mature implementation).
  * All functions are parameterized via JobConfig for entity terminology, job prefix,
  * UI labels, and YAML config key.
  *
- * Consumers import initLogger directly from src/lib/logging.ts.
- * Shared primitives (atomicWriteJson, sleepMs, etc.) are imported from src/lib/job-utils.ts.
+ * Consumers import initLogger directly from lib/logging.ts.
+ * Shared primitives (atomicWriteJson, sleepMs, etc.) are imported from lib/job-utils.ts.
  */
 
 import fs from 'fs';

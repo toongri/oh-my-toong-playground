@@ -13,6 +13,7 @@ import {
   readJsonIfExists,
   parseArgs,
   generateJobId,
+  computeTerminalDoneCount,
 } from '@lib/job-utils';
 
 import {
@@ -271,7 +272,6 @@ async function cmdStatus(options, jobDir) {
 
   const wantChecklist = Boolean(options.checklist) && !options.json;
   if (wantChecklist) {
-    const { computeTerminalDoneCount } = await import('../../../src/lib/job-utils');
     const done = computeTerminalDoneCount(payload.counts);
     const headerId = payload.id ? ` (${payload.id})` : '';
     process.stdout.write(`Agent Council${headerId}\n`);
@@ -296,7 +296,6 @@ async function cmdStatus(options, jobDir) {
 
   const wantText = Boolean(options.text) && !options.json;
   if (wantText) {
-    const { computeTerminalDoneCount } = await import('../../../src/lib/job-utils');
     const done = computeTerminalDoneCount(payload.counts);
     process.stdout.write(`members ${done}/${payload.counts.total} done; running=${payload.counts.running} queued=${payload.counts.queued}\n`);
     if (options.verbose) {
