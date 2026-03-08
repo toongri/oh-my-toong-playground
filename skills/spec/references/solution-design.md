@@ -165,6 +165,9 @@ Apply **Area Completion Protocol** (see SKILL.md)
   - **Integration Pattern**: External system integration, async processing, transaction boundaries
   - **AI Responsibility Contract**: AI/LLM delegation exists with quality-sensitive output
   - **Operations Plan**: Production deployment, monitoring, operational settings
+  - **Frontend / UX Surface**: Frontend/UI is significant part of system, component architecture decisions needed, state management or styling strategy undecided
+  - **Data / ML Pipeline**: Data pipeline is core component, multiple data sources, data quality strategy needed, ML serving involved
+  - **Security / Privacy**: Custom auth strategy needed, sensitive/personal data handling, multi-tenant access control, regulatory compliance
 
 #### 6.2 Present Design Area Selection
 - Prepare: List of recommended Design Areas with justification

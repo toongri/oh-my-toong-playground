@@ -4,6 +4,8 @@ Output format templates for each area of the spec skill.
 
 ---
 
+> **Template Flexibility**: These templates are recommended structures. Adapt sections, ordering, and detail level to your project's needs. The structural intent (what information to capture) matters more than exact formatting.
+
 ## Design Area Selection Template
 
 After completing Solution Design, use the following template to present Design Area selection to the user:
@@ -34,6 +36,12 @@ AskUserQuestion:
       description: "[Specific justification or 'Not needed - no external system integration required']"
     - label: "Operations Plan"
       description: "[Specific justification or 'Standard deployment sufficient - no custom monitoring needed']"
+    - label: "Frontend / UX Surface"
+      description: "[Specific justification - e.g., 'Component architecture decisions needed for multi-page SPA with shared design system']"
+    - label: "Data / ML Pipeline"
+      description: "[Specific justification - e.g., 'ETL pipeline design needed for 3 data sources with real-time processing requirements']"
+    - label: "Security / Privacy"
+      description: "[Specific justification - e.g., 'Custom auth strategy and GDPR compliance needed for user data handling']"
 ```
 
 **Custom Concerns**: The AskUserQuestion options above are defaults. If the user identifies
@@ -740,3 +748,183 @@ Wrapup produces context files for future spec sessions — information that shap
 - `decisions.md` - Team decision-making tendencies extracted from patterns across multiple decisions (NOT individual ADR entries)
 - `conventions.md` - Repeatable coding-level patterns for implementation consistency
 - `gotchas.md` - Implementation traps that would catch someone unfamiliar with this project
+
+---
+
+## Frontend / UX Surface Design Area
+
+### Output Template
+
+```markdown
+# [Project Name] - Frontend / UX Surface
+
+> **Area**: Frontend / UX Surface
+> **Last Updated**: [Date]
+
+## Component Architecture
+
+### Component Hierarchy
+[Component tree structure — pages, layouts, shared components]
+
+### Shared Component Strategy
+[Design system integration, component library approach]
+
+### Component Communication
+[Props flow, event patterns, slot/children patterns]
+
+## State Management
+
+### State Classification
+| State Type | Scope | Management Approach | Examples |
+|-----------|-------|-------------------|----------|
+| [e.g., Server state] | [e.g., Global] | [e.g., Query cache] | [e.g., User profile, product list] |
+
+### Data Flow
+[Unidirectional data flow, state update patterns]
+
+## Styling & Visual Architecture
+
+### Styling Strategy
+[Approach — CSS modules, utility-first, CSS-in-JS, etc.]
+
+### Responsive Design
+[Breakpoints, mobile-first vs desktop-first, adaptive patterns]
+
+### Theming
+[Theme structure, dark mode strategy (if applicable)]
+
+## Interaction & UX Patterns
+
+### User Flow Summary
+[Key user journeys with loading/error/empty states]
+
+### Accessibility
+[WCAG target level, key accessibility considerations]
+
+### SSR/SSG Strategy (if applicable)
+[Rendering strategy, hydration approach]
+
+## Records
+[Decision records created during this area]
+```
+
+---
+
+## Data / ML Pipeline Design Area
+
+### Output Template
+
+```markdown
+# [Project Name] - Data / ML Pipeline
+
+> **Area**: Data / ML Pipeline
+> **Last Updated**: [Date]
+
+## Data Source & Ingestion
+
+### Source Inventory
+| Source | Type | Format | Volume | Frequency |
+|--------|------|--------|--------|-----------|
+| [e.g., User events] | [e.g., Stream] | [e.g., JSON] | [e.g., 10K/min] | [e.g., Real-time] |
+
+### Ingestion Pattern
+[Push vs pull, batch vs stream, schema evolution strategy]
+
+## Transformation & Processing
+
+### Processing Model
+[Batch / Stream / Hybrid — with justification]
+
+### Transformation Pipeline
+[Stage descriptions, ordering, idempotency guarantees]
+
+### Data Quality & Validation
+[Validation rules, quality gates, error handling strategy]
+
+## Storage & Access
+
+### Storage Layer Design
+| Layer | Purpose | Technology Approach | Retention |
+|-------|---------|-------------------|-----------|
+| [e.g., Raw] | [e.g., Audit trail] | [e.g., Object storage] | [e.g., 90 days] |
+
+### Access Patterns
+[Query patterns, partitioning strategy, indexing approach]
+
+## ML Pipeline (if applicable)
+
+### Feature Engineering
+[Feature sources, computation strategy, feature store approach]
+
+### Model Serving
+[Serving pattern — batch inference, real-time, hybrid]
+
+### Experiment Tracking
+[A/B testing strategy, model versioning approach]
+
+## Records
+[Decision records created during this area]
+```
+
+---
+
+## Security / Privacy Design Area
+
+### Output Template
+
+```markdown
+# [Project Name] - Security / Privacy
+
+> **Area**: Security / Privacy
+> **Last Updated**: [Date]
+
+## Authentication & Identity
+
+### Authentication Strategy
+[Authentication method, identity provider, session management]
+
+### Multi-Factor Authentication (if applicable)
+[MFA approach, recovery strategy]
+
+## Authorization & Access Control
+
+### Authorization Model
+[RBAC / ABAC / hybrid — with justification]
+
+### Permission Matrix
+| Role | Resource | Create | Read | Update | Delete |
+|------|----------|--------|------|--------|--------|
+| [e.g., Admin] | [e.g., User accounts] | ✓ | ✓ | ✓ | ✓ |
+
+## Data Protection
+
+### Data Classification
+| Classification | Examples | Protection Level | Encryption |
+|---------------|----------|-----------------|------------|
+| [e.g., Sensitive PII] | [e.g., SSN, health data] | [e.g., High] | [e.g., At rest + in transit] |
+
+### PII Handling
+[Anonymization, pseudonymization, masking strategies]
+
+## Privacy & Compliance (if applicable)
+
+### Regulatory Requirements
+[Applicable regulations, compliance scope]
+
+### Consent Management
+[Consent collection, storage, withdrawal mechanism]
+
+### Data Retention & Deletion
+[Retention periods by data type, deletion procedures]
+
+## Threat Model (if applicable)
+
+### Attack Surface
+[Identified attack vectors, risk levels]
+
+### Mitigation Strategy
+[Key mitigations mapped to threats]
+
+## Records
+[Decision records created during this area]
+```
