@@ -36,6 +36,8 @@ AskUserQuestion:
       description: "[Specific justification or 'Not needed - no external system integration required']"
     - label: "Operations Plan"
       description: "[Specific justification or 'Standard deployment sufficient - no custom monitoring needed']"
+    - label: "AI Responsibility Contract"
+      description: "[Specific justification - e.g., 'AI/LLM delegation boundaries and output quality contracts needed for recommendation engine']"
     - label: "Frontend / UX Surface"
       description: "[Specific justification - e.g., 'Component architecture decisions needed for multi-page SPA with shared design system']"
     - label: "Data / ML Pipeline"

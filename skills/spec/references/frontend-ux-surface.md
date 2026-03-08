@@ -4,7 +4,7 @@
 
 As a frontend architecture and UX surface design specialist, systematically analyze how the system presents itself to users: component structure, state management boundaries, visual and interaction design strategy, and the user experience patterns that define how people interact with the product.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -157,3 +157,58 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Frontend / UX Surface Complete
 - Announce: "Frontend / UX Surface complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# [Project Name] - Frontend / UX Surface
+
+> **Area**: Frontend / UX Surface
+> **Last Updated**: [Date]
+
+## Component Architecture
+
+### Component Hierarchy
+[Component tree structure — pages, layouts, shared components]
+
+### Shared Component Strategy
+[Design system integration, component library approach]
+
+### Component Communication
+[Props flow, event patterns, slot/children patterns]
+
+## State Management
+
+### State Classification
+| State Type | Scope | Management Approach | Examples |
+|-----------|-------|-------------------|----------|
+| [e.g., Server state] | [e.g., Global] | [e.g., Query cache] | [e.g., User profile, product list] |
+
+### Data Flow
+[Unidirectional data flow, state update patterns]
+
+## Styling & Visual Architecture
+
+### Styling Strategy
+[Approach — CSS modules, utility-first, CSS-in-JS, etc.]
+
+### Responsive Design
+[Breakpoints, mobile-first vs desktop-first, adaptive patterns]
+
+### Theming
+[Theme structure, dark mode strategy (if applicable)]
+
+## Interaction & UX Patterns
+
+### User Flow Summary
+[Key user journeys with loading/error/empty states]
+
+### Accessibility
+[WCAG target level, key accessibility considerations]
+
+### SSR/SSG Strategy (if applicable)
+[Rendering strategy, hydration approach]
+
+## Records
+[Decision records created during this area]
+```

@@ -4,7 +4,7 @@
 
 As a knowledge curator, extract information that shapes the **next specification's direction** from accumulated records.
 
-**Output Format**: See `templates/area-outputs.md` (produces context files, not a single document)
+**Output Format**: See **Output Template** section below (produces context files, not a single document)
 
 **Context File Purpose**: Context files are loaded at the START of every future spec session. They must answer: "What kind of team is this, what do they value, and what big-picture constraints exist?" — NOT "What did they decide in the last spec?"
 
@@ -197,3 +197,12 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 Apply **Area Completion Protocol** (see SKILL.md)
 
 - Announce: "Wrapup complete. Specification process finished. Context preserved for future sessions."
+
+## Output Template
+
+Wrapup produces context files for future spec sessions — information that shapes the **next specification's direction**.
+
+- `project.md` - Big picture: tech stack, system philosophy, external dependencies, constraints
+- `decisions.md` - Team decision-making tendencies extracted from patterns across multiple decisions (NOT individual ADR entries)
+- `conventions.md` - Repeatable coding-level patterns for implementation consistency
+- `gotchas.md` - Implementation traps that would catch someone unfamiliar with this project

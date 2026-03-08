@@ -4,7 +4,7 @@
 
 As a software solution design expert, establish the technical context appropriate for the project, explore optimal solutions, and organize them into a single integrated document.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -116,7 +116,7 @@ Steps 4.2, 4.3, and 4.4 each contain design decisions that may have multiple via
 - **Internal vs External Separation**:
   - **Internal Components**: Systems YOU design and build — these are your design targets
   - **External Dependencies**: Systems you integrate WITH — these are constraints, not design targets
-  - Present in two separate sections (see `templates/area-outputs.md`)
+  - Present in two separate sections (see **Output Template** section below)
 
 - Apply **Design Decision Significance Check** to component structure decisions (e.g., microservices vs modular monolith vs hybrid)
 - Identify: Major internal components involved in the solution (L2 level)
@@ -170,15 +170,50 @@ Apply **Area Completion Protocol** (see SKILL.md)
   - **Security / Privacy**: Custom auth strategy needed, sensitive/personal data handling, multi-tenant access control, regulatory compliance
 
 #### 6.2 Present Design Area Selection
-- Prepare: List of recommended Design Areas with justification
-- Present: "The following Design Areas are recommended as analytical lenses for this project.
-  They are defaults — not exhaustive. Are there additional project-specific or cross-cutting
-  concerns that warrant dedicated design analysis?"
-- AI Proactive Check: Review Solution Design output for concerns that may not map
-  to any recommended Area (e.g., migration strategy, security model, workflow orchestration).
-  If found, recommend to user as additional concern.
-- Confirm: User selects which Design Areas to proceed with, optionally adding custom concerns
-- Custom concerns: Apply Emergent Concern Protocol triage
+
+Use the following AskUserQuestion format to present Design Area selection to the user:
+
+```yaml
+AskUserQuestion:
+  header: "Design Areas"
+  question: "Based on the Solution Design, the following Design Areas are recommended for this project:
+
+    **Recommended:**
+    - [Area Name]: [Specific reason based on project analysis]
+
+    **Optional:**
+    - [Area Name]: [Why it may or may not be needed]
+
+    Which Design Areas should we proceed with?"
+  multiSelect: true
+  options:
+    - label: "Domain Model (Recommended)"
+      description: "[Specific justification - e.g., 'Order entity has 5 state transitions with complex business rules']"
+    - label: "Data Schema (Recommended)"
+      description: "[Specific justification - e.g., 'Requires new RDB tables for order and payment data']"
+    - label: "Interface Contract (Recommended)"
+      description: "[Specific justification - e.g., 'New REST API endpoints for order management']"
+    - label: "Integration Pattern"
+      description: "[Specific justification or 'Not needed - no external system integration required']"
+    - label: "Operations Plan"
+      description: "[Specific justification or 'Standard deployment sufficient - no custom monitoring needed']"
+    - label: "AI Responsibility Contract"
+      description: "[Specific justification - e.g., 'AI/LLM delegation boundaries and output quality contracts needed for recommendation engine']"
+    - label: "Frontend / UX Surface"
+      description: "[Specific justification - e.g., 'Component architecture decisions needed for multi-page SPA with shared design system']"
+    - label: "Data / ML Pipeline"
+      description: "[Specific justification - e.g., 'ETL pipeline design needed for 3 data sources with real-time processing requirements']"
+    - label: "Security / Privacy"
+      description: "[Specific justification - e.g., 'Custom auth strategy and GDPR compliance needed for user data handling']"
+```
+
+**Custom Concerns**: The AskUserQuestion options above are defaults. If the user identifies
+additional design concerns (e.g., "마이그레이션 전략", "보안 모델"), apply the Emergent Concern
+Protocol triage from SKILL.md. Custom concerns are not constrained to the predefined Design Areas.
+
+**Recommendation Criteria**: Use SKILL.md Area Entry Criteria to determine which Design Areas to recommend.
+
+**AI Proactive Check**: Review Solution Design output for concerns that may not map to any recommended Area (e.g., migration strategy, security model, workflow orchestration). If found, recommend to user as additional concern.
 
 #### 6.3 Validate Selection
 - If user selects NO Design Areas: Ask for justification before proceeding
@@ -190,3 +225,138 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 
 #### Checkpoint: Solution Design Complete
 - Announce: "Solution Design complete. Selected Design Areas: [list]. Proceeding to first Design Area: [name]."
+
+## Output Template
+
+```markdown
+# Solution Design Document
+
+## 1. Design Context
+
+### 1.1 Core Challenges to Solve
+- Summary of core problems to solve
+- Business/technical requirements
+
+### 1.2 Current Architecture Impact
+- Relevant current system structure
+- Existing system characteristics affecting the solution
+
+### 1.3 Technology Stack Overview
+- Technology stack being utilized
+
+## 2. Solution Alternative Analysis
+
+### Alternative 1: [Alternative Name]
+- **Description**: Description of the solution approach
+- **Problem Resolution**: How it meets the requirements
+- **Pros**:
+  - Pro 1
+  - Pro 2
+- **Cons**:
+  - Con 1
+  - Con 2
+- **Architecture Impact**: Impact on existing systems
+
+[Repeat for Alternative 2, 3 if needed]
+
+## 3. Selected Solution
+
+### 3.1 Decision Summary
+- Brief description of the selected solution
+- Reasons for the decision (with clear rationale)
+
+### 3.2 Solution Structure
+
+#### Core Architecture Components
+
+> Target: Level 2 (Container/Component) — independently deployable units with clear operational boundaries.
+> Apply L2 verification for each: (1) Independent deployment? (2) Isolated failure domain? (3) Team ownership?
+
+**Internal Components** (systems you design and build):
+
+| Component | Responsibilities |
+|-----------|-----------------|
+| [Component Name] | - Responsibility 1<br>- Responsibility 2 |
+| [Component Name] | - Responsibility 1<br>- Responsibility 2 |
+
+**External Dependencies** (systems you integrate with — constraints, not design targets):
+
+| System | Interface Type | Integration Point |
+|--------|---------------|-------------------|
+| [External System] | REST API / SDK / Message Queue | [How your system connects] |
+| [External System] | REST API / SDK / Message Queue | [How your system connects] |
+
+#### Data Flow
+
+**1. [Use Case Name] Flow**
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S1 as System1
+    participant S2 as System2
+
+    C->>S1: Request
+    activate S1
+    S1->>S2: Processing Request [Communication Pattern]
+    activate S2
+    alt Success
+        S2-->>S1: Success Response
+    else Failure
+        S2-->>S1: Failure Response
+        S1-->>C: Error Response or Graceful Degradation
+    end
+    deactivate S2
+    S1-->>C: Final Response
+    deactivate S1
+```
+
+#### Internal Logic Flowchart (if complex branching exists)
+
+> Include only when a single component has 3+ branch points. See `references/diagram-selection.md` for selection criteria.
+
+```mermaid
+flowchart TD
+    A([Entry Point]) --> B{Condition?}
+    B -->|Case 1| C[Process A]
+    B -->|Case 2| D[Process B]
+    B -->|Case 3| E[Process C]
+    C --> F([Result])
+    D --> F
+    E --> F
+```
+
+### 3.3 Inter-system Integration
+
+| Integration Point | Communication Pattern | Sync/Async | Failure Handling | Rationale |
+|-------------------|----------------------|------------|------------------|-----------|
+| A -> B | Function Call (in-process) | Sync | Graceful Degradation | Same module, minimize latency |
+| A -> C | Kafka | Async | Retry 3x + DLQ | Service separation, ordering required |
+| A -> D | HTTP | Sync | Timeout with Fallback | Separate service, real-time response needed |
+
+### 3.4 Data Consistency Policy (if applicable)
+
+| Storage Relationship | Source of Truth | Consistency Policy | Rationale |
+|---------------------|-----------------|-------------------|-----------|
+| RDB <-> Cache | RDB | Ignore cache failures, periodic sync | Approximation acceptable |
+
+### 3.5 Transaction Boundaries (if applicable)
+
+| Operation | Transaction Scope | Pattern | Notes |
+|-----------|------------------|---------|-------|
+| ... | ... | Single DB / Outbox / Saga | ... |
+
+### 3.6 Event Contracts (for event-driven integration)
+
+**Consumed Events:**
+
+| Event Name | Required Fields | Publisher |
+|------------|-----------------|-----------|
+| ... | ... | ... |
+
+**Published Events:**
+
+| Event Name | Required Fields | Consumer |
+|------------|-----------------|----------|
+| ... | ... | ... |
+```

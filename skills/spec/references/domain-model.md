@@ -4,7 +4,7 @@
 
 As a Domain-Driven Design (DDD) expert, systematically design the project's domain model and organize it into a single unified document.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Design Philosophy
 
@@ -246,3 +246,110 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Domain Model Complete
 - Announce: "Domain Model complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# Domain Modeling Document
+
+## 1. Class Diagram
+
+```mermaid
+classDiagram
+    class AggregateRoot {
+        ...
+    }
+```
+
+### Key Structure
+- Aggregate composition and responsibilities
+- Design intent and reference relationship explanation
+
+### Value Object Invariants
+
+| Value Object | Invariant | Notes |
+|-------------|-----------|-------|
+| Money | amount >= 0 | Constructor validation |
+| ... | ... | ... |
+
+### Repository/Port Interfaces
+
+Define operations needed from domain perspective in business terms. For implementation details (SQL, cache commands, etc.), refer to detailed-design.
+
+**[Repository/Port Name]**
+
+| Method | Business Meaning |
+|--------|-----------------|
+| save(entity) | Save entity |
+| findById(id) | Find by ID |
+| ... | ... |
+
+## 2. Domain Rules
+
+### 2.1 [Rule Category Name]
+- Rule 1
+- Rule 2
+
+### 2.2 [Rule Category Name]
+- Rule 1
+- Rule 2
+
+[Use table format for calculation logic]
+
+| Condition | Calculation Method | Example |
+|-----------|-------------------|---------|
+| ... | ... | ... |
+
+### 2.X Domain Service Usage Rules (if multiple methods exist)
+
+**[Service Name] Method Relationships**
+
+| Situation | Method to Use | Description |
+|-----------|--------------|-------------|
+| ... | ... | ... |
+
+## 3. State Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> State1
+    State1 --> State2: event
+```
+
+### State Transition Rules
+
+| Current State | Event | Next State | Transition Condition | Side Effects |
+|--------------|-------|------------|---------------------|--------------|
+| ... | ... | ... | ... | ... |
+
+## 4. Domain Events
+
+### Current Usage Status
+[Used/Not used with clear reasoning]
+
+### Event List (if used)
+
+**Publisher Side**:
+
+| Event Name | Publisher | Trigger Condition |
+|------------|-----------|------------------|
+| OrderCreatedEvent | OrderService | After successful order creation |
+
+**Consumer Side**:
+
+| Event Name | Consumer | Processing Content |
+|------------|----------|-------------------|
+| OrderCreatedEvent | NotificationEventListener | Delegates to NotificationService.sendOrderConfirmation() |
+
+**Payload**:
+
+| Event Name | Fields | Description |
+|------------|--------|-------------|
+| OrderCreatedEvent | orderId, customerId, totalAmount, occuredAt | Order identification and basic information |
+
+Note: Publishing and consuming can be developed/tested/deployed independently. The event payload is the contract connecting them.
+
+### Potential Future Events (if not used)
+- Event 1: Timing/conditions for introduction
+- Event 2: Timing/conditions for introduction
+```

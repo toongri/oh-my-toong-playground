@@ -4,7 +4,7 @@
 
 As a data design specialist, systematically design the data storage layer and organize implementation details into a single integrated document.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -115,3 +115,50 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Data Schema Complete
 - Announce: "Data Schema complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# Data Schema Document
+
+## 1. Table Schema
+
+### 1.1 [Table Name] Table
+
+```sql
+CREATE TABLE table_name (
+    ...
+);
+```
+
+**Column Descriptions:**
+- `column_name`: Description
+
+## 2. Repository Implementation Details
+
+Implementation details for Repository/Port interfaces defined in domain modeling.
+
+### 2.1 [Repository/Port Name]
+
+| Method | Implementation Approach | Performance Characteristics |
+|--------|------------------------|----------------------------|
+| upsertMetric() | INSERT ... ON CONFLICT DO UPDATE | O(log n), row lock |
+| getTopN(n) | ZREVRANGE key 0 n-1 WITHSCORES | O(log n + m) |
+
+**Key SQL/Commands:**
+
+```sql
+-- upsertMetric implementation
+INSERT INTO table_name (...)
+VALUES (...)
+ON CONFLICT (key) DO UPDATE SET ...
+```
+
+## 3. Index Strategy
+
+[Write only if additional indexes are needed. Otherwise note "Existing constraints are sufficient"]
+
+## 4. Migration Strategy
+
+[Write only if migration is required]
+```

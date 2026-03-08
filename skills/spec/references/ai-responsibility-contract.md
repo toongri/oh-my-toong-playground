@@ -4,7 +4,7 @@
 
 As an AI responsibility design specialist, systematically define what the system delegates to AI components, what inputs they receive, what quality of output is expected, and what happens when AI fails or produces unacceptable results.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -156,3 +156,65 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: AI Responsibility Contract Complete
 - Announce: "AI Responsibility Contract complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# AI Responsibility Contract Document
+
+## 1. AI Delegation Inventory
+
+| AI Component | Purpose | Autonomy Level | Escalation Criteria |
+|-------------|---------|----------------|-------------------|
+| ... | ... | Autonomous / Assisted / Supervised | ... |
+
+## 2. Responsibility Boundaries
+
+| AI Component | Decides (Autonomous) | Assists (Human Confirms) | Cannot (Out of Scope) |
+|-------------|---------------------|------------------------|---------------------|
+| ... | ... | ... | ... |
+
+## 3. Input Contracts
+
+### 3.1 Input Structure
+
+| AI Component | Required Fields | Optional Fields | Validation Rules | Invalid Input Behavior |
+|-------------|----------------|-----------------|-----------------|----------------------|
+| ... | ... | ... | ... | ... |
+
+### 3.2 Context & Knowledge Strategy
+
+| AI Component | Knowledge Source | Context Window | Retrieval Strategy | Knowledge Freshness |
+|-------------|----------------|----------------|-------------------|-------------------|
+| ... | ... | ... | ... | ... |
+
+## 4. Output Expectations
+
+### 4.1 Output Format
+
+| AI Component | Structure | Schema Summary | Constraints |
+|-------------|-----------|----------------|------------|
+| ... | ... | ... | ... |
+
+### 4.2 Quality Acceptance Criteria
+
+| AI Component | Dimension | Acceptance Criteria | Unacceptable Example |
+|-------------|-----------|--------------------|--------------------|
+| ... | Accuracy | ... | ... |
+| ... | Completeness | ... | ... |
+| ... | Relevance | ... | ... |
+| ... | Tone/Style | ... | ... |
+| ... | Safety | ... | ... |
+
+## 5. Processing Pipeline
+
+| AI Component | Pre-processing | Post-processing | Validation Gates |
+|-------------|---------------|-----------------|-----------------|
+| ... | ... | ... | ... |
+
+## 6. Fallback Strategy
+
+| AI Component | AI Unavailable | Quality Below Threshold | Confidence Low | Chain Failure |
+|-------------|---------------|------------------------|----------------|--------------|
+| ... | ... | ... | ... | ... |
+```
