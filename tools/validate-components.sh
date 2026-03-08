@@ -328,15 +328,17 @@ validate_components() {
 
                 if [[ -n "$component" && "$component" != "null" ]]; then
                     # Accept agents/<name>.md (flat) or agents/<name>/index.md (folder-based)
-                    local parsed_agent_item="$component"
-                    if [[ "$component" == *:* ]]; then
-                        parsed_agent_item=$(echo "$component" | cut -d: -f2-)
-                    fi
-                    local flat_path="$ROOT_DIR/agents/${parsed_agent_item}.md"
-                    local index_path="$ROOT_DIR/agents/${parsed_agent_item}/index.md"
-                    if [[ -f "$flat_path" || -f "$index_path" ]]; then
-                        : # found
+                    if [[ "$component" != *:* ]]; then
+                        # Non-scoped: try fast-path first
+                        local flat_path="$ROOT_DIR/agents/${component}.md"
+                        local index_path="$ROOT_DIR/agents/${component}/index.md"
+                        if [[ -f "$flat_path" || -f "$index_path" ]]; then
+                            : # found
+                        else
+                            validate_scoped_component "agents" "$component" ".md" || true
+                        fi
                     else
+                        # Scoped: must go through scoping validation (cross-project refs are rejected)
                         validate_scoped_component "agents" "$component" ".md" || true
                     fi
                 fi
