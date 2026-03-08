@@ -753,8 +753,6 @@ Wrapup produces context files for future spec sessions — information that shap
 
 ### Frontend / UX Surface Design Area
 
-### Output Template
-
 ```markdown
 # [Project Name] - Frontend / UX Surface
 
@@ -812,8 +810,6 @@ Wrapup produces context files for future spec sessions — information that shap
 
 ### Data / ML Pipeline Design Area
 
-### Output Template
-
 ```markdown
 # [Project Name] - Data / ML Pipeline
 
@@ -869,8 +865,6 @@ Wrapup produces context files for future spec sessions — information that shap
 ---
 
 ### Security / Privacy Design Area
-
-### Output Template
 
 ```markdown
 # [Project Name] - Security / Privacy

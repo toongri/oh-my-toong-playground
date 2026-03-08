@@ -1045,7 +1045,7 @@ When the user requests "continue from here", "review this", etc.:
 1. Check existing directories in `.omt/specs/{spec-name}/`:
    - `requirements/` - Requirements completion
    - `solution-design/` - Solution Design completion
-   - `{area-name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
+   - `{area-name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-plan, frontend-ux-surface, data-ml-pipeline, security-privacy)
 2. Analyze completion status based on design.md existence
 3. Present status summary to user
 
@@ -1098,6 +1098,9 @@ spec.md = requirements/design.md
         + integration-pattern/design.md (if completed)
         + ai-responsibility-contract/design.md (if completed)
         + operations-plan/design.md (if completed)
+        + frontend-ux-surface/design.md (if completed)
+        + data-ml-pipeline/design.md (if completed)
+        + security-privacy/design.md (if completed)
         + {custom-concern}/design.md (if promoted via Emergent Concern Protocol)
 ```
 
