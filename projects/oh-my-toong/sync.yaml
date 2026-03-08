@@ -59,7 +59,6 @@ skills:
     - component: code-review
       platforms: [claude]
     - make-pr
-    - spec-review
     - technical-writing
     - technical-copywriting
 
