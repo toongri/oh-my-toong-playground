@@ -279,7 +279,7 @@ NO AREA COMPLETION WITHOUT:
 
 ---
 
-**Supporting files:** `references/diagram-selection.md` (diagram type selection), `templates/` (output formats)
+**Supporting files:** `references/diagram-selection.md` (diagram type selection), `templates/record.md` (record format)
 
 ### Spec Workflow (Wrapup Mandatory Path)
 
@@ -857,7 +857,7 @@ whether discovered by AI analysis or raised by the user — it must be explicitl
 
 | Option | When | Procedure |
 |--------|------|-----------|
-| **(A) 새 Design Area로 승격** | concern이 독립된 설계 영역으로 충분히 크고 복잡할 때 | 이름/범위 정의 → Custom Design Concern template 사용 → 기존 Area와 동일한 Checkpoint/Review/Completion Protocol 적용 |
+| **(A) 새 Design Area로 승격** | concern이 독립된 설계 영역으로 충분히 크고 복잡할 때 | 이름/범위 정의 → See `references/custom-design-concern.md` → 기존 Area와 동일한 Checkpoint/Review/Completion Protocol 적용 |
 | **(B) 기존 Area에 병합** | concern이 기존 (예정된) Area의 범위에 자연스럽게 포함될 때 | 해당 Area의 scope에 concern 추가 → 해당 Area 진행 시 함께 설계 |
 | **(C) Defer and Record** | concern이 현재 스펙 범위 밖이거나 우선순위가 낮을 때 | Record에 기록 (concern명, 발견 시점, defer 사유) → Wrapup에서 deferred concerns로 표시 |
 
@@ -952,6 +952,8 @@ digraph area_completion {
    - AI CANNOT self-declare Area completion
    - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
+
+> **Template Flexibility**: Output templates in each reference file are recommended structures. Adapt sections, ordering, and detail level to your project's needs. The structural intent (what information to capture) matters more than exact formatting.
 
 **Two gates must BOTH be passed for Area completion:**
 1. **spec-review pass** — APPROVE 또는 COMMENT (quality gate). REQUEST_CHANGES는 차단.
