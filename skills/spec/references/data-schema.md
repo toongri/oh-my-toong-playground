@@ -118,6 +118,7 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 ## Output Template
 
+````markdown
 # Data Schema Document
 
 ## 1. Table Schema
@@ -160,3 +161,4 @@ ON CONFLICT (key) DO UPDATE SET ...
 ## 4. Migration Strategy
 
 [Write only if migration is required]
+````

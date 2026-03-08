@@ -228,6 +228,7 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 
 ## Output Template
 
+````markdown
 # Solution Design Document
 
 ## 1. Design Context
@@ -358,3 +359,4 @@ flowchart TD
 | Event Name | Required Fields | Consumer |
 |------------|-----------------|----------|
 | ... | ... | ... |
+````
