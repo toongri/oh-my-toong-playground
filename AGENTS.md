@@ -6,12 +6,9 @@
 - `agents/`: Sub-agent prompt definitions used for delegation (e.g., `agents/oracle.md`).
 - `commands/`: Slash-command docs (e.g., `commands/hud.md`).
 - `hooks/`: Claude Code lifecycle hooks (`*.sh`) with colocated shell tests (`*_test.sh`).
-- `scripts/`: Sync/validation tooling and utilities.
-- `src/`: TypeScript source packages:
-  - `src/hooks/persistent-mode/`: Stop-hook TypeScript package.
-  - `src/hooks/skill-catalog/`: Skill catalog hook.
-  - `src/lib/`: Shared TypeScript helpers used by scripts/hooks.
-  - `src/scripts/hud/`: TypeScript HUD package (deployed as directory via sync).
+- `lib/`: Shared TypeScript helpers used by scripts/hooks.
+- `scripts/`: Deployed script packages (hud, chunk-review, spec-reviewer).
+- `tools/`: Internal sync/validation tooling (not deployed).
 - `projects/`: Project-specific overrides (e.g., `projects/<project>/skills/<skill>/SKILL.md`).
 - Local/runtime artifacts: `.omt/` (state) and `.claude/` are ignored by git.
 
@@ -20,7 +17,7 @@
 - `make validate`: Validate `sync.yaml` (schema + component existence).
 - `make sync-dry`: Preview sync changes without writing to the target project.
 - `make sync`: Apply sync to the target project configured in `sync.yaml:path`.
-- `bash scripts/sync_test.sh`: Run the sync orchestrator’s bash test suite.
+- `bash tools/sync_test.sh`: Run the sync orchestrator’s bash test suite.
 - `bash hooks/keyword-detector_test.sh`: Run hook-specific shell tests (colocated next to source).
 - `bun test`: Run all TypeScript tests (HUD + shared library).
 
@@ -36,7 +33,7 @@ Prereqs commonly needed: `bash` (macOS bash 3.2 compatible), `yq`, `jq`, `bun`, 
 ## Testing Guidelines
 
 - Shell tests (`*_test.sh`) are colocated next to their source files; use `mktemp -d` and clean up to avoid leaking artifacts.
-- TypeScript tests use bun:test (`*.test.ts`) under `src/scripts/hud/` and `src/lib/`.
+- TypeScript tests use bun:test (`*.test.ts`) under `scripts/hud/` and `lib/`.
 
 ## Commit & Pull Request Guidelines
 
