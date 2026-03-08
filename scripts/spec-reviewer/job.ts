@@ -569,7 +569,7 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
 async function cmdWait(options: Record<string, unknown>, jobDir: string): Promise<void> {
   // We override the wait payload to include specName, so we implement our own cmdWait
   // rather than delegating to the framework's cmdWait.
-  const { parseWaitCursor, formatWaitCursor, resolveBucketSize, sleepMs } = await import('../../lib/job-utils');
+  const { parseWaitCursor, formatWaitCursor, resolveBucketSize, sleepMs } = await import('@lib/job-utils');
 
   const resolvedJobDir = path.resolve(jobDir);
   const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
