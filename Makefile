@@ -10,20 +10,20 @@ help:
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 
 sync: validate validate-tests
-	@./scripts/sync.sh
+	@./tools/sync.sh
 
 sync-dry: validate
-	@./scripts/sync.sh --dry-run
+	@./tools/sync.sh --dry-run
 
 validate: validate-schema validate-components
 
 validate-schema:
-	@./scripts/validate-schema.sh
+	@./tools/validate-schema.sh
 
 validate-components:
-	@./scripts/validate-components.sh
+	@./tools/validate-components.sh
 
 validate-tests:
-	@./scripts/run-tests.sh
+	@./tools/run-tests.sh
 
 test: validate-tests

@@ -8,6 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # 컴포넌트 검증 실행
-if [[ -f "$ROOT_DIR/scripts/validate-components.sh" ]]; then
-    "$ROOT_DIR/scripts/validate-components.sh" --quiet 2>&1 || true
+if [[ -f "$ROOT_DIR/tools/validate-components.sh" ]]; then
+    "$ROOT_DIR/tools/validate-components.sh" --quiet 2>&1 || true
 fi

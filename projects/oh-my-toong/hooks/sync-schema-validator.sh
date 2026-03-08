@@ -20,13 +20,13 @@ if [[ -n "$file_path" && "$file_path" != *"sync.yaml" ]]; then
 fi
 
 # 스키마 검증 실행
-if [[ -f "$ROOT_DIR/scripts/validate-schema.sh" ]]; then
+if [[ -f "$ROOT_DIR/tools/validate-schema.sh" ]]; then
     if [[ -n "$file_path" && -f "$file_path" ]]; then
         # 특정 파일만 검증
-        "$ROOT_DIR/scripts/validate-schema.sh" "$file_path" 2>&1 || true
+        "$ROOT_DIR/tools/validate-schema.sh" "$file_path" 2>&1 || true
     else
         # 전체 검증
-        "$ROOT_DIR/scripts/validate-schema.sh" 2>&1 || true
+        "$ROOT_DIR/tools/validate-schema.sh" 2>&1 || true
     fi
 fi
 

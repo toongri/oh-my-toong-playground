@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Go up to scripts/, then to project root
+# Go up to tools/, then to project root
 SCRIPTS_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$SCRIPTS_DIR")"
 
@@ -19,8 +19,8 @@ setup_test_env() {
     TEST_TMP_DIR=$(mktemp -d)
 
     # Create oh-my-toong-like structure
-    mkdir -p "$TEST_TMP_DIR/scripts/lib"
-    mkdir -p "$TEST_TMP_DIR/scripts/adapters"
+    mkdir -p "$TEST_TMP_DIR/tools/lib"
+    mkdir -p "$TEST_TMP_DIR/tools/adapters"
     mkdir -p "$TEST_TMP_DIR/agents"
     mkdir -p "$TEST_TMP_DIR/projects/test-proj"
     mkdir -p "$TEST_TMP_DIR/target"
@@ -30,8 +30,8 @@ setup_test_env() {
     echo "# CLAUDE.md" > "$TEST_TMP_DIR/target/CLAUDE.md"
 
     # Copy lib and adapters from actual project
-    cp "$ROOT_DIR/scripts/lib/common.sh" "$TEST_TMP_DIR/scripts/lib/" 2>/dev/null || true
-    cp "$ROOT_DIR/adapters/"*.sh "$TEST_TMP_DIR/scripts/adapters/" 2>/dev/null || true
+    cp "$ROOT_DIR/tools/lib/common.sh" "$TEST_TMP_DIR/tools/lib/" 2>/dev/null || true
+    cp "$ROOT_DIR/tools/adapters/"*.sh "$TEST_TMP_DIR/tools/adapters/" 2>/dev/null || true
 }
 
 teardown_test_env() {
@@ -63,10 +63,10 @@ run_test() {
 
 test_config_yaml_at_root_location() {
     # sync.sh should look for config.yaml at $ROOT_DIR/config.yaml (not scripts/)
-    if grep -q 'config.yaml' "$ROOT_DIR/scripts/sync.sh" 2>/dev/null; then
+    if grep -q 'config.yaml' "$ROOT_DIR/tools/sync.sh" 2>/dev/null; then
         # Check that it reads from ROOT_DIR/config.yaml (not scripts/config.yaml)
-        if grep -q '\$ROOT_DIR/config.yaml' "$ROOT_DIR/scripts/sync.sh" || \
-           grep -q '"$ROOT_DIR"/config.yaml' "$ROOT_DIR/scripts/sync.sh"; then
+        if grep -q '\$ROOT_DIR/config.yaml' "$ROOT_DIR/tools/sync.sh" || \
+           grep -q '"$ROOT_DIR"/config.yaml' "$ROOT_DIR/tools/sync.sh"; then
             return 0
         else
             echo "sync.sh should read config.yaml from ROOT_DIR, not scripts/"
@@ -80,8 +80,8 @@ test_config_yaml_at_root_location() {
 
 test_config_yaml_not_in_scripts_dir() {
     # sync.sh should NOT read config.yaml from scripts/ directory
-    if grep -q '\$ROOT_DIR/scripts/config.yaml' "$ROOT_DIR/scripts/sync.sh" || \
-       grep -q '"$ROOT_DIR"/scripts/config.yaml' "$ROOT_DIR/scripts/sync.sh"; then
+    if grep -q '\$ROOT_DIR/tools/config.yaml' "$ROOT_DIR/tools/sync.sh" || \
+       grep -q '"$ROOT_DIR"/scripts/config.yaml' "$ROOT_DIR/tools/sync.sh"; then
         echo "sync.sh should NOT read config.yaml from scripts/ directory"
         return 1
     else
@@ -95,7 +95,7 @@ test_config_yaml_not_in_scripts_dir() {
 
 test_common_lib_reads_use_platforms() {
     # lib/common.sh should have function to read use-platforms from config.yaml
-    if grep -q 'use-platforms\|use_platforms' "$ROOT_DIR/scripts/lib/common.sh"; then
+    if grep -q 'use-platforms\|use_platforms' "$ROOT_DIR/tools/lib/common.sh"; then
         return 0
     else
         echo "lib/common.sh should read use-platforms from config.yaml"
@@ -106,8 +106,8 @@ test_common_lib_reads_use_platforms() {
 test_sync_uses_use_platforms_as_fallback() {
     # sync.sh should use use-platforms from config.yaml as fallback
     # when sync.yaml doesn't have platforms field
-    if grep -qE 'use.platforms|get_default_platforms' "$ROOT_DIR/scripts/sync.sh" || \
-       grep -qE 'use.platforms|get_default_platforms' "$ROOT_DIR/scripts/lib/common.sh"; then
+    if grep -qE 'use.platforms|get_default_platforms' "$ROOT_DIR/tools/sync.sh" || \
+       grep -qE 'use.platforms|get_default_platforms' "$ROOT_DIR/tools/lib/common.sh"; then
         return 0
     else
         echo "sync should use use-platforms from config.yaml as fallback"
@@ -120,7 +120,7 @@ test_platforms_priority_order() {
     # component-level platforms > section-level platforms > sync.yaml top-level platforms > config.yaml use-platforms > hardcoded ["claude"]
     #
     # This test verifies the priority chain exists in the code
-    local sync_file="$ROOT_DIR/scripts/sync.sh"
+    local sync_file="$ROOT_DIR/tools/sync.sh"
 
     # Check that sync_agents handles item_platforms (supports both old and new formats)
     # Old format: .agents[$i].platforms
@@ -139,7 +139,7 @@ test_platforms_priority_order() {
 
 test_get_default_platforms_function_exists() {
     # lib/common.sh should have get_default_platforms function
-    if grep -qE '^get_default_platforms\(\)|^function get_default_platforms' "$ROOT_DIR/scripts/lib/common.sh"; then
+    if grep -qE '^get_default_platforms\(\)|^function get_default_platforms' "$ROOT_DIR/tools/lib/common.sh"; then
         return 0
     else
         echo "lib/common.sh should have get_default_platforms function"
@@ -149,7 +149,7 @@ test_get_default_platforms_function_exists() {
 
 test_get_default_platforms_reads_config_yaml() {
     # get_default_platforms should read from $ROOT_DIR/config.yaml
-    local common_file="$ROOT_DIR/scripts/lib/common.sh"
+    local common_file="$ROOT_DIR/tools/lib/common.sh"
 
     if grep -A 20 'get_default_platforms' "$common_file" 2>/dev/null | grep -q 'config.yaml'; then
         return 0
@@ -161,7 +161,7 @@ test_get_default_platforms_reads_config_yaml() {
 
 test_get_default_platforms_returns_json_array() {
     # get_default_platforms should return JSON array format
-    local common_file="$ROOT_DIR/scripts/lib/common.sh"
+    local common_file="$ROOT_DIR/tools/lib/common.sh"
 
     # Should use yq -o=json or return JSON array
     if grep -A 20 'get_default_platforms' "$common_file" 2>/dev/null | grep -qE 'yq.*-o=json|\["claude"\]'; then
@@ -174,7 +174,7 @@ test_get_default_platforms_returns_json_array() {
 
 test_get_default_platforms_falls_back_to_claude() {
     # get_default_platforms should fall back to ["claude"] if config.yaml missing or empty
-    local common_file="$ROOT_DIR/scripts/lib/common.sh"
+    local common_file="$ROOT_DIR/tools/lib/common.sh"
 
     if grep -A 20 'get_default_platforms' "$common_file" 2>/dev/null | grep -q '\["claude"\]'; then
         return 0
@@ -190,7 +190,7 @@ test_get_default_platforms_falls_back_to_claude() {
 
 test_sync_agents_uses_get_default_platforms() {
     # sync_agents should use get_default_platforms for fallback
-    local sync_file="$ROOT_DIR/scripts/sync.sh"
+    local sync_file="$ROOT_DIR/tools/sync.sh"
 
     local agents_section
     agents_section=$(grep -A 100 '^sync_agents\(\)' "$sync_file" 2>/dev/null || echo "")
@@ -210,7 +210,7 @@ test_sync_agents_uses_get_default_platforms() {
 
 test_sync_commands_uses_get_default_platforms() {
     # sync_commands should use get_default_platforms for fallback
-    local sync_file="$ROOT_DIR/scripts/sync.sh"
+    local sync_file="$ROOT_DIR/tools/sync.sh"
 
     local commands_section
     commands_section=$(grep -A 100 '^sync_commands\(\)' "$sync_file" 2>/dev/null || echo "")
@@ -225,7 +225,7 @@ test_sync_commands_uses_get_default_platforms() {
 
 test_sync_hooks_uses_get_default_platforms() {
     # sync_hooks should use get_default_platforms for fallback
-    local sync_file="$ROOT_DIR/scripts/sync.sh"
+    local sync_file="$ROOT_DIR/tools/sync.sh"
 
     local hooks_section
     hooks_section=$(grep -A 180 '^sync_hooks\(\)' "$sync_file" 2>/dev/null || echo "")
@@ -240,7 +240,7 @@ test_sync_hooks_uses_get_default_platforms() {
 
 test_sync_skills_uses_get_default_platforms() {
     # sync_skills should use get_default_platforms for fallback
-    local sync_file="$ROOT_DIR/scripts/sync.sh"
+    local sync_file="$ROOT_DIR/tools/sync.sh"
 
     local skills_section
     skills_section=$(grep -A 100 '^sync_skills\(\)' "$sync_file" 2>/dev/null || echo "")

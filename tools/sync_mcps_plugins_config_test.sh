@@ -9,10 +9,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Source adapters (they include fallback logging)
-source "$ROOT_DIR/scripts/lib/common.sh"
-source "$ROOT_DIR/scripts/adapters/claude.sh"
-source "$ROOT_DIR/scripts/adapters/gemini.sh"
-source "$ROOT_DIR/scripts/adapters/codex.sh"
+source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/adapters/claude.sh"
+source "$SCRIPT_DIR/adapters/gemini.sh"
+source "$SCRIPT_DIR/adapters/codex.sh"
 
 # Test utilities
 TESTS_PASSED=0

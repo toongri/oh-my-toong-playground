@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPTS_DIR="$SCRIPT_DIR"
 ROOT_DIR="$(dirname "$SCRIPTS_DIR")"
 
-VALIDATE_SCHEMA="$ROOT_DIR/scripts/validate-schema.sh"
+VALIDATE_SCHEMA="$ROOT_DIR/tools/validate-schema.sh"
 
 # Test utilities
 TESTS_PASSED=0
