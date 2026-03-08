@@ -1256,6 +1256,23 @@ sync_plugins() {
 # Shared Lib Deployment
 # =============================================================================
 
+rewrite_lib_aliases() {
+    local platform_root="$1"
+    find "$platform_root" -name "*.ts" ! -name "*.test.ts" ! -path "*/lib/*" | while read -r file; do
+        if grep -q "from ['\"]@lib/" "$file" 2>/dev/null; then
+            local dir=$(dirname "$file")
+            local rel="${dir#$platform_root/}"
+            local depth=$(echo "$rel" | awk -F'/' '{print NF}')
+            local prefix=""
+            local i
+            for ((i=0; i<depth; i++)); do
+                prefix="../$prefix"
+            done
+            sed -i '' "s|from '@lib/|from '${prefix}lib/|g; s|from \"@lib/|from \"${prefix}lib/|g" "$file"
+        fi
+    done
+}
+
 sync_lib() {
     local target_path="$1"
     local yaml_file="$2"
@@ -1282,11 +1299,13 @@ sync_lib() {
         local lib_dir="$target_path/$platform_dir/lib"
         if [[ "$DRY_RUN" == "true" ]]; then
             log_dry "Deploy lib: lib/ -> $lib_dir/"
+            log_dry "Rewrite @lib/* aliases in $platform_dir/"
         else
             rm -rf "$lib_dir"
             mkdir -p "$lib_dir"
             rsync -a --exclude '*.test.ts' "$ROOT_DIR/lib/" "$lib_dir/"
             log_info "Deployed shared lib to $platform_dir/lib/"
+            rewrite_lib_aliases "$target_path/$platform_dir"
         fi
     done
 }
