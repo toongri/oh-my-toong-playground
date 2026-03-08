@@ -322,6 +322,59 @@ test_scoped_resolution_not_found_error() {
     assert_contains "$SCOPED_RESOLUTION_ERROR" "not found" "Should have not found error"
 }
 
+test_scoped_resolution_folder_agent_root_yaml() {
+    CURRENT_PROJECT_CONTEXT=""
+    IS_ROOT_YAML_CONTEXT=true
+
+    # Create folder-based agent
+    mkdir -p "$TEST_TMP_DIR/agents/folder-agent"
+    echo "# test" > "$TEST_TMP_DIR/agents/folder-agent/index.md"
+
+    resolve_scoped_source_path "agents" "folder-agent" ".md"
+
+    assert_equals "$TEST_TMP_DIR/agents/folder-agent/index.md" "$SCOPED_SOURCE_PATH" "Should find folder-based agent via index.md"
+}
+
+test_scoped_resolution_folder_agent_project_yaml() {
+    CURRENT_PROJECT_CONTEXT="project-a"
+    IS_ROOT_YAML_CONTEXT=false
+
+    # Create folder-based agent in project
+    mkdir -p "$TEST_TMP_DIR/projects/project-a/agents/local-folder-agent"
+    echo "# test" > "$TEST_TMP_DIR/projects/project-a/agents/local-folder-agent/index.md"
+
+    resolve_scoped_source_path "agents" "local-folder-agent" ".md"
+
+    assert_equals "$TEST_TMP_DIR/projects/project-a/agents/local-folder-agent/index.md" "$SCOPED_SOURCE_PATH" "Should find project folder-based agent"
+}
+
+test_scoped_resolution_flat_agent_preferred_over_folder() {
+    CURRENT_PROJECT_CONTEXT=""
+    IS_ROOT_YAML_CONTEXT=true
+
+    # Create BOTH flat and folder-based agent
+    # (oracle.md already exists from setup_test_env)
+    mkdir -p "$TEST_TMP_DIR/agents/oracle"
+    echo "# folder oracle" > "$TEST_TMP_DIR/agents/oracle/index.md"
+
+    resolve_scoped_source_path "agents" "oracle" ".md"
+
+    assert_equals "$TEST_TMP_DIR/agents/oracle.md" "$SCOPED_SOURCE_PATH" "Flat file should take priority over folder"
+}
+
+test_scoped_resolution_folder_agent_fallback_to_global() {
+    CURRENT_PROJECT_CONTEXT="project-a"
+    IS_ROOT_YAML_CONTEXT=false
+
+    # Create folder-based agent ONLY in global (not in project)
+    mkdir -p "$TEST_TMP_DIR/agents/global-folder-agent"
+    echo "# global folder" > "$TEST_TMP_DIR/agents/global-folder-agent/index.md"
+
+    resolve_scoped_source_path "agents" "global-folder-agent" ".md"
+
+    assert_equals "$TEST_TMP_DIR/agents/global-folder-agent/index.md" "$SCOPED_SOURCE_PATH" "Should fallback to global folder-based agent"
+}
+
 # =============================================================================
 # Run Tests
 # =============================================================================
@@ -352,6 +405,10 @@ main() {
     run_test test_scoped_resolution_project_yaml_allows_same_project_prefix
     run_test test_scoped_resolution_file_with_extension
     run_test test_scoped_resolution_not_found_error
+    run_test test_scoped_resolution_folder_agent_root_yaml
+    run_test test_scoped_resolution_folder_agent_project_yaml
+    run_test test_scoped_resolution_flat_agent_preferred_over_folder
+    run_test test_scoped_resolution_folder_agent_fallback_to_global
 
     echo ""
     echo "============================================"
