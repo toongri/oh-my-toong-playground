@@ -209,6 +209,22 @@ Apply **Area Completion Protocol** (see SKILL.md)
 ### SSR/SSG Strategy (if applicable)
 [Rendering strategy, hydration approach]
 
+### Animation & Motion System (if applicable)
+
+| Item | Detail |
+|------|--------|
+| Motion Design Scope | [Animation이 적용되는 인터랙션 범위] |
+| Motion Principles | [easing, duration 등 모션 원칙] |
+| Reduced-motion Policy | [prefers-reduced-motion 대응 전략] |
+
+### Internationalization (if applicable)
+
+| Item | Detail |
+|------|--------|
+| Supported Languages | [지원 언어 목록] |
+| Text Direction | [LTR/RTL 지원 여부] |
+| Locale-specific Formatting | [날짜, 숫자, 통화 포맷 전략] |
+
 ## Records
 [Decision records created during this area]
 ```

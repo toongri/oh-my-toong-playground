@@ -26,7 +26,7 @@ As a knowledge curator, extract information that shapes the **next specification
 - Collect: Read all records from:
   - `.omt/specs/{spec-name}/requirements/records/`
   - `.omt/specs/{spec-name}/solution-design/records/`
-  - `.omt/specs/{spec-name}/{area-name}/records/` (for each selected area: domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
+  - `.omt/specs/{spec-name}/{area-name}/records/` (for each selected Design Area)
 - Organize: Group by category (architectural decisions, domain conventions, gotchas, etc.)
 
 #### 1.2 Extract Candidates
