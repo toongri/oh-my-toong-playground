@@ -21,7 +21,7 @@ make sync               # Deploy to target projects (runs validate + tests first
 
 ```bash
 bash hooks/keyword-detector_test.sh        # Single shell test (colocated next to source)
-bash scripts/sync_test.sh                  # Sync orchestrator tests (colocated next to source)
+bash tools/sync_test.sh                    # Sync orchestrator tests (colocated next to source)
 bun test                                   # All TypeScript tests
 ```
 
@@ -40,15 +40,11 @@ oh-my-toong/
 ├── commands/        # Slash command definitions (<name>.md)
 ├── hooks/           # Session lifecycle scripts (sh/js/py)
 ├── rules/           # Behavioral rules synced as .claude/rules/
-├── scripts/         # Sync tooling, adapters, and utilities
-│   └── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
-├── src/             # TypeScript source packages
-│   ├── hooks/
-│   │   ├── persistent-mode/   # Stop-hook TypeScript package
-│   │   └── skill-catalog/     # Skill catalog hook
-│   ├── lib/                   # Shared TypeScript helpers (ESM, bun:test)
-│   └── scripts/
-│       └── hud/               # HUD TypeScript package (deployed as directory)
+├── lib/             # Shared TypeScript helpers (ESM, bun:test)
+├── scripts/         # Deployed script packages (hud, chunk-review, spec-reviewer)
+├── tools/           # Internal sync/validation tooling (not deployed)
+│   ├── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
+│   └── lib/         # Shared shell helpers for tools
 ├── projects/        # Project-specific overrides (skills, hooks per project)
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
@@ -56,7 +52,7 @@ oh-my-toong/
 
 ### Sync System (Core Feature)
 
-The sync tool (`scripts/sync.sh`) reads `sync.yaml` files and deploys components to target project directories (`.claude/`, `.gemini/`, `.codex/`).
+The sync tool (`tools/sync.sh`) reads `sync.yaml` files and deploys components to target project directories (`.claude/`, `.gemini/`, `.codex/`).
 
 **Processing order**: `projects/*/sync.yaml` first (project-specific), then root `sync.yaml` (skips already-processed paths).
 
@@ -86,7 +82,7 @@ skills:
 - Root `sync.yaml`: global paths only (`skills/`, `agents/`, etc.)
 - Project `sync.yaml`: own project first (`projects/<name>/skills/`), then global fallback. Cross-project references are blocked.
 
-**Adapters** (`scripts/adapters/`): Each platform (claude, gemini, codex) has its own adapter that handles directory layout differences. Claude has native support for all categories; Gemini and Codex use fallback strategies for agents/commands.
+**Adapters** (`tools/adapters/`): Each platform (claude, gemini, codex) has its own adapter that handles directory layout differences. Claude has native support for all categories; Gemini and Codex use fallback strategies for agents/commands.
 
 ### Core Skills
 
@@ -126,7 +122,7 @@ skills:
 - **TypeScript**: ESM modules, bun:test for testing. No build step required.
 - **YAML**: 2-space indentation
 - **Naming**: `skills/<greek-name>/`, `agents/<name>.md`, `hooks/<purpose>.(sh|js|py)`
-- **Shell tests**: Colocated next to source files with `_test.sh` suffix (e.g., `hooks/keyword-detector_test.sh`, `scripts/sync_test.sh`); use `mktemp -d` with cleanup
+- **Shell tests**: Colocated next to source files with `_test.sh` suffix (e.g., `hooks/keyword-detector_test.sh`, `tools/sync_test.sh`); use `mktemp -d` with cleanup
 
 ## Critical Patterns
 
