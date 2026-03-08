@@ -1261,8 +1261,14 @@ rewrite_lib_aliases() {
     find "$platform_root" -name "*.ts" ! -name "*.test.ts" ! -path "*/lib/*" | while read -r file; do
         if grep -q "from ['\"]@lib/" "$file" 2>/dev/null; then
             local dir=$(dirname "$file")
-            local rel="${dir#$platform_root/}"
-            local depth=$(echo "$rel" | awk -F'/' '{print NF}')
+            local rel="${dir#$platform_root}"
+            rel="${rel#/}"
+            local depth
+            if [[ -z "$rel" ]]; then
+                depth=0
+            else
+                depth=$(echo "$rel" | awk -F'/' '{print NF}')
+            fi
             local prefix=""
             local i
             for ((i=0; i<depth; i++)); do
