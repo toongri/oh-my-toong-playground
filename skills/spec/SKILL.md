@@ -208,6 +208,63 @@ NO AREA COMPLETION WITHOUT:
 
 ---
 
+### Frontend / UX Surface
+
+**Designs:** Component architecture, state management strategy, styling approach, responsive design, interaction patterns, accessibility considerations
+
+**Enter when:**
+- Frontend/UI layer is a significant part of the system
+- Component architecture decisions needed (composition, shared components, design system integration)
+- State management strategy undecided (local vs global, server vs client state)
+- Styling/theming approach requires alignment across team
+
+**Skip when:**
+- No frontend/UI component in the system (API-only, CLI-only, background service)
+- Using established design system with no customization needed
+- Frontend is trivial (single static page, no interactive components)
+
+**Reference:** `references/frontend-ux-surface.md`
+
+---
+
+### Data / ML Pipeline
+
+**Designs:** Data flow architecture, ingestion patterns, transformation strategy, storage layer design, data quality framework, ML model serving (if applicable)
+
+**Enter when:**
+- Data pipeline is a core architectural component (ETL/ELT, streaming, batch processing)
+- Multiple data sources require integration and transformation
+- Data quality/validation strategy needed
+- ML model serving or feature engineering is part of the architecture
+
+**Skip when:**
+- No data pipeline in the system (simple CRUD with single database)
+- Data processing is trivial (single source, no transformation)
+- Using fully managed data service with no custom pipeline logic
+
+**Reference:** `references/data-ml-pipeline.md`
+
+---
+
+### Security / Privacy
+
+**Designs:** Authentication strategy, authorization model, data protection, privacy compliance, threat modeling
+
+**Enter when:**
+- Authentication/authorization strategy needs design (not using off-the-shelf identity provider as-is)
+- System handles sensitive or personal data requiring protection policies
+- Multi-tenant or role-based access control needed
+- Regulatory or compliance requirements exist (GDPR, CCPA, HIPAA, etc.)
+
+**Skip when:**
+- Internal tool with no sensitive data and single-user access
+- Authentication fully delegated to external provider with no custom logic
+- No personal data processed or stored
+
+**Reference:** `references/security-privacy.md`
+
+---
+
 ### Wrapup
 
 **Designs:** Context files for future reference (project.md, conventions.md, decisions.md, gotchas.md)
@@ -949,6 +1006,9 @@ Save **whenever each Area is completed**:
 | Integration Pattern | `integration-pattern/` |
 | AI Responsibility Contract | `ai-responsibility-contract/` |
 | Operations Plan | `operations-plan/` |
+| Frontend / UX Surface | `frontend-ux-surface/` |
+| Data / ML Pipeline | `data-ml-pipeline/` |
+| Security / Privacy | `security-privacy/` |
 | Custom Design Concern | `{concern-name}/` (kebab-case) |
 
 **Custom Design Concerns** promoted via Emergent Concern Protocol receive the same directory structure:
