@@ -249,7 +249,6 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 ## Output Template
 
-```markdown
 # Domain Modeling Document
 
 ## 1. Class Diagram
@@ -274,7 +273,7 @@ classDiagram
 
 ### Repository/Port Interfaces
 
-Define operations needed from domain perspective in business terms. For implementation details (SQL, cache commands, etc.), refer to detailed-design.
+Define operations needed from domain perspective in business terms.
 
 **[Repository/Port Name]**
 
@@ -352,4 +351,3 @@ Note: Publishing and consuming can be developed/tested/deployed independently. T
 ### Potential Future Events (if not used)
 - Event 1: Timing/conditions for introduction
 - Event 2: Timing/conditions for introduction
-```

@@ -128,7 +128,6 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 ## Output Template
 
-```markdown
 # Interface Contract Document
 
 ## 1. Key Design Decisions and Background
@@ -196,4 +195,3 @@ Apply **Area Completion Protocol** (see SKILL.md)
 - **Reason**: [Reason for action]
 - **Replacement Interface**: [If a replacement exists]
 - **End of Support Date**: [Date]
-```
