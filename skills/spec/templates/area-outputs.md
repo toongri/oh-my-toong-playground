@@ -751,7 +751,7 @@ Wrapup produces context files for future spec sessions — information that shap
 
 ---
 
-## Frontend / UX Surface Design Area
+### Frontend / UX Surface Design Area
 
 ### Output Template
 
@@ -810,7 +810,7 @@ Wrapup produces context files for future spec sessions — information that shap
 
 ---
 
-## Data / ML Pipeline Design Area
+### Data / ML Pipeline Design Area
 
 ### Output Template
 
@@ -868,7 +868,7 @@ Wrapup produces context files for future spec sessions — information that shap
 
 ---
 
-## Security / Privacy Design Area
+### Security / Privacy Design Area
 
 ### Output Template
 
