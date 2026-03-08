@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 
 # Source the common library
-source "$ROOT_DIR/scripts/lib/common.sh"
+source "$SCRIPT_DIR/common.sh"
 
 # Test utilities
 TESTS_PASSED=0
