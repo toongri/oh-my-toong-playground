@@ -150,6 +150,7 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 ## Output Template
 
+````markdown
 # Integration Pattern Document
 
 ## 1. Integration Points Summary
@@ -231,3 +232,4 @@ flowchart TD
 | Operation | Transaction Scope | Pattern | Notes |
 |-----------|------------------|---------|-------|
 | ... | ... | Single DB / Outbox / Saga | ... |
+````

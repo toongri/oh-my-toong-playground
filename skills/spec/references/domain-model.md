@@ -249,6 +249,7 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 ## Output Template
 
+````markdown
 # Domain Modeling Document
 
 ## 1. Class Diagram
@@ -351,3 +352,4 @@ Note: Publishing and consuming can be developed/tested/deployed independently. T
 ### Potential Future Events (if not used)
 - Event 1: Timing/conditions for introduction
 - Event 2: Timing/conditions for introduction
+````
