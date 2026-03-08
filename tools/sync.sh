@@ -1279,6 +1279,21 @@ rewrite_lib_aliases() {
     done
 }
 
+rewrite_platform_paths() {
+    local platform_root="$1"
+    local platform="$2"
+
+    if [[ "$platform" == "claude" ]]; then
+        return 0
+    fi
+
+    find "$platform_root" -name "*.md" | while read -r file; do
+        if grep -q "\.claude/" "$file" 2>/dev/null; then
+            sed -i '' "s|\.claude/|\.${platform}/|g" "$file"
+        fi
+    done
+}
+
 sync_lib() {
     local target_path="$1"
     local yaml_file="$2"
@@ -1373,6 +1388,17 @@ process_yaml() {
     sync_rules "$target_path" "$yaml_file"
     sync_plugins "$target_path" "$yaml_file"
     sync_lib "$target_path" "$yaml_file"
+
+    for platform in gemini codex opencode; do
+        local platform_dir="$target_path/.$platform"
+        if [[ -d "$platform_dir" ]]; then
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log_dry "Rewrite .claude/ paths -> .$platform/ in $platform_dir/"
+            else
+                rewrite_platform_paths "$platform_dir" "$platform"
+            fi
+        fi
+    done
 
     log_success "완료: $yaml_file"
 }
