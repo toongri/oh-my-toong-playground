@@ -1,6 +1,6 @@
 import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
-import { logError } from '../../lib/logging.ts';
+import { logError } from '@lib/logging.ts';
 import type { AgentInfo } from './types.ts';
 
 interface ContentItem {

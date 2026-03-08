@@ -1,9 +1,9 @@
 import { readStdin, parseInput } from './stdin.ts';
 import { getProjectRoot } from './utils.ts';
 import { makeDecision, DecisionContext } from './decision.ts';
-import { readTasksFromDirectory, countIncompleteTasks } from '../../lib/task-reader.ts';
+import { readTasksFromDirectory, countIncompleteTasks } from '@lib/task-reader.ts';
 import { join } from 'path';
-import { initLogger, logStart, logEnd, logInfo, logDebug, logError } from '../../lib/logging.ts';
+import { initLogger, logStart, logEnd, logInfo, logDebug, logError } from '@lib/logging.ts';
 
 export async function main(): Promise<void> {
   try {

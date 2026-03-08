@@ -15,7 +15,7 @@ import {
   computeTerminalDoneCount,
   parseArgs,
   generateJobId,
-} from '../../lib/job-utils';
+} from '@lib/job-utils';
 
 import {
   type JobConfig,
@@ -28,7 +28,7 @@ import {
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
   gcStaleJobs,
-} from '../../lib/generic-job';
+} from '@lib/generic-job';
 
 // ---------------------------------------------------------------------------
 // Job configuration
@@ -785,6 +785,6 @@ export {
   computeTerminalDoneCount,
   parseArgs,
   generateJobId,
-} from '../../lib/job-utils';
+} from '@lib/job-utils';
 
 export { buildUiPayload, parseSpecReviewConfig, parseYamlSimple, computeStatus, resolveContextDir, findProjectRoot };

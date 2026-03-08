@@ -13,7 +13,7 @@ import {
   readJsonIfExists,
   parseArgs,
   generateJobId,
-} from '../../../src/lib/job-utils';
+} from '@lib/job-utils';
 
 import {
   type JobConfig,
@@ -31,7 +31,7 @@ import {
   parseYamlSimple as frameworkParseYamlSimple,
   buildManifest,
   safeFileName,
-} from '../../../src/lib/generic-job';
+} from '@lib/generic-job';
 
 // ---------------------------------------------------------------------------
 // Council JobConfig
@@ -470,7 +470,7 @@ export {
   readJsonIfExists,
   parseArgs,
   generateJobId,
-} from '../../../src/lib/job-utils';
+} from '@lib/job-utils';
 
 export {
   buildUiPayload,

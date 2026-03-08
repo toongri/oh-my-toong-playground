@@ -6,7 +6,7 @@ import * as stateMod from './state.ts';
 import * as transcriptMod from './transcript.ts';
 import * as usageApiMod from './usage-api.ts';
 import * as formatterMod from './formatter.ts';
-import * as loggingMod from '../../lib/logging.ts';
+import * as loggingMod from '@lib/logging.ts';
 import { main } from './index.ts';
 
 describe('main', () => {

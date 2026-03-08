@@ -1,5 +1,5 @@
 import { TranscriptDetection } from './types.ts';
-import { logDebug } from '../../lib/logging.ts';
+import { logDebug } from '@lib/logging.ts';
 
 // Pattern matchers
 const PROMISE_PATTERN = /<promise>\s*DONE\s*<\/promise>/i;

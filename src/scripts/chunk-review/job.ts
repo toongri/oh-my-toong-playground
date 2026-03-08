@@ -20,9 +20,9 @@ import {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
-} from '../../lib/job-utils';
+} from '@lib/job-utils';
 
-import { initLogger, logInfo, logStart, logEnd } from '../../lib/logging';
+import { initLogger, logInfo, logStart, logEnd } from '@lib/logging';
 
 import {
   type JobConfig,
@@ -39,7 +39,7 @@ import {
   cmdCollect as _cmdCollect,
   buildManifest as _buildManifest,
   parseYamlSimple as _parseYamlSimple,
-} from '../../lib/generic-job';
+} from '@lib/generic-job';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -480,7 +480,7 @@ export {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
-} from '../../lib/job-utils';
+} from '@lib/job-utils';
 
 export { safeFileName };
 
