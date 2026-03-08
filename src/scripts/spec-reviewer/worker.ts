@@ -3,8 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import { initLogger, logInfo, logError, logStart, logEnd } from '../../lib/logging';
-import { parseArgs, exitWithError } from '../../lib/job-utils';
+import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
+import { parseArgs, exitWithError } from '@lib/job-utils';
 import {
   splitCommand,
   atomicWriteJson,
@@ -14,7 +14,7 @@ import {
   runWithRetry as sharedRunWithRetry,
   MAX_RETRIES,
   BASE_DELAY_MS,
-} from '../../lib/worker-utils';
+} from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 
