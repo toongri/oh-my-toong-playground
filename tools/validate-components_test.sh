@@ -1200,6 +1200,50 @@ EOF
 }
 
 # =============================================================================
+# Tests: Folder-based Agent Validation
+# =============================================================================
+
+test_scoped_validate_folder_agent_root_yaml() {
+    IS_ROOT_YAML_CONTEXT=true
+    CURRENT_PROJECT_CONTEXT=""
+    CURRENT_PROJECT_DIR=""
+
+    # Create folder-based agent
+    mkdir -p "$TEST_TMP_DIR/agents/folder-agent"
+    echo "# test" > "$TEST_TMP_DIR/agents/folder-agent/index.md"
+
+    ERROR_COUNT=0
+    validate_scoped_component "agents" "folder-agent" ".md"
+
+    if [[ $? -eq 0 && $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Folder-based agent should pass validation"
+        return 1
+    fi
+}
+
+test_scoped_validate_folder_agent_project_yaml() {
+    IS_ROOT_YAML_CONTEXT=false
+    CURRENT_PROJECT_CONTEXT="project-a"
+    CURRENT_PROJECT_DIR="project-a"
+
+    # Create folder-based agent in project
+    mkdir -p "$TEST_TMP_DIR/projects/project-a/agents/local-folder"
+    echo "# test" > "$TEST_TMP_DIR/projects/project-a/agents/local-folder/index.md"
+
+    ERROR_COUNT=0
+    validate_scoped_component "agents" "local-folder" ".md"
+
+    if [[ $? -eq 0 && $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Project folder-based agent should pass validation"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1274,6 +1318,10 @@ main() {
     # MCP component validation
     run_test test_mcps_component_found
     run_test test_mcps_component_missing
+
+    # Folder-based agent validation
+    run_test test_scoped_validate_folder_agent_root_yaml
+    run_test test_scoped_validate_folder_agent_project_yaml
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

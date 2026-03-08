@@ -376,7 +376,15 @@ resolve_scoped_source_path() {
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
         local exists=false
         if [[ -n "$extension" ]]; then
-            [[ -f "$global_path" ]] && exists=true
+            if [[ -f "$global_path" ]]; then
+                exists=true
+            else
+                local folder_path="${global_path%$extension}/index${extension}"
+                if [[ -f "$folder_path" ]]; then
+                    exists=true
+                    global_path="$folder_path"  # Update path to actual found file
+                fi
+            fi
         else
             # Check both file and directory when extension is empty
             [[ -f "$global_path" || -d "$global_path" ]] && exists=true
@@ -393,7 +401,12 @@ resolve_scoped_source_path() {
         # 1. Try own project
         local project_path="$ROOT_DIR/projects/$CURRENT_PROJECT_DIR/$category/${parsed_item}${extension}"
         if [[ -n "$extension" ]]; then
-            [[ -f "$project_path" ]] && { SCOPED_SOURCE_PATH="$project_path"; return 0; }
+            if [[ -f "$project_path" ]]; then
+                SCOPED_SOURCE_PATH="$project_path"; return 0
+            else
+                local project_folder="${project_path%$extension}/index${extension}"
+                [[ -f "$project_folder" ]] && { SCOPED_SOURCE_PATH="$project_folder"; return 0; }
+            fi
         else
             [[ -f "$project_path" || -d "$project_path" ]] && { SCOPED_SOURCE_PATH="$project_path"; return 0; }
         fi
@@ -401,7 +414,12 @@ resolve_scoped_source_path() {
         # 2. Fall back to global
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
         if [[ -n "$extension" ]]; then
-            [[ -f "$global_path" ]] && { SCOPED_SOURCE_PATH="$global_path"; return 0; }
+            if [[ -f "$global_path" ]]; then
+                SCOPED_SOURCE_PATH="$global_path"; return 0
+            else
+                local global_folder="${global_path%$extension}/index${extension}"
+                [[ -f "$global_folder" ]] && { SCOPED_SOURCE_PATH="$global_folder"; return 0; }
+            fi
         else
             [[ -f "$global_path" || -d "$global_path" ]] && { SCOPED_SOURCE_PATH="$global_path"; return 0; }
         fi

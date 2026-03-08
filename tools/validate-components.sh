@@ -119,7 +119,13 @@ validate_scoped_component() {
         local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
         local exists=false
         if [[ -n "$extension" ]]; then
-            [[ -f "$global_path" ]] && exists=true
+            if [[ -f "$global_path" ]]; then
+                exists=true
+            else
+                # Folder-based fallback: <name>/index<extension>
+                local folder_path="${global_path%$extension}/index${extension}"
+                [[ -f "$folder_path" ]] && exists=true
+            fi
         else
             # Check both file and directory when extension is empty
             [[ -f "$global_path" || -d "$global_path" ]] && exists=true
@@ -135,9 +141,21 @@ validate_scoped_component() {
 
         local found=false
         if [[ -n "$extension" ]]; then
-            # Extension provided - check files only
-            [[ -f "$project_path" ]] && found=true
-            [[ "$found" == false && -f "$global_path" ]] && found=true
+            # Extension provided - check flat files first, then folder fallback
+            if [[ -f "$project_path" ]]; then
+                found=true
+            else
+                local project_folder="${project_path%$extension}/index${extension}"
+                [[ -f "$project_folder" ]] && found=true
+            fi
+            if [[ "$found" == false ]]; then
+                if [[ -f "$global_path" ]]; then
+                    found=true
+                else
+                    local global_folder="${global_path%$extension}/index${extension}"
+                    [[ -f "$global_folder" ]] && found=true
+                fi
+            fi
         else
             # No extension - check both files and directories
             [[ -f "$project_path" || -d "$project_path" ]] && found=true
