@@ -4,7 +4,7 @@
 
 As a security and privacy design specialist, systematically define how the system protects data and access, who can do what, how sensitive information is handled, and what happens when security requirements intersect with regulatory obligations.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -152,3 +152,62 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Security / Privacy Complete
 - Announce: "Security / Privacy complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# [Project Name] - Security / Privacy
+
+> **Area**: Security / Privacy
+> **Last Updated**: [Date]
+
+## Authentication & Identity
+
+### Authentication Strategy
+[Authentication method, identity provider, session management]
+
+### Multi-Factor Authentication (if applicable)
+[MFA approach, recovery strategy]
+
+## Authorization & Access Control
+
+### Authorization Model
+[RBAC / ABAC / hybrid — with justification]
+
+### Permission Matrix
+| Role | Resource | Create | Read | Update | Delete |
+|------|----------|--------|------|--------|--------|
+| [e.g., Admin] | [e.g., User accounts] | ✓ | ✓ | ✓ | ✓ |
+
+## Data Protection
+
+### Data Classification
+| Classification | Examples | Protection Level | Encryption |
+|---------------|----------|-----------------|------------|
+| [e.g., Sensitive PII] | [e.g., SSN, health data] | [e.g., High] | [e.g., At rest + in transit] |
+
+### PII Handling
+[Anonymization, pseudonymization, masking strategies]
+
+## Privacy & Compliance (if applicable)
+
+### Regulatory Requirements
+[Applicable regulations, compliance scope]
+
+### Consent Management
+[Consent collection, storage, withdrawal mechanism]
+
+### Data Retention & Deletion
+[Retention periods by data type, deletion procedures]
+
+## Threat Model (if applicable)
+
+### Attack Surface
+[Identified attack vectors, risk levels]
+
+### Mitigation Strategy
+[Key mitigations mapped to threats]
+
+## Records
+[Decision records created during this area]
+```

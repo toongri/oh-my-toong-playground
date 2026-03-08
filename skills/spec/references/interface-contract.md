@@ -4,7 +4,7 @@
 
 As an interface design specialist, systematically design and document the interfaces required for the project. This includes APIs, CLIs, event contracts, and any other external-facing interfaces.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -125,3 +125,75 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Interface Contract Complete
 - Announce: "Interface Contract complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# Interface Contract Document
+
+## 1. Key Design Decisions and Background
+
+### 1.1 Business Context
+[Core problems, solution objectives, business requirements addressed by the interfaces]
+
+### 1.2 Major Design Decisions
+[Major interface design decisions and their rationale]
+
+## 2. Interface Specifications
+
+### 2.1 [Interface Name]
+
+**Type**: [REST API / CLI / Event / gRPC / etc.]
+**Endpoint/Command/Topic**: [Specification]
+
+**Description**: [Interface function description]
+
+**Request**:
+```
+[Request parameters or body structure]
+```
+
+**Response**:
+```json
+{
+  "field": "value"
+}
+```
+
+**Business Rules**:
+- [Rule 1]
+- [Rule 2]
+
+**Error Cases**:
+
+| Condition | Status/Code | Error Code | Message |
+|-----------|-------------|------------|---------|
+| ... | ... | ... | ... |
+
+[Repeat for additional interfaces]
+
+## 3. Interface Changes
+
+### 3.1 Interfaces Being Added
+
+| Type | Endpoint/Command | Description | Impact |
+|------|------------------|-------------|--------|
+| ... | ... | ... | ... |
+
+### 3.2 Interfaces Being Modified (if applicable)
+
+- **Target**: [Type] [Endpoint/Command]
+- **Change Type**: [Field addition/removal/modification, path change, etc.]
+- **Change Details**: [Specific change details]
+- **Reason for Change**: [Background and reason for change]
+- **Backward Compatibility**: [Maintained/Broken]
+- **Migration Period**: [Specify if needed]
+
+### 3.3 Deleted/Deprecated Interfaces (if applicable)
+
+- **Target Interface**: [Type] [Endpoint/Command]
+- **Action**: [Deletion/Deprecation]
+- **Reason**: [Reason for action]
+- **Replacement Interface**: [If a replacement exists]
+- **End of Support Date**: [Date]
+```

@@ -4,7 +4,7 @@
 
 As a data and ML pipeline design specialist, systematically define how data flows from source to consumption — including ingestion, transformation, storage, and optionally ML model serving — with explicit decisions on processing models, data quality strategies, and access patterns.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -158,3 +158,57 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Data / ML Pipeline Complete
 - Announce: "Data / ML Pipeline complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+```markdown
+# [Project Name] - Data / ML Pipeline
+
+> **Area**: Data / ML Pipeline
+> **Last Updated**: [Date]
+
+## Data Source & Ingestion
+
+### Source Inventory
+| Source | Type | Format | Volume | Frequency |
+|--------|------|--------|--------|-----------|
+| [e.g., User events] | [e.g., Stream] | [e.g., JSON] | [e.g., 10K/min] | [e.g., Real-time] |
+
+### Ingestion Pattern
+[Push vs pull, batch vs stream, schema evolution strategy]
+
+## Transformation & Processing
+
+### Processing Model
+[Batch / Stream / Hybrid — with justification]
+
+### Transformation Pipeline
+[Stage descriptions, ordering, idempotency guarantees]
+
+### Data Quality & Validation
+[Validation rules, quality gates, error handling strategy]
+
+## Storage & Access
+
+### Storage Layer Design
+| Layer | Purpose | Technology Approach | Retention |
+|-------|---------|-------------------|-----------|
+| [e.g., Raw] | [e.g., Audit trail] | [e.g., Object storage] | [e.g., 90 days] |
+
+### Access Patterns
+[Query patterns, partitioning strategy, indexing approach]
+
+## ML Pipeline (if applicable)
+
+### Feature Engineering
+[Feature sources, computation strategy, feature store approach]
+
+### Model Serving
+[Serving pattern — batch inference, real-time, hybrid]
+
+### Experiment Tracking
+[A/B testing strategy, model versioning approach]
+
+## Records
+[Decision records created during this area]
+```
