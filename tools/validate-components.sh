@@ -10,12 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
-# 색상
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+source "${ACTUAL_ROOT_DIR:-${SCRIPT_DIR}}/lib/common.sh"
 
 ERROR_COUNT=0
 WARN_COUNT=0
@@ -45,22 +40,6 @@ log_success() {
 CURRENT_PROJECT_CONTEXT=""
 CURRENT_PROJECT_DIR=""
 IS_ROOT_YAML_CONTEXT=false
-
-# =============================================================================
-# CLI 프로젝트 파일 매핑
-# =============================================================================
-
-# CLI별 프로젝트 파일 반환
-# claude -> CLAUDE.md, gemini -> GEMINI.md, codex -> AGENTS.md
-get_cli_project_file() {
-    local cli="$1"
-    case "$cli" in
-        claude) echo "CLAUDE.md" ;;
-        gemini) echo "GEMINI.md" ;;
-        codex) echo "AGENTS.md" ;;
-        *) echo "" ;;
-    esac
-}
 
 # =============================================================================
 # 소스 경로 해석
