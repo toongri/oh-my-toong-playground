@@ -764,7 +764,10 @@ async function main(): Promise<void> {
   if (command === 'clean') {
     const jobDir = rest[0] as string;
     if (!jobDir) exitWithError('clean: missing jobDir');
-    _cmdClean(options, jobDir, JOB_CONFIG, path.join(PROJECT_ROOT, '.omt', 'jobs'));
+    const defaultJobsDir = (options['jobs-dir'] as string | undefined)
+      || process.env.SPEC_REVIEW_JOBS_DIR
+      || path.join(PROJECT_ROOT, '.omt', 'jobs');
+    _cmdClean(options, jobDir, JOB_CONFIG, defaultJobsDir);
     return;
   }
 
