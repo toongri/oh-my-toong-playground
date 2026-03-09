@@ -3,7 +3,7 @@ import { readRalphState, readBackgroundTasks, calculateSessionDuration, isThinki
 import { parseTranscript } from './transcript.ts';
 import { fetchRateLimits } from './usage-api.ts';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.ts';
-import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging.ts';
+import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import type { HudDataV2 } from './types.ts';
 
 /**
