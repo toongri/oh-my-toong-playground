@@ -1259,7 +1259,7 @@ sync_plugins() {
 rewrite_lib_aliases() {
     local platform_root="$1"
     find "$platform_root" -name "*.ts" ! -name "*.test.ts" ! -path "*/lib/*" | while read -r file; do
-        if grep -q "from ['\"]@lib/" "$file" 2>/dev/null; then
+        if grep -q "@lib/" "$file" 2>/dev/null; then
             local dir=$(dirname "$file")
             local rel="${dir#$platform_root}"
             rel="${rel#/}"
@@ -1274,7 +1274,7 @@ rewrite_lib_aliases() {
             for ((i=0; i<depth; i++)); do
                 prefix="../$prefix"
             done
-            sed -i '' "s|from '@lib/|from '${prefix}lib/|g; s|from \"@lib/|from \"${prefix}lib/|g" "$file"
+            sed -i '' "s|'@lib/|'${prefix}lib/|g; s|\"@lib/|\"${prefix}lib/|g" "$file"
         fi
     done
 }

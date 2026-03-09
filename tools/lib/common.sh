@@ -224,10 +224,10 @@ validate_cli_project_files() {
     # 각 카테고리에서 component-level platforms 수집
     local categories=("agents" "commands" "hooks" "skills")
     for category in "${categories[@]}"; do
-        local count=$(yq ".${category} | length // 0" "$yaml_file")
+        local count=$(yq ".${category}.items | length // 0" "$yaml_file")
         if [[ $count -gt 0 ]]; then
             for i in $(seq 0 $((count - 1))); do
-                local component_platforms=$(yq -o=json ".${category}[$i].platforms // null" "$yaml_file")
+                local component_platforms=$(yq -o=json ".${category}.items[$i].platforms // null" "$yaml_file")
                 if [[ "$component_platforms" != "null" ]]; then
                     for cli in $(echo "$component_platforms" | jq -r '.[]' 2>/dev/null); do
                         case "$cli" in
