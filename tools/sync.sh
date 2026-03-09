@@ -1274,6 +1274,7 @@ rewrite_lib_aliases() {
             for ((i=0; i<depth; i++)); do
                 prefix="../$prefix"
             done
+            [[ -z "$prefix" ]] && prefix="./"
             sed -i '' "s|'@lib/|'${prefix}lib/|g; s|\"@lib/|\"${prefix}lib/|g" "$file"
         fi
     done
