@@ -228,6 +228,8 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 
 ## Output Template
 
+> This is a recommended template. Adapt sections, ordering, and detail level to your project's needs.
+
 ````markdown
 # Solution Design Document
 

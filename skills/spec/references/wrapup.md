@@ -200,6 +200,8 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 ## Output Template
 
+> This is a recommended template. Adapt sections, ordering, and detail level to your project's needs.
+
 Wrapup produces context files for future spec sessions — information that shapes the **next specification's direction**.
 
 - `project.md` - Big picture: tech stack, system philosophy, external dependencies, constraints
