@@ -236,3 +236,34 @@ export function generateJobId(): string {
     .randomBytes(3)
     .toString('hex')}`;
 }
+
+// ---------------------------------------------------------------------------
+// Project root resolution
+// ---------------------------------------------------------------------------
+
+export function findProjectRoot(scriptDir: string): string {
+  let current = scriptDir;
+  const root = path.parse(current).root;
+
+  while (current !== root) {
+    const omtDir = path.join(current, '.omt');
+    if (fs.existsSync(omtDir) && fs.statSync(omtDir).isDirectory()) {
+      return current;
+    }
+
+    const gitDir = path.join(current, '.git');
+    if (fs.existsSync(gitDir)) {
+      return current;
+    }
+
+    current = path.dirname(current);
+  }
+
+  const normalized = scriptDir.replace(/\\/g, '/');
+  const scriptsMatch = normalized.match(/^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//);
+  if (scriptsMatch) {
+    return scriptsMatch[1];
+  }
+
+  return path.resolve(scriptDir, '../../..');
+}

@@ -20,6 +20,7 @@ import {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
+  findProjectRoot,
 } from '@lib/job-utils';
 
 import { initLogger, logInfo, logStart, logEnd } from '@lib/logging';
@@ -46,7 +47,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const SCRIPT_DIR = import.meta.dirname;
-const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../../..');
+const PROJECT_ROOT = findProjectRoot(SCRIPT_DIR);
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'chunk-review.config.yaml');

@@ -15,6 +15,7 @@ import {
   computeTerminalDoneCount,
   parseArgs,
   generateJobId,
+  findProjectRoot as _findProjectRoot,
 } from '@lib/job-utils';
 
 import {
@@ -48,7 +49,7 @@ const JOB_CONFIG: JobConfig = {
 // ---------------------------------------------------------------------------
 
 const SCRIPT_DIR = import.meta.dirname;
-const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../../..');
+const PROJECT_ROOT = findProjectRoot();
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'spec-reviewer.config.yaml');
@@ -242,31 +243,8 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
 // Spec-review-specific functions
 // ---------------------------------------------------------------------------
 
-function findProjectRoot(): string | null {
-  let current = SCRIPT_DIR;
-  const root = path.parse(current).root;
-
-  while (current !== root) {
-    const omtDir = path.join(current, '.omt');
-    if (fs.existsSync(omtDir) && fs.statSync(omtDir).isDirectory()) {
-      return current;
-    }
-
-    const gitDir = path.join(current, '.git');
-    if (fs.existsSync(gitDir)) {
-      return current;
-    }
-
-    current = path.dirname(current);
-  }
-
-  const normalized = SCRIPT_DIR.replace(/\\/g, '/');
-  const scriptsMatch = normalized.match(/^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//);
-  if (scriptsMatch) {
-    return scriptsMatch[1];
-  }
-
-  return null;
+function findProjectRoot(scriptDir: string = SCRIPT_DIR): string {
+  return _findProjectRoot(scriptDir);
 }
 
 function resolveContextDir(rawPath: string, projectRoot: string): string | null {
