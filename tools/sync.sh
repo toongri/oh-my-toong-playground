@@ -871,7 +871,7 @@ sync_scripts() {
             case "$target" in
                 claude)
                     if [[ "$prepared_claude" == false && "$DRY_RUN" != true ]]; then
-                        backup_category "$target_path/.claude" "scripts"
+                        backup_category "$target_path" "scripts"
                         rm -rf "$target_path/.claude/scripts"
                         mkdir -p "$target_path/.claude/scripts"
                         prepared_claude=true
