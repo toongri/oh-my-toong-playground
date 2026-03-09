@@ -40,6 +40,10 @@ describe('detectHostRole', () => {
     expect(detectHostRole('/home/user/.claude/skills/agent-council')).toBe('claude');
   });
 
+  test('returns gemini for paths containing /.gemini/skills/', () => {
+    expect(detectHostRole('/home/user/.gemini/skills/agent-council/scripts/job.ts')).toBe('gemini');
+  });
+
   test('returns codex for paths containing /.codex/skills/', () => {
     expect(detectHostRole('/home/user/.codex/skills/agent-council')).toBe('codex');
   });

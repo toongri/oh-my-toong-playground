@@ -26,6 +26,7 @@ export function exitWithError(message: string): never {
 export function detectHostRole(skillDir: string): string {
   const normalized = skillDir.replace(/\\/g, '/');
   if (normalized.includes('/.claude/skills/')) return 'claude';
+  if (normalized.includes('/.gemini/skills/')) return 'gemini';
   if (normalized.includes('/.codex/skills/')) return 'codex';
   return 'unknown';
 }
