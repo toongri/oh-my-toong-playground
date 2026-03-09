@@ -42,26 +42,6 @@ CURRENT_PROJECT_DIR=""
 IS_ROOT_YAML_CONTEXT=false
 
 # =============================================================================
-# 소스 경로 해석
-# =============================================================================
-
-resolve_source_path() {
-    local category="$1"
-    local name="$2"
-    local extension="$3"
-
-    if [[ "$name" == *:* ]]; then
-        local project=$(echo "$name" | cut -d: -f1)
-        local item=$(echo "$name" | cut -d: -f2-)
-        SOURCE_PATH="$ROOT_DIR/projects/$project/$category/${item}${extension}"
-        DISPLAY_NAME="$item"
-    else
-        SOURCE_PATH="$ROOT_DIR/$category/${name}${extension}"
-        DISPLAY_NAME="$name"
-    fi
-}
-
-# =============================================================================
 # Scoped Component Validation
 # =============================================================================
 
@@ -150,6 +130,42 @@ validate_scoped_component() {
     fi
 
     return 0
+}
+
+# =============================================================================
+# Hook Directory Index Validation
+# =============================================================================
+
+# After validate_scoped_component passes for a hook, check that a resolved
+# directory contains index.ts or index.sh (mirrors sync.sh runtime contract)
+check_hook_directory_index() {
+    local name="$1"
+
+    local parsed_item="$name"
+    if [[ "$name" == *:* ]]; then
+        parsed_item=$(echo "$name" | cut -d: -f2-)
+    fi
+
+    local resolved_dir=""
+
+    if [[ "$IS_ROOT_YAML_CONTEXT" == true ]]; then
+        local global_path="$ROOT_DIR/hooks/${parsed_item}"
+        [[ -d "$global_path" ]] && resolved_dir="$global_path"
+    else
+        local project_path="$ROOT_DIR/projects/$CURRENT_PROJECT_DIR/hooks/${parsed_item}"
+        local global_path="$ROOT_DIR/hooks/${parsed_item}"
+        if [[ -d "$project_path" ]]; then
+            resolved_dir="$project_path"
+        elif [[ -d "$global_path" ]]; then
+            resolved_dir="$global_path"
+        fi
+    fi
+
+    if [[ -n "$resolved_dir" ]]; then
+        if [[ ! -f "$resolved_dir/index.ts" ]] && [[ ! -f "$resolved_dir/index.sh" ]]; then
+            log_error "Hook directory '$parsed_item' missing index.ts or index.sh: $resolved_dir"
+        fi
+    fi
 }
 
 # =============================================================================
@@ -370,6 +386,7 @@ validate_components() {
                                 local hook_component=$(yq ".agents.items[$i].add-hooks[$j].component // \"\"" "$yaml_file")
                                 if [[ -n "$hook_component" && "$hook_component" != "null" ]]; then
                                     validate_scoped_component "hooks" "$hook_component" "" || true
+                                    check_hook_directory_index "$hook_component"
                                 fi
                             done
                         fi
@@ -404,6 +421,7 @@ validate_components() {
                 local component=$(yq ".hooks.items[$i].component // \"\"" "$yaml_file")
                 if [[ -n "$component" && "$component" != "null" ]]; then
                     validate_scoped_component "hooks" "$component" "" || true
+                    check_hook_directory_index "$component"
                 fi
             done
         fi
