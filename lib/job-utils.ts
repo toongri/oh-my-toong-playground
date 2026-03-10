@@ -261,10 +261,10 @@ export function findProjectRoot(scriptDir: string): string {
   }
 
   const normalized = scriptDir.replace(/\\/g, '/');
-  const scriptsMatch = normalized.match(/^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//);
+  const scriptsMatch = normalized.match(/^(.+?)\/\.(claude|gemini|codex|opencode)\/(scripts|skills\/[^/]+\/scripts)(?:\/|$)/);
   if (scriptsMatch) {
     return scriptsMatch[1];
   }
 
-  return path.resolve(scriptDir, '../../..');
+  return path.resolve(scriptDir, '../..');
 }
