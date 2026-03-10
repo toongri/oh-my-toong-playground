@@ -21,6 +21,7 @@ import {
   formatWaitCursor,
   resolveBucketSize,
   generateJobId,
+  findProjectRoot,
 } from './job-utils.ts';
 
 // ---------------------------------------------------------------------------
@@ -669,5 +670,41 @@ describe('resolveBucketSize', () => {
   test('returns at least 1 for very small totals', () => {
     expect(resolveBucketSize({}, 1, null)).toBe(1);
     expect(resolveBucketSize({}, 2, null)).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findProjectRoot
+// ---------------------------------------------------------------------------
+
+describe('findProjectRoot', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('.claude/skills/<name>/scripts/ 경로에서 프로젝트 루트 반환', () => {
+    // tmpDir has no .omt or .git, so regex branch is reached
+    const scriptDir = path.join(tmpDir, '.claude', 'skills', 'agent-council', 'scripts');
+    fs.mkdirSync(scriptDir, { recursive: true });
+    expect(findProjectRoot(scriptDir)).toBe(tmpDir);
+  });
+
+  test('.gemini/skills/<name>/scripts/ 경로에서 프로젝트 루트 반환', () => {
+    const scriptDir = path.join(tmpDir, '.gemini', 'skills', 'foo', 'scripts');
+    fs.mkdirSync(scriptDir, { recursive: true });
+    expect(findProjectRoot(scriptDir)).toBe(tmpDir);
+  });
+
+  test('regex 미매칭 시 2단계 상위 경로 반환', () => {
+    // A path that doesn't match any platform pattern
+    const scriptDir = path.join(tmpDir, 'scripts', 'chunk-review');
+    fs.mkdirSync(scriptDir, { recursive: true });
+    expect(findProjectRoot(scriptDir)).toBe(tmpDir);
   });
 });
