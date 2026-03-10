@@ -137,42 +137,6 @@ test_claude_get_context_file_returns_claude_md() {
 }
 
 # =============================================================================
-# Tests: Feature Support
-# =============================================================================
-
-test_claude_supports_feature_agents() {
-    claude_supports_feature "agents"
-    assert_equals 0 $? "Should support agents feature"
-}
-
-test_claude_supports_feature_commands() {
-    claude_supports_feature "commands"
-    assert_equals 0 $? "Should support commands feature"
-}
-
-test_claude_supports_feature_hooks() {
-    claude_supports_feature "hooks"
-    assert_equals 0 $? "Should support hooks feature"
-}
-
-test_claude_supports_feature_skills() {
-    claude_supports_feature "skills"
-    assert_equals 0 $? "Should support skills feature"
-}
-
-test_claude_supports_feature_unknown_returns_1() {
-    claude_supports_feature "unknown_feature" || true
-    local result=$?
-    # Function should return non-zero for unknown feature
-    # Since we use || true, we need to capture the actual return
-    if claude_supports_feature "unknown_feature"; then
-        return 1  # Should not support unknown feature
-    else
-        return 0  # Correctly returned non-zero
-    fi
-}
-
-# =============================================================================
 # Tests: Sync Agents
 # =============================================================================
 
@@ -588,16 +552,6 @@ EOF
 }
 
 # =============================================================================
-# Tests: Feature Support - Rules
-# =============================================================================
-
-test_supports_feature_rules() {
-    claude_supports_feature "rules"
-    local result=$?
-    assert_equals "0" "$result" "rules should be a supported feature"
-}
-
-# =============================================================================
 # Tests: Sync Rules Direct
 # =============================================================================
 
@@ -673,13 +627,6 @@ main() {
     run_test test_claude_get_settings_file_returns_settings_json
     run_test test_claude_get_context_file_returns_claude_md
 
-    # Feature Support
-    run_test test_claude_supports_feature_agents
-    run_test test_claude_supports_feature_commands
-    run_test test_claude_supports_feature_hooks
-    run_test test_claude_supports_feature_skills
-    run_test test_claude_supports_feature_unknown_returns_1
-
     # Sync Functions
     run_test test_claude_sync_agents_copies_file
     run_test test_claude_sync_agents_dry_run_does_not_copy
@@ -708,9 +655,6 @@ main() {
 
     # Settings Update - Bug Case (hooks wrapper cleanup)
     run_test test_update_settings_cleans_existing_hooks_wrapper
-
-    # Feature Support - Rules
-    run_test test_supports_feature_rules
 
     # Sync Rules Direct
     run_test test_sync_rules_direct_copies_file

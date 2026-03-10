@@ -52,30 +52,6 @@ gemini_get_context_file() {
 }
 
 # =============================================================================
-# Feature Support
-# =============================================================================
-
-# Check if Gemini supports a specific feature
-# Arguments:
-#   $1 - feature name (agents, commands, hooks, skills)
-# Returns: 0 if supported, 1 if not
-gemini_supports_feature() {
-    local feature="$1"
-
-    case "$feature" in
-        agents)
-            return 1  # No native subagent support
-            ;;
-        commands|hooks|skills|config|mcps)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-# =============================================================================
 # Sync Functions
 # =============================================================================
 

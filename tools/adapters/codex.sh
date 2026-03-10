@@ -52,36 +52,6 @@ codex_get_context_file() {
 }
 
 # =============================================================================
-# Feature Support
-# =============================================================================
-
-# Check if Codex supports a specific feature
-# Arguments:
-#   $1 - feature name (agents, commands, hooks, skills)
-# Returns: "true", "partial", or "false" via stdout
-codex_supports_feature() {
-    local feature="$1"
-
-    case "$feature" in
-        agents)
-            echo "false"  # No native subagent support
-            ;;
-        commands)
-            echo "false"  # Global only, not project-local
-            ;;
-        hooks)
-            echo "partial"  # Notify only
-            ;;
-        skills|config|mcps)
-            echo "true"  # Via directory copy / TOML managed block
-            ;;
-        *)
-            echo "false"
-            ;;
-    esac
-}
-
-# =============================================================================
 # Sync Functions
 # =============================================================================
 
