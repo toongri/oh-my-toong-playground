@@ -829,8 +829,10 @@ export function parseYamlSimple(
   configPath: string,
   fallback: Record<string, any>,
   config: JobConfig,
+  extraSections?: string[],
 ): Record<string, any> {
   const topKey = config.configTopLevelKey;
+  const extras = extraSections || [];
   try {
     const content = fs.readFileSync(configPath, 'utf8');
     const lines = content.split('\n');
@@ -838,6 +840,9 @@ export function parseYamlSimple(
     const result: Record<string, any> = {
       [topKey]: { chairman: {}, members: [], settings: {} },
     };
+    for (const section of extras) {
+      result[topKey][section] = {};
+    }
     let currentSection: string | null = null;
     let currentMember: Record<string, unknown> | null = null;
 
@@ -849,6 +854,9 @@ export function parseYamlSimple(
       if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
       if (trimmed === 'members:') { currentSection = 'members'; continue; }
       if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
+
+      const extraMatch = extras.find((s) => trimmed === `${s}:`);
+      if (extraMatch !== undefined) { currentSection = extraMatch; continue; }
 
       if (currentSection === 'members' && trimmed.startsWith('- name:')) {
         if (currentMember) result[topKey].members.push(currentMember);
@@ -864,14 +872,14 @@ export function parseYamlSimple(
         continue;
       }
 
-      if (currentSection === 'chairman' || currentSection === 'settings') {
+      if (currentSection === 'chairman' || currentSection === 'settings' || extras.includes(currentSection!)) {
         const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
         if (match) {
           let value: unknown = match[2].replace(/^"(.*)"$/, '$1').trim().replace(/\s+#.*$/, '');
           if (value === 'true') value = true;
           else if (value === 'false') value = false;
           else if (/^\d+$/.test(value as string)) value = parseInt(value as string, 10);
-          result[topKey][currentSection][match[1]] = value;
+          result[topKey][currentSection!][match[1]] = value;
         }
       }
     }
@@ -884,6 +892,9 @@ export function parseYamlSimple(
     }
     result[topKey].chairman = { ...(fallbackSection.chairman || {}), ...result[topKey].chairman };
     result[topKey].settings = { ...(fallbackSection.settings || {}), ...result[topKey].settings };
+    for (const section of extras) {
+      result[topKey][section] = { ...(fallbackSection[section] || {}), ...result[topKey][section] };
+    }
 
     return result;
   } catch (e) {

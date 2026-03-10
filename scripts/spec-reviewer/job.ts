@@ -29,6 +29,7 @@ import {
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
   gcStaleJobs,
+  parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
 
 // ---------------------------------------------------------------------------
@@ -73,76 +74,9 @@ const computeStatus = async (jobDir: string): Promise<any> => {
 // buildUiPayload: wraps framework version with JOB_CONFIG
 const buildUiPayload = (statusPayload: any): any => _buildUiPayload(statusPayload, JOB_CONFIG);
 
-// parseYamlSimple: wraps framework version with JOB_CONFIG
+// parseYamlSimple: wraps framework version with JOB_CONFIG and context extraSection
 function parseYamlSimple(configPath: string, fallback: Record<string, any>): Record<string, any> {
-  // Framework parseYamlSimple doesn't handle 'context' section, so use local implementation
-  // which is spec-review-specific (has context: section support).
-  return _parseYamlSimpleWithContext(configPath, fallback);
-}
-
-// ---------------------------------------------------------------------------
-// Spec-review-specific parseYamlSimple (adds context: section support)
-// ---------------------------------------------------------------------------
-
-function _parseYamlSimpleWithContext(configPath: string, fallback: Record<string, any>): Record<string, any> {
-  try {
-    const content = fs.readFileSync(configPath, 'utf8');
-    const lines = content.split('\n');
-
-    const result: Record<string, any> = { 'spec-review': { chairman: {}, members: [], context: {}, settings: {} } };
-    let currentSection: string | null = null;
-    let currentMember: Record<string, unknown> | null = null;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      if (trimmed === 'spec-review:') continue;
-      if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'members:') { currentSection = 'members'; continue; }
-      if (trimmed === 'context:') { currentSection = 'context'; continue; }
-      if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
-
-      if (currentSection === 'members' && trimmed.startsWith('- name:')) {
-        if (currentMember) result['spec-review'].members.push(currentMember);
-        currentMember = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
-        continue;
-      }
-
-      if (currentMember && currentSection === 'members') {
-        const match = trimmed.match(/^(\w+):\s*(?:"([^"]*)"|(.*))$/);
-        if (match) {
-          currentMember[match[1]] = match[2] !== undefined ? match[2] : match[3].replace(/\s*#.*$/, '').trim();
-        }
-        continue;
-      }
-
-      if (currentSection === 'chairman' || currentSection === 'settings' || currentSection === 'context') {
-        const match = trimmed.match(/^(\w+):\s*(?:"([^"]*)"|(.*))$/);
-        if (match) {
-          let value: unknown = match[2] !== undefined ? match[2] : match[3].replace(/\s*#.*$/, '').trim();
-          if (value === 'true') value = true;
-          else if (value === 'false') value = false;
-          else if (/^\d+$/.test(value as string)) value = parseInt(value as string, 10);
-          result['spec-review'][currentSection][match[1]] = value;
-        }
-      }
-    }
-
-    if (currentMember) result['spec-review'].members.push(currentMember);
-
-    const fallbackSection = fallback['spec-review'] || {};
-    if (result['spec-review'].members.length === 0) {
-      result['spec-review'].members = fallbackSection.members || [];
-    }
-    result['spec-review'].chairman = { ...(fallbackSection.chairman || {}), ...result['spec-review'].chairman };
-    result['spec-review'].settings = { ...(fallbackSection.settings || {}), ...result['spec-review'].settings };
-    result['spec-review'].context = { ...(fallbackSection.context || {}), ...result['spec-review'].context };
-
-    return result;
-  } catch (e) {
-    return fallback;
-  }
+  return frameworkParseYamlSimple(configPath, fallback, JOB_CONFIG, ['context']);
 }
 
 // ---------------------------------------------------------------------------

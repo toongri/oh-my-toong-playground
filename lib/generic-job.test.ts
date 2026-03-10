@@ -1163,6 +1163,52 @@ describe('parseYamlSimple', () => {
     const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
     expect(result['chunk-review'].settings.timeout).toBe(300);
   });
+
+  test('extraSections: context 섹션을 key-value 매핑으로 파싱', () => {
+    const configPath = path.join(tmpDir, 'config-extra.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  context:',
+      '    shared_context_dir: ~/my/context',
+      '    specs_dir: .omt/specs',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig, ['context']);
+    expect(result['chunk-review'].context).toBeDefined();
+    expect(result['chunk-review'].context.shared_context_dir).toBe('~/my/context');
+    expect(result['chunk-review'].context.specs_dir).toBe('.omt/specs');
+  });
+
+  test('extraSections: fallback context 값과 merge됨', () => {
+    const configPath = path.join(tmpDir, 'config-extra-fallback.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  context:',
+      '    specs_dir: custom/specs',
+    ].join('\n'));
+    const fallbackWithContext = {
+      'chunk-review': {
+        ...chunkFallback['chunk-review'],
+        context: { shared_context_dir: '~/.omt/default', specs_dir: '.omt/specs' },
+      },
+    };
+    const result = parseYamlSimple(configPath, fallbackWithContext, chunkReviewConfig, ['context']);
+    expect(result['chunk-review'].context.shared_context_dir).toBe('~/.omt/default');
+    expect(result['chunk-review'].context.specs_dir).toBe('custom/specs');
+  });
+
+  test('extraSections 미제공 시 기존 동작 유지 (context 섹션 무시됨)', () => {
+    const configPath = path.join(tmpDir, 'config-no-extra.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: gemini',
+      '  context:',
+      '    specs_dir: .omt/specs',
+    ].join('\n'));
+    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
+    expect(result['chunk-review'].chairman.role).toBe('gemini');
+    expect(result['chunk-review'].context).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
