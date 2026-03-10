@@ -1244,6 +1244,86 @@ test_scoped_validate_folder_agent_project_yaml() {
 }
 
 # =============================================================================
+# Tests: check_hook_directory_index
+# =============================================================================
+
+test_check_hook_directory_index_with_index_ts() {
+    # Hook directory with index.ts → no error
+    IS_ROOT_YAML_CONTEXT=true
+    CURRENT_PROJECT_DIR=""
+
+    mkdir -p "$TEST_TMP_DIR/hooks/my-hook"
+    touch "$TEST_TMP_DIR/hooks/my-hook/index.ts"
+
+    ERROR_COUNT=0
+    check_hook_directory_index "my-hook"
+
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Hook directory with index.ts should produce no error, got ERROR_COUNT=$ERROR_COUNT"
+        return 1
+    fi
+}
+
+test_check_hook_directory_index_with_index_sh() {
+    # Hook directory with index.sh → no error
+    IS_ROOT_YAML_CONTEXT=true
+    CURRENT_PROJECT_DIR=""
+
+    mkdir -p "$TEST_TMP_DIR/hooks/my-hook"
+    touch "$TEST_TMP_DIR/hooks/my-hook/index.sh"
+
+    ERROR_COUNT=0
+    check_hook_directory_index "my-hook"
+
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Hook directory with index.sh should produce no error, got ERROR_COUNT=$ERROR_COUNT"
+        return 1
+    fi
+}
+
+test_check_hook_directory_index_missing_index() {
+    # Hook directory with no index → error
+    IS_ROOT_YAML_CONTEXT=true
+    CURRENT_PROJECT_DIR=""
+
+    mkdir -p "$TEST_TMP_DIR/hooks/my-hook"
+    # No index.ts or index.sh
+
+    ERROR_COUNT=0
+    check_hook_directory_index "my-hook" 2>/dev/null
+
+    if [[ $ERROR_COUNT -gt 0 ]]; then
+        return 0
+    else
+        echo "Hook directory missing index.ts and index.sh should produce an error"
+        return 1
+    fi
+}
+
+test_check_hook_directory_index_non_directory_hook() {
+    # Non-directory hook (single file) → no check performed, no error
+    IS_ROOT_YAML_CONTEXT=true
+    CURRENT_PROJECT_DIR=""
+
+    # Create a plain file hook (not a directory)
+    touch "$TEST_TMP_DIR/hooks/my-hook.sh"
+
+    ERROR_COUNT=0
+    check_hook_directory_index "my-hook.sh" 2>/dev/null
+
+    if [[ $ERROR_COUNT -eq 0 ]]; then
+        return 0
+    else
+        echo "Non-directory hook should not trigger index check, got ERROR_COUNT=$ERROR_COUNT"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1322,6 +1402,12 @@ main() {
     # Folder-based agent validation
     run_test test_scoped_validate_folder_agent_root_yaml
     run_test test_scoped_validate_folder_agent_project_yaml
+
+    # check_hook_directory_index
+    run_test test_check_hook_directory_index_with_index_ts
+    run_test test_check_hook_directory_index_with_index_sh
+    run_test test_check_hook_directory_index_missing_index
+    run_test test_check_hook_directory_index_non_directory_hook
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
