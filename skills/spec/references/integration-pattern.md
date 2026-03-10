@@ -4,7 +4,7 @@
 
 As an integration design specialist, systematically design communication patterns, data flows, and stateful component policies for the project's integrations.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -147,3 +147,91 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Integration Pattern Complete
 - Announce: "Integration Pattern complete. Proceeding to next selected Design Area: [next area name]."
+
+## Output Template
+
+> This is a recommended template. Adapt sections, ordering, and detail level to your project's needs.
+
+````markdown
+# Integration Pattern Document
+
+## 1. Integration Points Summary
+
+| Integration Point | Communication Pattern | Sync/Async | Failure Handling | Rationale |
+|-------------------|----------------------|------------|------------------|-----------|
+| A -> B | Function Call (in-process) | Sync | Graceful Degradation | Same module, minimize latency |
+| A -> C | Kafka | Async | Retry 3x + DLQ | Service separation, ordering required |
+
+## 2. Data Flow Diagrams
+
+### 2.1 [Use Case Name] Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S1 as System1
+    participant S2 as System2
+
+    C->>S1: Request
+    activate S1
+    S1->>S2: Processing Request [Communication Pattern]
+    activate S2
+    alt Success
+        S2-->>S1: Success Response
+    else Failure
+        S2-->>S1: Failure Response
+        S1-->>C: Error Response or Graceful Degradation
+    end
+    deactivate S2
+    S1-->>C: Final Response
+    deactivate S1
+```
+
+### 2.X [Component Name] Internal Logic (if complex branching exists)
+
+> Include only when a single component has 3+ branch points. See `references/diagram-selection.md` for selection criteria.
+
+```mermaid
+flowchart TD
+    A([Entry Point]) --> B{Condition?}
+    B -->|Case 1| C[Process A]
+    B -->|Case 2| D[Process B]
+    B -->|Case 3| E[Process C]
+    C --> F([Result])
+    D --> F
+    E --> F
+```
+
+## 3. Stateful Component Policies
+
+### 3.1 [Component Name]
+
+**Purpose:** Description of component's role
+
+**Data Structure Choice:** [Map/Queue/List/etc.] - [Why this choice]
+
+**Concurrency Policy:** [Single-threaded/Lock-based/Lock-free] - [Rationale]
+
+**Lifecycle:**
+
+| Event | Handling |
+|-------|----------|
+| Initialization | ... |
+| Periodic Tasks | ... |
+| On Failure | ... |
+| On Shutdown | ... |
+
+## 4. Error and Recovery Flows
+
+### 4.1 Major Error Scenarios
+
+| Failure Scenario | Response Plan | Expected Outcome |
+|------------------|---------------|------------------|
+| ... | ... | ... |
+
+### 4.2 Transaction Boundaries
+
+| Operation | Transaction Scope | Pattern | Notes |
+|-----------|------------------|---------|-------|
+| ... | ... | Single DB / Outbox / Saga | ... |
+````

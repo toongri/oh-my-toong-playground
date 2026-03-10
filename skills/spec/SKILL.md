@@ -208,6 +208,63 @@ NO AREA COMPLETION WITHOUT:
 
 ---
 
+### Frontend / UX Surface
+
+**Designs:** Component architecture, state management strategy, styling approach, responsive design, interaction patterns, accessibility considerations
+
+**Enter when:**
+- Frontend/UI layer is a significant part of the system
+- Component architecture decisions needed (composition, shared components, design system integration)
+- State management strategy undecided (local vs global, server vs client state)
+- Styling/theming approach requires alignment across team
+
+**Skip when:**
+- No frontend/UI component in the system (API-only, CLI-only, background service)
+- Using established design system with no customization needed
+- Frontend is trivial (single static page, no interactive components)
+
+**Reference:** `references/frontend-ux-surface.md`
+
+---
+
+### Data / ML Pipeline
+
+**Designs:** Data flow architecture, ingestion patterns, transformation strategy, storage layer design, data quality framework, ML model serving (if applicable)
+
+**Enter when:**
+- Data pipeline is a core architectural component (ETL/ELT, streaming, batch processing)
+- Multiple data sources require integration and transformation
+- Data quality/validation strategy needed
+- ML model serving or feature engineering is part of the architecture
+
+**Skip when:**
+- No data pipeline in the system (simple CRUD with single database)
+- Data processing is trivial (single source, no transformation)
+- Using fully managed data service with no custom pipeline logic
+
+**Reference:** `references/data-ml-pipeline.md`
+
+---
+
+### Security / Privacy
+
+**Designs:** Authentication strategy, authorization model, data protection, privacy compliance, threat modeling
+
+**Enter when:**
+- Authentication/authorization strategy needs design (not using off-the-shelf identity provider as-is)
+- System handles sensitive or personal data requiring protection policies
+- Multi-tenant or role-based access control needed
+- Regulatory or compliance requirements exist (GDPR, CCPA, HIPAA, etc.)
+
+**Skip when:**
+- Internal tool with no sensitive data and single-user access
+- Authentication fully delegated to external provider with no custom logic
+- No personal data processed or stored
+
+**Reference:** `references/security-privacy.md`
+
+---
+
 ### Wrapup
 
 **Designs:** Context files for future reference (project.md, conventions.md, decisions.md, gotchas.md)
@@ -222,7 +279,7 @@ NO AREA COMPLETION WITHOUT:
 
 ---
 
-**Supporting files:** `references/diagram-selection.md` (diagram type selection), `templates/` (output formats)
+**Supporting files:** `references/diagram-selection.md` (diagram type selection), `templates/record.md` (record format)
 
 ### Spec Workflow (Wrapup Mandatory Path)
 
@@ -800,7 +857,7 @@ whether discovered by AI analysis or raised by the user — it must be explicitl
 
 | Option | When | Procedure |
 |--------|------|-----------|
-| **(A) 새 Design Area로 승격** | concern이 독립된 설계 영역으로 충분히 크고 복잡할 때 | 이름/범위 정의 → Custom Design Concern template 사용 → 기존 Area와 동일한 Checkpoint/Review/Completion Protocol 적용 |
+| **(A) 새 Design Area로 승격** | concern이 독립된 설계 영역으로 충분히 크고 복잡할 때 | 이름/범위 정의 → See `references/custom-design-concern.md` → 기존 Area와 동일한 Checkpoint/Review/Completion Protocol 적용 |
 | **(B) 기존 Area에 병합** | concern이 기존 (예정된) Area의 범위에 자연스럽게 포함될 때 | 해당 Area의 scope에 concern 추가 → 해당 Area 진행 시 함께 설계 |
 | **(C) Defer and Record** | concern이 현재 스펙 범위 밖이거나 우선순위가 낮을 때 | Record에 기록 (concern명, 발견 시점, defer 사유) → Wrapup에서 deferred concerns로 표시 |
 
@@ -896,6 +953,8 @@ digraph area_completion {
    - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 
+> **Template Flexibility**: Output templates in each reference file are recommended structures. Adapt sections, ordering, and detail level to your project's needs. The structural intent (what information to capture) matters more than exact formatting.
+
 **Two gates must BOTH be passed for Area completion:**
 1. **spec-review pass** — APPROVE 또는 COMMENT (quality gate). REQUEST_CHANGES는 차단.
 2. **User "Area complete" declaration** (authority gate)
@@ -949,6 +1008,9 @@ Save **whenever each Area is completed**:
 | Integration Pattern | `integration-pattern/` |
 | AI Responsibility Contract | `ai-responsibility-contract/` |
 | Operations Plan | `operations-plan/` |
+| Frontend / UX Surface | `frontend-ux-surface/` |
+| Data / ML Pipeline | `data-ml-pipeline/` |
+| Security / Privacy | `security-privacy/` |
 | Custom Design Concern | `{concern-name}/` (kebab-case) |
 
 **Custom Design Concerns** promoted via Emergent Concern Protocol receive the same directory structure:
@@ -985,7 +1047,7 @@ When the user requests "continue from here", "review this", etc.:
 1. Check existing directories in `.omt/specs/{spec-name}/`:
    - `requirements/` - Requirements completion
    - `solution-design/` - Solution Design completion
-   - `{area-name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
+   - `{area-name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, ai-responsibility-contract, operations-plan, frontend-ux-surface, data-ml-pipeline, security-privacy)
 2. Analyze completion status based on design.md existence
 3. Present status summary to user
 
@@ -1038,6 +1100,9 @@ spec.md = requirements/design.md
         + integration-pattern/design.md (if completed)
         + ai-responsibility-contract/design.md (if completed)
         + operations-plan/design.md (if completed)
+        + frontend-ux-surface/design.md (if completed)
+        + data-ml-pipeline/design.md (if completed)
+        + security-privacy/design.md (if completed)
         + {custom-concern}/design.md (if promoted via Emergent Concern Protocol)
 ```
 
