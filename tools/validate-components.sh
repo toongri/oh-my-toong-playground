@@ -20,7 +20,7 @@ log_info() {
 }
 
 log_error() {
-    echo -e "${RED}[COMPONENT]${NC} $1" >&2
+    echo -e "${RED}[ERROR]${NC} $1" >&2
     ((ERROR_COUNT++)) || true
 }
 
@@ -46,87 +46,23 @@ IS_ROOT_YAML_CONTEXT=false
 # =============================================================================
 
 # Validate component reference with project scoping
-# Returns 0 if valid, 1 if invalid (sets error message)
+# Returns 0 if valid, 1 if invalid (logs error)
+# Delegates existence resolution to resolve_scoped_source_path() from common.sh
 validate_scoped_component() {
     local category="$1"
     local name="$2"
     local extension="$3"  # ".md" for files, "" for directories
 
-    # Parse project prefix if present
-    local parsed_project=""
-    local parsed_item="$name"
-    if [[ "$name" == *:* ]]; then
-        parsed_project=$(echo "$name" | cut -d: -f1)
-        parsed_item=$(echo "$name" | cut -d: -f2-)
-    fi
-
-    # Cross-project validation
-    if [[ -n "$parsed_project" ]]; then
-        if [[ "$IS_ROOT_YAML_CONTEXT" == true ]]; then
-            log_error "Root sync.yaml cannot reference project components: $name"
-            return 1
-        elif [[ "$parsed_project" != "$CURRENT_PROJECT_CONTEXT" ]]; then
-            log_error "Cross-project reference not allowed: $name (current: $CURRENT_PROJECT_CONTEXT)"
-            return 1
+    if ! resolve_scoped_source_path "$category" "$name" "$extension"; then
+        log_error "$SCOPED_RESOLUTION_ERROR"
+        # For project context "not found" case, also show search paths
+        if [[ "$IS_ROOT_YAML_CONTEXT" == false && "$SCOPED_RESOLUTION_ERROR" == "Component not found"* ]]; then
+            local parsed_item="$name"
+            [[ "$name" == *:* ]] && parsed_item=$(echo "$name" | cut -d: -f2-)
+            log_info "  Searched: $ROOT_DIR/projects/$CURRENT_PROJECT_DIR/$category/${parsed_item}${extension}"
+            log_info "  Searched: $ROOT_DIR/$category/${parsed_item}${extension}"
         fi
-    fi
-
-    # Existence check with upward search
-    # Note: extension="" means check for both file and directory (hooks have extension in name)
-    if [[ "$IS_ROOT_YAML_CONTEXT" == true ]]; then
-        # Root yaml: global only
-        local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
-        local exists=false
-        if [[ -n "$extension" ]]; then
-            if [[ -f "$global_path" ]]; then
-                exists=true
-            else
-                # Folder-based fallback: <name>/index<extension>
-                local folder_path="${global_path%$extension}/index${extension}"
-                [[ -f "$folder_path" ]] && exists=true
-            fi
-        else
-            # Check both file and directory when extension is empty
-            [[ -f "$global_path" || -d "$global_path" ]] && exists=true
-        fi
-        if [[ "$exists" == false ]]; then
-            log_error "Component not found: $name -> $global_path"
-            return 1
-        fi
-    else
-        # Use CURRENT_PROJECT_DIR (directory name) for file path resolution
-        local project_path="$ROOT_DIR/projects/$CURRENT_PROJECT_DIR/$category/${parsed_item}${extension}"
-        local global_path="$ROOT_DIR/$category/${parsed_item}${extension}"
-
-        local found=false
-        if [[ -n "$extension" ]]; then
-            # Extension provided - check flat files first, then folder fallback
-            if [[ -f "$project_path" ]]; then
-                found=true
-            else
-                local project_folder="${project_path%$extension}/index${extension}"
-                [[ -f "$project_folder" ]] && found=true
-            fi
-            if [[ "$found" == false ]]; then
-                if [[ -f "$global_path" ]]; then
-                    found=true
-                else
-                    local global_folder="${global_path%$extension}/index${extension}"
-                    [[ -f "$global_folder" ]] && found=true
-                fi
-            fi
-        else
-            # No extension - check both files and directories
-            [[ -f "$project_path" || -d "$project_path" ]] && found=true
-            [[ "$found" == false && ( -f "$global_path" || -d "$global_path" ) ]] && found=true
-        fi
-
-        if [[ "$found" == false ]]; then
-            log_error "Component not found in project '$CURRENT_PROJECT_DIR' or global: $name"
-            log_info "  Searched: $project_path"
-            log_info "  Searched: $global_path"
-            return 1
-        fi
+        return 1
     fi
 
     return 0
@@ -188,100 +124,6 @@ get_item_component() {
     else
         ITEM_IS_OBJECT=true
         yq ".$section.items[$index].component // \"\"" "$yaml_file"
-    fi
-}
-
-# =============================================================================
-# CLI 프로젝트 파일 검증
-# =============================================================================
-
-# sync.yaml에서 사용되는 모든 CLI 목록 수집 및 프로젝트 파일 검증
-validate_cli_project_files() {
-    local yaml_file="$1"
-    local target_path="$2"
-
-    # Bash 3.2 호환 - 사용되는 CLI 추적
-    local used_claude=false
-    local used_gemini=false
-    local used_codex=false
-
-    # platforms 수집
-    local platforms_json=$(yq -o=json '.platforms // ["claude"]' "$yaml_file")
-    for cli in $(echo "$platforms_json" | jq -r '.[]' 2>/dev/null); do
-        case "$cli" in
-            claude) used_claude=true ;;
-            gemini) used_gemini=true ;;
-            codex) used_codex=true ;;
-        esac
-    done
-
-    # 각 카테고리에서 platforms 수집 (새 형식만 지원)
-    local categories=("agents" "commands" "hooks" "skills")
-    for category in "${categories[@]}"; do
-        local field_exists=$(yq ".$category" "$yaml_file")
-        if [[ "$field_exists" == "null" ]]; then
-            continue
-        fi
-
-        # Check section-level platforms
-        local section_platforms=$(yq -o=json ".$category.platforms // null" "$yaml_file")
-        if [[ "$section_platforms" != "null" ]]; then
-            for cli in $(echo "$section_platforms" | jq -r '.[]' 2>/dev/null); do
-                case "$cli" in
-                    claude) used_claude=true ;;
-                    gemini) used_gemini=true ;;
-                    codex) used_codex=true ;;
-                esac
-            done
-        fi
-
-        # Check item-level platforms
-        local count=$(yq ".$category.items | length // 0" "$yaml_file")
-        if [[ $count -gt 0 ]]; then
-            for i in $(seq 0 $((count - 1))); do
-                local item_type=$(yq ".$category.items[$i] | type" "$yaml_file")
-                if [[ "$item_type" != "!!str" ]]; then
-                    local component_platforms=$(yq -o=json ".$category.items[$i].platforms // null" "$yaml_file")
-                    if [[ "$component_platforms" != "null" ]]; then
-                        for cli in $(echo "$component_platforms" | jq -r '.[]' 2>/dev/null); do
-                            case "$cli" in
-                                claude) used_claude=true ;;
-                                gemini) used_gemini=true ;;
-                                codex) used_codex=true ;;
-                            esac
-                        done
-                    fi
-                fi
-            done
-        fi
-    done
-
-    # 각 CLI에 대해 프로젝트 파일 존재 확인
-    if [[ "$used_claude" == true ]]; then
-        local project_file=$(get_cli_project_file "claude")
-        if [[ ! -f "$target_path/$project_file" && ! -f "$target_path/.claude/$project_file" ]]; then
-            echo -e "${RED}[ERROR]${NC} CLI 프로젝트 파일 없음: $project_file (대상: $target_path)" >&2
-            echo -e "        먼저 'init'을 실행하여 프로젝트를 초기화하세요." >&2
-            ((ERROR_COUNT++)) || true
-        fi
-    fi
-
-    if [[ "$used_gemini" == true ]]; then
-        local project_file=$(get_cli_project_file "gemini")
-        if [[ ! -f "$target_path/$project_file" ]]; then
-            echo -e "${RED}[ERROR]${NC} CLI 프로젝트 파일 없음: $project_file (대상: $target_path)" >&2
-            echo -e "        먼저 'init'을 실행하여 프로젝트를 초기화하세요." >&2
-            ((ERROR_COUNT++)) || true
-        fi
-    fi
-
-    if [[ "$used_codex" == true ]]; then
-        local project_file=$(get_cli_project_file "codex")
-        if [[ ! -f "$target_path/$project_file" ]]; then
-            echo -e "${RED}[ERROR]${NC} CLI 프로젝트 파일 없음: $project_file (대상: $target_path)" >&2
-            echo -e "        먼저 'init'을 실행하여 프로젝트를 초기화하세요." >&2
-            ((ERROR_COUNT++)) || true
-        fi
     fi
 }
 

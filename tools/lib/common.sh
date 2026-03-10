@@ -221,21 +221,42 @@ validate_cli_project_files() {
         esac
     done
 
-    # 각 카테고리에서 component-level platforms 수집
+    # 각 카테고리에서 section-level 및 component-level platforms 수집
     local categories=("agents" "commands" "hooks" "skills")
     for category in "${categories[@]}"; do
+        local field_exists=$(yq ".$category" "$yaml_file")
+        if [[ "$field_exists" == "null" ]]; then
+            continue
+        fi
+
+        # Check section-level platforms
+        local section_platforms=$(yq -o=json ".$category.platforms // null" "$yaml_file")
+        if [[ "$section_platforms" != "null" ]]; then
+            for cli in $(echo "$section_platforms" | jq -r '.[]' 2>/dev/null); do
+                case "$cli" in
+                    claude) used_claude=true ;;
+                    gemini) used_gemini=true ;;
+                    codex) used_codex=true ;;
+                esac
+            done
+        fi
+
+        # Check item-level platforms
         local count=$(yq ".${category}.items | length // 0" "$yaml_file")
         if [[ $count -gt 0 ]]; then
             for i in $(seq 0 $((count - 1))); do
-                local component_platforms=$(yq -o=json ".${category}.items[$i].platforms // null" "$yaml_file")
-                if [[ "$component_platforms" != "null" ]]; then
-                    for cli in $(echo "$component_platforms" | jq -r '.[]' 2>/dev/null); do
-                        case "$cli" in
-                            claude) used_claude=true ;;
-                            gemini) used_gemini=true ;;
-                            codex) used_codex=true ;;
-                        esac
-                    done
+                local item_type=$(yq ".${category}.items[$i] | type" "$yaml_file")
+                if [[ "$item_type" != "!!str" ]]; then
+                    local component_platforms=$(yq -o=json ".${category}.items[$i].platforms // null" "$yaml_file")
+                    if [[ "$component_platforms" != "null" ]]; then
+                        for cli in $(echo "$component_platforms" | jq -r '.[]' 2>/dev/null); do
+                            case "$cli" in
+                                claude) used_claude=true ;;
+                                gemini) used_gemini=true ;;
+                                codex) used_codex=true ;;
+                            esac
+                        done
+                    fi
                 fi
             done
         fi
@@ -244,7 +265,7 @@ validate_cli_project_files() {
     # 각 CLI에 대해 프로젝트 파일 존재 확인
     if [[ "$used_claude" == true ]]; then
         local project_file=$(get_cli_project_file "claude")
-        if [[ ! -f "$target_path/$project_file" ]]; then
+        if [[ ! -f "$target_path/$project_file" && ! -f "$target_path/.claude/$project_file" ]]; then
             log_error "CLI 프로젝트 파일 없음: $project_file (대상: $target_path)"
             echo "        먼저 'init'을 실행하여 프로젝트를 초기화하세요."
             has_error=true
