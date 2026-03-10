@@ -60,10 +60,18 @@ export function safeFileName(name: string, fallback: string = 'member'): string 
 // CLI detection & augmented command construction
 // ---------------------------------------------------------------------------
 
+const PACKAGE_RUNNERS = ['npx', 'bunx', 'pnpm', 'yarn', 'deno'];
+const CLI_NAMES = ['claude', 'gemini', 'codex'];
+
 export function detectCliType(command: unknown): string {
   if (!command) return 'unknown';
-  const firstToken = String(command).trim().split(/\s+/)[0];
-  if (['claude', 'gemini', 'codex'].includes(firstToken)) return firstToken;
+  const tokens = String(command).trim().split(/\s+/);
+  if (CLI_NAMES.includes(tokens[0])) return tokens[0];
+  if (PACKAGE_RUNNERS.includes(tokens[0])) {
+    for (const token of tokens.slice(1, 3)) {
+      if (CLI_NAMES.includes(token)) return token;
+    }
+  }
   return 'unknown';
 }
 
