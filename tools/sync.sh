@@ -241,10 +241,15 @@ sync_agents() {
             if [[ "$add_skills_count" -gt 0 ]]; then
                 for j in $(seq 0 $((add_skills_count - 1))); do
                     local skill=$(yq ".agents.items[$i].add-skills[$j]" "$yaml_file")
-                    if [[ -n "$add_skills" ]]; then
-                        add_skills="$add_skills,$skill"
+                    if resolve_scoped_source_path "skills" "$skill" ""; then
+                        local resolved_skill="$SCOPED_DISPLAY_NAME"
+                        if [[ -n "$add_skills" ]]; then
+                            add_skills="$add_skills,$resolved_skill"
+                        else
+                            add_skills="$resolved_skill"
+                        fi
                     else
-                        add_skills="$skill"
+                        log_warn "add-skills not found: $skill ($SCOPED_RESOLUTION_ERROR)"
                     fi
                 done
             fi
