@@ -338,7 +338,7 @@ claude_sync_agents_direct() {
         for k in $(seq 0 $((hook_count - 1))); do
             local hook_source=$(echo "$add_hooks_json" | jq -r ".[$k].source_path // \"\"")
             local hook_display=$(echo "$add_hooks_json" | jq -r ".[$k].display_name // \"\"")
-            if [[ -n "$hook_source" && -f "$hook_source" ]]; then
+            if [[ -n "$hook_source" && -e "$hook_source" ]]; then
                 claude_sync_hooks_direct "$target_path" "$hook_display" "$hook_source" "$dry_run"
             fi
         done

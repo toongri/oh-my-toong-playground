@@ -215,7 +215,6 @@ oh-my-toong/
 │   ├── agent-council/         # Multi-AI advisory body
 │   ├── spec/                  # Specification writing
 │   ├── qa/                    # Quality Assurance guardian
-│   ├── spec-review/           # Multi-AI spec review service
 │   └── performance-optimizer/ # Performance analysis and optimization
 ├── agents/                    # Subagent definitions for Task tool delegation
 │   ├── sisyphus-junior.md     # Focused executor (works alone)
@@ -259,7 +258,6 @@ oh-my-toong/
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
 | **spec** | Specification writing | Structured spec creation workflow |
 | **argus** | Quality Assurance guardian | Validates implementation quality, plan compliance, and instruction fulfillment |
-| **spec-review** | Spec review | Multi-AI advisory service |
 | **performance-optimizer** | Performance optimization | Systematic analysis with Before/After verification |
 
 ## Agents
