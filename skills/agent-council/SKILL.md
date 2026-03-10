@@ -60,7 +60,7 @@ digraph council_decision {
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
 3. Council members provide independent opinions (raw outputs)
-4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — repeat until `overallState` is `"done"`
+4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — polls internally; re-call if `overallState` is `"running"`
 5. **Read each member's output file** via the Read tool
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
@@ -83,50 +83,16 @@ Execute `bun .claude/skills/agent-council/scripts/job.ts` from the project root:
 
 > Note: Always write the council prompt in English for consistent cross-model communication.
 
-### One-shot (Terminal)
-
-For interactive terminal use where you wait for completion:
-
-```bash
-# 1. Start council — capture JOB_DIR
-JOB_DIR=$(bun .claude/skills/agent-council/scripts/job.ts start --stdin <<'EOF'
-## Evaluation Criteria
-[Key principles - in English]
-
-## Project Context
-[Conventions and patterns - in English]
-
-## Target
-[Code or content under review]
-
-## Question
-[Specific points needing judgment - in English]
-EOF
-)
-
-# 2. Collect — poll until overallState is "done"
-while true; do
-  RESULT=$(bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR")
-  echo "$RESULT" | grep -q '"overallState":.*"done"' && break
-  echo "Still running... retrying in 10s"
-  sleep 10
-done
-echo "$RESULT"
-
-# 3. Read each member's output
-# Parse outputFilePath values from $RESULT and cat them, e.g.:
-#   cat /path/to/claude-output.txt
-#   cat /path/to/gemini-output.txt
-
-# 4. Clean up
-bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
-```
-
 ### Host Agent Context (Claude Code)
 
 For programmatic use within Claude Code sessions:
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
+
+**Hard Constraints:**
+0. **Each Bash call MUST run in FOREGROUND.** All subcommands (start, collect) run synchronously. No background execution. No `run_in_background`.
+1. **Do NOT use `sleep`.** The `collect` subcommand polls internally (5-second intervals, 150-second default timeout). External sleep is redundant and wastes time.
+2. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`collect`) may repeat. No job re-creation.
 
 **1. Start council (Bash, timeout: 180000)**
 ```bash
@@ -152,28 +118,14 @@ Output: JOB_DIR path (one line on stdout).
 
 **2. Collect results (Bash, timeout: 180000)**
 
-Poll until all members complete. Re-run this step if not done.
+`collect` polls internally every 5 seconds until all members complete or its internal timeout (default 150s) expires. No external sleep needed.
+
 ```bash
 bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR"
 ```
 
-Response JSON (done):
-```json
-{
-  "overallState": "done",
-  "id": "...",
-  "members": [
-    { "member": "claude", "outputFilePath": "/path/to/output.txt", "errorMessage": null },
-    { "member": "gemini", "outputFilePath": "/path/to/output.txt", "errorMessage": null },
-    { "member": "codex", "outputFilePath": null, "errorMessage": "timed_out" }
-  ]
-}
-```
-
-Response JSON (not done — re-run this step):
-```json
-{ "overallState": "running", "id": "...", "counts": { "total": 3, "done": 1, "running": 2, "queued": 0 } }
-```
+- If response shows `"overallState": "done"` → proceed to Step 3.
+- If response shows `"overallState": "running"` → call `collect` again (same command, foreground, timeout: 180000).
 
 **3. Read raw outputs**
 
