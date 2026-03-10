@@ -214,13 +214,7 @@ validate_components() {
                             for j in $(seq 0 $((skills_count - 1))); do
                                 local skill=$(yq ".agents.items[$i].add-skills[$j]" "$yaml_file")
                                 if [[ -n "$skill" && "$skill" != "null" ]]; then
-                                    local in_skills=$(yq ".skills.items[]" "$yaml_file" 2>/dev/null | grep -E "(^${skill}$|:${skill}$)" | head -1 || echo "")
-                                    if [[ -z "$in_skills" ]]; then
-                                        resolve_source_path "skills" "$skill" ""
-                                        if [[ ! -d "$SOURCE_PATH" ]]; then
-                                            log_warn "add-skills '$skill'가 skills 섹션에 없고 소스도 없음"
-                                        fi
-                                    fi
+                                    validate_scoped_component "skills" "$skill" "" || true
                                 fi
                             done
                         fi
