@@ -60,11 +60,11 @@ digraph council_decision {
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
 3. Council members provide independent opinions (raw outputs)
-4. **Collect**: `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect JOB_DIR` — repeat until `overallState` is `"done"`
+4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — repeat until `overallState` is `"done"`
 5. **Read each member's output file** via the Read tool
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
-8. **Cleanup**: `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts clean JOB_DIR`
+8. **Cleanup**: `bun .claude/skills/agent-council/scripts/job.ts clean JOB_DIR`
 
 ## Context Synchronization
 
@@ -79,7 +79,7 @@ Council members do not share the caller's session context. The caller must expli
 
 ## How to Call
 
-Execute `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts` from the project root:
+Execute `bun .claude/skills/agent-council/scripts/job.ts` from the project root:
 
 > Note: Always write the council prompt in English for consistent cross-model communication.
 
@@ -89,7 +89,7 @@ For interactive terminal use where you wait for completion:
 
 ```bash
 # 1. Start council — capture JOB_DIR
-JOB_DIR=$(bun ${CLAUDE_SKILL_DIR}/scripts/job.ts start --stdin <<'EOF'
+JOB_DIR=$(bun .claude/skills/agent-council/scripts/job.ts start --stdin <<'EOF'
 ## Evaluation Criteria
 [Key principles - in English]
 
@@ -106,7 +106,7 @@ EOF
 
 # 2. Collect — poll until overallState is "done"
 while true; do
-  RESULT=$(bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect "$JOB_DIR")
+  RESULT=$(bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR")
   echo "$RESULT" | grep -q '"overallState":.*"done"' && break
   echo "Still running... retrying in 10s"
   sleep 10
@@ -119,7 +119,7 @@ echo "$RESULT"
 #   cat /path/to/gemini-output.txt
 
 # 4. Clean up
-bun ${CLAUDE_SKILL_DIR}/scripts/job.ts clean "$JOB_DIR"
+bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
 ```
 
 ### Host Agent Context (Claude Code)
@@ -144,7 +144,7 @@ cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 ## Question
 [Specific points needing judgment - in English]
 PROMPT_EOF
-JOB_DIR=$(bun ${CLAUDE_SKILL_DIR}/scripts/job.ts start --stdin < "$PROMPT_FILE")
+JOB_DIR=$(bun .claude/skills/agent-council/scripts/job.ts start --stdin < "$PROMPT_FILE")
 ```
 Output: JOB_DIR path (one line on stdout).
 
@@ -154,7 +154,7 @@ Output: JOB_DIR path (one line on stdout).
 
 Poll until all members complete. Re-run this step if not done.
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect "$JOB_DIR"
+bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR"
 ```
 
 Response JSON (done):
@@ -186,7 +186,7 @@ You as the Chairman must synthesize raw outputs into the Advisory Format (see be
 
 **5. Cleanup (Bash, timeout: 180000)**
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/job.ts clean "$JOB_DIR"
+bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
 ```
 
 ### Synthesis Protocol
