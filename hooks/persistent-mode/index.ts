@@ -50,10 +50,10 @@ export async function main(): Promise<void> {
   } catch (error) {
     // On any error, allow stop (fail open)
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logError(`error: ${errorMessage}`);
+    try { logError(`error: ${errorMessage}`); } catch { /* logger not initialized */ }
     console.error('persistent-mode error:', error);
     console.log('{"continue": true}');
-    logEnd();
+    try { logEnd(); } catch { /* logger not initialized */ }
   }
 }
 

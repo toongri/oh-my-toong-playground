@@ -148,6 +148,43 @@ describe('main entry point', () => {
       }
     });
 
+    it('should fail open when error occurs before initLogger is called', async () => {
+      // stdin with valid JSON but makeDecision will run fine — what matters here is
+      // that even when catch block runs with logger uninitialized, continue: true is output.
+      // We simulate this by using a cwd that forces getProjectRoot to return a fallback
+      // and then causing readTasksFromDirectory to throw via a broken HOME setup.
+      // The catch block's logError/logEnd calls are wrapped in try/catch so they cannot
+      // prevent the console.log('{"continue": true}') from being reached.
+      const input = JSON.stringify({
+        sessionId: 'pre-init-error-test',
+        cwd: '/nonexistent/path/that/does/not/exist/for/logger/test',
+        last_assistant_message: null,
+      });
+
+      const mockStdin = createMockStdin(input);
+      Object.defineProperty(process, 'stdin', {
+        value: mockStdin,
+        writable: true,
+        configurable: true,
+      });
+
+      // Use a HOME with no tasks dir — forces a code path where logger may not be
+      // initialized properly (projectRoot fallback with no .omt dir)
+      const savedHome = process.env.HOME;
+      process.env.HOME = '/nonexistent';
+      try {
+        await main();
+
+        // Must always output continue: true regardless of logger state
+        expect(capturedOutput.length).toBeGreaterThan(0);
+        const lastOutput = capturedOutput[capturedOutput.length - 1];
+        const output = JSON.parse(lastOutput);
+        expect(output.continue).toBe(true);
+      } finally {
+        process.env.HOME = savedHome;
+      }
+    });
+
     it('should fail open when cwd directory does not exist', async () => {
       const input = JSON.stringify({
         sessionId: 'test-session',
