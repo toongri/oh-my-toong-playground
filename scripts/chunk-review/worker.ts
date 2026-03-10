@@ -119,7 +119,7 @@ if (import.meta.main) {
 
 export {
   splitCommand,
-  atomicWriteJson as atomicWriteJson,
+  atomicWriteJson,
   assemblePrompt,
   runOnce,
   runWithRetry,

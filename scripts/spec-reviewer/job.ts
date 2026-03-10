@@ -23,7 +23,6 @@ import {
   computeStatus as _computeStatus,
   buildUiPayload as _buildUiPayload,
   spawnWorkers as _spawnWorkers,
-  cmdWait as _cmdWait,
   cmdResults as _cmdResults,
   cmdStop as _cmdStop,
   cmdClean as _cmdClean,
