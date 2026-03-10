@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
+import { findProjectRoot, exitWithError, parseArgs } from '@lib/job-utils';
 import {
   splitCommand,
   atomicWriteJson,
@@ -17,41 +18,6 @@ import {
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 const FALLBACK_FILE = 'reviewer.md';
-
-// ---------------------------------------------------------------------------
-// Utility functions
-// ---------------------------------------------------------------------------
-
-function exitWithError(message) {
-  process.stderr.write(`${message}\n`);
-  process.exit(1);
-}
-
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const out = { _: [] };
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (!a.startsWith('--')) {
-      out._.push(a);
-      continue;
-    }
-
-    const [key, rawValue] = a.split('=', 2);
-    if (rawValue != null) {
-      out[key.slice(2)] = rawValue;
-      continue;
-    }
-    const next = args[i + 1];
-    if (next == null || next.startsWith('--')) {
-      out[key.slice(2)] = true;
-      continue;
-    }
-    out[key.slice(2)] = next;
-    i++;
-  }
-  return out;
-}
 
 // ---------------------------------------------------------------------------
 // Chunk-review wrappers (reviewer.md fallback default)
@@ -90,7 +56,7 @@ function main() {
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
   // Initialize persistent logging
-  const projectRoot = path.resolve(import.meta.dirname, '../../..');
+  const projectRoot = findProjectRoot(import.meta.dirname);
   const jobId = jobDir ? path.basename(jobDir).replace(/^chunk-review-/, '') : 'unknown';
   initLogger('chunk-review-worker', projectRoot, jobId);
   logStart();
