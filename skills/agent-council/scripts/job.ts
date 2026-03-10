@@ -54,7 +54,7 @@ const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'council.config.yaml');
-const REPO_CONFIG_FILE = path.join(path.resolve(SKILL_DIR, '../..'), 'council.config.yaml');
+const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'council.config.yaml');
 
 // ---------------------------------------------------------------------------
 // Council-specific config parsing (preserved)
