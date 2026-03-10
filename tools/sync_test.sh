@@ -87,6 +87,50 @@ assert_file_contains() {
     fi
 }
 
+assert_file_not_contains() {
+    local file="$1"
+    local pattern="$2"
+    local msg="${3:-File should not contain pattern}"
+
+    if ! grep -q "$pattern" "$file"; then
+        return 0
+    else
+        echo "ASSERTION FAILED: $msg"
+        echo "  Pattern: '$pattern'"
+        echo "  File: $file"
+        return 1
+    fi
+}
+
+# Extract and source functions from sync.sh without running main
+# Used by functional tests that need to call sync.sh functions directly
+SYNC_FUNCTIONS_SOURCED=false
+extract_functions_from_sync_script() {
+    if [[ "$SYNC_FUNCTIONS_SOURCED" == "true" ]]; then
+        return 0
+    fi
+
+    local tools_dir="$ROOT_DIR"
+    local tmp_script
+    tmp_script=$(mktemp)
+
+    # Remove last line (main "$@") before sourcing
+    local line_count
+    line_count=$(wc -l < "$tools_dir/sync.sh" | tr -d ' ')
+    local lines_to_keep=$((line_count - 1))
+
+    head -n "$lines_to_keep" "$tools_dir/sync.sh" > "$tmp_script"
+
+    # Replace relative source paths with absolute paths so sourcing works
+    # regardless of the temp script's location
+    sed -i '' "s|source \"\${SCRIPT_DIR}/|source \"${tools_dir}/|g" "$tmp_script"
+
+    source "$tmp_script"
+    rm -f "$tmp_script"
+
+    SYNC_FUNCTIONS_SOURCED=true
+}
+
 run_test() {
     local test_name="$1"
     CURRENT_TEST="$test_name"
@@ -739,6 +783,145 @@ test_sync_scripts_is_called_in_sync_to_target() {
 }
 
 # =============================================================================
+# Tests: rewrite_lib_aliases
+# =============================================================================
+
+test_rewrite_lib_aliases_depth_zero() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root"
+
+    # File at platform_root level (depth=0) — @lib/ should become ./lib/
+    cat > "$platform_root/index.ts" << 'EOF'
+import { foo } from '@lib/foo';
+import { bar } from "@lib/bar";
+EOF
+
+    rewrite_lib_aliases "$platform_root"
+
+    assert_file_contains "$platform_root/index.ts" "'./lib/foo'" "depth=0: single-quoted @lib/ should become ./lib/" || return 1
+    assert_file_contains "$platform_root/index.ts" '"./lib/bar"' "depth=0: double-quoted @lib/ should become ./lib/" || return 1
+}
+
+test_rewrite_lib_aliases_depth_one() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root/subdir"
+
+    # File 1 dir deep (depth=1) — @lib/ should become ../lib/
+    cat > "$platform_root/subdir/index.ts" << 'EOF'
+import { foo } from '@lib/foo';
+EOF
+
+    rewrite_lib_aliases "$platform_root"
+
+    assert_file_contains "$platform_root/subdir/index.ts" "'../lib/foo'" "depth=1: @lib/ should become ../lib/" || return 1
+}
+
+test_rewrite_lib_aliases_depth_two() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root/a/b"
+
+    # File 2 dirs deep (depth=2) — @lib/ should become ../../lib/
+    cat > "$platform_root/a/b/index.ts" << 'EOF'
+import { foo } from '@lib/foo';
+EOF
+
+    rewrite_lib_aliases "$platform_root"
+
+    assert_file_contains "$platform_root/a/b/index.ts" "'../../lib/foo'" "depth=2: @lib/ should become ../../lib/" || return 1
+}
+
+test_rewrite_lib_aliases_skips_test_ts() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root"
+
+    # .test.ts file should NOT be rewritten
+    cat > "$platform_root/index.test.ts" << 'EOF'
+import { foo } from '@lib/foo';
+EOF
+
+    rewrite_lib_aliases "$platform_root"
+
+    assert_file_contains "$platform_root/index.test.ts" "'@lib/foo'" "test.ts file should not be rewritten" || return 1
+}
+
+test_rewrite_lib_aliases_skips_lib_dir() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root/lib"
+
+    # Files inside lib/ should NOT be rewritten
+    cat > "$platform_root/lib/helper.ts" << 'EOF'
+import { foo } from '@lib/foo';
+EOF
+
+    rewrite_lib_aliases "$platform_root"
+
+    assert_file_contains "$platform_root/lib/helper.ts" "'@lib/foo'" "files inside lib/ should not be rewritten" || return 1
+}
+
+# =============================================================================
+# Tests: rewrite_platform_paths
+# =============================================================================
+
+test_rewrite_platform_paths_claude_no_changes() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root"
+
+    # For claude platform, nothing should change
+    cat > "$platform_root/README.md" << 'EOF'
+See .claude/scripts/foo for details.
+EOF
+
+    rewrite_platform_paths "$platform_root" "claude"
+
+    assert_file_contains "$platform_root/README.md" "\.claude/scripts/foo" "claude platform: .claude/ paths should not be changed" || return 1
+}
+
+test_rewrite_platform_paths_gemini_rewrites_md() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root"
+
+    # For gemini platform, .claude/ should become .gemini/ in .md files
+    cat > "$platform_root/README.md" << 'EOF'
+See .claude/scripts/foo for details.
+EOF
+
+    rewrite_platform_paths "$platform_root" "gemini"
+
+    assert_file_contains "$platform_root/README.md" "\.gemini/scripts/foo" "gemini platform: .claude/ should become .gemini/" || return 1
+    assert_file_not_contains "$platform_root/README.md" "\.claude/scripts/foo" "gemini platform: .claude/ should be replaced" || return 1
+}
+
+test_rewrite_platform_paths_skips_ts_files() {
+    extract_functions_from_sync_script
+
+    local platform_root="$TEST_TMP_DIR/platform"
+    mkdir -p "$platform_root"
+
+    # .ts files should NOT be processed (only .md files)
+    cat > "$platform_root/index.ts" << 'EOF'
+const path = '.claude/scripts/foo';
+EOF
+
+    rewrite_platform_paths "$platform_root" "gemini"
+
+    assert_file_contains "$platform_root/index.ts" "\.claude/scripts/foo" "gemini platform: .ts files should not be rewritten" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -811,6 +994,18 @@ main() {
     run_test test_sync_scripts_dispatches_to_gemini
     run_test test_sync_scripts_dispatches_to_codex
     run_test test_sync_scripts_is_called_in_sync_to_target
+
+    # rewrite_lib_aliases
+    run_test test_rewrite_lib_aliases_depth_zero
+    run_test test_rewrite_lib_aliases_depth_one
+    run_test test_rewrite_lib_aliases_depth_two
+    run_test test_rewrite_lib_aliases_skips_test_ts
+    run_test test_rewrite_lib_aliases_skips_lib_dir
+
+    # rewrite_platform_paths
+    run_test test_rewrite_platform_paths_claude_no_changes
+    run_test test_rewrite_platform_paths_gemini_rewrites_md
+    run_test test_rewrite_platform_paths_skips_ts_files
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
