@@ -14,6 +14,7 @@ import {
   parseArgs,
   generateJobId,
   computeTerminalDoneCount,
+  findProjectRoot,
 } from '@lib/job-utils';
 
 import {
@@ -48,7 +49,7 @@ const COUNCIL_CONFIG: JobConfig = {
 };
 
 const SCRIPT_DIR = import.meta.dirname;
-const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '../../..');
+const PROJECT_ROOT = findProjectRoot(SCRIPT_DIR);
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
