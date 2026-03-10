@@ -337,6 +337,13 @@ validate_components() {
         if [[ $count -gt 0 ]]; then
             for i in $(seq 0 $((count - 1))); do
                 local component
+                local item_type
+                item_type=$(yq ".agents.items[$i] | type" "$yaml_file")
+                if [[ "$item_type" == "!!str" ]]; then
+                    ITEM_IS_OBJECT=false
+                else
+                    ITEM_IS_OBJECT=true
+                fi
                 component=$(get_item_component "$yaml_file" "agents" "$i")
 
                 if [[ -n "$component" && "$component" != "null" ]]; then
