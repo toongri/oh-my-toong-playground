@@ -33,7 +33,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 
 You may ONLY execute these commands via Bash:
 - `bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"` — collect results (poll internally)
+- `bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -63,10 +63,16 @@ bun .claude/scripts/chunk-review/job.ts start --prompt-file "$PROMPT_FILE"
 Output: JOB_DIR path (one line on stdout)
 
 ### Step 2 — Collect (Bash, timeout: 180000)
-Poll until all reviewers complete. Re-run this step if not done.
+
+`collect` polls internally every 5 seconds until all reviewers complete or its internal timeout (default 150s) expires. No external sleep needed.
+
 ```bash
 bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"
 ```
+
+- If response shows `"overallState": "done"` → proceed to Step 3.
+- If response shows `"overallState": "running"` → call `collect` again (same command, foreground, timeout: 180000).
+
 Response JSON (done):
 ```json
 { "overallState": "done", "id": "...", "members": [{ "member": "claude", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
