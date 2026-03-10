@@ -52,27 +52,6 @@ claude_get_context_file() {
 }
 
 # =============================================================================
-# Feature Support
-# =============================================================================
-
-# Check if Claude supports a specific feature
-# Arguments:
-#   $1 - feature name (agents, commands, hooks, skills)
-# Returns: 0 if supported, 1 if not
-claude_supports_feature() {
-    local feature="$1"
-
-    case "$feature" in
-        agents|commands|hooks|skills|rules|plugins|mcps|config)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
-# =============================================================================
 # Sync Functions
 # =============================================================================
 

@@ -147,42 +147,6 @@ test_gemini_get_context_file_returns_gemini_md() {
 }
 
 # =============================================================================
-# Tests: Feature Support
-# =============================================================================
-
-test_gemini_supports_feature_agents_returns_false() {
-    # Gemini does not support native subagents - should return non-zero
-    if gemini_supports_feature "agents"; then
-        echo "ASSERTION FAILED: Should NOT support agents feature (no native subagent support)"
-        return 1
-    fi
-    return 0
-}
-
-test_gemini_supports_feature_commands() {
-    gemini_supports_feature "commands"
-    assert_equals 0 $? "Should support commands feature"
-}
-
-test_gemini_supports_feature_hooks() {
-    gemini_supports_feature "hooks"
-    assert_equals 0 $? "Should support hooks feature"
-}
-
-test_gemini_supports_feature_skills() {
-    gemini_supports_feature "skills"
-    assert_equals 0 $? "Should support skills feature"
-}
-
-test_gemini_supports_feature_unknown_returns_1() {
-    if gemini_supports_feature "unknown_feature"; then
-        return 1  # Should not support unknown feature
-    else
-        return 0  # Correctly returned non-zero
-    fi
-}
-
-# =============================================================================
 # Tests: Sync Agents (warns and skips - no native subagent support)
 # =============================================================================
 
@@ -570,13 +534,6 @@ main() {
     run_test test_gemini_get_config_dir_returns_dot_gemini
     run_test test_gemini_get_settings_file_returns_settings_json
     run_test test_gemini_get_context_file_returns_gemini_md
-
-    # Feature Support
-    run_test test_gemini_supports_feature_agents_returns_false
-    run_test test_gemini_supports_feature_commands
-    run_test test_gemini_supports_feature_hooks
-    run_test test_gemini_supports_feature_skills
-    run_test test_gemini_supports_feature_unknown_returns_1
 
     # Sync Agents (warns and skips - no native subagent support)
     run_test test_gemini_sync_agents_warns_and_skips

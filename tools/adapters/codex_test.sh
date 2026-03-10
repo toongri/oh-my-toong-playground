@@ -164,35 +164,6 @@ test_codex_get_context_file_returns_agents_md() {
 }
 
 # =============================================================================
-# Tests: Feature Support
-# =============================================================================
-
-test_codex_supports_feature_agents_returns_false() {
-    local result=$(codex_supports_feature "agents")
-    assert_equals "false" "$result" "Should NOT support agents (no native subagent support)"
-}
-
-test_codex_supports_feature_commands_returns_false() {
-    local result=$(codex_supports_feature "commands")
-    assert_equals "false" "$result" "Should NOT support commands (global only, not project-local)"
-}
-
-test_codex_supports_feature_hooks_returns_partial() {
-    local result=$(codex_supports_feature "hooks")
-    assert_equals "partial" "$result" "Should have partial hooks support (notify only)"
-}
-
-test_codex_supports_feature_skills_returns_true() {
-    local result=$(codex_supports_feature "skills")
-    assert_equals "true" "$result" "Should support skills via directory copy"
-}
-
-test_codex_supports_feature_unknown_returns_false() {
-    local result=$(codex_supports_feature "unknown_feature")
-    assert_equals "false" "$result" "Should return false for unknown features"
-}
-
-# =============================================================================
 # Tests: Sync Agents (warns and skips - no native subagent support)
 # =============================================================================
 
@@ -545,13 +516,6 @@ main() {
     run_test test_codex_get_config_dir_returns_dot_codex
     run_test test_codex_get_settings_file_returns_config_toml
     run_test test_codex_get_context_file_returns_agents_md
-
-    # Feature Support
-    run_test test_codex_supports_feature_agents_returns_false
-    run_test test_codex_supports_feature_commands_returns_false
-    run_test test_codex_supports_feature_hooks_returns_partial
-    run_test test_codex_supports_feature_skills_returns_true
-    run_test test_codex_supports_feature_unknown_returns_false
 
     # Sync Agents (warns and skips - no native subagent support)
     run_test test_codex_sync_agents_warns_and_skips
