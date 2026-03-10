@@ -4,7 +4,7 @@
 
 As a software requirements analysis expert, systematically analyze project requirements and organize them into a single integrated document.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -216,3 +216,96 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Requirements Complete
 - Announce: "Requirements complete. Entry criteria for Solution Design: Requirements complete OR requirements already documented, user confirmed readiness to proceed, complexity classification agreed upon"
+
+## Output Template
+
+> This is a recommended template. Adapt sections, ordering, and detail level to your project's needs.
+
+```markdown
+# Requirements Analysis Document: [Project Name]
+
+## 1. Project Overview
+
+### 1.1 Problem to Solve
+[Description of the core problem this project aims to solve]
+
+### 1.2 Project Objectives
+[Description of project objectives and expected business value]
+
+### 1.3 Expected Benefits
+[Description of expected benefits and success metrics]
+
+### 1.4 Project Completion Criteria
+This project is considered complete when all of the following conditions are satisfied.
+First, ... Second, ... Third, ...
+
+---
+
+## 2. Domain Glossary
+
+| Term | Definition |
+|-----|-----|
+| ... | ... |
+
+### 2.1 User Action Definitions
+[Include only if the system tracks user actions]
+
+**[Action Name]:** [When it occurs], [How duplicates are handled], [Behavior on cancellation]
+
+### 2.2 Business Rules
+
+**[Rule Name]:**
+[Rule description in clear prose. Include business rationale - why this rule exists.]
+
+**Example:**
+[Specific example with numbers illustrating the rule]
+
+---
+
+## 3. Primary Users and Goals
+
+### 3.1 [User Type 1]
+[User goals described in prose]
+
+### 3.2 [User Type 2]
+[User goals described in prose]
+
+---
+
+## 4. Use Case Specifications
+
+### US-1: [Use Case Name]
+
+**User Story:**
+[As-Want-So that format, written in prose]
+
+**Acceptance Criteria:**
+1. [Testable condition]
+2. [Testable condition]
+3. ...
+
+**Exception Scenarios:**
+1. [Error condition and expected system behavior]
+2. ...
+
+[If no error cases: "N/A: [specific reason]"]
+
+---
+
+## 5. Non-Functional Requirements
+
+### 5.1 [Requirement Category]
+[Requirement description in prose, followed by verification criteria]
+
+**Verification Criteria:** [Specific, measurable criteria]
+
+---
+
+## 6. Validation Scenarios
+
+### 6.1 [Scenario Name]
+[E2E scenario with specific numbers and expected results. Should read like a test case.]
+
+### 6.2 [Scenario Name]
+[Additional scenarios covering edge cases, time-based behavior, etc.]
+```

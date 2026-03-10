@@ -4,7 +4,7 @@
 
 As an operations design specialist, systematically design the observability aspects of the project including custom metrics, custom logging, and feature flag strategy.
 
-**Output Format**: See `templates/area-outputs.md`
+**Output Format**: See **Output Template** section below
 
 ## Principles
 
@@ -109,3 +109,35 @@ Apply **Area Completion Protocol** (see SKILL.md)
 
 #### Checkpoint: Operations Plan Complete
 - Announce: "Operations Plan complete. All selected Design Areas finished. Proceeding to Wrapup."
+
+## Output Template
+
+> This is a recommended template. Adapt sections, ordering, and detail level to your project's needs.
+
+```markdown
+# Operations Plan Document
+
+## 1. Observability Design
+
+### 1.1 Custom Metrics
+
+[Write only project-specific metrics]
+
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| ... | Counter/Gauge/Histogram | ... | ... |
+
+### 1.2 Custom Logging
+
+[Write only project-specific logging]
+
+| Log Event | Level | Fields | Description |
+|-----------|-------|--------|-------------|
+| ... | INFO/WARN/ERROR | ... | ... |
+
+## 2. Feature Flag Strategy
+
+| Flag Name | Scope | Default | Rollback Action |
+|-----------|-------|---------|-----------------|
+| ... | ... | ON/OFF | ... |
+```

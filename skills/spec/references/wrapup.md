@@ -4,7 +4,7 @@
 
 As a knowledge curator, extract information that shapes the **next specification's direction** from accumulated records.
 
-**Output Format**: See `templates/area-outputs.md` (produces context files, not a single document)
+**Output Format**: See **Output Template** section below (produces context files, not a single document)
 
 **Context File Purpose**: Context files are loaded at the START of every future spec session. They must answer: "What kind of team is this, what do they value, and what big-picture constraints exist?" — NOT "What did they decide in the last spec?"
 
@@ -26,7 +26,7 @@ As a knowledge curator, extract information that shapes the **next specification
 - Collect: Read all records from:
   - `.omt/specs/{spec-name}/requirements/records/`
   - `.omt/specs/{spec-name}/solution-design/records/`
-  - `.omt/specs/{spec-name}/{area-name}/records/` (for each selected area: domain-model, data-schema, interface-contract, integration-pattern, operations-plan)
+  - `.omt/specs/{spec-name}/{area-name}/records/` (for each selected Design Area)
 - Organize: Group by category (architectural decisions, domain conventions, gotchas, etc.)
 
 #### 1.2 Extract Candidates
@@ -197,3 +197,14 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 Apply **Area Completion Protocol** (see SKILL.md)
 
 - Announce: "Wrapup complete. Specification process finished. Context preserved for future sessions."
+
+## Output Template
+
+> This is a recommended template. Adapt sections, ordering, and detail level to your project's needs.
+
+Wrapup produces context files for future spec sessions — information that shapes the **next specification's direction**.
+
+- `project.md` - Big picture: tech stack, system philosophy, external dependencies, constraints
+- `decisions.md` - Team decision-making tendencies extracted from patterns across multiple decisions (NOT individual ADR entries)
+- `conventions.md` - Repeatable coding-level patterns for implementation consistency
+- `gotchas.md` - Implementation traps that would catch someone unfamiliar with this project
