@@ -53,7 +53,7 @@ const PROJECT_ROOT = findProjectRoot();
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
 const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'spec-reviewer.config.yaml');
-const REPO_CONFIG_FILE = path.join(path.resolve(SCRIPT_DIR, '../../..'), 'spec-reviewer.config.yaml');
+const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'spec-reviewer.config.yaml');
 
 // ---------------------------------------------------------------------------
 // Spec-review wrappers — pre-apply JOB_CONFIG so callers/tests need no config arg
