@@ -153,6 +153,22 @@ describe('detectCliType', () => {
   test('returns "claude" when command has leading whitespace', () => {
     expect(detectCliType('  claude --model opus')).toBe('claude');
   });
+
+  test('returns "claude" for "npx claude --model opus"', () => {
+    expect(detectCliType('npx claude --model opus')).toBe('claude');
+  });
+
+  test('returns "gemini" for "bunx gemini"', () => {
+    expect(detectCliType('bunx gemini')).toBe('gemini');
+  });
+
+  test('returns "codex" for "pnpm dlx codex"', () => {
+    expect(detectCliType('pnpm dlx codex')).toBe('codex');
+  });
+
+  test('returns "unknown" when cli name appears after the 3rd token', () => {
+    expect(detectCliType('echo hello claude')).toBe('unknown');
+  });
 });
 
 // ---------------------------------------------------------------------------
