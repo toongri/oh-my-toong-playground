@@ -269,7 +269,7 @@ sync_agents() {
                     local hook_source_path=""
                     local hook_display_name=""
                     if [[ -n "$hook_component" && "$hook_component" != "null" ]]; then
-                        resolve_scoped_source_path "hooks" "$hook_component" ""
+                        resolve_scoped_source_path "hooks" "$hook_component" "" || true
                         if [[ -n "$SCOPED_SOURCE_PATH" ]]; then
                             hook_source_path="$SCOPED_SOURCE_PATH"
                             hook_display_name="$SCOPED_DISPLAY_NAME"
