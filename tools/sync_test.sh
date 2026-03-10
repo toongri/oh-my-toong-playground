@@ -7,6 +7,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$SCRIPT_DIR"
+# Immutable path to sync.sh — $SCRIPT_DIR/$ROOT_DIR may be overridden by sourced scripts
+TEST_SYNC_SH_PATH="$SCRIPT_DIR/sync.sh"
 
 # Test utilities
 TESTS_PASSED=0
@@ -922,6 +924,40 @@ EOF
 }
 
 # =============================================================================
+# Tests: add-skills scoped resolution in sync_agents
+# =============================================================================
+
+test_sync_agents_add_skills_no_strip_prefix() {
+    # add-skills 처리에서 무조건 접두사를 제거하는 패턴(skill="${skill#*:}")이 없어야 함
+    # Note: $ROOT_DIR may be overridden by sourced scripts; use TEST_SYNC_SH_PATH captured at load time
+    if grep -A 30 'add_skills_count.*gt 0' "$TEST_SYNC_SH_PATH" | grep -q 'skill="${skill#\*:\}"'; then
+        echo "ASSERTION FAILED: sync.sh should not unconditionally strip skill prefix with \${skill#*:}"
+        return 1
+    fi
+    return 0
+}
+
+test_sync_agents_add_skills_calls_resolve_scoped_source_path() {
+    # add-skills 처리에서 resolve_scoped_source_path를 호출해야 함
+    if grep -A 30 'add_skills_count.*gt 0' "$TEST_SYNC_SH_PATH" | grep -q 'resolve_scoped_source_path "skills"'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: sync.sh add-skills should call resolve_scoped_source_path \"skills\""
+        return 1
+    fi
+}
+
+test_sync_agents_add_skills_warns_on_missing_skill() {
+    # 존재하지 않는 skill에 대해 log_warn을 호출해야 함
+    if grep -A 30 'add_skills_count.*gt 0' "$TEST_SYNC_SH_PATH" | grep -q 'log_warn.*add-skills'; then
+        return 0
+    else
+        echo "ASSERTION FAILED: sync.sh add-skills should call log_warn when skill not found"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -1006,6 +1042,11 @@ main() {
     run_test test_rewrite_platform_paths_claude_no_changes
     run_test test_rewrite_platform_paths_gemini_rewrites_md
     run_test test_rewrite_platform_paths_skips_ts_files
+
+    # add-skills scoped resolution
+    run_test test_sync_agents_add_skills_no_strip_prefix
+    run_test test_sync_agents_add_skills_calls_resolve_scoped_source_path
+    run_test test_sync_agents_add_skills_warns_on_missing_skill
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
