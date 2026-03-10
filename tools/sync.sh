@@ -306,7 +306,7 @@ sync_agents() {
             continue
         fi
 
-        resolve_scoped_source_path "agents" "$component" ".md"
+        resolve_scoped_source_path "agents" "$component" ".md" || true
         if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
             log_warn "$SCOPED_RESOLUTION_ERROR"
             continue
@@ -412,7 +412,7 @@ sync_commands() {
             continue
         fi
 
-        resolve_scoped_source_path "commands" "$component" ".md"
+        resolve_scoped_source_path "commands" "$component" ".md" || true
         if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
             log_warn "$SCOPED_RESOLUTION_ERROR"
             continue
@@ -527,7 +527,7 @@ sync_hooks() {
         local display_name=""
         local scoped_source=""
         if [[ -n "$component" && "$component" != "null" ]]; then
-            resolve_scoped_source_path "hooks" "$component" ""
+            resolve_scoped_source_path "hooks" "$component" "" || true
             if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
                 log_warn "$SCOPED_RESOLUTION_ERROR"
                 return 0
@@ -759,7 +759,7 @@ sync_skills() {
             continue
         fi
 
-        resolve_scoped_source_path "skills" "$component" ""
+        resolve_scoped_source_path "skills" "$component" "" || true
         if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
             log_warn "$SCOPED_RESOLUTION_ERROR"
             continue
@@ -866,7 +866,7 @@ sync_scripts() {
             continue
         fi
 
-        resolve_scoped_source_path "scripts" "$component" ""
+        resolve_scoped_source_path "scripts" "$component" "" || true
         if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
             log_warn "$SCOPED_RESOLUTION_ERROR"
             continue
@@ -1000,7 +1000,7 @@ sync_mcps() {
             continue
         fi
 
-        resolve_scoped_source_path "mcps" "$component" ".yaml"
+        resolve_scoped_source_path "mcps" "$component" ".yaml" || true
         if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
             log_warn "$SCOPED_RESOLUTION_ERROR"
             continue
@@ -1140,7 +1140,7 @@ sync_rules() {
             continue
         fi
 
-        resolve_scoped_source_path "rules" "$component" ".md"
+        resolve_scoped_source_path "rules" "$component" ".md" || true
         if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
             log_warn "$SCOPED_RESOLUTION_ERROR"
             continue
