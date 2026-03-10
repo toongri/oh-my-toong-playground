@@ -774,8 +774,8 @@ claude_update_agent_frontmatter() {
         skills_args="$skills_args + [\"$skill\"]"
     done
 
-    # Update skills array: convert to array if scalar, add new skills, deduplicate
-    yq -i ".skills = ([.skills] | flatten)${skills_args} | .skills |= unique" "$frontmatter_file"
+    # Update skills array: convert to array if scalar, filter null, add new skills, deduplicate
+    yq -i ".skills = ([.skills] | flatten | map(select(. != null)))${skills_args} | .skills |= unique" "$frontmatter_file"
 
     # Reassemble file
     echo "---" > "$temp_file"

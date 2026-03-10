@@ -320,6 +320,32 @@ EOF
     assert_file_contains "$target_dir/.claude/agents/test-agent.md" "new-skill" "Should add new skill"
 }
 
+test_claude_update_agent_frontmatter_no_existing_skills_no_null() {
+    local target_dir="$TEST_TMP_DIR/target"
+    mkdir -p "$target_dir/.claude/agents"
+
+    # Create agent file WITHOUT skills field
+    cat > "$target_dir/.claude/agents/test-agent.md" << 'EOF'
+---
+name: test-agent
+description: Test agent
+model: sonnet
+---
+# Test Agent Content
+EOF
+
+    # Execute
+    claude_update_agent_frontmatter "$target_dir/.claude/agents/test-agent.md" "new-skill" "false"
+
+    # Verify: should have new-skill but NOT null
+    assert_file_contains "$target_dir/.claude/agents/test-agent.md" "new-skill" "Should add new skill"
+    if grep -q "null" "$target_dir/.claude/agents/test-agent.md"; then
+        echo "ASSERTION FAILED: Should not contain null entry"
+        cat "$target_dir/.claude/agents/test-agent.md"
+        return 1
+    fi
+}
+
 test_claude_update_agent_frontmatter_dry_run_does_not_modify() {
     local target_dir="$TEST_TMP_DIR/target"
     mkdir -p "$target_dir/.claude/agents"
@@ -641,6 +667,7 @@ main() {
 
     # Agent Frontmatter
     run_test test_claude_update_agent_frontmatter_adds_skills
+    run_test test_claude_update_agent_frontmatter_no_existing_skills_no_null
     run_test test_claude_update_agent_frontmatter_dry_run_does_not_modify
 
     # Agent Hooks Frontmatter
