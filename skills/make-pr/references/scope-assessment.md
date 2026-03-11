@@ -148,8 +148,6 @@ Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
 - 포함 커밋: [커밋 목록]
 - 포함 파일: [파일 목록]
 
-의존성 분석: [Stacked / Parallel] — [근거]
-
 어떻게 진행할까요?
 1. 동의 (분리 진행)
 2. 거부 (단일 PR로 진행)
@@ -166,42 +164,20 @@ Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
 
 ---
 
-## Thesis 의존성 분석
+## Thesis 의존성
 
-Split 진행 전, thesis 간 의존성을 분석하여 Stacked vs Parallel을 결정한다.
-
-### 판별 기준
-
-| 유형 | 조건 |
-|------|------|
-| **Stacked PR** | thesis 간 공유 파일/함수가 있음, 또는 Thesis B가 Thesis A의 출력을 사용 |
-| **Parallel PR** | 완전히 독립적 (공유 파일 없음, 의존 관계 없음) |
-
-**불명확할 때 기본값: Stacked** (더 안전한 선택).
-
-### PR 생성 방식
-
-| 유형 | `gh pr create` 방식 |
-|------|---------------------|
-| Stacked | `gh pr create --base {이전-split-브랜치}` — PR #2는 PR #1의 브랜치를 base로 |
-| Parallel | `gh pr create --base {base-branch}` — 모든 PR이 {base-branch}를 base로 |
+모든 split은 이전 split 위에 체이닝된다. 첫 번째 PR은 `{base-branch}`를 base로, 이후 PR은 이전 split 브랜치를 base로 생성한다.
 
 ---
 
 ## 브랜치 분리 절차
 
-### 브랜치 명명 규칙
-
-```
-{원본-브랜치}-split-{N}
-```
-
-예시: `feat/order-event-split-1`, `feat/order-event-split-2`
-
 ### 분리 절차
 
 1. 각 thesis에 포함된 커밋 목록 확정 (머지 커밋 제외)
-2. 베이스 브랜치에서 새 브랜치 생성: `git checkout -b {branch-name} origin/{base-branch}`
+2. 새 브랜치 생성:
+   - 첫 번째 thesis: `git checkout -b {branch-name} origin/{base-branch}`
+   - 이후 thesis: `git checkout -b {branch-name} {이전-split-브랜치}`
 3. 해당 thesis의 커밋을 cherry-pick: `git cherry-pick {commit-hash}`
 4. 브랜치 push: `git push -u origin {branch-name}` (Split Accept는 브랜치 push를 포함한다. Accept 시점에서 유저가 remote 브랜치 생성에 동의한 것으로 간주한다.)
 5. 모든 sub-브랜치 생성 완료 후 Sub-PR Description 작성
@@ -237,12 +213,6 @@ cherry-pick이 실패하면:
 ### Split Context 노트
 
 각 sub-PR Summary 상단에 split 컨텍스트를 추가한다:
-
-```markdown
-> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. 관련 PR: [sibling PR 링크들]
-```
-
-Stacked PR인 경우 머지 순서도 명시한다:
 
 ```markdown
 > 이 PR은 [N]개 분리 PR 중 [K]번째입니다. 먼저 머지되어야 합니다. 관련 PR: [sibling PR 링크들]
