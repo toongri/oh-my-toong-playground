@@ -35,7 +35,7 @@ Never write a PR description without sufficient context. Continue the interview 
 |------|-------------------|---------------|---------|
 | Clearance Checklist all YES | Insufficient info leads to inaccurate PR | "I roughly get it, just write it" | Missing context leads to wrong PR |
 | Write in Korean | Project convention | "English is easier" | Project rules take priority |
-| Never run `gh pr create` | Writing PR description is the only scope | "Run it for me too" | Out of scope. User runs it themselves |
+| Never run `gh pr create` without user confirmation | PR creation requires explicit user approval | "Just create it directly" | Always confirm before creating PR |
 | Never read git diff file contents | Use metadata only | "Need to see code for accuracy" | Use explore for patterns. User interview is key |
 | Never reference non-git content in PR | Reviewers can't access agent-internal files | "Memory/plan adds context" | PR is a public document; internal files are inaccessible to reviewers |
 
@@ -45,13 +45,12 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Only writes the PR description body. Does NOT run `gh pr create`.
+Writes PR description body. After user approval, syncs with base branch (fetch + rebase) and creates the PR via `gh pr create`.
 
 ---
 
 ## When NOT to Use
 
-- User wants to run `gh pr create` directly without a description
 - Purpose is code review (use code-review skill)
 - Purpose is writing commit messages (use git-committer skill)
 
@@ -64,6 +63,11 @@ digraph make_pr_flow {
     rankdir=TB;
 
     "User Request" [shape=ellipse];
+    "Fetch + Rebase" [shape=box];
+    "Conflict?" [shape=diamond];
+    "Summarize Conflicts\n+ Recommend Resolution" [shape=box];
+    "User Decision" [shape=box];
+    "Resolve Conflicts" [shape=box];
     "Collect Git Metadata" [shape=box];
     "Explore Codebase Patterns" [shape=box];
     "Interview Mode" [shape=box];
@@ -71,9 +75,17 @@ digraph make_pr_flow {
     "Draft PR Description" [shape=box];
     "Present to User" [shape=box];
     "User Feedback" [shape=diamond];
-    "Final Output" [shape=ellipse];
+    "Confirm PR Creation" [shape=diamond];
+    "gh pr create" [shape=box];
+    "Return PR URL" [shape=ellipse];
 
-    "User Request" -> "Collect Git Metadata";
+    "User Request" -> "Fetch + Rebase";
+    "Fetch + Rebase" -> "Conflict?";
+    "Conflict?" -> "Collect Git Metadata" [label="No"];
+    "Conflict?" -> "Summarize Conflicts\n+ Recommend Resolution" [label="Yes"];
+    "Summarize Conflicts\n+ Recommend Resolution" -> "User Decision";
+    "User Decision" -> "Resolve Conflicts";
+    "Resolve Conflicts" -> "Collect Git Metadata";
     "Collect Git Metadata" -> "Explore Codebase Patterns";
     "Explore Codebase Patterns" -> "Interview Mode";
     "Interview Mode" -> "Clearance Checklist";
@@ -82,8 +94,79 @@ digraph make_pr_flow {
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
     "User Feedback" -> "Draft PR Description" [label="Revision requested"];
-    "User Feedback" -> "Final Output" [label="Approved"];
+    "User Feedback" -> "Confirm PR Creation" [label="Approved"];
+    "Confirm PR Creation" -> "Return PR URL" [label="Declined"];
+    "Confirm PR Creation" -> "gh pr create" [label="Confirmed"];
+    "gh pr create" -> "Return PR URL";
 }
+```
+
+---
+
+## Step 0: Base Branch Sync
+
+Upon receiving a PR writing request, first sync with the base branch.
+
+```bash
+# Fetch and rebase on base branch
+git fetch origin main
+git rebase origin/main
+```
+
+**If rebase succeeds:** Proceed to Step 1.
+
+**If conflicts occur:**
+
+1. **Summarize conflicts** — list conflicting files with a brief description of what each side changed
+2. **Gather conflict context** — investigate WHY each side made its changes (see Conflict Context Gathering below)
+3. **Analyze complexity** — if conflicts involve architectural changes or multi-file dependencies, consult oracle for impact analysis before recommending resolution
+4. **Recommend resolution** — suggest a resolution approach for each conflict, informed by gathered context
+5. **Ask user for decision** — present recommendations and ask user how to proceed
+6. **Resolve conflicts** — based on user's decision, resolve conflicts and run `git rebase --continue`
+7. Proceed to Step 1
+
+### Conflict Context Gathering
+
+Before recommending resolution, investigate the context behind each side's changes:
+
+```bash
+# Git history — what changed on main since branch diverged
+git log --oneline HEAD..origin/main -- <conflicting-file>
+
+# Blame — who last modified the conflicting lines on main
+git blame origin/main -- <conflicting-file> | grep -A2 -B2 '<conflict-area>'
+
+# Related PRs — find merged PRs that touched conflicting files
+gh pr list --state merged --search "<conflicting-file>" --limit 5
+
+# Related issues — find issues linked to the conflicting area
+gh issue list --search "<relevant-keyword>" --limit 5
+```
+
+| Source | What to Look For | Tool |
+|--------|-----------------|------|
+| Git history | Which commits on main caused the conflict, commit messages explaining intent | `git log`, `git blame` |
+| Merged PRs | PR descriptions explaining design decisions behind main's changes | `gh pr list`, `gh pr view` |
+| Issues | Requirements or bug reports that motivated either side's changes | `gh issue list`, `gh issue view` |
+| Project docs | Design docs, ADRs, or READMEs referenced in commits/PRs | `explore` agent |
+
+This context helps recommend informed resolution rather than guessing from diff alone.
+
+### Oracle Consultation for Conflicts
+
+Consult oracle when conflicts are **non-trivial**:
+
+| Conflict Type | Oracle? | Reason |
+|---------------|---------|--------|
+| Simple formatting/import changes | No | Mechanical resolution |
+| Same function modified both sides | Maybe | Depends on semantic overlap |
+| Architecture/design changes (e.g., interface change vs new feature) | Yes | Cross-file impact analysis needed |
+| Multiple files with interconnected changes | Yes | Dependency chain analysis needed |
+
+```
+Consulting Oracle for conflict impact analysis in OrderService rebase.
+
+Agent(subagent_type="oracle", prompt="Rebase conflict in OrderService.kt: main changed createOrder() signature (added userId parameter), feature branch added event publishing in the same method. PurchasingFacade.kt: main added new cancelOrder() method, feature branch removed PaymentService dependency. Analyze: Are these changes semantically compatible? What's the safest resolution approach? Any cross-file impacts to watch for?")
 ```
 
 ---
@@ -109,7 +192,7 @@ Use this metadata as supplementary context for the interview. Use it to gauge th
 
 ## Step 2: Explore Codebase Patterns
 
-Use the explore agent to understand codebase patterns and structure. Do NOT ask the user about the codebase.
+Use the explore agent to understand codebase patterns and structure. For architecture-level changes (e.g., module restructuring, design pattern changes), additionally consult oracle for deeper analysis. Do NOT ask the user about the codebase.
 
 **Context Brokering (CRITICAL):**
 
@@ -118,6 +201,7 @@ Use the explore agent to understand codebase patterns and structure. Do NOT ask 
 | "What's the project architecture?" | NO | Discover via explore |
 | "Which files changed?" | NO | Check via git metadata |
 | "What are the existing patterns?" | NO | Discover via explore |
+| "What's the architectural impact?" | NO | Consult oracle |
 | "What's the motivation for this change?" | YES | User interview |
 | "What alternatives were considered?" | YES | User interview |
 | "Anything you want to ask reviewers?" | YES | User interview |
@@ -240,8 +324,26 @@ This checklist is internal -- do NOT show it to the user.
 
 Present the drafted PR description to the user and collect feedback.
 
-- If approved: output the final PR description
+- If approved: proceed to Step 7
 - If revision requested: incorporate feedback and re-present
+
+---
+
+## Step 7: PR Creation
+
+After user approves the PR description, ask if they want to create the PR.
+
+- If user confirms: run `gh pr create` with the approved title and description
+- If user declines: output the final PR description only
+
+```bash
+gh pr create --title "PR 타이틀" --body "$(cat <<'EOF'
+PR description body
+EOF
+)"
+```
+
+Return the PR URL to the user after successful creation.
 
 ---
 
@@ -256,12 +358,14 @@ Present the drafted PR description to the user and collect feedback.
 
 | Step | Action | Key Point |
 |------|--------|-----------|
+| Base Branch Sync | `git fetch` + `git rebase` | Conflicts → summarize + recommend → user decides → resolve |
 | Collect Git Metadata | Run `git log`, `git diff --stat` | Metadata only, NO file contents |
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
 | Clearance Checklist | Check after every turn | Continue until all YES |
 | Write PR Title & Description | Follow output-format.md exactly | Emoji headers, Impact Scope, file paths in Checklist |
 | User Review | Present and collect feedback | Repeat until approved |
+| PR Creation | `gh pr create` after user confirmation | Return PR URL |
 
 ---
 
@@ -274,7 +378,8 @@ Present the drafted PR description to the user and collect feedback.
 | Asking user about codebase facts | Unnecessary burden on user | Discover via explore |
 | Describing design concerns in Changes | Mixes Changes and Review Points | Design concerns go in Review Points |
 | Writing without Review Points | No focal points for reviewer feedback | Proactively identify Review Points |
-| Running `gh pr create` | Out of scope | Output PR description only |
+| Running `gh pr create` without user confirmation | User must approve PR creation | Always confirm before running |
+| Skipping base branch rebase | Branch may have conflicts or be behind | Always fetch + rebase before starting |
 | Reading git diff file contents | Heavy context loading | Use git metadata + explore only |
 | Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |
 | Writing PR in English | Violates project convention | Write entirely in Korean |
