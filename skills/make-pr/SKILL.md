@@ -135,6 +135,16 @@ git symbolic-ref refs/remotes/origin/HEAD | sed 's@refs/remotes/origin/@@'
 
 감지된 값을 이후 모든 git 명령의 `{base-branch}`로 사용한다.
 
+### Working Tree 확인
+
+Rebase 전에 uncommitted 변경이 있는지 확인한다:
+
+```bash
+git status --porcelain
+```
+
+결과가 비어있지 않으면 사용자에게 안내: "uncommitted 변경이 있습니다. rebase 전에 commit 또는 stash해주세요." 사용자가 처리한 후 계속 진행.
+
 ```bash
 # Fetch and rebase on base branch
 git fetch origin {base-branch}
