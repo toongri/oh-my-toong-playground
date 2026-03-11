@@ -94,7 +94,11 @@ export async function fetchRateLimits(): Promise<RateLimitData | null> {
   if (!token) return null;
 
   // 4. Try to acquire lock
-  mkdirSync(getCacheDir(), { recursive: true });
+  try {
+    mkdirSync(getCacheDir(), { recursive: true });
+  } catch {
+    return null;
+  }
   const lockPath = join(getCacheDir(), 'hud-usage.lock');
   const lockResult = acquireLock(lockPath);
 
@@ -153,7 +157,7 @@ export async function fetchRateLimits(): Promise<RateLimitData | null> {
     return result;
   } catch (err: unknown) {
     const isTimeout = err instanceof DOMException && err.name === 'AbortError';
-    setCache(FAILURE_CACHE_KEY, { error: isTimeout ? 'timeout' : 'network' }, FAILURE_TTL_MS);
+    try { setCache(FAILURE_CACHE_KEY, { error: isTimeout ? 'timeout' : 'network' }, FAILURE_TTL_MS); } catch { /* best-effort */ }
     return null;
   } finally {
     releaseLock(lockPath);
