@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. After user approval, syncs with base branch (fetch + rebase) and creates the PR via `gh pr create`.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Syncs with base branch (fetch + rebase) first at request start, then collects metadata → interview → assessment → description. Creates the PR via `gh pr create` after user approval.
 
 ---
 
@@ -118,10 +118,26 @@ digraph make_pr_flow {
 
 Upon receiving a PR writing request, first sync with the base branch.
 
+### Base Branch 감지
+
+모든 git 작업 전에 프로젝트의 base branch를 감지한다:
+
+```bash
+# GitHub CLI (가장 정확)
+gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
+
+# Fallback: git remote HEAD
+git symbolic-ref refs/remotes/origin/HEAD | sed 's@refs/remotes/origin/@@'
+
+# 둘 다 실패 시 기본값: main
+```
+
+감지된 값을 이후 모든 git 명령의 `{base-branch}`로 사용한다.
+
 ```bash
 # Fetch and rebase on base branch
-git fetch origin main
-git rebase origin/main
+git fetch origin {base-branch}
+git rebase origin/{base-branch}
 ```
 
 **If rebase succeeds:** Proceed to Step 1.
@@ -141,11 +157,11 @@ git rebase origin/main
 Before recommending resolution, investigate the context behind each side's changes:
 
 ```bash
-# Git history — what changed on main since branch diverged
-git log --oneline HEAD..origin/main -- <conflicting-file>
+# Git history — what changed on base branch since branch diverged
+git log --oneline HEAD..origin/{base-branch} -- <conflicting-file>
 
-# Blame — who last modified the conflicting lines on main
-git blame origin/main -- <conflicting-file> | grep -A2 -B2 '<conflict-area>'
+# Blame — who last modified the conflicting lines on base branch
+git blame origin/{base-branch} -- <conflicting-file> | grep -A2 -B2 '<conflict-area>'
 
 # Related PRs — find merged PRs that touched conflicting files
 gh pr list --state merged --search "<conflicting-file>" --limit 5
@@ -156,7 +172,7 @@ gh issue list --search "<relevant-keyword>" --limit 5
 
 | Source | What to Look For | Tool |
 |--------|-----------------|------|
-| Git history | Which commits on main caused the conflict, commit messages explaining intent | `git log`, `git blame` |
+| Git history | Which commits on base branch caused the conflict, commit messages explaining intent | `git log`, `git blame` |
 | Merged PRs | PR descriptions explaining design decisions behind main's changes | `gh pr list`, `gh pr view` |
 | Issues | Requirements or bug reports that motivated either side's changes | `gh issue list`, `gh issue view` |
 | Project docs | Design docs, ADRs, or READMEs referenced in commits/PRs | `explore` agent |
@@ -188,13 +204,13 @@ Upon receiving a PR writing request, first collect lightweight git metadata.
 
 ```bash
 # Commit history
-git log main..HEAD --oneline
+git log {base-branch}..HEAD --oneline
 
 # Changed file list
-git diff main..HEAD --stat
+git diff {base-branch}..HEAD --stat
 
 # Commit messages and descriptions
-git log main..HEAD --format='%s%n%b'
+git log {base-branch}..HEAD --format='%s%n%b'
 ```
 
 Use this metadata as supplementary context for the interview. Use it to gauge the scope and scale of changes, but do NOT read actual file contents.
