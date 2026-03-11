@@ -171,8 +171,10 @@ describe('fetchRateLimits', () => {
   let mockSetCache: ReturnType<typeof spyOn>;
   let mockGetCacheDir: ReturnType<typeof spyOn>;
   let tempDir: string;
+  let originalFetch: typeof global.fetch;
 
   beforeEach(() => {
+    originalFetch = global.fetch;
     tempDir = mkdtempSync(join(tmpdir(), 'hud-usage-test-'));
     mockGetOAuthToken = spyOn(credentialsMod, 'getOAuthToken');
     mockGetCached = spyOn(cacheMod, 'getCached');
@@ -181,6 +183,7 @@ describe('fetchRateLimits', () => {
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     mockGetOAuthToken.mockRestore();
     mockGetCached.mockRestore();
     mockSetCache.mockRestore();
@@ -230,12 +233,10 @@ describe('fetchRateLimits', () => {
         ok: true,
         json: async () => ({}),
       } as Response);
-      const originalFetch = global.fetch;
       global.fetch = fetchMock;
 
       const result = await fetchRateLimits();
 
-      global.fetch = originalFetch;
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -243,7 +244,6 @@ describe('fetchRateLimits', () => {
     it('caches failure with 15s TTL on HTTP error response', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
         ok: false,
         status: 500,
@@ -252,7 +252,6 @@ describe('fetchRateLimits', () => {
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       expect(mockSetCache).toHaveBeenCalledWith(
         'oauth-usage-failure',
         { error: 'http-500' },
@@ -263,12 +262,10 @@ describe('fetchRateLimits', () => {
     it('caches failure with 15s TTL on network error', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new Error('Network error'));
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       expect(mockSetCache).toHaveBeenCalledWith(
         'oauth-usage-failure',
         { error: 'network' },
@@ -279,12 +276,10 @@ describe('fetchRateLimits', () => {
     it('caches failure with 15s TTL on timeout', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new DOMException('Aborted', 'AbortError'));
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       expect(mockSetCache).toHaveBeenCalledWith(
         'oauth-usage-failure',
         { error: 'timeout' },
@@ -297,7 +292,6 @@ describe('fetchRateLimits', () => {
     it('uses retry-after header value (in seconds) as failure TTL when > 0', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
         ok: false,
         status: 429,
@@ -306,7 +300,6 @@ describe('fetchRateLimits', () => {
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       // retry-after=60s → 60*1000=60000ms, max(60000, 15000) = 60000
       expect(mockSetCache).toHaveBeenCalledWith(
         'oauth-usage-failure',
@@ -318,7 +311,6 @@ describe('fetchRateLimits', () => {
     it('uses 15s default when retry-after header is absent', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
         ok: false,
         status: 429,
@@ -327,7 +319,6 @@ describe('fetchRateLimits', () => {
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       expect(mockSetCache).toHaveBeenCalledWith(
         'oauth-usage-failure',
         { error: 'http-429' },
@@ -338,7 +329,6 @@ describe('fetchRateLimits', () => {
     it('uses 15s minimum when retry-after value is 0', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
         ok: false,
         status: 429,
@@ -347,7 +337,6 @@ describe('fetchRateLimits', () => {
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       // retry-after=0 → 0ms, max(0, 15000) = 15000
       expect(mockSetCache).toHaveBeenCalledWith(
         'oauth-usage-failure',
@@ -361,7 +350,6 @@ describe('fetchRateLimits', () => {
     it('sends claude-code/2.1 as User-Agent', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       let capturedHeaders: Record<string, string> = {};
       global.fetch = jest.fn<typeof fetch>().mockImplementation(async (_url, init) => {
         capturedHeaders = init?.headers as Record<string, string> ?? {};
@@ -379,7 +367,6 @@ describe('fetchRateLimits', () => {
 
       await fetchRateLimits();
 
-      global.fetch = originalFetch;
       expect(capturedHeaders['User-Agent']).toBe('claude-code/2.1');
     });
   });
@@ -388,7 +375,6 @@ describe('fetchRateLimits', () => {
     it('returns null when lock is busy and no cache becomes available', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      const originalFetch = global.fetch;
       const fetchMock = jest.fn<typeof fetch>().mockResolvedValue({
         ok: true,
         json: async () => ({ five_hour: null, seven_day: null }),
@@ -405,8 +391,6 @@ describe('fetchRateLimits', () => {
       writeFileSync(lockPath, String(Date.now()), 'utf8');
 
       const result = await fetchRateLimits();
-
-      global.fetch = originalFetch;
 
       // Lock is busy → wait for cache → no cache appears → return null
       expect(result).toBeNull();
@@ -442,10 +426,7 @@ describe('fetchRateLimits', () => {
   });
 
   describe('when API returns valid data', () => {
-    let originalFetch: typeof global.fetch;
-
     beforeEach(() => {
-      originalFetch = global.fetch;
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
       jest.useFakeTimers();
@@ -453,7 +434,6 @@ describe('fetchRateLimits', () => {
     });
 
     afterEach(() => {
-      global.fetch = originalFetch;
       jest.useRealTimers();
     });
 
@@ -481,16 +461,9 @@ describe('fetchRateLimits', () => {
   });
 
   describe('when API errors occur', () => {
-    let originalFetch: typeof global.fetch;
-
     beforeEach(() => {
-      originalFetch = global.fetch;
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-    });
-
-    afterEach(() => {
-      global.fetch = originalFetch;
     });
 
     it('returns null on HTTP error response', async () => {
