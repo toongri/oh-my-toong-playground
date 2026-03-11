@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. After user approval, syncs with base branch (fetch + rebase) and creates the PR via `gh pr create`.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. After user approval, syncs with base branch (fetch + rebase) and creates the PR via `gh pr create`.
 
 ---
 
@@ -72,6 +72,10 @@ digraph make_pr_flow {
     "Explore Codebase Patterns" [shape=box];
     "Interview Mode" [shape=box];
     "Clearance Checklist" [shape=diamond];
+    "Scope Assessment" [shape=diamond];
+    "Split Proposal" [shape=box];
+    "Branch Separation" [shape=box];
+    "Sub-PR Loop\n(Step 6-8 per sub-PR)" [shape=box];
     "Draft PR Description" [shape=box];
     "Present to User" [shape=box];
     "User Feedback" [shape=diamond];
@@ -90,7 +94,14 @@ digraph make_pr_flow {
     "Explore Codebase Patterns" -> "Interview Mode";
     "Interview Mode" -> "Clearance Checklist";
     "Clearance Checklist" -> "Interview Mode" [label="ANY NO"];
-    "Clearance Checklist" -> "Draft PR Description" [label="ALL YES"];
+    "Clearance Checklist" -> "Scope Assessment" [label="ALL YES"];
+    "Scope Assessment" -> "Draft PR Description" [label="Single thesis"];
+    "Scope Assessment" -> "Split Proposal" [label="Multi-thesis"];
+    "Split Proposal" -> "Branch Separation" [label="Accept"];
+    "Split Proposal" -> "Draft PR Description" [label="Reject"];
+    "Split Proposal" -> "Split Proposal" [label="Modify"];
+    "Branch Separation" -> "Sub-PR Loop\n(Step 6-8 per sub-PR)";
+    "Sub-PR Loop\n(Step 6-8 per sub-PR)" -> "Return PR URL";
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
     "User Feedback" -> "Draft PR Description" [label="Revision requested"];
@@ -273,7 +284,23 @@ This checklist is internal -- do NOT show it to the user.
 
 ---
 
-## Step 5: Write PR Title & Description
+## Step 5: Scope Assessment
+
+After Clearance Checklist passes, analyze whether the PR contains multiple independent theses (behavioral changes) that should be separate PRs. See `references/scope-assessment.md` for the complete framework.
+
+**Quick summary:**
+1. Check proxy signals (commit type diversity, domain spread, LOC) as initial triggers
+2. Apply thesis isolation test: "이 PR은 하나의 논지(thesis)를 증명하는가?"
+3. If single thesis → proceed to Step 6
+4. If multi-thesis → propose split to user (Accept/Reject/Modify)
+5. On Accept → separate git branches, write sub-PR descriptions (Step 6-8 per sub-PR)
+6. On Reject → proceed to Step 6 as single PR
+
+**Data sources:** `git diff --stat`, `git log`, explore results, interview answers. Never read `git diff` file contents.
+
+---
+
+## Step 6: Write PR Title & Description
 
 ### PR Title
 
@@ -320,16 +347,16 @@ This checklist is internal -- do NOT show it to the user.
 
 ---
 
-## Step 6: User Review & Revision
+## Step 7: User Review & Revision
 
 Present the drafted PR description to the user and collect feedback.
 
-- If approved: proceed to Step 7
+- If approved: proceed to Step 8
 - If revision requested: incorporate feedback and re-present
 
 ---
 
-## Step 7: PR Creation
+## Step 8: PR Creation
 
 After user approves the PR description, ask if they want to create the PR.
 
@@ -363,6 +390,7 @@ Return the PR URL to the user after successful creation.
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
 | Clearance Checklist | Check after every turn | Continue until all YES |
+| Scope Assessment | Analyze thesis count, propose split if multi-thesis | Proxy signals trigger analysis, thesis isolation decides |
 | Write PR Title & Description | Follow output-format.md exactly | Emoji headers, Impact Scope, file paths in Checklist |
 | User Review | Present and collect feedback | Repeat until approved |
 | PR Creation | `gh pr create` after user confirmation | Return PR URL |
@@ -392,6 +420,10 @@ Return the PR URL to the user after successful creation.
 | "개선 효과" 마케팅 나열 | Review Point 목적과 무관 | 선택과 트레이드오프에 집중 |
 | References에 memory/plan 등 비-git 문서 포함 | 리뷰어가 접근 불가 | reviewer-accessible 콘텐츠만 참조 (GitHub URL, git-tracked 문서) |
 | 이전 세션 컨텍스트만으로 인터뷰 생략 | 불완전·편향된 정보 기반 PR | Clearance Checklist 기반 인터뷰는 매회 수행 |
+| 프록시 시그널만으로 split 결정 | thesis 분석 없이 잘못된 분리 | 프록시 시그널은 탐지 트리거일 뿐, thesis isolation이 최종 기준 |
+| Single thesis PR에서 불필요한 split 제안 | 사용자 부담, 워크플로우 지연 | Thesis 1개면 즉시 Step 6으로 진행 |
+| Scope assessment에서 git diff 파일 내용 읽기 | Non-Negotiable Rule 위반 | git diff --stat과 git log만 사용 |
+| Split 후 원본 브랜치 삭제 | 사용자 복구 불가 | 원본 브랜치는 항상 보존 |
 
 ---
 
