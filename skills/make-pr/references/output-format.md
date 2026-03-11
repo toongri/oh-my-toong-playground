@@ -119,4 +119,5 @@ PR description follows the structure below. Write entirely in Korean.
 ### References
 
 - **Purpose**: Provide links to related documents, issues, PRs
-- **Include**: Design documents, related issues/PRs, external references
+- **Include**: Related GitHub issues/PRs, external documentation URLs, git-tracked design documents
+- **Anti-patterns**: Agent-internal files (memory, plans, session notes, council records, `.omt/` 하위 파일) — 리뷰어가 접근할 수 없는 콘텐츠는 절대 포함하지 않음
