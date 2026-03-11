@@ -37,6 +37,7 @@ Never write a PR description without sufficient context. Continue the interview 
 | Write in Korean | Project convention | "English is easier" | Project rules take priority |
 | Never run `gh pr create` | Writing PR description is the only scope | "Run it for me too" | Out of scope. User runs it themselves |
 | Never read git diff file contents | Use metadata only | "Need to see code for accuracy" | Use explore for patterns. User interview is key |
+| Never reference non-git content in PR | Reviewers can't access agent-internal files | "Memory/plan adds context" | PR is a public document; internal files are inaccessible to reviewers |
 
 </Critical_Constraints>
 
@@ -133,6 +134,7 @@ Use the explore agent to understand codebase patterns and structure. Do NOT ask 
 2. **Adaptive question count** -- repeat until Clearance Checklist is all YES. Could be 1-2 if user provides enough upfront, or 5-6+ for complex changes
 3. **AskUserQuestion = structured choices**, plain text = open-ended questions
 4. **Context Brokering** -- if the codebase can answer it, use explore instead of asking
+5. **No shortcut from prior sessions** -- memory, plans, and previous session context do not replace the interview. Always start from git metadata + explore
 
 ### Question Type Selection
 
@@ -283,6 +285,8 @@ Present the drafted PR description to the user and collect feedback.
 | Omitting PR title | Incomplete deliverable | Include conventional commit style Korean title |
 | Review Point에 교과서 정의 작성 | 리뷰어가 아는 내용 반복, filler | 직면한 구체적 제약을 서술 |
 | "개선 효과" 마케팅 나열 | Review Point 목적과 무관 | 선택과 트레이드오프에 집중 |
+| References에 memory/plan 등 비-git 문서 포함 | 리뷰어가 접근 불가 | reviewer-accessible 콘텐츠만 참조 (GitHub URL, git-tracked 문서) |
+| 이전 세션 컨텍스트만으로 인터뷰 생략 | 불완전·편향된 정보 기반 PR | Clearance Checklist 기반 인터뷰는 매회 수행 |
 
 ---
 
