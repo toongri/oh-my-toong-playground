@@ -61,7 +61,7 @@ Content type determines which rules apply. **This step is MANDATORY — do NOT s
 |------|---------------------|-----------------|
 | **Blog/Essay** | Apply all patterns | YES — opinions, 1st person, personality strongly encouraged |
 | **Technical docs** | Clarity first. Remove modifiers/filler. **STRICT fact rule: do NOT add examples, numbers, or specifics not in the original. When removing vague modifiers like "다양한 플랫폼", replace with neutral phrasing ("여러 플랫폼") or simply delete — never substitute with concrete names (Google, GitHub, etc.) that weren't in the source** | NO — no emotion/personality. Precise and dry |
-| **Marketing/Copy** | Reduce exaggeration but maintain persuasion. Replace with concrete numbers | LIMITED — match brand voice |
+| **Marketing/Copy** | Reduce exaggeration but maintain persuasion. Replace with concrete numbers **only if they exist in the source**; otherwise remove the vague claim | LIMITED — match brand voice |
 | **Academic/Report** | Accuracy and citations first. Remove weasel words | NO — maintain objective tone |
 | **Code comments** | Brevity first. Remove unnecessary explanation | NO |
 | **SNS/Casual** | Remove excessive formality. Colloquial OK | YES — freely |

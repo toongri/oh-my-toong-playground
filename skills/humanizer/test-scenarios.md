@@ -234,15 +234,15 @@ Kubernetes는 다양한 워크로드를 관리한다. 스테이트풀셋, 데몬
 
 **Input text:**
 ```
-The \u201cserviceless\u201d architecture is gaining traction. In a world where cloud costs are spiraling, it\u2019s worth noting that this approach can reduce infrastructure spend by up to 60%.
+The “serviceless” architecture is gaining traction. In a world where cloud costs are spiraling, it’s worth noting that this approach can reduce infrastructure spend by up to 60%.
 
-여기서 핵심은 \u201cserviceless\u201d가 단순히 서버리스의 확장이 아니라는 것입니다. 이를 통해 개발자들은 인프라 관리에서 완전히 해방될 수 있으며, 이러한 측면에서 혁신적인 패러다임 전환이라고 할 수 있습니다.
+여기서 핵심은 “serviceless”가 단순히 서버리스의 확장이 아니라는 것입니다. 이를 통해 개발자들은 인프라 관리에서 완전히 해방될 수 있으며, 이러한 측면에서 혁신적인 패러다임 전환이라고 할 수 있습니다.
 
 Additionally, the intricate interplay between edge computing and serviceless patterns creates a robust foundation for next-generation applications. The future looks bright for this technology.
 ```
 
 **Expected detections:**
-- E16: Curly quotes (\u201c\u201d, \u2019) → straight quotes
+- E16: Curly quotes (“”, ’) → straight quotes
 - E13: "In a world where", "it's worth noting that"
 - E7: "Additionally", "intricate", "interplay", "robust"
 - C3: "The future looks bright"
