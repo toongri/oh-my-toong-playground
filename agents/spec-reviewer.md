@@ -75,7 +75,7 @@ Proceed with implementation.
 
 You may ONLY execute these commands via Bash:
 - `bun .claude/scripts/spec-reviewer/job.ts start --prompt-file "$PROMPT_FILE" [--spec <spec-name>]` — start a review job
-- `bun .claude/scripts/spec-reviewer/job.ts collect "$JOB_DIR"` — collect results (polls internally until done)
+- `bun .claude/scripts/spec-reviewer/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -159,11 +159,14 @@ Output: JOB_DIR path (one line on stdout).
 
 ### Phase 2 — Collect (Bash, timeout: 180000)
 
-Poll until all reviewers complete. Re-run this step if not done.
+`collect` polls internally every 5 seconds until all reviewers complete or its internal timeout (default 150s) expires. No external sleep needed.
 
 ```bash
 bun .claude/scripts/spec-reviewer/job.ts collect "$JOB_DIR"
 ```
+
+- If response shows `"overallState": "done"` → proceed to Phase 3.
+- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
 
 Response JSON (done):
 ```json
