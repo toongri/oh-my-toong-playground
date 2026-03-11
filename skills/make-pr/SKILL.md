@@ -75,13 +75,14 @@ digraph make_pr_flow {
     "Scope Assessment" [shape=diamond];
     "Split Proposal" [shape=box];
     "Branch Separation" [shape=box];
-    "Sub-PR Loop\n(Step 6-8 per sub-PR)" [shape=box];
+    "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" [shape=box];
     "Draft PR Description" [shape=box];
     "Present to User" [shape=box];
     "User Feedback" [shape=diamond];
     "Confirm PR Creation" [shape=diamond];
     "gh pr create" [shape=box];
     "Return PR URL" [shape=ellipse];
+    "Output Description Only" [shape=ellipse];
 
     "User Request" -> "Fetch + Rebase";
     "Fetch + Rebase" -> "Conflict?";
@@ -100,13 +101,13 @@ digraph make_pr_flow {
     "Split Proposal" -> "Branch Separation" [label="Accept"];
     "Split Proposal" -> "Draft PR Description" [label="Reject"];
     "Split Proposal" -> "Split Proposal" [label="Modify"];
-    "Branch Separation" -> "Sub-PR Loop\n(Step 6-8 per sub-PR)";
-    "Sub-PR Loop\n(Step 6-8 per sub-PR)" -> "Return PR URL";
+    "Branch Separation" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
+    "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" -> "Return PR URL";
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
     "User Feedback" -> "Draft PR Description" [label="Revision requested"];
     "User Feedback" -> "Confirm PR Creation" [label="Approved"];
-    "Confirm PR Creation" -> "Return PR URL" [label="Declined"];
+    "Confirm PR Creation" -> "Output Description Only" [label="Declined"];
     "Confirm PR Creation" -> "gh pr create" [label="Confirmed"];
     "gh pr create" -> "Return PR URL";
 }
@@ -157,8 +158,8 @@ git rebase origin/{base-branch}
 Before recommending resolution, investigate the context behind each side's changes:
 
 ```bash
-# Git history — what changed on base branch since branch diverged
-git log --oneline HEAD..origin/{base-branch} -- <conflicting-file>
+# Git history — what changed on base branch since branch diverged (ORIG_HEAD = pre-rebase branch tip)
+git log --oneline $(git merge-base ORIG_HEAD origin/{base-branch})..origin/{base-branch} -- <conflicting-file>
 
 # Blame — who last modified the conflicting lines on base branch
 git blame origin/{base-branch} -- <conflicting-file> | grep -A2 -B2 '<conflict-area>'
