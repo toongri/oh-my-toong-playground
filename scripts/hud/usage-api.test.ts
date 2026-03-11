@@ -396,7 +396,7 @@ describe('fetchRateLimits', () => {
       expect(result).toBeNull();
       // fetch was NOT called because lock was busy (another process is doing the work)
       expect(fetchMock).not.toHaveBeenCalled();
-    }, 5000);
+    }, 10000);
 
     it('returns cached data that appears during wait when lock is busy', async () => {
       const cachedData = { fiveHour: { percent: 42, resetIn: '1h' }, sevenDay: null };
@@ -422,7 +422,7 @@ describe('fetchRateLimits', () => {
 
       // Cache appeared during poll → should return it
       expect(result).toEqual(cachedData);
-    }, 5000);
+    }, 10000);
   });
 
   describe('when API returns valid data', () => {

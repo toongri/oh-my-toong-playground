@@ -9,7 +9,8 @@ const FAILURE_CACHE_KEY = 'oauth-usage-failure';
 const CACHE_TTL_MS = 30_000;      // 30 seconds
 const FAILURE_TTL_MS = 15_000;    // 15 seconds default
 const LOCK_STALE_MS = 30_000;     // 30 seconds
-const LOCK_WAIT_MS = 2_000;       // 2 seconds max wait
+const API_TIMEOUT_MS = 5_000;     // 5 seconds fetch timeout
+const LOCK_WAIT_MS = API_TIMEOUT_MS + 1_000; // must exceed fetch timeout
 const LOCK_POLL_MS = 50;          // 50ms polling interval
 const API_URL = 'https://api.anthropic.com/api/oauth/usage';
 
@@ -121,7 +122,7 @@ export async function fetchRateLimits(): Promise<RateLimitData | null> {
         'Authorization': `Bearer ${token}`,
         'anthropic-beta': 'oauth-2025-04-20',
       },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
 
     if (!response.ok) {
