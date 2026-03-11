@@ -39,6 +39,8 @@ The caller composes a QA REQUEST using this structure:
 - No mode field — the content of Spec determines which verification triggers activate
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
+To review what changed in a file, use `git diff -- <path>` for each file under review. Do not independently discover which files changed.
+
 ---
 
 ## Composable Verification Triggers
@@ -108,7 +110,7 @@ Review code against quality checklists by severity level.
 - Pre-existing issues (not introduced by this change)
 - Linter-catchable problems (let tools handle these)
 - Style preferences without documented standard
-- Code not in the Changed files list
+- Code not in Changed files
 - "Could be better" without concrete problem
 
 **When Uncertain:** Flag as nitpick - better to catch than miss. Missed issues escape forever.
@@ -119,13 +121,13 @@ Review code against quality checklists by severity level.
 
 **Verify the implementation meets the provided specification.**
 
-The Spec section of the QA REQUEST defines what was asked. Verify each section.
+Verify each Spec section.
 
 ### Expected Outcome Verification
 
 | Criterion | Method | Pass Condition |
 |-----------|--------|----------------|
-| Files listed | Check Changed files in QA REQUEST Scope vs EXPECTED OUTCOME paths | All expected files listed |
+| Files listed | Compare Changed files against EXPECTED OUTCOME paths | All expected files listed |
 | Behavior achieved | Read each Changed file, verify expected behavior in content | Implementation matches intent |
 | Verification command | Execute if provided | Command succeeds |
 
@@ -146,7 +148,7 @@ Convert each MUST DO bullet into a verification item:
 
 | Violation Type | Detection Method |
 |----------------|------------------|
-| File scope ("Do NOT touch X.ts") | Check if forbidden file appears in Changed files list |
+| File scope ("Do NOT touch X.ts") | `git diff -- X.ts` — empty means untouched |
 | Pattern prohibition ("Do NOT use any") | Grep Changed files' content for prohibited pattern |
 | Behavior constraint ("Do NOT change API") | Read and review interfaces in Changed files |
 
@@ -154,13 +156,11 @@ Convert each MUST DO bullet into a verification item:
 
 ```
 Expected files (from EXPECTED OUTCOME) = A
-Changed files (from QA REQUEST Scope) = B
+Changed files = B
 
 PASS if: B ⊆ A (changes within declared scope)
-FLAG if: B - A ≠ ∅ (undeclared files in Changed files list)
+FLAG if: B - A ≠ ∅ (undeclared files in Changed files)
 ```
-
-Changed files list is the Single Source of Truth. Do NOT use `git diff` to independently discover changes — in parallel execution, git diff includes changes from other concurrent agents.
 
 **Acceptable exceptions:** Test files for in-scope code, related config files.
 
