@@ -1,4 +1,4 @@
-import { openSync, unlinkSync, closeSync, writeSync, readFileSync, existsSync } from 'fs';
+import { openSync, unlinkSync, closeSync, writeSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { getOAuthToken } from './credentials.ts';
 import { getCached, setCache, getCacheDir } from './cache.ts';
@@ -42,7 +42,7 @@ export function acquireLock(lockPath: string): 'acquired' | 'busy' {
     try {
       const content = readFileSync(lockPath, 'utf8');
       const timestamp = parseInt(content, 10);
-      if (!isNaN(timestamp) && Date.now() - timestamp > LOCK_STALE_MS) {
+      if (isNaN(timestamp) || Date.now() - timestamp > LOCK_STALE_MS) {
         unlinkSync(lockPath);
       } else {
         return 'busy';
@@ -93,6 +93,7 @@ export async function fetchRateLimits(): Promise<RateLimitData | null> {
   if (!token) return null;
 
   // 4. Try to acquire lock
+  mkdirSync(getCacheDir(), { recursive: true });
   const lockPath = join(getCacheDir(), 'hud-usage.lock');
   const lockResult = acquireLock(lockPath);
 
