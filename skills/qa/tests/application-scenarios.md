@@ -4,11 +4,11 @@ Argus QA의 핵심 기법(Composable Verification Layers, Spec Compliance, Scope
 
 ## 변경 배경
 
-Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
+Argus가 unscoped `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 1. **누적 diff**: `git diff main`이 이전 커밋의 변경까지 포함
-2. **병렬 오염**: 여러 Junior가 동시 작업 시 git diff가 모든 Junior의 변경을 섞어서 표시
+2. **병렬 오염**: 여러 Junior가 동시 작업 시 unscoped git diff가 모든 Junior의 변경을 섞어서 표시
 
-해결: Sisyphus가 전달하는 **Changed files 목록 + QA REQUEST**를 Single Source of Truth로 삼고, 파일을 직접 읽어서 검증.
+해결: Changed files 목록을 기반으로 파일을 직접 읽어서 검증. 특정 파일의 변경 여부 확인이 필요한 경우 file-scoped `git diff -- <path>`를 사용.
 
 ---
 
@@ -18,9 +18,9 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 |---|---------|-------------------|------------------|
 | A-1 | Expected Outcome verification | File reading | git diff 제거 확인 |
 | A-2 | MUST DO evidence search | Content grep | diff 대신 파일 내용 검색 |
-| A-3 | MUST NOT DO file scope | Changed files list | git diff --name-only 제거 |
-| A-4 | Scope Boundary set ops | Changed files as B | git diff 기반 집합 연산 제거 |
-| A-5 | Parallel isolation | Agent isolation | 병렬 Junior 오염 방지 |
+| A-3 | MUST NOT DO file scope | File-scoped git diff | `git diff -- <path>`로 forbidden file 검증 |
+| A-4 | Scope Boundary set ops | Changed files as B | unscoped git diff 기반 집합 연산 제거 |
+| A-5 | Parallel isolation | Agent isolation | 병렬 Junior 오염 시 file-scoped 검증 |
 | A-6 | Pattern prohibition | Content search | 파일 내용 패턴 검색 |
 | A-7 | Fast-Path | No git diff needed | trivial 변경도 파일 읽기 |
 | A-8 | API endpoint → curl 검증 | Applicability detection (API) | API 신호 인식 + curl 시도 |
@@ -86,9 +86,9 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 
 ---
 
-## A-3: MUST NOT DO — git diff 없이 파일 scope 감지
+## A-3: MUST NOT DO — file-scoped git diff로 파일 scope 검증
 
-**Context:** Junior가 auth/login.ts만 수정하라는 task를 완료함. MUST NOT DO에 auth/config.ts 수정 금지가 있음.
+**Context:** Junior가 auth/login.ts만 수정하라는 task를 완료함. MUST NOT DO에 auth/config.ts 수정 금지가 있음. 병렬로 실행 중인 다른 Junior가 utils/helper.ts를 수정 중이라 working tree에 오염 존재.
 
 **QA REQUEST Spec:**
 - TASK: Fix login validation bug
@@ -102,12 +102,13 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: auth/login.ts
 - Junior's summary: "Fixed email regex pattern in login validation"
 
-**Expected Behavior:** Argus verifies "Do NOT touch auth/config.ts" by checking that auth/config.ts is NOT in the Changed files list. Does NOT use git diff --name-only.
+**Expected Behavior:** Argus가 "Do NOT touch auth/config.ts" 검증 시 Changed files 확인 또는 `git diff -- auth/config.ts`로 검증. unscoped `git diff`로 다른 Junior의 오염(utils/helper.ts)을 발견하여 scope violation으로 오판하지 않음.
 
 **Verification Points:**
-1. MUST NOT DO 파일 scope 검증을 Changed files 목록 기반으로 수행한다
-2. `git diff --name-only`를 사용하지 않는다
-3. auth/config.ts가 Changed files에 없으므로 PASS 판정한다
+1. MUST NOT DO 파일 scope 검증을 Changed files 또는 `git diff -- auth/config.ts`로 수행한다
+2. unscoped `git diff`나 `git diff --name-only`로 전체 변경 목록을 구하지 않는다
+3. 병렬 오염(utils/helper.ts)을 scope violation으로 flag하지 않는다
+4. auth/config.ts에 변경이 없으므로 PASS 판정한다
 
 ---
 
@@ -127,12 +128,12 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: src/A.ts, src/B.ts
 - Junior's summary: "Extracted shared query method into both files"
 
-**Expected Behavior:** Argus verifies ONLY src/A.ts and src/B.ts. Does NOT discover C.ts changes. Does NOT perform B ⊆ A set difference using git diff.
+**Expected Behavior:** Argus verifies ONLY src/A.ts and src/B.ts. Does NOT discover C.ts changes via unscoped git diff. Scope Boundary Check의 B 집합을 Changed files 목록에서 가져오며, unscoped `git diff`로 구성하지 않는다.
 
 **Verification Points:**
-1. `git diff`로 "Actual changed files" 집합(B)을 구하지 않는다
+1. unscoped `git diff`로 "Actual changed files" 집합(B)을 구하지 않는다
 2. Changed files 목록의 파일만 검증 대상으로 삼는다
-3. working tree의 다른 변경(C.ts)을 무시한다
+3. working tree의 다른 변경(C.ts)을 scope violation으로 flag하지 않는다
 
 ---
 
@@ -152,13 +153,13 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 - Changed files: auth.ts
 - Junior's summary: "Added rate limiting middleware to auth endpoint"
 
-**Expected Behavior:** Argus reads only auth.ts. payment.ts의 변경을 발견하지 않음. scope violation으로 flag하지 않음.
+**Expected Behavior:** Argus reads only auth.ts. payment.ts의 병렬 오염을 scope violation으로 flag하지 않음. MUST NOT DO 검증 시 Changed files 확인 또는 file-scoped `git diff -- payment.ts`를 사용하며, unscoped `git diff`로 전체 변경을 조회하지 않음.
 
 **Verification Points:**
 1. Argus가 auth.ts만 읽고 검증한다
 2. payment.ts(Junior B의 작업)를 scope violation으로 flag하지 않는다
-3. MUST NOT DO "Do NOT modify payment routes"를 Changed files 기반으로만 확인한다
-4. git diff가 payment.ts를 포함하더라도 그 결과를 사용하지 않는다
+3. MUST NOT DO "Do NOT modify payment routes"를 Changed files 또는 file-scoped git diff로 확인한다
+4. unscoped `git diff`가 payment.ts를 포함하더라도 그 결과를 scope 판단에 사용하지 않는다
 
 ---
 
@@ -434,9 +435,9 @@ Argus가 `git diff`로 변경사항을 식별하면 두 가지 문제가 발생:
 |---|---------|--------|------|-------|
 | A-1 | Expected Outcome — 파일 읽기 기반 검증 | | | |
 | A-2 | MUST DO — 파일 내용 기반 증거 검색 | | | |
-| A-3 | MUST NOT DO — git diff 없이 파일 scope 감지 | | | |
-| A-4 | Scope Boundary — git diff 기반 집합 연산 없음 | | | |
-| A-5 | 병렬 Junior — 격리된 검증 | | | |
+| A-3 | MUST NOT DO — file-scoped git diff로 파일 scope 검증 | PASS | 2026-03-11 | 4VP 충족. Changed files 기반 판정. 병렬 오염(checklists.md)에 현혹 안 됨. |
+| A-4 | Scope Boundary — git diff 기반 집합 연산 없음 | PASS | 2026-03-11 | 3VP 충족. Changed files 목록만으로 B 집합 구성. 오염 파일 미 flag. |
+| A-5 | 병렬 Junior — 격리된 검증 | PASS | 2026-03-11 | 4VP 충족. git diff로 오염 발견했으나 "noted, not treated as scope violations"로 처리. REFACTOR 2회 (git status 우회 → 상위 원칙 전환). |
 | A-6 | MUST NOT DO — 파일 내용의 패턴 금지 | | | |
 | A-7 | Fast-Path — git diff 없이 동작 | | | |
 | A-8 | API endpoint → curl 검증 | PASS | 2026-02-23 | 4VP 전부 충족. API 신호 감지, curl 절차, 서버 라이프사이클, 출력 포맷 모두 정확. |
