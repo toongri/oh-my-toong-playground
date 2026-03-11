@@ -60,7 +60,7 @@ digraph council_decision {
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
 3. Council members provide independent opinions (raw outputs)
-4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — polls internally; re-call if `overallState` is `"running"`
+4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — polls internally; re-call if not `"done"`
 5. **Read each member's output file** via the Read tool
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
@@ -125,7 +125,7 @@ bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- If response shows `"overallState": "running"` → call `collect` again (same command, foreground, timeout: 180000).
+- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
 
 **3. Read raw outputs**
 
