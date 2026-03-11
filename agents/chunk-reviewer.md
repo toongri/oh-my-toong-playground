@@ -71,7 +71,7 @@ bun .claude/scripts/chunk-review/job.ts collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
-- If response shows `"overallState": "running"` → call `collect` again (same command, foreground, timeout: 180000).
+- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
 
 Response JSON (done):
 ```json
