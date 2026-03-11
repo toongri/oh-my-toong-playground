@@ -164,7 +164,7 @@ Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
 
 ---
 
-## Thesis 의존성
+## Split PR Base 관계
 
 모든 split은 이전 split 위에 체이닝된다. 첫 번째 PR은 `{base-branch}`를 base로, 이후 PR은 이전 split 브랜치를 base로 생성한다.
 
