@@ -211,7 +211,7 @@ Agent(subagent_type="oracle", prompt="Rebase conflict in OrderService.kt: main c
 
 ## Step 1: Collect Git Metadata
 
-Upon receiving a PR writing request, first collect lightweight git metadata.
+After base branch sync, collect lightweight git metadata.
 
 ```bash
 # Commit history
