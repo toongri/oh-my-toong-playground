@@ -1,5 +1,5 @@
 import { jest, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import * as credentialsMod from './credentials.ts';
@@ -115,6 +115,29 @@ describe('acquireLock', () => {
 
     const result = acquireLock(lockPath);
     expect(result).toBe('busy');
+  });
+
+  it('캐시 디렉토리가 없다가 mkdirSync 후 lock 획득 가능 (P1: ENOENT)', () => {
+    // Simulate fresh install: cache dir does not exist yet
+    const missingDir = join(tempDir, 'nonexistent');
+    const lockInMissing = join(missingDir, 'test.lock');
+
+    // Before mkdir: acquireLock fails (ENOENT → busy)
+    expect(acquireLock(lockInMissing)).toBe('busy');
+
+    // After mkdirSync (as fetchRateLimits now does): acquireLock succeeds
+    mkdirSync(missingDir, { recursive: true });
+    const result = acquireLock(lockInMissing);
+    expect(result).toBe('acquired');
+    expect(existsSync(lockInMissing)).toBe(true);
+  });
+
+  it('NaN 타임스탬프 lock 파일을 stale로 판정하여 acquired 반환 (P2: corrupt lock)', () => {
+    writeFileSync(lockPath, 'not-a-number', 'utf8');
+
+    const result = acquireLock(lockPath);
+    expect(result).toBe('acquired');
+    expect(existsSync(lockPath)).toBe(true);
   });
 });
 
