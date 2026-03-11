@@ -377,11 +377,27 @@ Present the drafted PR description to the user and collect feedback.
 
 After user approves the PR description, ask if they want to create the PR.
 
-- If user confirms: run `gh pr create` with the approved title and description
+- If user confirms: push the branch and run `gh pr create` with the approved title and description
 - If user declines: output the final PR description only
 
+**단일 PR의 경우** (remote push 후 생성):
+
 ```bash
-gh pr create --title "PR 타이틀" --body "$(cat <<'EOF'
+# 단일 PR (remote push 후 생성)
+git push -u origin HEAD
+gh pr create --base {base-branch} --title "PR 타이틀" --body "$(cat <<'EOF'
+PR description body
+EOF
+)"
+```
+
+**Sub-PR (Stacked split)의 경우:**
+- 브랜치 push는 Step 5 브랜치 분리 절차에서 이미 완료됨
+- 첫 번째 sub-PR: `--base {base-branch}`
+- 이후 sub-PR: `--base {이전-split-브랜치}`
+
+```bash
+gh pr create --base {적절한-base} --title "PR 타이틀" --body "$(cat <<'EOF'
 PR description body
 EOF
 )"
