@@ -215,13 +215,13 @@ After base branch sync, collect lightweight git metadata.
 
 ```bash
 # Commit history
-git log {base-branch}..HEAD --oneline
+git log origin/{base-branch}..HEAD --oneline
 
 # Changed file list
-git diff {base-branch}..HEAD --stat
+git diff origin/{base-branch}..HEAD --stat
 
 # Commit messages and descriptions
-git log {base-branch}..HEAD --format='%s%n%b'
+git log origin/{base-branch}..HEAD --format='%s%n%b'
 ```
 
 Use this metadata as supplementary context for the interview. Use it to gauge the scope and scale of changes, but do NOT read actual file contents.
@@ -316,12 +316,13 @@ This checklist is internal -- do NOT show it to the user.
 After Clearance Checklist passes, analyze whether the PR contains multiple independent theses (behavioral changes) that should be separate PRs. See `references/scope-assessment.md` for the complete framework.
 
 **Quick summary:**
-1. Check proxy signals (commit type diversity, domain spread, LOC) as initial triggers
-2. Apply thesis isolation test: "이 PR은 하나의 논지(thesis)를 증명하는가?"
-3. If single thesis → proceed to Step 6
-4. If multi-thesis → propose split to user (Accept/Reject/Modify)
-5. On Accept → separate git branches, write sub-PR descriptions (Step 6-8 per sub-PR)
-6. On Reject → proceed to Step 6 as single PR
+1. Check exception cases first (new abstraction, campsite cleanup, minimal cross-domain)
+2. Check proxy signals (commit type diversity, domain spread, LOC) as initial triggers
+3. Apply thesis isolation test: "Does this PR prove a single thesis?"
+4. If single thesis → proceed to Step 6
+5. If multi-thesis → propose split to user (Accept/Reject/Modify)
+6. On Accept → separate git branches, write sub-PR descriptions (Step 6-8 per sub-PR)
+7. On Reject → proceed to Step 6 as single PR
 
 **Data sources:** `git diff --stat`, `git log`, explore results, interview answers. Never read `git diff` file contents.
 
@@ -401,13 +402,13 @@ EOF
 )"
 ```
 
-**Sub-PR (Stacked split)의 경우:**
-- 브랜치 push는 Step 5 브랜치 분리 절차에서 이미 완료됨
-- 첫 번째 sub-PR: `--base {base-branch}`
-- 이후 sub-PR: `--base {이전-split-브랜치}`
+**Sub-PR (Stacked split):**
+- Branch push already completed during Step 5 branch separation procedure
+- First sub-PR: `--base {base-branch}`
+- Subsequent sub-PRs: `--base {previous-split-branch}`
 
 ```bash
-gh pr create --base {적절한-base} --title "PR 타이틀" --body "$(cat <<'EOF'
+gh pr create --base {appropriate-base} --head {target-sub-branch} --title "PR title" --body "$(cat <<'EOF'
 PR description body
 EOF
 )"
