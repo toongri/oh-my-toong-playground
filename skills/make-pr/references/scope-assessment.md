@@ -182,7 +182,7 @@ Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
 2. 새 브랜치 생성:
    - 첫 번째 thesis: `git checkout -b {branch-name} origin/{base-branch}`
    - 이후 thesis: `git checkout -b {branch-name} {이전-split-브랜치}`
-3. 해당 thesis의 커밋을 cherry-pick: `git cherry-pick {commit-hash}`
+3. Cherry-pick commits for the thesis in chronological order (oldest first): `git cherry-pick {commit-hash}` (git log outputs newest-first, so apply bottom-to-top)
 4. 브랜치 push: `git push -u origin {branch-name}` (Split Accept는 브랜치 push를 포함한다. Accept 시점에서 유저가 remote 브랜치 생성에 동의한 것으로 간주한다.)
 5. 모든 sub-브랜치 생성 완료 후 Sub-PR Description 작성
 
