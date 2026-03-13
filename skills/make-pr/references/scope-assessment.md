@@ -187,7 +187,7 @@ Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
 4. 브랜치 push: `git push -u origin {branch-name}` (Split Accept는 브랜치 push를 포함한다. Accept 시점에서 유저가 remote 브랜치 생성에 동의한 것으로 간주한다.)
 5. 모든 sub-브랜치 생성 완료 후 Sub-PR Description 작성
 
-> **Mixed commit 주의**: 하나의 커밋이 여러 thesis에 속하는 파일을 함께 수정한 경우(mixed commit), cherry-pick하면 의도하지 않은 변경이 포함된다. Mixed commit이 감지되면 분리를 중단하고 Graceful Degradation 절차로 전환한다.
+> **Mixed commit 주의**: 하나의 커밋이 여러 thesis에 속하는 파일을 함께 수정한 경우(mixed commit), cherry-pick하면 의도하지 않은 변경이 포함된다. Mixed commit이 감지되면 **자동 분리를 즉시 중단**하고 Graceful Degradation 절차로 전환한다. 파일 단위 수동 분리가 가능할 수 있음을 사용자에게 안내하되, LLM이 직접 파일 추출을 시도하지 않는다.
 
 ### 머지 커밋 처리
 
@@ -233,7 +233,7 @@ cherry-pick이 실패하면:
 
 ## Graceful Degradation (우아한 퇴보)
 
-파일 수준 분리가 불가능한 경우 (하나의 파일에 두 thesis의 변경이 혼재):
+커밋 수준 분리가 불가능한 경우 (mixed commit, cherry-pick 충돌, 또는 공유 파일 존재):
 
 1. 사용자에게 안내: `"파일 수준 분리가 불가합니다. [file]이 두 thesis에 걸쳐 변경되었습니다."`
 2. 단일 PR로 fallback
