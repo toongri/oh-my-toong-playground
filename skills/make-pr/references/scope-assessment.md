@@ -187,6 +187,8 @@ Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
 4. 브랜치 push: `git push -u origin {branch-name}` (Split Accept는 브랜치 push를 포함한다. Accept 시점에서 유저가 remote 브랜치 생성에 동의한 것으로 간주한다.)
 5. 모든 sub-브랜치 생성 완료 후 Sub-PR Description 작성
 
+> **Mixed commit 주의**: 하나의 커밋이 여러 thesis에 속하는 파일을 함께 수정한 경우(mixed commit), cherry-pick하면 의도하지 않은 변경이 포함된다. Mixed commit이 감지되면 분리를 중단하고 Graceful Degradation 절차로 전환한다.
+
 ### 머지 커밋 처리
 
 머지 커밋은 thesis 분석에서 제외한다. 브랜치 동기화의 아티팩트이며, thesis와 무관한 변경이다. cherry-pick 시에도 머지 커밋은 건너뛴다.
