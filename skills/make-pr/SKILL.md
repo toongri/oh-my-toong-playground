@@ -7,7 +7,7 @@ description: Use when creating a PR description. Triggers include "PR 작성", "
 
 # Make-PR -- PR Description Writer
 
-Write Korean PR descriptions from a senior backend engineer's perspective. diff를 보지 않아도 PR만으로 핵심 결정을 충분히 이해할 수 있도록, "what changed" (Changes)와 "what needs discussion" (Review Points)를 명확히 분리하여 작성한다.
+Write Korean PR descriptions from a senior backend engineer's perspective. Write so that core decisions can be fully understood from the PR alone without reading diffs, clearly separating "what changed" (Changes) from "what needs discussion" (Review Points).
 
 > "A good PR description makes review productive. A bad one makes review a guessing game."
 
@@ -110,21 +110,19 @@ digraph make_pr_flow {
 
 Upon receiving a PR writing request, first detect the base branch and fetch its latest state.
 
-### Base Branch 감지
-
-모든 git 작업 전에 프로젝트의 base branch를 감지한다:
+Detect the project's base branch before any git operations:
 
 ```bash
-# GitHub CLI (가장 정확)
+# GitHub CLI (most accurate)
 gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
 
 # Fallback: git remote HEAD
 git symbolic-ref refs/remotes/origin/HEAD | sed 's@refs/remotes/origin/@@'
 
-# 둘 다 실패 시 기본값: main
+# Fallback default if both fail: main
 ```
 
-감지된 값을 이후 모든 git 명령의 `{base-branch}`로 사용한다.
+Use the detected value as `{base-branch}` in all subsequent git commands.
 
 ```bash
 # Fetch latest state of base branch
@@ -278,7 +276,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 
 - Use emoji section headers: `📌 Summary`, `🔧 Changes`, `💬 Review Points`, `✅ Checklist`, `📎 References`
 - Each Changes subsection MUST include `**영향 범위**` (Impact Scope)
-- Each Checklist item MUST be a **검증 가능한 인수조건**(verifiable acceptance criterion) in `- [ ]` 체크박스 형태, with the relevant file path indented below. 파일 나열이나 피처 설명이 아닌, true/false로 판별 가능한 조건을 작성
+- Each Checklist item MUST be a **verifiable acceptance criterion** in `- [ ]` checkbox format, with the relevant file path indented below. Write true/false verifiable conditions, not file lists or feature descriptions.
 - Review Points MUST use the 5-part structure: 배경 및 문제 상황 → 해결 방안 → 구현 세부사항 → 관련 코드 (optional) → 선택과 트레이드오프
 
 ### Review Points Selection Criteria
@@ -297,7 +295,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 2. **해결 방안**: How it was solved (overview)
 3. **구현 세부사항**: Detailed implementation explanation
 4. **관련 코드**: (Optional) Useful for Before/After comparison
-5. **선택과 트레이드오프**: 선택 근거, 거부한 대안, 인지된 트레이드오프. 열린 질문은 있을 때만 자연스럽게 포함
+5. **선택과 트레이드오프**: Rationale for the choice, rejected alternatives, acknowledged trade-offs. Include open questions only when they naturally arise.
 
 ---
 
@@ -317,13 +315,13 @@ After user approves the PR description, ask if they want to create the PR.
 - If user confirms: push the branch and run `gh pr create` with the approved title and description
 - If user declines: output the final PR description only
 
-**단일 PR의 경우** (remote push 후 생성):
+**For single PR** (create after remote push):
 
 ```bash
-# 단일 PR (remote push 후 생성)
+# Single PR (create after remote push)
 git push -u origin HEAD
 TITLE=$(cat <<'EOF'
-PR 타이틀
+PR title
 EOF
 )
 gh pr create --base {base-branch} --title "$TITLE" --body "$(cat <<'EOF'
@@ -390,17 +388,17 @@ Return the PR URL to the user after successful creation.
 | Writing PR in English | Violates project convention | Write entirely in Korean |
 | Missing emoji section headers | Inconsistent with output-format.md template | Use 📌, 🔧, 💬, ✅, 📎 prefixes |
 | Checklist items without file paths | Unverifiable conditions | Add indented file path under each item |
-| Checklist가 파일 목록이나 피처 나열 | 검증 불가, 인수 조건이 아님 | 검증 가능한 인수조건(true/false 판별)으로 작성 |
+| Checklist items are file lists or feature descriptions | Not verifiable, not acceptance criteria | Write verifiable acceptance criteria (true/false) |
 | Missing Impact Scope in Changes | Reviewer can't assess blast radius | Add `**영향 범위**` per Changes subsection |
 | Omitting PR title | Incomplete deliverable | Include conventional commit style Korean title |
-| Review Point에 교과서 정의 작성 | 리뷰어가 아는 내용 반복, filler | 직면한 구체적 제약을 서술 |
-| "개선 효과" 마케팅 나열 | Review Point 목적과 무관 | 선택과 트레이드오프에 집중 |
-| References에 memory/plan 등 비-git 문서 포함 | 리뷰어가 접근 불가 | reviewer-accessible 콘텐츠만 참조 (GitHub URL, git-tracked 문서) |
-| 이전 세션 컨텍스트만으로 인터뷰 생략 | 불완전·편향된 정보 기반 PR | Clearance Checklist 기반 인터뷰는 매회 수행 |
-| 프록시 시그널만으로 split 결정 | thesis 분석 없이 잘못된 분리 | 프록시 시그널은 탐지 트리거일 뿐, thesis isolation이 최종 기준 |
-| Single thesis PR에서 불필요한 split 제안 | 사용자 부담, 워크플로우 지연 | Thesis 1개면 즉시 Step 6으로 진행 |
-| Scope assessment에서 git diff 파일 내용 읽기 | Non-Negotiable Rule 위반 | git diff --stat과 git log만 사용 |
-| Split 후 원본 브랜치 삭제 | 사용자 복구 불가 | 원본 브랜치는 항상 보존 |
+| Writing textbook definitions in Review Points | Repeats what reviewers already know, filler | Describe the specific constraints you faced |
+| Listing "improvement effects" as marketing | Irrelevant to Review Point purpose | Focus on choices and trade-offs |
+| Including non-git documents (memory/plans) in References | Reviewers cannot access them | Reference only reviewer-accessible content (GitHub URLs, git-tracked docs) |
+| Skipping interview based on prior session context | PR based on incomplete/biased info | Run Clearance Checklist-based interview every time |
+| Deciding split based on proxy signals alone | Wrong split without thesis analysis | Proxy signals are detection triggers only; thesis isolation is the final criterion |
+| Proposing unnecessary split for single-thesis PR | User burden, workflow delay | If single thesis, proceed to Step 6 immediately |
+| Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
+| Deleting original branch after split | User cannot recover | Always preserve the original branch |
 
 ---
 
