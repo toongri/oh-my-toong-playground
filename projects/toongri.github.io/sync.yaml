@@ -53,6 +53,7 @@ skills:
       platforms: [claude]
     - make-pr
     - technical-writing
+    - humanizer
     - make-resume
     - review-resume
 
