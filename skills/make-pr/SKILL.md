@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Syncs with base branch (fetch + rebase) first at request start, then collects metadata → interview → assessment → description. Creates the PR via `gh pr create` after user approval.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch and fetches latest remote state at request start, then collects metadata → interview → assessment → description. Creates the PR via `gh pr create` after user approval.
 
 ---
 
@@ -63,11 +63,7 @@ digraph make_pr_flow {
     rankdir=TB;
 
     "User Request" [shape=ellipse];
-    "Fetch + Rebase" [shape=box];
-    "Conflict?" [shape=diamond];
-    "Summarize Conflicts\n+ Recommend Resolution" [shape=box];
-    "User Decision" [shape=box];
-    "Resolve Conflicts" [shape=box];
+    "Step 0: Base Branch Detection" [shape=box];
     "Collect Git Metadata" [shape=box];
     "Explore Codebase Patterns" [shape=box];
     "Interview Mode" [shape=box];
@@ -84,13 +80,8 @@ digraph make_pr_flow {
     "Return PR URL" [shape=ellipse];
     "Output Description Only" [shape=ellipse];
 
-    "User Request" -> "Fetch + Rebase";
-    "Fetch + Rebase" -> "Conflict?";
-    "Conflict?" -> "Collect Git Metadata" [label="No"];
-    "Conflict?" -> "Summarize Conflicts\n+ Recommend Resolution" [label="Yes"];
-    "Summarize Conflicts\n+ Recommend Resolution" -> "User Decision";
-    "User Decision" -> "Resolve Conflicts";
-    "Resolve Conflicts" -> "Collect Git Metadata";
+    "User Request" -> "Step 0: Base Branch Detection";
+    "Step 0: Base Branch Detection" -> "Collect Git Metadata";
     "Collect Git Metadata" -> "Explore Codebase Patterns";
     "Explore Codebase Patterns" -> "Interview Mode";
     "Interview Mode" -> "Clearance Checklist";
@@ -115,9 +106,9 @@ digraph make_pr_flow {
 
 ---
 
-## Step 0: Base Branch Sync
+## Step 0: Base Branch Detection
 
-Upon receiving a PR writing request, first sync with the base branch.
+Upon receiving a PR writing request, first detect the base branch and fetch its latest state.
 
 ### Base Branch 감지
 
@@ -135,83 +126,18 @@ git symbolic-ref refs/remotes/origin/HEAD | sed 's@refs/remotes/origin/@@'
 
 감지된 값을 이후 모든 git 명령의 `{base-branch}`로 사용한다.
 
-### Working Tree 확인
-
-Rebase 전에 uncommitted 변경이 있는지 확인한다:
-
 ```bash
-git status --porcelain
-```
-
-결과가 비어있지 않으면 사용자에게 안내: "uncommitted 변경이 있습니다. rebase 전에 commit 또는 stash해주세요." 사용자가 처리한 후 계속 진행.
-
-```bash
-# Fetch and rebase on base branch
+# Fetch latest state of base branch
 git fetch origin {base-branch}
-git rebase origin/{base-branch}
 ```
 
-**If rebase succeeds:** Proceed to Step 1.
-
-**If conflicts occur:**
-
-1. **Summarize conflicts** — list conflicting files with a brief description of what each side changed
-2. **Gather conflict context** — investigate WHY each side made its changes (see Conflict Context Gathering below)
-3. **Analyze complexity** — if conflicts involve architectural changes or multi-file dependencies, consult oracle for impact analysis before recommending resolution
-4. **Recommend resolution** — suggest a resolution approach for each conflict, informed by gathered context
-5. **Ask user for decision** — present recommendations and ask user how to proceed
-6. **Resolve conflicts** — based on user's decision, resolve conflicts and run `git rebase --continue`
-7. Proceed to Step 1
-
-### Conflict Context Gathering
-
-Before recommending resolution, investigate the context behind each side's changes:
-
-```bash
-# Git history — what changed on base branch since branch diverged (ORIG_HEAD = pre-rebase branch tip)
-git log --oneline $(git merge-base ORIG_HEAD origin/{base-branch})..origin/{base-branch} -- <conflicting-file>
-
-# Blame — who last modified the conflicting lines on base branch
-git blame origin/{base-branch} -- <conflicting-file> | grep -A2 -B2 '<conflict-area>'
-
-# Related PRs — find merged PRs that touched conflicting files
-gh pr list --state merged --search "<conflicting-file>" --limit 5
-
-# Related issues — find issues linked to the conflicting area
-gh issue list --search "<relevant-keyword>" --limit 5
-```
-
-| Source | What to Look For | Tool |
-|--------|-----------------|------|
-| Git history | Which commits on base branch caused the conflict, commit messages explaining intent | `git log`, `git blame` |
-| Merged PRs | PR descriptions explaining design decisions behind main's changes | `gh pr list`, `gh pr view` |
-| Issues | Requirements or bug reports that motivated either side's changes | `gh issue list`, `gh issue view` |
-| Project docs | Design docs, ADRs, or READMEs referenced in commits/PRs | `explore` agent |
-
-This context helps recommend informed resolution rather than guessing from diff alone.
-
-### Oracle Consultation for Conflicts
-
-Consult oracle when conflicts are **non-trivial**:
-
-| Conflict Type | Oracle? | Reason |
-|---------------|---------|--------|
-| Simple formatting/import changes | No | Mechanical resolution |
-| Same function modified both sides | Maybe | Depends on semantic overlap |
-| Architecture/design changes (e.g., interface change vs new feature) | Yes | Cross-file impact analysis needed |
-| Multiple files with interconnected changes | Yes | Dependency chain analysis needed |
-
-```
-Consulting Oracle for conflict impact analysis in OrderService rebase.
-
-Agent(subagent_type="oracle", prompt="Rebase conflict in OrderService.kt: main changed createOrder() signature (added userId parameter), feature branch added event publishing in the same method. PurchasingFacade.kt: main added new cancelOrder() method, feature branch removed PaymentService dependency. Analyze: Are these changes semantically compatible? What's the safest resolution approach? Any cross-file impacts to watch for?")
-```
+Proceed to Step 1.
 
 ---
 
 ## Step 1: Collect Git Metadata
 
-After base branch sync, collect lightweight git metadata.
+After base branch detection and fetch, collect lightweight git metadata.
 
 ```bash
 # Commit history
@@ -429,7 +355,7 @@ Return the PR URL to the user after successful creation.
 
 | Step | Action | Key Point |
 |------|--------|-----------|
-| Base Branch Sync | `git fetch` + `git rebase` | Conflicts → summarize + recommend → user decides → resolve |
+| Base Branch Detection | `git fetch origin {base-branch}` | Detect base branch, then fetch latest remote state |
 | Collect Git Metadata | Run `git log`, `git diff --stat` | Metadata only, NO file contents |
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
@@ -451,7 +377,6 @@ Return the PR URL to the user after successful creation.
 | Describing design concerns in Changes | Mixes Changes and Review Points | Design concerns go in Review Points |
 | Writing without Review Points | No focal points for reviewer feedback | Proactively identify Review Points |
 | Running `gh pr create` without user confirmation | User must approve PR creation | Always confirm before running |
-| Skipping base branch rebase | Branch may have conflicts or be behind | Always fetch + rebase before starting |
 | Reading git diff file contents | Heavy context loading | Use git metadata + explore only |
 | Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |
 | Writing PR in English | Violates project convention | Write entirely in Korean |
