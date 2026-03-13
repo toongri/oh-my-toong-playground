@@ -899,7 +899,6 @@ Every QA scenario must be executable by an agent without human involvement. Veri
     | "Concurrency stress test" | Test category, not executable | Project test runner |
     | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
-  - Non-code TODOs (docs, config) may use simplified block format: Scenario Name + Preconditions + Expected + Failure (Tool/Steps/Evidence optional)
   - **Evidence Convention**: Each QA scenario execution MUST save its output as an evidence artifact. Evidence path format:
     ```
     .omt/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}
@@ -982,7 +981,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
       Tool: curl
       Preconditions: Server running on localhost:3000, DB migrated, users table empty
       Steps:
-        1. `curl -s -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
+        1. `curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
         2. Assert response status is `201`
         3. Assert `response.body.id` exists and matches UUID format
         4. Assert `response.body.email` === `"test@example.com"`
@@ -994,7 +993,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
       Tool: curl
       Preconditions: Server running, DB migrated
       Steps:
-        1. `curl -s -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email User"}'`
+        1. `curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email User"}'`
         2. Assert response status is `400`
         3. Assert `response.body.error` contains `"email"`
       Expected: 400 Bad Request with error message referencing missing "email" field
@@ -1002,7 +1001,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
       Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.json
 ```
 
-**Non-code TODO Example (simplified format):**
+**Non-code TODO Example:**
 
 ```
 - [ ] 6. Update API Documentation
@@ -1017,14 +1016,26 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
     - QA Scenarios:
 
       Scenario: Rate limit headers documented
+        Tool: grep
         Preconditions: docs/api-reference.md exists, rate limiting middleware merged
-        Expected: Section titled "Rate Limiting" present with descriptions for X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers and a 429 error response example
-        Failure: Section absent, or any of X-RateLimit-Limit / X-RateLimit-Remaining / X-RateLimit-Reset not described, or 429 response not shown
+        Steps:
+          1. `grep -c "## Rate Limiting" docs/api-reference.md`
+          2. `grep "X-RateLimit-Limit" docs/api-reference.md`
+          3. `grep "X-RateLimit-Remaining" docs/api-reference.md`
+          4. `grep "X-RateLimit-Reset" docs/api-reference.md`
+          5. `grep "429" docs/api-reference.md`
+        Expected: All grep commands return exit code 0 with matching content
+        Failure: Any grep returns exit code 1 (section or header absent)
+        Evidence: .omt/evidence/{plan-name}/task-6-rate-limit-docs.txt
 
       Scenario: Existing docs preserved
+        Tool: diff
         Preconditions: No rate limiting section exists prior to this change
+        Steps:
+          1. `diff <(git show HEAD~1:docs/api-reference.md | grep -v "Rate Limiting" | head -50) <(head -50 docs/api-reference.md)` or equivalent to verify pre-existing sections unchanged
         Expected: All pre-existing endpoint sections (paths, parameters, response schemas) remain byte-for-byte identical after the update
         Failure: Any pre-existing heading, parameter description, or response schema is altered or removed
+        Evidence: .omt/evidence/{plan-name}/task-6-existing-docs-preserved.txt
 ```
 
 **Final Verification Wave**
