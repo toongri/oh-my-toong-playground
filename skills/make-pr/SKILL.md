@@ -322,7 +322,11 @@ After user approves the PR description, ask if they want to create the PR.
 ```bash
 # 단일 PR (remote push 후 생성)
 git push -u origin HEAD
-gh pr create --base {base-branch} --title "PR 타이틀" --body "$(cat <<'EOF'
+TITLE=$(cat <<'EOF'
+PR 타이틀
+EOF
+)
+gh pr create --base {base-branch} --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
 )"
@@ -334,7 +338,11 @@ EOF
 - Subsequent sub-PRs: `--base {previous-split-branch}`
 
 ```bash
-gh pr create --base {appropriate-base} --head {target-sub-branch} --title "PR title" --body "$(cat <<'EOF'
+TITLE=$(cat <<'EOF'
+PR title
+EOF
+)
+gh pr create --base {appropriate-base} --head {target-sub-branch} --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
 )"
