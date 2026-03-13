@@ -48,16 +48,13 @@ digraph thesis_decision {
     "Exception Cases\nApplicable?" [shape=diamond];
     "Keep inline\n(exception applied)" [shape=box];
     "Determine thesis count" [shape=box];
-    "1?" [shape=diamond];
     "2?" [shape=diamond];
     "3+?" [shape=diamond];
     "5+?" [shape=diamond];
     "Proceed to Step 6" [shape=box];
-    "Interface finalized?" [shape=diamond];
     "Independently reviewable?" [shape=diamond];
     "Propose split" [shape=box];
     "Keep as single PR" [shape=box];
-    "New abstraction\nunder design → keep combined" [shape=box];
     "Strongly recommend split" [shape=box];
     "Recommend manual decomposition\n(max 4 split cap)" [shape=box];
 
@@ -68,11 +65,8 @@ digraph thesis_decision {
     "5+?" -> "3+?" [label="NO"];
     "3+?" -> "Strongly recommend split" [label="YES"];
     "3+?" -> "2?" [label="NO"];
-    "2?" -> "Interface finalized?" [label="YES"];
-    "2?" -> "1?" [label="NO"];
-    "1?" -> "Proceed to Step 6" [label="YES"];
-    "Interface finalized?" -> "Independently reviewable?" [label="YES"];
-    "Interface finalized?" -> "New abstraction\nunder design → keep combined" [label="NO"];
+    "2?" -> "Independently reviewable?" [label="YES"];
+    "2?" -> "Proceed to Step 6" [label="NO"];
     "Independently reviewable?" -> "Propose split" [label="YES"];
     "Independently reviewable?" -> "Keep as single PR" [label="NO"];
 }
@@ -143,35 +137,37 @@ When multi-thesis is detected, propose to the user in the following format.
 ### Proposal Format
 
 ```
-[N] theses were detected in the change scope:
+[N]개의 thesis가 변경 범위에서 감지되었습니다:
 
 **Thesis 1: [thesis name]**
-- Included commits: [commit list]
-- Included files: [file list]
+- 포함된 커밋: [commit list]
+- 포함된 파일: [file list]
 
 **Thesis 2: [thesis name]**
-- Included commits: [commit list]
-- Included files: [file list]
+- 포함된 커밋: [commit list]
+- 포함된 파일: [file list]
 
-How would you like to proceed?
-1. Agree (proceed with split)
-2. Reject (proceed as single PR)
-3. Adjust thesis boundaries (modify file/commit assignments)
+어떻게 진행하시겠습니까?
+1. 동의 (분리 진행)
+2. 거부 (단일 PR로 진행)
+3. Thesis 경계 조정 (파일/커밋 할당 수정)
 ```
 
 ### User Choice Handling
 
-| Choice | Action |
+| 선택 | 동작 |
 |------|------|
-| Agree | Proceed with branch separation procedure |
-| Reject | Proceed to Step 6 (single PR standard flow) |
-| Adjust thesis boundaries | User modifies file/commit assignments → re-confirm |
+| 동의 | 브랜치 분리 절차 진행 |
+| 거부 | Step 6으로 진행 (단일 PR 표준 플로우) |
+| Thesis 경계 조정 | 사용자가 파일/커밋 할당 수정 → 재확인 |
 
 ---
 
 ## Split PR Base Relationship
 
 All splits are chained on top of the previous split. The first PR uses `{base-branch}` as base; subsequent PRs use the previous split branch as base.
+
+> **Note**: This is a stacked-only strategy. Even logically independent theses are chained sequentially. This is an intentional simplification.
 
 ---
 
@@ -198,14 +194,14 @@ Merge commits are excluded from thesis analysis. They are artifacts of branch sy
 If cherry-pick fails:
 1. Abort the entire separation (`git cherry-pick --abort`)
 2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
-3. Delete all sub-branches created so far
+3. Delete all sub-branches created so far: `git branch -D {branch-name}` and `git push origin --delete {branch-name}`
 4. Fall back to single PR flow (Step 6)
 5. Inform the user of the failure cause
 
 ### Original Branch Preservation
 
 The original branch must never be deleted. If the user changes their mind after split completion:
-- Delete sub-branches
+- Delete sub-branches (local and remote: `git branch -D` + `git push origin --delete`)
 - Return to the original branch
 - If a PR was already created with `gh pr create`, guide the user to manually close it
 
@@ -222,7 +218,7 @@ Each sub-PR follows the format in `references/output-format.md` (📌 Summary, �
 Add split context at the top of each sub-PR Summary:
 
 ```markdown
-> This PR is [K] of [N] split PRs. It must be merged first. Related PRs: [sibling PR links]
+> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. 먼저 머지되어야 합니다. 관련 PR: [sibling PR links]
 ```
 
 ### User Confirmation
@@ -235,7 +231,7 @@ Obtain user confirmation before each `gh pr create` execution.
 
 When commit-level separation is not possible (mixed commit, cherry-pick conflict, or shared files exist):
 
-1. Inform the user: `"File-level separation is not possible. [file] has been changed across two theses."`
+1. Inform the user: `"Automatic commit-level separation is not possible. [file] has been changed across two theses."`
 2. Fall back to single PR
 3. Explain thesis boundaries in the single PR's Review Points: write so reviewers can understand the mixed concerns
 

@@ -93,6 +93,7 @@ digraph make_pr_flow {
     "Split Proposal" -> "Draft PR Description" [label="Reject"];
     "Split Proposal" -> "Split Proposal" [label="Modify"];
     "Branch Separation" -> "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)";
+    "Branch Separation" -> "Draft PR Description" [label="Fallback\n(conflict/mixed)"];
     "Sub-PR Loop\n(Step 6-8 per sub-PR\nincl. user confirmation)" -> "Return PR URL";
     "Draft PR Description" -> "Present to User";
     "Present to User" -> "User Feedback";
@@ -324,7 +325,7 @@ TITLE=$(cat <<'EOF'
 PR title
 EOF
 )
-gh pr create --base {base-branch} --title "$TITLE" --body "$(cat <<'EOF'
+gh pr create --base {base-branch} --head $(git branch --show-current) --title "$TITLE" --body "$(cat <<'EOF'
 PR description body
 EOF
 )"

@@ -198,17 +198,16 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 
 | # | Criterion | Description |
 |---|-----------|-------------|
-| 1 | Step 1 after base branch detection | Collect git metadata after Step 0 base branch detection |
+| 1 | Base branch detection and fetch before metadata | Step 0 base branch detection and fetch completes before Step 1 git metadata collection |
 | 2 | Step 2 before interview | Explore codebase BEFORE interviewing |
 | 3 | One question at a time | Never bundle multiple questions |
 | 4 | Context Brokering | Never ask user codebase FACTS |
 | 5 | Clearance Checklist | Run after each interview turn |
 | 6 | Korean language | All user-facing text in Korean |
-| 7 | Base branch fetch before workflow | Fetch base branch before git metadata collection |
-| 8 | No diff file contents | Use metadata only |
-| 9 | Checklist hidden | Do NOT show Clearance Checklist to user |
+| 7 | No diff file contents | Use metadata only |
+| 8 | Checklist hidden | Do NOT show Clearance Checklist to user |
 
-### Result: 9/9 PASS
+### Result: 8/8 PASS
 
 ---
 
@@ -592,7 +591,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 - Added anti-pattern line for agent-internal files in References section
 
 **test-scenarios.md:**
-- Added Scenarios 9-15 (scope assessment: single thesis, parallel split, mixed commits, new abstraction, proxy signal false positive, user split reject, campsite cleanup)
+- Added Scenarios 9-15 (scope assessment: single thesis, stacked split, mixed commits, new abstraction, proxy signal false positive, user split reject, campsite cleanup)
 - Added GREEN results for Scenarios 9-15
 
 **Round 7:**
@@ -763,7 +762,7 @@ Improvement context: Scope Assessment 기능 추가 — PR 작성 전에 변경�
 
 ---
 
-## Scenario 11: Multi-Thesis + Mixed Commits (File-Level Split Attempt)
+## Scenario 11: Multi-Thesis + Mixed Commits (Graceful Degradation)
 
 **Type:** Variation
 **Purpose:** 커밋이 섞여 있지만 파일 수준에서는 분리 가능한 경우의 처리 검증
