@@ -107,8 +107,9 @@ Thesis 판별에 사용하는 데이터 소스와 그 목적:
 | 데이터 소스 | 목적 | 명령어 |
 |-------------|------|--------|
 | 파일 목록 | 어떤 파일이 변경되었는지 | `git diff --stat` |
-| 커밋 메타데이터 | 커밋 메시지, 타입, 수 | `git log {base-branch}..HEAD --oneline` |
-| 커밋 설명 | 상세 커밋 메시지 | `git log {base-branch}..HEAD --format='%s%n%b'` |
+| 커밋 메타데이터 | 커밋 메시지, 타입, 수 | `git log origin/{base-branch}..HEAD --oneline` |
+| 커밋 설명 | 상세 커밋 메시지 | `git log origin/{base-branch}..HEAD --format='%s%n%b'` |
+| commit별 파일 변경 | 어떤 커밋이 어떤 파일을 수정했는지 | `git log origin/{base-branch}..HEAD --name-status` |
 | 도메인 구조 | 모듈 경계, 의존 관계 | explore agent 결과 |
 | 변경 목적 | 사용자가 설명한 의도 | 인터뷰 답변 |
 
