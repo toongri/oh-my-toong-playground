@@ -155,11 +155,11 @@ When multi-thesis is detected, propose to the user in the following format.
 
 ### User Choice Handling
 
-| 선택 | 동작 |
-|------|------|
-| 동의 | 브랜치 분리 절차 진행 |
-| 거부 | Step 6으로 진행 (단일 PR 표준 플로우) |
-| Thesis 경계 조정 | 사용자가 파일/커밋 할당 수정 → 재확인 |
+| Choice | Action |
+|--------|--------|
+| Accept | Proceed to Branch Separation Procedure |
+| Reject | Proceed to Step 6 (single PR standard flow) |
+| Adjust thesis boundaries | User modifies file/commit assignment → re-confirm |
 
 ---
 
@@ -175,11 +175,14 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 ### Separation Steps
 
+**Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
+
 1. Finalize the list of commits included in each thesis (excluding merge commits)
 2. Create new branches:
    - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
    - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
-3. Cherry-pick commits for the thesis in chronological order (oldest first): `git cherry-pick {commit-hash}` (git log outputs newest-first, so apply bottom-to-top)
+3. List commits in chronological order: `git log --reverse origin/{base-branch}..HEAD --oneline`
+   Cherry-pick each commit: `git cherry-pick {commit-hash}`
 4. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
 5. After all sub-branches are created, write Sub-PR Descriptions
 
@@ -229,7 +232,7 @@ Obtain user confirmation before each `gh pr create` execution.
 
 ## Graceful Degradation
 
-When commit-level separation is not possible (mixed commit, cherry-pick conflict, or shared files exist):
+When commit-level separation is not possible (mixed commit detected, or cherry-pick conflict during separation):
 
 1. Inform the user: `"Automatic commit-level separation is not possible. [file] has been changed across two theses."`
 2. Fall back to single PR
