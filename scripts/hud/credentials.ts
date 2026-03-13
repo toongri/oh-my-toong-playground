@@ -14,7 +14,15 @@ interface ClaudeCredentials {
 
 export const KEYCHAIN_BACKOFF_MS = 60_000;
 
-const BACKOFF_FILE = join(homedir(), '.omt', 'cache', 'keychain-backoff');
+let config = {
+  backoffFile: join(homedir(), '.omt', 'cache', 'keychain-backoff'),
+  backoffDir: join(homedir(), '.omt', 'cache'),
+  credentialsPath: join(homedir(), '.claude', '.credentials.json'),
+};
+
+export function initCredentials(overrides: Partial<typeof config>): void {
+  Object.assign(config, overrides);
+}
 
 export function isMissingKeychainItemError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -25,8 +33,8 @@ export function isMissingKeychainItemError(error: unknown): boolean {
 
 export function isKeychainBackoff(): boolean {
   try {
-    if (!existsSync(BACKOFF_FILE)) return false;
-    const ts = Number(readFileSync(BACKOFF_FILE, 'utf8').trim());
+    if (!existsSync(config.backoffFile)) return false;
+    const ts = Number(readFileSync(config.backoffFile, 'utf8').trim());
     if (isNaN(ts)) return false;
     return Date.now() - ts < KEYCHAIN_BACKOFF_MS;
   } catch {
@@ -36,8 +44,8 @@ export function isKeychainBackoff(): boolean {
 
 export function recordKeychainBackoff(): void {
   try {
-    mkdirSync(join(homedir(), '.omt', 'cache'), { recursive: true });
-    writeFileSync(BACKOFF_FILE, String(Date.now()));
+    mkdirSync(config.backoffDir, { recursive: true });
+    writeFileSync(config.backoffFile, String(Date.now()));
   } catch {
     // Best-effort — ignore write failures
   }
@@ -45,8 +53,7 @@ export function recordKeychainBackoff(): void {
 
 export async function getTokenFromFile(): Promise<string | null> {
   try {
-    const credPath = join(homedir(), '.claude', '.credentials.json');
-    const content = await readFile(credPath, 'utf8');
+    const content = await readFile(config.credentialsPath, 'utf8');
     const creds = JSON.parse(content) as ClaudeCredentials;
     if (creds.claudeAiOauth?.accessToken) {
       return creds.claudeAiOauth.accessToken;
@@ -57,6 +64,16 @@ export async function getTokenFromFile(): Promise<string | null> {
   return null;
 }
 
+export async function readKeychainCredentials(): Promise<string> {
+  const { exec } = await import('child_process');
+  const execAsync = promisify(exec);
+  const { stdout } = await execAsync(
+    'security find-generic-password -s "Claude Code-credentials" -w',
+    { timeout: 5000 }
+  );
+  return stdout;
+}
+
 export async function getOAuthToken(): Promise<string | null> {
   // Check backoff first — skip keychain if we recently failed
   if (isKeychainBackoff()) {
@@ -65,12 +82,7 @@ export async function getOAuthToken(): Promise<string | null> {
 
   // Try macOS Keychain
   try {
-    const { exec } = await import('child_process');
-    const execAsync = promisify(exec);
-    const { stdout } = await execAsync(
-      'security find-generic-password -s "Claude Code-credentials" -w',
-      { timeout: 5000 }
-    );
+    const stdout = await readKeychainCredentials();
     const creds = JSON.parse(stdout.trim()) as ClaudeCredentials;
     if (creds.claudeAiOauth?.accessToken) {
       return creds.claudeAiOauth.accessToken;
