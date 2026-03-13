@@ -1,282 +1,282 @@
-# Scope Assessment (Thesis 기반 PR 범위 판별)
+# Scope Assessment (Thesis-Based PR Scope Analysis)
 
-Step 5의 PR 범위 판별을 위한 단일 참조 문서. Thesis 정의부터 분리 절차, 예외 처리까지 모든 범위 판별 로직의 진실 원천(source of truth).
+Single reference document for Step 5 PR scope analysis. Source of truth for all scope analysis logic, from thesis definition to separation procedure and exception handling.
 
-> **브랜치 플레이스홀더**: `{base-branch}`는 Step 0에서 감지된 프로젝트의 기본 브랜치를 나타낸다 (예: main, master, develop).
-
----
-
-## Thesis Definition (Thesis 정의)
-
-**Thesis**: 하나의 독립적으로 리뷰 가능한 행동적 변경(behavioral change). 리뷰어가 다른 변경을 동시에 이해하지 않아도 평가할 수 있는 단위.
-
-> 출처: Meta Jackson Gabbard의 "thesis isolation" 개념. 관련 원칙: Google Small CLs ("one self-contained change"), Kent Beck "Tidy First?" (구조 vs 행동 분리).
-
-### 단일 Thesis 예시 (분리 불필요)
-
-| 변경 설명 | 이유 |
-|-----------|------|
-| 주문 생성에 이벤트 발행 추가 | 파일이 여러 개 변경되더라도 목적이 하나 |
-| Repository에 캐시 레이어 추가 | 단일 횡단 관심사(cross-cutting concern) |
-| OrderService 트랜잭션 경계 리팩토링 | 하나의 설계 결정 |
-
-### 다중 Thesis 예시 (분리 대상)
-
-| 변경 설명 | 이유 |
-|-----------|------|
-| 이벤트 발행 추가 AND 결제 서비스 리팩토링 | 서로 무관한 두 가지 행동적 변경 |
-| 신규 기능 구현 AND 레거시 모듈 마이그레이션 | 목적이 다른 두 변경 |
-| 버그 픽스 AND 도메인 재설계 | 범주가 다른 두 변경 |
-
-### AND 테스트
-
-PR Summary를 한 문장으로 쓸 때 **무관한 행동**을 "AND"로 연결해야 한다면 multi-thesis 시그널.
-
-```
-"주문 이벤트 발행을 추가하고 결제 서비스를 리팩토링함" → multi-thesis
-"주문 생성 플로우 전반에 걸쳐 이벤트 발행을 추가함" → single-thesis (같은 도메인 내 여러 파일)
-```
+> **Branch placeholder**: `{base-branch}` represents the project's default branch detected in Step 0 (e.g., main, master, develop).
 
 ---
 
-## Decision Framework (판별 프레임워크)
+## Thesis Definition
+
+**Thesis**: A single independently reviewable behavioral change. A unit that reviewers can evaluate without needing to understand other changes simultaneously.
+
+> Source: Meta Jackson Gabbard's "thesis isolation" concept. Related principles: Google Small CLs ("one self-contained change"), Kent Beck "Tidy First?" (structure vs behavior separation).
+
+### Single Thesis Examples (No Split Needed)
+
+| Change Description | Reason |
+|-----------|------|
+| Add event publishing to order creation | Single purpose even if multiple files change |
+| Add cache layer to Repository | Single cross-cutting concern |
+| OrderService transaction boundary refactoring | Single design decision |
+
+### Multi-Thesis Examples (Split Candidates)
+
+| Change Description | Reason |
+|-----------|------|
+| Add event publishing AND refactor payment service | Two unrelated behavioral changes |
+| New feature implementation AND legacy module migration | Two changes with different purposes |
+| Bug fix AND domain redesign | Two changes in different categories |
+
+### AND Test
+
+If writing the PR Summary as a single sentence requires connecting **unrelated behaviors** with "AND", it's a multi-thesis signal.
+
+```
+"Add order event publishing and refactor payment service" → multi-thesis
+"Add event publishing across the entire order creation flow" → single-thesis (multiple files within the same domain)
+```
+
+---
+
+## Decision Framework
 
 ```dot
 digraph thesis_decision {
     rankdir=TB;
 
-    "Exception Cases\n해당?" [shape=diamond];
-    "인라인 유지\n(예외 적용)" [shape=box];
-    "Thesis 수 파악" [shape=box];
-    "1개?" [shape=diamond];
-    "2개?" [shape=diamond];
-    "3개 이상?" [shape=diamond];
-    "5개 이상?" [shape=diamond];
-    "Step 6 진행" [shape=box];
-    "인터페이스 확정?" [shape=diamond];
-    "독립 리뷰 가능?" [shape=diamond];
-    "Split 제안" [shape=box];
-    "단일 PR 유지" [shape=box];
-    "새로운 추상화\n설계 중 → 합쳐서 유지" [shape=box];
-    "Split 강력 권고" [shape=box];
-    "수동 분해 권장\n(최대 4개 split cap)" [shape=box];
+    "Exception Cases\nApplicable?" [shape=diamond];
+    "Keep inline\n(exception applied)" [shape=box];
+    "Determine thesis count" [shape=box];
+    "1?" [shape=diamond];
+    "2?" [shape=diamond];
+    "3+?" [shape=diamond];
+    "5+?" [shape=diamond];
+    "Proceed to Step 6" [shape=box];
+    "Interface finalized?" [shape=diamond];
+    "Independently reviewable?" [shape=diamond];
+    "Propose split" [shape=box];
+    "Keep as single PR" [shape=box];
+    "New abstraction\nunder design → keep combined" [shape=box];
+    "Strongly recommend split" [shape=box];
+    "Recommend manual decomposition\n(max 4 split cap)" [shape=box];
 
-    "Exception Cases\n해당?" -> "인라인 유지\n(예외 적용)" [label="YES"];
-    "Exception Cases\n해당?" -> "Thesis 수 파악" [label="NO"];
-    "Thesis 수 파악" -> "5개 이상?" [label="먼저 확인"];
-    "5개 이상?" -> "수동 분해 권장\n(최대 4개 split cap)" [label="YES"];
-    "5개 이상?" -> "3개 이상?" [label="NO"];
-    "3개 이상?" -> "Split 강력 권고" [label="YES"];
-    "3개 이상?" -> "2개?" [label="NO"];
-    "2개?" -> "인터페이스 확정?" [label="YES"];
-    "2개?" -> "1개?" [label="NO"];
-    "1개?" -> "Step 6 진행" [label="YES"];
-    "인터페이스 확정?" -> "독립 리뷰 가능?" [label="YES"];
-    "인터페이스 확정?" -> "새로운 추상화\n설계 중 → 합쳐서 유지" [label="NO"];
-    "독립 리뷰 가능?" -> "Split 제안" [label="YES"];
-    "독립 리뷰 가능?" -> "단일 PR 유지" [label="NO"];
+    "Exception Cases\nApplicable?" -> "Keep inline\n(exception applied)" [label="YES"];
+    "Exception Cases\nApplicable?" -> "Determine thesis count" [label="NO"];
+    "Determine thesis count" -> "5+?" [label="check first"];
+    "5+?" -> "Recommend manual decomposition\n(max 4 split cap)" [label="YES"];
+    "5+?" -> "3+?" [label="NO"];
+    "3+?" -> "Strongly recommend split" [label="YES"];
+    "3+?" -> "2?" [label="NO"];
+    "2?" -> "Interface finalized?" [label="YES"];
+    "2?" -> "1?" [label="NO"];
+    "1?" -> "Proceed to Step 6" [label="YES"];
+    "Interface finalized?" -> "Independently reviewable?" [label="YES"];
+    "Interface finalized?" -> "New abstraction\nunder design → keep combined" [label="NO"];
+    "Independently reviewable?" -> "Propose split" [label="YES"];
+    "Independently reviewable?" -> "Keep as single PR" [label="NO"];
 }
 ```
 
-**Split cap**: 최대 4개 sub-PR. 5개 이상의 thesis가 감지되면 자동 분리를 시도하지 않고 사용자에게 수동 분해를 권장.
+**Split cap**: Maximum 4 sub-PRs. If 5+ theses are detected, do not attempt automatic separation; recommend manual decomposition to the user.
 
-> **평가 순서**: Exception Cases (새로운 추상화 설계 중, 캠프사이트급 정리, 극소량 크로스-도메인 추가)는 thesis 수 기반 임계값보다 **먼저** 평가한다. 예외 조건에 해당하면 thesis 수와 무관하게 인라인 유지 또는 합쳐서 유지가 적용된다.
+> **Evaluation order**: Exception Cases (new abstraction under design, campsite-level cleanup, minimal cross-domain addition) are evaluated **before** thesis count thresholds. If an exception condition applies, inline or combined retention applies regardless of thesis count.
 
 ---
 
-## Proxy Signals (프록시 시그널)
+## Proxy Signals
 
-> **중요**: 프록시 시그널은 **탐지 트리거**다. 판별 기준이 아니다. 시그널이 있으면 Thesis 분석을 수행하고, Thesis 분석 결과가 판별한다.
+> **Important**: Proxy signals are **detection triggers**, not judgment criteria. When a signal is present, perform thesis analysis — the thesis analysis result determines the judgment.
 
-| 시그널 | 설명 | 임계값 |
+| Signal | Description | Threshold |
 |--------|------|--------|
-| 커밋 타입 다양성 | feat + fix + refactor 혼합 | 2가지 이상 타입 |
-| 도메인/모듈 분산 | 변경 파일이 2개 이상 도메인에 걸쳐 있음 | 2+ 도메인 |
-| LOC 임계값 | 변경 라인 수 | 400+ lines |
+| Commit type diversity | Mix of feat + fix + refactor | 2+ types |
+| Domain/module spread | Changed files span 2+ domains | 2+ domains |
+| LOC threshold | Lines of code changed | 400+ lines |
 
-> 참고: SmartBear/Cisco 연구에서 200-400 LOC = 70-90% 결함 탐지율, 600+ LOC = 탐지율 급락.
+> Note: SmartBear/Cisco research shows 200-400 LOC = 70-90% defect detection rate, 600+ LOC = detection rate drops sharply.
 
-프록시 시그널이 **없어도** AND 테스트에서 multi-thesis가 감지되면 분리를 고려한다.
+Even without proxy signals, if the AND test detects multi-thesis, consider splitting.
 
 ---
 
-## Thesis 분석 데이터 소스
+## Thesis Analysis Data Sources
 
-Thesis 판별에 사용하는 데이터 소스와 그 목적:
+Data sources used for thesis analysis and their purposes:
 
-| 데이터 소스 | 목적 | 명령어 |
+| Data Source | Purpose | Command |
 |-------------|------|--------|
-| 파일 목록 | 어떤 파일이 변경되었는지 | `git diff origin/{base-branch}..HEAD --stat` |
-| 커밋 메타데이터 | 커밋 메시지, 타입, 수 | `git log origin/{base-branch}..HEAD --oneline` |
-| 커밋 설명 | 상세 커밋 메시지 | `git log origin/{base-branch}..HEAD --format='%s%n%b'` |
-| commit별 파일 변경 | 어떤 커밋이 어떤 파일을 수정했는지 | `git log origin/{base-branch}..HEAD --name-status` |
-| 도메인 구조 | 모듈 경계, 의존 관계 | explore agent 결과 |
-| 변경 목적 | 사용자가 설명한 의도 | 인터뷰 답변 |
+| File list | Which files changed | `git diff origin/{base-branch}..HEAD --stat` |
+| Commit metadata | Commit messages, types, count | `git log origin/{base-branch}..HEAD --oneline` |
+| Commit descriptions | Detailed commit messages | `git log origin/{base-branch}..HEAD --format='%s%n%b'` |
+| Per-commit file changes | Which commits modified which files | `git log origin/{base-branch}..HEAD --name-status` |
+| Domain structure | Module boundaries, dependencies | explore agent results |
+| Change purpose | User-described intent | Interview answers |
 
-**NON-NEGOTIABLE**: `git diff`(파일 내용)는 절대 사용 불가. Non-Negotiable Rules 참조.
-
----
-
-## Explore 프롬프트 가이드
-
-Thesis 분석을 위한 explore agent 프롬프트 예시:
-
-```
-"이 프로젝트의 모듈/도메인 경계를 파악해줘. 각 모듈의 책임과 의존 관계를 알려줘."
-```
-
-```
-"변경된 파일들이 어떤 도메인/모듈에 속하는지, 모듈 간 의존성이 있는지 확인해줘:
-[git diff --stat 결과의 파일 목록]"
-```
-
-```
-"이 프로젝트에서 [패턴명]이 표준 패턴인지 새로운 추상화인지 판단해줘."
-```
+**NON-NEGOTIABLE**: `git diff` (file contents) must never be used. See Non-Negotiable Rules.
 
 ---
 
-## Split Proposal (Split 제안)
+## Explore Prompt Guide
 
-Multi-thesis가 감지되면 사용자에게 다음 형식으로 제안한다.
-
-### 제안 형식
+Example explore agent prompts for thesis analysis:
 
 ```
-변경 범위에서 [N]개의 thesis가 감지되었습니다:
-
-**Thesis 1: [thesis 이름]**
-- 포함 커밋: [커밋 목록]
-- 포함 파일: [파일 목록]
-
-**Thesis 2: [thesis 이름]**
-- 포함 커밋: [커밋 목록]
-- 포함 파일: [파일 목록]
-
-어떻게 진행할까요?
-1. 동의 (분리 진행)
-2. 거부 (단일 PR로 진행)
-3. Thesis 경계 조정 (파일/커밋 배정 수정)
+"Identify the module/domain boundaries in this project. Describe each module's responsibilities and dependencies."
 ```
 
-### 사용자 선택 처리
+```
+"Check which domains/modules the changed files belong to and whether there are cross-module dependencies:
+[file list from git diff --stat]"
+```
 
-| 선택 | 처리 |
+```
+"Determine whether [pattern name] is a standard pattern or a new abstraction in this project."
+```
+
+---
+
+## Split Proposal
+
+When multi-thesis is detected, propose to the user in the following format.
+
+### Proposal Format
+
+```
+[N] theses were detected in the change scope:
+
+**Thesis 1: [thesis name]**
+- Included commits: [commit list]
+- Included files: [file list]
+
+**Thesis 2: [thesis name]**
+- Included commits: [commit list]
+- Included files: [file list]
+
+How would you like to proceed?
+1. Agree (proceed with split)
+2. Reject (proceed as single PR)
+3. Adjust thesis boundaries (modify file/commit assignments)
+```
+
+### User Choice Handling
+
+| Choice | Action |
 |------|------|
-| 동의 | 브랜치 분리 절차 진행 |
-| 거부 | Step 6 (단일 PR 표준 플로우) 진행 |
-| Thesis 경계 조정 | 사용자가 파일/커밋 배정 수정 → 재확인 |
+| Agree | Proceed with branch separation procedure |
+| Reject | Proceed to Step 6 (single PR standard flow) |
+| Adjust thesis boundaries | User modifies file/commit assignments → re-confirm |
 
 ---
 
-## Split PR Base 관계
+## Split PR Base Relationship
 
-모든 split은 이전 split 위에 체이닝된다. 첫 번째 PR은 `{base-branch}`를 base로, 이후 PR은 이전 split 브랜치를 base로 생성한다.
+All splits are chained on top of the previous split. The first PR uses `{base-branch}` as base; subsequent PRs use the previous split branch as base.
 
 ---
 
-## 브랜치 분리 절차
+## Branch Separation Procedure
 
-### 분리 절차
+### Separation Steps
 
-1. 각 thesis에 포함된 커밋 목록 확정 (머지 커밋 제외)
-2. 새 브랜치 생성:
-   - 첫 번째 thesis: `git checkout -b {branch-name} origin/{base-branch}`
-   - 이후 thesis: `git checkout -b {branch-name} {이전-split-브랜치}`
+1. Finalize the list of commits included in each thesis (excluding merge commits)
+2. Create new branches:
+   - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
+   - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
 3. Cherry-pick commits for the thesis in chronological order (oldest first): `git cherry-pick {commit-hash}` (git log outputs newest-first, so apply bottom-to-top)
-4. 브랜치 push: `git push -u origin {branch-name}` (Split Accept는 브랜치 push를 포함한다. Accept 시점에서 유저가 remote 브랜치 생성에 동의한 것으로 간주한다.)
-5. 모든 sub-브랜치 생성 완료 후 Sub-PR Description 작성
+4. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
+5. After all sub-branches are created, write Sub-PR Descriptions
 
-> **Mixed commit 주의**: 하나의 커밋이 여러 thesis에 속하는 파일을 함께 수정한 경우(mixed commit), cherry-pick하면 의도하지 않은 변경이 포함된다. Mixed commit이 감지되면 **자동 분리를 즉시 중단**하고 Graceful Degradation 절차로 전환한다. 파일 단위 수동 분리가 가능할 수 있음을 사용자에게 안내하되, LLM이 직접 파일 추출을 시도하지 않는다.
+> **Mixed commit warning**: If a single commit modifies files belonging to multiple theses (mixed commit), cherry-picking will include unintended changes. When a mixed commit is detected, **immediately stop automatic separation** and switch to the Graceful Degradation procedure. Inform the user that manual file-level separation may be possible, but the LLM must not attempt to extract files directly.
 
-### 머지 커밋 처리
+### Merge Commit Handling
 
-머지 커밋은 thesis 분석에서 제외한다. 브랜치 동기화의 아티팩트이며, thesis와 무관한 변경이다. cherry-pick 시에도 머지 커밋은 건너뛴다.
+Merge commits are excluded from thesis analysis. They are artifacts of branch synchronization and contain changes unrelated to any thesis. Skip merge commits during cherry-pick as well.
 
-### 실패 처리
+### Failure Handling
 
-cherry-pick이 실패하면:
-1. 분리 전체 중단 (`git cherry-pick --abort`)
-2. 원본 브랜치로 복귀: `git checkout {원본-브랜치}` (현재 체크아웃된 브랜치는 삭제할 수 없으므로)
-3. 지금까지 생성된 모든 sub-브랜치 삭제
-4. 단일 PR 플로우(Step 6)로 fallback
-5. 사용자에게 실패 원인 안내
+If cherry-pick fails:
+1. Abort the entire separation (`git cherry-pick --abort`)
+2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
+3. Delete all sub-branches created so far
+4. Fall back to single PR flow (Step 6)
+5. Inform the user of the failure cause
 
-### 원본 브랜치 보존
+### Original Branch Preservation
 
-원본 브랜치는 절대 삭제하지 않는다. 사용자가 split 완료 후 마음을 바꾸면:
-- sub-브랜치 삭제
-- 원본 브랜치로 복귀
-- `gh pr create`로 이미 PR이 생성된 경우, 사용자에게 수동 close 안내
+The original branch must never be deleted. If the user changes their mind after split completion:
+- Delete sub-branches
+- Return to the original branch
+- If a PR was already created with `gh pr create`, guide the user to manually close it
 
 ---
 
-## Sub-PR Description 작성
+## Sub-PR Description Writing
 
-### 형식
+### Format
 
-각 sub-PR는 `references/output-format.md`의 형식을 따른다 (📌 Summary, 🔧 Changes, 💬 Review Points, ✅ Checklist, 📎 References).
+Each sub-PR follows the format in `references/output-format.md` (📌 Summary, 🔧 Changes, 💬 Review Points, ✅ Checklist, 📎 References).
 
-### Split Context 노트
+### Split Context Note
 
-각 sub-PR Summary 상단에 split 컨텍스트를 추가한다:
+Add split context at the top of each sub-PR Summary:
 
 ```markdown
-> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. 먼저 머지되어야 합니다. 관련 PR: [sibling PR 링크들]
+> This PR is [K] of [N] split PRs. It must be merged first. Related PRs: [sibling PR links]
 ```
 
-### 사용자 확인
+### User Confirmation
 
-각 `gh pr create` 실행 전에 사용자 확인을 받는다.
-
----
-
-## Graceful Degradation (우아한 퇴보)
-
-커밋 수준 분리가 불가능한 경우 (mixed commit, cherry-pick 충돌, 또는 공유 파일 존재):
-
-1. 사용자에게 안내: `"파일 수준 분리가 불가합니다. [file]이 두 thesis에 걸쳐 변경되었습니다."`
-2. 단일 PR로 fallback
-3. 단일 PR의 Review Points에 thesis 경계를 설명: 리뷰어가 혼재된 관심사를 이해할 수 있도록 작성
-
-cherry-pick이 공유 파일에서 충돌을 발생시키는 것이 이 경우의 전형적인 결과다.
+Obtain user confirmation before each `gh pr create` execution.
 
 ---
 
-## 분리 예외 (Exception Cases)
+## Graceful Degradation
 
-### 새로운 추상화 설계 중
+When commit-level separation is not possible (mixed commit, cherry-pick conflict, or shared files exist):
 
-인터페이스가 확정되지 않은 경우 → 합쳐서 유지.
+1. Inform the user: `"File-level separation is not possible. [file] has been changed across two theses."`
+2. Fall back to single PR
+3. Explain thesis boundaries in the single PR's Review Points: write so reviewers can understand the mixed concerns
 
-| 구분 | 예시 | 처리 |
+A cherry-pick conflict on a shared file is the typical outcome of this case.
+
+---
+
+## Exception Cases
+
+### New Abstraction Under Design
+
+When the interface is not yet finalized → keep combined.
+
+| Category | Example | Action |
 |------|------|------|
-| 표준 패턴 (분리 OK) | MQ consumer/producer, REST client, Repository, Cache layer, Middleware | 분리 가능 |
-| 새로운 도메인 추상화 (합쳐서 유지) | DiscountEngine, PricingStrategy — 인터페이스 설계 자체가 리뷰 대상 | 단일 PR 유지 |
+| Standard pattern (split OK) | MQ consumer/producer, REST client, Repository, Cache layer, Middleware | Can split |
+| New domain abstraction (keep combined) | DiscountEngine, PricingStrategy — the interface design itself is under review | Keep as single PR |
 
-탐지 시그널: 사용자가 "설계를 확인받고 싶다", "인터페이스가 아직 확정이 아니다" 등을 언급하는 경우.
+Detection signal: When the user mentions "I want to confirm the design" or "the interface is not finalized yet".
 
-### 캠프사이트급 정리 (Campsite-level cleanup)
+### Campsite-Level Cleanup
 
-import 정리, 오타 수정, 데드 코드 제거 — 별도 thesis로 취급하지 않는다. 인라인 유지.
+Import cleanup, typo fixes, dead code removal — do not treat as a separate thesis. Keep inline.
 
-판별 기준: 리뷰어가 맥락 없이도 승인할 수 있는 변경.
+Judgment criterion: Changes that a reviewer can approve without any context.
 
-### 극소량 크로스-도메인 추가
+### Minimal Cross-Domain Addition
 
-Domain A의 기능 구현 일부로 Domain B에 메서드 1개 또는 5줄 미만을 추가하는 경우 → 인라인 유지. 별도 thesis로 분리하지 않는다.
+When implementing a feature in Domain A requires adding 1 method or fewer than 5 lines to Domain B → keep inline. Do not split as a separate thesis.
 
 ---
 
-## 빠른 참조
+## Quick Reference
 
-| 상황 | 판단 | 처리 |
+| Situation | Judgment | Action |
 |------|------|------|
-| Thesis 1개 | 단일 thesis | Step 6 진행 |
-| Thesis 2개, 인터페이스 미확정 | 새로운 추상화 설계 중 | 합쳐서 유지 |
-| Thesis 2개, 독립 리뷰 가능 | 분리 대상 | Split 제안 |
-| Thesis 2개, 독립 리뷰 불가 | 결합 의존성 | 단일 PR 유지 |
-| Thesis 3-4개 | Split 강력 권고 | Split 제안 (cap: 4개) |
-| Thesis 5개 이상 | 너무 많음 | 수동 분해 권장 |
-| cherry-pick 충돌 | 파일 수준 분리 불가 | Graceful Degradation |
-| 캠프사이트급 정리 | Thesis 아님 | 인라인 유지 |
+| 1 thesis | Single thesis | Proceed to Step 6 |
+| 2 theses, interface not finalized | New abstraction under design | Keep combined |
+| 2 theses, independently reviewable | Split candidate | Propose split |
+| 2 theses, not independently reviewable | Coupled dependency | Keep as single PR |
+| 3-4 theses | Strongly recommend split | Propose split (cap: 4) |
+| 5+ theses | Too many | Recommend manual decomposition |
+| cherry-pick conflict | File-level separation not possible | Graceful Degradation |
+| Campsite-level cleanup | Not a thesis | Keep inline |
