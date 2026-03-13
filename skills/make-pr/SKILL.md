@@ -250,7 +250,7 @@ After Clearance Checklist passes, analyze whether the PR contains multiple indep
 6. On Accept → separate git branches, write sub-PR descriptions (Step 6-8 per sub-PR)
 7. On Reject → proceed to Step 6 as single PR
 
-**Data sources:** `git diff --stat`, `git log`, explore results, interview answers. Never read `git diff` file contents.
+**Data sources:** `git diff origin/{base-branch}..HEAD --stat`, `git log`, explore results, interview answers. Never read `git diff` file contents.
 
 ---
 
