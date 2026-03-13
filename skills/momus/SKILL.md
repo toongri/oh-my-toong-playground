@@ -128,6 +128,7 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 - ✅ "No acceptance criteria for the error case — executor cannot verify when done" — missing verification, blocks completion
 - ✅ "TODO 2 and TODO 4 both modify authentication middleware's error handling — MECE overlap" — duplicate scope, blocks parallel delegation
 - ✅ "TODO 3 requires modifying 5 unrelated modules across 3 layers — exceeds atomicity threshold" — not single-delegation completable, needs decomposition
+- ✅ "QA scenario says 'verify the API works correctly' without specific endpoint, status code, or response field assertions" — vague scenario, executor cannot verify
 
 ## Four Criteria (All Must Pass)
 
@@ -151,6 +152,7 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 | Edge cases covered | Errors, empty states, invalid input addressed? |
 | Test strategy defined | Unit? Integration? Manual? Specific commands to run? |
 | Evidence paths defined | Do QA Scenarios include `.omt/evidence/` paths for evidence capture? |
+| QA scenario specificity | Do scenarios use concrete selectors/endpoints, specific test data, and exact assertions? (not "verify it works") |
 
 ### 3. Context Completeness (90% confidence required)
 | Check | Question |

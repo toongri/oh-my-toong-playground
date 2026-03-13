@@ -871,23 +871,32 @@ Every QA scenario must be executable by an agent without human involvement. Veri
     | "Test fails" | "Process exits with code 1 and prints 'Config not found'" |
     | "No output" | "Response missing X-RateLimit-Remaining header" |
     The Failure field describes the specific observable symptoms of failure, not the absence of success.
-  - **Tool** definition: A CLI command the executor invokes from a shell. The project's specific test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.) — use that runner when known. When unknown, fall back to universal tools (`curl`, `grep`, `bash`).
-    Reference examples by project type:
-    | Project Type | Tool Example |
-    |---|---|
-    | HTTP API verification | `curl` |
-    | File content verification | `grep` |
-    | General shell script | `bash` |
-    | Node.js / Bun | `bun test` or `jest` |
-    | Python | `pytest` |
-    | Go | `go test` |
-    | Kotlin/Java (Gradle) | `./gradlew test` |
-    | Browser UI | `playwright` |
+  - **Specificity requirements — every scenario MUST use:**
+    - **API — Endpoints**: Specific paths and methods (`POST /api/users`, not "the user API")
+    - **API — Status Codes**: Exact HTTP codes (`201 Created`, not "success response")
+    - **API — Response Fields**: Specific JSON paths (`response.body.id is UUID`, not "returns user data")
+    - **UI — Selectors**: Specific CSS selectors (`.login-button`, not "the login button")
+    - **UI — Assertions**: Exact DOM state (`text contains "Welcome back"`, not "verify it works")
+    - **Shared — Data**: Concrete test data (`"test@example.com"`, not `"[email]"`)
+    - **Shared — Timing**: Wait conditions where relevant (`timeout: 10s`)
+    - **Shared — Negative**: At least ONE failure/error scenario per task
+  - **Anti-patterns (your scenario is INVALID if it looks like this):**
+    - "Verify it works correctly" — HOW? What does "correctly" mean?
+    - "Check the API returns data" — WHAT data? What fields? What values?
+    - "Test the component renders" — WHERE? What selector? What content?
+    - "Returns success response" — WHAT status code? What body? What headers?
+    - Any scenario without an evidence path
+  - **Tool** definition: A CLI command the executor invokes from a shell. The project's test runner is determined during Context Loading (from package.json, build.gradle, go.mod, etc.).
+    | Domain | Tool | What It Does |
+    |--------|------|--------------|
+    | Frontend/UI | `playwright` | Navigate, fill forms, click buttons, assert DOM state, capture screenshots |
+    | API | `curl` | Send HTTP requests, parse JSON responses, assert status codes and fields |
+    | Test suite | Project-specific runner | `jest`, `bun test`, `pytest`, `go test`, `./gradlew test` — determined from project config |
     Anti-patterns (INVALID Tool values):
     | WRONG | WHY | RIGHT |
     |---|---|---|
     | "Header validation" | Test description, not a command | `curl` or `bun test` |
-    | "Concurrency stress test" | Test category, not executable | `bash` |
+    | "Concurrency stress test" | Test category, not executable | Project test runner |
     | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
   - Non-code TODOs (docs, config) may use simplified block format: Scenario Name + Preconditions + Expected + Failure (Tool/Steps/Evidence optional)
@@ -969,23 +978,28 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
     - All methods return typed responses
     - QA Scenarios:
 
-    Scenario: Happy path — CRUD operations work correctly
-      Tool: jest
-      Preconditions: DB migrated, test user seed
+    Scenario: Happy path — create user returns correct response
+      Tool: curl
+      Preconditions: Server running on localhost:3000, DB migrated, users table empty
       Steps:
-        1. Run `npm test -- user-service`
-      Expected: All CRUD tests pass, coverage >90%
-      Failure: Test runner reports failing assertions or coverage below 90%
-      Evidence: .omt/evidence/{plan-name}/task-3-crud-happy.txt
+        1. `curl -s -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
+        2. Assert response status is `201`
+        3. Assert `response.body.id` exists and matches UUID format
+        4. Assert `response.body.email` === `"test@example.com"`
+      Expected: 201 Created with JSON body containing id (UUID), email ("test@example.com"), name ("Test User")
+      Failure: Non-201 status code, or response body missing `id` field, or `email` !== "test@example.com"
+      Evidence: .omt/evidence/{plan-name}/task-3-create-user-201.json
 
     Scenario: Validation failure — missing required field rejected
-      Tool: jest
-      Preconditions: DB migrated, no seed data
+      Tool: curl
+      Preconditions: Server running, DB migrated
       Steps:
-        1. Call create() with missing required field
-      Expected: Throws ValidationError with field name
-      Failure: No error thrown, or error type is not ValidationError, or field name missing from message
-      Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.txt
+        1. `curl -s -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email User"}'`
+        2. Assert response status is `400`
+        3. Assert `response.body.error` contains `"email"`
+      Expected: 400 Bad Request with error message referencing missing "email" field
+      Failure: Non-400 status code, or error message does not mention "email" field
+      Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.json
 ```
 
 **Non-code TODO Example (simplified format):**
@@ -1004,13 +1018,13 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
 
       Scenario: Rate limit headers documented
         Preconditions: docs/api-reference.md exists, rate limiting middleware merged
-        Expected: Rate limit headers documented with X-RateLimit-* descriptions
-        Failure: X-RateLimit-* header descriptions missing or incomplete in documentation
+        Expected: Section titled "Rate Limiting" present with descriptions for X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers and a 429 error response example
+        Failure: Section absent, or any of X-RateLimit-Limit / X-RateLimit-Remaining / X-RateLimit-Reset not described, or 429 response not shown
 
       Scenario: Existing docs preserved
-        Preconditions: No rate limiting section exists prior
-        Expected: Section added without modifying existing endpoint docs
-        Failure: Existing endpoint documentation sections altered or removed
+        Preconditions: No rate limiting section exists prior to this change
+        Expected: All pre-existing endpoint sections (paths, parameters, response schemas) remain byte-for-byte identical after the update
+        Failure: Any pre-existing heading, parameter description, or response schema is altered or removed
 ```
 
 **Final Verification Wave**
