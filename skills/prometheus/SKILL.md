@@ -896,7 +896,7 @@ Every QA scenario must be executable by an agent without human involvement. Veri
     | WRONG | WHY | RIGHT |
     |---|---|---|
     | "Header validation" | Test description, not a command | `curl` or `bun test` |
-    | "Concurrency stress test" | Test category, not executable | Project test runner |
+    | "Concurrency stress test" | Test category, not executable | `bun test`, `pytest`, `go test` |
     | "test runner" | Generic label, not a specific command | `bun test`, `pytest`, `go test` |
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
   - **Evidence Convention**: Each QA scenario execution MUST save its output as an evidence artifact. Evidence path format:
@@ -1032,7 +1032,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
         Tool: diff
         Preconditions: No rate limiting section exists prior to this change
         Steps:
-          1. `diff <(git show HEAD~1:docs/api-reference.md | grep -v "Rate Limiting" | head -50) <(head -50 docs/api-reference.md)` or equivalent to verify pre-existing sections unchanged
+          1. `diff <(git show HEAD~1:docs/api-reference.md | grep -v "Rate Limiting") <(grep -v "Rate Limiting" docs/api-reference.md)` to verify pre-existing sections unchanged (or equivalent full-file comparison)
         Expected: All pre-existing endpoint sections (paths, parameters, response schemas) remain byte-for-byte identical after the update
         Failure: Any pre-existing heading, parameter description, or response schema is altered or removed
         Evidence: .omt/evidence/{plan-name}/task-6-existing-docs-preserved.txt
