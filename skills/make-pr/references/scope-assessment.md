@@ -48,9 +48,9 @@ digraph thesis_decision {
     "Exception Cases\nApplicable?" [shape=diamond];
     "Keep inline\n(exception applied)" [shape=box];
     "Determine thesis count" [shape=box];
-    "2?" [shape=diamond];
-    "3+?" [shape=diamond];
-    "5+?" [shape=diamond];
+    "= 2?" [shape=diamond];
+    "≥3?" [shape=diamond];
+    "≥5?" [shape=diamond];
     "Proceed to Step 6" [shape=box];
     "Independently reviewable?" [shape=diamond];
     "Propose split" [shape=box];
@@ -60,13 +60,13 @@ digraph thesis_decision {
 
     "Exception Cases\nApplicable?" -> "Keep inline\n(exception applied)" [label="YES"];
     "Exception Cases\nApplicable?" -> "Determine thesis count" [label="NO"];
-    "Determine thesis count" -> "5+?" [label="check first"];
-    "5+?" -> "Recommend manual decomposition\n(max 4 split cap)" [label="YES"];
-    "5+?" -> "3+?" [label="NO"];
-    "3+?" -> "Strongly recommend split" [label="YES"];
-    "3+?" -> "2?" [label="NO"];
-    "2?" -> "Independently reviewable?" [label="YES"];
-    "2?" -> "Proceed to Step 6" [label="NO"];
+    "Determine thesis count" -> "≥5?" [label="check first"];
+    "≥5?" -> "Recommend manual decomposition\n(max 4 split cap)" [label="YES"];
+    "≥5?" -> "≥3?" [label="NO"];
+    "≥3?" -> "Strongly recommend split" [label="YES"];
+    "≥3?" -> "= 2?" [label="NO"];
+    "= 2?" -> "Independently reviewable?" [label="YES"];
+    "= 2?" -> "Proceed to Step 6" [label="NO"];
     "Independently reviewable?" -> "Propose split" [label="YES"];
     "Independently reviewable?" -> "Keep as single PR" [label="NO"];
 }
@@ -167,7 +167,7 @@ When multi-thesis is detected, propose to the user in the following format.
 
 All splits are chained on top of the previous split. The first PR uses `{base-branch}` as base; subsequent PRs use the previous split branch as base.
 
-> **Note**: This is a stacked-only strategy. Even logically independent theses are chained sequentially. This is an intentional simplification.
+> **Note**: This is a stacked-only strategy. Even logically independent theses are chained sequentially. This is an intentional simplification. Cherry-pick-based separation cannot guarantee that two theses do not touch the same file; if they do, a parallel approach would produce conflicting branches with no safe merge path. Stacking ensures each thesis builds cleanly on the previous one, making conflicts detectable and resolvable at each step.
 
 ---
 
@@ -179,6 +179,8 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 1. Finalize the list of commits included in each thesis (excluding merge commits), and record the mapping of thesis → commit hashes
 
+2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
+
 For each thesis (in stacking order):
    a. Create branch:
       - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
@@ -186,7 +188,7 @@ For each thesis (in stacking order):
    b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...`
    c. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
 
-2. After all sub-branches are created, write Sub-PR Descriptions
+3. After all sub-branches are created, write Sub-PR Descriptions
 
 > **Mixed commit warning**: If a single commit modifies files belonging to multiple theses (mixed commit), cherry-picking will include unintended changes. When a mixed commit is detected, **immediately stop automatic separation** and switch to the Graceful Degradation procedure. Inform the user that manual file-level separation may be possible, but the LLM must not attempt to extract files directly.
 
@@ -201,9 +203,11 @@ If cherry-pick fails:
 2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
 3. For each sub-branch created during this procedure:
    a. `git branch -D {branch-name}`
-   b. `git push origin --delete {branch-name} 2>/dev/null || true`
-4. Fall back to single PR flow (Step 6)
-5. Inform the user of the failure cause
+4. Ask the user for confirmation before deleting remote branches: list each remote branch to be deleted and wait for explicit approval
+5. For each remote branch confirmed by the user:
+   a. `git push origin --delete {branch-name} 2>/dev/null || true`
+6. Fall back to single PR flow (Step 6)
+7. Inform the user of the failure cause
 
 ### Original Branch Preservation
 
@@ -222,10 +226,16 @@ Each sub-PR follows the format in `references/output-format.md` (📌 Summary, �
 
 ### Split Context Note
 
-Add split context at the top of each sub-PR Summary:
+Add split context at the top of each sub-PR Summary. Use the appropriate template based on K (the position of this PR in the split series):
 
+When K = 1 (first PR — no predecessor):
 ```markdown
-> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. 먼저 머지되어야 합니다. 관련 PR: [sibling PR links]
+> 이 PR은 [N]개 분리 PR 중 첫 번째입니다. 관련 PR: [sibling PR links]
+```
+
+When K > 1 (has a predecessor):
+```markdown
+> 이 PR은 [N]개 분리 PR 중 [K]번째입니다. #[K-1] PR이 먼저 머지되어야 합니다. 관련 PR: [sibling PR links]
 ```
 
 ### User Confirmation
