@@ -120,7 +120,11 @@ gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
 # Fallback: git remote HEAD
 git symbolic-ref refs/remotes/origin/HEAD | sed 's@refs/remotes/origin/@@'
 
-# Fallback default if both fail: main
+# Fallback: check if main or master exists on remote
+git ls-remote --heads origin main   # if exit 0 and non-empty → use "main"
+git ls-remote --heads origin master # if exit 0 and non-empty → use "master"
+
+# If none of the above succeed: ask the user to specify the base branch
 ```
 
 Use the detected value as `{base-branch}` in all subsequent git commands.
