@@ -2,7 +2,7 @@
 
 Single reference document for Step 5 PR scope analysis. Source of truth for all scope analysis logic, from thesis definition to separation procedure and exception handling.
 
-> **Branch placeholder**: `{base-branch}` represents the project's default branch detected in Step 0 (e.g., main, master, develop).
+> **Branch placeholders**: `{base-branch}` represents the project's default branch detected in Step 0 (e.g., main, master, develop). `{original-branch}` represents the branch that was checked out when the separation procedure began.
 
 ---
 
@@ -177,8 +177,6 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 **Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
 
-Record the current branch: `ORIGINAL_BRANCH=$(git branch --show-current)`
-
 1. Finalize the list of commits included in each thesis (excluding merge commits), and record the mapping of thesis → commit hashes
 
 For each thesis (in stacking order):
@@ -200,7 +198,7 @@ Merge commits are excluded from thesis analysis. They are artifacts of branch sy
 
 If cherry-pick fails:
 1. Abort the entire separation (`git cherry-pick --abort`)
-2. Return to the original branch: `git checkout $ORIGINAL_BRANCH` (the currently checked-out branch cannot be deleted)
+2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
 3. For each sub-branch created during this procedure:
    a. `git branch -D {branch-name}`
    b. `git push origin --delete {branch-name} 2>/dev/null || true`
