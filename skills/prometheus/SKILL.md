@@ -981,10 +981,10 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
       Tool: curl
       Preconditions: Server running on localhost:3000, DB migrated, users table empty
       Steps:
-        1. `curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
-        2. Assert response status is `201`
-        3. Assert `response.body.id` exists and matches UUID format
-        4. Assert `response.body.email` === `"test@example.com"`
+        1. `HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}')`
+        2. Assert `$HTTP_STATUS` is `201`
+        3. Assert `response.json` contains `"id"` matching UUID format
+        4. Assert `response.json` contains `"email":"test@example.com"`
       Expected: 201 Created with JSON body containing id (UUID), email ("test@example.com"), name ("Test User")
       Failure: Non-201 status code, or response body missing `id` field, or `email` !== "test@example.com"
       Evidence: .omt/evidence/{plan-name}/task-3-create-user-201.json
@@ -993,9 +993,9 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
       Tool: curl
       Preconditions: Server running, DB migrated
       Steps:
-        1. `curl -s -w "\nHTTP_STATUS:%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email User"}'`
-        2. Assert response status is `400`
-        3. Assert `response.body.error` contains `"email"`
+        1. `HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email User"}')`
+        2. Assert `$HTTP_STATUS` is `400`
+        3. Assert `response.json` contains `"error"` referencing `"email"`
       Expected: 400 Bad Request with error message referencing missing "email" field
       Failure: Non-400 status code, or error message does not mention "email" field
       Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.json

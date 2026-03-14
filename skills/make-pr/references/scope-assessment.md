@@ -177,14 +177,18 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 **Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
 
-1. Finalize the list of commits included in each thesis (excluding merge commits)
-2. Create new branches:
-   - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
-   - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
-3. List commits in chronological order: `git log --reverse origin/{base-branch}..HEAD --oneline`
-   Cherry-pick each commit: `git cherry-pick {commit-hash}`
-4. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
-5. After all sub-branches are created, write Sub-PR Descriptions
+Record the current branch: `ORIGINAL_BRANCH=$(git branch --show-current)`
+
+1. Finalize the list of commits included in each thesis (excluding merge commits), and record the mapping of thesis → commit hashes
+
+For each thesis (in stacking order):
+   a. Create branch:
+      - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
+      - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
+   b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...`
+   c. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
+
+2. After all sub-branches are created, write Sub-PR Descriptions
 
 > **Mixed commit warning**: If a single commit modifies files belonging to multiple theses (mixed commit), cherry-picking will include unintended changes. When a mixed commit is detected, **immediately stop automatic separation** and switch to the Graceful Degradation procedure. Inform the user that manual file-level separation may be possible, but the LLM must not attempt to extract files directly.
 
@@ -196,8 +200,10 @@ Merge commits are excluded from thesis analysis. They are artifacts of branch sy
 
 If cherry-pick fails:
 1. Abort the entire separation (`git cherry-pick --abort`)
-2. Return to the original branch: `git checkout {original-branch}` (the currently checked-out branch cannot be deleted)
-3. Delete all sub-branches created so far: `git branch -D {branch-name}` and `git push origin --delete {branch-name}`
+2. Return to the original branch: `git checkout $ORIGINAL_BRANCH` (the currently checked-out branch cannot be deleted)
+3. For each sub-branch created during this procedure:
+   a. `git branch -D {branch-name}`
+   b. `git push origin --delete {branch-name} 2>/dev/null || true`
 4. Fall back to single PR flow (Step 6)
 5. Inform the user of the failure cause
 
