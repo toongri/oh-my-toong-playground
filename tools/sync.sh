@@ -1255,12 +1255,14 @@ sync_plugins() {
                 claude)
                     if [[ "$DRY_RUN" == "true" ]]; then
                         # dry-run: log_dry for all pre-commands and plugin install (skip check)
-                        local j
-                        for j in $(seq 0 $((pre_commands_count - 1))); do
-                            local cmd
-                            cmd=$(yq '.plugins.items['"$i"']["pre-commands"]['"$j"']' "$yaml_file")
-                            log_dry "$cmd"
-                        done
+                        if [[ "$pre_commands_count" -gt 0 ]]; then
+                            local j
+                            for j in $(seq 0 $((pre_commands_count - 1))); do
+                                local cmd
+                                cmd=$(yq '.plugins.items['"$i"']["pre-commands"]['"$j"']' "$yaml_file")
+                                log_dry "$cmd"
+                            done
+                        fi
                         claude_sync_plugin_install "$plugin_name" "$plugin_scope" "$target_path" "$DRY_RUN"
                     else
                         # Determine whether to run pre-commands based on check

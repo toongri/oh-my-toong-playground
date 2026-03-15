@@ -706,8 +706,8 @@ validate_plugins() {
             fi
 
             # check 검증
-            local has_check=$(yq ".plugins.items[$i].check // null" "$yaml_file")
-            if [[ "$has_check" != "null" ]]; then
+            local has_check=$(yq ".plugins.items[$i] | has(\"check\")" "$yaml_file")
+            if [[ "$has_check" == "true" ]]; then
                 local check_type=$(yq ".plugins.items[$i].check | type" "$yaml_file")
                 if [[ "$check_type" != "!!str" ]]; then
                     log_error "plugins.items[$i].check: string 이어야 합니다"
@@ -715,7 +715,7 @@ validate_plugins() {
             fi
 
             # check만 있고 pre-commands 없으면 경고
-            if [[ "$has_check" != "null" && "$has_pre_commands" == "null" ]]; then
+            if [[ "$has_check" == "true" && "$has_pre_commands" == "null" ]]; then
                 log_warn "plugins.items[$i]: 'check'가 있지만 'pre-commands'가 없습니다"
             fi
         fi
