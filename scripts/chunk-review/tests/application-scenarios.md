@@ -505,7 +505,7 @@
 |----|-------------------|
 | V1 | Session A: Worker가 P1으로 propose (현재 데이터에서 이미 SLA 초과 → demonstrable defect under today's conditions) |
 | V2 | Session B: Worker가 P2(b)로 propose (현재 문제 없음, 미래 성장 시 예상되는 문제) |
-| V3 | 양쪽 모두 per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 |
+| V3 | 양쪽 모두 Worker per-issue output에 Problem, Impact, Probability, Maintainability, Fix 필드 포함 |
 | V4 | Session A의 Probability 필드가 "현재 조건에서 이미 발현" 취지의 내용 포함 |
 | V5 | Session B의 Probability 필드가 "현재 조건에서 미발현, 성장 시 예상" 취지의 내용 포함 |
 
@@ -538,7 +538,7 @@
 | V1 | Worker가 P1으로 propose |
 | V2 | Problem 필드가 현재 코드의 결함을 기술 (유효성 검증 없음) |
 | V3 | Probability 필드가 "현재 realistic conditions에서 발현" 언급 (weekly support tickets) |
-| V4 | per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 (P1이므로 모든 필드 필수) |
+| V4 | Worker per-issue output에 Problem, Impact, Probability, Maintainability, Fix 필드 포함 |
 
 ---
 
@@ -676,7 +676,7 @@
 | V2 | Worker output에서 Probability가 명시적으로 라벨링됨 (e.g., "Probability: concurrent access is a normal traffic pattern") |
 | V3 | Worker output에서 Maintainability가 명시적으로 라벨링됨 (e.g., "Maintainability: requires optimistic locking") |
 | V4 | Worker가 P1으로 propose (demonstrable defect under today's conditions) |
-| V5 | per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 |
+| V5 | Worker per-issue output에 Problem, Impact, Probability, Maintainability, Fix 필드 포함 |
 
 ---
 
