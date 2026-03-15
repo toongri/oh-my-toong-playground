@@ -1032,12 +1032,13 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
         Evidence: .omt/evidence/{plan-name}/task-6-rate-limit-docs.txt
 
       Scenario: Existing docs preserved
-        Tool: diff
+        Tool: git
         Preconditions: No rate limiting section exists prior to this change
         Steps:
-          1. `diff <(git show HEAD:docs/api-reference.md) <(awk '/^## Rate Limiting$/,/^## /{next}1' docs/api-reference.md)` to verify pre-existing sections unchanged (section-aware extraction — strips the entire new section, not just heading lines)
-        Expected: All pre-existing endpoint sections (paths, parameters, response schemas) remain byte-for-byte identical after the update
-        Failure: Any pre-existing heading, parameter description, or response schema is altered or removed
+          1. `git diff HEAD -- docs/api-reference.md` to inspect all changes to the API reference document
+          2. Verify that the diff output shows ONLY additions within the new `## Rate Limiting` section — no modifications or deletions in pre-existing sections
+        Expected: Diff output contains only `+` lines (additions) under the `## Rate Limiting` heading; no `-` lines (deletions) or changes in other sections
+        Failure: Diff shows modifications or deletions in any pre-existing section (Authentication, Error Handling, etc.)
         Evidence: .omt/evidence/{plan-name}/task-6-existing-docs-preserved.txt
 ```
 
