@@ -552,7 +552,7 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 |----|--------|----------|
 | V1 | PASS | Session A: subagent가 P1으로 propose. "demonstrable performance defect under today's conditions — p99 already above SLA" |
 | V2 | PASS | Session B: subagent가 P2(b)로 propose. "no defect today — <50ms is fine — but predictable failure as data grows" |
-| V3 | PASS | 양쪽 모두 per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 |
+| V3 | PASS | 양쪽 모두 Worker per-issue output에 Problem, Impact, Probability, Maintainability, Fix 필드 포함 |
 | V4 | PASS | Session A Probability: "Every search request triggers this path with the current dataset" 취지 |
 | V5 | PASS | Session B Probability: "No defect under today's conditions. Projected failure under realistic growth trajectory" 취지 |
 
@@ -575,7 +575,7 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 | V1 | PASS | subagent가 P1으로 propose |
 | V2 | PASS | Problem: "currency field accepts any arbitrary string without validation" |
 | V3 | PASS | Probability: "confirmed by weekly support tickets" — 현재 realistic conditions에서 발현 |
-| V4 | PASS | per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 |
+| V4 | PASS | Worker per-issue output에 Problem, Impact, Probability, Maintainability, Fix 필드 포함 |
 
 ---
 
@@ -648,7 +648,7 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 | V2 | PASS | "**Probability**: Multi-device concurrent requests are confirmed in access logs per the project context. This is not a hypothetical — the trigger condition exists and is observed in production today." |
 | V3 | PASS | "**Maintainability**: The fix requires adding a pessimistic or optimistic lock; both are well-supported in Spring Data JPA." |
 | V4 | FAIL | Worker가 P0으로 propose (예상: P1). 근거: "financial data loss in a payment system, making this P0." Worker는 double-charge를 "data loss"(P0)로 해석했으나, Decision Gate Walkthrough 예시는 "data corruption"(P1)으로 분류. Rubric의 P0/P1 경계에서 "data corruption" vs "data loss" 구분이 재무 도메인에서 불충분 — rubric gap 신호 |
-| V5 | PASS | per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 |
+| V5 | PASS | Worker per-issue output에 Problem, Impact, Probability, Maintainability, Fix 필드 포함 |
 
 > **SEV-11 V4 실패 분석**: Decision Gate Walkthrough의 핵심 목표(3축 명시적 라벨링 + decision gate 순회 + 결정적 축 식별)는 V1-V3, V5에서 검증 완료. V4 실패는 P0/P1 경계의 rubric gap — "data corruption"(복원 가능한 잘못된 값)과 "data loss"(비가역적 손실)의 구분이 재무 도메인에서 모호. 향후 REFACTOR 후보.
 
