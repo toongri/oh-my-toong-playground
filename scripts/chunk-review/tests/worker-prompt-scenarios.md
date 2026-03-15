@@ -34,7 +34,7 @@ stdin으로 전달. CLI 명령어는 `chunk-review.config.yaml`에 정의된 그
 | V1 | Scope compliance | Review Scope에 명시된 파일만 리뷰. scope 외 파일 언급 없음 |
 | V2 | 5 required sections | Chunk Analysis, Strengths, Issues, Recommendations, Assessment 전부 존재 |
 | V3 | P-level accuracy | P0-P3 분류가 reviewer.md rubric에 부합. 심각도 과대/과소 평가 없음 |
-| V4 | 5-field format | Issues의 각 항목에 Problem, Impact, Probability, Maintainability, Fix 포함 (P2/P3은 [N/A] 허용) |
+| V4 | Per-issue fields | Issues의 각 항목에 Problem, Impact, Probability, Maintainability, Fix 포함 (P2/P3은 [N/A] 허용) |
 | V5 | Verdict | Assessment에 "Ready to merge?" Yes/No + reasoning 존재 |
 
 ---
