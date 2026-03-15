@@ -731,100 +731,316 @@ sequenceDiagram
 
 ### P0 (Must Fix)
 
-**[P0] `@Transactional` wrapping external HTTP call to Stripe**
-- **File**: OrderPaymentController.kt:34-67
-- **Problem**: `processPayment()` is `@Transactional` but includes `StripeGatewayAdapter.charge()` — an external HTTP round-trip (500ms-2s). The DB connection is held open for the entire network call.
-- **Impact**: Under concurrent load, 10 in-flight payments saturate the HikariCP pool, blocking all DB operations including order browsing and cart. Full system outage from DB connection exhaustion.
-- **Probability**: Triggered in normal operation — every payment request holds a DB connection for the duration of the Stripe call.
-- **Maintainability**: Tight coupling between transaction boundary and external call makes it impossible to tune DB pool and payment timeout independently.
-- **Fix**: Split into two transactions: (1) validate + mark `PAYMENT_IN_PROGRESS`, (2) after Stripe call, persist result + update status. Use compensating job for stuck `PAYMENT_IN_PROGRESS` orders.
+**[P0-1] `@Transactional` wrapping external HTTP call to Stripe**
+- **위치**: `OrderPaymentController.kt:34` — `processPayment()`
+- **현재 코드**:
+  ```kotlin
+  @PostMapping("/{orderId}/payment")
+  @Transactional
+  fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
+      val order = orderRepository.findByIdWithLock(orderId)
+          ?: throw OrderNotFoundException(orderId)
+      order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
+      val result = stripeGatewayAdapter.charge(order, request)  // external HTTP call inside TX
+      val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
+      order.transitionTo(OrderStatus.PAID)
+      return ResponseEntity.ok(PaymentResponse.from(record))
+  }
+  ```
+- **문맥**: HTTP POST handler → Stripe API call → DB persist. DB 트랜잭션이 외부 HTTP 호출을 포함하여 Stripe 응답 대기 동안 DB 커넥션을 점유
+- **문제**: `processPayment()`는 `@Transactional`이지만 `StripeGatewayAdapter.charge()` — 외부 HTTP 왕복(500ms-2s)을 포함함. DB 커넥션이 전체 네트워크 호출 동안 열려 있음
+- **영향**: 동시 부하 시 10개의 진행 중인 결제가 HikariCP 풀을 고갈시켜 주문 조회, 장바구니 등 모든 DB 작업 차단 — 모든 결제 요청이 정상 운영 중 DB 커넥션을 Stripe 호출 동안 보유하므로 즉시 발현됨
+- **수정안**:
+  ```diff
+  -@PostMapping("/{orderId}/payment")
+  -@Transactional
+  -fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
+  -    val order = orderRepository.findByIdWithLock(orderId)
+  -        ?: throw OrderNotFoundException(orderId)
+  -    order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
+  -    val result = stripeGatewayAdapter.charge(order, request)
+  -    val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
+  -    order.transitionTo(OrderStatus.PAID)
+  -    return ResponseEntity.ok(PaymentResponse.from(record))
+  -}
+  +@PostMapping("/{orderId}/payment")
+  +fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
+  +    val order = paymentApplicationService.initiatePayment(orderId)  // TX 1: validate + mark IN_PROGRESS
+  +    val result = stripeGatewayAdapter.charge(order, request)        // external call outside TX
+  +    val record = paymentApplicationService.persistResult(order, result)  // TX 2: save result + update status
+  +    return ResponseEntity.ok(PaymentResponse.from(record))
+  +}
+  ```
+- **영향 범위**: `OrderController.kt:initiatePayment()` → `processPayment()` 호출
 - **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P0; adjudicated P0 — unanimous)
 
-**[P0] No circuit breaker on Stripe API calls**
-- **File**: StripeGatewayAdapter.kt:44-78
-- **Problem**: No circuit breaker, bulkhead, or timeout override on `charge()` and `refund()`. Stripe SDK default timeout is 30s.
-- **Impact**: Combined with the `@Transactional` issue, a Stripe degradation cascades into full system unavailability. All DB connections blocked waiting on Stripe.
-- **Probability**: Stripe degradations occur multiple times per year; each occurrence triggers cascade failure in normal operation.
-- **Maintainability**: No isolation between external dependency failure and internal system health.
-- **Fix**: Add Resilience4j `@CircuitBreaker` (50% failure threshold, 30s wait, 3 half-open calls). Set Stripe SDK timeout to 5s. Return `PaymentResult.TEMPORARILY_UNAVAILABLE` as fallback.
+**[P0-2] No circuit breaker on Stripe API calls**
+- **위치**: `StripeGatewayAdapter.kt:44` — `charge()`
+- **현재 코드**:
+  ```kotlin
+  class StripeGatewayAdapter(
+      private val stripeClient: StripeClient,
+  ) : PaymentGateway {
+
+      fun charge(order: Order, request: PaymentRequest): PaymentResult {
+          val chargeParams = ChargeCreateParams.builder()
+              .setAmount(order.totalAmount.toLong())
+              .setCurrency(request.currency)
+              .setSource(request.paymentToken)
+              .build()
+          val charge = stripeClient.charges().create(chargeParams)
+          return PaymentResult.from(charge)
+      }
+  }
+  ```
+- **문맥**: `OrderPaymentController.processPayment()` → `charge()` → Stripe SDK HTTP 호출. 서킷 브레이커 없이 Stripe 장애 시 모든 호출이 30초 타임아웃까지 대기
+- **문제**: `charge()`와 `refund()`에 서킷 브레이커, 벌크헤드, 타임아웃 오버라이드가 없음. Stripe SDK 기본 타임아웃은 30s
+- **영향**: P0-1의 `@Transactional` 문제와 결합 시 Stripe 장애가 전체 시스템 불가용으로 이어짐 — Stripe 장애는 연간 수 차례 발생하며 발생 시마다 정상 운영 중 연쇄 실패 유발
+- **수정안**:
+  ```diff
+  +@CircuitBreaker(name = "stripe", fallbackMethod = "chargeFallback")
+   fun charge(order: Order, request: PaymentRequest): PaymentResult {
+       val chargeParams = ChargeCreateParams.builder()
+           .setAmount(order.totalAmount.toLong())
+           .setCurrency(request.currency)
+           .setSource(request.paymentToken)
+           .build()
+       val charge = stripeClient.charges().create(chargeParams)
+       return PaymentResult.from(charge)
+   }
+  +
+  +fun chargeFallback(order: Order, request: PaymentRequest, ex: Exception): PaymentResult =
+  +    PaymentResult.TEMPORARILY_UNAVAILABLE
+  ```
+- **영향 범위**: `OrderPaymentController.kt`, `refund()` 동일 패턴
 - **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P1; adjudicated P0 — Gemini's P1 reasoning did not account for cascade failure to unrelated endpoints, which satisfies outage criteria)
 
-**[P0] HTTPS not validated on webhook callback URL**
-- **File**: PaymentRequest.kt:8-12
-- **Problem**: `callbackUrl: String` with only `@NotBlank` validation. Accepts `http://` scheme — payment confirmations could be sent over plaintext.
-- **Impact**: Payment data interceptable via MITM attack in production environment. Security breach exposing payment confirmation details.
-- **Probability**: Any attacker on the network path can exploit; production environments route through public internet.
-- **Maintainability**: Simple validation gap — fix is additive with no architectural change.
-- **Fix**: Custom `@ValidCallbackUrl` annotation: well-formed URL, `https` scheme, no private/loopback IP. Production: allowlist of registered callback domains.
+**[P0-3] HTTPS not validated on webhook callback URL**
+- **위치**: `PaymentRequest.kt:8` — `PaymentRequest` data class
+- **현재 코드**:
+  ```kotlin
+  data class PaymentRequest(
+      @field:NotBlank
+      val currency: String,
+      @field:NotBlank
+      val paymentToken: String,
+      @field:NotBlank
+      val callbackUrl: String,   // http:// 허용 — plaintext 전송 가능
+  )
+  ```
+- **문맥**: API 입력 DTO → `OrderPaymentController.processPayment()` 파라미터. `callbackUrl`은 결제 확인 웹훅 전송 대상 URL
+- **문제**: `callbackUrl: String`에 `@NotBlank` 검증만 존재. `http://` 스킴을 허용하여 결제 확인이 평문으로 전송될 수 있음
+- **영향**: 프로덕션 환경에서 MITM 공격으로 결제 데이터 탈취 가능 — 네트워크 경로상 모든 공격자가 악용 가능하며 프로덕션은 공용 인터넷을 경유함
+- **수정안**:
+  ```diff
+  -    @field:NotBlank
+  -    val callbackUrl: String,
+  +    @field:ValidCallbackUrl
+  +    val callbackUrl: String,
+  ```
+- **영향 범위**: 이 위치만 해당
 - **Review Consensus**: 2/3 models identified (Opus P0, Sonnet P0; adjudicated P0 — Gemini did not flag but both flagging models' reasoning satisfies security + production criteria)
 
 ### P1 (Should Fix)
 
-**[P1] No dead letter queue for failed payment callbacks**
-- **File**: OrderPaymentController.kt:85-102
-- **Problem**: Failed webhook processing silently drops events. Stripe retries for 3 days then gives up permanently.
-- **Impact**: Data loss — payment confirmations permanently lost after Stripe retry exhaustion, leaving orders in inconsistent state.
-- **Probability**: Occurs under realistic failure conditions (deserialization errors, transient DB failures during webhook processing).
-- **Maintainability**: No observability into dropped events; debugging requires manual Stripe dashboard correlation.
-- **Fix**: Configure dead letter topic for the webhook consumer group. Add admin dashboard for manual reprocessing of failed events.
+**[P1-1] No dead letter queue for failed payment callbacks**
+- **위치**: `OrderPaymentController.kt:85` — `handleWebhook()`
+- **현재 코드**:
+  ```kotlin
+  @PostMapping("/webhook")
+  fun handleWebhook(@RequestBody payload: String, @RequestHeader("Stripe-Signature") sig: String): ResponseEntity<Unit> {
+      return try {
+          val event = webhookService.parse(payload, sig)
+          paymentEventHandler.handle(event)
+          ResponseEntity.ok().build()
+      } catch (ex: Exception) {
+          log.error("Webhook processing failed", ex)
+          ResponseEntity.ok().build()   // 예외를 삼키고 200 반환 — Stripe 재시도 차단
+      }
+  }
+  ```
+- **문맥**: Stripe 웹훅 수신 → 파싱 → `paymentEventHandler.handle()`. 예외 발생 시 이벤트가 조용히 드롭됨
+- **문제**: 웹훅 처리 실패 시 이벤트를 조용히 드롭함. Stripe는 3일간 재시도 후 영구 포기
+- **영향**: 데이터 손실 — Stripe 재시도 소진 후 결제 확인이 영구 유실되어 주문이 불일치 상태로 남음. 역직렬화 오류, DB 일시 장애 등 현실적인 장애 조건에서 발생
+- **수정안**:
+  ```diff
+  -        } catch (ex: Exception) {
+  -            log.error("Webhook processing failed", ex)
+  -            ResponseEntity.ok().build()
+  +        } catch (ex: Exception) {
+  +            log.error("Webhook processing failed, sending to DLT", ex)
+  +            deadLetterPublisher.publish(WebhookDeadLetter(payload, sig, ex.message))
+  +            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
+           }
+  ```
+- **영향 범위**: `application.yml` Kafka consumer config 연관
 - **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P1; adjudicated P1 — unanimous)
 
-**[P1] Currency field is unbounded String instead of ISO 4217 enum**
-- **File**: PaymentRequest.kt:6
-- **Problem**: Invalid currency codes reach Stripe, producing cryptic 400 errors surfaced as generic 500 to clients.
-- **Impact**: Data integrity violation — invalid currencies accepted at API boundary, causing downstream failures with misleading error messages.
-- **Probability**: Realistic with any non-trivial API consumer; typos and unsupported currency codes are common in integration testing and production.
-- **Maintainability**: Validation gap at API boundary forces debugging at Stripe integration layer instead of catching at input.
-- **Fix**: Replace `String` with `Currency` enum (ISO 4217 subset supported by business). Validate at DTO level with `@ValidCurrency`.
+**[P1-2] Currency field is unbounded String instead of ISO 4217 enum**
+- **위치**: `PaymentRequest.kt:6` — `PaymentRequest.currency`
+- **현재 코드**:
+  ```kotlin
+  data class PaymentRequest(
+      @field:NotBlank
+      val currency: String,    // "USDD", "KRW2" 등 잘못된 값 허용
+      @field:NotBlank
+      val paymentToken: String,
+      @field:NotBlank
+      val callbackUrl: String,
+  )
+  ```
+- **문맥**: API 입력 DTO → `StripeGatewayAdapter.charge()`에서 `request.currency` 직접 사용. 잘못된 값이 Stripe API까지 전달됨
+- **문제**: 유효하지 않은 통화 코드가 Stripe에 도달하여 모호한 400 오류가 클라이언트에 일반 500으로 노출됨
+- **영향**: API 경계에서 유효하지 않은 통화를 허용해 하위 실패를 유발 — 통합 테스트와 프로덕션에서 오타 및 미지원 통화 코드는 일반적이며 디버깅이 Stripe 레이어까지 밀려남
+- **수정안**:
+  ```diff
+  -    @field:NotBlank
+  -    val currency: String,
+  +    val currency: Currency,   // enum Currency { KRW, USD, EUR, JPY, ... }
+  ```
+- **영향 범위**: `StripeGatewayAdapter.charge()`에서 currency 사용
 - **Review Consensus**: 2/3 models identified (Opus P1, Gemini P1; adjudicated P1 — Sonnet flagged as P2 but data integrity impact under realistic input justifies P1)
 
-**[P1] Missing index on `inventory_reservations.order_id`**
-- **File**: V2024_001__add_payment_and_inventory_tables.sql:28
-- **Problem**: Idempotency lookup on every Kafka message does a full table scan. Grows linearly with order volume.
-- **Impact**: Performance degradation — inventory reservation latency increases linearly with order history, eventually causing Kafka consumer lag and order processing delays.
-- **Probability**: Guaranteed at scale; table grows monotonically with every order.
-- **Maintainability**: Missing index is a single-line fix but has compounding production impact if left unaddressed.
-- **Fix**: Add `CREATE INDEX idx_inventory_reservations_order_id ON inventory_reservations(order_id)` to migration.
+**[P1-3] Missing index on `inventory_reservations.order_id`**
+- **위치**: `V2024_001__add_payment_and_inventory_tables.sql:28` — `CREATE TABLE inventory_reservations`
+- **현재 코드**:
+  ```sql
+  CREATE TABLE inventory_reservations (
+      id          BIGINT       NOT NULL AUTO_INCREMENT,
+      order_id    BIGINT       NOT NULL,
+      product_id  BIGINT       NOT NULL,
+      quantity    INT          NOT NULL,
+      reserved_at DATETIME     NOT NULL,
+      PRIMARY KEY (id)
+      -- order_id 인덱스 없음 — 매 Kafka 메시지마다 full scan
+  );
+  ```
+- **문맥**: `InventoryService.kt`의 Kafka 컨슈머가 멱등성 체크를 위해 `order_id`로 조회. 인덱스 없이 테이블 전체 스캔
+- **문제**: 매 Kafka 메시지마다 멱등성 조회가 풀 테이블 스캔을 수행. 주문량에 따라 선형 증가
+- **영향**: 재고 예약 지연이 주문 이력에 비례하여 증가해 Kafka 컨슈머 랙과 주문 처리 지연 유발 — 테이블이 모든 주문마다 단조 증가하므로 스케일 시 보장된 성능 저하
+- **수정안**:
+  ```diff
+       PRIMARY KEY (id)
+  +    -- 멱등성 조회 성능 보장
+  +);
+  +
+  +CREATE INDEX idx_inventory_reservations_order_id
+  +    ON inventory_reservations (order_id);
+  -);
+  ```
+- **영향 범위**: 이 위치만 해당
 - **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P2; adjudicated P1 — performance degradation is guaranteed at scale, not speculative)
 
-**[P1] Kafka message loss leaves orders stuck in PAID state**
-- **File**: PaymentEventProducer.kt:23-31, InventoryService.kt
-- **Problem**: If `PaymentConfirmedEvent` is lost (producer failure, Kafka outage, or consumer deserialization error), the order remains in `PAID` state indefinitely and never transitions to `FULFILLMENT_READY`. No compensating mechanism exists.
-- **Impact**: Orders permanently stuck — customers charged but never fulfilled. Cross-chunk gap: order state machine (Chunk A) assumes async inventory flow (Chunk C) always completes.
-- **Probability**: Partial system failure under realistic conditions — Kafka producer failures, broker outages, and deserialization errors are well-documented operational scenarios.
-- **Maintainability**: No observability into stuck orders; requires manual DB queries to detect and resolve.
-- **Fix**: Implement scheduled reconciliation job that detects orders in `PAID` state beyond a threshold (e.g., 15 minutes) and either retries the event or alerts operations.
+**[P1-4] Kafka message loss leaves orders stuck in PAID state**
+- **위치**: `PaymentEventProducer.kt:23` — `publishConfirmed()`
+- **현재 코드**:
+  ```kotlin
+  fun publishConfirmed(order: Order) {
+      val event = PaymentConfirmedEvent(
+          orderId = order.id,
+          confirmedAt = Instant.now(),
+      )
+      kafkaTemplate.send("payment.confirmed", order.id.toString(), event)
+      // 전송 결과 확인 없음 — 실패 시 조용히 유실
+  }
+  ```
+- **문맥**: `OrderPaymentController` → `publishConfirmed()` → Kafka → `InventoryService` 컨슈머. 이벤트 유실 시 주문이 `PAID`에 영구 고착됨
+- **문제**: `PaymentConfirmedEvent` 유실 시(프로듀서 실패, Kafka 중단, 컨슈머 역직렬화 오류) 주문이 `PAID` 상태에 무기한 잔류하고 `FULFILLMENT_READY`로 전이되지 않음. 보상 메커니즘 없음
+- **영향**: 주문이 영구 고착 — 고객은 결제됐으나 이행되지 않음. Kafka 프로듀서 실패, 브로커 중단, 역직렬화 오류는 잘 알려진 운영 시나리오이며 stuck 주문 감지 수단 없음
+- **수정안**: `kafkaTemplate.send()`는 `ListenableFuture`를 반환하므로 콜백 추가 + 주기적 재조정 Job 도입:
+  ```diff
+  -    kafkaTemplate.send("payment.confirmed", order.id.toString(), event)
+  +    kafkaTemplate.send("payment.confirmed", order.id.toString(), event)
+  +        .addCallback(
+  +            { log.info("PaymentConfirmedEvent sent: orderId=${order.id}") },
+  +            { ex -> log.error("PaymentConfirmedEvent send failed: orderId=${order.id}", ex) }
+  +        )
+  ```
+- **영향 범위**: `InventoryService.kt` consumer, `OrderService.kt` state machine
 - **Review Consensus**: 2/3 models identified (Opus P1, Sonnet P1; adjudicated P1 — partial system failure under realistic conditions with no recovery path)
 
 ### P2 (Consider Fix)
 
-**[P2] No structured logging on payment events**
-- **File**: OrderPaymentController.kt:34-102, StripeGatewayAdapter.kt:44-78
-- **Problem**: No correlation ID, no MDC context across payment flow. End-to-end payment debugging across sync and async flows requires manual log correlation.
-- **Impact**: No direct bug or data loss. Significant increase in mean time to diagnose payment issues in production.
-- **Probability**: Every production debugging session for payment issues is affected.
-- **Maintainability**: Major maintainability gap — async flows spanning 3 services are effectively undebuggable without distributed tracing.
-- **Fix**: Implement distributed tracing with correlation ID propagated through HTTP headers, Kafka message headers, and consumer MDC context.
+**[P2-1] No structured logging on payment events**
+- **위치**: `OrderPaymentController.kt:34` — payment flow entry
+- **현재 코드**:
+  ```kotlin
+  @Transactional
+  fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
+      log.info("Processing payment for orderId=$orderId")
+      val order = orderRepository.findByIdWithLock(orderId) ?: throw OrderNotFoundException(orderId)
+      order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
+      val result = stripeGatewayAdapter.charge(order, request)
+      log.info("Payment charged for orderId=$orderId")
+      // MDC 없음 — Kafka 컨슈머와 로그 연결 불가
+  ```
+- **문맥**: HTTP 핸들러 → Stripe 호출 → Kafka 발행 → `InventoryService` 컨슈머. 동기+비동기 흐름이 3개 서비스에 걸쳐 있으나 연결 수단 없음
+- **문제**: 결제 플로우 전반에 correlation ID와 MDC 컨텍스트 없음. 동기+비동기 플로우 간 end-to-end 디버깅에 수동 로그 상관이 필요함
+- **영향**: 직접적인 버그나 데이터 손실 없음. 프로덕션 결제 이슈 진단 시 평균 시간이 크게 증가 — 모든 프로덕션 디버깅 세션에 영향
+- **수정안**:
+  ```diff
+  +    val correlationId = UUID.randomUUID().toString()
+  +    MDC.put("correlationId", correlationId)
+  +    MDC.put("orderId", orderId.toString())
+      log.info("Processing payment for orderId=$orderId")
+  ```
+- **영향 범위**: `StripeGatewayAdapter.kt`, `InventoryService.kt` 전체 payment flow
 - **Review Consensus**: 3/3 models identified (Opus P2, Sonnet P2, Gemini P2; adjudicated P2 — unanimous)
 
 ### P3 (Optional)
 
-**[P3] Missing OpenAPI annotations on payment endpoints**
-- **File**: OrderPaymentController.kt:28-33
-- **Problem**: API consumers have no contract documentation for payment flow.
-- **Impact**: No runtime impact. Documentation gap affects API consumer onboarding and integration testing.
-- **Probability**: N/A — documentation issue, not a runtime concern.
-- **Maintainability**: Improves developer experience but no functional consequence.
-- **Fix**: Add `@Operation`, `@ApiResponse`, `@Schema` annotations to payment controller endpoints.
+**[P3-1] Missing OpenAPI annotations on payment endpoints**
+- **위치**: `OrderPaymentController.kt:28` — controller class
+- **현재 코드**:
+  ```kotlin
+  @RestController
+  @RequestMapping("/api/orders")
+  class OrderPaymentController(
+      private val orderRepository: OrderRepository,
+      private val stripeGatewayAdapter: StripeGatewayAdapter,
+  ) {
+      @PostMapping("/{orderId}/payment")
+      fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
+  ```
+- **문맥**: 결제 API 진입점. `@Operation`, `@ApiResponse` 없이 Swagger UI에 메타데이터 미노출
+- **문제**: API 소비자에게 결제 플로우 계약 문서가 없음
+- **영향**: 런타임 영향 없음. API 소비자 온보딩과 통합 테스트에 영향을 미치는 문서화 갭
+- **수정안**:
+  ```diff
+  +@Operation(summary = "결제 처리", description = "주문에 대한 Stripe 결제를 실행합니다")
+  +@ApiResponse(responseCode = "200", description = "결제 성공")
+  +@ApiResponse(responseCode = "402", description = "결제 실패")
+   @PostMapping("/{orderId}/payment")
+   fun processPayment(...): ResponseEntity<PaymentResponse> {
+  ```
+- **영향 범위**: 이 위치만 해당
 - **Review Consensus**: 2/3 models identified (Opus P3, Gemini P3; adjudicated P3 — documentation improvement only)
 
-**[P3] Hardcoded retry count and timeout values**
-- **File**: StripeGatewayAdapter.kt:45, StripeGatewayAdapter.kt:52
-- **Problem**: Retry count and timeout values hardcoded in source. Not configurable per environment.
-- **Impact**: No runtime bug. Requires code change and redeployment to tune for different environments.
-- **Probability**: N/A — only triggered when operational tuning is needed.
-- **Maintainability**: Small configurability improvement; extract to `application.yml` properties.
-- **Fix**: Extract to Spring `@ConfigurationProperties` with sensible defaults. Allow per-environment override.
+**[P3-2] Hardcoded retry count and timeout values**
+- **위치**: `StripeGatewayAdapter.kt:45` — config constants
+- **현재 코드**:
+  ```kotlin
+  class StripeGatewayAdapter(
+      private val stripeClient: StripeClient,
+  ) : PaymentGateway {
+      private val TIMEOUT = 30_000L       // 하드코딩 — 환경별 조정 불가
+      private val MAX_RETRIES = 3         // 하드코딩 — 환경별 조정 불가
+
+      fun charge(order: Order, request: PaymentRequest): PaymentResult {
+          stripeClient.setTimeout(TIMEOUT)
+  ```
+- **문맥**: `StripeGatewayAdapter` 내 상수. 환경 변경 없이 튜닝하려면 소스 수정 + 재배포 필요
+- **문제**: 재시도 횟수와 타임아웃 값이 소스에 하드코딩되어 환경별 설정 불가
+- **영향**: 런타임 버그 없음. 환경별 튜닝에 코드 변경과 재배포가 필요함
+- **수정안**:
+  ```diff
+  -    private val TIMEOUT = 30_000L
+  -    private val MAX_RETRIES = 3
+  +    // application.yml: stripe.timeout-ms: 30000, stripe.max-retries: 3
+  +    @Value("\${stripe.timeout-ms:30000}") private val timeoutMs: Long = 30_000L
+  +    @Value("\${stripe.max-retries:3}") private val maxRetries: Int = 3
+  ```
+- **영향 범위**: `application.yml` 추가 필요
 - **Review Consensus**: 2/3 models identified (Sonnet P3, Gemini P3; adjudicated P3 — readability/configurability improvement)
 
 ## Recommendations
