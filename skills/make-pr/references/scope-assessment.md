@@ -74,7 +74,7 @@ digraph thesis_decision {
 
 **Split cap**: Maximum 4 sub-PRs. If 5+ theses are detected, do not attempt automatic separation; recommend manual decomposition to the user.
 
-> **Evaluation order**: Exception-matching changes (campsite cleanup, config-code pairs, minimal cross-domain additions, etc.) are absorbed into their nearest main thesis rather than counted as separate theses. After this per-thesis exception filtering, the remaining main thesis count determines the split decision.
+> **Evaluation order**: Exception-matching changes (campsite-level cleanup, new abstraction under design, minimal cross-domain addition) are absorbed into their nearest main thesis rather than counted as separate theses. After this per-thesis exception filtering, the remaining main thesis count determines the split decision.
 
 ---
 
@@ -254,7 +254,7 @@ EOF
 ```
 
 - When K = 1 (the first sub-PR), the initial description may omit sibling links because subsequent PR numbers are not yet known. Update it after all subsequent PRs are created.
-- Perform this update pass for every sub-PR in the series so that all sibling links are mutually consistent.
+- Update sub-PRs 1 through N-1 (the last sub-PR already has complete sibling knowledge at creation time).
 
 ---
 

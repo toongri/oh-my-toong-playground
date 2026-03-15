@@ -245,7 +245,7 @@ This checklist is internal -- do NOT show it to the user.
 After Clearance Checklist passes, analyze whether the PR contains multiple independent theses (behavioral changes) that should be separate PRs. See `references/scope-assessment.md` for the complete framework.
 
 **Quick summary:**
-1. Check exception cases first (new abstraction, campsite cleanup, minimal cross-domain)
+1. Identify candidate theses, then absorb exception-matching changes (campsite cleanup, minimal cross-domain) into their nearest main thesis
 2. Check proxy signals (commit type diversity, domain spread, LOC) as initial triggers
 3. Apply thesis isolation test: "Does this PR prove a single thesis?"
 4. If single thesis → proceed to Step 6

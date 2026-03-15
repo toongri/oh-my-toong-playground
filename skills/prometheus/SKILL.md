@@ -1035,7 +1035,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
         Tool: diff
         Preconditions: No rate limiting section exists prior to this change
         Steps:
-          1. Compare `git show HEAD:docs/api-reference.md` (original) with the current file, excluding the newly added section, to verify pre-existing content is unchanged. Use section-aware extraction (e.g., heading-anchor based `sed` or `awk`) rather than line-level `grep -v`.
+          1. `diff <(git show HEAD:docs/api-reference.md) <(awk '/^## Rate Limiting$/,/^## /{next}1' docs/api-reference.md)` to verify pre-existing sections unchanged (section-aware extraction — strips the entire new section, not just heading lines)
         Expected: All pre-existing endpoint sections (paths, parameters, response schemas) remain byte-for-byte identical after the update
         Failure: Any pre-existing heading, parameter description, or response schema is altered or removed
         Evidence: .omt/evidence/{plan-name}/task-6-existing-docs-preserved.txt
