@@ -460,13 +460,13 @@ Task(subagent_type="oracle", prompt="
 [INSTRUCTIONS]
 For each finding, produce exactly these 4 fields:
 
-1. 현재 코드: Read the file. Extract 5-15 lines centered on the issue location. Include the function/class/section signature for context. Use the file's language for the code fence (```kotlin, ```bash, ```yaml, ```markdown, etc.).
+1. Current Code: Read the file. Extract 5-15 lines centered on the issue location. Include the function/class/section signature for context. Use the file's language for the code fence (```kotlin, ```bash, ```yaml, ```markdown, etc.).
 
-2. 문맥: State which function/class/section this code belongs to. Describe the data flow: where input comes from → what transformation happens → where output goes. Explain why this code exists.
+2. Context: State which function/class/section this code belongs to. Describe the data flow: where input comes from → what transformation happens → where output goes. Explain why this code exists.
 
-3. 수정안: Produce a concrete unified diff (```diff block) showing the minimal fix. The diff must apply cleanly to the current code. If the fix requires structural changes that cannot be expressed as a simple diff, describe the design direction instead and note '구체적 diff 생성 불가 — 구조 변경 필요'.
+3. Fix: Produce a concrete unified diff (```diff block) showing the minimal fix. The diff must apply cleanly to the current code. If the fix requires structural changes that cannot be expressed as a simple diff, describe the design direction instead and note 'Concrete diff not possible — structural change required'.
 
-4. 영향 범위: Search (Grep/Glob) for references to the symbol/function/section affected. List files that import, call, or reference it. If no external references exist, state '이 위치만 해당'. Include evidence (grep result summary).
+4. Blast Radius: Search (Grep/Glob) for references to the symbol/function/section affected. List files that import, call, or reference it. If no external references exist, state 'This location only'. Include evidence (grep result summary).
 
 [CONSTRAINTS]
 - Do NOT re-evaluate severity or change Problem/Impact fields.
@@ -476,42 +476,42 @@ For each finding, produce exactly these 4 fields:
 [OUTPUT FORMAT]
 For each finding, output:
 ### {issue title}
-**현재 코드**:
+**Current Code**:
 [code block with language tag]
 
-**문맥**: ...
+**Context**: ...
 
-**수정안**:
+**Fix**:
 [diff block or design direction]
 
-**영향 범위**: ...
+**Blast Radius**: ...
 ")
 ````
 
 #### Enrichment Merge
 
-After all oracles return, merge enrichment fields into each finding. The orchestrator transforms Phase 2 fields into the enriched per-issue format:
+After all oracles return, merge enrichment fields into each finding. The orchestrator transforms Phase 2 fields into the final enriched output:
 
 | Phase 2 Field | Enriched Field | Transformation |
 |---------------|----------------|----------------|
-| File: {file}:{line} | **위치**: `{file}:{line}` — {section name} | Section name from oracle 문맥 |
-| — | **현재 코드** | From oracle (NEW) |
-| — | **문맥** | From oracle (NEW) |
-| Problem | **문제** | Korean label, content unchanged |
-| Impact + Probability | **영향** | Merge into single actionable statement |
+| File: {file}:{line} | **Location**: `{file}:{line}` — {section name} | Section name from oracle Context |
+| — | **Current Code** | From oracle (NEW) |
+| — | **Context** | From oracle (NEW) |
+| Problem | **Problem** | Label unchanged, content unchanged |
+| Impact + Probability | **Impact** | Merge into single actionable statement |
 | Maintainability | — | Removed (visible from code) |
-| Fix | **수정안** | Replaced by oracle diff (concrete) |
-| — | **영향 범위** | From oracle (NEW) |
+| Fix | **Fix** | Replaced by oracle diff (concrete) |
+| — | **Blast Radius** | From oracle (NEW) |
 | Review Consensus | **Review Consensus** | Unchanged |
 
 #### Edge Cases
 
 | Situation | Handling |
 |-----------|----------|
-| Oracle fails or times out | Use Phase 2 fields mapped to Korean labels. Omit 현재 코드, 문맥, 영향 범위. Use Phase 2 Fix text as 수정안. Prepend "(enrichment unavailable)" to finding. |
-| Finding references a deleted file | Oracle reads the file at base branch (`git show {base}:{file}`). Note "(삭제된 파일)" in 문맥. |
-| Finding spans multiple files | Primary file gets the code snippet. Other files listed in 영향 범위 with brief context. |
-| Diff cannot be expressed simply | 수정안 states design direction + "구체적 diff 생성 불가 — 구조 변경 필요". |
+| Oracle fails or times out | Use Phase 2 fields with English labels. Omit Current Code, Context, Blast Radius. Use Phase 2 Fix text as Fix. Prepend "(enrichment unavailable)" to finding. |
+| Finding references a deleted file | Oracle reads the file at base branch (`git show {base}:{file}`). Note "(deleted file)" in Context. |
+| Finding spans multiple files | Primary file gets the code snippet. Other files listed in Blast Radius with brief context. |
+| Diff cannot be expressed simply | Fix states design direction + "Concrete diff not possible — structural change required". |
 | Zero findings after Phase 2 | Skip Phase 3 entirely. |
 
 #### Data Flow
@@ -520,9 +520,9 @@ After all oracles return, merge enrichment fields into each finding. The orchest
 Phase 2 output (adjudicated findings with P-levels, verdict)
   → Group findings by file path
   → Dispatch oracle per file group (parallel, single response)
-  → Collect oracle results (현재 코드, 문맥, 수정안, 영향 범위)
+  → Collect oracle results (Current Code, Context, Fix, Blast Radius)
   → Merge enrichment into each finding (field transformation table above)
-  → Generate Final Output with enriched per-issue format
+  → Generate Final Output with enriched fields
 ```
 
 ### Final Output Format
@@ -563,24 +563,24 @@ Phase 2 output (adjudicated findings with P-levels, verdict)
 
 Per-issue format (enriched by Phase 3):
 **[P{X}-{N}] {issue title}**
-- **위치**: `{file}:{line}` — {section/function name}
-- **현재 코드**:
+- **Location**: `{file}:{line}` — {section/function name}
+- **Current Code**:
   ```{lang}
   [5-15 lines centered on the issue]
   ```
-- **문맥**: {what procedure/section this is in} → {data flow: input source → output destination}
-- **문제**: {problem description}
-- **영향**: {impact + probability merged into actionable statement}
-- **수정안**:
+- **Context**: {what procedure/section this is in} → {data flow: input source → output destination}
+- **Problem**: {problem description}
+- **Impact**: {impact + probability merged into actionable statement}
+- **Fix**:
   ```diff
   [concrete diff showing the fix]
   ```
-- **영향 범위**: {grep/reference evidence — what other files reference this, or "이 위치만 해당"}
+- **Blast Radius**: {grep/reference evidence — what other files reference this, or "This location only"}
 - **Review Consensus**: {N}/3 models identified ({Model A} P{X}, {Model B} P{Y}; adjudicated P{Z} because {reason})
 
 Numbering: {N} is a sequential counter within each P-level section (e.g., P0-1, P0-2, P1-1, P1-2, P1-3).
 
-Fallback (enrichment unavailable): If Phase 3 oracle fails for a finding, omit 현재 코드, 문맥, 영향 범위 fields. Use Phase 2 Fix text as 수정안. Prepend "(enrichment unavailable)" to the issue title.
+Fallback (enrichment unavailable): If Phase 3 oracle fails for a finding, omit Current Code, Context, Blast Radius fields. Use Phase 2 Fix text as Fix. Prepend "(enrichment unavailable)" to the issue title.
 
 ## Out of Scope (Pre-existing Issues)
 [Issues in unchanged context lines, sorted by P-level then file path. Do not affect merge verdict.]
