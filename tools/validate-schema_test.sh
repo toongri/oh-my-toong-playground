@@ -699,6 +699,24 @@ EOF
     fi
 }
 
+test_plugins_check_boolean_rejected() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      check: false
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for plugin check that is a boolean"
+        return 1
+    else
+        return 0
+    fi
+}
+
 # =============================================================================
 # Tests: config Section Validation
 # =============================================================================
@@ -871,6 +889,7 @@ main() {
     run_test test_plugins_pre_commands_non_string_item
     run_test test_plugins_check_valid
     run_test test_plugins_check_non_string
+    run_test test_plugins_check_boolean_rejected
 
     # Config section validation
     run_test test_config_valid_platforms

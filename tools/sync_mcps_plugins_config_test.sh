@@ -25,12 +25,8 @@ extract_functions_from_sync_script() {
     local tmp_script
     tmp_script=$(mktemp)
 
-    # Remove last line (main "$@") before sourcing
-    local line_count
-    line_count=$(wc -l < "$tools_dir/sync.sh" | tr -d ' ')
-    local lines_to_keep=$((line_count - 1))
-
-    head -n "$lines_to_keep" "$tools_dir/sync.sh" > "$tmp_script"
+    # Remove main "$@" invocation before sourcing
+    sed '/^main "\$@"$/d' "$tools_dir/sync.sh" > "$tmp_script"
 
     # Replace relative source paths with absolute paths
     sed -i '' "s|source \"\${SCRIPT_DIR}/|source \"${tools_dir}/|g" "$tmp_script"
@@ -436,8 +432,8 @@ EOF
     return 0
 }
 
-test_plugin_pre_commands_always_runs_install() {
-    # pre-commands가 있어도 plugin install이 항상 dry-run 출력에 포함됨
+test_plugin_no_pre_commands_dry_run() {
+    # pre-commands 없는 object plugin이 dry-run에서 크래시 없이 plugin install만 출력
     extract_functions_from_sync_script
 
     local yaml_file="$TEST_TMP_DIR/sync.yaml"
@@ -446,8 +442,6 @@ path: /tmp/test-target
 plugins:
   items:
     - name: my-plugin
-      pre-commands:
-        - echo "custom setup"
 EOF
 
     DRY_RUN=true
@@ -455,13 +449,76 @@ EOF
     output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
     DRY_RUN=false
 
+    # plugin install은 항상 출력되어야 함
     if ! echo "$output" | grep -qi "plugin install"; then
-        echo "ASSERTION FAILED: plugin install should always be in dry-run output even with pre-commands, got: $output"
+        echo "ASSERTION FAILED: plugin install should appear in dry-run output for object plugin without pre-commands, got: $output"
         return 1
     fi
 
-    if ! echo "$output" | grep -q 'echo "custom setup"'; then
-        echo "ASSERTION FAILED: pre-command should appear in dry-run output, got: $output"
+    return 0
+}
+
+# =============================================================================
+# Tests: Plugin - Live Mode (pre-commands + check)
+# =============================================================================
+
+test_plugin_live_check_pass_skips_pre_commands() {
+    # check가 exit 0이면 pre-commands 스킵, plugin install은 실행
+    extract_functions_from_sync_script
+
+    local yaml_file="$TEST_TMP_DIR/sync.yaml"
+    cat > "$yaml_file" <<'EOF'
+path: /tmp/test-target
+plugins:
+  items:
+    - name: my-plugin
+      check: "true"
+      pre-commands:
+        - echo "SHOULD_NOT_APPEAR"
+EOF
+
+    DRY_RUN=false
+    local output
+    output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
+
+    # check 통과 메시지가 있어야 함
+    if ! echo "$output" | grep -q "check 통과"; then
+        echo "ASSERTION FAILED: Should see 'check 통과' message, got: $output"
+        return 1
+    fi
+
+    # pre-command가 실행되지 않아야 함 (SHOULD_NOT_APPEAR가 output에 없어야)
+    if echo "$output" | grep -q "SHOULD_NOT_APPEAR"; then
+        echo "ASSERTION FAILED: Pre-command should NOT have been executed when check passes, got: $output"
+        return 1
+    fi
+
+    return 0
+}
+
+test_plugin_live_check_fail_runs_pre_commands() {
+    # check가 exit 1이면 pre-commands 실행
+    extract_functions_from_sync_script
+
+    local yaml_file="$TEST_TMP_DIR/sync.yaml"
+    local marker_file="$TEST_TMP_DIR/pre_cmd_ran"
+    cat > "$yaml_file" <<EOF
+path: /tmp/test-target
+plugins:
+  items:
+    - name: my-plugin
+      check: "false"
+      pre-commands:
+        - touch $marker_file
+EOF
+
+    DRY_RUN=false
+    local output
+    output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
+
+    # marker 파일이 생성되어야 함 (pre-command가 실행됨)
+    if [[ ! -f "$marker_file" ]]; then
+        echo "ASSERTION FAILED: Pre-command should have created marker file when check fails, got: $output"
         return 1
     fi
 
@@ -651,7 +708,9 @@ main() {
     run_test test_plugin_scope_project
     run_test test_plugin_pre_commands_dry_run
     run_test test_plugin_pre_commands_with_check_skip
-    run_test test_plugin_pre_commands_always_runs_install
+    run_test test_plugin_no_pre_commands_dry_run
+    run_test test_plugin_live_check_pass_skips_pre_commands
+    run_test test_plugin_live_check_fail_runs_pre_commands
 
     # Config Tests
     run_test test_config_claude_settings_local
