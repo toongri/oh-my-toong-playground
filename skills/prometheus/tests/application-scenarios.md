@@ -455,7 +455,7 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 |---|-------|-------------------|
 | V1 | Steps are agent-executable | Steps field contains concrete commands or actions (e.g., `curl -X POST /api/resource 101 times`, `grep 'rate-limit' README.md`) — NOT vague statements like "verify the feature works" or "check that limiting is applied" |
 | V2 | Failure scenario is non-trivial | Edge case scenario tests an actual failure mode specific to the task (e.g., "rate limit counter resets after window expires", "concurrent requests from same IP handled correctly") — NOT generic "invalid input returns error" |
-| V3 | Non-code TODO uses simplified format | Documentation update TODO uses simplified QA format (Preconditions + Expected only, no Tool/Steps) — NOT forced into full 4-field structure that doesn't make sense for docs |
+| V3 | Non-code TODO uses full QA format with appropriate verification tool | Documentation update TODO uses grep/diff as Tool with concrete Steps — same rigor as code TODOs |
 | V4 | Tool field is executable CLI command | Names an executable CLI command (e.g., `bun test`, `curl`, `grep`, `./gradlew test`), NOT a test description ("Header validation") or generic label ("test runner"). The named command must match what Steps actually invoke |
 
 ---
@@ -478,4 +478,4 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 | P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
-| P-19 | QA Scenarios in TODO | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G6 Tool=CLI command(V4), executable steps(V1), non-trivial failure(V2), G5 non-code simplified format(V3), G6 anti-pattern 위반 없음 |
+| P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
