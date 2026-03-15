@@ -561,15 +561,26 @@ Phase 2 output (adjudicated findings with P-levels, verdict)
 ### P3 (Optional)
 [Quality, readability, consistency improvements with no correctness or maintainability concern]
 
-Per-issue format:
-**[P{X}] {issue title}**
-- **File**: {file}:{line}
-- **Problem**: ...
-- **Impact**: ...
-- **Probability**: ...
-- **Maintainability**: ...
-- **Fix**: ...
+Per-issue format (enriched by Phase 3):
+**[P{X}-{N}] {issue title}**
+- **위치**: `{file}:{line}` — {section/function name}
+- **현재 코드**:
+  ```{lang}
+  [5-15 lines centered on the issue]
+  ```
+- **문맥**: {what procedure/section this is in} → {data flow: input source → output destination}
+- **문제**: {problem description}
+- **영향**: {impact + probability merged into actionable statement}
+- **수정안**:
+  ```diff
+  [concrete diff showing the fix]
+  ```
+- **영향 범위**: {grep/reference evidence — what other files reference this, or "이 위치만 해당"}
 - **Review Consensus**: {N}/3 models identified ({Model A} P{X}, {Model B} P{Y}; adjudicated P{Z} because {reason})
+
+Numbering: {N} is a sequential counter within each P-level section (e.g., P0-1, P0-2, P1-1, P1-2, P1-3).
+
+Fallback (enrichment unavailable): If Phase 3 oracle fails for a finding, omit 현재 코드, 문맥, 영향 범위 fields. Use Phase 2 Fix text as 수정안. Prepend "(enrichment unavailable)" to the issue title.
 
 ## Out of Scope (Pre-existing Issues)
 [Issues in unchanged context lines, sorted by P-level then file path. Do not affect merge verdict.]
