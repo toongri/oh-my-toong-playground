@@ -20,6 +20,10 @@ export function initCache(dir: string): void {
   cacheDir = dir;
 }
 
+export function getCacheDir(): string {
+  return cacheDir;
+}
+
 function readStore(): CacheStore {
   const path = getCachePath();
   try {
