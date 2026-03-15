@@ -1238,11 +1238,32 @@ sync_plugins() {
             continue
         fi
 
+        # Extract commands count (only available for object items)
+        local commands_count=0
+        if [[ "$item_type" != "!!str" ]]; then
+            commands_count=$(yq ".plugins.items[$i].commands | length // 0" "$yaml_file")
+        fi
+
         # Dispatch to each target adapter
         for target in $(echo "$item_platforms" | jq -r '.[]'); do
             case "$target" in
                 claude)
-                    claude_sync_plugin_install "$plugin_name" "$plugin_scope" "$target_path" "$DRY_RUN"
+                    if [[ "$commands_count" -gt 0 ]]; then
+                        local j
+                        for j in $(seq 0 $((commands_count - 1))); do
+                            local cmd
+                            cmd=$(yq ".plugins.items[$i].commands[$j]" "$yaml_file")
+                            if [[ "$DRY_RUN" == "true" ]]; then
+                                log_dry "$cmd"
+                            else
+                                if ! bash -c "$cmd"; then
+                                    log_warn "commands 실행 실패 (계속 진행): $cmd"
+                                fi
+                            fi
+                        done
+                    else
+                        claude_sync_plugin_install "$plugin_name" "$plugin_scope" "$target_path" "$DRY_RUN"
+                    fi
                     ;;
                 gemini|codex)
                     log_warn "plugins는 ${target}에서 지원되지 않습니다. 스킵: $plugin_name"

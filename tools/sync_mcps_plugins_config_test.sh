@@ -14,6 +14,33 @@ source "$SCRIPT_DIR/adapters/claude.sh"
 source "$SCRIPT_DIR/adapters/gemini.sh"
 source "$SCRIPT_DIR/adapters/codex.sh"
 
+# Extract and source functions from sync.sh without running main
+SYNC_FUNCTIONS_SOURCED=false
+extract_functions_from_sync_script() {
+    if [[ "$SYNC_FUNCTIONS_SOURCED" == "true" ]]; then
+        return 0
+    fi
+
+    local tools_dir="$SCRIPT_DIR"
+    local tmp_script
+    tmp_script=$(mktemp)
+
+    # Remove last line (main "$@") before sourcing
+    local line_count
+    line_count=$(wc -l < "$tools_dir/sync.sh" | tr -d ' ')
+    local lines_to_keep=$((line_count - 1))
+
+    head -n "$lines_to_keep" "$tools_dir/sync.sh" > "$tmp_script"
+
+    # Replace relative source paths with absolute paths
+    sed -i '' "s|source \"\${SCRIPT_DIR}/|source \"${tools_dir}/|g" "$tmp_script"
+
+    source "$tmp_script"
+    rm -f "$tmp_script"
+
+    SYNC_FUNCTIONS_SOURCED=true
+}
+
 # Test utilities
 TESTS_PASSED=0
 TESTS_FAILED=0
@@ -341,6 +368,71 @@ test_plugin_scope_project() {
     fi
 }
 
+test_plugin_commands_dry_run() {
+    # commands 필드가 있을 때 dry-run 시 각 command가 log_dry로 출력
+    extract_functions_from_sync_script
+
+    local yaml_file="$TEST_TMP_DIR/sync.yaml"
+    cat > "$yaml_file" <<'EOF'
+path: /tmp/test-target
+plugins:
+  items:
+    - name: my-plugin
+      commands:
+        - echo "step one"
+        - echo "step two"
+EOF
+
+    DRY_RUN=true
+    local output
+    output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
+    DRY_RUN=false
+
+    if ! echo "$output" | grep -q 'echo "step one"'; then
+        echo "ASSERTION FAILED: Dry-run output should contain first command, got: $output"
+        return 1
+    fi
+
+    if ! echo "$output" | grep -q 'echo "step two"'; then
+        echo "ASSERTION FAILED: Dry-run output should contain second command, got: $output"
+        return 1
+    fi
+
+    return 0
+}
+
+test_plugin_commands_replaces_default() {
+    # commands가 있으면 기본 plugin install이 출력되지 않음
+    extract_functions_from_sync_script
+
+    local yaml_file="$TEST_TMP_DIR/sync.yaml"
+    cat > "$yaml_file" <<'EOF'
+path: /tmp/test-target
+plugins:
+  items:
+    - name: my-plugin
+      commands:
+        - echo "custom install"
+EOF
+
+    DRY_RUN=true
+    local output
+    output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
+    DRY_RUN=false
+
+    if echo "$output" | grep -qi "plugin install"; then
+        echo "ASSERTION FAILED: Output should NOT contain 'plugin install' when commands is set, got: $output"
+        return 1
+    fi
+
+    if ! echo "$output" | grep -q 'echo "custom install"'; then
+        echo "ASSERTION FAILED: Output should contain the custom command, got: $output"
+        return 1
+    fi
+
+    return 0
+}
+
 # =============================================================================
 # Tests: Config - Claude (settings.json)
 # =============================================================================
@@ -522,6 +614,8 @@ main() {
     run_test test_plugin_string_shorthand
     run_test test_plugin_scope_user
     run_test test_plugin_scope_project
+    run_test test_plugin_commands_dry_run
+    run_test test_plugin_commands_replaces_default
 
     # Config Tests
     run_test test_config_claude_settings_local

@@ -601,6 +601,63 @@ EOF
     fi
 }
 
+test_plugins_with_commands_valid() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      commands:
+        - claude plugin install my-plugin
+        - claude plugin enable my-plugin
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass for plugin object with valid commands array"
+        return 1
+    fi
+}
+
+test_plugins_commands_empty_array() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      commands: []
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for plugin with empty commands array"
+        return 1
+    else
+        return 0
+    fi
+}
+
+test_plugins_commands_non_string_item() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      commands:
+        - 123
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for plugin commands containing non-string item"
+        return 1
+    else
+        return 0
+    fi
+}
+
 # =============================================================================
 # Tests: config Section Validation
 # =============================================================================
@@ -768,6 +825,9 @@ main() {
     run_test test_plugins_valid
     run_test test_plugins_string_shorthand
     run_test test_plugins_missing_name
+    run_test test_plugins_with_commands_valid
+    run_test test_plugins_commands_empty_array
+    run_test test_plugins_commands_non_string_item
 
     # Config section validation
     run_test test_config_valid_platforms
