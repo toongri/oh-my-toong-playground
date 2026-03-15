@@ -56,7 +56,7 @@ VALID_RULE_ITEM_FIELDS="component platforms"
 VALID_MCP_SECTION_FIELDS="platforms items"
 VALID_MCP_ITEM_FIELDS="component platforms"
 VALID_PLUGIN_SECTION_FIELDS="platforms items"
-VALID_PLUGIN_ITEM_FIELDS="name platforms"
+VALID_PLUGIN_ITEM_FIELDS="name platforms commands"
 
 VALID_ADD_HOOK_ITEM_FIELDS="event component command type matcher timeout prompt"
 
@@ -683,6 +683,27 @@ validate_plugins() {
             fi
 
             check_platforms_values "$yaml_file" ".plugins.items[$i].platforms" "plugins.items[$i].platforms"
+
+            # commands 검증
+            local has_commands=$(yq ".plugins.items[$i].commands // null" "$yaml_file")
+            if [[ "$has_commands" != "null" ]]; then
+                local commands_type=$(yq ".plugins.items[$i].commands | type" "$yaml_file")
+                if [[ "$commands_type" != "!!seq" ]]; then
+                    log_error "plugins.items[$i].commands: 배열 형식이어야 합니다"
+                else
+                    local commands_count=$(yq ".plugins.items[$i].commands | length" "$yaml_file")
+                    if [[ $commands_count -eq 0 ]]; then
+                        log_error "plugins.items[$i].commands: 빈 배열은 허용되지 않습니다"
+                    else
+                        for j in $(seq 0 $((commands_count - 1))); do
+                            local cmd_type=$(yq ".plugins.items[$i].commands[$j] | type" "$yaml_file")
+                            if [[ "$cmd_type" != "!!str" ]]; then
+                                log_error "plugins.items[$i].commands[$j]: string 이어야 합니다"
+                            fi
+                        done
+                    fi
+                fi
+            fi
         fi
     done
 }
