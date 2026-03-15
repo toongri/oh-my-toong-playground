@@ -45,9 +45,9 @@ If writing the PR Summary as a single sentence requires connecting **unrelated b
 digraph thesis_decision {
     rankdir=TB;
 
-    "Exception Cases\nApplicable?" [shape=diamond];
-    "Keep inline\n(exception applied)" [shape=box];
-    "Determine thesis count" [shape=box];
+    "Identify candidate\ntheses" [shape=box];
+    "Filter per thesis:\nexception-matching changes\nabsorbed into nearest\nmain thesis" [shape=box];
+    "Count remaining\nmain theses" [shape=box];
     "= 2?" [shape=diamond];
     "≥3?" [shape=diamond];
     "≥5?" [shape=diamond];
@@ -58,9 +58,9 @@ digraph thesis_decision {
     "Strongly recommend split" [shape=box];
     "Recommend manual decomposition\n(max 4 split cap)" [shape=box];
 
-    "Exception Cases\nApplicable?" -> "Keep inline\n(exception applied)" [label="YES"];
-    "Exception Cases\nApplicable?" -> "Determine thesis count" [label="NO"];
-    "Determine thesis count" -> "≥5?" [label="check first"];
+    "Identify candidate\ntheses" -> "Filter per thesis:\nexception-matching changes\nabsorbed into nearest\nmain thesis";
+    "Filter per thesis:\nexception-matching changes\nabsorbed into nearest\nmain thesis" -> "Count remaining\nmain theses";
+    "Count remaining\nmain theses" -> "≥5?" [label="check first"];
     "≥5?" -> "Recommend manual decomposition\n(max 4 split cap)" [label="YES"];
     "≥5?" -> "≥3?" [label="NO"];
     "≥3?" -> "Strongly recommend split" [label="YES"];
@@ -74,7 +74,7 @@ digraph thesis_decision {
 
 **Split cap**: Maximum 4 sub-PRs. If 5+ theses are detected, do not attempt automatic separation; recommend manual decomposition to the user.
 
-> **Evaluation order**: Exception Cases (new abstraction under design, campsite-level cleanup, minimal cross-domain addition) are evaluated **before** thesis count thresholds. If an exception condition applies, inline or combined retention applies regardless of thesis count.
+> **Evaluation order**: Exception-matching changes (campsite cleanup, config-code pairs, minimal cross-domain additions, etc.) are absorbed into their nearest main thesis rather than counted as separate theses. After this per-thesis exception filtering, the remaining main thesis count determines the split decision.
 
 ---
 
@@ -177,7 +177,7 @@ All splits are chained on top of the previous split. The first PR uses `{base-br
 
 **Precondition**: Working tree must be clean. Run `git status --porcelain` — if output is non-empty, ask the user to commit or stash changes before proceeding.
 
-1. Finalize the list of commits included in each thesis (excluding merge commits), and record the mapping of thesis → commit hashes
+1. Finalize the list of commits included in each thesis (excluding merge commits), sorted in chronological order (oldest first), and record the mapping of thesis → commit hashes
 
 2. Pre-check for mixed commits: run `git log origin/{base-branch}..HEAD --name-status` and cross-reference each commit's changed files against the thesis mapping from step 1. If any single commit modifies files assigned to more than one thesis, **immediately stop and switch to the Graceful Degradation procedure** before creating any branch. Do not proceed to the separation loop.
 
@@ -185,7 +185,7 @@ For each thesis (in stacking order):
    a. Create branch:
       - First thesis: `git checkout -b {branch-name} origin/{base-branch}`
       - Subsequent theses: `git checkout -b {branch-name} {previous-split-branch}`
-   b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...`
+   b. Cherry-pick ONLY the commits assigned to this thesis from the mapping in Step 1: `git cherry-pick {hash1} {hash2} ...` (MUST be in chronological order — oldest commit first)
    c. Push branch: `git push -u origin {branch-name}` (Split Accept includes branch push. Accepting the split is considered the user's consent to creating remote branches.)
 
 3. After all sub-branches are created, write Sub-PR Descriptions
@@ -241,6 +241,20 @@ When K > 1 (has a predecessor):
 ### User Confirmation
 
 Obtain user confirmation before each `gh pr create` execution.
+
+### Post-Creation Update
+
+After ALL sub-PRs have been created, update each PR description with the actual sibling PR links using `gh pr edit`:
+
+```bash
+gh pr edit {pr-number} --body "$(cat <<'EOF'
+{updated description with sibling links filled in}
+EOF
+)"
+```
+
+- When K = 1 (the first sub-PR), the initial description may omit sibling links because subsequent PR numbers are not yet known. Update it after all subsequent PRs are created.
+- Perform this update pass for every sub-PR in the series so that all sibling links are mutually consistent.
 
 ---
 

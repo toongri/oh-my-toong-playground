@@ -871,15 +871,18 @@ Every QA scenario must be executable by an agent without human involvement. Veri
     | "Test fails" | "Process exits with code 1 and prints 'Config not found'" |
     | "No output" | "Response missing X-RateLimit-Remaining header" |
     The Failure field describes the specific observable symptoms of failure, not the absence of success.
-  - **Specificity requirements — every scenario MUST use:**
-    - **API — Endpoints**: Specific paths and methods (`POST /api/users`, not "the user API")
-    - **API — Status Codes**: Exact HTTP codes (`201 Created`, not "success response")
-    - **API — Response Fields**: Specific JSON paths (`response.body.id is UUID`, not "returns user data")
-    - **UI — Selectors**: Specific CSS selectors (`.login-button`, not "the login button")
-    - **UI — Assertions**: Exact DOM state (`text contains "Welcome back"`, not "verify it works")
-    - **Shared — Data**: Concrete test data (`"test@example.com"`, not `"[email]"`)
-    - **Shared — Timing**: Wait conditions where relevant (`timeout: 10s`)
-    - **Shared — Negative**: At least ONE failure/error scenario per task
+  - **Specificity requirements — every scenario MUST include applicable domain-specific assertions:**
+    - **For API scenarios:**
+      - Endpoints: Specific paths and methods (`POST /api/users`, not "the user API")
+      - Status Codes: Exact HTTP codes (`201 Created`, not "success response")
+      - Response Fields: Specific JSON paths (`response.body.id is UUID`, not "returns user data")
+    - **For UI scenarios:**
+      - Selectors: Specific CSS selectors (`.login-button`, not "the login button")
+      - Assertions: Exact DOM state (`text contains "Welcome back"`, not "verify it works")
+    - **For all scenarios (shared):**
+      - Data: Concrete test data (`"test@example.com"`, not `"[email]"`)
+      - Timing: Wait conditions where relevant (`timeout: 10s`)
+      - Negative: At least ONE failure/error scenario per task
   - **Anti-patterns (your scenario is INVALID if it looks like this):**
     - "Verify it works correctly" — HOW? What does "correctly" mean?
     - "Check the API returns data" — WHAT data? What fields? What values?
@@ -1032,7 +1035,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
         Tool: diff
         Preconditions: No rate limiting section exists prior to this change
         Steps:
-          1. `diff <(git show HEAD~1:docs/api-reference.md | grep -v "Rate Limiting") <(grep -v "Rate Limiting" docs/api-reference.md)` to verify pre-existing sections unchanged (or equivalent full-file comparison)
+          1. Compare `git show HEAD:docs/api-reference.md` (original) with the current file, excluding the newly added section, to verify pre-existing content is unchanged. Use section-aware extraction (e.g., heading-anchor based `sed` or `awk`) rather than line-level `grep -v`.
         Expected: All pre-existing endpoint sections (paths, parameters, response schemas) remain byte-for-byte identical after the update
         Failure: Any pre-existing heading, parameter description, or response schema is altered or removed
         Evidence: .omt/evidence/{plan-name}/task-6-existing-docs-preserved.txt
