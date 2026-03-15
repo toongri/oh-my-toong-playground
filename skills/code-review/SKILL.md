@@ -33,6 +33,7 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 | Cross-file impact / design fit (Phase 1 only) | NEVER | oracle |
 | Worker claim fact-check (Phase 2) | NEVER | explore/oracle |
 | Individual chunk review | NEVER | chunk-reviewer |
+| Finding enrichment (Phase 3) | NEVER | oracle |
 | Code modification | NEVER | (forbidden entirely) |
 
 **RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
@@ -68,6 +69,7 @@ digraph role_separation {
 - CLAUDE.md file content
 - explore/oracle agent summaries (Phase 1a)
 - chunk-reviewer results
+- Phase 3 oracle enrichment results (finding-specific code, context, diffs, references)
 
 **Forbidden in orchestrator context:**
 - Raw diff lines (`git diff` without `--stat`/`--name-only`)
@@ -419,6 +421,109 @@ When the orchestrator determines "Yes with conditions" for P1 issues, the Assess
 **Exception:** If PR aggravates a pre-existing issue (increases blast radius, frequency, or severity), move to main issues section.
 
 **Cross-chunk rule:** If ANY worker in ANY chunk flags an issue as non-pre-existing (on a changed line), treat as current issue in main section.
+
+### Phase 3: Finding Enrichment
+
+After Phase 2 adjudication completes (severity finalized, verdict determined, Out of Scope classified), enrich each adjudicated finding with concrete code evidence before generating final output.
+
+**Purpose:** Make each finding self-contained — developer reads the output and can decide + act without opening any file.
+
+**Why after Phase 2:** Phase 2 deduplicates, dismisses false positives, and merges cross-chunk findings. Enriching before adjudication wastes oracle work on findings that may be dismissed or merged.
+
+**Scope:** ALL P-levels (P0-P3) in the main Issues section. Out of Scope (pre-existing) issues are NOT enriched.
+
+#### File Grouping
+
+Group adjudicated findings by file path. Dispatch one oracle per file group, all in parallel (single response).
+
+| Condition | Action |
+|-----------|--------|
+| Findings reference N distinct files | Create N groups (one per file) |
+| Single finding references multiple files (cross-file issue) | Group under the primary file |
+| Total groups > 8 | Merge smallest groups into batches of 2-3 files |
+
+#### Oracle Enrichment Prompt
+
+````
+Consulting Oracle for finding enrichment: {file_path} ({N} findings).
+
+Task(subagent_type="oracle", prompt="
+[CONTEXT] Code review finding enrichment. File: {file_path}
+
+[FINDINGS]
+{for each finding in this file group:}
+  - [{P-level}] {issue title} at {file}:{line}
+    Problem: {Phase 2 adjudicated Problem}
+    Fix direction: {Phase 2 adjudicated Fix}
+{end for}
+
+[INSTRUCTIONS]
+For each finding, produce exactly these 4 fields:
+
+1. 현재 코드: Read the file. Extract 5-15 lines centered on the issue location. Include the function/class/section signature for context. Use the file's language for the code fence (```kotlin, ```bash, ```yaml, ```markdown, etc.).
+
+2. 문맥: State which function/class/section this code belongs to. Describe the data flow: where input comes from → what transformation happens → where output goes. Explain why this code exists.
+
+3. 수정안: Produce a concrete unified diff (```diff block) showing the minimal fix. The diff must apply cleanly to the current code. If the fix requires structural changes that cannot be expressed as a simple diff, describe the design direction instead and note '구체적 diff 생성 불가 — 구조 변경 필요'.
+
+4. 영향 범위: Search (Grep/Glob) for references to the symbol/function/section affected. List files that import, call, or reference it. If no external references exist, state '이 위치만 해당'. Include evidence (grep result summary).
+
+[CONSTRAINTS]
+- Do NOT re-evaluate severity or change Problem/Impact fields.
+- Do NOT add new findings.
+- Enrich only — add concrete evidence to existing findings.
+
+[OUTPUT FORMAT]
+For each finding, output:
+### {issue title}
+**현재 코드**:
+[code block with language tag]
+
+**문맥**: ...
+
+**수정안**:
+[diff block or design direction]
+
+**영향 범위**: ...
+")
+````
+
+#### Enrichment Merge
+
+After all oracles return, merge enrichment fields into each finding. The orchestrator transforms Phase 2 fields into the enriched per-issue format:
+
+| Phase 2 Field | Enriched Field | Transformation |
+|---------------|----------------|----------------|
+| File: {file}:{line} | **위치**: `{file}:{line}` — {section name} | Section name from oracle 문맥 |
+| — | **현재 코드** | From oracle (NEW) |
+| — | **문맥** | From oracle (NEW) |
+| Problem | **문제** | Korean label, content unchanged |
+| Impact + Probability | **영향** | Merge into single actionable statement |
+| Maintainability | — | Removed (visible from code) |
+| Fix | **수정안** | Replaced by oracle diff (concrete) |
+| — | **영향 범위** | From oracle (NEW) |
+| Review Consensus | **Review Consensus** | Unchanged |
+
+#### Edge Cases
+
+| Situation | Handling |
+|-----------|----------|
+| Oracle fails or times out | Use Phase 2 fields mapped to Korean labels. Omit 현재 코드, 문맥, 영향 범위. Use Phase 2 Fix text as 수정안. Prepend "(enrichment unavailable)" to finding. |
+| Finding references a deleted file | Oracle reads the file at base branch (`git show {base}:{file}`). Note "(삭제된 파일)" in 문맥. |
+| Finding spans multiple files | Primary file gets the code snippet. Other files listed in 영향 범위 with brief context. |
+| Diff cannot be expressed simply | 수정안 states design direction + "구체적 diff 생성 불가 — 구조 변경 필요". |
+| Zero findings after Phase 2 | Skip Phase 3 entirely. |
+
+#### Data Flow
+
+```
+Phase 2 output (adjudicated findings with P-levels, verdict)
+  → Group findings by file path
+  → Dispatch oracle per file group (parallel, single response)
+  → Collect oracle results (현재 코드, 문맥, 수정안, 영향 범위)
+  → Merge enrichment into each finding (field transformation table above)
+  → Generate Final Output with enriched per-issue format
+```
 
 ### Final Output Format
 
