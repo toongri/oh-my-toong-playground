@@ -262,7 +262,7 @@ EOF
 
 When commit-level separation is not possible (mixed commit detected, or cherry-pick conflict during separation):
 
-1. Inform the user: `"Automatic commit-level separation is not possible. [file] has been changed across two theses."`
+1. Inform the user that automatic commit-level separation is not possible because [file] has been changed across two theses.
 2. Fall back to single PR
 3. Explain thesis boundaries in the single PR's Review Points: write so reviewers can understand the mixed concerns
 
