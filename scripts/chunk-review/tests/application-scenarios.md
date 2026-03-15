@@ -692,7 +692,7 @@
 | V1 | Findings를 파일별로 그룹: Group A (`OrderPaymentController.kt` — P0 1건), Group B (`PaymentRequest.kt` — P1 1건), Group C (`InventoryService.kt` — P1 1건) |
 | V2 | 3개 oracle 병렬 dispatch (하나의 응답에서 3개 Agent tool call) |
 | V3 | 각 oracle prompt에 finding의 P-level, issue title, Problem, Fix direction 포함 |
-| V4 | Oracle 결과에서 4개 필드(현재 코드, 문맥, 수정안, 영향 범위) 추출하여 finding에 merge |
+| V4 | Oracle 결과에서 4개 필드(Current Code, Context, Fix, Blast Radius) 추출하여 finding에 merge |
 | V5 | Out of Scope finding (`legacy/OldHandler.kt:15`)은 enrichment 대상에서 제외 |
 | V6 | 최종 per-issue output에 Location, Current Code, Context, Problem, Impact, Fix, Blast Radius, Review Consensus 필드 포함 |
-| V7 | Oracle 실패 시 해당 finding은 Phase 2 필드 기반 fallback format 사용 — "(enrichment unavailable)" 표기, 현재 코드/문맥/영향 범위 생략 |
+| V7 | Oracle 실패 시 해당 finding은 Phase 2 필드 기반 fallback format 사용 — "(enrichment unavailable)" 표기, Current Code/Context/Blast Radius 생략 |
