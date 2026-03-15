@@ -74,11 +74,11 @@ plugins:
     - serena
     - superpowers
     - code-review
-    - name: plannotator
-      commands:
+    - name: plannotator@plannotator
+      check: jq -e '.plugins["plannotator@plannotator"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
         - curl -fsSL https://plannotator.ai/install.sh | bash
         - claude plugin marketplace add backnotprop/plannotator
-        - claude plugin install plannotator@plannotator
 
 # MCP 서버 동기화
 mcps:
