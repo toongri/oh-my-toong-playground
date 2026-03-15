@@ -1238,30 +1238,52 @@ sync_plugins() {
             continue
         fi
 
-        # Extract commands count (only available for object items)
-        local commands_count=0
+        # Extract pre-commands count and check field (only available for object items)
+        local pre_commands_count=0
+        local check_cmd=""
         if [[ "$item_type" != "!!str" ]]; then
-            commands_count=$(yq ".plugins.items[$i].commands | length // 0" "$yaml_file")
+            pre_commands_count=$(yq '.plugins.items['"$i"']["pre-commands"] | length // 0' "$yaml_file")
+            check_cmd=$(yq '.plugins.items['"$i"']["check"] // ""' "$yaml_file")
+            if [[ "$check_cmd" == "null" ]]; then
+                check_cmd=""
+            fi
         fi
 
         # Dispatch to each target adapter
         for target in $(echo "$item_platforms" | jq -r '.[]'); do
             case "$target" in
                 claude)
-                    if [[ "$commands_count" -gt 0 ]]; then
+                    if [[ "$DRY_RUN" == "true" ]]; then
+                        # dry-run: log_dry for all pre-commands and plugin install (skip check)
                         local j
-                        for j in $(seq 0 $((commands_count - 1))); do
+                        for j in $(seq 0 $((pre_commands_count - 1))); do
                             local cmd
-                            cmd=$(yq ".plugins.items[$i].commands[$j]" "$yaml_file")
-                            if [[ "$DRY_RUN" == "true" ]]; then
-                                log_dry "$cmd"
-                            else
-                                if ! bash -c "$cmd"; then
-                                    log_warn "commands 실행 실패 (계속 진행): $cmd"
-                                fi
-                            fi
+                            cmd=$(yq '.plugins.items['"$i"']["pre-commands"]['"$j"']' "$yaml_file")
+                            log_dry "$cmd"
                         done
+                        claude_sync_plugin_install "$plugin_name" "$plugin_scope" "$target_path" "$DRY_RUN"
                     else
+                        # Determine whether to run pre-commands based on check
+                        local run_pre_commands=true
+                        if [[ -n "$check_cmd" ]]; then
+                            if bash -c "$check_cmd" > /dev/null 2>&1; then
+                                log_info "check 통과, pre-commands 스킵: $plugin_name"
+                                run_pre_commands=false
+                            fi
+                        fi
+
+                        if [[ "$run_pre_commands" == "true" && "$pre_commands_count" -gt 0 ]]; then
+                            local j
+                            for j in $(seq 0 $((pre_commands_count - 1))); do
+                                local cmd
+                                cmd=$(yq '.plugins.items['"$i"']["pre-commands"]['"$j"']' "$yaml_file")
+                                if ! bash -c "$cmd"; then
+                                    log_warn "pre-commands 실행 실패 (계속 진행): $cmd"
+                                fi
+                            done
+                        fi
+
+                        # Always run plugin install (idempotent)
                         claude_sync_plugin_install "$plugin_name" "$plugin_scope" "$target_path" "$DRY_RUN"
                     fi
                     ;;

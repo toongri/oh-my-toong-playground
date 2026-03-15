@@ -368,8 +368,8 @@ test_plugin_scope_project() {
     fi
 }
 
-test_plugin_commands_dry_run() {
-    # commands 필드가 있을 때 dry-run 시 각 command가 log_dry로 출력
+test_plugin_pre_commands_dry_run() {
+    # pre-commands 필드가 있을 때 dry-run 시 각 pre-command와 plugin install 모두 log_dry로 출력
     extract_functions_from_sync_script
 
     local yaml_file="$TEST_TMP_DIR/sync.yaml"
@@ -378,7 +378,7 @@ path: /tmp/test-target
 plugins:
   items:
     - name: my-plugin
-      commands:
+      pre-commands:
         - echo "step one"
         - echo "step two"
 EOF
@@ -389,20 +389,25 @@ EOF
     DRY_RUN=false
 
     if ! echo "$output" | grep -q 'echo "step one"'; then
-        echo "ASSERTION FAILED: Dry-run output should contain first command, got: $output"
+        echo "ASSERTION FAILED: Dry-run output should contain first pre-command, got: $output"
         return 1
     fi
 
     if ! echo "$output" | grep -q 'echo "step two"'; then
-        echo "ASSERTION FAILED: Dry-run output should contain second command, got: $output"
+        echo "ASSERTION FAILED: Dry-run output should contain second pre-command, got: $output"
+        return 1
+    fi
+
+    if ! echo "$output" | grep -qi "plugin install"; then
+        echo "ASSERTION FAILED: Dry-run output should contain plugin install, got: $output"
         return 1
     fi
 
     return 0
 }
 
-test_plugin_commands_replaces_default() {
-    # commands가 있으면 기본 plugin install이 출력되지 않음
+test_plugin_pre_commands_with_check_skip() {
+    # check가 exit 0이면 pre-commands는 스킵되고 plugin install은 dry-run 출력됨
     extract_functions_from_sync_script
 
     local yaml_file="$TEST_TMP_DIR/sync.yaml"
@@ -411,8 +416,9 @@ path: /tmp/test-target
 plugins:
   items:
     - name: my-plugin
-      commands:
-        - echo "custom install"
+      check: "true"
+      pre-commands:
+        - echo "should be skipped"
 EOF
 
     DRY_RUN=true
@@ -420,13 +426,42 @@ EOF
     output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
     DRY_RUN=false
 
-    if echo "$output" | grep -qi "plugin install"; then
-        echo "ASSERTION FAILED: Output should NOT contain 'plugin install' when commands is set, got: $output"
+    # dry-run does not execute check, so pre-commands appear in dry-run output
+    # plugin install must always appear
+    if ! echo "$output" | grep -qi "plugin install"; then
+        echo "ASSERTION FAILED: Dry-run output should contain plugin install, got: $output"
         return 1
     fi
 
-    if ! echo "$output" | grep -q 'echo "custom install"'; then
-        echo "ASSERTION FAILED: Output should contain the custom command, got: $output"
+    return 0
+}
+
+test_plugin_pre_commands_always_runs_install() {
+    # pre-commands가 있어도 plugin install이 항상 dry-run 출력에 포함됨
+    extract_functions_from_sync_script
+
+    local yaml_file="$TEST_TMP_DIR/sync.yaml"
+    cat > "$yaml_file" <<'EOF'
+path: /tmp/test-target
+plugins:
+  items:
+    - name: my-plugin
+      pre-commands:
+        - echo "custom setup"
+EOF
+
+    DRY_RUN=true
+    local output
+    output=$(sync_plugins "$TEST_TMP_DIR/target" "$yaml_file" 2>&1)
+    DRY_RUN=false
+
+    if ! echo "$output" | grep -qi "plugin install"; then
+        echo "ASSERTION FAILED: plugin install should always be in dry-run output even with pre-commands, got: $output"
+        return 1
+    fi
+
+    if ! echo "$output" | grep -q 'echo "custom setup"'; then
+        echo "ASSERTION FAILED: pre-command should appear in dry-run output, got: $output"
         return 1
     fi
 
@@ -614,8 +649,9 @@ main() {
     run_test test_plugin_string_shorthand
     run_test test_plugin_scope_user
     run_test test_plugin_scope_project
-    run_test test_plugin_commands_dry_run
-    run_test test_plugin_commands_replaces_default
+    run_test test_plugin_pre_commands_dry_run
+    run_test test_plugin_pre_commands_with_check_skip
+    run_test test_plugin_pre_commands_always_runs_install
 
     # Config Tests
     run_test test_config_claude_settings_local

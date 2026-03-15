@@ -601,57 +601,98 @@ EOF
     fi
 }
 
-test_plugins_with_commands_valid() {
+test_plugins_with_pre_commands_valid() {
     cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
 name: test-project
 path: /tmp/test
 plugins:
   items:
     - name: my-plugin
-      commands:
+      pre-commands:
         - claude plugin install my-plugin
         - claude plugin enable my-plugin
+      check: claude plugin list | grep my-plugin
 EOF
 
     if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
         return 0
     else
-        echo "Validation should pass for plugin object with valid commands array"
+        echo "Validation should pass for plugin object with valid pre-commands array and check"
         return 1
     fi
 }
 
-test_plugins_commands_empty_array() {
+test_plugins_pre_commands_empty_array() {
     cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
 name: test-project
 path: /tmp/test
 plugins:
   items:
     - name: my-plugin
-      commands: []
+      pre-commands: []
 EOF
 
     if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
-        echo "Validation should fail for plugin with empty commands array"
+        echo "Validation should fail for plugin with empty pre-commands array"
         return 1
     else
         return 0
     fi
 }
 
-test_plugins_commands_non_string_item() {
+test_plugins_pre_commands_non_string_item() {
     cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
 name: test-project
 path: /tmp/test
 plugins:
   items:
     - name: my-plugin
-      commands:
+      pre-commands:
         - 123
 EOF
 
     if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
-        echo "Validation should fail for plugin commands containing non-string item"
+        echo "Validation should fail for plugin pre-commands containing non-string item"
+        return 1
+    else
+        return 0
+    fi
+}
+
+test_plugins_check_valid() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      check: claude plugin list | grep my-plugin
+EOF
+
+    # check만 있고 pre-commands 없으면 warning이지만 에러는 아님 (exit 0)
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        return 0
+    else
+        echo "Validation should pass (with warning) for plugin with check but no pre-commands"
+        return 1
+    fi
+}
+
+test_plugins_check_non_string() {
+    cat > "$TEST_TMP_DIR/sync.yaml" << 'EOF'
+name: test-project
+path: /tmp/test
+plugins:
+  items:
+    - name: my-plugin
+      pre-commands:
+        - claude plugin install my-plugin
+      check:
+        - not-a-string
+EOF
+
+    if "$VALIDATE_SCHEMA" "$TEST_TMP_DIR/sync.yaml" 2>/dev/null; then
+        echo "Validation should fail for plugin check that is not a string"
         return 1
     else
         return 0
@@ -825,9 +866,11 @@ main() {
     run_test test_plugins_valid
     run_test test_plugins_string_shorthand
     run_test test_plugins_missing_name
-    run_test test_plugins_with_commands_valid
-    run_test test_plugins_commands_empty_array
-    run_test test_plugins_commands_non_string_item
+    run_test test_plugins_with_pre_commands_valid
+    run_test test_plugins_pre_commands_empty_array
+    run_test test_plugins_pre_commands_non_string_item
+    run_test test_plugins_check_valid
+    run_test test_plugins_check_non_string
 
     # Config section validation
     run_test test_config_valid_platforms
