@@ -260,8 +260,9 @@ If more than 30 production files are in the diff, group by directory instead of 
 
 If any check fails:
 1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
-2. Do NOT proceed to Step 3 or dispatch chunk-reviewer agents
-3. Report {EVIDENCE_RESULTS} and exit immediately
+2. Omit Part 2 (Test Coverage Mapping) — it is not needed on failure
+3. Do NOT proceed to Step 3 or dispatch chunk-reviewer agents
+4. Report {EVIDENCE_RESULTS} and exit immediately
 
 ## Step 3: Chunking Decision
 
