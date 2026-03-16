@@ -48,6 +48,19 @@ Only describe what is directly visible in the diff output. Do not infer the beha
 
 Cover ALL change units -- core changes AND supporting/peripheral changes.
 
+**Requirements Mapping:**
+
+If `{REQUIREMENTS}` is "N/A", skip this sub-step. Instead, verify commit message-change unit consistency. Output: "Requirements Mapping: skipped (requirements not provided)."
+
+Otherwise, perform a bidirectional mapping:
+
+- **Presence check** (requirements → changes): For each requirement item in `{REQUIREMENTS}`, identify the corresponding change unit(s). A requirement with no corresponding change unit is a gap — flag it explicitly.
+- **Absence check** (changes → requirements): For each change unit, identify the corresponding requirement. A change unit with no corresponding requirement is a scope creep candidate — tag it `[Unmapped]`.
+
+If `{REQUIREMENTS}` is free-form text (not enumerated), extract enumerable items from the text before mapping.
+
+If `{REQUIREMENTS}` is an external URL only, annotate: "Requirements provided as external URL — mapping not possible" and treat as N/A.
+
 Step 3 output becomes the Chunk Analysis section of your final output.
 
 ### Step 4: Correctness Verification
@@ -73,6 +86,21 @@ Trace every external input through the changed code:
 - Authentication gaps: missing auth checks on new endpoints, privilege escalation paths
 - Data exposure: sensitive data in logs, error messages, responses, URLs
 - Trust boundaries: unvalidated input crossing from untrusted to trusted context
+
+**Credential and Secret Scanning:**
+
+Scan every added or modified line for these patterns:
+- AWS access key prefix: `AKIA`
+- OpenAI/Anthropic API key prefix: `sk-`
+- GitHub token prefixes: `ghp_`, `gho_`, `ghs_`
+- Slack token prefix: `xox-`
+- PEM private key block: `-----BEGIN (RSA |EC |)PRIVATE KEY-----`
+- Connection string with embedded password: `://user:password@`
+- High-entropy Base64 token (40+ character opaque string in assignment or config context)
+
+**Severity guidance**: Credential pattern in production code = minimum **P1**. Credential pattern in test fixtures or documentation = **P3**.
+
+Verify whether the pattern is an actual credential or an intentional mock/example before assigning severity.
 
 ### Step 7: Performance Under Scale
 
@@ -113,7 +141,11 @@ Evaluate every change against ALL five categories:
 - Tests actually test logic (not mocks)?
 - Edge cases covered?
 - Integration tests where needed?
-- All tests passing?
+- Do tests exercise the changed code paths (not just exist alongside)?
+- Are assertions checking meaningful outcomes (not just no-exception)?
+- Are there changed production paths with no test coverage? (Check `{EVIDENCE_RESULTS}` Test Coverage Mapping)
+
+  Production file changes without corresponding test in diff or project = minimum P2. Test fixtures containing credential patterns (mock API keys, etc.) = P3, not P1.
 
 **Requirements:**
 - All plan requirements met?
@@ -136,9 +168,11 @@ Produce your review in exactly this structure:
 
 #### <filename>:<symbol> (<added|modified|deleted>)
 - **What Changed**: [description]
+- **Requirement**: Mapped to: {requirement text or ID} | [Unmapped — potential scope creep]
 
 #### <filename> (<added|modified|deleted>)
 - **What Changed**: [description]
+- **Requirement**: Mapped to: {requirement text or ID} | [Unmapped — potential scope creep]
 
 ### Strengths
 [What's well done? Be specific with file:line references.]
