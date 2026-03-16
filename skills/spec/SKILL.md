@@ -595,11 +595,21 @@ If you have sufficient information, use it to draft a high-quality proposal and 
 
 **Applies to Requirements Analysis and Solution Design only. Other Areas skip this scoring.**
 
+**Ambiguity Threshold**: 0.2 — used at Phase Transition Gate and area completion warnings below.
+
 After each Step completion within Requirements Analysis or Solution Design, compute clarity dimensions and display the score table to the user. The score from the final Step of an Area is the authoritative value used at the Phase Transition Gate.
 
 **Formula:** `Ambiguity = 1 − Σ(clarity_i × weight_i)`
 
 Each clarity dimension is rated 0.0 (fully ambiguous) to 1.0 (fully clear).
+
+**Calibration anchors:**
+
+| Score | Goal | Constraints | Success Criteria | Context (Brownfield) |
+|-------|------|-------------|------------------|----------------------|
+| 0.0 | No objective stated | No constraints identified | No criteria defined | No codebase understanding |
+| 0.5 | Objective stated but scope unclear | Some constraints named, no priorities | Criteria exist but not measurable | Key modules identified, dependencies unknown |
+| 1.0 | Single unambiguous objective with scope boundary | All constraints ranked with rationale | Every criterion has metric + threshold | Full dependency map with change-impact assessed |
 
 | Variant | Dimensions | Weights |
 |---------|-----------|---------|
@@ -625,11 +635,11 @@ Ambiguity: {score} → Next Step targets: {weakest dimension}
 
 For Greenfield projects, omit the Context row entirely.
 
-**Area completion warning:** When completing Requirements Analysis or Solution Design with Ambiguity > 0.2, display:
+**Area completion warning:** When completing Requirements Analysis or Solution Design with Ambiguity > 0.2 (the Ambiguity Threshold), display:
 
-> "Ambiguity is {score}. Consider addressing gaps before proceeding to {Next Area}. Note: the Phase Transition Gate enforces ≤ 0.2 at the Requirements → Solution Design boundary."
+> "Ambiguity is {score}. Consider addressing gaps before proceeding to {Next Area}. Note: the Phase Transition Gate enforces ≤ 0.2 (Ambiguity Threshold) at the Requirements → Solution Design boundary."
 
-The Phase Transition Gate enforces Ambiguity ≤ 0.2 at the Requirements → Solution Design boundary. For Solution Design → Design Areas, this warning is advisory only.
+The Phase Transition Gate enforces Ambiguity ≤ 0.2 (Ambiguity Threshold) at the Requirements → Solution Design boundary. For Solution Design → Design Areas, this warning is advisory only.
 
 **Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-review gate.
 
@@ -1033,7 +1043,7 @@ After Requirements Analysis completes (spec-review pass + user "Area complete"),
 | 3 | Key business rules documented with rationale? | Requirements |
 | 4 | Non-functional requirements quantified? | Requirements |
 | 5 | Success criteria testable? | Requirements |
-| 6 | Ambiguity Score ≤ 0.2? | Clarity Scoring |
+| 6 | Ambiguity Score ≤ 0.2 (Ambiguity Threshold)? | Clarity Scoring |
 
 **All YES** → Proceed to Solution Design.
 **Any NO** → Return to Requirements Analysis via Prior Area Amendment, then:
@@ -1053,7 +1063,7 @@ Phase Transition Gate: Requirements → Solution Design
 | 3 | Key business rules documented with rationale? | {YES/NO: gap} |
 | 4 | NFRs quantified?                      | {YES/NO: gap} |
 | 5 | Success criteria testable?            | {YES/NO: gap} |
-| 6 | Ambiguity Score ≤ 0.2?               | {YES/NO: current score} |
+| 6 | Ambiguity Score ≤ 0.2 (Ambiguity Threshold)? | {YES/NO: current score} |
 
 Result: {PASS — proceed to Solution Design | FAIL — return to Requirements}
 ```
