@@ -365,6 +365,25 @@ For complex technical decisions, provide rich context via markdown BEFORE asking
 
 **Continue until YOU have no questions left.** Not after 2-3 questions. Keep interviewing until every ambiguity is resolved.
 
+### Progress Reporting
+
+After each interview answer, compute the Ambiguity Score dimensions and display the progress table to the user.
+
+```
+Round {n} | Ambiguity: {score}%
+
+| Dimension             | Score | Gap                 |
+|-----------------------|-------|---------------------|
+| Goal                  | {s}   | {gap or "Clear"}    |
+| Constraints           | {s}   | {gap or "Clear"}    |
+| Success Criteria      | {s}   | {gap or "Clear"}    |
+| Context (brownfield)  | {s}   | {gap or "Clear"}    |
+
+→ Next question targets: {weakest dimension}
+```
+
+The Clearance Checklist (items 1-5) remains internal. Only the ambiguity dimension scores are surfaced.
+
 ### User Deferral Handling
 
 When user explicitly defers ("skip", "I don't know", "your call", "you decide", "no preference"):
