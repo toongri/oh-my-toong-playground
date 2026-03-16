@@ -591,6 +591,44 @@ AI has enough info for a Step?
 **"I already know this" is NEVER a reason to skip presenting to the user.**
 If you have sufficient information, use it to draft a high-quality proposal and present it for user review. The user may have corrections, additions, or different priorities that only surface when they see your proposal.
 
+### Clarity Scoring
+
+**Applies to Requirements Analysis and Solution Design only. Other Areas skip this scoring.**
+
+After each Step completion within Requirements Analysis or Solution Design, compute clarity dimensions and display the score table to the user.
+
+**Formula:** `Ambiguity = 1 − Σ(clarity_i × weight_i)`
+
+Each clarity dimension is rated 0.0 (fully ambiguous) to 1.0 (fully clear).
+
+| Variant | Dimensions | Weights |
+|---------|-----------|---------|
+| **Greenfield** | Goal, Constraints, Success Criteria | Goal 0.4, Constraints 0.3, Success Criteria 0.3 |
+| **Brownfield** | Goal, Constraints, Success Criteria, Context | Goal 0.35, Constraints 0.25, Success Criteria 0.25, Context 0.15 |
+
+**Display format** (shown after Step announcement in Step Completion Sequence item 7):
+
+```
+Step {n} complete.
+
+| Dimension             | Score | Gap              |
+|-----------------------|-------|------------------|
+| Goal                  | {s}   | {gap or "Clear"} |
+| Constraints           | {s}   | {gap or "Clear"} |
+| Success Criteria      | {s}   | {gap or "Clear"} |
+| Context (brownfield)  | {s}   | {gap or "Clear"} |
+
+Ambiguity: {score}% → Next Step targets: {weakest dimension}
+```
+
+**Area completion warning:** When completing Requirements Analysis or Solution Design with Ambiguity > 20%, display:
+
+> "Ambiguity is {score}%. Consider addressing gaps before proceeding to {Next Area}."
+
+This warning is advisory — it does NOT block Area completion (Iron Law preserved).
+
+**Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-review gate.
+
 ### Final Step Checkpoint (After Last Design Area)
 
 **BEFORE announcing "All Design Areas finished":**
