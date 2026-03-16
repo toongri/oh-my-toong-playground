@@ -1015,6 +1015,41 @@ This dashboard provides transparency into the overall spec progress, helping the
 
 **Without BOTH gates passed, the Area is NOT complete and next Area CANNOT begin.**
 
+### Phase Transition Gate (Requirements → Solution Design)
+
+After Requirements Analysis completes (spec-review APPROVE + user "Area complete"), automatically run this readiness check before entering Solution Design.
+
+| # | Check | Source |
+|---|-------|--------|
+| 1 | Core objective clearly defined? | Requirements |
+| 2 | Scope boundaries explicit (IN/OUT)? | Requirements |
+| 3 | Architecture drivers identified? | Requirements |
+| 4 | Non-functional requirements quantified? | Requirements |
+| 5 | Success criteria testable? | Requirements |
+| 6 | Ambiguity Score ≤ 0.2? | Clarity Scoring |
+
+**All YES** → Proceed to Solution Design.
+**Any NO** → Return to Requirements Analysis via Prior Area Amendment. Address the gap, then re-run this gate.
+
+This gate runs internally after Requirements Area completion. Display results to the user:
+
+```
+Phase Transition Gate: Requirements → Solution Design
+
+| # | Check                                 | Result |
+|---|---------------------------------------|--------|
+| 1 | Core objective clearly defined?       | {YES/NO: gap} |
+| 2 | Scope boundaries explicit (IN/OUT)?   | {YES/NO: gap} |
+| 3 | Architecture drivers identified?      | {YES/NO: gap} |
+| 4 | NFRs quantified?                      | {YES/NO: gap} |
+| 5 | Success criteria testable?            | {YES/NO: gap} |
+| 6 | Ambiguity Score ≤ 0.2?               | {YES/NO: current score} |
+
+Result: {PASS — proceed to Solution Design | FAIL — return to Requirements}
+```
+
+**Scope:** This gate applies ONLY to the Requirements → Solution Design transition. Other Area transitions rely on the spec-review gate and user "Area complete" declaration.
+
 ## Spec Completion Gate
 
 **SPEC IS NOT COMPLETE UNTIL:**
