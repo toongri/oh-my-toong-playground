@@ -283,9 +283,10 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 |---|-------|-------------------|
 | V1 | TL;DR section exists | Plan begins with a TL;DR section containing Quick Summary, Deliverables, and Estimated Effort fields |
 | V2 | Must NOT Have section exists | Plan contains a "Must NOT Have (Guardrails)" section with explicit exclusions and scope boundaries |
-| V3 | TODOs have acceptance criteria | Every TODO item includes concrete, agent-executable acceptance criteria (not vague "verify it works" descriptions) |
+| V3 | TODOs have rich "What to do" + two-line AC | Every TODO's "What to do" faithfully transfers interview conclusions (content, scope, approach, references, decisions); acceptance criteria follow the two-line format (Observable outcome + Verification line) |
 | V4 | Context section with Interview Summary | Plan includes Context section containing Interview Summary (key decisions from extended interview) |
 | V5 | Verification Strategy section present | Plan includes Verification Strategy with Test Decision, and Agent-Executed QA Scenarios for each TODO |
+| V6 | TODOs have populated References | Every TODO includes at least one Pattern or API/Type reference with WHY explanation |
 
 ---
 
@@ -357,7 +358,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with acceptance criteria — NOT 20-30 granular micro-steps with implementation details |
+| V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with rich outcome descriptions and two-line acceptance criteria — NOT 20-30 granular micro-steps with code snippets or planner-assumed implementation technique |
 | V2 | No plan generated before explicit trigger | For the filter feature request, skill enters interview mode and does NOT generate a plan until user explicitly requests it (e.g., "플랜 만들어줘") |
 | V3 | No under-planning | Each task is broken into verifiable chunks — no single task like "Step 1: Implement the feature" without further breakdown |
 | V4 | No architecture redesign | Skill proposes targeted changes that work within existing codebase patterns — does NOT suggest rewriting the entire component or introducing new frameworks unnecessarily |
@@ -475,6 +476,8 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 | P-9 | Acceptance Criteria Drafting | | | AC section rewritten -- verification points updated, needs re-testing |
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
+| P-12 | Plan Template Structure | **RETEST** | 2026-03-16 | V3 updated (two-line AC + rich What to do), V6 added (References). Needs re-testing |
+| P-15 | Failure Mode Avoidance | **RETEST** | 2026-03-16 | V1 updated — over-planning now checks for code snippets and planner-assumed technique. Needs re-testing |
 | P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
