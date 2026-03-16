@@ -22,7 +22,7 @@ NO STEP SKIPPING:
 
 NO AREA COMPLETION WITHOUT:
 1. All Steps in the Area completed with user confirmation
-2. spec-review APPROVE verdict received (review loop resolved)
+2. spec-review pass (APPROVE or COMMENT) verdict received (review loop resolved)
 3. User explicitly declares "Area complete"
 4. All acceptance criteria testable
 5. No "TBD" or vague placeholders remaining
@@ -39,7 +39,7 @@ NO AREA COMPLETION WITHOUT:
 | Error cases defined | Happy path only = production incidents |
 | Every Step presents to user | Skipped steps = missed requirements |
 | User confirmation at every Step | Agent decisions = user blamed |
-| Area completion = spec-review APPROVE + user gate | Unchecked areas = compounding errors |
+| Area completion = spec-review pass + user gate | Unchecked areas = compounding errors |
 | No Step/Area skipping ever | "Simple" hides complexity |
 | Design proposals include potential risks | Hidden risks = surprise in production |
 | spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
@@ -701,14 +701,14 @@ digraph feedback_loop {
 
 ### Human-in-the-Loop
 
-The final decision on feedback is always made by the **user**, but spec-review APPROVE is a prerequisite for Area completion.
+The final decision on feedback is always made by the **user**, but spec-review pass (APPROVE or COMMENT) is a prerequisite for Area completion.
 
 | Item | Description |
 |------|-------------|
-| spec-review Role | Quality gate — APPROVE required before Area can complete |
+| spec-review Role | Quality gate — pass (APPROVE or COMMENT) required before Area can complete |
 | AI (spec) Role | Present feedback, form recommendation, facilitate consensus |
-| User Role | Review feedback, agree on changes, declare "Area complete" after APPROVE |
-| Gate Order | spec-review APPROVE first → then user "Area complete" declaration |
+| User Role | Review feedback, agree on changes, declare "Area complete" after pass |
+| Gate Order | spec-review pass first → then user "Area complete" declaration |
 
 ### Delegating to spec-review
 
@@ -787,7 +787,7 @@ After receiving spec-review feedback, YOU must:
 2. User reviews and agrees on specific changes (user may modify recommendations)
 3. Apply agreed changes to design.md, record decisions in `records/`
 4. Re-delegate to spec-review
-5. Repeat until APPROVE received
+5. Repeat until pass received
 
 > **Note:** If a deliberate trade-off was made against previous review findings, note the decision rationale in `Key Decisions` or `Questions for Reviewers` within the re-delegation prompt. This helps reviewers understand intentional divergences but is not mandatory.
 
@@ -1035,7 +1035,7 @@ After Requirements Analysis completes (spec-review pass + user "Area complete"),
 
 **All YES** → Proceed to Solution Design.
 **Any NO** → Return to Requirements Analysis via Prior Area Amendment, then:
-1. Re-run spec-review on the amended Requirements (APPROVE required)
+1. Re-run spec-review on the amended Requirements (pass required)
 2. User re-declares "Area complete" for Requirements
 3. Re-run this Phase Transition Gate
 
