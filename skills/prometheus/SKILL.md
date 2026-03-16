@@ -820,6 +820,13 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Must NOT do, Files, References, etc.) indented under the checkbox line.
 
 - Each task = implementation + test combined (never separate)
+- **What to do** — faithfully transfer the interview conclusions. The executor has NO interview context; What to do is their only brief. Capture:
+  - Content — what the result contains or how it behaves
+  - Scope — which areas, entities, or modules are covered
+  - Approach — what direction or pattern to follow
+  - References — what specs or existing code informs this
+  - Decisions — choices confirmed during interview (libraries, thresholds, formats, etc.)
+  Detail level scales with input specificity: vague requests produce interview-derived conclusions; detailed user instructions are carried through faithfully; spec implementations reference spec sections and state which parts this TODO covers.
 - Acceptance criteria must be agent-executable (no human intervention)
 - **Files**: What this TODO creates or modifies — the deliverables. List concrete file paths.
 - **References (CRITICAL)** -- executor has NO interview context. Provide the context they need:
@@ -833,7 +840,7 @@ Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Mu
     WHY explains what decision this informs.
   - Each reference: `path-or-url — description` on first line, `WHY: explanation` on next line.
   - Files vs References: Files = what this TODO creates/modifies (deliverables). References = what existing files/resources to consult (context). Both coexist — References does NOT replace Files.
-  - Per-category: include when the category has relevant existing artifacts; skip when no applicable artifact exists. Not all 4 categories need to be filled. Soft limit: 1-3 references per category.
+  - 1-3 references per category. Every TODO must include at least one Pattern or API/Type reference.
 - Task count is determined by the Atomicity Heuristic — decompose until each TODO passes all 3 atomicity conditions. Wave is the execution ordering within that count
 - **Parallelization** -- every TODO must include:
   - `Blocked By`: list of TODO numbers this task depends on (empty if none)
@@ -998,20 +1005,24 @@ Wave Visualization:
 Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Task 23 -> F1-F4
 
 - [ ] 3. Implement UserService
-  - What to do: Create UserService with CRUD operations
+  - What to do: UserService manages User entity lifecycle — create, read (by ID and list), update, and delete. Create validates that email is present and unique; duplicate email returns a domain error. Read-by-ID returns null (not an exception) when the user is not found. All operations delegate persistence to UserRepository (confirmed in interview: no direct DB calls in the service layer). Error cases surface as typed result objects, not thrown exceptions — the interview confirmed this matches the existing service convention in product-service.ts.
   - Must NOT do: Add caching or event publishing
   - Files: src/service/user-service.ts, src/service/index.ts
   - References (CRITICAL):
     - Pattern: `src/service/product-service.ts:15-60` — existing service CRUD pattern
       WHY: Follow the same repository injection, error handling, and return type conventions
+    - API/Type: `src/types/user.ts` — User entity type and CreateUserInput interface
+      WHY: Service inputs and outputs must use these declared types; no inline type definitions
     - Test: `tests/service/product-service.test.ts:1-40` — existing service test structure
       WHY: Match describe/it nesting, mock setup, and assertion style
   - Blocked By: TODO 1, TODO 2
   - Blocks: TODO 5
   - Wave: 2
   - Acceptance Criteria:
-    - UserService implements create, read, update, delete
-    - All methods return typed responses
+    - [ ] **UserService create rejects duplicate email**: Calling create with an already-registered email returns a domain error result, not a thrown exception
+          **Verification**: Unit test asserts the returned result has `success: false` and error code `DUPLICATE_EMAIL` when repository returns an existing user
+    - [ ] **UserService read-by-ID returns null for missing user**: Calling readById with a non-existent ID produces null, not an exception
+          **Verification**: Unit test asserts return value is null when repository returns no record
     - QA Scenarios:
 
     Scenario: Happy path — create user returns correct response
@@ -1042,14 +1053,24 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
 
 ```
 - [ ] 6. Update API Documentation
-  - What to do: Add rate limiting section to API docs
+  - What to do: Add a "## Rate Limiting" section to docs/api-reference.md that documents the rate limiting behavior introduced by TODO 3. Content covers: per-endpoint request limits (confirmed in interview: 100 req/min for public endpoints, 1000 req/min for authenticated), the three response headers the middleware injects (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset), and the 429 error response shape including the Retry-After header. Direction: follow the existing "## Authentication" section style — lead with a prose overview paragraph, then a subsection per topic. Reference the middleware implementation for exact header names and limit values rather than hardcoding assumptions.
   - Must NOT do: Change existing endpoint documentation
   - Files: docs/api-reference.md
+  - References (CRITICAL):
+    - Pattern: `docs/api-reference.md:1-40` — existing Authentication section structure
+      WHY: New section must follow the same heading level, prose overview, and subsection pattern
+    - API/Type: `src/middleware/rate-limiter.ts` — middleware implementation with exact header names and limit constants
+      WHY: Documentation must reflect actual header names and limit values from the implementation, not assumptions
+    - External: `https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After` — Retry-After header spec
+      WHY: 429 response documentation must describe Retry-After format as defined in the HTTP spec
   - Blocked By: TODO 3
   - Blocks: None
   - Wave: 2
   - Acceptance Criteria:
-    - Rate limiting section documents limits, headers, and error responses
+    - [ ] **Rate Limiting section present with all required subsections**: docs/api-reference.md contains a "## Rate Limiting" heading followed by subsections covering limits, response headers, and 429 error shape
+          **Verification**: `grep -c "## Rate Limiting" docs/api-reference.md` returns 1; `grep "X-RateLimit-Limit" docs/api-reference.md` exits 0; `grep "429" docs/api-reference.md` exits 0
+    - [ ] **Existing documentation unchanged**: No pre-existing sections modified or deleted
+          **Verification**: `git diff HEAD -- docs/api-reference.md` shows only `+` lines under the new `## Rate Limiting` section; no `-` lines in other sections
     - QA Scenarios:
 
       Scenario: Rate limit headers documented
@@ -1166,7 +1187,7 @@ The Success Criteria section defines the binary pass/fail end state of the plan.
 
 | # | Anti-Pattern | What Goes Wrong | Instead |
 |---|-------------|-----------------|---------|
-| 1 | **Over-planning** | TODOs filled with implementation details (code snippets, pseudocode, line-by-line instructions) | Outcome-oriented TODOs with acceptance criteria — describe WHAT, not HOW |
+| 1 | **Code in plan** | TODOs contain code snippets or planner-assumed implementation technique | Faithfully describe content, behavior, and interview decisions |
 | 2 | **Under-planning** | "Step 1: Implement the feature" | Break down into verifiable chunks with clear scope |
 | 3 | **Premature metis invocation** | Invoking metis before Clearance + AC complete | Stay in interview mode until Clearance all YES and AC confirmed |
 | 4 | **Skipping confirmation** | Handing off without showing plan to user | After Momus approval, ALWAYS present the full plan and wait for user to finalize |
