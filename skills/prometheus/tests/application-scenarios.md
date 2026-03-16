@@ -286,7 +286,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V3 | TODOs have rich "What to do" + two-line AC | Every TODO's "What to do" faithfully transfers interview conclusions (content, scope, approach, references, decisions); acceptance criteria follow the two-line format (Observable outcome + Verification line) |
 | V4 | Context section with Interview Summary | Plan includes Context section containing Interview Summary (key decisions from extended interview) |
 | V5 | Verification Strategy section present | Plan includes Verification Strategy with Test Decision, and Agent-Executed QA Scenarios for each TODO |
-| V6 | TODOs have populated References | Every TODO includes at least one Pattern or API/Type reference with WHY explanation |
+| V6 | TODOs have populated References | Every TODO includes at least one Pattern or API/Type reference with WHY explanation; OR for greenfield tasks where no existing code patterns or types exist, states "Greenfield — no existing pattern" explicitly |
 
 ---
 
