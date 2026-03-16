@@ -620,14 +620,14 @@ Step {n} complete.
 | Success Criteria      | {s}   | {gap or "Clear"} |
 | Context (brownfield)  | {s}   | {gap or "Clear"} |
 
-Ambiguity: {score}% → Next Step targets: {weakest dimension}
+Ambiguity: {score} → Next Step targets: {weakest dimension}
 ```
 
-**Area completion warning:** When completing Requirements Analysis or Solution Design with Ambiguity > 20%, display:
+**Area completion warning:** When completing Requirements Analysis or Solution Design with Ambiguity > 0.2, display:
 
-> "Ambiguity is {score}%. Consider addressing gaps before proceeding to {Next Area}."
+> "Ambiguity is {score}. Consider addressing gaps before proceeding to {Next Area}."
 
-The Phase Transition Gate enforces Ambiguity ≤ 20% at the Requirements → Solution Design boundary.
+The Phase Transition Gate enforces Ambiguity ≤ 0.2 at the Requirements → Solution Design boundary.
 
 **Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-review gate.
 
@@ -1026,7 +1026,7 @@ After Requirements Analysis completes (spec-review APPROVE + user "Area complete
 | 3 | Architecture drivers identified? | Requirements |
 | 4 | Non-functional requirements quantified? | Requirements |
 | 5 | Success criteria testable? | Requirements |
-| 6 | Ambiguity Score ≤ 20%? | Clarity Scoring |
+| 6 | Ambiguity Score ≤ 0.2? | Clarity Scoring |
 
 **All YES** → Proceed to Solution Design.
 **Any NO** → Return to Requirements Analysis via Prior Area Amendment, then:
@@ -1046,7 +1046,7 @@ Phase Transition Gate: Requirements → Solution Design
 | 3 | Architecture drivers identified?      | {YES/NO: gap} |
 | 4 | NFRs quantified?                      | {YES/NO: gap} |
 | 5 | Success criteria testable?            | {YES/NO: gap} |
-| 6 | Ambiguity Score ≤ 20%?               | {YES/NO: current score} |
+| 6 | Ambiguity Score ≤ 0.2?               | {YES/NO: current score} |
 
 Result: {PASS — proceed to Solution Design | FAIL — return to Requirements}
 ```
