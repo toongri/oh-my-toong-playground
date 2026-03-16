@@ -986,6 +986,28 @@ This dashboard provides transparency into the overall spec progress, helping the
 
 **If records exist and Wrapup not done → BLOCKED. Cannot announce spec completion.**
 
+## Implementation Bridge
+
+After user confirms "Spec complete", present execution options via AskUserQuestion:
+
+**Question:** "Spec is complete. How would you like to proceed?"
+
+**Options:**
+
+1. **Plan implementation (/prometheus)** (Recommended for complex specs)
+   - "Generate a detailed work plan from this spec with TODO decomposition, wave parallelization, and QA scenarios. Best for specs with 3+ Design Areas or cross-module changes."
+   - Action: `Skill(skill: "prometheus")` with spec file path as context
+
+2. **Execute directly (/sisyphus)** (Recommended for focused specs)
+   - "Start implementation immediately with multi-agent orchestration. Best for specs with 1-2 focused Design Areas."
+   - Action: `Skill(skill: "sisyphus")` with spec file path as context
+
+3. **Revise spec**
+   - "Return to spec work for modifications."
+   - Action: Resume spec workflow from the relevant Area
+
+**IMPORTANT:** On execution selection, MUST invoke the chosen skill via `Skill()`. Do NOT tell the user to run a command manually. Do NOT implement directly — spec is a specification agent, not an executor.
+
 ## Completion Announcements
 
 ### Solution Design Completion
