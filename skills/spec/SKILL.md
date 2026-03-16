@@ -953,6 +953,22 @@ digraph area_completion {
    - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 
+### Progress Dashboard
+
+After each Area completion, display the overall spec progress to the user:
+
+| Area | Status | Key Decisions |
+|------|--------|---------------|
+| Requirements | Complete | {summary} |
+| Solution Design | Complete | {summary} |
+| {Current Area} | Complete | {summary} |
+| {Next Area} | Pending | - |
+| ... | ... | ... |
+
+Status values: `Complete` | `In Progress` | `Pending` | `Skipped`
+
+This dashboard provides transparency into the overall spec progress, helping the user understand where they are in the process and what remains.
+
 > **Template Flexibility**: Output templates in each reference file are recommended structures. Adapt sections, ordering, and detail level to your project's needs. The structural intent (what information to capture) matters more than exact formatting.
 
 **Two gates must BOTH be passed for Area completion:**
