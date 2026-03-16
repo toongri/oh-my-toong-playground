@@ -24,6 +24,12 @@ Do NOT review files outside this list. Cross-references to other files are accep
 
 This describes what kind of software is being reviewed. Reviewers must factor this into impact and probability assessments.
 
+## Evidence Results
+
+{EVIDENCE_RESULTS}
+
+The following results are from automated build/test/lint execution — these are verified facts. Do NOT re-evaluate pass/fail status. Use this information to assess test quality and coverage, not test correctness.
+
 ## Diff Command
 
 **Files in this chunk:** {FILE_LIST}
@@ -52,6 +58,7 @@ Execute the following command to obtain the diff for review. You MUST run this c
 | {DESCRIPTION} | Required | Step 0 interview or commit messages |
 | {REQUIREMENTS} | Optional | Step 0 interview, "N/A" if deferred |
 | {PROJECT_CONTEXT} | Required | Step 0 project context |
+| {EVIDENCE_RESULTS} | Optional | Step 2.5 Evidence Verification (may be 'unavailable' message) |
 | {FILE_LIST} | Required | Step 2 git diff --name-only |
 | {DIFF_COMMAND} | Required | Step 4 — constructed from range + chunk file list |
 | {CLAUDE_MD} | Optional | Step 2 CLAUDE.md collection |

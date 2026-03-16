@@ -27,6 +27,7 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 |--------|--------|----------|
 | Requirements 3-question gate | Yes | - |
 | Diff range determination & git | Yes | - |
+| Evidence Verification (build/test/lint) | Yes | - |
 | Chunking decision | Yes | - |
 | Walkthrough/critique synthesis | Yes | - |
 | Walkthrough context enrichment | NEVER | explore |
@@ -67,6 +68,7 @@ digraph role_separation {
 - `git diff {range} --name-only` output
 - `git log {range} --oneline` output
 - CLAUDE.md file content
+- Step 2.5 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
 - explore/oracle agent summaries (Phase 1a)
 - chunk-reviewer results
 - Phase 3 oracle enrichment results (finding-specific code, context, diffs, references)
@@ -196,6 +198,71 @@ Collect in parallel (using `{range}` from Step 1):
 3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
+## Step 2.5: Evidence Verification
+
+Run build, test, and lint checks BEFORE dispatching any chunk-reviewer agents. This is a fail-fast gate — a failing check aborts the review immediately.
+
+### Command Discovery
+
+**Do NOT assume commands.** Discover per-project commands in this order:
+
+1. **Memory file first**: `{project-root}/.omt/argus/project-commands.md`
+2. **Project documentation**: `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`
+3. **Build files**: `package.json` scripts, `build.gradle` / `build.gradle.kts` tasks, `Makefile` targets, `pyproject.toml`, `Cargo.toml`
+4. **If still unclear**: Ask user for build/test/lint commands
+
+Discovery is **per-command** and **independent** — if build is found but lint is not, run build and test; skip only the undiscovered command. If no commands are discovered at all, skip this step with the unavailable message (see Output Format below).
+
+Default timeout per command: **120 seconds**.
+
+### Execution Order
+
+Run in sequence — stop immediately on first failure:
+
+1. Build / compile
+2. Full test suite
+3. Linter / static analysis
+
+**Any failure → do NOT dispatch chunk-reviewer agents. Report failure and exit.**
+
+### Output Format: {EVIDENCE_RESULTS}
+
+Produce a two-part structured table after all checks complete.
+
+**Part 1 — Automated Checks**
+
+| Check | Status | Details |
+|-------|--------|---------|
+| Build | PASS / FAIL | Success: one-line summary. Failure: last 30 lines of output |
+| Tests | PASS (N passed) / FAIL (N/M failed) | Success: pass count. Failure: last 30 lines of output |
+| Lint | PASS / FAIL | Success: one-line summary or "No errors". Failure: last 30 lines of output |
+
+**Part 2 — Test Coverage Mapping**
+
+Identify production files from the Step 2 file list: files that do NOT match test glob patterns (`*Test*`, `*Spec*`, `*_test*`, `test_*`).
+
+For each production file, find its corresponding test file:
+
+| Production File | Test File | Coverage Status |
+|-----------------|-----------|-----------------|
+| `path/to/File.kt` | `path/to/FileTest.kt` | In diff / Exists, not in diff / No test found |
+
+Coverage Status values:
+- **In diff**: test file exists AND is in the diff (changed alongside production code)
+- **Exists, not in diff**: test file exists in the repo but was NOT changed
+- **No test found**: no test file matching the production file name found
+
+If more than 30 production files are in the diff, group by directory instead of listing per file.
+
+**Unavailable message** (no commands discovered): "Evidence verification unavailable — no build/test/lint commands discovered"
+
+### Fail-Fast Gate
+
+If any check fails:
+1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
+2. Do NOT proceed to Step 3 or dispatch chunk-reviewer agents
+3. Report {EVIDENCE_RESULTS} and exit immediately
+
 ## Step 3: Chunking Decision
 
 Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`):
@@ -226,7 +293,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
 ## Step 4: Agent Dispatch
 
 1. Read dispatch template from `../../scripts/chunk-review/chunk-reviewer-prompt.md`
-2. Interpolate placeholders with context from Steps 0-2:
+2. Interpolate placeholders with context from Steps 0-2.5:
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
@@ -235,6 +302,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
+   - {EVIDENCE_RESULTS} ← Step 2.5 evidence summary (Source: Step 2.5. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
 **Dispatch rules:**
