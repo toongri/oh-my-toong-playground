@@ -617,6 +617,17 @@ Each clarity dimension is rated 0.0 (fully ambiguous) to 1.0 (fully clear).
 
 **Variant selection:** Use Greenfield when no existing codebase is being modified; use Brownfield when the spec targets changes to an existing system.
 
+**Worked example (Greenfield):**
+
+| Dimension | Clarity | Weight | Weighted |
+|-----------|---------|--------|----------|
+| Goal | 0.8 | 0.4 | 0.32 |
+| Constraints | 0.6 | 0.3 | 0.18 |
+| Success Criteria | 0.5 | 0.3 | 0.15 |
+| **Sum** | | | **0.65** |
+
+`Ambiguity = 1 − 0.65 = 0.35` → exceeds 0.2 (Ambiguity Threshold); next Step targets Success Criteria (weakest at 0.5).
+
 **Display format** (replaces Step Completion Sequence item 7 announcement for scored Areas):
 
 ```
@@ -630,6 +641,7 @@ Step {n} complete.
 | Context (brownfield only)  | {s}   | {gap or "Clear"} |
 
 Ambiguity: {score} → Next Step targets: {weakest dimension}
+Proceed to next Step?
 ```
 
 For Greenfield projects, omit the Context row entirely.

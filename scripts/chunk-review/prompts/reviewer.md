@@ -50,7 +50,7 @@ Cover ALL change units -- core changes AND supporting/peripheral changes.
 
 **Requirements Mapping:**
 
-If `{REQUIREMENTS}` is "N/A", skip this sub-step. Instead, verify commit message-change unit consistency. Output: "Requirements Mapping: skipped (requirements not provided)."
+If `{REQUIREMENTS}` is "N/A", skip requirements mapping and omit the `**Requirement**` field from Chunk Analysis entries. Instead, verify commit message-change unit consistency.
 
 Otherwise, perform a bidirectional mapping:
 
@@ -145,7 +145,7 @@ Evaluate every change against ALL five categories:
 - Are assertions checking meaningful outcomes (not just no-exception)?
 - Are there changed production paths with no test coverage? (Check `{EVIDENCE_RESULTS}` Test Coverage Mapping)
 
-  Production file changes without corresponding test in diff or project = minimum P2. Test fixtures containing credential patterns (mock API keys, etc.) = P3, not P1.
+  Test fixtures containing credential patterns (mock API keys, etc.) = P3, not P1.
 
 **Requirements:**
 - All plan requirements met?
