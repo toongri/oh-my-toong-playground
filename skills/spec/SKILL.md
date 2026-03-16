@@ -999,11 +999,9 @@ After each Area completion, display the overall spec progress to the user:
 
 | Area | Status | Key Decisions |
 |------|--------|---------------|
-| Requirements | Complete | {summary} |
-| Solution Design | Complete | {summary} |
-| {Current Area} | Complete | {summary} |
-| {Next Area} | Pending | - |
-| ... | ... | ... |
+| {Area Name} | {status} | {summary or "-"} |
+
+One row per selected Area in processing order.
 
 Status values: `Complete` | `In Progress` | `Pending` | `Skipped`
 
@@ -1031,7 +1029,10 @@ After Requirements Analysis completes (spec-review APPROVE + user "Area complete
 | 6 | Ambiguity Score ≤ 20%? | Clarity Scoring |
 
 **All YES** → Proceed to Solution Design.
-**Any NO** → Return to Requirements Analysis via Prior Area Amendment. Address the gap, then re-run this gate.
+**Any NO** → Return to Requirements Analysis via Prior Area Amendment, then:
+1. Re-run spec-review on the amended Requirements (APPROVE required)
+2. User re-declares "Area complete" for Requirements
+3. Re-run this Phase Transition Gate
 
 This gate runs internally after Requirements Area completion. Display results to the user:
 
