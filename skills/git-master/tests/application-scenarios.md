@@ -1,8 +1,8 @@
-# Git-Committer Application Test Scenarios
+# Git-Master Application Test Scenarios
 
 ## Overview
 
-git-committer 스킬의 핵심 기법(technique)이 올바르게 적용되는지 검증하는 Application 시나리오.
+git-master 스킬의 핵심 기법(technique)이 올바르게 적용되는지 검증하는 Application 시나리오.
 
 각 시나리오는 실제 입력 → 기대 출력을 명시하며, 스킬이 로드된 상태에서 검증한다.
 
@@ -200,7 +200,7 @@ All files implement the single "포인트 적립" feature. PointController depen
 ## Scenario GC-12: 기능적 마크다운 파일 — docs가 아닌 feat/refactor 분류
 
 **Input**: `git status` shows staged changes:
-- `skills/git-committer/SKILL.md` — 커밋 타입 분류 기준 추가
+- `skills/git-master/SKILL.md` — 커밋 타입 분류 기준 추가
 - `rules/coding-discipline.md` — 기존 규칙 표현 개선
 
 **Primary Technique**: Type Classification — 파일 확장자가 아니라 "시스템 동작을 정의하는가, 인간 독자를 위한 참조 정보인가"로 판단

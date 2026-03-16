@@ -211,7 +211,7 @@ oh-my-toong/
 │   ├── librarian/             # 외부 문서 연구자
 │   ├── clarify/               # 요구사항 명확화 게이트
 │   ├── momus/                 # 작업 계획 검토자
-│   ├── git-committer/         # Git 커밋 워크플로우
+│   ├── git-master/            # Git 컨벤션 (커밋 + 브랜치 네이밍)
 │   ├── agent-council/         # 다중 AI 자문단
 │   ├── spec/                  # 명세서 작성
 │   ├── qa/                    # 품질 보증 가디언
@@ -255,7 +255,7 @@ oh-my-toong/
 | **oracle** | 아키텍처/디버깅 조언자 | READ-ONLY 컨설턴트 - 진단만, 구현 안 함 |
 | **clarify** | 요구사항 명확화 | 구현 전 필수 게이트 |
 | **momus** | 작업 계획 검토자 | 가차 없는 비평 - 구현 전 갭 포착 |
-| **git-committer** | Git 커밋 워크플로우 | 한국어 메시지, Subject 50자/Body 72자 제한, 원자적 커밋 |
+| **git-master** | Git 컨벤션 (커밋 + 브랜치 네이밍) | 한국어 메시지, Subject 50자/Body 72자 제한, 원자적 커밋 |
 | **agent-council** | 다중 AI 자문단 | 트레이드오프 및 주관적 결정용 |
 | **spec** | 명세서 작성 | 구조화된 명세서 생성 워크플로우 |
 | **argus** | 품질 보증 가디언 | 구현 품질, 계획 준수, 지시 이행 검증 |

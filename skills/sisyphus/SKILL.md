@@ -464,12 +464,12 @@ When invoking mnemosyne after argus approval, use this 5-section prompt:
 Commit changes from: [completed task subject]
 
 ## 2. EXPECTED OUTCOME
-- [ ] Atomic commit created with message following git-committer conventions
+- [ ] Atomic commit created with message following git-master conventions
 - [ ] Only files from this task committed
 - [ ] git log confirms commit
 
 ## 3. MUST DO
-- Follow git-committer skill exactly
+- Follow git-master skill exactly
 - Analyze git diff to understand changes
 - Check git log --oneline -10 for recent commit style reference
 

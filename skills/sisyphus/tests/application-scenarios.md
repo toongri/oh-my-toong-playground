@@ -752,7 +752,7 @@ Sisyphus needs to invoke mnemosyne to commit the changes.
 | V2 | TASK section contains commit reference | TASK section contains "Commit changes from: [task subject]" identifying what is being committed |
 | V3 | MUST NOT DO includes operational constraints | MUST NOT DO includes "Do NOT spawn subagents", "Do NOT run tests or builds", "Do NOT modify any files" |
 | V4 | CONTEXT includes task details and changed files | CONTEXT section includes the completed task subject/description and explicit changed file paths from argus review |
-| V5 | MUST DO includes git-committer skill reference | MUST DO includes "Follow git-committer skill exactly" to ensure commit conventions are followed |
+| V5 | MUST DO includes git-master skill reference | MUST DO includes "Follow git-master skill exactly" to ensure commit conventions are followed |
 
 ---
 

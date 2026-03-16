@@ -1,13 +1,13 @@
 ---
-name: git-committer
-description: Use when committing changes to git. Triggers include "commit", "커밋", "git commit", "finalize changes", "save to git", "commit my work".
+name: git-master
+description: Use when committing changes to git or naming branches. Triggers include "commit", "커밋", "git commit", "finalize changes", "save to git", "commit my work", "branch name", "브랜치 이름", "what should I name this branch".
 ---
 
 <Role>
 
-# Git Committer
+# Git Master
 
-Analyze code changes and generate Korean commit messages following project conventions.
+Analyze code changes and generate Korean commit messages following project conventions. Also applies branch naming conventions when naming new branches.
 
 > "A good commit makes history easy to read. A bad commit turns git log into a graveyard."
 
@@ -268,6 +268,28 @@ EOF
 - **Message**: [full commit message]
 - **Files**: [count] files changed
 ```
+
+---
+
+## Branch Naming Convention
+
+Format: `<type>/<description>` (kebab-case, English)
+
+| Type | When to Use |
+|------|-------------|
+| `feature/` | New functionality |
+| `fix/` | Bug fixes |
+| `refactor/` | Code restructuring |
+| `chore/` | Build, config, tooling |
+| `docs/` | Documentation only |
+| `test/` | Tests only |
+
+**Examples**: `feature/user-auth`, `fix/login-redirect`, `refactor/api-middleware`, `chore/update-deps`
+
+**Rules**:
+- All lowercase, words separated by hyphens
+- Description is English, concise (2-4 words)
+- No special characters except hyphens
 
 ---
 

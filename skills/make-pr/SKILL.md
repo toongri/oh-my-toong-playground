@@ -52,7 +52,7 @@ Writes PR description body. Optionally assesses PR scope for multi-thesis splitt
 ## When NOT to Use
 
 - Purpose is code review (use code-review skill)
-- Purpose is writing commit messages (use git-committer skill)
+- Purpose is writing commit messages (use git-master skill)
 
 ---
 
