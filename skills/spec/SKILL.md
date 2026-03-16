@@ -574,8 +574,7 @@ Even if AI already has sufficient information for a Step, it MUST:
 5. **MANDATORY: Record decisions** to `{area-directory}/records/` (see Record Workflow below)
    - If decisions were made: Create record NOW. This is a BLOCKING gate — do NOT proceed to step 6 until record is saved.
    - If no decisions were made: Explicitly state "No recordable decisions in this Step" before proceeding.
-5.5. **Emergent Concern Check**: "이 Step에서 선택된 Design Areas에서 다뤄지지 않는
-     설계/명확화 필요성이 발견되었는가?" 발견 시 Emergent Concern Protocol 적용.
+5.5. **Emergent Concern Check**: "Are there any design or clarification needs uncovered in this Step that are not addressed by the selected Design Areas?" If found, apply Emergent Concern Protocol.
 6. Regenerate `spec.md` by concatenating all completed design.md files
 7. Announce: "Step N complete. Saved. Proceed to next Step?" (For Requirements Analysis and Solution Design: Clarity Scoring display format replaces this announcement — see Clarity Scoring below)
 8. Wait for user confirmation to proceed
@@ -676,7 +675,7 @@ digraph feedback_loop {
     check_verdict [label="Verdict?", shape=diamond];
 
     approve [label="APPROVE"];
-    ask_user [label="Ask user:\n'Area 넘어갈까요?'", style="rounded,filled", fillcolor="#ccffcc"];
+    ask_user [label="Ask user:\n'Proceed to next Area?'", style="rounded,filled", fillcolor="#ccffcc"];
     next_area [label="Proceed to next Area"];
 
     request_changes [label="REQUEST_CHANGES"];
@@ -776,21 +775,21 @@ After receiving spec-review feedback, YOU must:
 
 | Verdict | Presentation |
 |---------|-------------|
-| **APPROVE** | "spec-review APPROVE. [Brief summary]. Area 넘어갈까요?" |
-| **REQUEST_CHANGES** | "spec-review REQUEST_CHANGES. [Blocking concerns 요약 + 권고사항]. 다음과 같이 수정하면 어떨까요? [구체적 수정 제안]" |
-| **COMMENT** | "spec-review COMMENT. [Non-blocking 개선 권고 요약]. 참고하여 진행하겠습니다. [follow-up 필요 시 생성]" |
+| **APPROVE** | "spec-review APPROVE. [Brief summary]. Proceed to next Area?" |
+| **REQUEST_CHANGES** | "spec-review REQUEST_CHANGES. [Summary of blocking concerns + recommendations]. How about making the following changes? [Specific change proposals]" |
+| **COMMENT** | "spec-review COMMENT. [Summary of non-blocking improvement recommendations]. I'll proceed with these in mind. [Follow-up created if needed]" |
 
 **Example (REQUEST_CHANGES):**
 
-> "spec-review **REQUEST_CHANGES**. 리뷰어들이 order state management의 event-sourcing 접근에 blocking concern을 제기했습니다. 팀의 ES 경험 부족과 복잡도 우려가 주요 지적입니다. 다만 Solution Design에서 full audit trail 필요성을 확정했으므로, event-sourcing을 유지하되 상세 구현 가이드를 스펙에 추가하는 방향을 제안합니다. 이 방향에 동의하시나요?"
+> "spec-review **REQUEST_CHANGES**. Reviewers raised a blocking concern about the event-sourcing approach for order state management. The main points were the team's limited ES experience and concerns about complexity. However, since the need for a full audit trail was confirmed in Solution Design, I propose keeping event-sourcing while adding a detailed implementation guide to the spec. Do you agree with this direction?"
 
 ### Verdict-Based Flow Control
 
 | Verdict | User Interaction | Next Action |
 |---------|-----------------|-------------|
-| **APPROVE** | "Area 넘어갈까요?" 질문 | User "Area complete" 선언 → 다음 Area |
-| **REQUEST_CHANGES** | Blocking concerns + 수정 제안 제시 | User 합의 → 수정 반영 → spec-review 재호출 |
-| **COMMENT** | Non-blocking 개선 권고 공유 | User 확인 → follow-up 생성 가능 → "Area 넘어갈까요?" 질문 |
+| **APPROVE** | Ask "Proceed to next Area?" | User declares "Area complete" → Next Area |
+| **REQUEST_CHANGES** | Present blocking concerns + change proposals | User agrees → Apply changes → Re-call spec-review |
+| **COMMENT** | Share non-blocking improvement recommendations | User confirms → Follow-up may be created → Ask "Proceed to next Area?" |
 
 **REQUEST_CHANGES Loop:**
 1. Present blocking concerns and recommended changes to user
@@ -801,7 +800,7 @@ After receiving spec-review feedback, YOU must:
 
 > **Note:** If a deliberate trade-off was made against previous review findings, note the decision rationale in `Key Decisions` or `Questions for Reviewers` within the re-delegation prompt. This helps reviewers understand intentional divergences but is not mandatory.
 
-**CRITICAL: spec-review가 pass(APPROVE 또는 COMMENT) 하지 않으면 Area complete 선언 불가.** REQUEST_CHANGES verdict가 반환된 상태에서 유저가 "Area complete"를 선언해도, pass할 때까지 Area를 완료할 수 없다.
+**CRITICAL: Area completion cannot be declared unless spec-review passes (APPROVE or COMMENT).** Even if the user declares "Area complete" while a REQUEST_CHANGES verdict is in effect, the Area cannot be completed until a pass is received.
 
 ## Record Workflow
 
@@ -821,22 +820,22 @@ A statement is a **recordable decision** if ANY of these apply:
 
 | Signal | Example | Why Recordable |
 |--------|---------|----------------|
-| Technology/tool selection | "Redis로 하자", "Kafka Streams로" | Technology choice with alternatives |
-| Strategy/approach choice | "멱등성은 UUID 기반으로" | Approach selected over alternatives |
-| Priority/classification | "P0/P1으로 나누자" | Affects scope and ordering |
-| Scope inclusion/exclusion | "관리자 대시보드는 빼자" | Scope boundary decision |
-| Feature deferral | "2차 릴리스에서 하자" | Timeline and scope impact |
-| Architecture pattern | "하이브리드로 가자" | Structural decision |
-| Boundary definition | "같은 Aggregate로 묶자" | Domain modeling decision |
+| Technology/tool selection | "Let's use Redis", "Go with Kafka Streams" | Technology choice with alternatives |
+| Strategy/approach choice | "Idempotency via UUID" | Approach selected over alternatives |
+| Priority/classification | "Split into P0/P1" | Affects scope and ordering |
+| Scope inclusion/exclusion | "Drop the admin dashboard" | Scope boundary decision |
+| Feature deferral | "Do that in the next release" | Timeline and scope impact |
+| Architecture pattern | "Go with the hybrid approach" | Structural decision |
+| Boundary definition | "Group under the same Aggregate" | Domain modeling decision |
 | Elimination conclusion | Two options rejected → third selected | Implicit selection by elimination |
 | Feedback incorporation | Reviewer concern accepted → design changed | Design modification through external review |
 
 **Decisions often hide behind casual language:**
-- "~하면 될 것 같아" → This IS a decision, not a suggestion
-- "당연히 ~이지" → "Obviously" framing does NOT make it non-recordable
-- "참고로 ~" → Informational framing CAN contain decisions
-- "뭐 ~하면 되겠지" → Throwaway tone does NOT reduce significance
-- "~는 빼자/연기하자" → Exclusions and deferrals ARE decisions
+- "I think we can just do X" → This IS a decision, not a suggestion
+- "Obviously it's X" → "Obviously" framing does NOT make it non-recordable
+- "Just for reference, X" → Informational framing CAN contain decisions
+- "Eh, we'll just do X" → Throwaway tone does NOT reduce significance
+- "Let's drop/defer X" → Exclusions and deferrals ARE decisions
 
 ### How to Record
 
@@ -866,11 +865,11 @@ At each Area Checkpoint:
 When a concern is deferred via Emergent Concern Protocol Option (C):
 
 **Record format:**
-- **Concern name**: 식별된 concern의 이름
-- **Discovery point**: 어느 Area의 어느 Step에서 발견되었는지
-- **Defer reason**: 왜 현재 스펙에서 다루지 않는지
-- **Follow-up needed**: 후속 조치 필요 여부 및 권장 시점
-- **Impact on current spec**: 현재 스펙에 미치는 영향 (있다면)
+- **Concern name**: Name of the identified concern
+- **Discovery point**: Which Area and Step it was discovered in
+- **Defer reason**: Why it is not addressed in the current spec
+- **Follow-up needed**: Whether follow-up is required and recommended timing
+- **Impact on current spec**: Impact on the current spec, if any
 
 **Save location**: `.omt/specs/{spec-name}/{current-area}/records/{step}-deferred-{concern-name}.md`
 
@@ -892,7 +891,7 @@ When errors or omissions in previous Areas are discovered during design:
 
 New features or requirements NOT in the original spec scope MUST be redirected to a separate spec. The current spec session handles only the originally scoped work.
 
-- "이것도 같이 하자" → "That requires a separate spec. Let's finish the current scope first."
+- "Let's do this too while we're at it" → "That requires a separate spec. Let's finish the current scope first."
 - Prior Area Amendment is for fixing **omissions in existing scope**, NOT for adding new features.
 
 ## Emergent Concern Protocol
@@ -901,31 +900,31 @@ When a design concern surfaces that is not covered by the selected Design Areas 
 whether discovered by AI analysis or raised by the user — it must be explicitly triaged.
 
 ### Trigger
-- **User-initiated**: 사용자가 concern을 직접 제기
-- **AI-initiated**: AI가 분석 중 미다뤄진 설계 필요성 발견
-- **Timing**: Design Area 선택 시점 AND 이후 모든 Step checkpoint에서
+- **User-initiated**: User directly raises a concern
+- **AI-initiated**: AI discovers an unaddressed design need during analysis
+- **Timing**: At the point of Design Area selection AND at every subsequent Step checkpoint
 
 ### Triage (3-way)
 
 | Option | When | Procedure |
 |--------|------|-----------|
-| **(A) 새 Design Area로 승격** | concern이 독립된 설계 영역으로 충분히 크고 복잡할 때 | 이름/범위 정의 → See `references/custom-design-concern.md` → 기존 Area와 동일한 Checkpoint/Review/Completion Protocol 적용 |
-| **(B) 기존 Area에 병합** | concern이 기존 (예정된) Area의 범위에 자연스럽게 포함될 때 | 해당 Area의 scope에 concern 추가 → 해당 Area 진행 시 함께 설계 |
-| **(C) Defer and Record** | concern이 현재 스펙 범위 밖이거나 우선순위가 낮을 때 | Record에 기록 (concern명, 발견 시점, defer 사유) → Wrapup에서 deferred concerns로 표시 |
+| **(A) Promote to new Design Area** | The concern is large and complex enough to stand as an independent design domain | Define name/scope → See `references/custom-design-concern.md` → Apply the same Checkpoint/Review/Completion Protocol as existing Areas |
+| **(B) Merge into existing Area** | The concern naturally fits within the scope of an existing (planned) Area | Add concern to that Area's scope → Design together when that Area is processed |
+| **(C) Defer and Record** | The concern is out of scope for the current spec or low priority | Record it (concern name, discovery point, defer reason) → List as deferred concern in Wrapup |
 
 ### Scope Guard Integration
-- 새 Design Area 승격 전 반드시 확인: "이 concern은 현재 스펙의 Requirements에 추적 가능한가?"
-- Requirements에 추적 불가 → Scope Guard 발동, 별도 스펙으로 안내
-- Requirements에 추적 가능 → 승격 진행, 사용자 확인 필수
+- Before promoting to a new Design Area, always verify: "Is this concern traceable to the Requirements of the current spec?"
+- Not traceable to Requirements → Scope Guard triggered; redirect to a separate spec
+- Traceable to Requirements → Proceed with promotion; user confirmation required
 
 ### Rationalization Guards
 
 | Rationalization | Counter |
 |-----------------|---------|
-| "사용자가 명시적으로 요청하지 않았으므로 넘어간다" | AI-initiated surfacing 의무: AI는 분석 중 발견한 concern을 반드시 제기해야 한다. 사용자 요청 여부와 무관. |
-| "이건 Scope Guard 대상이다" | Scope Guard vs Emergent Concern 구분: 새 feature 추가 → Scope Guard. 기존 scope 내 미다뤄진 설계 필요성 → Emergent Concern Protocol. |
-| "기존 Area에서 충분히 다룰 수 있다" | 병합 결정도 명시적 triage 거쳐야 함: 자동 병합 금지. 반드시 3-way triage를 사용자에게 제시. |
-| "간단한 건이라 별도 Area까지는 필요 없다" | 크기와 무관하게 triage는 필수: 복잡도와 무관하게 concern이 식별되면 triage 필수. |
+| "The user didn't explicitly ask for this, so I'll skip it" | AI-initiated surfacing is mandatory: AI MUST raise any concern discovered during analysis, regardless of whether the user requested it. |
+| "This falls under Scope Guard" | Distinguish Scope Guard from Emergent Concern: Adding a new feature → Scope Guard. Unaddressed design need within existing scope → Emergent Concern Protocol. |
+| "This can be sufficiently handled in an existing Area" | Merge decisions also require explicit triage: Auto-merge is prohibited. The 3-way triage MUST be presented to the user. |
+| "It's simple enough that a separate Area isn't needed" | Triage is required regardless of size: Whenever a concern is identified, triage is mandatory regardless of complexity. |
 
 ## Review Protocol
 
@@ -951,7 +950,7 @@ digraph area_completion {
     check_verdict [label="Verdict?", shape=diamond];
 
     approve [label="APPROVE"];
-    ask_complete [label="Ask user:\n'Area 넘어갈까요?'", style="rounded,filled", fillcolor="#ccffcc"];
+    ask_complete [label="Ask user:\n'Proceed to next Area?'", style="rounded,filled", fillcolor="#ccffcc"];
     user_final [label="User explicitly declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
     announce_next [label="Announce: [Area Name] complete.\nEntry criteria for [Next Area]: [list]"];
     progress_dashboard [label="Display Progress Dashboard\n(overall spec progress)"];
@@ -1004,7 +1003,7 @@ digraph area_completion {
 6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
    - AI CANNOT self-declare Area completion
-   - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
+   - **Area completion cannot be declared without spec-review pass (APPROVE or COMMENT)** — Area cannot be completed while REQUEST_CHANGES is in effect
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 8. **Progress Dashboard**: Display the overall spec progress to the user (see below)
 
@@ -1025,7 +1024,7 @@ This dashboard provides transparency into the overall spec progress, helping the
 > **Template Flexibility**: Output templates in each reference file are recommended structures. Adapt sections, ordering, and detail level to your project's needs. The structural intent (what information to capture) matters more than exact formatting.
 
 **Two gates must BOTH be passed for Area completion:**
-1. **spec-review pass** — APPROVE 또는 COMMENT (quality gate). REQUEST_CHANGES는 차단.
+1. **spec-review pass** — APPROVE or COMMENT (quality gate). REQUEST_CHANGES is a blocker.
 2. **User "Area complete" declaration** (authority gate)
 
 **Without BOTH gates passed, the Area is NOT complete and next Area CANNOT begin.**
