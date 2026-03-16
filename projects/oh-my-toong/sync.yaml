@@ -52,7 +52,7 @@ skills:
       platforms: [claude]
     - agent-council
     - clarify
-    - git-committer
+    - git-master
     - momus
     - oracle
     - qa

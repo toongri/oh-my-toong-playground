@@ -18,7 +18,7 @@
 
 ## Directory Structure
 
-- **`skills/`**: Contains `SKILL.md` files defining methodologies for specific tasks (e.g., `prometheus`, `sisyphus`, `git-committer`).
+- **`skills/`**: Contains `SKILL.md` files defining methodologies for specific tasks (e.g., `prometheus`, `sisyphus`, `git-master`).
 - **`agents/`**: Defines sub-agents and their personalities/constraints.
 - **`commands/`**: Custom slash commands (e.g., `/hud`, `/ralph`).
 - **`hooks/`**: Scripts triggering on session events (e.g., `session-start.sh`, `keyword-detector.sh`).

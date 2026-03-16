@@ -211,7 +211,7 @@ oh-my-toong/
 │   ├── librarian/             # External documentation researcher
 │   ├── clarify/               # Requirements clarification gate
 │   ├── momus/                 # Work plan reviewer
-│   ├── git-committer/         # Git commit workflow
+│   ├── git-master/            # Git conventions (commits + branch naming)
 │   ├── agent-council/         # Multi-AI advisory body
 │   ├── spec/                  # Specification writing
 │   ├── qa/                    # Quality Assurance guardian
@@ -254,7 +254,7 @@ oh-my-toong/
 | **oracle** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
 | **clarify** | Requirements clarification | MANDATORY gate before implementation |
 | **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
-| **git-committer** | Git commit workflow | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
+| **git-master** | Git conventions (commits + branch naming) | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
 | **spec** | Specification writing | Structured spec creation workflow |
 | **argus** | Quality Assurance guardian | Validates implementation quality, plan compliance, and instruction fulfillment |

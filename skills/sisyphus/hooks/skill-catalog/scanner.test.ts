@@ -42,11 +42,11 @@ describe('scanSkillDirectories', () => {
 
     const fakeHome = join(tempDir, 'fakehome');
     const userSkillsDir = join(fakeHome, '.claude', 'skills');
-    await mkdir(join(userSkillsDir, 'git-committer'), { recursive: true });
+    await mkdir(join(userSkillsDir, 'git-master'), { recursive: true });
     process.env.HOME = fakeHome;
 
     const skills = await scanSkillDirectories(projectDir);
-    expect(skills).toContain('git-committer');
+    expect(skills).toContain('git-master');
     expect(skills).toHaveLength(1);
   });
 
