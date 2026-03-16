@@ -824,7 +824,7 @@ Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Mu
   - Content — what the result contains or how it behaves
   - Scope — which areas, entities, or modules are covered
   - Approach — what direction or pattern to follow
-  - References — what specs or existing code informs this
+  - Inputs — what specs, requirements, or prior decisions inform this
   - Decisions — choices confirmed during interview (libraries, thresholds, formats, etc.)
   Detail level scales with input specificity: vague requests produce interview-derived conclusions; detailed user instructions are carried through faithfully; spec implementations reference spec sections and state which parts this TODO covers.
 - Acceptance criteria must be agent-executable (no human intervention)
