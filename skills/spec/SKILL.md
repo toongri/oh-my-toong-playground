@@ -691,7 +691,7 @@ digraph feedback_loop {
     present_feedback -> user_consensus;
     user_consensus -> incorporate [label="agree on changes"];
     incorporate -> re_delegate;
-    re_delegate -> check_verdict [label="loop until APPROVE"];
+    re_delegate -> check_verdict [label="loop until pass\n(APPROVE or COMMENT)"];
 
     check_verdict -> comment [label="COMMENT"];
     comment -> share_comment;
@@ -969,7 +969,7 @@ digraph area_completion {
     present_feedback -> user_consensus;
     user_consensus -> incorporate [label="agree"];
     incorporate -> re_review;
-    re_review -> check_verdict [label="loop until\nAPPROVE"];
+    re_review -> check_verdict [label="loop until pass\n(APPROVE or COMMENT)"];
 
     check_verdict -> comment [label="COMMENT"];
     comment -> share_comment;
