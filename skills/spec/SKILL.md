@@ -577,7 +577,7 @@ Even if AI already has sufficient information for a Step, it MUST:
 5.5. **Emergent Concern Check**: "이 Step에서 선택된 Design Areas에서 다뤄지지 않는
      설계/명확화 필요성이 발견되었는가?" 발견 시 Emergent Concern Protocol 적용.
 6. Regenerate `spec.md` by concatenating all completed design.md files
-7. Announce: "Step N complete. Saved. Proceed to next Step?"
+7. Announce: "Step N complete. Saved. Proceed to next Step?" (For Requirements Analysis and Solution Design: Clarity Scoring display format replaces this announcement — see Clarity Scoring below)
 8. Wait for user confirmation to proceed
 
 ### Information Sufficiency Rule
@@ -944,6 +944,7 @@ digraph area_completion {
     ask_complete [label="Ask user:\n'Area 넘어갈까요?'", style="rounded,filled", fillcolor="#ccffcc"];
     user_final [label="User explicitly declares\n'Area complete'", shape=diamond, style="rounded,filled", fillcolor="#ffcccc"];
     announce_next [label="Announce: [Area Name] complete.\nEntry criteria for [Next Area]: [list]"];
+    progress_dashboard [label="Display Progress Dashboard\n(overall spec progress)"];
 
     request_changes [label="REQUEST_CHANGES"];
     present_feedback [label="Present blocking concerns\nto user with recommendation"];
@@ -975,6 +976,7 @@ digraph area_completion {
     share_comment -> ask_complete [label="proceed"];
 
     user_final -> announce_next [label="YES: 'Area complete'"];
+    announce_next -> progress_dashboard;
     user_final -> present_feedback [label="NO: more discussion"];
 }
 ```
@@ -1028,7 +1030,7 @@ After Requirements Analysis completes (spec-review pass + user "Area complete"),
 |---|-------|--------|
 | 1 | Core objective clearly defined? | Requirements |
 | 2 | Scope boundaries explicit (IN/OUT)? | Requirements |
-| 3 | Architecture drivers identified? | Requirements |
+| 3 | Key business rules documented with rationale? | Requirements |
 | 4 | Non-functional requirements quantified? | Requirements |
 | 5 | Success criteria testable? | Requirements |
 | 6 | Ambiguity Score ≤ 0.2? | Clarity Scoring |
@@ -1048,7 +1050,7 @@ Phase Transition Gate: Requirements → Solution Design
 |---|---------------------------------------|--------|
 | 1 | Core objective clearly defined?       | {YES/NO: gap} |
 | 2 | Scope boundaries explicit (IN/OUT)?   | {YES/NO: gap} |
-| 3 | Architecture drivers identified?      | {YES/NO: gap} |
+| 3 | Key business rules documented with rationale? | {YES/NO: gap} |
 | 4 | NFRs quantified?                      | {YES/NO: gap} |
 | 5 | Success criteria testable?            | {YES/NO: gap} |
 | 6 | Ambiguity Score ≤ 0.2?               | {YES/NO: current score} |
