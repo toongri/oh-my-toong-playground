@@ -606,7 +606,9 @@ Each clarity dimension is rated 0.0 (fully ambiguous) to 1.0 (fully clear).
 | **Greenfield** | Goal, Constraints, Success Criteria | Goal 0.4, Constraints 0.3, Success Criteria 0.3 |
 | **Brownfield** | Goal, Constraints, Success Criteria, Context | Goal 0.35, Constraints 0.25, Success Criteria 0.25, Context 0.15 |
 
-**Display format** (shown after Step announcement in Step Completion Sequence item 7):
+**Variant selection:** Use Greenfield when no existing codebase is being modified; use Brownfield when the spec targets changes to an existing system.
+
+**Display format** (replaces Step Completion Sequence item 7 announcement for scored Areas):
 
 ```
 Step {n} complete.
@@ -625,7 +627,7 @@ Ambiguity: {score}% → Next Step targets: {weakest dimension}
 
 > "Ambiguity is {score}%. Consider addressing gaps before proceeding to {Next Area}."
 
-This warning is advisory — it does NOT block Area completion (Iron Law preserved).
+The Phase Transition Gate enforces Ambiguity ≤ 20% at the Requirements → Solution Design boundary.
 
 **Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-review gate.
 
@@ -1026,7 +1028,7 @@ After Requirements Analysis completes (spec-review APPROVE + user "Area complete
 | 3 | Architecture drivers identified? | Requirements |
 | 4 | Non-functional requirements quantified? | Requirements |
 | 5 | Success criteria testable? | Requirements |
-| 6 | Ambiguity Score ≤ 0.2? | Clarity Scoring |
+| 6 | Ambiguity Score ≤ 20%? | Clarity Scoring |
 
 **All YES** → Proceed to Solution Design.
 **Any NO** → Return to Requirements Analysis via Prior Area Amendment. Address the gap, then re-run this gate.
@@ -1043,7 +1045,7 @@ Phase Transition Gate: Requirements → Solution Design
 | 3 | Architecture drivers identified?      | {YES/NO: gap} |
 | 4 | NFRs quantified?                      | {YES/NO: gap} |
 | 5 | Success criteria testable?            | {YES/NO: gap} |
-| 6 | Ambiguity Score ≤ 0.2?               | {YES/NO: current score} |
+| 6 | Ambiguity Score ≤ 20%?               | {YES/NO: current score} |
 
 Result: {PASS — proceed to Solution Design | FAIL — return to Requirements}
 ```
