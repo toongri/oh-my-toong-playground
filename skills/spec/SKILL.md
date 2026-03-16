@@ -595,7 +595,7 @@ If you have sufficient information, use it to draft a high-quality proposal and 
 
 **Applies to Requirements Analysis and Solution Design only. Other Areas skip this scoring.**
 
-After each Step completion within Requirements Analysis or Solution Design, compute clarity dimensions and display the score table to the user.
+After each Step completion within Requirements Analysis or Solution Design, compute clarity dimensions and display the score table to the user. The score from the final Step of an Area is the authoritative value used at the Phase Transition Gate.
 
 **Formula:** `Ambiguity = 1 − Σ(clarity_i × weight_i)`
 
@@ -618,16 +618,18 @@ Step {n} complete.
 | Goal                  | {s}   | {gap or "Clear"} |
 | Constraints           | {s}   | {gap or "Clear"} |
 | Success Criteria      | {s}   | {gap or "Clear"} |
-| Context (brownfield)  | {s}   | {gap or "Clear"} |
+| Context (brownfield only)  | {s}   | {gap or "Clear"} |
 
 Ambiguity: {score} → Next Step targets: {weakest dimension}
 ```
 
+For Greenfield projects, omit the Context row entirely.
+
 **Area completion warning:** When completing Requirements Analysis or Solution Design with Ambiguity > 0.2, display:
 
-> "Ambiguity is {score}. Consider addressing gaps before proceeding to {Next Area}."
+> "Ambiguity is {score}. Consider addressing gaps before proceeding to {Next Area}. Note: the Phase Transition Gate enforces ≤ 0.2 at the Requirements → Solution Design boundary."
 
-The Phase Transition Gate enforces Ambiguity ≤ 0.2 at the Requirements → Solution Design boundary.
+The Phase Transition Gate enforces Ambiguity ≤ 0.2 at the Requirements → Solution Design boundary. For Solution Design → Design Areas, this warning is advisory only.
 
 **Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-review gate.
 
@@ -992,10 +994,11 @@ digraph area_completion {
    - AI CANNOT self-declare Area completion
    - **spec-review가 pass(APPROVE 또는 COMMENT) 없이 Area complete 선언 불가** — REQUEST_CHANGES 상태에서 Area 완료 불가
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
+8. **Progress Dashboard**: Display the overall spec progress to the user (see below)
 
-### Progress Dashboard
+### Progress Dashboard (Step 8)
 
-After each Area completion, display the overall spec progress to the user:
+Display the overall spec progress:
 
 | Area | Status | Key Decisions |
 |------|--------|---------------|
@@ -1017,7 +1020,9 @@ This dashboard provides transparency into the overall spec progress, helping the
 
 ### Phase Transition Gate (Requirements → Solution Design)
 
-After Requirements Analysis completes (spec-review APPROVE + user "Area complete"), automatically run this readiness check before entering Solution Design.
+**Precondition:** This gate runs only when both Requirements Analysis and Solution Design are selected. If Solution Design is not selected, skip this gate — Area transition proceeds via the standard spec-review + user gate.
+
+After Requirements Analysis completes (spec-review pass + user "Area complete"), automatically run this readiness check before entering Solution Design.
 
 | # | Check | Source |
 |---|-------|--------|

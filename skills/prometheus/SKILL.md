@@ -840,7 +840,7 @@ Each TODO is a checkbox line: `- [ ] N. Title` with body content (What to do, Mu
     WHY explains what decision this informs.
   - Each reference: `path-or-url — description` on first line, `WHY: explanation` on next line.
   - Files vs References: Files = what this TODO creates/modifies (deliverables). References = what existing files/resources to consult (context). Both coexist — References does NOT replace Files.
-  - 1-3 references per category. Every TODO must include at least one Pattern or API/Type reference.
+  - For each applicable category, provide 1-3 references. Skip categories with no relevant existing artifacts — not all 4 categories need to be filled. Every TODO must include at least one Pattern or API/Type reference. For greenfield tasks where no existing code patterns or types exist, state "Greenfield — no existing pattern" explicitly rather than omitting or fabricating references.
 - Task count is determined by the Atomicity Heuristic — decompose until each TODO passes all 3 atomicity conditions. Wave is the execution ordering within that count
 - **Parallelization** -- every TODO must include:
   - `Blocked By`: list of TODO numbers this task depends on (empty if none)
@@ -1187,7 +1187,7 @@ The Success Criteria section defines the binary pass/fail end state of the plan.
 
 | # | Anti-Pattern | What Goes Wrong | Instead |
 |---|-------------|-----------------|---------|
-| 1 | **Code in plan** | TODOs contain code snippets or planner-assumed implementation technique | Faithfully describe content, behavior, and interview decisions |
+| 1 | **Code in plan** | TODOs contain code snippets, pseudocode, line-by-line instructions, or planner-assumed implementation technique | Describe content, behavior, and interview decisions — WHAT and WHY, not HOW |
 | 2 | **Under-planning** | "Step 1: Implement the feature" | Break down into verifiable chunks with clear scope |
 | 3 | **Premature metis invocation** | Invoking metis before Clearance + AC complete | Stay in interview mode until Clearance all YES and AC confirmed |
 | 4 | **Skipping confirmation** | Handing off without showing plan to user | After Momus approval, ALWAYS present the full plan and wait for user to finalize |
