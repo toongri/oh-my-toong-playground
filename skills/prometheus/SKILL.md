@@ -66,7 +66,7 @@ digraph prometheus_flow {
     "Momus verdict?" [shape=diamond];
     "Present full plan\nAsk user to finalize" [shape=box];
     "User approves?" [shape=diamond];
-    "Handoff: Tell user to run /sisyphus" [shape=ellipse];
+    "Execution Bridge\n(AskUserQuestion)" [shape=ellipse];
 
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Context Loading";
@@ -87,7 +87,7 @@ digraph prometheus_flow {
     "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE"];
     "Present full plan\nAsk user to finalize" -> "User approves?";
     "User approves?" -> "Interview Mode" [label="no, more changes"];
-    "User approves?" -> "Handoff: Tell user to run /sisyphus" [label="yes"];
+    "User approves?" -> "Execution Bridge\n(AskUserQuestion)" [label="yes"];
 }
 ```
 
@@ -764,14 +764,29 @@ After Momus approves the plan:
 
 1. **Present the full plan** — Show the complete content of `.omt/plans/{name}.md` to the user
 2. **Ask to finalize** — Ask the user if they want to proceed with this plan
-3. **Handle response:**
+3. **Execution Bridge** — After the user approves, present execution options via AskUserQuestion:
 
-| User Response | Action |
-|---------------|--------|
-| Approves / "Looks good" / "Proceed" | Handoff: Tell user to run `/sisyphus` |
-| Requests changes | Return to Interview Mode to address concerns, then re-run through Metis → Plan → Momus pipeline |
+   **(1) Full orchestration** (Recommended for Complex/Architecture intents)
+   Multi-agent task orchestration with QA verification. Best for plans with 3+ TODOs or cross-module changes.
+
+   **(2) Focused execution** (Recommended for Trivial/Scoped intents)
+   Single-pass implementation. Best for plans with 1-2 straightforward TODOs.
+
+   **(3) Revise plan**
+   Return to Interview Mode for modifications.
+
+   **On selection:**
+   - Option 1: invoke `Skill(skill: "sisyphus")` with the plan file path
+   - Option 2: delegate directly to sisyphus-junior (not via Skill)
+   - Option 3: return to Interview Mode, then re-run through Metis → Plan → Momus pipeline
+
+   | User Response | Action |
+   |---------------|--------|
+   | Requests changes before selecting | Return to Interview Mode to address concerns, then re-run through Metis → Plan → Momus pipeline |
 
 This is the ONLY point where the user sees and confirms the plan. All internal quality gates (Metis, Momus) run automatically before this step.
+
+**IMPORTANT:** On execution selection, MUST invoke via Skill() or delegate. Do NOT tell the user to run a command manually.
 
 ### Plan Output
 
