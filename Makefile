@@ -10,18 +10,18 @@ help:
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 
 sync: validate validate-tests
-	@./tools/sync.sh
+	@bun run tools/sync.ts
 
 sync-dry: validate
-	@./tools/sync.sh --dry-run
+	@bun run tools/sync.ts --dry-run
 
 validate: validate-schema validate-components
 
 validate-schema:
-	@./tools/validate-schema.sh
+	@bun run tools/validators/schema.ts
 
 validate-components:
-	@./tools/validate-components.sh
+	@bun run tools/validators/components.ts
 
 validate-tests:
 	@./tools/run-tests.sh
