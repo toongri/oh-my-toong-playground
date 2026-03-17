@@ -1,0 +1,816 @@
+import fs from "fs/promises";
+import path from "path";
+import { parse as parseYaml } from "yaml";
+
+import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.ts";
+import type { PlatformAdapter } from "./types.ts";
+import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
+import { syncDirectory } from "../lib/sync-directory.ts";
+import { logInfo, logWarn, logDry } from "../lib/logger.ts";
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/** Recursively merges `source` into `target`. Source values win on conflict. */
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...target };
+  for (const key of Object.keys(source)) {
+    const sv = source[key];
+    const tv = target[key];
+    if (
+      sv !== null &&
+      typeof sv === "object" &&
+      !Array.isArray(sv) &&
+      tv !== null &&
+      typeof tv === "object" &&
+      !Array.isArray(tv)
+    ) {
+      result[key] = deepMerge(
+        tv as Record<string, unknown>,
+        sv as Record<string, unknown>,
+      );
+    } else {
+      result[key] = sv;
+    }
+  }
+  return result;
+}
+
+/** Read JSON file or return {} if missing. */
+async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
+  try {
+    const text = await fs.readFile(filePath, "utf8");
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+/** Write JSON to file, creating parent directories as needed. */
+async function writeJsonFile(
+  filePath: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
+}
+
+// =============================================================================
+// Plugin installer type (for DI in tests)
+// =============================================================================
+
+export type PluginInstaller = (name: string, targetPath: string) => Promise<void>;
+
+async function defaultPluginInstaller(
+  name: string,
+  targetPath: string,
+): Promise<void> {
+  const proc = Bun.spawn(["claude", "plugin", "install", name], {
+    cwd: targetPath,
+    env: { ...process.env, CLAUDECODE: "" },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  await proc.exited;
+}
+
+// =============================================================================
+// Claude Adapter
+// =============================================================================
+
+export class ClaudeAdapter implements PlatformAdapter {
+  readonly platform: Platform = "claude";
+  readonly configDir: string = ".claude";
+  readonly contextFile: string = "CLAUDE.md";
+
+  /** Injected plugin installer — swap out in tests. */
+  private readonly _installPlugin: PluginInstaller;
+
+  constructor(installPlugin?: PluginInstaller) {
+    this._installPlugin = installPlugin ?? defaultPluginInstaller;
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncAgentsDirect
+  // ---------------------------------------------------------------------------
+
+  async syncAgentsDirect(
+    targetPath: string,
+    displayName: string,
+    sourcePath: string,
+    addSkills?: string[],
+    addHooks?: unknown[],
+    dryRun = false,
+  ): Promise<void> {
+    const targetDir = path.join(targetPath, ".claude", "agents");
+    const targetFile = path.join(targetDir, `${displayName}.md`);
+
+    try {
+      await fs.stat(sourcePath);
+    } catch {
+      logWarn(`Agent file not found: ${sourcePath}`);
+      return;
+    }
+
+    if (dryRun) {
+      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+      return;
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.copyFile(sourcePath, targetFile);
+    logInfo(`Copied: ${displayName}.md`);
+
+    // Inject add-skills into frontmatter
+    if (addSkills && addSkills.length > 0) {
+      await this._addSkillsToFrontmatter(targetFile, addSkills);
+    }
+
+    // Inject add-hooks into frontmatter (and deploy hook files)
+    if (addHooks && addHooks.length > 0) {
+      const hooks = addHooks as Array<{
+        source_path?: string;
+        display_name?: string;
+        event: string;
+        matcher?: string;
+        type?: string;
+        command?: string;
+        timeout?: number;
+      }>;
+
+      // Deploy hook component files first
+      for (const hook of hooks) {
+        if (hook.source_path && hook.display_name) {
+          try {
+            await fs.stat(hook.source_path);
+            await this.syncHooksDirect(
+              targetPath,
+              hook.display_name,
+              hook.source_path,
+              false,
+            );
+          } catch {
+            // Hook file not found; skip silently
+          }
+        }
+      }
+
+      // Build frontmatter-ready hook definitions
+      const frontmatterHooks = hooks.map((h) => ({
+        event: h.event,
+        matcher: h.matcher ?? "*",
+        type: h.type ?? "command",
+        command:
+          h.command && h.command !== ""
+            ? h.command
+            : `$CLAUDE_PROJECT_DIR/.claude/hooks/${h.display_name ?? ""}`,
+        timeout: h.timeout ?? 10,
+      }));
+
+      await this._addHooksToFrontmatter(targetFile, frontmatterHooks);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncCommandsDirect
+  // ---------------------------------------------------------------------------
+
+  async syncCommandsDirect(
+    targetPath: string,
+    displayName: string,
+    sourcePath: string,
+    dryRun = false,
+  ): Promise<void> {
+    const targetDir = path.join(targetPath, ".claude", "commands");
+    const targetFile = path.join(targetDir, `${displayName}.md`);
+
+    try {
+      await fs.stat(sourcePath);
+    } catch {
+      logWarn(`Command file not found: ${sourcePath}`);
+      return;
+    }
+
+    if (dryRun) {
+      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+      return;
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.copyFile(sourcePath, targetFile);
+    logInfo(`Copied: ${displayName}.md`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncHooksDirect
+  // ---------------------------------------------------------------------------
+
+  async syncHooksDirect(
+    targetPath: string,
+    displayName: string,
+    sourcePath: string,
+    dryRun = false,
+  ): Promise<void> {
+    const targetDir = path.join(targetPath, ".claude", "hooks");
+
+    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    try {
+      stat = await fs.stat(sourcePath);
+    } catch {
+      logWarn(`Hook not found: ${sourcePath}`);
+      return;
+    }
+
+    if (stat.isDirectory()) {
+      const targetHookDir = path.join(targetDir, displayName);
+      if (dryRun) {
+        logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
+      } else {
+        await syncDirectory(sourcePath, targetHookDir, {
+          exclude: ["*.test.ts"],
+        });
+        logInfo(`Copied: ${displayName}/`);
+      }
+    } else {
+      const targetFile = path.join(targetDir, displayName);
+      if (dryRun) {
+        logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+      } else {
+        await fs.mkdir(targetDir, { recursive: true });
+        await fs.copyFile(sourcePath, targetFile);
+        // chmod +x
+        const srcStat = await fs.stat(sourcePath);
+        const tgtStat = await fs.stat(targetFile);
+        await fs.chmod(targetFile, tgtStat.mode | (srcStat.mode & 0o111) | 0o111);
+        logInfo(`Copied: ${displayName}`);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncSkillsDirect
+  // ---------------------------------------------------------------------------
+
+  async syncSkillsDirect(
+    targetPath: string,
+    displayName: string,
+    sourcePath: string,
+    dryRun = false,
+  ): Promise<void> {
+    const targetDir = path.join(targetPath, ".claude", "skills");
+    const targetSkillDir = path.join(targetDir, displayName);
+
+    try {
+      const stat = await fs.stat(sourcePath);
+      if (!stat.isDirectory()) throw new Error("not a directory");
+    } catch {
+      logWarn(`Skill directory not found: ${sourcePath}`);
+      return;
+    }
+
+    if (dryRun) {
+      logDry(`Copy (directory): ${sourcePath} -> ${targetSkillDir}`);
+      return;
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
+    await syncDirectory(sourcePath, targetSkillDir);
+    logInfo(`Copied: ${displayName}/`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncScriptsDirect
+  // ---------------------------------------------------------------------------
+
+  async syncScriptsDirect(
+    targetPath: string,
+    displayName: string,
+    sourcePath: string,
+    dryRun = false,
+  ): Promise<void> {
+    const targetDir = path.join(targetPath, ".claude", "scripts");
+
+    let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
+    try {
+      stat = await fs.stat(sourcePath);
+    } catch {
+      logWarn(`Script not found: ${sourcePath}`);
+      return;
+    }
+
+    if (stat.isDirectory()) {
+      const targetScriptDir = path.join(targetDir, displayName);
+      if (dryRun) {
+        logDry(`Copy (directory): ${sourcePath} -> ${targetScriptDir}/`);
+      } else {
+        await syncDirectory(sourcePath, targetScriptDir, {
+          exclude: ["*.test.ts"],
+        });
+        logInfo(`Copied: ${displayName}/`);
+      }
+      return;
+    }
+
+    const targetFile = path.join(targetDir, displayName);
+    if (dryRun) {
+      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+    } else {
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.copyFile(sourcePath, targetFile);
+      logInfo(`Copied: ${displayName}`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncRulesDirect
+  // ---------------------------------------------------------------------------
+
+  async syncRulesDirect(
+    targetPath: string,
+    displayName: string,
+    sourcePath: string,
+    dryRun = false,
+  ): Promise<void> {
+    const targetDir = path.join(targetPath, ".claude", "rules");
+    const targetFile = path.join(targetDir, `${displayName}.md`);
+
+    try {
+      await fs.stat(sourcePath);
+    } catch {
+      logWarn(`Rule file not found: ${sourcePath}`);
+      return;
+    }
+
+    if (dryRun) {
+      logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+      return;
+    }
+
+    await fs.mkdir(targetDir, { recursive: true });
+    await fs.copyFile(sourcePath, targetFile);
+    logInfo(`Copied: ${displayName}.md`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncPlatformYaml
+  // ---------------------------------------------------------------------------
+
+  async syncPlatformYaml(
+    targetPath: string,
+    platformYaml: Record<string, unknown>,
+    dryRun: boolean,
+  ): Promise<PlatformConfigResult> {
+    const yaml = platformYaml as PlatformYaml;
+    const processedSections: string[] = [];
+
+    // --- config ---
+    if (yaml.config != null) {
+      await this.syncConfig(targetPath, yaml.config, dryRun);
+      processedSections.push("config");
+    }
+
+    // --- hooks ---
+    if (yaml.hooks != null) {
+      const hooksMap = yaml.hooks as Record<string, Array<Record<string, unknown>>>;
+      const accumulatedHooks: Record<string, unknown[]> = {};
+      let hasHooks = false;
+
+      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (!Array.isArray(items)) continue;
+
+        for (const item of items) {
+          const component = (item["component"] as string | undefined) ?? "";
+          const timeout = (item["timeout"] as number | undefined) ?? 10;
+          const matcher = (item["matcher"] as string | undefined) ?? "*";
+          const hookType = (item["type"] as string | undefined) ?? "command";
+          const customCommand = (item["command"] as string | undefined) ?? "";
+          const promptText = (item["prompt"] as string | undefined) ?? "";
+
+          let displayName = "";
+          let resolvedSourcePath = "";
+
+          // If a component is specified, resolve and copy the hook file
+          if (component) {
+            // component is a pre-resolved source path in the TS world
+            // (The orchestrator/caller resolves paths before calling adapter)
+            // For direct usage here we treat component as display name and derive
+            // source from it. In the TS adapter context the caller passes
+            // pre-resolved source paths via a separate mechanism; for
+            // syncPlatformYaml the component is the hook component identifier.
+            // We use component as displayName and try to locate it.
+            displayName = component.includes(":")
+              ? component.split(":").slice(1).join(":")
+              : component;
+            resolvedSourcePath = component;
+
+            // Copy the hook file/dir
+            await this.syncHooksDirect(
+              targetPath,
+              displayName,
+              resolvedSourcePath,
+              dryRun,
+            );
+          }
+
+          // Build hook entry
+          let hookEntry: Record<string, unknown>;
+
+          if (hookType === "prompt") {
+            if (!promptText) {
+              logWarn(`Hook prompt 미정의: event=${hookEvent} (스킵)`);
+              continue;
+            }
+            hookEntry = this.buildHookEntry(
+              hookEvent,
+              matcher,
+              "prompt",
+              timeout,
+              promptText,
+              displayName,
+            );
+          } else {
+            let cmdPath: string;
+            if (customCommand) {
+              cmdPath = customCommand;
+            } else if (component) {
+              // Determine command path based on whether it's a directory
+              let isDir = false;
+              try {
+                const stat = await fs.stat(resolvedSourcePath);
+                isDir = stat.isDirectory();
+              } catch {
+                // treat as file
+              }
+
+              if (isDir) {
+                const indexTs = path.join(resolvedSourcePath, "index.ts");
+                const indexSh = path.join(resolvedSourcePath, "index.sh");
+                let hasIndexTs = false;
+                let hasIndexSh = false;
+                try {
+                  await fs.stat(indexTs);
+                  hasIndexTs = true;
+                } catch { /* empty */ }
+                try {
+                  await fs.stat(indexSh);
+                  hasIndexSh = true;
+                } catch { /* empty */ }
+
+                if (hasIndexTs) {
+                  cmdPath = `bun run $CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}/index.ts`;
+                } else if (hasIndexSh) {
+                  cmdPath = `bash $CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}/index.sh`;
+                } else {
+                  logWarn(`Hook 디렉토리에 index.ts/index.sh 없음: ${resolvedSourcePath} (스킵)`);
+                  continue;
+                }
+              } else {
+                cmdPath = `$CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}`;
+              }
+            } else {
+              logWarn(`Hook command 미정의: event=${hookEvent} (스킵)`);
+              continue;
+            }
+
+            hookEntry = this.buildHookEntry(
+              hookEvent,
+              matcher,
+              "command",
+              timeout,
+              cmdPath,
+              displayName,
+            );
+          }
+
+          // Accumulate hook entries per event
+          const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
+          const entryArray = hookEntry[hookEvent] as unknown[];
+          accumulatedHooks[hookEvent] = [...existing, ...entryArray];
+          hasHooks = true;
+        }
+      }
+
+      if (hasHooks) {
+        await this.updateSettings(targetPath, accumulatedHooks, dryRun);
+      }
+      processedSections.push("hooks");
+    }
+
+    // --- mcps ---
+    if (yaml.mcps != null) {
+      const mcps = yaml.mcps as Record<string, Record<string, unknown>>;
+      for (const [name, serverJson] of Object.entries(mcps)) {
+        await this.syncMcpsMerge(targetPath, name, serverJson, dryRun);
+      }
+      processedSections.push("mcps");
+    }
+
+    // --- plugins ---
+    if (yaml.plugins?.items != null) {
+      const items = yaml.plugins.items;
+      for (const item of items) {
+        if (typeof item === "string" && item) {
+          await this._installPluginSafe(item, targetPath, dryRun);
+        }
+      }
+      processedSections.push("plugins");
+    }
+
+    // --- statusLine ---
+    if (yaml.statusLine != null) {
+      await this.setStatusline(targetPath, yaml.statusLine, dryRun);
+      processedSections.push("statusLine");
+    }
+
+    return { processedSections, modelMap: undefined };
+  }
+
+  // ---------------------------------------------------------------------------
+  // buildHookEntry
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build a hook entry object for settings.json `hooks` section.
+   *
+   * Returns an object of shape: { [event]: [{ matcher, hooks: [...] }] }
+   */
+  buildHookEntry(
+    event: string,
+    matcher: string,
+    type: "command" | "prompt",
+    timeout: number,
+    commandOrPrompt: string,
+    displayName?: string,
+  ): Record<string, unknown[]> {
+    let hookDef: Record<string, unknown>;
+    if (type === "prompt") {
+      hookDef = { type: "prompt", prompt: commandOrPrompt, timeout };
+    } else {
+      // Substitute ${component} placeholder if present
+      let cmdPath = commandOrPrompt;
+      if (displayName) {
+        cmdPath = cmdPath.replace(/\$\{component\}/g, displayName);
+      }
+      hookDef = { type: "command", command: cmdPath, timeout };
+    }
+
+    return {
+      [event]: [{ matcher, hooks: [hookDef] }],
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // updateSettings
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Merge hooks entries into .claude/settings.json.
+   * Replaces the existing `hooks` key entirely with the new value.
+   */
+  async updateSettings(
+    targetPath: string,
+    hooksEntries: Record<string, unknown>,
+    dryRun = false,
+  ): Promise<void> {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+
+    if (dryRun) {
+      logDry(`Update settings.json: ${settingsFile}`);
+      return;
+    }
+
+    await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+    const current = await readJsonFile(settingsFile);
+    // Remove existing hooks key, add new one
+    const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
+    const updated = { ...rest, hooks: hooksEntries };
+    await writeJsonFile(settingsFile, updated);
+    logInfo(`Updated settings.json: ${settingsFile}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // setStatusline
+  // ---------------------------------------------------------------------------
+
+  /** Set the statusLine field in .claude/settings.json. */
+  async setStatusline(
+    targetPath: string,
+    statusLine: string,
+    dryRun = false,
+  ): Promise<void> {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+
+    if (dryRun) {
+      logDry(`Set statusLine: ${statusLine} -> ${settingsFile}`);
+      return;
+    }
+
+    let current: Record<string, unknown>;
+    try {
+      current = await readJsonFile(settingsFile);
+    } catch {
+      logWarn(`statusLine 설정 실패: ${settingsFile} 없음`);
+      return;
+    }
+
+    // Check file actually exists (readJsonFile returns {} for missing files)
+    try {
+      await fs.stat(settingsFile);
+    } catch {
+      logWarn(`statusLine 설정 실패: ${settingsFile} 없음`);
+      return;
+    }
+
+    const merged = deepMerge(current, {
+      statusLine: { type: "command", command: statusLine },
+    });
+    await writeJsonFile(settingsFile, merged);
+    logInfo(`statusLine 설정 완료: ${settingsFile}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncConfig
+  // ---------------------------------------------------------------------------
+
+  /** Deep merge config into .claude/settings.json. */
+  async syncConfig(
+    targetPath: string,
+    configJson: Record<string, unknown>,
+    dryRun = false,
+  ): Promise<void> {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+
+    if (dryRun) {
+      logDry(`Config merge: ${JSON.stringify(configJson)} -> ${settingsFile}`);
+      return;
+    }
+
+    await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+    const current = await readJsonFile(settingsFile);
+    const merged = deepMerge(current, configJson);
+    await writeJsonFile(settingsFile, merged);
+    logInfo(`Config merged: ${settingsFile}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // syncMcpsMerge
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Merge an MCP server definition into ~/.claude.json (user scope)
+   * or .claude/settings.json (local scope).
+   */
+  async syncMcpsMerge(
+    targetPath: string,
+    serverName: string,
+    serverJson: Record<string, unknown>,
+    dryRun = false,
+    scope?: string,
+  ): Promise<void> {
+    const claudeUserConfig =
+      process.env["CLAUDE_USER_CONFIG"] ??
+      path.join(process.env["HOME"] ?? "~", ".claude.json");
+
+    if (dryRun) {
+      if (scope === "local") {
+        logDry(`MCP merge: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
+      } else {
+        logDry(`MCP merge: ${serverName} -> ~/.claude.json (user scope)`);
+      }
+      return;
+    }
+
+    if (scope === "local") {
+      const current = await readJsonFile(claudeUserConfig);
+      const projects = (current["projects"] as Record<string, unknown>) ?? {};
+      const projectEntry = (projects[targetPath] as Record<string, unknown>) ?? {};
+      const mcpServers = (projectEntry["mcpServers"] as Record<string, unknown>) ?? {};
+      mcpServers[serverName] = serverJson;
+      projects[targetPath] = { ...projectEntry, mcpServers };
+      await writeJsonFile(claudeUserConfig, { ...current, projects });
+      logInfo(`MCP merged: ${serverName} -> ~/.claude.json (local: ${targetPath})`);
+    } else {
+      const current = await readJsonFile(claudeUserConfig);
+      const mcpServers = (current["mcpServers"] as Record<string, unknown>) ?? {};
+      mcpServers[serverName] = serverJson;
+      await writeJsonFile(claudeUserConfig, { ...current, mcpServers });
+      logInfo(`MCP merged: ${serverName} -> ~/.claude.json (user scope)`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private frontmatter helpers
+  // ---------------------------------------------------------------------------
+
+  private async _addSkillsToFrontmatter(
+    agentFile: string,
+    skillsToAdd: string[],
+  ): Promise<void> {
+    const content = await fs.readFile(agentFile, "utf8");
+    const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
+
+    if (!hasFrontmatter) {
+      logWarn(`No frontmatter found: ${agentFile}`);
+      return;
+    }
+
+    const existing = frontmatter["skills"];
+    let currentSkills: string[] = [];
+    if (Array.isArray(existing)) {
+      currentSkills = existing.filter((s): s is string => typeof s === "string");
+    } else if (typeof existing === "string" && existing) {
+      currentSkills = [existing];
+    }
+
+    // Deduplicate: existing + new
+    const merged = Array.from(new Set([...currentSkills, ...skillsToAdd]));
+    frontmatter["skills"] = merged;
+
+    await fs.writeFile(agentFile, serializeFrontmatter(frontmatter, body), "utf8");
+    logInfo(`Updated frontmatter: ${agentFile}`);
+  }
+
+  private async _addHooksToFrontmatter(
+    agentFile: string,
+    hooks: Array<{
+      event: string;
+      matcher: string;
+      type: string;
+      command?: string;
+      prompt?: string;
+      timeout: number;
+    }>,
+  ): Promise<void> {
+    const content = await fs.readFile(agentFile, "utf8");
+    const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
+
+    if (!hasFrontmatter) {
+      logWarn(`No frontmatter found: ${agentFile}`);
+      return;
+    }
+
+    // Build Claude frontmatter hooks structure grouped by event:
+    // hooks:
+    //   SubagentStop:
+    //     - matcher: "*"
+    //       hooks:
+    //         - type: command
+    //           command: "..."
+    //           timeout: 60
+    const existingHooks =
+      (frontmatter["hooks"] as Record<string, unknown[]>) ?? {};
+
+    for (const h of hooks) {
+      const eventHooks = (existingHooks[h.event] as Array<Record<string, unknown>>) ?? [];
+      const hookDef: Record<string, unknown> =
+        h.type === "prompt"
+          ? { type: "prompt", prompt: h.prompt ?? "", timeout: h.timeout }
+          : { type: "command", command: h.command ?? "", timeout: h.timeout };
+
+      // Find existing matcher group or create new one
+      const matcherGroup = eventHooks.find(
+        (g) => g["matcher"] === h.matcher,
+      ) as Record<string, unknown> | undefined;
+
+      if (matcherGroup) {
+        const inner = (matcherGroup["hooks"] as unknown[]) ?? [];
+        inner.push(hookDef);
+        matcherGroup["hooks"] = inner;
+      } else {
+        eventHooks.push({ matcher: h.matcher, hooks: [hookDef] });
+      }
+
+      existingHooks[h.event] = eventHooks;
+    }
+
+    frontmatter["hooks"] = existingHooks;
+    await fs.writeFile(agentFile, serializeFrontmatter(frontmatter, body), "utf8");
+    logInfo(`Updated frontmatter hooks: ${agentFile}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private plugin install helper
+  // ---------------------------------------------------------------------------
+
+  private async _installPluginSafe(
+    name: string,
+    targetPath: string,
+    dryRun: boolean,
+  ): Promise<void> {
+    if (dryRun) {
+      logDry(`claude plugin install ${name}`);
+      return;
+    }
+
+    try {
+      await this._installPlugin(name, targetPath);
+      logInfo(`플러그인 설치 완료: ${name}`);
+    } catch {
+      logWarn(`플러그인 설치 실패 (계속 진행): ${name}`);
+    }
+  }
+}
