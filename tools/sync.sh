@@ -29,9 +29,38 @@ CURRENT_BACKUP_SESSION=""
 # 현재 프로젝트 이름 (process_yaml에서 설정, 루트면 빈 문자열)
 CURRENT_PROJECT_NAME=""
 
+# Per-platform YAML 처리 결과 (sync_platform_configs에서 설정)
+PLATFORM_YAML_SECTIONS_CLAUDE=""
+PLATFORM_YAML_SECTIONS_GEMINI=""
+PLATFORM_YAML_SECTIONS_CODEX=""
+PLATFORM_YAML_SECTIONS_OPENCODE=""
+
+# Model-map JSON (per-platform YAML에서 로드, adapter의 _sync_agents_direct에서 사용)
+CODEX_MODEL_MAP_JSON=""
+OPENCODE_MODEL_MAP_JSON=""
+
 # Global variables for get_item_info
 ITEM_IS_OBJECT=false
 ITEM_COMPONENT=""
+
+# =============================================================================
+# Platform YAML Helpers
+# =============================================================================
+
+# Check if a platform YAML processed a specific section
+# Returns: 0 if section was processed, 1 if not
+platform_yaml_has_section() {
+    local platform="$1"
+    local section="$2"
+    local sections=""
+    case "$platform" in
+        claude) sections="$PLATFORM_YAML_SECTIONS_CLAUDE" ;;
+        gemini) sections="$PLATFORM_YAML_SECTIONS_GEMINI" ;;
+        codex) sections="$PLATFORM_YAML_SECTIONS_CODEX" ;;
+        opencode) sections="$PLATFORM_YAML_SECTIONS_OPENCODE" ;;
+    esac
+    [[ " $sections " == *" $section "* ]]
+}
 
 # =============================================================================
 # Item Component Helper
@@ -1428,6 +1457,55 @@ sync_lib() {
 }
 
 # =============================================================================
+# Per-platform YAML 처리
+# =============================================================================
+
+sync_platform_configs() {
+    local target_path="$1"
+    local yaml_dir="$2"
+
+    # Reset tracking variables
+    PLATFORM_YAML_SECTIONS_CLAUDE=""
+    PLATFORM_YAML_SECTIONS_GEMINI=""
+    PLATFORM_YAML_SECTIONS_CODEX=""
+    PLATFORM_YAML_SECTIONS_OPENCODE=""
+    CODEX_MODEL_MAP_JSON=""
+    OPENCODE_MODEL_MAP_JSON=""
+
+    for platform in claude gemini codex opencode; do
+        local platform_yaml="${yaml_dir}/${platform}.yaml"
+        if [[ ! -f "$platform_yaml" ]]; then
+            continue
+        fi
+
+        log_info "Per-platform YAML 감지: ${platform}.yaml"
+
+        # Check if adapter has the platform YAML function
+        if ! type "${platform}_sync_platform_yaml" &>/dev/null; then
+            log_warn "${platform}_sync_platform_yaml 함수 미구현, 스킵"
+            continue
+        fi
+
+        # Call platform-specific handler
+        # Function returns space-separated list of processed sections (e.g., "config hooks mcps")
+        local processed_sections
+        processed_sections=$("${platform}_sync_platform_yaml" "$target_path" "$platform_yaml" "$DRY_RUN")
+
+        # Store processed sections
+        case "$platform" in
+            claude) PLATFORM_YAML_SECTIONS_CLAUDE="$processed_sections" ;;
+            gemini) PLATFORM_YAML_SECTIONS_GEMINI="$processed_sections" ;;
+            codex) PLATFORM_YAML_SECTIONS_CODEX="$processed_sections" ;;
+            opencode) PLATFORM_YAML_SECTIONS_OPENCODE="$processed_sections" ;;
+        esac
+
+        if [[ -n "$processed_sections" ]]; then
+            log_info "${platform}.yaml 처리 완료: $processed_sections"
+        fi
+    done
+}
+
+# =============================================================================
 # YAML 처리
 # =============================================================================
 
@@ -1472,17 +1550,88 @@ process_yaml() {
         mkdir -p "$target_path/.claude"
     fi
 
+    # Per-platform YAML 처리 (sync.yaml의 config/hooks/mcps/plugins를 대체)
+    local yaml_dir
+    yaml_dir=$(dirname "$yaml_file")
+    sync_platform_configs "$target_path" "$yaml_dir"
+
     # 각 카테고리 동기화 (config → mcps → hooks → agents → commands → skills → scripts → rules → plugins)
+
+    # Config: per-platform YAML이 처리하지 않은 플랫폼만 sync.yaml에서 처리
+    local has_sync_yaml_config
+    has_sync_yaml_config=$(yq '.config // null' "$yaml_file")
+    if [[ "$has_sync_yaml_config" != "null" ]]; then
+        local any_platform_yaml_config=false
+        for _p in claude gemini codex opencode; do
+            if platform_yaml_has_section "$_p" "config"; then
+                any_platform_yaml_config=true
+                break
+            fi
+        done
+        if [[ "$any_platform_yaml_config" == true ]]; then
+            log_warn "[DEPRECATED] sync.yaml의 config 섹션은 per-platform YAML로 마이그레이션하세요"
+        fi
+    fi
     sync_config "$target_path" "$yaml_file"
+
+    # MCPs: 동일 패턴
+    local has_sync_yaml_mcps
+    has_sync_yaml_mcps=$(yq '.mcps // null' "$yaml_file")
+    if [[ "$has_sync_yaml_mcps" != "null" ]]; then
+        local any_platform_yaml_mcps=false
+        for _p in claude gemini codex opencode; do
+            if platform_yaml_has_section "$_p" "mcps"; then
+                any_platform_yaml_mcps=true
+                break
+            fi
+        done
+        if [[ "$any_platform_yaml_mcps" == true ]]; then
+            log_warn "[DEPRECATED] sync.yaml의 mcps 섹션은 per-platform YAML로 마이그레이션하세요"
+        fi
+    fi
     sync_mcps "$target_path" "$yaml_file"
+
+    # Hooks: 동일 패턴
+    local has_sync_yaml_hooks
+    has_sync_yaml_hooks=$(yq '.hooks // null' "$yaml_file")
+    if [[ "$has_sync_yaml_hooks" != "null" ]]; then
+        local any_platform_yaml_hooks=false
+        for _p in claude gemini codex opencode; do
+            if platform_yaml_has_section "$_p" "hooks"; then
+                any_platform_yaml_hooks=true
+                break
+            fi
+        done
+        if [[ "$any_platform_yaml_hooks" == true ]]; then
+            log_warn "[DEPRECATED] sync.yaml의 hooks 섹션은 per-platform YAML로 마이그레이션하세요"
+        fi
+    fi
     sync_hooks "$target_path" "$yaml_file"
+
     sync_agents "$target_path" "$yaml_file"
     sync_commands "$target_path" "$yaml_file"
     sync_skills "$target_path" "$yaml_file"
     sync_scripts "$target_path" "$yaml_file"
     sync_statusline "$target_path" "$yaml_file"
     sync_rules "$target_path" "$yaml_file"
+
+    # Plugins: 동일 패턴
+    local has_sync_yaml_plugins
+    has_sync_yaml_plugins=$(yq '.plugins // null' "$yaml_file")
+    if [[ "$has_sync_yaml_plugins" != "null" ]]; then
+        local any_platform_yaml_plugins=false
+        for _p in claude gemini codex opencode; do
+            if platform_yaml_has_section "$_p" "plugins"; then
+                any_platform_yaml_plugins=true
+                break
+            fi
+        done
+        if [[ "$any_platform_yaml_plugins" == true ]]; then
+            log_warn "[DEPRECATED] sync.yaml의 plugins 섹션은 per-platform YAML로 마이그레이션하세요"
+        fi
+    fi
     sync_plugins "$target_path" "$yaml_file"
+
     sync_lib "$target_path" "$yaml_file"
 
     for platform in gemini codex opencode; do
