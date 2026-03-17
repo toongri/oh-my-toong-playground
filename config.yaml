@@ -10,9 +10,6 @@ use-platforms: [claude]
 # Omitted categories fall back to use-platforms
 feature-platforms:
   skills: [claude, gemini, codex, opencode]
-  config: [claude, gemini, codex, opencode]
-  mcps: [claude, gemini, opencode]
-  plugins: [claude]
 
 # Backup retention settings
 backup_retention_days: 3
