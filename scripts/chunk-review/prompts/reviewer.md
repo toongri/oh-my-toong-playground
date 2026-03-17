@@ -50,7 +50,7 @@ Cover ALL change units -- core changes AND supporting/peripheral changes.
 
 **Requirements Mapping:**
 
-If `{REQUIREMENTS}` is "N/A", skip requirements mapping and omit the `**Requirement**` field from Chunk Analysis entries. Instead, verify commit message-change unit consistency.
+If `{REQUIREMENTS}` starts with "N/A", skip requirements mapping and omit the `**Requirement**` field from Chunk Analysis entries. Instead, verify commit message-change unit consistency.
 
 Otherwise, perform a bidirectional mapping:
 

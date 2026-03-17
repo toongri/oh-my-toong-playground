@@ -239,7 +239,7 @@ Produce a two-part structured table after all checks complete.
 
 **Part 2 — Test Coverage Mapping**
 
-Identify production files from the Step 2 file list: files that do NOT match test glob patterns (`*Test*`, `*Spec*`, `*_test*`, `test_*`).
+Identify production files from the Step 2 file list: files that do NOT match test glob patterns (`*Test*`, `*Spec*`, `*_test*`, `test_*`, `*.test.*`, `*.spec.*`, `*_spec*`).
 
 For each production file, find its corresponding test file:
 
