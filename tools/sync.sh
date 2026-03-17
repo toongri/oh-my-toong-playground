@@ -17,6 +17,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/adapters/claude.sh"
 source "${SCRIPT_DIR}/adapters/gemini.sh"
 source "${SCRIPT_DIR}/adapters/codex.sh"
+source "${SCRIPT_DIR}/adapters/opencode.sh"
 
 # =============================================================================
 # 전역 상태 변수 (백업용)
@@ -218,6 +219,7 @@ sync_agents() {
     local prepared_claude=false
     local prepared_gemini=false
     local prepared_codex=false
+    local prepared_opencode=false
 
     # Section-level platforms
     local section_platforms=$(yq -o=json '.agents.platforms // null' "$yaml_file")
@@ -338,6 +340,14 @@ sync_agents() {
                     fi
                     codex_sync_agents_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$add_skills" "$DRY_RUN"
                     ;;
+                opencode)
+                    if [[ "$prepared_opencode" == false && "$DRY_RUN" != true ]]; then
+                        rm -rf "$target_path/.opencode/agents"
+                        mkdir -p "$target_path/.opencode/agents"
+                        prepared_opencode=true
+                    fi
+                    opencode_sync_agents_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$add_skills" "$DRY_RUN"
+                    ;;
                 *)
                     log_warn "Unknown target: $target (skipping)"
                     ;;
@@ -384,6 +394,7 @@ sync_commands() {
     local prepared_claude=false
     local prepared_gemini=false
     local prepared_codex=false
+    local prepared_opencode=false
 
     # Section-level platforms
     local section_platforms=$(yq -o=json '.commands.platforms // null' "$yaml_file")
@@ -443,6 +454,14 @@ sync_commands() {
                         prepared_codex=true
                     fi
                     codex_sync_commands_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
+                    ;;
+                opencode)
+                    if [[ "$prepared_opencode" == false && "$DRY_RUN" != true ]]; then
+                        rm -rf "$target_path/.opencode/commands"
+                        mkdir -p "$target_path/.opencode/commands"
+                        prepared_opencode=true
+                    fi
+                    opencode_sync_commands_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
                     ;;
                 *)
                     log_warn "Unknown target: $target (skipping)"
@@ -731,6 +750,7 @@ sync_skills() {
     local prepared_claude=false
     local prepared_gemini=false
     local prepared_codex=false
+    local prepared_opencode=false
 
     # Section-level platforms
     local section_platforms=$(yq -o=json '.skills.platforms // null' "$yaml_file")
@@ -792,6 +812,14 @@ sync_skills() {
                     fi
                     codex_sync_skills_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
                     ;;
+                opencode)
+                    if [[ "$prepared_opencode" == false && "$DRY_RUN" != true ]]; then
+                        rm -rf "$target_path/.opencode/skills"
+                        mkdir -p "$target_path/.opencode/skills"
+                        prepared_opencode=true
+                    fi
+                    opencode_sync_skills_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
+                    ;;
                 *)
                     log_warn "Unknown target: $target (skipping)"
                     ;;
@@ -838,6 +866,7 @@ sync_scripts() {
     local prepared_claude=false
     local prepared_gemini=false
     local prepared_codex=false
+    local prepared_opencode=false
 
     # Section-level platforms
     local section_platforms=$(yq -o=json '.scripts.platforms // null' "$yaml_file")
@@ -898,6 +927,14 @@ sync_scripts() {
                         prepared_codex=true
                     fi
                     codex_sync_scripts_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
+                    ;;
+                opencode)
+                    if [[ "$prepared_opencode" == false && "$DRY_RUN" != true ]]; then
+                        rm -rf "$target_path/.opencode/scripts"
+                        mkdir -p "$target_path/.opencode/scripts"
+                        prepared_opencode=true
+                    fi
+                    opencode_sync_scripts_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
                     ;;
                 *)
                     log_warn "Unknown target: $target (skipping)"
@@ -1112,6 +1149,7 @@ sync_rules() {
 
     # Track which CLIs need directory preparation (Bash 3.2 compatible)
     local prepared_claude=false
+    local prepared_opencode=false
 
     # Section-level platforms
     local section_platforms=$(yq -o=json '.rules.platforms // null' "$yaml_file")
@@ -1155,6 +1193,13 @@ sync_rules() {
                         prepared_claude=true
                     fi
                     claude_sync_rules_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
+                    ;;
+                opencode)
+                    if [[ "$prepared_opencode" == false && "$DRY_RUN" != true ]]; then
+                        mkdir -p "$target_path/.opencode/rules"
+                        prepared_opencode=true
+                    fi
+                    opencode_sync_rules_direct "$target_path" "$SCOPED_DISPLAY_NAME" "$SCOPED_SOURCE_PATH" "$DRY_RUN"
                     ;;
                 *)
                     log_warn "Rules: platform '$target'는 rules 동기화를 지원하지 않습니다 (스킵)"
