@@ -86,7 +86,7 @@ opencode_translate_agent_frontmatter() {
     yq -i 'del(.["add-skills"])' "$frontmatter_file"
 
     # Convert subagent_type -> mode: "subagent" (only if subagent_type exists)
-    yq -i 'if .subagent_type then .mode = "subagent" | del(.subagent_type) end' "$frontmatter_file"
+    yq -i 'with(select(has("subagent_type")); .mode = "subagent" | del(.subagent_type))' "$frontmatter_file"
 
     # Reassemble file
     echo "---" > "$temp_file"
