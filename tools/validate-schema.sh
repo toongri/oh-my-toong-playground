@@ -910,6 +910,72 @@ validate_yaml_schema() {
 }
 
 # =============================================================================
+# Per-platform YAML 검증
+# =============================================================================
+
+validate_platform_yaml_hooks() {
+    local platform_yaml="$1"
+    local platform="$2"
+
+    local has_hooks=$(yq '.hooks // null' "$platform_yaml")
+    if [[ "$has_hooks" == "null" ]]; then
+        return 0
+    fi
+
+    # hooks는 event-keyed map
+    local events=$(yq '.hooks | keys | .[]' "$platform_yaml" 2>/dev/null || echo "")
+    for event in $events; do
+        local count=$(yq ".hooks.$event | length" "$platform_yaml" 2>/dev/null || echo "0")
+        for i in $(seq 0 $((count - 1))); do
+            local component=$(yq ".hooks.${event}[$i].component // \"\"" "$platform_yaml")
+            if [[ -n "$component" && "$component" != "null" ]]; then
+                local hook_path="$ROOT_DIR/hooks/${component}"
+                if [[ ! -f "$hook_path" && ! -d "$hook_path" ]]; then
+                    log_error "${platform}.yaml: hooks.${event}[$i].component '$component' 파일 없음"
+                fi
+            fi
+        done
+    done
+}
+
+validate_platform_yamls() {
+    local yaml_dir="$1"
+
+    for platform in claude gemini codex opencode; do
+        local platform_yaml="${yaml_dir}/${platform}.yaml"
+        if [[ ! -f "$platform_yaml" ]]; then
+            continue
+        fi
+
+        # YAML syntax check
+        if ! check_yaml_syntax "$platform_yaml"; then
+            continue
+        fi
+
+        # Check allowed top-level sections per platform
+        local allowed_sections=""
+        case "$platform" in
+            claude)   allowed_sections="config hooks mcps plugins statusLine" ;;
+            gemini)   allowed_sections="config hooks mcps" ;;
+            codex)    allowed_sections="config mcps model-map" ;;
+            opencode) allowed_sections="config mcps model-map" ;;
+        esac
+
+        local actual_sections=$(yq '. | keys | .[]' "$platform_yaml" 2>/dev/null || echo "")
+        for section in $actual_sections; do
+            if [[ ! " $allowed_sections " =~ " $section " ]]; then
+                log_warn "${platform}.yaml: 알 수 없는 섹션 '$section' (지원: $allowed_sections)"
+            fi
+        done
+
+        # Validate hook component references (claude and gemini only)
+        if [[ "$platform" == "claude" || "$platform" == "gemini" ]]; then
+            validate_platform_yaml_hooks "$platform_yaml" "$platform"
+        fi
+    done
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 
@@ -919,18 +985,23 @@ main() {
     if [[ -n "$target_file" && -f "$target_file" ]]; then
         # 특정 파일만 검증
         validate_yaml_schema "$target_file"
+        local yaml_dir=$(dirname "$target_file")
+        validate_platform_yamls "$yaml_dir"
     else
         # 모든 sync.yaml 검증
         if [[ -d "$ROOT_DIR/projects" ]]; then
             while IFS= read -r yaml_file; do
                 if [[ -n "$yaml_file" ]]; then
                     validate_yaml_schema "$yaml_file"
+                    local yaml_dir=$(dirname "$yaml_file")
+                    validate_platform_yamls "$yaml_dir"
                 fi
             done < <(find "$ROOT_DIR/projects" -name "sync.yaml" 2>/dev/null || true)
         fi
 
         if [[ -f "$ROOT_DIR/sync.yaml" ]]; then
             validate_yaml_schema "$ROOT_DIR/sync.yaml"
+            validate_platform_yamls "$ROOT_DIR"
         fi
     fi
 

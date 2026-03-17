@@ -741,3 +741,57 @@ codex_update_settings() {
 
     log_info "Updated config.toml: $config_file"
 }
+
+# =============================================================================
+# Per-platform YAML Sync
+# =============================================================================
+
+# Process codex.yaml and sync each declared section
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - platform_yaml: Path to codex.yaml
+#   $3 - dry_run: "true" or "false"
+# stdout: Space-separated list of processed sections (e.g., "config mcps model-map")
+# All log output goes to stderr
+codex_sync_platform_yaml() {
+    local target_path="$1"
+    local platform_yaml="$2"
+    local dry_run="${3:-false}"
+
+    local processed_sections=""
+
+    # --- config ---
+    local config_json
+    config_json=$(yq -o=json '.config // null' "$platform_yaml" 2>/dev/null)
+    if [[ "$config_json" != "null" && -n "$config_json" ]]; then
+        codex_sync_config "$target_path" "$config_json" "$dry_run" >&2
+        processed_sections="${processed_sections:+$processed_sections }config"
+    fi
+
+    # --- mcps ---
+    local mcps_count
+    mcps_count=$(yq '.mcps | length // 0' "$platform_yaml" 2>/dev/null || echo "0")
+    if [[ "$mcps_count" -gt 0 ]]; then
+        CODEX_MCP_SERVERS_JSON="{}"
+        local mcp_names
+        mcp_names=$(yq -r '.mcps | keys | .[]' "$platform_yaml" 2>/dev/null)
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            local server_json
+            server_json=$(yq -o=json ".mcps[\"$name\"]" "$platform_yaml" 2>/dev/null)
+            codex_sync_mcps_merge "$target_path" "$name" "$server_json" "$dry_run" >&2
+        done <<< "$mcp_names"
+        codex_write_mcp_managed_block "$target_path" "$dry_run" >&2
+        processed_sections="${processed_sections:+$processed_sections }mcps"
+    fi
+
+    # --- model-map ---
+    local model_map_json
+    model_map_json=$(yq -o=json '.model-map // null' "$platform_yaml" 2>/dev/null)
+    if [[ "$model_map_json" != "null" && -n "$model_map_json" ]]; then
+        CODEX_MODEL_MAP_JSON="$model_map_json"
+        processed_sections="${processed_sections:+$processed_sections }model-map"
+    fi
+
+    echo "$processed_sections"
+}

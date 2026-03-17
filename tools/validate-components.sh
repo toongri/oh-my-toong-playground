@@ -324,6 +324,40 @@ validate_components() {
 }
 
 # =============================================================================
+# Per-platform YAML 컴포넌트 검증
+# =============================================================================
+
+validate_platform_yaml_hook_components() {
+    local yaml_dir="$1"
+
+    for platform in claude gemini; do
+        local platform_yaml="${yaml_dir}/${platform}.yaml"
+        if [[ ! -f "$platform_yaml" ]]; then
+            continue
+        fi
+
+        local has_hooks=$(yq '.hooks // null' "$platform_yaml")
+        if [[ "$has_hooks" == "null" ]]; then
+            continue
+        fi
+
+        local events=$(yq '.hooks | keys | .[]' "$platform_yaml" 2>/dev/null || echo "")
+        for event in $events; do
+            local count=$(yq ".hooks.$event | length" "$platform_yaml" 2>/dev/null || echo "0")
+            for i in $(seq 0 $((count - 1))); do
+                local component=$(yq ".hooks.${event}[$i].component // \"\"" "$platform_yaml")
+                if [[ -n "$component" && "$component" != "null" ]]; then
+                    local hook_path="$ROOT_DIR/hooks/${component}"
+                    if [[ ! -f "$hook_path" && ! -d "$hook_path" ]]; then
+                        log_error "${platform}.yaml: hooks.${event}[$i].component '$component' 파일 없음"
+                    fi
+                fi
+            done
+        done
+    done
+}
+
+# =============================================================================
 # 메인
 # =============================================================================
 
@@ -347,12 +381,15 @@ main() {
         while IFS= read -r yaml_file; do
             if [[ -n "$yaml_file" ]]; then
                 validate_components "$yaml_file"
+                local yaml_dir=$(dirname "$yaml_file")
+                validate_platform_yaml_hook_components "$yaml_dir"
             fi
         done < <(find "$ROOT_DIR/projects" -name "sync.yaml" 2>/dev/null || true)
     fi
 
     if [[ -f "$ROOT_DIR/sync.yaml" ]]; then
         validate_components "$ROOT_DIR/sync.yaml"
+        validate_platform_yaml_hook_components "$ROOT_DIR"
     fi
 
     # 결과 출력

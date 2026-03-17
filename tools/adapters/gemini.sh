@@ -551,3 +551,134 @@ gemini_build_hook_entry() {
 
     echo "$hook_entry"
 }
+
+# =============================================================================
+# Platform YAML Sync
+# =============================================================================
+
+# Sync all sections from a gemini.yaml per-platform config file
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - platform_yaml: Path to gemini.yaml
+#   $3 - dry_run: "true" or "false"
+# Returns (stdout): Space-separated list of processed sections (e.g., "config hooks mcps")
+# All log output goes to stderr.
+gemini_sync_platform_yaml() {
+    local target_path="$1"
+    local platform_yaml="$2"
+    local dry_run="${3:-false}"
+
+    local processed_sections=""
+
+    # --- config ---
+    local config_json
+    config_json=$(yq -o=json '.config // null' "$platform_yaml")
+    if [[ "$config_json" != "null" ]]; then
+        gemini_sync_config "$target_path" "$config_json" "$dry_run" >&2
+        processed_sections="${processed_sections} config"
+    fi
+
+    # --- hooks ---
+    local hooks_exists
+    hooks_exists=$(yq '.hooks // null' "$platform_yaml")
+    if [[ "$hooks_exists" != "null" ]]; then
+        local gemini_hooks_json="{}"
+        local has_hooks=false
+
+        # Iterate over event keys
+        local events
+        events=$(yq -o=json '.hooks | keys' "$platform_yaml" | jq -r '.[]')
+
+        for hook_event in $events; do
+            local count
+            count=$(yq ".hooks.${hook_event} | length // 0" "$platform_yaml")
+
+            for i in $(seq 0 $((count - 1))); do
+                local item_path=".hooks.${hook_event}[$i]"
+
+                local component
+                component=$(yq "${item_path}.component // \"\"" "$platform_yaml")
+                local timeout
+                timeout=$(yq "${item_path}.timeout // 10" "$platform_yaml")
+                local matcher
+                matcher=$(yq "${item_path}.matcher // \"*\"" "$platform_yaml")
+                local hook_type
+                hook_type=$(yq "${item_path}.type // \"command\"" "$platform_yaml")
+                local custom_command
+                custom_command=$(yq "${item_path}.command // \"\"" "$platform_yaml")
+                local prompt_text
+                prompt_text=$(yq "${item_path}.prompt // \"\"" "$platform_yaml")
+
+                local display_name=""
+                local scoped_source=""
+                if [[ -n "$component" && "$component" != "null" ]]; then
+                    resolve_scoped_source_path "hooks" "$component" "" || true
+                    if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
+                        log_warn "$SCOPED_RESOLUTION_ERROR" >&2
+                        continue
+                    fi
+                    display_name="$SCOPED_DISPLAY_NAME"
+                    scoped_source="$SCOPED_SOURCE_PATH"
+                    gemini_sync_hooks_direct "$target_path" "$display_name" "$scoped_source" "$dry_run" >&2
+                fi
+
+                local hook_entry
+                if [[ "$hook_type" == "prompt" ]]; then
+                    if [[ -z "$prompt_text" || "$prompt_text" == "null" ]]; then
+                        log_warn "Hook prompt가 정의되지 않음: event=$hook_event (스킵)" >&2
+                        continue
+                    fi
+                    hook_entry=$(gemini_build_hook_entry "$hook_event" "$matcher" "prompt" "$timeout" "$prompt_text" "$display_name")
+                else
+                    local cmd_path
+                    if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
+                        cmd_path="$custom_command"
+                    elif [[ -n "$component" && "$component" != "null" ]]; then
+                        if [[ -d "$scoped_source" ]]; then
+                            if [[ -f "$scoped_source/index.ts" ]]; then
+                                cmd_path="bun run .gemini/hooks/${display_name}/index.ts"
+                            elif [[ -f "$scoped_source/index.sh" ]]; then
+                                cmd_path="bash .gemini/hooks/${display_name}/index.sh"
+                            else
+                                log_warn "Hook 디렉토리에 index.ts 또는 index.sh가 없음: $scoped_source (스킵)" >&2
+                                continue
+                            fi
+                        else
+                            cmd_path=".gemini/hooks/${display_name}"
+                        fi
+                    else
+                        log_warn "Hook command가 정의되지 않음: event=$hook_event (스킵)" >&2
+                        continue
+                    fi
+                    hook_entry=$(gemini_build_hook_entry "$hook_event" "$matcher" "command" "$timeout" "$cmd_path" "$display_name")
+                fi
+
+                gemini_hooks_json=$(echo "$gemini_hooks_json" | jq --arg event "$hook_event" --argjson entry "$hook_entry" '.[$event] = (.[$event] // []) + $entry')
+                has_hooks=true
+            done
+        done
+
+        if [[ "$has_hooks" == true ]]; then
+            gemini_update_settings "$target_path" "$gemini_hooks_json" "$dry_run" >&2
+        fi
+        processed_sections="${processed_sections} hooks"
+    fi
+
+    # --- mcps ---
+    local mcps_exists
+    mcps_exists=$(yq '.mcps // null' "$platform_yaml")
+    if [[ "$mcps_exists" != "null" ]]; then
+        local mcp_names
+        mcp_names=$(yq -o=json '.mcps | keys' "$platform_yaml" | jq -r '.[]')
+
+        for name in $mcp_names; do
+            local server_json
+            server_json=$(yq -o=json ".mcps.${name}" "$platform_yaml")
+            gemini_sync_mcps_merge "$target_path" "$name" "$server_json" "$dry_run" >&2
+        done
+        processed_sections="${processed_sections} mcps"
+    fi
+
+    # Return processed sections (trim leading space)
+    echo "${processed_sections# }"
+}
