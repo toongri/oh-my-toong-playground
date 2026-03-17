@@ -193,6 +193,10 @@ function tryResolveInDir(dir: string, name: string, category: string): string | 
     if (existsSync(skillPath)) return skillPath;
   }
 
+  // 4. Directory (for scripts, hooks with no file extension)
+  const dirPath = join(dir, name);
+  if (existsSync(dirPath)) return dirPath;
+
   return null;
 }
 

@@ -1,0 +1,4 @@
+[test]
+# Exclude deployed and backup directories — source tests live in lib/, scripts/, tools/
+# Skills tests have @lib/ dependencies that only resolve in deployed context
+exclude = [".claude/**", ".gemini/**", ".codex/**", ".opencode/**", ".sync-backup/**", ".omt/**", "skills/**"]
