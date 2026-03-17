@@ -47,6 +47,10 @@ oh-my-toong/
 │   └── lib/         # Shared shell helpers for tools
 ├── projects/        # Project-specific overrides (skills, hooks per project)
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
+├── claude.yaml      # Per-platform config (config/hooks/mcps/plugins)
+├── gemini.yaml      # Per-platform config (config/hooks/mcps)
+├── codex.yaml       # Per-platform config (config/mcps/model-map)
+├── opencode.yaml    # Per-platform config (config/mcps/model-map)
 └── sync.yaml        # Root sync definition (+ projects/*/sync.yaml per project)
 ```
 
@@ -82,7 +86,18 @@ skills:
 - Root `sync.yaml`: global paths only (`skills/`, `agents/`, etc.)
 - Project `sync.yaml`: own project first (`projects/<name>/skills/`), then global fallback. Cross-project references are blocked.
 
-**Adapters** (`tools/adapters/`): Each platform (claude, gemini, codex) has its own adapter that handles directory layout differences. Claude has native support for all categories; Gemini and Codex use fallback strategies for agents/commands.
+**Per-platform YAML** (`{platform}.yaml`): Colocated with `sync.yaml`, inheriting its `path`. Manages config/hooks/mcps/plugins per platform — separate from `sync.yaml` which handles component deployment only (agents, commands, skills, scripts, rules).
+
+> **Note**: `mcps/` directory is deprecated. MCPs are now defined inline in per-platform YAML files.
+
+**Adapters** (`tools/adapters/`): Each platform has its own adapter that handles directory layout differences.
+
+| Platform | Target dir | Supported categories | Notes |
+|----------|-----------|---------------------|-------|
+| claude | `.claude/` | agents, commands, skills, rules, scripts, hooks | Full native support |
+| gemini | `.gemini/` | agents, commands, skills, rules, scripts, hooks | Fallback for agents/commands |
+| codex | `.codex/` | agents, commands, skills, rules, scripts, hooks | Fallback for agents/commands |
+| opencode | `.opencode/` | agents, commands, skills, rules, scripts | Hooks not supported |
 
 ### Core Skills
 
