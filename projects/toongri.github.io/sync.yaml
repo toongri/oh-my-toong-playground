@@ -20,21 +20,6 @@ commands:
     - hud
     - ralph
 
-hooks:
-  items:
-    - component: keyword-detector.sh
-      event: UserPromptSubmit
-      timeout: 10
-    - component: pre-tool-enforcer.sh
-      event: PreToolUse
-      timeout: 5
-    - component: session-start.sh
-      event: SessionStart
-      timeout: 10
-    - component: persistent-mode
-      event: Stop
-      timeout: 15
-
 skills:
   items:
     - component: spec
@@ -68,7 +53,3 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
-
-config:
-  claude:
-    enableAllProjectMcpServers: true
