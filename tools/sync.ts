@@ -194,6 +194,7 @@ export async function syncCategory(
           addSkills,
           addHooks,
           false,
+          context.modelMaps.get(platform),
         );
       } else if (category === "commands") {
         await adapter.syncCommandsDirect(
@@ -331,9 +332,9 @@ export async function rewriteLibAliases(platformRoot: string): Promise<void> {
  */
 async function collectTsFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let entries: import("fs").Dirent[];
   try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
+    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
   } catch {
     return results;
   }
@@ -424,9 +425,9 @@ export async function rewritePlatformPaths(
  */
 async function collectMdFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
-  let entries: Awaited<ReturnType<typeof fs.readdir>>;
+  let entries: import("fs").Dirent[];
   try {
-    entries = await fs.readdir(dir, { withFileTypes: true });
+    entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
   } catch {
     return results;
   }
@@ -578,12 +579,11 @@ if (import.meta.main) {
   logInfo(`백업 세션: ${context.backupSession}`);
   logInfo(`백업 위치: ${rootDir}/.sync-backup/${context.backupSession}/`);
 
-  const adapters: AdapterMap = new Map([
-    ["claude", new ClaudeAdapter()],
-    ["gemini", new GeminiAdapter()],
-    ["codex", new CodexAdapter()],
-    ["opencode", opencodeAdapter],
-  ]);
+  const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
+  adapters.set("claude", new ClaudeAdapter());
+  adapters.set("gemini", new GeminiAdapter());
+  adapters.set("codex", new CodexAdapter());
+  adapters.set("opencode", opencodeAdapter);
 
   try {
     // projects/*/sync.yaml 먼저 처리

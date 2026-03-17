@@ -77,6 +77,7 @@ export const opencodeAdapter: PlatformAdapter = {
     addSkills?: string[],
     _addHooks?: unknown[],
     dryRun?: boolean,
+    modelMap?: Record<string, string>,
   ): Promise<void> {
     const targetDir = path.join(targetPath, ".opencode", "agents");
     const targetFile = path.join(targetDir, `${displayName}.md`);
@@ -97,9 +98,9 @@ export const opencodeAdapter: PlatformAdapter = {
     await fs.copyFile(sourcePath, targetFile);
     logInfo(`Copied: ${displayName}.md`);
 
-    // Translate frontmatter for OpenCode compatibility
+    // Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
     const content = await fs.readFile(targetFile, "utf-8");
-    const translated = translateAgentFrontmatter(content);
+    const translated = translateAgentFrontmatter(content, modelMap);
     await fs.writeFile(targetFile, translated, "utf-8");
 
     // add-skills not supported — log if provided
