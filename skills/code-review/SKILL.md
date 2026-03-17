@@ -68,7 +68,7 @@ digraph role_separation {
 - `git diff {range} --name-only` output
 - `git log {range} --oneline` output
 - CLAUDE.md file content
-- Step 2.5 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
+- Step 3 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
 - explore/oracle agent summaries (Phase 1a)
 - chunk-reviewer results
 - Phase 3 oracle enrichment results (finding-specific code, context, diffs, references)
@@ -139,7 +139,7 @@ One question at a time. Proceed to the next question only after receiving an ans
 
 **Project Context:**
 
-Include project context when interpolating the chunk-reviewer prompt template in Step 4. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and other available information.
+Include project context when interpolating the chunk-reviewer prompt template in Step 5. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and other available information.
 
 If the available context is insufficient to characterize the project, ask the user: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
 
@@ -151,7 +151,7 @@ Proceed to Step 1 when any of the following are met:
 
 **Context Brokering:**
 - DO NOT ask user about codebase facts (file locations, patterns, architecture)
-- USE explore/oracle in Step 5 Phase 1 for codebase context
+- USE explore/oracle in Step 6 Phase 1 for codebase context
 - ONLY ask user about: requirements, intent, specific concerns
 
 ## Step 1: Input Parsing
@@ -198,7 +198,7 @@ Collect in parallel (using `{range}` from Step 1):
 3. `git log {range} --oneline` (commit history)
 4. CLAUDE.md files: repo root + each changed directory's CLAUDE.md (if exists)
 
-## Step 2.5: Evidence Verification
+## Step 3: Evidence Verification
 
 Run build, test, and lint checks BEFORE dispatching any chunk-reviewer agents. This is a fail-fast gate — a failing check aborts the review immediately.
 
@@ -206,7 +206,7 @@ Run build, test, and lint checks BEFORE dispatching any chunk-reviewer agents. T
 
 **Do NOT assume commands.** Discover per-project commands in this order:
 
-1. **Memory file first**: `{project-root}/.omt/argus/project-commands.md`
+1. **Memory file first**: `~/.omt/{project}/project-commands.md` — derive `{project}` with: `basename -s .git $(git remote get-url origin 2>/dev/null)`, fallback: `basename $(git rev-parse --show-toplevel 2>/dev/null || pwd)`
 2. **Project documentation**: `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`
 3. **Build files**: `package.json` scripts, `build.gradle` / `build.gradle.kts` tasks, `Makefile` targets, `pyproject.toml`, `Cargo.toml`
 4. **If still unclear**: Ask user for build/test/lint commands
@@ -239,20 +239,20 @@ Produce a two-part structured table after all checks complete.
 
 **Part 2 — Test Coverage Mapping**
 
-Identify production files from the Step 2 file list: files that do NOT match test glob patterns (`*Test*`, `*Spec*`, `*_test*`, `test_*`, `*.test.*`, `*.spec.*`, `*_spec*`).
+Identify production source files from the Step 2 file list: source code files (exclude non-code files such as config, documentation, build scripts, migrations, Markdown, YAML, JSON, images, etc.) that do NOT match test glob patterns (`*Test*`, `*Spec*`, `*_test*`, `test_*`, `*.test.*`, `*.spec.*`, `*_spec*`).
 
-For each production file, find its corresponding test file:
+For each production source file, find its corresponding test file:
 
-| Production File | Test File | Coverage Status |
-|-----------------|-----------|-----------------|
+| Production Source File | Test File | Coverage Status |
+|------------------------|-----------|-----------------|
 | `path/to/File.kt` | `path/to/FileTest.kt` | In diff / Exists, not in diff / No test found |
 
 Coverage Status values:
 - **In diff**: test file exists AND is in the diff (changed alongside production code)
 - **Exists, not in diff**: test file exists in the repo but was NOT changed
-- **No test found**: no test file matching the production file name found
+- **No test found**: no test file matching the production source file name found
 
-If more than 30 production files are in the diff, group by directory instead of listing per file.
+If more than 30 production source files are in the diff, group by directory instead of listing per file.
 
 **Unavailable message** (no commands discovered): "Evidence verification unavailable — no build/test/lint commands discovered"
 
@@ -261,10 +261,10 @@ If more than 30 production files are in the diff, group by directory instead of 
 If any check fails:
 1. Populate {EVIDENCE_RESULTS} Part 1 with the failure details (last 30 lines of failing command output)
 2. Omit Part 2 (Test Coverage Mapping) — it is not needed on failure
-3. Do NOT proceed to Step 3 or dispatch chunk-reviewer agents
+3. Do NOT proceed to Step 4 or dispatch chunk-reviewer agents
 4. Report {EVIDENCE_RESULTS} and exit immediately
 
-## Step 3: Chunking Decision
+## Step 4: Chunking Decision
 
 Determine scale from `--stat` summary line (`N files changed, X insertions(+), Y deletions(-)`):
 
@@ -291,10 +291,10 @@ git diff {range} -- <file1> <file2> ... <fileN>
 
 The orchestrator constructs this command string but does NOT execute it. The command is passed to the chunk-reviewer via {DIFF_COMMAND}, and each reviewer CLI executes it independently.
 
-## Step 4: Agent Dispatch
+## Step 5: Agent Dispatch
 
 1. Read dispatch template from `../../scripts/chunk-review/chunk-reviewer-prompt.md`
-2. Interpolate placeholders with context from Steps 0-2.5:
+2. Interpolate placeholders with context from Steps 0-3:
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages
    - {REQUIREMENTS} ← Step 0 requirements (or "N/A - code quality review only")
@@ -303,7 +303,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
    - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
-   - {EVIDENCE_RESULTS} ← Step 2.5 evidence summary (Source: Step 2.5. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
+   - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
 
 **Dispatch rules:**
@@ -318,9 +318,9 @@ The orchestrator constructs this command string but does NOT execute it. The com
 After all chunk-reviewers return, verify each response covers all files in its assigned FILE_LIST.
 If any chunk response clearly omits assigned files, re-dispatch a new chunk-reviewer with only the missing files.
 Cap: maximum 1 re-dispatch per original chunk; if the re-dispatch also fails, accept partial coverage.
-After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 5.
+After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 6.
 
-## Step 5: Walkthrough Synthesis + Result Synthesis
+## Step 6: Walkthrough Synthesis + Result Synthesis
 
 After all agents return, produce the final output in two phases.
 

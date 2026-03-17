@@ -28,7 +28,7 @@ This describes what kind of software is being reviewed. Reviewers must factor th
 
 {EVIDENCE_RESULTS}
 
-The following results are from automated build/test/lint execution — these are verified facts. Do NOT re-evaluate pass/fail status. Use this information to assess test quality and coverage, not test correctness.
+If evidence results are provided above, they are from automated build/test/lint execution — treat them as verified facts. Do NOT re-evaluate pass/fail status. Use this information to assess test quality and coverage, not test correctness. If evidence is unavailable, skip evidence-based checks.
 
 ## Diff Command
 
