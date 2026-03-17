@@ -1054,7 +1054,7 @@ After Requirements Analysis completes (spec-review pass + user "Area complete"),
 | 3 | Key business rules documented with rationale? | Requirements |
 | 4 | Non-functional requirements quantified? | Requirements |
 | 5 | Success criteria testable? | Requirements |
-| 6 | Ambiguity Score ≤ 0.2 (Ambiguity Threshold)? | Clarity Scoring |
+| 6 | Ambiguity ≤ 0.2 (Ambiguity Threshold)? | Clarity Scoring |
 
 **All YES** → Proceed to Solution Design.
 **Any NO** → Return to Requirements Analysis via Prior Area Amendment, then:
@@ -1074,7 +1074,7 @@ Phase Transition Gate: Requirements → Solution Design
 | 3 | Key business rules documented with rationale? | {YES/NO: gap} |
 | 4 | NFRs quantified?                      | {YES/NO: gap} |
 | 5 | Success criteria testable?            | {YES/NO: gap} |
-| 6 | Ambiguity Score ≤ 0.2 (Ambiguity Threshold)? | {YES/NO: current score} |
+| 6 | Ambiguity ≤ 0.2 (Ambiguity Threshold)? | {YES/NO: current score} |
 
 Result: {PASS — proceed to Solution Design | FAIL — return to Requirements}
 ```

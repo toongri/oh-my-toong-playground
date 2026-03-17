@@ -96,7 +96,7 @@ Scan every added or modified line for these patterns:
 - Slack token prefix: `xox-`
 - PEM private key block: `-----BEGIN (RSA |EC |)PRIVATE KEY-----`
 - Connection string with embedded password: `://user:password@`
-- High-entropy Base64 token (40+ character opaque string in assignment or config context)
+- Long opaque string (40+ characters) assigned to a variable whose name contains `key`, `token`, `secret`, `password`, `credential`, or `api_key`
 
 **Severity guidance**: Credential pattern in production code = minimum **P1**. Credential pattern in test fixtures or documentation = **P3**.
 
