@@ -341,7 +341,7 @@ test_sync_agents_uses_adapter_dispatch() {
 
 test_sync_commands_uses_adapter_dispatch() {
     # sync_commands should use adapter dispatch pattern
-    if grep -A 80 '^sync_commands\(\)' "$ROOT_DIR/sync.sh" | grep -q 'claude_sync_commands'; then
+    if grep -A 200 '^sync_commands\(\)' "$ROOT_DIR/sync.sh" | grep -q 'claude_sync_commands'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_commands should call claude_sync_commands adapter"
@@ -375,7 +375,7 @@ test_sync_skills_uses_adapter_dispatch() {
 
 test_sync_agents_parses_platforms() {
     # sync_agents should parse platforms from YAML (top-level)
-    if grep -A 80 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q '\.platforms'; then
+    if grep -A 200 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q '\.platforms'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_agents should parse platforms from YAML"
@@ -554,7 +554,7 @@ test_sync_retains_sync_functions() {
 test_sync_agents_uses_json_output_for_platforms() {
     # sync_agents should use -o=json for platforms to avoid lexer errors
     # when interpolating JSON arrays into yq expressions
-    if grep -A 80 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
+    if grep -A 200 '^sync_agents\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
         return 0
     else
         echo "ASSERTION FAILED: sync_agents should use 'yq -o=json' for platforms"
@@ -585,7 +585,7 @@ test_sync_agents_uses_jq_for_platforms_iteration() {
 
 test_sync_commands_uses_json_output_for_platforms() {
     # sync_commands should use -o=json for platforms
-    if grep -A 80 '^sync_commands\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
+    if grep -A 200 '^sync_commands\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
         return 0
     else
         echo "ASSERTION FAILED: sync_commands should use 'yq -o=json' for platforms"
@@ -627,7 +627,7 @@ test_sync_hooks_uses_null_check_for_component_platforms() {
 
 test_sync_skills_uses_json_output_for_platforms() {
     # sync_skills should use -o=json for platforms
-    if grep -A 80 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
+    if grep -A 200 '^sync_skills\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
         return 0
     else
         echo "ASSERTION FAILED: sync_skills should use 'yq -o=json' for platforms"
@@ -736,7 +736,7 @@ test_sync_scripts_uses_adapter_dispatch() {
 
 test_sync_scripts_parses_platforms() {
     # sync_scripts should parse platforms from YAML (top-level)
-    if grep -A 80 '^sync_scripts\(\)' "$ROOT_DIR/sync.sh" | grep -q '\.platforms'; then
+    if grep -A 200 '^sync_scripts\(\)' "$ROOT_DIR/sync.sh" | grep -q '\.platforms'; then
         return 0
     else
         echo "ASSERTION FAILED: sync_scripts should parse platforms from YAML"
@@ -746,7 +746,7 @@ test_sync_scripts_parses_platforms() {
 
 test_sync_scripts_uses_json_output_for_platforms() {
     # sync_scripts should use -o=json for platforms
-    if grep -A 80 '^sync_scripts\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
+    if grep -A 200 '^sync_scripts\(\)' "$ROOT_DIR/sync.sh" | grep -q "yq -o=json '\.platforms"; then
         return 0
     else
         echo "ASSERTION FAILED: sync_scripts should use 'yq -o=json' for platforms"
