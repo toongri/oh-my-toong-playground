@@ -97,6 +97,21 @@ Trace every external input through the changed code:
 - Data exposure: sensitive data in logs, error messages, responses, URLs
 - Trust boundaries: unvalidated input crossing from untrusted to trusted context
 
+**Credential and Secret Scanning:**
+
+Scan every added or modified line for these patterns:
+- AWS access key prefix: `AKIA`
+- OpenAI/Anthropic API key prefix: `sk-`
+- GitHub token prefixes: `ghp_`, `gho_`, `ghs_`
+- Slack token prefix: `xox-`
+- PEM private key block: `-----BEGIN (RSA |EC |)PRIVATE KEY-----`
+- Connection string with embedded password: `://user:password@`
+- Long opaque string (40+ characters) assigned to a variable whose name contains `key`, `token`, `secret`, `password`, `credential`, or `api_key`
+
+**Severity guidance**: Credential pattern in production code = minimum **P1**. Credential pattern in test fixtures or documentation = **P3**.
+
+Verify whether the pattern is an actual credential or an intentional mock/example before assigning severity.
+
 ---
 ✓ Step 6 complete. Proceed to Step 7.
 ---
@@ -132,6 +147,9 @@ FINAL REMINDER: Now produce the COMPLETE output in the exact format specified be
 ## Review Checklist
 
 Evaluate every change against these categories: **Code Quality** (separation of concerns, error handling, type safety, DRY, edge cases), **Architecture** (design decisions, scalability, performance, security), **Testing** (tests verify logic not mocks, edge cases covered, integration tests where needed), **Requirements** (plan requirements met, matches spec, no scope creep), **Production Readiness** (migration strategy, backward compatibility, documentation).
+
+**Testing — additional checks:**
+- Are there changed production paths with no test coverage? (If `{EVIDENCE_RESULTS}` contains a Test Coverage Mapping table, use it; otherwise assess from the diff alone)
 
 **MANDATORY: Your response MUST include ALL of the following sections. Missing any section is a FAILURE:**
 1. ### Chunk Analysis (with per-file/per-symbol entries)

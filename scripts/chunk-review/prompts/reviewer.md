@@ -143,7 +143,7 @@ Evaluate every change against ALL five categories:
 - Integration tests where needed?
 - Do tests exercise the changed code paths (not just exist alongside)?
 - Are assertions checking meaningful outcomes (not just no-exception)?
-- Are there changed production paths with no test coverage? (Check `{EVIDENCE_RESULTS}` Test Coverage Mapping)
+- Are there changed production paths with no test coverage? (If `{EVIDENCE_RESULTS}` contains a Test Coverage Mapping table, use it; otherwise assess from the diff alone)
 
   Test fixtures containing credential patterns (mock API keys, etc.) = P3, not P1.
 
@@ -168,11 +168,11 @@ Produce your review in exactly this structure:
 
 #### <filename>:<symbol> (<added|modified|deleted>)
 - **What Changed**: [description]
-- **Requirement**: Mapped to: {requirement text or ID} | [Unmapped — potential scope creep]
+- **Requirement**: Mapped to: {requirement text or ID} | [Unmapped — potential scope creep]   ← include only when requirements mapping is active (omit when `{REQUIREMENTS}` is N/A)
 
 #### <filename> (<added|modified|deleted>)
 - **What Changed**: [description]
-- **Requirement**: Mapped to: {requirement text or ID} | [Unmapped — potential scope creep]
+- **Requirement**: Mapped to: {requirement text or ID} | [Unmapped — potential scope creep]   ← include only when requirements mapping is active (omit when `{REQUIREMENTS}` is N/A)
 
 ### Strengths
 [What's well done? Be specific with file:line references.]

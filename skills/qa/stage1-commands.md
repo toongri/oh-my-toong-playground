@@ -10,7 +10,8 @@ Run automated checks BEFORE any code analysis. This is not optional.
 
 ### Discovery Order
 
-1. **Check memory file first**: `{project-root}/.omt/argus/project-commands.md`
+1. **Check memory file first**: `~/.omt/{project}/project-commands.md`
+   - `{project}` = `basename -s .git $(git remote get-url origin 2>/dev/null)`, fallback: `basename $(git rev-parse --show-toplevel 2>/dev/null || pwd)`
 2. **If not found, analyze project documentation:**
    - `CLAUDE.md`, `AGENTS.md`, `CODEX.md`, `GEMINI.md` -> AI-specific instructions
    - `README.md` / `CONTRIBUTING.md` -> documented commands
@@ -23,11 +24,11 @@ Run automated checks BEFORE any code analysis. This is not optional.
    - `pyproject.toml` / `setup.py` -> pytest, tox
    - `Cargo.toml` -> cargo commands
 4. **If still unclear, ask user** for build/test/lint commands
-5. **Save discovered commands** to `{project-root}/.omt/argus/project-commands.md`
+5. **Save discovered commands** to `~/.omt/{project}/project-commands.md`
 
 ### Memory File Format
 
-**Location:** `{project-root}/.omt/argus/project-commands.md`
+**Location:** `~/.omt/{project}/project-commands.md`
 
 ```markdown
 # Project Commands
