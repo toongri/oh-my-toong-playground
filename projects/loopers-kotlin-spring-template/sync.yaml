@@ -23,27 +23,6 @@ commands:
     - hud
     - ralph
 
-hooks:
-  items:
-    # Common hooks
-    - component: keyword-detector.sh
-      event: UserPromptSubmit
-      timeout: 10
-    - component: pre-tool-enforcer.sh
-      event: PreToolUse
-      timeout: 5
-    - component: session-start.sh
-      event: SessionStart
-      timeout: 10
-    - component: persistent-mode
-      event: Stop
-      timeout: 15
-    # Kotlin project-specific hooks (file-based)
-    - component: pre-commit-gate.sh
-      event: PreToolUse
-      matcher: "Bash"
-      timeout: 120
-
 skills:
   items:
     - component: spec
@@ -76,15 +55,3 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
-
-mcps:
-  items:
-    - playwright
-
-plugins:
-  items:
-    - kotlin-lsp
-
-config:
-  claude:
-    enableAllProjectMcpServers: true

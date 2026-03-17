@@ -330,6 +330,13 @@ validate_components() {
 validate_platform_yaml_hook_components() {
     local yaml_dir="$1"
 
+    # Determine project dir name for local hook resolution
+    local project_dir_name=""
+    case "$yaml_dir" in
+        "$ROOT_DIR"/projects/*)
+            project_dir_name=$(basename "$yaml_dir") ;;
+    esac
+
     for platform in claude gemini; do
         local platform_yaml="${yaml_dir}/${platform}.yaml"
         if [[ ! -f "$platform_yaml" ]]; then
@@ -347,8 +354,30 @@ validate_platform_yaml_hook_components() {
             for i in $(seq 0 $((count - 1))); do
                 local component=$(yq ".hooks.${event}[$i].component // \"\"" "$platform_yaml")
                 if [[ -n "$component" && "$component" != "null" ]]; then
-                    local hook_path="$ROOT_DIR/hooks/${component}"
-                    if [[ ! -f "$hook_path" && ! -d "$hook_path" ]]; then
+                    local found=false
+                    if [[ "$component" == *:* ]]; then
+                        # Scoped: {project}:{name} → projects/{project}/hooks/{name}
+                        local scope_project=$(echo "$component" | cut -d: -f1)
+                        local scope_name=$(echo "$component" | cut -d: -f2-)
+                        local scoped_path="$ROOT_DIR/projects/${scope_project}/hooks/${scope_name}"
+                        if [[ -f "$scoped_path" || -d "$scoped_path" ]]; then
+                            found=true
+                        fi
+                    else
+                        # Global hook
+                        local global_path="$ROOT_DIR/hooks/${component}"
+                        if [[ -f "$global_path" || -d "$global_path" ]]; then
+                            found=true
+                        fi
+                        # Project-local hook
+                        if [[ "$found" == "false" && -n "$project_dir_name" ]]; then
+                            local local_path="$ROOT_DIR/projects/${project_dir_name}/hooks/${component}"
+                            if [[ -f "$local_path" || -d "$local_path" ]]; then
+                                found=true
+                            fi
+                        fi
+                    fi
+                    if [[ "$found" == "false" ]]; then
                         log_error "${platform}.yaml: hooks.${event}[$i].component '$component' 파일 없음"
                     fi
                 fi

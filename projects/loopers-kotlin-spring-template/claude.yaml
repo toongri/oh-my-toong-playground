@@ -1,0 +1,30 @@
+hooks:
+  UserPromptSubmit:
+    - component: keyword-detector.sh
+      timeout: 10
+  PreToolUse:
+    - component: pre-tool-enforcer.sh
+      timeout: 5
+    - component: pre-commit-gate.sh
+      matcher: "Bash"
+      timeout: 120
+  SessionStart:
+    - component: session-start.sh
+      timeout: 10
+  Stop:
+    - component: persistent-mode
+      timeout: 15
+
+config:
+  enableAllProjectMcpServers: true
+
+mcps:
+  playwright:
+    command: npx
+    args:
+      - -y
+      - "@playwright/mcp@latest"
+
+plugins:
+  items:
+    - kotlin-lsp

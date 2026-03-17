@@ -1,0 +1,31 @@
+config:
+  language: "한국어"
+  outputStyle: "Explanatory"
+  includeCoAuthoredBy: false
+  attribution:
+    commit: ""
+    pr: ""
+  skipDangerousModePermissionPrompt: true
+  permissions:
+    deny:
+      - "Bash(git push --force*)"
+      - "Bash(git push * --force*)"
+      - "Bash(git push -f*)"
+      - "Bash(git push * -f*)"
+      - "Bash(rm -rf *)"
+      - "Bash(rm -fr *)"
+      - "Bash(rm -Rf *)"
+      - "Bash(rm -r -f *)"
+      - "Bash(rm -f -r *)"
+
+plugins:
+  items:
+    - context7
+    - serena
+    - superpowers
+    - code-review
+    - name: plannotator@plannotator
+      check: jq -e '.plugins["plannotator@plannotator"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - curl -fsSL https://plannotator.ai/install.sh | bash
+        - claude plugin marketplace add backnotprop/plannotator

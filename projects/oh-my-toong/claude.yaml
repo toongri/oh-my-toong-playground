@@ -1,0 +1,22 @@
+hooks:
+  UserPromptSubmit:
+    - component: keyword-detector.sh
+      timeout: 10
+  PreToolUse:
+    - component: pre-tool-enforcer.sh
+      timeout: 5
+  SessionStart:
+    - component: session-start.sh
+      timeout: 10
+  Stop:
+    - component: persistent-mode
+      timeout: 15
+    - component: oh-my-toong:sync-component-validator.sh
+      timeout: 30
+  PostToolUse:
+    - component: oh-my-toong:sync-schema-validator.sh
+      matcher: "Edit(**/sync.yaml)"
+      timeout: 30
+
+config:
+  enableAllProjectMcpServers: true
