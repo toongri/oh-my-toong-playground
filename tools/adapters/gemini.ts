@@ -98,6 +98,7 @@ export class GeminiAdapter implements PlatformAdapter {
     _addSkills?: string[],
     _addHooks?: unknown[],
     _dryRun = false,
+    _modelMap?: Record<string, string>,
   ): Promise<void> {
     logWarn(`Gemini: agents는 지원되지 않습니다. Skip: ${displayName}`);
   }

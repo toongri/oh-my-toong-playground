@@ -119,7 +119,8 @@ export class CodexAdapter implements PlatformAdapter {
     _sourcePath: string,
     _addSkills?: string[],
     _addHooks?: unknown[],
-    _dryRun = false
+    _dryRun = false,
+    _modelMap?: Record<string, string>,
   ): Promise<void> {
     logWarn(`Codex: agents는 지원되지 않습니다. Skip: ${displayName}`);
   }

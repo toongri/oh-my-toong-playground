@@ -17,6 +17,7 @@ export interface PlatformAdapter {
   /**
    * Sync an agent file to the target project.
    * Optionally injects skills and hooks into the agent's frontmatter.
+   * modelMap is used by opencode to translate model names in frontmatter (P2-5).
    */
   syncAgentsDirect(
     targetPath: string,
@@ -25,6 +26,7 @@ export interface PlatformAdapter {
     addSkills?: string[],
     addHooks?: unknown[],
     dryRun?: boolean,
+    modelMap?: Record<string, string>,
   ): Promise<void>;
 
   /** Sync a command file to the target project. */

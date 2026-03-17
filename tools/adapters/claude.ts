@@ -105,6 +105,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     addSkills?: string[],
     addHooks?: unknown[],
     dryRun = false,
+    _modelMap?: Record<string, string>,
   ): Promise<void> {
     const targetDir = path.join(targetPath, ".claude", "agents");
     const targetFile = path.join(targetDir, `${displayName}.md`);

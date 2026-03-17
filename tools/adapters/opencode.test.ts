@@ -690,4 +690,32 @@ Body content.`,
       await fs.rm(targetDir, { recursive: true, force: true });
     }
   });
+
+  it("modelMap이 전달되면 에이전트 프론트매터의 model 필드에 적용된다 (P2-5 런타임 배선)", async () => {
+    const targetDir = await mkTempDir();
+    try {
+      const modelMap = { "claude-opus-4": "openai/o3" };
+      await opencodeAdapter.syncAgentsDirect(
+        targetDir,
+        "oracle",
+        agentFile,
+        [],
+        [],
+        false,
+        modelMap,
+      );
+
+      const target = path.join(targetDir, ".opencode", "agents", "oracle.md");
+      const content = await fs.readFile(target, "utf-8");
+
+      // model field must be translated
+      expect(content).toContain("model: openai/o3");
+      expect(content).not.toContain("claude-opus-4");
+      // frontmatter translation still applied
+      expect(content).not.toContain("subagent_type");
+      expect(content).toContain("mode: subagent");
+    } finally {
+      await fs.rm(targetDir, { recursive: true, force: true });
+    }
+  });
 });
