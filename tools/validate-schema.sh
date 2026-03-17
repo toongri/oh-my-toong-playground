@@ -62,7 +62,7 @@ VALID_ADD_HOOK_ITEM_FIELDS="event component command type matcher timeout prompt"
 
 VALID_EVENTS="SessionStart UserPromptSubmit PreToolUse PostToolUse Stop SubagentStop"
 VALID_HOOK_TYPES="command prompt"
-VALID_TARGETS="claude gemini codex"
+VALID_TARGETS="claude gemini codex opencode"
 
 # CLI-specific limitations (for warnings)
 # Format: "cli:category" = fallback/limited/skip
@@ -164,6 +164,15 @@ warn_cli_limitations() {
                 ;;
             codex:hooks)
                 log_warn "Codex: Notification event만 지원됩니다 (다른 hook events는 skip됩니다)"
+                ;;
+            opencode:agents)
+                log_warn "OpenCode: agents는 AGENTS.md fallback으로 동기화됩니다 (네이티브 subagent 미지원)"
+                ;;
+            opencode:commands)
+                log_warn "OpenCode: commands는 .opencode/commands/로 동기화됩니다"
+                ;;
+            opencode:hooks)
+                log_warn "OpenCode: hooks는 지원되지 않습니다 (skip됩니다)"
                 ;;
         esac
     done

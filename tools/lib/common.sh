@@ -184,7 +184,7 @@ cleanup_old_backups() {
 # =============================================================================
 
 # CLI별 프로젝트 파일 반환
-# claude -> CLAUDE.md, gemini -> GEMINI.md, codex -> AGENTS.md
+# claude -> CLAUDE.md, gemini -> GEMINI.md, codex -> AGENTS.md, opencode -> AGENTS.md
 #
 # 사용법: project_file=$(get_cli_project_file "claude")
 get_cli_project_file() {
@@ -193,6 +193,7 @@ get_cli_project_file() {
         claude) echo "CLAUDE.md" ;;
         gemini) echo "GEMINI.md" ;;
         codex) echo "AGENTS.md" ;;
+        opencode) echo "AGENTS.md" ;;
         *) echo "" ;;
     esac
 }
@@ -210,6 +211,7 @@ validate_cli_project_files() {
     local used_claude=false
     local used_gemini=false
     local used_codex=false
+    local used_opencode=false
 
     # platforms 수집
     local platforms_json=$(yq -o=json '.platforms // ["claude"]' "$yaml_file")
@@ -218,6 +220,7 @@ validate_cli_project_files() {
             claude) used_claude=true ;;
             gemini) used_gemini=true ;;
             codex) used_codex=true ;;
+            opencode) used_opencode=true ;;
         esac
     done
 
@@ -237,6 +240,7 @@ validate_cli_project_files() {
                     claude) used_claude=true ;;
                     gemini) used_gemini=true ;;
                     codex) used_codex=true ;;
+                    opencode) used_opencode=true ;;
                 esac
             done
         fi
@@ -254,6 +258,7 @@ validate_cli_project_files() {
                                 claude) used_claude=true ;;
                                 gemini) used_gemini=true ;;
                                 codex) used_codex=true ;;
+                                opencode) used_opencode=true ;;
                             esac
                         done
                     fi
@@ -283,6 +288,15 @@ validate_cli_project_files() {
 
     if [[ "$used_codex" == true ]]; then
         local project_file=$(get_cli_project_file "codex")
+        if [[ ! -f "$target_path/$project_file" ]]; then
+            log_error "CLI 프로젝트 파일 없음: $project_file (대상: $target_path)"
+            echo "        먼저 'init'을 실행하여 프로젝트를 초기화하세요."
+            has_error=true
+        fi
+    fi
+
+    if [[ "$used_opencode" == true ]]; then
+        local project_file=$(get_cli_project_file "opencode")
         if [[ ! -f "$target_path/$project_file" ]]; then
             log_error "CLI 프로젝트 파일 없음: $project_file (대상: $target_path)"
             echo "        먼저 'init'을 실행하여 프로젝트를 초기화하세요."

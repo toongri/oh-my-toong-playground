@@ -9,9 +9,9 @@ use-platforms: [claude]
 # Categories: skills, agents, commands, hooks, scripts
 # Omitted categories fall back to use-platforms
 feature-platforms:
-  skills: [claude, gemini, codex]
-  config: [claude, gemini, codex]
-  mcps: [claude, gemini]
+  skills: [claude, gemini, codex, opencode]
+  config: [claude, gemini, codex, opencode]
+  mcps: [claude, gemini, opencode]
   plugins: [claude]
 
 # Backup retention settings
