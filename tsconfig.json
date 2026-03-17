@@ -10,9 +10,10 @@
     "rootDir": ".",
     "baseUrl": ".",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@lib/*": ["lib/*"]
     }
   },
-  "include": ["lib/**/*.ts", "scripts/**/*.ts", "hooks/**/*.ts", "skills/*/scripts/**/*.ts"]
+  "include": ["lib/**/*.ts", "scripts/**/*.ts", "hooks/**/*.ts", "skills/*/scripts/**/*.ts", "tools/**/*.ts"]
 }

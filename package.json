@@ -7,6 +7,11 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "smol-toml": "^1.6.0",
+    "yaml": "^2.8.2"
   }
 }
