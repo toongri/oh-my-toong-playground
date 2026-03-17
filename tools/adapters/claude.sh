@@ -928,3 +928,159 @@ claude_build_hook_entry() {
 
     echo "$hook_entry"
 }
+
+# =============================================================================
+# Platform YAML Sync
+# =============================================================================
+
+# Sync all sections from a claude.yaml per-platform config file
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - platform_yaml: Path to claude.yaml
+#   $3 - dry_run: "true" or "false"
+# Returns (stdout): Space-separated list of processed sections (e.g., "config hooks mcps")
+# All log output goes to stderr.
+claude_sync_platform_yaml() {
+    local target_path="$1"
+    local platform_yaml="$2"
+    local dry_run="${3:-false}"
+
+    local processed_sections=""
+
+    # --- config ---
+    local config_json
+    config_json=$(yq -o=json '.config // null' "$platform_yaml")
+    if [[ "$config_json" != "null" ]]; then
+        claude_sync_config "$target_path" "$config_json" "$dry_run" >&2
+        processed_sections="${processed_sections} config"
+    fi
+
+    # --- hooks ---
+    local hooks_exists
+    hooks_exists=$(yq '.hooks // null' "$platform_yaml")
+    if [[ "$hooks_exists" != "null" ]]; then
+        local claude_hooks_json="{}"
+        local has_hooks=false
+
+        # Iterate over event keys
+        local events
+        events=$(yq -o=json '.hooks | keys' "$platform_yaml" | jq -r '.[]')
+
+        for hook_event in $events; do
+            local count
+            count=$(yq ".hooks.${hook_event} | length // 0" "$platform_yaml")
+
+            for i in $(seq 0 $((count - 1))); do
+                local item_path=".hooks.${hook_event}[$i]"
+
+                local component
+                component=$(yq "${item_path}.component // \"\"" "$platform_yaml")
+                local timeout
+                timeout=$(yq "${item_path}.timeout // 10" "$platform_yaml")
+                local matcher
+                matcher=$(yq "${item_path}.matcher // \"*\"" "$platform_yaml")
+                local hook_type
+                hook_type=$(yq "${item_path}.type // \"command\"" "$platform_yaml")
+                local custom_command
+                custom_command=$(yq "${item_path}.command // \"\"" "$platform_yaml")
+                local prompt_text
+                prompt_text=$(yq "${item_path}.prompt // \"\"" "$platform_yaml")
+
+                local display_name=""
+                local scoped_source=""
+                if [[ -n "$component" && "$component" != "null" ]]; then
+                    resolve_scoped_source_path "hooks" "$component" "" || true
+                    if [[ -z "$SCOPED_SOURCE_PATH" ]]; then
+                        log_warn "$SCOPED_RESOLUTION_ERROR" >&2
+                        continue
+                    fi
+                    display_name="$SCOPED_DISPLAY_NAME"
+                    scoped_source="$SCOPED_SOURCE_PATH"
+                    claude_sync_hooks_direct "$target_path" "$display_name" "$scoped_source" "$dry_run" >&2
+                fi
+
+                local hook_entry
+                if [[ "$hook_type" == "prompt" ]]; then
+                    if [[ -z "$prompt_text" || "$prompt_text" == "null" ]]; then
+                        log_warn "Hook prompt가 정의되지 않음: event=$hook_event (스킵)" >&2
+                        continue
+                    fi
+                    hook_entry=$(claude_build_hook_entry "$hook_event" "$matcher" "prompt" "$timeout" "$prompt_text" "$display_name")
+                else
+                    local cmd_path
+                    if [[ -n "$custom_command" && "$custom_command" != "null" ]]; then
+                        cmd_path="$custom_command"
+                    elif [[ -n "$component" && "$component" != "null" ]]; then
+                        if [[ -d "$scoped_source" ]]; then
+                            if [[ -f "$scoped_source/index.ts" ]]; then
+                                cmd_path="bun run \$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}/index.ts"
+                            elif [[ -f "$scoped_source/index.sh" ]]; then
+                                cmd_path="bash \$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}/index.sh"
+                            else
+                                log_warn "Hook 디렉토리에 index.ts 또는 index.sh가 없음: $scoped_source (스킵)" >&2
+                                continue
+                            fi
+                        else
+                            cmd_path="\$CLAUDE_PROJECT_DIR/.claude/hooks/${display_name}"
+                        fi
+                    else
+                        log_warn "Hook command가 정의되지 않음: event=$hook_event (스킵)" >&2
+                        continue
+                    fi
+                    hook_entry=$(claude_build_hook_entry "$hook_event" "$matcher" "command" "$timeout" "$cmd_path" "$display_name")
+                fi
+
+                claude_hooks_json=$(echo "$claude_hooks_json" | jq --arg event "$hook_event" --argjson entry "$hook_entry" '.[$event] = (.[$event] // []) + $entry')
+                has_hooks=true
+            done
+        done
+
+        if [[ "$has_hooks" == true ]]; then
+            claude_update_settings "$target_path" "$claude_hooks_json" "$dry_run" >&2
+        fi
+        processed_sections="${processed_sections} hooks"
+    fi
+
+    # --- mcps ---
+    local mcps_exists
+    mcps_exists=$(yq '.mcps // null' "$platform_yaml")
+    if [[ "$mcps_exists" != "null" ]]; then
+        local mcp_names
+        mcp_names=$(yq -o=json '.mcps | keys' "$platform_yaml" | jq -r '.[]')
+
+        for name in $mcp_names; do
+            local server_json
+            server_json=$(yq -o=json ".mcps.${name}" "$platform_yaml")
+            claude_sync_mcps_merge "$target_path" "$name" "$server_json" "$dry_run" >&2
+        done
+        processed_sections="${processed_sections} mcps"
+    fi
+
+    # --- plugins ---
+    local plugins_exists
+    plugins_exists=$(yq '.plugins.items // null' "$platform_yaml")
+    if [[ "$plugins_exists" != "null" ]]; then
+        local plugin_count
+        plugin_count=$(yq '.plugins.items | length // 0' "$platform_yaml")
+
+        for i in $(seq 0 $((plugin_count - 1))); do
+            local plugin_name
+            plugin_name=$(yq ".plugins.items[$i]" "$platform_yaml")
+            if [[ -n "$plugin_name" && "$plugin_name" != "null" ]]; then
+                claude_sync_plugin_install "$plugin_name" "user" "$target_path" "$dry_run" >&2
+            fi
+        done
+        processed_sections="${processed_sections} plugins"
+    fi
+
+    # --- statusLine ---
+    local statusline_value
+    statusline_value=$(yq '.statusLine // null' "$platform_yaml")
+    if [[ "$statusline_value" != "null" ]]; then
+        claude_set_statusline "$target_path" "$statusline_value" "$dry_run" >&2
+        processed_sections="${processed_sections} statusLine"
+    fi
+
+    # Return processed sections (trim leading space)
+    echo "${processed_sections# }"
+}

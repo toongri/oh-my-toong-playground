@@ -425,3 +425,83 @@ opencode_apply_model_map() {
         echo "$model_string"
     fi
 }
+
+# =============================================================================
+# Platform YAML Sync
+# =============================================================================
+
+# Sync an opencode.yaml platform file into a target project
+# Processes model-map, config, hooks (skip), and mcps sections
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - platform_yaml: Path to opencode.yaml file
+#   $3 - dry_run: "true" or "false"
+# Output (stdout): Space-separated list of processed section names
+# All log output goes to stderr
+opencode_sync_platform_yaml() {
+    local target_path="$1"
+    local platform_yaml="$2"
+    local dry_run="${3:-false}"
+
+    local processed_sections=""
+
+    # 1. model-map (must be processed before config)
+    local model_map_json
+    model_map_json=$(yq -o=json '.model-map // null' "$platform_yaml")
+    if [[ "$model_map_json" != "null" ]]; then
+        OPENCODE_MODEL_MAP_JSON="$model_map_json"
+        processed_sections="$processed_sections model-map"
+    fi
+
+    # 2. config
+    local config_json
+    config_json=$(yq -o=json '.config // null' "$platform_yaml")
+    if [[ "$config_json" != "null" ]]; then
+        # Apply model-map to model and small_model fields
+        if [[ -n "$OPENCODE_MODEL_MAP_JSON" ]]; then
+            local model_val
+            model_val=$(echo "$config_json" | jq -r '.model // empty')
+            if [[ -n "$model_val" ]]; then
+                local mapped
+                mapped=$(opencode_apply_model_map "$OPENCODE_MODEL_MAP_JSON" "$model_val")
+                config_json=$(echo "$config_json" | jq --arg m "$mapped" '.model = $m')
+            fi
+            local small_model_val
+            small_model_val=$(echo "$config_json" | jq -r '.small_model // empty')
+            if [[ -n "$small_model_val" ]]; then
+                local mapped
+                mapped=$(opencode_apply_model_map "$OPENCODE_MODEL_MAP_JSON" "$small_model_val")
+                config_json=$(echo "$config_json" | jq --arg m "$mapped" '.small_model = $m')
+            fi
+        fi
+        opencode_sync_config "$target_path" "$config_json" "$dry_run" >&2
+        processed_sections="$processed_sections config"
+    fi
+
+    # 3. hooks (not supported — log and skip)
+    local hooks_val
+    hooks_val=$(yq '.hooks // null' "$platform_yaml")
+    if [[ "$hooks_val" != "null" ]]; then
+        log_info "OpenCode does not support hooks. Skipping hooks section." >&2
+        processed_sections="$processed_sections hooks"
+    fi
+
+    # 4. mcps
+    local mcp_names
+    mcp_names=$(yq -o=json '.mcps // null' "$platform_yaml")
+    if [[ "$mcp_names" != "null" ]]; then
+        local names
+        names=$(echo "$mcp_names" | jq -r 'keys[]')
+        local name
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            local server_json
+            server_json=$(echo "$mcp_names" | jq --arg n "$name" '.[$n]')
+            opencode_sync_mcps_merge "$target_path" "$name" "$server_json" "$dry_run" >&2
+        done <<< "$names"
+        processed_sections="$processed_sections mcps"
+    fi
+
+    # Return processed sections (trim leading space)
+    echo "${processed_sections# }"
+}
