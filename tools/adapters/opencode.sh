@@ -326,3 +326,102 @@ opencode_sync_hooks_direct() {
     log_info "OpenCode does not support hooks. Skipping: ${display_name:-hook}"
     return 0
 }
+
+# =============================================================================
+# Config Sync
+# =============================================================================
+
+# Sync config by deep merging into opencode.json
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - config_json: JSON object with config fields
+#   $3 - dry_run: "true" or "false"
+opencode_sync_config() {
+    local target_path="$1"
+    local config_json="$2"
+    local dry_run="${3:-false}"
+
+    local config_file="$target_path/.opencode/opencode.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "Config merge: $config_json -> $config_file"
+        return 0
+    fi
+
+    mkdir -p "$target_path/.opencode"
+
+    local current="{}"
+    if [[ -f "$config_file" ]]; then
+        current=$(cat "$config_file")
+    fi
+
+    # Deep merge: existing * new (new wins on conflict)
+    local merged
+    merged=$(echo "$current" | jq --argjson new "$config_json" '. * $new')
+    echo "$merged" | jq '.' > "$config_file"
+    log_info "Config merged: $config_file"
+}
+
+# =============================================================================
+# MCP Server Sync
+# =============================================================================
+
+# Merge an MCP server definition into .opencode/opencode.json
+# Arguments:
+#   $1 - target_path: Target project path
+#   $2 - server_name: MCP server name (used as key in .mcp)
+#   $3 - server_json: JSON content of the MCP server definition
+#   $4 - dry_run: "true" or "false"
+opencode_sync_mcps_merge() {
+    local target_path="$1"
+    local server_name="$2"
+    local server_json="$3"
+    local dry_run="${4:-false}"
+
+    local config_file="$target_path/.opencode/opencode.json"
+
+    if [[ "$dry_run" == "true" ]]; then
+        log_dry "MCP merge: $server_name -> $config_file"
+        log_dry "Server config: $server_json"
+        return 0
+    fi
+
+    # Ensure .opencode directory exists
+    mkdir -p "$target_path/.opencode"
+
+    # Read existing opencode.json or create empty object
+    local current="{}"
+    if [[ -f "$config_file" ]]; then
+        current=$(cat "$config_file")
+    fi
+
+    # Merge: set .mcp.<name> to server_json, preserving all other keys
+    local updated
+    updated=$(echo "$current" | jq --arg name "$server_name" --argjson server "$server_json" '.mcp[$name] = $server')
+
+    echo "$updated" | jq '.' > "$config_file"
+    log_info "MCP merged: $server_name -> $config_file"
+}
+
+# =============================================================================
+# Model Map
+# =============================================================================
+
+# Apply a model map to resolve a model string to its mapped value
+# Arguments:
+#   $1 - model_map_json: JSON object mapping source model names to target model names
+#   $2 - model_string: Model name to look up
+# Output: Mapped model name, or original model_string if no mapping found
+opencode_apply_model_map() {
+    local model_map_json="$1"
+    local model_string="$2"
+
+    local mapped
+    mapped=$(echo "$model_map_json" | jq -r --arg model "$model_string" '.[$model] // empty')
+
+    if [[ -n "$mapped" ]]; then
+        echo "$mapped"
+    else
+        echo "$model_string"
+    fi
+}
