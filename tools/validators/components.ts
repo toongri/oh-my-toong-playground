@@ -61,8 +61,9 @@ function checkHookDirectoryIndex(
  * Resolve a hook component path for per-platform YAML hooks.
  * Search order:
  *   1. Scoped {project}:{name} → projects/{project}/hooks/{name}
- *   2. Global hooks/{component}
- *   3. Project-local projects/{projectDirName}/hooks/{component} (if projectDirName given)
+ *      Cross-project refs (scopeProject !== projectDirName) return null.
+ *   2. Project-local projects/{projectDirName}/hooks/{component} (if projectDirName given)
+ *   3. Global hooks/{component}
  */
 function resolveHookComponentPath(
   component: string,
@@ -71,20 +72,21 @@ function resolveHookComponentPath(
 ): string | null {
   if (component.includes(":")) {
     const [scopeProject, scopeName] = component.split(":", 2);
+    if (projectDirName && scopeProject !== projectDirName) return null;
     const path = join(rootDir, "projects", scopeProject, "hooks", scopeName);
     if (existsSync(path)) return path;
     return null;
   }
 
-  // Global hook
-  const globalPath = join(rootDir, "hooks", component);
-  if (existsSync(globalPath)) return globalPath;
-
-  // Project-local hook
+  // Project-local hook (checked first)
   if (projectDirName) {
     const localPath = join(rootDir, "projects", projectDirName, "hooks", component);
     if (existsSync(localPath)) return localPath;
   }
+
+  // Global hook fallback
+  const globalPath = join(rootDir, "hooks", component);
+  if (existsSync(globalPath)) return globalPath;
 
   return null;
 }

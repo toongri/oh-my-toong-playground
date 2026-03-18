@@ -21,3 +21,15 @@ export async function writeJsonFile(filePath: string, data: Record<string, unkno
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
+
+/** Read text file or return "" if missing. Re-throws non-ENOENT errors. */
+export async function readTextFile(filePath: string): Promise<string> {
+  try {
+    return await fs.readFile(filePath, "utf8");
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return "";
+    }
+    throw err;
+  }
+}

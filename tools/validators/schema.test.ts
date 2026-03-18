@@ -245,6 +245,45 @@ agents:
     });
   });
 
+  // --- items/platforms 비배열 검증 ---
+  describe("items/platforms 비배열 검증", () => {
+    it("returns error when items is a string via `validateSyncYaml`", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents:
+  items: "not-array"
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("agents.items") && e.includes("배열 형식"))).toBe(true);
+    });
+
+    it("returns error when section platforms is a string via `validateSyncYaml`", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents:
+  platforms: "not-array"
+  items:
+    - oracle
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("agents.platforms") && e.includes("배열 형식"))).toBe(true);
+    });
+
+    it("produces no errors for valid items array and platforms array", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents:
+  platforms: [claude]
+  items:
+    - oracle
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
   // --- P2-7: No hook component file checks ---
   describe("P2-7: schema.ts는 hook 파일 존재를 검사하지 않는다", () => {
     it("produces no file-existence errors for sync.yaml without hooks (deprecated — structure errors only)", () => {
@@ -425,6 +464,58 @@ mcps:
   some-mcp:
     command: npx
     args: [some-package]
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  // --- hooks 최상위 타입 검증 ---
+  describe("hooks 최상위 타입 검증", () => {
+    it("returns error when hooks is an array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks: []
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("hooks") && e.includes("object 형식"))).toBe(true);
+    });
+
+    it("returns error when hooks is a string via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks: "bad-type"
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("hooks") && e.includes("object 형식"))).toBe(true);
+    });
+
+    it("produces no errors when hooks is a valid object", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  UserPromptSubmit: []
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  // --- mcps 최상위 타입 검증 ---
+  describe("mcps 최상위 타입 검증", () => {
+    it("returns error when mcps is an array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+mcps: []
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("mcps") && e.includes("object 형식"))).toBe(true);
+    });
+
+    it("produces no errors when mcps is a valid object", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+mcps:
+  some-mcp:
+    command: npx
 `);
       const result = validatePlatformYaml(path, "claude");
       expect(result.errors).toHaveLength(0);

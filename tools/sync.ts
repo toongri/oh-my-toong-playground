@@ -636,12 +636,70 @@ export function createContext(dryRun: boolean): SyncContext {
 }
 
 // ---------------------------------------------------------------------------
+// CLI helpers
+// ---------------------------------------------------------------------------
+
+export function printUsage(): void {
+  process.stderr.write(
+    [
+      "Usage: bun tools/sync.ts [options]",
+      "",
+      "Options:",
+      "  --dry-run              Preview changes without writing files",
+      "  --verbose              Print detailed per-project/category logs",
+      "  --projects <name,...>  Process only the named project(s) (comma-separated)",
+      "  --help                 Show this help message",
+      "",
+    ].join("\n"),
+  );
+}
+
+export function parseCliArgs(args: string[]): {
+  dryRun: boolean;
+  verbose: boolean;
+  projectFilter: Set<string>;
+} {
+  let dryRun = false;
+  let verbose = false;
+  const projectFilter = new Set<string>();
+
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (arg === "--dry-run") {
+      dryRun = true;
+    } else if (arg === "--verbose") {
+      verbose = true;
+    } else if (arg === "--projects") {
+      const value = args[i + 1];
+      if (!value || value.startsWith("--")) {
+        logError("--projects 플래그에 값이 필요합니다 (예: --projects foo,bar)");
+        process.exit(1);
+      }
+      for (const name of value.split(",")) {
+        const trimmed = name.trim();
+        if (trimmed) projectFilter.add(trimmed);
+      }
+      i++;
+    } else if (arg === "--help") {
+      printUsage();
+      process.exit(0);
+    } else if (arg.startsWith("--")) {
+      logWarn(`알 수 없는 플래그: ${arg}`);
+    }
+    i++;
+  }
+
+  return { dryRun, verbose, projectFilter };
+}
+
+// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
-  const dryRun = args.includes("--dry-run");
+  const { dryRun, verbose, projectFilter } = parseCliArgs(args);
 
   if (dryRun) {
     logWarn("========== DRY-RUN 모드 (실제 변경 없음) ==========");
@@ -671,6 +729,7 @@ if (import.meta.main) {
       const projectEntries = await fs.readdir(projectsDir, { withFileTypes: true });
       for (const entry of projectEntries) {
         if (!entry.isDirectory()) continue;
+        if (projectFilter.size > 0 && !projectFilter.has(entry.name)) continue;
         const projectSyncYaml = path.join(projectsDir, entry.name, "sync.yaml");
         if (!existsSync(projectSyncYaml)) continue;
 
@@ -689,39 +748,53 @@ if (import.meta.main) {
         const targetPath = syncYaml.path;
         if (!targetPath) continue;
 
+        if (verbose) {
+          logInfo(`[verbose] 프로젝트 시작: ${entry.name}`);
+        }
         try {
           await processYaml(context, projectSyncYaml, adapters, rootDir);
           context.processedPaths.add(targetPath);
         } catch (err) {
           logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
         }
+        if (verbose) {
+          logInfo(`[verbose] 프로젝트 완료: ${entry.name}`);
+        }
       }
     }
 
-    // 루트 sync.yaml 처리 (이미 처리된 path는 스킵)
-    const rootSyncYaml = path.join(rootDir, "sync.yaml");
-    if (existsSync(rootSyncYaml)) {
-      let syncYaml: SyncYaml;
-      try {
-        const text = await fs.readFile(rootSyncYaml, "utf8");
-        const parsed = parseYaml(text);
-        if (parsed == null || typeof parsed !== "object") {
+    // 루트 sync.yaml 처리 (이미 처리된 path는 스킵, 프로젝트 필터 미적용)
+    if (projectFilter.size === 0) {
+      const rootSyncYaml = path.join(rootDir, "sync.yaml");
+      if (existsSync(rootSyncYaml)) {
+        let syncYaml: SyncYaml;
+        try {
+          const text = await fs.readFile(rootSyncYaml, "utf8");
+          const parsed = parseYaml(text);
+          if (parsed == null || typeof parsed !== "object") {
+            syncYaml = {};
+          } else {
+            syncYaml = parsed as SyncYaml;
+          }
+        } catch {
           syncYaml = {};
-        } else {
-          syncYaml = parsed as SyncYaml;
         }
-      } catch {
-        syncYaml = {};
-      }
 
-      const targetPath = syncYaml.path;
-      if (!targetPath) {
-        logInfo("루트 sync.yaml에 path가 정의되지 않음 (템플릿 상태)");
-      } else if (context.processedPaths.has(targetPath)) {
-        logWarn(`${targetPath}는 projects/에서 이미 처리됨, 스킵`);
-      } else {
-        await processYaml(context, rootSyncYaml, adapters, rootDir);
-        context.processedPaths.add(targetPath);
+        const targetPath = syncYaml.path;
+        if (!targetPath) {
+          logInfo("루트 sync.yaml에 path가 정의되지 않음 (템플릿 상태)");
+        } else if (context.processedPaths.has(targetPath)) {
+          logWarn(`${targetPath}는 projects/에서 이미 처리됨, 스킵`);
+        } else {
+          if (verbose) {
+            logInfo("[verbose] 루트 sync.yaml 처리 시작");
+          }
+          await processYaml(context, rootSyncYaml, adapters, rootDir);
+          context.processedPaths.add(targetPath);
+          if (verbose) {
+            logInfo("[verbose] 루트 sync.yaml 처리 완료");
+          }
+        }
       }
     }
 

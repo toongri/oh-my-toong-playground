@@ -13,6 +13,8 @@ import {
   rewritePlatformPaths,
   rewriteLibAliases,
   createContext,
+  parseCliArgs,
+  printUsage,
   type AdapterMap,
 } from "./sync.ts";
 import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
@@ -1506,5 +1508,91 @@ describe("createContext", () => {
     const ctx1 = createContext(false);
     const ctx2 = createContext(false);
     expect(ctx1.backupSession).not.toBe(ctx2.backupSession);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: parseCliArgs
+// ---------------------------------------------------------------------------
+
+describe("parseCliArgs", () => {
+  it("returns defaults when no args passed via `parseCliArgs`", () => {
+    const result = parseCliArgs([]);
+    expect(result.dryRun).toBe(false);
+    expect(result.verbose).toBe(false);
+    expect(result.projectFilter.size).toBe(0);
+  });
+
+  it("sets dryRun=true for --dry-run via `parseCliArgs`", () => {
+    const result = parseCliArgs(["--dry-run"]);
+    expect(result.dryRun).toBe(true);
+  });
+
+  it("sets verbose=true for --verbose via `parseCliArgs`", () => {
+    const result = parseCliArgs(["--verbose"]);
+    expect(result.verbose).toBe(true);
+  });
+
+  it("parses single project from --projects via `parseCliArgs`", () => {
+    const result = parseCliArgs(["--projects", "foo"]);
+    expect(result.projectFilter).toEqual(new Set(["foo"]));
+  });
+
+  it("parses comma-separated projects from --projects via `parseCliArgs`", () => {
+    const result = parseCliArgs(["--projects", "foo,bar,baz"]);
+    expect(result.projectFilter).toEqual(new Set(["foo", "bar", "baz"]));
+  });
+
+  it("trims whitespace in comma-separated --projects values via `parseCliArgs`", () => {
+    const result = parseCliArgs(["--projects", " foo , bar "]);
+    expect(result.projectFilter.has("foo")).toBe(true);
+    expect(result.projectFilter.has("bar")).toBe(true);
+  });
+
+  it("parses combined flags correctly via `parseCliArgs`", () => {
+    const result = parseCliArgs(["--dry-run", "--verbose", "--projects", "alpha,beta"]);
+    expect(result.dryRun).toBe(true);
+    expect(result.verbose).toBe(true);
+    expect(result.projectFilter).toEqual(new Set(["alpha", "beta"]));
+  });
+
+  it("emits logWarn for unknown flags via `parseCliArgs`", () => {
+    const warns: string[] = [];
+    const origStderr = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      if (typeof chunk === "string") warns.push(chunk);
+      return true;
+    };
+    try {
+      parseCliArgs(["--unknown-flag"]);
+    } finally {
+      process.stderr.write = origStderr;
+    }
+    expect(warns.some((w) => w.includes("--unknown-flag"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: printUsage
+// ---------------------------------------------------------------------------
+
+describe("printUsage", () => {
+  it("writes usage text containing --verbose and --projects via `printUsage`", () => {
+    const lines: string[] = [];
+    const origStderr = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      if (typeof chunk === "string") lines.push(chunk);
+      return true;
+    };
+    try {
+      printUsage();
+    } finally {
+      process.stderr.write = origStderr;
+    }
+    const output = lines.join("");
+    expect(output).toContain("--verbose");
+    expect(output).toContain("--projects");
+    expect(output).toContain("--dry-run");
+    expect(output).toContain("--help");
   });
 });
