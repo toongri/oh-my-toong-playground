@@ -26,7 +26,9 @@ flowchart TB
     B -->|No| D{Target position known?}
     C --> D
     D -->|No| E[ASK target position]
-    E --> F[S3/S4 Conditional Re-evaluation]
+    E --> F2{Self-introduction was evaluated?}
+    F2 -->|Yes| F[S3/S4 Conditional Re-evaluation]
+    F2 -->|No| G
     F --> G[Line-by-line 6-dimension scan]
     D -->|Yes| G
     G --> H[3-level pushback simulation]
@@ -62,7 +64,7 @@ Apply these limits consistently across S5 evaluation and Pre-Writing Validation:
 |--------|--------|--------|
 | ~500 characters | Recommended | PASS |
 | ~700 characters | Warning | PASS with note — consider trimming non-essential content |
-| 1000+ characters | FAIL | Compress to essentials. Restating the entire resume in paragraph form is not a self-introduction. |
+| ~1000+ characters | FAIL | Compress to essentials. Restating the entire resume in paragraph form is not a self-introduction. |
 
 ### Evaluation Output Format
 
@@ -364,7 +366,7 @@ that filter resumes by keyword match rate before human review.
 - Match rate > 70%: Strong alignment — PASS
 - Match rate 40-70%: Partial alignment — recommend adding missing keywords where the candidate has genuine experience
 - Match rate < 40%: Weak alignment — flag as potential ATS risk
-- NEVER recommend adding keywords for skills the candidate does not actually possess (Absolute Rule 1)
+- NEVER recommend adding keywords for skills the candidate does not actually possess (Absolute Rule 4)
 - Keyword placement matters: technical stack section and achievement lines are highest-weight ATS zones
 
 **When no JD is provided:** Skip this check. Note: "JD keyword matching skipped — no target JD available."
@@ -383,7 +385,7 @@ Additional trigger conditions (any one also triggers):
 - Section structure needs reorganization (D6 failures pointing to section migration)
 - Achievement lines need [Target] + [Action] + [Outcome] restructuring
 
-### Interview Simulation
+## Interview Simulation
 
 After writing or reviewing each achievement line, run this simulation. If the candidate cannot answer all 3 levels, that line will hurt more than help.
 
@@ -777,7 +779,8 @@ flowchart TB
 
     A --> B
     B -->|Yes| C
-    B --> D
+    C --> D
+    B -->|No| D
     D -->|Yes| E
 
     style C fill:lightyellow
@@ -791,7 +794,7 @@ Apply D1-D6 dimensions to each line in the other projects section. Additionally,
 **Volume guide:**
 - 3-5 projects recommended
 - 3-5 lines per project (bullet format)
-- Section total: max 20 lines
+- Section total: max 25 lines
 - If 5+ projects: recommend selecting the strongest 3-5
 
 **Ordering:** Priority order — most relevant to the target position first, then technical diversity, team collaboration, other
@@ -804,7 +807,7 @@ After evaluating other projects, produce a section-level check:
 [Other Projects — Section Check]
 - Project count: N (recommended 3-5) — PASS / FAIL
 - Lines per project: avg N (recommended 3-5) — PASS / FAIL
-- Total section length: N lines (max 20) — PASS / FAIL
+- Total section length: N lines (max 25) — PASS / FAIL
 - Ordering: priority order — PASS / FAIL (reason)
 ```
 
@@ -896,7 +899,7 @@ Excluded elements:
 
 #### Volume Guide and Ordering
 
-- 3-5 projects, 3-5 lines each, section total max 20 lines
+- 3-5 projects, 3-5 lines each, section total max 25 lines
 - If user has not specified ordering, recommend priority order:
   1. Most technically impressive project after signature
   2. Project showing technical diversity (different tech from signature)

@@ -23,6 +23,10 @@
 
 ---
 
+### Scenario 2: 잘 쓴 압축 P.A.R.R. 통과 — (not yet tested)
+
+---
+
 ### Scenario 3: 과다 분량 탐지 — PASS
 
 **행동:**
@@ -35,6 +39,14 @@
 **Baseline 대비 개선:**
 - 기존: P1-P5 오적용, 분량 미지적, "서사 깊이 부족" 과도한 요구
 - 개선: 그 외 프로젝트 전용 기준, 분량 FAIL 판정, 압축 권고
+
+---
+
+### Scenario 4: 혼합 품질 — (not yet tested)
+
+---
+
+### Scenario 5: 프로젝트 과다 탐지 — (not yet tested)
 
 ---
 
@@ -66,6 +78,18 @@
 **Baseline 대비 개선:**
 - 기존: 추론으로 압축, 불필요한 "배운 것" 불릿 추가
 - 개선: 스킬 기반 명확한 압축, 제외 요소 정확히 제거
+
+---
+
+### Scenario 8: 분량 초과 함정 — (not yet tested)
+
+---
+
+### Scenario 9: 배치 순서 무시 — (not yet tested)
+
+---
+
+### Scenario 10: 검증 누락 — (not yet tested)
 
 ---
 

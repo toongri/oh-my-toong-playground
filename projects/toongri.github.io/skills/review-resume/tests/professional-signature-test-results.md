@@ -46,7 +46,7 @@
 | S7: 멈추는 판단 | (not yet tested) | - | - | - | - | - |
 | S8: 비즈니스 임팩트 + 실험 기반 | (not yet tested) | - | - | - | - | - |
 
-### Key Baseline Failures (S1):
+### Key Baseline Failures (S5):
 - **V1 (Mid/Senior 프레이밍)**: New Grad/Junior 구분 없이 일반 P.A.R.R. 적용. "CS 깊이" 기준으로 안내
 - **V2 (정답 없는 문제)**: "정답이 없는 문제" 한 번 언급했지만 핵심 프레이밍으로 발전 안 함
 - **V3 (실험 기반 의사결정)**: 비교 기준 질문했지만 "실험 기반 의사결정"이라는 프레이밍 없음
