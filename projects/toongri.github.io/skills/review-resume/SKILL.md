@@ -30,11 +30,15 @@ flowchart TB
     E2 --> F2{Self-introduction was evaluated?}
     F2 -->|Yes| F[S3/S4 Conditional Re-evaluation]
     F2 -->|No| G
-    F --> G[Line-by-line 6-dimension scan]
+    F --> G[Line-by-line 6-dimension scan — career/problem-solving sections]
     D -->|Yes| G
     G --> H[3-level pushback simulation]
-    H --> I[Section fitness check]
-    I --> J{Signature project present?}
+    H --> I[First-Page Primacy check]
+    I --> I2{JD provided?}
+    I2 -->|Yes| I3[JD Keyword Matching]
+    I2 -->|No| I4[Section fitness check]
+    I3 --> I4
+    I4 --> J{Signature project present?}
     J -->|Yes| K[P1-P5 P.A.R.R. evaluation]
     J -->|No| L{Other projects present?}
     K --> L
@@ -191,7 +195,7 @@ This trigger is not optional. If the condition is met, deliver the guidance mess
 
 ## 6-Dimension Evaluation (D1-D6)
 
-Scan **every line** against these 6 dimensions. Report findings per line. No line is skipped.
+Scan **every line in career and problem-solving sections** against these 6 dimensions. Report findings per line. No line is skipped.
 
 ### Dimension Table
 
@@ -386,9 +390,9 @@ Additional trigger conditions (any one also triggers):
 - Section structure needs reorganization (D6 failures pointing to section migration)
 - Achievement lines need [Target] + [Action] + [Outcome] restructuring
 
-## Interview Simulation
+## Interview Simulation (extends 3-Level Pushback — node H in flowchart)
 
-After writing or reviewing each achievement line, run this simulation. If the candidate cannot answer all 3 levels, that line will hurt more than help.
+This section extends the 3-level pushback simulation (node H in the Evaluation Protocol flowchart) to the **writing guidance** context. When the agent is helping write or rewrite achievement lines (not just reviewing), apply the same 3-level simulation as a quality gate before finalizing each line. If the candidate cannot answer all 3 levels, that line will hurt more than help.
 
 1. **"How did you implement this?"** — Tests implementation knowledge
 2. **"Why did you choose that approach?"** — Tests technical judgment rationale
