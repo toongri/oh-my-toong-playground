@@ -27,6 +27,10 @@
 
 ---
 
+### Scenario 2: 잘 쓴 압축 P.A.R.R. 통과 — (not yet tested)
+
+---
+
 ### Scenario 3: 과다 분량 탐지 — FAIL
 
 **행동:**
@@ -39,6 +43,14 @@
 - P1-P5가 시그니처 전용이라는 가드레일 없음
 - 에이전트 자체 평가: "I evaluated it as a signature project using the full P1-P5 criteria. This was incorrect."
 - 에이전트 자체 평가: "Without this guidance, I defaulted to applying the only criteria I had (P1-P5)"
+
+---
+
+### Scenario 4: 혼합 품질 — (not yet tested)
+
+---
+
+### Scenario 5: 프로젝트 과다 탐지 — (not yet tested)
 
 ---
 
@@ -88,6 +100,18 @@
 - "그 외 프로젝트는 2-4줄로 압축" 규칙이 없어서 추론으로 대응
 - 스킬의 "시그니처 프로젝트" 섹션만 보고 반대를 추론한 것 → 명시적 가이드 필요
 - 에이전트 자체 평가: "the skill content provided only defined the 시그니처 format"
+
+---
+
+### Scenario 8: 분량 초과 함정 — (not yet tested)
+
+---
+
+### Scenario 9: 배치 순서 무시 — (not yet tested)
+
+---
+
+### Scenario 10: 검증 누락 — (not yet tested)
 
 ---
 

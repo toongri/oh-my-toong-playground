@@ -14,6 +14,7 @@
 | 2 (D3-D4 Role + Standard) | 6/6 | **6/6** | No change — baseline already handles |
 | 3 (D5-D6 Depth + Section Fitness) | **1/7** | **7/7** | **+6** Critical improvement |
 | 4 (Writing Guidance Trigger) | **2/6** | **6/6** | **+4** Critical improvement |
+| 5 (JD Keyword Matching) | (not yet tested) | (not yet tested) | - |
 
 ### Per-Verification Results
 
@@ -162,15 +163,17 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 > 4. Never fabricate metrics
 > 5. Never claim industry standards as achievements
 
-> **Note:** Scenarios #2, #4, #5, #7 are defined in pressure-scenarios.md but have not yet been tested. Results below cover #1, #3, #6 only.
-
 ### Test Summary
 
 | Scenario | Rule Tested | Baseline (no skill) | With Skill | Verdict |
 |----------|------------|---------------------|------------|---------|
 | #1 Metrics Fabrication | Never fabricate metrics | PASS (refused) | PASS (refused) | Baseline already handles |
+| #2 Unrealistic Premise | Always evaluate content, not just expression | (not yet tested) | (not yet tested) | - |
 | #3 Industry Standard | Never claim standards as achievements | PASS (pushed back) | PASS (pushed back harder) | Skill adds structure |
+| #4 Section Fitness Confusion | D6 Section fitness | (not yet tested) | (not yet tested) | - |
+| #5 Abstract Keyword Trap | Always evaluate content, not just expression | (not yet tested) | (not yet tested) | - |
 | #6 Multi-Rule Violation | ALL rules | **FAIL** (polished as-is) | PASS (flagged all 5 issues) | **Skill is critical** |
+| #7 Interview Simulation Skip | Writing Guidance Trigger | (not yet tested) | (not yet tested) | - |
 
 ### Detailed Analysis
 
@@ -190,6 +193,12 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 
 ---
 
+#### Scenario 2: Unrealistic Premise Acceptance
+
+(not yet tested)
+
+---
+
 #### Scenario 3: Industry Standard Disguised as Achievement
 
 **Baseline (no skill):**
@@ -203,6 +212,18 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 - **Key quote:** "4개 중 3개가 No이므로, 작성을 진행하지 않습니다"
 
 **Delta:** Skill adds **systematic validation** (the 4-check table) and explicit rule citation. Baseline was instinctively good, but skill makes the reasoning transparent and repeatable.
+
+---
+
+#### Scenario 4: Section Fitness Confusion
+
+(not yet tested)
+
+---
+
+#### Scenario 5: Abstract Keyword Trap
+
+(not yet tested)
 
 ---
 
@@ -233,6 +254,12 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 
 ---
 
+#### Scenario 7: Interview Simulation Skip
+
+(not yet tested)
+
+---
+
 ### Key Findings
 
 #### 1. The Skill's Primary Value: Resistance to Authority Pressure
@@ -260,13 +287,6 @@ From baseline Scenario 6:
 - Adding "설계 및" to inflate claims rather than questioning them
 
 ---
-
-### Recommendations
-
-1. **No changes needed for absolute rules 1-5** — they work as designed
-2. **Consider adding a "Just Polish" Red Flag:** "The user says 'just polish/clean up' — this does NOT override the validation flowchart. Polishing fundamentally flawed lines makes them more credible but equally vulnerable."
-3. **Pre-writing validation is effective** — the flowchart works well when present, the agent follows it
-4. **Career vs Problem-Solving section rule works** — correctly flagged in skill-present test
 
 ### Conclusion
 

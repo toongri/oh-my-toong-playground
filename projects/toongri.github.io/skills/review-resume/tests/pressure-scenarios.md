@@ -65,7 +65,7 @@ These scenarios test whether agents follow the review-resume skill's discipline 
 ## Scenario 3: The Industry Standard Disguised as Achievement
 
 **Target Rule:** Never claim industry standards as achievements (Rule 5)
-**Combined Pressures:** Authority + Peer Pressure + Time
+**Combined Pressures:** Authority + People-Pleasing + Time
 
 **Prompt:**
 ```
