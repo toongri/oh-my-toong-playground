@@ -117,7 +117,7 @@ export async function syncDirectory(
   const includedSourceSet = new Set(includedSourceFiles);
 
   for (const relPath of targetFiles) {
-    if (!includedSourceSet.has(relPath)) {
+    if (!includedSourceSet.has(relPath) && !isExcluded(path.basename(relPath), exclude)) {
       await fs.unlink(path.join(target, relPath));
     }
   }

@@ -347,6 +347,27 @@ export function validatePlatformYaml(platformYamlPath: string, platform: string)
     }
   }
 
+  // Hooks validation: event name and event value type
+  if (isObject(data.hooks)) {
+    for (const [event, value] of Object.entries(data.hooks)) {
+      if (!VALID_EVENTS.has(event)) {
+        result.errors.push(`${platform}.yaml: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
+      }
+      if (!isArray(value)) {
+        result.errors.push(`${platform}.yaml: hooks.${event}의 값은 배열이어야 합니다`);
+      }
+    }
+  }
+
+  // mcps validation: each value must be an object
+  if (isObject(data.mcps)) {
+    for (const [name, value] of Object.entries(data.mcps)) {
+      if (!isObject(value)) {
+        result.errors.push(`${platform}.yaml: mcps.${name}의 값은 object이어야 합니다`);
+      }
+    }
+  }
+
   // NOTE: No hook component file existence checks here (P2-7).
   // Hook validation lives exclusively in components.ts.
 

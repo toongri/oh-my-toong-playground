@@ -7,38 +7,7 @@ import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
-
-// =============================================================================
-// Helpers
-// =============================================================================
-
-/** Recursively merges `source` into `target`. Source values win on conflict. */
-function deepMerge(
-  target: Record<string, unknown>,
-  source: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...target };
-  for (const key of Object.keys(source)) {
-    const sv = source[key];
-    const tv = target[key];
-    if (
-      sv !== null &&
-      typeof sv === "object" &&
-      !Array.isArray(sv) &&
-      tv !== null &&
-      typeof tv === "object" &&
-      !Array.isArray(tv)
-    ) {
-      result[key] = deepMerge(
-        tv as Record<string, unknown>,
-        sv as Record<string, unknown>,
-      );
-    } else {
-      result[key] = sv;
-    }
-  }
-  return result;
-}
+import { deepMerge } from "../lib/deep-merge.ts";
 
 /** Read JSON file or return {} if missing. */
 async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
