@@ -552,6 +552,8 @@ export class ClaudeAdapter implements PlatformAdapter {
       return;
     }
 
+    await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
+
     let current: Record<string, unknown>;
     try {
       current = await readJsonFile(settingsFile);
@@ -561,14 +563,6 @@ export class ClaudeAdapter implements PlatformAdapter {
       } else {
         logWarn(`statusLine 설정 실패: ${settingsFile} 읽기 오류`);
       }
-      return;
-    }
-
-    // Check file actually exists (readJsonFile returns {} for missing files)
-    try {
-      await fs.stat(settingsFile);
-    } catch {
-      logWarn(`statusLine 설정 실패: ${settingsFile} 없음`);
       return;
     }
 

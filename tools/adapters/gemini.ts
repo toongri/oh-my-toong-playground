@@ -286,8 +286,11 @@ export class GeminiAdapter implements PlatformAdapter {
   // ---------------------------------------------------------------------------
 
   /**
-   * Merges a hooks object into .gemini/settings.json using deep merge.
-   * The hooks object has event keys mapped to arrays of hook entries.
+   * Atomically replaces hook event entries in .gemini/settings.json.
+   * Preserves non-hook config keys (e.g. mcpServers, customInstructions, model).
+   *
+   * Hook event values are always arrays; config values are objects or strings.
+   * This distinction is used to identify and remove stale hook entries.
    */
   async updateSettings(
     targetPath: string,
@@ -304,8 +307,18 @@ export class GeminiAdapter implements PlatformAdapter {
 
     await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
     const current = await readJsonFile(settingsFile);
-    const merged = deepMerge(current, hooksEntries);
-    await writeJsonFile(settingsFile, merged);
+
+    // Preserve non-hook config keys (objects/strings), remove stale hook event keys (arrays)
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(current)) {
+      if (!Array.isArray(value)) {
+        result[key] = value;
+      }
+    }
+    // Apply new hooks atomically
+    Object.assign(result, hooksEntries);
+
+    await writeJsonFile(settingsFile, result);
     logInfo(`Updated settings.json: ${settingsFile}`);
   }
 

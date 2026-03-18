@@ -284,6 +284,33 @@ agents:
     });
   });
 
+  // --- P2-3: component 필드 타입 검증 ---
+  describe("P2-3: component 필드 타입 검증", () => {
+    it("returns error when component is a number (non-string)", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents:
+  items:
+    - component: 123
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("string이어야 합니다"))).toBe(true);
+    });
+
+    it("returns error when component is an empty string", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents:
+  items:
+    - component: ""
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("빈 문자열은 허용되지 않습니다"))).toBe(true);
+    });
+  });
+
   // --- P2-7: No hook component file checks ---
   describe("P2-7: schema.ts는 hook 파일 존재를 검사하지 않는다", () => {
     it("produces no file-existence errors for sync.yaml without hooks (deprecated — structure errors only)", () => {

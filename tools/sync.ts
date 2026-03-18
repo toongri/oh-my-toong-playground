@@ -132,56 +132,66 @@ export async function syncCategory(
     // Resolve add-skills (agents category only)
     let addSkills: string[] | undefined;
     if (category === "agents" && typeof item === "object" && item["add-skills"]) {
-      const rawSkills = item["add-skills"] as string[];
-      const resolvedSkills: string[] = [];
-      for (const skillRef of rawSkills) {
-        const skillResolved = resolveComponentPath(
-          skillRef,
-          "skills",
-          rootDir,
-          context.projectDir || undefined,
-        );
-        if ("error" in skillResolved) {
-          logWarn(`add-skills not found: ${skillRef} (${skillResolved.error})`);
-        } else {
-          resolvedSkills.push(skillResolved.displayName);
+      const rawSkillsValue = item["add-skills"];
+      if (!Array.isArray(rawSkillsValue)) {
+        logWarn(`add-skills must be an array, got ${typeof rawSkillsValue}. Skipping.`);
+      } else {
+        const rawSkills = rawSkillsValue as string[];
+        const resolvedSkills: string[] = [];
+        for (const skillRef of rawSkills) {
+          const skillResolved = resolveComponentPath(
+            skillRef,
+            "skills",
+            rootDir,
+            context.projectDir || undefined,
+          );
+          if ("error" in skillResolved) {
+            logWarn(`add-skills not found: ${skillRef} (${skillResolved.error})`);
+          } else {
+            resolvedSkills.push(skillResolved.displayName);
+          }
         }
-      }
-      if (resolvedSkills.length > 0) {
-        addSkills = resolvedSkills;
+        if (resolvedSkills.length > 0) {
+          addSkills = resolvedSkills;
+        }
       }
     }
 
     // Resolve add-hooks (agents category only)
     let addHooks: unknown[] | undefined;
     if (category === "agents" && typeof item === "object" && item["add-hooks"]) {
-      const rawHooks = item["add-hooks"] as Array<Record<string, unknown>>;
-      const resolvedHooks: Array<Record<string, unknown>> = [];
-      for (const hook of rawHooks) {
-        const hookComponent = (hook["component"] as string | undefined) ?? "";
-        if (!hookComponent) {
-          // No component field — pass through as-is (command: field hooks)
-          resolvedHooks.push(hook);
-          continue;
+      const rawHooksValue = item["add-hooks"];
+      if (!Array.isArray(rawHooksValue)) {
+        logWarn(`add-hooks must be an array, got ${typeof rawHooksValue}. Skipping.`);
+      } else {
+        const rawHooks = rawHooksValue as Array<Record<string, unknown>>;
+        const resolvedHooks: Array<Record<string, unknown>> = [];
+        for (const hook of rawHooks) {
+          const hookComponent = (hook["component"] as string | undefined) ?? "";
+          if (!hookComponent) {
+            // No component field — pass through as-is (command: field hooks)
+            resolvedHooks.push(hook);
+            continue;
+          }
+          const hookResolved = resolveComponentPath(
+            hookComponent,
+            "hooks",
+            rootDir,
+            context.projectDir || undefined,
+          );
+          if ("error" in hookResolved) {
+            logWarn(`add-hooks not found: ${hookComponent} (${hookResolved.error})`);
+          } else {
+            resolvedHooks.push({
+              ...hook,
+              source_path: hookResolved.path,
+              display_name: hookResolved.displayName,
+            });
+          }
         }
-        const hookResolved = resolveComponentPath(
-          hookComponent,
-          "hooks",
-          rootDir,
-          context.projectDir || undefined,
-        );
-        if ("error" in hookResolved) {
-          logWarn(`add-hooks not found: ${hookComponent} (${hookResolved.error})`);
-        } else {
-          resolvedHooks.push({
-            ...hook,
-            source_path: hookResolved.path,
-            display_name: hookResolved.displayName,
-          });
+        if (resolvedHooks.length > 0) {
+          addHooks = resolvedHooks;
         }
-      }
-      if (resolvedHooks.length > 0) {
-        addHooks = resolvedHooks;
       }
     }
 

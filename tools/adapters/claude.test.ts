@@ -234,9 +234,15 @@ describe("setStatusline", () => {
     expect(statusLine["command"]).toBe("bun run hud.ts");
   });
 
-  it("logs warning and returns without error when settings.json absent via `setStatusline`", async () => {
-    // Should not throw
+  it("creates settings.json and applies statusLine when file is absent via `setStatusline`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+
     await adapter.setStatusline(targetPath, "bun run hud.ts");
+
+    const settings = await readJsonFile(settingsFile);
+    const statusLine = settings["statusLine"] as Record<string, unknown>;
+    expect(statusLine["type"]).toBe("command");
+    expect(statusLine["command"]).toBe("bun run hud.ts");
   });
 });
 
@@ -296,7 +302,7 @@ describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
     const content = await fs.readFile(agentFile, "utf8");
     const skillMatches = content.match(/testing/g);
     // "testing" should appear exactly once in the skills list
-    expect(skillMatches).not.toBeNull();
+    expect(skillMatches).toHaveLength(1);
   });
 
   it("preserves body --- separators after add-skills injection (regression P2-4)", async () => {

@@ -84,12 +84,9 @@ export const opencodeAdapter: PlatformAdapter = {
     const targetDir = path.join(targetPath, ".opencode", "agents");
     const targetFile = path.join(targetDir, `${displayName}.md`);
 
-    try {
-      await fs.access(sourcePath);
-    } catch {
-      logWarn(`Agent file not found: ${sourcePath}`);
-      return;
-    }
+    let stat;
+    try { stat = await fs.stat(sourcePath); } catch { logWarn(`Agent file not found: ${sourcePath}`); return; }
+    if (!stat.isFile()) { logWarn(`Agent path is not a file: ${sourcePath}`); return; }
 
     if (dryRun) {
       logDry(`Copy: ${sourcePath} -> ${targetFile}`);
@@ -127,12 +124,9 @@ export const opencodeAdapter: PlatformAdapter = {
     const targetDir = path.join(targetPath, ".opencode", "commands");
     const targetFile = path.join(targetDir, `${displayName}.md`);
 
-    try {
-      await fs.access(sourcePath);
-    } catch {
-      logWarn(`Command file not found: ${sourcePath}`);
-      return;
-    }
+    let stat;
+    try { stat = await fs.stat(sourcePath); } catch { logWarn(`Command file not found: ${sourcePath}`); return; }
+    if (!stat.isFile()) { logWarn(`Command path is not a file: ${sourcePath}`); return; }
 
     if (dryRun) {
       logDry(`Copy: ${sourcePath} -> ${targetFile}`);
@@ -228,12 +222,9 @@ export const opencodeAdapter: PlatformAdapter = {
     const configFile = path.join(targetPath, ".opencode", "opencode.json");
     const globEntry = ".opencode/rules/*.md";
 
-    try {
-      await fs.access(sourcePath);
-    } catch {
-      logWarn(`Rule file not found: ${sourcePath}`);
-      return;
-    }
+    let stat;
+    try { stat = await fs.stat(sourcePath); } catch { logWarn(`Rule file not found: ${sourcePath}`); return; }
+    if (!stat.isFile()) { logWarn(`Rule path is not a file: ${sourcePath}`); return; }
 
     if (dryRun) {
       logDry(`Copy: ${sourcePath} -> ${targetFile}`);
