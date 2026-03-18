@@ -318,6 +318,56 @@ Career-level guidance for 문제해결 / 프로젝트 상세 entry count. Candid
 | Mid (미들) | 1-2 entries per position | Balance depth and breadth. Signature project + major problem-solving entries. |
 | Senior (시니어) | Selective | Impact and leadership focus. Signature project less critical than career achievements and system thinking. |
 
+### First-Page Primacy Rule
+
+There is NO hard page limit. A 4-page resume is acceptable if every page earns its space.
+However, page 1 must function as a standalone executive summary:
+
+**Page 1 must contain:**
+- Role identity + core competency (self-introduction)
+- Top 2-3 quantified achievements
+- Signature project summary (problem + outcome in 2-3 lines)
+- Technical stack overview
+
+**Why:** Recruiters spend ~7.4 seconds on initial screening (Ladders Eye-Tracking Study, 2018).
+Everything that determines "read further vs reject" must appear on page 1.
+Pages 2+ are for depth — they will only be read if page 1 earns the reader's attention.
+
+**Evaluation:**
+- PASS: Page 1 contains identity, achievements, and signature summary
+- WARNING: Key achievements or signature project buried on page 2+
+- FAIL: Page 1 is entirely career history or education with no impact signals
+
+### JD Keyword Matching (AI/ATS Screening)
+
+When a target position or JD (Job Description) is provided, evaluate keyword alignment.
+Modern hiring pipelines use ATS (Applicant Tracking Systems) and AI-based screening
+that filter resumes by keyword match rate before human review.
+
+**Evaluation criteria:**
+- Extract key technical skills, tools, and domain terms from the target JD
+- Check which JD keywords appear in the resume (exact match or close synonym)
+- Calculate approximate match rate: matched keywords / total JD keywords
+
+**Output format (when target JD is available):**
+```
+[JD Keyword Match]
+- JD keywords identified: N
+- Matched in resume: M (list top matches)
+- Missing from resume: K (list missing keywords)
+- Match rate: M/N (X%)
+- Recommendation: [Add missing keywords where genuine experience exists / Match rate is sufficient]
+```
+
+**Guidelines:**
+- Match rate > 70%: Strong alignment — PASS
+- Match rate 40-70%: Partial alignment — recommend adding missing keywords where the candidate has genuine experience
+- Match rate < 40%: Weak alignment — flag as potential ATS risk
+- NEVER recommend adding keywords for skills the candidate does not actually possess (Absolute Rule 1)
+- Keyword placement matters: technical stack section and achievement lines are highest-weight ATS zones
+
+**When no JD is provided:** Skip this check. Note: "JD keyword matching skipped — no target JD available."
+
 ## Writing Guidance Trigger: Achievement Lines
 
 After completing the D1-D6 evaluation and summary count, check if the writing guidance trigger condition is met. This is a mandatory check.
