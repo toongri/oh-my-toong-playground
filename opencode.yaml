@@ -1,0 +1,21 @@
+# MCP definitions shared with codex.yaml and gemini.yaml — keep in sync
+mcps:
+  context7:
+    command: npx
+    args:
+      - -y
+      - "@upstash/context7-mcp@latest"
+  serena:
+    command: uvx
+    args:
+      - "--from"
+      - "git+https://github.com/oraios/serena"
+      - "serena"
+      - "start-mcp-server"
+      - "--project-from-cwd"
+
+# OpenCode does not support a config key to disable Claude Code integration.
+# The only supported mechanism is the OPENCODE_DISABLE_CLAUDE_CODE env var.
+config:
+  env:
+    OPENCODE_DISABLE_CLAUDE_CODE: "1"
