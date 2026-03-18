@@ -7,6 +7,7 @@ import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
+import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 
 // =============================================================================
 // Model Map Helper
@@ -246,17 +247,7 @@ export const opencodeAdapter: PlatformAdapter = {
     logInfo(`Copied: ${displayName}.md`);
 
     // Ensure opencode.json has instructions glob (idempotent)
-    await fs.mkdir(path.join(targetPath, ".opencode"), { recursive: true });
-
-    let config: Record<string, unknown> = {};
-    try {
-      const raw = await fs.readFile(configFile, "utf-8");
-      config = JSON.parse(raw) as Record<string, unknown>;
-    } catch (e: unknown) {
-      if (!(e && typeof e === "object" && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT")) {
-        throw e;
-      }
-    }
+    const config = await readJsonFile(configFile);
 
     const instructions = Array.isArray(config["instructions"])
       ? (config["instructions"] as unknown[])
@@ -264,11 +255,7 @@ export const opencodeAdapter: PlatformAdapter = {
 
     if (!instructions.includes(globEntry)) {
       config["instructions"] = [...instructions, globEntry];
-      await fs.writeFile(
-        configFile,
-        JSON.stringify(config, null, 2) + "\n",
-        "utf-8",
-      );
+      await writeJsonFile(configFile, config);
       if (instructions.length === 0) {
         logInfo("Created: opencode.json with instructions glob");
       } else {
@@ -360,24 +347,9 @@ export async function syncConfig(
     return;
   }
 
-  await fs.mkdir(path.join(targetPath, ".opencode"), { recursive: true });
-
-  let current: Record<string, unknown> = {};
-  try {
-    const raw = await fs.readFile(configFile, "utf-8");
-    current = JSON.parse(raw) as Record<string, unknown>;
-  } catch (e: unknown) {
-    if (!(e && typeof e === "object" && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT")) {
-      throw e;
-    }
-  }
-
+  const current = await readJsonFile(configFile);
   const merged = deepMerge(current, configObj);
-  await fs.writeFile(
-    configFile,
-    JSON.stringify(merged, null, 2) + "\n",
-    "utf-8",
-  );
+  await writeJsonFile(configFile, merged);
   logInfo(`Config merged: ${configFile}`);
 }
 
@@ -402,27 +374,11 @@ export async function syncMcpsMerge(
     return;
   }
 
-  await fs.mkdir(path.join(targetPath, ".opencode"), { recursive: true });
-
-  let current: Record<string, unknown> = {};
-  try {
-    const raw = await fs.readFile(configFile, "utf-8");
-    current = JSON.parse(raw) as Record<string, unknown>;
-  } catch (e: unknown) {
-    if (!(e && typeof e === "object" && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT")) {
-      throw e;
-    }
-  }
-
+  const current = await readJsonFile(configFile);
   const mcp = (current["mcp"] as Record<string, unknown> | undefined) ?? {};
   mcp[serverName] = serverDef;
   current["mcp"] = mcp;
-
-  await fs.writeFile(
-    configFile,
-    JSON.stringify(current, null, 2) + "\n",
-    "utf-8",
-  );
+  await writeJsonFile(configFile, current);
   logInfo(`MCP merged: ${serverName} -> ${configFile}`);
 }
 

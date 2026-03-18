@@ -6,31 +6,9 @@ import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
-import { logInfo, logWarn, logError, logDry } from "../lib/logger.ts";
+import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
-
-/** Read JSON file or return {} if missing. */
-async function readJsonFile(filePath: string): Promise<Record<string, unknown>> {
-  try {
-    const text = await fs.readFile(filePath, "utf8");
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch (err: unknown) {
-    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
-      return {};
-    }
-    logError(`JSON 파싱 실패: ${filePath}: ${err instanceof Error ? err.message : err}`);
-    throw err;
-  }
-}
-
-/** Write JSON to file, creating parent directories as needed. */
-async function writeJsonFile(
-  filePath: string,
-  data: Record<string, unknown>,
-): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
-}
+import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 
 // =============================================================================
 // Plugin installer type (for DI in tests)
