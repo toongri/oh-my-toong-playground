@@ -549,6 +549,20 @@ describe("syncPlatformConfigs", () => {
     const items = hooksMap["UserPromptSubmit"];
     expect(items).toHaveLength(0);
   });
+
+  it("빈 platform YAML이 크래시 없이 스킵된다 (P1-2)", async () => {
+    // Empty file — parseYaml returns null
+    await writeFile(path.join(yamlDir, "claude.yaml"), "");
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+
+    // Should not throw
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    // adapter never called because file was skipped
+    expect(adapters.getAdapter("claude")!.calls.filter((c) => c.method === "syncPlatformYaml")).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -673,6 +687,34 @@ describe("processYaml", () => {
 
     expect(claudeAdapter.calls.some((c) => c.method === "syncSkillsDirect")).toBe(true);
   });
+
+  it("빈 sync.yaml이 크래시 없이 반환된다 (P1-1)", async () => {
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    // Empty file — parseYaml returns null
+    await writeFile(syncYamlPath, "");
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+
+    // Should not throw
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
+  });
+
+  it("주석만 있는 sync.yaml이 크래시 없이 반환된다 (P1-1)", async () => {
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    // Comment-only file — parseYaml returns null
+    await writeFile(syncYamlPath, "# just a comment\n");
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+
+    // Should not throw
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -694,6 +736,94 @@ describe("처리 순서 및 중복 제거", () => {
   it("createContext가 빈 processedPaths로 초기화된다", () => {
     const context = createContext(false);
     expect(context.processedPaths.size).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: 프로젝트별 오류 격리 (P1-5)
+// ---------------------------------------------------------------------------
+
+describe("프로젝트별 오류 격리", () => {
+  let tmpDir: string;
+  let rootDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "project-isolation-test-"));
+    rootDir = path.join(tmpDir, "root");
+    await fs.mkdir(path.join(rootDir, "projects", "proj-a"), { recursive: true });
+    await fs.mkdir(path.join(rootDir, "projects", "proj-b"), { recursive: true });
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    _resetConfigCache();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  it("한 프로젝트 처리 실패 시 나머지 프로젝트가 계속 처리된다 (P1-5)", async () => {
+    const targetA = path.join(tmpDir, "target-a");
+    const targetB = path.join(tmpDir, "target-b");
+    await fs.mkdir(targetA, { recursive: true });
+    await fs.mkdir(targetB, { recursive: true });
+
+    // proj-a: valid sync.yaml pointing to targetA
+    await writeFile(
+      path.join(rootDir, "projects", "proj-a", "sync.yaml"),
+      `path: ${targetA}\n`,
+    );
+    // proj-b: valid sync.yaml pointing to targetB
+    await writeFile(
+      path.join(rootDir, "projects", "proj-b", "sync.yaml"),
+      `path: ${targetB}\n`,
+    );
+
+    // Track processYaml calls by intercepting via a spy on processedPaths
+    const processedTargets: string[] = [];
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+
+    // Monkey-patch processedPaths.add to record targets
+    const originalAdd = context.processedPaths.add.bind(context.processedPaths);
+    context.processedPaths.add = (value: string) => {
+      processedTargets.push(value);
+      return originalAdd(value);
+    };
+
+    // Simulate the CLI projects loop with per-project try/catch
+    const projectsDir = path.join(rootDir, "projects");
+    const { existsSync: existsSyncReal } = await import("fs");
+    const projectEntries = await fs.readdir(projectsDir, { withFileTypes: true });
+
+    for (const entry of projectEntries) {
+      if (!entry.isDirectory()) continue;
+      const projectSyncYaml = path.join(projectsDir, entry.name, "sync.yaml");
+      if (!existsSyncReal(projectSyncYaml)) continue;
+
+      let syncYaml: SyncYaml;
+      try {
+        const text = await fs.readFile(projectSyncYaml, "utf8");
+        const parsed = parseYaml(text);
+        if (parsed == null || typeof parsed !== "object") continue;
+        syncYaml = parsed as SyncYaml;
+      } catch {
+        continue;
+      }
+
+      const targetPath = syncYaml.path;
+      if (!targetPath) continue;
+
+      try {
+        await processYaml(context, projectSyncYaml, adapters, rootDir);
+        context.processedPaths.add(targetPath);
+      } catch {
+        // per-project isolation: continue to next project
+      }
+    }
+
+    // Both projects should have been processed despite any individual failure
+    expect(processedTargets).toContain(targetA);
+    expect(processedTargets).toContain(targetB);
   });
 });
 

@@ -45,8 +45,11 @@ async function collectDirs(dir: string, rel = ""): Promise<string[]> {
   let entries: import("fs").Dirent[];
   try {
     entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
-  } catch {
-    return results;
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return results;
+    }
+    throw err;
   }
   for (const entry of entries) {
     if (entry.isDirectory()) {

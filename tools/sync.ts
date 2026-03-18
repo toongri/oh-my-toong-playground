@@ -285,7 +285,12 @@ export async function syncPlatformConfigs(
     let parsedYaml: Record<string, unknown>;
     try {
       const text = await fs.readFile(platformYamlPath, "utf8");
-      parsedYaml = parseYaml(text) as Record<string, unknown>;
+      const parsed = parseYaml(text);
+      if (parsed == null || typeof parsed !== "object") {
+        logWarn(`${platform}.yaml이 비어있거나 유효하지 않음, 스킵`);
+        continue;
+      }
+      parsedYaml = parsed as Record<string, unknown>;
     } catch (err) {
       logWarn(`${platform}.yaml 파싱 실패: ${err}`);
       continue;
@@ -524,7 +529,12 @@ export async function processYaml(
 
   let syncYaml: SyncYaml;
   try {
-    syncYaml = parseYaml(rawText) as SyncYaml;
+    const parsed = parseYaml(rawText);
+    if (parsed == null || typeof parsed !== "object") {
+      logWarn(`YAML이 비어 있거나 유효한 객체가 아님: ${syncYamlPath}`);
+      return;
+    }
+    syncYaml = parsed as SyncYaml;
   } catch (err) {
     logError(`YAML 파싱 실패: ${syncYamlPath}: ${err}`);
     return;
@@ -652,7 +662,11 @@ if (import.meta.main) {
         let syncYaml: SyncYaml;
         try {
           const text = await fs.readFile(projectSyncYaml, "utf8");
-          syncYaml = parseYaml(text) as SyncYaml;
+          const parsed = parseYaml(text);
+          if (parsed == null || typeof parsed !== "object") {
+            continue;
+          }
+          syncYaml = parsed as SyncYaml;
         } catch {
           continue;
         }
@@ -660,8 +674,12 @@ if (import.meta.main) {
         const targetPath = syncYaml.path;
         if (!targetPath) continue;
 
-        await processYaml(context, projectSyncYaml, adapters, rootDir);
-        context.processedPaths.add(targetPath);
+        try {
+          await processYaml(context, projectSyncYaml, adapters, rootDir);
+          context.processedPaths.add(targetPath);
+        } catch (err) {
+          logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
+        }
       }
     }
 
@@ -671,7 +689,12 @@ if (import.meta.main) {
       let syncYaml: SyncYaml;
       try {
         const text = await fs.readFile(rootSyncYaml, "utf8");
-        syncYaml = parseYaml(text) as SyncYaml;
+        const parsed = parseYaml(text);
+        if (parsed == null || typeof parsed !== "object") {
+          syncYaml = {};
+        } else {
+          syncYaml = parsed as SyncYaml;
+        }
       } catch {
         syncYaml = {};
       }

@@ -407,22 +407,19 @@ export class CodexAdapter implements PlatformAdapter {
     const mcps = platformYaml["mcps"];
     if (mcps != null && typeof mcps === "object" && !Array.isArray(mcps)) {
       const mcpsObj = mcps as Record<string, unknown>;
-      const names = Object.keys(mcpsObj);
-      if (names.length > 0) {
-        for (const name of names) {
-          const server = mcpsObj[name];
-          if (server != null && typeof server === "object" && !Array.isArray(server)) {
-            if (dryRun) {
-              logDry(`MCP accumulate: ${name}`);
-            } else {
-              this.accumulateMcp(name, server as Record<string, unknown>);
-              logInfo(`MCP accumulated: ${name}`);
-            }
+      for (const name of Object.keys(mcpsObj)) {
+        const server = mcpsObj[name];
+        if (server != null && typeof server === "object" && !Array.isArray(server)) {
+          if (dryRun) {
+            logDry(`MCP accumulate: ${name}`);
+          } else {
+            this.accumulateMcp(name, server as Record<string, unknown>);
+            logInfo(`MCP accumulated: ${name}`);
           }
         }
-        await this.flushMcpBlock(targetPath, dryRun);
-        processedSections.push("mcps");
       }
+      await this.flushMcpBlock(targetPath, dryRun);
+      processedSections.push("mcps");
     }
 
     // --- model-map ---
