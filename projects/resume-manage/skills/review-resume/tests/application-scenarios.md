@@ -2,7 +2,7 @@
 
 ## Purpose
 
-These scenarios test whether the review-resume skill's **core techniques** are correctly applied. Each scenario targets specific dimensions of the 6-dimension evaluation framework, pushback simulation, section fitness rules, and handoff logic.
+These scenarios test whether the review-resume skill's **core techniques** are correctly applied. Each scenario targets specific dimensions of the 6-dimension evaluation framework, pushback simulation, section fitness rules, and writing guidance trigger logic.
 
 ## Technique Coverage Map
 
@@ -11,7 +11,8 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 | 1 | D1-D2: Causation + Specificity | 6-dim D1, D2 | Pushback L1 |
 | 2 | D3-D4: Role Clarity + Standard Detection | 6-dim D3, D4 | Pushback L2 |
 | 3 | D5-D6: Interview Depth + Section Fitness | 6-dim D5, D6 + 3-level pushback | Section migration |
-| 4 | Handoff Judgment | Handoff trigger (3+ D1/D2 fail) | make-resume guidance |
+| 4 | Writing Guidance Trigger | Writing Guidance Trigger (3+ D1/D2 fail) | Inline writing guidance |
+| 5 | JD Keyword Matching | JD keyword extraction + match rate | Absolute Rule 4 compliance |
 
 ---
 
@@ -102,9 +103,9 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 ---
 
-## Scenario 4: Handoff Judgment
+## Scenario 4: Writing Guidance Trigger
 
-**검증 대상:** D1/D2 다수 실패 시 make-resume 안내가 자연스럽게 나오는가?
+**검증 대상:** D1/D2 다수 실패 시 인라인 작성 가이드가 자연스럽게 제공되는가?
 
 **Prompt:**
 ```
@@ -124,10 +125,43 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 |---|-------|-------------------|
 | V1 | D1 all lines | 5/5 FAIL — 모든 라인에 goal→execution→outcome 체인 없음 |
 | V2 | D2 all lines | 5/5 FAIL — 어떤 라인도 구체적 수치/근거 없음 |
-| V3 | Handoff trigger | 3+ lines D1/D2 FAIL → make-resume 핸드오프 조건 충족 인지 |
-| V4 | Handoff message | "표현 수정이 아니라 내용 재구성이 필요합니다. make-resume 스킬로 재작성하시겠어요?" 또는 동등한 안내 |
+| V3 | Writing Guidance Trigger | 3+ lines D1/D2 FAIL → Writing Guidance Trigger 조건 충족 인지 |
+| V4 | Guidance message | "전체 N개 라인 중 X개가 D1/D2 FAIL입니다. 이 이력서는 표현 수정이 아니라 내용 재구성이 필요합니다. Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요." 또는 동등한 안내 |
 | V5 | Tone | 비난이 아닌 건설적 안내. "이 이력서는 리뷰가 아닌 재작성이 필요한 수준" |
-| V6 | Per-line evaluation | 핸드오프 전에도 각 라인별 D1-D6 평가는 완료 |
+| V6 | Per-line evaluation | 가이드 전에도 각 라인별 D1-D6 평가는 완료 |
+
+---
+
+## Scenario 5: JD Keyword Matching
+
+**검증 대상:** JD가 제공되었을 때 키워드를 추출하고 매칭률을 계산하며, 미보유 키워드 추가를 거부하는가?
+
+**Prompt:**
+```
+이력서 리뷰해줘. 쿠팡 백엔드 시니어 포지션이야.
+
+JD:
+- Kubernetes/Docker 기반 컨테이너 오케스트레이션 운영 경험
+- gRPC 또는 GraphQL 기반 API 설계 경험
+- 대규모 트래픽(TPS 10,000+) 처리 경험
+- Event-driven architecture (Kafka, RabbitMQ) 설계/운영
+- 성능 모니터링 및 장애 대응 체계 구축 경험
+
+경력:
+- Kafka 기반 주문-결제 이벤트 파이프라인 구축, 일 처리량 500만 건 달성
+- Redis 캐시 + DB 읽기 분리로 상품 조회 API 응답시간 200ms → 45ms 개선
+- Docker Compose 기반 로컬 개발 환경 표준화
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | JD 키워드 추출 | JD에서 핵심 기술 키워드 추출 (Kubernetes, gRPC/GraphQL, TPS 10,000+, Kafka/RabbitMQ, 모니터링) |
+| V2 | 매칭률 계산 | 이력서에 존재하는 JD 키워드 vs 전체 JD 키워드 비율 산출. Kafka: 매칭, Docker: 부분 매칭 (Compose ≠ Kubernetes), gRPC/GraphQL: 미매칭 |
+| V3 | 누락 키워드 식별 | Kubernetes, gRPC/GraphQL, 모니터링 체계가 이력서에 없음을 명시적으로 나열 |
+| V4 | 임계값 기반 권고 | 매칭률에 따라 40%/70% 임계값 적용. 이 이력서는 전체 매칭 1/5 = 20% 수준이므로 "Weak alignment" 판정 기대 (< 40% 임계값) |
+| V5 | 미보유 키워드 추가 거부 | gRPC/GraphQL, Kubernetes 경험이 없는 경우 이력서에 추가하라고 권고하지 않음 (Absolute Rule 4) |
 
 ---
 
