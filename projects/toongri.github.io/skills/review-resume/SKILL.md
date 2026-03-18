@@ -247,27 +247,28 @@ Choose specific keywords that invite rich follow-up questions.
 
 Before writing or rewriting any achievement line, walk through these questions in order. If any answer is "No," stop writing and discuss with the user.
 
-```dot
-digraph resume_check {
-    rankdir=TB;
-    "Achievement candidate" [shape=box];
-    "Is the motivation logical?" [shape=diamond];
-    "Is there evidence for the metrics?" [shape=diamond];
-    "Is this just adopting an industry standard?" [shape=diamond];
-    "Can you defend against 3 levels of interviewer pushback?" [shape=diamond];
-    "Proceed with writing" [shape=box, style=filled, fillcolor=lightgreen];
-    "STOP: Discuss with user" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+```mermaid
+flowchart TB
+    A[Achievement candidate]
+    B{Is the motivation logical?}
+    C{Is there evidence for the metrics?}
+    D{Is this just adopting an industry standard?}
+    E{Can you defend against 3 levels of interviewer pushback?}
+    F[Proceed with writing]
+    G[STOP: Discuss with user]
 
-    "Achievement candidate" -> "Is the motivation logical?";
-    "Is the motivation logical?" -> "STOP: Discuss with user" [label="No"];
-    "Is the motivation logical?" -> "Is there evidence for the metrics?" [label="Yes"];
-    "Is there evidence for the metrics?" -> "STOP: Discuss with user" [label="No"];
-    "Is there evidence for the metrics?" -> "Is this just adopting an industry standard?" [label="Yes"];
-    "Is this just adopting an industry standard?" -> "STOP: Discuss with user" [label="Standard"];
-    "Is this just adopting an industry standard?" -> "Can you defend against 3 levels of interviewer pushback?" [label="Not standard"];
-    "Can you defend against 3 levels of interviewer pushback?" -> "STOP: Discuss with user" [label="No"];
-    "Can you defend against 3 levels of interviewer pushback?" -> "Proceed with writing" [label="Yes"];
-}
+    A --> B
+    B -->|No| G
+    B -->|Yes| C
+    C -->|No| G
+    C -->|Yes| D
+    D -->|Standard| G
+    D -->|Not standard| E
+    E -->|No| G
+    E -->|Yes| F
+
+    style F fill:lightgreen
+    style G fill:red,color:white
 ```
 
 ## 3-Level Pushback Simulation
@@ -694,7 +695,7 @@ Why does this problem matter? What is the business risk? What is the root cause?
 Writing template:
 ```
 [문제] 문제의 본질은 무엇인가?
-[해결]
+[해결 과정]
   시도 1: 왜 이걸 시도했나? → 실패, 왜 이 도메인에서 안 됐는가?
   시도 2: 왜 이걸 다음으로 시도했나? → 실패, 무엇을 깨달았는가?
   시도 3: 왜 이것이 답인가? → 성공
@@ -844,7 +845,7 @@ Stage 1 (Vision): 보이는 것만 서술. Stage 2 (Text): 서술문을 메타�
 After P.A.R.R. evaluation, check this condition:
 
 - **Condition**: 3 or more P.A.R.R. dimensions are FAIL among P1-P5, OR the P.A.R.R. structure is entirely absent
-- **Immediate trigger**: If there is no [문제]/[해결]/[결과]/[회고] structure at all — trigger immediately without counting
+- **Immediate trigger**: If there is no [문제]/[해결 과정]/[검증]/[회고] structure at all — trigger immediately without counting
 - **Message to deliver**: "P.A.R.R. 평가 차원 5개 중 N개가 FAIL입니다. 이 시그니처 프로젝트는 구조적 재작성이 필요합니다. 위의 Writing Guidance: Signature Project P.A.R.R. 섹션의 템플릿과 서사 원칙을 참고하여 다시 작성해 보세요."
 
 This trigger is not optional. If the P.A.R.R. structure is absent entirely, trigger immediately.
@@ -870,20 +871,21 @@ This trigger is not optional. If the P.A.R.R. structure is absent entirely, trig
 
 When an "other projects" section is present, apply the criteria below. **IMPORTANT: Do NOT apply P1-P5 (signature evaluation) to other projects. Use D1-D6 + volume guide only.** Signature projects are evaluated on depth; other projects are evaluated on conciseness.
 
-```dot
-digraph section_branch {
-    rankdir=TB;
-    "Project section check" [shape=box];
-    "Signature project?" [shape=diamond];
-    "D1-D6 + P1-P5" [shape=box, style=filled, fillcolor=lightyellow];
-    "Other projects?" [shape=diamond];
-    "D1-D6 + volume guide" [shape=box, style=filled, fillcolor=lightblue];
+```mermaid
+flowchart TB
+    A[Project section check]
+    B{Signature project?}
+    C[D1-D6 + P1-P5]
+    D{Other projects?}
+    E[D1-D6 + volume guide]
 
-    "Project section check" -> "Signature project?";
-    "Signature project?" -> "D1-D6 + P1-P5" [label="Yes"];
-    "Signature project?" -> "Other projects?";
-    "Other projects?" -> "D1-D6 + volume guide" [label="Yes"];
-}
+    A --> B
+    B -->|Yes| C
+    B --> D
+    D -->|Yes| E
+
+    style C fill:lightyellow
+    style E fill:lightblue
 ```
 
 ### Evaluation Criteria (D1-D6 + Volume Guide)
