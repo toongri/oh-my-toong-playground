@@ -157,7 +157,34 @@ export async function syncCategory(
     // Resolve add-hooks (agents category only)
     let addHooks: unknown[] | undefined;
     if (category === "agents" && typeof item === "object" && item["add-hooks"]) {
-      addHooks = item["add-hooks"] as unknown[];
+      const rawHooks = item["add-hooks"] as Array<Record<string, unknown>>;
+      const resolvedHooks: Array<Record<string, unknown>> = [];
+      for (const hook of rawHooks) {
+        const hookComponent = (hook["component"] as string | undefined) ?? "";
+        if (!hookComponent) {
+          // No component field — pass through as-is (command: field hooks)
+          resolvedHooks.push(hook);
+          continue;
+        }
+        const hookResolved = resolveComponentPath(
+          hookComponent,
+          "hooks",
+          rootDir,
+          context.projectDir || undefined,
+        );
+        if ("error" in hookResolved) {
+          logWarn(`add-hooks not found: ${hookComponent} (${hookResolved.error})`);
+        } else {
+          resolvedHooks.push({
+            ...hook,
+            source_path: hookResolved.path,
+            display_name: hookResolved.displayName,
+          });
+        }
+      }
+      if (resolvedHooks.length > 0) {
+        addHooks = resolvedHooks;
+      }
     }
 
     // Dispatch to each platform
@@ -253,6 +280,7 @@ export async function syncPlatformConfigs(
   targetPath: string,
   yamlDir: string,
   adapters: AdapterMap,
+  rootDir: string,
 ): Promise<void> {
   for (const platform of KNOWN_PLATFORMS) {
     const platformYamlPath = path.join(yamlDir, `${platform}.yaml`);
@@ -275,6 +303,35 @@ export async function syncPlatformConfigs(
     } catch (err) {
       logWarn(`${platform}.yaml 파싱 실패: ${err}`);
       continue;
+    }
+
+    // Pre-resolve hook component paths before passing to adapter
+    if (parsedYaml["hooks"] != null) {
+      const hooksMap = parsedYaml["hooks"] as Record<string, Array<Record<string, unknown>>>;
+      for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (!Array.isArray(items)) continue;
+        const resolvedItems: Array<Record<string, unknown>> = [];
+        for (const item of items) {
+          const component = (item["component"] as string | undefined) ?? "";
+          if (!component) {
+            resolvedItems.push(item);
+            continue;
+          }
+          const resolved = resolveComponentPath(
+            component,
+            "hooks",
+            rootDir,
+            context.projectDir || undefined,
+          );
+          if ("error" in resolved) {
+            logWarn(`hook component not found: ${component}`);
+            // Skip this item — do not add to resolvedItems
+          } else {
+            resolvedItems.push({ ...item, component: resolved.path });
+          }
+        }
+        hooksMap[hookEvent] = resolvedItems;
+      }
     }
 
     try {
@@ -514,7 +571,7 @@ export async function processYaml(
 
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
-  await syncPlatformConfigs(context, targetPath, yamlDir, adapters);
+  await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
   // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
