@@ -726,119 +726,15 @@ Bad examples (all career levels):
 
 #### Before/After Full Comparison (New Grad / Junior)
 
-**Before — Feature Listing (anti-pattern):**
-```
-온라인 서점 쇼핑몰
-• 선착순 쿠폰 발급 기능 개발
-• Redis 분산 락 사용하여 동시성 문제 해결
-Spring Boot, MySQL, Redis 사용
-• JMeter로 부하 테스트 수행
-• 성능 개선 완료
-```
-
-**After — 김민준 Narrative (gold standard):**
-```
-온라인 서점 - 선착순 쿠폰 시스템
-
-[문제]
-파이널 프로젝트 QA 중 치명적 버그 발견: 재고 100개 쿠폰이 152개 발급. 하지만 로컬 환경에서는 재현 안 됨.
-Thread.sleep(100)을 강제 삽입해 동시성 상황 재현. 문제의 본질 파악: MySQL READ COMMITTED 격리 수준에서 두
-트랜잭션이 동시 재고 조회 → MVCC 특성상 필연적 문제.
-
-[해결 과정]
-시도 1 - 락 없이 해결 가능한가?
-낙관적 락 + CAS: 동시 1000건 중 950건 실패, 재시도 폭증. Exponential Backoff 최적화해도 평균 응답 1.2초.
-DB 격리 수준 상향(SERIALIZABLE): Gap Lock 발생, 처리량 60% 감소. 거부.
-
-시도 2 - 어떤 락인가?
-비관적 락(SELECT FOR UPDATE): Lock Escalation으로 Table Lock 전이, 커넥션 풀 고갈, 응답 800ms.
-Application Lock(synchronized): 단일 서버 작동, 하지만 Scale-out 불가. 서버 2대 실험 → 즉시 재현.
-깨달음: 분산 환경 작동 락 필요.
-
-시도 3 - 왜 Redis 분산 락인가?
-Redis 선택 이유: Lua 스크립트 원자성, TTL 자동 해제, Single Thread로 Race Condition 차단.
-Redisson vs 직접 구현: Spin Lock 비효율 vs Pub/Sub 기반 Wait/Notify. Redisson 선택.
-Lock 설정 근거: Wait 3초(선착순 특성), Lease 5초(로직 최대 실행 시간+여유).
-
-[검증]
-JMeter 동시 100 Thread, Ramp-up 0초. 재고 100개 → 발급 100건, 중복 0건.
-Lock Contention 측정: Redis MONITOR로 패턴 분석, 평균 대기 180ms, 최대 2.8초.
-극한 시나리오: 재고 10개, 동시 500건 → 10건만 성공, 정합성 100%.
-
-[회고]
-배운 것: MVCC와 격리 수준 트레이드오프, 분산 시스템 일관성(CAP 정리), Redlock 알고리즘과 한계(Martin
-Kleppmann 논문).
-인정하는 한계: Redis SPOF, 멱등성 미보장. 해결 방향: Cluster/Sentinel, 발급 이력 테이블.
-솔직한 고백: 처음엔 "Redis 쓰면 되겠지"였습니다. 멘토님 "락 없이 못 푸나?" 질문에 3일 밤새며 CAS, 격리 수준,
-MVCC 공부. 비로소 이해: 문제는 답 찾기가 아니라 왜 그것이 답인지 설명하는 것.
-
-→ 파이널 프로젝트 최우수상 (12팀 중 1위)
-```
+See Before/After examples in the "Before/After Detection (New Grad / Junior)" section above.
 
 #### Before/After Full Comparison (Mid / Senior)
 
-**Before — Result Listing (anti-pattern):**
-```
-메뉴 메타데이터 자동 추출
-• LLM 기반 시스템 개발
-• 5개 모델 비교하여 최적 조합 선택
-• 정확도 85% 달성
-• 인력 11명에서 3명으로 절감
-```
+See Before/After examples in the "Before/After Detection (Mid / Senior)" section above.
 
-**After — Production Engineering Judgment Narrative (gold standard):**
-```
-메뉴 사진 메타데이터 자동 추출 시스템
+#### Improvement Analysis
 
-[문제]
-F&B 커머스 플랫폼에서 입점 업체 메뉴 등록 시 영양정보, 알레르기, 카테고리 등 15개 필드를 수작업 입력.
-담당 인력 11명, 신메뉴 반영까지 4주. 성수기 메뉴 교체율 40% 상승 시 병목 심화. 월 인건비 약 2,200만원.
-
-[해결 과정]
-시도 1 - 왜 규칙 기반부터? 가장 예측 가능하고 비용이 낮아서.
-정규식 + 사전 매핑. 결과: 정확도 40%. 왜 안 되는가: "크림파스타", "까르보나라", "셰프 스페셜 A" — 같은 음식도
-이름이 다르고, 임의 이름이면 규칙 무력화. 교훈: 자연어 이해가 필요한 문제를 패턴 매칭으로 풀 수 없다.
-
-시도 2 - 왜 단일 LLM? 자연어 이해력이 있으니까.
-GPT-4V에 메뉴 사진 직접 입력, 15개 필드 한 번에 추출. 결과: 정확도 65%, 할루시네이션 30%.
-왜 안 되는가: 사진에 없는 알레르기 정보를 "추론"해서 생성. 15개 필드를 한 번에 요구하니 "아는 척" 빈도 증가.
-교훈: 관찰(사진에서 보이는 것)과 추론(도메인 지식 기반 매핑)을 분리해야 한다.
-
-시도 3 - 왜 2단계 파이프라인?
-Stage 1 (Vision): 보이는 것만 서술. Stage 2 (Text): 서술문을 메타데이터로 매핑.
-왜 이 구조인가: 각 단계가 하나의 역할만 수행하므로 할루시네이션 원인 추적 가능.
-5개 모델 조합 비교 — 정확도, 비용, 속도 매트릭스. 87% 조합 대비 정확도 2%↓ 비용 33%↓인 조합 선택.
-
-[검증]
-500건 랜덤 샘플: 정확도 85%, 할루시네이션 2% (단일 LLM 대비 28%p 감소).
-에러 분석: Stage 1 오류 45건(사진 품질), Stage 2 오류 29건(매핑 모호성). 각 단계별 개선 방향 명확.
-비용: 건당 ₩30 (수작업 건당 ₩3,000 대비 1/100).
-
-[회고]
-멈춘 이유: fine-tuning으로 93%까지 실험 확인. 그러나 월 200만원 추가 + 모델 업데이트마다 재학습.
-85%+수작업 검수가 TCO 최적이라는 판단.
-인정하는 한계: 사진 품질 의존성(어두운 사진 정확도 60%), 신메뉴 카테고리 미학습.
-비즈니스 결과: 인력 11→3명(월 약 1,600만원 절감), 재고 파악 4주→1주.
-```
-
-#### Improvement Analysis (New Grad / Junior)
-
-- **Problem root cause**: "MVCC 특성상 필연적" — Before states "동시성 문제" without explaining why
-- **Depth of attempts**: 3-stage approach (락 없이 → 어떤 락 → 왜 Redis) — Before jumps to "Redis 사용"
-- **Failure data per attempt**: "950건 실패", "처리량 60% 감소" — Before: zero failure process
-- **Repeated Why questions**: "왜 락인가?", "왜 Redis인가?", "왜 Redisson인가?" — Before: zero Why
-- **CS knowledge applied**: MVCC, CAP theorem, Redlock — Before: technology names only
-- **Verification depth**: Lock Contention analysis — Before: only "부하 테스트 수행"
-- **Acknowledged limits**: SPOF, idempotency — Before: ends with "성능 개선 완료"
-
-#### Improvement Analysis (Mid / Senior)
-
-- **Domain-specific failure reasoning**: "메뉴명 다양성으로 규칙 무력화", "할루시네이션 30%" — Before: zero
-- **Two Whys per attempt**: "왜 이걸 시도했나?" + "왜 안 됐나?" — Before: results only
-- **Experiment-based decision**: 5-model comparison matrix — Before: only "최적 조합 선택"
-- **Stopping judgment**: "93% 가능했지만 비용 대비 보류" — Before: ends with "85% 달성"
-- **Business impact**: Specific amounts and speed (월 1,600만원, 4주→1주) — Before: only "인력 절감"
-- **Error analysis**: Per-stage classification with improvement direction — Before: only "정확도 85%"
+See Improvement Analysis in the Detection sections above (New Grad / Junior and Mid / Senior).
 
 ### Writing Guidance Trigger: Signature Project
 
