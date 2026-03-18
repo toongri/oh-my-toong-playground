@@ -342,6 +342,26 @@ describe("CodexAdapter", () => {
       const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
       expect(result.modelMap).toBeUndefined();
     });
+
+    test("mcps: {} → 기존 managed block 제거 + processedSections에 포함", async () => {
+      // Setup: write a config.toml with an existing omt:mcp managed block
+      const configDir = path.join(tmpDir, ".codex");
+      await fs.mkdir(configDir, { recursive: true });
+      const configFile = path.join(configDir, "config.toml");
+      const existingContent = [
+        `# --- omt:mcp ---`,
+        `[mcp.servers.old-server]`,
+        `command = "old-cmd"`,
+        `# --- end omt:mcp ---`,
+      ].join("\n") + "\n";
+      await fs.writeFile(configFile, existingContent, "utf-8");
+
+      const result = await adapter.syncPlatformYaml(tmpDir, { mcps: {} }, false);
+
+      expect(result.processedSections).toContain("mcps");
+      const content = await fs.readFile(configFile, "utf-8");
+      expect(content).not.toContain("old-server");
+    });
   });
 
   // ---------------------------------------------------------------------------

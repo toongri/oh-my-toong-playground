@@ -46,7 +46,8 @@ export function getRootDir(): string | null {
 
 /**
  * Parse and cache config.yaml from the project root.
- * Returns null if config.yaml is not found or cannot be parsed.
+ * Returns null if config.yaml is not found or unreadable (I/O error).
+ * Throws if config.yaml exists but contains invalid YAML syntax.
  */
 export async function loadConfig(): Promise<ConfigYaml | null> {
   if (cachePopulated) return cachedConfig;
@@ -61,13 +62,17 @@ export async function loadConfig(): Promise<ConfigYaml | null> {
   const configPath = join(rootDir, "config.yaml");
   const file = Bun.file(configPath);
 
+  let text: string;
   try {
-    const text = await file.text();
-    cachedConfig = parse(text) as ConfigYaml;
+    text = await file.text();
   } catch {
+    // File unreadable (ENOENT, permission) — treat as missing
     cachedConfig = null;
+    cachePopulated = true;
+    return cachedConfig;
   }
 
+  cachedConfig = parse(text) as ConfigYaml;
   cachePopulated = true;
   return cachedConfig;
 }

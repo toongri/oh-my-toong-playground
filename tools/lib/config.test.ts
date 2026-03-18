@@ -96,8 +96,8 @@ describe("config 모듈", () => {
       }
     });
 
-    it("파싱 불가한 YAML이면 null을 반환한다", async () => {
-      // Return size > 0 but throw on text() to simulate read error
+    it("파일 읽기 실패 시 null을 반환한다", async () => {
+      // Return size > 0 but throw on text() to simulate I/O error
       const badFile = {
         size: 10,
         text: async () => { throw new Error("read error"); },
@@ -107,6 +107,21 @@ describe("config 모듈", () => {
         _resetConfigCache();
         const config = await loadConfig();
         expect(config).toBeNull();
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("잘못된 YAML 구문이면 에러를 던진다", async () => {
+      const badYamlFile = {
+        size: 1,
+        text: async () => Promise.resolve("{{invalid yaml:"),
+      };
+      const spy = spyOn(Bun, "file").mockReturnValue(badYamlFile as ReturnType<typeof Bun.file>);
+      try {
+        _resetConfigCache();
+        await expect(loadConfig()).rejects.toThrow();
       } finally {
         spy.mockRestore();
         _resetConfigCache();
