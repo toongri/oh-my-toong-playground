@@ -108,6 +108,17 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "sub/bar.test.ts"))).toBe(false);
     });
 
+    it("타겟에만 존재하는 exclude 파일은 삭제하지 않는다", async () => {
+      await writeFile(path.join(src, "foo.ts"), "foo");
+      await writeFile(path.join(tgt, "foo.ts"), "foo");
+      await writeFile(path.join(tgt, "foo.test.ts"), "test");
+
+      await syncDirectory(src, tgt);
+
+      expect(await exists(path.join(tgt, "foo.ts"))).toBe(true);
+      expect(await exists(path.join(tgt, "foo.test.ts"))).toBe(true);
+    });
+
     it("커스텀 exclude 패턴을 적용한다", async () => {
       await writeFile(path.join(src, "script.sh"), "#!/bin/bash");
       await writeFile(path.join(src, "readme.md"), "docs");

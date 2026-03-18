@@ -178,6 +178,13 @@ export async function syncCategory(
           context.backupSession,
         );
         preparedKeys.add(prepKey);
+        // Wipe category dir so orphan files from removed components are cleaned up.
+        // Rules are excluded: they may contain user-managed files.
+        if (category !== "rules") {
+          const categoryDir = path.join(syncYaml.path ?? "", `.${platform}`, category);
+          await fs.rm(categoryDir, { recursive: true, force: true });
+          await fs.mkdir(categoryDir, { recursive: true });
+        }
       }
 
       if (context.dryRun) {
@@ -509,9 +516,9 @@ export async function processYaml(
   const yamlDir = path.dirname(syncYamlPath);
   await syncPlatformConfigs(context, targetPath, yamlDir, adapters);
 
-  // Resolve platforms for lib sync (reuse syncYaml top-level platforms if set,
-  // else fall back — syncLib handles its own platform resolution via caller)
-  const libPlatforms = syncYaml.platforms ?? (["claude"] as Platform[]);
+  // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
+  // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
+  const libPlatforms = await resolvePlatforms({} as SyncItem, undefined, syncYaml.platforms, "lib");
 
   // Sync 5 categories
   for (const category of CATEGORIES) {
@@ -633,13 +640,12 @@ if (import.meta.main) {
     }
 
     // 오래된 백업 정리
+    const cleanupPromises: Promise<void>[] = [];
     if (!dryRun) {
       const retentionDays = await getBackupRetentionDays();
       // Find all processed target paths and clean up their backups
       for (const targetPath of context.processedPaths) {
-        cleanupOldBackups(targetPath, retentionDays).catch(() => {
-          // Ignore cleanup errors
-        });
+        cleanupPromises.push(cleanupOldBackups(targetPath, retentionDays).catch(() => {}));
       }
     }
 
@@ -649,6 +655,7 @@ if (import.meta.main) {
       logSuccess("========== 동기화 완료 ==========");
     }
 
+    await Promise.all(cleanupPromises);
     process.exit(0);
   } catch (err) {
     logError(`동기화 실패: ${err}`);

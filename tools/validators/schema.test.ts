@@ -343,6 +343,66 @@ model-map:
     });
   });
 
+  // --- hooks event name validation ---
+  describe("hooks 이벤트 이름 검증", () => {
+    it("잘못된 이벤트 이름이 있으면 ERROR를 반환한다", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  InvalidEvent:
+    - component: some-hook.sh
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("InvalidEvent"))).toBe(true);
+    });
+
+    it("이벤트 값이 배열이 아니면 ERROR를 반환한다", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  UserPromptSubmit: "not-an-array"
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("UserPromptSubmit") && e.includes("배열"))).toBe(true);
+    });
+
+    it("유효한 이벤트 이름과 배열 값은 에러가 없다", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: some-hook.sh
+  Stop:
+    - component: another-hook.sh
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  // --- mcps structure validation ---
+  describe("mcps 구조 검증", () => {
+    it("mcps 값이 object가 아니면 ERROR를 반환한다", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+mcps:
+  some-mcp: "not-an-object"
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("some-mcp") && e.includes("object"))).toBe(true);
+    });
+
+    it("mcps 값이 object이면 에러가 없다", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+mcps:
+  some-mcp:
+    command: npx
+    args: [some-package]
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
   // --- YAML syntax error ---
   describe("YAML 문법 오류", () => {
     it("잘못된 YAML이면 에러를 반환한다", () => {

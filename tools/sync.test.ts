@@ -248,6 +248,63 @@ describe("syncCategory", () => {
     const calls = adapters.getAdapter("claude")!.calls;
     expect(calls.filter((c) => c.method === "syncAgentsDirect")).toHaveLength(0);
   });
+
+  it("sync 후 orphan 파일이 삭제된다 (P1-3)", async () => {
+    // Create a skill component in rootDir
+    const skillDir = path.join(rootDir, "skills", "oracle");
+    await fs.mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
+
+    // Pre-populate target with an orphan agent file
+    const claudeAgentsDir = path.join(targetPath, ".claude", "agents");
+    await fs.mkdir(claudeAgentsDir, { recursive: true });
+    await writeFile(path.join(claudeAgentsDir, "orphan-agent.md"), "# Orphan\n");
+
+    const syncYaml: SyncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["claude"],
+        items: ["oracle"],
+      },
+    };
+
+    // Ensure source file exists so resolveComponentPath succeeds
+    await writeFile(path.join(rootDir, "agents", "oracle.md"), "# Oracle\n");
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+
+    // Orphan should be gone: wipe+recreate cleared the dir before writing
+    expect(await exists(path.join(claudeAgentsDir, "orphan-agent.md"))).toBe(false);
+  });
+
+  it("rules 카테고리는 디렉토리를 초기화하지 않는다 (P1-3)", async () => {
+    // Create a rule component in rootDir
+    await writeFile(path.join(rootDir, "rules", "my-rule.md"), "# My Rule\n");
+
+    // Pre-populate target with a manual rule file
+    const claudeRulesDir = path.join(targetPath, ".claude", "rules");
+    await fs.mkdir(claudeRulesDir, { recursive: true });
+    await writeFile(path.join(claudeRulesDir, "manual-rule.md"), "# Manual\n");
+
+    const syncYaml: SyncYaml = {
+      path: targetPath,
+      rules: {
+        platforms: ["claude"],
+        items: ["my-rule"],
+      },
+    };
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    await syncCategory(context, "rules", syncYaml, adapters, rootDir);
+
+    // manual-rule.md must still exist — rules dir is never wiped
+    expect(await exists(path.join(claudeRulesDir, "manual-rule.md"))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -560,6 +617,26 @@ describe("syncLib", () => {
 
     await syncLib(context, targetPath, rootDir, ["claude"]);
 
+    expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(false);
+  });
+
+  it("processYaml이 syncYaml.platforms cascade를 사용해 syncLib 플랫폼을 결정한다 (P2-4)", async () => {
+    // syncYaml.platforms = [gemini] → resolvePlatforms level-3 cascade picks gemini
+    const libSrc = path.join(rootDir, "lib");
+    await fs.mkdir(libSrc, { recursive: true });
+    await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+
+    const syncYamlPath = path.join(rootDir, "sync.yaml");
+    // Top-level platforms: [gemini] — cascade level 3 should override the old hardcoded ["claude"]
+    await writeFile(syncYamlPath, `path: ${targetPath}\nplatforms: [gemini]\n`);
+
+    const adapters = makeAdapterMap(["claude", "gemini"]);
+    const context = makeContext();
+
+    await processYaml(context, syncYamlPath, adapters, rootDir);
+
+    // lib should be deployed to gemini (syncYaml.platforms cascade), not claude
+    expect(await exists(path.join(targetPath, ".gemini", "lib", "helper.ts"))).toBe(true);
     expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(false);
   });
 

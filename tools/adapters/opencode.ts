@@ -6,6 +6,7 @@ import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformAdapter } from "./types.ts";
+import { deepMerge } from "../lib/deep-merge.ts";
 
 // =============================================================================
 // Model Map Helper
@@ -414,35 +415,3 @@ export async function syncMcpsMerge(
   logInfo(`MCP merged: ${serverName} -> ${configFile}`);
 }
 
-// =============================================================================
-// Deep Merge Helper
-// =============================================================================
-
-/**
- * Deep merge two objects. Values from `override` win on conflict.
- * Non-plain-object values are replaced (not merged).
- */
-function deepMerge(
-  base: Record<string, unknown>,
-  override: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = { ...base };
-  for (const [key, val] of Object.entries(override)) {
-    if (
-      isPlainObject(result[key]) &&
-      isPlainObject(val)
-    ) {
-      result[key] = deepMerge(
-        result[key] as Record<string, unknown>,
-        val as Record<string, unknown>,
-      );
-    } else {
-      result[key] = val;
-    }
-  }
-  return result;
-}
-
-function isPlainObject(v: unknown): boolean {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}

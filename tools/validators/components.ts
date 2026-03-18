@@ -148,7 +148,7 @@ function collectUsedPlatforms(data: Record<string, unknown>): Set<Platform> {
   }
 
   // Section and item platforms
-  const sections = ["agents", "commands", "hooks", "skills"];
+  const sections = ["agents", "commands", "hooks", "skills", "scripts", "rules"];
   for (const section of sections) {
     const sectionData = data[section];
     if (!isObject(sectionData)) continue;

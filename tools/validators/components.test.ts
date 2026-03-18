@@ -179,6 +179,36 @@ agents:
     });
   });
 
+  // --- scripts/rules section platform collection ---
+  describe("scripts/rules 섹션 플랫폼 수집", () => {
+    it("scripts 섹션 item에 platforms: [gemini]가 있으면 GEMINI.md 존재를 검사한다", () => {
+      // GEMINI.md does NOT exist → error expected (proving gemini was collected)
+      touch(join(root, "scripts", "my-script", "index.sh"));
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+scripts:
+  items:
+    - component: my-script
+      platforms: [gemini]
+`);
+      const result = validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("GEMINI.md"))).toBe(true);
+    });
+
+    it("rules 섹션 item에 platforms: [gemini]가 있으면 GEMINI.md 존재를 검사한다", () => {
+      touch(join(root, "rules", "my-rule.md"));
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+rules:
+  items:
+    - component: my-rule
+      platforms: [gemini]
+`);
+      const result = validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("GEMINI.md"))).toBe(true);
+    });
+  });
+
   // --- Component existence via object item format ---
   describe("object item 형식 컴포넌트 검증", () => {
     it("object 형식 item에서 존재하는 컴포넌트는 에러가 없다", () => {
