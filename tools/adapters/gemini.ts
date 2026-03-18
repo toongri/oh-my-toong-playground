@@ -419,9 +419,8 @@ export class GeminiAdapter implements PlatformAdapter {
 
           // If a component is specified, copy the hook file/dir
           if (component) {
-            displayName = component.includes(":")
-              ? component.split(":").slice(1).join(":")
-              : component;
+            // component is a pre-resolved absolute path (orchestrator resolves before calling adapter)
+            displayName = path.basename(component);
             resolvedSourcePath = component;
 
             await this.syncHooksDirect(

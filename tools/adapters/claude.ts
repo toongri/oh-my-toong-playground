@@ -45,6 +45,9 @@ async function defaultPluginInstaller(
     stderr: "inherit",
   });
   await proc.exited;
+  if (proc.exitCode !== 0) {
+    throw new Error(`claude plugin install ${name} exited with code ${proc.exitCode}`);
+  }
 }
 
 // =============================================================================
@@ -365,16 +368,8 @@ export class ClaudeAdapter implements PlatformAdapter {
 
           // If a component is specified, resolve and copy the hook file
           if (component) {
-            // component is a pre-resolved source path in the TS world
-            // (The orchestrator/caller resolves paths before calling adapter)
-            // For direct usage here we treat component as display name and derive
-            // source from it. In the TS adapter context the caller passes
-            // pre-resolved source paths via a separate mechanism; for
-            // syncPlatformYaml the component is the hook component identifier.
-            // We use component as displayName and try to locate it.
-            displayName = component.includes(":")
-              ? component.split(":").slice(1).join(":")
-              : component;
+            // component is a pre-resolved absolute path (orchestrator resolves before calling adapter)
+            displayName = path.basename(component);
             resolvedSourcePath = component;
 
             // Copy the hook file/dir

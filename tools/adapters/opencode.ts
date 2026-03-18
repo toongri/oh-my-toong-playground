@@ -247,8 +247,10 @@ export const opencodeAdapter: PlatformAdapter = {
     try {
       const raw = await fs.readFile(configFile, "utf-8");
       config = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      // File doesn't exist yet — start fresh
+    } catch (e: unknown) {
+      if (!(e && typeof e === "object" && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT")) {
+        throw e;
+      }
     }
 
     const instructions = Array.isArray(config["instructions"])
@@ -277,7 +279,7 @@ export const opencodeAdapter: PlatformAdapter = {
     _sourcePath: string,
     _dryRun?: boolean,
   ): Promise<void> {
-    logInfo(`OpenCode does not support hooks. Skipping: ${displayName || "hook"}`);
+    logWarn(`OpenCode does not support hooks. Skipping: ${displayName || "hook"}`);
   },
 
   async syncPlatformYaml(
@@ -317,7 +319,7 @@ export const opencodeAdapter: PlatformAdapter = {
 
     // 3. hooks — not supported, log and skip
     if (yaml.hooks != null) {
-      logInfo("OpenCode does not support hooks. Skipping hooks section.");
+      logWarn("OpenCode does not support hooks. Skipping hooks section.");
       processedSections.push("hooks");
     }
 
@@ -359,8 +361,10 @@ export async function syncConfig(
   try {
     const raw = await fs.readFile(configFile, "utf-8");
     current = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    // File doesn't exist — start empty
+  } catch (e: unknown) {
+    if (!(e && typeof e === "object" && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT")) {
+      throw e;
+    }
   }
 
   const merged = deepMerge(current, configObj);
@@ -399,8 +403,10 @@ export async function syncMcpsMerge(
   try {
     const raw = await fs.readFile(configFile, "utf-8");
     current = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    // File doesn't exist — start empty
+  } catch (e: unknown) {
+    if (!(e && typeof e === "object" && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT")) {
+      throw e;
+    }
   }
 
   const mcp = (current["mcp"] as Record<string, unknown> | undefined) ?? {};

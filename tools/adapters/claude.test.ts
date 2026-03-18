@@ -532,6 +532,20 @@ describe("Plugin install (DI 패턴)", () => {
     }, false);
   });
 
+  it("플러그인 설치기가 non-zero exitCode를 반환하면 warn 로그를 출력하고 계속 진행한다", async () => {
+    const failingInstaller = async (_name: string, _targetPath: string) => {
+      throw new Error("claude plugin install bad-plugin exited with code 1");
+    };
+
+    const adapterWithMock = new ClaudeAdapter(failingInstaller);
+    // Should not throw — _installPluginSafe catches and warns
+    await expect(
+      adapterWithMock.syncPlatformYaml(targetPath, {
+        plugins: { items: ["bad-plugin"] },
+      }, false),
+    ).resolves.toBeDefined();
+  });
+
   it("dry_run 모드에서는 플러그인 설치를 호출하지 않는다", async () => {
     const installedPlugins: string[] = [];
     const mockInstaller = async (name: string) => {
@@ -675,5 +689,29 @@ describe("syncPlatformYaml - processedSections", () => {
     }, true);
 
     expect(result.processedSections).toContain("config");
+  });
+
+  it("절대 경로 component에서 displayName을 path.basename()으로 추출해 훅을 복사한다", async () => {
+    // Create a real hook file at an absolute path (simulates pre-resolved path from orchestrator)
+    const hookFile = path.join(tmpDir, "keyword-detector.sh");
+    await writeFile(hookFile, "#!/bin/bash\necho hi\n", 0o644);
+
+    const result = await adapter.syncPlatformYaml(targetPath, {
+      hooks: {
+        UserPromptSubmit: [
+          {
+            component: hookFile,
+            timeout: 10,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    expect(result.processedSections).toContain("hooks");
+
+    // Hook should be copied under its basename, not full path or colon-split name
+    const hookDest = path.join(targetPath, ".claude", "hooks", "keyword-detector.sh");
+    expect(await exists(hookDest)).toBe(true);
   });
 });

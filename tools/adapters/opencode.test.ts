@@ -239,6 +239,14 @@ describe("syncConfig", () => {
       .catch(() => false);
     expect(exists).toBe(false);
   });
+
+  it("opencode.json이 손상된 JSON이면 SyntaxError를 던진다", async () => {
+    const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+    await fs.mkdir(path.join(tmpDir, ".opencode"), { recursive: true });
+    await fs.writeFile(configFile, "{ invalid json }", "utf-8");
+
+    await expect(syncConfig(tmpDir, { model: "openai/o3" }, false)).rejects.toThrow(SyntaxError);
+  });
 });
 
 // =============================================================================

@@ -280,6 +280,87 @@ describe("syncCategory", () => {
     expect(await exists(path.join(claudeAgentsDir, "orphan-agent.md"))).toBe(false);
   });
 
+  it("agents 카테고리에서 add-hooks component를 해석해 source_path와 display_name을 첨부한다", async () => {
+    // Create agent source file
+    const agentFile = path.join(rootDir, "agents", "oracle.md");
+    await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
+
+    // Create hook source file
+    const hookFile = path.join(rootDir, "hooks", "keyword-detector.sh");
+    await writeFile(hookFile, "#!/bin/bash\necho hi\n");
+
+    const syncYaml: SyncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["claude"],
+        items: [
+          {
+            component: "oracle",
+            "add-hooks": [
+              {
+                component: "keyword-detector.sh",
+                event: "UserPromptSubmit",
+                timeout: 10,
+              },
+            ],
+          } as never,
+        ],
+      },
+    };
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+
+    const calls = adapters.getAdapter("claude")!.calls;
+    const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
+    expect(agentCall).toBeDefined();
+    // addHooks (5th arg, index 4) should contain a resolved hook with source_path and display_name
+    const addHooks = agentCall!.args[4] as Array<Record<string, unknown>> | undefined;
+    expect(addHooks).toBeDefined();
+    expect(addHooks!.length).toBeGreaterThan(0);
+    expect(addHooks![0]["source_path"]).toBe(hookFile);
+    expect(addHooks![0]["display_name"]).toBe("keyword-detector.sh");
+  });
+
+  it("add-hooks에서 존재하지 않는 component는 경고 후 스킵된다", async () => {
+    const agentFile = path.join(rootDir, "agents", "oracle.md");
+    await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
+
+    const syncYaml: SyncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["claude"],
+        items: [
+          {
+            component: "oracle",
+            "add-hooks": [
+              {
+                component: "nonexistent-hook.sh",
+                event: "UserPromptSubmit",
+                timeout: 10,
+              },
+            ],
+          } as never,
+        ],
+      },
+    };
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    // Should not throw
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+
+    const calls = adapters.getAdapter("claude")!.calls;
+    const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
+    expect(agentCall).toBeDefined();
+    // addHooks should be undefined since the only hook failed to resolve
+    const addHooks = agentCall!.args[4] as unknown[] | undefined;
+    expect(addHooks == null || addHooks.length === 0).toBe(true);
+  });
+
   it("rules 카테고리는 디렉토리를 초기화하지 않는다 (P1-3)", async () => {
     // Create a rule component in rootDir
     await writeFile(path.join(rootDir, "rules", "my-rule.md"), "# My Rule\n");
@@ -313,13 +394,16 @@ describe("syncCategory", () => {
 
 describe("syncPlatformConfigs", () => {
   let tmpDir: string;
+  let rootDir: string;
   let yamlDir: string;
   let targetPath: string;
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "sync-platform-configs-test-"));
+    rootDir = path.join(tmpDir, "root");
     yamlDir = path.join(tmpDir, "yamldir");
     targetPath = path.join(tmpDir, "target");
+    await fs.mkdir(rootDir, { recursive: true });
     await fs.mkdir(yamlDir, { recursive: true });
     await fs.mkdir(targetPath, { recursive: true });
   });
@@ -337,7 +421,7 @@ describe("syncPlatformConfigs", () => {
     const adapters = makeAdapterMap(["claude", "gemini"]);
     const context = makeContext();
 
-    await syncPlatformConfigs(context, targetPath, yamlDir, adapters);
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
     const calls = adapters.getAdapter("claude")!.calls;
     expect(calls.some((c) => c.method === "syncPlatformYaml")).toBe(true);
@@ -365,7 +449,7 @@ describe("syncPlatformConfigs", () => {
 
     const context = makeContext();
 
-    await syncPlatformConfigs(context, targetPath, yamlDir, adapters);
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
     expect(context.modelMaps.get("codex")).toEqual({ "claude-3": "o3" });
   });
@@ -389,7 +473,7 @@ describe("syncPlatformConfigs", () => {
 
     const context = makeContext();
 
-    await syncPlatformConfigs(context, targetPath, yamlDir, adapters);
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
     expect(context.platformYamlSections.get("gemini")).toEqual(["config", "mcps"]);
   });
@@ -398,10 +482,72 @@ describe("syncPlatformConfigs", () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext();
 
-    await syncPlatformConfigs(context, targetPath, yamlDir, adapters);
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
     expect(context.platformYamlSections.size).toBe(0);
+  });
+
+  it("hooks component를 절대 경로로 변환해 어댑터에 전달한다", async () => {
+    // Create a real hook file in rootDir
+    const hookFile = path.join(rootDir, "hooks", "keyword-detector.sh");
+    await writeFile(hookFile, "#!/bin/bash\necho hi\n");
+
+    await writeFile(
+      path.join(yamlDir, "claude.yaml"),
+      "hooks:\n  UserPromptSubmit:\n    - component: keyword-detector.sh\n      timeout: 10\n",
+    );
+
+    const receivedYamls: Record<string, unknown>[] = [];
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      receivedYamls.push(yaml);
+      return { processedSections: ["hooks"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+    const context = makeContext();
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    // The adapter should have received the resolved absolute path
+    expect(receivedYamls.length).toBe(1);
+    const hooksMap = (receivedYamls[0] as Record<string, unknown>)["hooks"] as Record<string, Array<Record<string, unknown>>>;
+    const items = hooksMap["UserPromptSubmit"];
+    expect(items).toBeDefined();
+    expect(items[0]["component"]).toBe(hookFile);
+  });
+
+  it("존재하지 않는 hook component는 경고 후 스킵된다", async () => {
+    await writeFile(
+      path.join(yamlDir, "claude.yaml"),
+      "hooks:\n  UserPromptSubmit:\n    - component: nonexistent-hook.sh\n      timeout: 10\n",
+    );
+
+    const receivedYamls: Record<string, unknown>[] = [];
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      receivedYamls.push(yaml);
+      return { processedSections: ["hooks"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+    const context = makeContext();
+    // Should not throw
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    // The adapter is still called, but hooks item is removed
+    expect(receivedYamls.length).toBe(1);
+    const hooksMap = (receivedYamls[0] as Record<string, unknown>)["hooks"] as Record<string, Array<Record<string, unknown>>>;
+    const items = hooksMap["UserPromptSubmit"];
+    expect(items).toHaveLength(0);
   });
 });
 
