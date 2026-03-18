@@ -30,7 +30,8 @@ flowchart TB
     E2 --> F2{Self-introduction was evaluated?}
     F2 -->|Yes| F[S3/S4 Conditional Re-evaluation]
     F2 -->|No| G
-    F --> G[Line-by-line 6-dimension scan — career/problem-solving sections]
+    F --> F3[S1-S5 Writing Guidance Trigger recheck]
+    F3 --> G[Line-by-line 6-dimension scan — career/problem-solving sections]
     D -->|Yes| G
     G --> H[3-level pushback simulation]
     H --> I[First-Page Primacy check]
@@ -89,6 +90,7 @@ When the target position is obtained via the ASK node **after** the S1-S5 evalua
 - **Trigger condition**: S3 and/or S4 were marked N/A due to missing target, but the user has now provided target company/position information.
 - **Action**: Re-evaluate S3 (Connection) and S4 (Contribution Value) with the newly provided context. Change N/A to PASS or FAIL accordingly.
 - **Preserved results**: S1, S2, and S5 results from the initial evaluation are not changed.
+- **Trigger recheck**: After S3/S4 re-evaluation, recheck the Writing Guidance Trigger: Self-Introduction condition using the updated evaluable count (now 5 instead of 3). If the trigger was not fired after the initial S1-S5 evaluation but the condition is now met with the expanded evaluable set, deliver the guidance message before proceeding to D1-D6. If the trigger already fired after the initial evaluation, do not fire it again.
 
 Re-evaluation output format:
 
