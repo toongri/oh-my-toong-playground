@@ -170,6 +170,28 @@ describe("updateSettings", () => {
 });
 
 // ---------------------------------------------------------------------------
+// readJsonFile 동작 — syncConfig/updateSettings를 통한 간접 테스트
+// ---------------------------------------------------------------------------
+
+describe("readJsonFile 동작", () => {
+  it("손상된 JSON 파일이 있으면 예외를 던진다", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    await writeFile(settingsFile, "{invalid");
+
+    // syncConfig internally calls readJsonFile; corrupt JSON should propagate as throw
+    await expect(adapter.syncConfig(targetPath, { foo: "bar" })).rejects.toThrow();
+  });
+
+  it("파일이 없으면 빈 객체를 반환한다 (새 파일로 생성)", async () => {
+    // settings.json does not exist; syncConfig should create it from scratch
+    await adapter.syncConfig(targetPath, { createdFresh: true });
+
+    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.json"));
+    expect(settings["createdFresh"]).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // syncConfig
 // ---------------------------------------------------------------------------
 
@@ -681,6 +703,22 @@ describe("syncPlatformYaml - processedSections", () => {
   it("비어있는 yaml은 빈 processedSections를 반환한다", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {}, false);
     expect(result.processedSections).toHaveLength(0);
+  });
+
+  it("hooks: {} 이면 기존 hooks를 지우고 settings.json에 빈 hooks를 저장한다", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    await writeFile(settingsFile, JSON.stringify({
+      hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "/old", timeout: 10 }] }] },
+      otherKey: "keep",
+    }));
+
+    await adapter.syncPlatformYaml(targetPath, { hooks: {} }, false);
+
+    const settings = await readJsonFile(settingsFile);
+    // hooks must be cleared to empty object
+    expect(settings["hooks"]).toEqual({});
+    // unrelated keys must be preserved
+    expect(settings["otherKey"]).toBe("keep");
   });
 
   it("dry_run 모드에서 processedSections는 정상 반환된다", async () => {

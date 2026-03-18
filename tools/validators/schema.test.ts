@@ -217,6 +217,34 @@ agents:
     });
   });
 
+  // --- Non-object section data ---
+  describe("섹션 데이터가 object가 아닌 경우", () => {
+    it("agents 섹션이 string이면 에러를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents: "bad-type"
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("agents") && e.includes("object 형식"))).toBe(true);
+    });
+  });
+
+  // --- Object item missing component field ---
+  describe("object item에 component 필드가 없는 경우", () => {
+    it("component 필드가 없는 object item은 에러를 반환한다", () => {
+      const path = writeYaml(dir, "sync.yaml", `
+path: /target
+agents:
+  items:
+    - add-skills: [oracle]
+`);
+      const result = validateSyncYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("component 필드가 필요합니다"))).toBe(true);
+    });
+  });
+
   // --- P2-7: No hook component file checks ---
   describe("P2-7: schema.ts는 hook 파일 존재를 검사하지 않는다", () => {
     it("hooks가 없는 sync.yaml (hooks는 deprecated이므로 — 구조 오류만 감지)", () => {
@@ -409,6 +437,19 @@ mcps:
       const path = writeYaml(dir, "claude.yaml", `config: [unclosed`);
       const result = validatePlatformYaml(path, "claude");
       expect(result.errors.length).toBeGreaterThan(0);
+    });
+  });
+
+  // --- Non-object top-level data ---
+  describe("최상위 데이터가 object가 아닌 경우", () => {
+    it("claude.yaml 최상위가 배열이면 에러를 반환한다", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+- item1
+- item2
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("object 형식이어야 합니다"))).toBe(true);
     });
   });
 });
