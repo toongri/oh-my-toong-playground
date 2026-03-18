@@ -2,7 +2,7 @@
 
 ## Purpose
 
-These scenarios test whether the review-resume skill's **core techniques** are correctly applied. Each scenario targets specific dimensions of the 6-dimension evaluation framework, pushback simulation, section fitness rules, and handoff logic.
+These scenarios test whether the review-resume skill's **core techniques** are correctly applied. Each scenario targets specific dimensions of the 6-dimension evaluation framework, pushback simulation, section fitness rules, and writing guidance trigger logic.
 
 ## Technique Coverage Map
 
@@ -11,7 +11,7 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 | 1 | D1-D2: Causation + Specificity | 6-dim D1, D2 | Pushback L1 |
 | 2 | D3-D4: Role Clarity + Standard Detection | 6-dim D3, D4 | Pushback L2 |
 | 3 | D5-D6: Interview Depth + Section Fitness | 6-dim D5, D6 + 3-level pushback | Section migration |
-| 4 | Handoff Judgment | Handoff trigger (3+ D1/D2 fail) | make-resume guidance |
+| 4 | Writing Guidance Trigger | Writing Guidance Trigger (3+ D1/D2 fail) | Inline writing guidance |
 
 ---
 
@@ -102,9 +102,9 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 ---
 
-## Scenario 4: Handoff Judgment
+## Scenario 4: Writing Guidance Trigger
 
-**검증 대상:** D1/D2 다수 실패 시 make-resume 안내가 자연스럽게 나오는가?
+**검증 대상:** D1/D2 다수 실패 시 인라인 작성 가이드가 자연스럽게 제공되는가?
 
 **Prompt:**
 ```
@@ -124,10 +124,10 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 |---|-------|-------------------|
 | V1 | D1 all lines | 5/5 FAIL — 모든 라인에 goal→execution→outcome 체인 없음 |
 | V2 | D2 all lines | 5/5 FAIL — 어떤 라인도 구체적 수치/근거 없음 |
-| V3 | Handoff trigger | 3+ lines D1/D2 FAIL → make-resume 핸드오프 조건 충족 인지 |
-| V4 | Handoff message | "표현 수정이 아니라 내용 재구성이 필요합니다. make-resume 스킬로 재작성하시겠어요?" 또는 동등한 안내 |
+| V3 | Writing Guidance Trigger | 3+ lines D1/D2 FAIL → Writing Guidance Trigger 조건 충족 인지 |
+| V4 | Guidance message | "전체 N개 라인 중 X개가 D1/D2 FAIL입니다. 이 이력서는 표현 수정이 아니라 내용 재구성이 필요합니다. Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요." 또는 동등한 안내 |
 | V5 | Tone | 비난이 아닌 건설적 안내. "이 이력서는 리뷰가 아닌 재작성이 필요한 수준" |
-| V6 | Per-line evaluation | 핸드오프 전에도 각 라인별 D1-D6 평가는 완료 |
+| V6 | Per-line evaluation | 가이드 전에도 각 라인별 D1-D6 평가는 완료 |
 
 ---
 
