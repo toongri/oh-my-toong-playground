@@ -129,7 +129,7 @@ describe("syncCategory", () => {
     _resetConfigCache();
   });
 
-  it("올바른 어댑터에 dispatch한다 (claude)", async () => {
+  it("dispatches to the correct adapter for claude via `syncCategory`", async () => {
     // Create a skill component directory
     const skillDir = path.join(rootDir, "skills", "oracle");
     await fs.mkdir(skillDir, { recursive: true });
@@ -155,7 +155,7 @@ describe("syncCategory", () => {
     expect(geminiCalls.filter((c) => c.method === "syncSkillsDirect")).toHaveLength(0);
   });
 
-  it("item-level platforms override로 gemini에만 dispatch한다", async () => {
+  it("dispatches only to gemini when item-level platforms override is set", async () => {
     const commandFile = path.join(rootDir, "commands", "my-cmd.md");
     await writeFile(commandFile, "# My Command\n");
 
@@ -176,7 +176,7 @@ describe("syncCategory", () => {
     expect(adapters.getAdapter("claude")!.calls.filter((c) => c.method === "syncCommandsDirect")).toHaveLength(0);
   });
 
-  it("agents 카테고리에서 syncAgentsDirect를 호출한다", async () => {
+  it("calls `syncAgentsDirect` for agents category", async () => {
     const agentFile = path.join(rootDir, "agents", "oracle.md");
     await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
 
@@ -197,7 +197,7 @@ describe("syncCategory", () => {
     expect(calls.some((c) => c.method === "syncAgentsDirect")).toBe(true);
   });
 
-  it("component가 없는 항목을 스킵한다", async () => {
+  it("skips items with empty component", async () => {
     const syncYaml: SyncYaml = {
       path: targetPath,
       rules: {
@@ -214,7 +214,7 @@ describe("syncCategory", () => {
     expect(adapters.getAdapter("claude")!.calls.filter((c) => c.method === "syncRulesDirect")).toHaveLength(0);
   });
 
-  it("items 배열이 없으면 아무것도 하지 않는다", async () => {
+  it("does nothing when items array is absent", async () => {
     const syncYaml: SyncYaml = {
       path: targetPath,
       scripts: {},
@@ -227,7 +227,7 @@ describe("syncCategory", () => {
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
   });
 
-  it("dry-run 시 파일 쓰기 없이 logDry만 호출한다", async () => {
+  it("does not call adapter write methods in dry-run mode", async () => {
     const agentFile = path.join(rootDir, "agents", "oracle.md");
     await writeFile(agentFile, "# Oracle\n");
 
@@ -249,7 +249,7 @@ describe("syncCategory", () => {
     expect(calls.filter((c) => c.method === "syncAgentsDirect")).toHaveLength(0);
   });
 
-  it("sync 후 orphan 파일이 삭제된다 (P1-3)", async () => {
+  it("removes orphan files after sync (P1-3)", async () => {
     // Create a skill component in rootDir
     const skillDir = path.join(rootDir, "skills", "oracle");
     await fs.mkdir(skillDir, { recursive: true });
@@ -280,7 +280,7 @@ describe("syncCategory", () => {
     expect(await exists(path.join(claudeAgentsDir, "orphan-agent.md"))).toBe(false);
   });
 
-  it("agents 카테고리에서 add-hooks component를 해석해 source_path와 display_name을 첨부한다", async () => {
+  it("resolves add-hooks component and attaches source_path and display_name for agents category", async () => {
     // Create agent source file
     const agentFile = path.join(rootDir, "agents", "oracle.md");
     await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
@@ -324,7 +324,7 @@ describe("syncCategory", () => {
     expect(addHooks![0]["display_name"]).toBe("keyword-detector.sh");
   });
 
-  it("add-hooks에서 존재하지 않는 component는 경고 후 스킵된다", async () => {
+  it("skips missing add-hooks component with a warning", async () => {
     const agentFile = path.join(rootDir, "agents", "oracle.md");
     await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
 
@@ -361,7 +361,7 @@ describe("syncCategory", () => {
     expect(addHooks == null || addHooks.length === 0).toBe(true);
   });
 
-  it("rules 카테고리는 디렉토리를 초기화하지 않는다 (P1-3)", async () => {
+  it("does not wipe the rules directory (P1-3)", async () => {
     // Create a rule component in rootDir
     await writeFile(path.join(rootDir, "rules", "my-rule.md"), "# My Rule\n");
 
@@ -412,7 +412,7 @@ describe("syncPlatformConfigs", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("claude.yaml 발견 시 claude 어댑터의 syncPlatformYaml을 호출한다", async () => {
+  it("calls `syncPlatformYaml` on claude adapter when claude.yaml is found", async () => {
     await writeFile(
       path.join(yamlDir, "claude.yaml"),
       "config:\n  theme: dark\n",
@@ -429,7 +429,7 @@ describe("syncPlatformConfigs", () => {
     expect(adapters.getAdapter("gemini")!.calls.filter((c) => c.method === "syncPlatformYaml")).toHaveLength(0);
   });
 
-  it("model-map이 context.modelMaps에 저장된다 (P2-1)", async () => {
+  it("stores model-map in context.modelMaps (P2-1)", async () => {
     await writeFile(
       path.join(yamlDir, "codex.yaml"),
       "model-map:\n  claude-3: o3\n",
@@ -454,7 +454,7 @@ describe("syncPlatformConfigs", () => {
     expect(context.modelMaps.get("codex")).toEqual({ "claude-3": "o3" });
   });
 
-  it("processedSections이 context.platformYamlSections에 저장된다", async () => {
+  it("stores processedSections in context.platformYamlSections", async () => {
     await writeFile(
       path.join(yamlDir, "gemini.yaml"),
       "config:\n  key: val\n",
@@ -478,7 +478,7 @@ describe("syncPlatformConfigs", () => {
     expect(context.platformYamlSections.get("gemini")).toEqual(["config", "mcps"]);
   });
 
-  it("platform YAML 없으면 아무것도 하지 않는다", async () => {
+  it("does nothing when no platform YAML files are present", async () => {
     const adapters = makeAdapterMap(["claude"]);
     const context = makeContext();
 
@@ -488,7 +488,7 @@ describe("syncPlatformConfigs", () => {
     expect(context.platformYamlSections.size).toBe(0);
   });
 
-  it("hooks component를 절대 경로로 변환해 어댑터에 전달한다", async () => {
+  it("resolves hooks component to absolute path before passing to adapter", async () => {
     // Create a real hook file in rootDir
     const hookFile = path.join(rootDir, "hooks", "keyword-detector.sh");
     await writeFile(hookFile, "#!/bin/bash\necho hi\n");
@@ -521,7 +521,7 @@ describe("syncPlatformConfigs", () => {
     expect(items[0]["component"]).toBe(hookFile);
   });
 
-  it("존재하지 않는 hook component는 경고 후 스킵된다", async () => {
+  it("skips missing hook component with a warning", async () => {
     await writeFile(
       path.join(yamlDir, "claude.yaml"),
       "hooks:\n  UserPromptSubmit:\n    - component: nonexistent-hook.sh\n      timeout: 10\n",
@@ -550,7 +550,7 @@ describe("syncPlatformConfigs", () => {
     expect(items).toHaveLength(0);
   });
 
-  it("빈 platform YAML이 크래시 없이 스킵된다 (P1-2)", async () => {
+  it("skips empty platform YAML without crashing (P1-2)", async () => {
     // Empty file — parseYaml returns null
     await writeFile(path.join(yamlDir, "claude.yaml"), "");
 
@@ -589,7 +589,7 @@ describe("processYaml", () => {
     _resetConfigCache();
   });
 
-  it("syncPlatformConfigs 먼저 호출 후 5개 카테고리 처리한다", async () => {
+  it("calls `syncPlatformConfigs` first then processes all categories", async () => {
     // Create a claude.yaml to trigger syncPlatformConfigs
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     await writeFile(syncYamlPath, `path: ${targetPath}\n`);
@@ -620,7 +620,7 @@ describe("processYaml", () => {
     expect(platformYamlCalls.length).toBeGreaterThan(0);
   });
 
-  it("config/hooks/mcps/plugins 섹션을 처리하지 않는다 (P2-3)", async () => {
+  it("does not process config/hooks/mcps/plugins sections in sync.yaml (P2-3)", async () => {
     // sync.yaml with config/hooks/mcps/plugins sections (should all be ignored)
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     const yamlContent = `path: ${targetPath}\nconfig:\n  theme: dark\nhooks:\n  items: []\nmcps:\n  items: []\nplugins:\n  items: []\n`;
@@ -644,7 +644,7 @@ describe("processYaml", () => {
     expect(calls.filter((c) => c.method === "syncHooksDirect")).toHaveLength(0);
   });
 
-  it("path 없는 sync.yaml을 경고와 함께 스킵한다", async () => {
+  it("skips sync.yaml without path field with a warning", async () => {
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     await writeFile(syncYamlPath, "agents:\n  items: [oracle]\n");
 
@@ -657,7 +657,7 @@ describe("processYaml", () => {
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
   });
 
-  it("존재하지 않는 sync.yaml을 경고와 함께 스킵한다", async () => {
+  it("skips nonexistent sync.yaml with a warning", async () => {
     const missingPath = path.join(rootDir, "nonexistent.yaml");
 
     const adapters = makeAdapterMap(["claude"]);
@@ -668,7 +668,7 @@ describe("processYaml", () => {
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
   });
 
-  it("skill 항목을 올바른 어댑터로 동기화한다", async () => {
+  it("syncs skill items to the correct adapter", async () => {
     const skillDir = path.join(rootDir, "skills", "oracle");
     await fs.mkdir(skillDir, { recursive: true });
     await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
@@ -688,7 +688,7 @@ describe("processYaml", () => {
     expect(claudeAdapter.calls.some((c) => c.method === "syncSkillsDirect")).toBe(true);
   });
 
-  it("빈 sync.yaml이 크래시 없이 반환된다 (P1-1)", async () => {
+  it("returns without crashing on empty sync.yaml (P1-1)", async () => {
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     // Empty file — parseYaml returns null
     await writeFile(syncYamlPath, "");
@@ -702,7 +702,7 @@ describe("processYaml", () => {
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
   });
 
-  it("주석만 있는 sync.yaml이 크래시 없이 반환된다 (P1-1)", async () => {
+  it("returns without crashing on comment-only sync.yaml (P1-1)", async () => {
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     // Comment-only file — parseYaml returns null
     await writeFile(syncYamlPath, "# just a comment\n");
@@ -722,7 +722,7 @@ describe("processYaml", () => {
 // ---------------------------------------------------------------------------
 
 describe("처리 순서 및 중복 제거", () => {
-  it("processedPaths Set이 중복 처리를 방지한다", async () => {
+  it("processedPaths Set prevents duplicate processing", async () => {
     // Simulate Set dedup: same path in both projects and root
     const context = makeContext();
     const targetPath = "/some/target/path";
@@ -733,7 +733,7 @@ describe("처리 순서 및 중복 제거", () => {
     expect(context.processedPaths.has(targetPath)).toBe(true);
   });
 
-  it("createContext가 빈 processedPaths로 초기화된다", () => {
+  it("`createContext` initializes with empty processedPaths", () => {
     const context = createContext(false);
     expect(context.processedPaths.size).toBe(0);
   });
@@ -761,7 +761,7 @@ describe("프로젝트별 오류 격리", () => {
     _resetConfigCache();
   });
 
-  it("한 프로젝트 처리 실패 시 나머지 프로젝트가 계속 처리된다 (P1-5)", async () => {
+  it("continues processing remaining projects when one project fails (P1-5)", async () => {
     const targetA = path.join(tmpDir, "target-a");
     const targetB = path.join(tmpDir, "target-b");
     await fs.mkdir(targetA, { recursive: true });
@@ -854,7 +854,7 @@ describe("modelMaps 크로스 프로젝트 누수 방지", () => {
     _resetConfigCache();
   });
 
-  it("첫 번째 processYaml의 modelMap이 두 번째 호출로 누수되지 않는다", async () => {
+  it("does not leak modelMap from first `processYaml` call into second call", async () => {
     // First sync.yaml: has a claude.yaml with model-map
     const syncYaml1Dir = path.join(tmpDir, "yaml1");
     await fs.mkdir(syncYaml1Dir, { recursive: true });
@@ -895,7 +895,7 @@ describe("modelMaps 크로스 프로젝트 누수 방지", () => {
     expect(context.modelMaps.size).toBe(0);
   });
 
-  it("첫 번째 processYaml의 platformYamlSections가 두 번째 호출로 누수되지 않는다", async () => {
+  it("does not leak platformYamlSections from first `processYaml` call into second call", async () => {
     const syncYaml1Dir = path.join(tmpDir, "yaml1");
     await fs.mkdir(syncYaml1Dir, { recursive: true });
     const syncYaml1Path = path.join(syncYaml1Dir, "sync.yaml");
@@ -954,7 +954,7 @@ describe("루트 sync.yaml processedPaths 추가", () => {
     _resetConfigCache();
   });
 
-  it("processYaml 실행 후 caller가 targetPath를 processedPaths에 추가하면 중복 방지가 작동한다", async () => {
+  it("dedup works when caller adds targetPath to processedPaths after `processYaml`", async () => {
     // This test mirrors the CLI pattern: processYaml runs, then caller adds targetPath.
     // Verifies the fix: root sync.yaml targetPath is tracked in processedPaths.
     const syncYamlPath = path.join(rootDir, "sync.yaml");
@@ -973,7 +973,7 @@ describe("루트 sync.yaml processedPaths 추가", () => {
     expect(context.processedPaths.size).toBe(1);
   });
 
-  it("processedPaths가 비어 있으면 백업 정리 루프가 실행되지 않는다", async () => {
+  it("backup cleanup loop does not run when processedPaths is empty", async () => {
     // Before fix: processedPaths was empty after root sync.yaml processing
     // This test documents the pre-fix state (empty set)
     const context = makeContext();
@@ -1003,7 +1003,7 @@ describe("syncLib", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("lib/ 디렉토리가 없으면 아무것도 하지 않는다", async () => {
+  it("does nothing when lib/ directory does not exist", async () => {
     const context = makeContext();
 
     await syncLib(context, targetPath, rootDir, ["claude"]);
@@ -1012,7 +1012,7 @@ describe("syncLib", () => {
     expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
   });
 
-  it("lib/ 디렉토리를 각 플랫폼 대상에 배포한다", async () => {
+  it("deploys lib/ directory to each platform target via `syncLib`", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
@@ -1025,7 +1025,7 @@ describe("syncLib", () => {
     expect(await exists(destFile)).toBe(true);
   });
 
-  it("*.test.ts 파일을 제외한다", async () => {
+  it("excludes *.test.ts files from lib deployment", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
@@ -1039,7 +1039,7 @@ describe("syncLib", () => {
     expect(await exists(testFile)).toBe(false);
   });
 
-  it("dry-run 시 파일을 복사하지 않는다", async () => {
+  it("does not copy files in dry-run mode", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
@@ -1051,7 +1051,7 @@ describe("syncLib", () => {
     expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(false);
   });
 
-  it("processYaml이 syncYaml.platforms cascade를 사용해 syncLib 플랫폼을 결정한다 (P2-4)", async () => {
+  it("`processYaml` uses syncYaml.platforms cascade to determine `syncLib` platforms (P2-4)", async () => {
     // syncYaml.platforms = [gemini] → resolvePlatforms level-3 cascade picks gemini
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
@@ -1071,7 +1071,7 @@ describe("syncLib", () => {
     expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(false);
   });
 
-  it("@lib/* import alias를 상대 경로로 재작성한다", async () => {
+  it("rewrites @lib/* import aliases to relative paths via `syncLib`", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "types.ts"), "export type X = string;\n");
@@ -1110,7 +1110,7 @@ describe("rewriteLibAliases", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("루트 레벨 파일의 @lib/ -> ./lib/로 재작성한다", async () => {
+  it("rewrites @lib/ to ./lib/ for root-level files via `rewriteLibAliases`", async () => {
     await writeFile(
       path.join(tmpDir, "index.ts"),
       `import { X } from '@lib/types.ts';\nimport { Y } from "@lib/other.ts";\n`,
@@ -1123,7 +1123,7 @@ describe("rewriteLibAliases", () => {
     expect(content).toContain('"./lib/other.ts"');
   });
 
-  it("1단계 깊이 파일의 @lib/ -> ../lib/로 재작성한다", async () => {
+  it("rewrites @lib/ to ../lib/ for one-level-deep files via `rewriteLibAliases`", async () => {
     await writeFile(
       path.join(tmpDir, "agents", "oracle.ts"),
       "import { X } from '@lib/types.ts';\n",
@@ -1135,7 +1135,7 @@ describe("rewriteLibAliases", () => {
     expect(content).toContain("'../lib/types.ts'");
   });
 
-  it("2단계 깊이 파일의 @lib/ -> ../../lib/로 재작성한다", async () => {
+  it("rewrites @lib/ to ../../lib/ for two-levels-deep files via `rewriteLibAliases`", async () => {
     await writeFile(
       path.join(tmpDir, "a", "b", "deep.ts"),
       "import type { X } from '@lib/types.ts';\n",
@@ -1147,7 +1147,7 @@ describe("rewriteLibAliases", () => {
     expect(content).toContain("'../../lib/types.ts'");
   });
 
-  it("@lib/ 없는 파일은 변경하지 않는다", async () => {
+  it("does not modify files without @lib/ imports", async () => {
     const original = "import { X } from './local.ts';\n";
     await writeFile(path.join(tmpDir, "no-alias.ts"), original);
 
@@ -1157,7 +1157,7 @@ describe("rewriteLibAliases", () => {
     expect(content).toBe(original);
   });
 
-  it("*.test.ts 파일은 건드리지 않는다", async () => {
+  it("does not touch *.test.ts files", async () => {
     const original = "import { X } from '@lib/types.ts';\n";
     await writeFile(path.join(tmpDir, "helper.test.ts"), original);
 
@@ -1167,7 +1167,7 @@ describe("rewriteLibAliases", () => {
     expect(content).toBe(original);
   });
 
-  it("lib/ 내부 파일은 재작성하지 않는다", async () => {
+  it("does not rewrite files inside lib/ directory", async () => {
     const original = "import { X } from '@lib/types.ts';\n";
     await writeFile(path.join(tmpDir, "lib", "internal.ts"), original);
 
@@ -1196,7 +1196,7 @@ describe("rewritePlatformPaths", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("gemini 플랫폼: .claude/ -> .gemini/ 로 재작성한다", async () => {
+  it("rewrites .claude/ to .gemini/ for gemini platform via `rewritePlatformPaths`", async () => {
     const geminiDir = path.join(targetPath, ".gemini", "agents");
     await fs.mkdir(geminiDir, { recursive: true });
     await writeFile(
@@ -1211,7 +1211,7 @@ describe("rewritePlatformPaths", () => {
     expect(content).not.toContain(".claude/");
   });
 
-  it("codex 플랫폼: .claude/ -> .codex/ 로 재작성한다", async () => {
+  it("rewrites .claude/ to .codex/ for codex platform via `rewritePlatformPaths`", async () => {
     const codexDir = path.join(targetPath, ".codex", "rules");
     await fs.mkdir(codexDir, { recursive: true });
     await writeFile(
@@ -1226,7 +1226,7 @@ describe("rewritePlatformPaths", () => {
     expect(content).not.toContain(".claude/");
   });
 
-  it("opencode 플랫폼: .claude/ -> .opencode/ 로 재작성한다", async () => {
+  it("rewrites .claude/ to .opencode/ for opencode platform via `rewritePlatformPaths`", async () => {
     const opencodeDir = path.join(targetPath, ".opencode", "skills");
     await fs.mkdir(opencodeDir, { recursive: true });
     await writeFile(
@@ -1242,7 +1242,7 @@ describe("rewritePlatformPaths", () => {
     expect(content).not.toContain(".claude/");
   });
 
-  it("claude 플랫폼은 아무것도 하지 않는다", async () => {
+  it("does nothing for claude platform via `rewritePlatformPaths`", async () => {
     const claudeDir = path.join(targetPath, ".claude", "agents");
     await fs.mkdir(claudeDir, { recursive: true });
     const original = "Look in .claude/skills/ for more\n";
@@ -1254,7 +1254,7 @@ describe("rewritePlatformPaths", () => {
     expect(content).toBe(original);
   });
 
-  it(".claude/ 없는 파일은 변경하지 않는다", async () => {
+  it("does not modify files without .claude/ references", async () => {
     const geminiDir = path.join(targetPath, ".gemini");
     await fs.mkdir(geminiDir, { recursive: true });
     const original = "No platform path references here.\n";
@@ -1291,7 +1291,7 @@ describe("dry-run", () => {
     _resetConfigCache();
   });
 
-  it("processYaml dry-run: .claude 디렉토리를 생성하지 않는다", async () => {
+  it("`processYaml` does not create .claude directory in dry-run mode", async () => {
     const syncYamlPath = path.join(rootDir, "sync.yaml");
     await writeFile(syncYamlPath, `path: ${targetPath}\n`);
 
@@ -1304,7 +1304,7 @@ describe("dry-run", () => {
     expect(await exists(path.join(targetPath, ".claude"))).toBe(false);
   });
 
-  it("syncLib dry-run: 파일을 복사하지 않는다", async () => {
+  it("`syncLib` does not copy files in dry-run mode", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
     await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
@@ -1322,7 +1322,7 @@ describe("dry-run", () => {
 // ---------------------------------------------------------------------------
 
 describe("config.yaml feature-platforms 정리", () => {
-  it("feature-platforms에 skills만 남아있다", async () => {
+  it("feature-platforms contains only skills", async () => {
     // Read the actual config.yaml from the repo
     const configPath = path.join(
       import.meta.dir,
@@ -1348,7 +1348,7 @@ describe("config.yaml feature-platforms 정리", () => {
 // ---------------------------------------------------------------------------
 
 describe("createContext", () => {
-  it("dryRun=false 컨텍스트를 생성한다", () => {
+  it("creates context with dryRun=false via `createContext`", () => {
     const ctx = createContext(false);
     expect(ctx.dryRun).toBe(false);
     expect(ctx.processedPaths).toBeInstanceOf(Set);
@@ -1358,12 +1358,12 @@ describe("createContext", () => {
     expect(ctx.backupSession.length).toBeGreaterThan(0);
   });
 
-  it("dryRun=true 컨텍스트를 생성한다", () => {
+  it("creates context with dryRun=true via `createContext`", () => {
     const ctx = createContext(true);
     expect(ctx.dryRun).toBe(true);
   });
 
-  it("각 호출마다 고유한 backupSession을 생성한다", () => {
+  it("generates unique backupSession on each `createContext` call", () => {
     const ctx1 = createContext(false);
     const ctx2 = createContext(false);
     expect(ctx1.backupSession).not.toBe(ctx2.backupSession);

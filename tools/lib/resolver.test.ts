@@ -60,19 +60,19 @@ describe("resolvePlatforms", () => {
 
   // --- Level 1: item platforms ---
   describe("레벨 1: item.platforms", () => {
-    it("item 객체에 platforms가 있으면 해당 값을 반환한다", async () => {
+    it("returns item.platforms when present on the item object", async () => {
       const item: SyncItem = { component: "oracle", platforms: ["codex"] };
       const result = await resolvePlatforms(item, ["claude", "gemini"], ["claude"], "agents");
       expect(result).toEqual(["codex"]);
     });
 
-    it("platforms가 빈 배열이면 다음 레벨로 넘어간다", async () => {
+    it("falls through to next level when platforms is an empty array", async () => {
       const item: SyncItem = { component: "oracle", platforms: [] };
       const result = await resolvePlatforms(item, ["gemini"], undefined, "agents");
       expect(result).toEqual(["gemini"]);
     });
 
-    it("string 형태 item은 레벨 2로 넘어간다", async () => {
+    it("falls through to level 2 when item is a string", async () => {
       const item: SyncItem = "oracle";
       const result = await resolvePlatforms(item, ["gemini"], undefined, "agents");
       expect(result).toEqual(["gemini"]);
@@ -81,19 +81,19 @@ describe("resolvePlatforms", () => {
 
   // --- Level 2: sectionPlatforms ---
   describe("레벨 2: sectionPlatforms", () => {
-    it("item.platforms가 없을 때 sectionPlatforms를 반환한다", async () => {
+    it("returns sectionPlatforms when item.platforms is absent", async () => {
       const item: SyncItem = "oracle";
       const result = await resolvePlatforms(item, ["gemini", "codex"], ["claude"], "agents");
       expect(result).toEqual(["gemini", "codex"]);
     });
 
-    it("sectionPlatforms가 비어있으면 다음 레벨로 넘어간다", async () => {
+    it("falls through to next level when sectionPlatforms is empty", async () => {
       const item: SyncItem = "oracle";
       const result = await resolvePlatforms(item, [], ["opencode"], "agents");
       expect(result).toEqual(["opencode"]);
     });
 
-    it("sectionPlatforms가 undefined이면 다음 레벨로 넘어간다", async () => {
+    it("falls through to next level when sectionPlatforms is undefined", async () => {
       const item: SyncItem = "oracle";
       const result = await resolvePlatforms(item, undefined, ["opencode"], "agents");
       expect(result).toEqual(["opencode"]);
@@ -102,13 +102,13 @@ describe("resolvePlatforms", () => {
 
   // --- Level 3: syncYamlPlatforms ---
   describe("레벨 3: syncYamlPlatforms", () => {
-    it("sectionPlatforms가 없을 때 syncYamlPlatforms를 반환한다", async () => {
+    it("returns syncYamlPlatforms when sectionPlatforms is absent", async () => {
       const item: SyncItem = "oracle";
       const result = await resolvePlatforms(item, undefined, ["claude", "opencode"], "agents");
       expect(result).toEqual(["claude", "opencode"]);
     });
 
-    it("syncYamlPlatforms가 비어있으면 config 레벨로 넘어간다", async () => {
+    it("falls through to config level when syncYamlPlatforms is empty", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -124,7 +124,7 @@ describe("resolvePlatforms", () => {
 
   // --- Level 4: feature-platforms ---
   describe("레벨 4: feature-platforms (config.yaml)", () => {
-    it("syncYamlPlatforms가 없을 때 feature-platforms를 반환한다", async () => {
+    it("returns feature-platforms from config.yaml when syncYamlPlatforms is absent", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -137,7 +137,7 @@ describe("resolvePlatforms", () => {
       }
     });
 
-    it("agents 카테고리의 feature-platforms를 반환한다", async () => {
+    it("returns feature-platforms for the agents category", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -153,7 +153,7 @@ describe("resolvePlatforms", () => {
 
   // --- Level 5: use-platforms ---
   describe("레벨 5: use-platforms (config.yaml 기본값)", () => {
-    it("feature-platforms 항목이 없는 카테고리는 use-platforms로 폴백한다", async () => {
+    it("falls back to use-platforms for categories absent from feature-platforms", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(MINIMAL_CONFIG) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -169,7 +169,7 @@ describe("resolvePlatforms", () => {
 
   // --- Level 6: hardcoded fallback ---
   describe("레벨 6: 하드코딩 폴백 [\"claude\"]", () => {
-    it("config.yaml이 없으면 [\"claude\"]를 반환한다", async () => {
+    it("returns [\"claude\"] when config.yaml is missing", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(null) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -185,7 +185,7 @@ describe("resolvePlatforms", () => {
 
   // --- Replacement semantics ---
   describe("완전 교체 동작", () => {
-    it("item.platforms가 있으면 모든 하위 레벨을 완전히 교체한다", async () => {
+    it("item.platforms fully overrides all lower levels when present", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -223,31 +223,31 @@ describe("resolveComponentPath", () => {
 
   // --- Global (root yaml) ---
   describe("전역 컴포넌트 (루트 yaml)", () => {
-    it("직접 파일(.md)이 있으면 해당 경로를 반환한다", () => {
+    it("returns path when direct .md file exists", () => {
       touch(join(root, "agents", "oracle.md"));
       const result = resolveComponentPath("oracle", "agents", root, undefined);
       expect(result).toEqual({ path: join(root, "agents", "oracle.md"), displayName: "oracle" });
     });
 
-    it("index.md 폴더 폴백을 사용한다", () => {
+    it("falls back to index.md in folder", () => {
       touch(join(root, "agents", "oracle", "index.md"));
       const result = resolveComponentPath("oracle", "agents", root, undefined);
       expect(result).toEqual({ path: join(root, "agents", "oracle", "index.md"), displayName: "oracle" });
     });
 
-    it("skills 카테고리에서 SKILL.md 폴더를 사용한다", () => {
+    it("uses SKILL.md folder for the skills category", () => {
       touch(join(root, "skills", "prometheus", "SKILL.md"));
       const result = resolveComponentPath("prometheus", "skills", root, undefined);
       expect(result).toEqual({ path: join(root, "skills", "prometheus", "SKILL.md"), displayName: "prometheus" });
     });
 
-    it("컴포넌트가 없으면 에러를 반환한다", () => {
+    it("returns an error when component is not found", () => {
       const result = resolveComponentPath("missing", "agents", root, undefined);
       expect(result).toHaveProperty("error");
       expect((result as { error: string }).error).toContain("missing");
     });
 
-    it("직접 파일이 index.md보다 우선한다", () => {
+    it("direct file takes priority over index.md", () => {
       touch(join(root, "agents", "oracle.md"));
       touch(join(root, "agents", "oracle", "index.md"));
       const result = resolveComponentPath("oracle", "agents", root, undefined);
@@ -257,7 +257,7 @@ describe("resolveComponentPath", () => {
 
   // --- Scoped ref from root yaml (blocked) ---
   describe("루트 yaml에서 스코프 참조 (차단)", () => {
-    it("루트 yaml에서 프로젝트 스코프 참조를 하면 에러를 반환한다", () => {
+    it("returns an error when root yaml uses a project-scoped reference", () => {
       const result = resolveComponentPath("myproject:oracle", "agents", root, undefined);
       expect(result).toHaveProperty("error");
       expect((result as { error: string }).error).toContain("Root sync.yaml");
@@ -266,7 +266,7 @@ describe("resolveComponentPath", () => {
 
   // --- Project-local component ---
   describe("프로젝트 로컬 컴포넌트", () => {
-    it("프로젝트 디렉토리에 컴포넌트가 있으면 먼저 반환한다", () => {
+    it("returns project-local component first when it exists", () => {
       touch(join(root, "projects", "myproject", "agents", "oracle.md"));
       touch(join(root, "agents", "oracle.md")); // also global
       const result = resolveComponentPath("oracle", "agents", root, "myproject");
@@ -276,19 +276,19 @@ describe("resolveComponentPath", () => {
       });
     });
 
-    it("프로젝트에 없으면 전역으로 폴백한다", () => {
+    it("falls back to global component when not found in project", () => {
       touch(join(root, "agents", "oracle.md"));
       const result = resolveComponentPath("oracle", "agents", root, "myproject");
       expect(result).toEqual({ path: join(root, "agents", "oracle.md"), displayName: "oracle" });
     });
 
-    it("프로젝트에도 전역에도 없으면 에러를 반환한다", () => {
+    it("returns an error when component is absent from both project and global", () => {
       const result = resolveComponentPath("missing", "agents", root, "myproject");
       expect(result).toHaveProperty("error");
       expect((result as { error: string }).error).toContain("myproject");
     });
 
-    it("프로젝트 로컬 index.md 폴백을 사용한다", () => {
+    it("uses project-local index.md fallback", () => {
       touch(join(root, "projects", "myproject", "skills", "custom", "index.md"));
       const result = resolveComponentPath("custom", "skills", root, "myproject");
       expect(result).toEqual({
@@ -297,7 +297,7 @@ describe("resolveComponentPath", () => {
       });
     });
 
-    it("프로젝트 로컬 SKILL.md를 사용한다", () => {
+    it("uses project-local SKILL.md", () => {
       touch(join(root, "projects", "myproject", "skills", "custom", "SKILL.md"));
       const result = resolveComponentPath("custom", "skills", root, "myproject");
       expect(result).toEqual({
@@ -309,7 +309,7 @@ describe("resolveComponentPath", () => {
 
   // --- Scoped ref (same project) ---
   describe("동일 프로젝트 스코프 참조", () => {
-    it("같은 프로젝트 스코프 참조는 프로젝트 경로로 해석한다", () => {
+    it("resolves same-project scoped reference to the project path", () => {
       touch(join(root, "projects", "myproject", "skills", "custom.md"));
       const result = resolveComponentPath("myproject:custom", "skills", root, "myproject");
       expect(result).toEqual({
@@ -321,7 +321,7 @@ describe("resolveComponentPath", () => {
 
   // --- Cross-project blocked ---
   describe("크로스 프로젝트 참조 (차단)", () => {
-    it("다른 프로젝트를 참조하면 에러를 반환한다", () => {
+    it("returns an error when referencing a different project", () => {
       touch(join(root, "projects", "otherproject", "agents", "oracle.md"));
       const result = resolveComponentPath("otherproject:oracle", "agents", root, "myproject");
       expect(result).toHaveProperty("error");
@@ -332,7 +332,7 @@ describe("resolveComponentPath", () => {
 
   // --- index.md folder fallback (detail) ---
   describe("index.md 폴더 폴백 (상세)", () => {
-    it("name.md가 없고 name/index.md가 있으면 index.md를 반환한다", () => {
+    it("returns index.md when name.md is absent but name/index.md exists", () => {
       // Deliberately do NOT create oracle.md
       touch(join(root, "commands", "oracle", "index.md"));
       const result = resolveComponentPath("oracle", "commands", root, undefined);
@@ -358,7 +358,7 @@ describe("setProjectContext", () => {
 
   // --- Root yaml ---
   describe("루트 sync.yaml", () => {
-    it("루트 경로의 sync.yaml은 isRootYaml=true를 반환한다", () => {
+    it("returns isRootYaml=true for sync.yaml at the root path", () => {
       const syncYaml: SyncYaml = { path: "/target" };
       const result = setProjectContext(syncYaml, join(root, "sync.yaml"), root);
       expect(result).toEqual({ projectName: "", projectDir: "", isRootYaml: true });
@@ -367,7 +367,7 @@ describe("setProjectContext", () => {
 
   // --- Project yaml with name field ---
   describe("name 필드가 있는 프로젝트 sync.yaml", () => {
-    it("name 필드가 있으면 projectName에 사용한다", () => {
+    it("uses name field as projectName when present", () => {
       const syncYaml: SyncYaml = { name: "my-custom-name", path: "/target" };
       const yamlPath = join(root, "projects", "my-dir", "sync.yaml");
       const result = setProjectContext(syncYaml, yamlPath, root);
@@ -381,7 +381,7 @@ describe("setProjectContext", () => {
 
   // --- Project yaml without name field (directory fallback) ---
   describe("name 필드 없는 프로젝트 sync.yaml (디렉토리 폴백)", () => {
-    it("name 필드가 없으면 디렉토리 이름을 projectName으로 사용한다", () => {
+    it("uses directory name as projectName when name field is absent", () => {
       const syncYaml: SyncYaml = { path: "/target" };
       const yamlPath = join(root, "projects", "loopers-project", "sync.yaml");
       const result = setProjectContext(syncYaml, yamlPath, root);
@@ -392,7 +392,7 @@ describe("setProjectContext", () => {
       });
     });
 
-    it("빈 문자열 name 필드는 디렉토리 이름으로 폴백한다", () => {
+    it("falls back to directory name when name field is an empty string", () => {
       const syncYaml: SyncYaml = { name: "", path: "/target" };
       const yamlPath = join(root, "projects", "my-dir", "sync.yaml");
       const result = setProjectContext(syncYaml, yamlPath, root);
@@ -406,7 +406,7 @@ describe("setProjectContext", () => {
 
   // --- projectDir from directory ---
   describe("projectDir 파생", () => {
-    it("projectDir는 항상 sync.yaml 부모 디렉토리 이름이다", () => {
+    it("projectDir is always derived from the sync.yaml parent directory name", () => {
       const syncYaml: SyncYaml = { name: "alias" };
       const yamlPath = join(root, "projects", "actual-dir", "sync.yaml");
       const result = setProjectContext(syncYaml, yamlPath, root);

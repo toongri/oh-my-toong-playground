@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
@@ -9,14 +9,14 @@ import { CodexAdapter, insertManagedBlock, buildMcpTomlContent } from "./codex.t
 // =============================================================================
 
 describe("insertManagedBlock", () => {
-  test("빈 content에 블록 생성", () => {
+  it("creates a block in empty content via `insertManagedBlock`", () => {
     const result = insertManagedBlock("", "config", "key = \"value\"\n");
     expect(result).toBe(
       `# --- omt:config ---\nkey = "value"\n# --- end omt:config ---\n`
     );
   });
 
-  test("기존 블록 교체 (content 사이 내용 대체)", () => {
+  it("replaces existing block content via `insertManagedBlock`", () => {
     const existing =
       `# --- omt:config ---\nold = "data"\n# --- end omt:config ---\n`;
     const result = insertManagedBlock(existing, "config", `new = "data"\n`);
@@ -25,7 +25,7 @@ describe("insertManagedBlock", () => {
     );
   });
 
-  test("managed block 외부 사용자 content 보존", () => {
+  it("preserves user content outside managed block via `insertManagedBlock`", () => {
     const existing =
       `# user config\nsome_setting = true\n\n# --- omt:config ---\nold = "data"\n# --- end omt:config ---\n\n# trailing comment\n`;
     const result = insertManagedBlock(existing, "config", `new = "data"\n`);
@@ -35,7 +35,7 @@ describe("insertManagedBlock", () => {
     expect(result).not.toContain(`old = "data"`);
   });
 
-  test("다른 이름의 managed block은 그대로 유지", () => {
+  it("preserves managed blocks with different names via `insertManagedBlock`", () => {
     const existing =
       `# --- omt:mcp ---\nmcp_data = true\n# --- end omt:mcp ---\n`;
     const result = insertManagedBlock(existing, "config", `config_data = true\n`);
@@ -47,7 +47,7 @@ describe("insertManagedBlock", () => {
     expect(result).toContain("config_data = true");
   });
 
-  test("existing content 없을 때 markers 포함 블록 생성", () => {
+  it("creates block with markers when content is empty via `insertManagedBlock`", () => {
     const result = insertManagedBlock("", "mcp", `server = "test"\n`);
     expect(result).toContain("# --- omt:mcp ---");
     expect(result).toContain("# --- end omt:mcp ---");
@@ -60,7 +60,7 @@ describe("insertManagedBlock", () => {
 // =============================================================================
 
 describe("buildMcpTomlContent", () => {
-  test("서버 3개 → 단일 TOML 블록", () => {
+  it("builds a single TOML block from 3 servers via `buildMcpTomlContent`", () => {
     const servers = {
       "server-a": { command: "npx", args: ["-y", "a"] },
       "server-b": { command: "node", args: ["b.js"] },
@@ -73,7 +73,7 @@ describe("buildMcpTomlContent", () => {
     expect(toml).toContain("mcp_servers");
   });
 
-  test("빈 서버 목록 → 빈 TOML", () => {
+  it("returns empty TOML for empty server list via `buildMcpTomlContent`", () => {
     const toml = buildMcpTomlContent({});
     // smol-toml stringify on { mcp_servers: {} } should produce minimal output
     expect(typeof toml).toBe("string");
@@ -102,7 +102,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncAgentsDirect", () => {
-    test("agents skip with warning (no files created)", async () => {
+    it("skips with warning and creates no files via `syncAgentsDirect`", async () => {
       // Should not throw, should not create any files
       await adapter.syncAgentsDirect(tmpDir, "oracle", "/nonexistent/oracle.md");
       const codexDir = path.join(tmpDir, ".codex");
@@ -113,7 +113,7 @@ describe("CodexAdapter", () => {
       expect(exists).toBe(false);
     });
 
-    test("dryRun도 skip", async () => {
+    it("skips in dry-run mode via `syncAgentsDirect`", async () => {
       await adapter.syncAgentsDirect(tmpDir, "oracle", "/nonexistent/oracle.md", [], [], true);
       const exists = await fs
         .stat(path.join(tmpDir, ".codex"))
@@ -128,7 +128,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncRulesDirect", () => {
-    test("rules skip with warning (no files created)", async () => {
+    it("skips with warning and creates no files via `syncRulesDirect`", async () => {
       await adapter.syncRulesDirect(tmpDir, "my-rule.md", "/nonexistent/rule.md");
       const exists = await fs
         .stat(path.join(tmpDir, ".codex"))
@@ -143,7 +143,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncConfig", () => {
-    test("config → TOML managed block in config.toml", async () => {
+    it("writes config as TOML managed block in config.toml via `syncConfig`", async () => {
       await adapter.syncConfig(
         tmpDir,
         { model: "o4-mini", temperature: 0.7 },
@@ -157,7 +157,7 @@ describe("CodexAdapter", () => {
       expect(content).toContain("o4-mini");
     });
 
-    test("config 재호출 시 managed block 교체 (기존 content 보존)", async () => {
+    it("replaces managed block on re-call while preserving existing content via `syncConfig`", async () => {
       // Write initial user content
       const configFile = path.join(tmpDir, ".codex", "config.toml");
       await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
@@ -175,7 +175,7 @@ describe("CodexAdapter", () => {
       expect(content).toContain("o4-mini");
     });
 
-    test("dryRun: config.toml 미생성", async () => {
+    it("skips config.toml creation in dry-run mode via `syncConfig`", async () => {
       await adapter.syncConfig(tmpDir, { model: "o4-mini" }, true);
       const exists = await fs
         .stat(path.join(tmpDir, ".codex", "config.toml"))
@@ -190,7 +190,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("MCP accumulator", () => {
-    test("3개 서버 accumulate → 단일 omt:mcp managed block", async () => {
+    it("accumulates 3 servers into a single omt:mcp managed block via `flushMcpBlock`", async () => {
       adapter.resetMcpAccumulator();
       adapter.accumulateMcp("server-a", { command: "npx", args: ["-y", "a"] });
       adapter.accumulateMcp("server-b", { command: "node", args: ["b.js"] });
@@ -213,7 +213,7 @@ describe("CodexAdapter", () => {
       expect(blockContent).toContain("server-c");
     });
 
-    test("기존 omt:mcp block 교체 + 외부 content 보존", async () => {
+    it("replaces existing omt:mcp block and preserves content outside it via `flushMcpBlock`", async () => {
       const configFile = path.join(tmpDir, ".codex", "config.toml");
       await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
       await fs.writeFile(
@@ -232,7 +232,7 @@ describe("CodexAdapter", () => {
       expect(content).toContain("new-server");
     });
 
-    test("빈 accumulator → config.toml 변경 없음", async () => {
+    it("does not create config.toml when accumulator is empty via `flushMcpBlock`", async () => {
       adapter.resetMcpAccumulator();
       // flushMcpBlock with 0 servers should not create file
       await adapter.flushMcpBlock(tmpDir, false);
@@ -243,7 +243,7 @@ describe("CodexAdapter", () => {
       expect(exists).toBe(false);
     });
 
-    test("빈 accumulator + 기존 omt:mcp 블록 존재 → 빈 블록으로 교체", async () => {
+    it("replaces existing omt:mcp block with empty block when accumulator is empty via `flushMcpBlock`", async () => {
       const configFile = path.join(tmpDir, ".codex", "config.toml");
       await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
       await fs.writeFile(
@@ -273,7 +273,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncPlatformYaml", () => {
-    test("model-map 반환", async () => {
+    it("returns model-map in result via `syncPlatformYaml`", async () => {
       const yaml = {
         "model-map": {
           "claude-3-5-sonnet": "o4-mini",
@@ -288,13 +288,13 @@ describe("CodexAdapter", () => {
       });
     });
 
-    test("config 처리 → processedSections에 포함", async () => {
+    it("includes 'config' in processedSections after processing via `syncPlatformYaml`", async () => {
       const yaml = { config: { model: "o4-mini" } };
       const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
       expect(result.processedSections).toContain("config");
     });
 
-    test("mcps 처리 → processedSections에 포함 + managed block 생성", async () => {
+    it("includes 'mcps' in processedSections and creates managed block via `syncPlatformYaml`", async () => {
       const yaml = {
         mcps: {
           "my-server": { command: "npx", args: ["-y", "my-server"] },
@@ -311,7 +311,7 @@ describe("CodexAdapter", () => {
       expect(content).toContain("other-server");
     });
 
-    test("config+mcps+model-map 모두 처리", async () => {
+    it("processes config, mcps, and model-map sections together via `syncPlatformYaml`", async () => {
       const yaml = {
         config: { model: "o4-mini" },
         mcps: { "srv": { command: "npx" } },
@@ -324,7 +324,7 @@ describe("CodexAdapter", () => {
       expect(result.modelMap).toBeDefined();
     });
 
-    test("dryRun: config.toml 미생성", async () => {
+    it("skips config.toml creation in dry-run mode via `syncPlatformYaml`", async () => {
       const yaml = {
         config: { model: "o4-mini" },
         mcps: { "srv": { command: "npx" } },
@@ -337,13 +337,13 @@ describe("CodexAdapter", () => {
       expect(exists).toBe(false);
     });
 
-    test("model-map 없으면 modelMap은 undefined", async () => {
+    it("returns undefined for modelMap when model-map is absent via `syncPlatformYaml`", async () => {
       const yaml = { config: { model: "o4-mini" } };
       const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);
       expect(result.modelMap).toBeUndefined();
     });
 
-    test("mcps: {} → 기존 managed block 제거 + processedSections에 포함", async () => {
+    it("removes existing managed block and includes 'mcps' in processedSections when mcps: {} via `syncPlatformYaml`", async () => {
       // Setup: write a config.toml with an existing omt:mcp managed block
       const configDir = path.join(tmpDir, ".codex");
       await fs.mkdir(configDir, { recursive: true });
@@ -369,7 +369,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncSkillsDirect", () => {
-    test("skill 디렉토리 복사", async () => {
+    it("copies skill directory to target via `syncSkillsDirect`", async () => {
       // Create a source skill directory
       const sourceSkill = path.join(tmpDir, "source-skills", "prometheus");
       await fs.mkdir(sourceSkill, { recursive: true });
@@ -383,7 +383,7 @@ describe("CodexAdapter", () => {
       expect(content).toBe("# Prometheus\n");
     });
 
-    test("존재하지 않는 소스 → warn, 파일 미생성", async () => {
+    it("logs warning and creates no files when source is missing via `syncSkillsDirect`", async () => {
       const targetBase = path.join(tmpDir, "target");
       await adapter.syncSkillsDirect(
         targetBase,
@@ -404,7 +404,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncHooksDirect", () => {
-    test("hook 파일 복사 + chmod +x", async () => {
+    it("copies hook file and sets chmod +x via `syncHooksDirect`", async () => {
       const hookFile = path.join(tmpDir, "notify.sh");
       await fs.writeFile(hookFile, "#!/bin/bash\necho notify\n");
 
@@ -419,7 +419,7 @@ describe("CodexAdapter", () => {
       expect(stat.mode & 0o111).toBeGreaterThan(0);
     });
 
-    test("존재하지 않는 hook → warn, 파일 미생성", async () => {
+    it("logs warning and creates no files when hook source is missing via `syncHooksDirect`", async () => {
       const targetBase = path.join(tmpDir, "target");
       await adapter.syncHooksDirect(
         targetBase,
@@ -440,7 +440,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("syncCommandsDirect", () => {
-    test("commands skip with warning", async () => {
+    it("skips with warning via `syncCommandsDirect`", async () => {
       await adapter.syncCommandsDirect(tmpDir, "my-command", "/nonexistent.md");
       const exists = await fs
         .stat(path.join(tmpDir, ".codex"))
@@ -455,7 +455,7 @@ describe("CodexAdapter", () => {
   // ---------------------------------------------------------------------------
 
   describe("updateSettings", () => {
-    test("hooks 미지원 경고 출력 + config.toml 미생성", async () => {
+    it("logs hooks-unsupported warning and creates no config.toml via `updateSettings`", async () => {
       const stderrChunks: string[] = [];
       const originalWrite = process.stderr.write.bind(process.stderr);
       process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
@@ -480,7 +480,7 @@ describe("CodexAdapter", () => {
       expect(exists).toBe(false);
     });
 
-    test("dryRun도 hooks 미지원 경고 출력 + config.toml 미생성", async () => {
+    it("logs hooks-unsupported warning and creates no config.toml in dry-run mode via `updateSettings`", async () => {
       const stderrChunks: string[] = [];
       const originalWrite = process.stderr.write.bind(process.stderr);
       process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {

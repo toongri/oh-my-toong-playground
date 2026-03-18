@@ -37,18 +37,18 @@ async function writeJson(
 // =============================================================================
 
 describe("applyModelMap", () => {
-  it("매핑된 모델명을 반환한다", () => {
+  it("returns the mapped model name via `applyModelMap`", () => {
     const map = { "claude-opus-4": "openai/o3", "claude-sonnet-4": "openai/gpt-4o" };
     expect(applyModelMap(map, "claude-opus-4")).toBe("openai/o3");
     expect(applyModelMap(map, "claude-sonnet-4")).toBe("openai/gpt-4o");
   });
 
-  it("매핑이 없으면 원래 모델명을 반환한다", () => {
+  it("returns the original model name when mapping is absent via `applyModelMap`", () => {
     const map = { "claude-opus-4": "openai/o3" };
     expect(applyModelMap(map, "unknown-model")).toBe("unknown-model");
   });
 
-  it("빈 맵에서도 원래 모델명을 반환한다", () => {
+  it("returns the original model name for an empty map via `applyModelMap`", () => {
     expect(applyModelMap({}, "some-model")).toBe("some-model");
   });
 });
@@ -58,7 +58,7 @@ describe("applyModelMap", () => {
 // =============================================================================
 
 describe("translateAgentFrontmatter", () => {
-  it("add-skills 필드를 제거한다", () => {
+  it("removes add-skills field from frontmatter via `translateAgentFrontmatter`", () => {
     const content = `---
 name: sisyphus-junior
 add-skills:
@@ -74,7 +74,7 @@ Body text.`;
     expect(result).toContain("Body text.");
   });
 
-  it("subagent_type을 mode: subagent로 변환한다", () => {
+  it("converts subagent_type to mode: subagent via `translateAgentFrontmatter`", () => {
     const content = `---
 name: oracle
 subagent_type: general
@@ -88,7 +88,7 @@ Body.`;
     expect(result).toContain("mode: subagent");
   });
 
-  it("subagent_type이 없으면 mode를 추가하지 않는다", () => {
+  it("does not add mode field when subagent_type is absent via `translateAgentFrontmatter`", () => {
     const content = `---
 name: prometheus
 ---
@@ -101,7 +101,7 @@ Body.`;
     expect(result).toContain("name: prometheus");
   });
 
-  it("본문의 --- 수평선을 보존한다 (P2-4 회귀 테스트)", () => {
+  it("preserves body --- horizontal rules (regression P2-4) via `translateAgentFrontmatter`", () => {
     const content = `---
 name: metis
 subagent_type: general
@@ -141,7 +141,7 @@ Content C.`;
     expect(result).toContain("Content C.");
   });
 
-  it("모델맵이 제공되면 model 필드에 적용한다 (P2-5)", () => {
+  it("applies model map to model field when provided (P2-5) via `translateAgentFrontmatter`", () => {
     const content = `---
 name: oracle
 model: claude-opus-4
@@ -156,7 +156,7 @@ Body.`;
     expect(result).not.toContain("claude-opus-4");
   });
 
-  it("모델맵에 없는 model 값은 원래대로 유지한다 (P2-5)", () => {
+  it("preserves model value that is not in model map (P2-5) via `translateAgentFrontmatter`", () => {
     const content = `---
 name: oracle
 model: gpt-5-turbo
@@ -170,7 +170,7 @@ Body.`;
     expect(result).toContain("model: gpt-5-turbo");
   });
 
-  it("모델맵이 없으면 model 필드를 그대로 유지한다", () => {
+  it("preserves model field unchanged when model map is absent via `translateAgentFrontmatter`", () => {
     const content = `---
 name: oracle
 model: claude-opus-4
@@ -183,7 +183,7 @@ Body.`;
     expect(result).toContain("model: claude-opus-4");
   });
 
-  it("프론트매터가 없으면 원본을 그대로 반환한다", () => {
+  it("returns content unchanged when frontmatter is absent via `translateAgentFrontmatter`", () => {
     const content = `# Just markdown
 
 No frontmatter here.`;
@@ -209,7 +209,7 @@ describe("syncConfig", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("opencode.json이 없을 때 새로 생성한다", async () => {
+  it("creates opencode.json when absent via `syncConfig`", async () => {
     await syncConfig(tmpDir, { model: "openai/o3" }, false);
 
     const config = await readJson(
@@ -218,7 +218,7 @@ describe("syncConfig", () => {
     expect(config["model"]).toBe("openai/o3");
   });
 
-  it("기존 opencode.json과 딥 머지한다 (새 값이 우선)", async () => {
+  it("deep merges with existing opencode.json (new values take precedence) via `syncConfig`", async () => {
     const configFile = path.join(tmpDir, ".opencode", "opencode.json");
     await writeJson(configFile, { model: "old-model", theme: "dark" });
 
@@ -230,7 +230,7 @@ describe("syncConfig", () => {
     expect(config["fontSize"]).toBe(14);
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncConfig`", async () => {
     await syncConfig(tmpDir, { model: "openai/o3" }, true);
 
     const exists = await fs
@@ -240,7 +240,7 @@ describe("syncConfig", () => {
     expect(exists).toBe(false);
   });
 
-  it("opencode.json이 손상된 JSON이면 SyntaxError를 던진다", async () => {
+  it("throws SyntaxError when opencode.json contains corrupt JSON via `syncConfig`", async () => {
     const configFile = path.join(tmpDir, ".opencode", "opencode.json");
     await fs.mkdir(path.join(tmpDir, ".opencode"), { recursive: true });
     await fs.writeFile(configFile, "{ invalid json }", "utf-8");
@@ -264,7 +264,7 @@ describe("syncMcpsMerge", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("opencode.json의 .mcp.<name>에 서버 정의를 머지한다", async () => {
+  it("merges server definition into .mcp.<name> in opencode.json via `syncMcpsMerge`", async () => {
     await syncMcpsMerge(
       tmpDir,
       "context7",
@@ -282,7 +282,7 @@ describe("syncMcpsMerge", () => {
     });
   });
 
-  it("기존 MCP 서버를 보존하면서 새 서버를 추가한다", async () => {
+  it("adds new server while preserving existing MCP servers via `syncMcpsMerge`", async () => {
     const configFile = path.join(tmpDir, ".opencode", "opencode.json");
     await writeJson(configFile, { mcp: { existing: { type: "stdio" } } });
 
@@ -302,7 +302,7 @@ describe("syncMcpsMerge", () => {
     });
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncMcpsMerge`", async () => {
     await syncMcpsMerge(
       tmpDir,
       "context7",
@@ -336,7 +336,7 @@ describe("opencodeAdapter.syncRulesDirect", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("룰 파일을 .opencode/rules/에 복사하고 instructions glob을 추가한다", async () => {
+  it("copies rule file to .opencode/rules/ and adds instructions glob via `syncRulesDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncRulesDirect(
@@ -365,7 +365,7 @@ describe("opencodeAdapter.syncRulesDirect", () => {
     }
   });
 
-  it("instructions glob은 멱등적으로 추가된다 (중복 없음)", async () => {
+  it("adds instructions glob idempotently without duplicates via `syncRulesDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncRulesDirect(
@@ -394,7 +394,7 @@ describe("opencodeAdapter.syncRulesDirect", () => {
     }
   });
 
-  it("기존 opencode.json의 instructions 배열에 glob을 추가한다", async () => {
+  it("appends glob to existing opencode.json instructions array via `syncRulesDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       const configFile = path.join(targetDir, ".opencode", "opencode.json");
@@ -416,7 +416,7 @@ describe("opencodeAdapter.syncRulesDirect", () => {
     }
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncRulesDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncRulesDirect(
@@ -443,7 +443,7 @@ describe("opencodeAdapter.syncRulesDirect", () => {
 // =============================================================================
 
 describe("opencodeAdapter.syncHooksDirect", () => {
-  it("훅을 건너뛰고 정상 종료한다", async () => {
+  it("skips hook and returns normally via `syncHooksDirect`", async () => {
     // Should not throw
     await expect(
       opencodeAdapter.syncHooksDirect(
@@ -471,7 +471,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("config만 있는 YAML을 처리한다", async () => {
+  it("processes YAML with only config section via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       { config: { model: "openai/o3", theme: "dark" } },
@@ -488,7 +488,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(config["theme"]).toBe("dark");
   });
 
-  it("모든 섹션이 있는 전체 YAML을 처리한다", async () => {
+  it("processes full YAML with all sections via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       {
@@ -508,7 +508,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(result.processedSections).toContain("mcps");
   });
 
-  it("model-map + config: model 필드에 모델 매핑을 적용한다", async () => {
+  it("applies model mapping to config model fields when model-map is present via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       {
@@ -539,7 +539,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(config["theme"]).toBe("dark");
   });
 
-  it("model-map 없이 config model 필드는 그대로 유지된다", async () => {
+  it("preserves config model field unchanged when model-map is absent via `syncPlatformYaml`", async () => {
     await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       { config: { model: "claude-opus-4" } },
@@ -552,7 +552,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(config["model"]).toBe("claude-opus-4");
   });
 
-  it("hooks 섹션을 건너뛰고 processedSections에 포함한다", async () => {
+  it("skips hooks section processing but includes it in processedSections via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       { hooks: { UserPromptSubmit: [{ component: "keyword-detector.sh" }] } },
@@ -569,7 +569,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(exists).toBe(false);
   });
 
-  it("mcps 섹션을 처리하고 opencode.json에 머지한다", async () => {
+  it("processes mcps section and merges it into opencode.json via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       {
@@ -594,7 +594,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(mcp["serena"]).toEqual({ type: "stdio", command: "npx serena" });
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(
       tmpDir,
       {
@@ -615,7 +615,7 @@ describe("opencodeAdapter.syncPlatformYaml", () => {
     expect(exists).toBe(false);
   });
 
-  it("빈 YAML 객체는 processedSections가 비어있다", async () => {
+  it("returns empty processedSections for empty YAML object via `syncPlatformYaml`", async () => {
     const result = await opencodeAdapter.syncPlatformYaml(tmpDir, {}, false);
     expect(result.processedSections).toEqual([]);
     expect(result.modelMap).toBeUndefined();
@@ -652,7 +652,7 @@ Body content.`,
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("에이전트를 복사하고 프론트매터를 번역한다", async () => {
+  it("copies agent and translates frontmatter via `syncAgentsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncAgentsDirect(
@@ -676,7 +676,7 @@ Body content.`,
     }
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncAgentsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncAgentsDirect(
@@ -699,7 +699,7 @@ Body content.`,
     }
   });
 
-  it("modelMap이 전달되면 에이전트 프론트매터의 model 필드에 적용된다 (P2-5 런타임 배선)", async () => {
+  it("applies modelMap to agent frontmatter model field at runtime (P2-5) via `syncAgentsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       const modelMap = { "claude-opus-4": "openai/o3" };
@@ -727,7 +727,7 @@ Body content.`,
     }
   });
 
-  it("손상된 프론트매터는 경고를 남기고 파일을 원본 그대로 복사한다", async () => {
+  it("logs warning and copies file as-is when frontmatter is malformed via `syncAgentsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       // Write a file with malformed frontmatter that will cause parseFrontmatter to throw
@@ -785,7 +785,7 @@ describe("opencodeAdapter.syncCommandsDirect", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("커맨드 파일을 .opencode/commands/에 복사한다", async () => {
+  it("copies command file to .opencode/commands/ via `syncCommandsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncCommandsDirect(
@@ -803,7 +803,7 @@ describe("opencodeAdapter.syncCommandsDirect", () => {
     }
   });
 
-  it("소스 파일이 없으면 경고를 남기고 throw하지 않는다", async () => {
+  it("logs warning and does not throw when source file is missing via `syncCommandsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await expect(
@@ -826,7 +826,7 @@ describe("opencodeAdapter.syncCommandsDirect", () => {
     }
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncCommandsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncCommandsDirect(
@@ -867,7 +867,7 @@ describe("opencodeAdapter.syncSkillsDirect", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("스킬 디렉토리를 .opencode/skills/<name>/에 동기화한다", async () => {
+  it("syncs skill directory to .opencode/skills/<name>/ via `syncSkillsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncSkillsDirect(
@@ -885,7 +885,7 @@ describe("opencodeAdapter.syncSkillsDirect", () => {
     }
   });
 
-  it("소스 디렉토리가 없으면 경고를 남기고 throw하지 않는다", async () => {
+  it("logs warning and does not throw when source directory is missing via `syncSkillsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await expect(
@@ -908,7 +908,7 @@ describe("opencodeAdapter.syncSkillsDirect", () => {
     }
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncSkillsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncSkillsDirect(
@@ -948,7 +948,7 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("스크립트 파일을 .opencode/scripts/에 복사한다", async () => {
+  it("copies script file to .opencode/scripts/ via `syncScriptsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncScriptsDirect(
@@ -966,7 +966,7 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
     }
   });
 
-  it("소스 파일이 없으면 경고를 남기고 throw하지 않는다", async () => {
+  it("logs warning and does not throw when source file is missing via `syncScriptsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await expect(
@@ -989,7 +989,7 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
     }
   });
 
-  it("dry-run 모드에서는 파일을 쓰지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncScriptsDirect`", async () => {
     const targetDir = await mkTempDir();
     try {
       await opencodeAdapter.syncScriptsDirect(

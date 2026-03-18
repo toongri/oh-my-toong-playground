@@ -23,19 +23,19 @@ describe("backup 모듈", () => {
   });
 
   describe("generateBackupSessionId", () => {
-    it("16자리 hex 문자열을 반환한다", () => {
+    it("returns a 16-character hex string", () => {
       const id = generateBackupSessionId();
       expect(id).toMatch(/^[0-9a-f]{16}$/);
     });
 
-    it("호출할 때마다 고유한 값을 생성한다", () => {
+    it("generates a unique value on each call", () => {
       const ids = new Set(Array.from({ length: 20 }, () => generateBackupSessionId()));
       expect(ids.size).toBe(20);
     });
   });
 
   describe("backupCategory", () => {
-    it("소스 디렉토리를 .sync-backup/{sessionId}/{platform}/{category}/ 경로에 복사한다", async () => {
+    it("copies source directory to .sync-backup/{sessionId}/{platform}/{category}/", async () => {
       const targetPath = join(tmpDir, "backup-category-basic");
       const platform = "claude";
       const category = "agents";
@@ -55,7 +55,7 @@ describe("backup 모듈", () => {
       expect(files).toContain("sisyphus.md");
     });
 
-    it("소스 디렉토리가 없으면 아무것도 하지 않는다", async () => {
+    it("does nothing when source directory is missing", async () => {
       const targetPath = join(tmpDir, "backup-category-missing");
       await mkdir(targetPath, { recursive: true });
 
@@ -72,7 +72,7 @@ describe("backup 모듈", () => {
       expect(exists).toBe(false);
     });
 
-    it("중간 디렉토리가 없어도 목적지를 생성한다", async () => {
+    it("creates destination even when intermediate directories are absent", async () => {
       const targetPath = join(tmpDir, "backup-category-deep");
       const platform = "gemini";
       const category = "commands";
@@ -89,7 +89,7 @@ describe("backup 모듈", () => {
       expect(files).toContain("cmd.md");
     });
 
-    it("플랫폼에 따라 올바른 dot-directory를 선택한다", async () => {
+    it("selects the correct dot-directory for each platform", async () => {
       const targetPath = join(tmpDir, "backup-category-platform");
       const sessionId = "platform-sess";
 
@@ -108,7 +108,7 @@ describe("backup 모듈", () => {
   });
 
   describe("backupConfigFile", () => {
-    it("파일을 백업 디렉토리에 복사한다", async () => {
+    it("copies file into the backup directory", async () => {
       const targetPath = join(tmpDir, "backup-file-basic");
       const backupDir = join(targetPath, ".sync-backup", "sess01", "claude");
 
@@ -123,7 +123,7 @@ describe("backup 모듈", () => {
       expect(stats.isFile()).toBe(true);
     });
 
-    it("파일이 없으면 아무것도 하지 않는다", async () => {
+    it("does nothing when file does not exist", async () => {
       const missingFile = join(tmpDir, "nonexistent", "settings.json");
       const backupDir = join(tmpDir, "backup-file-missing");
 
@@ -140,7 +140,7 @@ describe("backup 모듈", () => {
       expect(exists).toBe(false);
     });
 
-    it("백업 디렉토리가 없으면 자동으로 생성한다", async () => {
+    it("auto-creates the backup directory when it does not exist", async () => {
       const targetPath = join(tmpDir, "backup-file-mkdir");
       const backupDir = join(targetPath, "deep", "nested", "dir");
 
@@ -157,7 +157,7 @@ describe("backup 모듈", () => {
   });
 
   describe("cleanupOldBackups", () => {
-    it(".sync-backup 디렉토리가 없으면 아무것도 하지 않는다", async () => {
+    it("does nothing when .sync-backup directory does not exist", async () => {
       const targetPath = join(tmpDir, "cleanup-no-dir");
       await mkdir(targetPath, { recursive: true });
 
@@ -165,7 +165,7 @@ describe("backup 모듈", () => {
       await cleanupOldBackups(targetPath, 7);
     });
 
-    it("retentionDays가 0이면 모든 세션 디렉토리를 삭제한다", async () => {
+    it("deletes all session directories when retentionDays is 0", async () => {
       const targetPath = join(tmpDir, "cleanup-zero");
       const backupDir = join(targetPath, ".sync-backup");
 
@@ -180,7 +180,7 @@ describe("backup 모듈", () => {
       expect(remaining).toHaveLength(0);
     });
 
-    it("retentionDays 이내 세션은 보존한다", async () => {
+    it("preserves sessions within retentionDays", async () => {
       const targetPath = join(tmpDir, "cleanup-retain");
       const backupDir = join(targetPath, ".sync-backup");
 
@@ -195,7 +195,7 @@ describe("backup 모듈", () => {
       expect(remaining).toContain("recent-sess");
     });
 
-    it("파일(디렉토리가 아닌)은 건드리지 않는다", async () => {
+    it("leaves plain files (non-directories) untouched", async () => {
       const targetPath = join(tmpDir, "cleanup-files");
       const backupDir = join(targetPath, ".sync-backup");
       await mkdir(backupDir, { recursive: true });

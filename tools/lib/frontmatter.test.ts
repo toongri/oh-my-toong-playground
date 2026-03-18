@@ -3,7 +3,7 @@ import { describe, it, expect } from 'bun:test';
 import { parseFrontmatter, serializeFrontmatter } from './frontmatter.ts';
 
 describe('parseFrontmatter', () => {
-  it('일반 프론트매터와 본문을 파싱한다', () => {
+  it('parses standard frontmatter and body', () => {
     const content = `---
 name: oracle
 model: sonnet
@@ -20,7 +20,7 @@ Body text here.`;
     expect(result.body).toBe('\n# Oracle\n\nBody text here.');
   });
 
-  it('본문의 --- 수평선을 보존한다 (P2-4 회귀 테스트)', () => {
+  it('preserves --- horizontal rules in body (P2-4 regression)', () => {
     // Mirrors the real structure of agents/metis.md which has 7 `---` horizontal
     // rules in the body. The buggy awk pattern consumed ALL of them.
     const content = `---
@@ -59,7 +59,7 @@ Content C.`;
     expect(result.body).toContain('Content C.');
   });
 
-  it('첫 번째 줄이 --- 가 아니면 hasFrontmatter=false를 반환한다', () => {
+  it('returns hasFrontmatter=false when first line is not ---', () => {
     const content = `# Just a markdown doc
 
 No frontmatter here.`;
@@ -71,7 +71,7 @@ No frontmatter here.`;
     expect(result.body).toBe(content);
   });
 
-  it('빈 프론트매터를 파싱한다', () => {
+  it('parses empty frontmatter block', () => {
     const content = `---
 ---
 body content`;
@@ -83,7 +83,7 @@ body content`;
     expect(result.body).toBe('body content');
   });
 
-  it('\\r\\n 줄바꿈을 정규화한다', () => {
+  it('normalizes \\r\\n line endings', () => {
     const content = '---\r\nname: test\r\n---\r\nbody line';
 
     const result = parseFrontmatter(content);
@@ -95,7 +95,7 @@ body content`;
 });
 
 describe('serializeFrontmatter', () => {
-  it('프론트매터와 본문을 직렬화한다', () => {
+  it('serializes frontmatter and body', () => {
     const frontmatter = { name: 'oracle', model: 'sonnet' };
     const body = '\n# Oracle\n\nBody text.';
 
@@ -110,7 +110,7 @@ describe('serializeFrontmatter', () => {
 });
 
 describe('왕복 변환 (parseFrontmatter → serializeFrontmatter)', () => {
-  it('파싱 후 직렬화하면 동등한 결과를 생성한다', () => {
+  it('produces equivalent output after `parseFrontmatter` then `serializeFrontmatter`', () => {
     const original = `---
 name: metis
 model: opus

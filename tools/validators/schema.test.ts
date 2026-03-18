@@ -38,7 +38,7 @@ describe("validateSyncYaml", () => {
 
   // --- P2-3: Deprecated sections ---
   describe("P2-3: deprecated 섹션 감지", () => {
-    it("config 섹션이 있으면 ERROR를 반환한다", () => {
+    it("returns error when config section is present via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 config:
@@ -52,7 +52,7 @@ config:
       expect(msg).toContain("per-platform YAML");
     });
 
-    it("hooks 섹션이 있으면 ERROR를 반환한다", () => {
+    it("returns error when hooks section is present via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 hooks:
@@ -67,7 +67,7 @@ hooks:
       expect(msg).toContain("per-platform YAML");
     });
 
-    it("mcps 섹션이 있으면 ERROR를 반환한다", () => {
+    it("returns error when mcps section is present via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 mcps:
@@ -81,7 +81,7 @@ mcps:
       expect(msg).toContain("per-platform YAML");
     });
 
-    it("plugins 섹션이 있으면 ERROR를 반환한다", () => {
+    it("returns error when plugins section is present via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 plugins:
@@ -95,7 +95,7 @@ plugins:
       expect(msg).toContain("per-platform YAML");
     });
 
-    it("deprecated 섹션 없는 sync.yaml은 해당 에러가 없다", () => {
+    it("produces no deprecated-section errors for sync.yaml without deprecated sections", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents:
@@ -110,7 +110,7 @@ agents:
 
   // --- YAML syntax error ---
   describe("YAML 문법 오류", () => {
-    it("잘못된 YAML이면 에러를 반환한다", () => {
+    it("returns error for invalid YAML syntax via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents:
@@ -124,7 +124,7 @@ agents:
 
   // --- Valid sync.yaml ---
   describe("유효한 sync.yaml", () => {
-    it("허용된 섹션만 있는 경우 에러가 없다", () => {
+    it("produces no errors when only allowed sections are present", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 platforms: [claude, gemini]
@@ -142,7 +142,7 @@ rules:
       expect(result.errors).toHaveLength(0);
     });
 
-    it("object item 형식이 올바르면 에러가 없다", () => {
+    it("produces no errors for valid object item format", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents:
@@ -157,7 +157,7 @@ agents:
 
   // --- Platform values ---
   describe("플랫폼 값 검증", () => {
-    it("잘못된 플랫폼 값이 있으면 에러를 반환한다", () => {
+    it("returns error for invalid platform value via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 platforms: [claude, invalid-platform]
@@ -167,7 +167,7 @@ platforms: [claude, invalid-platform]
       expect(result.errors.some((e) => e.includes("invalid-platform"))).toBe(true);
     });
 
-    it("지원되는 플랫폼 값은 에러가 없다", () => {
+    it("produces no errors for all supported platform values", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 platforms: [claude, gemini, codex, opencode]
@@ -179,7 +179,7 @@ platforms: [claude, gemini, codex, opencode]
 
   // --- Unknown top-level fields ---
   describe("알 수 없는 최상위 필드", () => {
-    it("알 수 없는 최상위 필드가 있으면 에러를 반환한다", () => {
+    it("returns error for unknown top-level field via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 unknown-field: value
@@ -191,7 +191,7 @@ unknown-field: value
 
   // --- Old array format ---
   describe("기존 배열 형식 거부", () => {
-    it("섹션이 배열이면 에러를 반환한다", () => {
+    it("returns error when section is an array via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents:
@@ -204,7 +204,7 @@ agents:
 
   // --- Item platform validation ---
   describe("item 플랫폼 값 검증", () => {
-    it("item.platforms에 잘못된 값이 있으면 에러를 반환한다", () => {
+    it("returns error when item.platforms contains an invalid value", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents:
@@ -219,7 +219,7 @@ agents:
 
   // --- Non-object section data ---
   describe("섹션 데이터가 object가 아닌 경우", () => {
-    it("agents 섹션이 string이면 에러를 반환한다", () => {
+    it("returns error when agents section is a string via `validateSyncYaml`", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents: "bad-type"
@@ -232,7 +232,7 @@ agents: "bad-type"
 
   // --- Object item missing component field ---
   describe("object item에 component 필드가 없는 경우", () => {
-    it("component 필드가 없는 object item은 에러를 반환한다", () => {
+    it("returns error for object item missing component field", () => {
       const path = writeYaml(dir, "sync.yaml", `
 path: /target
 agents:
@@ -247,7 +247,7 @@ agents:
 
   // --- P2-7: No hook component file checks ---
   describe("P2-7: schema.ts는 hook 파일 존재를 검사하지 않는다", () => {
-    it("hooks가 없는 sync.yaml (hooks는 deprecated이므로 — 구조 오류만 감지)", () => {
+    it("produces no file-existence errors for sync.yaml without hooks (deprecated — structure errors only)", () => {
       // This confirms schema doesn't do hook existence checks.
       // Since hooks is deprecated in sync.yaml (P2-3), any hooks in sync.yaml triggers
       // the deprecated error, not a file existence error.
@@ -282,7 +282,7 @@ describe("validatePlatformYaml", () => {
 
   // --- Unknown section → warning ---
   describe("알 수 없는 섹션 경고", () => {
-    it("claude.yaml에 알 수 없는 섹션이 있으면 WARNING을 반환한다", () => {
+    it("returns warning for unknown section in claude.yaml via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "claude.yaml", `
 config:
   model: claude-opus
@@ -293,7 +293,7 @@ unknown-section: value
       expect(result.warnings.some((w) => w.includes("unknown-section"))).toBe(true);
     });
 
-    it("gemini.yaml에 알 수 없는 섹션이 있으면 WARNING을 반환한다", () => {
+    it("returns warning for unknown section in gemini.yaml via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "gemini.yaml", `
 config:
   model: gemini-pro
@@ -304,7 +304,7 @@ plugins:
       expect(result.warnings.some((w) => w.includes("plugins"))).toBe(true);
     });
 
-    it("codex.yaml에 hooks 섹션이 있으면 WARNING을 반환한다", () => {
+    it("returns warning for hooks section in codex.yaml via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "codex.yaml", `
 config:
   model: o3
@@ -318,7 +318,7 @@ hooks:
 
   // --- Valid per-platform YAML ---
   describe("유효한 per-platform YAML", () => {
-    it("claude.yaml에 허용된 섹션만 있으면 에러/경고가 없다", () => {
+    it("produces no errors or warnings when claude.yaml has only allowed sections", () => {
       const path = writeYaml(dir, "claude.yaml", `
 config:
   model: claude-opus
@@ -334,7 +334,7 @@ statusLine: "test"
       expect(result.warnings).toHaveLength(0);
     });
 
-    it("gemini.yaml에 허용된 섹션만 있으면 에러/경고가 없다", () => {
+    it("produces no errors or warnings when gemini.yaml has only allowed sections", () => {
       const path = writeYaml(dir, "gemini.yaml", `
 config:
   model: gemini-pro
@@ -346,7 +346,7 @@ mcps:
       expect(result.warnings).toHaveLength(0);
     });
 
-    it("codex.yaml에 허용된 섹션만 있으면 에러/경고가 없다", () => {
+    it("produces no errors or warnings when codex.yaml has only allowed sections", () => {
       const path = writeYaml(dir, "codex.yaml", `
 config:
   model: o3
@@ -358,7 +358,7 @@ model-map:
       expect(result.warnings).toHaveLength(0);
     });
 
-    it("opencode.yaml에 허용된 섹션만 있으면 에러/경고가 없다", () => {
+    it("produces no errors or warnings when opencode.yaml has only allowed sections", () => {
       const path = writeYaml(dir, "opencode.yaml", `
 config:
   model: anthropic/claude-opus-4-5
@@ -373,7 +373,7 @@ model-map:
 
   // --- hooks event name validation ---
   describe("hooks 이벤트 이름 검증", () => {
-    it("잘못된 이벤트 이름이 있으면 ERROR를 반환한다", () => {
+    it("returns error for invalid event name in hooks via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "claude.yaml", `
 hooks:
   InvalidEvent:
@@ -384,7 +384,7 @@ hooks:
       expect(result.errors.some((e) => e.includes("InvalidEvent"))).toBe(true);
     });
 
-    it("이벤트 값이 배열이 아니면 ERROR를 반환한다", () => {
+    it("returns error when event value is not an array via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "claude.yaml", `
 hooks:
   UserPromptSubmit: "not-an-array"
@@ -394,7 +394,7 @@ hooks:
       expect(result.errors.some((e) => e.includes("UserPromptSubmit") && e.includes("배열"))).toBe(true);
     });
 
-    it("유효한 이벤트 이름과 배열 값은 에러가 없다", () => {
+    it("produces no errors for valid event names with array values", () => {
       const path = writeYaml(dir, "claude.yaml", `
 hooks:
   UserPromptSubmit:
@@ -409,7 +409,7 @@ hooks:
 
   // --- mcps structure validation ---
   describe("mcps 구조 검증", () => {
-    it("mcps 값이 object가 아니면 ERROR를 반환한다", () => {
+    it("returns error when mcps entry value is not an object via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "claude.yaml", `
 mcps:
   some-mcp: "not-an-object"
@@ -419,7 +419,7 @@ mcps:
       expect(result.errors.some((e) => e.includes("some-mcp") && e.includes("object"))).toBe(true);
     });
 
-    it("mcps 값이 object이면 에러가 없다", () => {
+    it("produces no errors when mcps entry value is an object", () => {
       const path = writeYaml(dir, "claude.yaml", `
 mcps:
   some-mcp:
@@ -433,7 +433,7 @@ mcps:
 
   // --- YAML syntax error ---
   describe("YAML 문법 오류", () => {
-    it("잘못된 YAML이면 에러를 반환한다", () => {
+    it("returns error for invalid YAML syntax via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "claude.yaml", `config: [unclosed`);
       const result = validatePlatformYaml(path, "claude");
       expect(result.errors.length).toBeGreaterThan(0);
@@ -442,7 +442,7 @@ mcps:
 
   // --- Non-object top-level data ---
   describe("최상위 데이터가 object가 아닌 경우", () => {
-    it("claude.yaml 최상위가 배열이면 에러를 반환한다", () => {
+    it("returns error when claude.yaml top-level is an array via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "claude.yaml", `
 - item1
 - item2
