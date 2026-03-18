@@ -13,9 +13,3 @@ mcps:
       - "serena"
       - "start-mcp-server"
       - "--project-from-cwd"
-
-# OpenCode does not support a config key to disable Claude Code integration.
-# The only supported mechanism is the OPENCODE_DISABLE_CLAUDE_CODE env var.
-config:
-  env:
-    OPENCODE_DISABLE_CLAUDE_CODE: "1"
