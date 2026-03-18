@@ -6,7 +6,7 @@ import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
-import { logInfo, logWarn, logDry } from "../lib/logger.ts";
+import { logInfo, logWarn, logError, logDry } from "../lib/logger.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 
 /** Read JSON file or return {} if missing. */
@@ -14,8 +14,12 @@ async function readJsonFile(filePath: string): Promise<Record<string, unknown>> 
   try {
     const text = await fs.readFile(filePath, "utf8");
     return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return {};
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    logError(`JSON 파싱 실패: ${filePath}: ${err instanceof Error ? err.message : err}`);
+    throw err;
   }
 }
 
@@ -350,7 +354,6 @@ export class ClaudeAdapter implements PlatformAdapter {
     if (yaml.hooks != null) {
       const hooksMap = yaml.hooks as Record<string, Array<Record<string, unknown>>>;
       const accumulatedHooks: Record<string, unknown[]> = {};
-      let hasHooks = false;
 
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
         if (!Array.isArray(items)) continue;
@@ -455,13 +458,10 @@ export class ClaudeAdapter implements PlatformAdapter {
           const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
           const entryArray = hookEntry[hookEvent] as unknown[];
           accumulatedHooks[hookEvent] = [...existing, ...entryArray];
-          hasHooks = true;
         }
       }
 
-      if (hasHooks) {
-        await this.updateSettings(targetPath, accumulatedHooks, dryRun);
-      }
+      await this.updateSettings(targetPath, accumulatedHooks, dryRun);
       processedSections.push("hooks");
     }
 
@@ -676,7 +676,14 @@ export class ClaudeAdapter implements PlatformAdapter {
     skillsToAdd: string[],
   ): Promise<void> {
     const content = await fs.readFile(agentFile, "utf8");
-    const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
+    let parsed: ReturnType<typeof parseFrontmatter>;
+    try {
+      parsed = parseFrontmatter(content);
+    } catch {
+      logWarn(`Malformed frontmatter, skipping: ${agentFile}`);
+      return;
+    }
+    const { frontmatter, body, hasFrontmatter } = parsed;
 
     if (!hasFrontmatter) {
       logWarn(`No frontmatter found: ${agentFile}`);
@@ -711,7 +718,14 @@ export class ClaudeAdapter implements PlatformAdapter {
     }>,
   ): Promise<void> {
     const content = await fs.readFile(agentFile, "utf8");
-    const { frontmatter, body, hasFrontmatter } = parseFrontmatter(content);
+    let parsed: ReturnType<typeof parseFrontmatter>;
+    try {
+      parsed = parseFrontmatter(content);
+    } catch {
+      logWarn(`Malformed frontmatter, skipping: ${agentFile}`);
+      return;
+    }
+    const { frontmatter, body, hasFrontmatter } = parsed;
 
     if (!hasFrontmatter) {
       logWarn(`No frontmatter found: ${agentFile}`);

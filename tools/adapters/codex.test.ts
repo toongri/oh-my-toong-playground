@@ -242,6 +242,30 @@ describe("CodexAdapter", () => {
         .catch(() => false);
       expect(exists).toBe(false);
     });
+
+    test("빈 accumulator + 기존 omt:mcp 블록 존재 → 빈 블록으로 교체", async () => {
+      const configFile = path.join(tmpDir, ".codex", "config.toml");
+      await fs.mkdir(path.join(tmpDir, ".codex"), { recursive: true });
+      await fs.writeFile(
+        configFile,
+        `model = "o4-mini"\n\n# --- omt:mcp ---\n[mcp_servers.old-server]\ncommand = "npx"\n# --- end omt:mcp ---\n`,
+        "utf-8"
+      );
+
+      adapter.resetMcpAccumulator();
+      await adapter.flushMcpBlock(tmpDir, false);
+
+      const content = await fs.readFile(configFile, "utf-8");
+      // Markers must still be present
+      expect(content).toContain("# --- omt:mcp ---");
+      expect(content).toContain("# --- end omt:mcp ---");
+      // Old server must be removed
+      expect(content).not.toContain("old-server");
+      // Empty comment inside block
+      expect(content).toContain("# No MCP servers configured");
+      // User content outside block preserved
+      expect(content).toContain(`model = "o4-mini"`);
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -400,6 +424,61 @@ describe("CodexAdapter", () => {
       await adapter.syncCommandsDirect(tmpDir, "my-command", "/nonexistent.md");
       const exists = await fs
         .stat(path.join(tmpDir, ".codex"))
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // updateSettings — hooks not supported
+  // ---------------------------------------------------------------------------
+
+  describe("updateSettings", () => {
+    test("hooks 미지원 경고 출력 + config.toml 미생성", async () => {
+      const stderrChunks: string[] = [];
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+        return originalWrite(chunk, ...(args as Parameters<typeof originalWrite> extends [unknown, ...infer R] ? R : []));
+      };
+
+      try {
+        await adapter.updateSettings(tmpDir, [{ event: "Stop", command: "echo done" }], false);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+
+      const output = stderrChunks.join("");
+      expect(output).toContain("Codex does not support hooks");
+
+      // Must not create any files
+      const exists = await fs
+        .stat(path.join(tmpDir, ".codex", "config.toml"))
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    });
+
+    test("dryRun도 hooks 미지원 경고 출력 + config.toml 미생성", async () => {
+      const stderrChunks: string[] = [];
+      const originalWrite = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+        stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+        return originalWrite(chunk, ...(args as Parameters<typeof originalWrite> extends [unknown, ...infer R] ? R : []));
+      };
+
+      try {
+        await adapter.updateSettings(tmpDir, [], true);
+      } finally {
+        process.stderr.write = originalWrite;
+      }
+
+      const output = stderrChunks.join("");
+      expect(output).toContain("Codex does not support hooks");
+
+      const exists = await fs
+        .stat(path.join(tmpDir, ".codex", "config.toml"))
         .then(() => true)
         .catch(() => false);
       expect(exists).toBe(false);

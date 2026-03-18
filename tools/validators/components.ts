@@ -86,8 +86,6 @@ function checkHookDirectoryIndex(
   result: ValidationResult,
 ): void {
   if (!existsSync(dirPath)) return;
-  const stat = Bun.file(dirPath).size; // will be 0 for directories but won't throw
-  // Use existsSync to check if it's actually a directory
   if (!existsSync(join(dirPath, "index.ts")) && !existsSync(join(dirPath, "index.sh"))) {
     result.errors.push(`Hook directory '${componentName}' missing index.ts or index.sh: ${dirPath}`);
   }
@@ -310,8 +308,6 @@ export function validateSyncYamlComponents(
       }
     }
 
-    // sync.yaml hooks items: validate hook component existence
-    if (category !== "hooks") continue; // only for hooks section (handled in components only)
   }
 
   // hooks section: separate pass (not in categories above since hooks use "" ext)

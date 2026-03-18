@@ -166,7 +166,10 @@ function validateSection(
     return;
   }
 
-  if (!isObject(sectionData)) return;
+  if (!isObject(sectionData)) {
+    result.errors.push(`${sectionName}: object 형식이어야 합니다`);
+    return;
+  }
 
   // Check section-level fields
   for (const key of Object.keys(sectionData)) {
@@ -202,7 +205,9 @@ function validateSection(
     }
 
     const component = item.component;
-    if (typeof component === "string" && component) {
+    if (!("component" in item)) {
+      result.errors.push(`${sectionName}.items[${i}]: component 필드가 필요합니다`);
+    } else if (typeof component === "string" && component) {
       validateComponentRef(component, `${itemCtx}.component`, result);
     }
 
@@ -336,7 +341,10 @@ export function validatePlatformYaml(platformYamlPath: string, platform: string)
   }
 
   const data = parsed.data;
-  if (!isObject(data)) return result;
+  if (!isObject(data)) {
+    result.errors.push(`${basename(platformYamlPath)}: object 형식이어야 합니다`);
+    return result;
+  }
 
   const allowed = PLATFORM_ALLOWED_SECTIONS[platform];
   if (!allowed) return result;

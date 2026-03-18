@@ -100,9 +100,14 @@ export const opencodeAdapter: PlatformAdapter = {
     logInfo(`Copied: ${displayName}.md`);
 
     // Translate frontmatter for OpenCode compatibility (P2-5: pass modelMap)
-    const content = await fs.readFile(targetFile, "utf-8");
-    const translated = translateAgentFrontmatter(content, modelMap);
-    await fs.writeFile(targetFile, translated, "utf-8");
+    try {
+      const content = await fs.readFile(targetFile, "utf-8");
+      const translated = translateAgentFrontmatter(content, modelMap);
+      await fs.writeFile(targetFile, translated, "utf-8");
+    } catch {
+      logWarn(`Failed to translate frontmatter for: ${sourcePath}. Copying as-is.`);
+      await fs.copyFile(sourcePath, targetFile);
+    }
 
     // add-skills not supported — log if provided
     if (addSkills && addSkills.length > 0) {

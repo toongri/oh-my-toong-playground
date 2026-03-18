@@ -209,6 +209,42 @@ rules:
     });
   });
 
+  // --- checkHookDirectoryIndex: directory index validation ---
+  describe("hook 디렉토리 index 파일 검증", () => {
+    it("add-hooks 디렉토리에 index.sh가 있으면 에러가 없다", () => {
+      touch(join(root, "agents", "oracle.md"));
+      touch(join(root, "hooks", "my-hook", "index.sh"));
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items:
+    - component: oracle
+      add-hooks:
+        - component: my-hook
+          event: UserPromptSubmit
+`);
+      const result = validateSyncYamlComponents(syncPath, root);
+      const hookErrors = result.errors.filter((e) => e.includes("my-hook"));
+      expect(hookErrors).toHaveLength(0);
+    });
+
+    it("add-hooks 디렉토리에 index 파일이 없으면 에러를 반환한다", () => {
+      touch(join(root, "agents", "oracle.md"));
+      mkdirSync(join(root, "hooks", "empty-hook"), { recursive: true });
+      const syncPath = writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items:
+    - component: oracle
+      add-hooks:
+        - component: empty-hook
+          event: UserPromptSubmit
+`);
+      const result = validateSyncYamlComponents(syncPath, root);
+      expect(result.errors.some((e) => e.includes("empty-hook") && e.includes("index"))).toBe(true);
+    });
+  });
+
   // --- Component existence via object item format ---
   describe("object item 형식 컴포넌트 검증", () => {
     it("object 형식 item에서 존재하는 컴포넌트는 에러가 없다", () => {

@@ -16,12 +16,13 @@
 
 import fs from "fs/promises";
 import path from "path";
+import { stringify as tomlStringify } from "smol-toml";
 
 import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
-import { logInfo, logWarn, logDry } from "../lib/logger.ts";
+import { logInfo, logWarn, logDry, logError } from "../lib/logger.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 
 /** Read JSON file or return {} if missing. */
@@ -29,8 +30,12 @@ async function readJsonFile(filePath: string): Promise<Record<string, unknown>> 
   try {
     const text = await fs.readFile(filePath, "utf8");
     return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return {};
+  } catch (err: unknown) {
+    if (err && typeof err === "object" && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
+      return {};
+    }
+    logError(`JSON 파싱 실패: ${filePath}: ${err instanceof Error ? err.message : err}`);
+    throw err;
   }
 }
 
@@ -106,14 +111,20 @@ export class GeminiAdapter implements PlatformAdapter {
 
     // Extract frontmatter description
     const content = await fs.readFile(sourcePath, "utf8");
-    const { frontmatter } = parseFrontmatter(content);
+    let frontmatter: Record<string, unknown> = {};
+    try {
+      ({ frontmatter } = parseFrontmatter(content));
+    } catch (err) {
+      logWarn(`Malformed frontmatter, skipping command: ${path.basename(sourcePath)} (${err instanceof Error ? err.message : err})`);
+      return;
+    }
     const description =
       typeof frontmatter["description"] === "string"
         ? frontmatter["description"]
         : "";
 
     await fs.mkdir(targetDir, { recursive: true });
-    const toml = `[extension]\nname = "${displayName}"\ndescription = "${description}"\n`;
+    const toml = tomlStringify({ extension: { name: displayName, description } });
     await fs.writeFile(targetFile, toml, "utf8");
     logInfo(`Created: ${displayName}.toml`);
   }
@@ -348,27 +359,30 @@ export class GeminiAdapter implements PlatformAdapter {
   // syncMcpsMerge
   // ---------------------------------------------------------------------------
 
-  /** Merges an MCP server definition into .gemini/settings.json mcpServers. */
+  /** Replaces .gemini/settings.json mcpServers entirely with the provided servers map. */
   async syncMcpsMerge(
     targetPath: string,
-    serverName: string,
-    serverJson: Record<string, unknown>,
+    servers: Record<string, Record<string, unknown>>,
     dryRun = false,
   ): Promise<void> {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
 
     if (dryRun) {
-      logDry(`MCP merge: ${serverName} -> ${settingsFile}`);
-      logDry(`Server config: ${JSON.stringify(serverJson)}`);
+      logDry(`MCP replace: ${Object.keys(servers).join(", ")} -> ${settingsFile}`);
       return;
     }
 
     await fs.mkdir(path.join(targetPath, ".gemini"), { recursive: true });
     const current = await readJsonFile(settingsFile);
-    const mcpServers = (current["mcpServers"] as Record<string, unknown>) ?? {};
-    mcpServers[serverName] = serverJson;
-    await writeJsonFile(settingsFile, { ...current, mcpServers });
-    logInfo(`MCP merged: ${serverName} -> ${settingsFile}`);
+    // Build complete mcpServers from yaml
+    const newMcpServers: Record<string, unknown> = {};
+    for (const [name, serverDef] of Object.entries(servers)) {
+      newMcpServers[name] = serverDef;
+    }
+    // Replace entirely (not merge)
+    current.mcpServers = newMcpServers;
+    await writeJsonFile(settingsFile, current);
+    logInfo(`MCP replaced: ${settingsFile}`);
   }
 
   // ---------------------------------------------------------------------------
@@ -401,7 +415,6 @@ export class GeminiAdapter implements PlatformAdapter {
     if (yaml.hooks != null) {
       const hooksMap = yaml.hooks as Record<string, Array<Record<string, unknown>>>;
       const accumulatedHooks: Record<string, unknown[]> = {};
-      let hasHooks = false;
 
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
         if (!Array.isArray(items)) continue;
@@ -505,22 +518,17 @@ export class GeminiAdapter implements PlatformAdapter {
           const existing = (accumulatedHooks[hookEvent] as unknown[]) ?? [];
           const entryArray = hookEntry[hookEvent] as unknown[];
           accumulatedHooks[hookEvent] = [...existing, ...entryArray];
-          hasHooks = true;
         }
       }
 
-      if (hasHooks) {
-        await this.updateSettings(targetPath, accumulatedHooks, dryRun);
-      }
+      await this.updateSettings(targetPath, accumulatedHooks, dryRun);
       processedSections.push("hooks");
     }
 
     // --- mcps ---
     if (yaml.mcps != null) {
       const mcps = yaml.mcps as Record<string, Record<string, unknown>>;
-      for (const [name, serverJson] of Object.entries(mcps)) {
-        await this.syncMcpsMerge(targetPath, name, serverJson, dryRun);
-      }
+      await this.syncMcpsMerge(targetPath, mcps, dryRun);
       processedSections.push("mcps");
     }
 

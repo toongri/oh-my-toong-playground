@@ -52,20 +52,6 @@ export type AdapterMap = Map<Platform, PlatformAdapter>;
 const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
 /**
- * Dispatch method name on an adapter for a given category.
- */
-function adapterMethodForCategory(category: Category): keyof PlatformAdapter {
-  const map: Record<Category, keyof PlatformAdapter> = {
-    agents: "syncAgentsDirect",
-    commands: "syncCommandsDirect",
-    skills: "syncSkillsDirect",
-    scripts: "syncScriptsDirect",
-    rules: "syncRulesDirect",
-  };
-  return map[category];
-}
-
-/**
  * Generic sync loop for a single category.
  * Replaces sync_agents, sync_commands, sync_skills, sync_scripts, sync_rules.
  *
@@ -569,6 +555,10 @@ export async function processYaml(
     await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
   }
 
+  // Clear per-project state to prevent cross-project leaks
+  context.modelMaps.clear();
+  context.platformYamlSections.clear();
+
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
   await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
@@ -693,6 +683,7 @@ if (import.meta.main) {
         logWarn(`${targetPath}는 projects/에서 이미 처리됨, 스킵`);
       } else {
         await processYaml(context, rootSyncYaml, adapters, rootDir);
+        context.processedPaths.add(targetPath);
       }
     }
 

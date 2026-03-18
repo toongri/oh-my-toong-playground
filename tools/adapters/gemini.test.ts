@@ -161,6 +161,42 @@ describe("syncCommandsDirect", () => {
       adapter.syncCommandsDirect(targetPath, "nonexistent", missingFile),
     ).resolves.toBeUndefined();
   });
+
+  it("description에 따옴표가 포함되어도 유효한 TOML을 생성한다", async () => {
+    const sourceFile = path.join(tmpDir, "commands", "tricky.md");
+    await writeFile(
+      sourceFile,
+      `---\ndescription: Say "hello" and it's done\n---\n\n# Tricky\n`,
+    );
+
+    await adapter.syncCommandsDirect(targetPath, "tricky", sourceFile);
+
+    const tomlFile = path.join(targetPath, ".gemini", "commands", "tricky.toml");
+    const content = await fs.readFile(tomlFile, "utf8");
+    // Must contain extension table and both fields without broken TOML
+    expect(content).toContain("[extension]");
+    // Parsed TOML should round-trip correctly
+    const { parse: tomlParse } = await import("smol-toml");
+    const parsed = tomlParse(content) as { extension: { name: string; description: string } };
+    expect(parsed.extension.name).toBe("tricky");
+    expect(parsed.extension.description).toBe(`Say "hello" and it's done`);
+  });
+
+  it("잘못된 frontmatter가 있으면 경고를 출력하고 파일을 생성하지 않는다", async () => {
+    const sourceFile = path.join(tmpDir, "commands", "broken.md");
+    // Invalid YAML: tab indentation causes parse error in strict YAML parsers
+    await writeFile(
+      sourceFile,
+      `---\n: bad: yaml: [\n---\n\n# Broken\n`,
+    );
+
+    await expect(
+      adapter.syncCommandsDirect(targetPath, "broken", sourceFile),
+    ).resolves.toBeUndefined();
+
+    const tomlFile = path.join(targetPath, ".gemini", "commands", "broken.toml");
+    expect(await exists(tomlFile)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -464,10 +500,10 @@ describe("syncConfig", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncMcpsMerge", () => {
-  it("MCP 서버를 settings.json mcpServers에 추가한다", async () => {
+  it("MCP 서버를 settings.json mcpServers에 저장한다", async () => {
     const serverJson = { command: "npx", args: ["-y", "@upstash/context7-mcp"] };
 
-    await adapter.syncMcpsMerge(targetPath, "context7", serverJson);
+    await adapter.syncMcpsMerge(targetPath, { context7: serverJson });
 
     const settings = await readJsonFile(
       path.join(targetPath, ".gemini", "settings.json"),
@@ -476,26 +512,56 @@ describe("syncMcpsMerge", () => {
     expect(mcpServers["context7"]).toEqual(serverJson);
   });
 
-  it("기존 mcpServers를 보존하면서 새 서버를 추가한다", async () => {
+  it("yaml에 포함된 서버만 mcpServers에 남기고 기존 서버를 교체한다", async () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     await writeFile(
       settingsFile,
       JSON.stringify({ mcpServers: { existing: { command: "existing" } } }),
     );
 
-    await adapter.syncMcpsMerge(targetPath, "context7", { command: "npx" });
+    await adapter.syncMcpsMerge(targetPath, { context7: { command: "npx" } });
 
     const settings = await readJsonFile(settingsFile);
     const mcpServers = settings["mcpServers"] as Record<string, unknown>;
-    expect(mcpServers["existing"]).toBeDefined();
+    expect(mcpServers["existing"]).toBeUndefined();
     expect(mcpServers["context7"]).toBeDefined();
   });
 
   it("dry-run 모드에서는 파일을 수정하지 않는다", async () => {
-    await adapter.syncMcpsMerge(targetPath, "context7", { command: "npx" }, true);
+    await adapter.syncMcpsMerge(targetPath, { context7: { command: "npx" } }, true);
 
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     expect(await exists(settingsFile)).toBe(false);
+  });
+
+  it("yaml에서 서버를 제거하면 settings.json에서도 제거된다", async () => {
+    const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+    await writeFile(
+      settingsFile,
+      JSON.stringify({ mcpServers: { removed: { command: "old" }, kept: { command: "keep" } } }),
+    );
+
+    await adapter.syncMcpsMerge(targetPath, { kept: { command: "keep" } });
+
+    const settings = await readJsonFile(settingsFile);
+    const mcpServers = settings["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["removed"]).toBeUndefined();
+    expect(mcpServers["kept"]).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readJsonFile (via updateSettings) — error handling
+// ---------------------------------------------------------------------------
+
+describe("readJsonFile 오류 처리", () => {
+  it("손상된 JSON 파일이 있을 때 updateSettings가 throw한다", async () => {
+    const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+    await writeFile(settingsFile, "{ invalid json !!!");
+
+    await expect(
+      adapter.updateSettings(targetPath, { PreToolUse: [] }),
+    ).rejects.toThrow();
   });
 });
 
@@ -624,6 +690,15 @@ describe("syncPlatformYaml", () => {
     expect(result.processedSections).toContain("config");
     expect(result.processedSections).toContain("mcps");
     expect(result.processedSections).toContain("hooks");
+  });
+
+  it("hooks 섹션이 있으면 hooks 항목이 없어도 settings.json을 업데이트한다", async () => {
+    // Without the hasHooks guard, updateSettings is called unconditionally.
+    // Even with an empty hooks map, settings.json must be created/touched.
+    await adapter.syncPlatformYaml(targetPath, { hooks: {} }, false);
+
+    const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+    expect(await exists(settingsFile)).toBe(true);
   });
 
   it("절대 경로 component에서 displayName을 path.basename()으로 추출해 훅을 복사한다", async () => {
