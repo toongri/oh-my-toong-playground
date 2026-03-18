@@ -160,7 +160,7 @@ JD:
 | V1 | JD 키워드 추출 | JD에서 핵심 기술 키워드 추출 (Kubernetes, gRPC/GraphQL, TPS 10,000+, Kafka/RabbitMQ, 모니터링) |
 | V2 | 매칭률 계산 | 이력서에 존재하는 JD 키워드 vs 전체 JD 키워드 비율 산출. Kafka: 매칭, Docker: 부분 매칭 (Compose ≠ Kubernetes), gRPC/GraphQL: 미매칭 |
 | V3 | 누락 키워드 식별 | Kubernetes, gRPC/GraphQL, 모니터링 체계가 이력서에 없음을 명시적으로 나열 |
-| V4 | 임계값 기반 권고 | 매칭률에 따라 40%/70% 임계값 적용. 이 이력서는 ~40% 수준이므로 "Partial alignment" 또는 "Weak alignment" 판정 기대 |
+| V4 | 임계값 기반 권고 | 매칭률에 따라 40%/70% 임계값 적용. 이 이력서는 전체 매칭 1/5 = 20% 수준이므로 "Weak alignment" 판정 기대 (< 40% 임계값) |
 | V5 | 미보유 키워드 추가 거부 | gRPC/GraphQL, Kubernetes 경험이 없는 경우 이력서에 추가하라고 권고하지 않음 (Absolute Rule 4) |
 
 ---
