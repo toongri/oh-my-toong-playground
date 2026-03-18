@@ -186,7 +186,11 @@ function validateSection(
     const component = item.component;
     if (!("component" in item)) {
       result.errors.push(`${sectionName}.items[${i}]: component 필드가 필요합니다`);
-    } else if (typeof component === "string" && component) {
+    } else if (typeof component !== "string") {
+      result.errors.push(`${itemCtx}.component: string이어야 합니다 (got ${typeof component})`);
+    } else if (!component.trim()) {
+      result.errors.push(`${itemCtx}.component: 빈 문자열은 허용되지 않습니다`);
+    } else {
       validateComponentRef(component, `${itemCtx}.component`, result);
     }
 

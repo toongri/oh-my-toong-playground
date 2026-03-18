@@ -1009,4 +1009,51 @@ describe("opencodeAdapter.syncScriptsDirect", () => {
       await fs.rm(targetDir, { recursive: true, force: true });
     }
   });
+
+  it("syncs directory source to .opencode/scripts/<name>/ via `syncScriptsDirect`", async () => {
+    const scriptDir = path.join(tmpDir, "hud");
+    await fs.mkdir(scriptDir, { recursive: true });
+    await fs.writeFile(path.join(scriptDir, "hud.sh"), "#!/bin/bash\necho hud", "utf-8");
+
+    const targetDir = await mkTempDir();
+    try {
+      await opencodeAdapter.syncScriptsDirect(
+        targetDir,
+        "hud",
+        scriptDir,
+        false,
+      );
+
+      const target = path.join(targetDir, ".opencode", "scripts", "hud", "hud.sh");
+      const content = await fs.readFile(target, "utf-8");
+      expect(content).toContain("echo hud");
+    } finally {
+      await fs.rm(targetDir, { recursive: true, force: true });
+    }
+  });
+
+  it("skips directory sync in dry-run mode via `syncScriptsDirect`", async () => {
+    const scriptDir = path.join(tmpDir, "hud");
+    await fs.mkdir(scriptDir, { recursive: true });
+    await fs.writeFile(path.join(scriptDir, "hud.sh"), "#!/bin/bash\necho hud", "utf-8");
+
+    const targetDir = await mkTempDir();
+    try {
+      await opencodeAdapter.syncScriptsDirect(
+        targetDir,
+        "hud",
+        scriptDir,
+        true,
+      );
+
+      const scriptsDir = path.join(targetDir, ".opencode", "scripts");
+      const exists = await fs
+        .access(scriptsDir)
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    } finally {
+      await fs.rm(targetDir, { recursive: true, force: true });
+    }
+  });
 });

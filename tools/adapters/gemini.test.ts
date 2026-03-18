@@ -460,6 +460,28 @@ describe("updateSettings", () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     expect(await exists(settingsFile)).toBe(false);
   });
+
+  it("removes old hook events not present in new hooksEntries (atomic replacement) via `updateSettings`", async () => {
+    const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+    await writeFile(
+      settingsFile,
+      JSON.stringify({
+        customInstructions: "keep me",
+        Stop: [{ matcher: "*", hooks: [{ type: "command", command: ".gemini/hooks/old.sh", timeout: 10 }] }],
+      }),
+    );
+
+    const hooksEntries = {
+      UserPromptSubmit: [{ matcher: "*", hooks: [{ type: "command", command: ".gemini/hooks/new.sh", timeout: 10 }] }],
+    };
+
+    await adapter.updateSettings(targetPath, hooksEntries);
+
+    const settings = await readJsonFile(settingsFile);
+    expect(settings["Stop"]).toBeUndefined();
+    expect(settings["UserPromptSubmit"]).toBeDefined();
+    expect(settings["customInstructions"]).toBe("keep me");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -699,6 +721,32 @@ describe("syncPlatformYaml", () => {
 
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     expect(await exists(settingsFile)).toBe(true);
+  });
+
+  it("removes old hook event from settings.json when not in new YAML (hook-removal regression) via `syncPlatformYaml`", async () => {
+    const settingsFile = path.join(targetPath, ".gemini", "settings.json");
+    await writeFile(
+      settingsFile,
+      JSON.stringify({
+        customInstructions: "keep me",
+        Stop: [{ matcher: "*", hooks: [{ type: "command", command: ".gemini/hooks/old.sh", timeout: 10 }] }],
+      }),
+    );
+
+    const yaml = {
+      hooks: {
+        UserPromptSubmit: [
+          { command: ".gemini/hooks/new.sh", timeout: 10, matcher: "*", type: "command" },
+        ],
+      },
+    };
+
+    await adapter.syncPlatformYaml(targetPath, yaml, false);
+
+    const settings = await readJsonFile(settingsFile);
+    expect(settings["Stop"]).toBeUndefined();
+    expect(settings["UserPromptSubmit"]).toBeDefined();
+    expect(settings["customInstructions"]).toBe("keep me");
   });
 
   it("extracts displayName via `path.basename()` from absolute component path and copies hook via `syncPlatformYaml`", async () => {

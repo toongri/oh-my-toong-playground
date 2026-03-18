@@ -363,6 +363,68 @@ describe("syncCategory", () => {
     expect(addHooks == null || addHooks.length === 0).toBe(true);
   });
 
+  it("warns and skips add-skills when value is a scalar string (P2-7)", async () => {
+    const agentFile = path.join(rootDir, "agents", "oracle.md");
+    await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
+
+    const syncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["claude"],
+        items: [
+          {
+            component: "oracle",
+            "add-skills": "my-skill",
+          },
+        ],
+      },
+    };
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    // Should not throw
+    await syncCategory(context, "agents", syncYaml as never, adapters, rootDir);
+
+    const calls = adapters.getAdapter("claude")!.calls;
+    const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
+    expect(agentCall).toBeDefined();
+    // addSkills (4th arg, index 3) should be absent since scalar was skipped
+    const addSkills = agentCall!.args[3] as string[] | undefined;
+    expect(addSkills == null || addSkills.length === 0).toBe(true);
+  });
+
+  it("warns and skips add-hooks when value is a scalar string (P2-7)", async () => {
+    const agentFile = path.join(rootDir, "agents", "oracle.md");
+    await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
+
+    const syncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["claude"],
+        items: [
+          {
+            component: "oracle",
+            "add-hooks": "my-hook",
+          },
+        ],
+      },
+    };
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    // Should not throw
+    await syncCategory(context, "agents", syncYaml as never, adapters, rootDir);
+
+    const calls = adapters.getAdapter("claude")!.calls;
+    const agentCall = calls.find((c) => c.method === "syncAgentsDirect");
+    expect(agentCall).toBeDefined();
+    // addHooks (5th arg, index 4) should be absent since scalar was skipped
+    const addHooks = agentCall!.args[4] as unknown[] | undefined;
+    expect(addHooks == null || addHooks.length === 0).toBe(true);
+  });
+
   it("does not wipe the rules directory (P1-3)", async () => {
     // Create a rule component in rootDir
     await writeFile(path.join(rootDir, "rules", "my-rule.md"), "# My Rule\n");

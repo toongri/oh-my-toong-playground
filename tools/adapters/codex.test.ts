@@ -425,6 +425,70 @@ describe("CodexAdapter", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // syncScriptsDirect
+  // ---------------------------------------------------------------------------
+
+  describe("syncScriptsDirect", () => {
+    it("copies a single script file to target via `syncScriptsDirect`", async () => {
+      const sourceFile = path.join(tmpDir, "hud.sh");
+      await fs.writeFile(sourceFile, "#!/bin/bash\necho hud\n");
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncScriptsDirect(targetBase, "hud.sh", sourceFile, false);
+
+      const targetFile = path.join(targetBase, ".codex", "scripts", "hud.sh");
+      const content = await fs.readFile(targetFile, "utf-8");
+      expect(content).toBe("#!/bin/bash\necho hud\n");
+    });
+
+    it("syncs a script directory to target via `syncScriptsDirect`", async () => {
+      const sourceDir = path.join(tmpDir, "source-scripts", "hud");
+      await fs.mkdir(sourceDir, { recursive: true });
+      await fs.writeFile(path.join(sourceDir, "index.sh"), "#!/bin/bash\necho index\n");
+      await fs.writeFile(path.join(sourceDir, "helper.sh"), "#!/bin/bash\necho helper\n");
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncScriptsDirect(targetBase, "hud", sourceDir, false);
+
+      const targetDir = path.join(targetBase, ".codex", "scripts", "hud");
+      const indexContent = await fs.readFile(path.join(targetDir, "index.sh"), "utf-8");
+      const helperContent = await fs.readFile(path.join(targetDir, "helper.sh"), "utf-8");
+      expect(indexContent).toContain("echo index");
+      expect(helperContent).toContain("echo helper");
+    });
+
+    it("skips copy in dry-run mode via `syncScriptsDirect`", async () => {
+      const sourceFile = path.join(tmpDir, "hud.sh");
+      await fs.writeFile(sourceFile, "#!/bin/bash\necho hud\n");
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncScriptsDirect(targetBase, "hud.sh", sourceFile, true);
+
+      const exists = await fs
+        .stat(path.join(targetBase, ".codex", "scripts", "hud.sh"))
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    });
+
+    it("logs warning for missing source and does not throw via `syncScriptsDirect`", async () => {
+      const targetBase = path.join(tmpDir, "target");
+      // Must not throw
+      await adapter.syncScriptsDirect(
+        targetBase,
+        "hud.sh",
+        path.join(tmpDir, "nonexistent.sh"),
+        false
+      );
+      const exists = await fs
+        .stat(path.join(targetBase, ".codex"))
+        .then(() => true)
+        .catch(() => false);
+      expect(exists).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // syncHooksDirect
   // ---------------------------------------------------------------------------
 
