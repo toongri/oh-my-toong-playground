@@ -1,6 +1,6 @@
 ---
 name: review-resume
-description: Resume review and writing guidance skill — evaluates resumes with S1-S5 self-introduction assessment, D1-D6 line-by-line analysis, P.A.R.R. signature project evaluation, and provides inline writing templates and examples for improvement.
+description: Resume review and writing guidance skill — evaluates resumes with S1-S5 self-introduction assessment, D1-D6 line-by-line analysis, P.A.R.R. signature project evaluation, and provides inline writing templates and examples for improvement. Triggers: 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume
 ---
 
 # Review Resume
@@ -26,7 +26,8 @@ flowchart TB
     B -->|No| D{Target position known?}
     C --> D
     D -->|No| E[ASK target position]
-    E --> F2{Self-introduction was evaluated?}
+    E --> E2[/HALT — wait for user reply/]
+    E2 --> F2{Self-introduction was evaluated?}
     F2 -->|Yes| F[S3/S4 Conditional Re-evaluation]
     F2 -->|No| G
     F --> G[Line-by-line 6-dimension scan]
@@ -324,26 +325,26 @@ Career-level guidance for 문제해결 / 프로젝트 상세 entry count. Candid
 ### First-Page Primacy Rule
 
 There is NO hard page limit. A 4-page resume is acceptable if every page earns its space.
-However, page 1 must function as a standalone executive summary:
+However, the opening section must function as a standalone executive summary:
 
-**Page 1 must contain:**
+**The opening section (approximately the first 500 words or 20-25 bullet lines) must contain:**
 - Role identity + core competency (self-introduction)
 - Top 2-3 quantified achievements
 - Signature project summary (problem + outcome in 2-3 lines)
 - Technical stack overview
 
 **Why:** Recruiters spend ~7.4 seconds on initial screening (Ladders Eye-Tracking Study, 2018).
-Everything that determines "read further vs reject" must appear on page 1.
-Pages 2+ are for depth — they will only be read if page 1 earns the reader's attention.
+Everything that determines "read further vs reject" must appear in the opening section.
+Remaining sections are for depth — they will only be read if the opening section earns the reader's attention.
 
 **Evaluation:**
-- PASS: Page 1 contains identity, achievements, and signature summary
-- WARNING: Key achievements or signature project buried on page 2+
-- FAIL: Page 1 is entirely career history or education with no impact signals
+- PASS: Opening section contains identity, achievements, and signature summary
+- WARNING: Key achievements or signature project buried past the opening section
+- FAIL: Opening section is entirely career history or education with no impact signals
 
 ### JD Keyword Matching (AI/ATS Screening)
 
-When a target position or JD (Job Description) is provided, evaluate keyword alignment.
+When a JD (Job Description) text is provided, evaluate keyword alignment.
 Modern hiring pipelines use ATS (Applicant Tracking Systems) and AI-based screening
 that filter resumes by keyword match rate before human review.
 
@@ -742,9 +743,9 @@ See Improvement Analysis in the Detection sections above (New Grad / Junior and 
 
 After P.A.R.R. evaluation, check this condition:
 
-- **Condition**: 3 or more P.A.R.R. dimensions are FAIL among P1-P5, OR the P.A.R.R. structure is entirely absent
+- **Condition**: 3 or more evaluated P.A.R.R. dimensions are FAIL, OR the P.A.R.R. structure is entirely absent
 - **Immediate trigger**: If there is no [문제]/[해결 과정]/[검증]/[회고] structure at all — trigger immediately without counting
-- **Message to deliver**: "P.A.R.R. 평가 차원 5개 중 N개가 FAIL입니다. 이 시그니처 프로젝트는 구조적 재작성이 필요합니다. 위의 Writing Guidance: Signature Project P.A.R.R. 섹션의 템플릿과 서사 원칙을 참고하여 다시 작성해 보세요."
+- **Message to deliver**: "P.A.R.R. 평가 차원 중 N개가 FAIL입니다. 이 시그니처 프로젝트는 구조적 재작성이 필요합니다. 위의 Writing Guidance: Signature Project P.A.R.R. 섹션의 템플릿과 서사 원칙을 참고하여 다시 작성해 보세요."
 
 This trigger is not optional. If the P.A.R.R. structure is absent entirely, trigger immediately.
 
@@ -918,41 +919,13 @@ Apply the standard Pre-Writing Validation flowchart. Additionally:
 
 #### Before/After Examples
 
-**Before — Feature listing (anti-pattern):**
-```
-기타 프로젝트
-• 페이징 기능 개발
-• OAuth 소셜 로그인 구현
-• 결제 API 개발
-• 장바구니 기능 개발
-```
-
-**After — Compressed P.A.R.R. (bullet format):**
-```
-그 외 프로젝트
-
-상품 상세 조회 최적화
-- 상품 상세 조회 p99 10초, 좋아요 수를 매 요청마다 COUNT 집계하는 구조적 한계
-- 집계 테이블 분리 및 복합 인덱스 추가로 읽기 부하 제거
-- p99 **10초 → 500ms** 단축, 가입자 상품 상세 조회 CTR **10% → 22%** 개선
-
-선착순 쿠폰 초과 발급 긴급 대응
-- 한정 수량(300매) 쿠폰 초과 발급 발생, 다음날 2차 이벤트 예정으로 즉시 대응 필요
-- 재고 조회-차감 사이 race condition 확인, `UPDATE ... WHERE stock > 0` 원자적 갱신으로 추가 인프라 없이 해결
-- k6 200 VU 부하 테스트로 동시 요청 시나리오 검증 (p95 1초 이내)
-- **2시간** 내 핫픽스 완료, 2차 이벤트 초과 발급 **0건**
-
-상품 조회 캐시 적용
-- 피크 시간대 상품 조회 p95 500ms로 SLO 미달, 반복 조회 상품의 캐시 부재가 원인
-- Redis 캐시 적용으로 DB 직접 조회 부하 제거
-- p95 **500ms → 150ms** 달성, DB 부하 **50%** 감소
-```
+See Before/After examples in the "Before/After Detection (Other Projects)" section above.
 
 ### Writing Guidance Trigger: Other Projects
 
 After completing D1-D6 evaluation on other projects, check this condition:
 
-- **Trigger formula**: `D1_FAIL_count / total_lines > 0.5` OR `D2_FAIL_count / total_lines > 0.5`
+- **Trigger formula**: `D1_FAIL_count / evaluable_lines > 0.5` OR `D2_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = D1-D6으로 평가된 성과 bullet 라인 수, 제목·빈 줄·섹션 마커 제외)
 - **Missing section**: If the other projects section is entirely absent, recommend adding it
 - **Message to deliver**: "전체 N개 라인 중 D1/D2 FAIL이 과반수입니다 (D1: X/N, D2: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed P.A.R.R. 섹션의 템플릿을 참고하여 재작성해 보세요."
 
