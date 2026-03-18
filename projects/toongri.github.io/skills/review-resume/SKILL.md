@@ -822,15 +822,7 @@ Other projects do NOT require attempt enumeration, retrospective, or trade-off c
 
 ### Explicit Anti-Patterns (ENHANCED)
 
-**Feature Listing Anti-Pattern**: Verb + feature/technology name only, with no problem context and no outcome. Flag immediately.
-
-Specific detection signals:
-- `[feature name] 개발` — e.g., "페이징 기능 개발", "장바구니 기능 개발"
-- `[tech name] 구현` — e.g., "OAuth 소셜 로그인 구현", "Redis 캐시 구현"
-- `[tech name] 적용` — e.g., "Kafka 적용", "ElasticSearch 적용"
-- `[tech name] 연동` — e.g., "결제 API 연동", "외부 API 연동"
-
-When detected: immediately flag as "Feature Listing Anti-Pattern" and request the underlying problem context and outcome.
+**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as D1 FAIL and request the underlying problem context and outcome.
 
 **Over-Narration Anti-Pattern**: Signature-level narrative (attempts, retrospective, trade-off comparison) used in non-signature projects. Flag and recommend compression to 3-5 bullet lines.
 
