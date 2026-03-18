@@ -1,3 +1,4 @@
+# MCP definitions shared with gemini.yaml — keep in sync
 mcps:
   context7:
     command: npx

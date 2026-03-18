@@ -388,6 +388,53 @@ hooks:
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors.some((e) => e.includes("nonexistent-hook.sh"))).toBe(true);
     });
+
+    it("returns null (error) for cross-project scoped ref from a project context", () => {
+      // yamlDir is inside projects/myproject — projectDirName = "myproject"
+      // component references "otherproject:hook.sh" — cross-project, must be rejected
+      const projectDir = join(root, "projects", "myproject");
+      mkdirSync(join(root, "projects", "otherproject", "hooks"), { recursive: true });
+      touch(join(root, "projects", "otherproject", "hooks", "hook.sh"));
+      writeYaml(projectDir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: otherproject:hook.sh
+`);
+      const result = validatePlatformYamlHookComponents(projectDir, root);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("otherproject:hook.sh"))).toBe(true);
+    });
+  });
+
+  // --- Resolution order: project-local before global ---
+  describe("해석 순서: project-local이 global보다 우선", () => {
+    it("prefers project-local hook over global hook when both exist", () => {
+      // Both hooks/shared.sh and projects/myproject/hooks/shared.sh exist.
+      // With projectDirName = "myproject", the project-local one must be found (no error).
+      const projectDir = join(root, "projects", "myproject");
+      touch(join(root, "hooks", "shared.sh"));
+      touch(join(root, "projects", "myproject", "hooks", "shared.sh"));
+      writeYaml(projectDir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: shared.sh
+`);
+      const result = validatePlatformYamlHookComponents(projectDir, root);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("falls back to global hook when only global exists", () => {
+      const projectDir = join(root, "projects", "myproject");
+      mkdirSync(join(root, "projects", "myproject", "hooks"), { recursive: true });
+      touch(join(root, "hooks", "global-only.sh"));
+      writeYaml(projectDir, "claude.yaml", `
+hooks:
+  UserPromptSubmit:
+    - component: global-only.sh
+`);
+      const result = validatePlatformYamlHookComponents(projectDir, root);
+      expect(result.errors).toHaveLength(0);
+    });
   });
 
   // --- Multiple hooks, one missing ---

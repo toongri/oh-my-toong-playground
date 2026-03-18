@@ -150,9 +150,16 @@ function validateSection(
     }
   }
 
+  if (sectionData.platforms !== undefined && !isArray(sectionData.platforms)) {
+    result.errors.push(`${sectionName}.platforms: 배열 형식이어야 합니다`);
+  }
   validatePlatformValues(sectionData.platforms, `${sectionName}.platforms`, result);
 
   const items = sectionData.items;
+  if (items !== undefined && !isArray(items)) {
+    result.errors.push(`${sectionName}.items: 배열 형식이어야 합니다`);
+    return;
+  }
   if (!isArray(items)) return;
 
   for (let i = 0; i < items.length; i++) {
@@ -328,7 +335,9 @@ export function validatePlatformYaml(platformYamlPath: string, platform: string)
   }
 
   // Hooks validation: event name and event value type
-  if (isObject(data.hooks)) {
+  if (data.hooks !== undefined && !isObject(data.hooks)) {
+    result.errors.push(`${platform}.yaml: hooks는 object 형식이어야 합니다`);
+  } else if (isObject(data.hooks)) {
     for (const [event, value] of Object.entries(data.hooks)) {
       if (!VALID_EVENTS.has(event)) {
         result.errors.push(`${platform}.yaml: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
@@ -340,7 +349,9 @@ export function validatePlatformYaml(platformYamlPath: string, platform: string)
   }
 
   // mcps validation: each value must be an object
-  if (isObject(data.mcps)) {
+  if (data.mcps !== undefined && !isObject(data.mcps)) {
+    result.errors.push(`${platform}.yaml: mcps는 object 형식이어야 합니다`);
+  } else if (isObject(data.mcps)) {
     for (const [name, value] of Object.entries(data.mcps)) {
       if (!isObject(value)) {
         result.errors.push(`${platform}.yaml: mcps.${name}의 값은 object이어야 합니다`);

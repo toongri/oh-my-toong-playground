@@ -21,13 +21,13 @@ make sync               # Deploy to target projects (runs validate + tests first
 
 ```bash
 bash hooks/keyword-detector_test.sh        # Single shell test (colocated next to source)
-bash tools/sync_test.sh                    # Sync orchestrator tests (colocated next to source)
+bun test tools/                            # Sync orchestrator tests
 bun test                                   # All TypeScript tests
 ```
 
 ### Prerequisites
 
-`yq`, `jq`, `bun`, `bash` (macOS 3.2 compatible)
+`bun`, `bash` (macOS 3.2 compatible)
 
 ## Architecture
 
@@ -43,8 +43,8 @@ oh-my-toong/
 ├── lib/             # Shared TypeScript helpers (ESM, bun:test)
 ├── scripts/         # Deployed script packages (hud, chunk-review, spec-reviewer)
 ├── tools/           # Internal sync/validation tooling (not deployed)
-│   ├── adapters/    # Platform adapters (claude.sh, gemini.sh, codex.sh)
-│   └── lib/         # Shared shell helpers for tools
+│   ├── adapters/    # Platform adapters (claude.ts, gemini.ts, codex.ts, opencode.ts)
+│   └── lib/         # Shared TypeScript modules for sync tools
 ├── projects/        # Project-specific overrides (skills, hooks per project)
 ├── config.yaml      # Global defaults (use-platforms, feature-platforms, backup retention)
 ├── claude.yaml      # Per-platform config (config/hooks/mcps/plugins)
@@ -56,7 +56,7 @@ oh-my-toong/
 
 ### Sync System (Core Feature)
 
-The sync tool (`tools/sync.sh`) reads `sync.yaml` files and deploys components to target project directories (`.claude/`, `.gemini/`, `.codex/`).
+The sync tool (`tools/sync.ts`) reads `sync.yaml` files and deploys components to target project directories (`.claude/`, `.gemini/`, `.codex/`).
 
 **Processing order**: `projects/*/sync.yaml` first (project-specific), then root `sync.yaml` (skips already-processed paths).
 
@@ -68,11 +68,6 @@ agents:
     - oracle                           # String shorthand
     - component: sisyphus-junior       # Object with options
       add-skills: [testing]            # Inject skills into agent frontmatter
-hooks:
-  items:
-    - component: keyword-detector.sh
-      event: UserPromptSubmit          # Required: SessionStart|UserPromptSubmit|PreToolUse|PostToolUse|Stop|SubagentStop
-      timeout: 10
 skills:
   items:
     - prometheus
@@ -94,10 +89,10 @@ skills:
 
 | Platform | Target dir | Supported categories | Notes |
 |----------|-----------|---------------------|-------|
-| claude | `.claude/` | agents, commands, skills, rules, scripts, hooks | Full native support |
-| gemini | `.gemini/` | agents, commands, skills, rules, scripts, hooks | Fallback for agents/commands |
-| codex | `.codex/` | agents, commands, skills, rules, scripts, hooks | Fallback for agents/commands |
-| opencode | `.opencode/` | agents, commands, skills, rules, scripts | Hooks not supported |
+| claude | `.claude/` | agents, commands, skills, scripts, rules | Full native support |
+| gemini | `.gemini/` | commands, skills, scripts | Hooks/config via syncPlatformYaml |
+| codex | `.codex/` | skills, scripts | Hooks/config via syncPlatformYaml |
+| opencode | `.opencode/` | agents, commands, skills, scripts, rules | Hooks not supported |
 
 ### Core Skills
 
@@ -137,7 +132,8 @@ skills:
 - **TypeScript**: ESM modules, bun:test for testing. No build step required.
 - **YAML**: 2-space indentation
 - **Naming**: `skills/<greek-name>/`, `agents/<name>.md`, `hooks/<purpose>.(sh|js|py)`
-- **Shell tests**: Colocated next to source files with `_test.sh` suffix (e.g., `hooks/keyword-detector_test.sh`, `tools/sync_test.sh`); use `mktemp -d` with cleanup
+- **Shell tests**: Colocated next to source files with `_test.sh` suffix (e.g., `hooks/keyword-detector_test.sh`); use `mktemp -d` with cleanup
+- **TypeScript tests**: Colocated next to source files with `.test.ts` suffix (e.g., `tools/sync.test.ts`); use bun:test
 
 ## Critical Patterns
 

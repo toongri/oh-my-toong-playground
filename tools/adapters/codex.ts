@@ -16,6 +16,7 @@ import fs from "fs/promises";
 import path from "path";
 import { stringify } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
+import { readTextFile } from "../lib/json.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
 import type { PlatformConfigResult } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
@@ -297,12 +298,7 @@ export class CodexAdapter implements PlatformAdapter {
 
     await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
 
-    let existing = "";
-    try {
-      existing = await fs.readFile(configFile, "utf-8");
-    } catch {
-      // File does not exist yet
-    }
+    const existing = await readTextFile(configFile);
 
     // Use smol-toml to generate TOML content from the config object
     const tomlContent = stringify(configJson);
@@ -333,10 +329,8 @@ export class CodexAdapter implements PlatformAdapter {
 
     if (serverCount === 0) {
       // If a managed MCP block exists in the file, replace it with an empty block
-      let existing = "";
-      try {
-        existing = await fs.readFile(configFile, "utf-8");
-      } catch {
+      const existing = await readTextFile(configFile);
+      if (!existing) {
         // File does not exist — nothing to clean up
         return;
       }
@@ -363,12 +357,7 @@ export class CodexAdapter implements PlatformAdapter {
 
     await fs.mkdir(path.join(targetPath, this.configDir), { recursive: true });
 
-    let existing = "";
-    try {
-      existing = await fs.readFile(configFile, "utf-8");
-    } catch {
-      // File does not exist yet
-    }
+    const existing = await readTextFile(configFile);
 
     const tomlContent = buildMcpTomlContent(this.mcpAccumulator);
     const updated = insertManagedBlock(existing, "mcp", tomlContent);
