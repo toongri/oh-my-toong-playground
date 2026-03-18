@@ -290,4 +290,6 @@ From baseline Scenario 6:
 
 ### Conclusion
 
-The skill is **essential for Scenario 6 (combined pressure)** and **adds systematic rigor for all scenarios**. The critical gap it fills is giving the agent grounds to override user authority ("don't change content") when quality rules are violated.
+The skill is **essential for Scenario 6 (combined pressure)** and **adds systematic rigor for tested scenarios (3/7 executed; #2, #4, #5, #7 untested)**. The critical gap it fills is giving the agent grounds to override user authority ("don't change content") when quality rules are violated.
+
+Untested scenarios (#2 Unrealistic Premise, #4 Section Fitness, #5 Abstract Keyword, #7 Interview Skip) remain coverage risks.
