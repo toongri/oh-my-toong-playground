@@ -710,7 +710,8 @@ Writing template:
 [회고] 무엇을 배웠는가? 한계는? 솔직한 고백은? (Mid/Senior: 멈추는 판단은?)
 ```
 
-A minimum of 2-3 attempts → failure → insight arc is required. A story that succeeds on the first try reads as "someone told me to do it and I just did it."
+A 2-3 attempt → failure → insight arc is strongly recommended. If the story genuinely succeeds on the first try, it can still pass IF the candidate provides: (1) alternative approaches considered and why they were rejected before implementation, (2) verification data proving the solution works under stress, and (3) acknowledged risks or limitations of the chosen approach.
+Without at least one of these compensating elements, a first-try success reads as "someone told me to do it and I just did it."
 Each attempt must include both "Why did I try this?" and "Why didn't it work?" Numbers alone without reasons are just a list, not a failure arc.
 
 #### Narrative Principles
@@ -758,7 +759,7 @@ This trigger is not optional. If the P.A.R.R. structure is absent entirely, trig
 | Thought | Reality |
 |---------|---------|
 | "기술 스택만 나열하면 되겠지" | Technology listing = zero thought process. The Before anti-pattern itself. |
-| "한 번에 성공했어" | A story that succeeds on the first try reads as "someone told me to do it." Minimum 2-3 attempts → failure → insight arc is required. |
+| "한 번에 성공했어" | A first-try success needs compensating depth: alternative approaches considered, verification data, and acknowledged risks. Without these, it reads as "someone told me to do it." |
 | "회고에 뭘 배웠는지 쓰면 되잖아" | "분산 시스템을 배웠다" is abstract. Specific trade-offs, acknowledged limits, and an honest confession are required. |
 | "매일 밤새며 공부했다고 쓰면 감동적이잖아" | Self-promotion ≠ engineering insight. "What did I initially assume incorrectly?" is the key. |
 | "왜 Redis인지는 당연하잖아" | "Obvious" means thinking has stopped. Every attempt requires both "Why did I try this?" + "Why didn't it work?" |
