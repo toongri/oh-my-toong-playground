@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { cp, mkdir, rm, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { logWarn } from "./logger.ts";
 
 /**
  * Generates a random hex session ID for backup directories.
@@ -26,9 +27,11 @@ export async function backupCategory(
 
   try {
     await stat(sourceDir);
-  } catch {
-    // Source does not exist — skip
-    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw err;
   }
 
   const destDir = join(
@@ -53,9 +56,11 @@ export async function backupConfigFile(
 ): Promise<void> {
   try {
     await stat(filePath);
-  } catch {
-    // File does not exist — skip
-    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw err;
   }
 
   await mkdir(backupDir, { recursive: true });
@@ -79,9 +84,11 @@ export async function cleanupOldBackups(
 
   try {
     await stat(backupDir);
-  } catch {
-    // Backup directory does not exist — nothing to clean
-    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return;
+    }
+    throw err;
   }
 
   const entries = await readdir(backupDir);
@@ -94,8 +101,11 @@ export async function cleanupOldBackups(
     let entryStats;
     try {
       entryStats = await stat(entryPath);
-    } catch {
-      continue;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        continue;
+      }
+      throw err;
     }
 
     if (!entryStats.isDirectory()) {
@@ -103,11 +113,19 @@ export async function cleanupOldBackups(
     }
 
     if (retentionDays === 0) {
-      await rm(entryPath, { recursive: true, force: true });
+      try {
+        await rm(entryPath, { recursive: true, force: true });
+      } catch (err) {
+        logWarn(`백업 디렉토리 삭제 실패, 건너뜀: ${entryPath}: ${err instanceof Error ? err.message : err}`);
+      }
     } else {
       const ageMs = now - entryStats.mtimeMs;
       if (ageMs > retentionMs) {
-        await rm(entryPath, { recursive: true, force: true });
+        try {
+          await rm(entryPath, { recursive: true, force: true });
+        } catch (err) {
+          logWarn(`백업 디렉토리 삭제 실패, 건너뜀: ${entryPath}: ${err instanceof Error ? err.message : err}`);
+        }
       }
     }
   }

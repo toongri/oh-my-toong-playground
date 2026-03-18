@@ -52,6 +52,18 @@ export type AdapterMap = Map<Platform, PlatformAdapter>;
 const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
 /**
+ * Platform×category capability map.
+ * Only combinations listed here proceed through backup+wipe+dispatch.
+ * Unsupported combos (e.g., codex+agents) are skipped entirely.
+ */
+const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
+  claude: new Set(["agents", "commands", "skills", "scripts", "rules"]),
+  gemini: new Set(["commands", "skills", "scripts"]),
+  codex: new Set(["skills", "scripts"]),
+  opencode: new Set(["agents", "commands", "skills", "scripts", "rules"]),
+};
+
+/**
  * Generic sync loop for a single category.
  * Replaces sync_agents, sync_commands, sync_skills, sync_scripts, sync_rules.
  *
@@ -180,6 +192,9 @@ export async function syncCategory(
         logWarn(`${category}/${componentRef}: no adapter for platform '${platform}', skipping`);
         continue;
       }
+
+      // Skip unsupported platform×category combinations entirely (no backup/wipe/dispatch).
+      if (!SUPPORTED_CATEGORIES[platform]?.has(category)) continue;
 
       // Backup before first write for this platform×category
       const prepKey = `${platform}:${category}`;

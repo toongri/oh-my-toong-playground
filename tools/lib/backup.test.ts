@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, mkdir, writeFile, readdir, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readdir, stat, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -105,6 +105,24 @@ describe("backup 모듈", () => {
         expect(files).toContain(`${platform}.md`);
       }
     });
+
+    it("propagates non-ENOENT stat errors (e.g., EACCES)", async () => {
+      const targetPath = join(tmpDir, "backup-category-eacces");
+      const platformDir = join(targetPath, ".claude");
+      await mkdir(platformDir, { recursive: true });
+
+      // Remove execute permission on the platform directory so stat of its
+      // children returns EACCES (code !== "ENOENT") → must rethrow
+      await chmod(platformDir, 0o000);
+
+      try {
+        await expect(
+          backupCategory(targetPath, "claude", "agents", "sess-eacces")
+        ).rejects.toThrow();
+      } finally {
+        await chmod(platformDir, 0o755);
+      }
+    });
   });
 
   describe("backupConfigFile", () => {
@@ -153,6 +171,23 @@ describe("backup 모듈", () => {
       const destFile = join(backupDir, "config.toml");
       const stats = await stat(destFile);
       expect(stats.isFile()).toBe(true);
+    });
+
+    it("propagates non-ENOENT stat errors (e.g., EACCES)", async () => {
+      const targetPath = join(tmpDir, "backup-file-eacces");
+      await mkdir(targetPath, { recursive: true });
+
+      // Remove execute permission on the parent directory so stat of a child
+      // file returns EACCES (code !== "ENOENT") → must rethrow
+      await chmod(targetPath, 0o000);
+
+      try {
+        await expect(
+          backupConfigFile(join(targetPath, "settings.json"), join(tmpDir, "backup-file-eacces-dest"))
+        ).rejects.toThrow();
+      } finally {
+        await chmod(targetPath, 0o755);
+      }
     });
   });
 
@@ -209,6 +244,34 @@ describe("backup 모듈", () => {
       // Plain file should remain untouched
       const s = await stat(orphanFile);
       expect(s.isFile()).toBe(true);
+    });
+
+    it("does not throw and processes all entries when rm() fails on some", async () => {
+      const targetPath = join(tmpDir, "cleanup-rm-fail");
+      const backupDir = join(targetPath, ".sync-backup");
+
+      // Create three session directories to delete (retentionDays=0)
+      for (const name of ["sess-rm-a", "sess-rm-b", "sess-rm-c"]) {
+        const sessDir = join(backupDir, name);
+        await mkdir(sessDir, { recursive: true });
+        await writeFile(join(sessDir, "file.txt"), "data");
+      }
+
+      // Remove write permission from .sync-backup so all rm() calls fail
+      // (deleting a child entry requires write on the parent directory)
+      await chmod(backupDir, 0o555);
+
+      try {
+        // Key invariant: does not throw even though rm() fails for every entry
+        await cleanupOldBackups(targetPath, 0);
+      } finally {
+        await chmod(backupDir, 0o755);
+      }
+
+      // All three entries survive (rm failed for each), confirming the loop
+      // ran through all entries without aborting on the first failure
+      const remaining = await readdir(backupDir);
+      expect(remaining).toHaveLength(3);
     });
   });
 });

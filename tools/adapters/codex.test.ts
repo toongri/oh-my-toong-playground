@@ -337,6 +337,31 @@ describe("CodexAdapter", () => {
       expect(exists).toBe(false);
     });
 
+    it("accumulates MCP servers in dry-run mode so preview is correct via `syncPlatformYaml`", async () => {
+      // Create existing config.toml so flushMcpBlock can log a meaningful dry-run preview
+      const configDir = path.join(tmpDir, ".codex");
+      await fs.mkdir(configDir, { recursive: true });
+      const configFile = path.join(configDir, "config.toml");
+      await fs.writeFile(configFile, `model = "o4-mini"\n`, "utf-8");
+
+      const yaml = {
+        mcps: {
+          "server-alpha": { command: "npx", args: ["-y", "alpha"] },
+          "server-beta": { command: "node", args: ["beta.js"] },
+        },
+      };
+
+      await adapter.syncPlatformYaml(tmpDir, yaml, true);
+
+      // Accumulator must be populated — flushMcpBlock dry-run path uses it to build preview
+      // Verify by calling flushMcpBlock in non-dry-run mode and confirming servers are written
+      await adapter.flushMcpBlock(tmpDir, false);
+      const content = await fs.readFile(configFile, "utf-8");
+      expect(content).toContain("server-alpha");
+      expect(content).toContain("server-beta");
+      expect(content).toContain("# --- omt:mcp ---");
+    });
+
     it("returns undefined for modelMap when model-map is absent via `syncPlatformYaml`", async () => {
       const yaml = { config: { model: "o4-mini" } };
       const result = await adapter.syncPlatformYaml(tmpDir, yaml, false);

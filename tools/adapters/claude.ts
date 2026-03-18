@@ -1,6 +1,5 @@
 import fs from "fs/promises";
 import path from "path";
-import { parse as parseYaml } from "yaml";
 
 import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
@@ -94,6 +93,7 @@ export class ClaudeAdapter implements PlatformAdapter {
         matcher?: string;
         type?: string;
         command?: string;
+        prompt?: string;
         timeout?: number;
       }>;
 
@@ -123,6 +123,7 @@ export class ClaudeAdapter implements PlatformAdapter {
           h.command && h.command !== ""
             ? h.command
             : `$CLAUDE_PROJECT_DIR/.claude/hooks/${h.display_name ?? ""}`,
+        prompt: h.prompt,
         timeout: h.timeout ?? 10,
       }));
 
@@ -198,9 +199,8 @@ export class ClaudeAdapter implements PlatformAdapter {
         await fs.mkdir(targetDir, { recursive: true });
         await fs.copyFile(sourcePath, targetFile);
         // chmod +x
-        const srcStat = await fs.stat(sourcePath);
         const tgtStat = await fs.stat(targetFile);
-        await fs.chmod(targetFile, tgtStat.mode | (srcStat.mode & 0o111) | 0o111);
+        await fs.chmod(targetFile, tgtStat.mode | 0o111);
         logInfo(`Copied: ${displayName}`);
       }
     }
@@ -555,8 +555,12 @@ export class ClaudeAdapter implements PlatformAdapter {
     let current: Record<string, unknown>;
     try {
       current = await readJsonFile(settingsFile);
-    } catch {
-      logWarn(`statusLine 설정 실패: ${settingsFile} 없음`);
+    } catch (err: unknown) {
+      if (err instanceof SyntaxError) {
+        logWarn(`statusLine 설정 실패: ${settingsFile} JSON 파싱 오류`);
+      } else {
+        logWarn(`statusLine 설정 실패: ${settingsFile} 읽기 오류`);
+      }
       return;
     }
 
