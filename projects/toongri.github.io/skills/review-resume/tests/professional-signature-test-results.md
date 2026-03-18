@@ -41,10 +41,10 @@
 
 | Scenario | V1 | V2 | V3 | V4 | V5 | Result |
 |----------|----|----|----|----|-----|--------|
-| S1: Mid/Senior 3년차 + 정답 없는 문제 | **FAIL** | PARTIAL | PARTIAL | PARTIAL | PASS | **FAIL** |
-| S2: 시도의 Why — 도메인 실패 이유 | (not yet tested) | - | - | - | - | - |
-| S3: 멈추는 판단 | (not yet tested) | - | - | - | - | - |
-| S4: 비즈니스 임팩트 + 실험 기반 | (not yet tested) | - | - | - | - | - |
+| S5: Mid/Senior 3년차 + 정답 없는 문제 | **FAIL** | PARTIAL | PARTIAL | PARTIAL | PASS | **FAIL** |
+| S6: 시도의 Why — 도메인 실패 이유 | (not yet tested) | - | - | - | - | - |
+| S7: 멈추는 판단 | (not yet tested) | - | - | - | - | - |
+| S8: 비즈니스 임팩트 + 실험 기반 | (not yet tested) | - | - | - | - | - |
 
 ### Key Baseline Failures (S1):
 - **V1 (Mid/Senior 프레이밍)**: New Grad/Junior 구분 없이 일반 P.A.R.R. 적용. "CS 깊이" 기준으로 안내

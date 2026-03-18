@@ -40,7 +40,7 @@
 
 ## Part 2: Writing Guidance Scenarios (inline writing guidance)
 
-### Scenario 1: 기능 나열 함정 — PASS
+### Scenario 6: 기능 나열 함정 — PASS
 
 **행동:**
 - 기능 리스트를 그대로 쓰지 않고 Pre-Writing Validation 단계 전부 실행
@@ -55,7 +55,7 @@
 
 ---
 
-### Scenario 2: 과도한 서술 함정 — PASS
+### Scenario 7: 과도한 서술 함정 — PASS
 
 **행동:**
 - "시그니처 수준으로 상세하게 작성되어 있다" 즉시 진단

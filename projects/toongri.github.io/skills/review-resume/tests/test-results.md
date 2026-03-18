@@ -156,11 +156,13 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 ## Part 2: Pressure Test Results
 
 > Scenarios test whether the skill's discipline rules hold under combined pressure. Each scenario targets the absolute rules:
-> 1. Never fabricate metrics
+> 1. Never skip targeting
 > 2. Never skip pushback on well-written content
 > 3. Always evaluate content, not just expression
 > 4. Never fabricate metrics
 > 5. Never claim industry standards as achievements
+
+> **Note:** Scenarios #2, #4, #5, #7 are defined in pressure-scenarios.md but have not yet been tested. Results below cover #1, #3, #6 only.
 
 ### Test Summary
 
