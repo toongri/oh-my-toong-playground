@@ -99,7 +99,7 @@ run_bun_tests() {
     fi
 
     local output
-    if output=$(cd "$ROOT_DIR" && bun test ./tools/ ./lib/ ./scripts/ 2>&1); then
+    if output=$(cd "$ROOT_DIR" && bun test ./tools/ ./lib/ ./scripts/ ./hooks/ 2>&1); then
         TS_PASS=1
         TS_TOTAL=1
         log_success "  Bun 테스트 통과"

@@ -13,10 +13,17 @@
  * CLI usage: bun run tools/validators/components.ts [path-to-sync.yaml]
  */
 
-import { parse } from "yaml";
-import { existsSync, readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { join, dirname, basename } from "path";
 import { getRootDir } from "../lib/config.ts";
+import {
+  type ValidationResult,
+  makeResult,
+  mergeResult,
+  isObject,
+  isArray,
+  parseYaml,
+} from "../lib/validation.ts";
 import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
 import type { SyncYaml } from "../lib/types.ts";
 
@@ -34,47 +41,6 @@ const CLI_PROJECT_FILE: Record<Platform, string> = {
   codex: "AGENTS.md",
   opencode: "AGENTS.md",
 };
-
-// ---------------------------------------------------------------------------
-// Result accumulator
-// ---------------------------------------------------------------------------
-
-type ValidationResult = {
-  errors: string[];
-  warnings: string[];
-};
-
-function makeResult(): ValidationResult {
-  return { errors: [], warnings: [] };
-}
-
-function mergeResult(target: ValidationResult, source: ValidationResult): void {
-  target.errors.push(...source.errors);
-  target.warnings.push(...source.warnings);
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isArray(value: unknown): value is unknown[] {
-  return Array.isArray(value);
-}
-
-function parseYaml(filePath: string): { data: unknown; error?: undefined } | { data?: undefined; error: string } {
-  try {
-    const text = readFileSync(filePath, "utf-8");
-    const data = parse(text);
-    return { data };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { error: `YAML 파싱 오류 (${basename(filePath)}): ${msg}` };
-  }
-}
 
 /**
  * Check that a hook directory contains index.ts or index.sh.

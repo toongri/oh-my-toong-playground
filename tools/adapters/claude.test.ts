@@ -416,6 +416,29 @@ describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
     const hrCount = bodyLines.filter((l) => l === "---").length;
     expect(hrCount).toBe(1);
   });
+
+  it("preserves prompt text for prompt-type hooks via `syncAgentsDirect` (P2-2)", async () => {
+    const sourceFile = path.join(tmpDir, "agent.md");
+    await writeFile(sourceFile, "---\nname: agent\n---\n\n# Agent\n");
+
+    const addHooks = [
+      {
+        event: "Stop",
+        matcher: "*",
+        type: "prompt",
+        prompt: "Please summarize what you did.",
+        timeout: 30,
+        display_name: "stop-prompt",
+      },
+    ];
+
+    await adapter.syncAgentsDirect(targetPath, "agent", sourceFile, [], addHooks);
+
+    const agentFile = path.join(targetPath, ".claude", "agents", "agent.md");
+    const content = await fs.readFile(agentFile, "utf8");
+    expect(content).toContain("prompt");
+    expect(content).toContain("Please summarize what you did.");
+  });
 });
 
 // ---------------------------------------------------------------------------

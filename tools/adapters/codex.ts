@@ -410,10 +410,8 @@ export class CodexAdapter implements PlatformAdapter {
       for (const name of Object.keys(mcpsObj)) {
         const server = mcpsObj[name];
         if (server != null && typeof server === "object" && !Array.isArray(server)) {
-          if (dryRun) {
-            logDry(`MCP accumulate: ${name}`);
-          } else {
-            this.accumulateMcp(name, server as Record<string, unknown>);
+          this.accumulateMcp(name, server as Record<string, unknown>);
+          if (!dryRun) {
             logInfo(`MCP accumulated: ${name}`);
           }
         }

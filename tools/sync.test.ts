@@ -386,6 +386,145 @@ describe("syncCategory", () => {
     // manual-rule.md must still exist — rules dir is never wiped
     expect(await exists(path.join(claudeRulesDir, "manual-rule.md"))).toBe(true);
   });
+
+  it("does not wipe target directory for unsupported platform×category combo (codex+agents)", async () => {
+    // Pre-populate target codex agents dir with a file
+    const codexAgentsDir = path.join(targetPath, ".codex", "agents");
+    await fs.mkdir(codexAgentsDir, { recursive: true });
+    await writeFile(path.join(codexAgentsDir, "existing-agent.md"), "# Existing\n");
+
+    const agentFile = path.join(rootDir, "agents", "oracle.md");
+    await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
+
+    const syncYaml: SyncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["codex"],
+        items: ["oracle"],
+      },
+    };
+
+    const adapters = makeAdapterMap(["codex"]);
+    const context = makeContext({ dryRun: false });
+
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+
+    // File must survive — codex does not support agents, so no wipe occurred
+    expect(await exists(path.join(codexAgentsDir, "existing-agent.md"))).toBe(true);
+    // Adapter must not have been called
+    expect(adapters.getAdapter("codex")!.calls.filter((c) => c.method === "syncAgentsDirect")).toHaveLength(0);
+  });
+
+  it("proceeds with backup+wipe+dispatch for supported platform×category combo (claude+agents)", async () => {
+    // Pre-populate target claude agents dir with an orphan file
+    const claudeAgentsDir = path.join(targetPath, ".claude", "agents");
+    await fs.mkdir(claudeAgentsDir, { recursive: true });
+    await writeFile(path.join(claudeAgentsDir, "orphan.md"), "# Orphan\n");
+
+    const agentFile = path.join(rootDir, "agents", "oracle.md");
+    await writeFile(agentFile, "---\nname: oracle\n---\n# Oracle\n");
+
+    const syncYaml: SyncYaml = {
+      path: targetPath,
+      agents: {
+        platforms: ["claude"],
+        items: ["oracle"],
+      },
+    };
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext({ dryRun: false });
+
+    await syncCategory(context, "agents", syncYaml, adapters, rootDir);
+
+    // Orphan wiped — claude supports agents
+    expect(await exists(path.join(claudeAgentsDir, "orphan.md"))).toBe(false);
+    // Adapter called
+    expect(adapters.getAdapter("claude")!.calls.some((c) => c.method === "syncAgentsDirect")).toBe(true);
+  });
+
+  it("SUPPORTED_CATEGORIES covers all 4 platforms with correct categories", async () => {
+    // Import the map indirectly by verifying behavior for each platform×category.
+    // Supported: claude=all5, opencode=all5, gemini=commands/skills/scripts, codex=skills/scripts
+    const allCategories: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
+
+    const expectedSupported: Record<string, Category[]> = {
+      claude: ["agents", "commands", "skills", "scripts", "rules"],
+      opencode: ["agents", "commands", "skills", "scripts", "rules"],
+      gemini: ["commands", "skills", "scripts"],
+      codex: ["skills", "scripts"],
+    };
+
+    const expectedUnsupported: Record<string, Category[]> = {
+      gemini: ["agents", "rules"],
+      codex: ["agents", "commands", "rules"],
+    };
+
+    for (const [platform, supported] of Object.entries(expectedSupported)) {
+      for (const category of supported) {
+        // Create a minimal component file for the category
+        const componentName = "test-component";
+        if (category === "agents" || category === "commands" || category === "rules") {
+          await writeFile(path.join(rootDir, category, `${componentName}.md`), `# ${componentName}\n`);
+        } else if (category === "skills") {
+          await writeFile(path.join(rootDir, "skills", componentName, "SKILL.md"), `# ${componentName}\n`);
+        } else if (category === "scripts") {
+          await writeFile(path.join(rootDir, "scripts", componentName, "index.ts"), `// ${componentName}\n`);
+        }
+
+        const syncYaml: SyncYaml = {
+          path: targetPath,
+          [category]: { platforms: [platform as Platform], items: [componentName] },
+        };
+
+        const adapters = makeAdapterMap([platform as Platform]);
+        const context = makeContext({ dryRun: false });
+
+        await syncCategory(context, category as Category, syncYaml, adapters, rootDir);
+
+        const methodMap: Record<Category, string> = {
+          agents: "syncAgentsDirect",
+          commands: "syncCommandsDirect",
+          skills: "syncSkillsDirect",
+          scripts: "syncScriptsDirect",
+          rules: "syncRulesDirect",
+        };
+        const calls = adapters.getAdapter(platform as Platform)!.calls;
+        expect(
+          calls.some((c) => c.method === methodMap[category as Category]),
+          `${platform}+${category} should be supported`,
+        ).toBe(true);
+      }
+    }
+
+    for (const [platform, unsupported] of Object.entries(expectedUnsupported)) {
+      for (const category of unsupported) {
+        const componentName = "test-component";
+        const syncYaml: SyncYaml = {
+          path: targetPath,
+          [category]: { platforms: [platform as Platform], items: [componentName] },
+        };
+
+        const adapters = makeAdapterMap([platform as Platform]);
+        const context = makeContext({ dryRun: false });
+
+        await syncCategory(context, category as Category, syncYaml, adapters, rootDir);
+
+        const methodMap: Record<Category, string> = {
+          agents: "syncAgentsDirect",
+          commands: "syncCommandsDirect",
+          skills: "syncSkillsDirect",
+          scripts: "syncScriptsDirect",
+          rules: "syncRulesDirect",
+        };
+        const calls = adapters.getAdapter(platform as Platform)!.calls;
+        expect(
+          calls.filter((c) => c.method === methodMap[category as Category]).length,
+          `${platform}+${category} should NOT be supported`,
+        ).toBe(0);
+      }
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
