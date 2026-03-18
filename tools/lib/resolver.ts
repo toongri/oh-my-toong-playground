@@ -187,10 +187,10 @@ function tryResolveInDir(dir: string, name: string, category: string): string | 
   const indexPath = join(dir, name, "index.md");
   if (existsSync(indexPath)) return indexPath;
 
-  // 3. Skills-specific SKILL.md
+  // 3. Skills-specific SKILL.md → return the containing directory
   if (category === "skills") {
     const skillPath = join(dir, name, "SKILL.md");
-    if (existsSync(skillPath)) return skillPath;
+    if (existsSync(skillPath)) return join(dir, name);
   }
 
   // 4. Directory (for scripts, hooks with no file extension)

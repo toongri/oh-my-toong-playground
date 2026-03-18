@@ -238,7 +238,7 @@ describe("resolveComponentPath", () => {
     it("uses SKILL.md folder for the skills category", () => {
       touch(join(root, "skills", "prometheus", "SKILL.md"));
       const result = resolveComponentPath("prometheus", "skills", root, undefined);
-      expect(result).toEqual({ path: join(root, "skills", "prometheus", "SKILL.md"), displayName: "prometheus" });
+      expect(result).toEqual({ path: join(root, "skills", "prometheus"), displayName: "prometheus" });
     });
 
     it("returns an error when component is not found", () => {
@@ -301,7 +301,7 @@ describe("resolveComponentPath", () => {
       touch(join(root, "projects", "myproject", "skills", "custom", "SKILL.md"));
       const result = resolveComponentPath("custom", "skills", root, "myproject");
       expect(result).toEqual({
-        path: join(root, "projects", "myproject", "skills", "custom", "SKILL.md"),
+        path: join(root, "projects", "myproject", "skills", "custom"),
         displayName: "custom",
       });
     });
