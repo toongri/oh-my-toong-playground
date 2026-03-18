@@ -62,7 +62,7 @@ describe("validateSyncYamlComponents", () => {
 
   // --- Valid: components exist ---
   describe("유효한 컴포넌트 존재", () => {
-    it("실제로 존재하는 agent 컴포넌트는 에러가 없다", () => {
+    it("produces no errors for existing agent component", () => {
       touch(join(root, "agents", "oracle.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
@@ -74,7 +74,7 @@ agents:
       expect(result.errors).toHaveLength(0);
     });
 
-    it("실제로 존재하는 skills 컴포넌트는 에러가 없다", () => {
+    it("produces no errors for existing skills component", () => {
       touch(join(root, "skills", "prometheus", "SKILL.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
@@ -86,7 +86,7 @@ skills:
       expect(result.errors).toHaveLength(0);
     });
 
-    it("SKILL.md 폴더 형태의 skill을 올바르게 해석한다", () => {
+    it("correctly resolves SKILL.md directory-style skill via `validateSyncYamlComponents`", () => {
       touch(join(root, "skills", "sisyphus-junior", "SKILL.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
@@ -101,7 +101,7 @@ skills:
 
   // --- Missing components ---
   describe("존재하지 않는 컴포넌트", () => {
-    it("존재하지 않는 agent 컴포넌트는 에러를 반환한다", () => {
+    it("returns error for missing agent component via `validateSyncYamlComponents`", () => {
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
 agents:
@@ -113,7 +113,7 @@ agents:
       expect(result.errors.some((e) => e.includes("nonexistent-agent"))).toBe(true);
     });
 
-    it("존재하지 않는 skills 컴포넌트는 에러를 반환한다", () => {
+    it("returns error for missing skills component via `validateSyncYamlComponents`", () => {
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
 skills:
@@ -124,7 +124,7 @@ skills:
       expect(result.errors.length).toBeGreaterThan(0);
     });
 
-    it("존재하지 않는 rules 컴포넌트는 에러를 반환한다", () => {
+    it("returns error for missing rules component via `validateSyncYamlComponents`", () => {
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
 rules:
@@ -138,7 +138,7 @@ rules:
 
   // --- path not defined (template state) ---
   describe("path가 없는 경우 (템플릿)", () => {
-    it("path가 없으면 경고를 반환하고 에러는 없다", () => {
+    it("returns warning and no errors when path field is absent", () => {
       const syncPath = writeYaml(root, "sync.yaml", `
 agents:
   items:
@@ -152,7 +152,7 @@ agents:
 
   // --- CLI project file validation ---
   describe("CLI 프로젝트 파일 검증", () => {
-    it("CLAUDE.md가 없으면 에러를 반환한다", () => {
+    it("returns error when CLAUDE.md is absent via `validateSyncYamlComponents`", () => {
       // Remove the CLAUDE.md created in makeRoot
       rmSync(join(root, "CLAUDE.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
@@ -165,7 +165,7 @@ agents:
       expect(result.errors.some((e) => e.includes("CLAUDE.md"))).toBe(true);
     });
 
-    it("CLAUDE.md가 있으면 에러가 없다", () => {
+    it("produces no CLAUDE.md errors when CLAUDE.md exists", () => {
       // CLAUDE.md already created in makeRoot
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
@@ -181,7 +181,7 @@ agents:
 
   // --- scripts/rules section platform collection ---
   describe("scripts/rules 섹션 플랫폼 수집", () => {
-    it("scripts 섹션 item에 platforms: [gemini]가 있으면 GEMINI.md 존재를 검사한다", () => {
+    it("checks for GEMINI.md when scripts item has platforms: [gemini]", () => {
       // GEMINI.md does NOT exist → error expected (proving gemini was collected)
       touch(join(root, "scripts", "my-script", "index.sh"));
       const syncPath = writeYaml(root, "sync.yaml", `
@@ -195,7 +195,7 @@ scripts:
       expect(result.errors.some((e) => e.includes("GEMINI.md"))).toBe(true);
     });
 
-    it("rules 섹션 item에 platforms: [gemini]가 있으면 GEMINI.md 존재를 검사한다", () => {
+    it("checks for GEMINI.md when rules item has platforms: [gemini]", () => {
       touch(join(root, "rules", "my-rule.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
@@ -211,7 +211,7 @@ rules:
 
   // --- checkHookDirectoryIndex: directory index validation ---
   describe("hook 디렉토리 index 파일 검증", () => {
-    it("add-hooks 디렉토리에 index.sh가 있으면 에러가 없다", () => {
+    it("produces no errors when add-hooks directory contains index.sh", () => {
       touch(join(root, "agents", "oracle.md"));
       touch(join(root, "hooks", "my-hook", "index.sh"));
       const syncPath = writeYaml(root, "sync.yaml", `
@@ -228,7 +228,7 @@ agents:
       expect(hookErrors).toHaveLength(0);
     });
 
-    it("add-hooks 디렉토리에 index 파일이 없으면 에러를 반환한다", () => {
+    it("returns error when add-hooks directory has no index file", () => {
       touch(join(root, "agents", "oracle.md"));
       mkdirSync(join(root, "hooks", "empty-hook"), { recursive: true });
       const syncPath = writeYaml(root, "sync.yaml", `
@@ -247,7 +247,7 @@ agents:
 
   // --- Component existence via object item format ---
   describe("object item 형식 컴포넌트 검증", () => {
-    it("object 형식 item에서 존재하는 컴포넌트는 에러가 없다", () => {
+    it("produces no errors for existing component in object item format", () => {
       touch(join(root, "agents", "oracle.md"));
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
@@ -260,7 +260,7 @@ agents:
       expect(result.errors.filter((e) => e.includes("oracle"))).toHaveLength(0);
     });
 
-    it("object 형식 item에서 존재하지 않는 컴포넌트는 에러를 반환한다", () => {
+    it("returns error for missing component in object item format", () => {
       const syncPath = writeYaml(root, "sync.yaml", `
 path: ${root}
 agents:
@@ -291,7 +291,7 @@ describe("validatePlatformYamlHookComponents (P2-7)", () => {
 
   // --- Hook component exists ---
   describe("hook 컴포넌트 파일 존재", () => {
-    it("존재하는 hook 컴포넌트는 에러가 없다", () => {
+    it("produces no errors for existing hook component via `validatePlatformYamlHookComponents`", () => {
       touch(join(root, "hooks", "keyword-detector.sh"));
       writeYaml(root, "claude.yaml", `
 hooks:
@@ -303,7 +303,7 @@ hooks:
       expect(result.errors).toHaveLength(0);
     });
 
-    it("존재하는 gemini hook 컴포넌트는 에러가 없다", () => {
+    it("produces no errors for existing gemini hook component via `validatePlatformYamlHookComponents`", () => {
       touch(join(root, "hooks", "session-start.sh"));
       writeYaml(root, "gemini.yaml", `
 hooks:
@@ -317,7 +317,7 @@ hooks:
 
   // --- P2-7: Hook component does NOT exist → fail ---
   describe("P2-7: hook 컴포넌트 파일 없음 → 에러", () => {
-    it("존재하지 않는 hook 컴포넌트는 에러를 반환한다", () => {
+    it("returns error for missing hook component via `validatePlatformYamlHookComponents`", () => {
       writeYaml(root, "claude.yaml", `
 hooks:
   UserPromptSubmit:
@@ -329,7 +329,7 @@ hooks:
       expect(result.errors.some((e) => e.includes("nonexistent-hook.sh"))).toBe(true);
     });
 
-    it("존재하지 않는 gemini hook 컴포넌트도 에러를 반환한다", () => {
+    it("returns error for missing gemini hook component via `validatePlatformYamlHookComponents`", () => {
       writeYaml(root, "gemini.yaml", `
 hooks:
   Stop:
@@ -343,7 +343,7 @@ hooks:
 
   // --- codex/opencode: no hook validation ---
   describe("codex/opencode는 hook 검증 대상이 아니다", () => {
-    it("codex.yaml에 hooks가 있어도 컴포넌트 존재를 검사하지 않는다", () => {
+    it("does not validate hook components in codex.yaml via `validatePlatformYamlHookComponents`", () => {
       writeYaml(root, "codex.yaml", `
 hooks:
   UserPromptSubmit:
@@ -357,7 +357,7 @@ hooks:
 
   // --- platform YAML not present ---
   describe("platform YAML 파일 없음", () => {
-    it("claude.yaml이 없으면 에러 없이 통과한다", () => {
+    it("passes without errors when claude.yaml is absent", () => {
       // No claude.yaml created
       const result = validatePlatformYamlHookComponents(root, root);
       expect(result.errors).toHaveLength(0);
@@ -366,7 +366,7 @@ hooks:
 
   // --- Scoped hook component ---
   describe("scoped hook 컴포넌트", () => {
-    it("존재하는 scoped hook 컴포넌트는 에러가 없다", () => {
+    it("produces no errors for existing scoped hook component", () => {
       mkdirSync(join(root, "projects", "myproject", "hooks"), { recursive: true });
       touch(join(root, "projects", "myproject", "hooks", "custom-hook.sh"));
       writeYaml(root, "claude.yaml", `
@@ -378,7 +378,7 @@ hooks:
       expect(result.errors).toHaveLength(0);
     });
 
-    it("존재하지 않는 scoped hook 컴포넌트는 에러를 반환한다", () => {
+    it("returns error for missing scoped hook component", () => {
       writeYaml(root, "claude.yaml", `
 hooks:
   UserPromptSubmit:
@@ -392,7 +392,7 @@ hooks:
 
   // --- Multiple hooks, one missing ---
   describe("여러 hook 중 하나가 없는 경우", () => {
-    it("두 hook 중 하나가 없으면 해당 에러만 반환한다", () => {
+    it("returns only the error for the missing hook when one of two hooks is absent", () => {
       touch(join(root, "hooks", "existing-hook.sh"));
       // nonexistent-hook.sh is NOT created
       writeYaml(root, "claude.yaml", `

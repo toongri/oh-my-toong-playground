@@ -20,7 +20,7 @@ describe('logger 모듈', () => {
   });
 
   describe('logInfo', () => {
-    it('파란색 [SYNC] 접두사와 함께 stderr에 출력한다', () => {
+    it('writes to stderr with blue [SYNC] prefix', () => {
       logInfo('test message');
       expect(stderrSpy).toHaveBeenCalledTimes(1);
       const output = stderrSpy.mock.calls[0][0] as string;
@@ -32,7 +32,7 @@ describe('logger 모듈', () => {
   });
 
   describe('logSuccess', () => {
-    it('초록색 [SYNC] 접두사와 함께 stderr에 출력한다', () => {
+    it('writes to stderr with green [SYNC] prefix', () => {
       logSuccess('done');
       expect(stderrSpy).toHaveBeenCalledTimes(1);
       const output = stderrSpy.mock.calls[0][0] as string;
@@ -44,7 +44,7 @@ describe('logger 모듈', () => {
   });
 
   describe('logWarn', () => {
-    it('노란색 [WARN] 접두사와 함께 stderr에 출력한다', () => {
+    it('writes to stderr with yellow [WARN] prefix', () => {
       logWarn('watch out');
       expect(stderrSpy).toHaveBeenCalledTimes(1);
       const output = stderrSpy.mock.calls[0][0] as string;
@@ -56,7 +56,7 @@ describe('logger 모듈', () => {
   });
 
   describe('logError', () => {
-    it('빨간색 [ERROR] 접두사와 함께 stderr에 출력한다', () => {
+    it('writes to stderr with red [ERROR] prefix', () => {
       logError('something failed');
       expect(stderrSpy).toHaveBeenCalledTimes(1);
       const output = stderrSpy.mock.calls[0][0] as string;
@@ -68,7 +68,7 @@ describe('logger 모듈', () => {
   });
 
   describe('logDry', () => {
-    it('시안색 [DRY] 접두사와 함께 stderr에 출력한다', () => {
+    it('writes to stderr with cyan [DRY] prefix', () => {
       logDry('would copy file');
       expect(stderrSpy).toHaveBeenCalledTimes(1);
       const output = stderrSpy.mock.calls[0][0] as string;
@@ -80,7 +80,7 @@ describe('logger 모듈', () => {
   });
 
   describe('출력 형식', () => {
-    it('각 함수는 줄바꿈으로 끝난다', () => {
+    it('each function output ends with a newline', () => {
       logInfo('line');
       logSuccess('line');
       logWarn('line');
@@ -91,7 +91,7 @@ describe('logger 모듈', () => {
       }
     });
 
-    it('stdout에는 아무것도 출력하지 않는다', () => {
+    it('writes nothing to stdout', () => {
       const stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
       logInfo('msg');
       logSuccess('msg');

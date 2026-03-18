@@ -53,7 +53,7 @@ describe("config 모듈", () => {
 
   // -------------------------------------------------------------------------
   describe("getRootDir", () => {
-    it("config.yaml이 존재하면 루트 디렉토리를 반환한다", () => {
+    it("returns root directory when config.yaml exists", () => {
       // getRootDir walks up from __dirname; in the real project the root exists
       const rootDir = getRootDir();
       expect(rootDir).not.toBeNull();
@@ -61,7 +61,7 @@ describe("config 모듈", () => {
       expect(typeof rootDir).toBe("string");
     });
 
-    it("config.yaml이 없으면 null을 반환한다", () => {
+    it("returns null when config.yaml is missing", () => {
       // Patch Bun.file so size is always 0 to simulate missing file
       const spy = spyOn(Bun, "file").mockReturnValue({ size: 0, text: async () => "" } as ReturnType<typeof Bun.file>);
       try {
@@ -77,14 +77,14 @@ describe("config 모듈", () => {
 
   // -------------------------------------------------------------------------
   describe("loadConfig", () => {
-    it("실제 config.yaml을 파싱해서 반환한다", async () => {
+    it("parses and returns the real config.yaml", async () => {
       const config = await loadConfig();
       expect(config).not.toBeNull();
       // Real config has use-platforms
       expect(config!["use-platforms"]).toBeDefined();
     });
 
-    it("config.yaml이 없으면 null을 반환한다", async () => {
+    it("returns null when config.yaml is missing", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(null) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -96,7 +96,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("파일 읽기 실패 시 null을 반환한다", async () => {
+    it("returns null when file read fails", async () => {
       // Return size > 0 but throw on text() to simulate I/O error
       const badFile = {
         size: 10,
@@ -113,7 +113,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("잘못된 YAML 구문이면 에러를 던진다", async () => {
+    it("throws on invalid YAML syntax", async () => {
       const badYamlFile = {
         size: 1,
         text: async () => Promise.resolve("{{invalid yaml:"),
@@ -128,7 +128,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("결과를 캐싱해서 두 번째 호출 시 재파싱하지 않는다", async () => {
+    it("caches result so second call to `loadConfig` does not re-parse", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -145,7 +145,7 @@ describe("config 모듈", () => {
 
   // -------------------------------------------------------------------------
   describe("getDefaultPlatforms", () => {
-    it("config.yaml의 use-platforms 값을 반환한다", async () => {
+    it("returns use-platforms value from config.yaml", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -157,7 +157,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("config.yaml이 없으면 [\"claude\"]를 반환한다", async () => {
+    it("returns [\"claude\"] when config.yaml is missing", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(null) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -169,7 +169,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("use-platforms 필드가 없으면 [\"claude\"]를 반환한다", async () => {
+    it("returns [\"claude\"] when use-platforms field is absent", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(EMPTY_FIELDS_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -181,7 +181,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("use-platforms가 빈 배열이면 [\"claude\"]를 반환한다", async () => {
+    it("returns [\"claude\"] when use-platforms is an empty array", async () => {
       const yaml = "use-platforms: []";
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(yaml) as ReturnType<typeof Bun.file>);
       try {
@@ -197,7 +197,7 @@ describe("config 모듈", () => {
 
   // -------------------------------------------------------------------------
   describe("getFeaturePlatforms", () => {
-    it("존재하는 카테고리의 feature-platforms 값을 반환한다", async () => {
+    it("returns feature-platforms value for an existing category", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -209,7 +209,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("존재하는 hooks 카테고리를 반환한다", async () => {
+    it("returns feature-platforms for the hooks category", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -221,7 +221,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("카테고리가 없으면 getDefaultPlatforms() 결과로 폴백한다", async () => {
+    it("falls back to `getDefaultPlatforms` when category is not in feature-platforms", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -235,7 +235,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("feature-platforms 섹션 자체가 없으면 getDefaultPlatforms() 결과로 폴백한다", async () => {
+    it("falls back to `getDefaultPlatforms` when feature-platforms section is absent", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(MINIMAL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -247,7 +247,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("config.yaml이 없으면 [\"claude\"]로 폴백한다", async () => {
+    it("falls back to [\"claude\"] when config.yaml is missing", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(null) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -262,7 +262,7 @@ describe("config 모듈", () => {
 
   // -------------------------------------------------------------------------
   describe("getBackupRetentionDays", () => {
-    it("config.yaml의 backup_retention_days 값을 반환한다", async () => {
+    it("returns backup_retention_days value from config.yaml", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -274,7 +274,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("backup_retention_days 필드가 없으면 3을 반환한다", async () => {
+    it("returns 3 when backup_retention_days field is absent", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(MINIMAL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -286,7 +286,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("config.yaml이 없으면 3을 반환한다", async () => {
+    it("returns 3 when config.yaml is missing", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(null) as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
@@ -298,7 +298,7 @@ describe("config 모듈", () => {
       }
     });
 
-    it("backup_retention_days가 0이면 기본값 3을 반환한다", async () => {
+    it("returns default 3 when backup_retention_days is 0", async () => {
       const yaml = "backup_retention_days: 0";
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(yaml) as ReturnType<typeof Bun.file>);
       try {

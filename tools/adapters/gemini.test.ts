@@ -55,15 +55,15 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe("PlatformAdapter 기본 필드", () => {
-  it("platform이 gemini이다", () => {
+  it("returns 'gemini' for platform field", () => {
     expect(adapter.platform).toBe("gemini");
   });
 
-  it("configDir가 .gemini이다", () => {
+  it("returns '.gemini' for configDir field", () => {
     expect(adapter.configDir).toBe(".gemini");
   });
 
-  it("contextFile이 GEMINI.md이다", () => {
+  it("returns 'GEMINI.md' for contextFile field", () => {
     expect(adapter.contextFile).toBe("GEMINI.md");
   });
 });
@@ -73,7 +73,7 @@ describe("PlatformAdapter 기본 필드", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncAgentsDirect", () => {
-  it("agents를 지원하지 않으므로 파일을 생성하지 않는다", async () => {
+  it("does not create files because agents are not supported via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "oracle.md");
     await writeFile(sourceFile, "# Oracle Agent\n");
 
@@ -84,7 +84,7 @@ describe("syncAgentsDirect", () => {
     expect(created).toBe(false);
   });
 
-  it("agents 지원 안 함 경고를 출력하고 에러 없이 반환된다", async () => {
+  it("logs unsupported warning and returns without error via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "oracle.md");
     await writeFile(sourceFile, "# Oracle Agent\n");
 
@@ -100,7 +100,7 @@ describe("syncAgentsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncCommandsDirect", () => {
-  it("frontmatter description을 포함한 .toml을 생성한다", async () => {
+  it("generates .toml with frontmatter description via `syncCommandsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "commands", "prometheus.md");
     await writeFile(
       sourceFile,
@@ -116,7 +116,7 @@ describe("syncCommandsDirect", () => {
     expect(content).toContain('description = "Strategic planning consultant"');
   });
 
-  it(".md를 .toml로 변환하고 .gemini/commands/ 에 저장한다", async () => {
+  it("converts .md to .toml and saves to .gemini/commands/ via `syncCommandsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "commands", "git-master.md");
     await writeFile(
       sourceFile,
@@ -132,7 +132,7 @@ describe("syncCommandsDirect", () => {
     expect(await exists(mdFile)).toBe(false);
   });
 
-  it("frontmatter가 없을 때 description이 빈 문자열인 .toml을 생성한다", async () => {
+  it("generates .toml with empty description when frontmatter is absent via `syncCommandsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "commands", "simple.md");
     await writeFile(sourceFile, "# Simple Command\nNo frontmatter here.\n");
 
@@ -144,7 +144,7 @@ describe("syncCommandsDirect", () => {
     expect(content).toContain('description = ""');
   });
 
-  it("dry-run 모드에서는 파일을 생성하지 않는다", async () => {
+  it("skips file creation in dry-run mode via `syncCommandsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "commands", "prometheus.md");
     await writeFile(sourceFile, `---\ndescription: Test\n---\n`);
 
@@ -154,7 +154,7 @@ describe("syncCommandsDirect", () => {
     expect(await exists(tomlFile)).toBe(false);
   });
 
-  it("소스 파일이 없으면 에러 없이 반환된다", async () => {
+  it("returns without error when source file is missing via `syncCommandsDirect`", async () => {
     const missingFile = path.join(tmpDir, "commands", "nonexistent.md");
 
     await expect(
@@ -162,7 +162,7 @@ describe("syncCommandsDirect", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("description에 따옴표가 포함되어도 유효한 TOML을 생성한다", async () => {
+  it("generates valid TOML when description contains quotes via `syncCommandsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "commands", "tricky.md");
     await writeFile(
       sourceFile,
@@ -182,7 +182,7 @@ describe("syncCommandsDirect", () => {
     expect(parsed.extension.description).toBe(`Say "hello" and it's done`);
   });
 
-  it("잘못된 frontmatter가 있으면 경고를 출력하고 파일을 생성하지 않는다", async () => {
+  it("logs warning and skips file creation when frontmatter is invalid via `syncCommandsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "commands", "broken.md");
     // Invalid YAML: tab indentation causes parse error in strict YAML parsers
     await writeFile(
@@ -204,7 +204,7 @@ describe("syncCommandsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncHooksDirect", () => {
-  it("훅 파일을 .gemini/hooks/ 에 복사하고 실행 권한을 부여한다", async () => {
+  it("copies hook file to .gemini/hooks/ and grants execute permission via `syncHooksDirect`", async () => {
     const sourceFile = path.join(tmpDir, "hooks", "test-hook.sh");
     await writeFile(sourceFile, "#!/bin/bash\necho test\n", 0o644);
 
@@ -216,7 +216,7 @@ describe("syncHooksDirect", () => {
     expect(stat.mode & 0o111).toBeGreaterThan(0);
   });
 
-  it("훅 디렉토리를 .gemini/hooks/{name}/ 에 동기화한다", async () => {
+  it("syncs hook directory to .gemini/hooks/{name}/ via `syncHooksDirect`", async () => {
     const sourceDir = path.join(tmpDir, "hooks", "persistent-mode");
     await writeFile(path.join(sourceDir, "index.ts"), "export {};\n");
     await writeFile(path.join(sourceDir, "index.sh"), "#!/bin/bash\n");
@@ -233,7 +233,7 @@ describe("syncHooksDirect", () => {
     expect(await exists(targetIndexTs)).toBe(true);
   });
 
-  it("dry-run 모드에서는 파일을 복사하지 않는다", async () => {
+  it("skips file copy in dry-run mode via `syncHooksDirect`", async () => {
     const sourceFile = path.join(tmpDir, "hooks", "test.sh");
     await writeFile(sourceFile, "#!/bin/bash\n");
 
@@ -243,7 +243,7 @@ describe("syncHooksDirect", () => {
     expect(await exists(targetFile)).toBe(false);
   });
 
-  it("소스가 없으면 에러 없이 반환된다", async () => {
+  it("returns without error when source is missing via `syncHooksDirect`", async () => {
     const missingFile = path.join(tmpDir, "hooks", "nonexistent.sh");
 
     await expect(
@@ -257,7 +257,7 @@ describe("syncHooksDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncSkillsDirect", () => {
-  it("스킬 디렉토리를 .gemini/skills/{name}/ 에 복사한다", async () => {
+  it("copies skill directory to .gemini/skills/{name}/ via `syncSkillsDirect`", async () => {
     const sourceDir = path.join(tmpDir, "skills", "prometheus");
     await writeFile(path.join(sourceDir, "SKILL.md"), "# Prometheus\n");
     await writeFile(path.join(sourceDir, "README.md"), "# Readme\n");
@@ -270,7 +270,7 @@ describe("syncSkillsDirect", () => {
     expect(await exists(readmeMd)).toBe(true);
   });
 
-  it("dry-run 모드에서는 디렉토리를 생성하지 않는다", async () => {
+  it("skips directory creation in dry-run mode via `syncSkillsDirect`", async () => {
     const sourceDir = path.join(tmpDir, "skills", "prometheus");
     await writeFile(path.join(sourceDir, "SKILL.md"), "# Prometheus\n");
 
@@ -280,7 +280,7 @@ describe("syncSkillsDirect", () => {
     expect(await exists(targetSkillDir)).toBe(false);
   });
 
-  it("소스 디렉토리가 없으면 에러 없이 반환된다", async () => {
+  it("returns without error when source directory is missing via `syncSkillsDirect`", async () => {
     const missingDir = path.join(tmpDir, "skills", "nonexistent");
 
     await expect(
@@ -294,7 +294,7 @@ describe("syncSkillsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncScriptsDirect", () => {
-  it("스크립트 디렉토리를 .gemini/scripts/{name}/ 에 복사한다", async () => {
+  it("copies script directory to .gemini/scripts/{name}/ via `syncScriptsDirect`", async () => {
     const sourceDir = path.join(tmpDir, "scripts", "hud");
     await writeFile(path.join(sourceDir, "index.ts"), "export {};\n");
 
@@ -304,7 +304,7 @@ describe("syncScriptsDirect", () => {
     expect(await exists(targetFile)).toBe(true);
   });
 
-  it("스크립트 단일 파일을 .gemini/scripts/ 에 복사한다", async () => {
+  it("copies single script file to .gemini/scripts/ via `syncScriptsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "scripts", "deploy.sh");
     await writeFile(sourceFile, "#!/bin/bash\n");
 
@@ -314,7 +314,7 @@ describe("syncScriptsDirect", () => {
     expect(await exists(targetFile)).toBe(true);
   });
 
-  it("dry-run 모드에서는 파일을 복사하지 않는다", async () => {
+  it("skips file copy in dry-run mode via `syncScriptsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "scripts", "deploy.sh");
     await writeFile(sourceFile, "#!/bin/bash\n");
 
@@ -330,7 +330,7 @@ describe("syncScriptsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncRulesDirect", () => {
-  it("rules를 지원하지 않으므로 파일을 생성하지 않는다", async () => {
+  it("does not create files because rules are not supported via `syncRulesDirect`", async () => {
     const sourceFile = path.join(tmpDir, "rules", "coding-discipline.md");
     await writeFile(sourceFile, "# Coding Discipline\n");
 
@@ -340,7 +340,7 @@ describe("syncRulesDirect", () => {
     expect(await exists(targetDir)).toBe(false);
   });
 
-  it("rules 지원 안 함 경고를 출력하고 에러 없이 반환된다", async () => {
+  it("logs unsupported warning and returns without error via `syncRulesDirect`", async () => {
     const sourceFile = path.join(tmpDir, "rules", "work-principles.md");
     await writeFile(sourceFile, "# Work Principles\n");
 
@@ -355,7 +355,7 @@ describe("syncRulesDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildHookEntry", () => {
-  it("command 타입 훅 엔트리를 생성한다", () => {
+  it("builds a 'command' type hook entry via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "PreToolUse",
       "*",
@@ -373,7 +373,7 @@ describe("buildHookEntry", () => {
     expect(hooks[0]["timeout"]).toBe(10);
   });
 
-  it("prompt 타입 훅 엔트리를 생성한다", () => {
+  it("builds a 'prompt' type hook entry via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "Stop",
       "*",
@@ -389,7 +389,7 @@ describe("buildHookEntry", () => {
     expect(hooks[0]["timeout"]).toBe(5);
   });
 
-  it("${component} 플레이스홀더를 displayName으로 치환한다", () => {
+  it("replaces ${component} placeholder with displayName via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "PreToolUse",
       "*",
@@ -405,7 +405,7 @@ describe("buildHookEntry", () => {
     expect(hooks[0]["command"]).toBe(".gemini/hooks/my-hook.sh");
   });
 
-  it("matcher를 훅 그룹에 포함한다", () => {
+  it("includes matcher in the hook group via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "PreToolUse",
       "Bash",
@@ -424,7 +424,7 @@ describe("buildHookEntry", () => {
 // ---------------------------------------------------------------------------
 
 describe("updateSettings", () => {
-  it("hooks를 settings.json에 저장한다", async () => {
+  it("writes hooks to settings.json via `updateSettings`", async () => {
     const hooksEntries = {
       PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: ".gemini/hooks/test.sh", timeout: 10 }] }],
     };
@@ -435,7 +435,7 @@ describe("updateSettings", () => {
     expect(settings["PreToolUse"]).toBeDefined();
   });
 
-  it("기존 settings.json에 훅을 병합한다", async () => {
+  it("merges hooks into existing settings.json via `updateSettings`", async () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     await writeFile(settingsFile, JSON.stringify({ existingKey: "existingValue" }));
 
@@ -450,7 +450,7 @@ describe("updateSettings", () => {
     expect(settings["PreToolUse"]).toBeDefined();
   });
 
-  it("dry-run 모드에서는 파일을 생성하지 않는다", async () => {
+  it("skips file creation in dry-run mode via `updateSettings`", async () => {
     const hooksEntries = {
       PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: ".gemini/hooks/test.sh", timeout: 10 }] }],
     };
@@ -467,7 +467,7 @@ describe("updateSettings", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncConfig", () => {
-  it("설정값을 settings.json에 deep merge한다", async () => {
+  it("deep merges config into settings.json via `syncConfig`", async () => {
     await adapter.syncConfig(targetPath, { model: "gemini-2.0-flash" });
 
     const settings = await readJsonFile(
@@ -476,7 +476,7 @@ describe("syncConfig", () => {
     expect(settings["model"]).toBe("gemini-2.0-flash");
   });
 
-  it("기존 settings.json과 deep merge한다", async () => {
+  it("deep merges with existing settings.json via `syncConfig`", async () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     await writeFile(settingsFile, JSON.stringify({ existing: "value" }));
 
@@ -487,7 +487,7 @@ describe("syncConfig", () => {
     expect(settings["model"]).toBe("gemini-2.0-flash");
   });
 
-  it("dry-run 모드에서는 파일을 생성하지 않는다", async () => {
+  it("skips file creation in dry-run mode via `syncConfig`", async () => {
     await adapter.syncConfig(targetPath, { model: "gemini-2.0-flash" }, true);
 
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
@@ -500,7 +500,7 @@ describe("syncConfig", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncMcpsMerge", () => {
-  it("MCP 서버를 settings.json mcpServers에 저장한다", async () => {
+  it("writes MCP server to mcpServers in settings.json via `syncMcpsMerge`", async () => {
     const serverJson = { command: "npx", args: ["-y", "@upstash/context7-mcp"] };
 
     await adapter.syncMcpsMerge(targetPath, { context7: serverJson });
@@ -512,7 +512,7 @@ describe("syncMcpsMerge", () => {
     expect(mcpServers["context7"]).toEqual(serverJson);
   });
 
-  it("yaml에 포함된 서버만 mcpServers에 남기고 기존 서버를 교체한다", async () => {
+  it("replaces existing servers with only yaml-defined servers in mcpServers via `syncMcpsMerge`", async () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     await writeFile(
       settingsFile,
@@ -527,14 +527,14 @@ describe("syncMcpsMerge", () => {
     expect(mcpServers["context7"]).toBeDefined();
   });
 
-  it("dry-run 모드에서는 파일을 수정하지 않는다", async () => {
+  it("skips file modification in dry-run mode via `syncMcpsMerge`", async () => {
     await adapter.syncMcpsMerge(targetPath, { context7: { command: "npx" } }, true);
 
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     expect(await exists(settingsFile)).toBe(false);
   });
 
-  it("yaml에서 서버를 제거하면 settings.json에서도 제거된다", async () => {
+  it("removes server from settings.json when removed from yaml via `syncMcpsMerge`", async () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     await writeFile(
       settingsFile,
@@ -555,7 +555,7 @@ describe("syncMcpsMerge", () => {
 // ---------------------------------------------------------------------------
 
 describe("readJsonFile 오류 처리", () => {
-  it("손상된 JSON 파일이 있을 때 updateSettings가 throw한다", async () => {
+  it("throws when settings.json contains corrupt JSON via `updateSettings`", async () => {
     const settingsFile = path.join(targetPath, ".gemini", "settings.json");
     await writeFile(settingsFile, "{ invalid json !!!");
 
@@ -570,7 +570,7 @@ describe("readJsonFile 오류 처리", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncPlatformYaml", () => {
-  it("config 섹션을 처리하고 processedSections에 포함한다", async () => {
+  it("processes config section and includes it in processedSections via `syncPlatformYaml`", async () => {
     const yaml = { config: { model: "gemini-2.0-flash" } };
 
     const result = await adapter.syncPlatformYaml(targetPath, yaml, false);
@@ -584,7 +584,7 @@ describe("syncPlatformYaml", () => {
     expect(settings["model"]).toBe("gemini-2.0-flash");
   });
 
-  it("mcps 섹션을 처리하고 processedSections에 포함한다", async () => {
+  it("processes mcps section and includes it in processedSections via `syncPlatformYaml`", async () => {
     const yaml = {
       mcps: {
         context7: { command: "npx", args: ["-y", "@upstash/context7-mcp"] },
@@ -602,7 +602,7 @@ describe("syncPlatformYaml", () => {
     expect(mcpServers["context7"]).toBeDefined();
   });
 
-  it("hooks 섹션을 처리하고 processedSections에 포함한다", async () => {
+  it("processes hooks section and includes it in processedSections via `syncPlatformYaml`", async () => {
     const yaml = {
       hooks: {
         PreToolUse: [
@@ -621,14 +621,14 @@ describe("syncPlatformYaml", () => {
     expect(result.processedSections).toContain("hooks");
   });
 
-  it("모든 섹션이 없으면 processedSections가 비어있다", async () => {
+  it("returns empty processedSections when no sections are present via `syncPlatformYaml`", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {}, false);
 
     expect(result.processedSections).toHaveLength(0);
     expect(result.modelMap).toBeUndefined();
   });
 
-  it("model-map은 지원하지 않으므로 modelMap이 undefined이다", async () => {
+  it("returns undefined for modelMap because model-map is not supported via `syncPlatformYaml`", async () => {
     const yaml = { config: { model: "gemini-2.0-flash" } };
 
     const result = await adapter.syncPlatformYaml(targetPath, yaml, false);
@@ -636,7 +636,7 @@ describe("syncPlatformYaml", () => {
     expect(result.modelMap).toBeUndefined();
   });
 
-  it("prompt 타입 훅을 settings.json에 저장한다", async () => {
+  it("writes prompt type hook to settings.json via `syncPlatformYaml`", async () => {
     const yaml = {
       hooks: {
         Stop: [
@@ -662,7 +662,7 @@ describe("syncPlatformYaml", () => {
     expect(hookDef["prompt"]).toBe("Please summarize what you did.");
   });
 
-  it("dry-run 모드에서는 settings.json을 생성하지 않는다", async () => {
+  it("skips settings.json creation in dry-run mode via `syncPlatformYaml`", async () => {
     const yaml = {
       config: { model: "gemini-2.0-flash" },
       mcps: { context7: { command: "npx" } },
@@ -674,7 +674,7 @@ describe("syncPlatformYaml", () => {
     expect(await exists(settingsFile)).toBe(false);
   });
 
-  it("여러 섹션을 한 번에 처리하고 모두 processedSections에 포함된다", async () => {
+  it("processes multiple sections at once and includes all in processedSections via `syncPlatformYaml`", async () => {
     const yaml = {
       config: { model: "gemini-2.0-flash" },
       mcps: { context7: { command: "npx" } },
@@ -692,7 +692,7 @@ describe("syncPlatformYaml", () => {
     expect(result.processedSections).toContain("hooks");
   });
 
-  it("hooks 섹션이 있으면 hooks 항목이 없어도 settings.json을 업데이트한다", async () => {
+  it("updates settings.json even when hooks section has no entries via `syncPlatformYaml`", async () => {
     // Without the hasHooks guard, updateSettings is called unconditionally.
     // Even with an empty hooks map, settings.json must be created/touched.
     await adapter.syncPlatformYaml(targetPath, { hooks: {} }, false);
@@ -701,7 +701,7 @@ describe("syncPlatformYaml", () => {
     expect(await exists(settingsFile)).toBe(true);
   });
 
-  it("절대 경로 component에서 displayName을 path.basename()으로 추출해 훅을 복사한다", async () => {
+  it("extracts displayName via `path.basename()` from absolute component path and copies hook via `syncPlatformYaml`", async () => {
     // Create a real hook file at an absolute path (simulates pre-resolved path from orchestrator)
     const hookFile = path.join(tmpDir, "keyword-detector.sh");
     await writeFile(hookFile, "#!/bin/bash\necho hi\n", 0o644);

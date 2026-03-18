@@ -55,15 +55,15 @@ afterEach(async () => {
 // ---------------------------------------------------------------------------
 
 describe("PlatformAdapter 기본 필드", () => {
-  it("platform이 claude이다", () => {
+  it("returns 'claude' for platform field", () => {
     expect(adapter.platform).toBe("claude");
   });
 
-  it("configDir가 .claude이다", () => {
+  it("returns '.claude' for configDir field", () => {
     expect(adapter.configDir).toBe(".claude");
   });
 
-  it("contextFile이 CLAUDE.md이다", () => {
+  it("returns 'CLAUDE.md' for contextFile field", () => {
     expect(adapter.contextFile).toBe("CLAUDE.md");
   });
 });
@@ -73,7 +73,7 @@ describe("PlatformAdapter 기본 필드", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildHookEntry", () => {
-  it("command 타입 훅 엔트리를 생성한다", () => {
+  it("builds a 'command' type hook entry via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "PreToolUse",
       "*",
@@ -91,7 +91,7 @@ describe("buildHookEntry", () => {
     expect(hooks[0]["timeout"]).toBe(10);
   });
 
-  it("prompt 타입 훅 엔트리를 생성한다", () => {
+  it("builds a 'prompt' type hook entry via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "Stop",
       "*",
@@ -107,7 +107,7 @@ describe("buildHookEntry", () => {
     expect(hooks[0]["timeout"]).toBe(30);
   });
 
-  it("${component} 플레이스홀더를 displayName으로 치환한다", () => {
+  it("replaces ${component} placeholder with displayName via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry(
       "PostToolUse",
       "*",
@@ -125,7 +125,7 @@ describe("buildHookEntry", () => {
     );
   });
 
-  it("matcher를 훅 그룹에 포함한다", () => {
+  it("includes matcher in the hook group via `buildHookEntry`", () => {
     const entry = adapter.buildHookEntry("PreToolUse", "Bash", "command", 5, "/path/cmd");
     const group = (entry["PreToolUse"] as Record<string, unknown>[])[0];
     expect(group["matcher"]).toBe("Bash");
@@ -137,7 +137,7 @@ describe("buildHookEntry", () => {
 // ---------------------------------------------------------------------------
 
 describe("updateSettings", () => {
-  it("hooks를 settings.json에 저장한다", async () => {
+  it("writes hooks to settings.json via `updateSettings`", async () => {
     const hooksEntries = {
       PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "/bin/test", timeout: 10 }] }],
     };
@@ -148,7 +148,7 @@ describe("updateSettings", () => {
     expect(settings["hooks"]).toEqual(hooksEntries);
   });
 
-  it("기존 hooks를 덮어쓴다", async () => {
+  it("overwrites existing hooks via `updateSettings`", async () => {
     const settingsFile = path.join(targetPath, ".claude", "settings.json");
     await writeFile(settingsFile, JSON.stringify({
       hooks: { Stop: [{ matcher: "*", hooks: [] }] },
@@ -163,7 +163,7 @@ describe("updateSettings", () => {
     expect(settings["someOtherKey"]).toBe(true);
   });
 
-  it("dry_run 모드에서는 파일을 수정하지 않는다", async () => {
+  it("skips file write in dry-run mode via `updateSettings`", async () => {
     await adapter.updateSettings(targetPath, { PreToolUse: [] }, true);
     expect(await exists(path.join(targetPath, ".claude", "settings.json"))).toBe(false);
   });
@@ -174,7 +174,7 @@ describe("updateSettings", () => {
 // ---------------------------------------------------------------------------
 
 describe("readJsonFile 동작", () => {
-  it("손상된 JSON 파일이 있으면 예외를 던진다", async () => {
+  it("throws when settings.json contains corrupt JSON via `syncConfig`", async () => {
     const settingsFile = path.join(targetPath, ".claude", "settings.json");
     await writeFile(settingsFile, "{invalid");
 
@@ -182,7 +182,7 @@ describe("readJsonFile 동작", () => {
     await expect(adapter.syncConfig(targetPath, { foo: "bar" })).rejects.toThrow();
   });
 
-  it("파일이 없으면 빈 객체를 반환한다 (새 파일로 생성)", async () => {
+  it("creates a new file when settings.json is absent via `syncConfig`", async () => {
     // settings.json does not exist; syncConfig should create it from scratch
     await adapter.syncConfig(targetPath, { createdFresh: true });
 
@@ -196,7 +196,7 @@ describe("readJsonFile 동작", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncConfig", () => {
-  it("config를 settings.json에 deep merge한다", async () => {
+  it("deep merges config into settings.json via `syncConfig`", async () => {
     const settingsFile = path.join(targetPath, ".claude", "settings.json");
     await writeFile(settingsFile, JSON.stringify({ existingKey: "value", nested: { a: 1 } }));
 
@@ -209,7 +209,7 @@ describe("syncConfig", () => {
     expect((settings["nested"] as Record<string, unknown>)["b"]).toBe(2);
   });
 
-  it("settings.json이 없으면 새로 생성한다", async () => {
+  it("creates settings.json when absent via `syncConfig`", async () => {
     await adapter.syncConfig(targetPath, { foo: "bar" });
 
     const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.json"));
@@ -222,7 +222,7 @@ describe("syncConfig", () => {
 // ---------------------------------------------------------------------------
 
 describe("setStatusline", () => {
-  it("settings.json에 statusLine을 설정한다", async () => {
+  it("sets statusLine in settings.json via `setStatusline`", async () => {
     const settingsFile = path.join(targetPath, ".claude", "settings.json");
     await writeFile(settingsFile, JSON.stringify({ hooks: {} }));
 
@@ -234,7 +234,7 @@ describe("setStatusline", () => {
     expect(statusLine["command"]).toBe("bun run hud.ts");
   });
 
-  it("settings.json이 없으면 경고만 출력하고 에러 없이 종료한다", async () => {
+  it("logs warning and returns without error when settings.json absent via `setStatusline`", async () => {
     // Should not throw
     await adapter.setStatusline(targetPath, "bun run hud.ts");
   });
@@ -245,7 +245,7 @@ describe("setStatusline", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncAgentsDirect - 파일 복사", () => {
-  it("에이전트 파일을 .claude/agents/ 에 복사한다", async () => {
+  it("copies agent file to .claude/agents/ via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "oracle.md");
     await writeFile(sourceFile, "---\nname: oracle\n---\n\n# Oracle\n");
 
@@ -254,11 +254,11 @@ describe("syncAgentsDirect - 파일 복사", () => {
     expect(await exists(path.join(targetPath, ".claude", "agents", "oracle.md"))).toBe(true);
   });
 
-  it("소스 파일이 없으면 경고만 출력하고 에러 없이 종료한다", async () => {
+  it("logs warning and returns without error when source file missing via `syncAgentsDirect`", async () => {
     await adapter.syncAgentsDirect(targetPath, "missing", "/nonexistent/missing.md");
   });
 
-  it("dry_run 모드에서는 파일을 복사하지 않는다", async () => {
+  it("skips file copy in dry-run mode via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "agent.md");
     await writeFile(sourceFile, "---\nname: agent\n---\n\nbody");
 
@@ -273,7 +273,7 @@ describe("syncAgentsDirect - 파일 복사", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
-  it("에이전트에 skills를 추가한다", async () => {
+  it("injects add-skills into agent frontmatter via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "oracle.md");
     await writeFile(sourceFile, "---\nname: oracle\nskills:\n  - existing-skill\n---\n\n# Oracle body\n");
 
@@ -286,7 +286,7 @@ describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
     expect(content).toContain("existing-skill");
   });
 
-  it("중복 스킬을 deduplicate한다", async () => {
+  it("deduplicates skills in agent frontmatter via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "oracle.md");
     await writeFile(sourceFile, "---\nname: oracle\nskills:\n  - testing\n---\n\nbody\n");
 
@@ -299,7 +299,7 @@ describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
     expect(skillMatches).not.toBeNull();
   });
 
-  it("add-skills 후 body의 --- 구분자가 보존된다 (P2-4 회귀 테스트)", async () => {
+  it("preserves body --- separators after add-skills injection (regression P2-4)", async () => {
     const sourceFile = path.join(tmpDir, "agent.md");
     const originalContent = [
       "---",
@@ -345,7 +345,7 @@ describe("syncAgentsDirect - add-skills 프론트매터 주입", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
-  it("에이전트 프론트매터에 hooks를 추가한다", async () => {
+  it("injects add-hooks into agent frontmatter via `syncAgentsDirect`", async () => {
     const sourceFile = path.join(tmpDir, "agent.md");
     await writeFile(sourceFile, "---\nname: agent\n---\n\n# Agent\n");
 
@@ -368,7 +368,7 @@ describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
     expect(content).toContain("my-hook.sh");
   });
 
-  it("add-hooks 후 body의 --- 구분자가 보존된다 (P2-4 회귀 테스트)", async () => {
+  it("preserves body --- separators after add-hooks injection (regression P2-4)", async () => {
     const sourceFile = path.join(tmpDir, "agent.md");
     const originalContent = [
       "---",
@@ -423,7 +423,7 @@ describe("syncAgentsDirect - add-hooks 프론트매터 주입", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncCommandsDirect", () => {
-  it("커맨드 파일을 .claude/commands/ 에 복사한다", async () => {
+  it("copies command file to .claude/commands/ via `syncCommandsDirect`", async () => {
     const src = path.join(tmpDir, "my-command.md");
     await writeFile(src, "# My Command\n");
 
@@ -438,7 +438,7 @@ describe("syncCommandsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncHooksDirect", () => {
-  it("훅 파일을 .claude/hooks/ 에 복사하고 +x 권한을 설정한다", async () => {
+  it("copies hook file to .claude/hooks/ and sets +x permission via `syncHooksDirect`", async () => {
     const src = path.join(tmpDir, "my-hook.sh");
     await writeFile(src, "#!/bin/bash\necho hi", 0o644);
 
@@ -450,7 +450,7 @@ describe("syncHooksDirect", () => {
     expect(stat.mode & 0o111).toBeTruthy();
   });
 
-  it("훅 디렉토리를 .claude/hooks/<name>/ 에 동기화한다", async () => {
+  it("syncs hook directory to .claude/hooks/<name>/ via `syncHooksDirect`", async () => {
     const srcDir = path.join(tmpDir, "persistent-mode");
     await writeFile(path.join(srcDir, "index.ts"), "export {}");
     await writeFile(path.join(srcDir, "index.test.ts"), "test content");
@@ -469,7 +469,7 @@ describe("syncHooksDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncSkillsDirect", () => {
-  it("스킬 디렉토리를 .claude/skills/<name>/ 에 복사한다", async () => {
+  it("copies skill directory to .claude/skills/<name>/ via `syncSkillsDirect`", async () => {
     const srcDir = path.join(tmpDir, "prometheus");
     await writeFile(path.join(srcDir, "SKILL.md"), "# Prometheus");
 
@@ -484,7 +484,7 @@ describe("syncSkillsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncScriptsDirect", () => {
-  it("스크립트 파일을 .claude/scripts/ 에 복사한다", async () => {
+  it("copies script file to .claude/scripts/ via `syncScriptsDirect`", async () => {
     const src = path.join(tmpDir, "script.sh");
     await writeFile(src, "#!/bin/bash\necho hi");
 
@@ -493,7 +493,7 @@ describe("syncScriptsDirect", () => {
     expect(await exists(path.join(targetPath, ".claude", "scripts", "script.sh"))).toBe(true);
   });
 
-  it("스크립트 디렉토리를 .claude/scripts/<name>/ 에 복사한다", async () => {
+  it("copies script directory to .claude/scripts/<name>/ via `syncScriptsDirect`", async () => {
     const srcDir = path.join(tmpDir, "hud");
     await writeFile(path.join(srcDir, "index.ts"), "export {}");
     await writeFile(path.join(srcDir, "index.test.ts"), "test");
@@ -510,7 +510,7 @@ describe("syncScriptsDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncRulesDirect", () => {
-  it("규칙 파일을 .claude/rules/ 에 복사한다", async () => {
+  it("copies rule file to .claude/rules/ via `syncRulesDirect`", async () => {
     const src = path.join(tmpDir, "coding-discipline.md");
     await writeFile(src, "# Coding Discipline\n");
 
@@ -525,7 +525,7 @@ describe("syncRulesDirect", () => {
 // ---------------------------------------------------------------------------
 
 describe("Plugin install (DI 패턴)", () => {
-  it("플러그인 설치가 호출된다", async () => {
+  it("invokes plugin installer via `syncPlatformYaml`", async () => {
     const installedPlugins: string[] = [];
     const mockInstaller = async (name: string) => {
       installedPlugins.push(name);
@@ -542,7 +542,7 @@ describe("Plugin install (DI 패턴)", () => {
     expect(installedPlugins).toContain("another-plugin");
   });
 
-  it("플러그인 설치 실패 시 에러 없이 계속 진행한다", async () => {
+  it("continues without error when plugin install throws via `syncPlatformYaml`", async () => {
     const failingInstaller = async (_name: string) => {
       throw new Error("install failed");
     };
@@ -554,7 +554,7 @@ describe("Plugin install (DI 패턴)", () => {
     }, false);
   });
 
-  it("플러그인 설치기가 non-zero exitCode를 반환하면 warn 로그를 출력하고 계속 진행한다", async () => {
+  it("logs warning and continues when plugin installer returns non-zero exit code via `syncPlatformYaml`", async () => {
     const failingInstaller = async (_name: string, _targetPath: string) => {
       throw new Error("claude plugin install bad-plugin exited with code 1");
     };
@@ -568,7 +568,7 @@ describe("Plugin install (DI 패턴)", () => {
     ).resolves.toBeDefined();
   });
 
-  it("dry_run 모드에서는 플러그인 설치를 호출하지 않는다", async () => {
+  it("skips plugin install in dry-run mode via `syncPlatformYaml`", async () => {
     const installedPlugins: string[] = [];
     const mockInstaller = async (name: string) => {
       installedPlugins.push(name);
@@ -604,7 +604,7 @@ describe("syncMcpsMerge", () => {
     }
   });
 
-  it("user-scope MCP를 ~/.claude.json의 mcpServers에 쓴다", async () => {
+  it("writes user-scope MCP to mcpServers in ~/.claude.json via `syncMcpsMerge`", async () => {
     await adapter.syncMcpsMerge(targetPath, "my-server", { command: "npx my-server" });
 
     const config = await readJsonFile(claudeConfigFile);
@@ -613,7 +613,7 @@ describe("syncMcpsMerge", () => {
     expect(mcpServers["my-server"]).toEqual({ command: "npx my-server" });
   });
 
-  it("기존 mcpServers에 새 서버를 머지하고 기존 항목을 덮어쓰지 않는다", async () => {
+  it("merges new server into existing mcpServers without overwriting others via `syncMcpsMerge`", async () => {
     await fs.writeFile(
       claudeConfigFile,
       JSON.stringify({ mcpServers: { "existing-server": { command: "npx existing" } } }),
@@ -628,7 +628,7 @@ describe("syncMcpsMerge", () => {
     expect(mcpServers["new-server"]).toEqual({ command: "npx new-server" });
   });
 
-  it("local-scope MCP를 ~/.claude.json의 projects[targetPath].mcpServers에 쓴다", async () => {
+  it("writes local-scope MCP to projects[targetPath].mcpServers in ~/.claude.json via `syncMcpsMerge`", async () => {
     await adapter.syncMcpsMerge(targetPath, "local-server", { command: "npx local" }, false, "local");
 
     const config = await readJsonFile(claudeConfigFile);
@@ -638,7 +638,7 @@ describe("syncMcpsMerge", () => {
     expect(mcpServers["local-server"]).toEqual({ command: "npx local" });
   });
 
-  it("dry_run 모드에서는 파일을 수정하지 않는다", async () => {
+  it("skips file write in dry-run mode via `syncMcpsMerge`", async () => {
     await adapter.syncMcpsMerge(targetPath, "my-server", { command: "npx my-server" }, true);
 
     expect(await exists(claudeConfigFile)).toBe(false);
@@ -650,7 +650,7 @@ describe("syncMcpsMerge", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncPlatformYaml - processedSections", () => {
-  it("config 섹션을 처리하면 processedSections에 포함된다", async () => {
+  it("includes 'config' in processedSections after processing config section via `syncPlatformYaml`", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {
       config: { foo: "bar" },
     }, false);
@@ -658,7 +658,7 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(result.processedSections).toContain("config");
   });
 
-  it("hooks 섹션을 처리하면 processedSections에 포함된다", async () => {
+  it("includes 'hooks' in processedSections after processing hooks section via `syncPlatformYaml`", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {
       hooks: {
         PreToolUse: [
@@ -674,7 +674,7 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(result.processedSections).toContain("hooks");
   });
 
-  it("plugins 섹션을 처리하면 processedSections에 포함된다", async () => {
+  it("includes 'plugins' in processedSections after processing plugins section via `syncPlatformYaml`", async () => {
     const noop = async () => {};
     const a = new ClaudeAdapter(noop);
     const result = await a.syncPlatformYaml(targetPath, {
@@ -684,7 +684,7 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(result.processedSections).toContain("plugins");
   });
 
-  it("statusLine 섹션을 처리하면 processedSections에 포함된다", async () => {
+  it("includes 'statusLine' in processedSections after processing statusLine section via `syncPlatformYaml`", async () => {
     const settingsFile = path.join(targetPath, ".claude", "settings.json");
     await writeFile(settingsFile, "{}");
 
@@ -695,17 +695,17 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(result.processedSections).toContain("statusLine");
   });
 
-  it("modelMap은 항상 undefined이다 (claude는 model-map 미지원)", async () => {
+  it("always returns undefined for modelMap (claude does not support model-map) via `syncPlatformYaml`", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {}, false);
     expect(result.modelMap).toBeUndefined();
   });
 
-  it("비어있는 yaml은 빈 processedSections를 반환한다", async () => {
+  it("returns empty processedSections for empty yaml via `syncPlatformYaml`", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {}, false);
     expect(result.processedSections).toHaveLength(0);
   });
 
-  it("hooks: {} 이면 기존 hooks를 지우고 settings.json에 빈 hooks를 저장한다", async () => {
+  it("clears existing hooks and saves empty hooks to settings.json when hooks: {} via `syncPlatformYaml`", async () => {
     const settingsFile = path.join(targetPath, ".claude", "settings.json");
     await writeFile(settingsFile, JSON.stringify({
       hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "/old", timeout: 10 }] }] },
@@ -721,7 +721,7 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(settings["otherKey"]).toBe("keep");
   });
 
-  it("dry_run 모드에서 processedSections는 정상 반환된다", async () => {
+  it("returns processedSections normally in dry-run mode via `syncPlatformYaml`", async () => {
     const result = await adapter.syncPlatformYaml(targetPath, {
       config: { foo: "bar" },
     }, true);
@@ -729,7 +729,7 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(result.processedSections).toContain("config");
   });
 
-  it("절대 경로 component에서 displayName을 path.basename()으로 추출해 훅을 복사한다", async () => {
+  it("extracts displayName via `path.basename()` from absolute component path and copies hook via `syncPlatformYaml`", async () => {
     // Create a real hook file at an absolute path (simulates pre-resolved path from orchestrator)
     const hookFile = path.join(tmpDir, "keyword-detector.sh");
     await writeFile(hookFile, "#!/bin/bash\necho hi\n", 0o644);

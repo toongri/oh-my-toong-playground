@@ -48,7 +48,7 @@ describe("syncDirectory", () => {
   });
 
   describe("중첩 디렉토리 재귀 복사", () => {
-    it("소스의 중첩 파일을 타겟에 복사한다", async () => {
+    it("copies nested source files to target", async () => {
       await writeFile(path.join(src, "a.ts"), "a");
       await writeFile(path.join(src, "sub/b.ts"), "b");
       await writeFile(path.join(src, "sub/deep/c.ts"), "c");
@@ -65,7 +65,7 @@ describe("syncDirectory", () => {
   });
 
   describe("고아 파일 삭제 (--delete 동작)", () => {
-    it("소스에 없는 타겟 파일을 삭제한다", async () => {
+    it("deletes target files absent from source", async () => {
       await writeFile(path.join(src, "keep.ts"), "keep");
       await writeFile(path.join(tgt, "keep.ts"), "keep");
       await writeFile(path.join(tgt, "orphan.ts"), "orphan");
@@ -76,7 +76,7 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "orphan.ts"))).toBe(false);
     });
 
-    it("중첩 디렉토리의 고아 파일도 삭제한다", async () => {
+    it("deletes orphan files in nested directories", async () => {
       await writeFile(path.join(src, "a.ts"), "a");
       await writeFile(path.join(tgt, "a.ts"), "a");
       await writeFile(path.join(tgt, "sub/orphan.ts"), "orphan");
@@ -88,7 +88,7 @@ describe("syncDirectory", () => {
   });
 
   describe("제외 패턴 (*.test.ts 기본값)", () => {
-    it("*.test.ts 파일을 복사하지 않는다", async () => {
+    it("does not copy *.test.ts files", async () => {
       await writeFile(path.join(src, "foo.ts"), "foo");
       await writeFile(path.join(src, "foo.test.ts"), "test");
 
@@ -98,7 +98,7 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "foo.test.ts"))).toBe(false);
     });
 
-    it("중첩 경로의 *.test.ts 파일도 제외한다", async () => {
+    it("excludes *.test.ts files in nested paths", async () => {
       await writeFile(path.join(src, "sub/bar.ts"), "bar");
       await writeFile(path.join(src, "sub/bar.test.ts"), "bartest");
 
@@ -108,7 +108,7 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "sub/bar.test.ts"))).toBe(false);
     });
 
-    it("타겟에만 존재하는 exclude 파일은 삭제하지 않는다", async () => {
+    it("does not delete excluded files that exist only in target", async () => {
       await writeFile(path.join(src, "foo.ts"), "foo");
       await writeFile(path.join(tgt, "foo.ts"), "foo");
       await writeFile(path.join(tgt, "foo.test.ts"), "test");
@@ -119,7 +119,7 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "foo.test.ts"))).toBe(true);
     });
 
-    it("커스텀 exclude 패턴을 적용한다", async () => {
+    it("applies custom exclude patterns", async () => {
       await writeFile(path.join(src, "script.sh"), "#!/bin/bash");
       await writeFile(path.join(src, "readme.md"), "docs");
 
@@ -131,7 +131,7 @@ describe("syncDirectory", () => {
   });
 
   describe("실행 권한 보존", () => {
-    it("실행 가능 파일의 +x 권한을 타겟에도 설정한다", async () => {
+    it("sets +x permission on target for executable source files", async () => {
       const scriptPath = path.join(src, "hook.sh");
       await writeFile(scriptPath, "#!/bin/bash\necho hi", 0o755);
 
@@ -140,7 +140,7 @@ describe("syncDirectory", () => {
       expect(await isExecutable(path.join(tgt, "hook.sh"))).toBe(true);
     });
 
-    it("실행 불가 파일은 +x 없이 복사된다", async () => {
+    it("copies non-executable files without +x permission", async () => {
       const filePath = path.join(src, "data.json");
       await writeFile(filePath, "{}", 0o644);
 
@@ -152,7 +152,7 @@ describe("syncDirectory", () => {
   });
 
   describe("고아 제거 후 빈 디렉토리 정리", () => {
-    it("고아 파일 삭제 후 빈 디렉토리를 제거한다", async () => {
+    it("removes empty directory after orphan file deletion", async () => {
       await writeFile(path.join(src, "a.ts"), "a");
       await writeFile(path.join(tgt, "a.ts"), "a");
       await writeFile(path.join(tgt, "empty-dir/orphan.ts"), "orphan");
@@ -163,7 +163,7 @@ describe("syncDirectory", () => {
       expect(await exists(path.join(tgt, "empty-dir"))).toBe(false);
     });
 
-    it("중첩 빈 디렉토리도 모두 제거한다", async () => {
+    it("removes all nested empty directories", async () => {
       await writeFile(path.join(src, "a.ts"), "a");
       await writeFile(path.join(tgt, "a.ts"), "a");
       await writeFile(path.join(tgt, "deep/nested/orphan.ts"), "orphan");
@@ -188,7 +188,7 @@ describe("copyFile", () => {
   });
 
   describe("파일 복사", () => {
-    it("파일 내용을 복사한다", async () => {
+    it("copies file contents", async () => {
       const src = path.join(tmpDir, "src.txt");
       const tgt = path.join(tmpDir, "nested/tgt.txt");
       await fs.writeFile(src, "hello");
@@ -199,7 +199,7 @@ describe("copyFile", () => {
       expect(content).toBe("hello");
     });
 
-    it("대상 디렉토리가 없으면 생성한다", async () => {
+    it("creates target directory when it does not exist", async () => {
       const src = path.join(tmpDir, "src.txt");
       const tgt = path.join(tmpDir, "new/deep/tgt.txt");
       await fs.writeFile(src, "data");
@@ -211,7 +211,7 @@ describe("copyFile", () => {
   });
 
   describe("실행 권한 보존", () => {
-    it("소스가 실행 가능하면 타겟도 실행 가능하다", async () => {
+    it("makes target executable when source is executable", async () => {
       const src = path.join(tmpDir, "script.sh");
       const tgt = path.join(tmpDir, "out/script.sh");
       await fs.writeFile(src, "#!/bin/bash");
@@ -223,7 +223,7 @@ describe("copyFile", () => {
       expect(stat.mode & 0o111).toBeTruthy();
     });
 
-    it("소스가 실행 불가면 타겟도 실행 불가다", async () => {
+    it("target is non-executable when source is non-executable", async () => {
       const src = path.join(tmpDir, "config.json");
       const tgt = path.join(tmpDir, "out/config.json");
       await fs.writeFile(src, "{}");
