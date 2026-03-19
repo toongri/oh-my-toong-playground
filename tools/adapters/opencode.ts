@@ -267,23 +267,22 @@ export const opencodeAdapter: PlatformAdapter = {
 
   async syncPlatformYaml(
     targetPath: string,
-    platformYaml: Record<string, unknown>,
+    yaml: PlatformYaml,
     dryRun: boolean,
     _scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
-    const yaml = platformYaml as PlatformYaml;
     const processedSections: string[] = [];
     let modelMap: Record<string, string> | undefined;
 
     // 1. model-map (must be processed before config)
     if (yaml["model-map"] != null) {
-      modelMap = yaml["model-map"] as Record<string, string>;
+      modelMap = yaml["model-map"];
       processedSections.push("model-map");
     }
 
     // 2. config — apply model-map to model and small_model fields, then merge
     if (yaml.config != null) {
-      let configObj = { ...yaml.config } as Record<string, unknown>;
+      let configObj = { ...yaml.config };
 
       if (modelMap) {
         if (typeof configObj["model"] === "string") {
@@ -309,8 +308,7 @@ export const opencodeAdapter: PlatformAdapter = {
 
     // 4. mcps — iterate items and merge each server
     if (yaml.mcps != null) {
-      const mcps = yaml.mcps as Record<string, Record<string, unknown>>;
-      for (const [name, serverDef] of Object.entries(mcps)) {
+      for (const [name, serverDef] of Object.entries(yaml.mcps)) {
         await syncMcpsMerge(targetPath, name, serverDef, dryRun);
       }
       processedSections.push("mcps");

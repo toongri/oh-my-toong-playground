@@ -1,4 +1,4 @@
-import type { Platform, PlatformConfigResult, PluginScope } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 
 /**
  * Common interface for all platform adapters.
@@ -80,7 +80,7 @@ export interface PlatformAdapter {
    */
   syncPlatformYaml(
     targetPath: string,
-    platformYaml: Record<string, unknown>,
+    platformYaml: PlatformYaml,
     dryRun: boolean,
     scope?: PluginScope,
   ): Promise<PlatformConfigResult>;

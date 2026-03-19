@@ -18,6 +18,7 @@ import { parse as parseYaml } from "yaml";
 import type {
   Platform,
   Category,
+  PlatformYaml,
   SyncItem,
   SyncYaml,
   SyncContext,
@@ -308,7 +309,7 @@ export async function syncPlatformConfigs(
       continue;
     }
 
-    let parsedYaml: Record<string, unknown>;
+    let parsedYaml: PlatformYaml;
     try {
       const text = await fs.readFile(platformYamlPath, "utf8");
       const parsed = parseYaml(text);
@@ -316,20 +317,20 @@ export async function syncPlatformConfigs(
         logWarn(`${platform}.yaml이 비어있거나 유효하지 않음, 스킵`);
         continue;
       }
-      parsedYaml = parsed as Record<string, unknown>;
+      parsedYaml = parsed as PlatformYaml;
     } catch (err) {
       logWarn(`${platform}.yaml 파싱 실패: ${err}`);
       continue;
     }
 
     // Pre-resolve hook component paths before passing to adapter
-    if (parsedYaml["hooks"] != null) {
-      const hooksMap = parsedYaml["hooks"] as Record<string, Array<Record<string, unknown>>>;
+    if (parsedYaml.hooks != null) {
+      const hooksMap = parsedYaml.hooks;
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
         if (!Array.isArray(items)) continue;
-        const resolvedItems: Array<Record<string, unknown>> = [];
+        const resolvedItems = [];
         for (const item of items) {
-          const component = (item["component"] as string | undefined) ?? "";
+          const component = item.component ?? "";
           if (!component) {
             resolvedItems.push(item);
             continue;

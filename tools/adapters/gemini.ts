@@ -429,11 +429,10 @@ export class GeminiAdapter implements PlatformAdapter {
    */
   async syncPlatformYaml(
     targetPath: string,
-    platformYaml: Record<string, unknown>,
+    yaml: PlatformYaml,
     dryRun: boolean,
     _scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
-    const yaml = platformYaml as PlatformYaml;
     const processedSections: string[] = [];
 
     // --- config ---
@@ -444,7 +443,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
     // --- hooks ---
     if (yaml.hooks != null) {
-      const hooksMap = yaml.hooks as Record<string, Array<Record<string, unknown>>>;
+      const hooksMap = yaml.hooks;
       const accumulatedHooks: Record<string, unknown[]> = {};
 
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
@@ -558,8 +557,7 @@ export class GeminiAdapter implements PlatformAdapter {
 
     // --- mcps ---
     if (yaml.mcps != null) {
-      const mcps = yaml.mcps as Record<string, Record<string, unknown>>;
-      await this.syncMcpsMerge(targetPath, mcps, dryRun);
+      await this.syncMcpsMerge(targetPath, yaml.mcps, dryRun);
       processedSections.push("mcps");
     }
 
