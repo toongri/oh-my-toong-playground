@@ -51,14 +51,14 @@ export type AdapterMap = Map<Platform, PlatformAdapter>;
 // ---------------------------------------------------------------------------
 
 /** All categories handled by syncCategory. */
-const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
+export const CATEGORIES: Category[] = ["agents", "commands", "skills", "scripts", "rules"];
 
 /**
  * Platform×category capability map.
  * Only combinations listed here proceed through backup+wipe+dispatch.
  * Unsupported combos (e.g., codex+agents) are skipped entirely.
  */
-const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
+export const SUPPORTED_CATEGORIES: Record<string, Set<Category>> = {
   claude: new Set(["agents", "commands", "skills", "scripts", "rules"]),
   gemini: new Set(["commands", "skills", "scripts"]),
   codex: new Set(["skills", "scripts"]),
