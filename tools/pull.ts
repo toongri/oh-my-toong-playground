@@ -333,10 +333,21 @@ export async function pullProject(options: PullOptions): Promise<void> {
 
         await writeContent(sourcePath, deployedContent);
       } else {
-        // Directory-based: copy deployed files to source, then remove orphans
-        // (preserving source files that match exclusion patterns like *.test.ts)
-        await copyDirectory(deployedPath, sourcePath, platform);
-        await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
+        // Non-file-based categories (skills, scripts): could be file or directory
+        const stat = await fs.stat(deployedPath);
+        if (stat.isDirectory()) {
+          // Directory: copy deployed files to source, then remove orphans
+          // (preserving source files that match exclusion patterns like *.test.ts)
+          await copyDirectory(deployedPath, sourcePath, platform);
+          await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
+        } else {
+          // Single file (e.g., scripts/deploy.sh): read, transform if .md, write
+          let content = await fs.readFile(deployedPath, "utf8");
+          if (deployedPath.endsWith(".md")) {
+            content = reversePlatformPaths(content, platform);
+          }
+          await writeContent(sourcePath, content);
+        }
       }
 
       process.stderr.write(`[${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`);

@@ -549,6 +549,26 @@ describe("pullProject", () => {
     expect(pulledContent).toBe("// updated\n");
   });
 
+  it("pulls single-file script (non-directory) without ENOTDIR crash", async () => {
+    const syncYamlContent = makeSyncYaml(targetPath, {
+      scripts: { items: ["deploy.sh"] },
+    });
+    await setupProject("test-proj", syncYamlContent);
+
+    await writeFile(path.join(rootDir, "scripts", "deploy.sh"), "#!/bin/bash\n# original\n");
+
+    // Deployed as a single file (not a directory)
+    await writeFile(
+      path.join(targetPath, ".claude", "scripts", "deploy.sh"),
+      "#!/bin/bash\n# updated\n",
+    );
+
+    await pullProject(makeOptions());
+
+    const pulledContent = await readFile(path.join(rootDir, "scripts", "deploy.sh"));
+    expect(pulledContent).toBe("#!/bin/bash\n# updated\n");
+  });
+
   it("preserves source-only `*.test.ts` files during directory pull", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["test-skill"] },
