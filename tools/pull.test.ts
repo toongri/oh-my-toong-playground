@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { existsSync } from "fs";
 import { stringify as stringifyYaml } from "yaml";
 
 import { pullProject, parseCliArgs, type PullOptions } from "./pull.ts";
@@ -19,15 +18,6 @@ async function writeFile(filePath: string, content: string): Promise<void> {
 
 async function readFile(filePath: string): Promise<string> {
   return fs.readFile(filePath, "utf8");
-}
-
-async function exists(p: string): Promise<boolean> {
-  try {
-    await fs.stat(p);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -400,7 +390,36 @@ describe("pullProject", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 9. 플랫폼 경로 역변환
+  // 9. Gemini commands TOML 형식 미지원 경고
+  // -------------------------------------------------------------------------
+
+  it("--platform gemini --category commands: TOML 미지원 경고 출력, 소스 파일 미변경", async () => {
+    const syncYamlContent = makeSyncYaml(targetPath, {
+      commands: { items: ["test-cmd"] },
+    });
+    await setupProject("test-proj", syncYamlContent);
+
+    // Source command file (pre-existing in oh-my-toong source)
+    await writeFile(path.join(rootDir, "commands", "test-cmd.md"), "# Original Command\n");
+
+    // No deployed file in .gemini/commands/ — guard skips before existsSync check
+
+    let output = "";
+    output = await captureStderr(async () => {
+      await pullProject(makeOptions({ platform: "gemini", categoryFilter: "commands" }));
+    });
+
+    // Should warn about TOML format incompatibility
+    expect(output).toContain("[WARN]");
+    expect(output).toContain("toml");
+
+    // Source file should NOT be modified
+    const sourceContent = await readFile(path.join(rootDir, "commands", "test-cmd.md"));
+    expect(sourceContent).toBe("# Original Command\n");
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. 플랫폼 경로 역변환
   // -------------------------------------------------------------------------
 
   it("gemini 플랫폼 풀 시 .gemini/ 경로를 .claude/로 역변환", async () => {
