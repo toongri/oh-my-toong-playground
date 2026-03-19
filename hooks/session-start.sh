@@ -69,14 +69,14 @@ PROJECT_NAME="${PROJECT_NAME// /-}"
 
 # Export OMT_PROJECT via Claude env file
 if [ -n "$CLAUDE_ENV_FILE" ]; then
-  echo "export OMT_PROJECT=$PROJECT_NAME" >> "$CLAUDE_ENV_FILE"
+  echo "export OMT_PROJECT=\"$PROJECT_NAME\"" >> "$CLAUDE_ENV_FILE"
 fi
 
 # Compute and export OMT_DIR (per-project working directory)
 OMT_DIR="$HOME/.omt/$PROJECT_NAME"
 mkdir -p "$OMT_DIR"
 if [ -n "$CLAUDE_ENV_FILE" ]; then
-  echo "export OMT_DIR=$OMT_DIR" >> "$CLAUDE_ENV_FILE"
+  echo "export OMT_DIR=\"$OMT_DIR\"" >> "$CLAUDE_ENV_FILE"
 fi
 
 MESSAGES=""
