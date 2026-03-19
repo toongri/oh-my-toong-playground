@@ -1,11 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
 
+export const DEFAULT_EXCLUDE = ["*.test.ts"];
+
 /**
  * Checks if a filename matches any of the given glob-style exclude patterns.
  * Only supports simple "*.ext" wildcard prefix patterns.
  */
-function isExcluded(filename: string, patterns: string[]): boolean {
+export function isExcluded(filename: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     if (pattern.startsWith("*.")) {
       const suffix = pattern.slice(1); // e.g. ".test.ts"
@@ -21,7 +23,7 @@ function isExcluded(filename: string, patterns: string[]): boolean {
  * Recursively collects all file paths under a directory.
  * Returns paths relative to the root dir.
  */
-async function collectFiles(dir: string, rel = ""): Promise<string[]> {
+export async function collectFiles(dir: string, rel = ""): Promise<string[]> {
   const results: string[] = [];
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
@@ -40,7 +42,7 @@ async function collectFiles(dir: string, rel = ""): Promise<string[]> {
  * Recursively collects all directory paths under a directory.
  * Returns paths relative to the root dir, deepest first.
  */
-async function collectDirs(dir: string, rel = ""): Promise<string[]> {
+export async function collectDirs(dir: string, rel = ""): Promise<string[]> {
   const results: string[] = [];
   let entries: import("fs").Dirent[];
   try {
@@ -94,7 +96,7 @@ export async function syncDirectory(
   target: string,
   options?: { exclude?: string[] }
 ): Promise<void> {
-  const exclude = options?.exclude ?? ["*.test.ts"];
+  const exclude = options?.exclude ?? DEFAULT_EXCLUDE;
 
   // 1. Ensure target directory exists
   await fs.mkdir(target, { recursive: true });
