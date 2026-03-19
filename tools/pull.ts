@@ -24,7 +24,7 @@ import {
   reversePlatformPaths,
   stripInjectedFrontmatter,
 } from "./lib/pull-utils.ts";
-import { DEFAULT_EXCLUDE, isExcluded } from "./lib/sync-directory.ts";
+import { DEFAULT_EXCLUDE, isExcluded, collectFiles, collectDirs } from "./lib/sync-directory.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -133,7 +133,7 @@ export function parseCliArgs(args: string[]): {
 // File copy helpers
 // ---------------------------------------------------------------------------
 
-async function copyFile(srcPath: string, destPath: string, content: string): Promise<void> {
+async function writeContent(destPath: string, content: string): Promise<void> {
   await fs.mkdir(path.dirname(destPath), { recursive: true });
   await fs.writeFile(destPath, content, "utf8");
 }
@@ -157,9 +157,8 @@ async function copyDirectory(
       if (entry.name.endsWith(".md")) {
         let content = await fs.readFile(deployedEntry, "utf8");
         content = reversePlatformPaths(content, platform);
-        await copyFile(deployedEntry, sourceEntry, content);
+        await writeContent(sourceEntry, content);
       } else {
-        await fs.mkdir(path.dirname(sourceEntry), { recursive: true });
         await fs.copyFile(deployedEntry, sourceEntry);
       }
     }
@@ -171,26 +170,6 @@ async function copyDirectory(
  * match an exclusion pattern. Also removes empty directories after cleanup.
  */
 async function removeOrphans(sourceDir: string, deployedDir: string, exclude: string[]): Promise<void> {
-  // Collect relative file paths in source
-  async function collectFiles(dir: string, rel = ""): Promise<string[]> {
-    const results: string[] = [];
-    let entries: import("fs").Dirent[];
-    try {
-      entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
-    } catch {
-      return results;
-    }
-    for (const entry of entries) {
-      const relPath = rel ? `${rel}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) {
-        results.push(...(await collectFiles(path.join(dir, entry.name), relPath)));
-      } else if (entry.isFile()) {
-        results.push(relPath);
-      }
-    }
-    return results;
-  }
-
   const sourceFiles = await collectFiles(sourceDir);
   const deployedFiles = new Set(await collectFiles(deployedDir));
 
@@ -202,24 +181,6 @@ async function removeOrphans(sourceDir: string, deployedDir: string, exclude: st
   }
 
   // Remove empty directories in source (deepest first)
-  async function collectDirs(dir: string, rel = ""): Promise<string[]> {
-    const results: string[] = [];
-    let entries: import("fs").Dirent[];
-    try {
-      entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
-    } catch {
-      return results;
-    }
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const relPath = rel ? `${rel}/${entry.name}` : entry.name;
-        results.push(...(await collectDirs(path.join(dir, entry.name), relPath)));
-        results.push(relPath);
-      }
-    }
-    return results;
-  }
-
   const sourceDirs = await collectDirs(sourceDir);
   for (const relDir of sourceDirs) {
     const absDir = path.join(sourceDir, relDir);
@@ -370,14 +331,12 @@ export async function pullProject(options: PullOptions): Promise<void> {
           deployedContent = stripInjectedFrontmatter(deployedContent, sourceContent, syncItem);
         }
 
-        await copyFile(deployedPath, sourcePath, deployedContent);
+        await writeContent(sourcePath, deployedContent);
       } else {
         // Directory-based: copy deployed files to source, then remove orphans
         // (preserving source files that match exclusion patterns like *.test.ts)
         await copyDirectory(deployedPath, sourcePath, platform);
-        if (existsSync(sourcePath)) {
-          await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
-        }
+        await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
       }
 
       process.stderr.write(`[${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`);
