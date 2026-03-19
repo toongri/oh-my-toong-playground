@@ -32,6 +32,8 @@ export function resolveDeployedPath(
 // resolveSourcePath
 // ---------------------------------------------------------------------------
 
+export type SourcePathError = { error: string };
+
 /**
  * Resolves the oh-my-toong source path where pulled content should be written.
  *
@@ -43,6 +45,7 @@ export function resolveDeployedPath(
  * categories (agents, commands, rules).
  *
  * Scoped refs:  "project:name" → {rootDir}/projects/{project}/{category}/{name}
+ * Unscoped refs with projectDirName: tries project-local first, then global fallback.
  * Global refs:  "name"         → {rootDir}/{category}/{name}
  */
 export function resolveSourcePath(
@@ -50,7 +53,7 @@ export function resolveSourcePath(
   category: Category,
   rootDir: string,
   projectDirName?: string,
-): string {
+): string | SourcePathError {
   let project = "";
   let name = componentRef;
 
@@ -62,16 +65,30 @@ export function resolveSourcePath(
 
   // Cross-project validation (mirrors resolveComponentPath in resolver.ts)
   if (project && projectDirName !== undefined && project !== projectDirName) {
-    throw new Error(
-      `Cross-project reference not allowed: ${componentRef} (current project: ${projectDirName})`,
-    );
+    return {
+      error: `Cross-project reference not allowed: ${componentRef} (current project: ${projectDirName})`,
+    };
   }
 
-  const baseDir = project
-    ? path.join(rootDir, "projects", project, category)
-    : path.join(rootDir, category);
+  // Scoped ref (same project) or no projectDirName: resolve directly
+  if (project) {
+    const baseDir = path.join(rootDir, "projects", project, category);
+    const resolved = tryResolveExisting(baseDir, name, category);
+    if (resolved !== null) return resolved;
+    if (FILE_BASED_CATEGORIES.has(category)) return path.join(baseDir, `${name}.md`);
+    return path.join(baseDir, name);
+  }
 
-  // Check filesystem for existing components (mirrors tryResolveInDir in resolver.ts)
+  // Unscoped ref with projectDirName: project-local first, then global fallback
+  // (mirrors resolver.ts:151-165)
+  if (projectDirName !== undefined) {
+    const projectBase = path.join(rootDir, "projects", projectDirName, category);
+    const projectResolved = tryResolveExisting(projectBase, name, category);
+    if (projectResolved !== null) return projectResolved;
+  }
+
+  // Global resolution
+  const baseDir = path.join(rootDir, category);
   const resolved = tryResolveExisting(baseDir, name, category);
   if (resolved !== null) return resolved;
 
