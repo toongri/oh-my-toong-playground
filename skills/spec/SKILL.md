@@ -26,7 +26,7 @@ NO AREA COMPLETION WITHOUT:
 3. User explicitly declares "Area complete"
 4. All acceptance criteria testable
 5. No "TBD" or vague placeholders remaining
-6. Document saved to .omt/specs/
+6. Document saved to $OMT_DIR/specs/
 ```
 
 **Violating the letter of these rules IS violating the spirit.** No exceptions.
@@ -569,7 +569,7 @@ Even if AI already has sufficient information for a Step, it MUST:
 
 1. **Present results**: Show the Step's output/proposal to user (even if based on prior knowledge). Include potential risks of the proposed design (e.g., transaction scope expansion, coupling increase, blast radius of policy changes). Present risks as trade-offs with alternatives, not as blocking problems.
 2. **User confirmation**: Wait for explicit user approval of the Step content
-3. Save content to `.omt/specs/{spec-name}/{area-directory}/design.md`
+3. Save content to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md`
 4. Update progress status at document top
 5. **MANDATORY: Record decisions** to `{area-directory}/records/` (see Record Workflow below)
    - If decisions were made: Create record NOW. This is a BLOCKING gate — do NOT proceed to step 6 until record is saved.
@@ -852,7 +852,7 @@ A statement is a **recordable decision** if ANY of these apply:
 ### How to Record
 
 1. **Create record NOW — not later, not at Area completion, not in batches**: Record MUST be created at the Step where the decision was confirmed. Do NOT defer to next Step, do NOT batch with other decisions, do NOT wait for Area Checkpoint.
-2. **Save location**: `.omt/specs/{spec-name}/{area-directory}/records/{naming-pattern}.md`
+2. **Save location**: `$OMT_DIR/specs/{spec-name}/{area-directory}/records/{naming-pattern}.md`
 3. **Naming**: Area and Step based - automatically determined by current progress
 4. **Template**: Use `templates/record.md` format
 
@@ -883,7 +883,7 @@ When a concern is deferred via Emergent Concern Protocol Option (C):
 - **Follow-up needed**: Whether follow-up is required and recommended timing
 - **Impact on current spec**: Impact on the current spec, if any
 
-**Save location**: `.omt/specs/{spec-name}/{current-area}/records/{step}-deferred-{concern-name}.md`
+**Save location**: `$OMT_DIR/specs/{spec-name}/{current-area}/records/{step}-deferred-{concern-name}.md`
 
 **Wrapup integration**: Deferred concern records are listed in Wrapup as a separate "Deferred Concerns" section.
 
@@ -1129,7 +1129,7 @@ If Design Area was recommended but user deselected:
 
 ## Step-by-Step Persistence
 
-**Core Principle**: Save progress to `.omt/specs/{spec-name}/{area-directory}/design.md` whenever each Area is completed.
+**Core Principle**: Save progress to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md` whenever each Area is completed.
 
 ### When to Save
 
@@ -1186,7 +1186,7 @@ When the user requests "continue from here", "review this", etc.:
 
 ### Resume Workflow
 
-1. Check existing directories in `.omt/specs/{spec-name}/`:
+1. Check existing directories in `$OMT_DIR/specs/{spec-name}/`:
    - `requirements/` - Requirements completion
    - `solution-design/` - Solution Design completion
    - `{area-name}/` - Design Area completion (domain-model, data-schema, interface-contract, integration-pattern, ai-responsibility-contract, operations-plan, frontend-ux-surface, data-ml-pipeline, security-privacy)
@@ -1218,7 +1218,7 @@ When the user requests "continue from here", "review this", etc.:
 
 ## Output Location
 
-All specification documents are saved in the `.omt/specs/` directory.
+All specification documents are saved in the `$OMT_DIR/specs/` directory.
 
 ### Structure Rationale
 

@@ -57,13 +57,13 @@ flowchart TD
 
     subgraph Design Phase
         Spec["/spec"] --> SpecReviewer[spec-reviewer]
-        SpecReviewer --> SpecFile[".omt/specs/*.md"]
+        SpecReviewer --> SpecFile["~/.omt/{OMT_PROJECT}/specs/*.md"]
     end
 
     subgraph Planning Phase
         Prometheus["/prometheus"] --> Metis[metis<br/>Gap Analysis]
         Metis --> Prometheus
-        Prometheus --> PlanFile[".omt/plans/*.md"]
+        Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
 
     SpecFile -.->|informs| Prometheus
@@ -85,14 +85,14 @@ flowchart TD
 
 - **Role**: Creates comprehensive, testable specifications
 - **Constraint**: No phase completion without user confirmation
-- **Output**: `.omt/specs/{name}/spec.md`
+- **Output**: `~/.omt/{OMT_PROJECT}/specs/{name}/spec.md` (via `$OMT_DIR`)
 - **Key Feature**: Multi-AI feedback via spec-reviewer
 
 ### prometheus (The Planner)
 
 - **Role**: Strategic planning, requirements interviews
 - **Constraint**: **READ-ONLY**. NEVER writes code.
-- **Output**: `.omt/plans/{name}.md`
+- **Output**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (via `$OMT_DIR`)
 - **Workflow**: Interview -> Research -> Metis consultation -> Plan creation
 
 ### sisyphus (The Orchestrator)
@@ -134,7 +134,7 @@ When requirements are clear, use `/prometheus`:
 1. **Interview Mode**: Collects context through questions
 2. **Research**: Investigates codebase via explore/librarian agents
 3. **Metis Consultation**: MANDATORY gap analysis before plan creation
-4. **Plan Generation**: Writes structured plan to `.omt/plans/*.md`
+4. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
 
 ### Phase 3: Execution
 
@@ -151,8 +151,8 @@ With a plan ready, use `/sisyphus`:
 
 | Command | Purpose | Output |
 |---------|---------|--------|
-| `/spec <description>` | Create software specification | `.omt/specs/*.md` |
-| `/prometheus <task>` | Create work plan | `.omt/plans/*.md` |
+| `/spec <description>` | Create software specification | `~/.omt/{OMT_PROJECT}/specs/*.md` |
+| `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/sisyphus` | Execute plan via orchestration | Verified code changes |
 | `/ralph <task>` | Iterative completion with oracle verification | Task completion |
 | `/hud setup\|restore` | HUD setup and management | statusLine configuration |

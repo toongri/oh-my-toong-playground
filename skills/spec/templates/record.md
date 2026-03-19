@@ -91,4 +91,4 @@ Records are saved to the `records/` folder within each area directory.
 - `2-communication-pattern.md` - Integration Pattern, Step 2 decision
 - `1-metrics-selection.md` - Operations Plan, Step 1 decision
 
-**Location**: `.omt/specs/{spec-name}/{area-name}/records/`
+**Location**: `$OMT_DIR/specs/{spec-name}/{area-name}/records/`

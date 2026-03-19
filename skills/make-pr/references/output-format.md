@@ -120,4 +120,4 @@ PR description follows the structure below. Write entirely in Korean.
 
 - **Purpose**: Provide links to related documents, issues, PRs
 - **Include**: Related GitHub issues/PRs, external documentation URLs, git-tracked design documents
-- **Anti-patterns**: Agent-internal files (memory, plans, session notes, council records, files under `.omt/`) — never include content that reviewers cannot access
+- **Anti-patterns**: Agent-internal files (memory, plans, session notes, council records, files under `$OMT_DIR/`) — never include content that reviewers cannot access

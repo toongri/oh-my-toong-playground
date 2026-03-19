@@ -10,7 +10,7 @@
 - `scripts/`: Deployed script packages (hud, chunk-review, spec-reviewer).
 - `tools/`: Internal sync/validation tooling (not deployed).
 - `projects/`: Project-specific overrides (e.g., `projects/<project>/skills/<skill>/SKILL.md`).
-- Local/runtime artifacts: `.omt/` (state) and `.claude/` are ignored by git.
+- Local/runtime artifacts: `~/.omt/{OMT_PROJECT}/` (state, in home directory) and `.claude/` are ignored by git.
 
 ## Build, Test, and Development Commands
 

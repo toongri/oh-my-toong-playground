@@ -32,7 +32,7 @@ digraph input_handling {
 }
 ```
 
-**When you receive ONLY a file path** (e.g., `.omt/plans/feature.md`):
+**When you receive ONLY a file path** (e.g., `$OMT_DIR/plans/feature.md`):
 1. This IS valid input - the path tells you WHICH plan to review
 2. Read the file at that path using your file reading tools
 3. If file exists: proceed to review its content
@@ -151,7 +151,7 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 | Measurable success | Can you objectively verify completion? (not "works properly") |
 | Edge cases covered | Errors, empty states, invalid input addressed? |
 | Test strategy defined | Unit? Integration? Manual? Specific commands to run? |
-| Evidence paths defined | Do QA Scenarios include `.omt/evidence/` paths for evidence capture? |
+| Evidence paths defined | Do QA Scenarios include `$OMT_DIR/evidence/` paths for evidence capture? |
 | QA scenario specificity | Do scenarios use concrete selectors/endpoints, specific test data, and exact assertions? (not "verify it works") |
 
 ### 3. Context Completeness (90% confidence required)

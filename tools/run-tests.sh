@@ -50,7 +50,6 @@ run_shell_tests() {
     test_files=$(find "$ROOT_DIR" \
         -path "*/node_modules" -prune -o \
         -path "*/.sync-backup" -prune -o \
-        -path "*/.omt" -prune -o \
         \( -name "*_test.sh" -o -name "test_*.sh" \) \
         -type f -print | sort)
 
