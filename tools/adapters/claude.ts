@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 
-import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginObjectItem, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
@@ -472,12 +472,9 @@ export class ClaudeAdapter implements PlatformAdapter {
         if (typeof item === "string" && item) {
           await this._installPluginSafe(item, targetPath, dryRun, pluginScope);
         } else if (typeof item === "object" && item !== null) {
-          const obj = item as Record<string, unknown>;
-          const name = typeof obj["name"] === "string" ? obj["name"] : "";
-          if (!name) { logWarn("플러그인 항목에 name 필드 없음 (스킵)"); continue; }
-          const check = typeof obj["check"] === "string" ? obj["check"] : undefined;
-          const preCommands = Array.isArray(obj["pre-commands"]) ? obj["pre-commands"] as string[] : undefined;
-          await this._installPluginObjectSafe(name, check, preCommands, targetPath, dryRun, pluginScope);
+          const obj = item as PluginObjectItem;
+          if (!obj.name) { logWarn("플러그인 항목에 name 필드 없음 (스킵)"); continue; }
+          await this._installPluginObjectSafe(obj.name, obj.check, obj["pre-commands"], targetPath, dryRun, pluginScope);
         }
       }
       processedSections.push("plugins");
