@@ -16,7 +16,9 @@ setup_test_env() {
     TEST_TMP_DIR=$(mktemp -d)
     # Create .git directory so get_project_root() can find project root
     mkdir -p "$TEST_TMP_DIR/.git"
-    mkdir -p "$TEST_TMP_DIR/.omt"
+    # Set OMT_DIR so hook uses this path directly (bypasses fallback computation)
+    export OMT_DIR="$TEST_TMP_DIR/.omt"
+    mkdir -p "$OMT_DIR"
     # Set HOME to test dir for global state files
     export HOME_BACKUP="$HOME"
     export HOME="$TEST_TMP_DIR"
@@ -25,6 +27,7 @@ setup_test_env() {
 
 teardown_test_env() {
     export HOME="$HOME_BACKUP"
+    unset OMT_DIR
     if [[ -d "$TEST_TMP_DIR" ]]; then
         rm -rf "$TEST_TMP_DIR"
     fi

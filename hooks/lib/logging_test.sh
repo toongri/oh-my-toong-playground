@@ -22,6 +22,10 @@ setup_test_env() {
     ORIGINAL_HOME="$HOME"
     ORIGINAL_OMT_HOOK_LOG_ENABLED="${OMT_HOOK_LOG_ENABLED:-}"
     ORIGINAL_OMT_HOOK_LOG_LEVEL="${OMT_HOOK_LOG_LEVEL:-}"
+    ORIGINAL_OMT_DIR="${OMT_DIR:-}"
+
+    # Set OMT_DIR so logging lib uses this path directly (bypasses fallback computation)
+    export OMT_DIR="$TEST_TMP_DIR/.omt"
 
     # Create temporary home directory for isolated tests
     TEST_HOME=$(mktemp -d)
@@ -46,6 +50,11 @@ teardown_test_env() {
         export OMT_HOOK_LOG_LEVEL="$ORIGINAL_OMT_HOOK_LOG_LEVEL"
     else
         unset OMT_HOOK_LOG_LEVEL 2>/dev/null || true
+    fi
+    if [[ -n "$ORIGINAL_OMT_DIR" ]]; then
+        export OMT_DIR="$ORIGINAL_OMT_DIR"
+    else
+        unset OMT_DIR 2>/dev/null || true
     fi
 
     if [[ -d "$TEST_TMP_DIR" ]]; then
@@ -417,7 +426,7 @@ test_log_file_location_uses_project_root() {
     omt_log_info "test message"
 
     local expected_log="$TEST_TMP_DIR/.omt/logs/test-hook.log"
-    assert_file_exists "$expected_log" "Log should be at PROJECT_ROOT/.omt/logs/" || return 1
+    assert_file_exists "$expected_log" "Log should be at OMT_DIR/logs/" || return 1
 }
 
 # =============================================================================

@@ -46,6 +46,19 @@ get_project_root() {
 # Get project root
 PROJECT_ROOT=$(get_project_root "$DIRECTORY")
 
+# Compute OMT_DIR if not already set by session-start.sh
+if [ -z "$OMT_DIR" ]; then
+  _omt_git_common=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)
+  _omt_pname=""
+  if [ -n "$_omt_git_common" ] && [ "$_omt_git_common" != ".git" ]; then
+    _omt_pname=$(basename "$(dirname "$_omt_git_common")")
+  else
+    _omt_pname=$(basename "$PROJECT_ROOT")
+  fi
+  OMT_DIR="$HOME/.omt/${_omt_pname// /-}"
+  mkdir -p "$OMT_DIR"
+fi
+
 # Extract the prompt text - try multiple JSON paths
 PROMPT=""
 if command -v jq &> /dev/null; then
@@ -124,12 +137,8 @@ truncate_prompt_text() {
 # Function to create ralph state file
 # Uses SESSION_ID for session-specific file naming
 create_ralph_state() {
-  local dir="$1"
-  local prompt="$2"
+  local prompt="$1"
   local timestamp=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
-
-  # Create local .omt directory
-  mkdir -p "$dir/.omt" 2>/dev/null
 
   if command -v jq &> /dev/null; then
     jq -n \
@@ -142,11 +151,11 @@ create_ralph_state() {
         completion_promise: "DONE",
         prompt: $prompt,
         started_at: $started_at
-      }' > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null
+      }' > "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null
   else
     # Fallback: basic escaping when jq is unavailable
     local escaped_prompt=$(printf '%s' "$prompt" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
-    cat > "$dir/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null << RALPH_STATE_EOF
+    cat > "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null << RALPH_STATE_EOF
 {
   "active": true,
   "iteration": 0,
@@ -165,7 +174,7 @@ if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   RALPH_CONTEXT_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_CONTEXT_PROMPT_MAX")
 
   # Create ralph state file
-  create_ralph_state "$PROJECT_ROOT" "$RALPH_STATE_PROMPT"
+  create_ralph_state "$RALPH_STATE_PROMPT"
 
   # Build ralph activation JSON safely using jq --arg to escape prompt
   if command -v jq &> /dev/null; then
