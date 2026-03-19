@@ -18,7 +18,7 @@ import { stringify } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile } from "../lib/json.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
-import type { PlatformConfigResult } from "../lib/types.ts";
+import type { PlatformConfigResult, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 
 // =============================================================================
@@ -373,7 +373,8 @@ export class CodexAdapter implements PlatformAdapter {
   async syncPlatformYaml(
     targetPath: string,
     platformYaml: Record<string, unknown>,
-    dryRun: boolean
+    dryRun: boolean,
+    _scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
     const processedSections: string[] = [];
     let modelMap: Record<string, string> | undefined;
@@ -424,6 +425,12 @@ export class CodexAdapter implements PlatformAdapter {
     const hooksRaw = platformYaml["hooks"];
     if (hooksRaw != null) {
       logWarn("Codex does not support hooks in config.toml. Skipping hooks section.");
+    }
+
+    // --- plugins ---
+    const pluginsRaw = platformYaml["plugins"];
+    if (pluginsRaw != null) {
+      logWarn("Codex does not support plugins. Skipping plugins section.");
     }
 
     return { processedSections, modelMap };

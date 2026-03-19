@@ -613,6 +613,161 @@ describe("Plugin install (DI 패턴)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Plugin scope 및 object format
+// ---------------------------------------------------------------------------
+
+describe("plugin scope 및 object format", () => {
+  it("passes 'user' scope to plugin installer", async () => {
+    const capturedScopes: string[] = [];
+    const mockInstaller = async (_name: string, _targetPath: string, scope: string) => {
+      capturedScopes.push(scope);
+    };
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: ["my-plugin"] },
+    }, false, "user");
+
+    expect(capturedScopes).toEqual(["user"]);
+  });
+
+  it("passes 'project' scope to plugin installer", async () => {
+    const capturedScopes: string[] = [];
+    const mockInstaller = async (_name: string, _targetPath: string, scope: string) => {
+      capturedScopes.push(scope);
+    };
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: ["my-plugin"] },
+    }, false, "project");
+
+    expect(capturedScopes).toEqual(["project"]);
+  });
+
+  it("defaults to 'user' scope when scope not provided", async () => {
+    const capturedScopes: string[] = [];
+    const mockInstaller = async (_name: string, _targetPath: string, scope: string) => {
+      capturedScopes.push(scope);
+    };
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: ["my-plugin"] },
+    }, false);
+
+    expect(capturedScopes).toEqual(["user"]);
+  });
+
+  it("processes object-format plugin with name field", async () => {
+    const installedNames: string[] = [];
+    const mockInstaller = async (name: string) => {
+      installedNames.push(name);
+    };
+    const mockCommandRunner = async (_cmd: string, _cwd: string) => ({ exitCode: 1 });
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller, mockCommandRunner);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: [{ name: "my-plugin@marketplace" }] },
+    }, false);
+
+    expect(installedNames).toContain("my-plugin@marketplace");
+  });
+
+  it("skips install when check command succeeds", async () => {
+    const installedNames: string[] = [];
+    const mockInstaller = async (name: string) => {
+      installedNames.push(name);
+    };
+    const mockCommandRunner = async (_cmd: string, _cwd: string) => ({ exitCode: 0 });
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller, mockCommandRunner);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: [{ name: "my-plugin", check: "which my-plugin" }] },
+    }, false);
+
+    expect(installedNames).toHaveLength(0);
+  });
+
+  it("runs pre-commands before install", async () => {
+    const callOrder: string[] = [];
+    const mockInstaller = async (name: string) => {
+      callOrder.push(`install:${name}`);
+    };
+    const mockCommandRunner = async (cmd: string, _cwd: string) => {
+      callOrder.push(`run:${cmd}`);
+      // check command fails (exit 1), pre-commands succeed (exit 0)
+      if (cmd === "which my-plugin") return { exitCode: 1 };
+      return { exitCode: 0 };
+    };
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller, mockCommandRunner);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: {
+        items: [{
+          name: "my-plugin",
+          check: "which my-plugin",
+          "pre-commands": ["brew install dep1", "brew install dep2"],
+        }],
+      },
+    }, false);
+
+    const preCmd1Idx = callOrder.indexOf("run:brew install dep1");
+    const preCmd2Idx = callOrder.indexOf("run:brew install dep2");
+    const installIdx = callOrder.indexOf("install:my-plugin");
+
+    expect(preCmd1Idx).toBeGreaterThanOrEqual(0);
+    expect(preCmd2Idx).toBeGreaterThanOrEqual(0);
+    expect(installIdx).toBeGreaterThanOrEqual(0);
+    expect(preCmd1Idx).toBeLessThan(installIdx);
+    expect(preCmd2Idx).toBeLessThan(installIdx);
+  });
+
+  it("skips object item without name", async () => {
+    const installedNames: string[] = [];
+    const mockInstaller = async (name: string) => {
+      installedNames.push(name);
+    };
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller);
+    // Should not throw
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: [{ check: "true" }] },
+    }, false);
+
+    expect(installedNames).toHaveLength(0);
+  });
+
+  it("handles install failure gracefully", async () => {
+    const throwingInstaller = async (_name: string) => {
+      throw new Error("installation failed badly");
+    };
+
+    const adapterWithMock = new ClaudeAdapter(throwingInstaller);
+    // Should not throw
+    await expect(
+      adapterWithMock.syncPlatformYaml(targetPath, {
+        plugins: { items: [{ name: "failing-plugin" }] },
+      }, false),
+    ).resolves.toBeDefined();
+  });
+
+  it("dry-run does not invoke installer", async () => {
+    const installedNames: string[] = [];
+    const mockInstaller = async (name: string) => {
+      installedNames.push(name);
+    };
+
+    const adapterWithMock = new ClaudeAdapter(mockInstaller);
+    await adapterWithMock.syncPlatformYaml(targetPath, {
+      plugins: { items: ["my-plugin", { name: "object-plugin" }] },
+    }, true);
+
+    expect(installedNames).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // syncMcpsMerge
 // ---------------------------------------------------------------------------
 

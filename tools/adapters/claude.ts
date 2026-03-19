@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 
-import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
@@ -13,13 +13,16 @@ import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 // Plugin installer type (for DI in tests)
 // =============================================================================
 
-export type PluginInstaller = (name: string, targetPath: string) => Promise<void>;
+export type PluginInstaller = (name: string, targetPath: string, scope: PluginScope) => Promise<void>;
+
+export type CommandRunner = (command: string, cwd: string) => Promise<{ exitCode: number }>;
 
 async function defaultPluginInstaller(
   name: string,
   targetPath: string,
+  scope: PluginScope,
 ): Promise<void> {
-  const proc = Bun.spawn(["claude", "plugin", "install", name], {
+  const proc = Bun.spawn(["claude", "plugin", "install", "--scope", scope, name], {
     cwd: targetPath,
     env: { ...process.env, CLAUDECODE: "" },
     stdout: "inherit",
@@ -27,8 +30,14 @@ async function defaultPluginInstaller(
   });
   await proc.exited;
   if (proc.exitCode !== 0) {
-    throw new Error(`claude plugin install ${name} exited with code ${proc.exitCode}`);
+    throw new Error(`claude plugin install --scope ${scope} ${name} exited with code ${proc.exitCode}`);
   }
+}
+
+async function defaultCommandRunner(command: string, cwd: string): Promise<{ exitCode: number }> {
+  const proc = Bun.spawn(["bash", "-c", command], { cwd, stdout: "inherit", stderr: "inherit" });
+  await proc.exited;
+  return { exitCode: proc.exitCode ?? 1 };
 }
 
 // =============================================================================
@@ -42,9 +51,12 @@ export class ClaudeAdapter implements PlatformAdapter {
 
   /** Injected plugin installer — swap out in tests. */
   private readonly _installPlugin: PluginInstaller;
+  /** Injected command runner — swap out in tests. */
+  private readonly _runCommand: CommandRunner;
 
-  constructor(installPlugin?: PluginInstaller) {
+  constructor(installPlugin?: PluginInstaller, runCommand?: CommandRunner) {
     this._installPlugin = installPlugin ?? defaultPluginInstaller;
+    this._runCommand = runCommand ?? defaultCommandRunner;
   }
 
   // ---------------------------------------------------------------------------
@@ -318,6 +330,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     targetPath: string,
     platformYaml: Record<string, unknown>,
     dryRun: boolean,
+    scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
     const yaml = platformYaml as PlatformYaml;
     const processedSections: string[] = [];
@@ -454,10 +467,17 @@ export class ClaudeAdapter implements PlatformAdapter {
 
     // --- plugins ---
     if (yaml.plugins?.items != null) {
-      const items = yaml.plugins.items;
-      for (const item of items) {
+      const pluginScope = scope ?? "user";
+      for (const item of yaml.plugins.items) {
         if (typeof item === "string" && item) {
-          await this._installPluginSafe(item, targetPath, dryRun);
+          await this._installPluginSafe(item, targetPath, dryRun, pluginScope);
+        } else if (typeof item === "object" && item !== null) {
+          const obj = item as Record<string, unknown>;
+          const name = typeof obj["name"] === "string" ? obj["name"] : "";
+          if (!name) { logWarn("플러그인 항목에 name 필드 없음 (스킵)"); continue; }
+          const check = typeof obj["check"] === "string" ? obj["check"] : undefined;
+          const preCommands = Array.isArray(obj["pre-commands"]) ? obj["pre-commands"] as string[] : undefined;
+          await this._installPluginObjectSafe(name, check, preCommands, targetPath, dryRun, pluginScope);
         }
       }
       processedSections.push("plugins");
@@ -755,15 +775,60 @@ export class ClaudeAdapter implements PlatformAdapter {
     name: string,
     targetPath: string,
     dryRun: boolean,
+    scope: PluginScope,
   ): Promise<void> {
     if (dryRun) {
-      logDry(`claude plugin install ${name}`);
+      logDry(`claude plugin install --scope ${scope} ${name}`);
       return;
     }
 
     try {
-      await this._installPlugin(name, targetPath);
-      logInfo(`플러그인 설치 완료: ${name}`);
+      await this._installPlugin(name, targetPath, scope);
+      logInfo(`플러그인 설치 완료: ${name} (scope: ${scope})`);
+    } catch {
+      logWarn(`플러그인 설치 실패 (계속 진행): ${name}`);
+    }
+  }
+
+  private async _installPluginObjectSafe(
+    name: string,
+    check: string | undefined,
+    preCommands: string[] | undefined,
+    targetPath: string,
+    dryRun: boolean,
+    scope: PluginScope,
+  ): Promise<void> {
+    if (dryRun) {
+      logDry(`claude plugin install --scope ${scope} ${name}`);
+      return;
+    }
+
+    // Run check — skip installation if exit code is 0
+    if (check) {
+      try {
+        const result = await this._runCommand(check, targetPath);
+        if (result.exitCode === 0) {
+          logInfo(`플러그인 이미 설치됨 (스킵): ${name}`);
+          return;
+        }
+      } catch { /* check failed, proceed with install */ }
+    }
+
+    // Run pre-commands
+    if (preCommands) {
+      for (const cmd of preCommands) {
+        try {
+          await this._runCommand(cmd, targetPath);
+        } catch {
+          logWarn(`pre-command 실패 (계속 진행): ${cmd}`);
+        }
+      }
+    }
+
+    // Install
+    try {
+      await this._installPlugin(name, targetPath, scope);
+      logInfo(`플러그인 설치 완료: ${name} (scope: ${scope})`);
     } catch {
       logWarn(`플러그인 설치 실패 (계속 진행): ${name}`);
     }

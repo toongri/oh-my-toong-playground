@@ -5,6 +5,8 @@
 
 export type Platform = "claude" | "gemini" | "codex" | "opencode";
 
+export type PluginScope = "user" | "project";
+
 export type Category = "agents" | "commands" | "skills" | "scripts" | "rules";
 
 export type SyncItem =

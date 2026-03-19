@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 
-import type { PlatformConfigResult, PlatformYaml } from "../lib/types.ts";
+import type { PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
@@ -269,6 +269,7 @@ export const opencodeAdapter: PlatformAdapter = {
     targetPath: string,
     platformYaml: Record<string, unknown>,
     dryRun: boolean,
+    _scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
     const yaml = platformYaml as PlatformYaml;
     const processedSections: string[] = [];
@@ -315,6 +316,11 @@ export const opencodeAdapter: PlatformAdapter = {
       processedSections.push("mcps");
     }
 
+    // 5. plugins — not supported, log and skip
+    if (yaml.plugins?.items != null) {
+      logWarn("OpenCode does not support plugins. Skipping plugins section.");
+    }
+
     return { processedSections, modelMap };
   },
 };
@@ -349,7 +355,41 @@ export async function syncConfig(
 // =============================================================================
 
 /**
+ * Transform a common-format MCP server definition to OpenCode's McpLocal format.
+ *
+ * Rules:
+ * - If `command` is a string and `args` is an array:
+ *     → `{ type: "local", command: [command, ...args] }`, `args` removed
+ * - If `command` is already an array and `type` is present: pass through as-is
+ * - `env` field → renamed to `environment`
+ */
+export function transformMcpServerDef(
+  serverDef: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...serverDef };
+
+  // Transform command string + args array → type: "local", command: array
+  if (typeof result["command"] === "string" && Array.isArray(result["args"])) {
+    const cmd = result["command"] as string;
+    const args = result["args"] as unknown[];
+    result["type"] = "local";
+    result["command"] = [cmd, ...args];
+    delete result["args"];
+  }
+
+  // Rename env → environment
+  if ("env" in result) {
+    result["environment"] = result["env"];
+    delete result["env"];
+  }
+
+  return result;
+}
+
+/**
  * Merge an MCP server definition into .opencode/opencode.json at `.mcp.<name>`.
+ * Transforms incoming definitions to OpenCode's McpLocal format.
+ * Removes stale top-level `env` key if present.
  */
 export async function syncMcpsMerge(
   targetPath: string,
@@ -358,17 +398,24 @@ export async function syncMcpsMerge(
   dryRun: boolean,
 ): Promise<void> {
   const configFile = path.join(targetPath, ".opencode", "opencode.json");
+  const transformed = transformMcpServerDef(serverDef);
 
   if (dryRun) {
     logDry(`MCP merge: ${serverName} -> ${configFile}`);
-    logDry(`Server config: ${JSON.stringify(serverDef)}`);
+    logDry(`Server config: ${JSON.stringify(transformed)}`);
     return;
   }
 
   const current = await readJsonFile(configFile);
   const mcp = (current["mcp"] as Record<string, unknown> | undefined) ?? {};
-  mcp[serverName] = serverDef;
+  mcp[serverName] = transformed;
   current["mcp"] = mcp;
+
+  // Remove stale top-level env key if present
+  if ("env" in current) {
+    delete current["env"];
+  }
+
   await writeJsonFile(configFile, current);
   logInfo(`MCP merged: ${serverName} -> ${configFile}`);
 }
