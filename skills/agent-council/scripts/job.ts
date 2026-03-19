@@ -35,6 +35,8 @@ import {
   safeFileName,
 } from '@lib/generic-job';
 
+import { getOmtDir } from '@lib/omt-dir';
+
 // ---------------------------------------------------------------------------
 // Council JobConfig
 // ---------------------------------------------------------------------------
@@ -313,7 +315,7 @@ async function cmdStatus(options, jobDir) {
 async function cmdStart(options, prompt) {
   const configPath = options.config || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
+    options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, COUNCIL_CONFIG);
@@ -448,7 +450,7 @@ async function main() {
     if (!jobDir) exitWithError('clean: missing jobDir');
     const defaultJobsDir = options['jobs-dir'] as string | undefined
       || process.env.COUNCIL_JOBS_DIR
-      || path.join(PROJECT_ROOT, '.omt', 'jobs');
+      || path.join(getOmtDir(), 'jobs');
     frameworkCmdClean(options, jobDir, COUNCIL_CONFIG, defaultJobsDir);
     return;
   }

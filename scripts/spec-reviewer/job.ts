@@ -31,6 +31,8 @@ import {
   parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
 
+import { getOmtDir } from '@lib/omt-dir';
+
 // ---------------------------------------------------------------------------
 // Job configuration
 // ---------------------------------------------------------------------------
@@ -211,10 +213,10 @@ function gatherSpecContext(specName: string, config: Record<string, any>): { con
 
   const contextConfig = config['spec-review'].context || {};
   const sharedContextDirRaw = contextConfig.shared_context_dir || '~/.omt/${OMT_PROJECT}/context';
-  const specsDir = contextConfig.specs_dir || '.omt/specs';
+  const specsDir = contextConfig.specs_dir || 'specs';
 
   const contextDir = resolveContextDir(sharedContextDirRaw, projectRoot);
-  const specDir = path.join(projectRoot, specsDir, specName);
+  const specDir = path.join(getOmtDir(), specsDir, specName);
 
   const files: string[] = [];
 
@@ -297,7 +299,7 @@ Usage:
 
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
-  - --spec auto-loads context from .omt/specs/<spec-name>/ (spec.md, records/*.md) + shared context
+  - --spec auto-loads context from $OMT_DIR/specs/<spec-name>/ (spec.md, records/*.md) + shared context
   - poll status with repeated short calls to update TODO/plan UIs in host agents
   - wait prints JSON by default and blocks until meaningful progress occurs, so you don't spam tool cells
 `);
@@ -330,7 +332,7 @@ function asWaitPayload(statusPayload: any): any {
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
   const configPath = (options.config || process.env.SPEC_REVIEW_CONFIG || resolveDefaultConfigFile()) as string;
   const jobsDir =
-    (options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs')) as string;
+    (options['jobs-dir'] || process.env.SPEC_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs')) as string;
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, JOB_CONFIG);
@@ -677,7 +679,7 @@ async function main(): Promise<void> {
     if (!jobDir) exitWithError('clean: missing jobDir');
     const defaultJobsDir = (options['jobs-dir'] as string | undefined)
       || process.env.SPEC_REVIEW_JOBS_DIR
-      || path.join(PROJECT_ROOT, '.omt', 'jobs');
+      || path.join(getOmtDir(), 'jobs');
     _cmdClean(options, jobDir, JOB_CONFIG, defaultJobsDir);
     return;
   }

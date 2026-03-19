@@ -3,6 +3,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import type { RalphState } from './types.ts';
 import { readTasksFromDirectory, countIncompleteTasks, getInProgressTask } from '@lib/task-reader';
+import { getOmtDir } from '../../lib/omt-dir';
 
 /**
  * Maximum age for state files to be considered "active".
@@ -40,9 +41,9 @@ async function readJsonFile<T>(path: string): Promise<T | null> {
  * Note: Global fallback (~/.claude/) was removed to prevent
  * state leakage between projects and parallel sessions.
  */
-async function findStateFile<T>(cwd: string, filename: string): Promise<T | null> {
+async function findStateFile<T>(filename: string): Promise<T | null> {
   // Project-local only (with stale check)
-  const localPath = join(cwd, '.omt', filename);
+  const localPath = join(getOmtDir(), filename);
   if (!await isStateFileStale(localPath)) {
     return readJsonFile<T>(localPath);
   }
@@ -50,8 +51,8 @@ async function findStateFile<T>(cwd: string, filename: string): Promise<T | null
   return null;
 }
 
-export async function readRalphState(cwd: string, sessionId: string = 'default'): Promise<RalphState | null> {
-  return findStateFile<RalphState>(cwd, `ralph-state-${sessionId}.json`);
+export async function readRalphState(_cwd: string, sessionId: string = 'default'): Promise<RalphState | null> {
+  return findStateFile<RalphState>(`ralph-state-${sessionId}.json`);
 }
 
 export async function readBackgroundTasks(): Promise<number> {
