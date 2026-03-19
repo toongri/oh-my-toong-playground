@@ -4,6 +4,7 @@ import { makeDecision, DecisionContext } from './decision.ts';
 import { readTasksFromDirectory, countIncompleteTasks } from '@lib/task-reader';
 import { join } from 'path';
 import { initLogger, logStart, logEnd, logInfo, logDebug, logError } from '@lib/logging';
+import { getOmtDir } from '@lib/omt-dir';
 
 export async function main(): Promise<void> {
   try {
@@ -15,7 +16,7 @@ export async function main(): Promise<void> {
     const projectRoot = getProjectRoot(input.directory);
 
     // Initialize logging
-    initLogger('persistent-mode', projectRoot, input.sessionId);
+    initLogger('persistent-mode', getOmtDir(), input.sessionId);
     logStart();
     logInfo(`stop hook invoked, sessionId=${input.sessionId}`);
 

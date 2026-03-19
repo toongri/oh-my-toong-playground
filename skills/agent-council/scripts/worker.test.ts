@@ -615,7 +615,7 @@ describe('main - --env passthrough', () => {
     }
   });
 
-  test('creates a log file in .omt/logs/ after successful run', async () => {
+  test('creates a log file in logs/ after successful run', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-log-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
@@ -629,16 +629,15 @@ describe('main - --env passthrough', () => {
           '--job-dir', jobDir,
           '--member', 'test-member',
           '--command', 'true',
-          '--project-root', tmpDir,
         ],
-        { stdout: 'pipe', stderr: 'pipe' },
+        { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, OMT_DIR: tmpDir } },
       );
       const exitCode = await proc.exited;
       expect(exitCode).toBe(0);
 
-      // Log file should exist in tmpDir/.omt/logs/
+      // Log file should exist in tmpDir/logs/
       // jobId = basename('job').replace(/^council-/, '') = 'job'
-      const logFile = path.join(tmpDir, '.omt', 'logs', 'council-job-worker-job.log');
+      const logFile = path.join(tmpDir, 'logs', 'council-job-worker-job.log');
       expect(fs.existsSync(logFile)).toBe(true);
       const content = fs.readFileSync(logFile, 'utf8');
       expect(content.includes('========== START ==========')).toBe(true);
