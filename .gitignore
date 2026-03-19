@@ -15,6 +15,9 @@
 # node
 node_modules/
 
+# omt state directories (project root and test artifacts)
+.omt/
+
 /.gemini/
 /.codex/
 .opencode/
