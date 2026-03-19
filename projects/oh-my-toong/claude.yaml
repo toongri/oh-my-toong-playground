@@ -18,5 +18,12 @@ hooks:
       matcher: "Edit(**/sync.yaml)"
       timeout: 30
 
+plugins:
+  items:
+    - name: typescript-lsp@claude-plugins-official
+      check: jq -e '.plugins["typescript-lsp@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add anthropics/claude-plugins-official
+
 config:
   enableAllProjectMcpServers: true

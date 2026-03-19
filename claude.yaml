@@ -29,3 +29,7 @@ plugins:
       pre-commands:
         - curl -fsSL https://plannotator.ai/install.sh | bash
         - claude plugin marketplace add backnotprop/plannotator
+    - name: skill-creator@claude-plugins-official
+      check: jq -e '.plugins["skill-creator@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add anthropics/claude-plugins-official
