@@ -213,7 +213,8 @@ function gatherSpecContext(specName: string, config: Record<string, any>): { con
 
   const contextConfig = config['spec-review'].context || {};
   const sharedContextDirRaw = contextConfig.shared_context_dir || '~/.omt/${OMT_PROJECT}/context';
-  const specsDir = contextConfig.specs_dir || 'specs';
+  // Strip legacy ".omt/" prefix to prevent double path (~/.omt/project/.omt/specs/)
+  const specsDir = (contextConfig.specs_dir || 'specs').replace(/^\.omt\//, '');
 
   const contextDir = resolveContextDir(sharedContextDirRaw, projectRoot);
   const specDir = path.join(getOmtDir(), specsDir, specName);
