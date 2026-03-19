@@ -72,6 +72,13 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
   echo "export OMT_PROJECT=$PROJECT_NAME" >> "$CLAUDE_ENV_FILE"
 fi
 
+# Compute and export OMT_DIR (per-project working directory)
+OMT_DIR="$HOME/.omt/$PROJECT_NAME"
+mkdir -p "$OMT_DIR"
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  echo "export OMT_DIR=$OMT_DIR" >> "$CLAUDE_ENV_FILE"
+fi
+
 MESSAGES=""
 
 # Cleanup stale ralph-state files (older than 3 hours)
@@ -79,7 +86,7 @@ if command -v jq &> /dev/null; then
   STALE_THRESHOLD=10800  # 3 hours in seconds
   CURRENT_TIME=$(date +%s)
 
-  for state_file in "$PROJECT_ROOT"/.omt/ralph-state-*.json; do
+  for state_file in "$OMT_DIR"/ralph-state-*.json; do
     if [ -f "$state_file" ]; then
       STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
       if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
@@ -99,8 +106,8 @@ if command -v jq &> /dev/null; then
 fi
 
 # Check for active ralph loop state (session-specific)
-if [ -f "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" ]; then
-  RALPH_STATE=$(cat "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null)
+if [ -f "$OMT_DIR/ralph-state-${SESSION_ID}.json" ]; then
+  RALPH_STATE=$(cat "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null)
 
   if command -v jq &> /dev/null; then
     IS_ACTIVE=$(echo "$RALPH_STATE" | jq -r '.active // false' 2>/dev/null)
@@ -136,7 +143,7 @@ if [ -d "$TODOS_DIR" ]; then
 fi
 
 # Check for incomplete todos in project directory
-for todo_path in "$PROJECT_ROOT/.omt/todos.json" "$DIRECTORY/.claude/todos.json"; do
+for todo_path in "$OMT_DIR/todos.json" "$DIRECTORY/.claude/todos.json"; do
   if [ -f "$todo_path" ]; then
     if command -v jq &> /dev/null; then
       COUNT=$(jq 'if type == "array" then [.[] | select(.status != "completed" and .status != "cancelled")] | length else 0 end' "$todo_path" 2>/dev/null || echo "0")
