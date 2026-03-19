@@ -51,36 +51,78 @@ function makeSyncYaml(targetPath: string, sections: Partial<SyncYaml>): string {
 // ---------------------------------------------------------------------------
 
 describe("parseCliArgs", () => {
-  it("첫 번째 위치 인수를 projectName으로 파싱", () => {
+  it("parses first positional arg as `projectName`", () => {
     const result = parseCliArgs(["my-project"]);
     expect(result.projectName).toBe("my-project");
     expect(result.platform).toBe("claude");
     expect(result.dryRun).toBe(false);
   });
 
-  it("--dry-run 플래그 파싱", () => {
+  it("parses `--dry-run` flag", () => {
     const result = parseCliArgs(["my-project", "--dry-run"]);
     expect(result.dryRun).toBe(true);
   });
 
-  it("--platform 플래그 파싱", () => {
+  it("parses `--platform` flag", () => {
     const result = parseCliArgs(["my-project", "--platform", "gemini"]);
     expect(result.platform).toBe("gemini");
   });
 
-  it("--category 플래그 파싱", () => {
+  it("parses `--category` flag", () => {
     const result = parseCliArgs(["my-project", "--category", "skills"]);
     expect(result.categoryFilter).toBe("skills");
   });
 
-  it("--component 플래그 파싱", () => {
+  it("parses `--component` flag", () => {
     const result = parseCliArgs(["my-project", "--category", "skills", "--component", "oracle"]);
     expect(result.componentFilter).toBe("oracle");
   });
 
-  it("projectName 없으면 빈 문자열 반환", () => {
+  it("returns empty `projectName` when no positional arg", () => {
     const result = parseCliArgs(["--dry-run"]);
     expect(result.projectName).toBe("");
+  });
+
+  it("exits with code 1 for invalid `--platform` value", async () => {
+    let exitCode: number | undefined;
+    const originalExit = process.exit.bind(process);
+    (process as unknown as { exit: (code?: number) => never }).exit = (code?: number) => {
+      exitCode = code;
+      throw new Error("process.exit called");
+    };
+
+    try {
+      await captureStderr(async () => {
+        parseCliArgs(["my-project", "--platform", "gemni"]);
+      });
+    } catch {
+      // Expected
+    } finally {
+      (process as unknown as { exit: (code?: number) => never }).exit = originalExit;
+    }
+
+    expect(exitCode).toBe(1);
+  });
+
+  it("exits with code 1 for invalid `--category` value", async () => {
+    let exitCode: number | undefined;
+    const originalExit = process.exit.bind(process);
+    (process as unknown as { exit: (code?: number) => never }).exit = (code?: number) => {
+      exitCode = code;
+      throw new Error("process.exit called");
+    };
+
+    try {
+      await captureStderr(async () => {
+        parseCliArgs(["my-project", "--category", "skill"]);
+      });
+    } catch {
+      // Expected
+    } finally {
+      (process as unknown as { exit: (code?: number) => never }).exit = originalExit;
+    }
+
+    expect(exitCode).toBe(1);
   });
 });
 
@@ -125,7 +167,7 @@ describe("pullProject", () => {
   // 1. 전체 풀 테스트
   // -------------------------------------------------------------------------
 
-  it("스킬과 에이전트를 대상에서 소스로 전체 풀", async () => {
+  it("pulls skills and agents from target to source", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["test-skill"] },
       agents: { items: ["test-agent"] },
@@ -160,7 +202,7 @@ describe("pullProject", () => {
   // 2. Dry-run 테스트
   // -------------------------------------------------------------------------
 
-  it("dry-run 모드에서 파일 변경 없음, 출력에 컴포넌트 포함", async () => {
+  it("does not modify files in `--dry-run` mode", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["dry-skill"] },
     });
@@ -190,7 +232,7 @@ describe("pullProject", () => {
   // 3. 존재하지 않는 프로젝트 이름
   // -------------------------------------------------------------------------
 
-  it("존재하지 않는 프로젝트 이름이면 종료 코드 1로 실패", async () => {
+  it("exits with code 1 for nonexistent project", async () => {
     let exitCode: number | undefined;
     const originalExit = process.exit.bind(process);
     (process as unknown as { exit: (code?: number) => never }).exit = (code?: number) => {
@@ -215,7 +257,7 @@ describe("pullProject", () => {
   // 4. 카테고리 필터 테스트
   // -------------------------------------------------------------------------
 
-  it("--category skills 필터: 스킬만 풀, 에이전트는 미변경", async () => {
+  it("pulls only skills when `--category skills` filter is applied", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["filter-skill"] },
       agents: { items: ["filter-agent"] },
@@ -254,7 +296,7 @@ describe("pullProject", () => {
   // 5. 컴포넌트 필터 테스트
   // -------------------------------------------------------------------------
 
-  it("--category skills --component target-skill: 해당 스킬만 풀", async () => {
+  it("pulls only `target-skill` with `--category skills --component target-skill`", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["target-skill", "other-skill"] },
     });
@@ -286,7 +328,7 @@ describe("pullProject", () => {
   // 6. --component without --category 에러
   // -------------------------------------------------------------------------
 
-  it("--component 지정 시 --category 없으면 오류 및 종료 코드 1", async () => {
+  it("detects `--component` without `--category` via `parseCliArgs` output", async () => {
     // This is validated in import.meta.main, but we test the CLI arg combination
     // by simulating the check. The main guard in pull.ts handles this before pullProject.
     // We verify the parseCliArgs output allows the caller to detect the issue.
@@ -323,7 +365,7 @@ describe("pullProject", () => {
   // 7. 배포된 컴포넌트 누락 경고
   // -------------------------------------------------------------------------
 
-  it("동기화 목록에 있지만 배포 경로에 없는 컴포넌트 경고 후 계속 진행", async () => {
+  it("warns on missing deployed component and continues pulling others", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["missing-skill", "present-skill"] },
     });
@@ -360,7 +402,7 @@ describe("pullProject", () => {
   // 8. 플랫폼 카테고리 지원 여부
   // -------------------------------------------------------------------------
 
-  it("--platform gemini --category agents: gemini는 agents 미지원이므로 스킵", async () => {
+  it("skips agents for `--platform gemini` (unsupported category)", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       agents: { items: ["gemini-agent"] },
       skills: { items: ["gemini-skill"] },
@@ -393,7 +435,7 @@ describe("pullProject", () => {
   // 9. Gemini commands TOML 형식 미지원 경고
   // -------------------------------------------------------------------------
 
-  it("--platform gemini --category commands: TOML 미지원 경고 출력, 소스 파일 미변경", async () => {
+  it("warns on gemini commands TOML incompatibility and skips pull", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       commands: { items: ["test-cmd"] },
     });
@@ -422,7 +464,7 @@ describe("pullProject", () => {
   // 10. 플랫폼 경로 역변환
   // -------------------------------------------------------------------------
 
-  it("gemini 플랫폼 풀 시 .gemini/ 경로를 .claude/로 역변환", async () => {
+  it("reverses `.gemini/` paths to `.claude/` when pulling gemini platform", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: ["path-skill"] },
     });
@@ -445,10 +487,10 @@ describe("pullProject", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 10. 에이전트 인젝션된 프론트매터 제거
+  // 11. 에이전트 인젝션된 프론트매터 제거
   // -------------------------------------------------------------------------
 
-  it("add-skills로 인젝션된 프론트매터 skills 필드 제거", async () => {
+  it("strips injected `skills` frontmatter field from agent via `add-skills`", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       agents: {
         items: [
@@ -483,10 +525,10 @@ describe("pullProject", () => {
   });
 
   // -------------------------------------------------------------------------
-  // 11. 스크립트 파일 및 디렉터리 풀
+  // 12. 스크립트 파일 및 디렉터리 풀
   // -------------------------------------------------------------------------
 
-  it("스크립트 단일 파일 풀 (파일 타입)", async () => {
+  it("pulls single-file script directory", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       scripts: { items: ["my-script"] },
     });
@@ -507,7 +549,7 @@ describe("pullProject", () => {
     expect(pulledContent).toBe("// updated\n");
   });
 
-  it("스크립트 서브디렉터리 포함 재귀 풀", async () => {
+  it("pulls script directory recursively including subdirectories", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       scripts: { items: ["complex-script"] },
     });
@@ -542,7 +584,7 @@ describe("pullProject", () => {
   // 추가: 스코프 컴포넌트 (project:name 형식) 소스 경로 해석
   // -------------------------------------------------------------------------
 
-  it("scoped 컴포넌트 (project:name) 소스 경로를 projects/ 아래로 해석", async () => {
+  it("resolves scoped component `project:name` to `projects/` source path", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       skills: { items: [{ component: "test-proj:scoped-skill" }] },
     });
@@ -570,7 +612,7 @@ describe("pullProject", () => {
   // 추가: 새 소스 파일 생성 (소스에 없는 경우)
   // -------------------------------------------------------------------------
 
-  it("소스에 없는 컴포넌트도 배포 경로에서 복사해 소스 생성", async () => {
+  it("creates new source file when component exists only in deployed target", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       commands: { items: ["new-cmd"] },
     });

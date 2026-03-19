@@ -13,32 +13,32 @@ import {
 // ---------------------------------------------------------------------------
 
 describe("resolveDeployedPath", () => {
-  it("agents: .md suffix 붙은 파일 경로 반환", () => {
+  it("returns file path with `.md` suffix for agents", () => {
     const result = resolveDeployedPath("/proj", "claude", "agents", "oracle");
     expect(result).toBe("/proj/.claude/agents/oracle.md");
   });
 
-  it("commands: .md suffix 붙은 파일 경로 반환", () => {
+  it("returns file path with `.md` suffix for commands", () => {
     const result = resolveDeployedPath("/proj", "claude", "commands", "commit");
     expect(result).toBe("/proj/.claude/commands/commit.md");
   });
 
-  it("rules: .md suffix 붙은 파일 경로 반환", () => {
+  it("returns file path with `.md` suffix for rules", () => {
     const result = resolveDeployedPath("/proj", "claude", "rules", "coding");
     expect(result).toBe("/proj/.claude/rules/coding.md");
   });
 
-  it("skills: suffix 없는 디렉터리 경로 반환", () => {
+  it("returns directory path without suffix for skills", () => {
     const result = resolveDeployedPath("/proj", "claude", "skills", "oracle");
     expect(result).toBe("/proj/.claude/skills/oracle");
   });
 
-  it("scripts: suffix 없는 디렉터리 경로 반환", () => {
+  it("returns directory path without suffix for scripts", () => {
     const result = resolveDeployedPath("/proj", "claude", "scripts", "hud");
     expect(result).toBe("/proj/.claude/scripts/hud");
   });
 
-  it("gemini 플랫폼: .gemini/ 디렉터리 사용", () => {
+  it("uses `.gemini/` directory for gemini platform", () => {
     const result = resolveDeployedPath("/proj", "gemini", "skills", "oracle");
     expect(result).toBe("/proj/.gemini/skills/oracle");
   });
@@ -51,24 +51,40 @@ describe("resolveDeployedPath", () => {
 describe("resolveSourcePath", () => {
   const ROOT = "/root/oh-my-toong";
 
-  it("글로벌 ref (skills): {rootDir}/skills/{name} 반환", () => {
+  it("resolves global ref for skills to `{rootDir}/skills/{name}`", () => {
     const result = resolveSourcePath("oracle", "skills", ROOT);
     expect(result).toBe(`${ROOT}/skills/oracle`);
   });
 
-  it("글로벌 ref (commands): {rootDir}/commands/{name} 반환", () => {
+  it("resolves global ref for commands to `{rootDir}/commands/{name}.md`", () => {
     const result = resolveSourcePath("commit", "commands", ROOT);
-    expect(result).toBe(`${ROOT}/commands/commit`);
+    expect(result).toBe(`${ROOT}/commands/commit.md`);
   });
 
-  it("스코프 ref: {rootDir}/projects/{project}/{category}/{name} 반환", () => {
+  it("resolves scoped ref to `{rootDir}/projects/{project}/{category}/{name}`", () => {
     const result = resolveSourcePath("my-project:testing", "skills", ROOT);
     expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
   });
 
-  it("projectDirName 제공 시 언스코프 ref는 글로벌 경로로 fallback", () => {
+  it("falls back to global path for unscoped ref when `projectDirName` is provided", () => {
     const result = resolveSourcePath("oracle", "skills", ROOT, "my-project");
     expect(result).toBe(`${ROOT}/skills/oracle`);
+  });
+
+  it("throws on cross-project scoped ref when `projectDirName` differs", () => {
+    expect(() =>
+      resolveSourcePath("other-project:testing", "skills", ROOT, "my-project"),
+    ).toThrow("Cross-project reference not allowed");
+  });
+
+  it("allows same-project scoped ref when `projectDirName` matches", () => {
+    const result = resolveSourcePath("my-project:testing", "skills", ROOT, "my-project");
+    expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
+  });
+
+  it("returns `.md` suffix for file-based categories (agents) on new component", () => {
+    const result = resolveSourcePath("new-agent", "agents", ROOT);
+    expect(result).toBe(`${ROOT}/agents/new-agent.md`);
   });
 });
 
@@ -77,25 +93,25 @@ describe("resolveSourcePath", () => {
 // ---------------------------------------------------------------------------
 
 describe("reversePlatformPaths", () => {
-  it("gemini: .gemini/ → .claude/ 치환", () => {
+  it("replaces `.gemini/` with `.claude/`", () => {
     const content = "See .gemini/skills/oracle/ for details";
     const result = reversePlatformPaths(content, "gemini");
     expect(result).toBe("See .claude/skills/oracle/ for details");
   });
 
-  it("codex: .codex/ → .claude/ 치환", () => {
+  it("replaces `.codex/` with `.claude/`", () => {
     const content = "See .codex/skills/oracle/ for details";
     const result = reversePlatformPaths(content, "codex");
     expect(result).toBe("See .claude/skills/oracle/ for details");
   });
 
-  it("claude: 내용 그대로 반환", () => {
+  it("returns content unchanged for claude platform", () => {
     const content = "See .claude/skills/oracle/ for details";
     const result = reversePlatformPaths(content, "claude");
     expect(result).toBe(content);
   });
 
-  it("여러 번 등장하는 경우 모두 치환", () => {
+  it("replaces all occurrences in content", () => {
     const content = ".gemini/agents/oracle.md and .gemini/skills/prometheus/";
     const result = reversePlatformPaths(content, "gemini");
     expect(result).toBe(".claude/agents/oracle.md and .claude/skills/prometheus/");
@@ -123,7 +139,7 @@ ${extra}---
 
 # Oracle body`;
 
-  it("add-skills 있고 소스에 skills 없음: deployed에서 skills 키 제거", () => {
+  it("removes `skills` key when `add-skills` present and source has no skills", () => {
     const deployed = makeDeployedWithSkills(["testing"]);
     const source = makeSource();
     const syncItem = { component: "oracle", "add-skills": ["testing"] };
@@ -134,7 +150,7 @@ ${extra}---
     expect("skills" in frontmatter).toBe(false);
   });
 
-  it("add-skills 있고 소스에 skills 있음: 소스의 skills 값으로 복원", () => {
+  it("restores source `skills` value when `add-skills` present and source has skills", () => {
     const deployed = makeDeployedWithSkills(["testing", "pre-existing"]);
     const source = makeSource("skills:\n  - pre-existing\n");
     const syncItem = { component: "oracle", "add-skills": ["testing"] };
@@ -145,7 +161,7 @@ ${extra}---
     expect(fm["skills"]).toEqual(["pre-existing"]);
   });
 
-  it("add-hooks 있고 소스에 hooks 없음: deployed에서 hooks 키 제거", () => {
+  it("removes `hooks` key when `add-hooks` present and source has no hooks", () => {
     const deployed = `---
 name: oracle
 model: sonnet
@@ -171,7 +187,7 @@ hooks:
     expect("hooks" in fm).toBe(false);
   });
 
-  it("string 아이템: 내용 그대로 반환", () => {
+  it("returns content unchanged for string sync items", () => {
     const deployed = makeDeployedWithSkills(["testing"]);
     const source = makeSource();
     const syncItem = "oracle";
@@ -181,7 +197,7 @@ hooks:
     expect(result).toBe(deployed);
   });
 
-  it("add-skills/add-hooks 없는 오브젝트 아이템: 내용 그대로 반환", () => {
+  it("returns content unchanged for object items without `add-skills`/`add-hooks`", () => {
     const deployed = makeDeployedWithSkills(["testing"]);
     const source = makeSource();
     const syncItem = { component: "oracle", platforms: ["claude"] as const };
@@ -191,7 +207,7 @@ hooks:
     expect(result).toBe(deployed);
   });
 
-  it("deployed body가 결과에 보존됨", () => {
+  it("preserves deployed body in result", () => {
     const deployedBody = "\n# Oracle body with DEPLOYED changes";
     const deployed = `---
 name: oracle
