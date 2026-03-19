@@ -35,16 +35,9 @@ find_project_root() {
 PROJECT_ROOT=$(find_project_root "$CWD")
 
 # Compute OMT_DIR if not already set by session-start.sh
-if [[ -z "$OMT_DIR" ]]; then
-  _omt_git_common=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)
-  _omt_pname=""
-  if [[ -n "$_omt_git_common" ]] && [[ "$_omt_git_common" != ".git" ]]; then
-    _omt_pname=$(basename "$(dirname "$_omt_git_common")")
-  else
-    _omt_pname=$(basename "$PROJECT_ROOT")
-  fi
-  OMT_DIR="$HOME/.omt/${_omt_pname// /-}"
-fi
+SCRIPT_DIR_SN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR_SN/lib/omt-dir.sh"
+compute_omt_dir "$PROJECT_ROOT"
 
 # --- 조건 검사: ralph-state 활성 여부 ---
 RALPH_STATE_FILE="$OMT_DIR/ralph-state-${SESSION_ID}.json"
