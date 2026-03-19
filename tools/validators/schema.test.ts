@@ -359,7 +359,7 @@ unknown-section: value
       expect(result.warnings.some((w) => w.includes("unknown-section"))).toBe(true);
     });
 
-    it("returns warning for unknown section in gemini.yaml via `validatePlatformYaml`", () => {
+    it("does not warn for plugins section in gemini.yaml via `validatePlatformYaml`", () => {
       const path = writeYaml(dir, "gemini.yaml", `
 config:
   model: gemini-pro
@@ -367,7 +367,7 @@ plugins:
   items: []
 `);
       const result = validatePlatformYaml(path, "gemini");
-      expect(result.warnings.some((w) => w.includes("plugins"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("plugins"))).toBe(false);
     });
 
     it("returns warning for hooks section in codex.yaml via `validatePlatformYaml`", () => {

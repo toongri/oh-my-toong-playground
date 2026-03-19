@@ -4,6 +4,7 @@ import path from "path";
 import os from "os";
 
 import { GeminiAdapter } from "./gemini.ts";
+import type { ExtensionInstaller, CommandRunner } from "./gemini.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -747,6 +748,120 @@ describe("syncPlatformYaml", () => {
     expect(settings["Stop"]).toBeUndefined();
     expect(settings["UserPromptSubmit"]).toBeDefined();
     expect(settings["customInstructions"]).toBe("keep me");
+  });
+
+  it("processes plugins section with string item and includes it in processedSections via `syncPlatformYaml`", async () => {
+    const installed: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { installed.push(name); };
+    const adapterWithDI = new GeminiAdapter(installer);
+
+    const yaml = { plugins: { items: ["github.com/user/my-extension"] } };
+    const result = await adapterWithDI.syncPlatformYaml(targetPath, yaml, false);
+
+    expect(result.processedSections).toContain("plugins");
+    expect(installed).toEqual(["github.com/user/my-extension"]);
+  });
+
+  it("logs dry-run message for string plugin item without installing via `syncPlatformYaml`", async () => {
+    const installed: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { installed.push(name); };
+    const adapterWithDI = new GeminiAdapter(installer);
+
+    const yaml = { plugins: { items: ["github.com/user/my-extension"] } };
+    await adapterWithDI.syncPlatformYaml(targetPath, yaml, true);
+
+    expect(installed).toHaveLength(0);
+  });
+
+  it("skips install when check exits 0 for object plugin item via `syncPlatformYaml`", async () => {
+    const installed: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { installed.push(name); };
+    const runner: CommandRunner = async () => ({ exitCode: 0 });
+    const adapterWithDI = new GeminiAdapter(installer, runner);
+
+    const yaml = {
+      plugins: {
+        items: [{ name: "github.com/user/ext", check: "gemini extensions list | grep ext" }],
+      },
+    };
+    await adapterWithDI.syncPlatformYaml(targetPath, yaml, false);
+
+    expect(installed).toHaveLength(0);
+  });
+
+  it("installs when check exits non-zero for object plugin item via `syncPlatformYaml`", async () => {
+    const installed: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { installed.push(name); };
+    const runner: CommandRunner = async () => ({ exitCode: 1 });
+    const adapterWithDI = new GeminiAdapter(installer, runner);
+
+    const yaml = {
+      plugins: {
+        items: [{ name: "github.com/user/ext", check: "gemini extensions list | grep ext" }],
+      },
+    };
+    await adapterWithDI.syncPlatformYaml(targetPath, yaml, false);
+
+    expect(installed).toEqual(["github.com/user/ext"]);
+  });
+
+  it("runs pre-commands before install for object plugin item via `syncPlatformYaml`", async () => {
+    const calls: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { calls.push(`install:${name}`); };
+    const runner: CommandRunner = async (cmd) => { calls.push(`run:${cmd}`); return { exitCode: 1 }; };
+    const adapterWithDI = new GeminiAdapter(installer, runner);
+
+    const yaml = {
+      plugins: {
+        items: [{
+          name: "github.com/user/ext",
+          check: "check-cmd",
+          "pre-commands": ["setup-cmd"],
+        }],
+      },
+    };
+    await adapterWithDI.syncPlatformYaml(targetPath, yaml, false);
+
+    // check runs first, then pre-commands, then install
+    expect(calls[0]).toBe("run:check-cmd");
+    expect(calls[1]).toBe("run:setup-cmd");
+    expect(calls[2]).toBe("install:github.com/user/ext");
+  });
+
+  it("logs warning and continues when install fails for string plugin item via `syncPlatformYaml`", async () => {
+    const installer: ExtensionInstaller = async () => { throw new Error("install failed"); };
+    const adapterWithDI = new GeminiAdapter(installer);
+
+    const yaml = { plugins: { items: ["github.com/user/ext"] } };
+
+    await expect(
+      adapterWithDI.syncPlatformYaml(targetPath, yaml, false),
+    ).resolves.toBeDefined();
+  });
+
+  it("skips object plugin item with no name and continues via `syncPlatformYaml`", async () => {
+    const installed: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { installed.push(name); };
+    const adapterWithDI = new GeminiAdapter(installer);
+
+    const yaml = { plugins: { items: [{ check: "some-check" }] } };
+    const result = await adapterWithDI.syncPlatformYaml(targetPath, yaml, false);
+
+    expect(result.processedSections).toContain("plugins");
+    expect(installed).toHaveLength(0);
+  });
+
+  it("logs dry-run message for object plugin item without installing via `syncPlatformYaml`", async () => {
+    const installed: string[] = [];
+    const installer: ExtensionInstaller = async (name) => { installed.push(name); };
+    const adapterWithDI = new GeminiAdapter(installer);
+
+    const yaml = {
+      plugins: { items: [{ name: "github.com/user/ext", check: "check-cmd" }] },
+    };
+    await adapterWithDI.syncPlatformYaml(targetPath, yaml, true);
+
+    expect(installed).toHaveLength(0);
   });
 
   it("extracts displayName via `path.basename()` from absolute component path and copies hook via `syncPlatformYaml`", async () => {

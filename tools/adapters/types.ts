@@ -1,4 +1,4 @@
-import type { Platform, PlatformConfigResult } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PluginScope } from "../lib/types.ts";
 
 /**
  * Common interface for all platform adapters.
@@ -82,6 +82,7 @@ export interface PlatformAdapter {
     targetPath: string,
     platformYaml: Record<string, unknown>,
     dryRun: boolean,
+    scope?: PluginScope,
   ): Promise<PlatformConfigResult>;
 
   /**

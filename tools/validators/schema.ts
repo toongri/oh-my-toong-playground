@@ -89,7 +89,7 @@ const VALID_HOOK_TYPES = new Set(["command", "prompt"]);
 
 const PLATFORM_ALLOWED_SECTIONS: Record<string, Set<string>> = {
   claude: new Set(["config", "hooks", "mcps", "plugins", "statusLine"]),
-  gemini: new Set(["config", "hooks", "mcps"]),
+  gemini: new Set(["config", "hooks", "mcps", "plugins"]),
   codex: new Set(["config", "mcps", "model-map"]),
   opencode: new Set(["config", "mcps", "model-map"]),
 };

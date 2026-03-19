@@ -6,6 +6,7 @@ import os from "os";
 import {
   applyModelMap,
   translateAgentFrontmatter,
+  transformMcpServerDef,
   syncConfig,
   syncMcpsMerge,
   opencodeAdapter,
@@ -250,6 +251,64 @@ describe("syncConfig", () => {
 });
 
 // =============================================================================
+// transformMcpServerDef
+// =============================================================================
+
+describe("transformMcpServerDef", () => {
+  it("converts command string + args array to type: local and merged command array via `transformMcpServerDef`", () => {
+    const result = transformMcpServerDef({
+      command: "npx",
+      args: ["-y", "@upstash/context7-mcp@latest"],
+    });
+
+    expect(result["type"]).toBe("local");
+    expect(result["command"]).toEqual(["npx", "-y", "@upstash/context7-mcp@latest"]);
+    expect(result["args"]).toBeUndefined();
+  });
+
+  it("passes through definition already in OpenCode format (type present, command is array) via `transformMcpServerDef`", () => {
+    const input = {
+      type: "local",
+      command: ["npx", "-y", "@upstash/context7-mcp@latest"],
+    };
+    const result = transformMcpServerDef(input);
+
+    expect(result).toEqual(input);
+  });
+
+  it("renames env to environment via `transformMcpServerDef`", () => {
+    const result = transformMcpServerDef({
+      command: "npx",
+      args: ["my-mcp"],
+      env: { API_KEY: "secret" },
+    });
+
+    expect(result["environment"]).toEqual({ API_KEY: "secret" });
+    expect(result["env"]).toBeUndefined();
+  });
+
+  it("renames env to environment when definition is already in OpenCode format via `transformMcpServerDef`", () => {
+    const result = transformMcpServerDef({
+      type: "local",
+      command: ["npx", "my-mcp"],
+      env: { TOKEN: "abc" },
+    });
+
+    expect(result["environment"]).toEqual({ TOKEN: "abc" });
+    expect(result["env"]).toBeUndefined();
+    expect(result["type"]).toBe("local");
+    expect(result["command"]).toEqual(["npx", "my-mcp"]);
+  });
+
+  it("passes through non-local type definitions (e.g. http) without modification via `transformMcpServerDef`", () => {
+    const input = { type: "http", url: "http://localhost:3000" };
+    const result = transformMcpServerDef(input);
+
+    expect(result).toEqual(input);
+  });
+});
+
+// =============================================================================
 // syncMcpsMerge
 // =============================================================================
 
@@ -315,6 +374,39 @@ describe("syncMcpsMerge", () => {
       .then(() => true)
       .catch(() => false);
     expect(exists).toBe(false);
+  });
+
+  it("transforms common format to OpenCode McpLocal format via `syncMcpsMerge`", async () => {
+    await syncMcpsMerge(
+      tmpDir,
+      "context7",
+      { command: "npx", args: ["-y", "@upstash/context7-mcp@latest"] },
+      false,
+    );
+
+    const config = await readJson(
+      path.join(tmpDir, ".opencode", "opencode.json"),
+    );
+    const mcp = config["mcp"] as Record<string, unknown>;
+    expect(mcp["context7"]).toEqual({
+      type: "local",
+      command: ["npx", "-y", "@upstash/context7-mcp@latest"],
+    });
+  });
+
+  it("removes stale top-level env key from opencode.json via `syncMcpsMerge`", async () => {
+    const configFile = path.join(tmpDir, ".opencode", "opencode.json");
+    await writeJson(configFile, { env: { OLD_KEY: "stale" }, mcp: {} });
+
+    await syncMcpsMerge(
+      tmpDir,
+      "context7",
+      { type: "http", url: "http://localhost:3000" },
+      false,
+    );
+
+    const config = await readJson(configFile);
+    expect(config["env"]).toBeUndefined();
   });
 });
 

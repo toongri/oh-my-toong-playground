@@ -18,13 +18,44 @@ import fs from "fs/promises";
 import path from "path";
 import { stringify as tomlStringify } from "smol-toml";
 
-import type { Platform, PlatformConfigResult, PlatformYaml } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
+
+// =============================================================================
+// Extension installer types (for DI in tests)
+// =============================================================================
+
+export type ExtensionInstaller = (name: string) => Promise<void>;
+export type CommandRunner = (command: string, cwd: string) => Promise<{ exitCode: number }>;
+
+async function defaultExtensionInstaller(name: string): Promise<void> {
+  const proc = Bun.spawn(["gemini", "extensions", "install", name], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  await proc.exited;
+  if (proc.exitCode !== 0) {
+    throw new Error(`gemini extensions install ${name} failed`);
+  }
+}
+
+async function defaultCommandRunner(
+  command: string,
+  cwd: string,
+): Promise<{ exitCode: number }> {
+  const proc = Bun.spawn(["bash", "-c", command], {
+    cwd,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  await proc.exited;
+  return { exitCode: proc.exitCode ?? 1 };
+}
 
 // =============================================================================
 // Gemini Adapter
@@ -34,6 +65,14 @@ export class GeminiAdapter implements PlatformAdapter {
   readonly platform: Platform = "gemini";
   readonly configDir: string = ".gemini";
   readonly contextFile: string = "GEMINI.md";
+
+  private readonly _installExtension: ExtensionInstaller;
+  private readonly _runCommand: CommandRunner;
+
+  constructor(installExtension?: ExtensionInstaller, runCommand?: CommandRunner) {
+    this._installExtension = installExtension ?? defaultExtensionInstaller;
+    this._runCommand = runCommand ?? defaultCommandRunner;
+  }
 
   // ---------------------------------------------------------------------------
   // syncAgentsDirect
@@ -383,8 +422,8 @@ export class GeminiAdapter implements PlatformAdapter {
   /**
    * Processes all sections from a gemini.yaml platform config object.
    *
-   * Sections handled: config, hooks, mcps
-   * Not handled: model-map (Gemini has none), plugins (not supported)
+   * Sections handled: config, hooks, mcps, plugins (as extensions)
+   * Not handled: model-map (Gemini has none)
    *
    * Returns the list of processed sections with modelMap: undefined.
    */
@@ -392,6 +431,7 @@ export class GeminiAdapter implements PlatformAdapter {
     targetPath: string,
     platformYaml: Record<string, unknown>,
     dryRun: boolean,
+    _scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
     const yaml = platformYaml as PlatformYaml;
     const processedSections: string[] = [];
@@ -523,6 +563,91 @@ export class GeminiAdapter implements PlatformAdapter {
       processedSections.push("mcps");
     }
 
+    // --- plugins (extensions) ---
+    if (yaml.plugins?.items != null) {
+      for (const item of yaml.plugins.items) {
+        if (typeof item === "string" && item) {
+          await this._installExtensionSafe(item, dryRun);
+        } else if (typeof item === "object" && item !== null) {
+          await this._installExtensionObjectSafe(
+            item as Record<string, unknown>,
+            targetPath,
+            dryRun,
+          );
+        }
+      }
+      processedSections.push("plugins");
+    }
+
     return { processedSections, modelMap: undefined };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private extension install helpers
+  // ---------------------------------------------------------------------------
+
+  private async _installExtensionSafe(name: string, dryRun: boolean): Promise<void> {
+    if (dryRun) {
+      logDry(`gemini extensions install ${name}`);
+      return;
+    }
+
+    try {
+      await this._installExtension(name);
+      logInfo(`익스텐션 설치 완료: ${name}`);
+    } catch {
+      logWarn(`익스텐션 설치 실패 (계속 진행): ${name}`);
+    }
+  }
+
+  private async _installExtensionObjectSafe(
+    item: Record<string, unknown>,
+    targetPath: string,
+    dryRun: boolean,
+  ): Promise<void> {
+    const name = typeof item["name"] === "string" ? item["name"] : "";
+    if (!name) {
+      logWarn("익스텐션 항목에 name이 없음 (스킵)");
+      return;
+    }
+
+    const check = typeof item["check"] === "string" ? item["check"] : "";
+    const preCommands = Array.isArray(item["pre-commands"])
+      ? (item["pre-commands"] as string[])
+      : [];
+
+    if (dryRun) {
+      logDry(`gemini extensions install ${name}`);
+      return;
+    }
+
+    // Run check — skip install if exit 0
+    if (check) {
+      try {
+        const { exitCode } = await this._runCommand(check, targetPath);
+        if (exitCode === 0) {
+          logInfo(`익스텐션 이미 설치됨 (스킵): ${name}`);
+          return;
+        }
+      } catch {
+        // check failed — proceed with install
+      }
+    }
+
+    // Run pre-commands
+    for (const cmd of preCommands) {
+      try {
+        await this._runCommand(cmd, targetPath);
+      } catch {
+        logWarn(`pre-command 실패 (계속 진행): ${cmd}`);
+      }
+    }
+
+    try {
+      await this._installExtension(name);
+      logInfo(`익스텐션 설치 완료: ${name}`);
+    } catch {
+      logWarn(`익스텐션 설치 실패 (계속 진행): ${name}`);
+    }
   }
 }

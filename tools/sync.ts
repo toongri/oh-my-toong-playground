@@ -21,6 +21,7 @@ import type {
   SyncItem,
   SyncYaml,
   SyncContext,
+  PluginScope,
 } from "./lib/types.ts";
 import { getRootDir, getBackupRetentionDays } from "./lib/config.ts";
 import {
@@ -351,7 +352,8 @@ export async function syncPlatformConfigs(
     }
 
     try {
-      const result = await adapter.syncPlatformYaml(targetPath, parsedYaml, context.dryRun);
+      const pluginScope: PluginScope = context.isRootYaml ? "user" : "project";
+      const result = await adapter.syncPlatformYaml(targetPath, parsedYaml, context.dryRun, pluginScope);
 
       if (result.processedSections.length > 0) {
         context.platformYamlSections.set(platform, result.processedSections);

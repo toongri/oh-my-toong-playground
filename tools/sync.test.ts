@@ -766,6 +766,48 @@ describe("syncPlatformConfigs", () => {
     // adapter never called because file was skipped
     expect(adapters.getAdapter("claude")!.calls.filter((c) => c.method === "syncPlatformYaml")).toHaveLength(0);
   });
+
+  it("passes 'user' scope for root yaml", async () => {
+    await writeFile(path.join(yamlDir, "claude.yaml"), "config:\n  theme: dark\n");
+
+    const receivedScopes: Array<string | undefined> = [];
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async (_t, _y, _d, scope) => {
+      receivedScopes.push(scope);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+    const context = makeContext({ isRootYaml: true });
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    expect(receivedScopes).toEqual(["user"]);
+  });
+
+  it("passes 'project' scope for project yaml", async () => {
+    await writeFile(path.join(yamlDir, "claude.yaml"), "config:\n  theme: dark\n");
+
+    const receivedScopes: Array<string | undefined> = [];
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async (_t, _y, _d, scope) => {
+      receivedScopes.push(scope);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+    const context = makeContext({ isRootYaml: false });
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    expect(receivedScopes).toEqual(["project"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
