@@ -123,7 +123,7 @@ skills:
 
 **Ralph Loop**:
 - Iterative completion enforcement with oracle verification
-- State file at `.omt/ralph-state.json`
+- State file at `~/.omt/{OMT_PROJECT}/ralph-state.json` (resolved via `$OMT_DIR` env var)
 - Cancel with `/cancel-ralph`
 
 ## Coding Conventions

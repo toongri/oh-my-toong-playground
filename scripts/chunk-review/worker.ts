@@ -5,6 +5,7 @@ import path from 'path';
 
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { findProjectRoot, exitWithError, parseArgs } from '@lib/job-utils';
+import { getOmtDir } from '@lib/omt-dir';
 import {
   splitCommand,
   atomicWriteJson,
@@ -56,9 +57,8 @@ function main() {
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
   // Initialize persistent logging
-  const projectRoot = findProjectRoot(import.meta.dirname);
   const jobId = jobDir ? path.basename(jobDir).replace(/^chunk-review-/, '') : 'unknown';
-  initLogger('chunk-review-worker', projectRoot, jobId);
+  initLogger('chunk-review-worker', getOmtDir(), jobId);
   logStart();
 
   // Parse --env args: collect KEY=VALUE pairs

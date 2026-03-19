@@ -46,30 +46,21 @@ get_project_root() {
 # Get project root
 PROJECT_ROOT=$(get_project_root "$DIRECTORY")
 
-# Derive OMT_PROJECT name (main repo name, not worktree branch name)
-PROJECT_NAME=""
-if command -v git &> /dev/null; then
-  GIT_COMMON_DIR=$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)
-  if [ -n "$GIT_COMMON_DIR" ] && [ "$GIT_COMMON_DIR" != ".git" ]; then
-    # Worktree: git-common-dir returns absolute path like /path/to/repo/.git
-    PROJECT_NAME=$(basename "$(dirname "$GIT_COMMON_DIR")")
-  elif [ "$GIT_COMMON_DIR" = ".git" ]; then
-    # Standard repo: use toplevel directory name
-    PROJECT_NAME=$(basename "$(git -C "$PROJECT_ROOT" rev-parse --show-toplevel 2>/dev/null)")
-  fi
-fi
-
-# Final fallback: use PROJECT_ROOT basename
-if [ -z "$PROJECT_NAME" ]; then
-  PROJECT_NAME=$(basename "$PROJECT_ROOT")
-fi
-
-# Sanitize: replace spaces with hyphens to prevent shell parsing issues
-PROJECT_NAME="${PROJECT_NAME// /-}"
+# Compute OMT_DIR via shared library
+SCRIPT_DIR_SS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=hooks/lib/omt-dir.sh
+source "$SCRIPT_DIR_SS/lib/omt-dir.sh"
+compute_omt_dir "$PROJECT_ROOT"
+PROJECT_NAME=$(basename "$OMT_DIR")
 
 # Export OMT_PROJECT via Claude env file
 if [ -n "$CLAUDE_ENV_FILE" ]; then
-  echo "export OMT_PROJECT=$PROJECT_NAME" >> "$CLAUDE_ENV_FILE"
+  echo "export OMT_PROJECT=\"$PROJECT_NAME\"" >> "$CLAUDE_ENV_FILE"
+fi
+
+# Export OMT_DIR via Claude env file
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  echo "export OMT_DIR=\"$OMT_DIR\"" >> "$CLAUDE_ENV_FILE"
 fi
 
 MESSAGES=""
@@ -79,7 +70,7 @@ if command -v jq &> /dev/null; then
   STALE_THRESHOLD=10800  # 3 hours in seconds
   CURRENT_TIME=$(date +%s)
 
-  for state_file in "$PROJECT_ROOT"/.omt/ralph-state-*.json; do
+  for state_file in "$OMT_DIR"/ralph-state-*.json; do
     if [ -f "$state_file" ]; then
       STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
       if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
@@ -99,8 +90,8 @@ if command -v jq &> /dev/null; then
 fi
 
 # Check for active ralph loop state (session-specific)
-if [ -f "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" ]; then
-  RALPH_STATE=$(cat "$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json" 2>/dev/null)
+if [ -f "$OMT_DIR/ralph-state-${SESSION_ID}.json" ]; then
+  RALPH_STATE=$(cat "$OMT_DIR/ralph-state-${SESSION_ID}.json" 2>/dev/null)
 
   if command -v jq &> /dev/null; then
     IS_ACTIVE=$(echo "$RALPH_STATE" | jq -r '.active // false' 2>/dev/null)
@@ -136,7 +127,7 @@ if [ -d "$TODOS_DIR" ]; then
 fi
 
 # Check for incomplete todos in project directory
-for todo_path in "$PROJECT_ROOT/.omt/todos.json" "$DIRECTORY/.claude/todos.json"; do
+for todo_path in "$OMT_DIR/todos.json" "$DIRECTORY/.claude/todos.json"; do
   if [ -f "$todo_path" ]; then
     if command -v jq &> /dev/null; then
       COUNT=$(jq 'if type == "array" then [.[] | select(.status != "completed" and .status != "cancelled")] | length else 0 end' "$todo_path" 2>/dev/null || echo "0")

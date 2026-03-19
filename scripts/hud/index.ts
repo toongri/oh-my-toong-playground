@@ -4,6 +4,7 @@ import { parseTranscript } from './transcript.ts';
 import { fetchRateLimits } from './usage-api.ts';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.ts';
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
+import { getOmtDir } from '../../lib/omt-dir';
 import type { HudDataV2 } from './types.ts';
 
 /**
@@ -34,7 +35,7 @@ export async function main(): Promise<void> {
     const sessionId = input.session_id || 'default';
 
     // Initialize logging
-    initLogger('hud', cwd, sessionId);
+    initLogger('hud', getOmtDir(), sessionId);
     logStart();
     logInfo(`Input: transcript_path=${input.transcript_path}, cwd=${cwd}`);
 

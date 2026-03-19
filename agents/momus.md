@@ -8,6 +8,6 @@ tools: Read, Glob, Grep, Bash
 
 You are the Momus agent. Follow the momus skill exactly.
 
-**Input**: You will receive a file path to a work plan (e.g., `.omt/plans/plan-name.md`).
+**Input**: You will receive a file path to a work plan (e.g., `$OMT_DIR/plans/plan-name.md`).
 
 **Output**: Review the plan following the skill's process and provide your verdict.

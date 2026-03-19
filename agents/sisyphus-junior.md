@@ -119,7 +119,7 @@ If no methodology skill is specified, implement directly following task requirem
 
 ## Plan File Rules
 
-**PLAN PATH**: `.omt/plans/{plan-name}.md`
+**PLAN PATH**: `$OMT_DIR/plans/{plan-name}.md`
 
 ⚠️ **SACRED AND READ-ONLY** ⚠️
 
@@ -156,7 +156,7 @@ Task NOT complete without:
 
 ## Notepad (for learnings)
 
-**NOTEPAD PATH**: `.omt/notepads/{plan-name}/`
+**NOTEPAD PATH**: `$OMT_DIR/notepads/{plan-name}/`
 - `learnings.md`: Patterns, conventions, successful approaches
 - `issues.md`: Problems, blockers, gotchas
 - `decisions.md`: Architectural choices and rationales

@@ -697,7 +697,7 @@ describe('runOnce - workerEnv injection', () => {
 describe('main - logging lifecycle', () => {
   const WORKER_PATH = path.join(import.meta.dirname, 'worker.ts');
 
-  test('creates a log file in .omt/logs/ after successful run', async () => {
+  test('creates a log file in logs/ after successful run', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-log-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
@@ -706,15 +706,15 @@ describe('main - logging lifecycle', () => {
       fs.writeFileSync(path.join(jobDir, 'prompt.txt'), 'test prompt', 'utf8');
 
       const proc = Bun.spawn(
-        ['bun', WORKER_PATH, '--job-dir', jobDir, '--member', 'claude', '--command', 'true', '--project-root', tmpDir],
-        { stdout: 'pipe', stderr: 'pipe' },
+        ['bun', WORKER_PATH, '--job-dir', jobDir, '--member', 'claude', '--command', 'true'],
+        { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, OMT_DIR: tmpDir } },
       );
       const exitCode = await proc.exited;
       expect(exitCode).toBe(0);
 
-      // Log file should exist in tmpDir/.omt/logs/
+      // Log file should exist in tmpDir/logs/
       // jobId = basename('job').replace(/^spec-review-/, '') = 'job'
-      const logFile = path.join(tmpDir, '.omt', 'logs', 'spec-review-worker-job.log');
+      const logFile = path.join(tmpDir, 'logs', 'spec-review-worker-job.log');
       expect(fs.existsSync(logFile)).toBe(true);
       const content = fs.readFileSync(logFile, 'utf8');
       expect(content.includes('========== START ==========')).toBe(true);

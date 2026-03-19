@@ -24,6 +24,7 @@ import {
 } from '@lib/job-utils';
 
 import { initLogger, logInfo, logStart, logEnd } from '@lib/logging';
+import { getOmtDir } from '@lib/omt-dir';
 
 import {
   type JobConfig,
@@ -53,7 +54,7 @@ const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'chunk-review.config.yaml');
 const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'chunk-review.config.yaml');
 
-const DEFAULT_JOBS_DIR = process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
+const DEFAULT_JOBS_DIR = process.env.CHUNK_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
 // ---------------------------------------------------------------------------
 // JobConfig for chunk-review
@@ -111,7 +112,7 @@ function parseYamlSimple(configPath: string, fallback: Record<string, any>) {
 
 function initLoggerFromJobDir(jobDir: string): void {
   const jobId = path.basename(jobDir).replace(/^chunk-review-/, '');
-  initLogger('chunk-review-job', PROJECT_ROOT, jobId);
+  initLogger('chunk-review-job', getOmtDir(), jobId);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +307,7 @@ Notes:
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
   const configPath = (options.config as string | undefined) || process.env.CHUNK_REVIEW_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    (options['jobs-dir'] as string | undefined) || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(PROJECT_ROOT, '.omt', 'jobs');
+    (options['jobs-dir'] as string | undefined) || process.env.CHUNK_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir);
@@ -340,7 +341,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   if (members.length === 0) exitWithError('start: no members remaining after filtering');
 
   const jobId = generateJobId();
-  initLogger('chunk-review-job', PROJECT_ROOT, jobId);
+  initLogger('chunk-review-job', getOmtDir(), jobId);
   logStart();
   logInfo(`GC: stale jobs cleaned`);
   logInfo(`config: ${configPath}, chairman: ${chairmanRole}, members: ${members.length}`);

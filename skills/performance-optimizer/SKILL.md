@@ -66,7 +66,7 @@ digraph perf_workflow {
     more_bottlenecks [label="More bottlenecks\nto improve?" shape=diamond];
 
     // Step 10: Final Report
-    report [label="Step 10: Generate Final Report\n(.omt/performance-reports/*.md)"];
+    report [label="Step 10: Generate Final Report\n($OMT_DIR/performance-reports/*.md)"];
 
     // End
     complete [label="Optimization\nComplete" shape=ellipse];
@@ -417,14 +417,14 @@ Good example:
 
 ## Output Location
 
-All performance optimization reports are stored in the `.omt/performance-reports/` directory.
+All performance optimization reports are stored in the `$OMT_DIR/performance-reports/` directory.
 
-**Naming Convention:** `.omt/performance-reports/{feature-name}-performance-report.md`
+**Naming Convention:** `$OMT_DIR/performance-reports/{feature-name}-performance-report.md`
 
 **Examples:**
-- `.omt/performance-reports/product-list-api-performance-report.md`
-- `.omt/performance-reports/order-processing-performance-report.md`
-- `.omt/performance-reports/search-api-performance-report.md`
+- `$OMT_DIR/performance-reports/product-list-api-performance-report.md`
+- `$OMT_DIR/performance-reports/order-processing-performance-report.md`
+- `$OMT_DIR/performance-reports/search-api-performance-report.md`
 
 ## Output Format
 

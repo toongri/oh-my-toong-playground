@@ -63,7 +63,7 @@ This project uses `make` to validate and sync configurations to your local envir
 - **Testing**: Test display names in Korean; method names in English.
 
 ### Workflow Principles
-1.  **Plan First**: Use `Prometheus` to generate a plan (`.omt/plans/*.md`) before any code is written.
+1.  **Plan First**: Use `Prometheus` to generate a plan (`~/.omt/{OMT_PROJECT}/plans/*.md`, via `$OMT_DIR`) before any code is written.
 2.  **Orchestrate**: Use `Sisyphus` to execute the plan. Sisyphus delegates the actual coding to `Sisyphus-Junior`.
 3.  **Verify**: Use `Oracle` or `Code-Reviewer` to validate changes.
 4.  **Ralph Loop**: A mechanism (`/ralph`) to enforce iterative work until a strict definition of done is met.

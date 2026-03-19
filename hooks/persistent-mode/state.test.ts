@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import {
   readRalphState,
   updateRalphState,
@@ -12,13 +12,14 @@ import type { RalphState } from './types.ts';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { tmpdir, homedir } from 'os';
+import { tmpdir } from 'os';
 
 describe('Ralph state management', () => {
   const testDir = join(tmpdir(), 'state-test-ralph-' + Date.now());
-  const projectRoot = join(testDir, 'project');
-  const omtDir = join(projectRoot, '.omt');
+  const omtDir = join(testDir, 'omt');
   const sessionId = 'test-session';
+
+  const savedOmtDir = process.env.OMT_DIR;
 
   beforeAll(async () => {
     await mkdir(omtDir, { recursive: true });
@@ -29,14 +30,23 @@ describe('Ralph state management', () => {
   });
 
   beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
     // Clean up state files before each test
     const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
     try { await rm(stateFile, { force: true }); } catch {}
   });
 
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
+  });
+
   describe('readRalphState', () => {
     it('should return null when state file does not exist', () => {
-      const result = readRalphState(projectRoot, 'nonexistent');
+      const result = readRalphState('nonexistent');
 
       expect(result).toBeNull();
     });
@@ -54,7 +64,7 @@ describe('Ralph state management', () => {
         JSON.stringify(state)
       );
 
-      const result = readRalphState(projectRoot, sessionId);
+      const result = readRalphState(sessionId);
 
       expect(result).not.toBeNull();
       expect(result?.active).toBe(true);
@@ -75,7 +85,7 @@ describe('Ralph state management', () => {
         JSON.stringify(state)
       );
 
-      const result = readRalphState(projectRoot, sessionId);
+      const result = readRalphState(sessionId);
 
       expect(result).toBeNull();
     });
@@ -86,7 +96,7 @@ describe('Ralph state management', () => {
         'invalid json {'
       );
 
-      const result = readRalphState(projectRoot, sessionId);
+      const result = readRalphState(sessionId);
 
       expect(result).toBeNull();
     });
@@ -103,7 +113,7 @@ describe('Ralph state management', () => {
         oracle_feedback: ['Feedback 1'],
       };
 
-      updateRalphState(projectRoot, sessionId, state);
+      updateRalphState(sessionId, state);
 
       const content = await readFile(
         join(omtDir, `ralph-state-${sessionId}.json`),
@@ -115,7 +125,8 @@ describe('Ralph state management', () => {
     });
 
     it('should create directory if it does not exist', async () => {
-      const newProjectRoot = join(testDir, 'new-project');
+      const newOmtDir = join(testDir, 'new-omt');
+      process.env.OMT_DIR = newOmtDir;
       const state: RalphState = {
         active: true,
         iteration: 1,
@@ -124,9 +135,9 @@ describe('Ralph state management', () => {
         prompt: 'New task',
       };
 
-      updateRalphState(newProjectRoot, sessionId, state);
+      updateRalphState(sessionId, state);
 
-      const stateFile = join(newProjectRoot, '.omt', `ralph-state-${sessionId}.json`);
+      const stateFile = join(newOmtDir, `ralph-state-${sessionId}.json`);
       expect(existsSync(stateFile)).toBe(true);
     });
   });
@@ -136,13 +147,13 @@ describe('Ralph state management', () => {
       const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
       await writeFile(stateFile, '{}');
 
-      cleanupRalphState(projectRoot, sessionId);
+      cleanupRalphState(sessionId);
 
       expect(existsSync(stateFile)).toBe(false);
     });
 
     it('should not throw when file does not exist', () => {
-      expect(() => cleanupRalphState(projectRoot, 'nonexistent')).not.toThrow();
+      expect(() => cleanupRalphState('nonexistent')).not.toThrow();
     });
   });
 });

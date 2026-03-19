@@ -5,6 +5,7 @@ import path from 'path';
 
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { parseArgs, exitWithError } from '@lib/job-utils';
+import { getOmtDir } from '@lib/omt-dir';
 import {
   splitCommand,
   atomicWriteJson,
@@ -81,11 +82,8 @@ function main() {
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
   // Initialize persistent logging
-  const projectRoot = options['project-root']
-    ? String(options['project-root'])
-    : path.resolve(import.meta.dirname, '../../..');
   const jobId = jobDir ? path.basename(String(jobDir)).replace(/^council-/, '') : 'unknown';
-  initLogger('council-job-worker', projectRoot, jobId);
+  initLogger('council-job-worker', getOmtDir(), jobId);
   logStart();
 
   // Parse --env args: collect KEY=VALUE pairs

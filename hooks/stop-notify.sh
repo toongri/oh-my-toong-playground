@@ -34,8 +34,13 @@ find_project_root() {
 
 PROJECT_ROOT=$(find_project_root "$CWD")
 
+# Compute OMT_DIR if not already set by session-start.sh
+SCRIPT_DIR_SN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR_SN/lib/omt-dir.sh"
+compute_omt_dir "$PROJECT_ROOT"
+
 # --- 조건 검사: ralph-state 활성 여부 ---
-RALPH_STATE_FILE="$PROJECT_ROOT/.omt/ralph-state-${SESSION_ID}.json"
+RALPH_STATE_FILE="$OMT_DIR/ralph-state-${SESSION_ID}.json"
 if [[ -f "$RALPH_STATE_FILE" ]]; then
   RALPH_ACTIVE=$(jq -r '.active // false' "$RALPH_STATE_FILE" 2>/dev/null)
   if [[ "$RALPH_ACTIVE" == "true" ]]; then

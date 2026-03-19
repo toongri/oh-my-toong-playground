@@ -1170,12 +1170,12 @@ describe('parseYamlSimple', () => {
       'chunk-review:',
       '  context:',
       '    shared_context_dir: ~/my/context',
-      '    specs_dir: .omt/specs',
+      '    specs_dir: specs',
     ].join('\n'));
     const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig, ['context']);
     expect(result['chunk-review'].context).toBeDefined();
     expect(result['chunk-review'].context.shared_context_dir).toBe('~/my/context');
-    expect(result['chunk-review'].context.specs_dir).toBe('.omt/specs');
+    expect(result['chunk-review'].context.specs_dir).toBe('specs');
   });
 
   test('extraSections: fallback context 값과 merge됨', () => {
@@ -1188,7 +1188,7 @@ describe('parseYamlSimple', () => {
     const fallbackWithContext = {
       'chunk-review': {
         ...chunkFallback['chunk-review'],
-        context: { shared_context_dir: '~/.omt/default', specs_dir: '.omt/specs' },
+        context: { shared_context_dir: '~/.omt/default', specs_dir: 'specs' },
       },
     };
     const result = parseYamlSimple(configPath, fallbackWithContext, chunkReviewConfig, ['context']);
@@ -1203,7 +1203,7 @@ describe('parseYamlSimple', () => {
       '  chairman:',
       '    role: gemini',
       '  context:',
-      '    specs_dir: .omt/specs',
+      '    specs_dir: specs',
     ].join('\n'));
     const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
     expect(result['chunk-review'].chairman.role).toBe('gemini');

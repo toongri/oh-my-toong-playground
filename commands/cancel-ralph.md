@@ -11,17 +11,14 @@ The Ralph Loop has been cancelled. You MUST now execute the full cleanup procedu
 Execute these commands to fully cancel the Ralph Loop and clean up all associated state (for all sessions):
 
 ```bash
-# Navigate to state directory
-cd .omt
-
 # Remove all session-specific ralph state files
-rm -f ralph-state-*.json 2>/dev/null || true
+rm -f "$OMT_DIR"/ralph-state-*.json 2>/dev/null || true
 
 # Check if ultrawork is linked to ralph and clean up if so
-if [ -f ultrawork-state.json ]; then
-  is_linked=$(jq -r '.linked_to_ralph // false' ultrawork-state.json 2>/dev/null)
+if [ -f "$OMT_DIR/ultrawork-state.json" ]; then
+  is_linked=$(jq -r '.linked_to_ralph // false' "$OMT_DIR/ultrawork-state.json" 2>/dev/null)
   if [ "$is_linked" = "true" ]; then
-    rm -f ultrawork-state.json
+    rm -f "$OMT_DIR/ultrawork-state.json"
     rm -f ~/.claude/ultrawork-state.json
   fi
 fi
@@ -33,7 +30,7 @@ After running the cleanup commands, verify the cancellation was successful:
 
 ```bash
 # Should return no files
-ls -la .omt/ralph-state-*.json 2>/dev/null || echo "ralph-state files removed"
+ls "$OMT_DIR"/ralph-state-*.json 2>/dev/null || echo "ralph-state files removed"
 ```
 
 ## POST-CANCELLATION

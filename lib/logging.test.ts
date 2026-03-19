@@ -40,38 +40,38 @@ describe('logging module', () => {
 
   describe('initLogger', () => {
     it('should create log directory and file path', () => {
-      const projectRoot = join(testDir, 'project1');
+      const omtDir = join(testDir, 'project1');
 
-      initLogger('test-component', projectRoot, 'session-123');
+      initLogger('test-component', omtDir, 'session-123');
 
       // Directory should exist after first log
       logInfo('test message');
-      const logDir = join(projectRoot, '.omt', 'logs');
+      const logDir = join(omtDir, 'logs');
       expect(existsSync(logDir)).toBe(true);
     });
 
     it('should use default when sessionId is not provided', async () => {
-      const projectRoot = join(testDir, 'project2');
+      const omtDir = join(testDir, 'project2');
 
-      initLogger('my-component', projectRoot);
+      initLogger('my-component', omtDir);
       logInfo('test');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'my-component-default.log');
+      const logPath = join(omtDir, 'logs', 'my-component-default.log');
       expect(existsSync(logPath)).toBe(true);
     });
 
     it('should sanitize sessionId with special characters', async () => {
-      const projectRoot = join(testDir, 'project3');
+      const omtDir = join(testDir, 'project3');
 
-      initLogger('comp', projectRoot, 'session/with:special*chars?');
+      initLogger('comp', omtDir, 'session/with:special*chars?');
       logInfo('test');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'comp-session-with-special-chars-.log');
+      const logPath = join(omtDir, 'logs', 'comp-session-with-special-chars-.log');
       expect(existsSync(logPath)).toBe(true);
     });
 
-    it('should not log when projectRoot is missing', async () => {
-      // @ts-expect-error - testing with undefined projectRoot
+    it('should not log when omtDir is missing', async () => {
+      // @ts-expect-error - testing with undefined omtDir
       initLogger('orphan', undefined);
       logInfo('should not be written');
 
@@ -79,7 +79,7 @@ describe('logging module', () => {
       expect(true).toBe(true);
     });
 
-    it('should not log when projectRoot is empty string', async () => {
+    it('should not log when omtDir is empty string', async () => {
       initLogger('orphan', '');
       logInfo('should not be written');
 
@@ -90,12 +90,12 @@ describe('logging module', () => {
 
   describe('log format', () => {
     it('should write logs in correct format: [timestamp] [LEVEL] [component] message', async () => {
-      const projectRoot = join(testDir, 'format-test');
+      const omtDir = join(testDir, 'format-test');
 
-      initLogger('format-comp', projectRoot, 'fmt-session');
+      initLogger('format-comp', omtDir, 'fmt-session');
       logInfo('test message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'format-comp-fmt-session.log');
+      const logPath = join(omtDir, 'logs', 'format-comp-fmt-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       // Should match format: [2024-01-15T10:30:00.000Z] [INFO] [format-comp] test message
@@ -112,13 +112,13 @@ describe('logging module', () => {
     });
 
     it('should default to INFO level', async () => {
-      const projectRoot = join(testDir, 'level-default');
+      const omtDir = join(testDir, 'level-default');
 
-      initLogger('level-comp', projectRoot, 'level-session');
+      initLogger('level-comp', omtDir, 'level-session');
       logDebug('debug message');
       logInfo('info message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'level-comp-level-session.log');
+      const logPath = join(omtDir, 'logs', 'level-comp-level-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).not.toContain('debug message');
@@ -127,12 +127,12 @@ describe('logging module', () => {
 
     it('should respect OMT_LOG_LEVEL environment variable', async () => {
       process.env.OMT_LOG_LEVEL = 'DEBUG';
-      const projectRoot = join(testDir, 'level-env');
+      const omtDir = join(testDir, 'level-env');
 
-      initLogger('env-comp', projectRoot, 'env-session');
+      initLogger('env-comp', omtDir, 'env-session');
       logDebug('debug message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'env-comp-env-session.log');
+      const logPath = join(omtDir, 'logs', 'env-comp-env-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('[DEBUG]');
@@ -141,15 +141,15 @@ describe('logging module', () => {
 
     it('should filter messages below configured level', async () => {
       process.env.OMT_LOG_LEVEL = 'WARN';
-      const projectRoot = join(testDir, 'level-filter');
+      const omtDir = join(testDir, 'level-filter');
 
-      initLogger('filter-comp', projectRoot, 'filter-session');
+      initLogger('filter-comp', omtDir, 'filter-session');
       logDebug('debug');
       logInfo('info');
       logWarn('warn');
       logError('error');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'filter-comp-filter-session.log');
+      const logPath = join(omtDir, 'logs', 'filter-comp-filter-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).not.toContain('[DEBUG]');
@@ -162,48 +162,48 @@ describe('logging module', () => {
   describe('log functions', () => {
     it('logDebug should write DEBUG level message', async () => {
       process.env.OMT_LOG_LEVEL = 'DEBUG';
-      const projectRoot = join(testDir, 'log-debug');
+      const omtDir = join(testDir, 'log-debug');
 
-      initLogger('debug-test', projectRoot, 'session');
+      initLogger('debug-test', omtDir, 'session');
       logDebug('debug message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'debug-test-session.log');
+      const logPath = join(omtDir, 'logs', 'debug-test-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('[DEBUG]');
     });
 
     it('logInfo should write INFO level message', async () => {
-      const projectRoot = join(testDir, 'log-info');
+      const omtDir = join(testDir, 'log-info');
 
-      initLogger('info-test', projectRoot, 'session');
+      initLogger('info-test', omtDir, 'session');
       logInfo('info message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'info-test-session.log');
+      const logPath = join(omtDir, 'logs', 'info-test-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('[INFO]');
     });
 
     it('logWarn should write WARN level message', async () => {
-      const projectRoot = join(testDir, 'log-warn');
+      const omtDir = join(testDir, 'log-warn');
 
-      initLogger('warn-test', projectRoot, 'session');
+      initLogger('warn-test', omtDir, 'session');
       logWarn('warn message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'warn-test-session.log');
+      const logPath = join(omtDir, 'logs', 'warn-test-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('[WARN]');
     });
 
     it('logError should write ERROR level message', async () => {
-      const projectRoot = join(testDir, 'log-error');
+      const omtDir = join(testDir, 'log-error');
 
-      initLogger('error-test', projectRoot, 'session');
+      initLogger('error-test', omtDir, 'session');
       logError('error message');
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'error-test-session.log');
+      const logPath = join(omtDir, 'logs', 'error-test-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('[ERROR]');
@@ -212,24 +212,24 @@ describe('logging module', () => {
 
   describe('logStart and logEnd', () => {
     it('logStart should write START marker', async () => {
-      const projectRoot = join(testDir, 'log-start');
+      const omtDir = join(testDir, 'log-start');
 
-      initLogger('start-test', projectRoot, 'session');
+      initLogger('start-test', omtDir, 'session');
       logStart();
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'start-test-session.log');
+      const logPath = join(omtDir, 'logs', 'start-test-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('========== START ==========');
     });
 
     it('logEnd should write END marker', async () => {
-      const projectRoot = join(testDir, 'log-end');
+      const omtDir = join(testDir, 'log-end');
 
-      initLogger('end-test', projectRoot, 'session');
+      initLogger('end-test', omtDir, 'session');
       logEnd();
 
-      const logPath = join(projectRoot, '.omt', 'logs', 'end-test-session.log');
+      const logPath = join(omtDir, 'logs', 'end-test-session.log');
       const content = await readFile(logPath, 'utf-8');
 
       expect(content).toContain('========== END ==========');
