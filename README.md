@@ -77,8 +77,8 @@ flowchart LR
         sisyphus["sisyphus"]
     end
 
-    spec -->|".omt/specs/{name}/"| prometheus
-    prometheus -->|".omt/plans/*.md"| sisyphus
+    spec -->|"~/.omt/{OMT_PROJECT}/specs/{name}/"| prometheus
+    prometheus -->|"~/.omt/{OMT_PROJECT}/plans/*.md"| sisyphus
     sisyphus -->|"검증된 코드"| Done((완료))
 ```
 
@@ -92,7 +92,7 @@ flowchart LR
 flowchart TB
     Start([사용자 요청]) --> Phase[단계 선택]
     Phase --> Step[단계 실행]
-    Step --> Save[.omt/specs/에 저장]
+    Step --> Save[~/.omt/{OMT_PROJECT}/specs/에 저장]
     Save --> Review{spec-reviewer<br/>피드백 필요?}
     Review -->|아니오| Next{다음 단계?}
     Review -->|예| Feedback[Multi-AI 피드백 수신]
@@ -129,7 +129,7 @@ flowchart TB
     Criteria -->|예| Metis[metis 상담]
     Criteria -->|아니오| Draft[기준 초안<br/>-> 사용자 확인]
     Draft --> Metis
-    Metis --> Write[.omt/plans/*.md에<br/>계획 작성]
+    Metis --> Write[~/.omt/{OMT_PROJECT}/plans/*.md에<br/>계획 작성]
     Write --> Handoff([/sisyphus로 전달])
 ```
 
@@ -294,7 +294,7 @@ oh-my-toong/
 ### 계획에서 실행까지
 
 ```
-1. /prometheus <task>     .omt/plans/*.md에 작업 계획 생성
+1. /prometheus <task>     ~/.omt/{OMT_PROJECT}/plans/*.md에 작업 계획 생성
          ↓
 2. /sisyphus              서브에이전트를 통해 계획 실행 조율
          ↓
@@ -305,7 +305,7 @@ oh-my-toong/
 
 oracle 검증을 통한 반복적 완료 강제. oracle이 작업이 정말로 완료되었음을 확인할 때까지 루프가 계속됩니다.
 
-- 상태 파일: `.omt/ralph-state.json`
+- 상태 파일: `~/.omt/{OMT_PROJECT}/ralph-state.json` (`$OMT_DIR` 환경 변수로 접근)
 - 취소: `/cancel-ralph`
 
 ### Ultrawork Mode

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import { makeDecision, DecisionContext } from './decision.ts';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
@@ -7,8 +7,10 @@ import { tmpdir } from 'os';
 describe('makeDecision', () => {
   const testDir = join(tmpdir(), 'persistent-mode-decision-test-' + Date.now());
   const projectRoot = join(testDir, 'project');
-  const omtDir = join(projectRoot, '.omt');
+  const omtDir = join(testDir, 'omt');
   const stateDir = join(omtDir, 'state');
+
+  const savedOmtDir = process.env.OMT_DIR;
 
   beforeAll(async () => {
     await mkdir(stateDir, { recursive: true });
@@ -19,9 +21,18 @@ describe('makeDecision', () => {
   });
 
   beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
     // Clean up state files between tests
     await rm(omtDir, { recursive: true, force: true });
     await mkdir(stateDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
   });
 
   const createContext = (overrides: Partial<DecisionContext> = {}): DecisionContext => ({

@@ -688,8 +688,49 @@ describe('findProjectRoot', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  test('.git 마커로 프로젝트 루트 탐지', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const subDir = path.join(tmpDir, 'src', 'lib');
+    fs.mkdirSync(subDir, { recursive: true });
+    expect(findProjectRoot(subDir)).toBe(tmpDir);
+  });
+
+  test('CLAUDE.md 마커로 프로젝트 루트 탐지', () => {
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '');
+    const subDir = path.join(tmpDir, 'src');
+    fs.mkdirSync(subDir, { recursive: true });
+    expect(findProjectRoot(subDir)).toBe(tmpDir);
+  });
+
+  test('package.json 마커로 프로젝트 루트 탐지', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{}');
+    const subDir = path.join(tmpDir, 'lib');
+    fs.mkdirSync(subDir, { recursive: true });
+    expect(findProjectRoot(subDir)).toBe(tmpDir);
+  });
+
+  test('.omt 서픽스 제거 후 프로젝트 루트 탐지', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const omtDir = path.join(tmpDir, '.omt');
+    fs.mkdirSync(omtDir);
+    expect(findProjectRoot(omtDir)).toBe(tmpDir);
+  });
+
+  test('.claude 서픽스 제거 후 프로젝트 루트 탐지', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const claudeDir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(claudeDir);
+    expect(findProjectRoot(claudeDir)).toBe(tmpDir);
+  });
+
+  test('.claude/scripts/foo/ 경로에서 regex로 프로젝트 루트 반환', () => {
+    // Regex fires first — no markers needed on disk
+    const scriptDir = path.join(tmpDir, '.claude', 'scripts', 'foo');
+    fs.mkdirSync(scriptDir, { recursive: true });
+    expect(findProjectRoot(scriptDir)).toBe(tmpDir);
+  });
+
   test('.claude/skills/<name>/scripts/ 경로에서 프로젝트 루트 반환', () => {
-    // tmpDir has no .omt or .git, so regex branch is reached
     const scriptDir = path.join(tmpDir, '.claude', 'skills', 'agent-council', 'scripts');
     fs.mkdirSync(scriptDir, { recursive: true });
     expect(findProjectRoot(scriptDir)).toBe(tmpDir);
@@ -702,7 +743,7 @@ describe('findProjectRoot', () => {
   });
 
   test('regex 미매칭 시 2단계 상위 경로 반환', () => {
-    // A path that doesn't match any platform pattern
+    // A path that doesn't match any platform pattern or markers
     const scriptDir = path.join(tmpDir, 'scripts', 'chunk-review');
     fs.mkdirSync(scriptDir, { recursive: true });
     expect(findProjectRoot(scriptDir)).toBe(tmpDir);

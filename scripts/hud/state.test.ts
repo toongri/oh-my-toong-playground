@@ -7,13 +7,15 @@ import { tmpdir, homedir } from 'os';
 describe('state readers', () => {
   const testDir = join(tmpdir(), 'hud-state-test-' + Date.now());
   const projectDir = join(testDir, 'project');
-  const omtDir = join(projectDir, '.omt');
+  const omtDir = join(testDir, 'omt');
 
   beforeAll(async () => {
     await mkdir(omtDir, { recursive: true });
+    process.env.OMT_DIR = omtDir;
   });
 
   afterAll(async () => {
+    delete process.env.OMT_DIR;
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -59,10 +61,7 @@ describe('state readers', () => {
     });
 
     it('should return null when session-specific file does not exist', async () => {
-      const nonExistentDir = join(testDir, 'nonexistent');
-      await mkdir(nonExistentDir, { recursive: true });
-
-      const result = await readRalphState(nonExistentDir, 'non-existent-session');
+      const result = await readRalphState('', 'non-existent-session');
 
       expect(result).toBeNull();
     });

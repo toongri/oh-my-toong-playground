@@ -1,4 +1,5 @@
 import { jest, describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { tmpdir } from 'os';
 import type { StdinInput, RalphState, RateLimitData } from './types.ts';
 import type { TranscriptResult } from './transcript.ts';
 import * as stdinMod from './stdin.ts';
@@ -33,6 +34,7 @@ describe('main', () => {
   let mockFormatMinimalStatus: ReturnType<typeof spyOn>;
 
   beforeEach(() => {
+    process.env.OMT_DIR = tmpdir();
     consoleLogSpy = spyOn(console, 'log').mockImplementation(() => {});
 
     // Spy on all module functions
@@ -70,6 +72,7 @@ describe('main', () => {
   });
 
   afterEach(() => {
+    delete process.env.OMT_DIR;
     consoleLogSpy.mockRestore();
     mockReadStdin.mockRestore();
     mockInitLogger.mockRestore();
@@ -513,7 +516,7 @@ describe('main', () => {
 
       await main();
 
-      expect(mockInitLogger).toHaveBeenCalledWith('hud', '/my/project', 'test-session-123');
+      expect(mockInitLogger).toHaveBeenCalledWith('hud', tmpdir(), 'test-session-123');
     });
 
     it('uses default session ID when session_id is empty', async () => {
@@ -531,7 +534,7 @@ describe('main', () => {
 
       await main();
 
-      expect(mockInitLogger).toHaveBeenCalledWith('hud', '/my/project', 'default');
+      expect(mockInitLogger).toHaveBeenCalledWith('hud', tmpdir(), 'default');
     });
 
     it('calls logStart at entry point', async () => {

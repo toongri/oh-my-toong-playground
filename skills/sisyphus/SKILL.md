@@ -324,7 +324,7 @@ digraph task_loop {
 - sisyphus-junior path: each junior completion → immediately invoke argus for QA
 - sisyphus-junior path: each argus approval → immediately invoke mnemosyne to commit
 - argus direct path: each argus approval → immediately mark completed (no mnemosyne — no code changes to commit)
-- After marking task completed, if a plan file exists in `.omt/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
+- After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
 
 ---
 

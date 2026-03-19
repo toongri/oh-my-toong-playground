@@ -6,6 +6,8 @@ import {
 } from './state.ts';
 import { analyzeTranscript } from './transcript-detector.ts';
 import { generateAttemptId, ensureDir } from './utils.ts';
+import { join } from 'path';
+import { getOmtDir } from '@lib/omt-dir';
 
 export interface DecisionContext {
   projectRoot: string;
@@ -136,21 +138,21 @@ Do NOT stop until all tasks are completed.
 
 export function makeDecision(context: DecisionContext): HookOutput {
   const { projectRoot, sessionId, lastAssistantMessage, incompleteTodoCount } = context;
-  const stateDir = `${projectRoot}/.omt/state`;
+  const stateDir = join(getOmtDir(), 'state');
   const attemptId = generateAttemptId(sessionId, projectRoot);
 
   // Ensure state directory exists
   ensureDir(stateDir);
 
   // Priority 1: Ralph Loop with Oracle Verification
-  const ralphState = readRalphState(projectRoot, sessionId);
+  const ralphState = readRalphState(sessionId);
 
   // Analyze last assistant message for completion markers
   const transcript = analyzeTranscript(lastAssistantMessage);
   if (ralphState && ralphState.active) {
     // Branch 1: Max iteration check (escape hatch, regardless of tasks)
     if (ralphState.iteration >= ralphState.max_iterations) {
-      cleanupRalphState(projectRoot, sessionId);
+      cleanupRalphState(sessionId);
       cleanupBlockCountFiles(stateDir, attemptId);
       return formatContinueOutput();
     }
@@ -163,7 +165,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
         ...ralphState,
         iteration: newIteration,
       };
-      updateRalphState(projectRoot, sessionId, updatedState);
+      updateRalphState(sessionId, updatedState);
 
       const message = buildRalphContinuationMessage(
         newIteration,
@@ -176,7 +178,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
 
     // Branch 3: VERIFIED_COMPLETE detected → cleanup → exit (regardless of DONE)
     if (transcript.hasOracleApproval) {
-      cleanupRalphState(projectRoot, sessionId);
+      cleanupRalphState(sessionId);
       cleanupBlockCountFiles(stateDir, attemptId);
       return formatContinueOutput();
     }
@@ -185,7 +187,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
     if (transcript.hasCompletionPromise) {
       const newIteration = ralphState.iteration + 1;
       const updatedState: RalphState = { ...ralphState, iteration: newIteration };
-      updateRalphState(projectRoot, sessionId, updatedState);
+      updateRalphState(sessionId, updatedState);
       const message = buildOracleVerificationMessage(newIteration, ralphState.max_iterations, ralphState.prompt);
       return formatBlockOutput(message);
     }
@@ -193,7 +195,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
     // Branch 5: No DONE detected → increment iteration → DONE reminder
     const newIteration = ralphState.iteration + 1;
     const updatedState: RalphState = { ...ralphState, iteration: newIteration };
-    updateRalphState(projectRoot, sessionId, updatedState);
+    updateRalphState(sessionId, updatedState);
     const message = buildNoDoneMessage(newIteration, ralphState.max_iterations, ralphState.prompt, ralphState.completion_promise || 'DONE');
     return formatBlockOutput(message);
   }

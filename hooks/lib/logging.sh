@@ -177,8 +177,15 @@ omt_log_init() {
     OMT_HOOK_NAME="$hook_name"
     OMT_PROJECT_ROOT="$project_root"
 
+    # Compute OMT_DIR if not already set by session-start.sh
+    local _log_script_dir
+    _log_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$_log_script_dir/omt-dir.sh"
+    compute_omt_dir "$OMT_PROJECT_ROOT"
+    local _log_omt_dir="$OMT_DIR"
+
     # Create log directory
-    local log_dir="$OMT_PROJECT_ROOT/.omt/logs"
+    local log_dir="${_log_omt_dir}/logs"
     mkdir -p "$log_dir" 2>/dev/null
 
     # Set log file path (with optional session ID suffix)
