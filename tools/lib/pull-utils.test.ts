@@ -1,4 +1,7 @@
 import { describe, it, expect } from "bun:test";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 
 import { parseFrontmatter } from "./frontmatter.ts";
 import {
@@ -66,15 +69,44 @@ describe("resolveSourcePath", () => {
     expect(result).toBe(`${ROOT}/projects/my-project/skills/testing`);
   });
 
-  it("falls back to global path for unscoped ref when `projectDirName` is provided", () => {
+  it("falls back to global path for unscoped ref when `projectDirName` is provided and project-local doesn't exist", () => {
     const result = resolveSourcePath("oracle", "skills", ROOT, "my-project");
     expect(result).toBe(`${ROOT}/skills/oracle`);
   });
 
-  it("throws on cross-project scoped ref when `projectDirName` differs", () => {
-    expect(() =>
-      resolveSourcePath("other-project:testing", "skills", ROOT, "my-project"),
-    ).toThrow("Cross-project reference not allowed");
+  it("returns error object on cross-project scoped ref when `projectDirName` differs", () => {
+    const result = resolveSourcePath("other-project:testing", "skills", ROOT, "my-project");
+    expect(typeof result).toBe("object");
+    expect(result).toHaveProperty("error");
+    expect((result as { error: string }).error).toContain("Cross-project reference not allowed");
+  });
+
+  it("prefers project-local path when exists for unscoped ref with projectDirName", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
+    try {
+      mkdirSync(join(tmpDir, "projects", "my-proj", "skills", "oracle"), { recursive: true });
+      writeFileSync(join(tmpDir, "projects", "my-proj", "skills", "oracle", "SKILL.md"), "# test");
+      mkdirSync(join(tmpDir, "skills", "oracle"), { recursive: true });
+      writeFileSync(join(tmpDir, "skills", "oracle", "SKILL.md"), "# global");
+
+      const result = resolveSourcePath("oracle", "skills", tmpDir, "my-proj");
+      expect(result).toBe(join(tmpDir, "projects", "my-proj", "skills", "oracle"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to global when project-local doesn't exist on filesystem", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
+    try {
+      mkdirSync(join(tmpDir, "skills", "oracle"), { recursive: true });
+      writeFileSync(join(tmpDir, "skills", "oracle", "SKILL.md"), "# global");
+
+      const result = resolveSourcePath("oracle", "skills", tmpDir, "my-proj");
+      expect(result).toBe(join(tmpDir, "skills", "oracle"));
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it("allows same-project scoped ref when `projectDirName` matches", () => {

@@ -268,6 +268,10 @@ export async function pullProject(options: PullOptions): Promise<void> {
       // Resolve paths
       const deployedPath = resolveDeployedPath(targetPath, platform, category, componentName);
       const sourcePath = resolveSourcePath(componentRef, category, rootDir, projectName);
+      if (typeof sourcePath === "object" && "error" in sourcePath) {
+        process.stderr.write(`[WARN] ${category}/${componentRef}: ${sourcePath.error}\n`);
+        continue;
+      }
 
       // Check deployed path exists
       if (!existsSync(deployedPath)) {
