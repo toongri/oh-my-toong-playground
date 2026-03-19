@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 
 import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.ts";
 import type { Category, Platform, SyncItem } from "./types.ts";
+import { tryResolveInDir } from "./resolver.ts";
 
 // ---------------------------------------------------------------------------
 // resolveDeployedPath
@@ -73,7 +74,7 @@ export function resolveSourcePath(
   // Scoped ref (same project) or no projectDirName: resolve directly
   if (project) {
     const baseDir = path.join(rootDir, "projects", project, category);
-    const resolved = tryResolveExisting(baseDir, name, category);
+    const resolved = tryResolveInDir(baseDir, name, category);
     if (resolved !== null) return resolved;
     if (FILE_BASED_CATEGORIES.has(category)) return path.join(baseDir, `${name}.md`);
     return path.join(baseDir, name);
@@ -83,13 +84,13 @@ export function resolveSourcePath(
   // (mirrors resolver.ts:151-165)
   if (projectDirName !== undefined) {
     const projectBase = path.join(rootDir, "projects", projectDirName, category);
-    const projectResolved = tryResolveExisting(projectBase, name, category);
+    const projectResolved = tryResolveInDir(projectBase, name, category);
     if (projectResolved !== null) return projectResolved;
   }
 
   // Global resolution
   const baseDir = path.join(rootDir, category);
-  const resolved = tryResolveExisting(baseDir, name, category);
+  const resolved = tryResolveInDir(baseDir, name, category);
   if (resolved !== null) return resolved;
 
   // Default path for new components
@@ -97,27 +98,6 @@ export function resolveSourcePath(
     return path.join(baseDir, `${name}.md`);
   }
   return path.join(baseDir, name);
-}
-
-/**
- * Mirrors tryResolveInDir from resolver.ts — checks existing filesystem locations.
- */
-function tryResolveExisting(dir: string, name: string, category: string): string | null {
-  const filePath = path.join(dir, `${name}.md`);
-  if (existsSync(filePath)) return filePath;
-
-  const indexPath = path.join(dir, name, "index.md");
-  if (existsSync(indexPath)) return indexPath;
-
-  if (category === "skills") {
-    const skillPath = path.join(dir, name, "SKILL.md");
-    if (existsSync(skillPath)) return path.join(dir, name);
-  }
-
-  const dirPath = path.join(dir, name);
-  if (existsSync(dirPath)) return dirPath;
-
-  return null;
 }
 
 // ---------------------------------------------------------------------------
