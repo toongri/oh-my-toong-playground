@@ -17,6 +17,7 @@ describe('main entry point', () => {
   const originalCwd = process.cwd;
   const originalLog = console.log;
   const originalError = console.error;
+  const savedOmtDir = process.env.OMT_DIR;
 
   let capturedOutput: string[] = [];
   let capturedErrors: string[] = [];
@@ -32,6 +33,7 @@ describe('main entry point', () => {
   });
 
   beforeEach(() => {
+    process.env.OMT_DIR = omtDir;
     capturedOutput = [];
     capturedErrors = [];
     console.log = (...args: unknown[]) => {
@@ -43,6 +45,11 @@ describe('main entry point', () => {
   });
 
   afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
     console.log = originalLog;
     console.error = originalError;
   });
@@ -243,6 +250,7 @@ describe('main entry point', () => {
     beforeEach(async () => {
       process.env.HOME = join(taskTestDir, 'home');
       process.env.OMT_LOG_LEVEL = 'DEBUG';
+      process.env.OMT_DIR = join(taskProjectRoot, '.omt');
     });
 
     afterEach(() => {
@@ -313,6 +321,7 @@ describe('main entry point', () => {
     beforeEach(async () => {
       // Set DEBUG log level to capture all logs
       process.env.OMT_LOG_LEVEL = 'DEBUG';
+      process.env.OMT_DIR = join(loggingProjectRoot, '.omt');
       // Clean up logs directory before each test
       try {
         await rm(logsDir, { recursive: true, force: true });
