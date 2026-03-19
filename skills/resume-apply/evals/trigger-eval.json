@@ -1,0 +1,22 @@
+[
+  {"query": "토스 서버 엔지니어에 지원하려고 해. JD 보내줄게.\n\n[채용공고]\n서버 엔지니어\n- Kotlin/Java 기반 서버 개발 경험\n- Spring Boot, Spring MVC\n- 대규모 트래픽 처리 경험\n- MSA 설계 경험 우대", "should_trigger": true},
+  {"query": "라인망가 지원 준비해야돼. JD는 cover-letters/linemanga-jd.yaml에 있어", "should_trigger": true},
+  {"query": "이 JD로 이력서 맞춰줘\n\nSenior Backend Engineer at Coupang\nRequirements:\n- 5+ years backend development\n- Java/Kotlin proficiency\n- Distributed systems experience\n- AWS infrastructure management", "should_trigger": true},
+  {"query": "네이버 클라우드 지원 준비. 채용 공고 url은 https://recruit.navercorp.com/jobs/12345 이거야", "should_trigger": true},
+  {"query": "내일까지 카카오 백엔드 포지션 이력서 보내야하는데 JD 기반으로 이력서 준비해줘. JD는 ~/Downloads/kakao-jd.pdf에 있어", "should_trigger": true},
+  {"query": "bemyfriends에 resume apply 해야해. 백엔드 개발자 포지션이고 Go랑 Kubernetes 경험을 요구해", "should_trigger": true},
+  {"query": "배달의민족 백엔드 엔지니어\n\n주요업무:\n- 주문/결제 시스템 개발 및 운영\n- Kotlin 기반 서버 개발\n- 대용량 트래픽 처리\n\n자격요건:\n- 컴퓨터공학 관련 전공\n- 서버 개발 경력 3년 이상", "should_trigger": true},
+  {"query": "지원서 준비해야하는데 JD 보고 _config.yml 수정하고 PDF까지 뽑아줘. 회사는 당근마켓이야", "should_trigger": true},
+  {"query": "everex에 지원할건데 지금 이력서 상태에서 JD에 맞게 조정하고 pdf 만들어줘", "should_trigger": true},
+  {"query": "placeand라는 스타트업에 지원하려는데. 풀스택 개발자 채용이고 Spring Boot + React 스택이래", "should_trigger": true},
+  {"query": "이력서 좀 봐줘. 전반적으로 피드백 부탁해", "should_trigger": false},
+  {"query": "_config.yml에서 마인이스 경력 description에 오타가 있어. '스게줄러'를 '스케줄러'로 고쳐줘", "should_trigger": false},
+  {"query": "이력서 레이아웃에서 문제해결 섹션이 페이지 넘김이 이상하게 돼. _sass/modern-resume-theme.scss에서 page-break 관련 스타일 좀 수정해줘", "should_trigger": false},
+  {"query": "cover-letters/linemanga-jd.yaml 자소서 내용 리뷰해줘. 문장이 좀 어색한 부분이 있는것 같아", "should_trigger": false},
+  {"query": "bun run pdf 실행하면 Docker 연결 에러가 나는데 왜 그런지 봐줘. Error: connect ECONNREFUSED 라고 뜸", "should_trigger": false},
+  {"query": "bemyfriends/260317 브랜치랑 main 브랜치 이력서 diff 보여줘. 뭐가 달라졌는지 확인하고 싶어", "should_trigger": false},
+  {"query": "면접 준비 도와줘. 내 이력서 기반으로 예상 질문 뽑아줘. 특히 캐시 적용 프로젝트랑 LLM 메타데이터 추론 쪽으로", "should_trigger": false},
+  {"query": "기술 섹션에 Docker랑 Kubernetes 추가하고 싶어. _config.yml 수정해줘", "should_trigger": false},
+  {"query": "generate-resume-pdf.ts 스크립트에서 margin을 좀 줄이고 싶어. top을 11mm에서 8mm로 바꿔줘", "should_trigger": false},
+  {"query": "이력서 S1-S5 자기소개 평가만 해줘. 전체 리뷰 말고 소개 부분만 집중적으로 봐줘", "should_trigger": false}
+]

@@ -1,0 +1,43 @@
+{
+  "skill_name": "resume-apply",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "네이버 웹툰 백엔드 엔지니어에 지원하려고 해.\n\n[채용 공고]\n백엔드 엔지니어\n- Java/Kotlin 기반 서버 개발 3년 이상\n- Spring Boot, Spring MVC 경험\n- RDBMS 설계 및 운영 경험\n- 대규모 트래픽 처리 경험 우대\n- 웹툰 서비스 도메인 이해도 우대",
+      "expected_output": "Extracts company (naver-webtoon), date (today YYMMDD), creates branch, invokes review-resume with JD context, follows structured 6-step workflow",
+      "assertions": [
+        {"text": "correct-company-extraction", "description": "Company name correctly extracted in lowercase kebab-case"},
+        {"text": "correct-branch-format", "description": "Branch follows {company}/{YYMMDD} pattern"},
+        {"text": "review-resume-protocol", "description": "References S1-S5 or D1-D6 evaluation dimensions"},
+        {"text": "pdf-generation-command", "description": "Notes correct bun run pdf {branch} command"},
+        {"text": "final-pdf-path", "description": "Produces correct final PDF path with variable substitution"},
+        {"text": "six-step-workflow", "description": "Follows all 6 steps in documented order"},
+        {"text": "config-file-handling", "description": "Handles config file check, interview, and YAML creation"},
+        {"text": "no-experience-fabrication", "description": "Does not fabricate experience or metrics"}
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "라인망가에 지원 준비 해야돼. JD는 이거야:\n\nLine Manga - Server Engineer\n주요업무:\n- Kotlin/Java 기반 서버 개발\n- 만화 뷰어 및 스토어 API 개발\n- 결제/정산 시스템 운영\n자격요건:\n- 서버 개발 경력 5년 이상\n- Kotlin 또는 Java 능숙\n- Spring Framework 활용 경험",
+      "expected_output": "Extracts company (linemanga), date (today YYMMDD), creates branch, invokes review-resume with JD context, follows structured 6-step workflow",
+      "assertions": [
+        {"text": "correct-company-extraction", "description": "Company name correctly extracted in lowercase kebab-case"},
+        {"text": "correct-branch-format", "description": "Branch follows {company}/{YYMMDD} pattern"},
+        {"text": "review-resume-protocol", "description": "References S1-S5 or D1-D6 evaluation dimensions"},
+        {"text": "pdf-generation-command", "description": "Notes correct bun run pdf {branch} command"},
+        {"text": "final-pdf-path", "description": "Produces correct final PDF path with variable substitution"},
+        {"text": "six-step-workflow", "description": "Follows all 6 steps in documented order"},
+        {"text": "config-file-handling", "description": "Handles config file check, interview, and YAML creation"},
+        {"text": "no-experience-fabrication", "description": "Does not fabricate experience or metrics"}
+      ],
+      "files": []
+    }
+  ],
+  "benchmark_summary": {
+    "iteration": 1,
+    "date": "2026-03-20",
+    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 139.1, "avg_tokens": 49869},
+    "without_skill": {"pass_rate": 0.125, "avg_time_seconds": 96.1, "avg_tokens": 27283}
+  }
+}
