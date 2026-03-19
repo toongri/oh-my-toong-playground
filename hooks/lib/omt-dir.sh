@@ -18,21 +18,31 @@
 # Arguments:
 #   $1  absolute path to the project root
 compute_omt_dir() {
-  if [ -n "$OMT_DIR" ]; then
+  if [ -n "${OMT_DIR:-}" ]; then
     return 0
   fi
 
   local _omt_root="$1"
   local _omt_git_common
-  _omt_git_common=$(git -C "$_omt_root" rev-parse --git-common-dir 2>/dev/null)
+  _omt_git_common=$(git -C "$_omt_root" rev-parse --git-common-dir 2>/dev/null) || true
 
   local _omt_name=""
   if [ -n "$_omt_git_common" ] && [ "$_omt_git_common" != ".git" ]; then
-    # Worktree: --git-common-dir returns an absolute path like /path/to/repo/.git
-    _omt_name=$(basename "$(dirname "$_omt_git_common")")
+    # Worktree: --git-common-dir may return absolute or relative path
+    # Resolve relative path against _omt_root using cd && pwd (Bash 3.2 compatible)
+    case "$_omt_git_common" in
+      /*)
+        # Already absolute
+        _omt_name=$(basename "$(dirname "$_omt_git_common")")
+        ;;
+      *)
+        # Relative: resolve against _omt_root
+        _omt_name=$(basename "$(dirname "$(cd "$_omt_root/$_omt_git_common" && pwd)")")
+        ;;
+    esac
   elif [ "$_omt_git_common" = ".git" ]; then
     # Standard repo: use the actual toplevel directory name
-    _omt_name=$(basename "$(git -C "$_omt_root" rev-parse --show-toplevel 2>/dev/null)")
+    _omt_name=$(basename "$(git -C "$_omt_root" rev-parse --show-toplevel 2>/dev/null)") || true
   else
     # No git: fall back to the project root basename
     _omt_name=$(basename "$_omt_root")
