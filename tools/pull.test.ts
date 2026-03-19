@@ -549,6 +549,39 @@ describe("pullProject", () => {
     expect(pulledContent).toBe("// updated\n");
   });
 
+  it("preserves source-only `*.test.ts` files during directory pull", async () => {
+    const syncYamlContent = makeSyncYaml(targetPath, {
+      skills: { items: ["test-skill"] },
+    });
+    await setupProject("test-proj", syncYamlContent);
+
+    // Source has SKILL.md + a test file (not present in deployed)
+    await writeFile(path.join(rootDir, "skills", "test-skill", "SKILL.md"), "# Original Skill\n");
+    await writeFile(path.join(rootDir, "skills", "test-skill", "skill.test.ts"), "// original test\n");
+    // Source also has an orphan non-excluded file that should be removed
+    await writeFile(path.join(rootDir, "skills", "test-skill", "old-helper.ts"), "// orphan\n");
+
+    // Deployed has SKILL.md only (sync excluded *.test.ts before deploying)
+    await writeFile(
+      path.join(targetPath, ".claude", "skills", "test-skill", "SKILL.md"),
+      "# Updated Skill\n",
+    );
+
+    await pullProject(makeOptions());
+
+    // SKILL.md should be updated from deployed
+    const pulledSkill = await readFile(path.join(rootDir, "skills", "test-skill", "SKILL.md"));
+    expect(pulledSkill).toBe("# Updated Skill\n");
+
+    // *.test.ts should be preserved (excluded from orphan cleanup)
+    const testFileContent = await readFile(path.join(rootDir, "skills", "test-skill", "skill.test.ts"));
+    expect(testFileContent).toBe("// original test\n");
+
+    // old-helper.ts (non-excluded orphan) should be removed
+    const { existsSync } = await import("fs");
+    expect(existsSync(path.join(rootDir, "skills", "test-skill", "old-helper.ts"))).toBe(false);
+  });
+
   it("pulls script directory recursively including subdirectories", async () => {
     const syncYamlContent = makeSyncYaml(targetPath, {
       scripts: { items: ["complex-script"] },
