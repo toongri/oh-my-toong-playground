@@ -243,27 +243,27 @@ export function generateJobId(): string {
 // ---------------------------------------------------------------------------
 
 export function findProjectRoot(scriptDir: string): string {
-  let current = scriptDir;
-  const root = path.parse(current).root;
-
-  while (current !== root) {
-    const omtDir = path.join(current, '.omt');
-    if (fs.existsSync(omtDir) && fs.statSync(omtDir).isDirectory()) {
-      return current;
-    }
-
-    const gitDir = path.join(current, '.git');
-    if (fs.existsSync(gitDir)) {
-      return current;
-    }
-
-    current = path.dirname(current);
-  }
-
+  // Regex fallback for deployed script paths — fires first before walk-up
   const normalized = scriptDir.replace(/\\/g, '/');
   const scriptsMatch = normalized.match(/^(.+?)\/\.(claude|gemini|codex|opencode)\/(scripts|skills\/[^/]+\/scripts)(?:\/|$)/);
   if (scriptsMatch) {
     return scriptsMatch[1];
+  }
+
+  // Strip .omt and .claude suffixes before walking up
+  let current = scriptDir.replace(/\/\.omt$/, '').replace(/\/\.claude$/, '');
+  const root = path.parse(current).root;
+
+  while (current !== root) {
+    if (
+      fs.existsSync(path.join(current, '.git')) ||
+      fs.existsSync(path.join(current, 'CLAUDE.md')) ||
+      fs.existsSync(path.join(current, 'package.json'))
+    ) {
+      return current;
+    }
+
+    current = path.dirname(current);
   }
 
   return path.resolve(scriptDir, '../..');
