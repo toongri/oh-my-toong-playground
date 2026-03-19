@@ -1,5 +1,5 @@
 import { rm, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { execSync } from 'child_process';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
@@ -21,19 +21,38 @@ afterAll(async () => {
 describe('getOmtDir', () => {
   let originalOmtDir: string | undefined;
   let originalCwd: string;
+  let createdOmtDirs: string[] = [];
+  let preExistingDirs: Set<string>;
 
   beforeEach(() => {
     originalOmtDir = process.env.OMT_DIR;
     originalCwd = process.cwd();
+    createdOmtDirs = [];
+    const omtBase = `${homedir()}/.omt`;
+    preExistingDirs = new Set(
+      existsSync(omtBase)
+        ? readdirSync(omtBase).map(d => `${omtBase}/${d}`)
+        : []
+    );
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     if (originalOmtDir === undefined) {
       delete process.env.OMT_DIR;
     } else {
       process.env.OMT_DIR = originalOmtDir;
     }
     process.chdir(originalCwd);
+
+    for (const dir of createdOmtDirs) {
+      if (
+        dir.startsWith(`${homedir()}/.omt/`) &&
+        !preExistingDirs.has(dir) &&
+        existsSync(dir)
+      ) {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
   });
 
   it('env var present: returns OMT_DIR and creates directory', () => {
@@ -54,6 +73,7 @@ describe('getOmtDir', () => {
     process.chdir(repoDir);
 
     const result = getOmtDir();
+    createdOmtDirs.push(result);
 
     // Should be under $HOME/.omt/
     expect(result.startsWith(`${homedir()}/.omt/`)).toBe(true);
@@ -91,6 +111,7 @@ describe('getOmtDir', () => {
     process.chdir(nonGitDir);
 
     const result = getOmtDir();
+    createdOmtDirs.push(result);
 
     const expectedName = basename(nonGitDir).replace(/ /g, '-');
     expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
@@ -131,6 +152,7 @@ describe('getOmtDir', () => {
 
     const expectedPath = `${homedir()}/.omt/${shellProjectName}`;
     const result = getOmtDir();
+    createdOmtDirs.push(result);
 
     expect(result).toBe(expectedPath);
   });
@@ -143,6 +165,7 @@ describe('getOmtDir', () => {
     process.chdir(subDir);
 
     const result = getOmtDir();
+    createdOmtDirs.push(result);
 
     // Derive expected name: resolve relative gitCommonDir against subDir
     const gitCommonDir = execSync('git rev-parse --git-common-dir', {
@@ -178,6 +201,7 @@ describe('getOmtDir', () => {
     process.chdir(spacedDir);
 
     const result = getOmtDir();
+    createdOmtDirs.push(result);
 
     expect(result).toBe(`${homedir()}/.omt/my-project-name`);
     expect(existsSync(result)).toBe(true);
