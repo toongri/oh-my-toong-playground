@@ -1,4 +1,5 @@
 import path from "path";
+import { existsSync } from "fs";
 
 import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.ts";
 import type { Category, Platform, SyncItem } from "./types.ts";
@@ -32,15 +33,17 @@ export function resolveDeployedPath(
 // ---------------------------------------------------------------------------
 
 /**
- * Computes the oh-my-toong source path where pulled content should be written.
+ * Resolves the oh-my-toong source path where pulled content should be written.
  *
- * Pure path computation — does NOT check filesystem existence.
+ * Checks filesystem to match resolveComponentPath's fallback chain
+ * (.md → index.md → SKILL.md → directory). Falls back to default path
+ * computation when no existing file is found (new component case).
+ *
+ * Returns the fully-resolved path including file extension for file-based
+ * categories (agents, commands, rules).
  *
  * Scoped refs:  "project:name" → {rootDir}/projects/{project}/{category}/{name}
  * Global refs:  "name"         → {rootDir}/{category}/{name}
- *
- * When projectDirName is provided, unscoped refs still resolve to global paths
- * (mirrors the global fallback in resolveComponentPath).
  */
 export function resolveSourcePath(
   componentRef: string,
@@ -48,14 +51,56 @@ export function resolveSourcePath(
   rootDir: string,
   projectDirName?: string,
 ): string {
+  let project = "";
+  let name = componentRef;
+
   if (componentRef.includes(":")) {
     const colonIndex = componentRef.indexOf(":");
-    const project = componentRef.slice(0, colonIndex);
-    const name = componentRef.slice(colonIndex + 1);
-    return path.join(rootDir, "projects", project, category, name);
+    project = componentRef.slice(0, colonIndex);
+    name = componentRef.slice(colonIndex + 1);
   }
 
-  return path.join(rootDir, category, componentRef);
+  // Cross-project validation (mirrors resolveComponentPath in resolver.ts)
+  if (project && projectDirName !== undefined && project !== projectDirName) {
+    throw new Error(
+      `Cross-project reference not allowed: ${componentRef} (current project: ${projectDirName})`,
+    );
+  }
+
+  const baseDir = project
+    ? path.join(rootDir, "projects", project, category)
+    : path.join(rootDir, category);
+
+  // Check filesystem for existing components (mirrors tryResolveInDir in resolver.ts)
+  const resolved = tryResolveExisting(baseDir, name, category);
+  if (resolved !== null) return resolved;
+
+  // Default path for new components
+  if (FILE_BASED_CATEGORIES.has(category)) {
+    return path.join(baseDir, `${name}.md`);
+  }
+  return path.join(baseDir, name);
+}
+
+/**
+ * Mirrors tryResolveInDir from resolver.ts — checks existing filesystem locations.
+ */
+function tryResolveExisting(dir: string, name: string, category: string): string | null {
+  const filePath = path.join(dir, `${name}.md`);
+  if (existsSync(filePath)) return filePath;
+
+  const indexPath = path.join(dir, name, "index.md");
+  if (existsSync(indexPath)) return indexPath;
+
+  if (category === "skills") {
+    const skillPath = path.join(dir, name, "SKILL.md");
+    if (existsSync(skillPath)) return path.join(dir, name);
+  }
+
+  const dirPath = path.join(dir, name);
+  if (existsSync(dirPath)) return dirPath;
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

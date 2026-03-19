@@ -86,12 +86,21 @@ export function parseCliArgs(args: string[]): {
         process.stderr.write("[ERROR] --platform 플래그에 값이 필요합니다 (예: --platform gemini)\n");
         process.exit(1);
       }
+      const validPlatforms = Object.keys(SUPPORTED_CATEGORIES);
+      if (!validPlatforms.includes(value)) {
+        process.stderr.write(`[ERROR] 유효하지 않은 platform: ${value} (허용: ${validPlatforms.join(", ")})\n`);
+        process.exit(1);
+      }
       platform = value as Platform;
       i++;
     } else if (arg === "--category") {
       const value = args[i + 1];
       if (!value || value.startsWith("--")) {
         process.stderr.write("[ERROR] --category 플래그에 값이 필요합니다 (예: --category skills)\n");
+        process.exit(1);
+      }
+      if (!CATEGORIES.includes(value as Category)) {
+        process.stderr.write(`[ERROR] 유효하지 않은 category: ${value} (허용: ${CATEGORIES.join(", ")})\n`);
         process.exit(1);
       }
       categoryFilter = value as Category;
@@ -258,11 +267,7 @@ export async function pullProject(options: PullOptions): Promise<void> {
 
       // Resolve paths
       const deployedPath = resolveDeployedPath(targetPath, platform, category, componentName);
-      const sourcePathBase = resolveSourcePath(componentRef, category, rootDir, projectName);
-      // File-based categories use .md suffix in source (mirrors resolveDeployedPath behavior)
-      const sourcePath = FILE_BASED_CATEGORIES.has(category)
-        ? `${sourcePathBase}.md`
-        : sourcePathBase;
+      const sourcePath = resolveSourcePath(componentRef, category, rootDir, projectName);
 
       // Check deployed path exists
       if (!existsSync(deployedPath)) {
@@ -294,7 +299,10 @@ export async function pullProject(options: PullOptions): Promise<void> {
 
         await copyFile(deployedPath, sourcePath, deployedContent);
       } else {
-        // Directory-based: recursive copy
+        // Directory-based: wipe then recursive copy (mirror, not additive)
+        if (existsSync(sourcePath)) {
+          await fs.rm(sourcePath, { recursive: true, force: true });
+        }
         await copyDirectory(deployedPath, sourcePath, platform);
       }
 
