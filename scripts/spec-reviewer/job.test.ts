@@ -64,11 +64,11 @@ describe('parseYamlSimple', () => {
       'spec-review:',
       '  context:',
       '    shared_context_dir: .omt/ctx',
-      '    specs_dir: .omt/specs',
+      '    specs_dir: specs',
     ].join('\n'));
     const result = parseYamlSimple(configPath, fallback);
     expect(result['spec-review'].context.shared_context_dir).toBe('.omt/ctx');
-    expect(result['spec-review'].context.specs_dir).toBe('.omt/specs');
+    expect(result['spec-review'].context.specs_dir).toBe('specs');
   });
 
   test('parses settings section with type coercion', () => {
