@@ -16,18 +16,14 @@ import { parse as parseYaml } from "yaml";
 import type { SyncYaml, SyncItem, Category, Platform } from "./lib/types.ts";
 import { getRootDir } from "./lib/config.ts";
 import { CATEGORIES, SUPPORTED_CATEGORIES } from "./sync.ts";
+import { resolvePlatforms } from "./lib/resolver.ts";
 import {
+  FILE_BASED_CATEGORIES,
   resolveDeployedPath,
   resolveSourcePath,
   reversePlatformPaths,
   stripInjectedFrontmatter,
 } from "./lib/pull-utils.ts";
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const FILE_BASED_CATEGORIES: Set<Category> = new Set(["agents", "commands", "rules"]);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,11 +144,14 @@ async function copyDirectory(
     if (entry.isDirectory()) {
       await copyDirectory(deployedEntry, sourceEntry, platform);
     } else if (entry.isFile()) {
-      let content = await fs.readFile(deployedEntry, "utf8");
       if (entry.name.endsWith(".md")) {
+        let content = await fs.readFile(deployedEntry, "utf8");
         content = reversePlatformPaths(content, platform);
+        await copyFile(deployedEntry, sourceEntry, content);
+      } else {
+        await fs.mkdir(path.dirname(sourceEntry), { recursive: true });
+        await fs.copyFile(deployedEntry, sourceEntry);
       }
-      await copyFile(deployedEntry, sourceEntry, content);
     }
   }
 }
@@ -245,6 +244,18 @@ export async function pullProject(options: PullOptions): Promise<void> {
         continue;
       }
 
+      // Check format compatibility: gemini commands use .toml format which cannot be reversed
+      if (platform === "gemini" && category === "commands") {
+        process.stderr.write(`[WARN] gemini 커맨드 .toml 형식 미지원 (스킵): ${componentName}\n`);
+        continue;
+      }
+
+      // Check platform cascade: skip items not targeting the current platform
+      const itemPlatforms = await resolvePlatforms(syncItem, section.platforms, syncYaml.platforms, category);
+      if (!itemPlatforms.includes(platform)) {
+        continue;
+      }
+
       // Resolve paths
       const deployedPath = resolveDeployedPath(targetPath, platform, category, componentName);
       const sourcePathBase = resolveSourcePath(componentRef, category, rootDir, projectName);
@@ -257,15 +268,6 @@ export async function pullProject(options: PullOptions): Promise<void> {
       if (!existsSync(deployedPath)) {
         process.stderr.write(`[WARN] 배포된 컴포넌트 없음 (스킵): ${deployedPath}\n`);
         continue;
-      }
-
-      // Check format compatibility: gemini commands in .toml format are unsupported
-      if (platform === "gemini" && category === "commands") {
-        const deployedStat = await fs.stat(deployedPath).catch(() => null);
-        if (deployedStat && deployedStat.isFile() && deployedPath.endsWith(".toml")) {
-          process.stderr.write(`[WARN] gemini 커맨드 .toml 형식 미지원 (스킵): ${deployedPath}\n`);
-          continue;
-        }
       }
 
       // Log or perform the pull
