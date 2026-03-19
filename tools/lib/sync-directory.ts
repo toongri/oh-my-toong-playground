@@ -1,11 +1,13 @@
 import fs from "fs/promises";
 import path from "path";
 
+export const DEFAULT_EXCLUDE = ["*.test.ts"];
+
 /**
  * Checks if a filename matches any of the given glob-style exclude patterns.
  * Only supports simple "*.ext" wildcard prefix patterns.
  */
-function isExcluded(filename: string, patterns: string[]): boolean {
+export function isExcluded(filename: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
     if (pattern.startsWith("*.")) {
       const suffix = pattern.slice(1); // e.g. ".test.ts"
@@ -94,7 +96,7 @@ export async function syncDirectory(
   target: string,
   options?: { exclude?: string[] }
 ): Promise<void> {
-  const exclude = options?.exclude ?? ["*.test.ts"];
+  const exclude = options?.exclude ?? DEFAULT_EXCLUDE;
 
   // 1. Ensure target directory exists
   await fs.mkdir(target, { recursive: true });

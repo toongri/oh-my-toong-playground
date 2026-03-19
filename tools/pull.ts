@@ -24,6 +24,7 @@ import {
   reversePlatformPaths,
   stripInjectedFrontmatter,
 } from "./lib/pull-utils.ts";
+import { DEFAULT_EXCLUDE, isExcluded } from "./lib/sync-directory.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -161,6 +162,74 @@ async function copyDirectory(
         await fs.mkdir(path.dirname(sourceEntry), { recursive: true });
         await fs.copyFile(deployedEntry, sourceEntry);
       }
+    }
+  }
+}
+
+/**
+ * Removes files in sourceDir that are not present in deployedDir, unless they
+ * match an exclusion pattern. Also removes empty directories after cleanup.
+ */
+async function removeOrphans(sourceDir: string, deployedDir: string, exclude: string[]): Promise<void> {
+  // Collect relative file paths in source
+  async function collectFiles(dir: string, rel = ""): Promise<string[]> {
+    const results: string[] = [];
+    let entries: import("fs").Dirent[];
+    try {
+      entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+    } catch {
+      return results;
+    }
+    for (const entry of entries) {
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        results.push(...(await collectFiles(path.join(dir, entry.name), relPath)));
+      } else if (entry.isFile()) {
+        results.push(relPath);
+      }
+    }
+    return results;
+  }
+
+  const sourceFiles = await collectFiles(sourceDir);
+  const deployedFiles = new Set(await collectFiles(deployedDir));
+
+  // Delete source orphans (not in deployed and not excluded)
+  for (const relPath of sourceFiles) {
+    if (!deployedFiles.has(relPath) && !isExcluded(path.basename(relPath), exclude)) {
+      await fs.unlink(path.join(sourceDir, relPath));
+    }
+  }
+
+  // Remove empty directories in source (deepest first)
+  async function collectDirs(dir: string, rel = ""): Promise<string[]> {
+    const results: string[] = [];
+    let entries: import("fs").Dirent[];
+    try {
+      entries = (await fs.readdir(dir, { withFileTypes: true })) as import("fs").Dirent[];
+    } catch {
+      return results;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+        results.push(...(await collectDirs(path.join(dir, entry.name), relPath)));
+        results.push(relPath);
+      }
+    }
+    return results;
+  }
+
+  const sourceDirs = await collectDirs(sourceDir);
+  for (const relDir of sourceDirs) {
+    const absDir = path.join(sourceDir, relDir);
+    try {
+      const contents = await fs.readdir(absDir);
+      if (contents.length === 0) {
+        await fs.rmdir(absDir);
+      }
+    } catch {
+      // Directory may have already been removed
     }
   }
 }
@@ -303,11 +372,12 @@ export async function pullProject(options: PullOptions): Promise<void> {
 
         await copyFile(deployedPath, sourcePath, deployedContent);
       } else {
-        // Directory-based: wipe then recursive copy (mirror, not additive)
-        if (existsSync(sourcePath)) {
-          await fs.rm(sourcePath, { recursive: true, force: true });
-        }
+        // Directory-based: copy deployed files to source, then remove orphans
+        // (preserving source files that match exclusion patterns like *.test.ts)
         await copyDirectory(deployedPath, sourcePath, platform);
+        if (existsSync(sourcePath)) {
+          await removeOrphans(sourcePath, deployedPath, DEFAULT_EXCLUDE);
+        }
       }
 
       process.stderr.write(`[${category}] ${componentName}: ${deployedPath} ${arrow} ${sourcePath}\n`);
