@@ -5,7 +5,7 @@ import { getOmtDir } from '@lib/omt-dir';
 
 const MAX_BLOCK_COUNT = 5;
 
-export function readRalphState(_projectRoot: string, sessionId: string): RalphState | null {
+export function readRalphState(sessionId: string): RalphState | null {
   const path = join(getOmtDir(), `ralph-state-${sessionId}.json`);
   const content = readFileOrNull(path);
   if (!content) return null;
@@ -18,12 +18,12 @@ export function readRalphState(_projectRoot: string, sessionId: string): RalphSt
   }
 }
 
-export function updateRalphState(_projectRoot: string, sessionId: string, state: RalphState): void {
+export function updateRalphState(sessionId: string, state: RalphState): void {
   const path = join(getOmtDir(), `ralph-state-${sessionId}.json`);
   writeFileSafe(path, JSON.stringify(state, null, 2));
 }
 
-export function cleanupRalphState(_projectRoot: string, sessionId: string): void {
+export function cleanupRalphState(sessionId: string): void {
   deleteFile(join(getOmtDir(), `ralph-state-${sessionId}.json`));
 }
 

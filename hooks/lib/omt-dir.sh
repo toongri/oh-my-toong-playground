@@ -24,7 +24,7 @@ compute_omt_dir() {
 
   local _omt_root="$1"
   local _omt_git_common
-  _omt_git_common=$(git -C "$_omt_root" rev-parse --git-common-dir 2>/dev/null) || true
+  _omt_git_common=$(git -C "$_omt_root" rev-parse --git-common-dir 2>/dev/null) || _omt_git_common=""
 
   local _omt_name=""
   if [ -n "$_omt_git_common" ] && [ "$_omt_git_common" != ".git" ]; then
@@ -42,7 +42,7 @@ compute_omt_dir() {
     esac
   elif [ "$_omt_git_common" = ".git" ]; then
     # Standard repo: use the actual toplevel directory name
-    _omt_name=$(basename "$(git -C "$_omt_root" rev-parse --show-toplevel 2>/dev/null)") || true
+    _omt_name=$(basename "$(git -C "$_omt_root" rev-parse --show-toplevel 2>/dev/null)") || _omt_name=""
   else
     # No git: fall back to the project root basename
     _omt_name=$(basename "$_omt_root")

@@ -16,7 +16,6 @@ import { tmpdir } from 'os';
 
 describe('Ralph state management', () => {
   const testDir = join(tmpdir(), 'state-test-ralph-' + Date.now());
-  const projectRoot = join(testDir, 'project');
   const omtDir = join(testDir, 'omt');
   const sessionId = 'test-session';
 
@@ -47,7 +46,7 @@ describe('Ralph state management', () => {
 
   describe('readRalphState', () => {
     it('should return null when state file does not exist', () => {
-      const result = readRalphState(projectRoot, 'nonexistent');
+      const result = readRalphState('nonexistent');
 
       expect(result).toBeNull();
     });
@@ -65,7 +64,7 @@ describe('Ralph state management', () => {
         JSON.stringify(state)
       );
 
-      const result = readRalphState(projectRoot, sessionId);
+      const result = readRalphState(sessionId);
 
       expect(result).not.toBeNull();
       expect(result?.active).toBe(true);
@@ -86,7 +85,7 @@ describe('Ralph state management', () => {
         JSON.stringify(state)
       );
 
-      const result = readRalphState(projectRoot, sessionId);
+      const result = readRalphState(sessionId);
 
       expect(result).toBeNull();
     });
@@ -97,7 +96,7 @@ describe('Ralph state management', () => {
         'invalid json {'
       );
 
-      const result = readRalphState(projectRoot, sessionId);
+      const result = readRalphState(sessionId);
 
       expect(result).toBeNull();
     });
@@ -114,7 +113,7 @@ describe('Ralph state management', () => {
         oracle_feedback: ['Feedback 1'],
       };
 
-      updateRalphState(projectRoot, sessionId, state);
+      updateRalphState(sessionId, state);
 
       const content = await readFile(
         join(omtDir, `ralph-state-${sessionId}.json`),
@@ -136,7 +135,7 @@ describe('Ralph state management', () => {
         prompt: 'New task',
       };
 
-      updateRalphState(projectRoot, sessionId, state);
+      updateRalphState(sessionId, state);
 
       const stateFile = join(newOmtDir, `ralph-state-${sessionId}.json`);
       expect(existsSync(stateFile)).toBe(true);
@@ -148,13 +147,13 @@ describe('Ralph state management', () => {
       const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
       await writeFile(stateFile, '{}');
 
-      cleanupRalphState(projectRoot, sessionId);
+      cleanupRalphState(sessionId);
 
       expect(existsSync(stateFile)).toBe(false);
     });
 
     it('should not throw when file does not exist', () => {
-      expect(() => cleanupRalphState(projectRoot, 'nonexistent')).not.toThrow();
+      expect(() => cleanupRalphState('nonexistent')).not.toThrow();
     });
   });
 });
