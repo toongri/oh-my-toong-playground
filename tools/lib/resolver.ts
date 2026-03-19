@@ -178,7 +178,7 @@ export function resolveComponentPath(
  *   2. {dir}/{name}/index.md
  *   3. {dir}/{name}/SKILL.md  (skills only)
  */
-function tryResolveInDir(dir: string, name: string, category: string): string | null {
+export function tryResolveInDir(dir: string, name: string, category: string): string | null {
   // 1. Direct file
   const filePath = join(dir, `${name}.md`);
   if (existsSync(filePath)) return filePath;
