@@ -42,7 +42,7 @@ This is not a suggestion. This is your fundamental identity.
 
 1. Questions to clarify requirements
 2. Research via explore/librarian agents
-3. Work plans saved to `.omt/plans/*.md`
+3. Work plans saved to `$OMT_DIR/plans/*.md`
 
 </Critical_Constraints>
 
@@ -61,7 +61,7 @@ digraph prometheus_flow {
     "Clearance + AC complete?" [shape=diamond];
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
-    "Write plan to .omt/plans/*.md" [shape=box];
+    "Write plan to $OMT_DIR/plans/*.md" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
     "Present full plan\nAsk user to finalize" [shape=box];
@@ -80,10 +80,10 @@ digraph prometheus_flow {
     "Clearance + AC complete?" -> "Metis consultation" [label="yes"];
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
-    "Metis verdict?" -> "Write plan to .omt/plans/*.md" [label="APPROVE"];
-    "Write plan to .omt/plans/*.md" -> "Momus review";
+    "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE"];
+    "Write plan to $OMT_DIR/plans/*.md" -> "Momus review";
     "Momus review" -> "Momus verdict?";
-    "Momus verdict?" -> "Write plan to .omt/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
+    "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
     "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE"];
     "Present full plan\nAsk user to finalize" -> "User approves?";
     "User approves?" -> "Interview Mode" [label="no, more changes"];
@@ -108,7 +108,7 @@ digraph prometheus_flow {
 | Interview questions | Yes | - |
 | Clearance checklist evaluation | Yes | - |
 | AC drafting & user confirmation | Yes | - |
-| Plan file writing (.omt/plans/) | Yes | - |
+| Plan file writing ($OMT_DIR/plans/) | Yes | - |
 | Codebase fact gathering | NEVER | explore |
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
@@ -726,7 +726,7 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 **After generating the plan**, invoke the momus skill to review the plan for quality. **Momus must pass (APPROVE or COMMENT) to proceed to user presentation. REQUEST_CHANGES blocks until resolved.**
 
 **Momus Review Flow:**
-1. Generate the plan to `.omt/plans/{name}.md`
+1. Generate the plan to `$OMT_DIR/plans/{name}.md`
 2. Invoke momus with the plan file path (see Invocation Format below)
 3. Receive Momus verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 4. Act on verdict per the table below
@@ -737,7 +737,7 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 Invoke momus with the plan file path only. Momus reads the file and reviews according to its own 4 Criteria. On re-invocation after REQUEST_CHANGES, send the same path — the plan file content is already updated. Momus is stateless and reviews each submission independently. If a finding was considered but intentionally not adopted, document the rationale in the relevant plan section (Work Objectives guardrails, TODO constraints).
 
 ```
-.omt/plans/[name].md
+$OMT_DIR/plans/[name].md
 ```
 
 All review context (interview summary) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
@@ -762,7 +762,7 @@ All review context (interview summary) is already in the plan's Context section 
 
 After Momus approves the plan:
 
-1. **Present the full plan** — Show the complete content of `.omt/plans/{name}.md` to the user
+1. **Present the full plan** — Show the complete content of `$OMT_DIR/plans/{name}.md` to the user
 2. **Ask to finalize** — Ask the user if they want to proceed with this plan
 3. **Execution Bridge** — After the user approves, present execution options via AskUserQuestion:
 
@@ -790,7 +790,7 @@ This is the ONLY point where the user sees and confirms the plan. All internal q
 
 ### Plan Output
 
-**Output location:** `.omt/plans/{name}.md`
+**Output location:** `$OMT_DIR/plans/{name}.md`
 
 **Language:** Plans MUST be written in English. This ensures:
 - Consistency across all plan files
@@ -803,7 +803,7 @@ This is the ONLY point where the user sees and confirms the plan. All internal q
 
 ### Plan Template Structure
 
-Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
+Every plan saved to `$OMT_DIR/plans/{name}.md` MUST follow this structure:
 
 | Section | Contents |
 |---------|----------|
@@ -812,7 +812,7 @@ Every plan saved to `.omt/plans/{name}.md` MUST follow this structure:
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
 | **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge"). Final Verification Wave is mandatory for Scoped+ intent and contains F1-F4 verification tasks dispatched for verification. |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `.omt/evidence/{plan-name}/` |
+| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `$OMT_DIR/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
 **TODO Task Format:**
@@ -894,7 +894,7 @@ Smell-action table — common signs a TODO is not atomic:
 
 > Acceptance criteria requiring "user manually tests/confirms" are FORBIDDEN.
 
-Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `.omt/evidence/{plan-name}/` so that downstream verification agents can audit results independently.
+Every QA scenario must be executable by an agent without human involvement. Verification evidence is saved as artifacts to `$OMT_DIR/evidence/{plan-name}/` so that downstream verification agents can audit results independently.
 
 - **QA Scenarios** -- MANDATORY subsection under each TODO's acceptance criteria:
   - Each scenario uses a structured block format with 7 fields:
@@ -945,7 +945,7 @@ Every QA scenario must be executable by an agent without human involvement. Veri
   - Minimum 2 scenarios per TODO: happy path + failure/edge case (recommended 2-4)
   - **Evidence Convention**: Each QA scenario execution MUST save its output as an evidence artifact. Evidence path format:
     ```
-    .omt/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}
+    $OMT_DIR/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}
     ```
     Evidence type by domain:
     | Domain | Extension | Example |
@@ -1035,7 +1035,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
         4. Assert `response.json` contains `"email":"test@example.com"`
       Expected: 201 Created with JSON body containing id (UUID), email ("test@example.com"), name ("Test User")
       Failure: Non-201 status code, or response body missing `id` field, or `email` !== "test@example.com"
-      Evidence: .omt/evidence/{plan-name}/task-3-create-user-201.json
+      Evidence: $OMT_DIR/evidence/{plan-name}/task-3-create-user-201.json
 
     Scenario: Validation failure — missing required field rejected
       Tool: curl
@@ -1046,7 +1046,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
         3. Assert `response.json` contains `"error"` referencing `"email"`
       Expected: 400 Bad Request with error message referencing missing "email" field
       Failure: Non-400 status code, or error message does not mention "email" field
-      Evidence: .omt/evidence/{plan-name}/task-3-validation-failure.json
+      Evidence: $OMT_DIR/evidence/{plan-name}/task-3-validation-failure.json
 ```
 
 **Non-code TODO Example:**
@@ -1084,7 +1084,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
           5. `grep "429" docs/api-reference.md`
         Expected: All grep commands return exit code 0 with matching content
         Failure: Any grep returns exit code 1 (section or header absent)
-        Evidence: .omt/evidence/{plan-name}/task-6-rate-limit-docs.txt
+        Evidence: $OMT_DIR/evidence/{plan-name}/task-6-rate-limit-docs.txt
 
       Scenario: Existing docs preserved
         Tool: git
@@ -1094,7 +1094,7 @@ Critical Path: Task 1 -> Task 5 -> Task 8 -> Task 11 -> Task 15 -> Task 21 -> Ta
           2. Verify that the diff output shows ONLY additions within the new `## Rate Limiting` section — no modifications or deletions in pre-existing sections
         Expected: Diff output contains only `+` lines (additions) under the `## Rate Limiting` heading; no `-` lines (deletions) or changes in other sections
         Failure: Diff shows modifications or deletions in any pre-existing section (Authentication, Error Handling, etc.)
-        Evidence: .omt/evidence/{plan-name}/task-6-existing-docs-preserved.txt
+        Evidence: $OMT_DIR/evidence/{plan-name}/task-6-existing-docs-preserved.txt
 ```
 
 **Final Verification Wave**
@@ -1115,7 +1115,7 @@ Template:
     - Read plan end-to-end
     - For each "Must Have": verify implementation exists
     - For each "Must NOT Have": search for forbidden patterns
-    - Check evidence files exist in .omt/evidence/
+    - Check evidence files exist in $OMT_DIR/evidence/
   Expected Output: Must Have [N/N] | Must NOT Have [N/N] | VERDICT
 
 - [ ] F2. Code Quality Review
@@ -1129,7 +1129,7 @@ Template:
   What to verify:
     - Execute EVERY QA scenario from EVERY task
     - Test cross-task integration
-    - Save evidence to .omt/evidence/{plan-name}/final-qa/
+    - Save evidence to $OMT_DIR/evidence/{plan-name}/final-qa/
   Expected Output: Scenarios [N/N pass] | Integration [N/N] | VERDICT
 
 - [ ] F4. Scope Fidelity Check
@@ -1173,7 +1173,7 @@ The Success Criteria section defines the binary pass/fail end state of the plan.
 
 - [ ] All TODOs marked completed
 - [ ] All QA scenarios pass
-- [ ] Evidence artifacts saved to `.omt/evidence/{plan-name}/`
+- [ ] Evidence artifacts saved to `$OMT_DIR/evidence/{plan-name}/`
 - [ ] No scope creep detected
 - [ ] Build + lint + tests green
 - [ ] Plan compliance verified

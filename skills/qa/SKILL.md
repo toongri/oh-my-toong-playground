@@ -71,7 +71,7 @@ Single-line edits, obvious typos, or changes with no functional behavior modific
 ## Self-Discovery Protocol
 
 When verification methods are NOT specified in the request:
-1. Search project files: `.omt/context`, `CLAUDE.md`, `package.json`, build config
+1. Search project files: `$OMT_DIR/context`, `CLAUDE.md`, `package.json`, build config
 2. Use `~/.omt/{project}/project-commands.md` cache (existing mechanism from stage1-commands.md)
 3. Fall back to default protocol (build → test → lint)
 

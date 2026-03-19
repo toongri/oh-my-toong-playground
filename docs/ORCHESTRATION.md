@@ -57,13 +57,13 @@ flowchart TD
 
     subgraph 설계 단계
         Spec["/spec"] --> SpecReviewer[spec-reviewer]
-        SpecReviewer --> SpecFile[".omt/specs/*.md"]
+        SpecReviewer --> SpecFile["~/.omt/{OMT_PROJECT}/specs/*.md"]
     end
 
     subgraph 기획 단계
         Prometheus["/prometheus"] --> Metis[metis<br/>갭 분석]
         Metis --> Prometheus
-        Prometheus --> PlanFile[".omt/plans/*.md"]
+        Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
 
     SpecFile -.->|참조| Prometheus
@@ -85,14 +85,14 @@ flowchart TD
 
 - **역할**: 포괄적이고 테스트 가능한 명세 작성
 - **제약**: 사용자 확인 없이 단계 완료 불가
-- **출력**: `.omt/specs/{name}/spec.md`
+- **출력**: `~/.omt/{OMT_PROJECT}/specs/{name}/spec.md` (`$OMT_DIR` 경유)
 - **핵심 기능**: spec-reviewer를 통한 다중 AI 피드백
 
 ### prometheus (기획자)
 
 - **역할**: 전략적 기획, 요구사항 인터뷰
 - **제약**: **READ-ONLY**. 절대 코드 작성 안 함.
-- **출력**: `.omt/plans/{name}.md`
+- **출력**: `~/.omt/{OMT_PROJECT}/plans/{name}.md` (`$OMT_DIR` 경유)
 - **워크플로우**: 인터뷰 -> 조사 -> Metis 상담 -> 계획 작성
 
 ### sisyphus (오케스트레이터)
@@ -134,7 +134,7 @@ flowchart TD
 1. **인터뷰 모드**: 질문을 통해 컨텍스트 수집
 2. **조사**: explore/librarian 에이전트로 코드베이스 조사
 3. **Metis 상담**: 계획 작성 전 필수 갭 분석
-4. **계획 생성**: `.omt/plans/*.md`에 구조화된 계획 작성
+4. **계획 생성**: `~/.omt/{OMT_PROJECT}/plans/*.md`에 구조화된 계획 작성
 
 ### 3단계: 실행
 
@@ -151,8 +151,8 @@ flowchart TD
 
 | 명령어 | 용도 | 출력 |
 |--------|------|------|
-| `/spec <설명>` | 소프트웨어 명세 작성 | `.omt/specs/*.md` |
-| `/prometheus <작업>` | 작업 계획 생성 | `.omt/plans/*.md` |
+| `/spec <설명>` | 소프트웨어 명세 작성 | `~/.omt/{OMT_PROJECT}/specs/*.md` |
+| `/prometheus <작업>` | 작업 계획 생성 | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/sisyphus` | 조율을 통한 계획 실행 | 검증된 코드 변경 |
 | `/ralph <작업>` | oracle 검증과 함께 반복적 완료 | 작업 완료 |
 | `/hud setup\|restore` | HUD 설정 및 관리 | statusLine 설정 |

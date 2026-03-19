@@ -155,7 +155,7 @@ Output: JOB_DIR path (one line on stdout).
 
 > **Important**: Write prompts in English for consistent cross-model communication.
 
-> **`--spec` flag**: Use `--spec <spec-name>` to auto-load context from `.omt/specs/<spec-name>/` (spec.md, records/*.md, shared context).
+> **`--spec` flag**: Use `--spec <spec-name>` to auto-load context from `$OMT_DIR/specs/<spec-name>/` (spec.md, records/*.md, shared context).
 
 ### Phase 2 — Collect (Bash, timeout: 180000)
 
