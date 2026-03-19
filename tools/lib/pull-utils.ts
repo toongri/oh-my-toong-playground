@@ -7,7 +7,7 @@ import type { Category, Platform, SyncItem } from "./types.ts";
 // resolveDeployedPath
 // ---------------------------------------------------------------------------
 
-const FILE_BASED_CATEGORIES: Set<Category> = new Set(["agents", "commands", "rules"]);
+export const FILE_BASED_CATEGORIES: Set<Category> = new Set(["agents", "commands", "rules"]);
 
 /**
  * Constructs the deployed file/directory path in the target project.
