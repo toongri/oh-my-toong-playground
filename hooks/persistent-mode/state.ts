@@ -1,10 +1,12 @@
 import { RalphState } from './types.ts';
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from './utils.ts';
+import { join } from 'path';
+import { getOmtDir } from '@lib/omt-dir';
 
 const MAX_BLOCK_COUNT = 5;
 
 export function readRalphState(projectRoot: string, sessionId: string): RalphState | null {
-  const path = `${projectRoot}/.omt/ralph-state-${sessionId}.json`;
+  const path = join(getOmtDir(), `ralph-state-${sessionId}.json`);
   const content = readFileOrNull(path);
   if (!content) return null;
 
@@ -17,12 +19,12 @@ export function readRalphState(projectRoot: string, sessionId: string): RalphSta
 }
 
 export function updateRalphState(projectRoot: string, sessionId: string, state: RalphState): void {
-  const path = `${projectRoot}/.omt/ralph-state-${sessionId}.json`;
+  const path = join(getOmtDir(), `ralph-state-${sessionId}.json`);
   writeFileSafe(path, JSON.stringify(state, null, 2));
 }
 
 export function cleanupRalphState(projectRoot: string, sessionId: string): void {
-  deleteFile(`${projectRoot}/.omt/ralph-state-${sessionId}.json`);
+  deleteFile(join(getOmtDir(), `ralph-state-${sessionId}.json`));
 }
 
 // Block counting for stuck agent escape hatch

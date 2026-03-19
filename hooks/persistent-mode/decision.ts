@@ -6,6 +6,8 @@ import {
 } from './state.ts';
 import { analyzeTranscript } from './transcript-detector.ts';
 import { generateAttemptId, ensureDir } from './utils.ts';
+import { join } from 'path';
+import { getOmtDir } from '@lib/omt-dir';
 
 export interface DecisionContext {
   projectRoot: string;
@@ -136,7 +138,7 @@ Do NOT stop until all tasks are completed.
 
 export function makeDecision(context: DecisionContext): HookOutput {
   const { projectRoot, sessionId, lastAssistantMessage, incompleteTodoCount } = context;
-  const stateDir = `${projectRoot}/.omt/state`;
+  const stateDir = join(getOmtDir(), 'state');
   const attemptId = generateAttemptId(sessionId, projectRoot);
 
   // Ensure state directory exists

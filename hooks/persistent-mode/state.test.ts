@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import {
   readRalphState,
   updateRalphState,
@@ -12,13 +12,15 @@ import type { RalphState } from './types.ts';
 import { mkdir, rm, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { tmpdir, homedir } from 'os';
+import { tmpdir } from 'os';
 
 describe('Ralph state management', () => {
   const testDir = join(tmpdir(), 'state-test-ralph-' + Date.now());
   const projectRoot = join(testDir, 'project');
-  const omtDir = join(projectRoot, '.omt');
+  const omtDir = join(testDir, 'omt');
   const sessionId = 'test-session';
+
+  const savedOmtDir = process.env.OMT_DIR;
 
   beforeAll(async () => {
     await mkdir(omtDir, { recursive: true });
@@ -29,9 +31,18 @@ describe('Ralph state management', () => {
   });
 
   beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
     // Clean up state files before each test
     const stateFile = join(omtDir, `ralph-state-${sessionId}.json`);
     try { await rm(stateFile, { force: true }); } catch {}
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
   });
 
   describe('readRalphState', () => {
@@ -115,7 +126,8 @@ describe('Ralph state management', () => {
     });
 
     it('should create directory if it does not exist', async () => {
-      const newProjectRoot = join(testDir, 'new-project');
+      const newOmtDir = join(testDir, 'new-omt');
+      process.env.OMT_DIR = newOmtDir;
       const state: RalphState = {
         active: true,
         iteration: 1,
@@ -124,9 +136,9 @@ describe('Ralph state management', () => {
         prompt: 'New task',
       };
 
-      updateRalphState(newProjectRoot, sessionId, state);
+      updateRalphState(projectRoot, sessionId, state);
 
-      const stateFile = join(newProjectRoot, '.omt', `ralph-state-${sessionId}.json`);
+      const stateFile = join(newOmtDir, `ralph-state-${sessionId}.json`);
       expect(existsSync(stateFile)).toBe(true);
     });
   });
