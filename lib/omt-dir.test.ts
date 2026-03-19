@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { execSync } from 'child_process';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
-import { basename, dirname } from 'path';
+import { basename, dirname, resolve } from 'path';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 
 import { getOmtDir } from './omt-dir.ts';
@@ -67,8 +67,9 @@ describe('getOmtDir', () => {
 
     let expectedName: string;
     if (gitCommonDir !== '.git') {
-      // Worktree: use parent of git-common-dir
-      expectedName = basename(dirname(gitCommonDir));
+      // Worktree or subdirectory: resolve relative path against cwd
+      const resolved = resolve(repoDir, gitCommonDir);
+      expectedName = basename(dirname(resolved));
     } else {
       const toplevel = execSync('git rev-parse --show-toplevel', {
         cwd: repoDir,
@@ -115,7 +116,8 @@ describe('getOmtDir', () => {
 
     let shellProjectName: string;
     if (gitCommonDir && gitCommonDir !== '.git') {
-      shellProjectName = basename(dirname(gitCommonDir));
+      const resolved = resolve(repoDir, gitCommonDir);
+      shellProjectName = basename(dirname(resolved));
     } else if (gitCommonDir === '.git') {
       const toplevel = execSync('git rev-parse --show-toplevel', {
         cwd: repoDir,
@@ -131,6 +133,40 @@ describe('getOmtDir', () => {
     const result = getOmtDir();
 
     expect(result).toBe(expectedPath);
+  });
+
+  it('env var absent from git repo subdirectory: returns correct $HOME/.omt/{repo-name}', async () => {
+    delete process.env.OMT_DIR;
+
+    // Use a subdirectory of this repo — git rev-parse --git-common-dir returns relative "../.git"
+    const subDir = join(import.meta.dir, '..', 'lib');
+    process.chdir(subDir);
+
+    const result = getOmtDir();
+
+    // Derive expected name: resolve relative gitCommonDir against subDir
+    const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+      cwd: subDir,
+      encoding: 'utf-8',
+    }).trim();
+
+    let expectedName: string;
+    if (gitCommonDir !== '.git') {
+      const resolved = resolve(subDir, gitCommonDir);
+      expectedName = basename(dirname(resolved));
+    } else {
+      const toplevel = execSync('git rev-parse --show-toplevel', {
+        cwd: subDir,
+        encoding: 'utf-8',
+      }).trim();
+      expectedName = basename(toplevel);
+    }
+    expectedName = expectedName.replace(/ /g, '-');
+
+    expect(result).toBe(`${homedir()}/.omt/${expectedName}`);
+    // Must not be the home directory itself (the bug: basename(dirname("../.git")) === "..")
+    expect(result).not.toBe(`${homedir()}/.omt/..`);
+    expect(existsSync(result)).toBe(true);
   });
 
   it('spaces in directory name are replaced with hyphens', async () => {

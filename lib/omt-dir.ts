@@ -11,7 +11,7 @@
 import { execSync } from 'child_process';
 import { mkdirSync } from 'fs';
 import { homedir } from 'os';
-import { basename, dirname } from 'path';
+import { basename, dirname, resolve } from 'path';
 
 /**
  * Returns the OMT working directory for the current project.
@@ -43,8 +43,9 @@ function deriveProjectName(cwd: string): string {
     let name: string;
 
     if (gitCommonDir !== '.git') {
-      // Worktree: git-common-dir returns absolute path like /path/to/repo/.git
-      name = basename(dirname(gitCommonDir));
+      // Worktree or subdirectory: resolve relative path against cwd
+      const resolved = resolve(cwd, gitCommonDir);
+      name = basename(dirname(resolved));
     } else {
       // Standard repo: use toplevel directory name
       const toplevel = execSync('git rev-parse --show-toplevel', {
