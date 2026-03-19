@@ -7,6 +7,12 @@ export type Platform = "claude" | "gemini" | "codex" | "opencode";
 
 export type PluginScope = "user" | "project";
 
+export type PluginObjectItem = {
+  name: string;
+  check?: string;
+  "pre-commands"?: string[];
+};
+
 export type Category = "agents" | "commands" | "skills" | "scripts" | "rules";
 
 export type SyncItem =
@@ -46,7 +52,7 @@ export type PlatformYaml = {
   config?: Record<string, unknown>;
   hooks?: Record<string, PlatformYamlHookItem[]>;
   mcps?: Record<string, Record<string, unknown>>;
-  plugins?: { items?: Array<string | Record<string, unknown>> };
+  plugins?: { items?: Array<string | PluginObjectItem> };
   statusLine?: string;
   "model-map"?: Record<string, string>;
 };

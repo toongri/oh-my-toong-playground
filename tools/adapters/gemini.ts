@@ -18,7 +18,7 @@ import fs from "fs/promises";
 import path from "path";
 import { stringify as tomlStringify } from "smol-toml";
 
-import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
+import type { Platform, PlatformConfigResult, PlatformYaml, PluginObjectItem, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
@@ -570,7 +570,7 @@ export class GeminiAdapter implements PlatformAdapter {
           await this._installExtensionSafe(item, dryRun);
         } else if (typeof item === "object" && item !== null) {
           await this._installExtensionObjectSafe(
-            item as Record<string, unknown>,
+            item as PluginObjectItem,
             targetPath,
             dryRun,
           );
@@ -601,20 +601,18 @@ export class GeminiAdapter implements PlatformAdapter {
   }
 
   private async _installExtensionObjectSafe(
-    item: Record<string, unknown>,
+    item: PluginObjectItem,
     targetPath: string,
     dryRun: boolean,
   ): Promise<void> {
-    const name = typeof item["name"] === "string" ? item["name"] : "";
+    const name = item.name;
     if (!name) {
       logWarn("익스텐션 항목에 name이 없음 (스킵)");
       return;
     }
 
-    const check = typeof item["check"] === "string" ? item["check"] : "";
-    const preCommands = Array.isArray(item["pre-commands"])
-      ? (item["pre-commands"] as string[])
-      : [];
+    const check = item.check ?? "";
+    const preCommands = item["pre-commands"] ?? [];
 
     if (dryRun) {
       logDry(`gemini extensions install ${name}`);
