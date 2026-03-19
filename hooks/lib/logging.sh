@@ -178,18 +178,11 @@ omt_log_init() {
     OMT_PROJECT_ROOT="$project_root"
 
     # Compute OMT_DIR if not already set by session-start.sh
+    local _log_script_dir
+    _log_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$_log_script_dir/omt-dir.sh"
+    compute_omt_dir "$OMT_PROJECT_ROOT"
     local _log_omt_dir="$OMT_DIR"
-    if [[ -z "$_log_omt_dir" ]]; then
-        local _log_git_common
-        _log_git_common=$(git -C "$OMT_PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)
-        local _log_pname=""
-        if [[ -n "$_log_git_common" ]] && [[ "$_log_git_common" != ".git" ]]; then
-            _log_pname=$(basename "$(dirname "$_log_git_common")")
-        else
-            _log_pname=$(basename "$OMT_PROJECT_ROOT")
-        fi
-        _log_omt_dir="$HOME/.omt/${_log_pname// /-}"
-    fi
 
     # Create log directory
     local log_dir="${_log_omt_dir}/logs"
