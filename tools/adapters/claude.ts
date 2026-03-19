@@ -328,11 +328,10 @@ export class ClaudeAdapter implements PlatformAdapter {
 
   async syncPlatformYaml(
     targetPath: string,
-    platformYaml: Record<string, unknown>,
+    yaml: PlatformYaml,
     dryRun: boolean,
     scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
-    const yaml = platformYaml as PlatformYaml;
     const processedSections: string[] = [];
 
     // --- config ---
@@ -343,7 +342,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 
     // --- hooks ---
     if (yaml.hooks != null) {
-      const hooksMap = yaml.hooks as Record<string, Array<Record<string, unknown>>>;
+      const hooksMap = yaml.hooks;
       const accumulatedHooks: Record<string, unknown[]> = {};
 
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
@@ -458,8 +457,7 @@ export class ClaudeAdapter implements PlatformAdapter {
 
     // --- mcps ---
     if (yaml.mcps != null) {
-      const mcps = yaml.mcps as Record<string, Record<string, unknown>>;
-      for (const [name, serverJson] of Object.entries(mcps)) {
+      for (const [name, serverJson] of Object.entries(yaml.mcps)) {
         await this.syncMcpsMerge(targetPath, name, serverJson, dryRun);
       }
       processedSections.push("mcps");

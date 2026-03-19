@@ -18,7 +18,7 @@ import { stringify } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile } from "../lib/json.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
-import type { PlatformConfigResult, PluginScope } from "../lib/types.ts";
+import type { PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 
 // =============================================================================
@@ -372,7 +372,7 @@ export class CodexAdapter implements PlatformAdapter {
 
   async syncPlatformYaml(
     targetPath: string,
-    platformYaml: Record<string, unknown>,
+    yaml: PlatformYaml,
     dryRun: boolean,
     _scope?: PluginScope,
   ): Promise<PlatformConfigResult> {
@@ -383,27 +383,17 @@ export class CodexAdapter implements PlatformAdapter {
     this.resetMcpAccumulator();
 
     // --- config ---
-    const configJson = platformYaml["config"];
-    if (configJson != null && typeof configJson === "object" && !Array.isArray(configJson)) {
-      await this.syncConfig(
-        targetPath,
-        configJson as Record<string, unknown>,
-        dryRun
-      );
+    if (yaml.config != null) {
+      await this.syncConfig(targetPath, yaml.config, dryRun);
       processedSections.push("config");
     }
 
     // --- mcps ---
-    const mcps = platformYaml["mcps"];
-    if (mcps != null && typeof mcps === "object" && !Array.isArray(mcps)) {
-      const mcpsObj = mcps as Record<string, unknown>;
-      for (const name of Object.keys(mcpsObj)) {
-        const server = mcpsObj[name];
-        if (server != null && typeof server === "object" && !Array.isArray(server)) {
-          this.accumulateMcp(name, server as Record<string, unknown>);
-          if (!dryRun) {
-            logInfo(`MCP accumulated: ${name}`);
-          }
+    if (yaml.mcps != null) {
+      for (const [name, server] of Object.entries(yaml.mcps)) {
+        this.accumulateMcp(name, server);
+        if (!dryRun) {
+          logInfo(`MCP accumulated: ${name}`);
         }
       }
       await this.flushMcpBlock(targetPath, dryRun);
@@ -411,25 +401,18 @@ export class CodexAdapter implements PlatformAdapter {
     }
 
     // --- model-map ---
-    const modelMapRaw = platformYaml["model-map"];
-    if (
-      modelMapRaw != null &&
-      typeof modelMapRaw === "object" &&
-      !Array.isArray(modelMapRaw)
-    ) {
-      modelMap = modelMapRaw as Record<string, string>;
+    if (yaml["model-map"] != null) {
+      modelMap = yaml["model-map"];
       processedSections.push("model-map");
     }
 
     // --- hooks ---
-    const hooksRaw = platformYaml["hooks"];
-    if (hooksRaw != null) {
+    if (yaml.hooks != null) {
       logWarn("Codex does not support hooks in config.toml. Skipping hooks section.");
     }
 
     // --- plugins ---
-    const pluginsRaw = platformYaml["plugins"];
-    if (pluginsRaw != null) {
+    if (yaml.plugins != null) {
       logWarn("Codex does not support plugins. Skipping plugins section.");
     }
 
