@@ -32,6 +32,22 @@
         {"text": "no-experience-fabrication", "description": "Does not fabricate experience or metrics"}
       ],
       "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "쿠팡 백엔드 엔지니어에 지원하려고 해.\n\n[채용 공고]\nBackend Engineer\n주요업무:\n- Java/Kotlin 기반 대규모 이커머스 서버 개발\n- 주문/결제/물류 시스템 설계 및 운영\n- MSA 기반 서비스 개발\n자격요건:\n- 서버 개발 경력 3년 이상\n- Spring Boot, JPA 활용 경험\n- Redis, Kafka 경험 우대",
+      "expected_output": "Extracts company (coupang), date (today YYMMDD), creates branch, checks other branches for reference patterns, invokes review-resume with JD context, resolves pdf_output_dir_rule, extracts {position} from JD title",
+      "assertions": [
+        {"text": "correct-company-extraction", "description": "Company name correctly extracted as 'coupang' in lowercase"},
+        {"text": "correct-branch-format", "description": "Branch follows {company}/{YYMMDD} pattern"},
+        {"text": "branch-reference-check", "description": "Checks other branches' _config.yml for existing patterns before review-resume"},
+        {"text": "review-resume-protocol", "description": "References S1-S5 or D1-D6 evaluation dimensions"},
+        {"text": "position-extraction", "description": "Extracts position title from JD (Backend Engineer) for {position} variable"},
+        {"text": "output-dir-rule-resolution", "description": "Resolves pdf_output_dir_rule by interpreting natural language rule, not using hardcoded path"},
+        {"text": "six-step-workflow", "description": "Follows all 6 steps in documented order"},
+        {"text": "no-experience-fabrication", "description": "Does not fabricate experience or metrics"}
+      ],
+      "files": []
     }
   ],
   "benchmark_summary": {

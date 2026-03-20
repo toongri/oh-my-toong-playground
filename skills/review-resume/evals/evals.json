@@ -1,0 +1,57 @@
+{
+  "skill_name": "review-resume",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘.\n\nJD 핵심:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- 대용량 트래픽, 동시성 처리, 실시간 데이터 처리\n- 유실없는 데이터 정합성과 신뢰성\n- 트러블슈팅, 성능 튜닝\n\n이력서는 _config.yml에 있어.",
+      "expected_output": "S1-S5 evaluation, D1-D6 line scan (D5 only on problem-solving section), P.A.R.R., JD keyword matching, Connection/Contribution guidance with examples, AI Tone Audit",
+      "assertions": [
+        {"text": "pre-evaluation-branch-check", "description": "Checks other branches' _config.yml patterns before evaluation", "last_result": "PASS", "evidence": "Checked 4 branches (main, sb, sentbe/260320, origin/linemanga/260317)"},
+        {"text": "no-jd-keyword-quoting", "description": "Does not quote JD keywords back at the company in self-intro suggestions", "last_result": "PASS", "evidence": "No JD quoting pattern found"},
+        {"text": "evidence-based-jd-matching", "description": "Distinguishes weak matches (tech section only, no achievement line) from strong matches", "last_result": "PASS", "evidence": "87.5% match rate, Java identified as missing"},
+        {"text": "connection-paragraph-examples", "description": "Provides Connection/Contribution guidance using example patterns (Bold philosophy + Evidence HOW + contribution vision)", "last_result": "PASS", "evidence": "S3/S4 evaluated with Connection structure"},
+        {"text": "no-nonexistent-experience", "description": "Does not use keywords for experiences the candidate hasn't had (e.g., 대용량 트래픽)", "last_result": "PASS", "evidence": "No non-existent keywords added"},
+        {"text": "d5-career-not-applied", "description": "Does NOT apply D5 (Interview depth) to career section bullets — career bullets are hooks, not proof", "last_result": "PASS", "evidence": "7 career bullets marked D5: N/A with 'hook' note"},
+        {"text": "d5-problem-solving-applied", "description": "DOES apply D5 to problem-solving section entries with trade-off richness check", "last_result": "PASS", "evidence": "19 problem-solving lines: D5 evaluated"},
+        {"text": "section-independence", "description": "Does not flag career bullets for lacking corresponding problem-solving entries — treats sections as independent", "last_result": "PASS", "evidence": "결제 동기화 no-entry noted as normal"},
+        {"text": "ai-tone-audit", "description": "Performs AI Tone Audit as final step", "last_result": "PASS", "evidence": "Final step performed, PASS"}
+      ],
+      "files": ["_config.yml"]
+    },
+    {
+      "id": 2,
+      "prompt": "이력서 봐줘. 전반적으로 피드백 부탁해. _config.yml에 있어.",
+      "expected_output": "S1-S5 evaluation, D1-D6 line scan (D5 problem-solving only), P.A.R.R. evaluation. No JD, so JD matching skipped. Optional personality paragraph guidance. AI Tone Audit.",
+      "assertions": [
+        {"text": "optional-personality-paragraph", "description": "Evaluates or mentions the personality/interest paragraph as optional", "last_result": "PASS", "evidence": "AI agent paragraph evaluated, compression recommended"},
+        {"text": "d5-career-not-applied", "description": "Does NOT apply D5 to career section bullets", "last_result": "PASS", "evidence": "No D5 FAILs on career bullets"},
+        {"text": "section-independence", "description": "Does not require career bullets to have corresponding problem-solving entries", "last_result": "PASS", "evidence": "No cross-section flagging"},
+        {"text": "ai-tone-audit", "description": "Performs AI Tone Audit as final step", "last_result": "PASS", "evidence": "Performed, no P1 patterns detected"},
+        {"text": "d1-d6-evaluation", "description": "Performs D1-D6 line-by-line evaluation on career and problem-solving sections", "last_result": "PASS", "evidence": "32 lines evaluated with D1-D6"}
+      ],
+      "files": ["_config.yml"]
+    }
+  ],
+  "benchmark_summary": {
+    "latest_iteration": 2,
+    "date": "2026-03-20",
+    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 395.6, "avg_tokens": 76129},
+    "without_skill": {"pass_rate": 0.071, "avg_time_seconds": 110.7, "avg_tokens": 25799}
+  },
+  "benchmark_history": [
+    {
+      "iteration": 1,
+      "date": "2026-03-20",
+      "with_skill": {"pass_rate": 0.846, "avg_time_seconds": 352.6, "avg_tokens": 65785},
+      "without_skill": {"pass_rate": 0.154, "avg_time_seconds": 137.4, "avg_tokens": 27178},
+      "notes": "s3-s4-na and no-company-specific-content assertions were design issues, not skill issues"
+    },
+    {
+      "iteration": 2,
+      "date": "2026-03-20",
+      "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 395.6, "avg_tokens": 76129},
+      "without_skill": {"pass_rate": 0.071, "avg_time_seconds": 110.7, "avg_tokens": 25799},
+      "changes": "D5 career exclusion, section independence, English language consistency"
+    }
+  ]
+}
