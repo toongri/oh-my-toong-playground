@@ -51,6 +51,13 @@ If the branch already exists, ask the user whether to overwrite or use a differe
 
 ### Step 3: Review & Improve Resume
 
+Before invoking review-resume, check other branches' `_config.yml` for the candidate's established self-introduction and company-connection patterns:
+```bash
+git branch -a
+git show {branch}:_config.yml  # for relevant branches
+```
+Pass any discovered patterns as context to the review-resume skill so it can maintain consistency.
+
 Invoke the `review-resume` skill via the Skill tool.
 
 Keep the full JD text in context — the review-resume skill needs the target position/company to perform accurate D1-D6 evaluation.
@@ -102,10 +109,12 @@ Read the output configuration file:
 
 Ask the user two questions:
 
-**Q1. PDF output directory**
-> "Where should the final PDF be saved?"
+**Q1. PDF output directory rule**
+> "What rule should determine the PDF output directory?"
 >
-> Example: `~/Documents/resumes/`, `~/Desktop/지원서/`
+> Example: `~/Documents/cv 내에서 가장 숫자가 큰 기존 디렉토리 사용`
+>
+> You can specify a fixed path (e.g., `~/Desktop/지원서/`) or a dynamic rule that the AI will resolve each time.
 
 **Q2. PDF naming format**
 > "What naming convention should be used? You can combine these variables:"
@@ -113,13 +122,14 @@ Ask the user two questions:
 > - `{company}` — company name
 > - `{date}` — application date (YYMMDD)
 > - `{name}` — name field from _config.yml
+> - `{position}` — position title extracted from the JD (use as-is from JD, do not translate)
 >
 > Example: `이력서_{name}_{company}_{date}.pdf`
 
 Save the answers as YAML:
 ```yaml
 # ~/.omt/resume-manage/resume-apply/config.yaml
-pdf_output_dir: "<user answer>"
+pdf_output_dir_rule: "<user answer>"
 pdf_naming_format: "<user answer>"
 ```
 
@@ -127,14 +137,15 @@ Create the directory with `mkdir -p` if it doesn't exist.
 
 #### 6-3. Copy PDF
 
-1. Read the `name` field from `_config.yml` for the `{name}` variable
-2. Substitute variables in `pdf_naming_format`:
-   - `{company}` → company name from Step 1
-   - `{date}` → date from Step 1 (YYMMDD)
-   - `{name}` → name value from _config.yml
-3. Create `pdf_output_dir` if it doesn't exist
-4. Copy the PDF:
+1. **Resolve output directory**: Read `pdf_output_dir_rule` from config.
+   - If it's a fixed path, use directly.
+   - If it's a natural language rule (e.g., "~/Documents/cv 내에서 가장 숫자가 큰 기존 디렉토리"), interpret the rule: list the directory contents, apply the rule logic, and determine the correct path.
+2. Read the `name` field from `_config.yml` for the `{name}` variable
+3. Extract `{position}` from the JD's position title (use as-is from JD, do not translate)
+4. Substitute variables in `pdf_naming_format`
+5. Create resolved output directory if it doesn't exist
+6. Copy the PDF:
    ```bash
-   cp resume.pdf "{pdf_output_dir}/{substituted_filename}"
+   cp resume.pdf "{resolved_output_dir}/{substituted_filename}"
    ```
-5. Report the final path to the user
+7. Report the final path to the user
