@@ -4,21 +4,22 @@
     {
       "id": 1,
       "prompt": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘.\n\nJD 핵심:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- 대용량 트래픽, 동시성 처리, 실시간 데이터 처리\n- 유실없는 데이터 정합성과 신뢰성\n- 트러블슈팅, 성능 튜닝\n\n이력서는 _config.yml에 있어.",
-      "expected_output": "S1-S5 evaluation, D1c-D6c career evaluation + D1p-D6p problem-solving evaluation, P.A.R.R., JD keyword matching, Connection/Contribution guidance, AI Tone Audit",
+      "expected_output": "Self-introduction type-based evaluation (A/B/C/D + global), D1c-D6c career, D1p-D6p problem-solving, P.A.R.R., JD keyword matching, Type C guidance with research suggestion, AI Tone Audit",
       "assertions": [
         {"text": "pre-evaluation-branch-check", "description": "Checks other branches' _config.yml patterns before evaluation"},
+        {"text": "per-type-evaluation", "description": "Each self-intro paragraph is identified by type (A/B/C/D) and evaluated against type-specific criteria — NOT S1-S5 codes"},
+        {"text": "global-evaluation", "description": "Global criteria (paragraph count, independence, first sentence, original framing) are evaluated after per-type evaluation"},
+        {"text": "no-s1-s5-codes", "description": "Output uses Type A/B/C/D codes — no S1, S2, S3, S4, S5 codes appear anywhere"},
+        {"text": "type-c-research-or-recommendation", "description": "When Type C is absent/needed for targeting, suggests researching the company (product, tech blog, career page) before writing — or offers option to omit Type C"},
+        {"text": "post-evaluation-options", "description": "After findings, presents concrete actionable options (2-3 choices with trade-offs) rather than just listing problems"},
+        {"text": "type-d-no-metric-requirement", "description": "Type D (current interest) paragraph is NOT failed for lacking metrics — direction and specificity are sufficient"},
         {"text": "no-jd-keyword-quoting", "description": "Does not quote JD keywords back at the company in self-intro suggestions"},
-        {"text": "evidence-based-jd-matching", "description": "Distinguishes weak matches (tech section only, no achievement line) from strong matches"},
-        {"text": "connection-paragraph-examples", "description": "Provides Connection/Contribution guidance using example patterns"},
-        {"text": "no-nonexistent-experience", "description": "Does not use keywords for experiences the candidate hasn't had"},
-        {"text": "career-uses-d1c-d6c", "description": "Career bullets are evaluated using D1c-D6c codes (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness)"},
-        {"text": "problem-solving-uses-d1p-d6p", "description": "Problem-solving entries are evaluated using D1p-D6p codes (Diagnostic Causation, Evidence Depth, Ownership of Thinking, Beyond-Standard Reasoning, Interview Depth, Section Fitness)"},
-        {"text": "d5c-hook-potential", "description": "Career bullets get D5c (Hook Potential) as an actual evaluation — not N/A or skipped"},
-        {"text": "d5p-interview-depth", "description": "Problem-solving entries get D5p (Interview Depth) with trade-off richness assessment"},
-        {"text": "d4c-outcome-focus", "description": "D4c evaluates whether the career achievement goes BEYOND industry standard (outcome differentiation), not reasoning depth"},
-        {"text": "d4p-reasoning-focus", "description": "D4p evaluates whether tech choice is justified with alternative comparison and trade-off analysis (reasoning depth)"},
-        {"text": "separate-summary-counts", "description": "Output includes separate [경력 Summary] D1c-D6c and [문제해결 Summary] D1p-D6p count lines"},
-        {"text": "d1c-linear-vs-d1p-diagnostic", "description": "D1c judges linear causation (goal→action→result) for career; D1p judges diagnostic causation (discovery→diagnosis→attempts→failure→resolution) for problem-solving"},
+        {"text": "evidence-based-jd-matching", "description": "Distinguishes weak matches from strong matches in JD keyword analysis"},
+        {"text": "career-uses-d1c-d6c", "description": "Career bullets evaluated with D1c-D6c codes"},
+        {"text": "problem-solving-uses-d1p-d6p", "description": "Problem-solving entries evaluated with D1p-D6p codes"},
+        {"text": "d5c-hook-potential", "description": "Career bullets get D5c (Hook Potential) as actual evaluation"},
+        {"text": "d5p-interview-depth", "description": "Problem-solving entries get D5p (Interview Depth) evaluation"},
+        {"text": "separate-summary-counts", "description": "Output includes separate career and problem-solving summary count lines"},
         {"text": "section-independence", "description": "Does not flag career bullets for lacking corresponding problem-solving entries"},
         {"text": "ai-tone-audit", "description": "Performs AI Tone Audit as final step"}
       ],
@@ -27,24 +28,26 @@
     {
       "id": 2,
       "prompt": "이력서 봐줘. 전반적으로 피드백 부탁해. _config.yml에 있어.",
-      "expected_output": "S1-S5 evaluation, D1c-D6c career + D1p-D6p problem-solving evaluation, P.A.R.R. No JD so JD matching skipped. AI Tone Audit.",
+      "expected_output": "Self-introduction type-based evaluation (A/B/D + global, no Type C since no target), D1c-D6c career, D1p-D6p problem-solving, P.A.R.R., AI Tone Audit.",
       "assertions": [
-        {"text": "optional-personality-paragraph", "description": "Evaluates or mentions the personality/interest paragraph as optional"},
-        {"text": "career-uses-d1c-d6c", "description": "Career bullets are evaluated using D1c-D6c dimension codes"},
-        {"text": "problem-solving-uses-d1p-d6p", "description": "Problem-solving entries are evaluated using D1p-D6p dimension codes"},
-        {"text": "d5c-hook-potential", "description": "Career bullets get D5c (Hook Potential) as an actual evaluation"},
-        {"text": "d5p-interview-depth", "description": "Problem-solving entries get D5p (Interview Depth) evaluation"},
-        {"text": "separate-summary-counts", "description": "Output includes separate career and problem-solving summary count lines"},
-        {"text": "d1c-linear-vs-d1p-diagnostic", "description": "D1c uses linear causation criteria; D1p uses diagnostic causation criteria"},
-        {"text": "section-independence", "description": "Does not require career bullets to have corresponding problem-solving entries"},
-        {"text": "ai-tone-audit", "description": "Performs AI Tone Audit as final step"}
+        {"text": "per-type-evaluation", "description": "Each self-intro paragraph identified by type and evaluated against type-specific criteria"},
+        {"text": "global-evaluation", "description": "Global criteria evaluated after per-type"},
+        {"text": "no-s1-s5-codes", "description": "No S1-S5 codes in output"},
+        {"text": "type-c-absent-normal", "description": "Absence of Type C noted as normal (no target company) — not flagged as a problem"},
+        {"text": "type-d-no-metric-requirement", "description": "Type D paragraph not failed for lacking metrics"},
+        {"text": "post-evaluation-options", "description": "Concrete options offered after findings"},
+        {"text": "career-uses-d1c-d6c", "description": "Career bullets evaluated with D1c-D6c"},
+        {"text": "problem-solving-uses-d1p-d6p", "description": "Problem-solving entries evaluated with D1p-D6p"},
+        {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary counts"},
+        {"text": "section-independence", "description": "Sections treated as independent"},
+        {"text": "ai-tone-audit", "description": "AI Tone Audit as final step"}
       ],
       "files": ["_config.yml"]
     }
   ],
   "benchmark_summary": {
-    "latest_iteration": 2,
-    "date": "2026-03-20",
+    "latest_iteration": 3,
+    "date": "2026-03-22",
     "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 395.6, "avg_tokens": 76129},
     "without_skill": {"pass_rate": 0.071, "avg_time_seconds": 110.7, "avg_tokens": 25799}
   },
@@ -62,6 +65,11 @@
       "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 395.6, "avg_tokens": 76129},
       "without_skill": {"pass_rate": 0.071, "avg_time_seconds": 110.7, "avg_tokens": 25799},
       "changes": "D5 career exclusion, section independence, English language consistency"
+    },
+    {
+      "iteration": 3,
+      "date": "2026-03-22",
+      "changes": "D1-D6 split to D1c-D6c/D1p-D6p, S1-S5 replaced with Type A-D + global evaluation"
     }
   ]
 }
