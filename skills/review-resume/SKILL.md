@@ -1,6 +1,6 @@
 ---
 name: review-resume
-description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured S1-S5, D1c-D6c / D1p-D6p, and P.A.R.R. evaluation with inline writing guidance. Do NOT use for JD-based resume tailoring (use resume-apply instead) or simple _config.yml edits.
+description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured self-introduction evaluation (per-type A-D + global), D1c-D6c / D1p-D6p, and P.A.R.R. evaluation with inline writing guidance. Do NOT use for JD-based resume tailoring (use resume-apply instead) or simple _config.yml edits.
 ---
 
 # Review Resume
@@ -9,7 +9,7 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
 
 ## Absolute Rules
 
-1. **Never skip targeting.** If the user hasn't stated the target position/company, ask BEFORE the section-specific evaluation. S1/S2/S5 self-introduction evaluation can proceed without a target, but S3/S4 are marked N/A when target is unspecified.
+1. **Never skip targeting.** If the user hasn't stated the target position/company, ask BEFORE the section-specific evaluation. Self-introduction evaluation (Types A, B, D) can proceed without a target, but Type C is marked N/A when target is unspecified.
 2. **Never skip pushback on well-written content.** Good formatting doesn't mean interview-ready. Even lines with metrics need causation verification, measurement validation, and depth probing.
 3. **Always evaluate content, not just expression.** Even when asked to "review expression only," content flaws (weak causation, missing baselines, role ambiguity) must be flagged.
 4. **Never fabricate metrics.** If the user doesn't provide numbers, ask. Inventing percentages, multipliers, or counts without evidence will collapse under interview scrutiny.
@@ -23,15 +23,15 @@ Every resume review follows this sequence. No step is optional.
 ```mermaid
 flowchart TB
     A[Resume received] --> B{Self-introduction present?}
-    B -->|Yes| C[S1-S5 self-introduction evaluation]
+    B -->|Yes| C[Self-introduction evaluation: per-type + global]
     B -->|No| D{Target position known?}
     C --> D
     D -->|No| E[ASK target position]
     E --> E2[/HALT — wait for user reply/]
     E2 --> F2{Self-introduction was evaluated?}
-    F2 -->|Yes| F[S3/S4 Conditional Re-evaluation]
+    F2 -->|Yes| F[Type C conditional evaluation]
     F2 -->|No| G
-    F --> F3[S1-S5 Writing Guidance Trigger recheck]
+    F --> F3[Writing Guidance Trigger recheck]
     F3 --> G[Section-specific evaluation: D1c-D6c career / D1p-D6p problem-solving]
     D -->|Yes| G
     G --> H[3-level pushback simulation]
@@ -51,113 +51,104 @@ flowchart TB
 
 ## Pre-Evaluation Research
 
-Before starting the S1-S5 evaluation, perform this preparation step:
+Before starting the self-introduction evaluation, perform this preparation step:
 
 1. **Check other branches for context**: Run `git branch -a` and inspect `_config.yml` on other branches to understand existing self-introduction and company connection patterns. This reveals the candidate's writing style and prior customizations.
 
-2. **Use skill-internal examples instead of external research**: Do not search the web for company information. Use the examples already embedded in this skill (see Connection / Contribution Paragraph examples under Writing Guidance: Self-Introduction) as reference patterns. Adapt them to the current target company's domain.
+2. **Use skill-internal examples instead of external research**: Do not search the web for company information. Use the examples already embedded in this skill (see Type C connection examples under Self-Introduction Evaluation) as reference patterns. Adapt them to the current target company's domain.
 
-## Self-Introduction Evaluation (S1-S5)
+## Self-Introduction Evaluation
 
-When a resume includes a self-introduction (personal statement, cover letter, core competency summary), evaluate the following 5 dimensions BEFORE the section-specific evaluation.
+The self-introduction answers one question: **"어떤 엔지니어인가?"** Every paragraph must reveal a different facet of this answer.
 
-### Evaluation Dimensions
+Unlike career bullets (which prove achievements) or problem-solving entries (which prove thinking), the self-introduction establishes **identity and direction**. Metrics support claims but are not required in every paragraph.
 
-| # | Dimension | Question | Fail Signal |
-|---|-----------|----------|-------------|
-| S1 | Evidence-based identity | Are competency claims backed by specific projects/achievements within the resume? | "집요한 문제 해결자", "열정적인 개발자" — trait listing with no supporting project |
-| S2 | Engineering philosophy specificity | Is the development philosophy grounded in actual cases, not abstract values? | "클린 코드를 지향합니다", "사용자 중심 개발" — no concrete project connection |
-| S3 | Connection (motivation) | Does the statement connect the candidate's experience to the company's **specific** product/technology/initiative? | "귀사의 혁신적인 문화에 감탄", "성장하고 싶습니다" — interchangeable with any company |
-| S4 | Contribution value proposition | Does it say "what I can contribute" rather than "what I want"? | "성장 환경을 찾고 있습니다", "배우고 싶습니다" — zero value from the company's perspective |
-| S5 | Conciseness | Is it within the recommended character limit? | See Tiered Character Limits below |
+### Paragraph Types
 
-### Tiered Character Limits
+A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of four types. Identify each paragraph's type, then evaluate it against the type-specific criteria below.
 
-Apply these limits consistently across S5 evaluation and Pre-Writing Validation:
+#### Type A — Professional Identity (정체성)
 
-| Length | Status | Action |
-|--------|--------|--------|
-| ~500 characters | Recommended | PASS |
-| ~700 characters | Warning | PASS with note — consider trimming non-essential content |
-| ~1000+ characters | FAIL | Compress to essentials. Restating the entire resume in paragraph form is not a self-introduction. |
+**Why**: In a 7.4-second scan, the first thing a hiring manager tries to determine is "what role and level is this person?" The identity paragraph must answer this instantly. Without a clear identity anchor, the self-introduction reads as a generic essay that could belong to anyone.
 
-### Evaluation Output Format
+**What**: Role anchor (what kind of developer) + differentiating trait (what makes you distinctive) + supporting evidence from the resume.
 
-```
-[Self-Introduction Evaluation]
-- S1 Evidence-based identity: PASS / FAIL (reason)
-- S2 Engineering philosophy: PASS / FAIL (reason)
-- S3 Connection: PASS / FAIL / N/A (reason) — N/A when target company not specified
-- S4 Contribution value: PASS / FAIL / N/A (reason) — N/A when target company not specified
-- S5 Conciseness: PASS / FAIL (reason — include approximate character count)
-```
+**How**: Open with a single sentence that combines your role with your distinguishing characteristic. Immediately follow with a concrete project or achievement that proves the claim. The evidence is not the point — the identity framing is. The evidence exists to make the identity credible.
 
-### S3/S4 Conditional Re-evaluation
+**Evaluation criteria:**
+- Is there a role anchor visible in the first sentence? (백엔드, 프론트엔드, 데이터 등)
+- Is the identity claim backed by at least one project or achievement from the resume?
+- Is the trait differentiating? (Would this sentence still work if another engineer wrote it?)
 
-When the target position is obtained via the ASK node **after** the S1-S5 evaluation has already been completed, re-evaluate S3 and S4:
+**PASS / FAIL Examples:**
 
-- **Trigger condition**: S3 and/or S4 were marked N/A due to missing target, but the user has now provided target company/position information.
-- **Action**: Re-evaluate S3 (Connection) and S4 (Contribution Value) with the newly provided context. Change N/A to PASS or FAIL accordingly.
-- **Preserved results**: S1, S2, and S5 results from the initial evaluation are not changed.
-- **Trigger recheck**: After S3/S4 re-evaluation, recheck the Writing Guidance Trigger: Self-Introduction condition using the updated evaluable count (now 5 instead of 3). If the trigger was not fired after the initial S1-S5 evaluation but the condition is now met with the expanded evaluable set, deliver the guidance message before proceeding to the section-specific evaluation. If the trigger already fired after the initial evaluation, do not fire it again.
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "**비즈니스 임팩트로 증명하는 백엔드 개발자입니다.** 상품 검수 병목을 숙련도 의존성으로 재정의하고, LLM 기반 자동화로 월 1,500만원 운영비를 절감했습니다." | 역할 앵커("백엔드 개발자") + 차별화("비즈니스 임팩트로 증명") + 증거(검수 병목 재정의 → 절감) |
+| PASS | "**해결보다 문제 선정에 더 집요한 백엔드 개발자입니다.** 어떤 문제를 잡느냐에 따라 같은 비용으로 만들 수 있는 성과가 완전히 달라지기 때문에, 방향을 정하기 전에 지금 잡은 문제가 진짜인지부터 의심합니다." | 역할 앵커 + 차별화("문제 선정에 집요") + 철학적 근거 |
+| FAIL | "저는 항상 새로운 기술을 배우며 성장하는 개발자입니다. 다양한 프로젝트 경험을 통해 역량을 키워왔습니다." | 역할 앵커 없음(무슨 개발자?), 차별화 없음("성장하는 개발자"는 모든 개발자), 증거 없음 |
+| FAIL | "3년차 백엔드 개발자 홍길동입니다. 주요 기술 스택은 Java, Spring Boot, MySQL입니다." | 역할 앵커는 있으나 차별화 없음 — 기술 스택 나열은 정체성이 아님 |
 
-Re-evaluation output format:
+#### Type B — Engineering Stance (일하는 방식)
 
-```
-[S3/S4 Re-evaluation — Target: {company/position}]
-- S3 Connection: PASS / FAIL (reason — was N/A, now evaluated with target context)
-- S4 Contribution value: PASS / FAIL (reason — was N/A, now evaluated with target context)
-```
+**Why**: Technical skills alone don't distinguish mid-level+ engineers. How someone approaches work — their engineering philosophy, collaboration style, problem-solving temperament — is what hiring managers remember after the 40-second scan. This paragraph answers "what would it be like to work with this person?"
 
-### Self-Introduction Red Flags
+**What**: A working philosophy or approach + a concrete episode that demonstrates it. The episode is not a full project description — it's a snapshot that makes the philosophy tangible.
 
-| Thought | Reality |
-|---------|---------|
-| "Listing good traits should be impressive" | Unsupported trait claims are indistinguishable from AI boilerplate. Every claim must be backed by a project in the resume. |
-| "Praising the company shows enthusiasm" | Generic company praise with no specific connection is the most common rejection signal in Korean hiring (한국 채용 시장). |
-| "Self-introduction can be casual, it's just an intro" | Self-introduction is the first section read in the 40-second scan. Apply the same rigor as the section-specific evaluation. |
-| "Without a target company, S3/S4 can't be evaluated" | Correct — mark N/A. S1, S2, and S5 are always evaluable regardless of target. |
-| "Saying I want to grow shows passion" | "What I want" has zero value from the company's perspective. Reframe as "what I can contribute." |
-| "One self-introduction works for all companies" | Without a target company, only S1/S2/S5 (evidence, philosophy, conciseness) can be evaluated. S3/S4 require per-company customization. |
-| "JD 키워드를 따옴표로 인용하면 열정을 보여줄 수 있다" | JD 문구를 그대로 되돌리면 아부 또는 앵무새로 읽힌다. 자기소개의 주어는 항상 "나"여야 하며, 회사 도메인은 참조하되 반드시 나의 언어로 표현할 것. |
+**How**: State your stance in one sentence, then immediately show it in action with a specific situation. Keep the episode brief — the self-introduction is not the place for a full problem-solving narrative.
 
-### Writing Guidance: Self-Introduction
+**Evaluation criteria:**
+- Is the philosophy grounded in an actual project/situation, not abstract values?
+- Would a hiring manager learn something about your working style from this paragraph?
 
-Use this section when S1-S5 evaluation reveals structural problems. This is not for light editing — it is for candidates who need to rebuild the self-introduction from scratch.
+**PASS / FAIL Examples:**
 
-#### Why Self-Introduction Matters
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "**팀원의 문제에 귀 기울이고, 제가 풀 수 있는 부분을 찾아 해결합니다.** 공정 조건 변경이 매번 배포를 기다려야 했던 현장 팀원들의 병목을 파악하고, Rule Engine 기반 PoC를 배포해 리드타임을 2주에서 즉시로 단축했습니다." | 일하는 방식("팀원의 문제 → 내가 풀 수 있는 부분 찾기") + 구체 사례(Rule Engine → 2주→즉시) |
+| PASS | "**코드를 작성하기 전에 문제의 경계를 먼저 정의합니다.** 결제-주문 상태 불일치를 단순 버그가 아닌 시스템 간 동기화 문제로 재정의한 후, 보상 트랜잭션 스케줄러를 설계하여 불일치를 0건으로 만들었습니다." | 철학("문제의 경계를 먼저 정의") + 구체 에피소드(결제-주문 불일치 재정의) |
+| FAIL | "클린 코드를 지향하며 테스트 주도 개발을 실천합니다. 코드 리뷰를 통해 팀의 코드 품질을 높이는 데 기여합니다." | 추상적 가치 나열("클린 코드", "TDD", "코드 리뷰"), 구체 사례 없음 — 아무나 쓸 수 있는 문장 |
+| FAIL | "효율적인 커뮤니케이션을 중시하며, 항상 문서화를 통해 지식을 공유합니다." | "효율적인 커뮤니케이션"은 모든 직장인의 기본 — 차별화 없음, 사례 없음 |
 
-Hiring managers scan a resume in 40 seconds. The self-introduction is the first section they read. It must immediately answer: "Who is this person, and what do they do?" It is not a feature list — it is the combination of identity and evidence.
+#### Type C — Company Connection (회사 연결)
 
-#### Portfolio-Style Structure Template
+**Why**: In Korean tech hiring, a generic self-introduction that could be sent to any company is the most common rejection signal. When targeting a specific company, the connection paragraph is the signal that this candidate did their homework. It answers "why HERE, and what can you GIVE?"
 
-```
-[Role Identity + Core Competency] + [Engineering Philosophy (evidence-based)] + [Quantitative Achievements 1-2]
-```
+**What**: Your experience/capability → the company's specific domain/product/challenge → your contribution vision. The paragraph starts from YOU (not the company), connects to THEM (specifically), and ends with what you will BUILD.
 
-Required elements:
-- **Role identity**: A single differentiating line, not an abstract title. Example: "비즈니스 임팩트로 증명하는 백엔드 개발자"
-- **Engineering philosophy**: Grounded in an actual project from the resume — not abstract values
-- **Quantitative achievements**: 1-2 highest-impact numbers
+**How**: Lead with an engineering belief grounded in your own experience. Bridge to the company's specific domain with concrete product/technology names. Close with a contribution statement ("만들고 싶습니다", "기여하고 싶습니다"). The subject is always "I" — never "your company is impressive."
 
-Optional element:
-- **개성/관심사 문단**: 최근 기술적 관심사나 개성을 보여주는 문단 (옵셔널). 4문단 강제가 아니라, 개성이 드러나는 경우에만 추가.
+**Before writing Type C — Research the company:**
 
-Target length: 2-3 paragraphs, approximately 500 characters (Korean)
+A genuine connection paragraph is impossible without knowing the company's actual products, technology, and challenges. JD keywords alone are not enough — parroting JD phrases back reads as "이거 JD 복붙했네" and is worse than no connection paragraph at all.
 
-#### Connection / Contribution Paragraph (Strongly recommended when target company exists)
+Before writing, research the company through these channels:
+1. **Company product/service**: Use the product directly if possible. Understand what they build and for whom.
+2. **Tech blog**: Search for `{company name} tech blog` or `{company name} 기술 블로그`. Engineering blog posts reveal the company's actual technical challenges and culture.
+3. **JD deep reading**: Look beyond requirements — what business problems does the JD hint at? What domain language does it use?
+4. **Career page / team introduction**: How does the team describe itself? What values do they emphasize?
 
-Add one paragraph after the main self-introduction when a target company is specified. In a resume-apply context (JD provided), this paragraph is **strongly recommended**.
+If no meaningful connection point is found after research, it is better to omit Type C entirely than to write a generic paragraph. A strong A + B self-introduction without Type C is always better than a forced connection.
 
-Template structure:
-1. **Bold 철학 (1줄)** — The engineering belief grounded in your own experience
-2. **Evidence HOW (1-2줄)** — Specific project evidence + the method/approach, not just the outcome
-3. **회사 연결** — The company's specific domain, product, or challenge (named concretely, not generically)
-4. **기여 비전 (1줄)** — What you will build / create for them ("만들고 싶습니다", "기여하고 싶습니다")
+**When to include**: Only when targeting a specific company. In a general-purpose resume, this paragraph is absent — that is normal, not a gap.
 
-The following examples demonstrate the pattern. Study them — they replace a list of constraints:
+**Evaluation criteria:**
+- Does the paragraph connect to the company's **specific** product/technology/domain? (Would swapping in another company name break the paragraph?)
+- Does it frame as "what I can give" rather than "what I want to get"?
+- Is the subject "I" throughout, not "귀사는..."?
 
-**Example 1 (금융/결제 도메인):**
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "데이터가 틀리면 안 되는 환경에서 정합성을 설계해 왔습니다. 선착순 쿠폰의 race condition을 원자적 갱신으로 해결해 초과 발급 0건을 달성하고, 결제-주문 상태 동기화로 불일치를 0건으로 만든 경험이 있습니다. **토스증권의 주식 매매와 결제 영역에서**, 한 건의 오차도 없는 금융 트랜잭션의 신뢰성을 만들고 싶습니다." | 내 경험(정합성 설계) → 회사 구체적 영역(토스증권 주식 매매/결제) → 기여 비전(신뢰성) |
+| PASS | "서비스가 복잡해질수록 외부 연동의 복원력이 핵심이 된다고 생각합니다. 불안정한 POS 서버 연동에서 SQS 비동기 분리와 Circuit Breaker로 장애를 격리하고, Kafka + Transactional Outbox로 메시지 유실 없는 이벤트 파이프라인을 설계했습니다. **비스테이지가 이커머스·라이브 스트리밍·커뮤니티를 하나의 플랫폼으로 엮어 글로벌 팬덤에 제공하는 구조에서**, 이벤트 기반 아키텍처와 외부 연동 복원력 경험으로 기여하고 싶습니다." | 내 경험(복원력 설계) → 회사 구체적 구조(비스테이지 이커머스+스트리밍+커뮤니티) → 기여 비전 |
+| FAIL | "귀사의 혁신적인 문화에 감탄했으며, 성장할 수 있는 환경에서 배우고 싶습니다." | 어느 회사에나 통하는 범용 + "내가 원하는 것" 프레이밍 + 주어가 "귀사" |
+| FAIL | "토스에서 일하고 싶습니다. 토스의 개발 문화가 인상적이었고, 좋은 동료들과 함께 성장하고 싶습니다." | 회사 이름은 있지만 구체적 도메인/제품 연결 없음 + "성장하고 싶다" = 내가 원하는 것 |
+
+**Additional connection examples** (study these patterns — they replace a list of constraints):
+
+**금융/결제 도메인:**
 ```
 데이터가 틀리면 안 되는 환경에서 정합성을 설계해 왔습니다.
 선착순 쿠폰의 race condition을 원자적 갱신으로 해결해 초과 발급 0건을
@@ -166,7 +157,7 @@ The following examples demonstrate the pattern. Study them — they replace a li
 트랜잭션의 신뢰성을 만들고 싶습니다.
 ```
 
-**Example 2 (안정성/복원력 도메인):**
+**안정성/복원력 도메인:**
 ```
 결제와 주문이 멈추지 않는 서비스의 '안정성을 설계하는 개발자'로
 기여하고 싶습니다. 불안정한 외부 POS 서버와의 연동에서 비동기
@@ -176,7 +167,7 @@ The following examples demonstrate the pattern. Study them — they replace a li
 만들고 싶습니다.
 ```
 
-**Example 3 (이벤트 기반 아키텍처 도메인):**
+**이벤트 기반 아키텍처 도메인:**
 ```
 서비스가 복잡해질수록 외부 연동의 복원력이 핵심이 된다고 생각합니다.
 불안정한 POS 서버 연동에서 SQS 비동기 분리와 Circuit Breaker로 장애를
@@ -186,7 +177,7 @@ The following examples demonstrate the pattern. Study them — they replace a li
 이벤트 기반 아키텍처와 외부 연동 복원력 경험으로 기여하고 싶습니다.
 ```
 
-**Example 4 (결제/과금 도메인):**
+**결제/과금 도메인:**
 ```
 결제 시스템에서 "장애가 없는 것"보다 "장애가 나도 괜찮은 것"이 더
 중요하다고 생각합니다. 외부 POS 서버의 불안정을 전제로 비동기 분리와
@@ -195,7 +186,7 @@ Circuit Breaker를 설계해 무중단 운영을 만든 경험이 있고, 결제
 결제 영역에서 이 경험을 확장하고 싶습니다.
 ```
 
-**Example 5 (물류/유통 도메인):**
+**물류/유통 도메인:**
 ```
 외부 시스템이 불안정해도 서비스가 멈추지 않는 구조를 만드는 데 관심이
 많습니다. 포스사 서버가 수시로 열화되는 환경에서 주문 승낙 API에
@@ -205,53 +196,133 @@ latency가 전파되지 않도록 비동기 분리와 복원력 패턴을 조합
 방식으로 기여하고 싶습니다.
 ```
 
-#### Pre-Writing Validation
+#### Type D — Current Interest (지금의 관심)
 
-Before writing any self-introduction, confirm all of the following. If any answer is No, stop and discuss with the user.
+**Why**: Past achievements show what you've done, but not where you're headed. What you're currently exploring signals growth trajectory, technical curiosity, and engineering taste. Hiring managers — especially at companies that value autonomy — read this as "will this person keep growing after they join?"
 
-1. **Is the competency claim backed by evidence?** — Can it be directly supported by a project or achievement already in the resume? → If No, remove the claim or add a supporting project.
-2. **Is the engineering philosophy specific?** — Is it grounded in an actual case, not just abstract values? → If No, connect to a specific example.
-3. **Does the connection have a specific link?** — Would the sentence still work if you swapped in a different company's name? → If yes (it's generic), add company-specific content.
-4. **Is it contribution-focused, not request-focused?** — Does it say what you can give, not what you want to receive? → If No, reframe from the company's perspective.
-5. **Is it concise (under ~500 characters)?** — Does it feel like a summary of the entire resume rather than a focused statement? → If it exceeds 700 characters, compress to essentials only.
+**What**: A current technical exploration + why you started it + your specific approach or direction. Results are NOT required — direction and specificity are. This is not a hobby section — the interest must be work-adjacent.
 
-#### Before/After Examples
+**How**: Start with what you're exploring and why. Show enough specificity that an interviewer could ask follow-up questions about your approach. End with a direction, not "시도 중에 있습니다."
 
-**Before — Trait listing (anti-pattern):**
+**Evaluation criteria:**
+- Is the interest work-adjacent? (Non-work hobbies belong in interviews, not resumes)
+- Is there a specific approach or direction? ("AI에 관심 있습니다" alone is too vague)
+- Could an interviewer ask a meaningful technical follow-up about this?
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "최근에는 AI 에이전트를 활용한 코드 리뷰 자동화를 설계하고 있습니다. 리뷰 시간을 줄이면 전체 개발 사이클이 빨라진다고 판단했고, 여러 모델에게 청크 단위로 리뷰를 맡긴 뒤 오케스트레이터가 합의를 도출하는 구조로 커버리지와 신뢰도를 높이고 있습니다." | 관심사(AI 코드 리뷰) + 왜(리뷰 시간→개발 사이클) + 구체적 접근(청크 리뷰 + 오케스트레이터 합의) |
+| PASS | "오픈소스 컨트리뷰션을 통해 분산 시스템의 실전 패턴을 학습하고 있습니다. 최근 Apache Kafka의 consumer rebalance 로직에 패치를 제출했고, 이 과정에서 파티션 할당 전략의 trade-off를 체감했습니다." | 구체적 활동(Kafka 패치) + 학습 방향(분산 시스템 실전 패턴) + 면접관이 물어볼 수 있는 깊이 |
+| FAIL | "새로운 기술에 관심이 많으며, 최근 AI와 클라우드 분야를 공부하고 있습니다." | "AI와 클라우드"는 너무 넓음, 구체적 접근 없음 — 면접관이 물어볼 게 없음 |
+| FAIL | "주말마다 알고리즘 문제를 풀며 실력을 키우고 있습니다." | 코딩 테스트 준비는 일적 관심사가 아닌 취업 준비 — 엔지니어링 방향을 보여주지 않음 |
+
+### Composition Guide
+
+There is no mandatory combination. Choose 2-4 paragraphs that best answer "어떤 엔지니어인가?" for your situation:
+
+| Situation | Recommended Composition | Paragraphs |
+|-----------|------------------------|------------|
+| General-purpose resume (no target) | A + B | 2 |
+| General-purpose + showing direction | A + B + D | 3 |
+| Targeting a specific company | A + B + C | 3 |
+| Targeting + showing direction | A + B + D + C | 4 |
+
+**Rules:**
+- **A is always first** — the identity paragraph is what the 7.4-second scan hits
+- **C appears only when targeting** — its absence in a general resume is normal, not a gap
+- **Two paragraphs of the same type are allowed** if they show genuinely different facets (e.g., two B paragraphs — one about individual problem-solving, one about team collaboration)
+- Paragraphs can blend types (e.g., A+B in one paragraph) — the type system is a guide, not a constraint
+
+### Global Evaluation
+
+After evaluating each paragraph against its type, check these cross-cutting criteria:
+
+| Criterion | Question | PASS | FAIL |
+|-----------|----------|------|------|
+| Paragraph count | 2-4개인가? | 2-4 paragraphs | 1 (too thin) or 5+ (unfocused) |
+| Independence | 각 문단이 "어떤 엔지니어인가"의 다른 면을 보여주는가? | Each paragraph reveals new information | Two paragraphs say the same thing differently |
+| First sentence | 첫 문장만 읽어도 이 사람이 어떤 엔지니어인지 감이 오는가? | "비즈니스 임팩트로 증명하는 백엔드 개발자" — standalone value | "안녕하세요. 3년차 개발자 홍길동입니다" — zero signal |
+| Original framing | 자기소개만의 프레이밍이 있는가, 경력 bullet을 문장화한 것인가? | "검수 병목을 숙련도 의존성으로 재정의" — this framing exists only in the intro | "LLM 기반 시스템 개발로 월 1,500만원 절감" — identical to career bullet |
+
+### Evaluation Output Format
+
 ```
-안녕하세요. 항상 새로운 기술을 배우며 성장하는 개발자 홍길동입니다.
-저는 다양한 프로젝트 경험을 통해 역량을 키워왔습니다.
-팀워크를 중시하고 커뮤니케이션 능력이 뛰어납니다.
-귀사의 혁신적인 문화와 성장 가능성에 매력을 느껴 지원합니다.
+[Self-Introduction Evaluation]
+
+Per-paragraph:
+- P1 [Type A/B/C/D]: PASS / FAIL (reason against type-specific criteria)
+- P2 [Type A/B/C/D]: PASS / FAIL (reason)
+- P3 [Type A/B/C/D]: PASS / FAIL (reason)
+
+Global:
+- Paragraph count: PASS / FAIL (N paragraphs)
+- Independence: PASS / FAIL (reason)
+- First sentence: PASS / FAIL (reason)
+- Original framing: PASS / FAIL (reason)
 ```
 
-Problems with Before:
-- "새로운 기술을 배우며 성장" = AI boilerplate with no evidence
-- "다양한 프로젝트 경험" = zero specificity
-- "혁신적인 문화" = generic — works for any company
-- Hiring manager reaction: "모든 지원자가 이렇게 써요" (Skip)
+### Type C Conditional Evaluation
 
-**After — Evidence-based identity + connection:**
-```
-비즈니스 임팩트로 증명하는 백엔드 개발자입니다. F&B 커머스에서 메뉴 메타데이터 자동
-추출 시스템을 설계하여 수작업 인력 11명→3명으로 절감(월 1,600만원 절감)했습니다.
-해결보다 문제 선정에 더 집요합니다 — 상품 검수 병목을 "인력 부족"이 아닌 "숙련도
-의존성"으로 재진단하여 근본 원인을 공략했습니다.
+When the target position is obtained **after** the initial self-introduction evaluation:
 
-귀사의 [제품명]에서 [구체적 기술 과제]를 마주하고 계신 것으로 파악했습니다.
-LLM 파이프라인 설계와 비용-정확도 트레이드오프 의사결정 경험을 바탕으로,
-[구체적 기여 방향]에 기여하고자 합니다.
-```
+- **Trigger**: No Type C paragraph exists, but the user has now provided target company/position
+- **Action**: Note that a Type C paragraph is recommended for this target. Provide connection guidance using the examples above.
+- **Not a FAIL**: Absence of Type C in a general resume is normal. It becomes a recommendation only when a target is specified.
+
+### Self-Introduction Anti-Patterns
+
+| Thought | Reality |
+|---------|---------|
+| "Listing good traits should be impressive" | Unsupported trait claims ("집요한 문제 해결자", "열정적인 개발자") are indistinguishable from AI boilerplate. Every identity claim needs a project reference — this is the Type A evaluation criterion. |
+| "Praising the company shows enthusiasm" | Generic company praise ("귀사의 혁신적인 문화에 감탄") is the most common rejection signal in Korean hiring. Type C requires specific product/domain connection, not praise. |
+| "Self-introduction can be casual, it's just an intro" | The self-introduction is the first section read in the 7.4-second scan. It determines whether the rest gets read. |
+| "Saying I want to grow shows passion" | "What I want" has zero value from the company's perspective. Type C requires "what I can give" framing. |
+| "One self-introduction works for all companies" | Without Type C, only identity (A), stance (B), and interest (D) are evaluable. Per-company customization lives in Type C. |
+| "JD 키워드를 따옴표로 인용하면 열정을 보여줄 수 있다" | JD 문구를 그대로 되돌리면 아부 또는 앵무새로 읽힌다. 자기소개의 주어는 항상 "나"여야 하며, 회사 도메인은 참조하되 반드시 나의 언어로 표현할 것. |
+| "Recent interests without results are filler" | Type D does not require metrics. A specific direction and approach are sufficient — this shows growth trajectory, not past achievement. |
 
 ### Writing Guidance Trigger: Self-Introduction
 
-After S1-S5 evaluation, check this condition:
+After evaluating all paragraphs, check this condition:
 
-- **Condition**: More than half of evaluable dimensions are FAIL — i.e., `FAIL_count > evaluable_count / 2` (rounded down). Evaluable = S1-S5 minus N/A items.
-- **N/A exclusion**: N/A items (S3, S4 when no target) are excluded from both FAIL count and evaluable count
-- **Message to deliver**: "S1-S5 중 N개 차원이 FAIL입니다. 이 자기소개는 재구성이 필요합니다. 위의 Writing Guidance: Self-Introduction 섹션의 템플릿과 예시를 참고하여 다시 작성해 보세요."
+- **Condition**: More than half of paragraphs FAIL their type-specific evaluation
+- **Message**: "자기소개의 N개 문단 중 X개가 유형별 평가에서 FAIL입니다. 위의 문단 유형별 가이드(Type A-D)와 PASS/FAIL 예시를 참고하여 재구성해 보세요."
 
 This trigger is not optional. If the condition is met, deliver the guidance message before proceeding to the section-specific evaluation.
+
+### Post-Evaluation Action: Always Offer Concrete Options
+
+After completing the self-introduction evaluation, do not simply list problems — always present concrete options for the user to choose from. The user should never be left with "여기가 문제입니다" without "이렇게 해결할 수 있습니다."
+
+**Pattern:**
+1. State the finding clearly (which paragraph, which criterion, why it fails)
+2. Explain **why** this matters (what a hiring manager would think)
+3. Present 2-3 actionable options with trade-offs
+
+**Example:**
+
+After finding that Type C is absent when targeting a company:
+
+> 위펀의 구체적 제품/서비스를 모르는 상태에서 진정성 있는 회사 연결 문단을 작성하는 건 불가능합니다. JD 문구를 앵무새처럼 되돌려주는 문단은 없는 것보다 나쁩니다.
+>
+> 선택지:
+> 1. **위펀 제품을 조사한 뒤 진짜 연결점을 찾아 작성** — 위펀 서비스를 직접 써보거나, 기술 블로그가 있다면 참고. 조사를 원하면 제가 회사 정보를 검색해 드릴 수 있습니다.
+> 2. **Type C 없이 제출** — 현재 자기소개(Type A + B PASS)만으로도 충분히 강합니다.
+
+**Example 2:**
+
+After finding that Type D fails due to vague direction:
+
+> P3의 "AI 에이전트를 활용한 개발 생산성 개선"은 방향은 있지만 구체적 접근이 약합니다.
+>
+> 선택지:
+> 1. **구체적 접근 추가** — "청크 단위 리뷰 + 오케스트레이터 합의 도출"처럼 현재 시도하고 있는 구조를 명시
+> 2. **이 문단 제거하고 A + B 2문단 구성** — 간결해지며, 면접에서 구두로 관심사를 언급하는 전략
+> 3. **초기 결과 추가** — 아직 없다면, 측정 가능한 결과가 나온 후 추가
+
+This pattern applies to ALL evaluation findings, not just self-introduction. It is a behavioral rule for the evaluator.
 
 ## Section-Specific Evaluation (D1c-D6c / D1p-D6p)
 
@@ -1201,7 +1272,7 @@ This trigger is not optional.
 
 ## AI Tone Audit (Final Step)
 
-After all evaluations (S1-S5, D1c-D6c / D1p-D6p, P.A.R.R., Other Projects) are complete, perform an AI Tone Audit as the final step.
+After all evaluations (self-introduction, D1c-D6c / D1p-D6p, P.A.R.R., Other Projects) are complete, perform an AI Tone Audit as the final step.
 
 Call the humanizer skill in audit mode on **every text element** of the resume:
 
