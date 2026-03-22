@@ -60,12 +60,9 @@ Pass any discovered patterns as context to the review-resume skill so it can mai
 
 Invoke the `review-resume` skill via the Skill tool.
 
-Keep the full JD text in context — the review-resume skill needs the target position/company to perform accurate D1-D6 evaluation.
+Keep the full JD text in context — the review-resume skill needs the target position/company to perform accurate evaluation.
 
-The review-resume skill runs its full evaluation protocol:
-- S1-S5 self-introduction assessment
-- D1-D6 line-by-line analysis
-- P.A.R.R. signature project evaluation
+The review-resume skill runs its full evaluation protocol (self-introduction, career/problem-solving sections, signature project).
 
 Apply improvements to `_config.yml` based on the evaluation results. This step involves user interaction, so wait until the review-resume process completes.
 
