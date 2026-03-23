@@ -51,12 +51,24 @@ If the branch already exists, ask the user whether to overwrite or use a differe
 
 ### Step 3: Review & Improve Resume
 
-Before invoking review-resume, check other branches' `_config.yml` for the candidate's established self-introduction and company-connection patterns:
+Before invoking review-resume, check ALL branches' `_config.yml` for reference material:
 ```bash
 git branch -a
-git show {branch}:_config.yml  # for relevant branches
+git show {branch}:_config.yml  # for ALL company branches, not just a few
 ```
-Pass any discovered patterns as context to the review-resume skill so it can maintain consistency.
+
+**What to look for:**
+- Self-introduction patterns: which Type A/B/C/D paragraphs have been written before?
+- Company connection (Type C) paragraphs: how has the candidate connected their experience to different companies? What worked well?
+- Career bullet variations: has the candidate customized bullet emphasis per company?
+- Problem-solving entry selection: which entries were swapped or added for specific JDs?
+
+**How to use as reference:**
+- When improving the self-introduction, use existing Type C paragraphs from other branches as structural reference — the candidate's own voice and proven patterns are better starting points than writing from scratch.
+- When the review-resume skill suggests changes, cross-check against other branches to maintain consistency in the candidate's core identity (Type A/B) while customizing company-specific content (Type C).
+- If a strong Type C paragraph exists for a similar domain (e.g., another fintech branch when targeting a fintech company), adapt it rather than starting from zero.
+
+Pass discovered patterns as context to the review-resume skill so it can maintain consistency and leverage existing material.
 
 Invoke the `review-resume` skill via the Skill tool.
 
@@ -64,7 +76,7 @@ Keep the full JD text in context — the review-resume skill needs the target po
 
 The review-resume skill runs its full evaluation protocol (self-introduction, career/problem-solving sections, signature project).
 
-Apply improvements to `_config.yml` based on the evaluation results. This step involves user interaction, so wait until the review-resume process completes.
+Apply improvements to `_config.yml` based on the evaluation results. When writing or rewriting self-introduction paragraphs, reference the patterns discovered from other branches — the candidate's proven voice and structure are the best foundation. This step involves user interaction, so wait until the review-resume process completes.
 
 ### Step 4: Commit
 
