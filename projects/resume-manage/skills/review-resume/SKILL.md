@@ -1,6 +1,6 @@
 ---
 name: review-resume
-description: Resume review and writing guidance skill — evaluates resumes with S1-S5 self-introduction assessment, D1-D6 line-by-line analysis, P.A.R.R. signature project evaluation, and provides inline writing templates and examples for improvement. Triggers: 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume
+description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured self-introduction evaluation (per-type A-D + global), D1c-D6c / D1p-D6p, and P.A.R.R. evaluation with inline writing guidance. Do NOT use for JD-based resume tailoring (use resume-apply instead) or simple _config.yml edits.
 ---
 
 # Review Resume
@@ -9,10 +9,11 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
 
 ## Absolute Rules
 
-1. **Never skip targeting.** If the user hasn't stated the target position/company, ask BEFORE the D1-D6 review. S1/S2/S5 self-introduction evaluation can proceed without a target, but S3/S4 are marked N/A when target is unspecified.
+1. **Never skip targeting.** If the user hasn't stated the target position/company, ask BEFORE the section-specific evaluation. Self-introduction evaluation (Types A, B, D) can proceed without a target, but Type C is marked N/A when target is unspecified.
 2. **Never skip pushback on well-written content.** Good formatting doesn't mean interview-ready. Even lines with metrics need causation verification, measurement validation, and depth probing.
 3. **Always evaluate content, not just expression.** Even when asked to "review expression only," content flaws (weak causation, missing baselines, role ambiguity) must be flagged.
 4. **Never fabricate metrics.** If the user doesn't provide numbers, ask. Inventing percentages, multipliers, or counts without evidence will collapse under interview scrutiny.
+   - **Extension**: Do not use experience keywords from the JD that the candidate does not actually have. Cross-check the JD against the resume, and verify with the user ("이 경험이 있나요?") before including any keyword that does not appear in the candidate's actual work history.
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
 
 ## Evaluation Protocol
@@ -22,16 +23,16 @@ Every resume review follows this sequence. No step is optional.
 ```mermaid
 flowchart TB
     A[Resume received] --> B{Self-introduction present?}
-    B -->|Yes| C[S1-S5 self-introduction evaluation]
+    B -->|Yes| C[Self-introduction evaluation: per-type + global]
     B -->|No| D{Target position known?}
     C --> D
     D -->|No| E[ASK target position]
     E --> E2[/HALT — wait for user reply/]
     E2 --> F2{Self-introduction was evaluated?}
-    F2 -->|Yes| F[S3/S4 Conditional Re-evaluation]
+    F2 -->|Yes| F[Type C conditional evaluation]
     F2 -->|No| G
-    F --> F3[S1-S5 Writing Guidance Trigger recheck]
-    F3 --> G[Line-by-line 6-dimension scan — career/problem-solving sections]
+    F --> F3[Writing Guidance Trigger recheck]
+    F3 --> G[Section-specific evaluation: D1c-D6c career / D1p-D6p problem-solving]
     D -->|Yes| G
     G --> H[3-level pushback simulation]
     H --> I[First-Page Primacy check]
@@ -43,192 +44,574 @@ flowchart TB
     J -->|Yes| K[P1-P5 P.A.R.R. evaluation]
     J -->|No| L{Other projects present?}
     K --> L
-    L -->|Yes| M[D1-D6 + volume guide]
+    L -->|Yes| M[D1p-D6p + volume guide]
     L -->|No| N[Deliver findings + inline writing guidance]
     M --> N
 ```
 
-## Self-Introduction Evaluation (S1-S5)
+## Workflow Progress Tracking
 
-When a resume includes a self-introduction (personal statement, cover letter, core competency summary), evaluate the following 5 dimensions BEFORE the D1-D6 scan.
+The Evaluation Protocol above defines 9 phases. Resume reviews involve extensive back-and-forth — user discussion during self-introduction alone can span dozens of messages. Without explicit tracking, phases 5-9 are routinely skipped because the model loses its place after long user discussions.
 
-### Evaluation Dimensions
+### Phase Map
 
-| # | Dimension | Question | Fail Signal |
-|---|-----------|----------|-------------|
-| S1 | Evidence-based identity | Are competency claims backed by specific projects/achievements within the resume? | "집요한 문제 해결자", "열정적인 개발자" — trait listing with no supporting project |
-| S2 | Engineering philosophy specificity | Is the development philosophy grounded in actual cases, not abstract values? | "클린 코드를 지향합니다", "사용자 중심 개발" — no concrete project connection |
-| S3 | Connection (motivation) | Does the statement connect the candidate's experience to the company's **specific** product/technology/initiative? | "귀사의 혁신적인 문화에 감탄", "성장하고 싶습니다" — interchangeable with any company |
-| S4 | Contribution value proposition | Does it say "what I can contribute" rather than "what I want"? | "성장 환경을 찾고 있습니다", "배우고 싶습니다" — zero value from the company's perspective |
-| S5 | Conciseness | Is it within the recommended character limit? | See Tiered Character Limits below |
+| Phase | Flowchart Node(s) | Section |
+|-------|-------------------|---------|
+| 1 | A→B | Pre-Evaluation Research |
+| 2 | C | Self-Introduction Evaluation (per-type + global) |
+| 3 | D→E→E2→F2→F→F3 | Target Position Gate + Type C Conditional |
+| 4 | G | Section-Specific Evaluation (D1c-D6c / D1p-D6p) |
+| 5 | H | 3-Level Pushback Simulation |
+| 6 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching |
+| 7 | J→K | Signature Project P.A.R.R. Evaluation |
+| 8 | L→M | Other Projects Evaluation |
+| 9 | N | AI Tone Audit + Deliver Findings |
 
-### Tiered Character Limits
+### Tracking Rules
 
-Apply these limits consistently across S5 evaluation and Pre-Writing Validation:
+1. After completing each phase, output a progress line: `[Phase N/9: {phase name} ✓]`
+2. Before starting a new phase, verify the previous phase's progress line was output. If it was not, complete the skipped phase first.
+3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
+4. At the end, output the Completion Checklist (see the final section of this document).
 
-| Length | Status | Action |
-|--------|--------|--------|
-| ~500 characters | Recommended | PASS |
-| ~700 characters | Warning | PASS with note — consider trimming non-essential content |
-| ~1000+ characters | FAIL | Compress to essentials. Restating the entire resume in paragraph form is not a self-introduction. |
+## Pre-Evaluation Research
+
+Before starting the evaluation, perform these preparation steps. The research results inform ALL paragraph type selections (A, B, C, D) — not just the company connection.
+
+### Step 1. Check other branches for context
+
+Run `git branch -a` and inspect `_config.yml` on other branches to understand existing self-introduction and company connection patterns. This reveals the candidate's writing style and prior customizations.
+
+### Step 2. JD Analysis
+
+If a JD (Job Description) is provided, analyze it before evaluation:
+
+1. **Team identification**: Which team is hiring? (결제팀, 전시팀, CRM팀, 플랫폼팀 등) The team determines which candidate traits are most relevant.
+2. **Keyword extraction**: Extract key technical skills, domain terms, and soft-skill signals. Categorize into:
+   - Technical requirements (언어, 프레임워크, 인프라)
+   - Domain context (결제, 추천, 물류, 데이터 등)
+   - Working culture signals (자율, 협업, 프로덕트 엔지니어, 오너십 등)
+3. **Implicit problems**: What business problems does the JD hint at? "대규모 트래픽 처리" implies scaling challenges. "레거시 개선" implies tech debt. "신규 서비스" implies zero-to-one building.
+4. **What is NOT in the JD**: Absence is also a signal. No mention of testing culture? No mention of data-driven decisions? These gaps help avoid misaligned self-introduction topics.
+
+### Step 3. Company Research
+
+When targeting a specific company, research through these channels using WebSearch and WebFetch:
+
+**3-1. Company core values / engineering principles**
+- Search: `{company name} 핵심가치` or `{company name} core values` or `{company name} engineering principles`
+- Look for: official career pages, culture decks, CEO/CTO interviews
+- Example findings: "Focus on Impact" (토스), "자율과 책임" (당근), "좋은 제품이 최고의 세일즈" (채널톡)
+- **Why this matters**: The candidate's Type A identity and Type B stance should resonate with — not contradict — the company's stated values
+
+**3-2. Tech blog**
+- Search: `{company name} tech blog` or `{company name} 기술 블로그`
+- Look for: engineering challenges the team writes about, architecture decisions, team culture posts
+- **Why this matters**: Blog posts reveal ACTUAL technical challenges (not just JD keywords) and the team's engineering maturity level
+
+**3-3. Product / Service**
+- Search: `{company name}` and visit the actual product/service
+- Look for: what the company builds, who the users are, what problems it solves
+- **Why this matters**: Type C connection must reference specific product/domain, not generic company praise. Without understanding the product, connection paragraphs feel hollow.
+
+**3-4. Career page / Team introduction**
+- Search: `{company name} 채용` or `{company name} careers`
+- Look for: how the team describes itself, what traits they emphasize, team structure
+- **Why this matters**: Team self-descriptions often reveal what they value most in candidates — "프로덕트 엔지니어", "풀스택", "자기 주도적" etc.
+
+**3-5. Recent news / funding / growth signals**
+- Search: `{company name} 시리즈` or `{company name} funding` or `{company name} MAU`
+- Look for: growth stage, recent milestones, market position
+- **Why this matters**: A Series A startup values differently from a mature company. Growth signals inform what the company needs NOW.
+
+### How research feeds into each Type
+
+| Type | Research feeds... |
+|------|-------------------|
+| A (정체성) | Which identity to highlight — aligned with JD keywords and company values |
+| B (일하는 방식) | Which working style to emphasize — aligned with team culture signals |
+| C (회사 연결) | Company-specific domain/product/values for connection paragraph |
+| D (지금의 관심) | Which interest to surface — aligned with JD tech stack and company direction |
+
+If targeting a specific company and no meaningful research results are found, note this limitation. A strong A + B self-introduction without company-specific context is always better than forced connections based on guesswork.
+
+## Self-Introduction Evaluation
+
+The self-introduction answers one question: **"어떤 엔지니어인가?"** Every paragraph must reveal a different facet of this answer.
+
+Unlike career bullets (which prove achievements) or problem-solving entries (which prove thinking), the self-introduction establishes **identity and direction**. Metrics support claims but are not required in every paragraph.
+
+### Paragraph Types
+
+A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of four types. Identify each paragraph's type, then evaluate it against the type-specific criteria below.
+
+#### Type A — Professional Identity (정체성)
+
+**Why**: In a 7.4-second scan, the first thing a hiring manager tries to determine is "what role and level is this person?" The identity paragraph must answer this instantly. Without a clear identity anchor, the self-introduction reads as a generic essay that could belong to anyone.
+
+**What**: Role anchor (what kind of developer) + differentiating trait (what makes you distinctive) + supporting evidence from the resume.
+
+**How**: Open with a single sentence that combines your role with your distinguishing characteristic. Immediately follow with a concrete project or achievement that proves the claim. The evidence is not the point — the identity framing is. The evidence exists to make the identity credible.
+
+**Evaluation criteria:**
+- Is there a role anchor visible in the first sentence? (백엔드, 프론트엔드, 데이터 등)
+- Is the identity claim backed by at least one project or achievement from the resume?
+- Is the trait differentiating? (Would this sentence still work if another engineer wrote it?)
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "**비즈니스 임팩트로 증명하는 백엔드 개발자입니다.** 상품 검수 병목을 숙련도 의존성으로 재정의하고, LLM 기반 자동화로 월 1,500만원 운영비를 절감했습니다." | JD '비즈니스 성과', '임팩트 중심' 강조 → 기술력보다 비즈니스 임팩트를 정체성으로 내세움. 역할 앵커("백엔드") + 차별화("임팩트로 증명") + 증거(병목 재정의 → 1,500만원) |
+| PASS | "**해결보다 문제 선정에 더 집요한 백엔드 개발자입니다.** 어떤 문제를 잡느냐에 따라 같은 비용으로 만들 수 있는 성과가 완전히 달라지기 때문에, 방향을 정하기 전에 지금 잡은 문제가 진짜인지부터 의심합니다." | JD '자기 주도적', '문제 해결' 강조 → 실행력보다 문제 선정 능력을 차별화로 선택. 역할 앵커 + 차별화("문제 선정에 집요") + 철학적 근거 |
+| PASS | "**완벽한 시스템보다 문제를 빠르게 감지하고 복구할 수 있는 시스템을 만듭니다.** 모든 장애를 막으려면 비용이 기하급수적으로 늘어나지만, 감지와 복구 속도를 높이는 것은 설계로 해결할 수 있다고 생각합니다. 배포 후 이상 징후를 사람이 모니터링하던 구조를 자동 헬스체크와 자동 롤백으로 바꿔, 배포 실패 대응 시간을 30분에서 3분으로 줄였습니다." | JD '안정성', '장애 대응', 'SRE' 강조 → 예방보다 감지/복구 속도를 설계 철학으로 제시. 정체성("감지/복구 시스템") + 철학("예방 비용 vs 복구 설계") + 증거(30분→3분) |
+| PASS | "**가설을 세우고 사용자 행동으로 검증하며 일하는 백엔드 개발자입니다.** 신규 가입자의 상품 탐색률이 낮았을 때, 리스트 조회 속도를 개선하면 상품 상세 진입률이 오를 것이고, 결국 첫 주문까지의 경험으로 이어질 것이라고 가설을 세웠습니다. p99을 10초에서 500ms로 줄인 결과, 상세 진입률이 10%에서 22%로 오르며 가설이 맞았음을 확인했습니다." | JD '데이터 기반', '사용자 중심', '프로덕트' 강조 → 기술 지표가 아닌 사용자 행동 변화로 검증하는 정체성 선택. 가설 기반("탐색률 → 진입률 → 첫 주문") + 증거(p99 10s→500ms, 진입률 10%→22%) |
+| FAIL | "저는 항상 새로운 기술을 배우며 성장하는 개발자입니다. 다양한 프로젝트 경험을 통해 역량을 키워왔습니다." | 역할 앵커 없음(무슨 개발자?), 차별화 없음("성장하는 개발자"는 모든 개발자), 증거 없음 |
+| FAIL | "3년차 백엔드 개발자 홍길동입니다. 주요 기술 스택은 Java, Spring Boot, MySQL입니다." | 역할 앵커는 있으나 차별화 없음 — 기술 스택 나열은 정체성이 아님 |
+
+#### Type B — Engineering Stance (일하는 방식)
+
+**Why**: Technical skills alone don't distinguish mid-level+ engineers. How someone approaches work — their engineering philosophy, collaboration style, problem-solving temperament — is what hiring managers remember after the 40-second scan. This paragraph answers "what would it be like to work with this person?"
+
+**What**: A working philosophy or approach + a concrete episode that demonstrates it. The episode is not a full project description — it's a snapshot that makes the philosophy tangible.
+
+**How**: State your stance in one sentence, then immediately show it in action with a specific situation. Keep the episode brief — the self-introduction is not the place for a full problem-solving narrative.
+
+**Evaluation criteria:**
+- Is the philosophy grounded in an actual project/situation, not abstract values?
+- Would a hiring manager learn something about your working style from this paragraph?
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "**팀원의 문제에 귀 기울이고, 제가 풀 수 있는 부분을 찾아 해결합니다.** 공정 조건 변경이 매번 배포를 기다려야 했던 현장 팀원들의 병목을 파악하고, Rule Engine 기반 PoC를 배포해 리드타임을 2주에서 즉시로 단축했습니다." | JD '협업', '크로스펑셔널', '팀 문화' 강조 → 개인 성과보다 팀 임팩트를 일하는 방식으로 제시. 철학("팀원의 문제 → 내가 풀 수 있는 부분") + 사례(Rule Engine → 2주→즉시) |
+| PASS | "**코드를 작성하기 전에 문제의 경계를 먼저 정의합니다.** 결제-주문 상태 불일치를 단순 버그가 아닌 시스템 간 동기화 문제로 재정의한 후, 보상 트랜잭션 스케줄러를 설계하여 불일치를 0건으로 만들었습니다." | JD '설계', '아키텍처', '시스템 사고' 강조 → 코딩 전 문제 정의를 우선하는 접근. 철학("문제 경계 먼저") + 에피소드(결제-주문 불일치 재정의 → 0건) |
+| PASS | "**의사결정은 수치로 근거를 남겨야 한다고 생각합니다.** 감에 의존하면 성과를 객관적으로 평가하기 어렵고, 팀원들과 판단 근거를 공유할 수 없기 때문입니다. 트래픽 분석 결과 90% 이상이 상위 5페이지에 집중된다는 데이터를 근거로, 전체가 아닌 상위 5페이지만 캐싱하는 전략을 팀에 제안해 메모리 비용을 절감하면서 체감 성능을 확보했습니다." | JD '데이터 기반 의사결정', '정량적 판단' 강조 → 감 아닌 수치 근거로 팀과 판단을 공유하는 방식. 철학("수치로 근거") + 이유("평가 불가 + 공유 불가") + 사례(90% → 상위 5페이지 캐싱) |
+| PASS | "**문제와 요구사항을 함께 정의하며 일합니다.** 프로덕트 엔지니어로서 기술적 컨텍스트를 기반으로 ROI를 함께 고민하여, 커뮤니케이션 비용을 줄이고 요구사항을 명확하게 만듭니다. 전체 주문 이력 실시간 조회 요구사항을 받았을 때, 실제 데이터를 분석하니 고객의 98%가 최근 3개월 이내 주문만 조회하고 있었습니다. '3개월 이내는 p95 200ms, 이전은 p95 3s'로 SLA를 제안해 개발 기간을 3주에서 1주로 줄이면서 사용자 체감을 유지했습니다." | JD '프로덕트 엔지니어', 'PM 협업', '자율성' 강조 → 시킨 것만 구현하지 않고 ROI 기반으로 요구사항을 함께 정의. 철학("요구사항 함께 정의") + 사례(98% 데이터 → SLA 분리 → 3주→1주) |
+| FAIL | "클린 코드를 지향하며 테스트 주도 개발을 실천합니다. 코드 리뷰를 통해 팀의 코드 품질을 높이는 데 기여합니다." | 추상적 가치 나열("클린 코드", "TDD", "코드 리뷰"), 구체 사례 없음 — 아무나 쓸 수 있는 문장 |
+| FAIL | "효율적인 커뮤니케이션을 중시하며, 항상 문서화를 통해 지식을 공유합니다." | "효율적인 커뮤니케이션"은 모든 직장인의 기본 — 차별화 없음, 사례 없음 |
+
+#### Type C — Company Connection (회사 연결)
+
+**Why**: In Korean tech hiring, a generic self-introduction that could be sent to any company is the most common rejection signal. When targeting a specific company, the connection paragraph is the signal that this candidate did their homework. It answers "why HERE, and what can you GIVE?"
+
+**What**: Your experience/capability → the company's specific domain/product/challenge → your contribution vision. The paragraph starts from YOU (not the company), connects to THEM (specifically), and ends with what you will BUILD.
+
+**How**: Lead with a concrete capability or experience claim. Back it with specific evidence (metrics, project outcomes). Close with a contribution vision that connects your capability to the target company's domain, values, or philosophy. The subject is always "I" — never "your company is impressive."
+
+**When to include**: Only when targeting a specific company. In a general-purpose resume, this paragraph is absent — that is normal, not a gap.
+
+**Evaluation criteria:**
+- Does the paragraph connect to the company's **specific** product/technology/domain? (Would swapping in another company name break the paragraph?)
+- Does it frame as "what I can give" rather than "what I want to get"?
+- Is the subject "I" throughout, not "귀사는..."?
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "데이터 불일치가 곧 비즈니스 손실인 환경에서, 정합성을 구조로 보장해 왔습니다. 선착순 쿠폰의 race condition을 원자적으로 처리하여 초과 발급 0건을 달성하고, 결제-주문 상태 동기화로 불일치를 0건으로 만든 경험이 있습니다. **토스증권의 주식 매매와 결제 영역에서**, 한 건의 오차도 없는 금융 트랜잭션의 신뢰성을 만들고 싶습니다." | JD '데이터 정합성', '결제 시스템' 키워드 → 정합성 경험(race condition 0건 + 불일치 0건) → 토스증권 금융 트랜잭션 신뢰성 기여 |
+| PASS | "**불안정한 외부 시스템과의 연동에서 장애가 전파되지 않는 복원력 아키텍처를 설계해 왔습니다.** 비동기 메시지큐와 Circuit Breaker로 외부 POS 서버 장애를 격리해, 피크타임에도 주문 승낙 API p95 200ms 이내를 유지하고 결제-주문 상태 불일치를 주 5건에서 0건으로 줄였습니다. '좋은 제품이 최고의 세일즈'라는 철학에 공감하며, {회사명}의 사용자가 장애를 체감하지 않는 안정적인 제품 경험을 만들고 싶습니다." | JD '결제 안정성', '장애 대응' 키워드 + 회사 제품 철학 '좋은 제품 = 최고의 세일즈' 연결 → 복원력 경험(p95 + 정합성) → 안정적 제품 경험 기여 |
+| PASS | "**사용자가 검색하지 않아도 취향에 맞는 상품을 만나는 탐색형 쇼핑 경험을 설계한 경험이 있습니다.** 구매 이력과 탐색 패턴을 결합한 개인화 추천 엔진을 구축해 홈 피드 클릭률을 8%에서 15%로 끌어올리고, 추천 경유 구매 비중을 전체의 25%까지 높였습니다. {회사명}이 지향하는 발견형 쇼핑 경험에서, 사용자가 의도하지 않았던 상품과의 만남을 더 정확하고 자연스럽게 만드는 데 기여하고 싶습니다." | JD '전시팀', '추천' 키워드 + 회사 비전 '발견형 쇼핑(Discovery Commerce)' 연결 → 개인화 추천 경험(CTR 8%→15%, 추천 구매 25%) → 발견형 쇼핑 고도화 기여 |
+| PASS | "**고객 행동 신호를 실시간으로 분류하고 자동 캠페인으로 연결하는 파이프라인을 구축한 경험이 있습니다.** 주문·방문·이탈 신호 기반으로 고객을 12개 세그먼트로 자동 분류하고, 세그먼트별 맞춤 캠페인을 트리거해 재구매율을 18%에서 27%로 끌어올렸습니다. 월 300만 MAU가 만들어내는 {회사명}의 행동 데이터에서, 세그먼트별 리텐션 전략과 고객 생애 가치 극대화에 이 경험을 적용하고 싶습니다." | JD 'CRM', '고객 데이터' 키워드 + MAU 규모 맥락 → 세그멘테이션/캠페인 자동화 경험(재구매율 18%→27%) → 리텐션/LTV 기여 |
+| PASS | "**수작업 운영 프로세스를 자동화하고 이상 감지 시스템을 구축한 경험이 있습니다.** 정산 담당자가 매월 3일씩 처리하던 정산 검증을 자동화하고, 이상 거래 실시간 감지 대시보드를 구축해 정산 오류를 월 15건에서 0건으로 줄였습니다. 'Focus on Impact'의 가치에 깊게 공감하며, 운영 팀이 반복 업무에서 벗어나 임팩트 있는 의사결정에 집중할 수 있는 환경을 만들고 싶습니다." | JD '백오피스', '운영 효율화' 키워드 + 회사 핵심가치 'Focus on Impact' 연결 → 자동화/대시보드 경험(정산 오류 15→0건) → 운영팀 임팩트 집중 환경 기여 |
+| FAIL | "귀사의 혁신적인 문화에 감탄했으며, 성장할 수 있는 환경에서 배우고 싶습니다." | 어느 회사에나 통하는 범용 + "내가 원하는 것" 프레이밍 + 주어가 "귀사" |
+| FAIL | "토스에서 일하고 싶습니다. 토스의 개발 문화가 인상적이었고, 좋은 동료들과 함께 성장하고 싶습니다." | 회사 이름은 있지만 구체적 도메인/제품 연결 없음 + "성장하고 싶다" = 내가 원하는 것 |
+
+#### Type D — Current Interest (지금의 관심)
+
+**Why**: Past achievements show what you've done, but not where you're headed. What you're currently exploring signals growth trajectory, technical curiosity, and engineering taste. Hiring managers — especially at companies that value autonomy — read this as "will this person keep growing after they join?"
+
+**What**: A current technical exploration + why you started it + your specific approach or direction. Results are NOT required — direction and specificity are. This is not a hobby section — the interest must be work-adjacent.
+
+**How**: Start with what you're exploring and why. Show enough specificity that an interviewer could ask follow-up questions about your approach. End with a direction, not "시도 중에 있습니다."
+
+**Evaluation criteria:**
+- Is the interest work-adjacent? (Non-work hobbies belong in interviews, not resumes)
+- Is there a specific approach or direction? ("AI에 관심 있습니다" alone is too vague)
+- Could an interviewer ask a meaningful technical follow-up about this?
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "최근에는 AI 에이전트를 활용한 코드 리뷰 자동화를 설계하고 있습니다. 리뷰 시간을 줄이면 전체 개발 사이클이 빨라진다고 판단했고, 여러 모델에게 청크 단위로 리뷰를 맡긴 뒤 오케스트레이터가 합의를 도출하는 구조로 커버리지와 신뢰도를 높이고 있습니다." | JD 'AI', '개발 생산성', '자동화' 키워드 → AI 에이전트 관심사가 JD와 직접 연결. 관심사(AI 코드 리뷰) + 왜(리뷰 시간→개발 사이클) + 구체적 접근(청크 리뷰 + 오케스트레이터) |
+| PASS | "오픈소스 컨트리뷰션을 통해 분산 시스템의 실전 패턴을 학습하고 있습니다. 최근 Apache Kafka의 consumer rebalance 로직에 패치를 제출했고, 이 과정에서 파티션 할당 전략의 trade-off를 체감했습니다." | JD '분산 시스템', 'Kafka', '대규모 트래픽' → 오픈소스 컨트리뷰션이 JD 기술스택과 직결. 활동(Kafka 패치) + 방향(분산 시스템 실전 패턴) + 면접 질문 가능한 깊이 |
+| PASS | "**배운 것을 글로 정리해야 진짜 내 것이 된다고 생각합니다.** 최근 POS 연동에서 Circuit Breaker 설정값을 튜닝한 경험을 기술 블로그에 정리했습니다. failure rate 임계값을 어떻게 정했는지를 중심으로 썼는데, 같은 고민을 하는 개발자들의 피드백을 받으며 제 이해도 더 깊어졌습니다." | JD '장애 대응', '복원력' + 회사 '기술 공유 문화' → 실무 경험 블로그가 JD 기술 요구와 팀 문화 모두 연결. 철학("글로 정리 = 내 것") + 사례(CB 설정값 블로그) + 결과(피드백 → 이해 심화) |
+| PASS | "**반복되는 운영 작업을 자동화하는 데 관심이 많습니다.** 최근 배포 후 헬스체크 → 로그 확인 → 롤백 판단까지의 수동 프로세스를 스크립트로 묶어, 배포 실패 시 3분 내 자동 롤백되는 파이프라인을 구성했습니다." | JD 'DevOps', '운영 효율', 'CI/CD' → 배포 자동화 관심사가 JD 운영 역량과 연결. 관심사(운영 자동화) + 접근(수동 프로세스 → 스크립트 → 3분 자동 롤백) + 면접 질문("어떤 기준으로 롤백?") |
+| FAIL | "새로운 기술에 관심이 많으며, 최근 AI와 클라우드 분야를 공부하고 있습니다." | "AI와 클라우드"는 너무 넓음, 구체적 접근 없음 — 면접관이 물어볼 게 없음 |
+| FAIL | "주말마다 알고리즘 문제를 풀며 실력을 키우고 있습니다." | 코딩 테스트 준비는 일적 관심사가 아닌 취업 준비 — 엔지니어링 방향을 보여주지 않음 |
+
+### Composition Guide
+
+There is no mandatory combination. Choose 2-4 paragraphs that best answer "어떤 엔지니어인가?" for your situation:
+
+| Situation | Recommended Composition | Paragraphs |
+|-----------|------------------------|------------|
+| General-purpose resume (no target) | A + B | 2 |
+| General-purpose + showing direction | A + B + D | 3 |
+| Targeting a specific company | A + B + C | 3 |
+| Targeting + showing direction | A + B + D + C | 4 |
+
+**Rules:**
+- **A is always first** — the identity paragraph is what the 7.4-second scan hits
+- **C appears only when targeting** — its absence in a general resume is normal, not a gap
+- **Two paragraphs of the same type are allowed** if they show genuinely different facets (e.g., two B paragraphs — one about individual problem-solving, one about team collaboration)
+- Paragraphs can blend types (e.g., A+B in one paragraph) — the type system is a guide, not a constraint
+
+### Global Evaluation
+
+After evaluating each paragraph against its type, check these cross-cutting criteria:
+
+| Criterion | Question | PASS | FAIL |
+|-----------|----------|------|------|
+| Paragraph count | 2-4개인가? | 2-4 paragraphs | 1 (too thin) or 5+ (unfocused) |
+| Independence | 각 문단이 "어떤 엔지니어인가"의 다른 면을 보여주는가? | Each paragraph reveals new information | Two paragraphs say the same thing differently |
+| First sentence | 첫 문장만 읽어도 이 사람이 어떤 엔지니어인지 감이 오는가? | "비즈니스 임팩트로 증명하는 백엔드 개발자" — standalone value | "안녕하세요. 3년차 개발자 홍길동입니다" — zero signal |
+| Original framing | 자기소개만의 프레이밍이 있는가, 경력 bullet을 문장화한 것인가? | "검수 병목을 숙련도 의존성으로 재정의" — this framing exists only in the intro | "LLM 기반 시스템 개발로 월 1,500만원 절감" — identical to career bullet |
 
 ### Evaluation Output Format
 
 ```
 [Self-Introduction Evaluation]
-- S1 Evidence-based identity: PASS / FAIL (reason)
-- S2 Engineering philosophy: PASS / FAIL (reason)
-- S3 Connection: PASS / FAIL / N/A (reason) — N/A when target company not specified
-- S4 Contribution value: PASS / FAIL / N/A (reason) — N/A when target company not specified
-- S5 Conciseness: PASS / FAIL (reason — include approximate character count)
+
+Per-paragraph:
+- P1 [Type A/B/C/D]: PASS / FAIL (reason against type-specific criteria)
+- P2 [Type A/B/C/D]: PASS / FAIL (reason)
+- P3 [Type A/B/C/D]: PASS / FAIL (reason)
+
+Global:
+- Paragraph count: PASS / FAIL (N paragraphs)
+- Independence: PASS / FAIL (reason)
+- First sentence: PASS / FAIL (reason)
+- Original framing: PASS / FAIL (reason)
 ```
 
-### S3/S4 Conditional Re-evaluation
+### Type C Conditional Evaluation
 
-When the target position is obtained via the ASK node **after** the S1-S5 evaluation has already been completed, re-evaluate S3 and S4:
+When the target position is obtained **after** the initial self-introduction evaluation:
 
-- **Trigger condition**: S3 and/or S4 were marked N/A due to missing target, but the user has now provided target company/position information.
-- **Action**: Re-evaluate S3 (Connection) and S4 (Contribution Value) with the newly provided context. Change N/A to PASS or FAIL accordingly.
-- **Preserved results**: S1, S2, and S5 results from the initial evaluation are not changed.
-- **Trigger recheck**: After S3/S4 re-evaluation, recheck the Writing Guidance Trigger: Self-Introduction condition using the updated evaluable count (now 5 instead of 3). If the trigger was not fired after the initial S1-S5 evaluation but the condition is now met with the expanded evaluable set, deliver the guidance message before proceeding to D1-D6. If the trigger already fired after the initial evaluation, do not fire it again.
+- **Trigger**: No Type C paragraph exists, but the user has now provided target company/position
+- **Action**: Note that a Type C paragraph is recommended for this target. Provide connection guidance using the examples above.
+- **Not a FAIL**: Absence of Type C in a general resume is normal. It becomes a recommendation only when a target is specified.
 
-Re-evaluation output format:
-
-```
-[S3/S4 Re-evaluation — Target: {company/position}]
-- S3 Connection: PASS / FAIL (reason — was N/A, now evaluated with target context)
-- S4 Contribution value: PASS / FAIL (reason — was N/A, now evaluated with target context)
-```
-
-### Self-Introduction Red Flags
+### Self-Introduction Anti-Patterns
 
 | Thought | Reality |
 |---------|---------|
-| "Listing good traits should be impressive" | Unsupported trait claims are indistinguishable from AI boilerplate. Every claim must be backed by a project in the resume. |
-| "Praising the company shows enthusiasm" | Generic company praise with no specific connection is the most common rejection signal in Korean hiring (한국 채용 시장). |
-| "Self-introduction can be casual, it's just an intro" | Self-introduction is the first section read in the 40-second scan. Apply the same rigor as D1-D6. |
-| "Without a target company, S3/S4 can't be evaluated" | Correct — mark N/A. S1, S2, and S5 are always evaluable regardless of target. |
-| "Saying I want to grow shows passion" | "What I want" has zero value from the company's perspective. Reframe as "what I can contribute." |
-| "One self-introduction works for all companies" | Without a target company, only S1/S2/S5 (evidence, philosophy, conciseness) can be evaluated. S3/S4 require per-company customization. |
-
-### Writing Guidance: Self-Introduction
-
-Use this section when S1-S5 evaluation reveals structural problems. This is not for light editing — it is for candidates who need to rebuild the self-introduction from scratch.
-
-#### Why Self-Introduction Matters
-
-Hiring managers scan a resume in 40 seconds. The self-introduction is the first section they read. It must immediately answer: "Who is this person, and what do they do?" It is not a feature list — it is the combination of identity and evidence.
-
-#### Portfolio-Style Structure Template
-
-```
-[Role Identity + Core Competency] + [Engineering Philosophy (evidence-based)] + [Quantitative Achievements 1-2]
-```
-
-Required elements:
-- **Role identity**: A single differentiating line, not an abstract title. Example: "비즈니스 임팩트로 증명하는 백엔드 개발자"
-- **Engineering philosophy**: Grounded in an actual project from the resume — not abstract values
-- **Quantitative achievements**: 1-2 highest-impact numbers
-
-Target length: 2-3 paragraphs, approximately 500 characters (Korean)
-
-#### Connection / Contribution Paragraph (Optional — when target company exists)
-
-Add one paragraph after the main self-introduction when a target company is specified:
-
-```
-[Specific product/technology/initiative of the company] + [Connection to candidate's experience] + [Specific contribution value proposition]
-```
-
-Connection principle: Name the company's **specific** product, tech blog post, or recent initiative by name. Connect your experience to that specific context. "귀사의 혁신적인 문화" is not a connection.
-
-Required elements:
-- The company's specific technical context (product name, tech stack, public engineering challenge)
-- The candidate's directly matching experience
-- "What I can contribute" (not "what I want")
-
-#### Pre-Writing Validation
-
-Before writing any self-introduction, confirm all of the following. If any answer is No, stop and discuss with the user.
-
-1. **Is the competency claim backed by evidence?** — Can it be directly supported by a project or achievement already in the resume? → If No, remove the claim or add a supporting project.
-2. **Is the engineering philosophy specific?** — Is it grounded in an actual case, not just abstract values? → If No, connect to a specific example.
-3. **Does the connection have a specific link?** — Would the sentence still work if you swapped in a different company's name? → If yes (it's generic), add company-specific content.
-4. **Is it contribution-focused, not request-focused?** — Does it say what you can give, not what you want to receive? → If No, reframe from the company's perspective.
-5. **Is it concise (under ~500 characters)?** — Does it feel like a summary of the entire resume rather than a focused statement? → If it exceeds 700 characters, compress to essentials only.
-
-#### Before/After Examples
-
-**Before — Trait listing (anti-pattern):**
-```
-안녕하세요. 항상 새로운 기술을 배우며 성장하는 개발자 홍길동입니다.
-저는 다양한 프로젝트 경험을 통해 역량을 키워왔습니다.
-팀워크를 중시하고 커뮤니케이션 능력이 뛰어납니다.
-귀사의 혁신적인 문화와 성장 가능성에 매력을 느껴 지원합니다.
-```
-
-Problems with Before:
-- "새로운 기술을 배우며 성장" = AI boilerplate with no evidence
-- "다양한 프로젝트 경험" = zero specificity
-- "혁신적인 문화" = generic — works for any company
-- Hiring manager reaction: "모든 지원자가 이렇게 써요" (Skip)
-
-**After — Evidence-based identity + connection:**
-```
-비즈니스 임팩트로 증명하는 백엔드 개발자입니다. F&B 커머스에서 메뉴 메타데이터 자동
-추출 시스템을 설계하여 수작업 인력 11명→3명으로 절감(월 1,600만원 절감)했습니다.
-해결보다 문제 선정에 더 집요합니다 — 상품 검수 병목을 "인력 부족"이 아닌 "숙련도
-의존성"으로 재진단하여 근본 원인을 공략했습니다.
-
-귀사의 [제품명]에서 [구체적 기술 과제]를 마주하고 계신 것으로 파악했습니다.
-LLM 파이프라인 설계와 비용-정확도 트레이드오프 의사결정 경험을 바탕으로,
-[구체적 기여 방향]에 기여하고자 합니다.
-```
+| "Listing good traits should be impressive" | Unsupported trait claims ("집요한 문제 해결자", "열정적인 개발자") are indistinguishable from AI boilerplate. Every identity claim needs a project reference — this is the Type A evaluation criterion. |
+| "Praising the company shows enthusiasm" | Generic company praise ("귀사의 혁신적인 문화에 감탄") is the most common rejection signal in Korean hiring. Type C requires specific product/domain connection, not praise. |
+| "Self-introduction can be casual, it's just an intro" | The self-introduction is the first section read in the 7.4-second scan. It determines whether the rest gets read. |
+| "Saying I want to grow shows passion" | "What I want" has zero value from the company's perspective. Type C requires "what I can give" framing. |
+| "One self-introduction works for all companies" | Without Type C, only identity (A), stance (B), and interest (D) are evaluable. Per-company customization lives in Type C. |
+| "JD 키워드를 따옴표로 인용하면 열정을 보여줄 수 있다" | JD 문구를 그대로 되돌리면 아부 또는 앵무새로 읽힌다. 자기소개의 주어는 항상 "나"여야 하며, 회사 도메인은 참조하되 반드시 나의 언어로 표현할 것. |
+| "Recent interests without results are filler" | Type D does not require metrics. A specific direction and approach are sufficient — this shows growth trajectory, not past achievement. |
 
 ### Writing Guidance Trigger: Self-Introduction
 
-After S1-S5 evaluation, check this condition:
+After evaluating all paragraphs, check this condition:
 
-- **Condition**: More than half of evaluable dimensions are FAIL — i.e., `FAIL_count > evaluable_count / 2` (rounded down). Evaluable = S1-S5 minus N/A items.
-- **N/A exclusion**: N/A items (S3, S4 when no target) are excluded from both FAIL count and evaluable count
-- **Message to deliver**: "S1-S5 중 N개 차원이 FAIL입니다. 이 자기소개는 재구성이 필요합니다. 위의 Writing Guidance: Self-Introduction 섹션의 템플릿과 예시를 참고하여 다시 작성해 보세요."
+- **Condition**: More than half of paragraphs FAIL their type-specific evaluation
+- **Message**: "자기소개의 N개 문단 중 X개가 유형별 평가에서 FAIL입니다. 위의 문단 유형별 가이드(Type A-D)와 PASS/FAIL 예시를 참고하여 재구성해 보세요."
 
-This trigger is not optional. If the condition is met, deliver the guidance message before proceeding to D1-D6.
+This trigger is not optional. If the condition is met, deliver the guidance message before proceeding to the section-specific evaluation.
 
-## 6-Dimension Evaluation (D1-D6)
+### Post-Evaluation Action: Always Offer Concrete Options
 
-Scan **every line in career and problem-solving sections** against these 6 dimensions. Report findings per line. No line is skipped.
+After completing the self-introduction evaluation, do not simply list problems — always present concrete options for the user to choose from. The user should never be left with "여기가 문제입니다" without "이렇게 해결할 수 있습니다."
 
-### Dimension Table
+**Pattern:**
+1. State the finding clearly (which paragraph, which criterion, why it fails)
+2. Explain **why** this matters (what a hiring manager would think)
+3. Present 2-3 actionable options with trade-offs
+
+**Example:**
+
+After finding that Type C is absent when targeting a company:
+
+> 위펀의 구체적 제품/서비스를 모르는 상태에서 진정성 있는 회사 연결 문단을 작성하는 건 불가능합니다. JD 문구를 앵무새처럼 되돌려주는 문단은 없는 것보다 나쁩니다.
+>
+> 선택지:
+> 1. **위펀 제품을 조사한 뒤 진짜 연결점을 찾아 작성** — 위펀 서비스를 직접 써보거나, 기술 블로그가 있다면 참고. 조사를 원하면 제가 회사 정보를 검색해 드릴 수 있습니다.
+> 2. **Type C 없이 제출** — 현재 자기소개(Type A + B PASS)만으로도 충분히 강합니다.
+
+**Example 2:**
+
+After finding that Type D fails due to vague direction:
+
+> P3의 "AI 에이전트를 활용한 개발 생산성 개선"은 방향은 있지만 구체적 접근이 약합니다.
+>
+> 선택지:
+> 1. **구체적 접근 추가** — "청크 단위 리뷰 + 오케스트레이터 합의 도출"처럼 현재 시도하고 있는 구조를 명시
+> 2. **이 문단 제거하고 A + B 2문단 구성** — 간결해지며, 면접에서 구두로 관심사를 언급하는 전략
+> 3. **초기 결과 추가** — 아직 없다면, 측정 가능한 결과가 나온 후 추가
+
+This pattern applies to ALL evaluation findings, not just self-introduction. It is a behavioral rule for the evaluator.
+
+### CRITICAL: Writing Validation Checklist
+
+Before writing or suggesting ANY self-introduction content, verify ALL three checks. If any check fails, rewrite before presenting to the user. This is not optional — skipping this checklist produces logically broken paragraphs.
+
+**Check 1 — Capability-Evidence-Contribution Chain**
+
+Can you articulate the cause-effect chain in one sentence? If the chain has a "???" gap, the pairing is forced and must be rewritten.
+
+| | Chain | Verdict |
+|---|-------|---------|
+| GOOD | "Automated repetitive ops → team freed from toil → focus on impactful decisions → 'Focus on Impact'" | Clear causal link at every step |
+| BAD | "Resilience architecture → ??? → 'Focus on Impact'" | No causal link — fault isolation and impact focus are unrelated concepts |
+| GOOD | "Fault isolation → users don't experience outages → stable product experience → 'Great product = best sales'" | Clear causal link |
+| BAD | "Fault isolation → ??? → 'Focus on Impact'" | Fault isolation and impact focus are different topics |
+
+**Check 2 — JD Scope Alignment**
+
+Does the contribution vision describe work that the JD **explicitly states** as part of the role? Writing about work not mentioned in the JD signals "this person didn't read the JD."
+
+| | JD Role | Contribution Vision | Verdict |
+|---|---------|---------------------|---------|
+| GOOD | "Build and operate data pipelines" | "Design pipeline reliability" | Matches JD-stated responsibility |
+| BAD | Backend API development JD | "Build AI infrastructure" | JD never mentions AI infrastructure — role mismatch |
+| GOOD | "Design AI agent APIs and integrate with systems" | "Build reliable AI agent delivery" | Matches JD-stated responsibility |
+| BAD | "Develop and operate web crawlers" | "Guarantee LLM reliability" | JD is about crawlers, not LLM reliability — different role |
+
+**Check 3 — Candidate-First, Not Company-Guess**
+
+Does the paragraph start from the candidate's actual capability? Or does it start from a guess about what the company needs?
+
+| | Starting Point | Verdict |
+|---|----------------|---------|
+| GOOD | "I achieved 90% accuracy in an LLM pipeline" → "I want to apply this to CODIT's data pipeline" | Starts from candidate capability → connects to JD role |
+| BAD | "CODIT needs accurate answers" → "I will guarantee LLM reliability" | Starts from company-need guess — candidate capability is absent |
+| GOOD | "I have designed fault-isolation architectures for unstable external systems" → "I want to build a stable product experience for {company}'s users" | Starts from candidate experience → connects to company domain |
+| BAD | "This company is a small elite team" → "I will boost productivity with AI" | Starts from company situation analysis — no candidate capability anchoring the claim |
+
+**Validation flow:**
+```
+1. Write the capability/experience claim
+2. Check 3: Does this claim start from the candidate's actual capability?
+3. Write evidence (metrics, project outcomes)
+4. Check 1: Can the capability → evidence → contribution chain be explained in one sentence?
+5. Write the contribution vision
+6. Check 2: Is this contribution vision within the JD's stated role scope?
+7. All checks pass → present to user
+8. Any check fails → fix the failing point and re-validate
+```
+
+## Section-Specific Evaluation (D1c-D6c / D1p-D6p)
+
+경력 섹션과 문제해결 섹션은 근본적으로 다른 질문에 답하며, 서로 다른 기준으로 평가한다.
+
+- **경력** (Career): "이 사람이 무엇을 이뤘는가?" — 방향성과 임팩트. 경력 bullet은 면접 질문을 유도하는 **hook**.
+- **문제해결 / 프로젝트 상세** (Problem-Solving): "이 사람이 어떻게 문제를 접근하는가?" — 사고 과정과 깊이. 문제해결 엔트리는 엔지니어링 사고의 **proof**.
+
+두 섹션은 **독립적**이다. 경력 bullet과 문제해결 엔트리가 1:1 대응할 필요 없다. 경력 섹션의 모든 라인은 D1c-D6c로, 문제해결 섹션의 모든 라인은 D1p-D6p로 평가한다.
+
+### Career Section Evaluation (D1c-D6c)
+
+#### Dimension Table
 
 | # | Dimension | Question | Fail Signal |
 |---|-----------|----------|-------------|
-| D1 | Causation | Does goal → execution → outcome form a logical chain? | "향상", "개선" without mechanism |
-| D2 | Specificity | Are claims backed by verifiable metrics? | Vague percentages, undefined baselines, no measurement method |
-| D3 | Role clarity | Is individual contribution distinguishable from team output? | "참여", "(팀 프로젝트, N인)" without personal scope |
-| D4 | Standard detection | Is this an industry standard disguised as an achievement? | Webhook, CI/CD, Docker, REST API as standalone achievements |
-| D5 | Interview depth | Can this line survive 3 levels of pushback? | One-liner with no narrative behind it |
-| D6 | Section fitness | Is this line in the correct section? | Problem narratives in 경력, system descriptions in 문제해결 / 프로젝트 상세 |
+| D1c | Linear Causation | 목표→실행→성과가 한 줄 안에서 선형 인과로 연결되는가? | "개선", "향상", "도입" without mechanism or outcome |
+| D2c | Metric Specificity | 성과가 검증 가능한 수치(before→after, 절대값)로 뒷받침되는가? | 모호한 퍼센트, 정의 없는 baseline, 측정 방법 불명 |
+| D3c | Role Clarity | 개인 기여가 팀 성과와 구분되는가? | "참여", "기여", "N인 프로젝트" without personal scope |
+| D4c | Standard Transcendence | 업계 표준을 넘어서는 차별화된 성과인가? | Webhook, CI/CD, Docker, REST API 등을 단독 성과로 제시 |
+| D5c | Hook Potential | 이 한 줄이 면접관의 호기심을 자극하여 질문을 유도하는가? | 기술명 나열, 질문 유도력 없는 평범한 서술 |
+| D6c | Section Fitness | 성과 기술(achievement statement)인가, 문제 서사(problem narrative)인가? | 문제 진단/해결 과정이 경력 섹션에 위치 |
 
-### Evaluation Output Format
+#### PASS / FAIL Examples
 
-**This format is mandatory.** Do not use free-form prose for evaluation. For each line, produce:
+**D1c Linear Causation — 목표→실행→성과 선형 인과:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "결제-주문 상태 동기화 스케줄러 구축으로 주간 불일치 15→0건 달성" | 목표(불일치 해소)→실행(스케줄러 구축)→성과(0건) 연결 명확 |
+| PASS | "Redis 캐시를 상품 목록/상세 API에 적용, 피크 시간 DB CPU 90%→50% 절감" | 적용 대상→기술 행동→수치 성과 연결 명확 |
+| FAIL | "결제 시스템 개선" | 무엇을 어떻게? 성과는? — 인과 전체 누락 |
+| FAIL | "비동기 처리로 성능 향상" | 어디에 적용? 얼마나? — 인과 불완전 |
+
+**D2c Metric Specificity — 검증 가능한 수치:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "주간 결제-주문 불일치 15건→0건" | before→after 명확, 검증 가능 |
+| PASS | "피크 시간 DB CPU 90%→50%, 평균 응답 속도 1.2s→0.3s" | 복수 지표, 조건(피크 시간) 명시 |
+| FAIL | "성능 50% 향상" | 무엇의 50%? 어떤 조건에서? baseline 불명 |
+| FAIL | "대폭 절감" | "대폭"의 정의 없음, 검증 불가 |
+
+**D3c Role Clarity — 개인 기여 식별:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "직접 설계한 보상 트랜잭션 스케줄러로 결제 불일치 해소" | 개인 행동(직접 설계) 명시 |
+| PASS | "POS 서버 연동 장애 격리 아키텍처를 주도적으로 설계·구현" | 역할(주도 설계·구현) 명확 |
+| FAIL | "팀에서 결제 시스템 개선" | 본인이 뭘 했는지 불명 |
+| FAIL | "3인 프로젝트로 주문 시스템 개발" | 인원수만 있고 본인 역할 범위 없음 |
+
+**D4c Standard Transcendence — 업계 표준 이상의 성과:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "Webhook 실패 시 보상 트랜잭션 + 스케줄러 구축, 결제 불일치 0건" | 표준(Webhook) **위에** 구축한 차별화 성과 |
+| PASS | "Redis 캐시 + TTL 전략 + 캐시 무효화 로직으로 DB 부하 80% 절감" | 단순 캐시가 아닌 전략적 설계 + 성과 |
+| FAIL | "Webhook 기반 비동기 결제 시스템 도입" | 업계 표준 그 자체 — 성과 아님 |
+| FAIL | "CI/CD 파이프라인 구축" | 인프라 기본 |
+| FAIL | "Docker 기반 배포 환경 구성" | 현대 개발의 기본 |
+
+**D5c Hook Potential — 면접 질문 유도:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "선착순 쿠폰 race condition을 원자적 갱신으로 해결, 초과 발급 0건" | 면접관: "원자적 갱신이 정확히 뭔가요?" — 질문 자연 유도 |
+| PASS | "외부 POS 장애가 주문에 전파되지 않는 복원력 아키텍처 설계" | 면접관: "어떤 패턴을 썼나요?" — 호기심 자극 |
+| FAIL | "쿠폰 시스템 개발" | 물어볼 게 없음 — 면접관 시선 머무르지 않음 |
+| FAIL | "주문 시스템 안정화" | 너무 추상적, 구체적 질문 떠오르지 않음 |
+
+**D6c Section Fitness — 올바른 섹션 배치:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "보상 트랜잭션 스케줄러 구축으로 결제 불일치 0건 달성" | [시스템]을 [행동]하여 [결과] 패턴 — 성과 기술 |
+| PASS | "비동기 메시지큐 기반 주문 처리 파이프라인 구축으로 피크 시간 처리량 3배 향상" | 시스템 구축 + 성과 수치 — 성과 기술 |
+| FAIL | "결제-주문 상태 불일치 문제를 발견하고, 원인을 분석한 결과..." | 문제 서사 → 문제해결 섹션으로 이동 필요 |
+| FAIL | "POS 서버의 간헐적 타임아웃 원인을 분석하여 Circuit Breaker 패턴을 도입하게 된 과정..." | 원인 분석 + 도입 과정 서사 → 문제해결 섹션으로 이동 필요 |
+
+#### Career Evaluation Output Format
 
 ```
-[Line] "원문 그대로"
-- D1 Causation: PASS / FAIL (reason)
-- D2 Specificity: PASS / FAIL (reason)
-- D3 Role: PASS / FAIL / N/A (reason)
-- D4 Standard: PASS / FAIL (reason)
-- D5 Depth: PASS / FAIL (reason)
-- D6 Section: PASS / FAIL (reason)
+[경력 Line] "원문 그대로"
+- D1c Linear Causation: PASS / FAIL (reason)
+- D2c Metric Specificity: PASS / FAIL (reason)
+- D3c Role Clarity: PASS / FAIL / N/A (reason)
+- D4c Standard Transcendence: PASS / FAIL (reason)
+- D5c Hook Potential: PASS / FAIL (reason)
+- D6c Section Fitness: PASS / FAIL (reason)
 ```
 
-After all lines are evaluated, produce a summary count: `D1: X/Y FAIL, D2: X/Y FAIL, ...` — this count drives the Writing Guidance Trigger at the end of this section.
+### Problem-Solving Section Evaluation (D1p-D6p)
+
+"문제해결" and "프로젝트 상세" are the same intent with different tab names. Both are deep narrative spaces for demonstrating problem detection and problem-solving ability.
+
+#### Dimension Table
+
+| # | Dimension | Question | Fail Signal |
+|---|-----------|----------|-------------|
+| D1p | Diagnostic Causation | 문제 발견→원인 진단→시도→실패 이유→해결이 탐색적 인과로 연결되는가? | 해결책으로 직행, 중간 시도의 실패 원인 분석 없음 |
+| D2p | Evidence Depth | 각 시도의 실패/성공이 구체적 수치와 근거로 뒷받침되는가? | "안 됐다", "비효율적", "느렸다" without data |
+| D3p | Ownership of Thinking | 문제 진단과 기술 선택이 본인의 사고 과정에서 나왔는가? | "멘토 조언으로", "팀에서 결정", "블로그 참고" without personal reasoning |
+| D4p | Beyond-Standard Reasoning | 기술 선택이 대안 비교와 trade-off 분석으로 뒷받침되는가? | "[기술] 사용", "[기술] 적용" without why-this-not-that |
+| D5p | Interview Depth | 3단계 pushback(구현→판단→대안)을 견딜 서사 깊이가 있는가? | 한 줄 해결, 실패 과정 없음, trade-off 없음 |
+| D6p | Section Fitness | 사고 과정 서사인가, 성과 나열인가? | 문제해결 섹션에 성과 bullet만 나열 |
+
+#### PASS / FAIL Examples
+
+**D1p Diagnostic Causation — 탐색적 인과 (발견→진단→시도→실패→해결):**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "QA 중 재고 100개 쿠폰이 152개 발급 → Thread.sleep으로 재현 → READ COMMITTED + MVCC 특성 진단 → 낙관적 락 시도 후 950건 실패 → 분산 환경 락 필요성 도출" | 발견→재현→진단→시도→실패 원인→해결 방향 전체 arc 연결 |
+| PASS | "정규식 정확도 40% → 자연어 이해 필요 판단 → 단일 LLM 할루시네이션 30% → 관찰/추론 분리 필요성 도출 → 2단계 파이프라인" | 각 시도마다 왜 안 됐는지 → 다음 시도로 연결되는 학습 arc |
+| FAIL | "동시성 문제를 Redis 분산 락으로 해결" | 왜 다른 건 안 됐는지, 어떻게 발견했는지 없음 — 해결책으로 직행 |
+| FAIL | "LLM 파이프라인으로 정확도 85% 달성" | 왜 이 구조인지, 이전 시도가 왜 실패했는지 없음 |
+
+**D2p Evidence Depth — 시도별 구체적 실패/성공 데이터:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "낙관적 락: 동시 1000건 중 950건 실패, Exponential Backoff 적용해도 평균 응답 1.2초" | 실패 건수 + 대응 후에도 남는 문제까지 수치로 |
+| PASS | "단일 LLM: 정확도 65%, 할루시네이션 30% — 사진에 없는 알레르기 정보를 생성" | 수치 + 구체적 실패 양상(무엇이 잘못됐는지) |
+| FAIL | "낙관적 락은 효율적이지 않았다" | 어디서 얼마나 비효율? — 데이터 없음 |
+| FAIL | "첫 번째 시도는 정확도가 낮았다" | 얼마나 낮았는지, 무엇이 문제였는지 없음 |
+
+**D3p Ownership of Thinking — 본인 사고 과정 귀속:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "사진에 없는 정보를 LLM이 '추론'해서 생성하는 것을 확인 → 관찰과 추론을 분리해야 한다는 결론을 내림" | 관찰→판단→결론이 본인 사고로 연결 |
+| PASS | "멘토님의 '락 없이 못 푸나?' 질문에서 출발 → 3일간 CAS, 격리 수준, MVCC를 직접 실험 → 분산 락 필요성 스스로 확인" | 계기는 외부지만, 탐색과 결론은 본인 |
+| FAIL | "팀 회의에서 2단계 파이프라인으로 결정" | 본인의 사고 과정 없이 팀 결정만 기술 |
+| FAIL | "Redis 분산 락이 적합하다는 블로그를 참고하여 적용" | 왜 이 상황에 맞는지 자기 판단 없음 |
+
+**D4p Beyond-Standard Reasoning — 대안 비교 + trade-off 분석:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "비관적 락: Lock Escalation → Table Lock 전이 위험 / Advisory Lock: RDB 공유 메모리 소비 + 스케일아웃 제약 / → 분산 락: Lua 원자성 + TTL 자동 해제" | 대안별 적합 시나리오 + 배제 이유 후 선택 근거 |
+| PASS | "5개 모델 조합을 정확도·비용·속도 매트릭스로 비교, 87% 조합 대비 2%↓ 비용 33%↓ 조합 선택" | 다차원 비교 기준 + 의사결정 근거 |
+| FAIL | "Redis 분산 락을 사용했습니다" | 왜 Redis? 다른 대안은? — 선택 근거 부재 |
+| FAIL | "GPT-4V를 사용했습니다" | 왜 이 모델? 다른 모델은? — 비교 없음 |
+
+**D5p Interview Depth — 3단계 pushback 생존력:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | 2-3회 시도 실패 arc + 각 실패의 구체적 데이터와 교훈 + 최종 선택의 trade-off | L1("어떻게?")→L2("왜?")→L3("다른 건?") 모두 서사에서 직접 답변 가능 |
+| PASS | "정규식(정확도 40%) → 단일 LLM(할루시네이션 30%) → 관찰/추론 분리 파이프라인(정확도 85%) — 각 단계 실패 원인과 다음 시도의 동기가 연결된 서사" | L1("2단계 파이프라인 어떻게?")→L2("왜 분리?")→L3("단일 LLM에서 프롬프트 튜닝은?") 모두 답변 가능 |
+| FAIL | "Redis 분산 락으로 동시성 문제 해결" | L1 — 구현 상세 없음 / L2 — 선택 근거 없음 / L3 — 대안 없음, 모든 레벨 답 불가 |
+| FAIL | "LLM 할루시네이션 문제를 2단계 파이프라인으로 해결했습니다" | L1("어떻게 분리?") — 구조 상세 없음 / L2("왜 분리가 답?") — 근거 없음 / L3("프롬프트 엔지니어링은?") — 대안 검토 없음 |
+
+**D6p Section Fitness — 올바른 섹션 배치:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS | "[문제] → [해결 과정] → [검증] → [회고]" 구조의 탐색 서사 | 사고 과정이 드러나는 서사 구조 |
+| PASS | "선착순 쿠폰 초과 발급 버그 → MVCC 진단 → 3단계 락 실험 → Redis 분산 락 선택 → 검증 → 회고" 형태의 문제 탐색 서사 | 문제→진단→시도→해결→회고 arc가 드러나는 서사 |
+| FAIL | "메뉴 메타데이터 자동 추출 시스템 구축, 인력 11→3명 절감" | 성과 bullet → 경력 섹션으로 이동 필요 |
+| FAIL | "선착순 쿠폰 race condition 해결로 초과 발급 0건 달성, Redis 분산 락 구현" | 결과 요약 bullet → 경력 섹션으로 이동 필요 |
+
+#### D5p Enhancement: Trade-off Richness Check
+
+For problem-solving entries, D5p passes only when each alternative or attempt includes **rich trade-off reasoning** — not just "tried it, didn't work." Every excluded alternative must show why it was considered AND why it was ruled out in this specific context.
+
+**Bad — alternatives listed without trade-off:**
+```
+대안 1 — 낙관적 락: 안 맞아서 배제
+대안 2 — Redis 분산 락: 인프라 없어서 배제
+```
+
+**Good — each alternative with applicable scenario + specific exclusion reason:**
+```
+대안 1 — 낙관적 락(version 기반)
+- 충돌이 드문 환경에서는 락 없이 대부분의 요청이 성공해 효율적이나,
+  선착순처럼 동시 요청이 같은 row에 집중되면 재시도 폭증으로
+  오히려 DB 부하 가중
+
+대안 2 — DB 락(비관적 락 / Advisory Lock)
+- 비관적 락은 조회-검증-갱신이 필요한 복잡한 비즈니스 로직에서는
+  정합성을 보장하는 정석이나, 재고를 1 차감하는 단순 연산에
+  두 단계를 거치는 것은 과도
+- Advisory Lock은 스케일아웃이 어려운 RDB의 공유 메모리를
+  소비하며, 단일 row 차감에 DB 세션 단위의 락을 도입하는 것은
+  비용 대비 이점이 적다고 판단
+```
+
+#### Problem-Solving Evaluation Output Format
+
+```
+[문제해결 Line] "원문 그대로"
+- D1p Diagnostic Causation: PASS / FAIL (reason)
+- D2p Evidence Depth: PASS / FAIL (reason)
+- D3p Ownership of Thinking: PASS / FAIL / N/A (reason)
+- D4p Beyond-Standard Reasoning: PASS / FAIL (reason)
+- D5p Interview Depth: PASS / FAIL (reason)
+- D6p Section Fitness: PASS / FAIL (reason)
+```
+
+### Summary Count Format
+
+After all lines are evaluated, produce a split summary:
+
+```
+[경력 Summary] D1c: X/Y FAIL, D2c: X/Y FAIL, D3c: X/Y FAIL, D4c: X/Y FAIL, D5c: X/Y FAIL, D6c: X/Y FAIL
+[문제해결 Summary] D1p: X/Y FAIL, D2p: X/Y FAIL, D3p: X/Y FAIL, D4p: X/Y FAIL, D5p: X/Y FAIL, D6p: X/Y FAIL
+```
+
+These counts drive the Writing Guidance Triggers.
 
 ### Writing Guidance: Achievement Lines
 
-Use this section when D1 or D2 failures indicate that lines need content restructuring, not expression polishing.
+Use this section when D1c or D2c failures indicate that career lines need content restructuring, not expression polishing.
 
 #### Achievement Line Structure
 
@@ -282,7 +665,7 @@ flowchart TB
 
 ## 3-Level Pushback Simulation
 
-After the 6-dimension scan, simulate an interviewer on **every line**, including well-written ones. Apply the **same intensity** regardless of writing quality — well-written lines get harder L1-L3, not softer ones.
+After the section-specific evaluation, simulate an interviewer on **every line**, including well-written ones. Apply the **same intensity** regardless of writing quality — well-written lines get harder L1-L3, not softer ones.
 
 | Level | Question Pattern | What It Tests |
 |-------|-----------------|---------------|
@@ -295,16 +678,28 @@ For well-written lines (e.g., "5분 주기 스케줄러"), pushback goes deeper:
 - L2: "동시 실행 방지는 어떻게 했나요?"
 - L3: "스케줄러가 죽으면 어떻게 되나요?"
 
+### L3 Trade-off Quality Standard
+
+When evaluating L3 ("다른 대안은 검토하지 않았나요?"), each excluded alternative must include **both**:
+1. The scenario where this alternative would have been the right choice
+2. The specific reason it was ruled out in this situation
+
+A bare "배제" or "인프라 없어서" is insufficient. The answer must show engineering judgment, not just a conclusion.
+
+| Quality | Example |
+|---------|---------|
+| **Bad — no trade-off, just a verdict** | "낙관적 락: 안 맞아서 배제 / Redis 분산 락: 인프라 없어서 배제" |
+| **Good — scenario + this-situation reason** | "낙관적 락(version 기반): 충돌이 드문 환경에서는 락 없이 대부분의 요청이 성공해 효율적이나, 선착순처럼 동시 요청이 같은 row에 집중되면 재시도 폭증으로 오히려 DB 부하 가중 / DB 락(비관적 락 / Advisory Lock): 비관적 락은 조회-검증-갱신이 필요한 복잡한 비즈니스 로직에서는 정합성을 보장하는 정석이나, 재고를 1 차감하는 단순 연산에 두 단계를 거치는 것은 과도. Advisory Lock은 스케일아웃이 어려운 RDB의 공유 메모리를 소비하며, 단일 row 차감에 DB 세션 단위의 락을 도입하는 것은 비용 대비 이점이 적다고 판단" |
+
+### Obvious Elimination → Interview Backup
+
+Alternatives that are obviously inapplicable (e.g., `synchronized` in a multi-instance environment) do not belong in the resume body — they waste space and signal shallow thinking. Prepare these as **interview backup answers** instead: know why they fail, but do not surface them in writing unless the context demands it.
+
 ## Section Fitness Rules
 
 ### Career vs Problem-Solving Distinction
 
-| Section | Purpose | Tone | Unit |
-|---------|---------|------|------|
-| 경력 | Skim-and-hook | "[시스템]을 [행동]하여 [결과]" / "Built [system] achieving [outcome]" | System/Feature |
-| 문제해결 / 프로젝트 상세 | Deep narrative | Problem recognition → Definition → Solution → Outcome | Problem |
-
-"문제해결" and "프로젝트 상세" are the same intent with different tab names. Both are Deep narrative spaces for demonstrating problem detection and problem-solving ability.
+Career (D1c-D6c) evaluates direction and impact. Problem-Solving (D1p-D6p) evaluates thought process and depth. See the Section-Specific Evaluation section above for full criteria.
 
 Never put problem descriptions like "Resolved payment-order state inconsistency" in the career section. That belongs in the problem-solving section.
 
@@ -375,21 +770,28 @@ that filter resumes by keyword match rate before human review.
 - Match rate < 40%: Weak alignment — flag as potential ATS risk
 - NEVER recommend adding keywords for skills the candidate does not actually possess (Absolute Rule 4)
 - Keyword placement matters: technical stack section and achievement lines are highest-weight ATS zones
+- Every JD keyword match must map to a specific project or achievement in the resume. A keyword that appears only in the technical stack section with no supporting achievement line is a **weak match** — flag it and recommend adding an evidence line.
 
 **When no JD is provided:** Skip this check. Note: "JD keyword matching skipped — no target JD available."
 
 ## Writing Guidance Trigger: Achievement Lines
 
-After completing the D1-D6 evaluation and summary count, check if the writing guidance trigger condition is met. This is a mandatory check.
+After completing the section-specific evaluation and summary counts, check if the writing guidance trigger condition is met. This is a mandatory check.
 
-**Trigger condition**: `D1_FAIL_count / evaluable_lines > 0.5` OR `D2_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = D1-D6으로 평가된 성과 bullet 라인 수, 제목·빈 줄·섹션 마커 제외). Use the summary count produced after all-line evaluation.
+**Career trigger**: `D1c_FAIL_count / career_lines > 0.5` OR `D2c_FAIL_count / career_lines > 0.5` (career_lines = 경력 섹션에서 D1c-D6c로 평가된 bullet 라인 수, 제목·빈 줄·섹션 마커 제외)
 
-When triggered, deliver the full D1-D6 evaluation first, then deliver:
+**Problem-solving trigger**: `D1p_FAIL_count / problem_lines > 0.5` OR `D2p_FAIL_count / problem_lines > 0.5` (problem_lines = 문제해결 섹션에서 D1p-D6p로 평가된 라인 수)
 
-> "전체 N개 라인 중 X개가 D1/D2 FAIL입니다. 이 이력서는 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요."
+When triggered, deliver the full section-specific evaluation first, then deliver the corresponding message:
+
+**Career trigger message:**
+> "경력 섹션 전체 N개 라인 중 X개가 D1c/D2c FAIL입니다. 이 경력 기술은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요."
+
+**Problem-solving trigger message:**
+> "문제해결 섹션 전체 N개 라인 중 X개가 D1p/D2p FAIL입니다. 이 문제해결 기술은 사고 과정이 드러나도록 재구성이 필요합니다. 위의 P.A.R.R. Writing Template과 Before/After 예시를 참고하여 재작성해 보세요."
 
 Additional trigger conditions (any one also triggers):
-- Section structure needs reorganization (D6 failures pointing to section migration)
+- Section structure needs reorganization (D6c/D6p failures pointing to section migration)
 - Achievement lines need [Target] + [Action] + [Outcome] restructuring
 
 ## Interview Simulation (extends 3-Level Pushback — node H in flowchart)
@@ -431,7 +833,7 @@ For Mid/Senior: the four signature strengths are:
 
 ### P.A.R.R. Evaluation Dimensions (P1-P5, Common)
 
-These 5 dimensions apply to ALL career levels. After D1-D6, evaluate the signature project against all P1-P5 dimensions.
+These 5 dimensions apply to ALL career levels. After D1c-D6c / D1p-D6p evaluation, evaluate the signature project against all P1-P5 dimensions.
 
 | # | Dimension | Question | Fail Signal |
 |---|---|---|---|
@@ -481,7 +883,7 @@ For Mid (미들) and Senior (시니어) — candidates with 3+ years of producti
 
 ### P.A.R.R. Evaluation Output Format
 
-After D1-D6 evaluation, when a signature project is present, produce:
+After the section-specific evaluation, when a signature project is present, produce:
 
 ```
 [Signature Project Evaluation]
@@ -775,15 +1177,15 @@ This trigger is not optional. If the P.A.R.R. structure is absent entirely, trig
 
 ### Section Branch: Signature vs Other
 
-When an "other projects" section is present, apply the criteria below. **IMPORTANT: Do NOT apply P1-P5 (signature evaluation) to other projects. Use D1-D6 + volume guide only.** Signature projects are evaluated on depth; other projects are evaluated on conciseness.
+When an "other projects" section is present, apply the criteria below. **IMPORTANT: Do NOT apply P1-P5 (signature evaluation) to other projects. Use D1c-D6c / D1p-D6p + volume guide only.** Signature projects are evaluated on depth; other projects are evaluated on conciseness.
 
 ```mermaid
 flowchart TB
     A[Project section check]
     B{Signature project?}
-    C[D1-D6 + P1-P5]
+    C[D1c-D6c / D1p-D6p + P1-P5]
     D{Other projects?}
-    E[D1-D6 + volume guide]
+    E[D1c-D6c / D1p-D6p + volume guide]
 
     A --> B
     B -->|Yes| C
@@ -795,9 +1197,9 @@ flowchart TB
     style E fill:lightblue
 ```
 
-### Evaluation Criteria (D1-D6 + Volume Guide)
+### Evaluation Criteria (D1c-D6c / D1p-D6p + Volume Guide)
 
-Apply D1-D6 dimensions to each line in the other projects section. Additionally, check the volume guide:
+Apply D1c-D6c / D1p-D6p dimensions to each line in the other projects section. Additionally, check the volume guide:
 
 **Volume guide:**
 - 3-5 projects recommended
@@ -825,7 +1227,7 @@ Other projects do NOT require attempt enumeration, retrospective, or trade-off c
 
 ### Explicit Anti-Patterns (ENHANCED)
 
-**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as D1 FAIL and request the underlying problem context and outcome.
+**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as D1p FAIL and request the underlying problem context and outcome.
 
 **Over-Narration Anti-Pattern**: Signature-level narrative (attempts, retrospective, trade-off comparison) used in non-signature projects. Flag and recommend compression to 3-5 bullet lines.
 
@@ -863,7 +1265,7 @@ Other projects do NOT require attempt enumeration, retrospective, or trade-off c
 
 ### Writing Guidance: Compressed P.A.R.R.
 
-Use this section when D1/D2 evaluation reveals that other projects need content restructuring. This is for candidates who need to compress verbose content or expand feature-only listings.
+Use this section when D1p/D2p evaluation reveals that other projects need content restructuring. This is for candidates who need to compress verbose content or expand feature-only listings.
 
 #### Strategy: Supporting Backdrop
 
@@ -922,11 +1324,11 @@ See Before/After examples in the "Before/After Detection (Other Projects)" secti
 
 ### Writing Guidance Trigger: Other Projects
 
-After completing D1-D6 evaluation on other projects, check this condition:
+After completing D1c-D6c / D1p-D6p evaluation on other projects, check this condition:
 
-- **Trigger formula**: `D1_FAIL_count / evaluable_lines > 0.5` OR `D2_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = D1-D6으로 평가된 성과 bullet 라인 수, 제목·빈 줄·섹션 마커 제외)
+- **Trigger formula**: `D1p_FAIL_count / evaluable_lines > 0.5` OR `D2p_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = D1c-D6c / D1p-D6p로 평가된 성과 bullet 라인 수, 제목·빈 줄·섹션 마커 제외)
 - **Missing section**: If the other projects section is entirely absent, recommend adding it
-- **Message to deliver**: "전체 N개 라인 중 D1/D2 FAIL이 과반수입니다 (D1: X/N, D2: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed P.A.R.R. 섹션의 템플릿을 참고하여 재작성해 보세요."
+- **Message to deliver**: "전체 N개 라인 중 D1p/D2p FAIL이 과반수입니다 (D1p: X/N, D2p: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed P.A.R.R. 섹션의 템플릿을 참고하여 재작성해 보세요."
 
 This trigger is not optional.
 
@@ -934,11 +1336,46 @@ This trigger is not optional.
 
 | Thought | Reality |
 |---------|---------|
-| "P1-P5로 깊이를 평가해야지" | Applying P1-P5 to other projects is an excessive demand. Use D1-D6 + volume guide only. |
+| "P1-P5로 깊이를 평가해야지" | Applying P1-P5 to other projects is an excessive demand. Use D1c-D6c / D1p-D6p + volume guide only. |
 | "시도→실패→깨달음이 없으니 FAIL" | Attempt enumeration is for the signature project only. Other projects pass with problem → action → verification → result bullet flow. |
-| "잘 쓰였으니 넘어가자" | Well-written projects still require D1 (causation) and D2 (specificity) verification. |
+| "잘 쓰였으니 넘어가자" | Well-written projects still require D1p (diagnostic causation) and D2p (evidence depth) verification. |
 | "프로젝트가 7개인데 각각 평가하면 되지" | Check the volume guide (5+ projects) BEFORE individual evaluation. If 5+, recommend selection first. |
 | "숫자가 없으니 대충 넣자" | Never fabricate metrics. If numbers are missing, always request them from the user. |
 | "기능 나열이지만 깔끔하게 정리됐잖아" | Neat feature listing is still Feature Listing Anti-Pattern. Problem context and outcome are required for every line. |
 | "시그니처 수준으로 깊이 있게 써야지" | Over-narration in other projects creates imbalance and buries the signature. 3-5 bullet lines per project. |
 
+## AI Tone Audit (Final Step)
+
+After all evaluations (self-introduction, D1c-D6c / D1p-D6p, P.A.R.R., Other Projects) are complete, perform an AI Tone Audit as the final step.
+
+Call the humanizer skill in audit mode on **every text element** of the resume:
+
+- 자기소개 (about_content)
+- 경력 섹션 각 회사의 bullet lines
+- 문제 해결 섹션 각 엔트리의 description
+- 기술/스터디/기타 섹션
+
+**If AI tone patterns are detected:** Include the affected lines and suggested revision direction in the evaluation results delivered to the user.
+
+**If no AI tone patterns are detected:** Skip this section in the output.
+
+## Completion Checklist
+
+Before claiming the review is complete, verify every phase was executed. Output this checklist with DONE or SKIPPED status:
+
+```
+[Review Completion Checklist]
+- [ ] Phase 1: Pre-Evaluation Research
+- [ ] Phase 2: Self-Introduction Evaluation
+- [ ] Phase 3: Target Position Gate
+- [ ] Phase 4: Section-Specific Evaluation (D1c-D6c / D1p-D6p)
+- [ ] Phase 5: 3-Level Pushback Simulation
+- [ ] Phase 6: First-Page Primacy + JD Keyword Matching
+- [ ] Phase 7: Signature Project P.A.R.R. Evaluation
+- [ ] Phase 8: Other Projects Evaluation
+- [ ] Phase 9: AI Tone Audit
+```
+
+A phase is SKIPPED only when its precondition is not met (e.g., Phase 7 skipped because no signature project exists, Phase 8 skipped because no other projects section exists). All other phases must be DONE.
+
+If any phase shows SKIPPED without a valid precondition reason, go back and complete it before finalizing.

@@ -17,6 +17,12 @@ End-to-end workflow that tailors a resume to a specific JD, generates a PDF, and
 
 Execute the 7 steps below in order. Each step proceeds automatically to the next, except Step 3 (review-resume) which involves user interaction and follows the review-resume skill's protocol.
 
+### Step Completion Tracking
+
+After completing each step, output: `[Step N/7: {step name} ✓]`
+
+Before starting the next step, verify the previous step's completion marker was output. Step 3 (review-resume) often involves extensive user interaction — after it concludes, re-read this Step list to locate your position and continue with Step 4. Steps 5-7 are the most commonly skipped because Step 3 consumes significant context.
+
 ### Step 1: Collect JD
 
 Receive the Job Description from the user.
@@ -158,3 +164,20 @@ git branch -D {company}/{YYMMDD}
 ```
 
 The local branch is safe to delete because the remote now has the full history. If the push fails, do not delete the local branch — report the error to the user.
+
+### Completion Verification
+
+Before reporting completion to the user, output this checklist:
+
+```
+[Resume Apply Completion]
+- [ ] Step 1: JD collected, company/date confirmed
+- [ ] Step 2: Branch created from main
+- [ ] Step 3: review-resume completed, _config.yml updated
+- [ ] Step 4: Changes committed
+- [ ] Step 5: PDF generated
+- [ ] Step 6: PDF delivered to configured output
+- [ ] Step 7: Branch pushed and local deleted
+```
+
+Every step must be DONE. If any step shows incomplete, complete it before finalizing.
