@@ -15,7 +15,7 @@ End-to-end workflow that tailors a resume to a specific JD, generates a PDF, and
 
 ## Workflow
 
-Execute the 6 steps below in order. Each step proceeds automatically to the next, except Step 3 (review-resume) which involves user interaction and follows the review-resume skill's protocol.
+Execute the 7 steps below in order. Each step proceeds automatically to the next, except Step 3 (review-resume) which involves user interaction and follows the review-resume skill's protocol.
 
 ### Step 1: Collect JD
 
@@ -42,8 +42,9 @@ JD: "라인망가 백엔드 엔지니어 채용"
 
 ### Step 2: Create Branch
 
-Create a new branch from the current branch:
+Switch to `main` first (to avoid carrying over another company's changes), then create a new branch:
 ```bash
+git checkout main
 git checkout -b {company}/{YYMMDD}
 ```
 
@@ -147,3 +148,13 @@ Create the directory with `mkdir -p` if it doesn't exist.
    cp resume.pdf "{resolved_output_dir}/{substituted_filename}"
    ```
 7. Report the final path to the user
+
+### Step 7: Push & Cleanup
+
+Push the branch to origin and delete the local branch:
+```bash
+git push origin {company}/{YYMMDD}
+git branch -D {company}/{YYMMDD}
+```
+
+The local branch is safe to delete because the remote now has the full history. If the push fails, do not delete the local branch — report the error to the user.
