@@ -51,20 +51,13 @@ If the branch already exists, ask the user whether to overwrite or use a differe
 
 ### Step 3: Review & Improve Resume
 
-Before invoking review-resume, check ALL branches' `_config.yml` for reference material:
+Before invoking review-resume, check other branches' `_config.yml` for reference:
 ```bash
 git branch -a
-git show {branch}:_config.yml  # for ALL company branches, not just a few
+git show {branch}:_config.yml  # for relevant branches
 ```
 
-Other branches contain prior company-specific customizations — self-introduction variations, career bullet emphasis changes, problem-solving entry swaps. These are the candidate's own proven patterns and voice.
-
-**When to reference other branches:**
-- When improving the self-introduction: the candidate's existing company-specific paragraphs from other branches are better starting points than writing from scratch
-- When writing a company connection paragraph: if a similar domain was targeted before (e.g., another fintech branch when targeting a fintech company), adapt the existing version
-- When the evaluation suggests changes: cross-check against other branches to maintain consistency in the candidate's core identity while customizing company-specific content
-
-Pass discovered patterns as context to the review-resume skill so it can maintain consistency and leverage existing material.
+Other branches contain previously written company-specific versions of the resume. When improving or rewriting any section, always check these branches first — the candidate's own prior work is the best reference for tone, structure, and proven patterns. Do not write from scratch when an existing version can be adapted.
 
 Invoke the `review-resume` skill via the Skill tool.
 
