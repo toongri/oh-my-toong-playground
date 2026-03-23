@@ -330,47 +330,47 @@ Before writing or suggesting ANY self-introduction content, verify ALL three che
 
 **Check 1 — Capability-Evidence-Contribution Chain**
 
-Can you articulate the cause-effect chain in one sentence? If not, the pairing is forced.
+Can you articulate the cause-effect chain in one sentence? If the chain has a "???" gap, the pairing is forced and must be rewritten.
 
 | | Chain | Verdict |
 |---|-------|---------|
-| GOOD | "반복 업무 자동화 → 팀이 반복에서 해방 → 임팩트 있는 의사결정에 집중 → 'Focus on Impact'" | 인과 연결 명확 |
-| BAD | "복원력 아키텍처 설계 → ??? → 'Focus on Impact에 공감'" | 중간 논리 없음 — 복원력과 임팩트 집중은 인과 관계 아님 |
-| GOOD | "장애 격리 설계 → 사용자가 장애를 체감하지 않음 → 안정적인 제품 경험 → '좋은 제품이 최고의 세일즈'" | 인과 연결 명확 |
-| BAD | "장애 격리 설계 → ??? → 'Focus on Impact에 공감'" | 장애 격리와 임팩트 집중은 다른 얘기 |
+| GOOD | "Automated repetitive ops → team freed from toil → focus on impactful decisions → 'Focus on Impact'" | Clear causal link at every step |
+| BAD | "Resilience architecture → ??? → 'Focus on Impact'" | No causal link — fault isolation and impact focus are unrelated concepts |
+| GOOD | "Fault isolation → users don't experience outages → stable product experience → 'Great product = best sales'" | Clear causal link |
+| BAD | "Fault isolation → ??? → 'Focus on Impact'" | Fault isolation and impact focus are different topics |
 
 **Check 2 — JD Scope Alignment**
 
-기여 비전이 JD에서 이 역할이 하는 일로 **명시된** 것인가? JD에 없는 일을 기여 비전으로 쓰면 "이 사람이 JD를 읽었나?" 의문을 남긴다.
+Does the contribution vision describe work that the JD **explicitly states** as part of the role? Writing about work not mentioned in the JD signals "this person didn't read the JD."
 
-| | JD 역할 | 기여 비전 | Verdict |
-|---|---------|----------|---------|
-| GOOD | "데이터 파이프라인 구축 및 운영" | "데이터 파이프라인의 정합성을 설계하고 싶습니다" | JD에 명시된 역할과 일치 |
-| BAD | 백엔드 API 개발 JD | "AI 인프라를 만들고 싶습니다" | JD에 AI 인프라 언급 없음 — 역할 이탈 |
-| GOOD | "AI 에이전트 API 설계 및 시스템 통합" | "AI 에이전트가 사용자에게 안정적으로 전달되는 서비스를 만들고 싶습니다" | JD에 명시된 역할과 일치 |
-| BAD | "웹 크롤러 개발 및 운영" | "LLM 신뢰성을 보장하겠습니다" | JD가 크롤러인데 LLM 신뢰성은 다른 역할 |
+| | JD Role | Contribution Vision | Verdict |
+|---|---------|---------------------|---------|
+| GOOD | "Build and operate data pipelines" | "Design pipeline reliability" | Matches JD-stated responsibility |
+| BAD | Backend API development JD | "Build AI infrastructure" | JD never mentions AI infrastructure — role mismatch |
+| GOOD | "Design AI agent APIs and integrate with systems" | "Build reliable AI agent delivery" | Matches JD-stated responsibility |
+| BAD | "Develop and operate web crawlers" | "Guarantee LLM reliability" | JD is about crawlers, not LLM reliability — different role |
 
 **Check 3 — Candidate-First, Not Company-Guess**
 
-문단이 후보자의 실제 역량/경험에서 출발하는가? 아니면 "이 회사가 이걸 필요로 할 것 같아서" 맞추려 한 건가?
+Does the paragraph start from the candidate's actual capability? Or does it start from a guess about what the company needs?
 
-| | 출발점 | Verdict |
-|---|--------|---------|
-| GOOD | "LLM 파이프라인에서 정확도 90%를 달성한 경험이 있다" → "이 경험을 코딧의 데이터 파이프라인에 적용하고 싶다" | 후보자 역량에서 출발 → JD 역할로 연결 |
-| BAD | "코딧이 정확한 답변을 해야 하니까" → "LLM 신뢰성을 보장하겠다" | 회사 필요 추측에서 출발 — 후보자 역량이 뒷전 |
-| GOOD | "외부 시스템 장애를 격리하는 복원력 아키텍처를 설계해 왔다" → "{회사명}의 사용자가 장애를 체감하지 않는 경험을 만들고 싶다" | 후보자 경험에서 출발 → 회사 도메인으로 연결 |
-| BAD | "이 회사는 소수정예 팀이니까" → "AI로 생산성을 높이겠다" | 회사 상황 분석에서 출발 — 후보자 역량 부재 |
+| | Starting Point | Verdict |
+|---|----------------|---------|
+| GOOD | "I achieved 90% accuracy in an LLM pipeline" → "I want to apply this to CODIT's data pipeline" | Starts from candidate capability → connects to JD role |
+| BAD | "CODIT needs accurate answers" → "I will guarantee LLM reliability" | Starts from company-need guess — candidate capability is absent |
+| GOOD | "I have designed fault-isolation architectures for unstable external systems" → "I want to build a stable product experience for {company}'s users" | Starts from candidate experience → connects to company domain |
+| BAD | "This company is a small elite team" → "I will boost productivity with AI" | Starts from company situation analysis — no candidate capability anchoring the claim |
 
 **Validation flow:**
 ```
-1. 역량/경험 claim 작성
-2. Check 3: 이 claim이 후보자의 실제 역량에서 출발하는가?
-3. 근거(수치/프로젝트) 작성
-4. Check 1: 역량 → 근거 → 기여 비전의 인과 체인이 한 문장으로 설명 가능한가?
-5. 기여 비전 작성
-6. Check 2: 이 기여 비전이 JD에 명시된 역할 범위 안인가?
-7. 모든 체크 통과 → 제시
-8. 하나라도 실패 → 실패 지점 수정 후 재검증
+1. Write the capability/experience claim
+2. Check 3: Does this claim start from the candidate's actual capability?
+3. Write evidence (metrics, project outcomes)
+4. Check 1: Can the capability → evidence → contribution chain be explained in one sentence?
+5. Write the contribution vision
+6. Check 2: Is this contribution vision within the JD's stated role scope?
+7. All checks pass → present to user
+8. Any check fails → fix the failing point and re-validate
 ```
 
 ## Section-Specific Evaluation (D1c-D6c / D1p-D6p)
