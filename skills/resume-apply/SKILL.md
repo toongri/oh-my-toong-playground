@@ -57,16 +57,12 @@ git branch -a
 git show {branch}:_config.yml  # for ALL company branches, not just a few
 ```
 
-**What to look for:**
-- Self-introduction patterns: which Type A/B/C/D paragraphs have been written before?
-- Company connection (Type C) paragraphs: how has the candidate connected their experience to different companies? What worked well?
-- Career bullet variations: has the candidate customized bullet emphasis per company?
-- Problem-solving entry selection: which entries were swapped or added for specific JDs?
+Other branches contain prior company-specific customizations — self-introduction variations, career bullet emphasis changes, problem-solving entry swaps. These are the candidate's own proven patterns and voice.
 
-**How to use as reference:**
-- When improving the self-introduction, use existing Type C paragraphs from other branches as structural reference — the candidate's own voice and proven patterns are better starting points than writing from scratch.
-- When the review-resume skill suggests changes, cross-check against other branches to maintain consistency in the candidate's core identity (Type A/B) while customizing company-specific content (Type C).
-- If a strong Type C paragraph exists for a similar domain (e.g., another fintech branch when targeting a fintech company), adapt it rather than starting from zero.
+**When to reference other branches:**
+- When improving the self-introduction: the candidate's existing company-specific paragraphs from other branches are better starting points than writing from scratch
+- When writing a company connection paragraph: if a similar domain was targeted before (e.g., another fintech branch when targeting a fintech company), adapt the existing version
+- When the evaluation suggests changes: cross-check against other branches to maintain consistency in the candidate's core identity while customizing company-specific content
 
 Pass discovered patterns as context to the review-resume skill so it can maintain consistency and leverage existing material.
 
