@@ -45,8 +45,9 @@ flowchart TB
     J -->|No| L{Other projects present?}
     K --> L
     L -->|Yes| M[D1p-D6p + volume guide]
-    L -->|No| N[Deliver findings + inline writing guidance]
-    M --> N
+    L -->|No| O
+    M --> O[MUST: AI Tone Audit — Skill humanizer audit mode]
+    O --> N[Deliver findings + inline writing guidance]
 ```
 
 ## Workflow Progress Tracking
@@ -65,7 +66,7 @@ The Evaluation Protocol above defines 9 phases. Resume reviews involve extensive
 | 6 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching |
 | 7 | J→K | Signature Project P.A.R.R. Evaluation |
 | 8 | L→M | Other Projects Evaluation |
-| 9 | N | AI Tone Audit + Deliver Findings |
+| 9 | O→N | MUST: AI Tone Audit (`Skill(humanizer)`) + Deliver Findings |
 
 ### Tracking Rules
 
@@ -1344,11 +1345,13 @@ This trigger is not optional.
 | "기능 나열이지만 깔끔하게 정리됐잖아" | Neat feature listing is still Feature Listing Anti-Pattern. Problem context and outcome are required for every line. |
 | "시그니처 수준으로 깊이 있게 써야지" | Over-narration in other projects creates imbalance and buries the signature. 3-5 bullet lines per project. |
 
-## AI Tone Audit (Final Step)
+## CRITICAL: AI Tone Audit (Final Step)
 
 After all evaluations (self-introduction, D1c-D6c / D1p-D6p, P.A.R.R., Other Projects) are complete, perform an AI Tone Audit as the final step.
 
-Call the humanizer skill in audit mode on **every text element** of the resume:
+**MUST invoke the humanizer skill via the Skill tool.** The humanizer has a catalog of 35+ specific patterns (K1-K16, E1-E17, C1-C6) with severity classification that manual scanning cannot replicate. Reading the text yourself and judging "this sounds fine" is NOT a substitute — you will miss subtle patterns every time.
+
+Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text element:
 
 - 자기소개 (about_content)
 - 경력 섹션 각 회사의 bullet lines
@@ -1373,9 +1376,9 @@ Before claiming the review is complete, verify every phase was executed. Output 
 - [ ] Phase 6: First-Page Primacy + JD Keyword Matching
 - [ ] Phase 7: Signature Project P.A.R.R. Evaluation
 - [ ] Phase 8: Other Projects Evaluation
-- [ ] Phase 9: AI Tone Audit
+- [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 ```
 
-A phase is SKIPPED only when its precondition is not met (e.g., Phase 7 skipped because no signature project exists, Phase 8 skipped because no other projects section exists). All other phases must be DONE.
+A phase is SKIPPED only when its precondition is not met (e.g., Phase 7 skipped because no signature project exists, Phase 8 skipped because no other projects section exists). Phase 9 has NO precondition — it is always required. All other phases must be DONE.
 
 If any phase shows SKIPPED without a valid precondition reason, go back and complete it before finalizing.

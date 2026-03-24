@@ -17,7 +17,8 @@
         "Follows all 7 steps in documented order",
         "Outputs [Step N/7: ...] completion markers for each step",
         "Outputs the Resume Apply Completion checklist at the end",
-        "Does not fabricate experience or metrics"
+        "Does not fabricate experience or metrics",
+        "Invokes Skill(humanizer) in audit mode during Phase 9 AI Tone Audit — manual scanning does NOT count"
       ],
       "files": []
     },
@@ -38,7 +39,8 @@
         "Follows all 7 steps in documented order",
         "Outputs [Step N/7: ...] completion markers for each step",
         "Outputs the Resume Apply Completion checklist at the end",
-        "Does not fabricate experience or metrics"
+        "Does not fabricate experience or metrics",
+        "Invokes Skill(humanizer) in audit mode during Phase 9 AI Tone Audit — manual scanning does NOT count"
       ],
       "files": []
     },
@@ -60,7 +62,8 @@
         "Follows all 7 steps in documented order",
         "Outputs [Step N/7: ...] completion markers for each step",
         "Outputs the Resume Apply Completion checklist at the end",
-        "Does not fabricate experience or metrics"
+        "Does not fabricate experience or metrics",
+        "Invokes Skill(humanizer) in audit mode during Phase 9 AI Tone Audit — manual scanning does NOT count"
       ],
       "files": []
     }
