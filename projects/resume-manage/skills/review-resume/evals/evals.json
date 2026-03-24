@@ -27,8 +27,11 @@
         {"text": "d4c-vs-d4p-different-criteria", "description": "D4c evaluates outcome differentiation (Standard Transcendence); D4p evaluates reasoning depth (Beyond-Standard Reasoning)"},
         {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary count lines"},
         {"text": "section-independence", "description": "Does not flag career for lacking corresponding problem-solving entries"},
+        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
+        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations (N/A for junior C3-C5)"},
+        {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED, provides specific (not abstract) gap recommendations"},
         {"text": "ai-tone-audit", "description": "Performs AI Tone Audit as final step"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/9: ...] progress markers at least for phases 1, 2, 4, 5"},
+        {"text": "phase-progress-markers", "description": "Outputs [Phase N/10: ...] progress markers at least for phases 1, 2, 4, 5"},
         {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist at the end with DONE/SKIPPED status for each phase"}
       ],
       "files": ["_config.yml"]
@@ -52,8 +55,10 @@
         {"text": "d4c-vs-d4p-different-criteria", "description": "D4c and D4p use different evaluation criteria"},
         {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary counts"},
         {"text": "section-independence", "description": "Sections treated as independent"},
+        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
+        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations"},
         {"text": "ai-tone-audit", "description": "AI Tone Audit as final step"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/9: ...] progress markers at least for phases 1, 2, 4, 5"},
+        {"text": "phase-progress-markers", "description": "Outputs [Phase N/10: ...] progress markers at least for phases 1, 2, 4, 5"},
         {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist at the end with DONE/SKIPPED status for each phase"}
       ],
       "files": ["_config.yml"]
@@ -91,6 +96,11 @@
       "iteration": 5,
       "date": "2026-03-23",
       "changes": "Pre-eval research expansion, Type C capability-first, A/B/D Reason JD context, Type C domain diversification"
+    },
+    {
+      "iteration": 6,
+      "date": "2026-03-24",
+      "changes": "Developer Competency Assessment (C1-C5) added as Phase 4, all phases renumbered (9→10)"
     }
   ]
 }
