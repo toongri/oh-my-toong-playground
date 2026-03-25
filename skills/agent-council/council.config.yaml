@@ -44,4 +44,4 @@ council:
   # Execution settings
   settings:
     exclude_chairman_from_members: false  # Chairman also participates as a council member
-    timeout: 180                          # Timeout seconds per agent (0 to disable)
+    timeout: 300                          # Timeout seconds per agent (0 to disable)

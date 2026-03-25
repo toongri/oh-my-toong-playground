@@ -43,7 +43,7 @@ spec-review:
 
   # Execution settings
   settings:
-    timeout: 300                          # Timeout seconds per reviewer (spec reviews take longer)
+    timeout: 600                          # Timeout seconds per reviewer (spec reviews take longer)
 
   # Spec context configuration
   context:
