@@ -1,6 +1,6 @@
 ---
 name: review-resume
-description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured self-introduction evaluation (per-type A-D + global), D1c-D6c / D1p-D6p, and depth-based problem-solving evaluation with inline writing guidance. Do NOT use for JD-based resume tailoring (use resume-apply instead) or simple _config.yml edits.
+description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured self-introduction evaluation (per-type A-D + global), D1c-D6c / D1p-D6p, and depth-based problem-solving evaluation with inline writing guidance. When a JD is provided, this skill evaluates JD fit of self-introduction, career bullets, and problem-solving entries, and recommends the optimal combination from the memory candidate pool. Not for simple _config.yml edits.
 ---
 
 # Review Resume
@@ -15,6 +15,7 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
 4. **Never fabricate metrics.** If the user doesn't provide numbers, ask. Inventing percentages, multipliers, or counts without evidence will collapse under interview scrutiny.
    - **Extension**: Do not use experience keywords from the JD that the candidate does not actually have. Cross-check the JD against the resume, and verify with the user ("이 경험이 있나요?") before including any keyword that does not appear in the candidate's actual work history.
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
+6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a memory candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
 
 ## Persistent Memory System
 
@@ -107,10 +108,12 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 
 ### Tracking Rules
 
-1. After completing each phase, output a progress line: `[Phase N/11: {phase name} ✓]`
-2. Before starting a new phase, verify the previous phase's progress line was output. If missing, complete the skipped phase first.
+1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
+2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. At the end, output the Completion Checklist (see the final section of this document).
+4. Phases 0-10 are internal processing steps — their outputs (progress lines, intermediate evaluations, checklists) are NOT shown to the user. Only Phase 11 produces user-facing output.
+5. Exception: Phase 3 (Target Position Gate), Phase 10 (Memory Accumulate), and Phase 11 (Deliver Findings — cherry-pick workflow) require user interaction.
+6. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
 
@@ -346,16 +349,102 @@ Save? (y/n)
 
 ## Phase 11: Deliver Findings
 
-Compile all evaluation results and deliver to the user with inline writing guidance for every finding. Never leave the user with "here's the problem" without "here's how to fix it."
+Compile all evaluation results from Phases 0-10 and deliver to the user. This is the **only phase that produces user-facing output**. Structure the output in exactly 3 parts, in order.
 
-`[Phase 11/11: Deliver Findings ✓]`
+### Part 1: Summary Table
 
-## Completion Checklist
+Open with a single table that maps every finding to a priority level. Use the resume's section order (자기소개 → 경력 각 회사 → 문제해결 각 엔트리 → 기술스택/기타).
 
-Before claiming the review is complete, verify every phase was executed. Output this checklist with DONE or SKIPPED status:
+```markdown
+## 리뷰 요약
+
+| P | # | 섹션 | 한 줄 진단 |
+|---|---|------|-----------|
+| P0 | 1 | 자기소개 | 임팩트 부재 — 성과 없는 기간 서술 |
+| P0 | 2 | 경력 A사 | 전체 bullet이 업무 나열 — 성과 0개 |
+| P1 | 3 | 경력 B사 #2 | 수치는 있으나 baseline 없음 |
+| P1 | 4 | 문제해결 #1 | 해결책 직행 — 실패 arc 없음 |
+| P2 | 5 | 기술스택 | JD 키워드 3개 누락 |
+```
+
+Priority level definitions:
+
+| Level | 의미 | 기준 |
+|-------|------|------|
+| **P0** | 반드시 수정 | 면접에서 즉시 깨짐 — 성과 없음, 인과 없음, 표준을 성과로 제시, cross-section 불일치 |
+| **P1** | 수정 권장 | 면접에서 약점 노출 — 수치 불완전, 역할 불명확, 깊이 부족, AI 톤 감지 |
+| **P2** | 개선 가능 | 더 좋아질 수 있음 — 표현 개선, JD 키워드 추가, 순서 변경, hook potential 강화 |
+| **P3** | 참고 | 스타일 선호 — 어조, 포맷팅, 사소한 표현 차이 |
+
+### Part 2: Section-by-Section Inline Feedback
+
+Output findings in resume section order (자기소개 → 경력 각 회사 → 문제해결 각 엔트리 → 기술스택/기타). For each section heading, list only the lines that have findings — lines with no issues (PASS on all dimensions) are skipped entirely.
+
+Use the following format for each finding:
+
+```markdown
+### 자기소개
+
+> 저는 백엔드 개발자로 3년간 근무했습니다.
+
+✗ **[#1 · P0]** "3년간 근무"는 기간 사실일 뿐, 성과가 없음. 면접관이 기억할 것이 없다.
+- 위반: 목표→실행→성과 인과 없음, 차별화 요소 없음
+- 면접 시뮬레이션: "그래서 뭘 하셨나요?" — 답이 이 문장 안에 없음
+
+**수정안:**
+> 3년간 B2B SaaS 결제 시스템을 설계·운영하며, 결제-주문 불일치를 0건으로 만들었습니다.
+
+---
+
+> Redis 캐시를 적용하여 성능을 개선했습니다.
+
+⚠ **[#3 · P1]** 수치는 있으나 before→after baseline이 없어 검증 불가.
+- 위반: 메트릭 구체성 부족
+- 면접 시뮬레이션: "기존 대비 얼마나 개선?" — 답 불가
+
+**수정안:**
+> Redis 캐시를 상품 목록/상세 API에 적용, 피크 시간 DB CPU 90%→50% 절감
+```
+
+Symbol guide:
+- ✗ = P0 (반드시 수정)
+- ⚠ = P1 (수정 권장)
+- △ = P2 (개선 가능)
+- ℹ = P3 (참고)
+
+Rules:
+- Finding labels use the same # numbers as the Summary Table.
+- Internal dimension codes (D1c, D2c, etc.) are NOT shown. Use plain Korean to describe the violation (e.g., "before→after baseline이 없어 검증 불가" instead of "D2c FAIL").
+- The "위반" line may briefly name the internal criterion in plain terms so the user can learn patterns across reviews.
+- Every finding must include a **수정안** — never leave a problem without a fix.
+
+### Part 3: Cherry-pick Improvement Workflow
+
+After all section feedback, close with the improvement selection prompt:
+
+```markdown
+---
+
+## 개선 선택
+
+P0 **N**건, P1 **N**건, P2 **N**건, P3 **N**건 — 총 **N**건의 개선 제안이 있습니다.
+
+어떤 항목을 개선할까요?
+- `all` — 전체 적용
+- `p0` — P0만 우선 적용
+- `1,3,5` — 특정 번호만 적용
+- `skip 5` — 5번 제외하고 전체 적용
+- `none` — 확인만, 개선 없음
+```
+
+When the user selects items, begin actual resume editing starting with the selected findings.
+
+## Completion Checklist (Internal — do NOT output to user)
+
+Before delivering Phase 11 output, verify every phase was executed internally. Track with DONE or SKIPPED status:
 
 ```
-[Review Completion Checklist]
+[Review Completion Checklist — INTERNAL]
 - [ ] Phase 0: Memory Load + Auto-Seeding
 - [ ] Phase 1: Pre-Evaluation Research
 - [ ] Phase 2: Self-Introduction Evaluation
@@ -367,9 +456,9 @@ Before claiming the review is complete, verify every phase was executed. Output 
 - [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
 - [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 - [ ] Phase 10: Memory Accumulate (candidate/preference persistence — user confirmation required)
-- [ ] Phase 11: Deliver Findings + Inline Writing Guidance
+- [ ] Phase 11: Deliver Findings
 ```
 
 A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 9, 10 have NO precondition — always required. Phase 10 counts as DONE even if the user declines to save.
 
-If any phase shows SKIPPED without a valid precondition reason, go back and complete it before finalizing.
+If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 11 output.

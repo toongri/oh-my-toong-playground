@@ -18,7 +18,8 @@
    - [Migration Rules](#migration-rules)
    - [Career-Level Volume Recommendations](#career-level-volume-recommendations)
    - [First-Page Primacy Rule](#first-page-primacy-rule)
-   - [JD Keyword Matching](#jd-keyword-matching-aiats-screening)
+   - [JD-Based Content Selection & Keyword Matching](#jd-based-content-selection--keyword-matching)
+   - [Cross-Section Consistency Rule](#cross-section-consistency-rule)
 5. [Writing Guidance Trigger: Achievement Lines](#5-writing-guidance-trigger-achievement-lines)
 6. [Interview Simulation](#6-interview-simulation)
 
@@ -105,7 +106,9 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "결제-주문 상태 불일치 문제를 발견하고, 원인을 분석한 결과..." | 문제 서사 → 문제해결 섹션으로 이동 필요 |
 | FAIL | "POS 서버의 간헐적 타임아웃 원인을 분석하여 Circuit Breaker 패턴을 도입하게 된 과정..." | 원인 분석 + 도입 과정 서사 → 문제해결 섹션으로 이동 필요 |
 
-### Career Evaluation Output Format
+### Career Evaluation Output Format (Internal)
+
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
 
 ```
 [경력 Line] "원문 그대로"
@@ -216,7 +219,9 @@ For problem-solving entries, D5p passes only when each alternative or attempt in
   비용 대비 이점이 적다고 판단
 ```
 
-### Problem-Solving Evaluation Output Format
+### Problem-Solving Evaluation Output Format (Internal)
+
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
 
 ```
 [문제해결 Line] "원문 그대로"
@@ -228,7 +233,9 @@ For problem-solving entries, D5p passes only when each alternative or attempt in
 - D6p Section Fitness: PASS / FAIL (reason)
 ```
 
-### Summary Count Format
+### Summary Count Format (Internal)
+
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
 
 After all lines are evaluated, produce a split summary:
 
@@ -286,7 +293,9 @@ There is NO hard page limit. A 4-page resume is acceptable if every page earns i
 - WARNING: Key achievements or signature project buried past the opening section
 - FAIL: Opening section is entirely career history or education with no impact signals
 
-### JD Keyword Matching (AI/ATS Screening)
+### JD-Based Content Selection & Keyword Matching
+
+#### JD Keyword Matching (AI/ATS Screening)
 
 When a JD (Job Description) text is provided, evaluate keyword alignment. Modern hiring pipelines use ATS (Applicant Tracking Systems) and AI-based screening that filter resumes by keyword match rate before human review.
 
@@ -314,6 +323,59 @@ When a JD (Job Description) text is provided, evaluate keyword alignment. Modern
 - Every JD keyword match must map to a specific project or achievement in the resume. A keyword that appears only in the technical stack section with no supporting achievement line is a **weak match** — flag it and recommend adding an evidence line.
 
 **When no JD is provided:** Skip this check. Note: "JD keyword matching skipped — no target JD available."
+
+#### JD-Based Content Selection
+
+JD가 제공된 경우, 키워드 매칭에 그치지 않고 **컨텐츠 선별 자체를 JD에 최적화**한다. 메모리 풀에 더 적합한 후보가 있다면 swap을 추천한다.
+
+**경력 bullet / 문제해결 엔트리 JD 적합도 평가:**
+- 현재 이력서에 포함된 경력 bullet과 문제해결 엔트리 각각에 대해 JD 키워드 및 도메인 관련성을 평가
+- 메모리 풀(memory pool)에 JD에 더 적합한 candidate가 있으면 swap을 구체적으로 추천:
+  - "현재 [엔트리 원문] → [메모리 풀 후보 제목]으로 교체 검토 (JD 키워드 [키워드명] 커버)"
+- 메모리 풀 후보가 없는 경우: 현재 엔트리의 JD 관련 키워드 강조 방향 제시
+
+**자기소개 유형 추천:**
+- 자기소개 유형(A/B/C/D)도 JD에 맞춰 추천한다 (각 유형의 포지셔닝은 self-introduction.md 참고)
+- JD가 강조하는 역량(예: 시스템 설계, 문제해결 깊이, 리더십, 특정 도메인 경험)에 따라 어떤 유형이 가장 효과적인 후킹을 만드는지 판단
+- 추천 형식: "JD 분석 결과 [역량] 강조가 유리 → 자기소개 유형 [X] 추천 (이유)"
+
+**When no JD is provided:** 이 섹션 전체를 스킵한다. Note: "JD-based content selection skipped — no target JD available."
+
+### Cross-Section Consistency Rule
+
+자기소개에서 후킹(언급)한 프로젝트/에피소드/성과는 반드시 경력 또는 문제해결 섹션에 대응하는 엔트리가 있어야 한다.
+
+**핵심 직관:**
+- 자기소개 = 면접관의 시선을 끄는 후킹 포인트
+- 문제해결 = 그 후킹의 증거(proof)
+- 후킹했으면 증거가 있어야 한다. 후킹 없는 증거는 묻히고, **증거 없는 후킹은 신뢰를 떨어뜨린다.**
+
+**왜 이 규칙이 중요한가:**
+- 면접관은 자기소개에서 관심이 생긴 프로젝트를 이력서에서 찾는다 → 없으면 신뢰 하락
+- 자기소개에서 흘렸던(간략히 언급한) 프로젝트/성과는 문제해결 쪽에서 상세 서술해야 한다
+- 자기소개에 있는 것은 JD에 맞춘 핵심 후킹 요소 → 가장 시선을 끄는 프로젝트들이므로 문제해결 탭에서 증거로 뒷받침되어야 함
+
+**평가 방법:**
+1. 자기소개에서 언급된 프로젝트/에피소드/성과 키워드를 추출
+2. 각 키워드에 대해 경력 섹션 또는 문제해결 섹션에 대응 엔트리가 있는지 확인
+3. 특히 후킹 수준(면접관이 질문할 만한)의 프로젝트는 문제해결 섹션에 **상세 서술**이 있어야 함 — 경력 한 줄만으로는 부족
+
+**PASS / FAIL Examples:**
+
+| Verdict | 자기소개 언급 | 경력/문제해결 대응 | Reason |
+|---------|-------------|-----------------|--------|
+| PASS | "결제-주문 상태 불일치를 시스템 간 동기화 문제로 재정의" 언급 | 문제해결 섹션에 해당 프로젝트 상세 서술 존재 | 후킹 → 증거 연결 완전 |
+| FAIL | "선착순 쿠폰 race condition을 원자적으로 해결" 언급 | 문제해결/경력 어디에도 해당 프로젝트 없음 | 후킹만 있고 증거 전무 → 면접관이 이력서에서 찾을 수 없음 |
+| FAIL | "LLM 기반 자동화로 월 1,500만원 절감" 언급 | 경력에 한 줄만 있고 문제해결에 상세 서술 없음 | 후킹 수준의 프로젝트인데 증거가 부족 — 면접관이 질문했을 때 이력서에서 뒷받침이 없음 |
+
+**출력 형식 (자기소개 후킹-증거 점검):**
+```
+[Cross-Section Consistency Check]
+자기소개 후킹 키워드: [추출된 키워드 목록]
+
+- "[후킹 원문]" → 문제해결/경력 대응: PASS / FAIL
+  (FAIL인 경우: "문제해결 섹션에 상세 서술 추가 필요" 또는 "경력 엔트리 보강 필요")
+```
 
 ---
 

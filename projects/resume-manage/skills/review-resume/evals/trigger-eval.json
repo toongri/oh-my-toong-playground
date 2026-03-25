@@ -77,6 +77,14 @@
   },
   {
     "query": "쿠팡 백엔드 엔지니어에 지원하려고 해. JD 기반으로 이력서 맞춤화하고 PDF까지 뽑아줘",
-    "should_trigger": false
+    "should_trigger": true
+  },
+  {
+    "query": "네이버 검색 백엔드 JD 보고 이력서 리뷰해줘. 경력이랑 문제해결 섹션이 이 JD에 맞는지 봐줘. _config.yml에 있어",
+    "should_trigger": true
+  },
+  {
+    "query": "이 JD에 맞게 내 이력서 경력 bullet을 어떤 걸 앞에 세우고 어떤 걸 빼야 할지 추천해줘. _config.yml 기반으로",
+    "should_trigger": true
   }
 ]
