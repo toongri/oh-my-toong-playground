@@ -128,12 +128,17 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 #### 5.1 Major Error Scenarios
 - Identify: Major error scenarios across integrations
 - Design: Fallback flows and recovery strategies
+- Ask (system-level resilience):
+  - **Degradation Mode**: On failure, does only partial functionality stop, or does the entire service go down?
+  - **Blast Radius**: How far does a single component failure propagate? Which downstream systems are affected?
+  - **Recovery Mode**: Is automatic recovery possible, or is manual intervention required? Does a simple restart restore normal operation?
 - Review: Discuss with user
 
 #### 5.2 Cross-cutting Concerns
 - **Transaction boundaries**: Where do transactions start and end?
 - **Saga/Outbox patterns**: If applicable, identify participating components
 - **Retry policies**: Define retry behavior at integration points
+- **Recovery expectations**: How quickly must the system return to normal operation?
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 5 Complete
@@ -225,9 +230,9 @@ flowchart TD
 
 ### 4.1 Major Error Scenarios
 
-| Failure Scenario | Response Plan | Expected Outcome |
-|------------------|---------------|------------------|
-| ... | ... | ... |
+| Failure Scenario | Response Plan | Degradation Mode | Recovery Mode | Expected Outcome |
+|------------------|---------------|------------------|---------------|------------------|
+| ... | ... | Partial / Full | Auto / Manual | ... |
 
 ### 4.2 Transaction Boundaries
 
