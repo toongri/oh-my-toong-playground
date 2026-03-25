@@ -105,10 +105,10 @@
     }
   ],
   "benchmark_summary": {
-    "latest_iteration": 8,
+    "latest_iteration": 9,
     "date": "2026-03-25",
-    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 402.4, "avg_tokens": 93622},
-    "notes": "66 assertions across 3 evals, 100% pass. Assertions refined in iter 8 to measure skill quality (content application) rather than eval infrastructure (Read() call visibility)."
+    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 381.9, "avg_tokens": 97074},
+    "notes": "78 assertions across 3 evals, 100% pass. Assertions overhauled in iter 9: Phase 11 output format (summary-table, inline-blockquote-feedback, cherry-pick-workflow, priority-classification, suggested-revisions), JD content selection, cross-section consistency. Phase tracking markers and completion checklist removed (now internal-only)."
   },
   "benchmark_history": [
     {
