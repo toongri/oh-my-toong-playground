@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘.\n\nJD 핵심:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- 대용량 트래픽, 동시성 처리, 실시간 데이터 처리\n- 유실없는 데이터 정합성과 신뢰성\n- 트러블슈팅, 성능 튜닝\n\n이력서는 _config.yml에 있어.",
-      "expected_output": "Memory load, Pre-eval research (branch + JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, D1c-D6c/D1p-D6p, depth-based problem-solving eval, JD keyword matching, AI Tone Audit, Memory accumulate",
+      "expected_output": "Memory load, Pre-eval research (branch + JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, D1c-D6c/D1p-D6p, depth-based problem-solving eval, JD keyword matching + content selection, Cross-section consistency check, AI Tone Audit, Memory accumulate → Phase 11 output: Summary Table (P0-P3), Section-by-section inline feedback with suggested revisions, Cherry-pick improvement workflow",
       "assertions": [
         {"text": "memory-load", "description": "Phase 0: checks ~/.omt/resume-manage/review-resume/ and reports memory status (loaded or auto-seeding)"},
         {"text": "pre-eval-branch-check", "description": "Checks other branches' _config.yml patterns before evaluation"},
@@ -26,8 +26,7 @@
         {"text": "d5p-interview-depth", "description": "Problem-solving entries get D5p (Interview Depth) evaluation"},
         {"text": "d1c-linear-vs-d1p-diagnostic", "description": "D1c uses linear causation for career; D1p uses diagnostic causation for problem-solving"},
         {"text": "d4c-vs-d4p-different-criteria", "description": "D4c evaluates outcome differentiation; D4p evaluates reasoning depth"},
-        {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary count lines"},
-        {"text": "section-independence", "description": "Does not flag career for lacking corresponding problem-solving entries"},
+        {"text": "section-independence", "description": "Career and problem-solving sections are evaluated independently with separate D-dimension criteria (D1c-D6c vs D1p-D6p). Note: cross-section consistency between self-introduction and other sections IS checked separately."},
         {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations"},
         {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED, provides specific gap recommendations"},
@@ -36,15 +35,20 @@
         {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — e.g., uses P.A.R.R. dimensions (P1-P5/P6-P8), Type A-D criteria, D1c-D6c/D1p-D6p framework, or depth classification flowchart. Evidence: specific dimension codes or criteria language that only exists in references/."},
         {"text": "ai-tone-audit-phase", "description": "Phase 9 explicitly addresses AI Tone Audit — either invokes Skill(humanizer) or declares intent to invoke it (e.g., '[Would invoke Skill(humanizer)]'). The phase must not be skipped."},
         {"text": "memory-accumulate", "description": "Phase 10: proposes memory accumulation (new candidates, updates, preferences) and asks for user confirmation"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/11: ...] progress markers at least for phases 0, 1, 2, 4, 5, 8"},
-        {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist at the end with DONE/SKIPPED status for phases 0-11"}
+        {"text": "summary-table", "description": "Phase 11 output includes a priority summary table with P0-P3 severity levels, finding numbers, sections, and one-line diagnoses"},
+        {"text": "inline-blockquote-feedback", "description": "Uses markdown blockquote (>) to quote original resume content, followed by severity symbol (✗/⚠/△/ℹ) + finding number + priority label + diagnosis"},
+        {"text": "cherry-pick-workflow", "description": "After all findings, presents improvement selection prompt with options (all/p0/specific numbers/skip/none)"},
+        {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
+        {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
+        {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"},
+        {"text": "cross-section-consistency", "description": "Checks that projects/episodes mentioned in self-introduction have corresponding entries in problem-solving or career sections. Flags hooks without backing evidence."}
       ],
       "files": ["_config.yml"]
     },
     {
       "id": 2,
       "prompt": "이력서 봐줘. 전반적으로 피드백 부탁해. _config.yml에 있어.",
-      "expected_output": "Memory load, Pre-eval research (branch check, NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, D1c-D6c/D1p-D6p, depth-based problem-solving eval, AI Tone Audit, Memory accumulate",
+      "expected_output": "Memory load, Pre-eval research (branch check, NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, D1c-D6c/D1p-D6p, depth-based problem-solving eval, Cross-section consistency check, AI Tone Audit, Memory accumulate → Phase 11 output: Summary Table (P0-P3), Section-by-section inline feedback with suggested revisions, Cherry-pick improvement workflow",
       "assertions": [
         {"text": "memory-load", "description": "Phase 0: checks memory directory and reports status"},
         {"text": "pre-eval-branch-check", "description": "Checks other branches for context"},
@@ -59,8 +63,7 @@
         {"text": "problem-solving-uses-d1p-d6p", "description": "Problem-solving entries evaluated with D1p-D6p"},
         {"text": "d5c-hook-potential", "description": "D5c Hook Potential actually evaluated on career bullets"},
         {"text": "d4c-vs-d4p-different-criteria", "description": "D4c and D4p use different evaluation criteria"},
-        {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary counts"},
-        {"text": "section-independence", "description": "Sections treated as independent"},
+        {"text": "section-independence", "description": "Career and problem-solving sections are evaluated independently with separate D-dimension criteria (D1c-D6c vs D1p-D6p). Note: cross-section consistency between self-introduction and other sections IS checked separately."},
         {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes"},
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies expectations"},
         {"text": "depth-classification", "description": "Classifies problem-solving entries by depth before evaluation"},
@@ -68,15 +71,19 @@
         {"text": "applies-reference-criteria", "description": "Evaluation uses criteria from reference files — P.A.R.R. dimensions, Type A-D criteria, D1c-D6c/D1p-D6p, or depth classification language"},
         {"text": "ai-tone-audit-phase", "description": "Phase 9 addresses AI Tone Audit — invokes or declares intent to invoke Skill(humanizer)"},
         {"text": "memory-accumulate", "description": "Proposes memory accumulation and asks for user confirmation"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/11: ...] progress markers at least for phases 0, 1, 2, 4, 5, 8"},
-        {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist with phases 0-11"}
+        {"text": "summary-table", "description": "Phase 11 output includes a priority summary table with P0-P3 severity levels, finding numbers, sections, and one-line diagnoses"},
+        {"text": "inline-blockquote-feedback", "description": "Uses markdown blockquote (>) to quote original resume content, followed by severity symbol (✗/⚠/△/ℹ) + finding number + priority label + diagnosis"},
+        {"text": "cherry-pick-workflow", "description": "After all findings, presents improvement selection prompt with options (all/p0/specific numbers/skip/none)"},
+        {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
+        {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
+        {"text": "cross-section-consistency", "description": "Checks that projects/episodes mentioned in self-introduction have corresponding entries in problem-solving or career sections. Flags hooks without backing evidence."}
       ],
       "files": ["_config.yml"]
     },
     {
       "id": 3,
       "prompt": "이력서 문제해결 섹션만 리뷰해줘. 당근 결제팀 지원하려고 해. _config.yml에 있어.\n\nJD 핵심:\n- 결제 시스템 설계/운영\n- 대규모 트래픽 환경 안정성\n- 장애 대응 및 복원력\n- Kotlin, Spring Boot",
-      "expected_output": "Memory load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, candidate pool recommendation if available, memory accumulate",
+      "expected_output": "Memory load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, memory accumulate → Phase 11 output: Summary Table (P0-P3), Section-by-section inline feedback with suggested revisions, Cherry-pick improvement workflow",
       "assertions": [
         {"text": "memory-load", "description": "Phase 0: loads memory and reports problem-solving candidate pool status"},
         {"text": "depth-classification", "description": "Classifies each problem-solving entry by depth (signature/detailed/compressed)"},
@@ -86,8 +93,13 @@
         {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (결제, 장애 대응 prioritized)"},
         {"text": "candidate-pool-awareness", "description": "If memory has problem-solving candidates, mentions available alternatives or suggests swaps for JD fit"},
         {"text": "memory-accumulate", "description": "Proposes accumulating new insights from this review session"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/11: ...] progress markers including Phase 0 and Phase 8"},
-        {"text": "applies-problem-solving-criteria", "description": "Uses depth classification flowchart, P.A.R.R. dimensions (P1-P5/P6-P8), or career-level criteria from references/problem-solving.md"}
+        {"text": "applies-problem-solving-criteria", "description": "Uses depth classification flowchart, P.A.R.R. dimensions (P1-P5/P6-P8), or career-level criteria from references/problem-solving.md"},
+        {"text": "summary-table", "description": "Phase 11 output includes a priority summary table with P0-P3 severity levels, finding numbers, sections, and one-line diagnoses"},
+        {"text": "inline-blockquote-feedback", "description": "Uses markdown blockquote (>) to quote original resume content, followed by severity symbol (✗/⚠/△/ℹ) + finding number + priority label + diagnosis"},
+        {"text": "cherry-pick-workflow", "description": "After all findings, presents improvement selection prompt with options (all/p0/specific numbers/skip/none)"},
+        {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
+        {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
+        {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"}
       ],
       "files": ["_config.yml"]
     }
@@ -140,6 +152,11 @@
       "iteration": 8,
       "date": "2026-03-25",
       "changes": "Assertion improvements: reads-reference-files→applies-reference-criteria (check content not Read() calls), ai-tone-audit→ai-tone-audit-phase (accept declared intent), compressed-volume-guide→compressed-depth-handling (accept absence detection), reads-problem-solving-reference→applies-problem-solving-criteria"
+    },
+    {
+      "iteration": 9,
+      "date": "2026-03-25",
+      "changes": "Phase 11 output format (Summary Table + Inline Feedback + Cherry-pick), Phase tracking internal-only, JD-based content selection, Cross-Section Consistency Rule, assertion overhaul"
     }
   ]
 }
