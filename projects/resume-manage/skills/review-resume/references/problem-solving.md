@@ -63,7 +63,7 @@ The recommended depth distribution varies by years of experience. Junior candida
 | Mid (3-7 yrs) | 1 | 1-2 | 3-5 | 5-8 |
 | Senior (7+ yrs) | 1 | 0-1 | 3-5 | 4-7 |
 
-**Memory candidate pool**: If candidates exist at `~/.omt/resume-manage/review-resume/problem-solving/`, you may suggest the most JD-relevant combination from the full candidate pool — not just the entries currently in the resume. Prioritize items with `rating: preferred`.
+**Memory candidate pool**: If candidates exist at `$OMT_DIR/review-resume/problem-solving/`, you may suggest the most JD-relevant combination from the full candidate pool — not just the entries currently in the resume.
 
 ---
 

@@ -21,7 +21,7 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
 
 Resume reviews are not one-off events. Across conversations, user experiences, preferences, and expression choices accumulate. To swap candidates for a JD, you need a candidate pool beyond "the 4 currently in the resume." This memory system provides cross-session persistence.
 
-**Directory:** `~/.omt/resume-manage/review-resume/`
+**Directory:** `$OMT_DIR/review-resume/`
 
 | Folder | Contents |
 |--------|----------|
@@ -121,16 +121,16 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 
 Load persistent memory before starting the review. Previous review sessions' candidate pools, user preferences, and research caches become the starting point for this review.
 
-1. Check if `~/.omt/resume-manage/review-resume/` exists
+1. Check if `$OMT_DIR/review-resume/` exists
 2. If empty or missing → execute **Auto-Seeding** (parse current resume into initial candidate files)
 3. If exists → scan frontmatter of all candidate files, load `preferences.md`, check `sources/` for cached research
 
 Report memory status to user:
 ```
 [Memory Loaded]
-- Self-introduction candidates: N (preferred: X)
+- Self-introduction candidates: N
 - Career candidates: N
-- Problem-solving candidates: N (signature: X, detailed: Y, compressed: Z)
+- Problem-solving candidates: N
 - User preferences: loaded / not found
 - Research cache: {company} found / none
 ```
@@ -283,7 +283,7 @@ flowchart TB
 | detailed | D1p-D6p | P1, P2, P5 only | Narrative exists, at least 1 failure, why-chain present |
 | compressed | D1p-D6p | Volume guide (3-5 entries, 3-5 lines each, max 25 lines) | Conciseness, problem→solution→result bullet flow |
 
-**Memory candidate pool:** If `~/.omt/resume-manage/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool. Prioritize `rating: preferred` candidates.
+**Memory candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
 
 **Reference:** Read `references/problem-solving.md` for full P.A.R.R. dimensions, career-level criteria, Before/After examples, writing guidance, and red flags.
 
@@ -314,11 +314,9 @@ At review completion, accumulate insights from this session into persistent memo
 ### What to accumulate
 
 1. **New candidates**: Experiences discussed that aren't in the pool → propose new files
-2. **Candidate updates**: Improved expressions → add as variants (don't replace — other JDs may prefer the original)
-3. **Usage history**: Update `used_in` for candidates used in this review
-4. **Preference updates**: Explicit user preferences ("이게 더 좋다" / "이건 별로") → update `rating`
-5. **preferences.md**: New tone/judgment preferences discovered during review
-6. **Research cache**: Company research results → `sources/{company}-{date}.md`
+2. **Candidate updates**: Improved expressions → update the existing candidate body
+3. **preferences.md**: New tone/judgment preferences discovered during review
+4. **Research cache**: Company research results → `sources/{company}-{date}.md`
 
 ### Output format
 
@@ -328,11 +326,10 @@ Show accumulation summary and wait for user confirmation before writing files:
 [Memory Accumulate — Phase 10]
 
 New candidates:
-  + problem-solving/search-latency-optimization.md (compressed)
+  + problem-solving/search-latency-optimization.md
 
 Updates:
-  ~ problem-solving/payment-order-sync.md → variant C added
-  ~ career/product-cache.md → rating: neutral → preferred
+  ~ problem-solving/payment-order-sync.md → body updated
 
 Preferences:
   ~ preferences.md → added "impact-first ordering preference"
