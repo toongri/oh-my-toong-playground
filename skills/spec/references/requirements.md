@@ -177,6 +177,12 @@ Define only requirements that differ from project baselines or are critical.
   - Example: "API response time p95 under 50ms"
   - Must include measurement method
 
+- **Resource Efficiency**:
+  - Resource usage goals from a business or operational perspective
+  - Example: "Memory usage should not grow unboundedly under sustained load"
+  - Example: "Network egress should stay within acceptable cost bounds for expected traffic volume"
+  - Do not include: specific instance types, caching strategies, or infrastructure-level tuning
+
 - **Do not include**:
   - Implementation details like "batch processing every 30 seconds"
   - Infrastructure choices like "use Redis cache"
@@ -187,6 +193,8 @@ Define only requirements that differ from project baselines or are critical.
 
 #### 4.3 System Reliability Requirements
 - Identification: Identify graceful degradation, fault isolation, data durability requirements
+- **Availability**: Clarify whether the service must remain available despite partial failures — e.g., "Should the service remain available if a single component fails?"
+- **Redundancy**: Identify whether any component has a no-single-point-of-failure requirement — e.g., "Does this component require redundancy to meet availability goals?"
 - Review: Review with user
 
 #### 4.4 Monitoring Requirements
