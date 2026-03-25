@@ -2,7 +2,7 @@
 
 Area: Solution Design
 Reference: `skills/spec/references/solution-design.md`
-Scenario Count: 3
+Scenario Count: 4
 
 ---
 
@@ -39,3 +39,15 @@ Scenario Count: 3
 **Expected Output**: Medium-scale로 분류("Multiple component modifications, introduction of new patterns"에 해당). 근거를 구체적으로 제시하고 사용자에게 분류 동의를 구함. 분류에 따라 Step 3에서 적절한 수의 대안 생성.
 
 **Pass Criteria**: (1) 3가지 분류(Small/Medium/Large) 중 하나를 명확히 선택하고, (2) 선택 근거를 프로젝트 특성과 매핑하며, (3) 사용자 동의를 구하는 절차가 포함됨.
+
+---
+
+### SD-4: External Prior Art Comparison
+
+**Technique Under Test**: Step 3.2 Analysis of Each Alternative — Optional external prior art comparison (solution-design.md line 80)
+
+**Input**: 비자명한 아키텍처 결정 상황. 예: "대용량 이벤트 처리 시스템에서 이벤트 소싱 vs CQRS vs 전통적 CRUD 중 선택해야 하는 상황. 일일 100만 건 이벤트, 3개 소비자 서비스."
+
+**Expected Output**: 대안 분석 시 유사 규모/도메인의 외부 사례가 참조됨. "(Optional)" 표기에 따라 비자명한 결정에서만 적용. 외부 패턴과 현재 접근의 정렬/차이가 언급됨. 특정 회사명을 강제로 인용하지 않음.
+
+**Pass Criteria**: (1) 비자명한 아키텍처 결정에서 외부 사례가 참조되거나 참조 여부가 고려됨, (2) 단순 CRUD 같은 자명한 결정에서는 적용되지 않음 (optional 원칙 준수), (3) 특정 회사를 복사-붙여넣기하지 않고 패턴 수준에서 비교함. 모든 결정에 강제 적용하면 RED.
