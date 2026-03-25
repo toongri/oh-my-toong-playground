@@ -106,7 +106,9 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "결제-주문 상태 불일치 문제를 발견하고, 원인을 분석한 결과..." | 문제 서사 → 문제해결 섹션으로 이동 필요 |
 | FAIL | "POS 서버의 간헐적 타임아웃 원인을 분석하여 Circuit Breaker 패턴을 도입하게 된 과정..." | 원인 분석 + 도입 과정 서사 → 문제해결 섹션으로 이동 필요 |
 
-### Career Evaluation Output Format
+### Career Evaluation Output Format (Internal)
+
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
 
 ```
 [경력 Line] "원문 그대로"
@@ -217,7 +219,9 @@ For problem-solving entries, D5p passes only when each alternative or attempt in
   비용 대비 이점이 적다고 판단
 ```
 
-### Problem-Solving Evaluation Output Format
+### Problem-Solving Evaluation Output Format (Internal)
+
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
 
 ```
 [문제해결 Line] "원문 그대로"
@@ -229,7 +233,9 @@ For problem-solving entries, D5p passes only when each alternative or attempt in
 - D6p Section Fitness: PASS / FAIL (reason)
 ```
 
-### Summary Count Format
+### Summary Count Format (Internal)
+
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
 
 After all lines are evaluated, produce a split summary:
 
