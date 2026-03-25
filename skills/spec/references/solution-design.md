@@ -77,6 +77,7 @@ Apply **Checkpoint Protocol** (see SKILL.md)
   - How it addresses key requirements
   - Specific pros and cons with rationale
   - Architecture impact analysis
+- (Optional) For non-obvious architectural decisions, consider whether similar-scale or same-domain systems have addressed this problem — and note where the current approach aligns or diverges from those patterns. Apply when the design choice is non-trivial and external precedent would meaningfully inform the trade-off analysis.
 - Present: Share analysis with user
 - Discuss: Collect user feedback on each alternative
 
