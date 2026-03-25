@@ -14,7 +14,7 @@ As an operations design specialist, systematically design the observability aspe
 
 ### Document Scope
 
-- **Include**: Project-specific metrics, custom logging, feature flag strategy
+- **Include**: Project-specific metrics, custom logging, feature flag strategy, failure detection design (what signals indicate failure, what data enables detection), validation & impact data requirements
 - **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, deployment procedures, failure recovery plans, generic operational practices
 
 ## Vague Answer Clarification Examples
@@ -57,6 +57,7 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 ### Step 2: Observability Design
 
 #### 2.1 Custom Metrics
+- **Failure Detection Signature**: For each critical component, ask: What signal indicates this component is failing? What data enables detection of that signal? (Data may be a metric, a log entry, or an external monitoring system's output — choose the form that best fits the signal.)
 - Identify: Project-specific technical metrics needed:
   - Examples: buffer size, flush latency, retry count, cache hit rate
 - Define: Metric names, types (counter, gauge, histogram), and labels
@@ -85,6 +86,7 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 | DEBUG | Intermediate steps (enable on demand) | Step durations, skip reasons, query details |
 
 - Principle: Aim for ≤2 INFO lines per request in normal flow. Intermediate steps = DEBUG.
+- **Production Debuggability**: For each log point, verify: Can the root cause be identified from this log data alone, without local reproduction? If not, add the missing context fields.
 - Define: Message formats and context fields (correlation ID mandatory)
 - Note: Do not include framework default logging
 - Confirm: Get user agreement
@@ -96,6 +98,18 @@ Apply **Checkpoint Protocol** (see SKILL.md)
   - Rollout strategy (percentage-based, user-segment)
   - Flag lifecycle (temporary vs. permanent, cleanup plan)
 - Note: For DB migration strategy, see Data Schema area. For failure handling and error scenarios, see Integration Pattern area.
+- Confirm: Get user agreement
+
+#### 2.4 Validation & Impact Data
+- **Purpose**: Define what data is needed to validate that the feature works as intended and to measure its business impact — before deciding how to collect it.
+- **Key principle**: Treat "data" as the primary concept. The collection form (application metric, structured log, database record, analytics event, business KPI data point) is a downstream decision driven by the data need.
+- **Questions to answer for each feature or hypothesis**:
+  - What data is needed to verify the feature behaves as intended?
+  - What data is needed to measure the business impact of this feature?
+  - Where and in what form should that data be collected? (metric counter? structured log field? event record in DB? analytics event to data mart?)
+- Identify: Data needs mapped to validation goals and impact hypotheses
+- Design: Collection method and storage for each data need
+- Note: Avoid collecting data "just in case" — every data point should map to a specific question
 - Confirm: Get user agreement
 
 #### Checkpoint: Step 2 Complete
@@ -140,4 +154,10 @@ Apply **Area Completion Protocol** (see SKILL.md)
 | Flag Name | Scope | Default | Rollback Action |
 |-----------|-------|---------|-----------------|
 | ... | ... | ON/OFF | ... |
+
+## 3. Validation & Impact Data
+
+| Data Need | Purpose | Collection Method | Storage | Notes |
+|-----------|---------|-------------------|---------|-------|
+| ... | Validation / Impact | Metric / Log / DB record / Analytics event | ... | ... |
 ```
