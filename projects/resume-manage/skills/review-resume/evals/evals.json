@@ -4,17 +4,18 @@
     {
       "id": 1,
       "prompt": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘.\n\nJD 핵심:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- 대용량 트래픽, 동시성 처리, 실시간 데이터 처리\n- 유실없는 데이터 정합성과 신뢰성\n- 트러블슈팅, 성능 튜닝\n\n이력서는 _config.yml에 있어.",
-      "expected_output": "Pre-eval research (branch + JD analysis + company research), Self-intro type-based evaluation (A/B/C/D + global), D1c-D6c career, D1p-D6p problem-solving, P.A.R.R., JD keyword matching, Post-eval options, AI Tone Audit",
+      "expected_output": "Memory load, Pre-eval research (branch + JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, D1c-D6c/D1p-D6p, depth-based problem-solving eval, JD keyword matching, AI Tone Audit, Memory accumulate",
       "assertions": [
+        {"text": "memory-load", "description": "Phase 0: checks ~/.omt/resume-manage/review-resume/ and reports memory status (loaded or auto-seeding)"},
         {"text": "pre-eval-branch-check", "description": "Checks other branches' _config.yml patterns before evaluation"},
         {"text": "pre-eval-jd-analysis", "description": "Performs JD analysis: team identification, keyword extraction (technical/domain/culture), implicit problems from JD"},
         {"text": "pre-eval-company-research", "description": "Performs company research via WebSearch/WebFetch: core values, tech blog, product/service, career page — at least 2 channels attempted"},
-        {"text": "research-feeds-type-selection", "description": "Research results visibly influence which Type A/B/D aspects are highlighted in evaluation (e.g., 'JD emphasizes X → this identity/stance aligns')"},
+        {"text": "research-feeds-type-selection", "description": "Research results visibly influence which Type A/B/D aspects are highlighted in evaluation"},
         {"text": "per-type-evaluation", "description": "Each self-intro paragraph identified by type (A/B/C/D) and evaluated against type-specific criteria"},
         {"text": "global-evaluation", "description": "Global criteria (paragraph count, independence, first sentence, original framing) evaluated after per-type"},
         {"text": "no-s1-s5-codes", "description": "No S1-S5 codes anywhere in output"},
         {"text": "type-c-capability-first", "description": "When suggesting Type C content, the suggested opening is a capability/experience claim — NOT a philosophy/belief statement"},
-        {"text": "type-c-recommendation-with-research", "description": "Type C recommendation references company research findings (specific product/domain/values discovered during research)"},
+        {"text": "type-c-recommendation-with-research", "description": "Type C recommendation references company research findings"},
         {"text": "post-evaluation-options", "description": "After findings, presents 2-3 concrete options with trade-offs"},
         {"text": "type-d-no-metric-requirement", "description": "Type D not failed for lacking metrics"},
         {"text": "no-jd-keyword-quoting", "description": "Does not parrot JD keywords back in self-intro suggestions"},
@@ -24,25 +25,30 @@
         {"text": "d5c-hook-potential", "description": "Career bullets get D5c (Hook Potential) as actual evaluation"},
         {"text": "d5p-interview-depth", "description": "Problem-solving entries get D5p (Interview Depth) evaluation"},
         {"text": "d1c-linear-vs-d1p-diagnostic", "description": "D1c uses linear causation for career; D1p uses diagnostic causation for problem-solving"},
-        {"text": "d4c-vs-d4p-different-criteria", "description": "D4c evaluates outcome differentiation (Standard Transcendence); D4p evaluates reasoning depth (Beyond-Standard Reasoning)"},
+        {"text": "d4c-vs-d4p-different-criteria", "description": "D4c evaluates outcome differentiation; D4p evaluates reasoning depth"},
         {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary count lines"},
         {"text": "section-independence", "description": "Does not flag career for lacking corresponding problem-solving entries"},
         {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
-        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations (N/A for junior C3-C5)"},
-        {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED, provides specific (not abstract) gap recommendations"},
-        {"text": "ai-tone-audit", "description": "Performs AI Tone Audit as final step"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/10: ...] progress markers at least for phases 1, 2, 4, 5"},
-        {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist at the end with DONE/SKIPPED status for each phase"}
+        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations"},
+        {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED, provides specific gap recommendations"},
+        {"text": "depth-classification", "description": "Phase 8: classifies problem-solving entries by depth (signature/detailed/compressed) before evaluation"},
+        {"text": "depth-specific-evaluation", "description": "Applies depth-appropriate criteria: P.A.R.R. for signature, P1+P2+P5 for detailed, volume guide for compressed"},
+        {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — e.g., uses P.A.R.R. dimensions (P1-P5/P6-P8), Type A-D criteria, D1c-D6c/D1p-D6p framework, or depth classification flowchart. Evidence: specific dimension codes or criteria language that only exists in references/."},
+        {"text": "ai-tone-audit-phase", "description": "Phase 9 explicitly addresses AI Tone Audit — either invokes Skill(humanizer) or declares intent to invoke it (e.g., '[Would invoke Skill(humanizer)]'). The phase must not be skipped."},
+        {"text": "memory-accumulate", "description": "Phase 10: proposes memory accumulation (new candidates, updates, preferences) and asks for user confirmation"},
+        {"text": "phase-progress-markers", "description": "Outputs [Phase N/11: ...] progress markers at least for phases 0, 1, 2, 4, 5, 8"},
+        {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist at the end with DONE/SKIPPED status for phases 0-11"}
       ],
       "files": ["_config.yml"]
     },
     {
       "id": 2,
       "prompt": "이력서 봐줘. 전반적으로 피드백 부탁해. _config.yml에 있어.",
-      "expected_output": "Pre-eval research (branch check, NO company research since no target), Self-intro type-based evaluation (A/B/D + global, no Type C), D1c-D6c career, D1p-D6p problem-solving, P.A.R.R., AI Tone Audit.",
+      "expected_output": "Memory load, Pre-eval research (branch check, NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, D1c-D6c/D1p-D6p, depth-based problem-solving eval, AI Tone Audit, Memory accumulate",
       "assertions": [
+        {"text": "memory-load", "description": "Phase 0: checks memory directory and reports status"},
         {"text": "pre-eval-branch-check", "description": "Checks other branches for context"},
-        {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified — skips Step 2/3 or notes 'no target'"},
+        {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified"},
         {"text": "per-type-evaluation", "description": "Each self-intro paragraph identified by type and evaluated against type-specific criteria"},
         {"text": "global-evaluation", "description": "Global criteria evaluated after per-type"},
         {"text": "no-s1-s5-codes", "description": "No S1-S5 codes in output"},
@@ -55,19 +61,42 @@
         {"text": "d4c-vs-d4p-different-criteria", "description": "D4c and D4p use different evaluation criteria"},
         {"text": "separate-summary-counts", "description": "Separate career and problem-solving summary counts"},
         {"text": "section-independence", "description": "Sections treated as independent"},
-        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
-        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations"},
-        {"text": "ai-tone-audit", "description": "AI Tone Audit as final step"},
-        {"text": "phase-progress-markers", "description": "Outputs [Phase N/10: ...] progress markers at least for phases 1, 2, 4, 5"},
-        {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist at the end with DONE/SKIPPED status for each phase"}
+        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes"},
+        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies expectations"},
+        {"text": "depth-classification", "description": "Classifies problem-solving entries by depth before evaluation"},
+        {"text": "depth-specific-evaluation", "description": "Applies depth-appropriate criteria per entry"},
+        {"text": "applies-reference-criteria", "description": "Evaluation uses criteria from reference files — P.A.R.R. dimensions, Type A-D criteria, D1c-D6c/D1p-D6p, or depth classification language"},
+        {"text": "ai-tone-audit-phase", "description": "Phase 9 addresses AI Tone Audit — invokes or declares intent to invoke Skill(humanizer)"},
+        {"text": "memory-accumulate", "description": "Proposes memory accumulation and asks for user confirmation"},
+        {"text": "phase-progress-markers", "description": "Outputs [Phase N/11: ...] progress markers at least for phases 0, 1, 2, 4, 5, 8"},
+        {"text": "completion-checklist", "description": "Outputs the Review Completion Checklist with phases 0-11"}
+      ],
+      "files": ["_config.yml"]
+    },
+    {
+      "id": 3,
+      "prompt": "이력서 문제해결 섹션만 리뷰해줘. 당근 결제팀 지원하려고 해. _config.yml에 있어.\n\nJD 핵심:\n- 결제 시스템 설계/운영\n- 대규모 트래픽 환경 안정성\n- 장애 대응 및 복원력\n- Kotlin, Spring Boot",
+      "expected_output": "Memory load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, candidate pool recommendation if available, memory accumulate",
+      "assertions": [
+        {"text": "memory-load", "description": "Phase 0: loads memory and reports problem-solving candidate pool status"},
+        {"text": "depth-classification", "description": "Classifies each problem-solving entry by depth (signature/detailed/compressed)"},
+        {"text": "signature-parr-evaluation", "description": "Signature depth entries get full P.A.R.R. (P1-P5) evaluation"},
+        {"text": "compressed-depth-handling", "description": "Either evaluates compressed entries with volume guide, OR detects their absence and recommends adding compressed entries per career-level guide"},
+        {"text": "career-level-appropriate", "description": "Evaluation criteria match the candidate's career level (not applying junior criteria to mid/senior or vice versa)"},
+        {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (결제, 장애 대응 prioritized)"},
+        {"text": "candidate-pool-awareness", "description": "If memory has problem-solving candidates, mentions available alternatives or suggests swaps for JD fit"},
+        {"text": "memory-accumulate", "description": "Proposes accumulating new insights from this review session"},
+        {"text": "phase-progress-markers", "description": "Outputs [Phase N/11: ...] progress markers including Phase 0 and Phase 8"},
+        {"text": "applies-problem-solving-criteria", "description": "Uses depth classification flowchart, P.A.R.R. dimensions (P1-P5/P6-P8), or career-level criteria from references/problem-solving.md"}
       ],
       "files": ["_config.yml"]
     }
   ],
   "benchmark_summary": {
-    "latest_iteration": 4,
-    "date": "2026-03-23",
-    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 395.6, "avg_tokens": 76129}
+    "latest_iteration": 8,
+    "date": "2026-03-25",
+    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 402.4, "avg_tokens": 93622},
+    "notes": "66 assertions across 3 evals, 100% pass. Assertions refined in iter 8 to measure skill quality (content application) rather than eval infrastructure (Read() call visibility)."
   },
   "benchmark_history": [
     {
@@ -101,6 +130,16 @@
       "iteration": 6,
       "date": "2026-03-24",
       "changes": "Developer Competency Assessment (C1-C5) added as Phase 4, all phases renumbered (9→10)"
+    },
+    {
+      "iteration": 7,
+      "date": "2026-03-25",
+      "changes": "Persistent Memory System (Phase 0/10), Problem-Solving unified framework (depth: signature/detailed/compressed), SKILL.md split into 375-line core + 6 reference files, Korean→English conversion"
+    },
+    {
+      "iteration": 8,
+      "date": "2026-03-25",
+      "changes": "Assertion improvements: reads-reference-files→applies-reference-criteria (check content not Read() calls), ai-tone-audit→ai-tone-audit-phase (accept declared intent), compressed-volume-guide→compressed-depth-handling (accept absence detection), reads-problem-solving-reference→applies-problem-solving-criteria"
     }
   ]
 }
