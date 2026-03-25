@@ -2,7 +2,7 @@
 
 Area: Requirements
 Reference: `skills/spec/references/requirements.md`
-Scenario Count: 5
+Scenario Count: 7
 
 ---
 
@@ -69,3 +69,27 @@ Scenario Count: 5
 - **Extension question(s)**: e.g., "Could cancellation rules vary by payment method in the future?", "Will manual cancellation by CS agents be needed later?"
 
 **Pass Criteria**: (1) At least one question from each of the 3 types (Policy, Boundary, Extension) is present. (2) Each question is labeled with its type. (3) Questions are ordered by priority (blocking/policy questions before extension questions). If questions are asked without type classification, or if any type category is missing, RED.
+
+---
+
+### RQ-6: Resource Efficiency NFR
+
+**Technique Under Test**: Step 4.1 Performance Requirements — Resource Efficiency (requirements.md lines 180-184)
+
+**Input**: 혼합된 성능 요구사항 — "메모리는 2GB 이하", "Redis 인스턴스 r6g.large 사용", "네트워크 트래픽이 비용 효율적이어야 함", "30초마다 배치 처리"
+
+**Expected Output**: Resource Efficiency 카테고리로 분류 가능한 항목("메모리 2GB 이하", "네트워크 트래픽 비용 효율성")과 구현 상세("Redis r6g.large", "30초 배치")가 분리됨. Resource Efficiency에는 목표 수준만, 구현 수준 세부사항은 제외.
+
+**Pass Criteria**: (1) Resource Efficiency 항목이 Business Tolerance/Technical Goals와 별도로 분류되고, (2) 구현 세부사항(instance types, infrastructure-level tuning)이 제외되며, (3) 비즈니스/운영 관점의 리소스 목표만 포함됨. 구현 상세가 Resource Efficiency에 포함되면 RED.
+
+---
+
+### RQ-7: Availability and Redundancy Requirements
+
+**Technique Under Test**: Step 4.3 System Reliability Requirements — Availability, Redundancy (requirements.md lines 196-197)
+
+**Input**: 시스템 신뢰성 요구사항 논의 중. 주문 서비스는 "결제 서비스 장애 시에도 주문 조회는 가능해야 함", 결제 서비스는 "단일 장애점이 없어야 함".
+
+**Expected Output**: (1) 주문 서비스에 대해 Availability 질문 적용 — "단일 컴포넌트 장애 시 서비스 가용 여부" 확인, partial failure tolerance 요구 도출. (2) 결제 서비스에 대해 Redundancy 질문 적용 — "no-single-point-of-failure 요구사항" 확인, 이중화 필요 컴포넌트 식별.
+
+**Pass Criteria**: (1) Availability와 Redundancy가 기존 graceful degradation/fault isolation과 구분되어 별도로 다뤄지고, (2) 각 컴포넌트별로 해당 요구가 있는지 확인하며, (3) 사용자에게 확인을 구함. Availability/Redundancy 질문 없이 일반적 신뢰성만 논의하면 RED.
