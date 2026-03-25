@@ -20,7 +20,7 @@ Persistent memory for resume review. Accumulates candidate pool, user preference
 ## 1. Memory Directory Structure
 
 ```
-~/.omt/resume-manage/review-resume/
+$OMT_DIR/review-resume/
 ├── self-introduction/        # Type A, B, C, D candidate paragraphs
 │   ├── identity-impact-driven.md
 │   ├── stance-team-problem-solver.md
@@ -63,26 +63,11 @@ All candidate files use Markdown with YAML frontmatter:
 ```markdown
 ---
 tags: [결제, 동시성, MVCC]
-depth: signature              # signature | detailed | compressed
-used_in:                      # JD usage history for this candidate
-  - {jd: "토스 백엔드", date: "2025-03"}
-  - {jd: "당근 결제팀", date: "2025-02"}
-rating: preferred             # preferred | neutral | archived
-source: "실제 경험 + 2025-03 리뷰 세션"
-created: "2025-03-01"
-updated: "2025-03-25"
 ---
 
 ## 결제-주문 상태 동기화
 
-### 핵심 내용
 결제 완료 후 주문 상태 불일치가 주 15건 발생...
-
-### 변형 A (비즈니스 임팩트 강조)
-보상 트랜잭션 스케줄러 설계로 불일치 0건 달성...
-
-### 변형 B (기술 깊이 강조)
-MVCC 특성상 발생하는 동시성 문제를 분석하여...
 ```
 
 **Frontmatter fields:**
@@ -90,11 +75,8 @@ MVCC 특성상 발생하는 동시성 문제를 분석하여...
 | Field | Purpose |
 |-------|---------|
 | `tags` | Keywords for JD matching and search |
-| `depth` | Current narrative depth of this candidate |
-| `used_in` | Usage history (JD name + date) — tracks which companies received which combinations |
-| `rating` | User preference: `preferred` = frequently selected, `neutral` = situational, `archived` = no longer in use |
-| `source` | Origin of this candidate (real experience, review session discussion, user-added directly, etc.) |
-| `created` / `updated` | Timestamps |
+
+The candidate body contains the narrative content directly. Depth (signature/detailed/compressed) is determined at evaluation time from the content structure, not stored as metadata.
 
 ---
 
@@ -112,7 +94,7 @@ MVCC 특성상 발생하는 동시성 문제를 분석하여...
 - 숫자가 없으면 차라리 빼는 쪽 선호
 
 ## 피드백 히스토리
-- 2025-03-15: "이 문장은 너무 AI스럽다" → payment-sync 변형 A 수정
+- 2025-03-15: "이 문장은 너무 AI스럽다" → payment-sync 본문 수정
 - 2025-03-20: "문제해결 순서를 시간순이 아니라 임팩트순으로"
 ```
 
@@ -136,7 +118,7 @@ Load persistent memory before starting the review. The candidate pool, user pref
 
 ### Step 0-1. Memory Directory Check
 
-1. Check if `~/.omt/resume-manage/review-resume/` exists
+1. Check if `$OMT_DIR/review-resume/` exists
 2. If the directory is absent or empty → run **Auto-Seeding** (see Section 7)
 3. If the directory exists → proceed to Step 0-2
 
@@ -150,9 +132,9 @@ Report the load result to the user:
 
 ```
 [Memory Loaded]
-- 자기소개 후보: N개 (preferred: X)
+- 자기소개 후보: N개
 - 경력 후보: N개
-- 문제해결 후보: N개 (signature: X, detailed: Y, compressed: Z)
+- 문제해결 후보: N개
 - 유저 선호: loaded / not found
 - 리서치 캐시: {회사명} found / none
 ```
@@ -185,23 +167,15 @@ After the review is complete, accumulate information discovered in this session 
 
 1. **Create new candidates**: If a new experience or expression discussed during the review is not in the existing candidate pool → propose creating a new file
    - Filename: kebab-case reflecting the core topic (e.g., `search-latency-optimization.md`)
-   - `depth`: auto-determined from the narrative level in the current resume
    - `tags`: keywords surfaced during the discussion
-   - `rating`: `neutral` (use `preferred` if the user explicitly expressed a preference)
 
-2. **Update existing candidates**: If an expression revised during the review is an improvement over an existing candidate → add a variant or update the body
-   - Add new variants as `### 변형 X (맥락 설명)`
-   - Never replace existing variants — keep them in parallel. The original variant may be the better choice for a different JD.
+2. **Update existing candidates**: If an expression revised during the review is an improvement over an existing candidate → update the body directly
 
-3. **Usage history**: Add the JD name + date to the `used_in` field for every candidate actually used in this review
-
-4. **Rating update**: Update the `rating` field for any candidate where the user explicitly stated "this is better" or "this doesn't work"
-
-5. **preferences.md update**: Append any new preferences or judgment criteria revealed during the review
+3. **preferences.md update**: Append any new preferences or judgment criteria revealed during the review
    - e.g., "비즈니스 임팩트 숫자를 앞에 배치하는 스타일 선호"
    - e.g., "~했습니다 종결 대신 명사형 종결 선호"
 
-6. **sources/ cache**: Save information gathered during Company Research (Phase 1 Step 3) as `sources/{company}-{date}.md`
+4. **sources/ cache**: Save information gathered during Company Research (Phase 1 Step 3) as `sources/{company}-{date}.md`
 
 ### Accumulation Output
 
@@ -211,11 +185,10 @@ Show a summary of changes to the user and wait for confirmation before saving:
 [Memory Accumulate — Phase 10]
 
 새 후보:
-  + problem-solving/search-latency-optimization.md (compressed, tags: [검색, p99, 인덱스])
+  + problem-solving/search-latency-optimization.md (tags: [검색, p99, 인덱스])
 
 업데이트:
-  ~ problem-solving/payment-order-sync.md → 변형 C (비즈니스 임팩트 강조) 추가
-  ~ career/product-cache.md → rating: neutral → preferred
+  ~ problem-solving/payment-order-sync.md → 본문 갱신
 
 선호도:
   ~ preferences.md → "임팩트순 정렬 선호" 추가

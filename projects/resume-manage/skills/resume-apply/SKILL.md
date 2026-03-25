@@ -104,7 +104,7 @@ This may take some time. Report errors to the user if they occur.
 
 Read the output configuration file:
 ```
-~/.omt/resume-manage/resume-apply/config.yaml
+$OMT_DIR/resume-apply/config.yaml
 ```
 
 - **File not found** → go to 6-2 (first-run interview)
@@ -133,7 +133,7 @@ Ask the user two questions:
 
 Save the answers as YAML:
 ```yaml
-# ~/.omt/resume-manage/resume-apply/config.yaml
+# $OMT_DIR/resume-apply/config.yaml
 pdf_output_dir_rule: "<user answer>"
 pdf_naming_format: "<user answer>"
 ```
