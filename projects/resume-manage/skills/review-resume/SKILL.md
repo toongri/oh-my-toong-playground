@@ -112,7 +112,7 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
 4. Phases 0-10 are internal processing steps — their outputs (progress lines, intermediate evaluations, checklists) are NOT shown to the user. Only Phase 11 produces user-facing output.
-5. Exception: Phase 3 (Target Position Gate) and Phase 10 (Memory Accumulate) require user interaction — ask the user directly for these phases only.
+5. Exception: Phase 3 (Target Position Gate), Phase 10 (Memory Accumulate), and Phase 11 (Deliver Findings — cherry-pick workflow) require user interaction.
 6. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
