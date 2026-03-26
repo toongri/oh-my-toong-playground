@@ -105,10 +105,10 @@
     }
   ],
   "benchmark_summary": {
-    "latest_iteration": 9,
-    "date": "2026-03-25",
-    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 381.9, "avg_tokens": 97074},
-    "notes": "78 assertions across 3 evals, 100% pass. Assertions overhauled in iter 9: Phase 11 output format (summary-table, inline-blockquote-feedback, cherry-pick-workflow, priority-classification, suggested-revisions), JD content selection, cross-section consistency. Phase tracking markers and completion checklist removed (now internal-only)."
+    "latest_iteration": 10,
+    "date": "2026-03-26",
+    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 387.3, "avg_tokens": 103106},
+    "notes": "78 assertions across 3 evals, 100% pass. Memory system simplification: hardcoded paths → $OMT_DIR dynamic binding, frontmatter reduced to tags-only, variant/used_in/rating/depth metadata removed, accumulation rules 6→4. No behavioral regression — identical pass rate to iter 9."
   },
   "benchmark_history": [
     {
@@ -157,6 +157,11 @@
       "iteration": 9,
       "date": "2026-03-25",
       "changes": "Phase 11 output format (Summary Table + Inline Feedback + Cherry-pick), Phase tracking internal-only, JD-based content selection, Cross-Section Consistency Rule, assertion overhaul"
+    },
+    {
+      "iteration": 10,
+      "date": "2026-03-26",
+      "changes": "Memory system simplification: ~/.omt/resume-manage/ → $OMT_DIR/ dynamic binding, frontmatter tags-only (depth/rating/used_in/variant removed), accumulation rules 6→4, resume-apply path fix"
     }
   ]
 }
