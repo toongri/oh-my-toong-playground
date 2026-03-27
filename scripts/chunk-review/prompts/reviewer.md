@@ -29,6 +29,13 @@ Read files referenced in the diff to understand the full picture:
 - Interfaces, base classes, and types that changed code implements or extends
 - Functions and methods that changed code calls or is called by
 - Configuration and constants that changed code depends on
+- **Execution context of callers**: Before assessing any method, trace who calls it and under what execution model. A method's correctness depends on how it is invoked — the same code may be safe under single-threaded sequential execution and broken under concurrent access. Verify:
+  - Threading model: Is the caller single-threaded, multi-threaded, or event-loop-based?
+  - Dispatch model: Is this called synchronously, via async event handler, message consumer, scheduled task, or thread pool?
+  - Ordering guarantees: If message-driven, does the messaging infrastructure (queue routing, consumer assignment, acknowledgment strategy) guarantee ordering or exclusive processing?
+  - Transaction boundaries: Where do transactions start and end in the call chain? Does the caller's TX scope match the callee's expectations?
+
+**Before claiming a concurrency, ordering, or data consistency issue, you MUST verify the actual execution model of the caller — not just the code pattern of the callee.** A race condition that is structurally impossible under the actual execution model is not an issue.
 
 This step builds understanding — no findings yet.
 

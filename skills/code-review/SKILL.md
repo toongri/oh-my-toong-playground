@@ -30,14 +30,12 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 | Evidence Verification (build/test/lint) | Yes | - |
 | Chunking decision | Yes | - |
 | Walkthrough/critique synthesis | Yes | - |
-| Walkthrough context enrichment | NEVER | explore |
-| Cross-file impact / design fit (Phase 1 only) | NEVER | oracle |
-| Worker claim fact-check (Phase 2) | NEVER | explore/oracle |
+| Walkthrough context enrichment | Yes (read code directly) | explore (fallback for broad architectural scope) |
+| Finding verification & enrichment (Phase 2) | Yes (read code directly) | - |
 | Individual chunk review | NEVER | chunk-reviewer |
-| Finding enrichment (Phase 3) | NEVER | oracle |
 | Code modification | NEVER | (forbidden entirely) |
 
-**RULE**: Orchestration, synthesis, decisions = Do directly. Convention search, impact analysis, chunk review = DELEGATE. Code modification = FORBIDDEN.
+**RULE**: Orchestration, synthesis, decisions, and verification = Do directly by reading code. Multi-model review = DELEGATE to chunk-reviewer. Code modification = FORBIDDEN.
 
 ### Role Separation
 
@@ -46,20 +44,22 @@ digraph role_separation {
     rankdir=LR;
     "Orchestrator" [shape=box];
     "chunk-reviewer" [shape=box];
+    "Codebase" [shape=cylinder];
     "Orchestrator" -> "chunk-reviewer" [label="dispatch with {DIFF_COMMAND}"];
     "chunk-reviewer" -> "Orchestrator" [label="chunk analysis results"];
+    "Orchestrator" -> "Codebase" [label="Read/Grep to verify findings"];
 }
 ```
 
 **Your role as orchestrator:**
 - Dispatch chunk-reviewer agents with diff command strings
 - Synthesize chunk analysis results into walkthrough + critique
+- **Directly read code to verify chunk-reviewer findings** (Read, Grep, Glob tools)
 - Make chunking decisions and determine final verdict
 
 **NOT your role:**
-- Reading raw diff content (never run `git diff` without `--stat` or `--name-only`)
-- Reviewing code directly
-- Loading changed file content via Read tool
+- Modifying any source files
+- Running the raw `git diff` command (chunk-reviewers execute the diff)
 
 ### Context Budget
 
@@ -69,16 +69,20 @@ digraph role_separation {
 - `git log {range} --oneline` output
 - CLAUDE.md file content
 - Step 3 evidence summary (structured table — build/test/lint status + test coverage mapping, truncated to summary on success / last 30 lines on failure)
-- explore/oracle agent summaries (Phase 1a)
 - chunk-reviewer results
-- Phase 3 oracle enrichment results (finding-specific code, context, diffs, references)
+- **Targeted code reading** via Read/Grep/Glob for finding verification (Phase 2) and walkthrough enrichment (Phase 1a)
 
 **Forbidden in orchestrator context:**
-- Raw diff lines (`git diff` without `--stat`/`--name-only`)
-- `Read` tool on diff target source files
-- Any tool that loads changed file content into orchestrator context
+- Running the raw `git diff` command (chunk-reviewers execute the diff, not you)
+- Modifying any source files
 
-**RULE**: If a command would put diff lines or source code into your context, it is forbidden. Only metadata (stats, file names, commit messages) and agent outputs are allowed.
+**Context management for code reading:**
+- Read only files relevant to specific findings or walkthrough gaps — not the entire diff
+- Target 10-30 lines per finding verification (the issue location + caller context)
+- For walkthrough enrichment, read key architectural files (configs, base classes) — not every changed file
+- If a PR has 50+ findings requiring verification, batch in groups of 10 to manage context
+
+**RULE**: You CAN and SHOULD read code to verify findings and enrich the walkthrough. You CANNOT run the raw diff command or modify files.
 
 ## Step 0: Requirements Context
 
@@ -334,52 +338,32 @@ Orchestrator directly produces the Walkthrough from:
 
 ### Phase 1a: Context Enrichment (Conditional)
 
-After reading all chunk Chunk Analysis sections (What Changed entries), assess whether the available information is sufficient to write the Walkthrough. If gaps exist, dispatch explore/oracle before writing Phase 1 output.
+After reading all chunk Chunk Analysis sections (What Changed entries), assess whether the available information is sufficient to write the Walkthrough. If gaps exist, **read the relevant code directly** before writing Phase 1 output.
 
-**When to dispatch:**
+**When to read code for enrichment:**
 
-| Trigger | Agent | Example |
-|---------|-------|---------|
-| Core Logic Analysis requires understanding cross-module relationships not visible from What Changed entries | explore | "Chunk A shows OrderService calling PaymentGateway, but the gateway's implementation and other consumers are in Chunk B's scope or outside the diff" |
-| Architecture Diagram requires understanding existing class/module hierarchy beyond what's in the diff | explore | "New class extends BaseRepository but the base class and its other subclasses are not in any chunk" |
-| Chunk-reviewer Cross-File Concerns section flags architectural patterns requiring codebase investigation | oracle | "Cross-file concern: adapter error codes may not match controller expectations — need to verify existing error handling contract" |
-| Multiple chunks flag inconsistent patterns suggesting architectural misalignment | oracle | "Chunk A uses Result<T> for error handling, Chunk B uses exceptions — need to determine which is the project convention" |
+| Gap | What to Read | Example |
+|-----|-------------|---------|
+| Cross-module relationships unclear | Interfaces, base classes, caller/callee code | "Chunk A shows OrderService calling PaymentGateway — read the gateway interface and its implementations" |
+| Architecture hierarchy unknown | Class hierarchy, module structure | "New class extends BaseRepository — read the base class to understand the contract" |
+| Inconsistent patterns across chunks | Both implementations + project conventions | "Chunk A uses Result<T>, Chunk B uses exceptions — read both to determine project convention" |
 
-**When NOT to dispatch:**
+**When NOT to enrich:**
 
 | Condition | Reason |
 |-----------|--------|
 | Simple changes (test-only, doc-only, config-only, single-function logic) | Chunk analysis is self-sufficient |
 | Chunk analysis provides complete understanding of all changed modules | No gaps to fill |
 | Trivial diff (< 5 files, < 100 lines) | Sparse analysis is expected, not a gap |
-| Cross-File Concerns section is empty across all chunks | No architectural investigation needed |
 
-**Dispatch rules:**
-- At most 1 explore and 1 oracle per review (never per-chunk)
-- explore and oracle may be dispatched in parallel if both are needed
-- If agent returns empty or times out, proceed with synthesis using available data
-
-**Explore prompt structure** (4-Field, chunk-analysis-aware):
-```
-Task(subagent_type="explore", prompt="
-[CONTEXT] Reviewing changes to {file_list}. Chunk analysis revealed: {specific_gap_from_what_changed}.
-[GOAL] Fill the context gap identified during walkthrough synthesis to produce accurate Core Logic Analysis and Architecture Diagram.
-[DOWNSTREAM] Output used by orchestrator to write Phase 1 Walkthrough — not injected into any reviewer prompt.
-[REQUEST] Find: {targeted_search_based_on_gap}. Return file paths with pattern descriptions. Skip unrelated directories.")
-```
-
-**Oracle dispatch** (same trigger announcement pattern):
-```
-Consulting Oracle for [specific gap from chunk analysis].
-```
-Oracle receives the specific chunk-reviewer findings that triggered the dispatch, not generic diff metadata.
+**Fallback**: For very broad architectural exploration (10+ files across many modules), dispatch an explore agent instead of reading everything directly. This is the exception, not the default.
 
 **Data flow:**
 ```
 Phase 1: Read all What Changed entries from Chunk Analysis
-       → Assess: sufficient for Walkthrough? (check decision table)
-       → If gaps: dispatch explore/oracle (Phase 1a)
-       → Write Walkthrough using: What Changed entries + Step 2 metadata + Phase 1a results (if any)
+       → Assess: sufficient for Walkthrough?
+       → If gaps: Read relevant code directly (Read/Grep/Glob)
+       → Write Walkthrough using: What Changed entries + Step 2 metadata + code reading results
 ```
 
 #### Change Summary
@@ -455,7 +439,45 @@ Examples of context-driven recalibration (both directions — context can lower 
 
 - **Models assess P3 for missing pagination. Project is a rapidly growing SaaS.** — Models treat unbounded queries as a style issue because the current dataset is small. But the project context shows user growth of 10x per quarter with no ceiling. If current queries already show measurable latency degradation at today's data volume: recalibrate **upward to P1** (demonstrable defect under today's conditions -- the defect exists and manifests now). If current dataset is still within SLA but growth trajectory makes future degradation certain: recalibrate **upward to P2(b)** (no defect today, but predictable failure under realistic growth).
 
-**Low-Consensus Fact Verification:** When only 1 out of N workers reports an issue, the factual premise may be wrong — the worker may have misunderstood how the code works. Before adjudicating severity, dispatch explore or oracle to verify the factual claim against the actual code. If the premise is false, dismiss as false positive.
+**Direct Finding Verification (MANDATORY):** Before adjudicating severity for ANY finding — regardless of consensus level — the orchestrator MUST verify the factual claim by reading the actual code. Workers analyze diffs in isolation and may miss runtime context (caller execution model, messaging topology, transaction boundaries). Unanimous agreement does not make a claim true.
+
+For each finding, read the relevant code and verify:
+1. **Is the claimed scenario structurally possible?** Trace the call chain from the entry point to the issue location. Check the caller's execution model (threading, message dispatch, scheduling).
+2. **Does the runtime context support the claim?** A race condition requires concurrent access. A message ordering issue requires out-of-order delivery. Verify these preconditions against the actual infrastructure (e.g., Kafka partition key, consumer group config, thread pool setup).
+3. **Is this an intentional design choice?** Check for comments, commit messages, or PR description that explain the pattern as a deliberate tradeoff.
+
+```dot
+digraph verification_flow {
+    rankdir=TB;
+    "chunk-reviewer finding" [shape=ellipse];
+    "Read code at issue location" [shape=box];
+    "Trace caller execution context" [shape=box];
+    "Scenario possible?" [shape=diamond];
+    "Dismiss as false positive" [shape=box, style=filled, fillcolor=lightgray];
+    "Intentional design?" [shape=diamond];
+    "Note as tradeoff, adjust severity" [shape=box];
+    "Adjudicate severity (P0-P3)" [shape=box, style=filled, fillcolor=lightyellow];
+    "Enrich finding\n(code snippet, context, fix, blast radius)" [shape=box, style=filled, fillcolor=lightblue];
+
+    "chunk-reviewer finding" -> "Read code at issue location";
+    "Read code at issue location" -> "Trace caller execution context";
+    "Trace caller execution context" -> "Scenario possible?";
+    "Scenario possible?" -> "Dismiss as false positive" [label="No"];
+    "Scenario possible?" -> "Intentional design?" [label="Yes"];
+    "Intentional design?" -> "Note as tradeoff, adjust severity" [label="Yes"];
+    "Intentional design?" -> "Adjudicate severity (P0-P3)" [label="No"];
+    "Note as tradeoff, adjust severity" -> "Adjudicate severity (P0-P3)";
+    "Adjudicate severity (P0-P3)" -> "Enrich finding\n(code snippet, context, fix, blast radius)";
+}
+```
+
+**Verification produces enrichment as a byproduct.** When you read code to verify a finding, you already have the code snippet, understand the context, and can identify the blast radius. Capture these during verification — no separate enrichment phase needed.
+
+**Enrichment fields to produce during verification:**
+- **Current Code**: 5-15 lines centered on the issue (already read for verification)
+- **Context**: Function/class it belongs to, data flow (discovered while tracing call chain)
+- **Fix**: Concrete diff or design direction (informed by verified understanding)
+- **Blast Radius**: Use Grep/Glob to find references to affected symbols
 
 **Adjudication examples:**
 
@@ -491,108 +513,27 @@ When the orchestrator determines "Yes with conditions" for P1 issues, the Assess
 
 **Cross-chunk rule:** If ANY worker in ANY chunk flags an issue as non-pre-existing (on a changed line), treat as current issue in main section.
 
-### Phase 3: Finding Enrichment
+### Phase 2 Data Flow (Verification + Enrichment Combined)
 
-After Phase 2 adjudication completes (severity finalized, verdict determined, Out of Scope classified), enrich each adjudicated finding with concrete code evidence before generating final output.
-
-**Purpose:** Make each finding self-contained — developer reads the output and can decide + act without opening any file.
-
-**Why after Phase 2:** Phase 2 deduplicates, dismisses false positives, and merges cross-chunk findings. Enriching before adjudication wastes oracle work on findings that may be dismissed or merged.
-
-**Scope:** ALL P-levels (P0-P3) in the main Issues section. Out of Scope (pre-existing) issues are NOT enriched.
-
-#### File Grouping
-
-Group adjudicated findings by file path. Dispatch one oracle per file group, all in parallel (single response).
-
-| Condition | Action |
-|-----------|--------|
-| Findings reference N distinct files | Create N groups (one per file) |
-| Single finding references multiple files (cross-file issue) | Group under the primary file |
-| Total groups > 8 | Merge smallest groups into batches of 2-3 files |
-
-#### Oracle Enrichment Prompt
-
-````
-Consulting Oracle for finding enrichment: {file_path} ({N} findings).
-
-Task(subagent_type="oracle", prompt="
-[CONTEXT] Code review finding enrichment. File: {file_path}
-
-[FINDINGS]
-{for each finding in this file group:}
-  - [{P-level}] {issue title} at {file}:{line}
-    Problem: {Phase 2 adjudicated Problem}
-    Fix direction: {Phase 2 adjudicated Fix}
-{end for}
-
-[INSTRUCTIONS]
-For each finding, produce exactly these 4 fields:
-
-1. Current Code: Read the file. Extract 5-15 lines centered on the issue location. Include the function/class/section signature for context. Use the file's language for the code fence (```kotlin, ```bash, ```yaml, ```markdown, etc.).
-
-2. Context: State which function/class/section this code belongs to. Describe the data flow: where input comes from → what transformation happens → where output goes. Explain why this code exists.
-
-3. Fix: Produce a concrete unified diff (```diff block) showing the minimal fix. The diff must apply cleanly to the current code. If the fix requires structural changes that cannot be expressed as a simple diff, describe the design direction instead and note 'Concrete diff not possible — structural change required'.
-
-4. Blast Radius: Search (Grep/Glob) for references to the symbol/function/section affected. List files that import, call, or reference it. If no external references exist, state 'This location only'. Include evidence (grep result summary).
-
-[CONSTRAINTS]
-- Do NOT re-evaluate severity or change Problem/Impact fields.
-- Do NOT add new findings.
-- Enrich only — add concrete evidence to existing findings.
-
-[OUTPUT FORMAT]
-For each finding, output:
-### {issue title}
-**Current Code**:
-[code block with language tag]
-
-**Context**: ...
-
-**Fix**:
-[diff block or design direction]
-
-**Blast Radius**: ...
-")
-````
-
-#### Enrichment Merge
-
-After all oracles return, merge enrichment fields into each finding. The orchestrator transforms Phase 2 fields into the final enriched output:
-
-| Phase 2 Field | Enriched Field | Transformation |
-|---------------|----------------|----------------|
-| File: {file}:{line} | **Location**: `{file}:{line}` — {section name} | Section name from oracle Context |
-| — | **Current Code** | From oracle (NEW) |
-| — | **Context** | From oracle (NEW) |
-| Problem | **Problem** | Label unchanged, content unchanged |
-| Impact + Probability | **Impact** | Merge into single actionable statement |
-| Maintainability | — | Removed (visible from code) |
-| Fix | **Fix** | Replaced by oracle diff (concrete) |
-| — | **Blast Radius** | From oracle (NEW) |
-| Review Consensus | **Review Consensus** | Unchanged |
+```
+chunk-reviewer results (proposed findings with P-levels)
+  → Merge/deduplicate across chunks
+  → For each finding: Read code → Trace caller context → Verify claim
+  → Dismiss false positives / Adjust severity based on verified context
+  → Enrichment fields captured as byproduct of verification
+  → Final Adjudication (severity, verdict, out-of-scope)
+  → Generate Final Output with verified, enriched findings
+```
 
 #### Edge Cases
 
 | Situation | Handling |
 |-----------|----------|
-| Oracle fails or times out | Use Phase 2 fields with English labels. Omit Current Code, Context, Blast Radius. Use Phase 2 Fix text as Fix. Prepend "(enrichment unavailable)" to finding. |
-| Finding references a deleted file | Oracle reads the file at base branch (`git show {base}:{file}`). Note "(deleted file)" in Context. |
+| Finding references a deleted file | Read the file at base branch (`git show {base}:{file}`). Note "(deleted file)" in Context. |
 | Finding spans multiple files | Primary file gets the code snippet. Other files listed in Blast Radius with brief context. |
-| Diff cannot be expressed simply | Fix states design direction + "Concrete diff not possible — structural change required". |
-| Zero findings after Phase 2 | Skip Phase 3 entirely. |
-
-#### Data Flow
-
-```
-Phase 2 output (adjudicated findings with P-levels, verdict)
-  → Group findings by file path
-  → Dispatch oracle per file group (parallel, single response)
-  → Collect oracle results (Current Code, Context, Fix, Blast Radius)
-  → Merge enrichment into each finding (field transformation table above)
-  → Generate Final Output with enriched fields
-```
+| Fix cannot be expressed as simple diff | State design direction + "Concrete diff not possible — structural change required". |
+| Zero findings after verification | Skip enrichment. Report clean review. |
+| 50+ findings requiring verification | Batch in groups of 10 by file proximity. Verify highest-severity first. |
 
 ### Final Output Format
 
@@ -630,7 +571,7 @@ Phase 2 output (adjudicated findings with P-levels, verdict)
 ### P3 (Optional)
 [Quality, readability, consistency improvements with no correctness or maintainability concern]
 
-Per-issue format (enriched by Phase 3):
+Per-issue format (enriched during Phase 2 verification):
 **[P{X}-{N}] {issue title}**
 - **Location**: `{file}:{line}` — {section/function name}
 - **Current Code**:
@@ -649,7 +590,7 @@ Per-issue format (enriched by Phase 3):
 
 Numbering: {N} is a sequential counter within each P-level section (e.g., P0-1, P0-2, P1-1, P1-2, P1-3).
 
-Fallback (enrichment unavailable): If Phase 3 oracle fails for a finding, omit Current Code, Context, Blast Radius fields. Use Phase 2 Fix text as Fix. Prepend "(enrichment unavailable)" to the issue title.
+Fallback (verification skipped): If a finding could not be verified due to context budget constraints, omit Current Code, Context, Blast Radius fields. Use worker's Fix text as Fix. Prepend "(unverified)" to the issue title.
 
 ## Out of Scope (Pre-existing Issues)
 [Issues in unchanged context lines, sorted by P-level then file path. Do not affect merge verdict.]
@@ -663,462 +604,4 @@ Fallback (enrichment unavailable): If Phase 3 oracle fails for a finding, omit C
 
 ### Example Final Output
 
-Synthesized from 3 chunks: (A) Order API + domain, (B) Payment integration, (C) Inventory + messaging.
-
-````
-## Walkthrough
-
-### Change Summary
-Implements end-to-end order payment flow for the e-commerce platform, spanning three domains: order lifecycle management (creation, validation, state transitions), payment gateway integration (Stripe charge creation, webhook handling, refund support), and inventory reservation (stock deduction on payment confirmation with Kafka-based async messaging). The PR introduces 9 new files and modifies 3 existing files across the API, domain, infrastructure, and messaging layers. Orders transition through a state machine (`CREATED` → `PENDING_PAYMENT` → `PAYMENT_IN_PROGRESS` → `PAID` → `FULFILLMENT_READY`), with inventory reserved asynchronously on payment confirmation via a Kafka event. A Flyway migration adds the `payment_records` and `inventory_reservations` tables to support the new flows.
-
-### Core Logic Analysis
-
-**Order Lifecycle (order/)**:
-`OrderController.kt` exposes `POST /api/v1/orders` for creation and `POST /api/v1/orders/{id}/pay` to initiate payment. `OrderService.kt` owns the order state machine — `canTransition()` validates allowed state changes, `initiatePayment()` transitions from `CREATED`/`PENDING_PAYMENT` to `PAYMENT_IN_PROGRESS` and delegates to the payment layer. `OrderRepository.kt` extends Spring Data JPA with a custom `findByIdWithLock()` using `@Lock(PESSIMISTIC_WRITE)` to prevent concurrent payment attempts on the same order. The state machine is enforced at the service layer, not via DB constraints — this means invalid transitions are caught in application code but not at the storage level.
-
-**Payment Integration (payment/)**:
-`OrderPaymentController.kt` orchestrates the payment flow: validates order state, delegates to `StripeGatewayAdapter.charge()`, and persists the `PaymentRecord`. `StripeGatewayAdapter.kt` implements the `PaymentGateway` port interface — maps domain `PaymentCommand` to Stripe `PaymentIntentCreateParams`, calls the Stripe SDK, and maps the response back. The webhook endpoint receives async payment confirmations from Stripe and publishes a `PaymentConfirmedEvent` to Kafka for downstream processing. `PaymentRequest.kt` is the DTO carrying amount, currency, and callback URL from the API boundary.
-
-**Inventory Reservation (inventory/)**:
-`InventoryService.kt` listens for `PaymentConfirmedEvent` via `@KafkaListener` and reserves stock by decrementing `available_quantity` in the `inventory` table. Uses `SELECT ... FOR UPDATE` to prevent overselling under concurrent reservations. If stock is insufficient, publishes an `InventoryShortageEvent` to a separate topic for the order service to handle (cancellation or backorder). `InventoryReservation` entity tracks which order reserved which SKUs and quantities — used for idempotency checks on retry.
-
-**Messaging (kafka/)**:
-`PaymentEventProducer.kt` publishes `PaymentConfirmedEvent` and `PaymentFailedEvent` to the `payment-events` topic. Uses `KafkaTemplate` with a `ProducerRecord` that includes the `orderId` as the message key for partition affinity — all events for the same order land on the same partition, preserving ordering. No dead letter topic is configured for the `payment-events` consumer group.
-
-**Database (migration/)**:
-`V2024_001__add_payment_and_inventory_tables.sql` adds two tables: `payment_records` (transaction ID, order ID, amount, currency, status, Stripe payment intent ID, timestamps) and `inventory_reservations` (order ID, SKU, quantity, reserved_at). Both tables have foreign keys to `orders`. The `payment_records` table has a unique constraint on `stripe_payment_intent_id` for idempotency. No index on `inventory_reservations.order_id` despite being used in the idempotency lookup query.
-
-### Architecture Diagram
-```mermaid
-classDiagram
-    class OrderController {
-        +createOrder(req) OrderResponse
-        +initiatePayment(orderId) PaymentResponse
-    }
-    class OrderService {
-        +createOrder(cmd) Order
-        +initiatePayment(orderId) PaymentResult
-        -canTransition(from, to) boolean
-    }
-    class OrderRepository {
-        +findByIdWithLock(id) Order
-    }
-    class OrderPaymentController {
-        +processPayment(orderId, req) PaymentResponse
-        +handleWebhook(payload, signature) void
-    }
-    class StripeGatewayAdapter {
-        +charge(cmd) PaymentResult
-        +refund(cmd) RefundResult
-        +verifyWebhookSignature(payload, sig) Event
-    }
-    class PaymentEventProducer {
-        +publishConfirmed(event) void
-        +publishFailed(event) void
-    }
-    class InventoryService {
-        +reserveStock(event) void
-        -checkIdempotency(orderId, sku) boolean
-    }
-    class PaymentGateway {
-        <<interface>>
-        +charge(cmd) PaymentResult
-        +refund(cmd) RefundResult
-    }
-    class Stripe["Stripe API"]
-    class Kafka["Kafka (payment-events)"]
-
-    OrderController --> OrderService : delegates
-    OrderService --> OrderRepository : persistence
-    OrderService --> PaymentGateway : payment delegation
-    OrderPaymentController --> StripeGatewayAdapter : charge/refund
-    OrderPaymentController --> PaymentEventProducer : publish events
-    StripeGatewayAdapter ..|> PaymentGateway : implements
-    StripeGatewayAdapter --> Stripe : HTTP
-    PaymentEventProducer --> Kafka : produce
-    Kafka --> InventoryService : consume
-    InventoryService --> OrderRepository : update order
-
-    note for OrderController "MODIFIED"
-    note for OrderService "MODIFIED"
-    note for OrderPaymentController "NEW"
-    note for StripeGatewayAdapter "NEW"
-    note for PaymentEventProducer "NEW"
-    note for InventoryService "MODIFIED"
-```
-
-### Sequence Diagram
-```mermaid
-sequenceDiagram
-    participant Client
-    participant OrderCtrl as OrderController
-    participant OrderSvc as OrderService
-    participant PayCtrl as OrderPaymentController
-    participant Stripe as StripeGatewayAdapter
-    participant StripeAPI as Stripe API
-    participant Kafka as Kafka
-    participant InvSvc as InventoryService
-
-    rect rgb(230, 240, 255)
-    note right of Client: Payment Initiation Flow
-    Client->>OrderCtrl: POST /orders/{id}/pay
-    OrderCtrl->>OrderSvc: initiatePayment(orderId)
-    OrderSvc->>OrderSvc: canTransition(PENDING_PAYMENT, PAYMENT_IN_PROGRESS)
-    OrderSvc->>PayCtrl: processPayment(orderId, PaymentRequest)
-    PayCtrl->>Stripe: charge(PaymentCommand)
-    Stripe->>StripeAPI: PaymentIntent.create()
-    StripeAPI-->>Stripe: PaymentIntent (succeeded)
-    Stripe-->>PayCtrl: PaymentResult(COMPLETED)
-    PayCtrl->>PayCtrl: persist PaymentRecord
-    PayCtrl-->>OrderSvc: PaymentResult
-    OrderSvc->>OrderSvc: transition → PAID
-    OrderSvc-->>OrderCtrl: PaymentResult
-    OrderCtrl-->>Client: 200 PaymentResponse
-    end
-
-    rect rgb(255, 240, 230)
-    note right of Client: Async Confirmation Flow
-    StripeAPI->>PayCtrl: POST /payments/webhook (payment_intent.succeeded)
-    PayCtrl->>PayCtrl: verifyWebhookSignature()
-    PayCtrl->>Kafka: publish PaymentConfirmedEvent
-    Kafka->>InvSvc: consume PaymentConfirmedEvent
-    InvSvc->>InvSvc: checkIdempotency(orderId, sku)
-    InvSvc->>InvSvc: reserveStock (SELECT FOR UPDATE, decrement)
-    InvSvc->>OrderSvc: updateOrder → FULFILLMENT_READY
-    end
-```
-
----
-
-## Strengths
-- Clean hexagonal architecture: Stripe interaction fully encapsulated behind `PaymentGateway` port interface, domain never references Stripe SDK types (StripeGatewayAdapter.kt:1-15)
-- Order state machine validation prevents double-charging — `canTransition()` check with pessimistic locking rejects concurrent payment attempts on the same order (OrderService.kt:42-58, OrderRepository.kt:12)
-- Kafka partition key strategy using `orderId` ensures ordering guarantees per order — payment confirmed before inventory reserved, never reversed (PaymentEventProducer.kt:23-31)
-- Idempotency check on inventory reservation prevents duplicate stock deductions on Kafka consumer retries (InventoryService.kt:34-42)
-
-## Issues
-
-### P0 (Must Fix)
-
-**[P0-1] `@Transactional` wrapping external HTTP call to Stripe**
-- **Location**: `OrderPaymentController.kt:34` — `processPayment()`
-- **Current Code**:
-  ```kotlin
-  @PostMapping("/{orderId}/payment")
-  @Transactional
-  fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
-      val order = orderRepository.findByIdWithLock(orderId)
-          ?: throw OrderNotFoundException(orderId)
-      order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
-      val result = stripeGatewayAdapter.charge(order, request)  // external HTTP call inside TX
-      val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
-      order.transitionTo(OrderStatus.PAID)
-      return ResponseEntity.ok(PaymentResponse.from(record))
-  }
-  ```
-- **Context**: HTTP POST handler → Stripe API call → DB persist. DB 트랜잭션이 외부 HTTP 호출을 포함하여 Stripe 응답 대기 동안 DB 커넥션을 점유
-- **Problem**: `processPayment()`는 `@Transactional`이지만 `StripeGatewayAdapter.charge()` — 외부 HTTP 왕복(500ms-2s)을 포함함. DB 커넥션이 전체 네트워크 호출 동안 열려 있음
-- **Impact**: 동시 부하 시 10개의 진행 중인 결제가 HikariCP 풀을 고갈시켜 주문 조회, 장바구니 등 모든 DB 작업 차단 — 모든 결제 요청이 정상 운영 중 DB 커넥션을 Stripe 호출 동안 보유하므로 즉시 발현됨
-- **Fix**:
-  ```diff
-  -@PostMapping("/{orderId}/payment")
-  -@Transactional
-  -fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
-  -    val order = orderRepository.findByIdWithLock(orderId)
-  -        ?: throw OrderNotFoundException(orderId)
-  -    order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
-  -    val result = stripeGatewayAdapter.charge(order, request)
-  -    val record = paymentRecordRepository.save(PaymentRecord.from(order, result))
-  -    order.transitionTo(OrderStatus.PAID)
-  -    return ResponseEntity.ok(PaymentResponse.from(record))
-  -}
-  +@PostMapping("/{orderId}/payment")
-  +fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
-  +    val order = paymentApplicationService.initiatePayment(orderId)  // TX 1: validate + mark IN_PROGRESS
-  +    val result = stripeGatewayAdapter.charge(order, request)        // external call outside TX
-  +    val record = paymentApplicationService.persistResult(order, result)  // TX 2: save result + update status
-  +    return ResponseEntity.ok(PaymentResponse.from(record))
-  +}
-  ```
-- **Blast Radius**: `OrderController.kt:initiatePayment()` → `processPayment()` 호출
-- **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P0; adjudicated P0 — unanimous)
-
-**[P0-2] No circuit breaker on Stripe API calls**
-- **Location**: `StripeGatewayAdapter.kt:44` — `charge()`
-- **Current Code**:
-  ```kotlin
-  class StripeGatewayAdapter(
-      private val stripeClient: StripeClient,
-  ) : PaymentGateway {
-
-      fun charge(order: Order, request: PaymentRequest): PaymentResult {
-          val chargeParams = ChargeCreateParams.builder()
-              .setAmount(order.totalAmount.toLong())
-              .setCurrency(request.currency)
-              .setSource(request.paymentToken)
-              .build()
-          val charge = stripeClient.charges().create(chargeParams)
-          return PaymentResult.from(charge)
-      }
-  }
-  ```
-- **Context**: `OrderPaymentController.processPayment()` → `charge()` → Stripe SDK HTTP 호출. 서킷 브레이커 없이 Stripe 장애 시 모든 호출이 30초 타임아웃까지 대기
-- **Problem**: `charge()`와 `refund()`에 서킷 브레이커, 벌크헤드, 타임아웃 오버라이드가 없음. Stripe SDK 기본 타임아웃은 30s
-- **Impact**: P0-1의 `@Transactional` 문제와 결합 시 Stripe 장애가 전체 시스템 불가용으로 이어짐 — Stripe 장애는 연간 수 차례 발생하며 발생 시마다 정상 운영 중 연쇄 실패 유발
-- **Fix**:
-  ```diff
-  +@CircuitBreaker(name = "stripe", fallbackMethod = "chargeFallback")
-   fun charge(order: Order, request: PaymentRequest): PaymentResult {
-       val chargeParams = ChargeCreateParams.builder()
-           .setAmount(order.totalAmount.toLong())
-           .setCurrency(request.currency)
-           .setSource(request.paymentToken)
-           .build()
-       val charge = stripeClient.charges().create(chargeParams)
-       return PaymentResult.from(charge)
-   }
-  +
-  +fun chargeFallback(order: Order, request: PaymentRequest, ex: Exception): PaymentResult =
-  +    PaymentResult.TEMPORARILY_UNAVAILABLE
-  ```
-- **Blast Radius**: `OrderPaymentController.kt`, `refund()` 동일 패턴
-- **Review Consensus**: 3/3 models identified (Opus P0, Sonnet P0, Gemini P1; adjudicated P0 — Gemini's P1 reasoning did not account for cascade failure to unrelated endpoints, which satisfies outage criteria)
-
-**[P0-3] HTTPS not validated on webhook callback URL**
-- **Location**: `PaymentRequest.kt:8` — `PaymentRequest` data class
-- **Current Code**:
-  ```kotlin
-  data class PaymentRequest(
-      @field:NotBlank
-      val currency: String,
-      @field:NotBlank
-      val paymentToken: String,
-      @field:NotBlank
-      val callbackUrl: String,   // http:// 허용 — plaintext 전송 가능
-  )
-  ```
-- **Context**: API 입력 DTO → `OrderPaymentController.processPayment()` 파라미터. `callbackUrl`은 결제 확인 웹훅 전송 대상 URL
-- **Problem**: `callbackUrl: String`에 `@NotBlank` 검증만 존재. `http://` 스킴을 허용하여 결제 확인이 평문으로 전송될 수 있음
-- **Impact**: 프로덕션 환경에서 MITM 공격으로 결제 데이터 탈취 가능 — 네트워크 경로상 모든 공격자가 악용 가능하며 프로덕션은 공용 인터넷을 경유함
-- **Fix**:
-  ```diff
-  -    @field:NotBlank
-  -    val callbackUrl: String,
-  +    @field:ValidCallbackUrl
-  +    val callbackUrl: String,
-  ```
-- **Blast Radius**: 이 위치만 해당
-- **Review Consensus**: 2/3 models identified (Opus P0, Sonnet P0; adjudicated P0 — Gemini did not flag but both flagging models' reasoning satisfies security + production criteria)
-
-### P1 (Should Fix)
-
-**[P1-1] No dead letter queue for failed payment callbacks**
-- **Location**: `OrderPaymentController.kt:85` — `handleWebhook()`
-- **Current Code**:
-  ```kotlin
-  @PostMapping("/webhook")
-  fun handleWebhook(@RequestBody payload: String, @RequestHeader("Stripe-Signature") sig: String): ResponseEntity<Unit> {
-      return try {
-          val event = webhookService.parse(payload, sig)
-          paymentEventHandler.handle(event)
-          ResponseEntity.ok().build()
-      } catch (ex: Exception) {
-          log.error("Webhook processing failed", ex)
-          ResponseEntity.ok().build()   // 예외를 삼키고 200 반환 — Stripe 재시도 차단
-      }
-  }
-  ```
-- **Context**: Stripe 웹훅 수신 → 파싱 → `paymentEventHandler.handle()`. 예외 발생 시 이벤트가 조용히 드롭됨
-- **Problem**: 웹훅 처리 실패 시 이벤트를 조용히 드롭함. Stripe는 3일간 재시도 후 영구 포기
-- **Impact**: 데이터 손실 — Stripe 재시도 소진 후 결제 확인이 영구 유실되어 주문이 불일치 상태로 남음. 역직렬화 오류, DB 일시 장애 등 현실적인 장애 조건에서 발생
-- **Fix**:
-  ```diff
-  -        } catch (ex: Exception) {
-  -            log.error("Webhook processing failed", ex)
-  -            ResponseEntity.ok().build()
-  +        } catch (ex: Exception) {
-  +            log.error("Webhook processing failed, sending to DLT", ex)
-  +            deadLetterPublisher.publish(WebhookDeadLetter(payload, sig, ex.message))
-  +            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-           }
-  ```
-- **Blast Radius**: `application.yml` Kafka consumer config 연관
-- **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P1; adjudicated P1 — unanimous)
-
-**[P1-2] Currency field is unbounded String instead of ISO 4217 enum**
-- **Location**: `PaymentRequest.kt:6` — `PaymentRequest.currency`
-- **Current Code**:
-  ```kotlin
-  data class PaymentRequest(
-      @field:NotBlank
-      val currency: String,    // "USDD", "KRW2" 등 잘못된 값 허용
-      @field:NotBlank
-      val paymentToken: String,
-      @field:NotBlank
-      val callbackUrl: String,
-  )
-  ```
-- **Context**: API 입력 DTO → `StripeGatewayAdapter.charge()`에서 `request.currency` 직접 사용. 잘못된 값이 Stripe API까지 전달됨
-- **Problem**: 유효하지 않은 통화 코드가 Stripe에 도달하여 모호한 400 오류가 클라이언트에 일반 500으로 노출됨
-- **Impact**: API 경계에서 유효하지 않은 통화를 허용해 하위 실패를 유발 — 통합 테스트와 프로덕션에서 오타 및 미지원 통화 코드는 일반적이며 디버깅이 Stripe 레이어까지 밀려남
-- **Fix**:
-  ```diff
-  -    @field:NotBlank
-  -    val currency: String,
-  +    val currency: Currency,   // enum Currency { KRW, USD, EUR, JPY, ... }
-  ```
-- **Blast Radius**: `StripeGatewayAdapter.charge()`에서 currency 사용
-- **Review Consensus**: 2/3 models identified (Opus P1, Gemini P1; adjudicated P1 — Sonnet flagged as P2 but data integrity impact under realistic input justifies P1)
-
-**[P1-3] Missing index on `inventory_reservations.order_id`**
-- **Location**: `V2024_001__add_payment_and_inventory_tables.sql:28` — `CREATE TABLE inventory_reservations`
-- **Current Code**:
-  ```sql
-  CREATE TABLE inventory_reservations (
-      id          BIGINT       NOT NULL AUTO_INCREMENT,
-      order_id    BIGINT       NOT NULL,
-      product_id  BIGINT       NOT NULL,
-      quantity    INT          NOT NULL,
-      reserved_at DATETIME     NOT NULL,
-      PRIMARY KEY (id)
-      -- order_id 인덱스 없음 — 매 Kafka 메시지마다 full scan
-  );
-  ```
-- **Context**: `InventoryService.kt`의 Kafka 컨슈머가 멱등성 체크를 위해 `order_id`로 조회. 인덱스 없이 테이블 전체 스캔
-- **Problem**: 매 Kafka 메시지마다 멱등성 조회가 풀 테이블 스캔을 수행. 주문량에 따라 선형 증가
-- **Impact**: 재고 예약 지연이 주문 이력에 비례하여 증가해 Kafka 컨슈머 랙과 주문 처리 지연 유발 — 테이블이 모든 주문마다 단조 증가하므로 스케일 시 보장된 성능 저하
-- **Fix**:
-  ```diff
-       PRIMARY KEY (id)
-  +    -- 멱등성 조회 성능 보장
-  +);
-  +
-  +CREATE INDEX idx_inventory_reservations_order_id
-  +    ON inventory_reservations (order_id);
-  -);
-  ```
-- **Blast Radius**: 이 위치만 해당
-- **Review Consensus**: 3/3 models identified (Opus P1, Sonnet P1, Gemini P2; adjudicated P1 — performance degradation is guaranteed at scale, not speculative)
-
-**[P1-4] Kafka message loss leaves orders stuck in PAID state**
-- **Location**: `PaymentEventProducer.kt:23` — `publishConfirmed()`
-- **Current Code**:
-  ```kotlin
-  fun publishConfirmed(order: Order) {
-      val event = PaymentConfirmedEvent(
-          orderId = order.id,
-          confirmedAt = Instant.now(),
-      )
-      kafkaTemplate.send("payment.confirmed", order.id.toString(), event)
-      // 전송 결과 확인 없음 — 실패 시 조용히 유실
-  }
-  ```
-- **Context**: `OrderPaymentController` → `publishConfirmed()` → Kafka → `InventoryService` 컨슈머. 이벤트 유실 시 주문이 `PAID`에 영구 고착됨
-- **Problem**: `PaymentConfirmedEvent` 유실 시(프로듀서 실패, Kafka 중단, 컨슈머 역직렬화 오류) 주문이 `PAID` 상태에 무기한 잔류하고 `FULFILLMENT_READY`로 전이되지 않음. 보상 메커니즘 없음
-- **Impact**: 주문이 영구 고착 — 고객은 결제됐으나 이행되지 않음. Kafka 프로듀서 실패, 브로커 중단, 역직렬화 오류는 잘 알려진 운영 시나리오이며 stuck 주문 감지 수단 없음
-- **Fix**: `kafkaTemplate.send()`는 `ListenableFuture`를 반환하므로 콜백 추가 + 주기적 재조정 Job 도입:
-  ```diff
-  -    kafkaTemplate.send("payment.confirmed", order.id.toString(), event)
-  +    kafkaTemplate.send("payment.confirmed", order.id.toString(), event)
-  +        .addCallback(
-  +            { log.info("PaymentConfirmedEvent sent: orderId=${order.id}") },
-  +            { ex -> log.error("PaymentConfirmedEvent send failed: orderId=${order.id}", ex) }
-  +        )
-  ```
-- **Blast Radius**: `InventoryService.kt` consumer, `OrderService.kt` state machine
-- **Review Consensus**: 2/3 models identified (Opus P1, Sonnet P1; adjudicated P1 — partial system failure under realistic conditions with no recovery path)
-
-### P2 (Consider Fix)
-
-**[P2-1] No structured logging on payment events**
-- **Location**: `OrderPaymentController.kt:34` — payment flow entry
-- **Current Code**:
-  ```kotlin
-  @Transactional
-  fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
-      log.info("Processing payment for orderId=$orderId")
-      val order = orderRepository.findByIdWithLock(orderId) ?: throw OrderNotFoundException(orderId)
-      order.transitionTo(OrderStatus.PAYMENT_IN_PROGRESS)
-      val result = stripeGatewayAdapter.charge(order, request)
-      log.info("Payment charged for orderId=$orderId")
-      // MDC 없음 — Kafka 컨슈머와 로그 연결 불가
-  ```
-- **Context**: HTTP 핸들러 → Stripe 호출 → Kafka 발행 → `InventoryService` 컨슈머. 동기+비동기 흐름이 3개 서비스에 걸쳐 있으나 연결 수단 없음
-- **Problem**: 결제 플로우 전반에 correlation ID와 MDC 컨텍스트 없음. 동기+비동기 플로우 간 end-to-end 디버깅에 수동 로그 상관이 필요함
-- **Impact**: 직접적인 버그나 데이터 손실 없음. 프로덕션 결제 이슈 진단 시 평균 시간이 크게 증가 — 모든 프로덕션 디버깅 세션에 영향
-- **Fix**:
-  ```diff
-  +    val correlationId = UUID.randomUUID().toString()
-  +    MDC.put("correlationId", correlationId)
-  +    MDC.put("orderId", orderId.toString())
-      log.info("Processing payment for orderId=$orderId")
-  ```
-- **Blast Radius**: `StripeGatewayAdapter.kt`, `InventoryService.kt` 전체 payment flow
-- **Review Consensus**: 3/3 models identified (Opus P2, Sonnet P2, Gemini P2; adjudicated P2 — unanimous)
-
-### P3 (Optional)
-
-**[P3-1] Missing OpenAPI annotations on payment endpoints**
-- **Location**: `OrderPaymentController.kt:28` — controller class
-- **Current Code**:
-  ```kotlin
-  @RestController
-  @RequestMapping("/api/orders")
-  class OrderPaymentController(
-      private val orderRepository: OrderRepository,
-      private val stripeGatewayAdapter: StripeGatewayAdapter,
-  ) {
-      @PostMapping("/{orderId}/payment")
-      fun processPayment(@PathVariable orderId: Long, @RequestBody @Valid request: PaymentRequest): ResponseEntity<PaymentResponse> {
-  ```
-- **Context**: 결제 API 진입점. `@Operation`, `@ApiResponse` 없이 Swagger UI에 메타데이터 미노출
-- **Problem**: API 소비자에게 결제 플로우 계약 문서가 없음
-- **Impact**: 런타임 영향 없음. API 소비자 온보딩과 통합 테스트에 영향을 미치는 문서화 갭
-- **Fix**:
-  ```diff
-  +@Operation(summary = "결제 처리", description = "주문에 대한 Stripe 결제를 실행합니다")
-  +@ApiResponse(responseCode = "200", description = "결제 성공")
-  +@ApiResponse(responseCode = "402", description = "결제 실패")
-   @PostMapping("/{orderId}/payment")
-   fun processPayment(...): ResponseEntity<PaymentResponse> {
-  ```
-- **Blast Radius**: 이 위치만 해당
-- **Review Consensus**: 2/3 models identified (Opus P3, Gemini P3; adjudicated P3 — documentation improvement only)
-
-**[P3-2] Hardcoded retry count and timeout values**
-- **Location**: `StripeGatewayAdapter.kt:45` — config constants
-- **Current Code**:
-  ```kotlin
-  class StripeGatewayAdapter(
-      private val stripeClient: StripeClient,
-  ) : PaymentGateway {
-      private val TIMEOUT = 30_000L       // 하드코딩 — 환경별 조정 불가
-      private val MAX_RETRIES = 3         // 하드코딩 — 환경별 조정 불가
-
-      fun charge(order: Order, request: PaymentRequest): PaymentResult {
-          stripeClient.setTimeout(TIMEOUT)
-  ```
-- **Context**: `StripeGatewayAdapter` 내 상수. 환경 변경 없이 튜닝하려면 소스 수정 + 재배포 필요
-- **Problem**: 재시도 횟수와 타임아웃 값이 소스에 하드코딩되어 환경별 설정 불가
-- **Impact**: 런타임 버그 없음. 환경별 튜닝에 코드 변경과 재배포가 필요함
-- **Fix**:
-  ```diff
-  -    private val TIMEOUT = 30_000L
-  -    private val MAX_RETRIES = 3
-  +    // application.yml: stripe.timeout-ms: 30000, stripe.max-retries: 3
-  +    @Value("\${stripe.timeout-ms:30000}") private val timeoutMs: Long = 30_000L
-  +    @Value("\${stripe.max-retries:3}") private val maxRetries: Int = 3
-  ```
-- **Blast Radius**: `application.yml` 추가 필요
-- **Review Consensus**: 2/3 models identified (Sonnet P3, Gemini P3; adjudicated P3 — readability/configurability improvement)
-
-## Recommendations
-- Introduce a `PaymentApplicationService` between controllers and adapters to own transaction boundaries — resolves the P0 `@Transactional` issue and establishes a pattern for future payment gateway integrations
-- Add Resilience4j circuit breaker as a cross-cutting concern via Spring AOP — resolves the P0 circuit breaker issue and any future payment gateway integration (PayPal, Toss) will need the same protection pattern
-- Implement distributed tracing with correlation ID propagated through HTTP headers → Kafka message headers → consumer MDC — addresses the P2 logging issue and is prerequisite for debugging the async payment confirmation flow that spans 3 services
-- Set up a dead letter topic with an admin dashboard for payment event reprocessing — resolves the P1 dead letter queue issue; failed webhook events and inventory shortage events both need manual intervention workflows
-
-## Assessment
-**Ready to merge: No**
-**Reasoning:** Three P0 issues block merge — `@Transactional` spanning external HTTP calls risks connection pool starvation under load, missing circuit breaker enables cascading failures from Stripe outages, and unvalidated callback URL scheme violates transport security requirements. All P0 issues must be resolved before this code handles production payment traffic. Four P1 issues (dead letter queue, currency validation, missing index, stuck orders) should be addressed before or immediately after merge.
-````
+See `references/output-example.md` for a complete example synthesized from 3 chunks (Order API + domain, Payment integration, Inventory + messaging). Read it when producing your first review output to understand the expected format, level of detail, and enrichment style.
