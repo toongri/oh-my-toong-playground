@@ -26,6 +26,29 @@
 
 ---
 
+## Mandatory Evaluation Checklist
+
+아래 항목은 문제해결 섹션 평가 시 반드시 체크하고, 결과를 Phase 11 출력에 포함해야 한다.
+
+### 구조 체크
+- [ ] [문제] verbose 판정 — 아래 시그널 중 2개 이상 해당하면 [개요]+[문제] 분리 권장:
+  - 비즈니스 맥락 + 기술 이슈가 [문제] 안에 혼재
+  - [문제]만 단독으로 5줄 이상
+  - "이게 왜 문제인지"에 도달하기까지 배경 설명이 3줄 이상
+  - 시그널 해당 없으면 분리 불필요로 판정하고 넘어감
+- [ ] 회고가 있으면 → 감상적 성장 서사 FLAG, 아키텍처 한계 + 확장 방향(2-3줄)은 OK. 회고 자체는 OPTIONAL
+
+### 포트폴리오 다양성
+- [ ] 전체 문제해결 엔트리의 테마 분류 수행 (정합성, 성능, 안정성, 비즈니스, 데이터 파이프라인 등)
+- [ ] 2개 이상 동일 테마면 FLAG — 테마 겹침 경고 + 교체 권장
+
+### Depth별 필수 확인
+- [ ] Signature depth: P.A.R.R. P1-P5 전체 적용, 실패 arc 존재 여부, 멈추는 판단 확인
+- [ ] Detailed depth: 최소 1개 실패 시도, why-chain 확인
+- [ ] Compressed depth: 3-5줄 이내, 문제→해결→결과 흐름 확인
+
+---
+
 ## Overview
 
 The resume's "signature project", "problem-solving", and "other projects" are not separate categories. They are all **detailed descriptions showing how this person solves problems**, differentiated only by **depth**.
@@ -41,15 +64,15 @@ flowchart TB
     A[Collect problem-solving entries] --> B{Does it have a full P.A.R.R. narrative?}
     B -->|Yes| C[signature depth → Full P.A.R.R. evaluation]
     B -->|No| D{Does it have 5+ lines of description?}
-    D -->|Yes| E[detailed depth → D1p-D6p + P1,P2,P5 evaluation]
-    D -->|No| F[compressed depth → D1p-D6p + Volume Guide]
+    D -->|Yes| E[detailed depth → 문제해결 6개 기준 + P1,P2,P5 evaluation]
+    D -->|No| F[compressed depth → 문제해결 6개 기준 + Volume Guide]
 
     style C fill:lightyellow
     style E fill:lightgreen
     style F fill:lightblue
 ```
 
-**Common base**: D1p-D6p applies to all depths. **Depth-specific additions**: signature adds P1-P8, detailed adds P1+P2+P5, compressed adds volume guide.
+**Common base**: 문제해결 6개 기준(탐색적 인과·근거 깊이·사고 귀속·대안 비교·면접 심층성·섹션 적합성)은 모든 depth에 적용. **Depth-specific additions**: signature adds P1-P8, detailed adds P1+P2+P5, compressed adds volume guide.
 
 ---
 
@@ -63,7 +86,21 @@ The recommended depth distribution varies by years of experience. Junior candida
 | Mid (3-7 yrs) | 1 | 1-2 | 3-5 | 5-8 |
 | Senior (7+ yrs) | 1 | 0-1 | 3-5 | 4-7 |
 
-**Memory candidate pool**: If candidates exist at `$OMT_DIR/review-resume/problem-solving/`, you may suggest the most JD-relevant combination from the full candidate pool — not just the entries currently in the resume.
+**Note candidate pool**: If candidates exist at `$OMT_DIR/review-resume/problem-solving/`, you may suggest the most JD-relevant combination from the full candidate pool — not just the entries currently in the resume.
+
+### Portfolio Theme Diversity
+
+문제해결 포트폴리오 전체를 평가할 때, **기술 테마 다양성**을 확인. 2개 이상의 엔트리가 동일 테마를 공유하면 플래그.
+
+| Technical Theme | Example Topics |
+|----------------|---------------|
+| 정합성 (Consistency) | race condition, distributed lock, transaction sync |
+| 성능 (Performance) | caching, query optimization, response time |
+| 안정성 (Resilience) | circuit breaker, retry, fallback, fault isolation |
+| 비즈니스 메트릭 (Business) | cost reduction, headcount, conversion rate |
+| 데이터 파이프라인 | ETL, streaming, batch processing |
+
+**왜 중요한가**: 같은 테마의 프로젝트가 여러 개면 "이 사람은 이것밖에 못하나?" 인상을 줌. 각 signature/detailed 엔트리가 서로 다른 테마를 커버하도록 조합을 추천.
 
 ---
 
@@ -97,7 +134,7 @@ For Mid/Senior: the four signature strengths are:
 
 ## 4. P.A.R.R. Evaluation Dimensions P1-P5 (Signature Depth)
 
-Apply to signature depth entries. After D1p-D6p evaluation, apply the full P1-P5 as additional evaluation. For detailed depth entries, apply only P1, P2, P5.
+Apply to signature depth entries. After 문제해결 6개 기준 평가 후, apply the full P1-P5 as additional evaluation. For detailed depth entries, apply only P1, P2, P5.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
@@ -158,7 +195,7 @@ Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (
 
 ```
 [Problem-Solving: {entry name} — signature depth]
-- D1p-D6p: (output separately, refer to Section-Specific Evaluation)
+- 문제해결 6개 기준: (output separately, refer to Section-Specific Evaluation)
 - P1 Narrative depth: PASS / FAIL (reason)
 - P2 Failure arc: PASS / FAIL (reason)
 - P3 Verification depth: PASS / FAIL (reason)
@@ -178,13 +215,13 @@ For Mid/Senior, append:
 
 ```
 [Problem-Solving: {entry name} — detailed depth]
-- D1p-D6p: (output separately)
+- 문제해결 6개 기준: (output separately)
 - P1 Narrative depth: PASS / FAIL (reason)
 - P2 Failure arc: PASS / FAIL (reason)
 - P5 "Why?" chain: PASS / FAIL (reason)
 ```
 
-**Compressed depth** entries: Apply D1p-D6p + Volume Guide only (P.A.R.R. not applied).
+**Compressed depth** entries: Apply 문제해결 6개 기준 + Volume Guide only (P.A.R.R. not applied).
 
 ---
 
@@ -410,12 +447,29 @@ Apply the full P.A.R.R. formula, but show the depth of thought process — not a
 - New Grad/Junior: intentional Race Condition reproduction, edge case testing
 - Mid/Senior: business metrics (headcount reduction, cost savings, throughput increase), experiment result numbers
 
-**Reflection:**
+**Reflection (optional):**
 
-- The essence of what was learned (trade-offs, acknowledged limits)
-- Honest confession ("처음엔...", "3일 밤을 새우며...")
+회고는 OPTIONAL. 진짜 아키텍처 트레이드오프가 있을 때만 포함. 감상적 회고는 제거.
+- GOOD: 아키텍처 한계 + 확장 방향 (2-3줄). e.g., "트래픽 증가 시 메시지 큐 기반 전환 가능", "유저 중복 발급 요구사항 추가 시 DB 제약조건 변경 필요"
+- BAD: 감상적 성장 서사. e.g., "기술적 완성도가 곧 정답이라 생각했지만, 이 프로젝트를 거치면서 관리 비용을 같이 보는 습관이 생겼다"
 - Mid/Senior additional: stopping judgment ("93%까지 가능했지만 비용 대비 85%에서 보류")
-- Next improvement direction
+
+### 개요/문제 분리 패턴
+
+[문제] 섹션이 길어질 때(비즈니스 맥락과 기술 이슈가 섞여 verbose해지는 경우), [개요]와 [문제]를 분리하여 가독성 확보.
+
+- **[개요]**: 비즈니스 맥락 — 이 시스템이 왜 존재하는지, 규모, 비즈니스 비용
+- **[문제]**: 기술 이슈 — 관찰된 증상, 진단한 원인, 기술적 의미
+
+**Verbose 시그널 (2개 이상 해당 시 분리 권장):**
+1. 비즈니스 맥락 + 기술 이슈가 [문제] 안에 혼재
+2. [문제]만 단독으로 5줄 이상
+3. "이게 왜 문제인지"에 도달하기까지 배경 설명이 3줄 이상
+
+시그널 해당 없으면 분리 불필요.
+
+**When to split**: [문제]가 길고 비즈니스 설명과 기술 진단이 혼재. 분리하면 스캐너가 [개요]를 건너뛰고 [문제]만 읽을 수 있음.
+**When NOT to split**: 문제가 순수 기술적이라 비즈니스 전제가 짧을 때. 강제 분리는 불필요한 구조를 만듦.
 
 Writing template:
 
@@ -426,7 +480,7 @@ Writing template:
   시도 2: 왜 이걸 다음으로 시도했나? → 실패, 무엇을 깨달았는가?
   시도 3: 왜 이것이 답인가? → 성공
 [검증] 어떻게 증명했는가?
-[회고] 무엇을 배웠는가? 한계는? 솔직한 고백은? (Mid/Senior: 멈추는 판단은?)
+[회고] (optional) 아키텍처 한계 + 확장 방향. 감상적 성장 서사 금지.
 ```
 
 A 2-3 attempt → failure → insight arc is strongly recommended. If the story genuinely succeeds on the first try, it can still pass IF the candidate provides: (1) alternative approaches considered and why they were rejected before implementation, (2) verification data proving the solution works under stress, and (3) acknowledged risks or limitations of the chosen approach. Without at least one of these compensating elements, a first-try success reads as "someone told me to do it and I just did it." Each attempt must include both "Why did I try this?" and "Why didn't it work?" Numbers alone without reasons are just a list, not a failure arc.
@@ -485,11 +539,11 @@ This trigger is not optional. If the P.A.R.R. structure is absent entirely, trig
 
 ## 17. Compressed Depth Evaluation
 
-Apply to compressed depth entries (items described as "other projects" or concise bullet-format entries in the resume). Do not apply P.A.R.R. (P1-P5). Use D1p-D6p + Volume Guide only.
+Apply to compressed depth entries (items described as "other projects" or concise bullet-format entries in the resume). Do not apply P.A.R.R. (P1-P5). Use 문제해결 6개 기준 + Volume Guide only.
 
-### Evaluation Criteria (D1p-D6p + Volume Guide)
+### Evaluation Criteria (문제해결 6개 기준 + Volume Guide)
 
-Apply D1p-D6p dimensions to each line of compressed depth entries. Additionally check the volume guide:
+Apply 문제해결 6개 기준(탐색적 인과·근거 깊이·사고 귀속·대안 비교·면접 심층성·섹션 적합성)을 compressed depth entries의 각 라인에 적용. Additionally check the volume guide:
 
 **Volume guide:**
 
@@ -518,7 +572,7 @@ Attempt enumeration, retrospective, and trade-off comparison are **not required*
 
 ### Explicit Anti-Patterns (ENHANCED)
 
-**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as D1p FAIL and request the underlying problem context and outcome.
+**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as 탐색적 인과 FAIL and request the underlying problem context and outcome.
 
 **Over-Narration Anti-Pattern**: Signature-level narrative (attempts, retrospective, trade-off comparison) used in non-signature projects. Flag and recommend compression to 3-5 bullet lines.
 
@@ -562,7 +616,7 @@ Attempt enumeration, retrospective, and trade-off comparison are **not required*
 
 ## 19. Writing Guidance: Compressed Depth
 
-Use when content restructuring is needed for compressed depth entries based on D1p/D2p evaluation. Guides compressing verbose narratives or converting feature lists into problem-solving narratives.
+Use when content restructuring is needed for compressed depth entries based on 탐색적 인과/근거 깊이 평가. Guides compressing verbose narratives or converting feature lists into problem-solving narratives.
 
 ### Strategy: Supporting Backdrop
 
@@ -619,11 +673,11 @@ Apply the standard Pre-Writing Validation flowchart. Additionally:
 
 ## 20. Writing Guidance Trigger: Compressed Depth
 
-After completing D1p-D6p evaluation on compressed depth entries, check:
+After completing 문제해결 6개 기준 evaluation on compressed depth entries, check:
 
-- **Trigger formula**: `D1p_FAIL_count / evaluable_lines > 0.5` OR `D2p_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = bullet lines evaluated by D1p-D6p, excluding titles, blank lines, and section markers)
+- **Trigger formula**: `탐색적 인과_FAIL_count / evaluable_lines > 0.5` OR `근거 깊이_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = bullet lines evaluated by 문제해결 6개 기준, excluding titles, blank lines, and section markers)
 - **Missing section**: If there are no compressed depth entries at all, recommend adding them
-- **Message to deliver**: "전체 N개 라인 중 D1p/D2p FAIL이 과반수입니다 (D1p: X/N, D2p: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed Depth 섹션의 템플릿을 참고하여 재작성해 보세요."
+- **Message to deliver**: "전체 N개 라인 중 탐색적 인과/근거 깊이 FAIL이 과반수입니다 (탐색적 인과: X/N, 근거 깊이: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed Depth 섹션의 템플릿을 참고하여 재작성해 보세요."
 
 This trigger is not optional.
 
@@ -633,9 +687,9 @@ This trigger is not optional.
 
 | Thought | Reality |
 | --- | --- |
-| "P1-P5로 깊이를 평가해야지" | Applying P1-P5 to compressed depth is an excessive requirement. Use D1p-D6p + volume guide only. |
+| "P1-P5로 깊이를 평가해야지" | Applying P1-P5 to compressed depth is an excessive requirement. Use 문제해결 6개 기준 + volume guide only. |
 | "시도→실패→깨달음이 없으니 FAIL" | Attempt enumeration is signature depth only. Compressed depth passes with problem→solution→verification→result bullet flow. |
-| "잘 쓰였으니 넘어가자" | Even well-written entries must be checked for D1p (diagnostic causality) and D2p (evidence depth). |
+| "잘 쓰였으니 넘어가자" | Even well-written entries must be checked for 탐색적 인과(diagnostic causality) and 근거 깊이(evidence depth). |
 | "프로젝트가 7개인데 각각 평가하면 되지" | Check the volume guide (5+ entries) before individual evaluation. If 5+, recommend selection first. |
 | "숫자가 없으니 대충 넣자" | Fabricating metrics is prohibited. If numbers are missing, always request them from the user. |
 | "기능 나열이지만 깔끔하게 정리됐잖아" | Clean feature listing is still the Feature Listing Anti-Pattern. Problem context and outcome are required. |
