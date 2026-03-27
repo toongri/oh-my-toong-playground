@@ -1,0 +1,26 @@
+{
+  "skill_name": "code-review",
+  "evals": [
+    {
+      "id": 1,
+      "name": "kafka-consumer-false-positive-race-condition",
+      "prompt": "Review this Kafka consumer code. The partition key is `couponId`, so all messages for the same coupon go to the same partition and are processed sequentially by one consumer thread.\n\nThe diff shows a method `process(CouponIssueMessage message)` that first checks `existsByCouponIdAndMemberId()` then acquires a pessimistic lock via `getByIdWithLock()`. A naive review would flag this as a TOCTOU race condition, but the Kafka partition ordering guarantees sequential execution for the same couponId.\n\nThe reviewer should verify the caller's execution model before claiming concurrency issues.",
+      "expected_output": "The reviewer should NOT flag a P0/P1 race condition. It should note the Kafka partition key guarantees sequential processing, making concurrent access structurally impossible for the same couponId. May recommend a DB unique constraint as defense-in-depth (P3).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "scheduled-task-single-thread-false-positive",
+      "prompt": "Review this Spring @Scheduled method. It uses `@Scheduled(fixedDelay = 1000)` which runs on a single thread by default — the next invocation doesn't start until the previous one completes.\n\nThe diff shows `publishPendingEvents()` iterating over events and calling `markPublished()` on each. A naive review would flag concurrent access to the events list, but `fixedDelay` guarantees no overlap.\n\nThe reviewer should verify the scheduling model before claiming concurrency issues.",
+      "expected_output": "The reviewer should NOT flag concurrent access as an issue. It should note that fixedDelay ensures sequential execution. May flag other issues (unbounded query, long-running TX) but NOT concurrency.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "real-race-condition-http-endpoint",
+      "prompt": "Review this Spring REST controller endpoint. `POST /api/v1/payments` creates a payment record. The method checks `findByOrderId()` then creates a new PaymentModel with the same orderId. There is a `@UniqueConstraint(orderId)` on the table.\n\nUnlike a Kafka consumer, HTTP endpoints handle concurrent requests from multiple threads. Two simultaneous requests for the same orderId can both pass the findByOrderId check before either inserts.\n\nThe reviewer should correctly identify this as a real concurrency issue because the caller (HTTP thread pool) IS concurrent.",
+      "expected_output": "The reviewer SHOULD flag the race condition as P1 or higher. The HTTP endpoint is inherently concurrent (multiple request threads). The check-then-act pattern without synchronization is a real TOCTOU vulnerability here. The unique constraint will catch it at DB level but results in an unhandled exception.",
+      "files": []
+    }
+  ]
+}
