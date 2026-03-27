@@ -19,6 +19,34 @@
 
 ---
 
+## Mandatory Evaluation Checklist
+
+아래 항목은 자기소개 평가 시 반드시 체크하고, 결과를 Phase 11 출력에 포함해야 한다.
+
+### Type A (행동 원칙)
+- [ ] Bridge 3박자 구조: bold 오프너 → 이유(브릿지) → 에피소드. 셋 중 하나라도 빠지면 FLAG
+- [ ] 차별화 실패 점검: 오프너가 "개발자 10명이 써도 어색하지 않은" 범용 문장이면 FLAG
+- [ ] 자기 주장형 종결 점검: "~편입니다", "~타입입니다", "~사람입니다" 종결이면 FLAG → 행동 기반 오프너+bridge+episode로 전환 권장
+
+### Type B (일하는 방식)
+- [ ] 구체적 행동 원칙이 에피소드로 뒷받침되는지 확인
+
+### Type C (회사 연결)
+- [ ] 마무리 동사 점검: "~하고 싶다"(소망) → FLAG. "~에 기여할 수 있다"(기여 비전)으로 전환 권장
+- [ ] 회사 연결이 역량/경험 기반인지, 추상적 비전인지 구분
+
+### Type D (현재 관심)
+- [ ] 구체적 관심사가 근거와 함께 제시되는지 확인
+- [ ] 수치 없어도 FAIL 아님 (Type D 특성)
+
+### Global
+- [ ] 문단별 독립성: 각 문단이 독립적으로 읽혔을 때 가치가 있는가?
+- [ ] 첫 문장 독립 가치: 첫 문장만 읽어도 인상이 남는가?
+- [ ] 원본 프레이밍: 경력 bullet과 동일한 표현을 피하고 있는가?
+- [ ] 문단 수 적정성: 3-4개 권장 (2개 이하 → 부족, 5개 이상 → 산만)
+
+---
+
 ## Overview
 
 The self-introduction answers one question: **"어떤 엔지니어인가?"** Every paragraph must reveal a different facet of this answer.
@@ -39,6 +67,8 @@ A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of
 
 **How**: Open with a single sentence that combines your role with your distinguishing characteristic. Immediately follow with a concrete project or achievement that proves the claim. The evidence is not the point — the identity framing is. The evidence exists to make the identity credible.
 
+**Bridge pattern**: When the bold opener states an action principle, connect it to the episode with a bridge sentence that explains **why** you work this way. Structure: **[행동 원칙]. [이유 — 브릿지]. [에피소드].** This three-beat structure turns a bare claim into a reasoned stance. The bridge can use any natural phrasing ("~때문입니다", "~라고 생각합니다", "~라는 판단에서") — the key is that the reason exists between the principle and the evidence.
+
 **Evaluation criteria:**
 - Is there a role anchor visible in the first sentence? (백엔드, 프론트엔드, 데이터 등)
 - Is the identity claim backed by at least one project or achievement from the resume?
@@ -49,7 +79,7 @@ A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of
 | Verdict | Example | Reason |
 |---------|---------|--------|
 | PASS | "**비즈니스 임팩트로 증명하는 백엔드 개발자입니다.** 상품 검수 병목을 숙련도 의존성으로 재정의하고, LLM 기반 자동화로 월 1,500만원 운영비를 절감했습니다." | JD '비즈니스 성과', '임팩트 중심' 강조 → 기술력보다 비즈니스 임팩트를 정체성으로 내세움. 역할 앵커("백엔드") + 차별화("임팩트로 증명") + 증거(병목 재정의 → 1,500만원) |
-| PASS | "**해결보다 문제 선정에 더 집요한 백엔드 개발자입니다.** 어떤 문제를 잡느냐에 따라 같은 비용으로 만들 수 있는 성과가 완전히 달라지기 때문에, 방향을 정하기 전에 지금 잡은 문제가 진짜인지부터 의심합니다." | JD '자기 주도적', '문제 해결' 강조 → 실행력보다 문제 선정 능력을 차별화로 선택. 역할 앵커 + 차별화("문제 선정에 집요") + 철학적 근거 |
+| PASS | "**당연해 보이는 원인일수록 다시 확인합니다.** 같은 비용이라도 어떤 문제를 해결하느냐에 따라 만들 수 있는 임팩트가 달라지기 때문입니다. 상품 검수 인력이 부족하다는 판단에 인력충원을 준비하던 중 현장 라인을 방문해 병목을 확인하고, 검수 자동화를 통해 1인당 처리량을 5배로 끌어올리고 월 1,500만원 운영비를 절감했습니다." | JD '자기 주도적', '문제 해결' 강조 → 행동 원칙("다시 확인") + 브릿지("때문입니다") + 에피소드(현장 병목 → 5배 → 1,500만원). 성격 주장이 아닌 행동으로 정체성 표현 |
 | PASS | "**완벽한 시스템보다 문제를 빠르게 감지하고 복구할 수 있는 시스템을 만듭니다.** 모든 장애를 막으려면 비용이 기하급수적으로 늘어나지만, 감지와 복구 속도를 높이는 것은 설계로 해결할 수 있다고 생각합니다. 배포 후 이상 징후를 사람이 모니터링하던 구조를 자동 헬스체크와 자동 롤백으로 바꿔, 배포 실패 대응 시간을 30분에서 3분으로 줄였습니다." | JD '안정성', '장애 대응', 'SRE' 강조 → 예방보다 감지/복구 속도를 설계 철학으로 제시. 정체성("감지/복구 시스템") + 철학("예방 비용 vs 복구 설계") + 증거(30분→3분) |
 | PASS | "**가설을 세우고 사용자 행동으로 검증하며 일하는 백엔드 개발자입니다.** 신규 가입자의 상품 탐색률이 낮았을 때, 리스트 조회 속도를 개선하면 상품 상세 진입률이 오를 것이고, 결국 첫 주문까지의 경험으로 이어질 것이라고 가설을 세웠습니다. p99을 10초에서 500ms로 줄인 결과, 상세 진입률이 10%에서 22%로 오르며 가설이 맞았음을 확인했습니다." | JD '데이터 기반', '사용자 중심', '프로덕트' 강조 → 기술 지표가 아닌 사용자 행동 변화로 검증하는 정체성 선택. 가설 기반("탐색률 → 진입률 → 첫 주문") + 증거(p99 10s→500ms, 진입률 10%→22%) |
 | FAIL | "저는 항상 새로운 기술을 배우며 성장하는 개발자입니다. 다양한 프로젝트 경험을 통해 역량을 키워왔습니다." | 역할 앵커 없음(무슨 개발자?), 차별화 없음("성장하는 개발자"는 모든 개발자), 증거 없음 |
@@ -108,6 +138,13 @@ A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of
 | PASS | "**수작업 운영 프로세스를 자동화하고 이상 감지 시스템을 구축한 경험이 있습니다.** 정산 담당자가 매월 3일씩 처리하던 정산 검증을 자동화하고, 이상 거래 실시간 감지 대시보드를 구축해 정산 오류를 월 15건에서 0건으로 줄였습니다. 'Focus on Impact'의 가치에 깊게 공감하며, 운영 팀이 반복 업무에서 벗어나 임팩트 있는 의사결정에 집중할 수 있는 환경을 만들고 싶습니다." | JD '백오피스', '운영 효율화' 키워드 + 회사 핵심가치 'Focus on Impact' 연결 → 자동화/대시보드 경험(정산 오류 15→0건) → 운영팀 임팩트 집중 환경 기여 |
 | FAIL | "귀사의 혁신적인 문화에 감탄했으며, 성장할 수 있는 환경에서 배우고 싶습니다." | 어느 회사에나 통하는 범용 + "내가 원하는 것" 프레이밍 + 주어가 "귀사" |
 | FAIL | "토스에서 일하고 싶습니다. 토스의 개발 문화가 인상적이었고, 좋은 동료들과 함께 성장하고 싶습니다." | 회사 이름은 있지만 구체적 도메인/제품 연결 없음 + "성장하고 싶다" = 내가 원하는 것 |
+
+**Closing verb guidance**: Type C의 마지막 문장은 "이 회사의 비즈니스에 내가 어떤 기여를 할 수 있는지"를 보여주는 자리. 소망이 아닌 기여 비전이어야 한다.
+- "만들겠습니다" (commitment) — 강함: 확신과 주도성
+- "기여할 수 있습니다" (capability) — 강함: 검증된 역량
+- "하고 싶습니다" (desire) — 약함: 소망에 그치면 기여가 아니라 바람
+
+핵심: 주어가 "나"이고, 동사가 회사의 비즈니스 도메인에 연결된 기여 행위여야 한다.
 
 ---
 
@@ -209,6 +246,8 @@ When the target position is obtained **after** the initial self-introduction eva
 | "One self-introduction works for all companies" | Without Type C, only identity (A), stance (B), and interest (D) are evaluable. Per-company customization lives in Type C. |
 | "JD 키워드를 따옴표로 인용하면 열정을 보여줄 수 있다" | JD 문구를 그대로 되돌리면 아부 또는 앵무새로 읽힌다. 자기소개의 주어는 항상 "나"여야 하며, 회사 도메인은 참조하되 반드시 나의 언어로 표현할 것. |
 | "Recent interests without results are filler" | Type D does not require metrics. A specific direction and approach are sufficient — this shows growth trajectory, not past achievement. |
+| "차별화 실패 오프너: 오프너가 범용 문장이면 충분하다" | 기준: "이 문장을 다른 개발자 10명이 자기소개에 써도 어색하지 않은가?" → Yes면 FLAG. "문제에 집중합니다", "꼼꼼합니다", "항상 사용자 관점에서 생각합니다"는 범용 문장. 대비 구조("해결보다 문제 선정에 더 집요한") 또는 특정 행동("당연해 보이는 원인일수록 다시 확인합니다")으로 전환할 것. |
+| "자기 주장형 종결: '~편입니다'는 겸손한 표현이다" | "~편입니다", "~타입입니다", "~사람입니다" 종결은 3가지 구조적 문제를 가진다: (1) 헤징 — 자기도 확신 없는 주장, (2) bridge+episode가 붙기 어려운 구조, (3) 면접관 후속 질문 유도력 제로. "저는 집요한 편입니다", "꼼꼼한 타입입니다" 대신 행동 기반 오프너로 전환 후 bridge+episode를 연결할 것. |
 
 ---
 

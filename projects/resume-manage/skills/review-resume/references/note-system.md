@@ -1,23 +1,23 @@
-# Memory System Reference
+# Note System Reference
 
-Persistent memory for resume review. Accumulates candidate pool, user preferences, and research cache across sessions so that JD-based candidate selection improves over time without re-parsing from scratch.
+Persistent note for resume review. Accumulates candidate pool, user preferences, and research cache across sessions so that JD-based candidate selection improves over time without re-parsing from scratch.
 
 ---
 
 ## Table of Contents
 
-1. [Memory Directory Structure](#1-memory-directory-structure)
+1. [Note Directory Structure](#1-note-directory-structure)
 2. [problem-solving/ Unification Principle](#2-problem-solving-unification-principle)
 3. [Candidate File Format](#3-candidate-file-format)
 4. [preferences.md Structure](#4-preferencesmd-structure)
 5. [Career-Level Depth Distribution Guide](#5-career-level-depth-distribution-guide)
-6. [Memory Load (Phase 0)](#6-memory-load-phase-0)
+6. [Note Load (Phase 0)](#6-note-load-phase-0)
 7. [Auto-Seeding (First Run)](#7-auto-seeding-first-run)
-8. [Memory Accumulate (Phase 10)](#8-memory-accumulate-phase-10)
+8. [Note Accumulate (Phase 10)](#8-note-accumulate-phase-10)
 
 ---
 
-## 1. Memory Directory Structure
+## 1. Note Directory Structure
 
 ```
 $OMT_DIR/review-resume/
@@ -32,6 +32,8 @@ $OMT_DIR/review-resume/
 ├── problem-solving/          # Problem-solving narrative candidates (unified pool)
 │   ├── payment-order-sync.md
 │   ├── coupon-race-condition.md
+│   └── ...
+├── study/                    # Study/activity section candidates
 │   ├── llm-inspection-automation.md
 │   └── ...
 ├── preferences.md            # User preferences, expression style, judgment criteria
@@ -112,17 +114,17 @@ Three sections are required: **표현 스타일** (expression style), **판단 �
 
 ---
 
-## 6. Memory Load (Phase 0)
+## 6. Note Load (Phase 0)
 
-Load persistent memory before starting the review. The candidate pool, user preferences, and research cache accumulated from previous reviews are the starting point for the current session.
+Load persistent note before starting the review. The candidate pool, user preferences, and research cache accumulated from previous reviews are the starting point for the current session.
 
-### Step 0-1. Memory Directory Check
+### Step 0-1. Note Directory Check
 
 1. Check if `$OMT_DIR/review-resume/` exists
 2. If the directory is absent or empty → run **Auto-Seeding** (see Section 7)
 3. If the directory exists → proceed to Step 0-2
 
-### Step 0-2. Load Existing Memory
+### Step 0-2. Load Existing Note
 
 1. **Scan candidate pool**: Read file lists and frontmatter from `self-introduction/`, `career/`, and `problem-solving/`. Read file bodies only when needed.
 2. **Load preferences.md**: Bring the user's expression preferences, judgment criteria, and feedback history into context.
@@ -131,7 +133,7 @@ Load persistent memory before starting the review. The candidate pool, user pref
 Report the load result to the user:
 
 ```
-[Memory Loaded]
+[Note Loaded]
 - 자기소개 후보: N개
 - 경력 후보: N개
 - 문제해결 후보: N개
@@ -139,13 +141,13 @@ Report the load result to the user:
 - 리서치 캐시: {회사명} found / none
 ```
 
-`[Phase 0/11: Memory Load ✓]`
+`[Phase 0/11: Note Load ✓]`
 
 ---
 
 ## 7. Auto-Seeding (First Run)
 
-Run only when memory is empty. Parse the current resume to auto-generate the initial candidate pool.
+Run only when note is empty. Parse the current resume to auto-generate the initial candidate pool.
 
 1. Read `_config.yml` (or the resume file on the current branch)
 2. **Self-introduction**: Classify each paragraph as Type A/B/C/D and create files in `self-introduction/`
@@ -155,13 +157,13 @@ Run only when memory is empty. Parse the current resume to auto-generate the ini
    - Items with detailed narrative → `depth: detailed`
    - Items in 3–5 bullet form → `depth: compressed`
 5. Create `preferences.md` as a blank template
-6. Report seeding results to the user: "메모리를 초기화했습니다. 현재 이력서 기준 N개의 후보가 등록되었습니다."
+6. Report seeding results to the user: "노트를 초기화했습니다. 현재 이력서 기준 N개의 후보가 등록되었습니다."
 
 ---
 
-## 8. Memory Accumulate (Phase 10)
+## 8. Note Accumulate (Phase 10)
 
-After the review is complete, accumulate information discovered in this session into persistent memory. Save only after user confirmation.
+After the review is complete, accumulate information discovered in this session into persistent note. Save only after user confirmation.
 
 ### Accumulation Rules
 
@@ -182,7 +184,7 @@ After the review is complete, accumulate information discovered in this session 
 Show a summary of changes to the user and wait for confirmation before saving:
 
 ```
-[Memory Accumulate — Phase 10]
+[Note Accumulate — Phase 10]
 
 새 후보:
   + problem-solving/search-latency-optimization.md (tags: [검색, p99, 인덱스])
@@ -201,4 +203,4 @@ Show a summary of changes to the user and wait for confirmation before saving:
 
 If the user confirms, create or modify the files. If declined, do not accumulate.
 
-`[Phase 10/11: Memory Accumulate ✓]`
+`[Phase 10/11: Note Accumulate ✓]`

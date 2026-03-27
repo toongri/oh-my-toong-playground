@@ -1,6 +1,6 @@
 ---
 name: review-resume
-description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured self-introduction evaluation (per-type A-D + global), D1c-D6c / D1p-D6p, and depth-based problem-solving evaluation with inline writing guidance. When a JD is provided, this skill evaluates JD fit of self-introduction, career bullets, and problem-solving entries, and recommends the optimal combination from the memory candidate pool. Not for simple _config.yml edits.
+description: MUST USE this skill when the user asks to review, evaluate, check, or get feedback on their resume — even partially (e.g., just self-introduction, just problem-solving section, just career bullets). Use when ANY of these appear: (1) 이력서 리뷰, 이력서 봐줘, 이력서 검토, 이력서 피드백, resume review, review my resume; (2) requests to evaluate specific resume sections like 자기소개, 경력, 문제 해결, 프로젝트; (3) questions about resume quality, interview readiness, or achievement line strength; (4) requests to check for industry-standard items, AI tone, or section structure; (5) any mention of _config.yml combined with review/feedback/check/evaluate intent. This skill provides structured self-introduction evaluation (per-type A-D + global), career 6-criteria / problem-solving 6-criteria section evaluation, and depth-based problem-solving evaluation with inline writing guidance. When a JD is provided, this skill evaluates JD fit of self-introduction, career bullets, and problem-solving entries, and recommends the optimal combination from the note candidate pool. Not for simple _config.yml edits.
 ---
 
 # Review Resume
@@ -15,11 +15,11 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
 4. **Never fabricate metrics.** If the user doesn't provide numbers, ask. Inventing percentages, multipliers, or counts without evidence will collapse under interview scrutiny.
    - **Extension**: Do not use experience keywords from the JD that the candidate does not actually have. Cross-check the JD against the resume, and verify with the user ("이 경험이 있나요?") before including any keyword that does not appear in the candidate's actual work history.
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
-6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a memory candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
+6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a note candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
 
-## Persistent Memory System
+## Persistent Note System
 
-Resume reviews are not one-off events. Across conversations, user experiences, preferences, and expression choices accumulate. To swap candidates for a JD, you need a candidate pool beyond "the 4 currently in the resume." This memory system provides cross-session persistence.
+Resume reviews are not one-off events. Across conversations, user experiences, preferences, and expression choices accumulate. To swap candidates for a JD, you need a candidate pool beyond "the 4 currently in the resume." This note system provides cross-session persistence.
 
 **Directory:** `$OMT_DIR/review-resume/`
 
@@ -28,6 +28,7 @@ Resume reviews are not one-off events. Across conversations, user experiences, p
 | `self-introduction/` | Type A, B, C, D paragraph candidates |
 | `career/` | Career bullet candidates |
 | `problem-solving/` | All problem-solving entries (unified: signature + detailed + compressed depth) |
+| `study/` | Study/activity section candidates |
 | `preferences.md` | User tone preferences, judgment criteria, feedback history |
 | `sources/` | Company research cache, JD analysis results |
 
@@ -51,7 +52,7 @@ Resume reviews are not one-off events. Across conversations, user experiences, p
 
 Maintain **2-3x more candidates** in the pool than what's actually used in the resume. This enables JD-specific combination swaps.
 
-**Reference:** Read `references/memory-system.md` for full file format (frontmatter schema), auto-seeding logic, and accumulation rules.
+**Reference:** Read `references/note-system.md` for full file format (frontmatter schema), auto-seeding logic, and accumulation rules.
 
 ## Evaluation Protocol
 
@@ -59,7 +60,7 @@ Every resume review follows this sequence. No step is optional.
 
 ```mermaid
 flowchart TB
-    M0[Memory Load + Auto-Seeding] --> A[Resume received]
+    M0[Note Load + Auto-Seeding] --> A[Resume received]
     A --> B{Self-introduction present?}
     B -->|Yes| C[Self-introduction evaluation: per-type + global]
     B -->|No| D{Target position known?}
@@ -72,7 +73,7 @@ flowchart TB
     F --> F3[Writing Guidance Trigger recheck]
     F3 --> CA
     D -->|Yes| CA
-    CA --> G[Section-specific evaluation: D1c-D6c career / D1p-D6p problem-solving]
+    CA --> G[Section-specific evaluation: 경력 6개 기준 / 문제해결 6개 기준]
     G --> H[3-level pushback simulation]
     H --> I[First-Page Primacy check]
     I --> I2{JD provided?}
@@ -81,7 +82,7 @@ flowchart TB
     I3 --> I4
     I4 --> PS[Problem-Solving Evaluation: depth-based branching]
     PS --> O[MUST: AI Tone Audit — Skill humanizer audit mode]
-    O --> MA[Memory Accumulate — candidate/preference persistence]
+    O --> MA[Note Accumulate — candidate/preference persistence]
     MA --> N[Deliver findings + inline writing guidance]
 ```
 
@@ -93,17 +94,17 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 
 | Phase | Node(s) | Section | Reference |
 |-------|---------|---------|-----------|
-| 0 | M0 | Memory Load + Auto-Seeding | `references/memory-system.md` |
+| 0 | M0 | Note Load + Auto-Seeding | `references/note-system.md` |
 | 1 | A→B | Pre-Evaluation Research | `references/pre-evaluation-research.md` |
 | 2 | C | Self-Introduction Evaluation (per-type + global) | `references/self-introduction.md` |
 | 3 | D→E→E2→F2→F→F3 | Target Position Gate + Type C Conditional | `references/self-introduction.md` |
 | 4 | CA | Developer Competency Assessment (C1-C5) | `references/competency-assessment.md` |
-| 5 | G | Section-Specific Evaluation (D1c-D6c / D1p-D6p) | `references/section-evaluation.md` |
+| 5 | G | Section-Specific Evaluation | `references/section-evaluation.md` |
 | 6 | H | 3-Level Pushback Simulation | `references/section-evaluation.md` |
 | 7 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md` |
 | 8 | PS | Problem-Solving Evaluation (depth: signature → detailed → compressed) | `references/problem-solving.md` |
 | 9 | O | AI Tone Audit | (inline below) |
-| 10 | MA | Memory Accumulate | `references/memory-system.md` |
+| 10 | MA | Note Accumulate | `references/note-system.md` |
 | 11 | N | Deliver Findings + Inline Writing Guidance | (inline below) |
 
 ### Tracking Rules
@@ -112,22 +113,22 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
 4. Phases 0-10 are internal processing steps — their outputs (progress lines, intermediate evaluations, checklists) are NOT shown to the user. Only Phase 11 produces user-facing output.
-5. Exception: Phase 3 (Target Position Gate), Phase 10 (Memory Accumulate), and Phase 11 (Deliver Findings — cherry-pick workflow) require user interaction.
+5. Exception: Phase 3 (Target Position Gate), Phase 10 (Note Accumulate), and Phase 11 (Deliver Findings — cherry-pick workflow) require user interaction.
 6. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
 
-## Phase 0: Memory Load
+## Phase 0: Note Load
 
-Load persistent memory before starting the review. Previous review sessions' candidate pools, user preferences, and research caches become the starting point for this review.
+Load persistent note before starting the review. Previous review sessions' candidate pools, user preferences, and research caches become the starting point for this review.
 
 1. Check if `$OMT_DIR/review-resume/` exists
 2. If empty or missing → execute **Auto-Seeding** (parse current resume into initial candidate files)
 3. If exists → scan frontmatter of all candidate files, load `preferences.md`, check `sources/` for cached research
 
-Report memory status to user:
+Report note status to user:
 ```
-[Memory Loaded]
+[Note Loaded]
 - Self-introduction candidates: N
 - Career candidates: N
 - Problem-solving candidates: N
@@ -135,17 +136,16 @@ Report memory status to user:
 - Research cache: {company} found / none
 ```
 
-**Reference:** Read `references/memory-system.md` for full auto-seeding procedure and file format details.
+**Reference:** Read `references/note-system.md` for full auto-seeding procedure and file format details.
 
-`[Phase 0/11: Memory Load ✓]`
+`[Phase 0/11: Note Load ✓]`
 
 ## Phase 1: Pre-Evaluation Research
 
-Before evaluation, perform preparation: check other branches for context, analyze the JD (if provided), and research the target company.
+Before evaluation, perform preparation: analyze the JD (if provided) and research the target company.
 
-- **Step 1**: Run `git branch -a`, inspect `_config.yml` on other branches for writing style and prior customizations
-- **Step 2**: JD Analysis — extract team, keywords, implicit problems, and what is NOT in the JD
-- **Step 3**: Company Research — core values, tech blog, product/service, career page, recent news
+- **Step 1**: JD Analysis — extract team, keywords, implicit problems, and what is NOT in the JD
+- **Step 2**: Company Research — core values, tech blog, product/service, career page, recent news
 
 Research results feed into ALL paragraph type selections (A, B, C, D). Check `sources/` cache before doing fresh research.
 
@@ -184,7 +184,7 @@ If the user hasn't stated the target position/company, ASK and HALT. After recei
 
 ## Phase 4: Developer Competency Assessment (C1-C5)
 
-Holistically assess the ENTIRE resume against 5 core competency axes. This answers a different question from D1c-D6c/D1p-D6p: not "is this well-written?" but **"does this resume demonstrate a competent developer?"**
+Holistically assess the ENTIRE resume against 5 core competency axes. This answers a different question from section-specific evaluation: not "is this well-written?" but **"does this resume demonstrate a competent developer?"**
 
 | Axis | Focus |
 |------|-------|
@@ -200,33 +200,33 @@ Rate each axis as STRONG / PRESENT / ABSENT with evidence citations. Apply caree
 
 `[Phase 4/11: Developer Competency Assessment ✓]`
 
-## Phase 5: Section-Specific Evaluation (D1c-D6c / D1p-D6p)
+## Phase 5: Section-Specific Evaluation
 
 Career and problem-solving sections answer fundamentally different questions:
-- **Career (D1c-D6c)**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
-- **Problem-solving (D1p-D6p)**: "How does this person approach problems?" — thought process and depth. Entries are engineering thinking **proof**.
+- **경력**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
+- **문제해결**: "How does this person approach problems?" — thought process and depth. Entries are engineering thinking **proof**.
 
-### Career Dimensions (D1c-D6c)
+### Career Dimensions (경력 6개 기준)
 
-| # | Dimension | Question |
-|---|-----------|----------|
-| D1c | Linear Causation | Goal → action → outcome connected in one line? |
-| D2c | Metric Specificity | Verifiable numbers (before → after, absolute values)? |
-| D3c | Role Clarity | Personal contribution distinguishable from team output? |
-| D4c | Standard Transcendence | Beyond industry standard? |
-| D5c | Hook Potential | Does this line provoke interviewer curiosity? |
-| D6c | Section Fitness | Achievement statement, not problem narrative? |
+| # | 기준 | Question |
+|---|------|----------|
+| 인과 연결 | Linear Causation | Goal → action → outcome connected in one line? |
+| 수치 구체성 | Metric Specificity | Verifiable numbers (before → after, absolute values)? |
+| 역할 명확성 | Role Clarity | Personal contribution distinguishable from team output? |
+| 차별화 | Standard Transcendence | Beyond industry standard? |
+| 면접 유도력 | Hook Potential | Does this line provoke interviewer curiosity? |
+| 섹션 적합성 | Section Fitness | Achievement statement, not problem narrative? |
 
-### Problem-Solving Dimensions (D1p-D6p)
+### Problem-Solving Dimensions (문제해결 6개 기준)
 
-| # | Dimension | Question |
-|---|-----------|----------|
-| D1p | Diagnostic Causation | Problem detection → root cause → solution chain clear? |
-| D2p | Evidence Depth | Failure data, alternative comparison, verification data present? |
-| D3p | Thought Visibility | Is the reasoning process visible, not just the result? |
-| D4p | Standard Transcendence | Beyond textbook solutions? |
-| D5p | Hook Potential | Does this entry provoke follow-up questions? |
-| D6p | Section Fitness | Problem narrative, not achievement statement? |
+| # | 기준 | Question |
+|---|------|----------|
+| 탐색적 인과 | Diagnostic Causation | Problem detection → root cause → solution chain clear? |
+| 근거 깊이 | Evidence Depth | Failure data, alternative comparison, verification data present? |
+| 사고 귀속 | Thought Visibility | Is the reasoning process visible, not just the result? |
+| 대안 비교 | Standard Transcendence | Beyond textbook solutions? |
+| 면접 심층성 | Hook Potential | Does this entry provoke follow-up questions? |
+| 섹션 적합성 | Section Fitness | Problem narrative, not achievement statement? |
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, first-page primacy check, JD keyword matching, and writing guidance triggers.
 
@@ -267,8 +267,8 @@ flowchart TB
     A[Collect all problem-solving entries] --> B{Full P.A.R.R. narrative present?}
     B -->|Yes| C[signature depth → Full P.A.R.R. evaluation]
     B -->|No| D{5+ lines of description?}
-    D -->|Yes| E[detailed depth → D1p-D6p + P1,P2,P5]
-    D -->|No| F[compressed depth → D1p-D6p + Volume Guide]
+    D -->|Yes| E[detailed depth → 문제해결 6개 기준 + P1,P2,P5]
+    D -->|No| F[compressed depth → 문제해결 6개 기준 + Volume Guide]
 
     style C fill:lightyellow
     style E fill:lightgreen
@@ -279,11 +279,15 @@ flowchart TB
 
 | Depth | Base | Additional | Key Focus |
 |-------|------|-----------|-----------|
-| signature | D1p-D6p | P1-P5 (all), P6-P8 (mid/senior) | Narrative depth, failure arc, why-chain, stopping judgment |
-| detailed | D1p-D6p | P1, P2, P5 only | Narrative exists, at least 1 failure, why-chain present |
-| compressed | D1p-D6p | Volume guide (3-5 entries, 3-5 lines each, max 25 lines) | Conciseness, problem→solution→result bullet flow |
+| signature | 문제해결 6개 기준 | P1-P5 (all), P6-P8 (mid/senior) | Narrative depth, failure arc, why-chain, stopping judgment |
+| detailed | 문제해결 6개 기준 | P1, P2, P5 only | Narrative exists, at least 1 failure, why-chain present |
+| compressed | 문제해결 6개 기준 | Volume guide (3-5 entries, 3-5 lines each, max 25 lines) | Conciseness, problem→solution→result bullet flow |
 
-**Memory candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
+After classifying all entries, output the depth distribution count:
+"Signature N개, Detailed N개, Compressed N개"
+Compare against career-level recommendations. If any depth category has 0 entries where the guide expects entries, flag this gap.
+
+**Note candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
 
 **Reference:** Read `references/problem-solving.md` for full P.A.R.R. dimensions, career-level criteria, Before/After examples, writing guidance, and red flags.
 
@@ -307,9 +311,9 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 `[Phase 9/11: AI Tone Audit ✓]`
 
-## Phase 10: Memory Accumulate
+## Phase 10: Note Accumulate
 
-At review completion, accumulate insights from this session into persistent memory. Save after user confirmation.
+At review completion, accumulate insights from this session into persistent note. Save after user confirmation.
 
 ### What to accumulate
 
@@ -323,7 +327,7 @@ At review completion, accumulate insights from this session into persistent memo
 Show accumulation summary and wait for user confirmation before writing files:
 
 ```
-[Memory Accumulate — Phase 10]
+[Note Accumulate — Phase 10]
 
 New candidates:
   + problem-solving/search-latency-optimization.md
@@ -340,9 +344,9 @@ Research cache:
 Save? (y/n)
 ```
 
-**Reference:** Read `references/memory-system.md` § "Memory Accumulate" for full accumulation rules.
+**Reference:** Read `references/note-system.md` § "Note Accumulate" for full accumulation rules.
 
-`[Phase 10/11: Memory Accumulate ✓]`
+`[Phase 10/11: Note Accumulate ✓]`
 
 ## Phase 11: Deliver Findings
 
@@ -411,7 +415,7 @@ Symbol guide:
 
 Rules:
 - Finding labels use the same # numbers as the Summary Table.
-- Internal dimension codes (D1c, D2c, etc.) are NOT shown. Use plain Korean to describe the violation (e.g., "before→after baseline이 없어 검증 불가" instead of "D2c FAIL").
+- 내부 기준명은 한국어로 서술한다 (e.g., "before→after baseline이 없어 검증 불가" — 기준명 그대로 자연어로 표현).
 - The "위반" line may briefly name the internal criterion in plain terms so the user can learn patterns across reviews.
 - Every finding must include a **수정안** — never leave a problem without a fix.
 
@@ -442,17 +446,17 @@ Before delivering Phase 11 output, verify every phase was executed internally. T
 
 ```
 [Review Completion Checklist — INTERNAL]
-- [ ] Phase 0: Memory Load + Auto-Seeding
+- [ ] Phase 0: Note Load + Auto-Seeding
 - [ ] Phase 1: Pre-Evaluation Research
 - [ ] Phase 2: Self-Introduction Evaluation
 - [ ] Phase 3: Target Position Gate
 - [ ] Phase 4: Developer Competency Assessment (C1-C5)
-- [ ] Phase 5: Section-Specific Evaluation (D1c-D6c / D1p-D6p)
+- [ ] Phase 5: Section-Specific Evaluation (경력 6개 기준 / 문제해결 6개 기준)
 - [ ] Phase 6: 3-Level Pushback Simulation
 - [ ] Phase 7: First-Page Primacy + JD Keyword Matching
 - [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
 - [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 10: Memory Accumulate (candidate/preference persistence — user confirmation required)
+- [ ] Phase 10: Note Accumulate (candidate/preference persistence — user confirmation required)
 - [ ] Phase 11: Deliver Findings
 ```
 
