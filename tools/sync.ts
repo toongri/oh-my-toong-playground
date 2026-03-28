@@ -471,39 +471,6 @@ export async function syncLib(
   }
 }
 
-/**
- * Deploy hooks/lib/ directory to .claude/hooks/lib/ for each sync target.
- * Mirrors syncLib() but targets the shell hook library used by .sh hooks.
- *
- * Called AFTER syncPlatformConfigs(), so hooks are already deployed and lib/
- * accompanies them in the same step.
- */
-export async function syncHooksLib(
-  context: SyncContext,
-  targetPath: string,
-  rootDir: string,
-): Promise<void> {
-  const hooksLibSrc = path.join(rootDir, "hooks", "lib");
-  if (!existsSync(hooksLibSrc)) {
-    return;
-  }
-
-  const hooksLibDest = path.join(targetPath, ".claude", "hooks", "lib");
-
-  if (context.dryRun) {
-    logDry(`Deploy hooks lib: hooks/lib/ -> ${hooksLibDest}/`);
-  } else {
-    try {
-      await fs.rm(hooksLibDest, { recursive: true, force: true });
-    } catch {
-      // ignore
-    }
-    await fs.mkdir(hooksLibDest, { recursive: true });
-    await syncDirectory(hooksLibSrc, hooksLibDest, { exclude: ["*_test.sh"] });
-    logInfo(`Deployed shared hooks lib to .claude/hooks/lib/`);
-  }
-}
-
 // ---------------------------------------------------------------------------
 // rewritePlatformPaths
 // ---------------------------------------------------------------------------
@@ -633,9 +600,6 @@ export async function processYaml(
   // Per-platform YAML processing
   const yamlDir = path.dirname(syncYamlPath);
   await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
-
-  // Sync hooks/lib/ to .claude/hooks/lib/ (shell shared libraries for .sh hooks)
-  await syncHooksLib(context, targetPath, rootDir);
 
   // Resolve platforms for lib sync using the full cascade (item, section, syncYaml,
   // feature-platforms.lib, use-platforms, hardcoded ["claude"]).
