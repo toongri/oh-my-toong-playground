@@ -113,6 +113,35 @@
         {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags 2+ entries sharing same theme (정합성, 성능, 안정성, 비즈니스 등)"}
       ],
       "files": ["_config.yml"]
+    },
+    {
+      "id": 4,
+      "prompt": "이력서 리뷰해줘. 신입 개발자인데 인턴 1회 경험만 있어. _config.yml에 있어.",
+      "expected_output": "Note load, Pre-eval research (no target company → no company research), Self-intro type-based eval (Type A/B/D; multiple FAIL expected due to thin experience), Phase 2 interview trigger (experience-mining.md Phase 2: 자기소개 절반 이상 FAIL), C1-C5 competency assessment with WEAK/ABSENT on C2/C3/C4 axes, Phase 4 interview trigger (experience-mining.md Phase 4: WEAK/ABSENT axes EXPECTED/REQUIRED), Section-specific evaluation, Phase 5 interview trigger (section FAIL률 > 50%), 4-Stage Bypass Protocol executed per triggered phase (direct → reframing → adjacent → routine), Discovered Candidates Working Set populated with mined experiences, graceful opt-out if user declines interview, Note accumulate → Phase 11 HTML report",
+      "assertions": [
+        {"text": "note-load", "description": "Phase 0: checks note directory and reports status (self-introduction/career/problem-solving candidate counts)"},
+        {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified"},
+        {"text": "per-type-evaluation", "description": "Each self-intro paragraph identified by type (A/B/D) and evaluated against type-specific criteria"},
+        {"text": "global-evaluation", "description": "Global criteria evaluated after per-type (paragraph count, independence, first sentence, original framing)"},
+        {"text": "no-s1-s5-codes", "description": "No S1-S5 codes anywhere in output"},
+        {"text": "experience-mining-trigger", "description": "Phase 2/4/5 interview trigger activated due to WEAK/ABSENT/FAIL conditions — agent invokes experience-mining.md protocol for at least one phase"},
+        {"text": "four-stage-protocol", "description": "4-Stage Bypass Protocol executed per triggered phase: Stage 1 (직접 질문) → Stage 2 (우회/리프레이밍) → Stage 3 (인접 경험) → Stage 4 (일상 업무). Each stage only entered if previous stage yielded no source."},
+        {"text": "discovered-candidates-tracking", "description": "Discovered Candidates Working Set records at least one mined experience in format: Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}"},
+        {"text": "interview-opt-out-handling", "description": "If user says '다음으로' or '넘어가자', agent exits current phase interview gracefully, falls back to static Writing Guidance, and continues to next phase — does not force interview continuation"},
+        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
+        {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level (New Grad/Junior) and applies career-level expectations"},
+        {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED at junior level, provides specific gap recommendations or triggers Phase 4 interview"},
+        {"text": "depth-classification", "description": "Phase 8: classifies problem-solving entries by depth (signature/detailed/compressed) before evaluation"},
+        {"text": "depth-specific-evaluation", "description": "Applies depth-appropriate criteria per entry type"},
+        {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — P.A.R.R. dimensions, Type A-D criteria, career/PS evaluation criteria, or depth classification language"},
+        {"text": "ai-tone-audit-phase", "description": "Phase 9 addresses AI Tone Audit — invokes or declares intent to invoke Skill(humanizer)"},
+        {"text": "note-accumulate", "description": "Phase 10: proposes note accumulation (new candidates, updates, preferences) and asks for user confirmation"},
+        {"text": "html-summary-section", "description": "Phase 11 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-inline-feedback", "description": "Phase 11 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
+        {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
+        {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"}
+      ],
+      "files": ["_config.yml"]
     }
   ],
   "benchmark_summary": {

@@ -101,7 +101,7 @@ flowchart TB
     IG5 --> O
     O[MUST: AI Tone Audit — Skill humanizer audit mode]
     O --> MA[Note Accumulate — candidate/preference persistence]
-    MA --> N[Deliver findings + inline writing guidance]
+    MA --> N[Generate HTML Report]
 
     subgraph Interview Gate Sub-Process
         IGS1[Trigger check: FAIL condition met?] --> IGS2[Read experience-mining.md\nphase-specific section]
@@ -232,7 +232,7 @@ Holistically assess the ENTIRE resume against 5 core competency axes. This answe
 | C4 | Collaboration & Communication — cross-functional, knowledge sharing, stakeholder management |
 | C5 | Learning & Growth — depth of learning, external references, failure-driven growth |
 
-Rate each axis as STRONG / PRESENT / WEAK / ABSENT / N/A with evidence citations. Apply career-level expectations (not all axes need STRONG).
+Rate each axis as STRONG / PRESENT / WEAK / ABSENT with evidence citations. C3-C5 axes may additionally be rated N/A when not expected at the candidate's career level (see Career-Level Expectations).
 
 **Reference:** Read `references/competency-assessment.md` for full checklists, evidence examples, and career-level expectations table.
 
@@ -647,6 +647,7 @@ Example — all-PASS line:
   <div class="stat-box"><div class="count" style="color:#e67e22;"><!-- P1 COUNT --></div><div class="label">P1 수정 권장</div></div>
   <div class="stat-box"><div class="count" style="color:#f1c40f;"><!-- P2 COUNT --></div><div class="label">P2 개선 가능</div></div>
   <div class="stat-box"><div class="count" style="color:#95a5a6;"><!-- P3 COUNT --></div><div class="label">P3 참고</div></div>
+  <div class="stat-box"><div class="count"><!-- TOTAL COUNT --></div><div class="label">전체</div></div>
 </div>
 <table>
   <thead>

@@ -75,6 +75,7 @@ If the config file already has `pdf_output_dir_rule` etc., append the new keys w
 
 Interpret `jd_source` and list available JDs:
 - **Local directory** → list files, read each to extract company/position/date
+- **URL** → fetch with WebFetch, parse page content to extract JD listings (company/position/date)
 - **Natural language rule** (e.g., "노션 취업 준비 페이지") → interpret the rule using available tools. If the source is not directly accessible, ask the user to provide the JD list or content.
 
 Sort by `jd_selection_order` (default: newest first). If `jd_preferences` exists, highlight matching JDs.
