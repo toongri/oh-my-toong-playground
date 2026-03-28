@@ -51,11 +51,16 @@ digraph review_process {
     rankdir=TB;
     node [shape=box];
 
+    "0. Pre-commitment Predictions" -> "1. Read/receive plan content";
     "1. Read/receive plan content" -> "2. Extract ALL file references";
     "2. Extract ALL file references" -> "3. Verify references (if codebase accessible)";
-    "3. Verify references (if codebase accessible)" -> "4. Apply 4 Criteria";
-    "4. Apply 4 Criteria" -> "5. Simulate each task";
-    "5. Simulate each task" -> "All criteria pass?" [shape=diamond];
+    "3. Verify references (if codebase accessible)" -> "4. Pre-Mortem Exercise";
+    "4. Pre-Mortem Exercise" -> "5. Apply 4 Criteria";
+    "5. Apply 4 Criteria" -> "6. Simulate each task";
+    "6. Simulate each task" -> "7. Certainty Classification";
+    "7. Certainty Classification" -> "8. Self-Audit Refutability Check";
+    "8. Self-Audit Refutability Check" -> "9. Realist Check";
+    "9. Realist Check" -> "All criteria pass?" [shape=diamond];
     "All criteria pass?" -> "No findings?" [label="yes"];
     "No findings?" -> "APPROVE" [label="yes"];
     "No findings?" -> "[POSSIBLE]-only?" [label="no"];
@@ -64,6 +69,22 @@ digraph review_process {
     "All criteria pass?" -> "REQUEST_CHANGES with specifics" [label="no"];
 }
 ```
+
+### Pre-commitment Predictions
+
+**Step 0 — before reading the plan in detail.**
+
+Based on the type of plan (feature, refactor, migration, etc.) and its domain, predict 3-5 likely problem areas and record them before investigating. Then investigate each one specifically.
+
+**Purpose**: Activates deliberate search rather than passive reading. Forces you to look for problems rather than wait to encounter them. Prevents confirmation bias where the plan's framing shapes your perception of completeness.
+
+**Process**:
+1. Read only the plan title, goal, and task list (not the detail)
+2. Write down 3-5 predicted problem areas (e.g., "missing rollback path", "unclear acceptance criteria for error cases", "MECE overlap between tasks 2 and 4")
+3. Proceed with full review
+4. At verdict time, compare actual findings against predictions
+
+Predictions are internal scaffolding — they appear in the output as a reconciliation summary, not as findings.
 
 ### Simulation Protocol
 
@@ -99,6 +120,27 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 - "I'll trust the references" → Verify if you can. If you can't, evaluate specificity.
 - Do NOT APPROVE without verifying references (when codebase is accessible)
 
+### Pre-Mortem Exercise
+
+**Run after Reference Verification and before applying the 4 Criteria.**
+
+Assume the plan was executed exactly as written — every task completed, every reference followed — and the outcome was a failure. Generate 5-7 concrete, specific failure scenarios. Then check: does the plan address each scenario? If not, it is a candidate finding.
+
+**Distinction from Simulation Protocol**:
+- Simulation Protocol checks "is this executable?" — structural completeness: are references valid, are steps unambiguous, can each task be delegated?
+- Pre-Mortem checks "if executed and failed, HOW does it fail?" — failure imagination: environmental failures, fragile assumptions, timing dependencies, external service failures, implicit knowledge gaps.
+
+These are different questions. Simulation catches missing information; Pre-Mortem catches wrong information and missing resilience.
+
+**Failure scenario categories to consider**:
+- Environmental: wrong environment assumed, missing permissions, missing dependencies
+- Assumption-based: a stated or implicit assumption turns out to be false
+- Timing: steps assumed sequential interact unexpectedly, or parallel steps conflict
+- Dependency: an external service, file, or API referenced does not behave as assumed
+- Scope creep: the plan solves the stated problem but creates a new one adjacent to it
+
+**Gate**: If Pre-Mortem produces a failure scenario that the plan has no answer for and no reference to resolve, classify it as a [CERTAIN] or [POSSIBLE] finding per the Certainty Levels rules and carry it forward. If the plan addresses it (even implicitly), note it as addressed and move on.
+
 ### Certainty Levels
 
 Classify every finding by certainty before it affects the verdict.
@@ -129,6 +171,45 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 - ✅ "TODO 2 and TODO 4 both modify authentication middleware's error handling — MECE overlap" — duplicate scope, blocks parallel delegation
 - ✅ "TODO 3 requires modifying 5 unrelated modules across 3 layers — exceeds atomicity threshold" — not single-delegation completable, needs decomposition
 - ✅ "QA scenario says 'verify the API works correctly' without specific endpoint, status code, or response field assertions" — vague scenario, executor cannot verify
+
+### Self-Audit Refutability Check
+
+**Run after Certainty Classification, before writing the verdict.**
+
+Re-examine every finding. For each one, ask two questions:
+
+1. "Could the plan author immediately refute this with context I might be missing?"
+2. "Is this a flaw in the plan, or a personal preference about how plans should be written?"
+
+**Downgrade rules**:
+- If the author could immediately refute it AND you have no hard evidence → downgrade [CERTAIN] to [POSSIBLE]
+- If it is a preference rather than a genuine gap → downgrade [CERTAIN] to [POSSIBLE]
+- If it is [POSSIBLE] and it is refutable or a preference → remove entirely
+
+**Verdict cascade**: If Self-Audit downgrades all [CERTAIN] findings, re-evaluate the verdict per the Verdict Rules: no [CERTAIN] findings means the verdict becomes APPROVE (no findings) or COMMENT ([POSSIBLE]-only findings). Do not issue REQUEST_CHANGES after Self-Audit has cleared all [CERTAIN] items.
+
+Self-Audit is an internal process. No output section is produced for Self-Audit — its effect shows up only in the final findings list and verdict.
+
+### Realist Check
+
+**Run immediately after Self-Audit, before writing the verdict.**
+
+For each finding that survived Self-Audit, pressure-test whether the severity assignment is realistic:
+
+1. "What is the realistic worst case — not the theoretical maximum, but what would actually happen to a real executor following this plan?"
+2. "Are there mitigating factors the review might be ignoring? (existing conventions, partial documentation elsewhere, low-stakes context)"
+3. "Am I in hunting mode — inflating severity because I found momentum during review?"
+
+**Recalibration rules**:
+- If realistic worst case is minor confusion with an easy workaround → downgrade [CERTAIN] to [POSSIBLE]
+- If mitigating factors substantially reduce the actual blocking risk → downgrade [CERTAIN] to [POSSIBLE] with a "Mitigated by:" statement
+- If the finding survives all three questions at [CERTAIN] → it is correctly rated, keep it
+- **Never-downgrade rule**: findings involving data loss, security breach, or financial impact are NEVER downgraded regardless of mitigation arguments
+- Every downgrade MUST include a "Mitigated by:" statement. No downgrade without an explicit mitigation rationale.
+
+Apply the same verdict cascade as Self-Audit: if Realist Check downgrades all remaining [CERTAIN] findings, re-evaluate per Verdict Rules.
+
+Realist Check is an internal process. No output section is produced — its effect shows up only in the final findings list and verdict.
 
 ## Four Criteria (All Must Pass)
 
@@ -193,6 +274,11 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 ## Final Verdict Format
 
 ```
+**Pre-commitment Predictions**:
+- [predicted area 1]: [confirmed] / [missed] / [unexpected — not predicted but found]
+- [predicted area 2]: [confirmed] / [missed] / [unexpected — not predicted but found]
+- [predicted area 3]: [confirmed] / [missed] / [unexpected — not predicted but found]
+
 **[APPROVE / REQUEST_CHANGES / COMMENT]**
 
 **Justification**: [1-2 sentences]
