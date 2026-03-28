@@ -1,6 +1,6 @@
 ---
 name: resume-apply
-description: "MUST USE this skill when ANY of these appear: (1) a JD or job posting is present — look for keywords like 채용, 채용공고, 주요업무, 자격요건, Requirements, Qualifications, 우대사항, 포지션; (2) user mentions applying to a specific company — '지원', '지원하려고', '지원 준비', '이력서 지원', 'resume apply', 'apply'; (3) user wants to tailor resume for a position — '이력서 맞춤', '이력서 준비', 'JD 이력서', 'JD 기반', 'JD 보고'; (4) user provides a JD via text, file path, or URL; (5) user mentions a company name with intent to apply (e.g. '토스 지원', '네이버 준비', '카카오 이력서'). This skill handles the FULL workflow: receive JD → create branch ({company}/{YYMMDD}) → tailor resume via review-resume → commit → generate PDF → deliver to configured output. Do NOT confuse with review-resume (general review without a target JD) or simple _config.yml edits."
+description: "MUST USE this skill when ANY of these appear: (1) a JD or job posting is present — look for keywords like 채용, 채용공고, 주요업무, 자격요건, Requirements, Qualifications, 우대사항, 포지션; (2) user mentions applying to a specific company — '지원', '지원하려고', '지원 준비', '이력서 지원', 'resume apply', 'apply'; (3) user wants to tailor resume for a position — '이력서 맞춤', '이력서 준비', 'JD 이력서', 'JD 기반', 'JD 보고'; (4) user provides a JD via text, file path, or URL; (5) user mentions a company name with intent to apply (e.g. '토스 지원', '네이버 준비', '카카오 이력서'); (6) user wants to find or browse JDs — '어디 넣을까', '지원할 곳', 'JD 찾아', 'JD 골라', '공고 뭐 있지', '지원 준비 시작'. This skill handles the FULL workflow: acquire JD (provided or discovered from configured source) → create branch ({company}/{YYMMDD}) → tailor resume via review-resume → commit → generate PDF → deliver to configured output. Do NOT confuse with review-resume (general review without a target JD) or simple _config.yml edits."
 ---
 
 # Resume Apply Workflow
@@ -23,18 +23,79 @@ After completing each step, output: `[Step N/7: {step name} ✓]`
 
 Before starting the next step, verify the previous step's completion marker was output. Step 3 (review-resume) often involves extensive user interaction — after it concludes, re-read this Step list to locate your position and continue with Step 4. Steps 5-7 are the most commonly skipped because Step 3 consumes significant context.
 
-### Step 1: Collect JD
+### Step 1: Acquire JD
 
-Receive the Job Description from the user.
+Get the Job Description. Two paths depending on whether the user already has one.
 
-**Input methods:**
-- Text pasted directly into the conversation
+#### 1-A. JD Provided
+
+The user provided a JD directly. Read it using the appropriate method:
+- Text pasted directly → use as-is
 - File path → read with the `Read` tool
 - URL → fetch with `WebFetch`
 
-**Extract from JD:**
-- **Company name**: for the branch name (English lowercase, kebab-case for multi-word names)
-- **Application date**: default to today's date if not specified (`YYMMDD` format)
+Skip to **Extract from JD** below.
+
+#### 1-B. JD Discovery
+
+The user wants to apply but didn't provide a specific JD. Help them find one.
+
+**1. Check Configuration**
+
+Read `$OMT_DIR/resume-apply/config.yaml` for the `jd_source` key.
+
+- **Key exists** → go to step 3 (Browse JD Source)
+- **Key missing** → go to step 2 (First-Run Interview)
+
+**2. First-Run Interview**
+
+Ask the user:
+
+**Q1. JD 저장 위치**
+> "JD 쌓아놓은 곳이 있나요? (로컬 폴더, 노션 페이지, 북마크 파일 등)"
+
+**Q2. 선호 기준** (optional)
+> "보통 어떤 회사나 포지션에 관심 있으세요? JD 고르는 기준이 있나요?"
+>
+> 없으면 최신순으로 보여드립니다.
+
+Save to `$OMT_DIR/resume-apply/config.yaml`:
+```yaml
+jd_source: "<user answer — path, URL, or natural language rule>"
+jd_selection_order: "latest"  # default, or user-specified criteria
+jd_preferences:               # optional — only if user provided
+  target_companies: [...]
+  target_positions: [...]
+  criteria: "<natural language>"
+```
+
+If the config file already has `pdf_output_dir_rule` etc., append the new keys without overwriting existing ones.
+
+**3. Browse JD Source**
+
+Interpret `jd_source` and list available JDs:
+- **Local directory** → list files, read each to extract company/position/date
+- **Natural language rule** (e.g., "노션 취업 준비 페이지") → interpret the rule using available tools. If the source is not directly accessible, ask the user to provide the JD list or content.
+
+Sort by `jd_selection_order` (default: newest first). If `jd_preferences` exists, highlight matching JDs.
+
+Present the list to the user:
+```
+Found 3 JDs in ~/Documents/jd/:
+1. [2026-03-25] 토스 - Backend Engineer
+2. [2026-03-20] 네이버 - Server Developer
+3. [2026-03-15] 카카오 - Platform Engineer
+→ 어떤 JD로 진행할까요?
+```
+
+**4. User Selects**
+
+Read the selected JD and proceed to extraction.
+
+#### Extract from JD
+
+- **Company name**: English lowercase, kebab-case for multi-word names
+- **Application date**: default to today (`YYMMDD` format)
 
 Confirm the extracted company name and date with the user before proceeding.
 
@@ -171,7 +232,7 @@ Before reporting completion to the user, output this checklist:
 
 ```
 [Resume Apply Completion]
-- [ ] Step 1: JD collected, company/date confirmed
+- [ ] Step 1: JD acquired (provided or discovered), company/date confirmed
 - [ ] Step 2: Branch created from main
 - [ ] Step 3: review-resume completed, _config.yml updated
 - [ ] Step 4: Changes committed
