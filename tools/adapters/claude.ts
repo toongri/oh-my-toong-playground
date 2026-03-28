@@ -6,7 +6,7 @@ import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
-import { resolveShellDependencies, syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
+import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 
@@ -185,20 +185,9 @@ export class ClaudeAdapter implements PlatformAdapter {
     dryRun = false,
   ): Promise<void> {
     const targetDir = path.join(targetPath, ".claude", "hooks");
-    // hooksSourceDir is the hooks/ root, two levels up from a lib file or one
-    // level up from a top-level hook. We derive it as the parent of sourcePath's
-    // parent when the hook lives directly in hooks/, but the reliable way is to
-    // resolve from sourcePath: hooks/<name>.sh → hooks/
-    // For directory hooks like persistent-mode/, same logic applies.
-    // We pass this to resolveShellDependencies so relative paths like
-    // "lib/omt-dir.sh" resolve correctly under hooks/.
+    // hooksSourceDir: parent of sourcePath — hooks/ root for top-level files,
+    // or the directory hook itself (its .sh files resolve deps relative to it).
     const hooksSourceDir = path.dirname(sourcePath);
-    // For top-level files, hooksSourceDir IS the hooks/ dir.
-    // For directory hooks, sourcePath IS a directory and we want its parent as
-    // the base for source resolution (since hooks inside the dir use
-    // $SCRIPT_DIR/lib/... which means hooks/<dir>/lib/...).
-    // We'll pass hooksSourceDir as the immediate directory of each .sh file
-    // during directory scanning (handled inline below).
 
     let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
     try {
@@ -213,14 +202,14 @@ export class ClaudeAdapter implements PlatformAdapter {
       if (dryRun) {
         logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
         // Scan .sh files in directory for dependencies (dry-run logging)
-        await syncShellDepsForDir(sourcePath, targetDir, dryRun);
+        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
       } else {
         await syncDirectory(sourcePath, targetHookDir, {
           exclude: ["*.test.ts"],
         });
         logInfo(`Copied: ${displayName}/`);
         // Copy shell dependencies discovered in directory hooks
-        await syncShellDepsForDir(sourcePath, targetDir, dryRun);
+        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
       }
     } else {
       const targetFile = path.join(targetDir, displayName);
