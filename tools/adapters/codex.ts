@@ -18,6 +18,7 @@ import { stringify } from "smol-toml";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { readTextFile } from "../lib/json.ts";
 import { syncDirectory, copyFile } from "../lib/sync-directory.ts";
+import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import type { PlatformConfigResult, PlatformYaml, PluginScope } from "../lib/types.ts";
 import type { PlatformAdapter } from "./types.ts";
 
@@ -154,6 +155,7 @@ export class CodexAdapter implements PlatformAdapter {
     // event filtering is handled by the caller (sync.sh / orchestrator)
     // This method is called only for supported events — just copy the file
     const targetDir = path.join(targetPath, this.configDir, "hooks");
+    const hooksSourceDir = path.dirname(sourcePath);
 
     let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
     try {
@@ -164,21 +166,20 @@ export class CodexAdapter implements PlatformAdapter {
     }
 
     if (stat.isDirectory()) {
+      const targetHookDir = path.join(targetDir, displayName);
       if (dryRun) {
-        logDry(
-          `Copy (directory): ${sourcePath} -> ${path.join(targetDir, displayName)}/`
-        );
+        logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
+        await syncShellDepsForDir(sourcePath, targetDir, dryRun);
         return;
       }
-      await syncDirectory(
-        sourcePath,
-        path.join(targetDir, displayName)
-      );
+      await syncDirectory(sourcePath, targetHookDir);
       logInfo(`Copied: ${displayName}/`);
+      await syncShellDepsForDir(sourcePath, targetDir, dryRun);
     } else {
       const targetFile = path.join(targetDir, displayName);
       if (dryRun) {
         logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+        await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
         return;
       }
       await copyFile(sourcePath, targetFile);
@@ -186,6 +187,7 @@ export class CodexAdapter implements PlatformAdapter {
       const fileStat = await fs.stat(targetFile);
       await fs.chmod(targetFile, fileStat.mode | 0o111);
       logInfo(`Copied: ${displayName}`);
+      await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
     }
   }
 
