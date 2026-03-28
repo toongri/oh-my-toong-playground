@@ -4,7 +4,7 @@
     {
       "id": 1,
       "prompt": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘.\n\nJD 핵심:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- 대용량 트래픽, 동시성 처리, 실시간 데이터 처리\n- 유실없는 데이터 정합성과 신뢰성\n- 트러블슈팅, 성능 튜닝\n\n이력서는 _config.yml에 있어.",
-      "expected_output": "Note load, Pre-eval research (JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, 경력 6개 기준/문제해결 6개 기준, depth-based problem-solving eval, JD keyword matching + content selection, Cross-section consistency check, AI Tone Audit, Note accumulate → Phase 11 output: Summary Table (P0-P3), Section-by-section inline feedback with suggested revisions, Cherry-pick improvement workflow, bridge pattern check, generic opener detection, portfolio theme diversity, skill section placement",
+      "expected_output": "Note load, Pre-eval research (JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, 경력 6개 기준/문제해결 6개 기준, depth-based problem-solving eval, JD keyword matching + content selection, Cross-section consistency check, AI Tone Audit, Note accumulate → Phase 11 output: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, bridge pattern check, generic opener detection, portfolio theme diversity, skill section placement",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: checks $OMT_DIR/review-resume/ and reports note status (loaded or auto-seeding)"},
         {"text": "pre-eval-jd-analysis", "description": "Performs JD analysis: team identification, keyword extraction (technical/domain/culture), implicit problems from JD"},
@@ -34,9 +34,8 @@
         {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — e.g., uses P.A.R.R. dimensions (P1-P5/P6-P8), Type A-D criteria, career/PS evaluation criteria, or depth classification flowchart. Evidence: specific dimension codes or criteria language that only exists in references/."},
         {"text": "ai-tone-audit-phase", "description": "Phase 9 explicitly addresses AI Tone Audit — either invokes Skill(humanizer) or declares intent to invoke it (e.g., '[Would invoke Skill(humanizer)]'). The phase must not be skipped."},
         {"text": "note-accumulate", "description": "Phase 10: proposes note accumulation (new candidates, updates, preferences) and asks for user confirmation"},
-        {"text": "summary-table", "description": "Phase 11 output includes a priority summary table with P0-P3 severity levels, finding numbers, sections, and one-line diagnoses"},
-        {"text": "inline-blockquote-feedback", "description": "Uses markdown blockquote (>) to quote original resume content, followed by severity symbol (✗/⚠/△/ℹ) + finding number + priority label + diagnosis"},
-        {"text": "cherry-pick-workflow", "description": "After all findings, presents improvement selection prompt with options (all/p0/specific numbers/skip/none)"},
+        {"text": "html-summary-section", "description": "Phase 11 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-inline-feedback", "description": "Phase 11 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
         {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"},
@@ -54,7 +53,7 @@
     {
       "id": 2,
       "prompt": "이력서 봐줘. 전반적으로 피드백 부탁해. _config.yml에 있어.",
-      "expected_output": "Note load, Pre-eval research (NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, 경력 6개 기준/문제해결 6개 기준, depth-based problem-solving eval, Cross-section consistency check, AI Tone Audit, Note accumulate → Phase 11 output: Summary Table (P0-P3), Section-by-section inline feedback with suggested revisions, Cherry-pick improvement workflow, bridge pattern check, portfolio theme diversity, skill section placement",
+      "expected_output": "Note load, Pre-eval research (NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, 경력 6개 기준/문제해결 6개 기준, depth-based problem-solving eval, Cross-section consistency check, AI Tone Audit, Note accumulate → Phase 11 output: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, bridge pattern check, portfolio theme diversity, skill section placement",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: checks note directory and reports status"},
         {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified"},
@@ -76,9 +75,8 @@
         {"text": "applies-reference-criteria", "description": "Evaluation uses criteria from reference files — P.A.R.R. dimensions, Type A-D criteria, career/PS evaluation criteria, or depth classification language"},
         {"text": "ai-tone-audit-phase", "description": "Phase 9 addresses AI Tone Audit — invokes or declares intent to invoke Skill(humanizer)"},
         {"text": "note-accumulate", "description": "Proposes note accumulation and asks for user confirmation"},
-        {"text": "summary-table", "description": "Phase 11 output includes a priority summary table with P0-P3 severity levels, finding numbers, sections, and one-line diagnoses"},
-        {"text": "inline-blockquote-feedback", "description": "Uses markdown blockquote (>) to quote original resume content, followed by severity symbol (✗/⚠/△/ℹ) + finding number + priority label + diagnosis"},
-        {"text": "cherry-pick-workflow", "description": "After all findings, presents improvement selection prompt with options (all/p0/specific numbers/skip/none)"},
+        {"text": "html-summary-section", "description": "Phase 11 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-inline-feedback", "description": "Phase 11 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
         {"text": "cross-section-consistency", "description": "Checks that projects/episodes mentioned in self-introduction have corresponding entries in problem-solving or career sections. Flags hooks without backing evidence."},
@@ -94,7 +92,7 @@
     {
       "id": 3,
       "prompt": "이력서 문제해결 섹션만 리뷰해줘. 당근 결제팀 지원하려고 해. _config.yml에 있어.\n\nJD 핵심:\n- 결제 시스템 설계/운영\n- 대규모 트래픽 환경 안정성\n- 장애 대응 및 복원력\n- Kotlin, Spring Boot",
-      "expected_output": "Note load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, note accumulate → Phase 11 output: Summary Table (P0-P3), Section-by-section inline feedback with suggested revisions, Cherry-pick improvement workflow, overview/problem split awareness, portfolio theme diversity",
+      "expected_output": "Note load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, note accumulate → Phase 11 output: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, overview/problem split awareness, portfolio theme diversity",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: loads note and reports problem-solving candidate pool status"},
         {"text": "depth-classification", "description": "Classifies each problem-solving entry by depth (signature/detailed/compressed)"},
@@ -105,9 +103,8 @@
         {"text": "candidate-pool-awareness", "description": "If note has problem-solving candidates, mentions available alternatives or suggests swaps for JD fit"},
         {"text": "note-accumulate", "description": "Proposes accumulating new insights from this review session"},
         {"text": "applies-problem-solving-criteria", "description": "Uses depth classification flowchart, P.A.R.R. dimensions (P1-P5/P6-P8), or career-level criteria from references/problem-solving.md"},
-        {"text": "summary-table", "description": "Phase 11 output includes a priority summary table with P0-P3 severity levels, finding numbers, sections, and one-line diagnoses"},
-        {"text": "inline-blockquote-feedback", "description": "Uses markdown blockquote (>) to quote original resume content, followed by severity symbol (✗/⚠/△/ℹ) + finding number + priority label + diagnosis"},
-        {"text": "cherry-pick-workflow", "description": "After all findings, presents improvement selection prompt with options (all/p0/specific numbers/skip/none)"},
+        {"text": "html-summary-section", "description": "Phase 11 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-inline-feedback", "description": "Phase 11 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
         {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"},
