@@ -448,8 +448,12 @@ When triggered, deliver the full section-specific evaluation first, then deliver
 **Career trigger message:**
 > "경력 섹션 전체 N개 라인 중 X개가 인과 연결/수치 구체성 FAIL입니다. 이 경력 기술은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요."
 
+위 경력 섹션 트리거 충족 시, `Read references/experience-mining.md` Phase 5 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
+
 **Problem-solving trigger message:**
 > "문제해결 섹션 전체 N개 라인 중 X개가 탐색적 인과/근거 깊이 FAIL입니다. 이 문제해결 기술은 사고 과정이 드러나도록 재구성이 필요합니다. 위의 P.A.R.R. Writing Template과 Before/After 예시를 참고하여 재작성해 보세요."
+
+위 문제해결 섹션 트리거 충족 시, `Read references/experience-mining.md` Phase 5 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 Additional trigger conditions (any one also triggers):
 - Section structure needs reorganization (섹션 적합성 failures pointing to section migration)

@@ -518,6 +518,8 @@ After P.A.R.R. evaluation, check the following conditions:
 
 This trigger is not optional. If the P.A.R.R. structure is absent entirely, trigger immediately.
 
+위 트리거 충족 시, `Read references/experience-mining.md` Phase 8 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
+
 ---
 
 ## 16. Red Flags: Signature/Detailed Depth
@@ -680,6 +682,8 @@ After completing 문제해결 6개 기준 evaluation on compressed depth entries
 - **Message to deliver**: "전체 N개 라인 중 탐색적 인과/근거 깊이 FAIL이 과반수입니다 (탐색적 인과: X/N, 근거 깊이: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed Depth 섹션의 템플릿을 참고하여 재작성해 보세요."
 
 This trigger is not optional.
+
+위 트리거 충족 시, `Read references/experience-mining.md` Phase 8 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 ---
 

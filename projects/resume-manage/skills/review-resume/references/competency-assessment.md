@@ -11,7 +11,8 @@
 6. [Career-Level Expectations](#career-level-expectations)
 7. [Rating Scale & Output Format](#rating-scale--output-format)
 8. [Gap Guidance Standards](#gap-guidance-standards)
-9. [Anti-Patterns](#anti-patterns)
+9. [Interview Trigger](#interview-trigger)
+10. [Anti-Patterns](#anti-patterns)
 
 ---
 
@@ -284,6 +285,16 @@ Gap guidance must be specific and actionable — not abstract advice. The candid
 - "C5 WEAK: 팀 기여 활동이 없습니다. 코드 리뷰, 기술 공유 세션, 온보딩 문서 작성 등 팀의 엔지니어링 수준을 높인 사례가 있다면 추가하세요"
 
 The framing principle: gap guidance should say "if you have this experience, here is how to surface it" — prompt, don't assume absence.
+
+---
+
+## Interview Trigger
+
+C1-C5 역량 평가 결과, WEAK 또는 ABSENT로 평가된 축이 해당 career level에서 EXPECTED 또는 REQUIRED인 경우 → `Read references/experience-mining.md` Phase 4 section을 참조하여 Experience Mining Interview를 진행한다.
+
+인터뷰는 WEAK/ABSENT로 평가된 특정 축만을 대상으로 한다 (전체 5개 축이 아님).
+
+유저가 opt-out("다음으로", "넘어가자")하면 위의 Gap Guidance로 대체한다.
 
 ---
 
