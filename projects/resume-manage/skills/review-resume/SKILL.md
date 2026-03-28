@@ -232,7 +232,7 @@ Holistically assess the ENTIRE resume against 5 core competency axes. This answe
 | C4 | Collaboration & Communication — cross-functional, knowledge sharing, stakeholder management |
 | C5 | Learning & Growth — depth of learning, external references, failure-driven growth |
 
-Rate each axis as STRONG / PRESENT / ABSENT with evidence citations. Apply career-level expectations (not all axes need STRONG).
+Rate each axis as STRONG / PRESENT / WEAK / ABSENT / N/A with evidence citations. Apply career-level expectations (not all axes need STRONG).
 
 **Reference:** Read `references/competency-assessment.md` for full checklists, evidence examples, and career-level expectations table.
 
