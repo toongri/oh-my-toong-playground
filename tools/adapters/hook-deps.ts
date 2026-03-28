@@ -122,18 +122,6 @@ export async function syncShellDepsForDir(
     if (entry.name.endsWith("_test.sh")) continue;
 
     const shFile = path.join(hookDir, entry.name);
-    // For files inside a subdirectory hook, source base is the hook dir itself
-    const deps = await resolveShellDependencies(shFile, hookDir);
-    for (const dep of deps) {
-      const relDep = path.relative(hookDir, dep);
-      const targetDep = path.join(targetHooksDir, relDep);
-      if (dryRun) {
-        logDry(`Copy (dep): ${dep} -> ${targetDep}`);
-      } else {
-        await fs.mkdir(path.dirname(targetDep), { recursive: true });
-        await fs.copyFile(dep, targetDep);
-        logInfo(`Copied (dep): ${relDep}`);
-      }
-    }
+    await syncShellDependencies(shFile, hookDir, targetHooksDir, dryRun);
   }
 }
