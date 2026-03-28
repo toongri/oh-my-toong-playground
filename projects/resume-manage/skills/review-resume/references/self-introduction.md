@@ -260,6 +260,12 @@ After evaluating all paragraphs, check this condition:
 
 This trigger is not optional. If the condition is met, deliver the guidance message before proceeding to the section-specific evaluation.
 
+### Experience Mining Interview
+
+위 트리거 조건 충족 시, `Read references/experience-mining.md` Phase 2 section을 참조하여 Experience Mining Interview를 진행한다.
+
+유저가 opt-out("다음으로", "넘어가자")하면 위의 Writing Guidance 메시지로 대체한다.
+
 ---
 
 ## Post-Evaluation Action
