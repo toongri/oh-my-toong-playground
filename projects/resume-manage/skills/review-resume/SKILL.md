@@ -64,7 +64,10 @@ flowchart TB
     A --> B{Self-introduction present?}
     B -->|Yes| C[Self-introduction evaluation: per-type + global]
     B -->|No| D{Target position known?}
-    C --> D
+    C --> CIG{Interview needed?\nPhase 2 trigger}
+    CIG -->|Yes| IG1[Interview Gate:\nRead experience-mining.md Phase 2]
+    CIG -->|No| D
+    IG1 --> D
     D -->|No| E[ASK target position]
     E --> E2[/HALT — wait for user reply/]
     E2 --> F2{Self-introduction was evaluated?}
@@ -73,17 +76,44 @@ flowchart TB
     F --> F3[Writing Guidance Trigger recheck]
     F3 --> CA
     D -->|Yes| CA
-    CA --> G[Section-specific evaluation: 경력 6개 기준 / 문제해결 6개 기준]
-    G --> H[3-level pushback simulation]
+    CA --> CAIG{Interview needed?\nPhase 4 trigger}
+    CAIG -->|Yes| IG2[Interview Gate:\nRead experience-mining.md Phase 4]
+    CAIG -->|No| G
+    IG2 --> G
+    G[Section-specific evaluation: 경력 6개 기준 / 문제해결 6개 기준]
+    G --> GIG{Interview needed?\nPhase 5 trigger}
+    GIG -->|Yes| IG3[Interview Gate:\nRead experience-mining.md Phase 5]
+    GIG -->|No| H
+    IG3 --> H
+    H[3-level pushback simulation]
     H --> I[First-Page Primacy check]
     I --> I2{JD provided?}
     I2 -->|Yes| I3[JD Keyword Matching]
     I2 -->|No| I4[Section fitness check]
-    I3 --> I4
+    I3 --> I3IG{Interview needed?\nPhase 7 trigger}
+    I3IG -->|Yes| IG4[Interview Gate:\nRead experience-mining.md Phase 7]
+    I3IG -->|No| I4
+    IG4 --> I4
     I4 --> PS[Problem-Solving Evaluation: depth-based branching]
-    PS --> O[MUST: AI Tone Audit — Skill humanizer audit mode]
+    PS --> PSIG{Interview needed?\nPhase 8 trigger}
+    PSIG -->|Yes| IG5[Interview Gate:\nRead experience-mining.md Phase 8]
+    PSIG -->|No| O
+    IG5 --> O
+    O[MUST: AI Tone Audit — Skill humanizer audit mode]
     O --> MA[Note Accumulate — candidate/preference persistence]
     MA --> N[Deliver findings + inline writing guidance]
+
+    subgraph Interview Gate Sub-Process
+        IGS1[Trigger check: FAIL condition met?] --> IGS2[Read experience-mining.md\nphase-specific section]
+        IGS2 --> IGS3[Interview loop:\n4-stage bypass protocol]
+        IGS3 --> IGS4{Source found\nor 4-stage exhausted?}
+        IGS4 -->|Source found| IGS5[Add to Discovered Candidates working set]
+        IGS4 -->|Exhausted| IGS6[Mark topic as 진짜 없음]
+        IGS4 -->|User opt-out| IGS7[Fallback to static Writing Guidance]
+        IGS5 --> IGS8[Return to next phase]
+        IGS6 --> IGS8
+        IGS7 --> IGS8
+    end
 ```
 
 ## Workflow Progress Tracking
@@ -96,13 +126,13 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 |-------|---------|---------|-----------|
 | 0 | M0 | Note Load + Auto-Seeding | `references/note-system.md` |
 | 1 | A→B | Pre-Evaluation Research | `references/pre-evaluation-research.md` |
-| 2 | C | Self-Introduction Evaluation (per-type + global) | `references/self-introduction.md` |
+| 2 | C | Self-Introduction Evaluation (per-type + global) | `references/self-introduction.md` + `references/experience-mining.md` (conditional) |
 | 3 | D→E→E2→F2→F→F3 | Target Position Gate + Type C Conditional | `references/self-introduction.md` |
-| 4 | CA | Developer Competency Assessment (C1-C5) | `references/competency-assessment.md` |
-| 5 | G | Section-Specific Evaluation | `references/section-evaluation.md` |
+| 4 | CA | Developer Competency Assessment (C1-C5) | `references/competency-assessment.md` + `references/experience-mining.md` (conditional) |
+| 5 | G | Section-Specific Evaluation | `references/section-evaluation.md` + `references/experience-mining.md` (conditional) |
 | 6 | H | 3-Level Pushback Simulation | `references/section-evaluation.md` |
-| 7 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md` |
-| 8 | PS | Problem-Solving Evaluation (depth: signature → detailed → compressed) | `references/problem-solving.md` |
+| 7 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md` + `references/experience-mining.md` (conditional) |
+| 8 | PS | Problem-Solving Evaluation (depth: signature → detailed → compressed) | `references/problem-solving.md` + `references/experience-mining.md` (conditional) |
 | 9 | O | AI Tone Audit | (inline below) |
 | 10 | MA | Note Accumulate | `references/note-system.md` |
 | 11 | N | Deliver Findings + Inline Writing Guidance | (inline below) |
@@ -112,8 +142,12 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phases 0-10 are internal processing steps — their outputs (progress lines, intermediate evaluations, checklists) are NOT shown to the user. Only Phase 11 produces user-facing output.
-5. Exception: Phase 3 (Target Position Gate), Phase 10 (Note Accumulate), and Phase 11 (Deliver Findings — cherry-pick workflow) require user interaction.
+4. Phases 0-10은 평가 결과를 유저에게 출력하지 않는다. 유저 인터랙션은 다음에서만 발생한다:
+   (a) 정보 게이트 — Phase 3 (target position)
+   (b) 경험 발굴 인터뷰 — Phase 2, 4, 5, 7, 8 (트리거 시). 인터뷰 중 유저에게 보여지는 것: 인터뷰 질문 + 간략한 진단 맥락. 보여지지 않는 것: 내부 PASS/FAIL 집계, Completion Checklist, Phase 진행 마커.
+   (c) 확인 게이트 — Phase 10 (note save)
+   Phase 11이 유일한 평가 결과 전달 Phase이다.
+5. Phase 11 (Deliver Findings — cherry-pick workflow) produces all user-facing evaluation output.
 6. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
@@ -170,6 +204,10 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 **Reference:** Read `references/self-introduction.md` for full type-specific PASS/FAIL examples, composition guide, writing validation checklist, and post-evaluation action patterns.
 
+### Experience Mining Interview
+
+자기소개 절반 이상 FAIL 시 → `Read references/experience-mining.md` Phase 2 section을 참조하여 인터뷰를 진행한다.
+
 `[Phase 2/11: Self-Introduction Evaluation ✓]`
 
 ## Phase 3: Target Position Gate
@@ -197,6 +235,10 @@ Holistically assess the ENTIRE resume against 5 core competency axes. This answe
 Rate each axis as STRONG / PRESENT / ABSENT with evidence citations. Apply career-level expectations (not all axes need STRONG).
 
 **Reference:** Read `references/competency-assessment.md` for full checklists, evidence examples, and career-level expectations table.
+
+### Experience Mining Interview
+
+WEAK/ABSENT 축이 career level 기대치에서 EXPECTED/REQUIRED일 때 → `Read references/experience-mining.md` Phase 4 section을 참조하여 인터뷰를 진행한다.
 
 `[Phase 4/11: Developer Competency Assessment ✓]`
 
@@ -230,6 +272,10 @@ Career and problem-solving sections answer fundamentally different questions:
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, first-page primacy check, JD keyword matching, and writing guidance triggers.
 
+### Experience Mining Interview
+
+경력 또는 문제해결 기준 FAIL률 > 50% 시 → `Read references/experience-mining.md` Phase 5 section을 참조하여 인터뷰를 진행한다.
+
 `[Phase 5/11: Section-Specific Evaluation ✓]`
 
 ## Phase 6: 3-Level Pushback Simulation
@@ -253,6 +299,10 @@ If a candidate cannot answer all 3 levels, that line will hurt more than help.
 Check that the strongest content is on page 1 (the 7.4-second scan zone). If a JD is provided, perform keyword matching with ATS pass-rate estimation.
 
 **Reference:** Read `references/section-evaluation.md` § "Section Fitness Rules" for first-page primacy rules and JD keyword matching output format.
+
+### Experience Mining Interview
+
+JD 제공됨 AND 3개 이상 키워드 누락 AND 해당 키워드에 대한 노트 후보 없음 → `Read references/experience-mining.md` Phase 7 section을 참조하여 인터뷰를 진행한다.
 
 `[Phase 7/11: First-Page Primacy + JD Keyword Matching ✓]`
 
@@ -291,7 +341,52 @@ Compare against career-level recommendations. If any depth category has 0 entrie
 
 **Reference:** Read `references/problem-solving.md` for full P.A.R.R. dimensions, career-level criteria, Before/After examples, writing guidance, and red flags.
 
+### Experience Mining Interview
+
+P.A.R.R. 3개 이상 FAIL 또는 구조 부재 OR 테마 편중 → `Read references/experience-mining.md` Phase 8 section을 참조하여 인터뷰를 진행한다.
+
 `[Phase 8/11: Problem-Solving Evaluation ✓]`
+
+## Discovered Candidates Working Set
+
+인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 10에서 노트 시스템에 영구 저장된다.
+
+### Template
+
+```
+[Discovered Candidates]
+- Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}
+```
+
+예시:
+```
+[Discovered Candidates]
+- Phase 2 | 장애 대응 경험 | Fact: 결제 서버 다운타임 발생 시 수동 failover 수행 | Context: 새벽 2시 온콜, 10분 내 복구 | Verifiable: 다운타임 10분 → 0 SLA 위반 | Target: self-introduction/Type-B
+- Phase 4 | 비용 절감 프로젝트 | Fact: 불필요한 Lambda 호출 제거로 AWS 비용 절감 | Context: 모니터링 중 비정상 패턴 발견 | Verifiable: 월 $800 → $200 (75% 절감) | Target: problem-solving/detailed
+```
+
+### Lifecycle
+
+1. **Created** — 인터뷰 중 소스 품질 기준(Fact + Context + Verifiability) 충족 시 추가
+2. **Consumed** — 이후 Phase에서 노트 풀과 함께 추가 옵션으로 참조 (기존 PASS/FAIL 결과 변경 없음)
+3. **Persisted** — Phase 10 Note Accumulate 시 노트 시스템에 영구 저장
+
+### Consumption Examples
+
+1. **Phase 4 gap-filling**: Phase 2에서 발견된 장애 대응 경험이 C2 Operations WEAK 갭을 채울 수 있음 — Phase 4 평가 시 Working Set 확인 후 해당 Axis 재검토 옵션 제시
+2. **Phase 8 depth classification**: Phase 4에서 발견된 비용 절감 프로젝트가 detailed-depth 엔트리로 진입 가능 — Phase 8 depth 분포 부족 시 Working Set 후보로 추천
+
+### Structural Bound
+
+- **Per-topic**: 4-stage 인터뷰 프로토콜 (직접 질문 → 우회 질문 → 인접 경험 → 일상 업무 탐색)
+- **Per-Phase topics**: 해당 Phase의 FAIL 항목만 대상
+- **Session cap**: 유저 opt-out
+
+### Opt-Out
+
+유저가 '다음으로' 또는 '넘어가자'라고 하면 현재 Phase 인터뷰를 종료하고 기존 Writing Guidance 정적 메시지로 fallback한다. Opt-out은 현재 Phase에만 적용되며, 다른 Phase의 인터뷰에는 영향을 주지 않는다.
+
+---
 
 ## Phase 9: AI Tone Audit
 
@@ -455,6 +550,11 @@ Before delivering Phase 11 output, verify every phase was executed internally. T
 - [ ] Phase 6: 3-Level Pushback Simulation
 - [ ] Phase 7: First-Page Primacy + JD Keyword Matching
 - [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
+- [ ] Phase 2: Experience Mining Interview (DONE/SKIPPED/N/A)
+- [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED/N/A)
+- [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED/N/A)
+- [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED/N/A)
+- [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 - [ ] Phase 10: Note Accumulate (candidate/preference persistence — user confirmation required)
 - [ ] Phase 11: Deliver Findings
