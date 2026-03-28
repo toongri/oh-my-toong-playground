@@ -169,6 +169,8 @@ Classify work intent before analysis.
 | Scope | in-scope and out-of-scope both defined |
 | Dependencies | prerequisites clear and available |
 | Risks | failure modes and mitigations |
+| Rollback Analysis | recovery path if step N fails mid-execution; rollback strategy for partial completion; data/state cleanup on failure (distinct from Risks: Risks identifies failure modes, Rollback evaluates recovery paths after failure) |
+| Feasibility Check | executor has required access (permissions, credentials), knowledge (domain expertise, codebase familiarity), tools (CLI, frameworks, test runners), and context (prior decisions, dependencies) to complete without blocking questions |
 | Success Criteria | measurable outcomes |
 | AC Quality | observable outcomes + concrete verification; MECE assessability: Can each AC be independently implemented? Does the set of ACs cover the full stated scope? Do any ACs describe overlapping behavior? |
 | Edge Cases | unusual but plausible scenarios |
