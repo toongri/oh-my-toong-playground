@@ -23,6 +23,7 @@ import type { PlatformAdapter } from "./types.ts";
 import { parseFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
+import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 
@@ -160,6 +161,7 @@ export class GeminiAdapter implements PlatformAdapter {
     dryRun = false,
   ): Promise<void> {
     const targetDir = path.join(targetPath, ".gemini", "hooks");
+    const hooksSourceDir = path.dirname(sourcePath);
 
     let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
     try {
@@ -173,16 +175,19 @@ export class GeminiAdapter implements PlatformAdapter {
       const targetHookDir = path.join(targetDir, displayName);
       if (dryRun) {
         logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
+        await syncShellDepsForDir(sourcePath, targetDir, dryRun);
       } else {
         await syncDirectory(sourcePath, targetHookDir, {
           exclude: ["*.test.ts"],
         });
         logInfo(`Copied: ${displayName}/`);
+        await syncShellDepsForDir(sourcePath, targetDir, dryRun);
       }
     } else {
       const targetFile = path.join(targetDir, displayName);
       if (dryRun) {
         logDry(`Copy: ${sourcePath} -> ${targetFile}`);
+        await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
       } else {
         await fs.mkdir(targetDir, { recursive: true });
         await fs.copyFile(sourcePath, targetFile);
@@ -190,6 +195,7 @@ export class GeminiAdapter implements PlatformAdapter {
         const tgtStat = await fs.stat(targetFile);
         await fs.chmod(targetFile, tgtStat.mode | 0o111);
         logInfo(`Copied: ${displayName}`);
+        await syncShellDependencies(sourcePath, hooksSourceDir, targetDir, dryRun);
       }
     }
   }
