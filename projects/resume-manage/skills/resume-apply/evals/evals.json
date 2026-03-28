@@ -67,12 +67,49 @@
       ],
       "files": []
     }
+    ,
+    {
+      "id": 4,
+      "prompt": "이력서 지원 준비 좀 해야하는데, JD는 아직 안 골랐어. 뭐 넣을지 같이 좀 봐줘.",
+      "expected_output": "Enters JD Discovery path (1-B). Checks config.yaml for jd_source. If missing, runs first-run interview asking about JD storage location and preferences. After config is set, browses the JD source, presents list sorted by selection order, waits for user to pick one, then proceeds with the full 7-step workflow.",
+      "expectations": [
+        "Does NOT ask user to paste a JD directly — recognizes this as a JD Discovery scenario",
+        "Checks $OMT_DIR/resume-apply/config.yaml for jd_source key",
+        "If jd_source missing: asks Q1 about JD storage location (로컬 폴더, 노션, 북마크 등)",
+        "If jd_source missing: asks Q2 about preferences/selection criteria (optional)",
+        "Saves jd_source and jd_selection_order to config.yaml without overwriting existing keys",
+        "Browses the JD source and presents a list to the user",
+        "Sorts JD list by jd_selection_order (default: newest first)",
+        "Waits for user to select a JD before proceeding",
+        "After JD selection, extracts company name and date as in Path 1-A",
+        "Continues with Step 2 (Create Branch) after JD acquisition"
+      ],
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "지원할 곳 좀 골라야 하는데. config는 이미 설정돼있어.\n\n(config.yaml에 jd_source: ~/Documents/jd/, jd_selection_order: latest 가 있다고 가정)",
+      "expected_output": "Enters JD Discovery path (1-B). Reads existing config.yaml, finds jd_source. Skips interview. Browses ~/Documents/jd/, lists JDs sorted by newest first, presents to user for selection.",
+      "expectations": [
+        "Does NOT ask user to paste a JD directly — recognizes this as a JD Discovery scenario",
+        "Reads $OMT_DIR/resume-apply/config.yaml and finds jd_source key",
+        "Skips first-run interview since jd_source already exists",
+        "Browses the configured jd_source path (~/Documents/jd/)",
+        "Lists available JDs with company/position/date extracted from files",
+        "Sorts by jd_selection_order (latest = newest first)",
+        "Presents numbered list for user to choose from",
+        "Waits for user selection before proceeding",
+        "After selection, extracts company name and date correctly",
+        "Continues with Step 2 (Create Branch) after JD acquisition"
+      ],
+      "files": []
+    }
   ],
   "benchmark_summary": {
-    "iteration": 2,
-    "date": "2026-03-23",
-    "changes": "Added Step 7 (Push & Cleanup), fixed step count 6→7, added git checkout main in Step 2",
-    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 100.1, "avg_tokens": 24072},
-    "without_skill": {"pass_rate": 0.091, "avg_time_seconds": 55.9, "avg_tokens": 17986}
+    "iteration": 3,
+    "date": "2026-03-28",
+    "changes": "Added JD Discovery phase (Step 1-B): config-based JD source interview, browse, and selection. Expanded Step 1 from 'Collect JD' to 'Acquire JD' with two paths (provided vs discovery). Added jd_source/jd_selection_order/jd_preferences config keys. Added evals 4-5 for JD Discovery scenarios.",
+    "with_skill": {"pass_rate": 1.0, "avg_time_seconds": 99.2, "avg_tokens": 25863},
+    "without_skill": {"pass_rate": 0.0, "avg_time_seconds": 90.0, "avg_tokens": 24502}
   }
 }
