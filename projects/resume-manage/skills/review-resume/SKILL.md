@@ -100,8 +100,11 @@ flowchart TB
     PSIG -->|No| O
     IG5 --> O
     O[MUST: AI Tone Audit — Skill humanizer audit mode]
-    O --> MA[Note Accumulate — candidate/preference persistence]
-    MA --> N[Generate HTML Report]
+    O --> N[Generate HTML Report]
+    N --> NA{User approval?}
+    NA -->|Approved| MA[Note Accumulate — candidate/preference persistence]
+    NA -->|Revision requested| RV[Apply revisions → regenerate report]
+    RV --> NA
 
     subgraph Interview Gate Sub-Process
         IGS1[Trigger check: FAIL condition met?] --> IGS2[Read experience-mining.md\nphase-specific section]
@@ -134,8 +137,8 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 | 7 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md` + `references/experience-mining.md` (conditional) |
 | 8 | PS | Problem-Solving Evaluation (depth: signature → detailed → compressed) | `references/problem-solving.md` + `references/experience-mining.md` (conditional) |
 | 9 | O | AI Tone Audit | (inline below) |
-| 10 | MA | Note Accumulate | `references/note-system.md` |
-| 11 | N | Generate HTML Report | (inline below) |
+| 10 | N | Generate HTML Report + User Approval Gate | (inline below) |
+| 11 | MA | Note Accumulate | `references/note-system.md` |
 
 ### Interview Trigger Precedence
 
@@ -150,12 +153,12 @@ Experience Mining Interview의 트리거 조건이 충족되면:
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phases 0-10은 평가 결과를 유저에게 출력하지 않는다. 유저 인터랙션은 다음에서만 발생한다:
+4. Phases 0-9는 평가 결과를 유저에게 출력하지 않는다. 유저 인터랙션은 다음에서만 발생한다:
    (a) 정보 게이트 — Phase 3 (target position)
    (b) 경험 발굴 인터뷰 — Phase 2, 4, 5, 7, 8 (트리거 시). 인터뷰 중 유저에게 보여지는 것: 인터뷰 질문 + 간략한 진단 맥락. 보여지지 않는 것: 내부 PASS/FAIL 집계, Completion Checklist, Phase 진행 마커.
-   (c) 확인 게이트 — Phase 10 (note save)
-   Phase 11이 유일한 평가 결과 전달 Phase이다.
-5. Phase 11 generates an HTML report file and opens it in the browser. No user interaction is required.
+   Phase 10이 유일한 평가 결과 전달 Phase이다.
+5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate (Phase 11) proceeds ONLY after approval.
+6. Phase 11 (Note Accumulate)은 유저가 HTML 리포트를 확인하고 승인한 후에만 진행한다. 승인 전에 노트 저장을 묻지 않는다.
 6. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
@@ -357,7 +360,7 @@ P.A.R.R. 3개 이상 FAIL 또는 구조 부재 OR 테마 편중 → `Read refere
 
 ## Discovered Candidates Working Set
 
-인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 10에서 노트 시스템에 영구 저장된다.
+인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 11에서 노트 시스템에 영구 저장된다.
 
 Working Set의 템플릿, 라이프사이클, 소비 규칙은 `references/experience-mining.md` § "Discovered Candidates Working Set"을 참조한다.
 
@@ -381,46 +384,17 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 `[Phase 9/11: AI Tone Audit ✓]`
 
-## Phase 10: Note Accumulate
+## Phase 10: Generate HTML Report + User Approval Gate
 
-At review completion, accumulate insights from this session into persistent note. Save after user confirmation.
+Compile all evaluation results from Phases 0-9 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. Generate the file, open it, and wait for user approval.
 
-### What to accumulate
+### Approval Gate
 
-1. **New candidates**: Experiences discussed that aren't in the pool → propose new files
-2. **Candidate updates**: Improved expressions → update the existing candidate body
-3. **preferences.md**: New tone/judgment preferences discovered during review
-4. **Research cache**: Company research results → `sources/{company}-{date}.md`
-
-### Output format
-
-Show accumulation summary and wait for user confirmation before writing files:
-
-```
-[Note Accumulate — Phase 10]
-
-New candidates:
-  + problem-solving/search-latency-optimization.md
-
-Updates:
-  ~ problem-solving/payment-order-sync.md → body updated
-
-Preferences:
-  ~ preferences.md → added "impact-first ordering preference"
-
-Research cache:
-  + sources/toss-backend-2025-03.md
-
-Save? (y/n)
-```
-
-**Reference:** Read `references/note-system.md` § "Note Accumulate" for full accumulation rules.
-
-`[Phase 10/11: Note Accumulate ✓]`
-
-## Phase 11: Generate HTML Report
-
-Compile all evaluation results from Phases 0-10 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. No user interaction is required — generate the file and open it.
+After opening the HTML report:
+1. Tell the user the report is open and ask for review
+2. **Wait for user response** — do NOT proceed to Phase 11 automatically
+3. If the user approves → proceed to Phase 11 (Note Accumulate)
+4. If the user requests revisions → apply changes, regenerate the report, and ask again
 
 ### Priority Level Definitions
 
@@ -648,9 +622,48 @@ Example — all-PASS line:
 </html>
 ```
 
+`[Phase 10/11: Generate HTML Report ✓]`
+
+## Phase 11: Note Accumulate
+
+After the user has reviewed the HTML report and approved it, accumulate insights from this session into persistent note. Save after user confirmation.
+
+### What to accumulate
+
+1. **New candidates**: Experiences discussed that aren't in the pool → propose new files
+2. **Candidate updates**: Improved expressions → update the existing candidate body
+3. **preferences.md**: New tone/judgment preferences discovered during review
+4. **Research cache**: Company research results → `sources/{company}-{date}.md`
+
+### Output format
+
+Show accumulation summary and wait for user confirmation before writing files:
+
+```
+[Note Accumulate — Phase 11]
+
+New candidates:
+  + problem-solving/search-latency-optimization.md
+
+Updates:
+  ~ problem-solving/payment-order-sync.md → body updated
+
+Preferences:
+  ~ preferences.md → added "impact-first ordering preference"
+
+Research cache:
+  + sources/toss-backend-2025-03.md
+
+Save? (y/n)
+```
+
+**Reference:** Read `references/note-system.md` § "Note Accumulate" for full accumulation rules.
+
+`[Phase 11/11: Note Accumulate ✓]`
+
 ## Completion Checklist (Internal — do NOT output to user)
 
-Before delivering Phase 11 output, verify every phase was executed internally. Track with DONE or SKIPPED status:
+Before delivering Phase 10 output, verify every phase was executed internally. Track with DONE or SKIPPED status:
 
 ```
 [Review Completion Checklist — INTERNAL]
@@ -669,10 +682,10 @@ Before delivering Phase 11 output, verify every phase was executed internally. T
 - [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
 - [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 10: Note Accumulate (candidate/preference persistence — user confirmation required)
-- [ ] Phase 11: Generate HTML Report
+- [ ] Phase 10: Generate HTML Report + User Approval Gate
+- [ ] Phase 11: Note Accumulate (candidate/preference persistence — user confirmation required)
 ```
 
-A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 9, 10 have NO precondition — always required. Phase 10 counts as DONE even if the user declines to save.
+A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 9, 10 have NO precondition — always required. Phase 11 counts as DONE even if the user declines to save.
 
-If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 11 output.
+If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 10 output.

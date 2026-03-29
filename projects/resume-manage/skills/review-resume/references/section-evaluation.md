@@ -27,7 +27,7 @@
 
 ## Mandatory Evaluation Checklist
 
-아래 항목은 평가 시 반드시 체크하고, 결과를 Phase 11 출력에 포함해야 한다.
+아래 항목은 평가 시 반드시 체크하고, 결과를 Phase 10 출력에 포함해야 한다.
 
 ### 경력 섹션
 - [ ] 6개 기준(인과 연결, 수치 구체성, 역할 명확성, 차별화, 면접 유도력, 섹션 적합성) 각각에 대해 PASS/FAIL 판정
@@ -135,7 +135,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 
 ### Career Evaluation Output Format (Internal)
 
-This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 10.
 
 ```
 [경력 Line] "원문 그대로"
@@ -248,7 +248,7 @@ For problem-solving entries, 면접 심층성 passes only when each alternative 
 
 ### Problem-Solving Evaluation Output Format (Internal)
 
-This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 10.
 
 ```
 [문제해결 Line] "원문 그대로"
@@ -262,7 +262,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 
 ### Summary Count Format (Internal)
 
-This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
+This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 10.
 
 After all lines are evaluated, produce a split summary:
 
