@@ -32,7 +32,7 @@
 
 ## Mandatory Evaluation Checklist
 
-The following items must be checked when evaluating the problem-solving section, and the results must be included in the Phase 11 output.
+The following items must be checked when evaluating the problem-solving section, and the results must be included in the HTML Report output.
 
 ### Structure Check
 - [ ] [문제] verbose verdict — if 2 or more of the following signals apply, recommend splitting [개요]+[문제]:
@@ -522,7 +522,7 @@ After P.A.R.R. evaluation, check the following conditions:
 
 This trigger is not optional. If the P.A.R.R. structure is absent entirely, trigger immediately.
 
-위 트리거 충족 시, `Read references/experience-mining.md` Phase 8 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
+위 트리거 충족 시, `Read references/experience-mining.md` Problem-Solving section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 ---
 
@@ -687,7 +687,7 @@ After completing Problem-Solving 6 Criteria evaluation on compressed depth entri
 
 This trigger is not optional.
 
-위 트리거 충족 시, `Read references/experience-mining.md` Phase 8 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
+위 트리거 충족 시, `Read references/experience-mining.md` Problem-Solving section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 ---
 
@@ -707,7 +707,7 @@ This trigger is not optional.
 
 ## 22. Technical Substance Verification T1-T3
 
-Phase 8 (P.A.R.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a reflection?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
+Problem-Solving Evaluation (P.A.R.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a reflection?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
 
 Key distinction: P1-P8 asks "does this element **exist**?", T1-T3 asks "is this content **correct**?"
 

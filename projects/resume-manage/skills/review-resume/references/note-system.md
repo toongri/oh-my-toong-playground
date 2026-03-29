@@ -11,9 +11,9 @@ Persistent note for resume review. Accumulates candidate pool, user preferences,
 3. [Candidate File Format](#3-candidate-file-format)
 4. [preferences.md Structure](#4-preferencesmd-structure)
 5. [Career-Level Depth Distribution Guide](#5-career-level-depth-distribution-guide)
-6. [Note Load (Phase 0)](#6-note-load-phase-0)
+6. [Note Load](#6-note-load)
 7. [Auto-Seeding (First Run)](#7-auto-seeding-first-run)
-8. [Note Accumulate (Phase 12)](#8-note-accumulate-phase-12)
+8. [Note Accumulate](#8-note-accumulate)
 
 ---
 
@@ -114,7 +114,7 @@ Three sections are required: **Expression Style**, **Judgment Criteria**, **Feed
 
 ---
 
-## 6. Note Load (Phase 0)
+## 6. Note Load
 
 Load persistent note before starting the review. The candidate pool, user preferences, and research cache accumulated from previous reviews are the starting point for the current session.
 
@@ -128,7 +128,7 @@ Load persistent note before starting the review. The candidate pool, user prefer
 
 1. **Scan candidate pool**: Read file lists and frontmatter from `self-introduction/`, `career/`, and `problem-solving/`. Read file bodies only when needed.
 2. **Load preferences.md**: Bring the user's expression preferences, judgment criteria, and feedback history into context.
-3. **Check sources/**: If a target company is specified, check whether an existing research cache is present. If found, reuse it in Phase 1 Step 3 (Company Research).
+3. **Check sources/**: If a target company is specified, check whether an existing research cache is present. If found, reuse it in Pre-Evaluation Research phase Step 3 (Company Research).
 
 Report the load result to the user:
 
@@ -161,7 +161,7 @@ Run only when note is empty. Parse the current resume to auto-generate the initi
 
 ---
 
-## 8. Note Accumulate (Phase 12)
+## 8. Note Accumulate
 
 After the review is complete, accumulate information discovered in this session into persistent note. Save only after user confirmation.
 
@@ -177,14 +177,14 @@ After the review is complete, accumulate information discovered in this session 
    - e.g., "비즈니스 임팩트 숫자를 앞에 배치하는 스타일 선호"
    - e.g., "~했습니다 종결 대신 명사형 종결 선호"
 
-4. **sources/ cache**: Save information gathered during Company Research (Phase 1 Step 3) as `sources/{company}-{date}.md`
+4. **sources/ cache**: Save information gathered during Company Research (Pre-Evaluation Research phase Step 3) as `sources/{company}-{date}.md`
 
 ### Accumulation Output
 
 Show a summary of changes to the user and wait for confirmation before saving:
 
 ```
-[Note Accumulate — Phase 12]
+[Note Accumulate]
 
 New Candidates:
   + problem-solving/search-latency-optimization.md (tags: [검색, p99, 인덱스])

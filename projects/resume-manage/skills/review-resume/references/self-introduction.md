@@ -21,7 +21,7 @@
 
 ## Mandatory Evaluation Checklist
 
-아래 항목은 자기소개 평가 시 반드시 체크하고, 결과를 Phase 11 출력에 포함해야 한다.
+아래 항목은 자기소개 평가 시 반드시 체크하고, 결과를 HTML Report 출력에 포함해야 한다.
 
 ### Type A (Action Principle)
 - [ ] Bridge 3박자 구조: bold 오프너 → 이유(브릿지) → 에피소드. 셋 중 하나라도 빠지면 FLAG
@@ -262,7 +262,7 @@ This trigger is not optional. If the condition is met, proceed to the Experience
 
 ### Experience Mining Interview
 
-위 트리거 조건 충족 시, `Read references/experience-mining.md` Phase 2 section을 참조하여 Experience Mining Interview를 진행한다.
+위 트리거 조건 충족 시, `Read references/experience-mining.md` Self-Introduction section을 참조하여 Experience Mining Interview를 진행한다.
 
 유저가 opt-out("다음으로", "넘어가자")하면 위의 Writing Guidance 메시지로 대체한다.
 
