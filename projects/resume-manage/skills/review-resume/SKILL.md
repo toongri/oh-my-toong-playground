@@ -159,7 +159,7 @@ Experience Mining Interview의 트리거 조건이 충족되면:
    Phase 10이 유일한 평가 결과 전달 Phase이다.
 5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate (Phase 11) proceeds ONLY after approval.
 6. Phase 11 (Note Accumulate)은 유저가 HTML 리포트를 확인하고 승인한 후에만 진행한다. 승인 전에 노트 저장을 묻지 않는다.
-6. The Completion Checklist is internal — do NOT output it to the user.
+7. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
 
@@ -663,7 +663,7 @@ Save? (y/n)
 
 ## Completion Checklist (Internal — do NOT output to user)
 
-Before delivering Phase 10 output, verify every phase was executed internally. Track with DONE or SKIPPED status:
+Before delivering Phase 10 output, verify every phase was completed or has a valid skip reason. Track with DONE or SKIPPED status:
 
 ```
 [Review Completion Checklist — INTERNAL]
@@ -686,6 +686,6 @@ Before delivering Phase 10 output, verify every phase was executed internally. T
 - [ ] Phase 11: Note Accumulate (candidate/preference persistence — user confirmation required)
 ```
 
-A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 9, 10 have NO precondition — always required. Phase 11 counts as DONE even if the user declines to save.
+A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 9, 10 have NO precondition — always required. Phase 11 has a strict precondition: User Approval in Phase 10. Phase 11 counts as DONE even if the user declines to save.
 
 If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 10 output.
