@@ -1,5 +1,5 @@
 import { ParsedInput, HookInput, HookOutput } from './types.ts';
-import { buildCatalog, formatCatalog, getAvailableHashmapEntries } from './catalog.ts';
+import { buildCatalog, formatCatalog } from './catalog.ts';
 import { scanSkillDirectories, readEnabledPlugins } from './scanner.ts';
 
 export async function readStdin(): Promise<string> {
@@ -40,11 +40,8 @@ export async function main(): Promise<void> {
     // Build catalog from hashmap + discovered skills
     const entries = buildCatalog(discoveredSkills, enabledPlugins);
 
-    // Resolve available hashmap entries for situation-based formatting
-    const availableHashmap = getAvailableHashmapEntries(discoveredSkills, Array.from(enabledPlugins));
-
     // Format catalog text
-    const additionalContext = formatCatalog(entries, availableHashmap);
+    const additionalContext = formatCatalog(entries);
 
     // Output JSON
     const output: HookOutput = {

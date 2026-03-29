@@ -169,12 +169,12 @@ export class CodexAdapter implements PlatformAdapter {
       const targetHookDir = path.join(targetDir, displayName);
       if (dryRun) {
         logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
-        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
+        await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
         return;
       }
       await syncDirectory(sourcePath, targetHookDir);
       logInfo(`Copied: ${displayName}/`);
-      await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
+      await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
     } else {
       const targetFile = path.join(targetDir, displayName);
       if (dryRun) {
