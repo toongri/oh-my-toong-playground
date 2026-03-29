@@ -97,9 +97,10 @@ flowchart TB
     I4 --> PS[Problem-Solving Evaluation: depth-based branching]
     PS --> PSIG{Interview needed?\nPhase 8 trigger}
     PSIG -->|Yes| IG5[Interview Gate:\nRead experience-mining.md Phase 8]
-    PSIG -->|No| O
-    IG5 --> O
-    O[MUST: AI Tone Audit — Skill humanizer audit mode]
+    PSIG -->|No| TS
+    IG5 --> TS
+    TS[Technical Substance Verification: T1-T3]
+    TS --> O[MUST: AI Tone Audit — Skill humanizer audit mode]
     O --> N[Generate HTML Report]
     N --> NA{User approval?}
     NA -->|Approved| MA[Note Accumulate — candidate/preference persistence]
@@ -121,7 +122,7 @@ flowchart TB
 
 ## Workflow Progress Tracking
 
-The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensive back-and-forth — user discussion during self-introduction alone can span dozens of messages. Without explicit tracking, later phases are routinely skipped.
+The Evaluation Protocol defines 13 phases (0-12). Resume reviews involve extensive back-and-forth — user discussion during self-introduction alone can span dozens of messages. Without explicit tracking, later phases are routinely skipped.
 
 ### Phase Map
 
@@ -136,9 +137,10 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 | 6 | H | 3-Level Pushback Simulation | `references/section-evaluation.md` |
 | 7 | I→I2→I3→I4 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md` + `references/experience-mining.md` (conditional) |
 | 8 | PS | Problem-Solving Evaluation (depth: signature → detailed → compressed) | `references/problem-solving.md` + `references/experience-mining.md` (conditional) |
-| 9 | O | AI Tone Audit | (inline below) |
-| 10 | N | Generate HTML Report + User Approval Gate | (inline below) |
-| 11 | MA | Note Accumulate | `references/note-system.md` |
+| 9 | TS | Technical Substance Verification (T1-T3) | `references/problem-solving.md` §22-25 |
+| 10 | O | AI Tone Audit | (inline below) |
+| 11 | N | Generate HTML Report + User Approval Gate | (inline below) |
+| 12 | MA | Note Accumulate | `references/note-system.md` |
 
 ### Interview Trigger Precedence
 
@@ -153,12 +155,12 @@ Experience Mining Interview의 트리거 조건이 충족되면:
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phases 0-9는 평가 결과를 유저에게 출력하지 않는다. 유저 인터랙션은 다음에서만 발생한다:
+4. Phases 0-10은 평가 결과를 유저에게 출력하지 않는다. 유저 인터랙션은 다음에서만 발생한다:
    (a) 정보 게이트 — Phase 3 (target position)
    (b) 경험 발굴 인터뷰 — Phase 2, 4, 5, 7, 8 (트리거 시). 인터뷰 중 유저에게 보여지는 것: 인터뷰 질문 + 간략한 진단 맥락. 보여지지 않는 것: 내부 PASS/FAIL 집계, Completion Checklist, Phase 진행 마커.
-   Phase 10이 유일한 평가 결과 전달 Phase이다.
-5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate (Phase 11) proceeds ONLY after approval.
-6. Phase 11 (Note Accumulate)은 유저가 HTML 리포트를 확인하고 승인한 후에만 진행한다. 승인 전에 노트 저장을 묻지 않는다.
+   Phase 11이 유일한 평가 결과 전달 Phase이다.
+5. Phase 11 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate (Phase 12) proceeds ONLY after approval.
+6. Phase 12 (Note Accumulate)은 유저가 HTML 리포트를 확인하고 승인한 후에만 진행한다. 승인 전에 노트 저장을 묻지 않는다.
 7. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
@@ -183,7 +185,7 @@ Report note status to user:
 
 **Reference:** Read `references/note-system.md` for full auto-seeding procedure and file format details.
 
-`[Phase 0/11: Note Load ✓]`
+`[Phase 0/12: Note Load ✓]`
 
 ## Phase 1: Pre-Evaluation Research
 
@@ -196,7 +198,7 @@ Research results feed into ALL paragraph type selections (A, B, C, D). Check `so
 
 **Reference:** Read `references/pre-evaluation-research.md` for the full research protocol.
 
-`[Phase 1/11: Pre-Evaluation Research ✓]`
+`[Phase 1/12: Pre-Evaluation Research ✓]`
 
 ## Phase 2: Self-Introduction Evaluation
 
@@ -219,7 +221,7 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 자기소개 절반 이상 FAIL 시 → `Read references/experience-mining.md` Phase 2 section을 참조하여 인터뷰를 진행한다.
 
-`[Phase 2/11: Self-Introduction Evaluation ✓]`
+`[Phase 2/12: Self-Introduction Evaluation ✓]`
 
 ## Phase 3: Target Position Gate
 
@@ -229,7 +231,7 @@ If the user hasn't stated the target position/company, ASK and HALT. After recei
 
 **Reference:** Type C conditional logic is in `references/self-introduction.md` § "Type C Conditional Evaluation".
 
-`[Phase 3/11: Target Position Gate ✓]`
+`[Phase 3/12: Target Position Gate ✓]`
 
 ## Phase 4: Developer Competency Assessment (C1-C5)
 
@@ -251,7 +253,7 @@ Rate each axis as STRONG / PRESENT / WEAK / ABSENT / N/A with evidence citations
 
 WEAK/ABSENT 축이 career level 기대치에서 EXPECTED/REQUIRED일 때 → `Read references/experience-mining.md` Phase 4 section을 참조하여 인터뷰를 진행한다.
 
-`[Phase 4/11: Developer Competency Assessment ✓]`
+`[Phase 4/12: Developer Competency Assessment ✓]`
 
 ## Phase 5: Section-Specific Evaluation
 
@@ -259,27 +261,27 @@ Career and problem-solving sections answer fundamentally different questions:
 - **경력**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
 - **문제해결**: "How does this person approach problems?" — thought process and depth. Entries are engineering thinking **proof**.
 
-### Career Dimensions (경력 6개 기준)
+### Career Dimensions
 
-| # | 기준 | Question |
-|---|------|----------|
-| 인과 연결 | Linear Causation | Goal → action → outcome connected in one line? |
-| 수치 구체성 | Metric Specificity | Verifiable numbers (before → after, absolute values)? |
-| 역할 명확성 | Role Clarity | Personal contribution distinguishable from team output? |
-| 차별화 | Standard Transcendence | Beyond industry standard? |
-| 면접 유도력 | Hook Potential | Does this line provoke interviewer curiosity? |
-| 섹션 적합성 | Section Fitness | Achievement statement, not problem narrative? |
+| Criterion | Question |
+|-----------|----------|
+| Linear Causation | Goal → action → outcome connected in one line? |
+| Metric Specificity | Verifiable numbers (before → after, absolute values)? |
+| Role Clarity | Personal contribution distinguishable from team output? |
+| Standard Transcendence | Beyond industry standard? |
+| Hook Potential | Does this line provoke interviewer curiosity? |
+| Section Fitness | Achievement statement, not problem narrative? |
 
-### Problem-Solving Dimensions (문제해결 6개 기준)
+### Problem-Solving Dimensions
 
-| # | 기준 | Question |
-|---|------|----------|
-| 탐색적 인과 | Diagnostic Causation | Problem detection → root cause → solution chain clear? |
-| 근거 깊이 | Evidence Depth | Failure data, alternative comparison, verification data present? |
-| 사고 귀속 | Thought Visibility | Is the reasoning process visible, not just the result? |
-| 대안 비교 | Standard Transcendence | Beyond textbook solutions? |
-| 면접 심층성 | Hook Potential | Does this entry provoke follow-up questions? |
-| 섹션 적합성 | Section Fitness | Problem narrative, not achievement statement? |
+| Criterion | Question |
+|-----------|----------|
+| Diagnostic Causation | Problem detection → root cause → solution chain clear? |
+| Evidence Depth | Failure data, alternative comparison, verification data present? |
+| Thought Visibility | Is the reasoning process visible, not just the result? |
+| Standard Transcendence | Beyond textbook solutions? |
+| Hook Potential | Does this entry provoke follow-up questions? |
+| Section Fitness | Problem narrative, not achievement statement? |
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, first-page primacy check, JD keyword matching, and writing guidance triggers.
 
@@ -287,7 +289,7 @@ Career and problem-solving sections answer fundamentally different questions:
 
 경력 또는 문제해결 기준 FAIL률 > 50% 시 → `Read references/experience-mining.md` Phase 5 section을 참조하여 인터뷰를 진행한다.
 
-`[Phase 5/11: Section-Specific Evaluation ✓]`
+`[Phase 5/12: Section-Specific Evaluation ✓]`
 
 ## Phase 6: 3-Level Pushback Simulation
 
@@ -303,7 +305,7 @@ If a candidate cannot answer all 3 levels, that line will hurt more than help.
 
 **Reference:** Read `references/section-evaluation.md` § "3-Level Pushback Simulation" for the full simulation protocol.
 
-`[Phase 6/11: 3-Level Pushback Simulation ✓]`
+`[Phase 6/12: 3-Level Pushback Simulation ✓]`
 
 ## Phase 7: First-Page Primacy + JD Keyword Matching
 
@@ -315,7 +317,7 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 JD 제공됨 AND 3개 이상 키워드 누락 AND 해당 키워드에 대한 노트 후보 없음 → `Read references/experience-mining.md` Phase 7 section을 참조하여 인터뷰를 진행한다.
 
-`[Phase 7/11: First-Page Primacy + JD Keyword Matching ✓]`
+`[Phase 7/12: First-Page Primacy + JD Keyword Matching ✓]`
 
 ## Phase 8: Problem-Solving Evaluation
 
@@ -356,17 +358,49 @@ Compare against career-level recommendations. If any depth category has 0 entrie
 
 P.A.R.R. 3개 이상 FAIL 또는 구조 부재 OR 테마 편중 → `Read references/experience-mining.md` Phase 8 section을 참조하여 인터뷰를 진행한다.
 
-`[Phase 8/11: Problem-Solving Evaluation ✓]`
+`[Phase 8/12: Problem-Solving Evaluation ✓]`
 
 ## Discovered Candidates Working Set
 
-인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 11에서 노트 시스템에 영구 저장된다.
+인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 12에서 노트 시스템에 영구 저장된다.
 
 Working Set의 템플릿, 라이프사이클, 소비 규칙은 `references/experience-mining.md` § "Discovered Candidates Working Set"을 참조한다.
 
 ---
 
-## Phase 9: AI Tone Audit
+## Phase 9: Technical Substance Verification
+
+Phase 8이 서사 **구조**를 검증했다면(Why 체인이 있는가? 실패 호가 있는가?), Phase 9는 서사 안의 기술적 **실체**를 검증한다(그 Why가 기술적으로 맞는가? 그 선택이 합리적인가?).
+
+Phase 8에서 P.A.R.R. PASS를 받은 엔트리도 Phase 9에서 T1-T3 FAIL이 될 수 있다. 두 Phase는 독립된 관심사이다.
+
+### T1-T3 Evaluation Dimensions
+
+| # | Dimension | Question |
+|---|-----------|----------|
+| T1 | 기술적 정합성 | 기술 클레임이 내적으로 일관되고, 명시된 원인이 명시된 결과를 실제로 산출할 수 있는가? |
+| T2 | 선택 합리성 | 각 기술/접근법 선택이 이 문제의 구체적 제약 조건에 근거한 합리적 기반을 갖는가? |
+| T3 | 트레이드오프 진정성 | 명시된 트레이드오프가 이 문제 맥락에서 실제적이고 구체적인가, 교과서 암기인가? |
+
+### Depth Gating
+
+- **signature**: T1, T2, T3 전체 적용
+- **detailed**: T1, T2만 적용 (T2는 선택 언급 시)
+- **compressed**: 미적용
+
+### Evaluation Flow
+
+1. Phase 8에서 depth 분류된 각 엔트리에 대해 T1-T3을 순차 적용
+2. FAIL 판정 시 구체적 지적: 어떤 클레임이, 왜 문제인지, 면접에서 어떻게 깨지는지
+3. signature depth 엔트리에서 T1-T3 중 2개 이상 FAIL → HTML 리포트에서 **P0 (반드시 수정)** 분류
+
+**Reference:** Read `references/problem-solving.md` §22-25 for full T1-T3 PASS/FAIL examples, depth gating table, output format, and writing guidance trigger.
+
+`[Phase 9/12: Technical Substance Verification ✓]`
+
+---
+
+## Phase 10: AI Tone Audit
 
 After all evaluations are complete, perform an AI Tone Audit.
 
@@ -382,28 +416,28 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 **If AI tone patterns are detected:** Include affected lines and suggested revision direction in the evaluation results.
 **If no AI tone patterns are detected:** Skip this section in the output.
 
-`[Phase 9/11: AI Tone Audit ✓]`
+`[Phase 10/12: AI Tone Audit ✓]`
 
-## Phase 10: Generate HTML Report + User Approval Gate
+## Phase 11: Generate HTML Report + User Approval Gate
 
-Compile all evaluation results from Phases 0-9 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. Generate the file, open it, and wait for user approval.
+Compile all evaluation results from Phases 0-10 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. Generate the file, open it, and wait for user approval.
 
 ### Approval Gate
 
 After opening the HTML report:
 1. Tell the user the report is open and ask for review
-2. **Wait for user response** — do NOT proceed to Phase 11 automatically
-3. If the user approves → proceed to Phase 11 (Note Accumulate)
+2. **Wait for user response** — do NOT proceed to Phase 12 automatically
+3. If the user approves → proceed to Phase 12 (Note Accumulate)
 4. If the user requests revisions → apply changes, regenerate the report, and ask again
 
 ### Priority Level Definitions
 
-| Level | 의미 | 기준 |
-|-------|------|------|
-| **P0** | 반드시 수정 | 면접에서 즉시 깨짐 — 성과 없음, 인과 없음, 표준을 성과로 제시, cross-section 불일치 |
-| **P1** | 수정 권장 | 면접에서 약점 노출 — 수치 불완전, 역할 불명확, 깊이 부족, AI 톤 감지 |
-| **P2** | 개선 가능 | 더 좋아질 수 있음 — 표현 개선, JD 키워드 추가, 순서 변경, hook potential 강화 |
-| **P3** | 참고 | 스타일 선호 — 어조, 포맷팅, 사소한 표현 차이 |
+| Level | Meaning | Criteria |
+|-------|---------|----------|
+| **P0** | Must Fix | 면접에서 즉시 깨짐 — 성과 없음, 인과 없음, 표준을 성과로 제시, cross-section 불일치 |
+| **P1** | Recommended Fix | 면접에서 약점 노출 — 수치 불완전, 역할 불명확, 깊이 부족, AI 톤 감지 |
+| **P2** | Can Improve | 더 좋아질 수 있음 — 표현 개선, JD 키워드 추가, 순서 변경, hook potential 강화 |
+| **P3** | Reference | 스타일 선호 — 어조, 포맷팅, 사소한 표현 차이 |
 
 ### File Path
 
@@ -427,7 +461,7 @@ Before inserting any resume text into the HTML, apply these substitutions:
 
 ### Strength Comment Selection Criteria
 
-개별 경력 bullet 또는 문제해결 엔트리 단위로, 해당 섹션 평가 6개 기준 전부 PASS한 항목만 `.comment-strength` 표시. C1-C5 STRONG 판정은 C1-C5 섹션 내에서 시각 강조.
+Per career bullet or problem-solving entry, only items that PASS all 6 section evaluation criteria get `.comment-strength`. C1-C5 STRONG ratings are visually emphasized within the C1-C5 section.
 
 ### HTML Skeleton Template
 
@@ -438,7 +472,7 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <title>이력서 리뷰 — <!-- CANDIDATE NAME --></title>
+  <title>Resume Review Report — <!-- CANDIDATE NAME --></title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -533,20 +567,20 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
 <body>
 
 <!-- HEADER -->
-<h1>이력서 리뷰 보고서</h1>
+<h1>Resume Review Report</h1>
 <p>
-  <strong>후보자:</strong> <!-- CANDIDATE NAME --><br>
-  <strong>지원 직군:</strong> <!-- TARGET POSITION --><br>
-  <strong>리뷰 일시:</strong> <!-- REVIEW DATETIME --><br>
-  <strong>JD 참조:</strong> <!-- JD REFERENCE OR "없음" -->
+  <strong>Candidate:</strong> <!-- CANDIDATE NAME --><br>
+  <strong>Target Position:</strong> <!-- TARGET POSITION --><br>
+  <strong>Review Date:</strong> <!-- REVIEW DATETIME --><br>
+  <strong>JD Reference:</strong> <!-- JD REFERENCE OR "없음" -->
 </p>
 
 <!-- C1-C5 SECTION -->
-<h2>역량 평가 (C1-C5)</h2>
+<h2>Competency Assessment (C1-C5)</h2>
 <p>5점 척도: <span class="rating-strong">STRONG</span> / <span class="rating-present">PRESENT</span> / <span class="rating-weak">WEAK</span> / <span class="rating-absent">ABSENT</span> / <span class="rating-na">N/A</span></p>
 <table>
   <thead>
-    <tr><th>역량</th><th>평가</th><th>근거</th></tr>
+    <tr><th>Competency</th><th>Rating</th><th>Evidence</th></tr>
   </thead>
   <tbody>
     <!-- For each C1-C5 competency, output one row. Example:
@@ -560,7 +594,7 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
 </table>
 
 <!-- RESUME SECTIONS -->
-<h2>섹션별 인라인 피드백</h2>
+<h2>Section Inline Feedback</h2>
 <!-- Repeat the following block for each resume section in order:
      자기소개 → 경력 각 회사 → 문제해결 각 엔트리 → 기술스택/기타 -->
 
@@ -590,17 +624,17 @@ Example — all-PASS line:
 -->
 
 <!-- SUMMARY FOOTER -->
-<h2>리뷰 요약</h2>
+<h2>Review Summary</h2>
 <div class="stat-grid">
-  <div class="stat-box"><div class="count" style="color:#c0392b;"><!-- P0 COUNT --></div><div class="label">P0 반드시 수정</div></div>
-  <div class="stat-box"><div class="count" style="color:#e67e22;"><!-- P1 COUNT --></div><div class="label">P1 수정 권장</div></div>
-  <div class="stat-box"><div class="count" style="color:#f1c40f;"><!-- P2 COUNT --></div><div class="label">P2 개선 가능</div></div>
-  <div class="stat-box"><div class="count" style="color:#95a5a6;"><!-- P3 COUNT --></div><div class="label">P3 참고</div></div>
-  <div class="stat-box"><div class="count"><!-- TOTAL COUNT --></div><div class="label">전체</div></div>
+  <div class="stat-box"><div class="count" style="color:#c0392b;"><!-- P0 COUNT --></div><div class="label">P0 Must Fix</div></div>
+  <div class="stat-box"><div class="count" style="color:#e67e22;"><!-- P1 COUNT --></div><div class="label">P1 Recommended Fix</div></div>
+  <div class="stat-box"><div class="count" style="color:#f1c40f;"><!-- P2 COUNT --></div><div class="label">P2 Can Improve</div></div>
+  <div class="stat-box"><div class="count" style="color:#95a5a6;"><!-- P3 COUNT --></div><div class="label">P3 Reference</div></div>
+  <div class="stat-box"><div class="count"><!-- TOTAL COUNT --></div><div class="label">Total</div></div>
 </div>
 <table>
   <thead>
-    <tr><th>P</th><th>#</th><th>섹션</th><th>한 줄 진단</th></tr>
+    <tr><th>P</th><th>#</th><th>Section</th><th>One-Line Diagnosis</th></tr>
   </thead>
   <tbody>
     <!-- One row per finding, in resume section order. Example:
@@ -622,9 +656,9 @@ Example — all-PASS line:
 </html>
 ```
 
-`[Phase 10/11: Generate HTML Report ✓]`
+`[Phase 11/12: Generate HTML Report ✓]`
 
-## Phase 11: Note Accumulate
+## Phase 12: Note Accumulate
 
 After the user has reviewed the HTML report and approved it, accumulate insights from this session into persistent note. Save after user confirmation.
 
@@ -640,7 +674,7 @@ After the user has reviewed the HTML report and approved it, accumulate insights
 Show accumulation summary and wait for user confirmation before writing files:
 
 ```
-[Note Accumulate — Phase 11]
+[Note Accumulate — Phase 12]
 
 New candidates:
   + problem-solving/search-latency-optimization.md
@@ -659,11 +693,11 @@ Save? (y/n)
 
 **Reference:** Read `references/note-system.md` § "Note Accumulate" for full accumulation rules.
 
-`[Phase 11/11: Note Accumulate ✓]`
+`[Phase 12/12: Note Accumulate ✓]`
 
 ## Completion Checklist (Internal — do NOT output to user)
 
-Before delivering Phase 10 output, verify every phase was completed or has a valid skip reason. Track with DONE or SKIPPED status:
+Before delivering Phase 11 output, verify every phase was completed or has a valid skip reason. Track with DONE or SKIPPED status:
 
 ```
 [Review Completion Checklist — INTERNAL]
@@ -681,11 +715,12 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
 - [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 10: Generate HTML Report + User Approval Gate
-- [ ] Phase 11: Note Accumulate (candidate/preference persistence — user confirmation required)
+- [ ] Phase 9: Technical Substance Verification (T1-T3: 기술적 정합성, 선택 합리성, 트레이드오프 진정성)
+- [ ] Phase 10: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
+- [ ] Phase 11: Generate HTML Report + User Approval Gate
+- [ ] Phase 12: Note Accumulate (candidate/preference persistence — user confirmation required)
 ```
 
-A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 9, 10 have NO precondition — always required. Phase 11 has a strict precondition: User Approval in Phase 10. Phase 11 counts as DONE even if the user declines to save.
+A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 10, 11 have NO precondition — always required. Phase 12 has a strict precondition: User Approval in Phase 11. Phase 12 counts as DONE even if the user declines to save.
 
 If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 10 output.

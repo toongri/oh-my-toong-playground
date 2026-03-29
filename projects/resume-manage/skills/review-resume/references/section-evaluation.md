@@ -3,14 +3,14 @@
 ## Table of Contents
 
 1. [Career vs Problem-Solving Distinction](#1-career-vs-problem-solving-distinction)
-2. [Career Section Evaluation (경력 평가 기준)](#2-career-section-evaluation-경력-평가-기준)
+2. [Career Section Evaluation](#2-career-section-evaluation)
    - [Dimension Table](#dimension-table)
    - [PASS / FAIL Examples](#pass--fail-examples)
    - [Output Format](#career-evaluation-output-format)
-3. [Problem-Solving Section Evaluation (문제해결 평가 기준)](#3-problem-solving-section-evaluation-문제해결-평가-기준)
+3. [Problem-Solving Section Evaluation](#3-problem-solving-section-evaluation)
    - [Dimension Table](#dimension-table-1)
    - [PASS / FAIL Examples](#pass--fail-examples-1)
-   - [면접 심층성 Enhancement: Trade-off Richness Check](#면접-심층성-enhancement-trade-off-richness-check)
+   - [Interview Depth Enhancement: Trade-off Richness Check](#interview-depth-enhancement-trade-off-richness-check)
    - [Output Format](#problem-solving-evaluation-output-format)
    - [Summary Count Format](#summary-count-format)
 4. [Section Fitness Rules](#4-section-fitness-rules)
@@ -29,24 +29,24 @@
 
 아래 항목은 평가 시 반드시 체크하고, 결과를 Phase 10 출력에 포함해야 한다.
 
-### 경력 섹션
-- [ ] 6개 기준(인과 연결, 수치 구체성, 역할 명확성, 차별화, 면접 유도력, 섹션 적합성) 각각에 대해 PASS/FAIL 판정
-- [ ] 면접 유도력이 높은 bullet과 낮은 bullet 식별
-- [ ] 섹션 적합성 위반 시 문제해결 섹션으로 이동 권장
+### Career Section
+- [ ] 6개 기준(Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness) 각각에 대해 PASS/FAIL 판정
+- [ ] Hook Potential이 높은 bullet과 낮은 bullet 식별
+- [ ] Section Fitness 위반 시 문제해결 섹션으로 이동 권장
 
-### 문제해결 섹션
-- [ ] 6개 기준(탐색적 인과, 근거 깊이, 사고 귀속, 대안 비교, 면접 심층성, 섹션 적합성) 각각에 대해 PASS/FAIL 판정
-- [ ] 면접 심층성: 3단계 pushback 시뮬레이션 결과 포함
+### Problem-Solving Section
+- [ ] 6개 기준(Diagnostic Causation, Evidence Depth, Thought Visibility, Beyond-Standard Reasoning, Interview Depth, Section Fitness) 각각에 대해 PASS/FAIL 판정
+- [ ] Interview Depth: 3단계 pushback 시뮬레이션 결과 포함
 
-### 기술 섹션 배치
+### Technical Stack Placement
 - [ ] 기술 섹션이 자기소개 바로 아래에 위치하는지 확인 (JD 기술 스택 매칭이 7초 스캔에 포함되어야 ATS+리크루터 모두 유리)
 - [ ] PASS: 자기소개 직후 / WARNING: 2번째 이후 / FAIL: 3번째 이후 또는 페이지 하단
 
-### 포트폴리오 테마 다양성
-- [ ] 문제해결 엔트리의 테마 분류 (정합성, 성능, 안정성, 비즈니스, 데이터 파이프라인 등)
+### Portfolio Theme Diversity
+- [ ] 문제해결 엔트리의 테마 분류 (Consistency, Performance, Resilience, Business Metrics, Data Pipeline 등)
 - [ ] 2개 이상 동일 테마면 FLAG — 하나를 다른 테마로 교체 권장
 
-### 크로스섹션 일관성
+### Cross-Section Consistency
 - [ ] 자기소개에서 언급한 에피소드/키워드가 경력 또는 문제해결에서 뒷받침되는지 확인
 - [ ] 뒷받침 없는 hook은 FLAG
 
@@ -59,26 +59,26 @@ The career section and the problem-solving section answer fundamentally differen
 - **Career** (경력): "What did this person achieve?" — direction and impact. Career bullets are **hooks** that invite interview questions.
 - **Problem-Solving / Project Detail** (문제해결 / 프로젝트 상세): "How does this person approach problems?" — thought process and depth. Problem-solving entries are **proof** of engineering thinking.
 
-The two sections are **independent**. Career bullets and problem-solving entries do not need a 1:1 correspondence. Every career section line is evaluated against the 경력 6개 기준; every problem-solving section line is evaluated against the 문제해결 6개 기준.
+The two sections are **independent**. Career bullets and problem-solving entries do not need a 1:1 correspondence. Every career section line is evaluated against the Career 6 criteria; every problem-solving section line is evaluated against the Problem-Solving 6 criteria.
 
 ---
 
-## 2. Career Section Evaluation (경력 평가 기준)
+## 2. Career Section Evaluation
 
 ### Dimension Table
 
-| # | Dimension | Question | Fail Signal |
-|---|-----------|----------|-------------|
-| 인과 연결 | Linear Causation | 목표→실행→성과가 한 줄 안에서 선형 인과로 연결되는가? | "개선", "향상", "도입" without mechanism or outcome |
-| 수치 구체성 | Metric Specificity | 성과가 검증 가능한 수치(before→after, 절대값)로 뒷받침되는가? | 모호한 퍼센트, 정의 없는 baseline, 측정 방법 불명 |
-| 역할 명확성 | Role Clarity | 개인 기여가 팀 성과와 구분되는가? | "참여", "기여", "N인 프로젝트" without personal scope |
-| 차별화 | Standard Transcendence | 업계 표준을 넘어서는 차별화된 성과인가? | Webhook, CI/CD, Docker, REST API 등을 단독 성과로 제시 |
-| 면접 유도력 | Hook Potential | 이 한 줄이 면접관의 호기심을 자극하여 질문을 유도하는가? | 기술명 나열, 질문 유도력 없는 평범한 서술 |
-| 섹션 적합성 | Section Fitness | 성과 기술(achievement statement)인가, 문제 서사(problem narrative)인가? | 문제 진단/해결 과정이 경력 섹션에 위치 |
+| Dimension | Question | Fail Signal |
+|-----------|----------|-------------|
+| Linear Causation | 목표→실행→성과가 한 줄 안에서 선형 인과로 연결되는가? | "개선", "향상", "도입" without mechanism or outcome |
+| Metric Specificity | 성과가 검증 가능한 수치(before→after, 절대값)로 뒷받침되는가? | 모호한 퍼센트, 정의 없는 baseline, 측정 방법 불명 |
+| Role Clarity | 개인 기여가 팀 성과와 구분되는가? | "참여", "기여", "N인 프로젝트" without personal scope |
+| Standard Transcendence | 업계 표준을 넘어서는 차별화된 성과인가? | Webhook, CI/CD, Docker, REST API 등을 단독 성과로 제시 |
+| Hook Potential | 이 한 줄이 면접관의 호기심을 자극하여 질문을 유도하는가? | 기술명 나열, 질문 유도력 없는 평범한 서술 |
+| Section Fitness | 성과 기술(achievement statement)인가, 문제 서사(problem narrative)인가? | 문제 진단/해결 과정이 경력 섹션에 위치 |
 
 ### PASS / FAIL Examples
 
-**인과 연결 — 목표→실행→성과 선형 인과:**
+**Linear Causation — 목표→실행→성과 선형 인과:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -87,7 +87,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "결제 시스템 개선" | 무엇을 어떻게? 성과는? — 인과 전체 누락 |
 | FAIL | "비동기 처리로 성능 향상" | 어디에 적용? 얼마나? — 인과 불완전 |
 
-**수치 구체성 — 검증 가능한 수치:**
+**Metric Specificity — 검증 가능한 수치:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -96,7 +96,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "성능 50% 향상" | 무엇의 50%? 어떤 조건에서? baseline 불명 |
 | FAIL | "대폭 절감" | "대폭"의 정의 없음, 검증 불가 |
 
-**역할 명확성 — 개인 기여 식별:**
+**Role Clarity — 개인 기여 식별:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -105,7 +105,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "팀에서 결제 시스템 개선" | 본인이 뭘 했는지 불명 |
 | FAIL | "3인 프로젝트로 주문 시스템 개발" | 인원수만 있고 본인 역할 범위 없음 |
 
-**차별화 — 업계 표준 이상의 성과:**
+**Standard Transcendence — 업계 표준 이상의 성과:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -115,7 +115,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "CI/CD 파이프라인 구축" | 인프라 기본 |
 | FAIL | "Docker 기반 배포 환경 구성" | 현대 개발의 기본 |
 
-**면접 유도력 — 면접 질문 유도:**
+**Hook Potential — 면접 질문 유도:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -124,7 +124,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | FAIL | "쿠폰 시스템 개발" | 물어볼 게 없음 — 면접관 시선 머무르지 않음 |
 | FAIL | "주문 시스템 안정화" | 너무 추상적, 구체적 질문 떠오르지 않음 |
 
-**섹션 적합성 — 올바른 섹션 배치:**
+**Section Fitness — 올바른 섹션 배치:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -138,35 +138,35 @@ The two sections are **independent**. Career bullets and problem-solving entries
 This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 10.
 
 ```
-[경력 Line] "원문 그대로"
-- 인과 연결: PASS / FAIL (reason)
-- 수치 구체성: PASS / FAIL (reason)
-- 역할 명확성: PASS / FAIL / N/A (reason)
-- 차별화: PASS / FAIL (reason)
-- 면접 유도력: PASS / FAIL (reason)
-- 섹션 적합성: PASS / FAIL (reason)
+[Career Line] "원문 그대로"
+- Linear Causation: PASS / FAIL (reason)
+- Metric Specificity: PASS / FAIL (reason)
+- Role Clarity: PASS / FAIL / N/A (reason)
+- Standard Transcendence: PASS / FAIL (reason)
+- Hook Potential: PASS / FAIL (reason)
+- Section Fitness: PASS / FAIL (reason)
 ```
 
 ---
 
-## 3. Problem-Solving Section Evaluation (문제해결 평가 기준)
+## 3. Problem-Solving Section Evaluation
 
 "문제해결" and "프로젝트 상세" are the same intent with different tab names. Both are deep narrative spaces for demonstrating problem detection and problem-solving ability.
 
 ### Dimension Table
 
-| # | Dimension | Question | Fail Signal |
-|---|-----------|----------|-------------|
-| 탐색적 인과 | Diagnostic Causation | 문제 발견→원인 진단→시도→실패 이유→해결이 탐색적 인과로 연결되는가? | 해결책으로 직행, 중간 시도의 실패 원인 분석 없음 |
-| 근거 깊이 | Evidence Depth | 각 시도의 실패/성공이 구체적 수치와 근거로 뒷받침되는가? | "안 됐다", "비효율적", "느렸다" without data |
-| 사고 귀속 | Ownership of Thinking | 문제 진단과 기술 선택이 본인의 사고 과정에서 나왔는가? | "멘토 조언으로", "팀에서 결정", "블로그 참고" without personal reasoning |
-| 대안 비교 | Beyond-Standard Reasoning | 기술 선택이 대안 비교와 trade-off 분석으로 뒷받침되는가? | "[기술] 사용", "[기술] 적용" without why-this-not-that |
-| 면접 심층성 | Interview Depth | 3단계 pushback(구현→판단→대안)을 견딜 서사 깊이가 있는가? | 한 줄 해결, 실패 과정 없음, trade-off 없음 |
-| 섹션 적합성 | Section Fitness | 사고 과정 서사인가, 성과 나열인가? | 문제해결 섹션에 성과 bullet만 나열 |
+| Dimension | Question | Fail Signal |
+|-----------|----------|-------------|
+| Diagnostic Causation | 문제 발견→원인 진단→시도→실패 이유→해결이 탐색적 인과로 연결되는가? | 해결책으로 직행, 중간 시도의 실패 원인 분석 없음 |
+| Evidence Depth | 각 시도의 실패/성공이 구체적 수치와 근거로 뒷받침되는가? | "안 됐다", "비효율적", "느렸다" without data |
+| Thought Visibility | 문제 진단과 기술 선택이 본인의 사고 과정에서 나왔는가? | "멘토 조언으로", "팀에서 결정", "블로그 참고" without personal reasoning |
+| Beyond-Standard Reasoning | 기술 선택이 대안 비교와 trade-off 분석으로 뒷받침되는가? | "[기술] 사용", "[기술] 적용" without why-this-not-that |
+| Interview Depth | 3단계 pushback(구현→판단→대안)을 견딜 서사 깊이가 있는가? | 한 줄 해결, 실패 과정 없음, trade-off 없음 |
+| Section Fitness | 사고 과정 서사인가, 성과 나열인가? | 문제해결 섹션에 성과 bullet만 나열 |
 
 ### PASS / FAIL Examples
 
-**탐색적 인과 — 발견→진단→시도→실패→해결:**
+**Diagnostic Causation — 발견→진단→시도→실패→해결:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -175,7 +175,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 | FAIL | "동시성 문제를 Redis 분산 락으로 해결" | 왜 다른 건 안 됐는지, 어떻게 발견했는지 없음 — 해결책으로 직행 |
 | FAIL | "LLM 파이프라인으로 정확도 85% 달성" | 왜 이 구조인지, 이전 시도가 왜 실패했는지 없음 |
 
-**근거 깊이 — 시도별 구체적 실패/성공 데이터:**
+**Evidence Depth — 시도별 구체적 실패/성공 데이터:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -184,7 +184,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 | FAIL | "낙관적 락은 효율적이지 않았다" | 어디서 얼마나 비효율? — 데이터 없음 |
 | FAIL | "첫 번째 시도는 정확도가 낮았다" | 얼마나 낮았는지, 무엇이 문제였는지 없음 |
 
-**사고 귀속 — 본인 사고 과정 귀속:**
+**Thought Visibility — 본인 사고 과정 귀속:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -193,7 +193,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 | FAIL | "팀 회의에서 2단계 파이프라인으로 결정" | 본인의 사고 과정 없이 팀 결정만 기술 |
 | FAIL | "Redis 분산 락이 적합하다는 블로그를 참고하여 적용" | 왜 이 상황에 맞는지 자기 판단 없음 |
 
-**대안 비교 — 대안 비교 + trade-off 분석:**
+**Beyond-Standard Reasoning — 대안 비교 + trade-off 분석:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -202,7 +202,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 | FAIL | "Redis 분산 락을 사용했습니다" | 왜 Redis? 다른 대안은? — 선택 근거 부재 |
 | FAIL | "GPT-4V를 사용했습니다" | 왜 이 모델? 다른 모델은? — 비교 없음 |
 
-**면접 심층성 — 3단계 pushback 생존력:**
+**Interview Depth — 3단계 pushback 생존력:**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -211,7 +211,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 | FAIL | "Redis 분산 락으로 동시성 문제 해결" | L1 — 구현 상세 없음 / L2 — 선택 근거 없음 / L3 — 대안 없음, 모든 레벨 답 불가 |
 | FAIL | "LLM 할루시네이션 문제를 2단계 파이프라인으로 해결했습니다" | L1("어떻게 분리?") — 구조 상세 없음 / L2("왜 분리가 답?") — 근거 없음 / L3("프롬프트 엔지니어링은?") — 대안 검토 없음 |
 
-**섹션 적합성 — 올바른 섹션 배치 (문제해결):**
+**Section Fitness — 올바른 섹션 배치 (문제해결):**
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
@@ -220,9 +220,9 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 | FAIL | "메뉴 메타데이터 자동 추출 시스템 구축, 인력 11→3명 절감" | 성과 bullet → 경력 섹션으로 이동 필요 |
 | FAIL | "선착순 쿠폰 race condition 해결로 초과 발급 0건 달성, Redis 분산 락 구현" | 결과 요약 bullet → 경력 섹션으로 이동 필요 |
 
-### 면접 심층성 Enhancement: Trade-off Richness Check
+### Interview Depth Enhancement: Trade-off Richness Check
 
-For problem-solving entries, 면접 심층성 passes only when each alternative or attempt includes **rich trade-off reasoning** — not just "tried it, didn't work." Every excluded alternative must show why it was considered AND why it was ruled out in this specific context.
+For problem-solving entries, Interview Depth passes only when each alternative or attempt includes **rich trade-off reasoning** — not just "tried it, didn't work." Every excluded alternative must show why it was considered AND why it was ruled out in this specific context.
 
 **Bad — alternatives listed without trade-off:**
 ```
@@ -251,13 +251,13 @@ For problem-solving entries, 면접 심층성 passes only when each alternative 
 This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 10.
 
 ```
-[문제해결 Line] "원문 그대로"
-- 탐색적 인과: PASS / FAIL (reason)
-- 근거 깊이: PASS / FAIL (reason)
-- 사고 귀속: PASS / FAIL / N/A (reason)
-- 대안 비교: PASS / FAIL (reason)
-- 면접 심층성: PASS / FAIL (reason)
-- 섹션 적합성: PASS / FAIL (reason)
+[Problem-Solving Line] "원문 그대로"
+- Diagnostic Causation: PASS / FAIL (reason)
+- Evidence Depth: PASS / FAIL (reason)
+- Thought Visibility: PASS / FAIL / N/A (reason)
+- Beyond-Standard Reasoning: PASS / FAIL (reason)
+- Interview Depth: PASS / FAIL (reason)
+- Section Fitness: PASS / FAIL (reason)
 ```
 
 ### Summary Count Format (Internal)
@@ -267,8 +267,8 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 After all lines are evaluated, produce a split summary:
 
 ```
-[경력 Summary] 인과 연결: X/Y FAIL, 수치 구체성: X/Y FAIL, 역할 명확성: X/Y FAIL, 차별화: X/Y FAIL, 면접 유도력: X/Y FAIL, 섹션 적합성: X/Y FAIL
-[문제해결 Summary] 탐색적 인과: X/Y FAIL, 근거 깊이: X/Y FAIL, 사고 귀속: X/Y FAIL, 대안 비교: X/Y FAIL, 면접 심층성: X/Y FAIL, 섹션 적합성: X/Y FAIL
+[Career Summary] Linear Causation: X/Y FAIL, Metric Specificity: X/Y FAIL, Role Clarity: X/Y FAIL, Standard Transcendence: X/Y FAIL, Hook Potential: X/Y FAIL, Section Fitness: X/Y FAIL
+[Problem-Solving Summary] Diagnostic Causation: X/Y FAIL, Evidence Depth: X/Y FAIL, Thought Visibility: X/Y FAIL, Beyond-Standard Reasoning: X/Y FAIL, Interview Depth: X/Y FAIL, Section Fitness: X/Y FAIL
 ```
 
 These counts drive the Writing Guidance Triggers.
@@ -279,7 +279,7 @@ These counts drive the Writing Guidance Triggers.
 
 ### Career vs Problem-Solving Distinction
 
-Career (경력 6개 기준) evaluates direction and impact. Problem-Solving (문제해결 6개 기준) evaluates thought process and depth. See Section 2 and Section 3 above for full criteria.
+Career (6 criteria) evaluates direction and impact. Problem-Solving (6 criteria) evaluates thought process and depth. See Section 2 and Section 3 above for full criteria.
 
 Never put problem descriptions like "Resolved payment-order state inconsistency" in the career section. That belongs in the problem-solving section.
 
@@ -383,25 +383,25 @@ JD가 제공된 경우, 키워드 매칭에 그치지 않고 **컨텐츠 선별 
 
 자기소개에서 후킹(언급)한 프로젝트/에피소드/성과는 반드시 경력 또는 문제해결 섹션에 대응하는 엔트리가 있어야 한다.
 
-**핵심 직관:**
+**Core Intuition:**
 - 자기소개 = 면접관의 시선을 끄는 후킹 포인트
 - 문제해결 = 그 후킹의 증거(proof)
 - 후킹했으면 증거가 있어야 한다. 후킹 없는 증거는 묻히고, **증거 없는 후킹은 신뢰를 떨어뜨린다.**
 
-**왜 이 규칙이 중요한가:**
+**Why This Rule Matters:**
 - 면접관은 자기소개에서 관심이 생긴 프로젝트를 이력서에서 찾는다 → 없으면 신뢰 하락
 - 자기소개에서 흘렸던(간략히 언급한) 프로젝트/성과는 문제해결 쪽에서 상세 서술해야 한다
 - 자기소개에 있는 것은 JD에 맞춘 핵심 후킹 요소 → 가장 시선을 끄는 프로젝트들이므로 문제해결 탭에서 증거로 뒷받침되어야 함
 
-**평가 방법:**
+**Evaluation Method:**
 1. 자기소개에서 언급된 프로젝트/에피소드/성과 키워드를 추출
 2. 각 키워드에 대해 경력 섹션 또는 문제해결 섹션에 대응 엔트리가 있는지 확인
 3. 특히 후킹 수준(면접관이 질문할 만한)의 프로젝트는 문제해결 섹션에 **상세 서술**이 있어야 함 — 경력 한 줄만으로는 부족
 
 **PASS / FAIL Examples:**
 
-| Verdict | 자기소개 언급 | 경력/문제해결 대응 | Reason |
-|---------|-------------|-----------------|--------|
+| Verdict | Self-Intro Reference | Career/Problem-Solving Match | Reason |
+|---------|---------------------|------------------------------|--------|
 | PASS | "결제-주문 상태 불일치를 시스템 간 동기화 문제로 재정의" 언급 | 문제해결 섹션에 해당 프로젝트 상세 서술 존재 | 후킹 → 증거 연결 완전 |
 | FAIL | "선착순 쿠폰 race condition을 원자적으로 해결" 언급 | 문제해결/경력 어디에도 해당 프로젝트 없음 | 후킹만 있고 증거 전무 → 면접관이 이력서에서 찾을 수 없음 |
 | FAIL | "LLM 기반 자동화로 월 1,500만원 절감" 언급 | 경력에 한 줄만 있고 문제해결에 상세 서술 없음 | 후킹 수준의 프로젝트인데 증거가 부족 — 면접관이 질문했을 때 이력서에서 뒷받침이 없음 |
@@ -423,11 +423,11 @@ JD가 제공된 경우, 키워드 매칭에 그치지 않고 **컨텐츠 선별 
 
 | Technical Theme | Example Topics |
 |----------------|---------------|
-| 정합성 (Consistency) | race condition, distributed lock, transaction sync |
-| 성능 (Performance) | caching, query optimization, response time |
-| 안정성 (Resilience) | circuit breaker, retry, fallback, fault isolation |
-| 비즈니스 메트릭 (Business) | cost reduction, headcount, conversion rate |
-| 데이터 파이프라인 | ETL, streaming, batch processing |
+| Consistency | race condition, distributed lock, transaction sync |
+| Performance | caching, query optimization, response time |
+| Resilience | circuit breaker, retry, fallback, fault isolation |
+| Business Metrics | cost reduction, headcount, conversion rate |
+| Data Pipeline | ETL, streaming, batch processing |
 
 **Evaluation**:
 - PASS: 각 signature/detailed 엔트리가 서로 다른 테마
@@ -439,29 +439,29 @@ JD가 제공된 경우, 키워드 매칭에 그치지 않고 **컨텐츠 선별 
 
 After completing the section-specific evaluation and summary counts, check if the writing guidance trigger condition is met. This is a mandatory check.
 
-**Career trigger**: `인과 연결 FAIL 수 / career_lines > 0.5` OR `수치 구체성 FAIL 수 / career_lines > 0.5` (career_lines = 경력 섹션에서 경력 6개 기준으로 평가된 bullet 라인 수, 제목·빈 줄·섹션 마커 제외)
+**Career trigger**: `Linear Causation FAIL 수 / career_lines > 0.5` OR `Metric Specificity FAIL 수 / career_lines > 0.5` (career_lines = 경력 섹션에서 경력 6개 기준으로 평가된 bullet 라인 수, 제목·빈 줄·섹션 마커 제외)
 
-**Problem-solving trigger**: `탐색적 인과 FAIL 수 / problem_lines > 0.5` OR `근거 깊이 FAIL 수 / problem_lines > 0.5` (problem_lines = 문제해결 섹션에서 문제해결 6개 기준으로 평가된 라인 수)
+**Problem-solving trigger**: `Diagnostic Causation FAIL 수 / problem_lines > 0.5` OR `Evidence Depth FAIL 수 / problem_lines > 0.5` (problem_lines = 문제해결 섹션에서 문제해결 6개 기준으로 평가된 라인 수)
 
 When triggered, deliver the full section-specific evaluation first, then deliver the corresponding message:
 
 **Career trigger message:**
-> "경력 섹션 전체 N개 라인 중 X개가 인과 연결/수치 구체성 FAIL입니다. 이 경력 기술은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요."
+> "경력 섹션 전체 N개 라인 중 X개가 Linear Causation/Metric Specificity FAIL입니다. 이 경력 기술은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요."
 
 위 경력 섹션 트리거 충족 시, `Read references/experience-mining.md` Phase 5 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 **Problem-solving trigger message:**
-> "문제해결 섹션 전체 N개 라인 중 X개가 탐색적 인과/근거 깊이 FAIL입니다. 이 문제해결 기술은 사고 과정이 드러나도록 재구성이 필요합니다. 위의 P.A.R.R. Writing Template과 Before/After 예시를 참고하여 재작성해 보세요."
+> "문제해결 섹션 전체 N개 라인 중 X개가 Diagnostic Causation/Evidence Depth FAIL입니다. 이 문제해결 기술은 사고 과정이 드러나도록 재구성이 필요합니다. 위의 P.A.R.R. Writing Template과 Before/After 예시를 참고하여 재작성해 보세요."
 
 위 문제해결 섹션 트리거 충족 시, `Read references/experience-mining.md` Phase 5 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 Additional trigger conditions (any one also triggers):
-- Section structure needs reorganization (섹션 적합성 failures pointing to section migration)
+- Section structure needs reorganization (Section Fitness failures pointing to section migration)
 - Achievement lines need [Target] + [Action] + [Outcome] restructuring
 
 ### Achievement Line Structure
 
-Use this guidance when 인과 연결 or 수치 구체성 failures indicate that career lines need content restructuring, not expression polishing.
+Use this guidance when Linear Causation or Metric Specificity failures indicate that career lines need content restructuring, not expression polishing.
 
 ```
 [Target context] + [Technical action] + [Measurable outcome]

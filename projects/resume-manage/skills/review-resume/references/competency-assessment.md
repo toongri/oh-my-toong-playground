@@ -290,11 +290,11 @@ The framing principle: gap guidance should say "if you have this experience, her
 
 ## Interview Trigger
 
-C1-C5 역량 평가 결과, WEAK 또는 ABSENT로 평가된 축이 해당 career level에서 EXPECTED 또는 REQUIRED인 경우 → `Read references/experience-mining.md` Phase 4 section을 참조하여 Experience Mining Interview를 진행한다.
+When C1-C5 assessment results show a WEAK or ABSENT axis that is EXPECTED or REQUIRED for the candidate's career level → refer to `Read references/experience-mining.md` Phase 4 section and conduct the Experience Mining Interview.
 
-인터뷰는 WEAK/ABSENT로 평가된 특정 축만을 대상으로 한다 (전체 5개 축이 아님).
+Interview targets only axes rated WEAK/ABSENT (not all 5 axes).
 
-유저가 opt-out("다음으로", "넘어가자")하면 위의 Gap Guidance로 대체한다.
+If the user opts out ("다음으로", "넘어가자"), fall back to the Gap Guidance above.
 
 ---
 

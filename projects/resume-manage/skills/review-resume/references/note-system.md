@@ -85,22 +85,22 @@ The candidate body contains the narrative content directly. Depth (signature/det
 ## 4. preferences.md Structure
 
 ```markdown
-# 유저 선호
+# User Preferences
 
-## 표현 스타일
+## Expression Style
 - "~했습니다" 종결 선호 (vs "~함" 명사형)
 - 기술 용어는 영문 유지 (Redis, Kafka — 한글화 하지 않음)
 
-## 판단 기준
+## Judgment Criteria
 - 비즈니스 임팩트 > 기술 깊이 (본인 정체성)
 - 숫자가 없으면 차라리 빼는 쪽 선호
 
-## 피드백 히스토리
+## Feedback History
 - 2025-03-15: "이 문장은 너무 AI스럽다" → payment-sync 본문 수정
 - 2025-03-20: "문제해결 순서를 시간순이 아니라 임팩트순으로"
 ```
 
-Three sections are required: **표현 스타일** (expression style), **판단 기준** (judgment criteria), **피드백 히스토리** (feedback history). Add entries to each section as they emerge from review sessions. Never overwrite history — append only.
+Three sections are required: **Expression Style**, **Judgment Criteria**, **Feedback History**. Add entries to each section as they emerge from review sessions. Never overwrite history — append only.
 
 ---
 
@@ -134,11 +134,11 @@ Report the load result to the user:
 
 ```
 [Note Loaded]
-- 자기소개 후보: N개
-- 경력 후보: N개
-- 문제해결 후보: N개
-- 유저 선호: loaded / not found
-- 리서치 캐시: {회사명} found / none
+- Self-Introduction Candidates: N개
+- Career Candidates: N개
+- Problem-Solving Candidates: N개
+- User Preferences: loaded / not found
+- Research Cache: {회사명} found / none
 ```
 
 `[Phase 0/11: Note Load ✓]`
@@ -186,19 +186,19 @@ Show a summary of changes to the user and wait for confirmation before saving:
 ```
 [Note Accumulate — Phase 11]
 
-새 후보:
+New Candidates:
   + problem-solving/search-latency-optimization.md (tags: [검색, p99, 인덱스])
 
-업데이트:
+Updates:
   ~ problem-solving/payment-order-sync.md → 본문 갱신
 
-선호도:
+Preferences:
   ~ preferences.md → "임팩트순 정렬 선호" 추가
 
-리서치 캐시:
+Research Cache:
   + sources/toss-backend-2025-03.md
 
-저장할까요? (y/n)
+Save? (y/n)
 ```
 
 If the user confirms, create or modify the files. If declined, do not accumulate.
