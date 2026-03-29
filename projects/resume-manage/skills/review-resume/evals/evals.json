@@ -145,10 +145,10 @@
     }
   ],
   "benchmark_summary": {
-    "latest_iteration": 13,
-    "date": "2026-03-27",
+    "latest_iteration": 14,
+    "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "92 assertions across 3 evals (42+32+18), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass."
+    "notes": "110 assertions across 4 evals (41+31+17+21), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증."
   },
   "benchmark_history": [
     {

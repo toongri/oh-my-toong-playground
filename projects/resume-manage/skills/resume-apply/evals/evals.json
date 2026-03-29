@@ -66,8 +66,7 @@
         "Invokes Skill(humanizer) in audit mode during Phase 9 AI Tone Audit — manual scanning does NOT count"
       ],
       "files": []
-    }
-    ,
+    },
     {
       "id": 4,
       "prompt": "이력서 지원 준비 좀 해야하는데, JD는 아직 안 골랐어. 뭐 넣을지 같이 좀 봐줘.",

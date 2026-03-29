@@ -258,7 +258,7 @@ After evaluating all paragraphs, check this condition:
 - **Condition**: More than half of paragraphs FAIL their type-specific evaluation
 - **Message**: "자기소개의 N개 문단 중 X개가 유형별 평가에서 FAIL입니다. 위의 문단 유형별 가이드(Type A-D)와 PASS/FAIL 예시를 참고하여 재구성해 보세요."
 
-This trigger is not optional. If the condition is met, deliver the guidance message before proceeding to the section-specific evaluation.
+This trigger is not optional. If the condition is met, proceed to the Experience Mining Interview below. See review-resume/SKILL.md § "Interview Trigger Precedence" for the interview-first rule.
 
 ### Experience Mining Interview
 
