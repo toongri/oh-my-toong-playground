@@ -657,16 +657,16 @@ Before delivering Phase 11 output, verify every phase was executed internally. T
 - [ ] Phase 0: Note Load + Auto-Seeding
 - [ ] Phase 1: Pre-Evaluation Research
 - [ ] Phase 2: Self-Introduction Evaluation
+- [ ] Phase 2: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 3: Target Position Gate
 - [ ] Phase 4: Developer Competency Assessment (C1-C5)
+- [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 5: Section-Specific Evaluation (경력 6개 기준 / 문제해결 6개 기준)
+- [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 6: 3-Level Pushback Simulation
 - [ ] Phase 7: First-Page Primacy + JD Keyword Matching
-- [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
-- [ ] Phase 2: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED/N/A)
+- [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
 - [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 9: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 - [ ] Phase 10: Note Accumulate (candidate/preference persistence — user confirmation required)

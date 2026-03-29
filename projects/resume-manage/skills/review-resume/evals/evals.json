@@ -128,7 +128,7 @@
         {"text": "four-stage-protocol", "description": "4-Stage Bypass Protocol executed per triggered phase: Stage 1 (직접 질문) → Stage 2 (우회/리프레이밍) → Stage 3 (인접 경험) → Stage 4 (일상 업무). Each stage only entered if previous stage yielded no source."},
         {"text": "discovered-candidates-tracking", "description": "Discovered Candidates Working Set records at least one mined experience in format: Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}"},
         {"text": "interview-opt-out-handling", "description": "If user says '다음으로' or '넘어가자', agent exits current phase interview gracefully, falls back to static Writing Guidance, and continues to next phase — does not force interview continuation"},
-        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence"},
+        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT/N/A with cited evidence; C3-C5 axes may be rated N/A when not expected at the candidate's career level"},
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level (New Grad/Junior) and applies career-level expectations"},
         {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED at junior level, provides specific gap recommendations or triggers Phase 4 interview"},
         {"text": "depth-classification", "description": "Phase 8: classifies problem-solving entries by depth (signature/detailed/compressed) before evaluation"},
