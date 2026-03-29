@@ -24,6 +24,8 @@ setup_test_env() {
     TEST_HOME=$(mktemp -d)
     mkdir -p "$TEST_HOME/.claude"
     export HOME="$TEST_HOME"
+    unset OMT_DIR
+    unset OMT_PROJECT
 
     # Pre-compute TEST_OMT_DIR: mirrors session-start.sh OMT_DIR derivation.
     # Since TEST_TMP_DIR has no real git repo, PROJECT_NAME = basename(TEST_TMP_DIR).
