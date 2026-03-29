@@ -251,6 +251,42 @@ describe("syncHooksDirect", () => {
       adapter.syncHooksDirect(targetPath, "nonexistent.sh", missingFile),
     ).resolves.toBeUndefined();
   });
+
+  it("파일 훅의 shell 의존성을 target에 복사한다", async () => {
+    // hooks/ 구조: my-hook.sh (source 문 포함) + lib/shared.sh
+    const hooksDir = path.join(tmpDir, "hooks");
+    await writeFile(
+      path.join(hooksDir, "my-hook.sh"),
+      '#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho hook\n',
+      0o644,
+    );
+    await writeFile(path.join(hooksDir, "lib", "shared.sh"), "#!/bin/bash\necho shared\n", 0o644);
+
+    await adapter.syncHooksDirect(targetPath, "my-hook.sh", path.join(hooksDir, "my-hook.sh"));
+
+    const targetLib = path.join(targetPath, ".gemini", "hooks", "lib", "shared.sh");
+    expect(await exists(targetLib)).toBe(true);
+  });
+
+  it("디렉토리 훅의 외부 의존성을 base dir 기반으로 resolve한다", async () => {
+    // hooks/ 구조: my-dir-hook/entry.sh (hooks/ 루트 기준 source) + lib/shared.sh
+    // hooksSourceDir = path.dirname(dirHookDir) = hooks/
+    // syncShellDepsForDir copies deps into targetHookDir = .gemini/hooks/my-dir-hook/
+    const hooksDir = path.join(tmpDir, "hooks");
+    const dirHookDir = path.join(hooksDir, "my-dir-hook");
+    await writeFile(
+      path.join(dirHookDir, "entry.sh"),
+      '#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+      0o644,
+    );
+    await writeFile(path.join(hooksDir, "lib", "shared.sh"), "#!/bin/bash\necho shared\n", 0o644);
+
+    await adapter.syncHooksDirect(targetPath, "my-dir-hook", dirHookDir);
+
+    // deps are copied into the targetHookDir, not the parent hooks/ dir
+    const targetLib = path.join(targetPath, ".gemini", "hooks", "my-dir-hook", "lib", "shared.sh");
+    expect(await exists(targetLib)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
