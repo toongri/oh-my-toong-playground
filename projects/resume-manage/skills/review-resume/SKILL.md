@@ -137,6 +137,14 @@ The Evaluation Protocol defines 12 phases (0-11). Resume reviews involve extensi
 | 10 | MA | Note Accumulate | `references/note-system.md` |
 | 11 | N | Generate HTML Report | (inline below) |
 
+### Interview Trigger Precedence
+
+Experience Mining Interview의 트리거 조건이 충족되면:
+1. 인터뷰를 먼저 진행한다 (`Read references/experience-mining.md` 해당 Phase section 참조)
+2. 유저가 opt-out("다음으로", "넘어가자")하면 해당 Phase의 static guidance로 대체한다
+
+이 규칙은 모든 Phase의 인터뷰 트리거에 동일하게 적용된다.
+
 ### Tracking Rules
 
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
@@ -232,7 +240,7 @@ Holistically assess the ENTIRE resume against 5 core competency axes. This answe
 | C4 | Collaboration & Communication — cross-functional, knowledge sharing, stakeholder management |
 | C5 | Learning & Growth — depth of learning, external references, failure-driven growth |
 
-Rate each axis as STRONG / PRESENT / WEAK / ABSENT with evidence citations. C3-C5 axes may additionally be rated N/A when not expected at the candidate's career level (see Career-Level Expectations).
+Rate each axis as STRONG / PRESENT / WEAK / ABSENT / N/A with evidence citations. C3-C5 axes may be rated N/A when not expected at the candidate's career level (see Career-Level Expectations).
 
 **Reference:** Read `references/competency-assessment.md` for full checklists, evidence examples, and career-level expectations table.
 
@@ -351,40 +359,7 @@ P.A.R.R. 3개 이상 FAIL 또는 구조 부재 OR 테마 편중 → `Read refere
 
 인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 10에서 노트 시스템에 영구 저장된다.
 
-### Template
-
-```
-[Discovered Candidates]
-- Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}
-```
-
-예시:
-```
-[Discovered Candidates]
-- Phase 2 | 장애 대응 경험 | Fact: 결제 서버 다운타임 발생 시 수동 failover 수행 | Context: 새벽 2시 온콜, 10분 내 복구 | Verifiable: 다운타임 10분 → 0 SLA 위반 | Target: self-introduction/Type-B
-- Phase 4 | 비용 절감 프로젝트 | Fact: 불필요한 Lambda 호출 제거로 AWS 비용 절감 | Context: 모니터링 중 비정상 패턴 발견 | Verifiable: 월 $800 → $200 (75% 절감) | Target: problem-solving/detailed
-```
-
-### Lifecycle
-
-1. **Created** — 인터뷰 중 소스 품질 기준(Fact + Context + Verifiability) 충족 시 추가
-2. **Consumed** — 이후 Phase에서 노트 풀과 함께 추가 옵션으로 참조 (기존 PASS/FAIL 결과 변경 없음)
-3. **Persisted** — Phase 10 Note Accumulate 시 노트 시스템에 영구 저장
-
-### Consumption Examples
-
-1. **Phase 4 gap-filling**: Phase 2에서 발견된 장애 대응 경험이 C2 Operations WEAK 갭을 채울 수 있음 — Phase 4 평가 시 Working Set 확인 후 해당 Axis 재검토 옵션 제시
-2. **Phase 8 depth classification**: Phase 4에서 발견된 비용 절감 프로젝트가 detailed-depth 엔트리로 진입 가능 — Phase 8 depth 분포 부족 시 Working Set 후보로 추천
-
-### Structural Bound
-
-- **Per-topic**: 4-stage 인터뷰 프로토콜 (직접 질문 → 우회 질문 → 인접 경험 → 일상 업무 탐색)
-- **Per-Phase topics**: 해당 Phase의 FAIL 항목만 대상
-- **Session cap**: 유저 opt-out
-
-### Opt-Out
-
-유저가 '다음으로' 또는 '넘어가자'라고 하면 현재 Phase 인터뷰를 종료하고 기존 Writing Guidance 정적 메시지로 fallback한다. Opt-out은 현재 Phase에만 적용되며, 다른 Phase의 인터뷰에는 영향을 주지 않는다.
+Working Set의 템플릿, 라이프사이클, 소비 규칙은 `references/experience-mining.md` § "Discovered Candidates Working Set"을 참조한다.
 
 ---
 
