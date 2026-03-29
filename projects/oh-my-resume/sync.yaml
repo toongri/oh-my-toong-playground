@@ -5,6 +5,7 @@ platforms: [claude]
 agents:
   items:
     - explore
+    - librarian
     - mnemosyne
     - oracle
     - argus
