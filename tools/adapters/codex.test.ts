@@ -522,6 +522,52 @@ describe("CodexAdapter", () => {
         .catch(() => false);
       expect(exists).toBe(false);
     });
+
+    it("파일 훅의 shell 의존성을 target에 복사한다", async () => {
+      // hooks/ 구조: my-hook.sh (source 문 포함) + lib/shared.sh
+      const hooksDir = path.join(tmpDir, "hooks");
+      const libDir = path.join(hooksDir, "lib");
+      await fs.mkdir(hooksDir, { recursive: true });
+      await fs.mkdir(libDir, { recursive: true });
+      await fs.writeFile(
+        path.join(hooksDir, "my-hook.sh"),
+        '#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho hook\n',
+        "utf-8",
+      );
+      await fs.writeFile(path.join(libDir, "shared.sh"), "#!/bin/bash\necho shared\n", "utf-8");
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncHooksDirect(targetBase, "my-hook.sh", path.join(hooksDir, "my-hook.sh"), false);
+
+      const targetLib = path.join(targetBase, ".codex", "hooks", "lib", "shared.sh");
+      const libExists = await fs.stat(targetLib).then(() => true).catch(() => false);
+      expect(libExists).toBe(true);
+    });
+
+    it("디렉토리 훅의 외부 의존성을 base dir 기반으로 resolve한다", async () => {
+      // hooks/ 구조: my-dir-hook/entry.sh (hooks/ 루트 기준 source) + lib/shared.sh
+      // hooksSourceDir = path.dirname(dirHookDir) = hooks/
+      // syncShellDepsForDir copies deps into targetHookDir = .codex/hooks/my-dir-hook/
+      const hooksDir = path.join(tmpDir, "hooks");
+      const dirHookDir = path.join(hooksDir, "my-dir-hook");
+      const libDir = path.join(hooksDir, "lib");
+      await fs.mkdir(dirHookDir, { recursive: true });
+      await fs.mkdir(libDir, { recursive: true });
+      await fs.writeFile(
+        path.join(dirHookDir, "entry.sh"),
+        '#!/bin/bash\nsource "$HOOKS_DIR/lib/shared.sh"\necho entry\n',
+        "utf-8",
+      );
+      await fs.writeFile(path.join(libDir, "shared.sh"), "#!/bin/bash\necho shared\n", "utf-8");
+
+      const targetBase = path.join(tmpDir, "target");
+      await adapter.syncHooksDirect(targetBase, "my-dir-hook", dirHookDir, false);
+
+      // deps are copied into the targetHookDir, not the parent hooks/ dir
+      const targetLib = path.join(targetBase, ".codex", "hooks", "my-dir-hook", "lib", "shared.sh");
+      const libExists = await fs.stat(targetLib).then(() => true).catch(() => false);
+      expect(libExists).toBe(true);
+    });
   });
 
   // ---------------------------------------------------------------------------
