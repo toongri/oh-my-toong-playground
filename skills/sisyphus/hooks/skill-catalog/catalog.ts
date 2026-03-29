@@ -82,6 +82,11 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
   const seen = new Set<string>();
 
   // 1. Add hashmap skills whose plugin is enabled (regardless of scan)
+  // Design intent: Skills without a pluginId (e.g. testing, implement, frontend-design) are
+  // intentionally excluded here. They must be physically installed in the project
+  // (.claude/skills/ or ~/.claude/skills/) to appear in the catalog — discovered via scan
+  // in Phase 2, where SKILL_HASHMAP metadata (description, situationIds) is applied as
+  // enrichment. Only skills with a pluginId are auto-registered based on plugin activation.
   for (const [name, entry] of SKILL_HASHMAP) {
     if (entry.pluginId && enabledPluginIds.has(entry.pluginId)) {
       entries.push({
