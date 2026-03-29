@@ -30,6 +30,7 @@ export interface CatalogEntry {
   name: string;
   description?: string;
   discoveredOnly: boolean;
+  situationIds?: string[];
 }
 
 // Hook output format

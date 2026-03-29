@@ -202,14 +202,14 @@ export class ClaudeAdapter implements PlatformAdapter {
       if (dryRun) {
         logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
         // Scan .sh files in directory for dependencies (dry-run logging)
-        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
+        await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
       } else {
         await syncDirectory(sourcePath, targetHookDir, {
           exclude: ["*.test.ts"],
         });
         logInfo(`Copied: ${displayName}/`);
         // Copy shell dependencies discovered in directory hooks
-        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
+        await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
       }
     } else {
       const targetFile = path.join(targetDir, displayName);

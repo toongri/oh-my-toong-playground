@@ -103,10 +103,13 @@ export async function syncShellDependencies(
 /**
  * Scan all .sh files in a hook directory for shell source dependencies,
  * then copy (or log) each discovered dependency.
- * Dependencies are resolved relative to the hook directory itself.
+ * Dependencies are resolved relative to hooksBaseDir (the hooks root),
+ * not hookDir itself — allowing .sh files inside a subdirectory to reference
+ * shared libraries outside their own directory (e.g. hooks/lib/).
  */
 export async function syncShellDepsForDir(
   hookDir: string,
+  hooksBaseDir: string,
   targetHooksDir: string,
   dryRun: boolean,
 ): Promise<void> {
@@ -122,6 +125,6 @@ export async function syncShellDepsForDir(
     if (entry.name.endsWith("_test.sh")) continue;
 
     const shFile = path.join(hookDir, entry.name);
-    await syncShellDependencies(shFile, hookDir, targetHooksDir, dryRun);
+    await syncShellDependencies(shFile, hooksBaseDir, targetHooksDir, dryRun);
   }
 }

@@ -250,7 +250,7 @@ describe("syncShellDepsForDir", () => {
     await writeFile(hookA, 'source "$HOOKS_DIR/lib/shared.sh"\n');
     await writeFile(hookB, 'source "$HOOKS_DIR/lib/shared.sh"\n');
 
-    await syncShellDepsForDir(hooksDir, targetDir, false);
+    await syncShellDepsForDir(hooksDir, hooksDir, targetDir, false);
 
     const expected = path.join(targetDir, "lib", "shared.sh");
     expect(await exists(expected)).toBe(true);
@@ -265,7 +265,7 @@ describe("syncShellDepsForDir", () => {
     const testHook = path.join(hooksDir, "hook-a_test.sh");
     await writeFile(testHook, 'source "$HOOKS_DIR/lib/test-only.sh"\n');
 
-    await syncShellDepsForDir(hooksDir, targetDir, false);
+    await syncShellDepsForDir(hooksDir, hooksDir, targetDir, false);
 
     const expected = path.join(targetDir, "lib", "test-only.sh");
     expect(await exists(expected)).toBe(false);
@@ -282,7 +282,7 @@ describe("syncShellDepsForDir", () => {
     const jsonFile = path.join(hooksDir, "config.json");
     await writeFile(jsonFile, '{"key": "value"}');
 
-    await syncShellDepsForDir(hooksDir, targetDir, false);
+    await syncShellDepsForDir(hooksDir, hooksDir, targetDir, false);
 
     const expected = path.join(targetDir, "lib", "ts-dep.sh");
     expect(await exists(expected)).toBe(false);
@@ -292,7 +292,27 @@ describe("syncShellDepsForDir", () => {
     const nonExistentDir = path.join(tmpDir, "does-not-exist");
     // Should not throw
     await expect(
-      syncShellDepsForDir(nonExistentDir, targetDir, false),
+      syncShellDepsForDir(nonExistentDir, hooksDir, targetDir, false),
     ).resolves.toBeUndefined();
+  });
+
+  it("디렉토리 훅 내 .sh가 상위 lib/ 경로를 source할 때 hooksBaseDir 기반으로 resolve", async () => {
+    // Structure: hooksDir/lib/shared.sh + hooksDir/myhook/entry.sh
+    // entry.sh sources $VAR/lib/shared.sh (relative to hooksDir, not myhook/)
+    const sharedLib = path.join(hooksDir, "lib", "shared.sh");
+    await writeFile(sharedLib, "# shared from lib");
+
+    const hookSubDir = path.join(hooksDir, "myhook");
+    const entryFile = path.join(hookSubDir, "entry.sh");
+    await writeFile(entryFile, 'source "$HOOKS_DIR/lib/shared.sh"\n');
+
+    // hooksBaseDir = hooksDir (the hooks root), not hookSubDir
+    await syncShellDepsForDir(hookSubDir, hooksDir, targetDir, false);
+
+    // Should copy lib/shared.sh relative to hooksDir into targetDir
+    const expected = path.join(targetDir, "lib", "shared.sh");
+    expect(await exists(expected)).toBe(true);
+    const content = await fs.readFile(expected, "utf8");
+    expect(content).toBe("# shared from lib");
   });
 });

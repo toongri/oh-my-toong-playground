@@ -76,30 +76,6 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
   ],
 ]);
 
-// Return only hashmap entries whose availability can be confirmed
-export function getAvailableHashmapEntries(
-  discoveredSkillNames: string[],
-  enabledPluginIds: string[],
-): Map<string, HashmapSkillEntry> {
-  const result = new Map<string, HashmapSkillEntry>();
-  const discoveredSet = new Set(discoveredSkillNames);
-  const pluginSet = new Set(enabledPluginIds);
-
-  for (const [name, entry] of SKILL_HASHMAP) {
-    if (entry.pluginId) {
-      if (pluginSet.has(entry.pluginId)) {
-        result.set(name, entry);
-      }
-    } else {
-      if (discoveredSet.has(name)) {
-        result.set(name, entry);
-      }
-    }
-  }
-
-  return result;
-}
-
 // Build catalog entries from hashmap + discovered skill names
 export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: Set<string>): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
@@ -112,6 +88,7 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
         name,
         description: entry.description,
         discoveredOnly: false,
+        situationIds: entry.situationIds,
       });
       seen.add(name);
     }
@@ -125,11 +102,16 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
 
     const hashmapEntry = SKILL_HASHMAP.get(skillName);
     if (hashmapEntry) {
+      // Discovered + in hashmap: skip if plugin-gated and plugin not enabled
+      if (hashmapEntry.pluginId && !enabledPluginIds.has(hashmapEntry.pluginId)) {
+        continue;
+      }
       // Discovered + in hashmap → full entry
       entries.push({
         name: skillName,
         description: hashmapEntry.description,
         discoveredOnly: false,
+        situationIds: hashmapEntry.situationIds,
       });
     } else {
       // Discovered-only → name-only entry
@@ -145,18 +127,18 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
 }
 
 // Format catalog entries into the additionalContext string
-export function formatCatalog(entries: CatalogEntry[], availableHashmap: Map<string, HashmapSkillEntry>): string {
+export function formatCatalog(entries: CatalogEntry[]): string {
   const discoveredOnlyEntries = entries.filter((e) => e.discoveredOnly);
 
-  // Collect situation rows: for each situation, find available skills with that situationId
+  // Collect situation rows: for each situation, find entries with that situationId
   type SituationRow = { situation: Situation; skillNames: string[] };
   const situationRows: SituationRow[] = [];
 
   for (const situation of SITUATIONS) {
     const matchingSkills: string[] = [];
-    for (const [skillName, entry] of availableHashmap) {
-      if (entry.situationIds.includes(situation.id)) {
-        matchingSkills.push(skillName);
+    for (const entry of entries) {
+      if (!entry.discoveredOnly && entry.situationIds?.includes(situation.id)) {
+        matchingSkills.push(entry.name);
       }
     }
     if (matchingSkills.length > 0) {

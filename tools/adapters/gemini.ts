@@ -175,13 +175,13 @@ export class GeminiAdapter implements PlatformAdapter {
       const targetHookDir = path.join(targetDir, displayName);
       if (dryRun) {
         logDry(`Copy (directory): ${sourcePath} -> ${targetHookDir}/`);
-        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
+        await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
       } else {
         await syncDirectory(sourcePath, targetHookDir, {
           exclude: ["*.test.ts"],
         });
         logInfo(`Copied: ${displayName}/`);
-        await syncShellDepsForDir(sourcePath, targetHookDir, dryRun);
+        await syncShellDepsForDir(sourcePath, hooksSourceDir, targetHookDir, dryRun);
       }
     } else {
       const targetFile = path.join(targetDir, displayName);
