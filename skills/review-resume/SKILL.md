@@ -424,11 +424,16 @@ Compile all evaluation results from Phases 0-10 and write a self-contained HTML 
 
 ### Approval Gate
 
+<critical>
+HTML report를 열고 AskUserQuestion으로 유저에게 리뷰를 요청하라. 유저가 응답할 때까지 어떤 다음 단계도 진행하지 마라. resume-apply 워크플로우 내에서 호출된 경우에도 이 규칙은 동일하게 적용된다.
+</critical>
+
 After opening the HTML report:
-1. Tell the user the report is open and ask for review
-2. **Wait for user response** — do NOT proceed to Phase 12 automatically
-3. If the user approves → proceed to Phase 12 (Note Accumulate)
-4. If the user requests revisions → apply changes, regenerate the report, and ask again
+1. Tell the user the report is open
+2. Use `AskUserQuestion` to ask the user to review the report and provide feedback
+3. **Do NOT proceed** until the user responds
+4. If the user approves → proceed to Phase 12 (Note Accumulate)
+5. If the user requests revisions → apply changes, regenerate the report, and ask again
 
 ### Priority Level Definitions
 
