@@ -27,7 +27,7 @@
 
 ## Mandatory Evaluation Checklist
 
-아래 항목은 평가 시 반드시 체크하고, 결과를 Phase 11 출력에 포함해야 한다.
+아래 항목은 평가 시 반드시 체크하고, 결과를 HTML Report 출력에 포함해야 한다.
 
 ### Career Section
 - [ ] 6개 기준(Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness) 각각에 대해 PASS/FAIL 판정
@@ -135,7 +135,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 
 ### Career Evaluation Output Format (Internal)
 
-This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
+This is the internal evaluation format used during Section-Specific Evaluation. The user-facing output format is defined in SKILL.md HTML Report phase.
 
 ```
 [Career Line] "원문 그대로"
@@ -248,7 +248,7 @@ For problem-solving entries, Interview Depth passes only when each alternative o
 
 ### Problem-Solving Evaluation Output Format (Internal)
 
-This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
+This is the internal evaluation format used during Section-Specific Evaluation. The user-facing output format is defined in SKILL.md HTML Report phase.
 
 ```
 [Problem-Solving Line] "원문 그대로"
@@ -262,7 +262,7 @@ This is the internal evaluation format used during Phase 5. The user-facing outp
 
 ### Summary Count Format (Internal)
 
-This is the internal evaluation format used during Phase 5. The user-facing output format is defined in SKILL.md Phase 11.
+This is the internal evaluation format used during Section-Specific Evaluation. The user-facing output format is defined in SKILL.md HTML Report phase.
 
 After all lines are evaluated, produce a split summary:
 
@@ -448,12 +448,12 @@ When triggered, deliver the full section-specific evaluation first, then deliver
 **Career trigger message:**
 > "경력 섹션 전체 N개 라인 중 X개가 Linear Causation/Metric Specificity FAIL입니다. 이 경력 기술은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요."
 
-위 경력 섹션 트리거 충족 시, `Read references/experience-mining.md` Phase 5 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
+위 경력 섹션 트리거 충족 시, `Read references/experience-mining.md` Section-Specific Evaluation section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 **Problem-solving trigger message:**
 > "문제해결 섹션 전체 N개 라인 중 X개가 Diagnostic Causation/Evidence Depth FAIL입니다. 이 문제해결 기술은 사고 과정이 드러나도록 재구성이 필요합니다. 위의 P.A.R.R. Writing Template과 Before/After 예시를 참고하여 재작성해 보세요."
 
-위 문제해결 섹션 트리거 충족 시, `Read references/experience-mining.md` Phase 5 section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
+위 문제해결 섹션 트리거 충족 시, `Read references/experience-mining.md` Section-Specific Evaluation section을 참조하여 Experience Mining Interview를 진행한다. 유저가 opt-out하면 위의 Writing Guidance 메시지로 대체한다.
 
 Additional trigger conditions (any one also triggers):
 - Section structure needs reorganization (Section Fitness failures pointing to section migration)
