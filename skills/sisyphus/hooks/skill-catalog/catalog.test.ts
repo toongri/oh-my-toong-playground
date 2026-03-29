@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'bun:test';
-import { SITUATIONS, SKILL_HASHMAP, getAvailableHashmapEntries, buildCatalog, formatCatalog } from './catalog.ts';
+import { SITUATIONS, SKILL_HASHMAP, buildCatalog, formatCatalog } from './catalog.ts';
 
 const SUPERPOWERS_PLUGIN = 'superpowers@claude-plugins-official';
 
@@ -16,7 +16,7 @@ describe('SITUATIONS', () => {
     }
   });
 
-  it('required situation ids are present', () => {
+  it('필수 situation id가 존재한다', () => {
     const ids = SITUATIONS.map((s) => s.id);
     expect(ids).toContain('bugfix');
     expect(ids).toContain('new-feature');
@@ -86,38 +86,6 @@ describe('SKILL_HASHMAP', () => {
   });
 });
 
-describe('getAvailableHashmapEntries', () => {
-  it('플러그인이 활성화되면 해당 스킬이 포함된다', () => {
-    const result = getAvailableHashmapEntries([], [SUPERPOWERS_PLUGIN]);
-    expect(result.has('superpowers:test-driven-development')).toBe(true);
-  });
-
-  it('플러그인이 비활성화되면 해당 스킬이 제외된다', () => {
-    const result = getAvailableHashmapEntries([], []);
-    expect(result.has('superpowers:test-driven-development')).toBe(false);
-  });
-
-  it('pluginId 없는 스킬은 discoveredSkillNames로 판단된다', () => {
-    const result = getAvailableHashmapEntries(['testing', 'implement'], []);
-    expect(result.has('testing')).toBe(true);
-    expect(result.has('implement')).toBe(true);
-  });
-
-  it('발견되지 않은 스킬은 제외된다', () => {
-    const result = getAvailableHashmapEntries([], []);
-    expect(result.has('testing')).toBe(false);
-    expect(result.has('frontend-design')).toBe(false);
-  });
-
-  it('반환 타입이 Map<string, HashmapSkillEntry>이다', () => {
-    const result = getAvailableHashmapEntries(['testing'], []);
-    expect(result).toBeInstanceOf(Map);
-    const entry = result.get('testing')!;
-    expect(entry.description).toBeTruthy();
-    expect(entry.situationIds).toBeDefined();
-  });
-});
-
 describe('buildCatalog', () => {
   it('플러그인 활성화 시 superpowers 스킬이 카탈로그에 포함된다', () => {
     const enabledPlugins = new Set([SUPERPOWERS_PLUGIN]);
@@ -156,37 +124,41 @@ describe('buildCatalog', () => {
     expect((tdd as any).criteria).toBeUndefined();
     expect((tdd as any).examples).toBeUndefined();
   });
+
+  it('pluginId가 있지만 disabled인 discovered 스킬이 buildCatalog에서 제외된다', () => {
+    // superpowers:test-driven-development는 pluginId가 있는 스킬
+    // discoveredSkillNames에는 포함하되 enabledPluginIds에서 제외하면 카탈로그에 나타나지 않아야 한다
+    const entries = buildCatalog(['superpowers:test-driven-development'], new Set());
+    const tdd = entries.find((e) => e.name === 'superpowers:test-driven-development');
+    expect(tdd).toBeUndefined();
+  });
 });
 
 describe('formatCatalog', () => {
   it('skill-catalog 태그를 포함한다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], [SUPERPOWERS_PLUGIN]);
     const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
     expect(output).toContain('<skill-catalog>');
     expect(output).toContain('</skill-catalog>');
   });
 
   it('Load Skills 헤더를 포함한다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], [SUPERPOWERS_PLUGIN]);
     const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
     expect(output).toContain('## Load Skills');
   });
 
   it('상황별 테이블이 available 스킬을 포함한다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], [SUPERPOWERS_PLUGIN]);
     const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
     // TDD has bugfix, new-feature, refactoring situationIds
     expect(output).toContain('Bug fix');
     expect(output).toContain('superpowers:test-driven-development');
   });
 
   it('How to evaluate 섹션에 reasoning이 포함된다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], [SUPERPOWERS_PLUGIN]);
     const entries = buildCatalog([], new Set([SUPERPOWERS_PLUGIN]));
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
     expect(output).toContain('### How to evaluate');
     // bugfix situation reasoning
     expect(output).toContain('Defect reproduction');
@@ -194,9 +166,8 @@ describe('formatCatalog', () => {
 
   it('refactoring 행에 testing 스킬이 포함되지 않는다', () => {
     // testing has situationIds ['bugfix', 'new-feature'] — NOT refactoring
-    const availableHashmap = getAvailableHashmapEntries(['testing', 'implement'], []);
     const entries = buildCatalog(['testing', 'implement'], new Set());
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
 
     // Split lines and find the refactoring row
     const lines = output.split('\n');
@@ -206,23 +177,14 @@ describe('formatCatalog', () => {
   });
 
   it('discovered-only 스킬이 별도 목록으로 출력된다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], []);
     const entries = buildCatalog(['my-skill'], new Set());
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
     expect(output).toContain('my-skill');
   });
 
   it('available 스킬이 없고 discovered-only도 없으면 최소 출력을 반환한다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], []);
     const entries = buildCatalog([], new Set());
-    const output = formatCatalog(entries, availableHashmap);
+    const output = formatCatalog(entries);
     expect(output).toBe('<skill-catalog>\nNo skills available for delegation.\n</skill-catalog>');
-  });
-
-  it('formatCatalog는 entries와 availableHashmap 두 인수를 받는다', () => {
-    const availableHashmap = getAvailableHashmapEntries([], []);
-    const entries = buildCatalog([], new Set());
-    // Must compile with two arguments — just verify it runs without error
-    expect(() => formatCatalog(entries, availableHashmap)).not.toThrow();
   });
 });

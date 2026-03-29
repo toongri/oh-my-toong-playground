@@ -6,30 +6,30 @@ import { tmpdir } from 'os';
 import { Readable } from 'stream';
 
 describe('parseInput', () => {
-  it('parses valid JSON with cwd and sessionId', () => {
+  it('유효한 JSON에서 cwd와 sessionId를 파싱한다', () => {
     const result = parseInput('{"sessionId": "abc123", "cwd": "/tmp/project"}');
     expect(result.sessionId).toBe('abc123');
     expect(result.cwd).toBe('/tmp/project');
   });
 
-  it('falls back to defaults on invalid JSON', () => {
+  it('유효하지 않은 JSON이면 기본값으로 폴백한다', () => {
     const result = parseInput('not-json');
     expect(result.sessionId).toBe('default');
     expect(result.cwd).toBe(process.cwd());
   });
 
-  it('handles session_id snake_case variant', () => {
+  it('snake_case session_id를 처리한다', () => {
     const result = parseInput('{"session_id": "snake123"}');
     expect(result.sessionId).toBe('snake123');
   });
 
-  it('prefers sessionId over session_id', () => {
+  it('session_id보다 sessionId를 우선한다', () => {
     const result = parseInput('{"sessionId": "camel", "session_id": "snake"}');
     expect(result.sessionId).toBe('camel');
   });
 });
 
-describe('main (integration)', () => {
+describe('main (통합)', () => {
   let tempDir: string;
   let originalHome: string | undefined;
   let consoleOutput: string[];
@@ -61,7 +61,7 @@ describe('main (integration)', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('outputs valid JSON with additionalContext on valid input', async () => {
+  it('유효한 입력에서 additionalContext가 포함된 JSON을 출력한다', async () => {
     const projectDir = join(tempDir, 'project');
     const skillsDir = join(projectDir, '.claude', 'skills');
     await mkdir(join(skillsDir, 'my-skill'), { recursive: true });
@@ -131,7 +131,7 @@ describe('main (integration)', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('## Load Skills');
   });
 
-  it('fail-open: outputs continue:true on broken stdin', async () => {
+  it('fail-open: stdin 오류 시 continue:true를 출력한다', async () => {
     const readable = new Readable({
       read() {
         process.nextTick(() => this.destroy(new Error('stdin broken')));
