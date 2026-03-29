@@ -279,8 +279,8 @@ Career and problem-solving sections answer fundamentally different questions:
 | Diagnostic Causation | Problem detection → root cause → solution chain clear? |
 | Evidence Depth | Failure data, alternative comparison, verification data present? |
 | Thought Visibility | Is the reasoning process visible, not just the result? |
-| Standard Transcendence | Beyond textbook solutions? |
-| Hook Potential | Does this entry provoke follow-up questions? |
+| Beyond-Standard Reasoning | Beyond textbook solutions? |
+| Interview Depth | Does this entry provoke follow-up questions? |
 | Section Fitness | Problem narrative, not achievement statement? |
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, first-page primacy check, JD keyword matching, and writing guidance triggers.
@@ -723,4 +723,4 @@ Before delivering Phase 11 output, verify every phase was completed or has a val
 
 A phase is SKIPPED only when its precondition is not met (e.g., Phase 8 specific depth skipped because no entries at that depth exist). Phases 0, 10, 11 have NO precondition — always required. Phase 12 has a strict precondition: User Approval in Phase 11. Phase 12 counts as DONE even if the user declines to save.
 
-If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 10 output.
+If any phase shows SKIPPED without a valid precondition reason, complete it before delivering Phase 11 output.

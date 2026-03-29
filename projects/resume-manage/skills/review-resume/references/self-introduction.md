@@ -21,7 +21,7 @@
 
 ## Mandatory Evaluation Checklist
 
-아래 항목은 자기소개 평가 시 반드시 체크하고, 결과를 Phase 10 출력에 포함해야 한다.
+아래 항목은 자기소개 평가 시 반드시 체크하고, 결과를 Phase 11 출력에 포함해야 한다.
 
 ### Type A (Action Principle)
 - [ ] Bridge 3박자 구조: bold 오프너 → 이유(브릿지) → 에피소드. 셋 중 하나라도 빠지면 FLAG

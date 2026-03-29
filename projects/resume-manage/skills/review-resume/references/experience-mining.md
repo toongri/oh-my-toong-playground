@@ -71,7 +71,7 @@
 
 ✗ "모니터링은 해봤어요" — Action은 있지만 Fact(어떤 상황에서?), Context(어떤 도구로? 무엇을 관찰했나?), Verifiability 모두 없음.
 
-### ✓ Valid Source (Valid Source)
+### ✓ Valid Source
 
 ✓ "API 응답 시간이 3초를 넘자 고객 이탈이 늘었고 [Fact], Redis 캐시를 도입해 로컬 캐시 vs 분산 캐시를 비교 검토했습니다 [Context]. 도입 후 평균 응답 시간이 3.2초 → 0.4초로 줄었습니다 [Verifiability]."
 
@@ -102,7 +102,7 @@
 **라이프사이클:**
 - Created: 인터뷰 중 소스 품질 확인 직후
 - Consumed: 이후 Phase들이 note pool과 함께 추가 옵션으로 참조 (기존 PASS/FAIL 결과 변경 없음)
-- Persisted: Phase 11 Note Accumulate 시 note 시스템에 저장
+- Persisted: Phase 12 Note Accumulate 시 note 시스템에 저장
 
 ---
 

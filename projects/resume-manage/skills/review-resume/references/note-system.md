@@ -13,7 +13,7 @@ Persistent note for resume review. Accumulates candidate pool, user preferences,
 5. [Career-Level Depth Distribution Guide](#5-career-level-depth-distribution-guide)
 6. [Note Load (Phase 0)](#6-note-load-phase-0)
 7. [Auto-Seeding (First Run)](#7-auto-seeding-first-run)
-8. [Note Accumulate (Phase 11)](#8-note-accumulate-phase-11)
+8. [Note Accumulate (Phase 12)](#8-note-accumulate-phase-12)
 
 ---
 
@@ -141,7 +141,7 @@ Report the load result to the user:
 - Research Cache: {회사명} found / none
 ```
 
-`[Phase 0/11: Note Load ✓]`
+`[Phase 0/12: Note Load ✓]`
 
 ---
 
@@ -161,7 +161,7 @@ Run only when note is empty. Parse the current resume to auto-generate the initi
 
 ---
 
-## 8. Note Accumulate (Phase 11)
+## 8. Note Accumulate (Phase 12)
 
 After the review is complete, accumulate information discovered in this session into persistent note. Save only after user confirmation.
 
@@ -184,7 +184,7 @@ After the review is complete, accumulate information discovered in this session 
 Show a summary of changes to the user and wait for confirmation before saving:
 
 ```
-[Note Accumulate — Phase 11]
+[Note Accumulate — Phase 12]
 
 New Candidates:
   + problem-solving/search-latency-optimization.md (tags: [검색, p99, 인덱스])
@@ -203,4 +203,4 @@ Save? (y/n)
 
 If the user confirms, create or modify the files. If declined, do not accumulate.
 
-`[Phase 11/11: Note Accumulate ✓]`
+`[Phase 12/12: Note Accumulate ✓]`
