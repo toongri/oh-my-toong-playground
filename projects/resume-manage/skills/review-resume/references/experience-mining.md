@@ -102,7 +102,7 @@
 **라이프사이클:**
 - Created: 인터뷰 중 소스 품질 확인 직후
 - Consumed: 이후 Phase들이 note pool과 함께 추가 옵션으로 참조 (기존 PASS/FAIL 결과 변경 없음)
-- Persisted: Phase 10 Note Accumulate 시 note 시스템에 저장
+- Persisted: Phase 11 Note Accumulate 시 note 시스템에 저장
 
 ---
 
