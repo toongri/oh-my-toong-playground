@@ -11,20 +11,24 @@ export interface ParsedInput {
   cwd: string;
 }
 
-// Hashmap skill entry — rich metadata for delegation evaluation
+// Situation — a task context that determines which skills are relevant
+export interface Situation {
+  id: string;
+  label: string;
+  reasoning: string;
+}
+
+// Hashmap skill entry — metadata for availability evaluation
 export interface HashmapSkillEntry {
   description: string;
-  criteria: string;
   pluginId?: string;
-  examples: string[];
+  situationIds: string[];
 }
 
 // Catalog entry — either hashmap-enriched or discovered-only
 export interface CatalogEntry {
   name: string;
   description?: string;
-  criteria?: string;
-  examples?: string[];
   discoveredOnly: boolean;
 }
 

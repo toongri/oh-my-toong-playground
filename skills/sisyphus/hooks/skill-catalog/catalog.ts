@@ -1,4 +1,33 @@
-import { HashmapSkillEntry, CatalogEntry } from './types.ts';
+import { HashmapSkillEntry, CatalogEntry, Situation } from './types.ts';
+
+// Situations that determine which skills are relevant
+export const SITUATIONS: Situation[] = [
+  {
+    id: 'bugfix',
+    label: 'Bug fix',
+    reasoning: 'Defect reproduction → fix → pass cycle required. Involves both test writing and implementation.',
+  },
+  {
+    id: 'new-feature',
+    label: 'New feature',
+    reasoning: 'Define expected behavior → implement → verify cycle. New functionality requires both tests and implementation.',
+  },
+  {
+    id: 'refactoring',
+    label: 'Refactoring',
+    reasoning: 'Structure change without spec change. Existing tests verify behavior preservation, so testing skill is unnecessary.',
+  },
+  {
+    id: 'design',
+    label: 'Design',
+    reasoning: 'User interface and experience design. Establish design patterns and UX principles before implementation.',
+  },
+  {
+    id: 'analytics',
+    label: 'Data analytics',
+    reasoning: 'Data-driven decision making. Product analysis and metric definition required.',
+  },
+];
 
 // Internal hashmap of known skills with rich metadata
 export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
@@ -6,16 +35,70 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
     'superpowers:test-driven-development',
     {
       description: 'Test-Driven Development methodology — write failing tests first, then implement to pass',
-      criteria: 'Implementation task that produces testable code',
       pluginId: 'superpowers@claude-plugins-official',
-      examples: [
-        'Add rate limiting middleware → TDD: write limit-exceeded test first',
-        'Create user service CRUD → TDD: write each operation\'s test before implementation',
-        'Fix authentication bug → TDD: write regression test reproducing the bug first',
-      ],
+      situationIds: ['bugfix', 'new-feature', 'refactoring'],
+    },
+  ],
+  [
+    'testing',
+    {
+      description: 'Testing skill — write and maintain automated tests',
+      situationIds: ['bugfix', 'new-feature'],
+    },
+  ],
+  [
+    'implement',
+    {
+      description: 'Implementation skill — focused code implementation following a spec',
+      situationIds: ['bugfix', 'new-feature', 'refactoring'],
+    },
+  ],
+  [
+    'frontend-design',
+    {
+      description: 'Frontend design skill — UI component design and visual implementation',
+      situationIds: ['new-feature', 'design'],
+    },
+  ],
+  [
+    'ux-design',
+    {
+      description: 'UX design skill — user experience flows, interaction patterns, and usability',
+      situationIds: ['design'],
+    },
+  ],
+  [
+    'pm-data-analytics',
+    {
+      description: 'Product analytics skill — data-driven product decisions and metric definition',
+      situationIds: ['analytics', 'new-feature'],
     },
   ],
 ]);
+
+// Return only hashmap entries whose availability can be confirmed
+export function getAvailableHashmapEntries(
+  discoveredSkillNames: string[],
+  enabledPluginIds: string[],
+): Map<string, HashmapSkillEntry> {
+  const result = new Map<string, HashmapSkillEntry>();
+  const discoveredSet = new Set(discoveredSkillNames);
+  const pluginSet = new Set(enabledPluginIds);
+
+  for (const [name, entry] of SKILL_HASHMAP) {
+    if (entry.pluginId) {
+      if (pluginSet.has(entry.pluginId)) {
+        result.set(name, entry);
+      }
+    } else {
+      if (discoveredSet.has(name)) {
+        result.set(name, entry);
+      }
+    }
+  }
+
+  return result;
+}
 
 // Build catalog entries from hashmap + discovered skill names
 export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: Set<string>): CatalogEntry[] {
@@ -28,8 +111,6 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
       entries.push({
         name,
         description: entry.description,
-        criteria: entry.criteria,
-        examples: entry.examples,
         discoveredOnly: false,
       });
       seen.add(name);
@@ -48,8 +129,6 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
       entries.push({
         name: skillName,
         description: hashmapEntry.description,
-        criteria: hashmapEntry.criteria,
-        examples: hashmapEntry.examples,
         discoveredOnly: false,
       });
     } else {
@@ -66,31 +145,67 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
 }
 
 // Format catalog entries into the additionalContext string
-export function formatCatalog(entries: CatalogEntry[]): string {
-  const lines: string[] = [
-    '<skill-catalog>',
-    '## Available Skills for Delegation',
-    '',
-  ];
+export function formatCatalog(entries: CatalogEntry[], availableHashmap: Map<string, HashmapSkillEntry>): string {
+  const discoveredOnlyEntries = entries.filter((e) => e.discoveredOnly);
 
-  for (const entry of entries) {
-    if (entry.discoveredOnly) {
-      lines.push(`- ${entry.name}: Available (invoke Skill(skill: "${entry.name}") to load — no selection criteria defined, evaluate by name)`);
-    } else {
-      lines.push(`- ${entry.name}: ${entry.description}`);
-      lines.push(`  - Criteria: ${entry.criteria}`);
-      if (entry.examples && entry.examples.length > 0) {
-        lines.push('  - Examples:');
-        for (const example of entry.examples) {
-          lines.push(`    - ${example}`);
-        }
+  // Collect situation rows: for each situation, find available skills with that situationId
+  type SituationRow = { situation: Situation; skillNames: string[] };
+  const situationRows: SituationRow[] = [];
+
+  for (const situation of SITUATIONS) {
+    const matchingSkills: string[] = [];
+    for (const [skillName, entry] of availableHashmap) {
+      if (entry.situationIds.includes(situation.id)) {
+        matchingSkills.push(skillName);
       }
+    }
+    if (matchingSkills.length > 0) {
+      situationRows.push({ situation, skillNames: matchingSkills });
     }
   }
 
-  lines.push('');
-  lines.push('When delegating to sisyphus-junior, evaluate the above skills against the task.');
-  lines.push('Include relevant skills in ## 7. MANDATORY SKILLS section.');
+  // If nothing to show, return minimal output
+  if (situationRows.length === 0 && discoveredOnlyEntries.length === 0) {
+    return '<skill-catalog>\nNo skills available for delegation.\n</skill-catalog>';
+  }
+
+  const lines: string[] = [
+    '<skill-catalog>',
+    '## Load Skills',
+    '',
+    'Based on the task situation, load the relevant skills listed below before delegating to sisyphus-junior.',
+    '',
+  ];
+
+  // Situation-based table
+  if (situationRows.length > 0) {
+    lines.push('| Situation | Skills |');
+    lines.push('|-----------|--------|');
+    for (const row of situationRows) {
+      lines.push(`| ${row.situation.label} | ${row.skillNames.join(', ')} |`);
+    }
+    lines.push('');
+
+    // How to evaluate section
+    lines.push('### How to evaluate');
+    lines.push('');
+    for (const row of situationRows) {
+      lines.push(`**${row.situation.label}:** ${row.situation.reasoning}`);
+      lines.push(`Load: ${row.skillNames.join(', ')}`);
+      lines.push('');
+    }
+  }
+
+  // Discovered-only entries
+  if (discoveredOnlyEntries.length > 0) {
+    lines.push('### Additional discovered skills');
+    lines.push('');
+    for (const entry of discoveredOnlyEntries) {
+      lines.push(`- ${entry.name}: Available (invoke Skill(skill: "${entry.name}") to load — no selection criteria defined, evaluate by name)`);
+    }
+    lines.push('');
+  }
+
   lines.push('</skill-catalog>');
 
   return lines.join('\n');

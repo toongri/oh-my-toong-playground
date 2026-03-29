@@ -112,8 +112,26 @@ describe('main (integration)', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('superpowers:test-driven-development');
   });
 
+  it('additionalContext에 Load Skills 헤더가 포함된다', async () => {
+    const fakeHome = join(tempDir, 'fakehome');
+    await mkdir(join(fakeHome, '.claude'), { recursive: true });
+    await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
+    process.env.HOME = fakeHome;
+
+    const mockStdin = createMockStdin(JSON.stringify({ sessionId: 'test', cwd: join(tempDir, 'nonexistent') }));
+    Object.defineProperty(process, 'stdin', {
+      value: mockStdin,
+      writable: true,
+      configurable: true,
+    });
+
+    await main();
+
+    const output = JSON.parse(consoleOutput[consoleOutput.length - 1]);
+    expect(output.hookSpecificOutput.additionalContext).toContain('## Load Skills');
+  });
+
   it('fail-open: outputs continue:true on broken stdin', async () => {
-    // Mock stdin that emits an error
     const readable = new Readable({
       read() {
         process.nextTick(() => this.destroy(new Error('stdin broken')));
