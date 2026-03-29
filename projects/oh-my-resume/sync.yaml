@@ -1,0 +1,27 @@
+name: oh-my-resume
+path: /Users/toong/repos/oh-my-resume/main
+platforms: [claude]
+
+agents:
+  items:
+    - explore
+    - mnemosyne
+    - oracle
+    - argus
+    - sisyphus-junior
+
+skills:
+  items:
+    - sisyphus
+    - git-master
+    - humanizer
+    - qa
+    - resume-apply
+    - review-resume
+
+rules:
+  items:
+    - tool-usage-policy
+    - work-principles
+    - coding-discipline
+    - resume-workflow
