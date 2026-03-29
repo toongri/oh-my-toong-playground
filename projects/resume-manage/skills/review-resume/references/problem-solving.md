@@ -32,7 +32,7 @@
 
 ## Mandatory Evaluation Checklist
 
-The following items must be checked when evaluating the problem-solving section, and the results must be included in the Phase 10 output.
+The following items must be checked when evaluating the problem-solving section, and the results must be included in the Phase 11 output.
 
 ### Structure Check
 - [ ] [문제] verbose verdict — if 2 or more of the following signals apply, recommend splitting [개요]+[문제]:
