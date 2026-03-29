@@ -12,7 +12,7 @@ If a JD (Job Description) is provided, analyze it before evaluation:
 
 1. **Team identification**: Which team is hiring? (결제팀, 전시팀, CRM팀, 플랫폼팀, etc.) The team determines which candidate traits are most relevant.
 2. **Keyword extraction**: Extract key technical skills, domain terms, and soft-skill signals. Categorize into:
-   - Technical requirements (언어, 프레임워크, 인프라)
+   - Technical requirements (Languages, Frameworks, Infrastructure)
    - Domain context (결제, 추천, 물류, 데이터, etc.)
    - Working culture signals (자율, 협업, 프로덕트 엔지니어, 오너십, etc.)
 3. **Implicit problems**: What business problems does the JD hint at? "대규모 트래픽 처리" implies scaling challenges. "레거시 개선" implies tech debt. "신규 서비스" implies zero-to-one building.
@@ -57,9 +57,9 @@ When targeting a specific company, research through these channels using WebSear
 
 | Type | Research feeds... |
 | --- | --- |
-| A (정체성) | Which identity to highlight — aligned with JD keywords and company values |
-| B (일하는 방식) | Which working style to emphasize — aligned with team culture signals |
-| C (회사 연결) | Company-specific domain/product/values for connection paragraph |
-| D (지금의 관심) | Which interest to surface — aligned with JD tech stack and company direction |
+| A (Identity) | Which identity to highlight — aligned with JD keywords and company values |
+| B (Working Style) | Which working style to emphasize — aligned with team culture signals |
+| C (Company Connection) | Company-specific domain/product/values for connection paragraph |
+| D (Current Interest) | Which interest to surface — aligned with JD tech stack and company direction |
 
 If targeting a specific company and no meaningful research results are found, note this limitation. A strong A + B self-introduction without company-specific context is always better than forced connections based on guesswork.

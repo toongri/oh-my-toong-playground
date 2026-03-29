@@ -23,29 +23,33 @@
 19. [Writing Guidance: Compressed Depth](#19-writing-guidance-compressed-depth)
 20. [Writing Guidance Trigger: Compressed Depth](#20-writing-guidance-trigger-compressed-depth)
 21. [Red Flags: Compressed Depth](#21-red-flags-compressed-depth)
+22. [Technical Substance Verification T1-T3](#22-technical-substance-verification-t1-t3)
+23. [T1-T3 Depth Gating](#23-t1-t3-depth-gating)
+24. [T1-T3 Output Format](#24-t1-t3-output-format)
+25. [T1-T3 Writing Guidance Trigger](#25-t1-t3-writing-guidance-trigger)
 
 ---
 
 ## Mandatory Evaluation Checklist
 
-아래 항목은 문제해결 섹션 평가 시 반드시 체크하고, 결과를 Phase 10 출력에 포함해야 한다.
+The following items must be checked when evaluating the problem-solving section, and the results must be included in the Phase 10 output.
 
-### 구조 체크
-- [ ] [문제] verbose 판정 — 아래 시그널 중 2개 이상 해당하면 [개요]+[문제] 분리 권장:
-  - 비즈니스 맥락 + 기술 이슈가 [문제] 안에 혼재
-  - [문제]만 단독으로 5줄 이상
-  - "이게 왜 문제인지"에 도달하기까지 배경 설명이 3줄 이상
-  - 시그널 해당 없으면 분리 불필요로 판정하고 넘어감
-- [ ] 회고가 있으면 → 감상적 성장 서사 FLAG, 아키텍처 한계 + 확장 방향(2-3줄)은 OK. 회고 자체는 OPTIONAL
+### Structure Check
+- [ ] [문제] verbose verdict — if 2 or more of the following signals apply, recommend splitting [개요]+[문제]:
+  - Business context + technical issue mixed inside [문제]
+  - [문제] alone is 5+ lines
+  - 3+ lines of background explanation before reaching "why this is a problem"
+  - If no signals apply, judge as no split needed and move on
+- [ ] If 회고 exists → FLAG sentimental growth narrative; architecture limits + expansion direction (2-3 lines) is OK. 회고 itself is OPTIONAL
 
-### 포트폴리오 다양성
-- [ ] 전체 문제해결 엔트리의 테마 분류 수행 (정합성, 성능, 안정성, 비즈니스, 데이터 파이프라인 등)
-- [ ] 2개 이상 동일 테마면 FLAG — 테마 겹침 경고 + 교체 권장
+### Portfolio Diversity
+- [ ] Classify themes for all problem-solving entries (Consistency, Performance, Resilience, Business Metrics, Data Pipeline, etc.)
+- [ ] If 2+ entries share the same theme → FLAG — theme overlap warning + recommend replacement
 
-### Depth별 필수 확인
-- [ ] Signature depth: P.A.R.R. P1-P5 전체 적용, 실패 arc 존재 여부, 멈추는 판단 확인
-- [ ] Detailed depth: 최소 1개 실패 시도, why-chain 확인
-- [ ] Compressed depth: 3-5줄 이내, 문제→해결→결과 흐름 확인
+### Per-Depth Required Checks
+- [ ] Signature depth: Apply full P.A.R.R. P1-P5, check for failure arc, check for stopping judgment
+- [ ] Detailed depth: At least 1 failed attempt, why-chain check
+- [ ] Compressed depth: within 3-5 lines, problem→solution→result flow check
 
 ---
 
@@ -64,15 +68,15 @@ flowchart TB
     A[Collect problem-solving entries] --> B{Does it have a full P.A.R.R. narrative?}
     B -->|Yes| C[signature depth → Full P.A.R.R. evaluation]
     B -->|No| D{Does it have 5+ lines of description?}
-    D -->|Yes| E[detailed depth → 문제해결 6개 기준 + P1,P2,P5 evaluation]
-    D -->|No| F[compressed depth → 문제해결 6개 기준 + Volume Guide]
+    D -->|Yes| E[detailed depth → Problem-Solving 6 Criteria + P1,P2,P5 evaluation]
+    D -->|No| F[compressed depth → Problem-Solving 6 Criteria + Volume Guide]
 
     style C fill:lightyellow
     style E fill:lightgreen
     style F fill:lightblue
 ```
 
-**Common base**: 문제해결 6개 기준(탐색적 인과·근거 깊이·사고 귀속·대안 비교·면접 심층성·섹션 적합성)은 모든 depth에 적용. **Depth-specific additions**: signature adds P1-P8, detailed adds P1+P2+P5, compressed adds volume guide.
+**Common base**: Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) apply to all depths. **Depth-specific additions**: signature adds P1-P8, detailed adds P1+P2+P5, compressed adds volume guide.
 
 ---
 
@@ -90,17 +94,17 @@ The recommended depth distribution varies by years of experience. Junior candida
 
 ### Portfolio Theme Diversity
 
-문제해결 포트폴리오 전체를 평가할 때, **기술 테마 다양성**을 확인. 2개 이상의 엔트리가 동일 테마를 공유하면 플래그.
+When evaluating the full problem-solving portfolio, check **technical theme diversity**. Flag if 2 or more entries share the same theme.
 
 | Technical Theme | Example Topics |
 |----------------|---------------|
-| 정합성 (Consistency) | race condition, distributed lock, transaction sync |
-| 성능 (Performance) | caching, query optimization, response time |
-| 안정성 (Resilience) | circuit breaker, retry, fallback, fault isolation |
-| 비즈니스 메트릭 (Business) | cost reduction, headcount, conversion rate |
-| 데이터 파이프라인 | ETL, streaming, batch processing |
+| Consistency | race condition, distributed lock, transaction sync |
+| Performance | caching, query optimization, response time |
+| Resilience | circuit breaker, retry, fallback, fault isolation |
+| Business Metrics | cost reduction, headcount, conversion rate |
+| Data Pipeline | ETL, streaming, batch processing |
 
-**왜 중요한가**: 같은 테마의 프로젝트가 여러 개면 "이 사람은 이것밖에 못하나?" 인상을 줌. 각 signature/detailed 엔트리가 서로 다른 테마를 커버하도록 조합을 추천.
+**Why it matters**: Multiple projects with the same theme give the impression "this person only knows this one thing." Recommend combinations where each signature/detailed entry covers a different theme.
 
 ---
 
@@ -134,7 +138,7 @@ For Mid/Senior: the four signature strengths are:
 
 ## 4. P.A.R.R. Evaluation Dimensions P1-P5 (Signature Depth)
 
-Apply to signature depth entries. After 문제해결 6개 기준 평가 후, apply the full P1-P5 as additional evaluation. For detailed depth entries, apply only P1, P2, P5.
+Apply to signature depth entries. After Problem-Solving 6 Criteria evaluation, apply the full P1-P5 as additional evaluation. For detailed depth entries, apply only P1, P2, P5.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
@@ -195,7 +199,7 @@ Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (
 
 ```
 [Problem-Solving: {entry name} — signature depth]
-- 문제해결 6개 기준: (output separately, refer to Section-Specific Evaluation)
+- Problem-Solving 6 Criteria: (output separately, refer to Section-Specific Evaluation)
 - P1 Narrative depth: PASS / FAIL (reason)
 - P2 Failure arc: PASS / FAIL (reason)
 - P3 Verification depth: PASS / FAIL (reason)
@@ -215,13 +219,13 @@ For Mid/Senior, append:
 
 ```
 [Problem-Solving: {entry name} — detailed depth]
-- 문제해결 6개 기준: (output separately)
+- Problem-Solving 6 Criteria: (output separately)
 - P1 Narrative depth: PASS / FAIL (reason)
 - P2 Failure arc: PASS / FAIL (reason)
 - P5 "Why?" chain: PASS / FAIL (reason)
 ```
 
-**Compressed depth** entries: Apply 문제해결 6개 기준 + Volume Guide only (P.A.R.R. not applied).
+**Compressed depth** entries: Apply Problem-Solving 6 Criteria + Volume Guide only (P.A.R.R. not applied).
 
 ---
 
@@ -454,22 +458,22 @@ Apply the full P.A.R.R. formula, but show the depth of thought process — not a
 - BAD: 감상적 성장 서사. e.g., "기술적 완성도가 곧 정답이라 생각했지만, 이 프로젝트를 거치면서 관리 비용을 같이 보는 습관이 생겼다"
 - Mid/Senior additional: stopping judgment ("93%까지 가능했지만 비용 대비 85%에서 보류")
 
-### 개요/문제 분리 패턴
+### Overview/Problem Split Pattern
 
-[문제] 섹션이 길어질 때(비즈니스 맥락과 기술 이슈가 섞여 verbose해지는 경우), [개요]와 [문제]를 분리하여 가독성 확보.
+When the [문제] section grows long (verbose due to business context and technical issues mixing together), split [개요] and [문제] for readability.
 
-- **[개요]**: 비즈니스 맥락 — 이 시스템이 왜 존재하는지, 규모, 비즈니스 비용
-- **[문제]**: 기술 이슈 — 관찰된 증상, 진단한 원인, 기술적 의미
+- **[개요]**: Business context — why this system exists, its scale, business cost
+- **[문제]**: Technical issue — observed symptoms, diagnosed cause, technical significance
 
-**Verbose 시그널 (2개 이상 해당 시 분리 권장):**
-1. 비즈니스 맥락 + 기술 이슈가 [문제] 안에 혼재
-2. [문제]만 단독으로 5줄 이상
-3. "이게 왜 문제인지"에 도달하기까지 배경 설명이 3줄 이상
+**Verbose Signals (recommend split if 2 or more apply):**
+1. Business context + technical issue mixed inside [문제]
+2. [문제] alone is 5+ lines
+3. 3+ lines of background explanation before reaching "why this is a problem"
 
-시그널 해당 없으면 분리 불필요.
+If no signals apply, no split needed.
 
-**When to split**: [문제]가 길고 비즈니스 설명과 기술 진단이 혼재. 분리하면 스캐너가 [개요]를 건너뛰고 [문제]만 읽을 수 있음.
-**When NOT to split**: 문제가 순수 기술적이라 비즈니스 전제가 짧을 때. 강제 분리는 불필요한 구조를 만듦.
+**When to split**: [문제] is long and business explanation and technical diagnosis are mixed. Splitting allows scanners to skip [개요] and read only [문제].
+**When NOT to split**: When the problem is purely technical and the business premise is brief. Forced splitting creates unnecessary structure.
 
 Writing template:
 
@@ -514,7 +518,7 @@ After P.A.R.R. evaluation, check the following conditions:
 
 - **Condition**: 3 or more P.A.R.R. dimensions are FAIL, or the P.A.R.R. structure is entirely absent
 - **Immediate trigger**: If the \[문제\]/\[해결 과정\]/\[검증\]/\[회고\] structure is completely absent — trigger immediately without counting
-- **Message to deliver**: "P.A.R.R. 평가 차원 중 N개가 FAIL입니다. 이 문제해결 엔트리는 구조적 재작성이 필요합니다. 위의 Writing Guidance: Signature Depth P.A.R.R. 섹션의 템플릿과 서사 원칙을 참고하여 다시 작성해 보세요."
+- **Message to deliver**: "N of the P.A.R.R. evaluation dimensions are FAIL. This problem-solving entry requires structural rewriting. Refer to the Writing Guidance: Signature Depth P.A.R.R. section template and narrative principles."
 
 This trigger is not optional. If the P.A.R.R. structure is absent entirely, trigger immediately.
 
@@ -541,11 +545,11 @@ This trigger is not optional. If the P.A.R.R. structure is absent entirely, trig
 
 ## 17. Compressed Depth Evaluation
 
-Apply to compressed depth entries (items described as "other projects" or concise bullet-format entries in the resume). Do not apply P.A.R.R. (P1-P5). Use 문제해결 6개 기준 + Volume Guide only.
+Apply to compressed depth entries (items described as "other projects" or concise bullet-format entries in the resume). Do not apply P.A.R.R. (P1-P5). Use Problem-Solving 6 Criteria + Volume Guide only.
 
-### Evaluation Criteria (문제해결 6개 기준 + Volume Guide)
+### Evaluation Criteria (Problem-Solving 6 Criteria + Volume Guide)
 
-Apply 문제해결 6개 기준(탐색적 인과·근거 깊이·사고 귀속·대안 비교·면접 심층성·섹션 적합성)을 compressed depth entries의 각 라인에 적용. Additionally check the volume guide:
+Apply Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) to each line of compressed depth entries. Additionally check the volume guide:
 
 **Volume guide:**
 
@@ -574,7 +578,7 @@ Attempt enumeration, retrospective, and trade-off comparison are **not required*
 
 ### Explicit Anti-Patterns (ENHANCED)
 
-**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as 탐색적 인과 FAIL and request the underlying problem context and outcome.
+**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as Diagnostic Causation FAIL and request the underlying problem context and outcome.
 
 **Over-Narration Anti-Pattern**: Signature-level narrative (attempts, retrospective, trade-off comparison) used in non-signature projects. Flag and recommend compression to 3-5 bullet lines.
 
@@ -618,7 +622,7 @@ Attempt enumeration, retrospective, and trade-off comparison are **not required*
 
 ## 19. Writing Guidance: Compressed Depth
 
-Use when content restructuring is needed for compressed depth entries based on 탐색적 인과/근거 깊이 평가. Guides compressing verbose narratives or converting feature lists into problem-solving narratives.
+Use when content restructuring is needed for compressed depth entries based on Diagnostic Causation/Evidence Depth evaluation. Guides compressing verbose narratives or converting feature lists into problem-solving narratives.
 
 ### Strategy: Supporting Backdrop
 
@@ -675,11 +679,11 @@ Apply the standard Pre-Writing Validation flowchart. Additionally:
 
 ## 20. Writing Guidance Trigger: Compressed Depth
 
-After completing 문제해결 6개 기준 evaluation on compressed depth entries, check:
+After completing Problem-Solving 6 Criteria evaluation on compressed depth entries, check:
 
-- **Trigger formula**: `탐색적 인과_FAIL_count / evaluable_lines > 0.5` OR `근거 깊이_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = bullet lines evaluated by 문제해결 6개 기준, excluding titles, blank lines, and section markers)
+- **Trigger formula**: `Diagnostic Causation_FAIL_count / evaluable_lines > 0.5` OR `Evidence Depth_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = bullet lines evaluated by Problem-Solving 6 Criteria, excluding titles, blank lines, and section markers)
 - **Missing section**: If there are no compressed depth entries at all, recommend adding them
-- **Message to deliver**: "전체 N개 라인 중 탐색적 인과/근거 깊이 FAIL이 과반수입니다 (탐색적 인과: X/N, 근거 깊이: X/N). 이 섹션은 표현 수정이 아니라 내용 재구성이 필요합니다. 위의 Writing Guidance: Compressed Depth 섹션의 템플릿을 참고하여 재작성해 보세요."
+- **Message to deliver**: "More than half of the Diagnostic Causation/Evidence Depth evaluations across N lines are FAIL (Diagnostic Causation: X/N, Evidence Depth: X/N). This section needs content restructuring, not expression editing. Refer to the Writing Guidance: Compressed Depth section template."
 
 This trigger is not optional.
 
@@ -691,10 +695,131 @@ This trigger is not optional.
 
 | Thought | Reality |
 | --- | --- |
-| "P1-P5로 깊이를 평가해야지" | Applying P1-P5 to compressed depth is an excessive requirement. Use 문제해결 6개 기준 + volume guide only. |
+| "P1-P5로 깊이를 평가해야지" | Applying P1-P5 to compressed depth is an excessive requirement. Use Problem-Solving 6 Criteria + volume guide only. |
 | "시도→실패→깨달음이 없으니 FAIL" | Attempt enumeration is signature depth only. Compressed depth passes with problem→solution→verification→result bullet flow. |
-| "잘 쓰였으니 넘어가자" | Even well-written entries must be checked for 탐색적 인과(diagnostic causality) and 근거 깊이(evidence depth). |
+| "잘 쓰였으니 넘어가자" | Even well-written entries must be checked for Diagnostic Causation and Evidence Depth. |
 | "프로젝트가 7개인데 각각 평가하면 되지" | Check the volume guide (5+ entries) before individual evaluation. If 5+, recommend selection first. |
 | "숫자가 없으니 대충 넣자" | Fabricating metrics is prohibited. If numbers are missing, always request them from the user. |
 | "기능 나열이지만 깔끔하게 정리됐잖아" | Clean feature listing is still the Feature Listing Anti-Pattern. Problem context and outcome are required. |
 | "signature 수준으로 깊이 있게 써야지" | Over-narration in compressed entries creates imbalance. 3-5 bullet lines per entry. |
+
+---
+
+## 22. Technical Substance Verification T1-T3
+
+Phase 8 (P.A.R.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a reflection?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
+
+Key distinction: P1-P8 asks "does this element **exist**?", T1-T3 asks "is this content **correct**?"
+
+### T1 — Technical Coherence
+
+> Are the technical claims internally consistent, and can the stated cause actually produce the stated result?
+
+| Detection Target | Signal | Why It's a Problem |
+|-----------|--------|-------------|
+| Buzzword Salad | 3+ technology names in one sentence + no explanation of their interaction | Listing tech names alone means you can't answer "so how do these connect?" in an interview |
+| Scale Mismatch | Distributed system solution for a single-server problem, or vice versa | Interviewers immediately ask "was this solution necessary at this scale?" |
+| Impossible Metrics | Performance numbers that contradict the call chain described in the architecture | When asked for the basis of the numbers in an interview, you can't explain |
+| Causal Impossibility | The stated cause cannot produce the stated result | Reveals lack of technical understanding, causing loss of trust |
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|------|------|------|
+| PASS | "READ COMMITTED에서 두 트랜잭션이 동시에 재고를 조회하면 MVCC 특성상 둘 다 같은 값을 읽어 초과 차감 발생" | The technical causality between cause (isolation level + concurrent read) and result (over-deduction) is accurate |
+| FAIL | "MVCC 특성상 필연적으로 데이터 유실 발생" | MVCC does not cause data loss. Lost Update is an isolation level issue, not a flaw in MVCC itself |
+| FAIL | "Redis 분산 락으로 해결. 평균 응답 0.5ms" | Redis network round-trip alone is 1-2ms, so an overall response of 0.5ms is physically impossible |
+| PASS | "비관적 락(SELECT FOR UPDATE) 적용 → Lock Escalation으로 Table Lock 전이, 커넥션 풀 고갈" | The escalation from row lock to table lock in MySQL InnoDB and its consequence are accurately connected |
+| FAIL | "Kafka 적용으로 응답시간 3초 → 200ms" | Async processing only separates perceived user response from actual completion; the processing itself doesn't speed up. Without clarifying what the 200ms refers to, this falls apart in an interview |
+
+**Reverse Test**: Can you still understand the solution approach after removing all technology names? If yes, the tech names are descriptions that carry substance. If no, the description depends on tech names alone — T1 suspect.
+
+### T2 — Selection Rationality
+
+> Does each technology/approach choice have a rational basis grounded in the specific constraints of this problem?
+
+| Detection Target | Signal | Why It's a Problem |
+|-----------|--------|-------------|
+| Post-hoc Rationalization | Listing the technology's general advantages rather than this problem's specific constraints | Answering "why did you choose this?" with "because it's fast" invites "then why not just use anything fast?" |
+| Missing Constraints | The most obvious constraint is ignored in the selection | Interviewers immediately call it out: "Didn't you consider SPOF?" |
+| Excess Alternatives | 5+ alternatives listed when 2-3 are realistic candidates | Gives the impression of padding with unrealistic alternatives — doesn't seem like genuine deliberation |
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|------|------|------|
+| PASS | "선착순 특성상 동시 요청이 같은 row에 집중 → 낙관적 락의 재시도 폭증이 예측되어 비관적 락 선택" | The problem's specific characteristic (same row concentration) directly supports the selection rationale |
+| FAIL | "Redis는 빠르고 확장성이 좋아서 선택" | Lists Redis's general advantages. No connection to why speed/scalability is the core constraint in this problem |
+| PASS | "Stage 1(Vision)과 Stage 2(Text) 분리 — 각 단계가 하나의 역할만 수행하므로 할루시네이션 원인 추적 가능" | The reason for the structural choice is directly connected to the core issue (hallucination) in this problem |
+| FAIL | "MSA로 전환하여 확장성 확보" | No explanation of why the monolith needed MSA-level scale, or which services needed to be separated |
+
+**3-Element Selection Check**: A rational selection includes (1) the specific constraints of this problem, (2) why this approach is advantageous under those constraints, and (3) awareness of this approach's known drawbacks. If any of the 3 elements is missing, flag as suspect.
+
+### T3 — Trade-off Authenticity
+
+> Is the stated trade-off real and specific in this problem's context, or is it textbook recitation?
+
+| Detection Target | Signal | Why It's a Problem |
+|-----------|--------|-------------|
+| Textbook Recitation | Only citing general CS principles without domain context | Writing only "sacrificing Consistency per CAP theorem" prompts interviewers to ask "what does consistency loss mean in this service?" |
+| One-sided Comparison | Only listing rejected alternatives' downsides, zero downsides for the chosen approach | Real trade-offs have two sides. Showing only one side raises suspicion of post-hoc rationalization |
+| Hindsight Wisdom | Described as retrospective wisdom rather than reasoning at the time of the decision | "We should have chosen this from the start" framing hides the actual judgment process |
+
+**PASS / FAIL Examples:**
+
+| Verdict | Example | Reason |
+|------|------|------|
+| PASS | "낙관적 락은 충돌이 드문 환경에서는 효율적이나, 선착순처럼 동시 요청이 같은 row에 집중되면 재시도 폭증으로 DB 부하 가중" | The scenario where the alternative is appropriate + specific exclusion reason in this context |
+| FAIL | "낙관적 락: 안 맞아서 배제" | No explanation of why it doesn't fit in this domain context |
+| PASS | "87% 조합 대비 정확도 2%↓이지만 비용 33%↓ — 월 처리량 대비 TCO 최적이라 판단" | Explicitly acknowledges the chosen approach's downside (2% accuracy drop) and connects it to cost as the constraint in this context |
+| FAIL | "5개 모델 비교하여 최적 조합 선택" | No indication of what "optimal" means, what criteria were used, or what was given up |
+| PASS | "fine-tuning으로 93%까지 실험 확인. 그러나 월 200만원 추가 + 모델 업데이트마다 재학습 필요. 85%+수작업 검수가 TCO 최적이라 판단" | Acknowledges that a better option existed while showing intentional stopping due to cost constraints — presents both sides |
+
+---
+
+## 23. T1-T3 Depth Gating
+
+T1-T3 verifies technical substance inside the narrative, so it applies only to depths where sufficient technical description exists.
+
+| Depth | T1 Technical Coherence | T2 Selection Rationality | T3 Trade-off Authenticity |
+|-------|-----------------|----------------|----------------------|
+| signature | Apply | Apply | Apply |
+| detailed | Apply | Apply (when selection is mentioned) | Not applied |
+| compressed | Not applied | Not applied | Not applied |
+
+Compressed depth has only 3-5 lines of content — there is not enough description to judge technical substance. Applying T1-T3 to sparse descriptions would cause nearly every item to FAIL, making it diagnostically useless.
+
+---
+
+## 24. T1-T3 Output Format
+
+**Signature depth** entries (T1-T3 all applied):
+
+```
+[Technical Substance: {entry name} — signature depth]
+- T1 Technical Coherence: PASS / FAIL (reason)
+- T2 Selection Rationality: PASS / FAIL (reason)
+- T3 Trade-off Authenticity: PASS / FAIL (reason)
+```
+
+**Detailed depth** entries (T1, T2 only):
+
+```
+[Technical Substance: {entry name} — detailed depth]
+- T1 Technical Coherence: PASS / FAIL (reason)
+- T2 Selection Rationality: PASS / FAIL (reason)
+```
+
+When a FAIL verdict is issued, always include specific critique: which claim is the problem, why it is a problem, and how it falls apart in an interview.
+
+---
+
+## 25. T1-T3 Writing Guidance Trigger
+
+After T1-T3 evaluation, check the following conditions:
+
+- **Trigger**: 2 or more of T1-T3 are FAIL on a signature depth entry
+- **Message**: "N of the Technical Substance Verification (T1-T3) dimensions are FAIL. The narrative structure is sound, but the technical content has accuracy/rationality issues. Review each FAIL item's specific critique and verify whether the technical claims can withstand interview scrutiny."
+- **Priority**: T1-T3 FAILs cause loss of technical credibility in interviews, so classify as **P0 (must fix)** in the HTML report.
+
+T1-T3 verifies content accuracy, so provide a **technical re-examination guide** rather than Writing Guidance (structural rewriting). No need to rewrite the structure — just fix the incorrect technical claims.

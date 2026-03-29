@@ -4,10 +4,10 @@
 
 1. [Overview](#overview)
 2. [Paragraph Types](#paragraph-types)
-   - [Type A — Professional Identity](#type-a--professional-identity-정체성)
-   - [Type B — Engineering Stance](#type-b--engineering-stance-일하는-방식)
-   - [Type C — Company Connection](#type-c--company-connection-회사-연결)
-   - [Type D — Current Interest](#type-d--current-interest-지금의-관심)
+   - [Type A — Professional Identity](#type-a--professional-identity)
+   - [Type B — Engineering Stance](#type-b--engineering-stance)
+   - [Type C — Company Connection](#type-c--company-connection)
+   - [Type D — Current Interest](#type-d--current-interest)
 3. [Composition Guide](#composition-guide)
 4. [Global Evaluation](#global-evaluation)
 5. [Evaluation Output Format](#evaluation-output-format)
@@ -23,19 +23,19 @@
 
 아래 항목은 자기소개 평가 시 반드시 체크하고, 결과를 Phase 10 출력에 포함해야 한다.
 
-### Type A (행동 원칙)
+### Type A (Action Principle)
 - [ ] Bridge 3박자 구조: bold 오프너 → 이유(브릿지) → 에피소드. 셋 중 하나라도 빠지면 FLAG
 - [ ] 차별화 실패 점검: 오프너가 "개발자 10명이 써도 어색하지 않은" 범용 문장이면 FLAG
 - [ ] 자기 주장형 종결 점검: "~편입니다", "~타입입니다", "~사람입니다" 종결이면 FLAG → 행동 기반 오프너+bridge+episode로 전환 권장
 
-### Type B (일하는 방식)
+### Type B (Working Style)
 - [ ] 구체적 행동 원칙이 에피소드로 뒷받침되는지 확인
 
-### Type C (회사 연결)
+### Type C (Company Connection)
 - [ ] 마무리 동사 점검: "~하고 싶다"(소망) → FLAG. "~에 기여할 수 있다"(기여 비전)으로 전환 권장
 - [ ] 회사 연결이 역량/경험 기반인지, 추상적 비전인지 구분
 
-### Type D (현재 관심)
+### Type D (Current Interest)
 - [ ] 구체적 관심사가 근거와 함께 제시되는지 확인
 - [ ] 수치 없어도 FAIL 아님 (Type D 특성)
 
@@ -59,7 +59,7 @@ Unlike career bullets (which prove achievements) or problem-solving entries (whi
 
 A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of four types. Identify each paragraph's type, then evaluate it against the type-specific criteria below.
 
-### Type A — Professional Identity (정체성)
+### Type A — Professional Identity
 
 **Why**: In a 7.4-second scan, the first thing a hiring manager tries to determine is "what role and level is this person?" The identity paragraph must answer this instantly. Without a clear identity anchor, the self-introduction reads as a generic essay that could belong to anyone.
 
@@ -87,7 +87,7 @@ A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of
 
 ---
 
-### Type B — Engineering Stance (일하는 방식)
+### Type B — Engineering Stance
 
 **Why**: Technical skills alone don't distinguish mid-level+ engineers. How someone approaches work — their engineering philosophy, collaboration style, problem-solving temperament — is what hiring managers remember after the 40-second scan. This paragraph answers "what would it be like to work with this person?"
 
@@ -112,7 +112,7 @@ A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of
 
 ---
 
-### Type C — Company Connection (회사 연결)
+### Type C — Company Connection
 
 **Why**: In Korean tech hiring, a generic self-introduction that could be sent to any company is the most common rejection signal. When targeting a specific company, the connection paragraph is the signal that this candidate did their homework. It answers "why HERE, and what can you GIVE?"
 
@@ -148,7 +148,7 @@ A self-introduction consists of 2-4 paragraphs. Each paragraph belongs to one of
 
 ---
 
-### Type D — Current Interest (지금의 관심)
+### Type D — Current Interest
 
 **Why**: Past achievements show what you've done, but not where you're headed. What you're currently exploring signals growth trajectory, technical curiosity, and engineering taste. Hiring managers — especially at companies that value autonomy — read this as "will this person keep growing after they join?"
 
