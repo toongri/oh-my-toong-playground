@@ -46,7 +46,8 @@
         {"text": "overview-problem-split-awareness", "description": "When [문제] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [개요]+[문제] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
         {"text": "retrospective-optional-guidance", "description": "Treats retrospective as optional; flags sentimental growth narrative as anti-pattern but accepts architectural limit + extension direction (2-3 lines)"},
         {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags when 2+ entries share the same theme (정합성, 성능, 안정성, 비즈니스 등)"},
-        {"text": "skill-section-placement", "description": "Evaluates technical skill section placement — checks if skill section is positioned for JD keyword matching within 7-second recruiter scan"}
+        {"text": "skill-section-placement", "description": "Evaluates technical skill section placement — checks if skill section is positioned for JD keyword matching within 7-second recruiter scan"},
+        {"text": "phase-tracking-consistency", "description": "Phase tracking markers use [Phase N/12: ...] format with correct total (12), and phase names in markers match SKILL.md Phase Map: 0=Note Load, 1=Pre-Evaluation Research, 2=Self-Introduction Evaluation, 3=Target Position Gate, 4=Developer Competency Assessment, 5=Section-Specific Evaluation, 6=3-Level Pushback Simulation, 7=First-Page Primacy + JD Keyword Matching, 8=Problem-Solving Evaluation, 9=Technical Substance Verification, 10=AI Tone Audit, 11=Generate HTML Report, 12=Note Accumulate"}
       ],
       "files": ["_config.yml"]
     },
@@ -148,7 +149,7 @@
     "latest_iteration": 14,
     "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "110 assertions across 4 evals (41+31+17+21), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증."
+    "notes": "111 assertions across 4 evals (42+31+17+21), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증."
   },
   "benchmark_history": [
     {
