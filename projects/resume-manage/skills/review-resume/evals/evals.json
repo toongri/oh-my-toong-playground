@@ -74,7 +74,7 @@
         {"text": "depth-specific-evaluation", "description": "Applies depth-appropriate criteria per entry"},
         {"text": "applies-reference-criteria", "description": "Evaluation uses criteria from reference files — P.A.R.R. dimensions, Type A-D criteria, career/PS evaluation criteria, or depth classification language"},
         {"text": "ai-tone-audit-phase", "description": "Phase 9 addresses AI Tone Audit — invokes or declares intent to invoke Skill(humanizer)"},
-        {"text": "note-accumulate", "description": "Proposes note accumulation and asks for user confirmation"},
+        {"text": "note-accumulate", "description": "Phase 11: proposes note accumulation and asks for user confirmation"},
         {"text": "html-summary-section", "description": "Phase 10 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 10 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
