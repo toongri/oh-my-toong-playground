@@ -511,12 +511,11 @@ When sending a single bullet to the content-evaluator, use a format that **exact
 ## Candidate Profile
 - Experience: {years} years
 - Position: {position}
-- Target company/role: {company} / {role}
+- Target Company/Role: {company} / {role}
 
 ## Bullet Under Review
 - Section: {Career > Company A | Problem-Solving > Payment System Fault Isolation | Self-Introduction Type C}
 - Original: "{original text that was the subject of Phase 0-10 evaluation}"
-- Revised: "{revised text selected by the user}"
 
 ## Technical Context
 - Technologies/approaches mentioned in this bullet: {identified by main session directly from bullet text — e.g., Kafka, Redis, circuit breaker}
@@ -542,7 +541,7 @@ If the user says "move on" / "this is OK enough" → end the current section loo
 
 ## Phase 12: Generate HTML Report + User Approval Gate
 
-Compile all evaluation results from Phases 0-10 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. Generate the file, open it, and wait for user approval.
+Compile all evaluation results from Phases 0-11 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. Generate the file, open it, and wait for user approval.
 
 ### Approval Gate (Strict Feedback Loop)
 
@@ -721,6 +720,46 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
       padding: 10px 14px;
       margin: 8px 0;
       border-radius: 0 4px 4px 0;
+      font-style: italic;
+    }
+    .section-opt-out {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 8px 0;
+    }
+    .opt-out-badge {
+      display: inline-block;
+      background: #ffc107;
+      color: #212529;
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .unresolved-feedback {
+      margin-top: 8px;
+    }
+    .fail-axis {
+      border-left: 3px solid #dc3545;
+      padding: 6px 12px;
+      margin: 6px 0;
+      background: #fff;
+    }
+    .axis-label {
+      font-weight: 700;
+      color: #dc3545;
+      font-size: 0.85rem;
+    }
+    .axis-feedback {
+      margin: 4px 0;
+      font-size: 0.9rem;
+    }
+    .axis-hint {
+      color: #6c757d;
+      font-size: 0.85rem;
       font-style: italic;
     }
     .resume-line {

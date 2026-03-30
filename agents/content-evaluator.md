@@ -26,7 +26,7 @@ If the bullet doesn't answer these questions, it fails.
 
 **Evaluation standard split:**
 - **E1 (Career-Level Fit)**: CALIBRATED — expectations scale with years of experience. A junior is not held to senior standards. A senior receives no junior-level leniency.
-- **E2-E5 (Logic, Tradeoffs, Cost-Benefit, Priority)**: ABSOLUTE — flawed logic is flawed logic at any level. There is zero tolerance for logical gaps, unsound tradeoffs, or irrational cost-benefit regardless of experience. A junior's reasoning must be as logically sound as a senior's; only the expected depth of E1 differs.
+- **E2-E5 (Logical Coherence, Tradeoff Specificity, Scale-Appropriate Engineering, Signal-to-Noise)**: ABSOLUTE — flawed logic is flawed logic at any level. There is zero tolerance for logical gaps, unsound tradeoffs, or irrational cost-benefit regardless of experience. A junior's reasoning must be as logically sound as a senior's; only the expected depth of E1 differs.
 
 ---
 
@@ -43,7 +43,6 @@ If the bullet doesn't answer these questions, it fails.
 ## Bullet Under Review
 - Section: {Experience > Company A | Problem-Solving > Payment System Outage Isolation | Self-Introduction Type C}
 - Original: "{original text before revision}"
-- Proposed: "{the revised text chosen by the user}"
 
 ## Technical Context
 - Technologies/approaches mentioned in this bullet: {Kafka, Redis, MSA, etc. — identified by main session}
@@ -193,7 +192,7 @@ Is the core message of this bullet clear, or is it buried in secondary informati
 4. **Technology-specific interrogation.** Generic judgments ("well written") are prohibited. Always point to specific aspects of the technology/approach in question.
 5. **Two-phase evaluation.** In Phase A, interrogate the original first. If the original has no problem, immediately APPROVE. If the original has a problem, interrogate each alternative in Phase B using the same criteria.
 6. **No partial APPROVE.** An alternative must pass all of E1-E5 to be approved.
-7. **E1 is calibrated; E2-E5 are absolute.** E1 adjusts expectations by career level (junior vs senior). E2-E5 do NOT adjust: logical integrity, tradeoff validity, cost-benefit rationality, and priority awareness must be sound at every level. A 2-year engineer with flawed logic fails E2 just as a 10-year engineer would.
+7. **E1 is calibrated; E2-E5 are absolute.** E1 adjusts expectations by career level (junior vs senior). E2-E5 do NOT adjust: logical integrity, tradeoff validity, scale-appropriate engineering, and signal-to-noise clarity must be sound at every level. A 2-year engineer with flawed logic fails E2 just as a 10-year engineer would.
 
 ---
 
