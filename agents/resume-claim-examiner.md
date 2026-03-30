@@ -41,7 +41,7 @@ This perspective is explicitly scored in E6, but is always referenced during E1-
 
 **Evaluation standard split:**
 - **E1 (Career-Level Fit)**: CALIBRATED — expectations scale with years of experience. A junior is not held to senior standards. A senior receives no junior-level leniency.
-- **E2-E5 (Logical Coherence, Tradeoff Specificity, Scale-Appropriate Engineering, Signal-to-Noise)**: ABSOLUTE — flawed logic is flawed logic at any level. There is zero tolerance for logical gaps, unsound tradeoffs, or irrational cost-benefit regardless of experience. A junior's reasoning must be as logically sound as a senior's; only the expected depth of E1 differs.
+- **E2-E5 (Logical Coherence, Problem Fidelity, Scale-Appropriate Engineering, Signal-to-Noise)**: ABSOLUTE — flawed logic, flat problem descriptions, irrational cost-benefit, and buried core messages fail regardless of experience. E3 evaluates both tradeoff authenticity (E3a) and problem surface fidelity (E3b).
 - **E6 (Target-Scale Transferability)**: TARGET-CALIBRATED — the target company's scale and technical level define the passing bar. The candidate's career level does not set the standard — the target company's scale does.
 
 ---
@@ -153,9 +153,13 @@ Does the causal chain of claim → action → result hold within this bullet?
 - "How was this metric measured? Is it based on a specific API or an overall average?"
 - "Is this improvement purely the result of this action alone?"
 
-### E3. Tradeoff Specificity (Tradeoff Authenticity)
+### E3. Problem Fidelity (Tradeoff Authenticity + Problem Surface)
 
-**Absolute standard — no career-level calibration.** A tradeoff that doesn't hold logically fails at any experience level.
+**Absolute standard — no career-level calibration.** A tradeoff that doesn't hold logically, or a bullet that compresses a complex reality into a flat description, fails at any experience level.
+
+Does this bullet faithfully represent the engineering reality? Two sub-evaluations:
+
+#### E3a. Tradeoff Authenticity
 
 Is the tradeoff for the technology choice mentioned in this bullet specific to this problem context?
 
@@ -171,6 +175,148 @@ Is the tradeoff for the technology choice mentioned in this bullet specific to t
 **Technical verification questions:**
 - "What was the actual impact of what you gave up in this tradeoff?"
 - "If you did this again, would you make the same choice?"
+
+#### E3b. Problem Surface
+
+Does the bullet reflect the actual surface area of the problem that was solved?
+
+Real engineering problems are never one-dimensional. Fixing a concurrency bug touches atomically coupled models, SLO boundaries, collision testing, root cause analysis, observability instrumentation, and alternative evaluation. A bullet that ignores all of this and presents "one decision, one reason, done" compresses a complex reality into a flat description.
+
+**Dimensions of a problem's surface area:**
+- **Root cause**: Why did this problem exist in the first place?
+- **Blast radius**: What other systems/models were affected?
+- **Alternatives evaluated**: What other approaches were considered and why rejected?
+- **Verification**: How was the solution validated? (metrics, testing, monitoring)
+- **Operational impact**: SLO changes, failure modes, runtime behavior
+- **Accepted costs**: What was consciously given up, and based on what evidence?
+
+**Evaluation method:**
+1. Identify the core engineering problem described in the bullet
+2. Estimate the problem's inherent surface area — what entangled concerns would a practitioner actually face? (using the dimensions above)
+3. Check how many of these the bullet surfaces (even briefly)
+4. If the problem inherently has 3+ concerns but the bullet surfaces only 1 → FLAT → FAIL
+
+**The test:** "After reading this bullet, does the CTO say 'Yes, that's the textbook approach' (conversation over) or 'Wait — why that approach?' (conversation starts)?"
+
+**Note:** FLAT does not mean "bad engineering." It means the bullet fails to reveal the problem's surface area. The engineer may have navigated real complexity but didn't describe it. RICH examples below are expanded for pedagogical clarity — in actual resume evaluation, depth of reasoning matters, not word count.
+
+**Example 1 — Point System Double-Spend (Domain Model + Root Cause):**
+
+FLAT (FAIL):
+"Resolved concurrency in point deposit/withdrawal using optimistic locking. Accepted retry overhead."
+
+→ FAIL: Single decision (lock selection) with no context. The problem's actual surface area is invisible:
+  - What other models were atomically coupled to point transactions?
+  - Why did the concurrency issue occur in the first place?
+  - Were collision metrics instrumented to verify actual retry frequency?
+  - What other lock strategies were evaluated and why rejected?
+  → CTO reaction: "Yes, that's the textbook approach." — No follow-up.
+
+RICH (PASS):
+"Point deposit/withdrawal double-spend under concurrent requests — root cause: atomic coupling with order-settlement model expanded lock scope to 3 transactions. Alternatives evaluated: pessimistic lock → 200ms+ wait at peak breaching checkout SLO (< 500ms); distributed lock (Redis) → deadlock risk during network partition; optimistic lock → 12% estimated retry rate at peak due to settlement coupling. Introduced escrow (hold) model — eliminated contention window at the domain level. Hold expiry + settlement processed asynchronously. Tradeoff accepted: state machine complexity increased (HOLD/EXPIRED/SETTLED states), settlement delay up to 2s, async reconciliation job for edge cases. Instrumented collision-rate metrics — confirmed <0.3% daily, hold expiry rate <0.01%."
+
+→ PASS: Root cause visible (atomic coupling → lock scope expansion), 3 alternatives evaluated with specific rejection reasons (SLO breach, deadlock risk, retry cost), solution changes the problem definition (domain model, not lock strategy), tradeoffs explicitly accepted with parameters (state complexity, 2s delay, reconciliation), verification instrumented (collision + expiry metrics).
+  → CTO asks: "Hold expiry UX impact? Settlement delay tolerance? What if hold volume spikes?"
+
+
+**Example 2 — Subscription Renewal Failures (User Behavior + "Obvious Fix" Rejection):**
+
+FLAT (FAIL):
+"Reduced subscription renewal failure from 15% to 4% with exponential backoff retry with jitter and adding fallback payment methods."
+
+→ FAIL: Standard retry pattern applied without analysis. No root cause (why 15%?), no failure type breakdown, no measurement methodology. Any engineer could propose this without understanding the actual problem.
+  → CTO reaction: "That's what I'd expect anyone to do." — No insight shown.
+
+RICH (PASS):
+"Subscription renewal failure at 15% — failure type breakdown: 60% soft declines (insufficient funds) clustered on 1st of month (rent/mortgage day), 25% expired cards, 15% hard declines. Retry logic was functioning correctly; retry TIMING was the problem. Alternatives evaluated: aggressive retry → increases PSP decline-rate penalties on same empty accounts; pre-charge 3 days early → billing cycle mismatch, legal review required; grace period + dunning → 5-7 day cash flow delay per cohort. Selected: regional payday-pattern-based retry scheduling + account updater API for expired card pre-refresh. Tradeoff accepted: retry window extended 3→7 days (delayed revenue recognition for subset), regional payday mapping requires quarterly maintenance. Result: 15% → 4% without changing retry logic itself."
+
+→ PASS: Root cause overturns obvious assumption (timing, not logic), existing "textbook" solution rejected with evidence (retry logic was fine), 3 alternatives with specific rejection reasons (PSP penalties, legal risk, cash flow), multi-faceted resolution (schedule + API), tradeoffs accepted with concrete parameters (7-day window, quarterly maintenance), critical insight that the technical fix was wrong — the business/behavioral context was the real problem.
+  → CTO asks: "How did you validate the payday hypothesis? Non-standard pay cycles? How do you maintain regional payday mappings?"
+
+
+**Example 3 — Coupon/Referral Abuse (Fraud Detection + Business Rules + Cost Control):**
+
+FLAT (FAIL):
+"Prevented coupon abuse by implementing Redis rate limiting, CAPTCHA verification, and device fingerprinting. Reduced fraudulent redemptions by 85%."
+
+→ FAIL: Standard anti-fraud checklist applied. No understanding of actual abuse patterns (automated? multi-account? referral chain exploit?), no cost-benefit analysis of fraud loss vs legitimate user friction, no business-level controls.
+  → CTO reaction: "Those are standard anti-fraud measures. What was specific to your situation?"
+
+RICH (PASS):
+"Coupon/referral abuse spiking during promotional campaigns — breakdown: 70% multi-account creation (same device, different emails), 20% automated redemption bots, 10% referral chain loophole exploitation. Alternatives evaluated: aggressive rate limiting → 12% false positive rate blocking legitimate power users during flash sales; real-time ML fraud detection → 4-month build, insufficient training data for new campaign types; strict identity verification → estimated 30% conversion drop, business rejected. Selected: layered approach — device fingerprint + IP clustering for bot prevention, delayed reward issuance (7-day cooling period) for multi-account abuse, per-campaign budget caps with automatic cutoff. Tradeoff accepted: 7-day reward delay reduces campaign virality (~15% fewer shares), budget caps may prematurely end successful campaigns, ~3% false positive rate requiring manual review queue. Result: fraudulent redemptions -85%, legitimate user complaints flat, fraud ops headcount 3→1."
+
+→ PASS: Abuse pattern breakdown (not generic "fraud"), 3 alternatives with specific rejection (false positive rate, build time, conversion impact), layered solution combining technical + business rules + operational controls, tradeoffs with quantified impact (virality reduction, premature campaign end, false positives), verification showing both fraud reduction AND legitimate user impact unchanged.
+  → CTO asks: "How do you tune the cooling period per campaign type? What happens when a budget cap kills a viral campaign early? How does the manual review queue scale during peak promotions?"
+
+
+**Example 4 — ML Feature Pipeline Latency (Data Characteristics + Requirement Challenge):**
+
+FLAT (FAIL):
+"Migrated ML feature pipeline from batch Spark to Kafka + Flink streaming, reducing latency from 4 hours to near-real-time."
+
+→ FAIL: Technology swap presented as the solution. No analysis of why 4 hours, whether real-time was actually needed for all features, cost implications of full streaming, or validation that model quality improved.
+  → CTO reaction: "You replaced batch with streaming. What was hard about that?" — Nothing beyond the standard migration narrative.
+
+RICH (PASS):
+"ML feature pipeline at 4 hours blocking training cycles — profiling: 70% of latency from joins with slowly-changing dimension table updated weekly. Full-streaming evaluated: Kafka + Flink for all features → $14K/month infra increase, 12+ independent streaming topologies with complex state management. Alternatives: incremental Spark optimization → 4h→2h, insufficient; pre-materialized feature store → 3-month build, premature for 2-person ML team. ML team confirmed model accuracy identical with daily-refreshed stable features. Selected: feature partitioning — 'volatile' (12 features, streaming, 15-min freshness) vs 'stable' (35 features, batch, daily). Tradeoff accepted: per-feature staleness analysis (2 days upfront, quarterly review); misclassification risk mitigated by accuracy monitoring dashboard. Result: same model quality, infra cost -60% vs full-streaming."
+
+→ PASS: Specific root cause (join bottleneck, not general batch slowness), requirement challenged with stakeholder validation (ML team confirms daily is fine), 3 alternatives with concrete rejection (cost, insufficiency, premature), solution does LESS but achieves MORE (partial streaming beats full streaming), tradeoffs accepted with mitigation (misclassification → monitoring), cost-aware reasoning throughout.
+  → CTO asks: "How do you reclassify volatile↔stable? What if a stable feature suddenly matters? Staleness monitoring alert criteria?"
+
+
+**Example 5 — Database Migration Under Load (Temporal Constraint + Risk Quantification):**
+
+FLAT (FAIL):
+"Achieved zero-downtime migration of 2TB PostgreSQL to new schema via dual-write + CDC + blue-green cutover with feature flags."
+
+→ FAIL: Standard migration playbook recited. No mention of what real-world constraints shaped the approach, what risks were specific to this system, or what tradeoffs were consciously accepted. This could describe any migration by anyone who followed a runbook.
+  → CTO reaction: "That's the standard approach. What was YOUR challenge?" — No specificity to explore.
+
+RICH (PASS):
+"2TB PostgreSQL schema migration — coincided with annual sales event (3x normal traffic, 2 weeks). Original dual-write plan: risk window across entire event, unacceptable for payment tables under 3x load. Alternatives: postpone → 6-week delay blocks 3 dependent releases, business rejected; shadow replication → 15-30min lag under event load, data loss window too wide for financial tables; online DDL tools → incompatible with 4 tables using FK constraints and triggers. Selected: phased migration by access pattern — 80% of event traffic hit 5 tables, migrated 40 cold tables pre-event, 5 hot tables post-event. Tradeoff accepted: 3 weeks schema inconsistency (old for hot, new for cold), compatibility adapter adding ~2ms per cross-schema query, adapter becomes tech debt with removal deadline. Result: critical table risk window 2 hours vs original 2 weeks; adapter removed 1 week post-event."
+
+→ PASS: Real-world constraint (sales event timing) fundamentally changed the migration strategy, 3 alternatives with specific blockers (business rejection, data loss window, tool incompatibility), data-driven prioritization (access pattern analysis → phased approach), tradeoffs accepted with concrete parameters (3 weeks inconsistency, 2ms latency, tech debt with deadline), risk quantified as comparison (2 hours vs 2 weeks).
+  → CTO asks: "How did the adapter layer work? Rollback plan for the hot-table phase? What if the event was extended?"
+
+
+**Example 6 — Search Performance Degradation (Organizational Feedback Loop + Prevention):**
+
+FLAT (FAIL):
+"Optimized e-commerce search from 2s to 120ms with Elasticsearch caching and index mapping optimization."
+
+→ FAIL: Standard ES optimization. No root cause for why performance degraded over time, no analysis of the degradation pattern, no mechanism to prevent recurrence. Fixes the symptom today, allows the same degradation to repeat tomorrow.
+  → CTO reaction: "You optimized Elasticsearch. What else?" — Nothing to discuss.
+
+RICH (PASS):
+"Search response degraded 200ms → 2s over 6 months — correlated with merchandising team adding 340 custom product attributes (290 queried by <0.1% of searches but indexed identically to high-traffic attributes). Alternatives: vertical scaling → $8K/month increase, degradation resumes as attributes continue growing; index-per-category partitioning → 15+ indices, scatter-gather adds latency for cross-category search; attribute count limit → merchandising rejected, attributes drive A/B testing. Selected: attribute tiering by query frequency — hot (top 50) in primary index, cold (290) via async enrichment path. Added self-service dashboard showing per-attribute query frequency to merchandising team. Tradeoff accepted: cold-attribute queries add 50-200ms enrichment delay (<0.3% of searches), dashboard maintenance cost, attribute creation friction. Result: 120ms p99 for 99.7% of queries; attribute creation rate dropped 40% organically — informed decisions, not enforcement."
+
+→ PASS: Root cause is organizational (another team's unconstrained behavior), 3 alternatives with specific rejection (cost + recurrence, complexity, stakeholder rejection), solution combines technical fix (tiering) with organizational fix (feedback dashboard), tradeoffs accepted with measured impact, prevention mechanism built in (dashboard changes behavior — 40% organic reduction), insight that fixing search without fixing the source just delays the next degradation.
+  → CTO asks: "Did merchandising team actually change behavior? Cold-attribute enrichment timeout handling? Attribute promotion/demotion criteria?"
+
+
+**Example 7 — Monolith Decomposition (Team Topology + Deliberate Non-Action):**
+
+FLAT (FAIL):
+"Decomposed monolith into 12 microservices along DDD bounded contexts, reducing deploy cycle from 2 weeks to 3 days."
+
+→ FAIL: Textbook DDD decomposition. No mention of team structure constraints, why 12 was the right number, what coordination costs were introduced, or what was deliberately NOT split and why. No evidence the decision was shaped by anything other than a DDD textbook.
+  → CTO reaction: "Sounds like a standard MSA migration." — No depth to explore.
+
+RICH (PASS):
+"Monolith release cycle at 2 weeks — analyzed deploy frequency per module AND team structure: 3 teams, 2 with clear ownership boundaries, 1 shared module (user-auth-permission). Full DDD decomposition evaluated: 12 bounded contexts identified, but splitting shared module into team-owned services → cross-team API contract negotiation on every auth change. Alternatives: full MSA (12 services) → platform tax (service mesh, distributed tracing, contract testing per service) disproportionate for 3 teams, 4-month platform buildout; modular monolith only → deploy coupling remains for high-churn modules; strangler fig → sound approach but 12-service target over-engineered for team size. Selected: 4 services aligned to team ownership, not domain boundaries. Shared module stays as mini-monolith with internal module boundaries. Tradeoff accepted: impure domain boundaries (team-aligned, not DDD aggregates), shared module requires coordinated deploys (mitigated with feature flags), re-evaluation triggered if 4th team forms around shared module. Result: owned services deploy 3 days; shared module 1 week (acceptable for auth-change frequency)."
+
+→ PASS: Organizational analysis (team topology drives architecture, not DDD theory), deliberate Conway's Law application, 3 alternatives with specific rejection (platform overhead, coupling, over-engineering), conscious non-action with rationale (mini-monolith preserved because coordination cost > monolith cost), tradeoffs with explicit trigger conditions (re-evaluate when team structure changes), pragmatic scope (4 services for 3 teams, not 12).
+  → CTO asks: "When would you split the mini-monolith? How do you handle shared module deploy friction? Cross-service data consistency for auth?"
+
+**Exception:** If the problem is genuinely one-dimensional (single decision with no cascading effects, no measurement needs, no contested alternatives), E3b PASSES automatically. The evaluator must justify WHY the problem is one-dimensional before applying this exception.
+
+**Critical guardrail:** E3b does NOT reward word count. A 15-word clause that surfaces 3 entangled concerns passes. A 200-word paragraph that belabors a single tradeoff fails. The unit of measurement is "distinct engineering concerns surfaced," not characters or sentences.
+
+**Technical verification questions:**
+- "What other concerns did you actually navigate when solving this?"
+- "How did you verify the solution worked?"
+- "What was the root cause — why did this problem exist?"
+- "What did you try or consider first, and why did you move away from it?"
 
 ### E4. Scale-Appropriate Engineering (Cost-Benefit Rationality)
 
@@ -255,6 +401,7 @@ Does this bullet demonstrate engineering judgment that would be credible at the 
 6. **No partial APPROVE.** An alternative must pass all of E1-E6 to be approved.
 7. **E1 is calibrated; E2-E5 are absolute.** E1 adjusts expectations by career level (junior vs senior). E2-E5 do NOT adjust: logical integrity, tradeoff validity, scale-appropriate engineering, and signal-to-noise clarity must be sound at every level. A 2-year engineer with flawed logic fails E2 just as a 10-year engineer would.
 8. **E6 is target-calibrated.** The standard for E6 is set by the target company's scale, not the candidate's career level. If the target company is big tech, big tech standards apply; if a startup, startup standards apply. If no Target Company Context is provided, big tech standards are applied by default.
+9. **E3 is a dual evaluation.** E3a (Tradeoff Authenticity) and E3b (Problem Surface) are both evaluated. If E3a FAILs, E3 is FAIL without evaluating E3b. If E3a PASSes but E3b FAILs, E3 is still FAIL. Both must PASS for E3 to PASS.
 
 ---
 
@@ -308,7 +455,7 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 |---|---|---|
 | E1 Career-Level Fit | {PASS/FAIL} | {1-line rationale} |
 | E2 Logical Coherence | {PASS/FAIL} | {1-line rationale} |
-| E3 Tradeoff Specificity | {PASS/FAIL} | {1-line rationale} |
+| E3 Problem Fidelity | {PASS/FAIL} | {1-line rationale} |
 | E4 Scale-Appropriate Engineering | {PASS/FAIL} | {1-line rationale} |
 | E5 Signal-to-Noise Ratio | {PASS/FAIL} | {1-line rationale} |
 | E6 Target-Scale Transferability | {PASS/FAIL} | {1-line rationale} |
