@@ -406,7 +406,7 @@ Defines how alternatives for each finding are displayed in the Phase 12 HTML rep
 
 ### CSS Class Definitions
 
-CSS to add to SKILL.md HTML template (actual application in SKILL.md modification task):
+CSS reference (canonical source: SKILL.md HTML template `<style>` block. This section is for documentation only — do not modify CSS here; update SKILL.md instead):
 
 ```css
 .alternatives {
