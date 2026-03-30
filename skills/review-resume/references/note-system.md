@@ -141,7 +141,7 @@ Report the load result to the user:
 - Research Cache: {회사명} found / none
 ```
 
-`[Phase 0/12: Note Load ✓]`
+`[Phase 0/13: Note Load ✓]`
 
 ---
 
