@@ -134,6 +134,15 @@ For Mid/Senior: the four signature strengths are:
 3. **Stopping judgment** — "93% was achievable, but we stopped at 85% for cost reasons"
 4. **Business impact** — headcount reduction, cost savings, throughput improvement measured in business terms
 
+**Target-Scale Awareness (전체 경력 수준 공통):**
+
+Signature depth 선정 시, 가능하면 타겟 회사 규모에서의 기술적 신뢰를 보여줄 수 있는 에피소드를 우선한다:
+- 규모가 작아도 확장을 고려한 설계 판단이 드러나는 에피소드
+- 현재 규모의 한계를 인식하고 다음 단계를 예측한 경험
+- 작은 규모에서의 깊은 문제 해결이 큰 규모에서도 통용되는 원리를 보여주는 에피소드
+
+이 선정 가이드는 resume-claim-examiner E6 평가와 연동된다.
+
 ---
 
 ## 4. P.A.R.R. Evaluation Dimensions P1-P5 (Signature Depth)
@@ -147,6 +156,8 @@ Apply to signature depth entries. After Problem-Solving 6 Criteria evaluation, a
 | P3 | Verification depth | Is the verification appropriate for the domain? | New Grad/Junior: "부하 테스트 수행"만. Mid/Senior: "정확도 85%"만 있고 에러 분석 없음 |
 | P4 | Reflection quality | Are trade-offs + acknowledged limits + honest confession present? | "분산 시스템을 배웠다", "LLM은 만능이 아니다" — abstract takeaway with no specifics |
 | P5 | "Why?" chain | Does every attempt include both "Why did I try this?" AND "Why didn't it work?" | Either the selection reason OR the failure reason is missing from any attempt |
+
+**P1 Target-Scale Note:** Narrative depth 평가 시, 기술 선택의 서사가 "현재 규모에서의 최적화"에 그치는지, "규모 변화에 대한 인식"까지 포함하는지 확인한다. 후자가 있으면 서사 깊이 가점. 없다고 해서 자동 FAIL은 아님 — 이것은 resume-claim-examiner E6에서 명시적으로 평가됨.
 
 **Feature Listing Anti-Pattern**: If the project entry consists only of verb + feature/technology name, flag immediately as P1 FAIL:
 
@@ -167,6 +178,8 @@ Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (
 | P6 | Domain-specific failure reasoning | Does each attempt's failure explain WHY this approach doesn't work in THIS domain (not just CS principles)? | Explains failure using only CS principles (MVCC, CAP) without domain context, or lists numbers without causal reasoning |
 | P7 | Stopping judgment | Is there an explicit, intentional decision to stop at a certain point for cost/time/risk reasons? | The final number (85%, 93%) is stated without explaining the judgment behind stopping there |
 | P8 | Business impact | Are business outcomes (headcount reduction, cost savings, revenue impact) stated in concrete terms? | Abstract language: "성능 개선", "효율화". No monetary amount, ratio, or count |
+
+**P8 Target-Scale Note:** Business impact 수치가 타겟 회사 규모에서도 인상적인 수치인지 고려한다. "인력 11→3명 절감"은 작은 팀에서 큰 성과지만, 타겟 회사가 엔지니어 500명 규모라면 이 수치의 임팩트가 상대적으로 달라진다. 수치의 절대값보다 "판단의 질"과 "접근 방식의 전이 가능성"을 우선한다.
 
 ---
 

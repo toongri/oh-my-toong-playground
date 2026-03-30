@@ -52,6 +52,15 @@ When targeting a specific company, research through these channels using WebSear
 - Search: `{company name} 시리즈` or `{company name} funding` or `{company name} MAU`
 - Look for: growth stage, recent milestones, market position
 - **Why this matters**: A Series A startup values differently from a mature company. Growth signals inform what the company needs NOW.
+- **Scale estimation**: 투자 라운드와 성장 지표로 회사의 엔지니어링 규모를 추정할 수 있다. 이 추정은 3-6의 규모 지표와 결합하여 타겟 회사의 기술적 스케일을 파악한다.
+
+**3-6. Scale & volume indicators (규모 지표)**
+
+- Search: `{company name} TPS` or `{company name} DAU` or `{company name} 트래픽` or `{company name} tech blog architecture`
+- Look for: transaction volume (TPS/RPM), daily active users (DAU/MAU), data scale (TB/PB), engineering team size, infrastructure scale (서버 수, 클러스터 규모)
+- Example findings: "일 100만 결제 처리" (토스), "MAU 1800만" (당근), "일 주문 300만건" (쿠팡)
+- **Why this matters**: 후보의 경험 규모와 타겟 회사의 운영 규모 사이의 갭을 측정해야 한다. 이 갭이 클수록, 후보는 이력서에서 "규모가 커질 때의 판단"을 보여줘야 신뢰를 쌓을 수 있다. 이 데이터는 resume-claim-examiner의 E6 (Target-Scale Transferability) 평가에 직접 사용된다.
+- **Fallback**: 구체적 규모 지표를 찾을 수 없으면 회사의 성장 단계(시리즈 A/B/C, 상장 여부)와 서비스 카테고리로 추정 — "MAU 정확한 수치 미확인, 시리즈 C + 결제 도메인 → 최소 일 10만건 이상 트랜잭션 추정"
 
 ## How research feeds into each Type
 
@@ -61,5 +70,6 @@ When targeting a specific company, research through these channels using WebSear
 | B (Working Style) | Which working style to emphasize — aligned with team culture signals |
 | C (Company Connection) | Company-specific domain/product/values for connection paragraph |
 | D (Current Interest) | Which interest to surface — aligned with JD tech stack and company direction |
+| **All Evaluations** | **Scale context — resume-claim-examiner E6 (Target-Scale Transferability) 평가의 기준선. 후보의 경험 규모 vs 타겟 회사 규모 갭을 Phase 11 evaluator dispatch 시 전달** |
 
 If targeting a specific company and no meaningful research results are found, note this limitation. A strong A + B self-introduction without company-specific context is always better than forced connections based on guesswork.
