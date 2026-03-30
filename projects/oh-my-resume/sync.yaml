@@ -9,6 +9,7 @@ agents:
     - mnemosyne
     - oracle
     - argus
+    - content-evaluator
     - sisyphus-junior
 
 skills:
