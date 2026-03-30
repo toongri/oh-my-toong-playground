@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 12). If Phases 0-10 diagnose "what is wrong with this section," the Quality Gate is the step where the content-evaluator agent independently verifies "has that problem actually been resolved."
+The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 12). If Phases 0-10 diagnose "what is wrong with this section," the Quality Gate is the step where the resume-claim-examiner agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
@@ -40,7 +40,7 @@ If even one answer is "no," that section does not pass the Quality Gate.
 |-----------|----------------------|-------------|
 | Role | Diagnosis | Verification |
 | Question | "What is the problem?" | "Has the problem been resolved?" |
-| Agent | review-resume skill | content-evaluator agent (independent review) |
+| Agent | review-resume skill | resume-claim-examiner agent (independent review) |
 | Output | Gap list, revision direction | APPROVE / REQUEST_CHANGES binary verdict |
 | Repetition | Single pass | Loop — repeats until APPROVE |
 | Exit | None (completing evaluation is the goal) | User Opt-Out only |
@@ -49,7 +49,7 @@ If even one answer is "no," that section does not pass the Quality Gate.
 
 ## 2. Evaluation Units
 
-The Quality Gate splits the resume into **1 bullet / 1 entry** units for processing. The minimum unit in which content-evaluator conducts technical interrogation is the individual technical claim.
+The Quality Gate splits the resume into **1 bullet / 1 entry** units for processing. The minimum unit in which resume-claim-examiner conducts technical interrogation is the individual technical claim.
 
 ### Target Selection
 
@@ -82,11 +82,11 @@ Examples:
 - Entire "payment system fault isolation" episode → 1 unit
 - Entire "search response latency optimization" episode → 1 unit
 
-**Processing order:** signature depth → detailed depth → compressed depth. Compressed is not a content-evaluator target (sentences too short for technical interrogation).
+**Processing order:** signature depth → detailed depth → compressed depth. Compressed is not a resume-claim-examiner target (sentences too short for technical interrogation).
 
 ### Skills / Study
 
-**Not a content-evaluator target.** A list of tech stacks is not subject to technical interrogation. Phase 0-10 evaluation is sufficient.
+**Not a resume-claim-examiner target.** A list of tech stacks is not subject to technical interrogation. Phase 0-10 evaluation is sufficient.
 
 ---
 
@@ -98,9 +98,9 @@ Examples:
 
 Presenting a single revision causes two problems:
 1. The user is forced to adopt the revision without sharing the underlying assumptions (positioning direction, risk tolerance).
-2. When the content-evaluator issues a FAIL, there is no indication of which direction to revise toward.
+2. When the resume-claim-examiner issues a FAIL, there is no indication of which direction to revise toward.
 
-Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the content-evaluator's FAIL axes within the chosen direction.
+Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the resume-claim-examiner's FAIL axes within the chosen direction.
 
 ### Alternative Format
 
@@ -188,20 +188,20 @@ Quality Gate interviews **extend** the 4-Stage Bypass Protocol from experience-m
 | Dimension | experience-mining interview | Quality Gate interview |
 |-----------|-----------------------------|----------------------|
 | Purpose | Discover new sources | Secure sources to resolve already-identified problems |
-| Trigger | Phase gap detected | content-evaluator REQUEST_CHANGES received |
+| Trigger | Phase gap detected | resume-claim-examiner REQUEST_CHANGES received |
 | Target | Undiscovered experiences | Evaluation axes (E1-E5) with FAIL verdict |
-| Question basis | Gap list from Writing Guidance | Interview Hints from content-evaluator |
+| Question basis | Gap list from Writing Guidance | Interview Hints from resume-claim-examiner |
 | When exhausted | Mark as "genuinely none," move to next topic | Generate "best revision with current sources" + state limitations |
 
 ### Interview Loop Structure
 
 ```
-content-evaluator REQUEST_CHANGES received
+resume-claim-examiner REQUEST_CHANGES received
     ↓
 Extract FAIL axis list from REQUEST_CHANGES
     ↓
 For each FAIL axis:
-    1. Check Interview Hints from content-evaluator
+    1. Check Interview Hints from resume-claim-examiner
     2. Set source target that can move this axis to PASS
     3. Apply experience-mining 4-Stage Bypass:
        Stage 1: Direct Question (specific question based on Hints)
@@ -214,7 +214,7 @@ For each FAIL axis:
 
 ### How to Use Interview Hints
 
-The content-evaluator provides Interview Hints for each FAIL axis with REQUEST_CHANGES. These Hints specify "what information would change this axis to PASS."
+The resume-claim-examiner provides Interview Hints for each FAIL axis with REQUEST_CHANGES. These Hints specify "what information would change this axis to PASS."
 
 Principles for converting Hints into questions:
 
@@ -248,8 +248,8 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The E3 (Tradeoff Specificity) axis may be difficult to PASS with current sources. If the content-evaluator issues a FAIL again, consider User Opt-Out for this item."
-3. Dispatch this revision to the content-evaluator. If the content-evaluator APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
+2. State the limitation explicitly in the revision: "The E3 (Tradeoff Specificity) axis may be difficult to PASS with current sources. If the resume-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
+3. Dispatch this revision to the resume-claim-examiner. If the resume-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**
 - One question per message. Multiple questions are prohibited.
@@ -265,7 +265,7 @@ flowchart TB
     A[Phase 0-10 evaluation complete] --> B[Select bullets with P0/P1 findings]
     B --> C[Select next bullet]
     C --> D[Generate 2-3 alternatives + tradeoffs]
-    D --> H[content-evaluator dispatch\n— send original + alternatives package]
+    D --> H[resume-claim-examiner dispatch\n— send original + alternatives package]
 
     H --> DIAG{Phase A: Interrogate original\nIs there really a problem?}
     DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
@@ -298,11 +298,11 @@ flowchart TB
 
 The Quality Gate loop is entered automatically after Phase 10 completes. Without a separate trigger, immediately after the final Phase 10 evaluation output, the flow proceeds directly to the Section Units split step.
 
-### content-evaluator dispatch
+### resume-claim-examiner dispatch
 
-The content-evaluator is dispatched **1 bullet / 1 entry** at a time.
+The resume-claim-examiner is dispatched **1 bullet / 1 entry** at a time.
 
-The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `agents/content-evaluator.md`.
+The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `agents/resume-claim-examiner.md`.
 
 **Key rules:**
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
@@ -345,7 +345,7 @@ In this case: confirm with "Is there anything still unsatisfying about this sect
 
 Opted-out sections are displayed in the HTML report as follows:
 - "Unresolved feedback" badge at the top of the section
-- Last REQUEST_CHANGES from content-evaluator included as an "Unresolved feedback" block
+- Last REQUEST_CHANGES from resume-claim-examiner included as an "Unresolved feedback" block
 - Each FAIL axis and its Interview Hints provided in a collapsible state
 
 ---
@@ -397,7 +397,7 @@ Defines how alternatives for each finding are displayed in the Phase 12 HTML rep
     <summary>View unresolved feedback ({N} axes)</summary>
     <div class="fail-axis">
       <span class="axis-label">E3: Tradeoff authenticity</span>
-      <div class="axis-feedback">{feedback text from content-evaluator}</div>
+      <div class="axis-feedback">{feedback text from resume-claim-examiner}</div>
       <div class="axis-hint">Interview Hint: {hint text}</div>
     </div>
   </details>

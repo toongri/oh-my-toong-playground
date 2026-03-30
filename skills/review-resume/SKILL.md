@@ -164,7 +164,7 @@ This rule applies equally to all interview triggers across all Phases.
    (a) Information gate — Phase 3 (target position)
    (b) Experience mining interviews — Phase 2, 4, 5, 7, 8 (when triggered). What the user sees during interviews: interview questions + brief diagnostic context. What the user does NOT see: internal PASS/FAIL tallies, Completion Checklist, Phase progress markers.
    Phase 12 is the only phase that delivers evaluation results to the user.
-5. Phase 11 (Per-Bullet Content Quality Gate) loops per section unit until content-evaluator APPROVE or user opt-out.
+5. Phase 11 (Per-Bullet Content Quality Gate) loops per section unit until resume-claim-examiner APPROVE or user opt-out.
 6. Phase 12 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate (Phase 13) proceeds ONLY after approval.
 7. Phase 13 (Note Accumulate) proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 8. The Completion Checklist is internal — do NOT output it to the user.
@@ -426,11 +426,11 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 ## Phase 11: Per-Bullet Content Quality Gate
 
-While Phases 0-10 diagnosed "what the problems are," Phase 11 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the content-evaluator sub-agent issues APPROVE.
+While Phases 0-10 diagnosed "what the problems are," Phase 11 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the resume-claim-examiner sub-agent issues APPROVE.
 
 ### Evaluation Units
 
-The content-evaluator conducts technical interrogation at the granularity of **1 bullet / 1 entry**. It drills deep into individual technical claims, not entire sections.
+The resume-claim-examiner conducts technical interrogation at the granularity of **1 bullet / 1 entry**. It drills deep into individual technical claims, not entire sections.
 
 | Unit Type | Granularity | Example | Notes |
 |-----------|-------------|---------|-------|
@@ -447,7 +447,7 @@ For each P0/P1 bullet:
 
 1. Collect the findings for that bullet from the Phase 0-10 evaluation results
 2. **Generate 2-3 alternatives + tradeoff comparison** (safe / high-impact / balanced)
-3. **Dispatch original text + alternatives package to content-evaluator** — evaluator performs 2-stage verification:
+3. **Dispatch original text + alternatives package to resume-claim-examiner** — evaluator performs 2-stage verification:
    - Phase A: Is the original really problematic? → If no problem, APPROVE immediately (no revision needed)
    - Phase B: Is each alternative technically sound? → APPROVE if at least 1 passes
 4. **APPROVE** → include verified alternatives in the HTML report. Move to next bullet.
@@ -466,7 +466,7 @@ flowchart TB
     SELECT --> PICK[Pick next bullet]
 
     PICK --> ALT[Generate 2-3 alternatives + tradeoffs]
-    ALT --> DISPATCH[content-evaluator dispatch\n— send original + alternatives package]
+    ALT --> DISPATCH[resume-claim-examiner dispatch\n— send original + alternatives package]
 
     DISPATCH --> DIAG{Phase A: Interrogate original\nIs it really problematic?}
     DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
@@ -496,14 +496,14 @@ flowchart TB
 ```
 
 <critical>
-There is no escape from this loop without content-evaluator APPROVE.
+There is no escape from this loop without resume-claim-examiner APPROVE.
 The only exception is the user opting out with "move on."
 Advancing to the next bullet or proceeding to Phase 12 without APPROVE is forbidden.
 </critical>
 
 ### Evaluator Dispatch Protocol
 
-When sending a single bullet to the content-evaluator, use a format that **exactly matches the Input Format in agents/content-evaluator.md**.
+When sending a single bullet to the resume-claim-examiner, use a format that **exactly matches the Input Format in agents/resume-claim-examiner.md**.
 
 ```
 # Technical Evaluation Request
@@ -876,7 +876,7 @@ Example — user-accepted but evaluator-not-approved:
   <span class="badge badge-p1">P1 #5</span>
   <strong>No concrete tradeoffs from the MSA migration</strong>
   <div class="unresolved-note">
-    ⚠ Unresolved: content-evaluator issued FAIL on E3 (Tradeoff Specificity) and E4 (Scale-Appropriate Engineering). User chose to proceed with current content.
+    ⚠ Unresolved: resume-claim-examiner issued FAIL on E3 (Tradeoff Specificity) and E4 (Scale-Appropriate Engineering). User chose to proceed with current content.
   </div>
 </div>
 -->
@@ -975,7 +975,7 @@ Before delivering Phase 12 output, verify every phase was completed or has a val
 - [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 9: Technical Substance Verification (T1-T3: 기술적 정합성, 선택 합리성, 트레이드오프 진정성)
 - [ ] Phase 10: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 11: Per-Bullet Content Quality Gate (content-evaluator APPROVE or user opt-out required for each section unit)
+- [ ] Phase 11: Per-Bullet Content Quality Gate (resume-claim-examiner APPROVE or user opt-out required for each section unit)
 - [ ] Phase 12: Generate HTML Report + User Approval Gate (피드백 0될 때까지 무한루프)
 - [ ] Phase 13: Note Accumulate (candidate/preference persistence — user confirmation required)
 ```
