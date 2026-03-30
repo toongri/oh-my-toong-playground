@@ -454,21 +454,22 @@ export async function syncLib(
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
 
+    // Always wipe libDest first (dry-run: log only)
+    if (context.dryRun) {
+      if (existsSync(libDest)) {
+        logDry(`Remove stale lib directory: ${libDest}`);
+      }
+    } else {
+      try {
+        await fs.rm(libDest, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
+    }
+
     const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
 
     if (requiredModules.size === 0) {
-      // Clean up stale lib from previous syncs
-      if (context.dryRun) {
-        if (existsSync(libDest)) {
-          logDry(`Remove stale lib directory: ${libDest}`);
-        }
-      } else {
-        try {
-          await fs.rm(libDest, { recursive: true, force: true });
-        } catch {
-          // ignore
-        }
-      }
       logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
       continue;
     }
@@ -480,12 +481,6 @@ export async function syncLib(
       }
       logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
     } else {
-      // Remove and recreate lib dir
-      try {
-        await fs.rm(libDest, { recursive: true, force: true });
-      } catch {
-        // ignore
-      }
       await fs.mkdir(libDest, { recursive: true });
       for (const dep of requiredModules) {
         const relPath = path.relative(libSrc, dep);
