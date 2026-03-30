@@ -177,7 +177,7 @@ Load persistent note before starting the review. Previous review sessions' candi
 
 1. Check if `$OMT_DIR/review-resume/` exists
 2. If empty or missing → execute **Auto-Seeding** (parse current resume into initial candidate files)
-3. If exists → scan frontmatter of all candidate files, load `preferences.md`, check `sources/` for cached research
+3. If exists → scan file lists (names only) from all candidate directories, load `preferences.md`, check `sources/` for cached research
 
 Report note status to user:
 ```

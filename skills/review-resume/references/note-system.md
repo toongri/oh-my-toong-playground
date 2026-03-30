@@ -126,7 +126,7 @@ Load persistent note before starting the review. The candidate pool, user prefer
 
 ### Step 0-2. Load Existing Note
 
-1. **Scan candidate pool**: Read file lists and frontmatter from `self-introduction/`, `career/`, and `problem-solving/`. Read file bodies only when needed.
+1. **Scan candidate pool**: Read file lists (names only) from `self-introduction/`, `career/`, and `problem-solving/`. Do not read frontmatter or file bodies at this stage — load them lazily when first needed (e.g., frontmatter tags when performing JD keyword matching in Phase 7, file bodies when drafting or comparing candidates).
 2. **Load preferences.md**: Bring the user's expression preferences, judgment criteria, and feedback history into context.
 3. **Check sources/**: If a target company is specified, check whether an existing research cache is present. If found, reuse it in Pre-Evaluation Research phase Step 3 (Company Research).
 
