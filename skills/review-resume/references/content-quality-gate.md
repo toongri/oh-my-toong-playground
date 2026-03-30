@@ -256,7 +256,7 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The E3 (Tradeoff Specificity) axis may be difficult to PASS with current sources. If the resume-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
+2. State the limitation explicitly in the revision: "The E3 (Problem Fidelity) axis may be difficult to PASS with current sources. If the resume-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
 3. Dispatch this revision to the resume-claim-examiner. If the resume-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**
@@ -405,7 +405,7 @@ Defines how alternatives for each finding are displayed in the Phase 12 HTML rep
   <details class="unresolved-feedback">
     <summary>View unresolved feedback ({N} axes)</summary>
     <div class="fail-axis">
-      <span class="axis-label">E3: Tradeoff authenticity</span>
+      <span class="axis-label">E3: Problem Fidelity</span>
       <div class="axis-feedback">{feedback text from resume-claim-examiner}</div>
       <div class="axis-hint">Interview Hint: {hint text}</div>
     </div>
