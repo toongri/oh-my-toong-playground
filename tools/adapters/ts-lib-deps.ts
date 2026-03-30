@@ -100,9 +100,10 @@ export async function collectRequiredLibModules(
   libSourceDir: string,
 ): Promise<Set<string>> {
   const result = new Set<string>();
+  const shared = new Set<string>();
   const tsFiles = await collectTsFiles(platformDir, platformDir);
   for (const filePath of tsFiles) {
-    const deps = await resolveTsLibDependencies(filePath, libSourceDir);
+    const deps = await resolveTsLibDependencies(filePath, libSourceDir, shared);
     for (const dep of deps) {
       result.add(dep);
     }
