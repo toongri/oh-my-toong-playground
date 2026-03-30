@@ -149,11 +149,11 @@ Each alternative follows this structure:
 
 **Scale Framing in Alternatives:**
 
-대안 생성 시, 후보의 경험 규모가 타겟 회사 대비 작을 경우:
-- **Alternative 1 (Safe)**: Scale-Omit 전략 — 규모 수치를 생략하고 판단 논리에 집중
-- **Alternative 2 (High-Impact)**: Scale-Project 전략 — 타겟 회사 수준의 규모로 서술하되, 후보가 면접에서 논리적으로 방어할 수 있어야 한다
-- 핵심 기준은 면접 방어 가능성이다. 후보가 해당 수치와 설계를 2단계 깊이까지 설명할 수 있으면 유효하다
-- 비교 테이블의 "Interview safety" 평가 시, 후보가 해당 규모의 질문을 커버할 수 있는지를 반영한다
+When generating alternatives and the candidate's experience scale is smaller than the target company's:
+- **Alternative 1 (Safe)**: Scale-Omit strategy — omit scale numbers and focus on the reasoning and judgment logic
+- **Alternative 2 (High-Impact)**: Scale-Project strategy — describe at the target company's scale, but the candidate must be able to logically defend this in an interview
+- The primary criterion is interview defensibility. If the candidate can explain the numbers and design two levels deep, it is valid.
+- When assessing "Interview safety" in the comparison table, reflect whether the candidate can cover questions at that scale.
 
 ### Comparison Table (User Presentation Format)
 
@@ -316,7 +316,7 @@ The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispa
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
 - Phase 0-10 findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
-- Target Company Context (회사 규모, 핵심가치, 기술적 도전과제)는 Phase 1 리서치 결과를 기반으로 작성한다. 이 정보는 resume-claim-examiner의 E6 (Target-Scale Transferability) 평가에 직접 사용된다.
+- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 1 research results. This information is used directly in the resume-claim-examiner's E6 (Target-Scale Transferability) evaluation.
 
 ### Post-APPROVE Handling
 
