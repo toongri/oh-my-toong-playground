@@ -129,7 +129,7 @@ Does the causal chain of claim → action → result hold within this bullet?
 - "How was this metric measured? Is it based on a specific API or an overall average?"
 - "Is this improvement purely the result of this action alone?"
 
-### E3. Tradeoff Specificity (Tradeoff Specificity)
+### E3. Tradeoff Specificity (Tradeoff Authenticity)
 
 **Absolute standard — no career-level calibration.** A tradeoff that doesn't hold logically fails at any experience level.
 
@@ -148,7 +148,7 @@ Is the tradeoff for the technology choice mentioned in this bullet specific to t
 - "What was the actual impact of what you gave up in this tradeoff?"
 - "If you did this again, would you make the same choice?"
 
-### E4. Scale-Appropriate Engineering (Scale-Appropriate Engineering)
+### E4. Scale-Appropriate Engineering (Cost-Benefit Rationality)
 
 **Absolute standard — no career-level calibration.** Disproportionate engineering fails regardless of experience level.
 
@@ -167,7 +167,7 @@ Is the technology/approach chosen in this bullet appropriate for the scale of th
 - "What was the monthly operating cost of this infrastructure?"
 - "When this scale grows, where does the bottleneck appear first?"
 
-### E5. Signal-to-Noise Ratio (Signal-to-Noise Ratio)
+### E5. Signal-to-Noise Ratio (Clarity)
 
 **Absolute standard — no career-level calibration.** A buried core message fails regardless of experience level.
 
