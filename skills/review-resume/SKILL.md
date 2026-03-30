@@ -522,6 +522,14 @@ When sending a single bullet to the resume-claim-examiner, use a format that **e
 - JD-related keywords: {relevant JD keywords obtained in Phase 1}
 - Phase 0-10 findings: {verbatim P0/P1/P2 findings for this bullet}
 
+## Target Company Context
+- Company: {Phase 1 리서치에서 파악한 회사명}
+- Scale indicators: {Phase 1 Step 3-6에서 조사한 TPS, DAU, 데이터 규모 등}
+- Engineering team size: {파악된 경우}
+- Core values / engineering principles: {Phase 1 Step 3-1에서 조사한 핵심가치}
+- Key technical challenges: {JD 분석 + 테크블로그에서 파악된 기술적 도전과제}
+- If unavailable: "No specific target — evaluate against big tech standards (빅테크 기준)"
+
 ## Proposed Alternatives (2-3)
 {alternatives generated per content-quality-gate.md §3 protocol}
 ```
@@ -530,6 +538,7 @@ When sending a single bullet to the resume-claim-examiner, use a format that **e
 - "Technologies/approaches" in Technical Context are identified directly from the bullet text by the main session. Do not let the evaluator find them on its own.
 - Phase 0-10 findings are transmitted verbatim. Do not summarize.
 - Each evaluation is independent. Do not re-send results from previous evaluations.
+- Target Company Context는 Phase 1 리서치 결과를 기반으로 작성한다. Phase 1에서 규모 지표를 확보하지 못한 경우 "No specific target" fallback을 사용한다.
 
 ### User Opt-Out
 
