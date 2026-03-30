@@ -24,6 +24,10 @@ If the bullet doesn't answer these questions, it fails.
 - Mid (3-7yr): "Did you choose this deliberately?" — independent judgment, constraint-based selection
 - Senior (7+yr): "Did you evaluate the systemic impact?" — cost/benefit at org scale, team implications
 
+**Evaluation standard split:**
+- **E1 (Career-Level Fit)**: CALIBRATED — expectations scale with years of experience. A junior is not held to senior standards. A senior receives no junior-level leniency.
+- **E2-E5 (Logic, Tradeoffs, Cost-Benefit, Priority)**: ABSOLUTE — flawed logic is flawed logic at any level. There is zero tolerance for logical gaps, unsound tradeoffs, or irrational cost-benefit regardless of experience. A junior's reasoning must be as logically sound as a senior's; only the expected depth of E1 differs.
+
 ---
 
 ## Input Format
@@ -89,6 +93,8 @@ Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
 
 ### E1. 연차 적합성 (Career-Level Technical Depth)
 
+**Calibrated standard — expectations scale with career level.** This is the ONLY axis where experience level changes the passing bar.
+
 해당 연차에 기대되는 기술적 깊이가 이 bullet에 드러나는가?
 
 **평가 방법:**
@@ -107,6 +113,8 @@ Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
 
 ### E2. 논리적 정합성 (Causal Integrity)
 
+**Absolute standard — no career-level calibration.** Flawed causal reasoning fails regardless of experience level.
+
 주장 → 행동 → 결과의 인과관계가 이 bullet 안에서 성립하는가?
 
 **평가 방법:**
@@ -123,6 +131,8 @@ Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
 - "이 개선이 순수하게 이 행동만의 결과인가요?"
 
 ### E3. 트레이드오프 진정성 (Tradeoff Specificity)
+
+**Absolute standard — no career-level calibration.** A tradeoff that doesn't hold logically fails at any experience level.
 
 이 bullet에 언급된 기술 선택의 트레이드오프가 이 문제 맥락에서 구체적인가?
 
@@ -141,6 +151,8 @@ Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
 
 ### E4. 비용-이득 합리성 (Scale-Appropriate Engineering)
 
+**Absolute standard — no career-level calibration.** Disproportionate engineering fails regardless of experience level.
+
 이 bullet에서 선택한 기술/접근법이 문제의 규모에 적합한가?
 
 **평가 방법:**
@@ -157,6 +169,8 @@ Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
 - "이 규모가 성장했을 때 어디가 먼저 병목이 되나요?"
 
 ### E5. 핵심 선별력 (Signal-to-Noise Ratio)
+
+**Absolute standard — no career-level calibration.** A buried core message fails regardless of experience level.
 
 이 bullet이 전달하려는 핵심 메시지가 명확한가, 부수 정보에 묻혀있지 않은가?
 
@@ -179,6 +193,7 @@ Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
 4. **기술-specific 심문.** 범용 판단("잘 썼다") 금지. 반드시 해당 기술/접근법의 구체적 측면을 지적.
 5. **2단계 평가.** Phase A에서 원문을 먼저 심문한다. 원문에 문제 없으면 즉시 APPROVE. 원문에 문제 있으면 Phase B에서 각 수정안을 동일 기준으로 심문한다.
 6. **부분 APPROVE 없음.** 수정안 단위로 E1-E5 전부 PASS여야 해당 수정안이 합격.
+7. **E1 is calibrated; E2-E5 are absolute.** E1 adjusts expectations by career level (junior vs senior). E2-E5 do NOT adjust: logical integrity, tradeoff validity, cost-benefit rationality, and priority awareness must be sound at every level. A 2-year engineer with flawed logic fails E2 just as a 10-year engineer would.
 
 ---
 
