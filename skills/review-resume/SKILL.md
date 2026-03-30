@@ -876,7 +876,7 @@ Example — user-accepted but evaluator-not-approved:
   <span class="badge badge-p1">P1 #5</span>
   <strong>No concrete tradeoffs from the MSA migration</strong>
   <div class="unresolved-note">
-    ⚠ Unresolved: content-evaluator issued FAIL on E3 (tradeoff authenticity) and E4 (cost-benefit rationality). User chose to proceed with current content.
+    ⚠ Unresolved: content-evaluator issued FAIL on E3 (Tradeoff Specificity) and E4 (Scale-Appropriate Engineering). User chose to proceed with current content.
   </div>
 </div>
 -->

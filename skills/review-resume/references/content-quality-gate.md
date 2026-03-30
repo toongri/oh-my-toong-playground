@@ -248,7 +248,7 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The E3 (tradeoff authenticity) axis may be difficult to PASS with current sources. If the content-evaluator issues a FAIL again, consider User Opt-Out for this item."
+2. State the limitation explicitly in the revision: "The E3 (Tradeoff Specificity) axis may be difficult to PASS with current sources. If the content-evaluator issues a FAIL again, consider User Opt-Out for this item."
 3. Dispatch this revision to the content-evaluator. If the content-evaluator APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**
