@@ -149,24 +149,24 @@ The Evaluation Protocol defines 14 phases (0-13). Resume reviews involve extensi
 
 ### Interview Trigger Precedence
 
-Experience Mining Interview의 트리거 조건이 충족되면:
-1. 인터뷰를 먼저 진행한다 (`Read references/experience-mining.md` 해당 Phase section 참조)
-2. 유저가 opt-out("다음으로", "넘어가자")하면 해당 Phase의 static guidance로 대체한다
+When the Experience Mining Interview trigger condition is met:
+1. Conduct the interview first (refer to `Read references/experience-mining.md` for the relevant Phase section)
+2. If the user opts out ("다음으로", "넘어가자"), replace with the static guidance for that Phase
 
-이 규칙은 모든 Phase의 인터뷰 트리거에 동일하게 적용된다.
+This rule applies equally to all interview triggers across all Phases.
 
 ### Tracking Rules
 
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phases 0-10은 평가 결과를 유저에게 출력하지 않는다. 유저 인터랙션은 다음에서만 발생한다:
-   (a) 정보 게이트 — Phase 3 (target position)
-   (b) 경험 발굴 인터뷰 — Phase 2, 4, 5, 7, 8 (트리거 시). 인터뷰 중 유저에게 보여지는 것: 인터뷰 질문 + 간략한 진단 맥락. 보여지지 않는 것: 내부 PASS/FAIL 집계, Completion Checklist, Phase 진행 마커.
-   Phase 12가 유일한 평가 결과 전달 Phase이다.
-5. Phase 11 (Per-Bullet Content Quality Gate)은 각 섹션 unit에 대해 content-evaluator APPROVE 또는 유저 opt-out까지 루프한다.
+4. Phases 0-10 do not output evaluation results to the user. User interaction occurs only at:
+   (a) Information gate — Phase 3 (target position)
+   (b) Experience mining interviews — Phase 2, 4, 5, 7, 8 (when triggered). What the user sees during interviews: interview questions + brief diagnostic context. What the user does NOT see: internal PASS/FAIL tallies, Completion Checklist, Phase progress markers.
+   Phase 12 is the only phase that delivers evaluation results to the user.
+5. Phase 11 (Per-Bullet Content Quality Gate) loops per section unit until content-evaluator APPROVE or user opt-out.
 6. Phase 12 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate (Phase 13) proceeds ONLY after approval.
-7. Phase 13 (Note Accumulate)은 유저가 HTML 리포트를 확인하고 승인한 후에만 진행한다. 승인 전에 노트 저장을 묻지 않는다.
+7. Phase 13 (Note Accumulate) proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 8. The Completion Checklist is internal — do NOT output it to the user.
 
 ---
@@ -426,68 +426,68 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 ## Phase 11: Per-Bullet Content Quality Gate
 
-Phase 0-10이 "무엇이 문제인가"를 진단했다면, Phase 11은 "문제가 충분히 해결되었는가"를 검증한다. 각 이력서 섹션을 개별 단위로 분리하여, content-evaluator sub-agent가 APPROVE할 때까지 수정-인터뷰-평가 루프를 반복한다.
+While Phases 0-10 diagnosed "what the problems are," Phase 11 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the content-evaluator sub-agent issues APPROVE.
 
 ### Evaluation Units
 
-content-evaluator는 **bullet 1개 / entry 1개** 단위로 기술적 심문을 수행한다. 섹션 전체가 아니라 개별 기술 클레임을 깊게 파고든다.
+The content-evaluator conducts technical interrogation at the granularity of **1 bullet / 1 entry**. It drills deep into individual technical claims, not entire sections.
 
-| Unit Type | Granularity | Example | 비고 |
-|-----------|-------------|---------|------|
-| 자기소개 | Type별 1 unit | Type C 1개 | Type C는 기술 연결이므로 evaluator 대상. Type A/B/D는 기술 심문 불필요 시 skip 가능 |
-| 경력 | bullet별 1 unit | "Kafka 비동기 파이프라인 구축으로 처리량 3배 향상" | 회사 전체가 아닌, bullet 1줄을 evaluator에 보냄 |
-| 문제해결 | entry별 1 unit | "결제 시스템 장애 격리" 에피소드 전체 | entry는 하나의 기술적 서사이므로 통으로 보냄 |
-| 기술/스터디 | evaluator 비대상 | — | 기술 스택 나열은 심문 대상이 아님. Phase 0-10 평가로 충분 |
+| Unit Type | Granularity | Example | Notes |
+|-----------|-------------|---------|-------|
+| Self-introduction | 1 unit per Type | Type C (1 entry) | Type C involves tech connections, so it is evaluator-eligible. Type A/B/D can be skipped if no technical interrogation is needed |
+| Career | 1 unit per bullet | "Built Kafka async pipeline, 3x throughput improvement" | Send a single bullet line to the evaluator, not the entire company block |
+| Problem-solving | 1 unit per entry | Entire "Payment System Fault Isolation" episode | Each entry is a single technical narrative — send it as a whole |
+| Tech/Study | Not evaluator-eligible | — | Listing a tech stack is not subject to interrogation. Phase 0-10 evaluation is sufficient |
 
-**대상 선별:** Phase 0-10에서 P0/P1 finding이 있는 bullet/entry만 Quality Gate 대상. 전체 PASS인 bullet은 skip.
+**Selection criteria:** Only bullets/entries with P0/P1 findings from Phases 0-10 are subject to the Quality Gate. Bullets that are fully PASS are skipped.
 
 ### Quality Gate Loop
 
-각 P0/P1 bullet에 대해:
+For each P0/P1 bullet:
 
-1. Phase 0-10 평가 결과에서 해당 bullet의 finding을 수집
-2. **2-3개 수정안 + 트레이드오프 비교 생성** (안전/고임팩트/절충)
-3. **content-evaluator에 원문 + 수정안 패키지를 dispatch** — evaluator가 2단계 검증:
-   - Phase A: 원문이 정말 문제인가? → 문제 없으면 즉시 APPROVE (수정 불필요)
-   - Phase B: 각 수정안이 기술적으로 합당한가? → 최소 1개 합격이면 APPROVE
-4. **APPROVE** → 검증된 수정안들을 HTML 리포트에 포함. 다음 bullet으로.
-5. **REQUEST_CHANGES** → evaluator의 Interview Hints 기반으로 유저 인터뷰 → 소스 보강 → 수정안 재생성 → 2번부터 재시작 (무한루프)
+1. Collect the findings for that bullet from the Phase 0-10 evaluation results
+2. **Generate 2-3 alternatives + tradeoff comparison** (safe / high-impact / balanced)
+3. **Dispatch original text + alternatives package to content-evaluator** — evaluator performs 2-stage verification:
+   - Phase A: Is the original really problematic? → If no problem, APPROVE immediately (no revision needed)
+   - Phase B: Is each alternative technically sound? → APPROVE if at least 1 passes
+4. **APPROVE** → include verified alternatives in the HTML report. Move to next bullet.
+5. **REQUEST_CHANGES** → interview the user based on evaluator's Interview Hints → supplement sources → regenerate alternatives → restart from step 2 (infinite loop)
 
-**Phase 12에서 유저가 HTML을 보고:**
-- 수정안을 선택하고 진행 → Pass
-- "다른 대안 없나?" / "이거 별로" → 해당 bullet Phase 11 재진입
-- "피드백 없어" → Phase 13
+**When the user reviews the HTML in Phase 12:**
+- Selects an alternative and proceeds → Pass
+- "Any other options?" / "Not great" → re-enter Phase 11 Quality Gate for that bullet
+- "No feedback" → Phase 13
 
 ### Quality Gate Flow (Per Bullet)
 
 ```mermaid
 flowchart TB
-    START[Phase 0-10 평가 완료] --> SELECT[P0/P1 finding 있는 bullet 선별]
-    SELECT --> PICK[다음 bullet 선택]
+    START[Phase 0-10 evaluation complete] --> SELECT[Select bullets with P0/P1 findings]
+    SELECT --> PICK[Pick next bullet]
 
-    PICK --> ALT[2-3 수정안 + 트레이드오프 생성]
-    ALT --> DISPATCH[content-evaluator dispatch\n— 원문 + 수정안 패키지 전송]
+    PICK --> ALT[Generate 2-3 alternatives + tradeoffs]
+    ALT --> DISPATCH[content-evaluator dispatch\n— send original + alternatives package]
 
-    DISPATCH --> DIAG{Phase A: 원문 심문\n정말 문제인가?}
-    DIAG -->|문제 없음| APPROVE_ORIG[APPROVE — 수정 불필요]
-    DIAG -->|문제 있음| ALTEVAL{Phase B: 수정안 심문\n각각 합당한가?}
+    DISPATCH --> DIAG{Phase A: Interrogate original\nIs it really problematic?}
+    DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
+    DIAG -->|Problem confirmed| ALTEVAL{Phase B: Interrogate alternatives\nIs each one sound?}
 
-    ALTEVAL -->|최소 1개 합격| APPROVE_ALT[APPROVE — 검증된 수정안 HTML 포함]
-    ALTEVAL -->|전부 불합격| CHANGES[REQUEST_CHANGES\n+ Interview Hints]
+    ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternatives in HTML]
+    ALTEVAL -->|All fail| CHANGES[REQUEST_CHANGES\n+ Interview Hints]
 
-    CHANGES --> INTERVIEW[유저 인터뷰\n4-Stage Bypass Protocol]
-    INTERVIEW --> SOURCE{소스 확보?}
+    CHANGES --> INTERVIEW[User interview\n4-Stage Bypass Protocol]
+    INTERVIEW --> SOURCE{Source obtained?}
     SOURCE -->|YES| ALT
-    SOURCE -->|NO: 4-Stage 소진| BEST[현재 소스로 최선 수정안]
-    BEST --> OPTOUT{유저 Opt-Out?}
-    OPTOUT -->|YES: 넘어가자| NEXT
-    OPTOUT -->|NO: 계속| DISPATCH
+    SOURCE -->|NO: 4-Stage exhausted| BEST[Best alternative with current source]
+    BEST --> OPTOUT{User Opt-Out?}
+    OPTOUT -->|YES: move on| NEXT
+    OPTOUT -->|NO: continue| DISPATCH
 
-    APPROVE_ORIG --> NEXT{다음 bullet\n있음?}
+    APPROVE_ORIG --> NEXT{Next bullet\nexists?}
     APPROVE_ALT --> NEXT
 
     NEXT -->|YES| PICK
-    NEXT -->|NO| DONE[Phase 12: HTML 생성]
+    NEXT -->|NO| DONE[Phase 12: Generate HTML]
 
     style DISPATCH fill:#e74c3c,stroke:#333,color:#fff
     style DIAG fill:#f39c12,stroke:#333,color:#fff
@@ -496,45 +496,45 @@ flowchart TB
 ```
 
 <critical>
-content-evaluator가 APPROVE하지 않으면 이 루프에서 절대 탈출할 수 없다.
-유저가 "넘어가자"로 Opt-Out하는 것만이 유일한 예외다.
-APPROVE 없이 다음 bullet으로 넘어가거나 Phase 12로 진행하는 것은 금지된다.
+There is no escape from this loop without content-evaluator APPROVE.
+The only exception is the user opting out with "move on."
+Advancing to the next bullet or proceeding to Phase 12 without APPROVE is forbidden.
 </critical>
 
 ### Evaluator Dispatch Protocol
 
-content-evaluator에 bullet 1개를 보낼 때, **agents/content-evaluator.md의 Input Format과 정확히 일치하는 형식**으로 전달한다.
+When sending a single bullet to the content-evaluator, use a format that **exactly matches the Input Format in agents/content-evaluator.md**.
 
 ```
 # Technical Evaluation Request
 
 ## Candidate Profile
-- 경력: {years}년차
-- 포지션: {position}
-- 지원 회사/포지션: {company} / {role}
+- Experience: {years} years
+- Position: {position}
+- Target company/role: {company} / {role}
 
 ## Bullet Under Review
-- 소속 섹션: {경력 > A사 | 문제해결 > 결제 시스템 장애 격리 | 자기소개 Type C}
-- 원문: "{Phase 0-10 평가 대상이었던 원본 텍스트}"
-- 수정안: "{유저가 선택한 수정안 텍스트}"
+- Section: {Career > Company A | Problem-Solving > Payment System Fault Isolation | Self-Introduction Type C}
+- Original: "{original text that was the subject of Phase 0-10 evaluation}"
+- Revised: "{revised text selected by the user}"
 
 ## Technical Context
-- 이 bullet에서 언급된 기술/접근법: {메인 세션이 식별 — 예: Kafka, Redis, 서킷브레이커}
-- JD 관련 키워드: {Phase 1에서 확보한 JD 키워드 중 관련된 것}
-- Phase 0-10 findings: {이 bullet에 대한 기존 P0/P1/P2 finding 원문}
+- Technologies/approaches mentioned in this bullet: {identified by main session directly from bullet text — e.g., Kafka, Redis, circuit breaker}
+- JD-related keywords: {relevant JD keywords obtained in Phase 1}
+- Phase 0-10 findings: {verbatim P0/P1/P2 findings for this bullet}
 
-## Proposed Alternatives (2-3개)
-{content-quality-gate.md §3 프로토콜에 따라 생성한 수정안들}
+## Proposed Alternatives (2-3)
+{alternatives generated per content-quality-gate.md §3 protocol}
 ```
 
-**핵심 규칙:**
-- Technical Context의 "기술/접근법"은 메인 세션이 bullet 텍스트에서 직접 식별한다. evaluator가 알아서 찾게 하지 않는다.
-- Phase 0-10 findings는 원문 그대로 전달한다. 요약하지 않는다.
-- 각 평가는 독립적이다. 이전 평가 결과를 재전송하지 않는다.
+**Key rules:**
+- "Technologies/approaches" in Technical Context are identified directly from the bullet text by the main session. Do not let the evaluator find them on its own.
+- Phase 0-10 findings are transmitted verbatim. Do not summarize.
+- Each evaluation is independent. Do not re-send results from previous evaluations.
 
 ### User Opt-Out
 
-유저가 "넘어가자" / "이 정도면 OK" → 현재 섹션 루프 종료. 상태: "user-accepted (evaluator-not-approved)". HTML 리포트에 미해소 피드백 포함.
+If the user says "move on" / "this is OK enough" → end the current section loop. Status: "user-accepted (evaluator-not-approved)". Include unresolved feedback in the HTML report.
 
 **Reference:** Read `references/content-quality-gate.md` for full protocol including alternative suggestion format, interview loop, HTML format, and whole-resume feedback loop.
 
@@ -547,7 +547,7 @@ Compile all evaluation results from Phases 0-10 and write a self-contained HTML 
 ### Approval Gate (Strict Feedback Loop)
 
 <critical>
-HTML report를 열고 유저에게 리뷰를 요청하라. 유저가 "피드백 없음"을 명시적으로 선언할 때까지 어떤 다음 단계도 진행하지 마라. resume-apply 워크플로우 내에서 호출된 경우에도 이 규칙은 동일하게 적용된다.
+Open the HTML report and ask the user to review it. Do not proceed to any next step until the user explicitly declares "no feedback." This rule applies even when called from within a resume-apply workflow.
 </critical>
 
 After opening the HTML report:
@@ -558,13 +558,13 @@ After opening the HTML report:
 
 | Response Type | Examples | Action |
 |---------------|----------|--------|
-| 명시적 피드백 없음 | "없음", "OK", "피드백 없어", "넘어가자" | → Phase 13 진행 |
-| 애매한 응답 | "괜찮은 것 같은데", "음...", "대충 OK" | → "구체적으로 수정하고 싶은 부분이 있나요?" 재질문 |
-| 특정 섹션 피드백 | "자기소개 Type C가 약해", "경력 2번째가..." | → 해당 섹션 Phase 11 Quality Gate 재진입 |
-| 전체 방향 피드백 | "전체적으로 임팩트가 약해", "차별화가 안 돼" | → 관련 섹션들의 Phase 11 Quality Gate 재진입 |
+| Explicit no feedback | "없음", "OK", "No feedback", "Move on" | → Proceed to Phase 13 |
+| Ambiguous response | "Looks okay I guess", "Hmm...", "Roughly OK" | → Re-ask: "Is there anything specific you'd like to revise?" |
+| Section-specific feedback | "Self-intro Type C is weak", "Career bullet 2nd..." | → Re-enter Phase 11 Quality Gate for that section |
+| Overall direction feedback | "Overall impact is weak", "Not differentiated enough" | → Re-enter Phase 11 Quality Gate for relevant sections |
 
-4. 피드백 반영 후 → HTML 재생성 → `open` → 다시 2번부터 (무한루프)
-5. **탈출 조건은 오직 "명시적 피드백 없음"뿐이다.**
+4. After applying feedback → regenerate HTML → `open` → loop back to step 2 (infinite loop)
+5. **The only exit condition is "explicit no feedback."**
 
 ### Priority Level Definitions
 
@@ -785,59 +785,59 @@ For each resume line in this section:
   - If any criterion fails: wrap in .comment-p{0|1|2|3} matching the finding priority
 
 Example — finding with comment:
-<div class="resume-line">저는 백엔드 개발자로 3년간 근무했습니다.</div>
+<div class="resume-line">I worked as a backend developer for 3 years.</div>
 <div class="comment-p0">
   <span class="badge badge-p0">P0 #1</span>
-  <strong>"3년간 근무"는 기간 사실일 뿐, 성과가 없음. 면접관이 기억할 것이 없다.</strong><br>
-  <em>위반:</em> 목표→실행→성과 인과 없음, 차별화 요소 없음<br>
-  <em>면접 시뮬레이션:</em> "그래서 뭘 하셨나요?" — 답이 이 문장 안에 없음
-  <div class="suggestion">수정안: 3년간 B2B SaaS 결제 시스템을 설계·운영하며, 결제-주문 불일치를 0건으로 만들었습니다.</div>
+  <strong>"Worked for 3 years" is a duration fact only — no achievement. Nothing for the interviewer to remember.</strong><br>
+  <em>Violation:</em> No goal→action→outcome causation, no differentiator<br>
+  <em>Interview simulation:</em> "So what did you actually do?" — the answer is not in this sentence
+  <div class="suggestion">Revised: Designed and operated a B2B SaaS payment system over 3 years, reducing payment-order discrepancies to zero.</div>
 </div>
 
 Example — all-PASS line:
-<div class="resume-line">결제-주문 불일치를 0건으로 달성, 월 평균 클레임 12건 → 0건 전환.</div>
+<div class="resume-line">Achieved zero payment-order discrepancies, converting an average of 12 monthly claims to 0.</div>
 <div class="comment-strength">
   <span class="badge badge-strength">PASS</span>
-  6개 기준 전부 통과 — 목표·실행·성과 인과 명확, 수치 검증 가능
+  All 6 criteria passed — goal/action/outcome causation clear, metrics verifiable
 </div>
 
 Example — finding with multiple alternatives:
-<div class="resume-line">Kafka 기반 비동기 파이프라인을 구축했습니다.</div>
+<div class="resume-line">Built a Kafka-based async pipeline.</div>
 <div class="comment-p1">
   <span class="badge badge-p1">P1 #3</span>
-  <strong>왜 Kafka인지, 어떤 트레이드오프인지 없음.</strong><br>
-  <em>위반:</em> 트레이드오프 진정성(E3) — 기술 선택 근거 부재<br>
-  <em>면접 시뮬레이션:</em> "왜 RabbitMQ가 아니라 Kafka를 선택했나요?" — 답 없음
+  <strong>No explanation of why Kafka or what tradeoffs were made.</strong><br>
+  <em>Violation:</em> Tradeoff authenticity (E3) — no basis for technology choice<br>
+  <em>Interview simulation:</em> "Why Kafka instead of RabbitMQ?" — no answer
   <div class="alternatives">
-    <h4>수정 대안</h4>
+    <h4>Alternatives</h4>
     <div class="alternative">
-      <div><span class="alt-badge alt-safe">대안 1: 안전</span><span class="alt-recommendation">★ 추천</span></div>
-      <div class="alt-content">일 10만 건 이벤트의 순서 보장이 필요해 Kafka를 선택했고, RabbitMQ 대비 파티션 기반 순서 보장이 결정적 이유였습니다.</div>
-      <div class="alt-pros">장점: 최소 변경, 기술 선택 근거 명확</div>
-      <div class="alt-cons">단점: 임팩트가 약함, 차별화 부족</div>
+      <div><span class="alt-badge alt-safe">Alt 1: Safe</span><span class="alt-recommendation">★ Recommended</span></div>
+      <div class="alt-content">Needed ordering guarantees for 100K daily events and chose Kafka; partition-based ordering was the decisive factor over RabbitMQ.</div>
+      <div class="alt-pros">Pros: Minimal change, technology choice clearly justified</div>
+      <div class="alt-cons">Cons: Impact is weak, low differentiation</div>
     </div>
     <div class="alternative">
-      <div><span class="alt-badge alt-impact">대안 2: 고임팩트</span></div>
-      <div class="alt-content">일 10만 건 이벤트를 처리하되 파티션 간 순서 보장과 처리량 사이의 트레이드오프에서, 순서 보장을 우선하고 파티션 수를 3개로 제한하여 처리 지연 200ms를 수용했습니다.</div>
-      <div class="alt-pros">장점: 트레이드오프 구체적, 면접 깊이 ↑</div>
-      <div class="alt-cons">단점: 수치 검증 필요, 없으면 역효과</div>
+      <div><span class="alt-badge alt-impact">Alt 2: High Impact</span></div>
+      <div class="alt-content">Processing 100K daily events while balancing the tradeoff between partition ordering and throughput, we prioritized ordering and capped partitions at 3, accepting 200ms processing latency.</div>
+      <div class="alt-pros">Pros: Tradeoff is specific, deeper interview signal ↑</div>
+      <div class="alt-cons">Cons: Metrics verification required — backfires if absent</div>
     </div>
     <table class="tradeoff-table">
-      <tr><th>기준</th><th>대안 1</th><th>대안 2</th></tr>
-      <tr><td>면접 안전성</td><td>★★★</td><td>★★☆</td></tr>
-      <tr><td>차별화</td><td>★★☆</td><td>★★★</td></tr>
-      <tr><td>소스 필요량</td><td>낮음</td><td>높음</td></tr>
+      <tr><th>Criterion</th><th>Alt 1</th><th>Alt 2</th></tr>
+      <tr><td>Interview safety</td><td>★★★</td><td>★★☆</td></tr>
+      <tr><td>Differentiation</td><td>★★☆</td><td>★★★</td></tr>
+      <tr><td>Source required</td><td>Low</td><td>High</td></tr>
     </table>
   </div>
 </div>
 
 Example — user-accepted but evaluator-not-approved:
-<div class="resume-line">MSA로 전환하여 배포 주기를 단축했습니다.</div>
+<div class="resume-line">Migrated to MSA and shortened the deployment cycle.</div>
 <div class="comment-p1">
   <span class="badge badge-p1">P1 #5</span>
-  <strong>MSA 전환의 구체적 트레이드오프 부재</strong>
+  <strong>No concrete tradeoffs from the MSA migration</strong>
   <div class="unresolved-note">
-    ⚠ 미해소: content-evaluator가 E3(트레이드오프 진정성), E4(비용-이득 합리성) FAIL 판정. 유저가 현재 내용으로 진행 선택.
+    ⚠ Unresolved: content-evaluator issued FAIL on E3 (tradeoff authenticity) and E4 (cost-benefit rationality). User chose to proceed with current content.
   </div>
 </div>
 -->
@@ -936,7 +936,7 @@ Before delivering Phase 12 output, verify every phase was completed or has a val
 - [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 9: Technical Substance Verification (T1-T3: 기술적 정합성, 선택 합리성, 트레이드오프 진정성)
 - [ ] Phase 10: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 11: Per-Bullet Content Quality Gate (content-evaluator APPROVE required for each section)
+- [ ] Phase 11: Per-Bullet Content Quality Gate (content-evaluator APPROVE or user opt-out required for each section unit)
 - [ ] Phase 12: Generate HTML Report + User Approval Gate (피드백 0될 때까지 무한루프)
 - [ ] Phase 13: Note Accumulate (candidate/preference persistence — user confirmation required)
 ```
