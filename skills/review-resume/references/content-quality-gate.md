@@ -262,16 +262,18 @@ Hints를 질문으로 변환하는 원칙:
 
 ```mermaid
 flowchart TB
-    A[Phase 0-10 평가 완료] --> B[P0/P1 finding 있는 bullet/entry 선별]
+    A[Phase 0-10 평가 완료] --> B[P0/P1 finding 있는 bullet 선별]
     B --> C[다음 bullet 선택]
     C --> D[2-3 수정안 + 트레이드오프 생성]
-    D --> E[유저에게 대안 제시]
-    E --> F{유저 선택}
-    F --> G[선택 방향으로 수정안 확정]
-    G --> H[content-evaluator dispatch\n— bullet 1개 전송]
-    H --> I{content-evaluator\nE1-E5 기술 심문}
-    I -->|APPROVE| J{다음 bullet\n있음?}
-    I -->|REQUEST_CHANGES| K[FAIL 축 분석\n+ Interview Hints 추출]
+    D --> H[content-evaluator dispatch\n— 원문 + 수정안 패키지 전송]
+
+    H --> DIAG{Phase A: 원문 심문\n정말 문제인가?}
+    DIAG -->|문제 없음| APPROVE_ORIG[APPROVE — 수정 불필요]
+    DIAG -->|문제 있음| ALTEVAL{Phase B: 수정안 심문\n각각 합당한가?}
+
+    ALTEVAL -->|최소 1개 합격| APPROVE_ALT[APPROVE — 검증된 수정안 HTML 포함]
+    ALTEVAL -->|전부 불합격| K[REQUEST_CHANGES\n+ Interview Hints]
+
     K --> L[유저 인터뷰\n4-Stage Bypass Protocol]
     L --> M{소스 확보?}
     M -->|YES| D
@@ -279,11 +281,16 @@ flowchart TB
     N --> O{유저 Opt-Out?}
     O -->|YES: 넘어가자| J
     O -->|NO: 계속| H
+
+    APPROVE_ORIG --> J{다음 bullet\n있음?}
+    APPROVE_ALT --> J
+
     J -->|YES| C
     J -->|NO| P[Phase 12: HTML 생성]
 
     style H fill:#e74c3c,stroke:#333,color:#fff
-    style I fill:#f39c12,stroke:#333,color:#fff
+    style DIAG fill:#f39c12,stroke:#333,color:#fff
+    style ALTEVAL fill:#f39c12,stroke:#333,color:#fff
     style P fill:#27ae60,stroke:#333,color:#fff
 ```
 
@@ -300,7 +307,7 @@ Input Format은 SKILL.md Phase 11 "Evaluator Dispatch Protocol"에 정의된 템
 **핵심 규칙:**
 - Technical Context의 "기술/접근법"은 메인 세션이 bullet 텍스트에서 직접 식별한다
 - Phase 0-10 findings는 원문 그대로 전달한다 (요약 금지)
-- Previous Evaluation은 evaluator의 이전 응답 전체를 복사-붙여넣기한다
+- 각 평가는 독립적이다. 이전 평가 결과를 재전송하지 않는다
 
 ### APPROVE 판정 후 처리
 

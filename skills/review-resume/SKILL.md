@@ -443,36 +443,39 @@ content-evaluator는 **bullet 1개 / entry 1개** 단위로 기술적 심문을 
 
 ### Quality Gate Loop
 
-각 섹션 unit에 대해:
+각 P0/P1 bullet에 대해:
 
-1. Phase 0-10 평가 결과에서 해당 섹션의 finding을 수집
+1. Phase 0-10 평가 결과에서 해당 bullet의 finding을 수집
 2. **2-3개 수정안 + 트레이드오프 비교 생성** (안전/고임팩트/절충)
-3. 유저에게 대안 제시 → 선택 또는 피드백
-4. 필요 시 experience-mining 인터뷰로 소스 보강
-5. 확정된 내용을 **content-evaluator** sub-agent에 dispatch (Agent 도구 사용)
-6. APPROVE → 다음 bullet으로
-7. REQUEST_CHANGES → evaluator 피드백 기반으로 2번부터 재시작 (무한루프)
+3. **content-evaluator에 원문 + 수정안 패키지를 dispatch** — evaluator가 2단계 검증:
+   - Phase A: 원문이 정말 문제인가? → 문제 없으면 즉시 APPROVE (수정 불필요)
+   - Phase B: 각 수정안이 기술적으로 합당한가? → 최소 1개 합격이면 APPROVE
+4. **APPROVE** → 검증된 수정안들을 HTML 리포트에 포함. 다음 bullet으로.
+5. **REQUEST_CHANGES** → evaluator의 Interview Hints 기반으로 유저 인터뷰 → 소스 보강 → 수정안 재생성 → 2번부터 재시작 (무한루프)
+
+**Phase 12에서 유저가 HTML을 보고:**
+- 수정안을 선택하고 진행 → Pass
+- "다른 대안 없나?" / "이거 별로" → 해당 bullet Phase 11 재진입
+- "피드백 없어" → Phase 13
 
 ### Quality Gate Flow (Per Bullet)
 
 ```mermaid
 flowchart TB
-    START[Phase 0-10 평가 완료] --> SELECT[P0/P1 finding 있는 bullet/entry 선별]
+    START[Phase 0-10 평가 완료] --> SELECT[P0/P1 finding 있는 bullet 선별]
     SELECT --> PICK[다음 bullet 선택]
 
     PICK --> ALT[2-3 수정안 + 트레이드오프 생성]
-    ALT --> PRESENT[유저에게 대안 제시]
-    PRESENT --> CHOOSE{유저 선택}
-    CHOOSE --> FINALIZE[선택 방향으로 수정안 확정]
+    ALT --> DISPATCH[content-evaluator dispatch\n— 원문 + 수정안 패키지 전송]
 
-    FINALIZE --> DISPATCH[content-evaluator dispatch\n— bullet 1개 전송]
+    DISPATCH --> DIAG{Phase A: 원문 심문\n정말 문제인가?}
+    DIAG -->|문제 없음| APPROVE_ORIG[APPROVE — 수정 불필요]
+    DIAG -->|문제 있음| ALTEVAL{Phase B: 수정안 심문\n각각 합당한가?}
 
-    DISPATCH --> EVAL{content-evaluator\nE1-E5 기술 심문}
+    ALTEVAL -->|최소 1개 합격| APPROVE_ALT[APPROVE — 검증된 수정안 HTML 포함]
+    ALTEVAL -->|전부 불합격| CHANGES[REQUEST_CHANGES\n+ Interview Hints]
 
-    EVAL -->|APPROVE| NEXT{다음 bullet\n있음?}
-    EVAL -->|REQUEST_CHANGES| ANALYZE[FAIL 축 분석\n+ Interview Hints 추출]
-
-    ANALYZE --> INTERVIEW[유저 인터뷰\n4-Stage Bypass Protocol]
+    CHANGES --> INTERVIEW[유저 인터뷰\n4-Stage Bypass Protocol]
     INTERVIEW --> SOURCE{소스 확보?}
     SOURCE -->|YES| ALT
     SOURCE -->|NO: 4-Stage 소진| BEST[현재 소스로 최선 수정안]
@@ -480,11 +483,15 @@ flowchart TB
     OPTOUT -->|YES: 넘어가자| NEXT
     OPTOUT -->|NO: 계속| DISPATCH
 
+    APPROVE_ORIG --> NEXT{다음 bullet\n있음?}
+    APPROVE_ALT --> NEXT
+
     NEXT -->|YES| PICK
     NEXT -->|NO| DONE[Phase 12: HTML 생성]
 
     style DISPATCH fill:#e74c3c,stroke:#333,color:#fff
-    style EVAL fill:#f39c12,stroke:#333,color:#fff
+    style DIAG fill:#f39c12,stroke:#333,color:#fff
+    style ALTEVAL fill:#f39c12,stroke:#333,color:#fff
     style DONE fill:#27ae60,stroke:#333,color:#fff
 ```
 
@@ -518,15 +525,12 @@ content-evaluator에 bullet 1개를 보낼 때, **agents/content-evaluator.md의
 
 ## Proposed Alternatives (2-3개)
 {content-quality-gate.md §3 프로토콜에 따라 생성한 수정안들}
-
-## Previous Evaluation (재평가 시)
-{이전 content-evaluator의 REQUEST_CHANGES 전체 원문 — 첫 평가 시 생략}
 ```
 
 **핵심 규칙:**
 - Technical Context의 "기술/접근법"은 메인 세션이 bullet 텍스트에서 직접 식별한다. evaluator가 알아서 찾게 하지 않는다.
 - Phase 0-10 findings는 원문 그대로 전달한다. 요약하지 않는다.
-- Previous Evaluation은 evaluator의 이전 응답 전체를 복사-붙여넣기한다. 요약하면 맥락이 손실된다.
+- 각 평가는 독립적이다. 이전 평가 결과를 재전송하지 않는다.
 
 ### User Opt-Out
 

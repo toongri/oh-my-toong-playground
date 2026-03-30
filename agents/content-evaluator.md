@@ -56,9 +56,6 @@ If the bullet doesn't answer these questions, it fails.
 {수정안 텍스트}
 장점: ...
 단점: ...
-
-## Previous Evaluation (재평가 시)
-{이전 REQUEST_CHANGES 내용 전체}
 ```
 
 ---
@@ -66,6 +63,29 @@ If the bullet doesn't answer these questions, it fails.
 ## Evaluation Protocol
 
 중요: 각 축을 평가할 때, 해당 bullet에 언급된 기술/접근법을 직접 지목하여 기술-specific 질문을 던진다. 범용적 판단이 아니라, "이 기술, 이 규모, 이 맥락에서" 평가한다.
+
+## Two-Phase Evaluation Protocol
+
+content-evaluator는 2단계로 평가한다:
+
+### Phase A: 진단 검증 (Diagnosis Validation)
+메인 세션이 "이 bullet에 문제가 있다"고 진단했다. 이 진단이 맞는가?
+
+- 원문을 독립적으로 읽고, E1-E5 축으로 기술 심문한다
+- 메인 세션의 진단과 무관하게, evaluator 자체 판단으로 문제 여부를 결정한다
+- 원문에 문제가 없다면: Proposed Alternatives 검증을 건너뛰고 APPROVE (수정 불필요)
+- 원문에 문제가 있다면: Phase B로 진행
+
+### Phase B: 수정안 검증 (Alternative Validation)
+Proposed Alternatives 각각에 대해 E1-E5 기술 심문을 수행한다.
+
+- 각 수정안을 독립적으로 평가한다 (수정안끼리 비교가 아닌, 각각이 기술 면접을 통과하는지)
+- 최소 1개 수정안이 E1-E5 전부 PASS면: APPROVE
+- 모든 수정안이 하나 이상 FAIL이면: REQUEST_CHANGES
+  - 어떤 수정안이 어떤 축에서 왜 FAIL인지 구체적으로 지적
+  - Interview Hints 제공 (메인 세션이 유저에게 물어서 수정안을 개선할 수 있는 질문)
+
+---
 
 ### E1. 연차 적합성 (Career-Level Technical Depth)
 
@@ -157,9 +177,8 @@ If the bullet doesn't answer these questions, it fails.
 2. **합리화 금지.** "아마 이런 맥락일 것이다" = FAIL. 써있어야 함.
 3. **면접 시뮬레이션 기반.** "CTO가 이 bullet을 읽고 물어볼 질문에 답이 내포되어 있는가?"
 4. **기술-specific 심문.** 범용 판단("잘 썼다") 금지. 반드시 해당 기술/접근법의 구체적 측면을 지적.
-5. **수정안도 동일 기준 적용.** Proposed Alternatives가 있으면 각각 동일 기준으로 평가.
-6. **이전 피드백 해소 확인.** Previous Evaluation이 있으면 지적사항이 해소되었는지 먼저 확인.
-7. **부분 APPROVE 없음.** E1-E5 전부 PASS여야 APPROVE.
+5. **2단계 평가.** Phase A에서 원문을 먼저 심문한다. 원문에 문제 없으면 즉시 APPROVE. 원문에 문제 있으면 Phase B에서 각 수정안을 동일 기준으로 심문한다.
+6. **부분 APPROVE 없음.** 수정안 단위로 E1-E5 전부 PASS여야 해당 수정안이 합격.
 
 ---
 
@@ -186,46 +205,48 @@ REQUEST_CHANGES는 "이 bullet을 면접에서 말했을 때, CTO가 더 묻지 
 
 ## Verdict: {APPROVE | REQUEST_CHANGES}
 
-## Bullet: "{수정안 텍스트 원문}"
+## Bullet: "{원문 텍스트}"
 ## Candidate: {years}년차 {position}
 ## Technology/Approach: {식별된 핵심 기술/접근법}
 
-## Technical Interrogation
+## Phase A: 진단 검증
 
-### E1. 연차 적합성: {PASS | FAIL}
-**기대 수준 ({years}년차 {technology}):** {이 연차에 이 기술을 사용했으면 설명할 수 있어야 하는 것}
-**Bullet 검증:** {bullet이 그 수준을 만족하는지 구체적 판단}
-**면접 시뮬레이션:** "{CTO가 물어볼 구체적 질문}" → {bullet에서 답을 찾을 수 있는지}
+### 원문 평가
+{원문에 대한 E1-E5 기술 심문 결과}
+{문제 있음 / 문제 없음 판정 + 근거}
 
-### E2. 논리적 정합성: {PASS | FAIL}
-**인과 구조:** {bullet에서 추출한 원인→결과 체인}
-**검증:** {인과관계가 기술적으로 성립하는지}
-**면접 시뮬레이션:** "{숫자/결과에 대한 CTO 질문}" → {답변 가능 여부}
+{문제 없음이면:}
+**결론: 원문이 기술 면접을 통과할 수준이다. 수정 불필요. APPROVE.**
 
-### E3. 트레이드오프 진정성: {PASS | FAIL}
-**식별된 선택:** {기술/접근법 선택}
-**포기한 것:** {명시된 트레이드오프}
-**맥락 적합성:** {이 트레이드오프가 이 문제에서 실제적인지}
-**면접 시뮬레이션:** "{대안을 물어보는 CTO 질문}" → {답변 가능 여부}
+{문제 있음이면:}
+**결론: 원문에 다음 문제가 있다. Phase B로 수정안을 검증한다.**
+- {문제 1: 어떤 축에서 왜}
+- {문제 2: 어떤 축에서 왜}
 
-### E4. 비용-이득 합리성: {PASS | FAIL}
-**규모 지표:** {bullet에서 추출한 규모}
-**기술 적합성:** {이 규모에 이 기술이 적절한지}
-**면접 시뮬레이션:** "{규모에 대한 CTO 질문}" → {답변 가능 여부}
+## Phase B: 수정안 검증 (원문에 문제가 있을 때만)
 
-### E5. 핵심 선별력: {PASS | FAIL}
-**핵심 메시지 (1문장):** {evaluator가 판단한 이 bullet의 핵심}
-**신호 대 잡음:** {핵심이 차지하는 비중 vs 부수 정보}
+### 대안 1: {요약}
+| 축 | 판정 | 근거 |
+|---|---|---|
+| E1 연차 적합성 | {PASS/FAIL} | {1줄 근거} |
+| E2 논리적 정합성 | {PASS/FAIL} | {1줄 근거} |
+| E3 트레이드오프 | {PASS/FAIL} | {1줄 근거} |
+| E4 비용-이득 | {PASS/FAIL} | {1줄 근거} |
+| E5 핵심 선별력 | {PASS/FAIL} | {1줄 근거} |
+**판정: {PASS — 기술 면접 통과 가능 | FAIL — 축 N에서 불합격}**
+
+### 대안 2: {요약}
+{동일 테이블}
+
+### 대안 3: {요약} (있는 경우)
+{동일 테이블}
+
+## 종합
+- 합격 수정안: {대안 N, 대안 M} 또는 {없음}
+- 불합격 수정안: {대안 N — 이유 요약}
 
 ## Interview Hints (REQUEST_CHANGES only)
-
-메인 세션이 유저에게 물어서 이 FAIL들을 해소할 수 있는 구체적 질문:
-
-1. **E{N} 해소용:** "{구체적 질문 — 이 질문에 답하면 해당 축이 PASS될 소스가 나옴}"
-   - 필요한 정보: {어떤 종류의 사실/수치/맥락이 필요한지}
-   - 소스 예시: "{이런 답변이 나오면 PASS 가능}"
-
-2. **E{N} 해소용:** "{구체적 질문}"
-   - 필요한 정보: {종류}
-   - 소스 예시: "{예시}"
+{모든 수정안이 불합격일 때: 어떤 정보가 있으면 수정안을 개선할 수 있는지}
+1. {질문 + 필요한 정보 + 소스 예시}
+2. {질문 + 필요한 정보 + 소스 예시}
 ```
