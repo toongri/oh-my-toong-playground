@@ -457,6 +457,18 @@ export async function syncLib(
     const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
 
     if (requiredModules.size === 0) {
+      // Clean up stale lib from previous syncs
+      if (context.dryRun) {
+        if (existsSync(libDest)) {
+          logDry(`Remove stale lib directory: ${libDest}`);
+        }
+      } else {
+        try {
+          await fs.rm(libDest, { recursive: true, force: true });
+        } catch {
+          // ignore
+        }
+      }
       logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
       continue;
     }
