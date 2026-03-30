@@ -11,7 +11,7 @@ agents:
     - oracle
     - argus
     - chunk-reviewer
-    - content-evaluator
+    - resume-claim-examiner
     - spec-reviewer
     - sisyphus-junior
 
