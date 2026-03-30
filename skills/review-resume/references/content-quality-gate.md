@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Section Quality Gate is a verification loop that ensures content quality for each resume section immediately before HTML report generation (Phase 11). If Phases 0-10 diagnose "what is wrong with this section," the Quality Gate is the step where the content-evaluator agent independently verifies "has that problem actually been resolved."
+The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 12). If Phases 0-10 diagnose "what is wrong with this section," the Quality Gate is the step where the content-evaluator agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
@@ -311,7 +311,7 @@ The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispa
 
 ### Post-APPROVE Handling
 
-Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 11 HTML report is generated based on these confirmed revisions.
+Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 12 HTML report is generated based on these confirmed revisions.
 
 ---
 
@@ -352,7 +352,7 @@ Opted-out sections are displayed in the HTML report as follows:
 
 ## 7. HTML Report Alternatives Format
 
-Defines how alternatives for each finding are displayed in the Phase 11 HTML report. Actual application is handled in the SKILL.md HTML template modification task.
+Defines how alternatives for each finding are displayed in the Phase 12 HTML report. Actual application is handled in the SKILL.md HTML template modification task.
 
 ### Direction of Change
 
@@ -503,12 +503,12 @@ CSS to add to SKILL.md HTML template (actual application in SKILL.md modificatio
 
 ### Purpose
 
-After generating the HTML report in Phase 11, provide a loop that allows the user to give additional feedback after reviewing the completed resume as a whole. If the per-section Quality Gate ensures the quality of individual revisions, the Whole-Resume Feedback Loop performs a final check on the consistency and direction of the resume as a whole.
+After generating the HTML report in Phase 12, provide a loop that allows the user to give additional feedback after reviewing the completed resume as a whole. If the per-section Quality Gate ensures the quality of individual revisions, the Whole-Resume Feedback Loop performs a final check on the consistency and direction of the resume as a whole.
 
 ### Loop Structure
 
 ```
-Phase 11 HTML generated + browser opened
+Phase 12 HTML generated + browser opened
     ↓
 User review → AskUserQuestion
 "Have you reviewed the full resume? Let me know if there is anything you'd like to revise."
@@ -516,7 +516,7 @@ User review → AskUserQuestion
 Feedback present?
     → YES (specific section issue): Re-enter Quality Gate for that section
     → YES (overall structure/direction issue): Re-enter Quality Gate for relevant sections
-    → NO (explicit termination signal only): Proceed to Phase 12
+    → NO (explicit termination signal only): Proceed to Phase 13
 ```
 
 ### Feedback Classification and Handling
@@ -533,7 +533,7 @@ Feedback present?
 Only the following expressions are recognized as loop termination signals:
 - "OK", "looks good", "done", "that's it"
 - "no feedback", "nothing to add"
-- "let's move on", "go to Phase 12"
+- "let's move on", "go to Phase 13"
 - "this is enough"
 
 ### Handling Ambiguous Responses
@@ -560,4 +560,4 @@ Repeat this full regeneration + re-review loop until the user sends an explicit 
 
 On force-exit signals such as "just move on":
 - Display an "Unresolved feedback" badge in the HTML report for any sections with unresolved feedback
-- Proceed to Phase 12
+- Proceed to Phase 13
