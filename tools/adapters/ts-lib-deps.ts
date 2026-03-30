@@ -10,6 +10,8 @@ import { logWarn } from "../lib/logger.ts";
  *   from '@lib/xxx'
  *   import "@lib/xxx"
  *   import '@lib/xxx'
+ *   import("@lib/xxx")
+ *   import('@lib/xxx')
  * The xxx part may or may not include a .ts extension.
  *
  * Resolves each reference under libSourceDir (appending .ts if needed),
@@ -38,8 +40,9 @@ export async function resolveTsLibDependencies(
 
   // Match: from "@lib/xxx" or from '@lib/xxx'
   //        import "@lib/xxx" or import '@lib/xxx'
+  //        import("@lib/xxx") or import('@lib/xxx')  (dynamic import)
   // The xxx may contain letters, digits, underscores, hyphens, dots, slashes
-  const LIB_IMPORT_RE = /(?:from|import)\s+["']@lib\/([^"']+)["']/g;
+  const LIB_IMPORT_RE = /(?:from|import)\s*[\s(]["']@lib\/([^"']+)["']/g;
 
   const deps: string[] = [];
 

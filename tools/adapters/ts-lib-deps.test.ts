@@ -153,6 +153,39 @@ describe("resolveTsLibDependencies", () => {
     const deps = await resolveTsLibDependencies(entryFile, libDir);
     expect(deps).toEqual([fooLib]);
   });
+
+  it('`import("@lib/foo")` (동적 import) 매칭', async () => {
+    const fooLib = path.join(libDir, "foo.ts");
+    await writeFile(fooLib, "// foo lib");
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, 'const mod = import("@lib/foo");\n');
+
+    const deps = await resolveTsLibDependencies(entryFile, libDir);
+    expect(deps).toEqual([fooLib]);
+  });
+
+  it('`await import("@lib/foo")` (async 동적 import) 매칭', async () => {
+    const fooLib = path.join(libDir, "foo.ts");
+    await writeFile(fooLib, "// foo lib");
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, 'const mod = await import("@lib/foo");\n');
+
+    const deps = await resolveTsLibDependencies(entryFile, libDir);
+    expect(deps).toEqual([fooLib]);
+  });
+
+  it("`import('@lib/foo')` (싱글 쿼트 동적 import) 매칭", async () => {
+    const fooLib = path.join(libDir, "foo.ts");
+    await writeFile(fooLib, "// foo lib");
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, "const mod = import('@lib/foo');\n");
+
+    const deps = await resolveTsLibDependencies(entryFile, libDir);
+    expect(deps).toEqual([fooLib]);
+  });
 });
 
 // ---------------------------------------------------------------------------
