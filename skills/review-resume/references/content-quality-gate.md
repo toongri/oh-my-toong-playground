@@ -147,6 +147,14 @@ Each alternative follows this structure:
 - Or presents a clear midpoint between alternatives 1 and 2
 - Present 3 alternatives when there is a meaningful strategic difference in "how to position this section"
 
+**Scale Framing in Alternatives:**
+
+대안 생성 시, 후보의 경험 규모가 타겟 회사 대비 작을 경우:
+- **Alternative 1 (Safe)**: Scale-Omit 전략 — 규모 수치를 생략하고 판단 논리에 집중
+- **Alternative 2 (High-Impact)**: Scale-Project 전략 — 확장 가능 설계를 명시적으로 서술 (후보가 면접에서 답변 가능한 경우에만)
+- 어떤 대안이든 Absolute Rule 4 (메트릭 날조 금지)를 위반하지 않아야 한다
+- 비교 테이블의 "Interview safety" 평가 시, Scale-Project 전략은 확장 질문에 대한 답변 가능 여부를 고려해야 한다
+
 ### Comparison Table (User Presentation Format)
 
 After presenting alternatives, always include a comparison table in the following format:
@@ -189,7 +197,7 @@ Quality Gate interviews **extend** the 4-Stage Bypass Protocol from experience-m
 |-----------|-----------------------------|----------------------|
 | Purpose | Discover new sources | Secure sources to resolve already-identified problems |
 | Trigger | Phase gap detected | resume-claim-examiner REQUEST_CHANGES received |
-| Target | Undiscovered experiences | Evaluation axes (E1-E5) with FAIL verdict |
+| Target | Undiscovered experiences | Evaluation axes (E1-E6) with FAIL verdict |
 | Question basis | Gap list from Writing Guidance | Interview Hints from resume-claim-examiner |
 | When exhausted | Mark as "genuinely none," move to next topic | Generate "best revision with current sources" + state limitations |
 
@@ -308,6 +316,7 @@ The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispa
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
 - Phase 0-10 findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
+- Target Company Context (회사 규모, 핵심가치, 기술적 도전과제)는 Phase 1 리서치 결과를 기반으로 작성한다. 이 정보는 resume-claim-examiner의 E6 (Target-Scale Transferability) 평가에 직접 사용된다.
 
 ### Post-APPROVE Handling
 
