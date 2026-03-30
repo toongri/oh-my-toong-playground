@@ -33,6 +33,7 @@ import {
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { syncDirectory } from "./lib/sync-directory.ts";
+import { collectRequiredLibModules } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
@@ -453,8 +454,18 @@ export async function syncLib(
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
 
+    const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
+
+    if (requiredModules.size === 0) {
+      logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
+      continue;
+    }
+
     if (context.dryRun) {
-      logDry(`Deploy lib: lib/ -> ${libDest}/`);
+      logDry(`Deploy lib modules to ${libDest}/:`);
+      for (const dep of requiredModules) {
+        logDry(`  ${path.relative(libSrc, dep)}`);
+      }
       logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
     } else {
       // Remove and recreate lib dir
@@ -464,7 +475,12 @@ export async function syncLib(
         // ignore
       }
       await fs.mkdir(libDest, { recursive: true });
-      await syncDirectory(libSrc, libDest, { exclude: ["*.test.ts"] });
+      for (const dep of requiredModules) {
+        const relPath = path.relative(libSrc, dep);
+        const destFile = path.join(libDest, relPath);
+        await fs.mkdir(path.dirname(destFile), { recursive: true });
+        await fs.copyFile(dep, destFile);
+      }
       logInfo(`Deployed shared lib to .${platform}/lib/`);
       await rewriteLibAliases(platformDir);
     }
