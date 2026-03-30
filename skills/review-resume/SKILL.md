@@ -522,7 +522,7 @@ When sending a single bullet to the resume-claim-examiner, use a format that **e
 - JD-related keywords: {relevant JD keywords obtained in Phase 1}
 - Phase 0-10 findings: {verbatim P0/P1/P2 findings for this bullet}
 
-## Target Company Context
+## Target Company Context (if available)
 - Company: {Phase 1 리서치에서 파악한 회사명}
 - Scale indicators: {Phase 1 Step 3-6에서 조사한 TPS, DAU, 데이터 규모 등}
 - Engineering team size: {파악된 경우}
