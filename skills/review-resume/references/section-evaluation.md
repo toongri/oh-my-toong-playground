@@ -204,12 +204,12 @@ This is the internal evaluation format used during Section-Specific Evaluation. 
 
 **Target-Scale Perspective (타겟 회사 관점 참고):**
 
-Beyond-Standard Reasoning 평가 시, 대안 비교와 trade-off 분석이 타겟 회사 규모에서도 유효한지를 추가로 확인한다. 이는 독립 기준이 아니라 Beyond-Standard Reasoning의 평가 깊이를 강화하는 관점이다.
+When evaluating Beyond-Standard Reasoning, additionally verify whether the alternative comparison and trade-off analysis remain valid at the target company's scale. This is not an independent criterion — it is a lens that reinforces the evaluation depth of Beyond-Standard Reasoning.
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
-| PASS | "단일 DB 락 → 분산 환경에서 스케일아웃 제약 분석 → Redis 분산 락 선택, TTL + Lua 원자성으로 확장 가능한 구조" | 현재 규모뿐 아니라 확장 시나리오까지 고려한 기술 선택 |
-| FAIL | "동시성 문제를 synchronized 블록으로 해결" | 단일 서버에서만 유효한 해법 — 타겟 회사의 분산 환경에서 무효 |
+| PASS | "단일 DB 락 → 분산 환경에서 스케일아웃 제약 분석 → Redis 분산 락 선택, TTL + Lua 원자성으로 확장 가능한 구조" | Technology choice accounts for scaling scenarios, not just current scale |
+| FAIL | "동시성 문제를 synchronized 블록으로 해결" | Solution valid only on a single server — ineffective in the target company's distributed environment |
 
 **Interview Depth — 3단계 pushback 생존력:**
 
@@ -257,10 +257,10 @@ For problem-solving entries, Interview Depth passes only when each alternative o
 
 **Scale Transfer Check (규모 전이 확인):**
 
-면접관의 L3 pushback("다른 방법은?")에 이어 "규모가 10배가 되면?"이라는 질문이 올 수 있다. 이 질문에 대한 답이 서사 안에 암시되어 있는지 확인한다.
+Following the interviewer's L3 pushback ("any other approaches?"), the question "what if the scale were 10x?" may arise. Check whether the answer to this question is implied within the narrative.
 
-- 확장 시나리오에서의 bottleneck 예측이 보이면: Interview Depth 강화 요소
-- 현재 규모에만 최적화된 서사이면: Interview Depth에 약점 가능성 — P1 finding 후보
+- If bottleneck prediction in a scaling scenario is visible: reinforcing element for Interview Depth
+- If the narrative is optimized only for the current scale: potential weakness in Interview Depth — P1 finding candidate
 
 ### Problem-Solving Evaluation Output Format (Internal)
 

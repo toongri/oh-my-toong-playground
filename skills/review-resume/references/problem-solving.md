@@ -134,14 +134,14 @@ For Mid/Senior: the four signature strengths are:
 3. **Stopping judgment** — "93% was achievable, but we stopped at 85% for cost reasons"
 4. **Business impact** — headcount reduction, cost savings, throughput improvement measured in business terms
 
-**Target-Scale Awareness (전체 경력 수준 공통):**
+**Target-Scale Awareness (all career levels):**
 
-Signature depth 선정 시, 가능하면 타겟 회사 규모에서의 기술적 신뢰를 보여줄 수 있는 에피소드를 우선한다:
-- 규모가 작아도 확장을 고려한 설계 판단이 드러나는 에피소드
-- 현재 규모의 한계를 인식하고 다음 단계를 예측한 경험
-- 작은 규모에서의 깊은 문제 해결이 큰 규모에서도 통용되는 원리를 보여주는 에피소드
+When selecting signature depth entries, prioritize episodes that can demonstrate technical credibility at the target company's scale:
+- Episodes where design judgment accounts for future scaling, even at a small current scale
+- Experiences where the candidate recognized the limits of the current scale and anticipated the next stage
+- Episodes where deep problem-solving at a small scale demonstrates principles that transfer to larger scale
 
-이 선정 가이드는 resume-claim-examiner E6 평가와 연동된다.
+This selection guide is linked to the resume-claim-examiner E6 evaluation.
 
 ---
 
@@ -157,7 +157,7 @@ Apply to signature depth entries. After Problem-Solving 6 Criteria evaluation, a
 | P4 | Reflection quality | Are trade-offs + acknowledged limits + honest confession present? | "분산 시스템을 배웠다", "LLM은 만능이 아니다" — abstract takeaway with no specifics |
 | P5 | "Why?" chain | Does every attempt include both "Why did I try this?" AND "Why didn't it work?" | Either the selection reason OR the failure reason is missing from any attempt |
 
-**P1 Target-Scale Note:** Narrative depth 평가 시, 기술 선택의 서사가 "현재 규모에서의 최적화"에 그치는지, "규모 변화에 대한 인식"까지 포함하는지 확인한다. 후자가 있으면 서사 깊이 가점. 없다고 해서 자동 FAIL은 아님 — 이것은 resume-claim-examiner E6에서 명시적으로 평가됨.
+**P1 Target-Scale Note:** When evaluating narrative depth, check whether the narrative of technology choices stops at "optimization at current scale" or extends to "awareness of scale change." The latter earns a bonus on narrative depth. Its absence is not an automatic FAIL — this is explicitly evaluated in resume-claim-examiner E6.
 
 **Feature Listing Anti-Pattern**: If the project entry consists only of verb + feature/technology name, flag immediately as P1 FAIL:
 
@@ -179,7 +179,7 @@ Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (
 | P7 | Stopping judgment | Is there an explicit, intentional decision to stop at a certain point for cost/time/risk reasons? | The final number (85%, 93%) is stated without explaining the judgment behind stopping there |
 | P8 | Business impact | Are business outcomes (headcount reduction, cost savings, revenue impact) stated in concrete terms? | Abstract language: "성능 개선", "효율화". No monetary amount, ratio, or count |
 
-**P8 Target-Scale Note:** Business impact 수치가 타겟 회사 규모에서도 인상적인 수치인지 고려한다. "인력 11→3명 절감"은 작은 팀에서 큰 성과지만, 타겟 회사가 엔지니어 500명 규모라면 이 수치의 임팩트가 상대적으로 달라진다. 수치의 절대값보다 "판단의 질"과 "접근 방식의 전이 가능성"을 우선한다.
+**P8 Target-Scale Note:** Consider whether the business impact figure is impressive at the target company's scale. "Headcount reduction 11→3" is a significant result in a small team, but if the target company has 500 engineers, the relative impact of this figure changes. Prioritize "quality of judgment" and "transferability of approach" over the absolute value of the number.
 
 ---
 
@@ -525,36 +525,36 @@ Bad examples (all career levels):
 
 ### Scale Framing Strategy (규모 프레이밍 전략)
 
-작은 규모의 경험이라도 타겟 회사 수준의 기술적 신뢰를 줄 수 있도록 서술 전략을 안내한다. 핵심은 **숫자가 아니라 판단의 질**로 신뢰를 쌓는 것이다.
+Guide the candidate on writing strategies to convey technical credibility at the target company's level, even from small-scale experience. The key is building trust through **quality of judgment, not numbers**.
 
-**원칙: 기술적 적합도(Technical Fit)와 성숙도(Maturity)를 동시에 보여준다.**
+**Principle: Demonstrate both Technical Fit and Maturity simultaneously.**
 
-현재 시스템에 맞는 역량을 보여주되, "이 사람이 우리 회사에 와서도 잘할 수 있겠다"는 확신을 주는 것이 더 중요하다.
+Show competency appropriate to the current system, but what matters more is giving the interviewer confidence that "this person will succeed at our company too."
 
-**전략 1: 규모 숨기기 + 판단으로 승부 (Scale-Omit)**
-- 작은 규모의 절대 수치를 생략하고, 엔지니어링 판단과 논리 구조로 서술
-- 예: ~~"일 50건 결제를 처리하면서"~~ → "결제-주문 상태 동기화에서 eventual consistency를 도입, 보상 트랜잭션으로 정합성을 보장하는 구조를 설계"
-- 언제: 절대 수치가 타겟 회사 대비 현저히 작아서 오히려 신뢰를 깎을 때
+**Strategy 1: Scale-Omit — Hide scale, compete on judgment**
+- Omit absolute figures from small-scale experience and describe using engineering judgment and logical structure
+- e.g.: ~~"일 50건 결제를 처리하면서"~~ → "결제-주문 상태 동기화에서 eventual consistency를 도입, 보상 트랜잭션으로 정합성을 보장하는 구조를 설계"
+- When to use: when the absolute figure is significantly smaller than the target company and would undermine credibility
 
-**전략 2: 확장 시나리오 명시 (Scale-Project)**
-- 현재 규모를 밝히되, 확장을 고려한 설계 판단을 명시적으로 서술
-- 예: "현재 TPS 50이지만, 이벤트 기반 아키텍처로 설계하여 Kafka 기반 비동기 전환 시 TPS 100K까지 수평 확장 가능한 구조"
-- 언제: 실제로 확장 가능한 설계를 했고, 그 근거를 설명할 수 있을 때
-- **핵심: 면접에서 "이 설계가 100K에서 어떻게 동작하나요?"에 논리적으로 답할 수 있어야 한다.** 답할 수 있으면 유효하고, 답할 수 없으면 한 질문에 무너진다.
+**Strategy 2: Scale-Project — State scaling scenario explicitly**
+- Disclose the current scale while explicitly stating the design judgment that accounts for scaling
+- e.g.: "현재 TPS 50이지만, 이벤트 기반 아키텍처로 설계하여 Kafka 기반 비동기 전환 시 TPS 100K까지 수평 확장 가능한 구조"
+- When to use: when the candidate actually built a scalable design and can explain the reasoning behind it
+- **Key: the candidate must be able to logically answer "How does this design perform at 100K?" in an interview.** If they can answer, it's valid; if not, it collapses on one question.
 
-**전략 3: 상대적 개선율 강조 (Scale-Relative)**
-- 절대 수치 대신 개선 비율이나 배수로 임팩트를 표현
-- 예: "응답 시간 3.2s → 0.4s (8배 개선)" — TPS와 무관하게 최적화 역량을 보여줌
-- 언제: 개선율 자체가 인상적이고, 절대 규모가 핵심이 아닌 최적화/효율 개선 서사일 때
+**Strategy 3: Scale-Relative — Emphasize relative improvement**
+- Express impact using improvement ratios or multiples instead of absolute figures
+- e.g.: "응답 시간 3.2s → 0.4s (8배 개선)" — demonstrates optimization capability regardless of TPS
+- When to use: when the improvement rate itself is impressive and the narrative is about optimization/efficiency rather than absolute scale
 
-**핵심 기준 — 면접 방어 가능성 (Interview Defensibility):**
-- 수치의 사실 여부가 아니라, 면접에서 그 수치를 논리적으로 방어할 수 있는가가 유일한 기준이다
-- TPS 50 경험인데 TPS 10K로 쓰더라도, 그 아키텍처를 논리적으로 설명하고 "왜 이 설계가 10K에서 동작하는지" 면접에서 커버칠 수 있으면 유효하다
-- 반대로, 본인이 설명하지 못하는 수치를 쓰면 — 면접에서 한 질문에 무너진다. 이것이 자연스러운 필터다
-- 결국 기준은 단 하나: **"이 숫자에 대해 CTO가 2단계 깊이로 물어봤을 때 답할 수 있는가?"**
+**Key criterion — Interview Defensibility:**
+- The only criterion is not whether the number is factually true, but whether the candidate can logically defend it in an interview
+- Even if the experience was TPS 50 but written as TPS 10K — it's valid if the candidate can logically explain the architecture and cover "why this design works at 10K" in an interview
+- Conversely, writing a figure the candidate cannot explain means collapsing on one question. This is a natural filter
+- Ultimately there is only one criterion: **"When a CTO asks 2 levels deep about this number, can the candidate answer?"**
 
-**resume-claim-examiner E6 연동:**
-이 전략으로 작성된 bullet은 E6 (Target-Scale Transferability) 평가에서 면접 방어 가능성을 기준으로 평가된다. 핵심은 수치가 사실인지가 아니라, 후보가 그 수치와 설계를 논리적으로 방어할 수 있는지이다.
+**resume-claim-examiner E6 integration:**
+Bullets written using these strategies are evaluated in E6 (Target-Scale Transferability) with interview defensibility as the criterion. The key is not whether the figure is factually accurate, but whether the candidate can logically defend that figure and the design behind it.
 
 ---
 

@@ -26,23 +26,23 @@ If the bullet doesn't answer these questions, it fails.
 
 **Foundational Evaluation Premise — Target Company Perspective (MUST HAVE)**:
 
-모든 평가(E1-E6)의 기저에는 "이 사람이 타겟 회사에 와서도 잘할 수 있다는 확신과 신뢰를 줄 수 있는가?"가 깔려있다.
+Underlying every evaluation (E1-E6) is the question: "Can this person build confidence and trust that they will succeed at the target company?"
 
-작은 스타트업에서 TPS 50 규모에 맞는 설계를 했다고 해서 그 자체가 나쁜 것은 아니다. 하지만 타겟 회사가 TPS 100K를 처리하는 빅테크라면, TPS 50 경험만으로는 "우리 규모에서도 통할까?"라는 의문이 남는다.
+Designing for TPS 50 at a small startup is not inherently bad. But if the target company is a big tech processing TPS 100K, TPS 50 experience alone leaves the question: "Will this hold up at our scale?"
 
-핵심 질문: "이 bullet에 드러난 엔지니어링 판단이, 타겟 회사의 규모·복잡도·기술 수준에서도 유효한 판단인가?"
+Core question: "Is the engineering judgment demonstrated in this bullet valid at the target company's scale, complexity, and technical level?"
 
-Target Company Context가 제공되면 해당 회사 기준으로 평가. 제공되지 않으면 빅테크(네이버, 카카오, 토스, 쿠팡 등 국내 대형 플랫폼 또는 FAANG급) 기준을 디폴트로 적용.
+If Target Company Context is provided, evaluate against that company's standards. If not provided, default to big tech standards (major domestic platforms such as Naver, Kakao, Toss, Coupang, or FAANG-equivalent).
 
-이 관점은 E6에서 명시적으로 점수화되지만, E1-E5 평가 시에도 항상 참조된다:
-- E1: 해당 경력 수준에서 타겟 회사가 기대하는 기술 깊이인가?
-- E3: 타겟 회사 규모에서도 의미있는 트레이드오프인가?
-- E4: 타겟 회사 규모 대비 over/under-engineering이 아닌가?
+This perspective is explicitly scored in E6, but is always referenced during E1-E5 evaluation as well:
+- E1: Does this bullet demonstrate the technical depth the target company expects at this career level?
+- E3: Is this tradeoff meaningful at the target company's scale?
+- E4: Is this over- or under-engineering relative to the target company's scale?
 
 **Evaluation standard split:**
 - **E1 (Career-Level Fit)**: CALIBRATED — expectations scale with years of experience. A junior is not held to senior standards. A senior receives no junior-level leniency.
 - **E2-E5 (Logical Coherence, Tradeoff Specificity, Scale-Appropriate Engineering, Signal-to-Noise)**: ABSOLUTE — flawed logic is flawed logic at any level. There is zero tolerance for logical gaps, unsound tradeoffs, or irrational cost-benefit regardless of experience. A junior's reasoning must be as logically sound as a senior's; only the expected depth of E1 differs.
-- **E6 (Target-Scale Transferability)**: TARGET-CALIBRATED — 타겟 회사의 규모와 기술 수준이 평가 기준을 결정한다. 후보의 경력 수준이 아닌 타겟 회사의 스케일이 PASS의 기준이다.
+- **E6 (Target-Scale Transferability)**: TARGET-CALIBRATED — the target company's scale and technical level define the passing bar. The candidate's career level does not set the standard — the target company's scale does.
 
 ---
 
@@ -67,11 +67,11 @@ Target Company Context가 제공되면 해당 회사 기준으로 평가. 제공
 
 ## Target Company Context (if available)
 - Company: {company name}
-- Scale indicators: {TPS, DAU, transaction volume, data size 등 알려진 규모 지표}
+- Scale indicators: {known scale indicators such as TPS, DAU, transaction volume, data size}
 - Engineering team size: {approximate team size if known}
-- Core values / engineering principles: {핵심가치 or 엔지니어링 원칙}
-- Key technical challenges: {채용 공고나 테크블로그에서 파악된 기술적 도전과제}
-- If unavailable: "No specific target — evaluate against big tech standards (빅테크 기준)"
+- Core values / engineering principles: {core values or engineering principles}
+- Key technical challenges: {technical challenges identified from the job posting or tech blog}
+- If unavailable: "No specific target — evaluate against big tech standards"
 
 ## Proposed Alternatives (2-3)
 ### Alternative 1: {summary}
@@ -217,31 +217,31 @@ Does this bullet demonstrate engineering judgment that would be credible at the 
 2. Compare against the target company's known or inferred scale
 3. Assess whether the engineering decisions described would transfer — not just the exact numbers, but the judgment patterns
 
-**핵심 원칙:** 숫자 자체가 아니라 "판단의 전이 가능성"을 평가한다.
+**Core principle:** Evaluate "transferability of judgment," not the numbers themselves.
 
-- TPS 50에서 Redis를 도입했다면: Redis 자체가 문제가 아니라, "왜 이 규모에서 Redis가 필요했는지, 이 판단이 TPS 100K에서도 유효한 판단 체계인지"를 본다.
-- 작은 규모에서 대규모를 고려한 설계(확장 포인트, bottleneck 예측)가 보이면 PASS
-- 현재 규모에만 최적화된 설계(하드코딩, 스케일아웃 불가 구조)가 보이면 FAIL
+- If Redis was introduced at TPS 50: the problem is not Redis itself, but "why was Redis needed at this scale, and is this judgment framework valid at TPS 100K?"
+- If the design shows consideration for larger scale (extension points, bottleneck prediction) at a small scale → PASS
+- If the design is optimized only for current scale (hardcoding, non-scalable architecture) → FAIL
 
-**면접 방어 가능성 (Interview Defensibility) — E6의 핵심 기준:**
-- 수치의 사실 여부는 E6의 평가 대상이 아니다. 후보가 그 수치와 설계를 면접에서 논리적으로 방어할 수 있는가가 유일한 기준이다
-- TPS 50 경험에서 TPS 10K로 서술하더라도, "이 아키텍처가 10K에서 어떻게 동작하는지" 2단계 깊이까지 설명할 수 있으면 PASS
-- 후보가 설명하지 못하는 수치 → 면접에서 한 질문에 무너짐 → 자연스럽게 FAIL
-- 규모를 생략하고 엔지니어링 논리로만 서술한 bullet → 논리의 질로 E6 평가. 유효한 전략
+**Interview Defensibility — the primary criterion for E6:**
+- Whether the numbers are factually accurate is not what E6 evaluates. The sole criterion is whether the candidate can logically defend those numbers and that design in an interview.
+- Even if TPS 50 experience is described as TPS 10K, if the candidate can explain "how this architecture behaves at 10K" two levels deep → PASS
+- Numbers the candidate cannot explain → the interview collapses at the first question → naturally FAIL
+- A bullet describing only engineering logic without stating scale → E6 is evaluated on the quality of that logic. A valid strategy.
 
-**Example (target: 빅테크, 후보: 스타트업 출신):**
-- "일 50건 결제를 단일 DB로 동기 처리" → FAIL: 타겟 회사 규모에서 이 접근은 즉시 한계. 확장 고려 흔적 없음
-- "일 50건이지만, 결제-주문 상태 동기화에서 eventual consistency 모델을 설계하고, 볼륨 증가 시 Kafka 기반 비동기 전환이 가능하도록 이벤트 인터페이스를 분리" → PASS: 현재 규모는 작지만, 확장을 고려한 설계 판단이 보임
-- "100K DAU 서비스에서 Redis 캐시 + TTL 전략으로 DB 부하 80% 절감" → PASS: 타겟 회사에서도 유효한 규모와 접근
+**Example (target: big tech, candidate: startup background):**
+- "일 50건 결제를 단일 DB로 동기 처리" → FAIL: this approach hits its limit immediately at the target company's scale. No evidence of scalability consideration.
+- "일 50건이지만, 결제-주문 상태 동기화에서 eventual consistency 모델을 설계하고, 볼륨 증가 시 Kafka 기반 비동기 전환이 가능하도록 이벤트 인터페이스를 분리" → PASS: current scale is small, but design judgment that accounts for growth is evident.
+- "100K DAU 서비스에서 Redis 캐시 + TTL 전략으로 DB 부하 80% 절감" → PASS: scale and approach are valid at the target company as well.
 
 **Interview simulation:**
-"이 시스템의 트래픽이 100배가 되면 어디서 먼저 터지나요? 그때는 어떻게 대응하실 건가요?"
-→ bullet이 이 질문에 대한 답을 암시하는가?
+"If traffic on this system grows 100x, where does it break first? How would you respond?"
+→ Does the bullet imply an answer to this question?
 
 **Calibration note:**
-- Target Company Context가 제공된 경우: 해당 회사의 실제 규모/지표 기준으로 평가
-- Target Company Context가 없는 경우: 빅테크 기준(DAU 100만+, TPS 10K+, 데이터 TB+)을 디폴트로 적용
-- Junior 후보가 대규모 경험이 없는 것은 자연스럽다. 그러나 "규모가 커질 때 무엇이 문제가 되는지 인식하고 있는가?"는 확인한다
+- If Target Company Context is provided: evaluate against the actual scale/indicators of that company
+- If Target Company Context is not provided: default to big tech standards (DAU 1M+, TPS 10K+, data TB+)
+- It is natural for junior candidates to lack large-scale experience. However, verify: "Does the candidate recognize what would become a problem as scale grows?"
 
 ---
 
@@ -254,7 +254,7 @@ Does this bullet demonstrate engineering judgment that would be credible at the 
 5. **Two-phase evaluation.** In Phase A, interrogate the original first. If the original has no problem, immediately APPROVE. If the original has a problem, interrogate each alternative in Phase B using the same criteria.
 6. **No partial APPROVE.** An alternative must pass all of E1-E6 to be approved.
 7. **E1 is calibrated; E2-E5 are absolute.** E1 adjusts expectations by career level (junior vs senior). E2-E5 do NOT adjust: logical integrity, tradeoff validity, scale-appropriate engineering, and signal-to-noise clarity must be sound at every level. A 2-year engineer with flawed logic fails E2 just as a 10-year engineer would.
-8. **E6 is target-calibrated.** E6의 기준은 후보의 경력 수준이 아니라 타겟 회사의 규모로 결정된다. 타겟 회사가 빅테크이면 빅테크 기준, 스타트업이면 스타트업 기준. Target Company Context가 없으면 빅테크 기준을 디폴트로 적용한다.
+8. **E6 is target-calibrated.** The standard for E6 is set by the target company's scale, not the candidate's career level. If the target company is big tech, big tech standards apply; if a startup, startup standards apply. If no Target Company Context is provided, big tech standards are applied by default.
 
 ---
 
@@ -272,7 +272,7 @@ REQUEST_CHANGES means "when this bullet is said in an interview, the CTO moves o
 
 The loop continues until APPROVE. There is no exit unless the user opts out.
 
-**Target Company Lens**: APPROVE는 "타겟 회사 면접에서 이 bullet이 신뢰를 쌓을 수 있다"는 뜻이다. 현재 회사에서 잘했다는 것만으로는 부족하다. 타겟 회사의 규모와 복잡도에서도 이 판단이 유효해 보이는가? 이것이 모든 평가의 출발점이다.
+**Target Company Lens**: APPROVE means "this bullet can build credibility in an interview at the target company." Performing well at the current company alone is not enough. Does this engineering judgment appear valid at the target company's scale and complexity? That is the starting point of every evaluation.
 
 ---
 
