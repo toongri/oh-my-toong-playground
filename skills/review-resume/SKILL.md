@@ -497,7 +497,7 @@ flowchart TB
 
 <critical>
 There is no escape from this loop without resume-claim-examiner APPROVE.
-The only exception is the user opting out with "move on."
+The only exception is the user explicitly opting out (see "User Opt-Out" section below for recognized keywords).
 Advancing to the next bullet or proceeding to Phase 12 without APPROVE is forbidden.
 </critical>
 
@@ -541,7 +541,7 @@ If the user says "move on" / "this is OK" / "skip" / "just continue" → end the
 
 ## Phase 12: Generate HTML Report + User Approval Gate
 
-Compile all evaluation results from Phases 0-11 and write a self-contained HTML file. This is the **only phase that produces user-facing output**. Generate the file, open it, and wait for user approval.
+Compile all evaluation results from Phases 0-11 and write a self-contained HTML file. This is the **only phase that produces the final comprehensive evaluation report**. Generate the file, open it, and wait for user approval.
 
 ### Approval Gate (Strict Feedback Loop)
 
@@ -712,8 +712,9 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
     }
     .alt-pros { color: #27ae60; font-size: 0.9rem; margin: 4px 0; }
     .alt-cons { color: #c0392b; font-size: 0.9rem; margin: 4px 0; }
-    .tradeoff-table { margin-top: 12px; font-size: 0.9rem; }
-    .tradeoff-table th { background: #e9ecef; }
+    .tradeoff-table { margin-top: 12px; font-size: 0.9rem; width: 100%; border-collapse: collapse; }
+    .tradeoff-table th { background: #e9ecef; padding: 6px 12px; text-align: left; }
+    .tradeoff-table td { padding: 6px 12px; border-bottom: 1px solid #dee2e6; }
     .unresolved-note {
       background: #fff3cd;
       border-left: 4px solid #ffc107;

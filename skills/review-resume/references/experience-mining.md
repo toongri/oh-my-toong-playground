@@ -49,6 +49,8 @@
 
 예: "매일 하는 작업 중에 '이 부분은 내가 신경 써서 챙긴다'는 게 있었나요?", "팀에서 유독 본인에게 물어보는 부분이 있었나요?"
 
+> **Cross-reference:** Phase 11 (Per-Bullet Content Quality Gate)에서 이 프로토콜을 extend하여 resume-claim-examiner REQUEST_CHANGES 시 소스 확보 인터뷰에 사용합니다. 상세: `references/content-quality-gate.md` §4 Interview Loop Protocol.
+
 ---
 
 ## 3. Source Quality Formula
