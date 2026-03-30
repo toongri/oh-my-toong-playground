@@ -1300,6 +1300,31 @@ describe("syncLib", () => {
     expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
   });
 
+  it("removes stale lib/ directory when no @lib/ imports exist after previous sync", async () => {
+    const libSrc = path.join(rootDir, "lib");
+    await fs.mkdir(libSrc, { recursive: true });
+    await writeFile(path.join(libSrc, "helper.ts"), "export const x = 1;\n");
+
+    // Simulate stale lib from a previous sync
+    const staleDest = path.join(targetPath, ".claude", "lib");
+    await fs.mkdir(staleDest, { recursive: true });
+    await writeFile(path.join(staleDest, "helper.ts"), "export const x = 1;\n");
+
+    // Place a deployed .ts file with NO @lib/ imports
+    const claudeDir = path.join(targetPath, ".claude");
+    await writeFile(
+      path.join(claudeDir, "agents", "simple.ts"),
+      "export const hello = 'world';\n",
+    );
+
+    const context = makeContext();
+
+    await syncLib(context, targetPath, rootDir, ["claude"]);
+
+    // Stale lib/ directory should be removed
+    expect(await exists(path.join(targetPath, ".claude", "lib"))).toBe(false);
+  });
+
   it("excludes *.test.ts files from lib deployment", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
