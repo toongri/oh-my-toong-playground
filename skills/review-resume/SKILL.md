@@ -436,7 +436,7 @@ The content-evaluator conducts technical interrogation at the granularity of **1
 |-----------|-------------|---------|-------|
 | Self-introduction | 1 unit per Type | Type C (1 entry) | Type C involves tech connections, so it is evaluator-eligible. Type A/B/D can be skipped if no technical interrogation is needed |
 | Career | 1 unit per bullet | "Built Kafka async pipeline, 3x throughput improvement" | Send a single bullet line to the evaluator, not the entire company block |
-| Problem-solving | 1 unit per entry | Entire "Payment System Fault Isolation" episode | Each entry is a single technical narrative — send it as a whole |
+| Problem-solving | 1 unit per entry | Entire "Payment System Fault Isolation" episode | Each entry is a single technical narrative — send it as a whole. **Compressed depth excluded** (too short for technical interrogation) |
 | Tech/Study | Not evaluator-eligible | — | Listing a tech stack is not subject to interrogation. Phase 0-10 evaluation is sufficient |
 
 **Selection criteria:** Only bullets/entries with P0/P1 findings from Phases 0-10 are subject to the Quality Gate. Bullets that are fully PASS are skipped.
@@ -533,7 +533,7 @@ When sending a single bullet to the content-evaluator, use a format that **exact
 
 ### User Opt-Out
 
-If the user says "move on" / "this is OK enough" → end the current section loop. Status: "user-accepted (evaluator-not-approved)". Include unresolved feedback in the HTML report.
+If the user says "move on" / "this is OK" / "skip" / "just continue" → end the current section loop. Status: "user-accepted (evaluator-not-approved)". Include unresolved feedback in the HTML report.
 
 **Reference:** Read `references/content-quality-gate.md` for full protocol including alternative suggestion format, interview loop, HTML format, and whole-resume feedback loop.
 

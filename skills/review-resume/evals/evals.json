@@ -99,7 +99,7 @@
     {
       "id": 3,
       "prompt": "이력서 문제해결 섹션만 리뷰해줘. 당근 결제팀 지원하려고 해. _config.yml에 있어.\n\nJD 핵심:\n- 결제 시스템 설계/운영\n- 대규모 트래픽 환경 안정성\n- 장애 대응 및 복원력\n- Kotlin, Spring Boot",
-      "expected_output": "Note load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, overview/problem split awareness, portfolio theme diversity",
+      "expected_output": "Note load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, Phase 11 Quality Gate: content-evaluator dispatch for P0/P1 entries + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, overview/problem split awareness, portfolio theme diversity",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: loads note and reports problem-solving candidate pool status"},
         {"text": "depth-classification", "description": "Classifies each problem-solving entry by depth (signature/detailed/compressed)"},
@@ -117,14 +117,17 @@
         {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"},
         {"text": "overview-problem-split-awareness", "description": "When [문제] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [개요]+[문제] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
         {"text": "retrospective-optional-guidance", "description": "Treats retrospective as optional; flags sentimental growth narrative but accepts architectural limit/extension direction"},
-        {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags 2+ entries sharing same theme (정합성, 성능, 안정성, 비즈니스 등)"}
+        {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags 2+ entries sharing same theme (정합성, 성능, 안정성, 비즈니스 등)"},
+        {"text": "quality-gate-dispatch", "description": "Phase 11: content-evaluator agent is dispatched for bullets/entries with P0 or P1 findings — either actual dispatch or declaration of intent to dispatch (e.g., '[Would dispatch content-evaluator]'). Bullets without P0/P1 findings are skipped."},
+        {"text": "quality-gate-alternatives", "description": "Phase 11: generates 2-3 revision alternatives with tradeoff comparison (safe/high-impact/balanced directions) for each P0/P1 bullet before content-evaluator dispatch"},
+        {"text": "quality-gate-approve-or-optout", "description": "Phase 11: each P0/P1 bullet requires content-evaluator APPROVE or explicit user opt-out before proceeding to Phase 12. No bullet advances without one of these two outcomes."}
       ],
       "files": ["_config.yml"]
     },
     {
       "id": 4,
       "prompt": "이력서 리뷰해줘. 신입 개발자인데 인턴 1회 경험만 있어. _config.yml에 있어.",
-      "expected_output": "Note load, Pre-eval research (no target company → no company research), Self-intro type-based eval (Type A/B/D; multiple FAIL expected due to thin experience), Phase 2 interview trigger (experience-mining.md Phase 2: 자기소개 절반 이상 FAIL), C1-C5 competency assessment with WEAK/ABSENT on C2/C3/C4 axes, Phase 4 interview trigger (experience-mining.md Phase 4: WEAK/ABSENT axes EXPECTED/REQUIRED), Section-specific evaluation, Phase 5 interview trigger (section FAIL률 > 50%), 4-Stage Bypass Protocol executed per triggered phase (direct → reframing → adjacent → routine), Discovered Candidates Working Set populated with mined experiences, graceful opt-out if user declines interview, Phase 12 HTML report + user approval → Phase 13 Note accumulate",
+      "expected_output": "Note load, Pre-eval research (no target company → no company research), Self-intro type-based eval (Type A/B/D; multiple FAIL expected due to thin experience), Phase 2 interview trigger (experience-mining.md Phase 2: 자기소개 절반 이상 FAIL), C1-C5 competency assessment with WEAK/ABSENT on C2/C3/C4 axes, Phase 4 interview trigger (experience-mining.md Phase 4: WEAK/ABSENT axes EXPECTED/REQUIRED), Section-specific evaluation, Phase 5 interview trigger (section FAIL률 > 50%), 4-Stage Bypass Protocol executed per triggered phase (direct → reframing → adjacent → routine), Discovered Candidates Working Set populated with mined experiences, graceful opt-out if user declines interview, Phase 11 Quality Gate: content-evaluator dispatch for P0/P1 bullets + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 HTML report + user approval → Phase 13 Note accumulate",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: checks note directory and reports status (self-introduction/career/problem-solving candidate counts)"},
         {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified"},
@@ -146,7 +149,10 @@
         {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 12 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
-        {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"}
+        {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
+        {"text": "quality-gate-dispatch", "description": "Phase 11: content-evaluator agent is dispatched for bullets/entries with P0 or P1 findings — either actual dispatch or declaration of intent to dispatch (e.g., '[Would dispatch content-evaluator]'). Bullets without P0/P1 findings are skipped."},
+        {"text": "quality-gate-alternatives", "description": "Phase 11: generates 2-3 revision alternatives with tradeoff comparison (safe/high-impact/balanced directions) for each P0/P1 bullet before content-evaluator dispatch"},
+        {"text": "quality-gate-approve-or-optout", "description": "Phase 11: each P0/P1 bullet requires content-evaluator APPROVE or explicit user opt-out before proceeding to Phase 12. No bullet advances without one of these two outcomes."}
       ],
       "files": ["_config.yml"]
     }
@@ -155,7 +161,7 @@
     "latest_iteration": 14,
     "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "117 assertions across 4 evals (45+34+17+21), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증. Phase 11 Quality Gate assertions 추가 (3개 × 2 evals = 6개 신규)."
+    "notes": "123 assertions across 4 evals (45+34+20+24), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증. Phase 11 Quality Gate assertions 추가 (3개 × 2 evals = 6개 신규). Eval 3/4에 quality-gate assertions 추가 (3개 × 2 evals = 6개 신규)."
   },
   "benchmark_history": [
     {

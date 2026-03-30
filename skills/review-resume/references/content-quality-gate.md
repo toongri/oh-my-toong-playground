@@ -421,6 +421,7 @@ CSS to add to SKILL.md HTML template (actual application in SKILL.md modificatio
   padding: 8px 12px;
   margin: 8px 0;
   background: #fff;
+  border-radius: 0 4px 4px 0;
 }
 .alt-badge {
   display: inline-block;
@@ -493,6 +494,14 @@ CSS to add to SKILL.md HTML template (actual application in SKILL.md modificatio
 .axis-hint {
   color: #6c757d;
   font-size: 0.85rem;
+  font-style: italic;
+}
+.unresolved-note {
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  padding: 10px 14px;
+  margin: 8px 0;
+  border-radius: 0 4px 4px 0;
   font-style: italic;
 }
 ```
