@@ -151,9 +151,9 @@ Each alternative follows this structure:
 
 대안 생성 시, 후보의 경험 규모가 타겟 회사 대비 작을 경우:
 - **Alternative 1 (Safe)**: Scale-Omit 전략 — 규모 수치를 생략하고 판단 논리에 집중
-- **Alternative 2 (High-Impact)**: Scale-Project 전략 — 확장 가능 설계를 명시적으로 서술 (후보가 면접에서 답변 가능한 경우에만)
-- 어떤 대안이든 Absolute Rule 4 (메트릭 날조 금지)를 위반하지 않아야 한다
-- 비교 테이블의 "Interview safety" 평가 시, Scale-Project 전략은 확장 질문에 대한 답변 가능 여부를 고려해야 한다
+- **Alternative 2 (High-Impact)**: Scale-Project 전략 — 타겟 회사 수준의 규모로 서술하되, 후보가 면접에서 논리적으로 방어할 수 있어야 한다
+- 핵심 기준은 면접 방어 가능성이다. 후보가 해당 수치와 설계를 2단계 깊이까지 설명할 수 있으면 유효하다
+- 비교 테이블의 "Interview safety" 평가 시, 후보가 해당 규모의 질문을 커버할 수 있는지를 반영한다
 
 ### Comparison Table (User Presentation Format)
 
