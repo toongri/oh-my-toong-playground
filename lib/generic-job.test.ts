@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-import type { JobConfig } from './generic-job.ts';
+import type { JobConfig, CmdResultsHooks } from './generic-job.ts';
 import {
   detectCliType,
   buildAugmentedCommand,
@@ -1347,4 +1347,163 @@ describe('cmdCollect', () => {
     const result = JSON.parse(output[0]);
     expect(result.overallState).toBe('done');
   }, 15000);
+});
+
+// ---------------------------------------------------------------------------
+// cmdResults
+// ---------------------------------------------------------------------------
+
+describe('cmdResults', () => {
+  let tmpDir: string;
+
+  function captureStdout(fn: () => void): string {
+    let captured = '';
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: any) => {
+      captured += String(chunk);
+      return true;
+    }) as any;
+    try {
+      fn();
+    } finally {
+      process.stdout.write = orig;
+    }
+    return captured;
+  }
+
+  function setupResultsFixture(
+    jobDir: string,
+    members: Record<string, { member: string; state: string; exitCode: number; output: string; stderr: string }>,
+    jobMeta?: Record<string, any>,
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(jobMeta || { id: 'test' }));
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, data] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({ member: data.member, state: data.state, exitCode: data.exitCode }));
+      fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      fs.writeFileSync(path.join(dir, 'error.txt'), data.stderr);
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('--json 기본 출력 구조 검증', () => {
+    const jobDir = path.join(tmpDir, 'job-results-basic');
+    setupResultsFixture(jobDir, {
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: 'hello', stderr: '' },
+    });
+
+    const raw = captureStdout(() => {
+      cmdResults({ json: true }, jobDir, chunkReviewConfig);
+    });
+
+    const result = JSON.parse(raw);
+    expect(result.jobDir).toBeDefined();
+    expect(result.id).toBe('test');
+    expect(Array.isArray(result.members)).toBe(true);
+    const member = result.members[0];
+    expect(member.member).toBe('alice');
+    expect(member.state).toBe('done');
+    expect(member.exitCode).toBe(0);
+    expect(member.message).toBeNull();
+    expect(member.output).toBe('hello');
+    expect(member.stderr).toBeUndefined();
+  });
+
+  test('hooks.extraTopLevel 커스텀 필드 추가', () => {
+    const jobDir = path.join(tmpDir, 'job-results-extratop');
+    setupResultsFixture(jobDir, {
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: '', stderr: '' },
+    });
+
+    const hooks: CmdResultsHooks = {
+      extraTopLevel: () => ({ specName: 'test-spec', prompt: 'test prompt' }),
+    };
+
+    const raw = captureStdout(() => {
+      cmdResults({ json: true }, jobDir, chunkReviewConfig, hooks);
+    });
+
+    const result = JSON.parse(raw);
+    expect(result.specName).toBe('test-spec');
+    expect(result.prompt).toBe('test prompt');
+  });
+
+  test('hooks.extraMemberFields per-member 필드 추가', () => {
+    const jobDir = path.join(tmpDir, 'job-results-extramember');
+    setupResultsFixture(jobDir, {
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: '', stderr: 'some error' },
+    });
+
+    const hooks: CmdResultsHooks = {
+      extraMemberFields: (r) => ({ stderr: r.stderr }),
+    };
+
+    const raw = captureStdout(() => {
+      cmdResults({ json: true }, jobDir, chunkReviewConfig, hooks);
+    });
+
+    const result = JSON.parse(raw);
+    expect(result.members[0].stderr).toBe('some error');
+  });
+
+  test('ANSI 코드가 output에서 제거됨', () => {
+    const jobDir = path.join(tmpDir, 'job-results-ansi-output');
+    setupResultsFixture(jobDir, {
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: '\x1b[31mred\x1b[0m', stderr: '' },
+    });
+
+    const raw = captureStdout(() => {
+      cmdResults({ json: true }, jobDir, chunkReviewConfig);
+    });
+
+    const result = JSON.parse(raw);
+    expect(result.members[0].output).toBe('red');
+  });
+
+  test('hooks 미전달 시 기존 동작 유지', () => {
+    const jobDir = path.join(tmpDir, 'job-results-nohooks');
+    setupResultsFixture(jobDir, {
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: 'out', stderr: 'err' },
+    });
+
+    const raw = captureStdout(() => {
+      cmdResults({ json: true }, jobDir, chunkReviewConfig);
+    });
+
+    const result = JSON.parse(raw);
+    const member = result.members[0];
+    expect(member.member).toBe('alice');
+    expect(member.output).toBe('out');
+    expect(member.stderr).toBeUndefined();
+    expect(member.specName).toBeUndefined();
+  });
+
+  test('ANSI 코드가 stderr에서도 제거됨', () => {
+    const jobDir = path.join(tmpDir, 'job-results-ansi-stderr');
+    setupResultsFixture(jobDir, {
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: '', stderr: '\x1b[32mgreen\x1b[0m' },
+    });
+
+    const hooks: CmdResultsHooks = {
+      extraMemberFields: (r) => ({ stderr: r.stderr }),
+    };
+
+    const raw = captureStdout(() => {
+      cmdResults({ json: true }, jobDir, chunkReviewConfig, hooks);
+    });
+
+    const result = JSON.parse(raw);
+    expect(result.members[0].stderr).toBe('green');
+  });
 });

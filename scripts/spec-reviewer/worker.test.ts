@@ -399,7 +399,7 @@ describe('runWithRetry', () => {
     expect(delays[0] < BASE_DELAY_MS * 3).toBe(true);
   });
 
-  test('appends output with attempt marker on retry', async () => {
+  test('retry 시 output.txt가 truncate되어 최종 attempt만 남음', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
     const result = await runWithRetry({
       program: 'sh',
@@ -413,8 +413,8 @@ describe('runWithRetry', () => {
     });
 
     const out = fs.readFileSync(paths.outPath, 'utf8');
-    expect(out.includes('attempt1')).toBe(true);
-    expect(out.includes('--- attempt 1 ---')).toBe(true);
+    expect(out.includes('attempt1')).toBe(false);
+    expect(out.includes('--- attempt')).toBe(false);
     expect(out.includes('attempt2')).toBe(true);
   });
 

@@ -4,6 +4,7 @@ import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execFileSync } from 'child_process';
 
 import {
   buildUiPayload,
@@ -816,5 +817,108 @@ describe('findProjectRoot', () => {
     const re = /^(.+?)\/\.(claude|gemini|codex|opencode)\/scripts\//;
     const match = '/path/to/project/.other/scripts/spec-reviewer/job.ts'.match(re);
     expect(match).toBe(null);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cmdResults
+// ---------------------------------------------------------------------------
+
+describe('cmdResults', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir;
+
+  function setupResultsFixture(
+    jobDir: string,
+    members: Record<string, { member: string; state: string; exitCode: number; output: string; stderr: string }>,
+    opts?: { specName?: string; prompt?: string },
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({
+      id: 'spec-review-test',
+      specName: opts?.specName || null,
+    }));
+    if (opts?.prompt) {
+      fs.writeFileSync(path.join(jobDir, 'prompt.txt'), opts.prompt);
+    }
+    const membersDir = path.join(jobDir, 'members');
+    fs.mkdirSync(membersDir, { recursive: true });
+    for (const [name, data] of Object.entries(members)) {
+      const dir = path.join(membersDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify({
+        member: data.member, state: data.state, exitCode: data.exitCode,
+      }));
+      if (data.output !== undefined) {
+        fs.writeFileSync(path.join(dir, 'output.txt'), data.output);
+      }
+      fs.writeFileSync(path.join(dir, 'error.txt'), data.stderr || '');
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('--json 출력에 specName, prompt, stderr 필드 포함', () => {
+    const jobDir = path.join(tmpDir, 'job-results-1');
+    setupResultsFixture(
+      jobDir,
+      {
+        claude: { member: 'claude', state: 'done', exitCode: 0, output: 'review output', stderr: 'some warning' },
+      },
+      { specName: 'auth-flow', prompt: 'review this spec' },
+    );
+    const raw = execFileSync(process.execPath, [SCRIPT, 'results', '--json', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(raw.toString());
+    expect(parsed.specName).toBe('auth-flow');
+    expect(parsed.prompt).toBe('review this spec');
+    expect(parsed.members[0].stderr).toBe('some warning');
+  });
+
+  test('--json members가 알파벳 순 정렬', () => {
+    const jobDir = path.join(tmpDir, 'job-results-2');
+    setupResultsFixture(jobDir, {
+      codex: { member: 'codex', state: 'done', exitCode: 0, output: 'codex output', stderr: '' },
+      alice: { member: 'alice', state: 'done', exitCode: 0, output: 'alice output', stderr: '' },
+    });
+    const raw = execFileSync(process.execPath, [SCRIPT, 'results', '--json', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(raw.toString());
+    expect(parsed.members[0].member).toBe('alice');
+    expect(parsed.members[1].member).toBe('codex');
+  });
+
+  test('non-JSON: output 비어있으면 stderr fallback 출력', () => {
+    const jobDir = path.join(tmpDir, 'job-results-3');
+    setupResultsFixture(jobDir, {
+      claude: { member: 'claude', state: 'error', exitCode: 1, output: '', stderr: 'fallback error content' },
+    });
+    const raw = execFileSync(process.execPath, [SCRIPT, 'results', jobDir], { stdio: 'pipe' });
+    expect(raw.toString().includes('fallback error content')).toBe(true);
+  });
+
+  test('non-JSON: output 있으면 output 출력, stderr 미포함', () => {
+    const jobDir = path.join(tmpDir, 'job-results-4');
+    setupResultsFixture(jobDir, {
+      claude: { member: 'claude', state: 'done', exitCode: 0, output: 'primary content', stderr: 'hidden stderr' },
+    });
+    const raw = execFileSync(process.execPath, [SCRIPT, 'results', jobDir], { stdio: 'pipe' });
+    const out = raw.toString();
+    expect(out.includes('primary content')).toBe(true);
+    expect(out.includes('hidden stderr')).toBe(false);
+  });
+
+  test('--json 출력에서 ANSI 코드 제거됨', () => {
+    const jobDir = path.join(tmpDir, 'job-results-5');
+    setupResultsFixture(jobDir, {
+      claude: { member: 'claude', state: 'done', exitCode: 0, output: '\x1b[31mclean output\x1b[0m', stderr: '' },
+    });
+    const raw = execFileSync(process.execPath, [SCRIPT, 'results', '--json', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(raw.toString());
+    expect(parsed.members[0].output).toBe('clean output');
   });
 });
