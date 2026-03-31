@@ -25,6 +25,7 @@ import {
   parseWaitCursor,
   formatWaitCursor,
   resolveBucketSize,
+  stripAnsi,
 } from './job-utils';
 
 // ---------------------------------------------------------------------------
@@ -46,6 +47,24 @@ export interface JobConfig {
   configTopLevelKey: string;
   /** optional feature flags for consumers */
   [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Hook interfaces for cmdResults / cmdWait extensibility
+// ---------------------------------------------------------------------------
+
+export interface CmdResultsHooks {
+  /** Extra top-level fields to add to JSON output (e.g., specName, prompt) */
+  extraTopLevel?: (jobDir: string, jobMeta: any) => Record<string, unknown>;
+  /** Extra per-member fields. Receives the raw member object (includes stderr, output, safeName, all status.json fields). */
+  extraMemberFields?: (rawMember: any) => Record<string, unknown>;
+}
+
+export interface CmdWaitHooks {
+  /** Transform the wait payload before output (e.g., add specName) */
+  transformPayload?: (payload: any) => any;
+  /** Override default timeout-ms (framework default: 600000). Set 0 for infinite. */
+  defaultTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +599,7 @@ export async function cmdWait(
   options: Record<string, unknown>,
   jobDir: string,
   config: JobConfig,
+  hooks?: CmdWaitHooks,
 ): Promise<void> {
   const resolvedJobDir = path.resolve(jobDir);
   const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
@@ -595,9 +615,12 @@ export async function cmdWait(
   const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
 
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 600000;
+  const defaultTimeout = hooks?.defaultTimeoutMs ?? 600000;
+  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : defaultTimeout;
   const timeoutMs = Math.trunc(Number(timeoutMsRaw));
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
+
+  const applyHook = (p: any) => hooks?.transformPayload ? hooks.transformPayload(p) : p;
 
   let payload = await computeStatus(jobDir, config);
   const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
@@ -612,7 +635,7 @@ export async function cmdWait(
 
   if (!prevCursor) {
     fs.writeFileSync(cursorFilePath, cursor, 'utf8');
-    process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload, config), cursor }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ...applyHook(asWaitPayload(payload, config)), cursor }, null, 2)}\n`);
     return;
   }
 
@@ -630,7 +653,7 @@ export async function cmdWait(
     const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
     if (nextCursor !== prevCursorRaw) {
       fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
-      process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload, config), cursor: nextCursor }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ ...applyHook(asWaitPayload(payload, config)), cursor: nextCursor }, null, 2)}\n`);
       return;
     }
   }
@@ -644,7 +667,7 @@ export async function cmdWait(
   const finalDoneBucket = Math.floor(finalDone / bucketSize);
   const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
   fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
-  process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload, config), cursor: finalCursor }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ...applyHook(asWaitPayload(finalPayload, config)), cursor: finalCursor }, null, 2)}\n`);
 }
 
 // ---------------------------------------------------------------------------
@@ -655,6 +678,7 @@ export function cmdResults(
   options: Record<string, unknown>,
   jobDir: string,
   config: JobConfig,
+  hooks?: CmdResultsHooks,
 ): void {
   const resolvedJobDir = path.resolve(jobDir);
   const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
@@ -668,8 +692,8 @@ export function cmdResults(
       const errorPath = path.join(entitiesRoot, entry, 'error.txt');
       const status = readJsonIfExists(statusPath) as any;
       if (!status) continue;
-      const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-      const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
+      const output = fs.existsSync(outputPath) ? stripAnsi(fs.readFileSync(outputPath, 'utf8')) : '';
+      const stderr = fs.existsSync(errorPath) ? stripAnsi(fs.readFileSync(errorPath, 'utf8')) : '';
       reviewers.push({ safeName: entry, ...status, output, stderr });
     }
   }
@@ -681,11 +705,13 @@ export function cmdResults(
   }
 
   if (options.json) {
+    const extraTop = hooks?.extraTopLevel ? hooks.extraTopLevel(resolvedJobDir, jobMeta) : {};
     process.stdout.write(
       `${JSON.stringify(
         {
           jobDir: resolvedJobDir,
           id: jobMeta ? jobMeta.id : null,
+          ...extraTop,
           [config.entityPlural]: reviewers
             .map((r) => ({
               member: r.member,
@@ -693,6 +719,7 @@ export function cmdResults(
               exitCode: r.exitCode != null ? r.exitCode : null,
               message: r.message || null,
               output: r.output,
+              ...(hooks?.extraMemberFields ? hooks.extraMemberFields(r) : {}),
             }))
             .sort((a, b) => String(a.member).localeCompare(String(b.member))),
         },

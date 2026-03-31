@@ -22,6 +22,7 @@ import {
   resolveBucketSize,
   generateJobId,
   findProjectRoot,
+  stripAnsi,
 } from './job-utils.ts';
 
 // ---------------------------------------------------------------------------
@@ -747,5 +748,39 @@ describe('findProjectRoot', () => {
     const scriptDir = path.join(tmpDir, 'scripts', 'chunk-review');
     fs.mkdirSync(scriptDir, { recursive: true });
     expect(findProjectRoot(scriptDir)).toBe(tmpDir);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stripAnsi
+// ---------------------------------------------------------------------------
+
+describe('stripAnsi', () => {
+  test('SGR 색상 코드 제거', () => {
+    expect(stripAnsi('\x1b[31mred text\x1b[0m')).toBe('red text');
+  });
+
+  test('bold/underline 코드 제거', () => {
+    expect(stripAnsi('\x1b[1mbold\x1b[22m \x1b[4munderline\x1b[24m')).toBe('bold underline');
+  });
+
+  test('일반 텍스트 무변경', () => {
+    expect(stripAnsi('plain text')).toBe('plain text');
+  });
+
+  test('빈 문자열 처리', () => {
+    expect(stripAnsi('')).toBe('');
+  });
+
+  test('cursor 이동 시퀀스 제거', () => {
+    expect(stripAnsi('\x1b[2Jhello\x1b[H')).toBe('hello');
+  });
+
+  test('OSC 시퀀스 (BEL 종료) 제거', () => {
+    expect(stripAnsi('\x1b]0;title\x07content')).toBe('content');
+  });
+
+  test('OSC 8 하이퍼링크 (ST 종료) 제거', () => {
+    expect(stripAnsi('\x1b]8;;https://example.com\x1b\\link text\x1b]8;;\x1b\\')).toBe('link text');
   });
 });
