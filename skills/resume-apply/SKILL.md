@@ -13,6 +13,10 @@ End-to-end workflow that tailors a resume to a specific JD, generates a PDF, and
 - Docker running (required for PDF generation)
 - `bun` installed
 
+## Core Principle
+
+All resume modifications are made by directly editing `_config.yml`. Do not create intermediate files, scratch documents, or temporary drafts. Every change — whether applying review-resume feedback, tailoring content for a JD, or adjusting any resume field — happens in `_config.yml` itself.
+
 ## Workflow
 
 Execute the 7 steps below in order. Each step proceeds automatically to the next, except Step 3 (review-resume) which involves user interaction and follows the review-resume skill's protocol.
