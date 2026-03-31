@@ -482,3 +482,177 @@ describe('runOnce heartbeat', () => {
     await promise;
   });
 });
+
+// ---------------------------------------------------------------------------
+// runOnce 환경 변수 전파
+// ---------------------------------------------------------------------------
+
+function createCapturingSpawnFn() {
+  const captured: { env?: Record<string, string> } = {};
+  const mockSpawn = (program: string, args: string[], options: any) => {
+    captured.env = options?.env;
+    const child = new (require('events').EventEmitter)();
+    const stdin = { write: () => true, end: () => {}, on: () => stdin } as any;
+    (child as any).stdin = stdin;
+    (child as any).stdout = null;
+    (child as any).stderr = null;
+    (child as any).pid = 12345;
+    process.nextTick(() => {
+      child.emit('exit', 0, null);
+      process.nextTick(() => child.emit('close', 0, null));
+    });
+    return child as any;
+  };
+  return { mockSpawn, captured };
+}
+
+describe('runOnce 환경 변수 전파', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'worker-env-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeEnvTestOpts(overrides: Partial<RunOnceOpts> = {}): RunOnceOpts {
+    const memberDir = join(tmpDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+    return {
+      program: '/bin/sh',
+      args: ['-c', 'exit 0'],
+      prompt: 'test prompt',
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh -c "exit 0"',
+      timeoutSec: 10,
+      attempt: 0,
+      ...overrides,
+    };
+  }
+
+  it('NO_COLOR=1 전파 확인', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn });
+    await runOnce(opts);
+    expect(captured.env?.NO_COLOR).toBe('1');
+  });
+
+  it('TERM=dumb 전파 확인', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn });
+    await runOnce(opts);
+    expect(captured.env?.TERM).toBe('dumb');
+  });
+
+  it('FORCE_COLOR=0 전파 확인', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn });
+    await runOnce(opts);
+    expect(captured.env?.FORCE_COLOR).toBe('0');
+  });
+
+  it('workerEnv가 NO_COLOR override 가능', async () => {
+    const { mockSpawn, captured } = createCapturingSpawnFn();
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn, workerEnv: { NO_COLOR: '' } });
+    await runOnce(opts);
+    expect(captured.env?.NO_COLOR).toBe('');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// retry 시 output 정제
+// ---------------------------------------------------------------------------
+
+describe('retry 시 output 정제', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'worker-retry-output-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('attempt 1에서 output.txt에 attempt 마커 없음', async () => {
+    const subDir = join(tmpDir, 'no-marker');
+    const memberDir = join(subDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+
+    await runOnce({
+      program: '/bin/sh',
+      args: ['-c', 'echo "retry output"'],
+      prompt: 'test prompt',
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh -c \'echo "retry output"\'',
+      timeoutSec: 10,
+      attempt: 1,
+    });
+
+    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputContent).not.toContain('--- attempt');
+  });
+
+  it('attempt 1에서 output.txt가 truncate됨 (이전 데이터 없음)', async () => {
+    const subDir = join(tmpDir, 'truncate-check');
+    const memberDir = join(subDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Pre-write old data
+    writeFileSync(join(memberDir, 'output.txt'), 'old data\n');
+
+    await runOnce({
+      program: '/bin/sh',
+      args: ['-c', 'echo "new output"'],
+      prompt: 'test prompt',
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh -c \'echo "new output"\'',
+      timeoutSec: 10,
+      attempt: 1,
+    });
+
+    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputContent).toContain('new output');
+    expect(outputContent).not.toContain('old data');
+  });
+
+  it('errOffset=0 for retry: non-retryable 패턴 감지 정상', async () => {
+    const subDir = join(tmpDir, 'eroffset-retry');
+    const memberDir = join(subDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Write a counter file to make the script behave differently on each invocation
+    const counterFile = join(subDir, 'counter');
+    writeFileSync(counterFile, '0');
+
+    const script = `
+  COUNT=$(cat ${counterFile})
+  echo $((COUNT + 1)) > ${counterFile}
+  if [ "$COUNT" = "0" ]; then
+    echo "Connection refused: retryable error" >&2
+    exit 1
+  else
+    echo "TerminalQuotaError: quota exceeded" >&2
+    exit 1
+  fi
+`;
+
+    const result = await runWithRetry({
+      program: '/bin/sh',
+      args: ['-c', script],
+      prompt: 'test prompt',
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh script',
+      timeoutSec: 10,
+      sleepFn: noopSleep,
+    });
+
+    expect(result.state).toBe('non_retryable');
+  });
+});

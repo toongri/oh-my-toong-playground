@@ -347,7 +347,7 @@ describe('runWithRetry', () => {
     expect(result.attempt).toBe(0);
   });
 
-  test('appends output with attempt marker on retry', async () => {
+  test('retry 시 output.txt가 truncate되어 최종 attempt만 남음', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
     // First attempt: echo "attempt1" and exit 1; second: echo "attempt2" and exit 0
     const script = `sh -c 'if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi'`;
@@ -363,9 +363,9 @@ describe('runWithRetry', () => {
     });
 
     const output = fs.readFileSync(paths.outPath, 'utf8');
-    // Should contain both attempts with marker separator
-    expect(output.includes('attempt1')).toBe(true);
-    expect(output.includes('--- attempt 1 ---')).toBe(true);
+    // Retry truncates: only final attempt output remains
+    expect(output.includes('attempt1')).toBe(false);
+    expect(output.includes('--- attempt')).toBe(false);
     expect(output.includes('attempt2')).toBe(true);
   });
 

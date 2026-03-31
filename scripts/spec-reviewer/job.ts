@@ -20,10 +20,13 @@ import {
 
 import {
   type JobConfig,
+  type CmdResultsHooks,
+  type CmdWaitHooks,
   computeStatus as _computeStatus,
   buildUiPayload as _buildUiPayload,
   spawnWorkers as _spawnWorkers,
   cmdResults as _cmdResults,
+  cmdWait as _cmdWait,
   cmdStop as _cmdStop,
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
@@ -307,28 +310,28 @@ Notes:
 }
 
 // ---------------------------------------------------------------------------
-// Wait payload (spec-review-specific — adds specName field)
+// Hook definitions for framework cmdResults / cmdWait
 // ---------------------------------------------------------------------------
 
-function asWaitPayload(statusPayload: any): any {
-  const membersArray = Array.isArray(statusPayload.members) ? statusPayload.members : [];
+const RESULTS_HOOKS: CmdResultsHooks = {
+  extraTopLevel: (jobDir, jobMeta) => ({
+    specName: jobMeta?.specName || null,
+    prompt: fs.existsSync(path.join(jobDir, 'prompt.txt'))
+      ? fs.readFileSync(path.join(jobDir, 'prompt.txt'), 'utf8')
+      : null,
+  }),
+  extraMemberFields: (member) => ({
+    stderr: member.stderr || '',
+  }),
+};
 
-  return {
-    jobDir: statusPayload.jobDir,
-    id: statusPayload.id,
-    chairmanRole: statusPayload.chairmanRole,
-    overallState: statusPayload.overallState,
-    counts: statusPayload.counts,
-    specName: statusPayload.specName,
-    members: membersArray.map((r: any) => ({
-      member: r.member,
-      state: r.state,
-      exitCode: r.exitCode != null ? r.exitCode : null,
-      message: r.message || null,
-    })),
-    ui: buildUiPayload(statusPayload),
-  };
-}
+const WAIT_HOOKS: CmdWaitHooks = {
+  defaultTimeoutMs: 0,
+  transformPayload: (payload) => {
+    const jobMeta = readJsonIfExists(path.join(path.resolve(payload.jobDir), 'job.json')) as any;
+    return { ...payload, specName: jobMeta?.specName || null };
+  },
+};
 
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
   const configPath = (options.config || process.env.SPEC_REVIEW_CONFIG || resolveDefaultConfigFile()) as string;
@@ -477,144 +480,6 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
 }
 
 // ---------------------------------------------------------------------------
-// cmdWait (spec-review-specific — adds specName to wait payload)
-// ---------------------------------------------------------------------------
-
-async function cmdWait(options: Record<string, unknown>, jobDir: string): Promise<void> {
-  // We override the wait payload to include specName, so we implement our own cmdWait
-  // rather than delegating to the framework's cmdWait.
-  const { parseWaitCursor, formatWaitCursor, resolveBucketSize, sleepMs } = await import('@lib/job-utils');
-
-  const resolvedJobDir = path.resolve(jobDir);
-  const cursorFilePath = path.join(resolvedJobDir, '.wait_cursor');
-  const prevCursorRaw =
-    options.cursor != null
-      ? String(options.cursor)
-      : fs.existsSync(cursorFilePath)
-        ? String(fs.readFileSync(cursorFilePath, 'utf8')).trim()
-        : '';
-  const prevCursor = parseWaitCursor(prevCursorRaw);
-
-  const intervalMsRaw = options['interval-ms'] != null ? options['interval-ms'] : 250;
-  const intervalMs = Math.max(50, Math.trunc(Number(intervalMsRaw)));
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) exitWithError(`wait: invalid --interval-ms: ${intervalMsRaw}`);
-
-  const timeoutMsRaw = options['timeout-ms'] != null ? options['timeout-ms'] : 0;
-  const timeoutMs = Math.trunc(Number(timeoutMsRaw));
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 0) exitWithError(`wait: invalid --timeout-ms: ${timeoutMsRaw}`);
-
-  let payload = await computeStatus(jobDir);
-  const bucketSize = resolveBucketSize(options, payload.counts.total, prevCursor);
-
-  const doneCount = computeTerminalDoneCount(payload.counts);
-  const isDone = payload.overallState === 'done';
-  const total = Number(payload.counts.total || 0);
-  const queued = Number(payload.counts.queued || 0);
-  const dispatchBucket = queued === 0 && total > 0 ? 1 : 0;
-  const doneBucket = Math.floor(doneCount / bucketSize);
-  const cursor = formatWaitCursor(bucketSize, dispatchBucket, doneBucket, isDone);
-
-  if (!prevCursor) {
-    fs.writeFileSync(cursorFilePath, cursor, 'utf8');
-    process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor }, null, 2)}\n`);
-    return;
-  }
-
-  const start = Date.now();
-  while (cursor === prevCursorRaw) {
-    if (timeoutMs > 0 && Date.now() - start >= timeoutMs) break;
-    await sleepMs(intervalMs);
-    payload = await computeStatus(jobDir);
-    const d = computeTerminalDoneCount(payload.counts);
-    const doneFlag = payload.overallState === 'done';
-    const totalCount = Number(payload.counts.total || 0);
-    const queuedCount = Number(payload.counts.queued || 0);
-    const dispatchB = queuedCount === 0 && totalCount > 0 ? 1 : 0;
-    const doneB = Math.floor(d / bucketSize);
-    const nextCursor = formatWaitCursor(bucketSize, dispatchB, doneB, doneFlag);
-    if (nextCursor !== prevCursorRaw) {
-      fs.writeFileSync(cursorFilePath, nextCursor, 'utf8');
-      process.stdout.write(`${JSON.stringify({ ...asWaitPayload(payload), cursor: nextCursor }, null, 2)}\n`);
-      return;
-    }
-  }
-
-  const finalPayload = await computeStatus(jobDir);
-  const finalDone = computeTerminalDoneCount(finalPayload.counts);
-  const finalDoneFlag = finalPayload.overallState === 'done';
-  const finalTotal = Number(finalPayload.counts.total || 0);
-  const finalQueued = Number(finalPayload.counts.queued || 0);
-  const finalDispatchBucket = finalQueued === 0 && finalTotal > 0 ? 1 : 0;
-  const finalDoneBucket = Math.floor(finalDone / bucketSize);
-  const finalCursor = formatWaitCursor(bucketSize, finalDispatchBucket, finalDoneBucket, finalDoneFlag);
-  fs.writeFileSync(cursorFilePath, finalCursor, 'utf8');
-  process.stdout.write(`${JSON.stringify({ ...asWaitPayload(finalPayload), cursor: finalCursor }, null, 2)}\n`);
-}
-
-// ---------------------------------------------------------------------------
-// cmdResults (spec-review-specific — adds specName and prompt to JSON output)
-// ---------------------------------------------------------------------------
-
-function cmdResults(options: Record<string, unknown>, jobDir: string): void {
-  const resolvedJobDir = path.resolve(jobDir);
-  const jobMeta = readJsonIfExists(path.join(resolvedJobDir, 'job.json')) as any;
-  const membersRoot = path.join(resolvedJobDir, 'members');
-
-  const members: any[] = [];
-  if (fs.existsSync(membersRoot)) {
-    for (const entry of fs.readdirSync(membersRoot)) {
-      const statusPath = path.join(membersRoot, entry, 'status.json');
-      const outputPath = path.join(membersRoot, entry, 'output.txt');
-      const errorPath = path.join(membersRoot, entry, 'error.txt');
-      const status = readJsonIfExists(statusPath) as any;
-      if (!status) continue;
-      const output = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
-      const stderr = fs.existsSync(errorPath) ? fs.readFileSync(errorPath, 'utf8') : '';
-      members.push({ safeName: entry, ...status, output, stderr });
-    }
-  }
-
-  if (options.json) {
-    process.stdout.write(
-      `${JSON.stringify(
-        {
-          jobDir: resolvedJobDir,
-          id: jobMeta ? jobMeta.id : null,
-          specName: jobMeta ? jobMeta.specName : null,
-          prompt: fs.existsSync(path.join(resolvedJobDir, 'prompt.txt'))
-            ? fs.readFileSync(path.join(resolvedJobDir, 'prompt.txt'), 'utf8')
-            : null,
-          members: members
-            .map((r) => ({
-              member: r.member,
-              state: r.state,
-              exitCode: r.exitCode != null ? r.exitCode : null,
-              message: r.message || null,
-              output: r.output,
-              stderr: r.stderr,
-            }))
-            .sort((a, b) => String(a.member).localeCompare(String(b.member))),
-        },
-        null,
-        2
-      )}\n`
-    );
-    return;
-  }
-
-  for (const r of members.sort((a, b) => String(a.member).localeCompare(String(b.member)))) {
-    process.stdout.write(`\n=== ${r.member} (${r.state}) ===\n`);
-    if (r.message) process.stdout.write(`${r.message}\n`);
-    process.stdout.write(r.output || '');
-    if (!r.output && r.stderr) {
-      process.stdout.write('\n');
-      process.stdout.write(r.stderr);
-    }
-    process.stdout.write('\n');
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -654,7 +519,7 @@ async function main(): Promise<void> {
   if (command === 'wait') {
     const jobDir = rest[0] as string;
     if (!jobDir) exitWithError('wait: missing jobDir');
-    await cmdWait(options, jobDir);
+    await _cmdWait(options, jobDir, JOB_CONFIG, WAIT_HOOKS);
     return;
   }
   if (command === 'collect') {
@@ -666,7 +531,7 @@ async function main(): Promise<void> {
   if (command === 'results') {
     const jobDir = rest[0] as string;
     if (!jobDir) exitWithError('results: missing jobDir');
-    cmdResults(options, jobDir);
+    _cmdResults(options, jobDir, JOB_CONFIG, RESULTS_HOOKS);
     return;
   }
   if (command === 'stop') {

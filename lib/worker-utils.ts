@@ -226,8 +226,8 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
       command, pid: null, attempt,
     });
 
-    const outStream = fs.createWriteStream(outPath, { flags: 'a' });
-    const errStream = fs.createWriteStream(errPath, { flags: 'a' });
+    const outStream = fs.createWriteStream(outPath, { flags: attempt > 0 ? 'w' : 'a' });
+    const errStream = fs.createWriteStream(errPath, { flags: attempt > 0 ? 'w' : 'a' });
     outStream.on('error', () => { /* ignore */ });
     errStream.on('error', () => { /* ignore */ });
 
@@ -235,7 +235,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
     try {
       child = spawnFn(program, [...args], {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...workerEnv },
+        env: { ...process.env, NO_COLOR: '1', TERM: 'dumb', FORCE_COLOR: '0', ...workerEnv },
       });
     } catch (error: unknown) {
       const err = error as Error | undefined;
@@ -283,13 +283,6 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
       } catch { /* ignore */ }
     }, heartbeatIntervalMs);
     heartbeatHandle.unref();
-
-    // Write attempt separator before piping output (preserves previous attempts)
-    if (attempt > 0) {
-      const marker = `\n--- attempt ${attempt} ---\n`;
-      outStream.write(marker);
-      errStream.write(marker);
-    }
 
     if (child.stdout) child.stdout.pipe(outStream);
     if (child.stderr) child.stderr.pipe(errStream);
@@ -387,8 +380,9 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
   const errPath = path.join(runOpts.memberDir, 'error.txt');
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    // Record current error.txt size so we only check NEW stderr from this attempt
-    const errOffset = (() => { try { return fs.statSync(errPath).size; } catch { return 0; } })();
+    // On retry (attempt > 0), runOnce truncates error.txt, so offset is always 0.
+    // On first attempt, record current size to check only NEW stderr.
+    const errOffset = attempt > 0 ? 0 : (() => { try { return fs.statSync(errPath).size; } catch { return 0; } })();
 
     result = await runOnce({ ...runOpts, attempt });
 
