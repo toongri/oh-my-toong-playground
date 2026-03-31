@@ -53,16 +53,16 @@ The Quality Gate splits the resume into **1 bullet / 1 entry** units for process
 
 ### Target Selection
 
-Only **bullets/entries with P0 or P1 findings** from Phases 0-10 are subject to the Quality Gate. Bullets that pass all criteria skip evaluator dispatch entirely.
+**ALL evaluator-eligible items** are subject to the Quality Gate. Eligibility is determined by content type (see SKILL.md Examiner Eligibility Rule), not by Phase 0-10 P-level findings. Phase 0-10 findings are transmitted as context to the examiner, but do not gate eligibility.
 
 ### Summary/Introduction
 
 | Type | Evaluator Target | Reason |
 |------|-----------------|--------|
-| Type A (professional identity) | Conditional | Only if technical claims are included |
-| Type B (work philosophy) | Conditional | Only if technical episodes are included |
+| Type A (professional identity) | YES — when technical claims are included | Technical claims require verification of technical substance |
+| Type B (work philosophy) | YES — when technical episodes are included | Technical episodes require verification of technical substance |
 | Type C (company connection) | YES | Technical capability → company domain mapping requires verification of technical substance |
-| Type D (current interests) | Conditional | Only if technical exploration is included |
+| Type D (current interests) | YES — when technical exploration is included | Technical exploration requires verification of technical substance |
 
 ### Career / Work Experience
 
@@ -188,6 +188,38 @@ Always provide a recommendation, but respect the user's choice if they select a 
 
 ---
 
+## 3.5. Pre-Examiner Interview Protocol
+
+### Purpose
+
+Examiner dispatch 전에 유저와 항목별 상세 인터뷰를 진행한다. 인터뷰의 목적은 실패 대응이 아닌 **성공을 위한 사전 준비와 합의 도출**이다.
+
+### Interview Flow (Per Item)
+
+1. **Findings 공유**: Phase 0-10 평가 결과를 항목 단위로 제시
+2. **컨텍스트 수집**: 고민, 트레이드오프, 숨겨진 맥락 발굴
+3. **대안 제시 + 논의**: 2-3개 대안과 장단점 논의, 유저 선호 확인
+4. **합의 도출**: 방향성 합의 후 최종 alternatives 확정
+
+### Interview Rules
+
+- 메시지당 질문 하나. 복수 질문 금지.
+- 모든 findings에 대해 빠짐없이 논의. "사소하다"는 이유로 건너뛰지 않는다.
+- 유저의 모호한 답변 → 명확화 질문으로 파고든다.
+- 유저가 "다음으로" / "넘어가자" → 현재 항목 인터뷰 종료, examiner dispatch 진행.
+- PASS 항목이라도 개선 여지가 있으면 제안. "아쉽지만 PASS"도 논의 대상.
+
+### Relationship with Section 4 (Post-Examiner Interview)
+
+| Dimension | Pre-Examiner Interview | Post-Examiner Interview |
+|-----------|----------------------|------------------------|
+| Trigger | Always (every evaluator-eligible item) | REQUEST_CHANGES received |
+| Purpose | 합의 도출, 성공 준비 | FAIL axes 보충, 개선 |
+| Question basis | Phase 0-10 findings | Examiner's Interview Hints |
+| Exit | 합의 완료 → examiner dispatch | Source 확보 → re-dispatch |
+
+---
+
 ## 4. Interview Loop Protocol
 
 ### Relationship with experience-mining.md
@@ -271,9 +303,11 @@ If sources remain unconfirmed after all 4 Stages are exhausted:
 
 ```mermaid
 flowchart TB
-    A[Phase 0-10 evaluation complete] --> B[Select bullets with P0/P1 findings]
-    B --> C[Select next bullet]
-    C --> D[Generate 2-3 alternatives + tradeoffs]
+    A[Phase 0-10 evaluation complete] --> B[Select ALL evaluator-eligible items]
+    B --> C[Select next item]
+    C --> PRESENT[Present Phase 0-10 findings to user]
+    PRESENT --> INTERVIEW_PRE[Pre-Examiner Interview\n— discuss findings, collect context,\npropose improvements, reach agreement]
+    INTERVIEW_PRE --> D[Generate 2-3 alternatives + tradeoffs]
     D --> H[resume-claim-examiner dispatch\n— send original + alternatives package]
 
     H --> DIAG{Phase A: Interrogate original\nIs there really a problem?}
@@ -283,7 +317,7 @@ flowchart TB
     ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative in HTML]
     ALTEVAL -->|All fail| K[REQUEST_CHANGES\n+ Interview Hints]
 
-    K --> L[User interview\n4-Stage Bypass Protocol]
+    K --> L[Additional Interview\n— FAIL axes 기반, 지옥 끝까지\n4-Stage Bypass Protocol]
     L --> M{Source confirmed?}
     M -->|YES| D
     M -->|NO: 4-Stage exhausted| N[Best revision with current sources]
@@ -291,21 +325,22 @@ flowchart TB
     O -->|YES: move on| J
     O -->|NO: continue| H
 
-    APPROVE_ORIG --> J{Next bullet\nexists?}
+    APPROVE_ORIG --> J{Next item\nexists?}
     APPROVE_ALT --> J
 
     J -->|YES| C
-    J -->|NO| P[Phase 12: Generate HTML]
+    J -->|NO| VERDICT[Verdict Tracker 검증]
+    VERDICT --> P[Phase 12: Generate HTML]
 
     style H fill:#e74c3c,stroke:#333,color:#fff
-    style DIAG fill:#f39c12,stroke:#333,color:#fff
-    style ALTEVAL fill:#f39c12,stroke:#333,color:#fff
+    style INTERVIEW_PRE fill:#3498db,stroke:#333,color:#fff
+    style L fill:#8e44ad,stroke:#333,color:#fff
     style P fill:#27ae60,stroke:#333,color:#fff
 ```
 
 ### Loop Entry Condition
 
-The Quality Gate loop is entered automatically after Phase 10 completes. Without a separate trigger, immediately after the final Phase 10 evaluation output, the flow proceeds directly to the Section Units split step.
+The Quality Gate loop is entered automatically after Phase 10 completes. Without a separate trigger, immediately after the final Phase 10 evaluation output, the flow proceeds to selecting ALL evaluator-eligible items and starting the pre-examiner interview for each item.
 
 ### resume-claim-examiner dispatch
 
@@ -322,6 +357,16 @@ The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispa
 ### Post-APPROVE Handling
 
 Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 12 HTML report is generated based on these confirmed revisions.
+
+### Mandatory Verdict Tracker
+
+Phase 12 진입 전, 모든 evaluator-eligible 항목의 verdict를 내부적으로 추적한다. 빈 칸이 하나라도 있으면 Phase 12 진입이 차단된다.
+
+| # | Section | Item | Verdict | Loop Count |
+|---|---------|------|---------|------------|
+| 1 | 자기소개 C | "데이터 정합성..." | APPROVE / user-opt-out / ??? | N |
+
+verdict가 `???`인 항목이 존재하면 → 해당 항목으로 돌아가 Quality Gate 재진행.
 
 ---
 
