@@ -34,10 +34,12 @@ Core question: "Is the engineering judgment demonstrated in this bullet valid at
 
 If Target Company Context is provided, evaluate against that company's standards. If not provided, default to big tech standards (major domestic platforms such as Naver, Kakao, Toss, Coupang, or FAANG-equivalent).
 
-This perspective is explicitly scored in E6, but is always referenced during E1-E5 evaluation as well:
+This perspective is explicitly scored in E6, and is most impactful in E1, E3, E4:
 - E1: Does this bullet demonstrate the technical depth the target company expects at this career level?
 - E3: Is this tradeoff meaningful at the target company's scale?
 - E4: Is this over- or under-engineering relative to the target company's scale?
+
+E2 (Logical Coherence) and E5 (Signal-to-Noise) are scale-invariant — flawed logic and buried messages fail regardless of target company. No target-specific adjustment needed.
 
 **Evaluation standard split:**
 - **E1 (Career-Level Fit)**: CALIBRATED — expectations scale with years of experience. A junior is not held to senior standards. A senior receives no junior-level leniency.

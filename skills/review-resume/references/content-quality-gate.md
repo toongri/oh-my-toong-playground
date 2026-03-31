@@ -152,6 +152,7 @@ Each alternative follows this structure:
 When generating alternatives and the candidate's experience scale is smaller than the target company's:
 - **Alternative 1 (Safe)**: Scale-Omit strategy — omit scale numbers and focus on the reasoning and judgment logic
 - **Alternative 2 (High-Impact)**: Scale-Project strategy — describe at the target company's scale, but the candidate must be able to logically defend this in an interview
+- **Alternative 3 (if applicable)**: Scale-Relative strategy — express impact using improvement ratios (e.g., "8x improvement") rather than absolute figures. Useful when the improvement rate is impressive regardless of absolute scale.
 - The primary criterion is interview defensibility. If the candidate can explain the numbers and design two levels deep, it is valid.
 - When assessing "Interview safety" in the comparison table, reflect whether the candidate can cover questions at that scale.
 
