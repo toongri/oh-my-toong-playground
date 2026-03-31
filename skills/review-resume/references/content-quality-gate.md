@@ -72,7 +72,7 @@ Examples:
 - "Built Kafka async pipeline, tripling throughput" → 1 unit
 - "Achieved zero payment-order inconsistencies" → 1 unit
 
-**Processing order:** P0 finding bullets → P1 finding bullets. Within the same priority, most recent employer first.
+**Processing order:** Most recent employer first. Within the same employer, by finding severity (P0 → P1 → P2 → P3 → no findings).
 
 ### Problem-Solving
 
@@ -337,6 +337,8 @@ flowchart TB
     style L fill:#8e44ad,stroke:#333,color:#fff
     style P fill:#27ae60,stroke:#333,color:#fff
 ```
+
+> **Note:** SKILL.md "Quality Gate Flow (Per Item)" contains the primary flow that the AI follows. Changes to the loop structure must be synchronized between both files.
 
 ### Loop Entry Condition
 
