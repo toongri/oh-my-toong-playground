@@ -120,14 +120,6 @@ If the branch already exists, ask the user whether to overwrite or use a differe
 
 ### Step 3: Review & Improve Resume
 
-Before invoking review-resume, check other branches' `_config.yml` for reference:
-```bash
-git branch -a
-git show {branch}:_config.yml  # for relevant branches
-```
-
-Other branches contain previously written company-specific versions of the resume. When improving or rewriting any section, always check these branches first — the candidate's own prior work is the best reference for tone, structure, and proven patterns. Do not write from scratch when an existing version can be adapted.
-
 Invoke the `review-resume` skill via the Skill tool.
 
 Keep the full JD text in context — the review-resume skill needs the target position/company to perform accurate evaluation.
@@ -136,7 +128,7 @@ review-resume 스킬은 유저와의 인터랙션을 포함한 전체 평가 프
 
 ### Step 4: Apply Review Findings & Commit
 
-review-resume에서 승인된 수정사항을 `_config.yml`에 적용한다. 자기소개 문단을 작성하거나 수정할 때는 다른 브랜치에서 검증된 패턴을 참조하라.
+review-resume에서 승인된 수정사항을 `_config.yml`에 적용한다.
 
 적용 완료 후 커밋:
 ```bash
