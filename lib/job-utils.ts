@@ -268,3 +268,14 @@ export function findProjectRoot(scriptDir: string): string {
 
   return path.resolve(scriptDir, '../..');
 }
+
+// ---------------------------------------------------------------------------
+// ANSI stripping
+// ---------------------------------------------------------------------------
+
+// Covers SGR sequences, OSC (BEL and ST terminated), and CSI via 0x9B
+const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?(\x07|\x1b\\)|\x9b[0-9;]*[A-Za-z]/g;
+
+export function stripAnsi(text: string): string {
+  return text.replace(ANSI_PATTERN, '');
+}

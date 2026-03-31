@@ -417,7 +417,7 @@ describe('runWithRetry', () => {
     expect(delays[0] < BASE_DELAY_MS * 3).toBe(true);
   });
 
-  test('appends output with attempt marker on retry', async () => {
+  test('retry 시 output.txt가 truncate되어 최종 attempt만 남음', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
     const result = await runWithRetry({
       program: 'sh',
@@ -431,8 +431,8 @@ describe('runWithRetry', () => {
     });
 
     const out = await waitForFileContent(paths.outPath, 'attempt2');
-    expect(out.includes('attempt1')).toBe(true);
-    expect(out.includes('--- attempt 1 ---')).toBe(true);
+    expect(out.includes('attempt1')).toBe(false);
+    expect(out.includes('--- attempt')).toBe(false);
     expect(out.includes('attempt2')).toBe(true);
   });
 
@@ -734,10 +734,10 @@ describe('runOnce - workerEnv injection', () => {
     // Existing env vars should be present
     expect(captured.options.env.PATH).toBe(process.env.PATH);
     expect(captured.options.env.HOME).toBe(process.env.HOME);
-    // No extra keys beyond what process.env has
-    const envKeys = Object.keys(captured.options.env);
-    const processEnvKeys = Object.keys(process.env);
-    expect(envKeys.sort()).toEqual(processEnvKeys.sort());
+    // Framework injects NO_COLOR, TERM, FORCE_COLOR for clean output
+    expect(captured.options.env.NO_COLOR).toBe('1');
+    expect(captured.options.env.TERM).toBe('dumb');
+    expect(captured.options.env.FORCE_COLOR).toBe('0');
   });
 
   test('merges multiple workerEnv vars into spawn env', async () => {
