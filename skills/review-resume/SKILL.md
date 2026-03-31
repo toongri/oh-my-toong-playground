@@ -102,9 +102,9 @@ flowchart TB
     TS[Technical Substance Verification: T1-T3]
     TS --> O[MUST: AI Tone Audit — Skill humanizer audit mode]
     O --> QG[Per-Bullet Content Quality Gate]
-    QG --> QGA{All bullets APPROVE\nor Opt-Out?}
+    QG --> QGA{All items APPROVE\nor Opt-Out?}
     QGA -->|Yes| N[Generate HTML Report]
-    QGA -->|No| QGL[Interview → Re-alternative\n→ Re-evaluate per bullet]
+    QGA -->|No| QGL[Interview → Re-alternative\n→ Re-evaluate per item]
     QGL --> QGA
     N --> NA{User approval?}
     NA -->|Approved| MA[Note Accumulate — candidate/preference persistence]
@@ -508,6 +508,8 @@ flowchart TB
     style DONE fill:#27ae60,stroke:#333,color:#fff
 ```
 
+> **Canonical reference:** `references/content-quality-gate.md` Section 5 contains the full Quality Gate loop flow with detailed dispatch rules and post-APPROVE handling.
+
 ### Pre-Examiner Interview Protocol
 
 Examiner dispatch 전에 유저와 항목별 상세 인터뷰를 진행한다. 인터뷰의 목적은 실패 대응이 아닌 **성공을 위한 사전 준비와 합의 도출**이다.
@@ -529,7 +531,7 @@ Examiner dispatch 전에 유저와 항목별 상세 인터뷰를 진행한다. �
 <critical>
 There is no escape from this loop without resume-claim-examiner APPROVE.
 The only exception is the user explicitly opting out (see "User Opt-Out" section below for recognized keywords).
-Advancing to the next bullet or proceeding to Phase 12 without APPROVE is forbidden.
+Advancing to the next item or proceeding to Phase 12 without APPROVE is forbidden.
 </critical>
 
 ### Mandatory Verdict Tracker

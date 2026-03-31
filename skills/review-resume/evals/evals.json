@@ -165,7 +165,7 @@
     "latest_iteration": 14,
     "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "123 assertions across 4 evals (45+34+20+24), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증. Phase 11 Quality Gate assertions 추가 (3개 × 2 evals = 6개 신규). Eval 3/4에 quality-gate assertions 추가 (3개 × 2 evals = 6개 신규)."
+    "notes": "127 assertions across 4 evals (46+35+21+25), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증. Phase 11 Quality Gate assertions 추가 (3개 × 2 evals = 6개 신규). Eval 3/4에 quality-gate assertions 추가 (3개 × 2 evals = 6개 신규)."
   },
   "benchmark_history": [
     {
