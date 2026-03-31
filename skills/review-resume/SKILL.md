@@ -225,7 +225,7 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 ### Experience Mining Interview
 
-자기소개 절반 이상 FAIL 시 → `Read references/experience-mining.md` Phase 2 section을 참조하여 인터뷰를 진행한다.
+자기소개 ANY type FAIL 시 → `Read references/experience-mining.md` Phase 2 section을 참조하여 인터뷰를 진행한다.
 
 `[Phase 2/13: Self-Introduction Evaluation ✓]`
 
@@ -257,7 +257,7 @@ Rate each axis as STRONG / PRESENT / WEAK / ABSENT / N/A with evidence citations
 
 ### Experience Mining Interview
 
-WEAK/ABSENT 축이 career level 기대치에서 EXPECTED/REQUIRED일 때 → `Read references/experience-mining.md` Phase 4 section을 참조하여 인터뷰를 진행한다.
+ANY axis WEAK 또는 ABSENT 시 → `Read references/experience-mining.md` Phase 4 section을 참조하여 인터뷰를 진행한다.
 
 `[Phase 4/13: Developer Competency Assessment ✓]`
 
@@ -293,7 +293,7 @@ Career and problem-solving sections answer fundamentally different questions:
 
 ### Experience Mining Interview
 
-경력 또는 문제해결 기준 FAIL률 > 50% 시 → `Read references/experience-mining.md` Phase 5 section을 참조하여 인터뷰를 진행한다.
+경력 또는 문제해결 ANY criterion FAIL 시 → `Read references/experience-mining.md` Phase 5 section을 참조하여 인터뷰를 진행한다.
 
 `[Phase 5/13: Section-Specific Evaluation ✓]`
 
@@ -362,7 +362,7 @@ Compare against career-level recommendations. If any depth category has 0 entrie
 
 ### Experience Mining Interview
 
-P.A.R.R. 3개 이상 FAIL 또는 구조 부재 OR 테마 편중 → `Read references/experience-mining.md` Phase 8 section을 참조하여 인터뷰를 진행한다.
+P.A.R.R. ANY dimension FAIL 또는 구조 부재 OR 테마 편중 → `Read references/experience-mining.md` Phase 8 section을 참조하여 인터뷰를 진행한다.
 
 `[Phase 8/13: Problem-Solving Evaluation ✓]`
 
@@ -434,71 +434,118 @@ The resume-claim-examiner conducts technical interrogation at the granularity of
 
 | Unit Type | Granularity | Example | Notes |
 |-----------|-------------|---------|-------|
-| Self-introduction | 1 unit per Type | Type C (1 entry) | Type C involves tech connections, so it is evaluator-eligible. Type A/B/D can be skipped if no technical interrogation is needed |
+| Self-introduction | 1 unit per Type | Type C (1 entry) | Type C involves tech connections, so it is evaluator-eligible |
 | Career | 1 unit per bullet | "Built Kafka async pipeline, 3x throughput improvement" | Send a single bullet line to the evaluator, not the entire company block |
 | Problem-solving | 1 unit per entry | Entire "Payment System Fault Isolation" episode | Each entry is a single technical narrative — send it as a whole. **Compressed depth excluded** (too short for technical interrogation) |
 | Tech/Study | Not evaluator-eligible | — | Listing a tech stack is not subject to interrogation. Phase 0-10 evaluation is sufficient |
 
-**Selection criteria:** Only bullets/entries with P0/P1 findings from Phases 0-10 are subject to the Quality Gate. Bullets that are fully PASS are skipped.
+### Examiner Eligibility Rule
+
+기술적 클레임이나 문제해결 과정이 포함된 항목 → examiner 대상. 예외 없음.
+
+| Section | Examiner 대상? | 기준 |
+|---------|:---:|------|
+| 자기소개 Type A | 기술적 클레임 포함 시 YES | "Redis 도입" 같은 기술 언급 존재 여부 |
+| 자기소개 Type B | 기술적 에피소드 포함 시 YES | 엔지니어링 철학의 근거 에피소드에 기술 내용 |
+| 자기소개 Type C | **항상 YES** | 회사 도메인-기술 연결이 본질 |
+| 자기소개 Type D | 기술적 탐구 포함 시 YES | 기술 방향성 검증 필요 |
+| 경력 bullet | **항상 YES** | 모든 경력 bullet은 성과 주장 |
+| 문제해결 signature | **항상 YES** | 깊은 기술적 서사 |
+| 문제해결 detailed | **항상 YES** | 문제해결 과정 |
+| 문제해결 compressed | NO | 문장이 너무 짧아 기술 심문 불가 |
+| 기술/스터디 | NO | 나열이지 주장이 아님 |
+
+**Selection criteria:** ALL evaluator-eligible items are subject to the Quality Gate. Eligibility is determined by content type — not by Phase 0-10 P-level findings. Phase 0-10 findings are transmitted as context to the examiner, but do not gate eligibility. Internal "fully PASS" is not a skip condition.
 
 ### Quality Gate Loop
 
-For each P0/P1 bullet:
+For each evaluator-eligible item:
 
-1. Collect the findings for that bullet from the Phase 0-10 evaluation results
-2. **Generate 2-3 alternatives + tradeoff comparison** (safe / high-impact / balanced)
-3. **Dispatch original text + alternatives package to resume-claim-examiner** — evaluator performs 2-stage verification:
-   - Phase A: Is the original really problematic? → If no problem, APPROVE immediately (no revision needed)
-   - Phase B: Is each alternative technically sound? → APPROVE if at least 1 passes
-4. **APPROVE** → include verified alternatives in the HTML report. Move to next bullet.
-5. **REQUEST_CHANGES** → interview the user based on evaluator's Interview Hints → supplement sources → regenerate alternatives → restart from step 2 (infinite loop)
+1. Phase 0-10 findings를 항목 단위로 수집
+2. **Pre-Examiner Interview** — 유저와 findings 논의, 컨텍스트 수집, 대안 합의
+3. 합의 결과 기반 **2-3 alternatives 생성** (safe / high-impact / balanced)
+4. **resume-claim-examiner dispatch** — original + alternatives package 전송
+5. **APPROVE** → 확정, 다음 item
+6. **REQUEST_CHANGES** → FAIL axes 기반 추가 인터뷰 → 소스 보충 → alternatives 재생성 → 재dispatch → APPROVE 또는 user opt-out까지 **무한루프**
 
-**When the user reviews the HTML in Phase 12:**
-- Selects an alternative and proceeds → Pass
-- "Any other options?" / "Not great" → re-enter Phase 11 Quality Gate for that bullet
-- "No feedback" → Phase 13
-
-### Quality Gate Flow (Per Bullet)
+### Quality Gate Flow (Per Item)
 
 ```mermaid
 flowchart TB
-    START[Phase 0-10 evaluation complete] --> SELECT[Select bullets with P0/P1 findings]
-    SELECT --> PICK[Pick next bullet]
+    START[Phase 0-10 evaluation complete] --> SELECT[Select ALL evaluator-eligible items]
+    SELECT --> PICK[Pick next item]
 
-    PICK --> ALT[Generate 2-3 alternatives + tradeoffs]
-    ALT --> DISPATCH[resume-claim-examiner dispatch\n— send original + alternatives package]
+    PICK --> PRESENT[Present Phase 0-10 findings to user]
+    PRESENT --> INTERVIEW_PRE[Pre-Examiner Interview\n— discuss findings, collect context,\npropose improvements, reach agreement]
+    INTERVIEW_PRE --> ALT[Generate 2-3 alternatives based on interview]
+    ALT --> DISPATCH[resume-claim-examiner dispatch\n— stateless, full context]
 
     DISPATCH --> DIAG{Phase A: Interrogate original\nIs it really problematic?}
     DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
     DIAG -->|Problem confirmed| ALTEVAL{Phase B: Interrogate alternatives\nIs each one sound?}
 
-    ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternatives in HTML]
+    ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative]
     ALTEVAL -->|All fail| CHANGES[REQUEST_CHANGES\n+ Interview Hints]
 
-    CHANGES --> INTERVIEW[User interview\n4-Stage Bypass Protocol]
-    INTERVIEW --> SOURCE{Source obtained?}
+    CHANGES --> INTERVIEW_POST[Additional Interview\n— FAIL axes 기반, 지옥 끝까지\n4-Stage Bypass Protocol]
+    INTERVIEW_POST --> SOURCE{Source obtained?}
     SOURCE -->|YES| ALT
-    SOURCE -->|NO: 4-Stage exhausted| BEST[Best alternative with current source]
+    SOURCE -->|NO: 4-Stage exhausted| BEST[Best alternative with current sources]
     BEST --> OPTOUT{User Opt-Out?}
     OPTOUT -->|YES: move on| NEXT
     OPTOUT -->|NO: continue| DISPATCH
 
-    APPROVE_ORIG --> NEXT{Next bullet\nexists?}
+    APPROVE_ORIG --> NEXT{Next item\nexists?}
     APPROVE_ALT --> NEXT
 
     NEXT -->|YES| PICK
-    NEXT -->|NO| DONE[Phase 12: Generate HTML]
+    NEXT -->|NO| VERDICT_CHECK[Verdict Tracker 검증]
+    VERDICT_CHECK --> DONE[Phase 12: Generate HTML]
 
     style DISPATCH fill:#e74c3c,stroke:#333,color:#fff
-    style DIAG fill:#f39c12,stroke:#333,color:#fff
-    style ALTEVAL fill:#f39c12,stroke:#333,color:#fff
+    style INTERVIEW_PRE fill:#3498db,stroke:#333,color:#fff
+    style INTERVIEW_POST fill:#8e44ad,stroke:#333,color:#fff
     style DONE fill:#27ae60,stroke:#333,color:#fff
 ```
+
+### Pre-Examiner Interview Protocol
+
+Examiner dispatch 전에 유저와 항목별 상세 인터뷰를 진행한다. 인터뷰의 목적은 실패 대응이 아닌 **성공을 위한 사전 준비와 합의 도출**이다.
+
+**인터뷰 절차 (항목당):**
+
+1. **Findings 공유**: Phase 0-10 평가 결과를 항목 단위로 제시 — 어떤 기준이 PASS/FAIL인지, 어떤 점이 아쉬운지
+2. **컨텍스트 수집**: 해당 항목에 대한 추가 정보 — 어떤 고민이 있었는지, 어떤 트레이드오프가 있었는지, 어떤 맥락이 있었는지
+3. **대안 제시 + 논의**: 2-3개 대안을 제시하고 각각의 장단점을 논의. 유저의 선호와 방향성 확인
+4. **합의 도출**: 유저와 방향성에 합의한 후 최종 alternatives 확정
+
+**인터뷰 규칙:**
+- 메시지당 질문 하나. 복수 질문 금지.
+- 모든 findings에 대해 빠짐없이 논의. "사소하다"는 이유로 건너뛰지 않는다.
+- 유저의 모호한 답변 → 명확화 질문으로 파고든다.
+- 유저가 "다음으로" / "넘어가자" → 현재 항목의 인터뷰 종료, examiner dispatch 진행.
+- PASS 항목이라도 개선 여지가 있으면 제안. "아쉽지만 PASS"도 논의 대상.
 
 <critical>
 There is no escape from this loop without resume-claim-examiner APPROVE.
 The only exception is the user explicitly opting out (see "User Opt-Out" section below for recognized keywords).
 Advancing to the next bullet or proceeding to Phase 12 without APPROVE is forbidden.
+</critical>
+
+### Mandatory Verdict Tracker
+
+Phase 12 진입 전, 모든 evaluator-eligible 항목의 verdict를 내부적으로 추적한다. 빈 칸이 하나라도 있으면 Phase 12 진입이 차단된다.
+
+| # | Section | Item | Verdict | Loop Count |
+|---|---------|------|---------|------------|
+| 1 | 자기소개 C | "데이터 정합성..." | APPROVE / user-opt-out / ??? | N |
+
+verdict가 `???`인 항목이 존재하면 → 해당 항목으로 돌아가 Quality Gate 재진행.
+
+### Anti-Pattern: Internal PASS Bypass
+
+<critical>
+Phase 0-10에서 모든 경력/문제해결 항목이 "fully PASS"로 나왔더라도, evaluator-eligible 항목은 반드시 Quality Gate를 통과해야 한다. 내부 평가의 "PASS"는 examiner dispatch를 면제하지 않는다. Examiner는 독립적 관점에서 내부 평가가 놓친 문제를 발견할 수 있다.
 </critical>
 
 ### Evaluator Dispatch Protocol
