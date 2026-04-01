@@ -177,6 +177,11 @@ public record ProductPageQuery(int page, int size) {
 }
 ```
 
+**record vs class selection**:
+- **Default**: `record` + compact constructor — for 2–3 required parameters
+- **Allowed**: `class` + `@Getter` + private constructor + static factory — when 4+ parameters AND optional parameters exist
+- Validation must always occur in the constructor or static factory, regardless of choice
+
 ### 12. Messages
 
 - **Error messages**: Korean, `[field = value]` prefix AT START
