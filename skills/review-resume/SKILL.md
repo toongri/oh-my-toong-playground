@@ -1,11 +1,15 @@
 ---
 name: review-resume
-description: Use when the user asks to review, evaluate, check, or get feedback on their resume — even partially (self-introduction, career, problem-solving, or any single section). Triggers on resume review/evaluation/feedback, section-specific evaluation requests, interview readiness checks, achievement line quality, AI tone audit, or _config.yml + review intent. When a JD is provided, evaluates JD fit and recommends optimal content from the candidate pool. NOT for simple _config.yml edits, PDF generation, layout/CSS changes, or interview prep.
+description: Use when the user asks to review, evaluate, check, or get feedback on their resume — even partially (self-introduction/자기소개, career/경력, problem-solving/문제해결, or any single section). Triggers on resume review/evaluation/feedback (이력서 리뷰/검토/피드백), section-specific evaluation requests, interview readiness checks, achievement line quality, AI tone audit, or _config.yml + review intent. When a JD is provided, evaluates JD fit and recommends optimal content from the candidate pool. NOT for simple _config.yml edits, PDF generation, layout/CSS changes, or interview prep.
 ---
 
 # Review Resume
 
 You are a **critical resume evaluator and writing guide**, not a polisher. Your job is to find what will break in an interview, explain why it will break, and show exactly how to fix it.
+
+## Output Language
+
+Always communicate with the user and generate all output (interviews, feedback, HTML report) in Korean, regardless of the language of these instructions. Internal processing (evaluation criteria matching, structural analysis) uses English; all user-facing output is Korean.
 
 ## Absolute Rules
 
@@ -16,6 +20,17 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
    - **Extension**: Do not use experience keywords from the JD that the candidate does not actually have. Cross-check the JD against the resume, and verify with the user ("Do you have this experience?") before including any keyword that does not appear in the candidate's actual work history.
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
 6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a note candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
+
+## P.A.R.R. Terminology Glossary
+
+Resume section headers used in writing templates and evaluation. All references across documents MUST use these exact English terms. Korean equivalents are provided for user-facing output.
+
+| English (canonical) | Korean (user-facing) | Used In |
+|---------------------|---------------------|---------|
+| [Problem] | [문제] | problem-solving.md, section-evaluation.md |
+| [Solution Process] | [해결 과정] | problem-solving.md, section-evaluation.md |
+| [Verification] | [검증] | problem-solving.md, section-evaluation.md |
+| [Reflection] | [회고] | problem-solving.md, section-evaluation.md |
 
 ## Persistent Note System
 
@@ -147,11 +162,29 @@ The Evaluation Protocol defines 14 phases (0-13). Resume reviews involve extensi
 | 12 | N | Generate HTML Report + User Approval Gate | (inline below) |
 | 13 | MA | Note Accumulate | `references/note-system.md` |
 
+### Recognized Opt-Out Keywords
+
+The following keywords are recognized as opt-out signals across all Phases. Use this canonical set everywhere:
+
+| Keyword | Language |
+|---------|----------|
+| "next" | EN |
+| "move on" | EN |
+| "skip" | EN |
+| "this is OK" | EN |
+| "just continue" | EN |
+| "다음으로" | KR |
+| "넘어가자" | KR |
+| "넘어가" | KR |
+| "괜찮아" | KR |
+
+When any of these is detected, end the current interview/loop and proceed to the next phase or fallback guidance.
+
 ### Interview Trigger Precedence
 
 When the Experience Mining Interview trigger condition is met:
 1. Conduct the interview first (refer to `Read references/experience-mining.md` for the relevant Phase section)
-2. If the user opts out ("move on", "let's skip"), replace with the static guidance for that Phase
+2. If the user opts out (see Recognized Opt-Out Keywords above), replace with the static guidance for that Phase
 
 This rule applies equally to all interview triggers across all Phases.
 
@@ -526,7 +559,7 @@ Before dispatching to the examiner, conduct a detailed per-item interview with t
 - One question per message. Multiple questions are prohibited.
 - Discuss every finding without exception. Do not skip anything on the basis that it is "minor."
 - User gives a vague answer → probe with a clarifying question.
-- User says "move on" / "let's skip" → end the interview for the current item and proceed to examiner dispatch.
+- User gives an opt-out keyword (see Recognized Opt-Out Keywords) → end the interview for the current item and proceed to examiner dispatch.
 - Even PASS items — propose improvements if there is room. "Barely passing" is still worth discussing.
 
 <critical>
@@ -592,7 +625,7 @@ When sending a single bullet to the resume-claim-examiner, use a format that **e
 
 ### User Opt-Out
 
-If the user says "move on" / "this is OK" / "skip" / "just continue" → end the current section loop. Status: "user-accepted (evaluator-not-approved)". Include unresolved feedback in the HTML report.
+If the user gives an opt-out keyword (see Recognized Opt-Out Keywords above) → end the current section loop. Status: "user-accepted (evaluator-not-approved)". Include unresolved feedback in the HTML report.
 
 **Reference:** Read `references/content-quality-gate.md` for full protocol including alternative suggestion format, interview loop, HTML format, and whole-resume feedback loop.
 
@@ -616,7 +649,7 @@ After opening the HTML report:
 
 | Response Type | Examples | Action |
 |---------------|----------|--------|
-| Explicit no feedback | "None", "OK", "No feedback", "Move on" | → Proceed to Phase 13 |
+| Explicit no feedback | "None", "OK", "No feedback", "Move on" (see Recognized Opt-Out Keywords) | → Proceed to Phase 13 |
 | Ambiguous response | "Looks okay I guess", "Hmm...", "Roughly OK" | → Re-ask: "Is there anything specific you'd like to revise?" |
 | Section-specific feedback | "Self-intro Type C is weak", "Career bullet 2nd..." | → Re-enter Phase 11 Quality Gate for that section |
 | Overall direction feedback | "Overall impact is weak", "Not differentiated enough" | → Re-enter Phase 11 Quality Gate for relevant sections |
