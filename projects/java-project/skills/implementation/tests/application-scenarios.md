@@ -730,7 +730,7 @@ public class Order extends BaseEntity {
 
 **Expected Correct Output**:
 ```java
-public record Money(BigDecimal amount, Currency currency) {
+public record Money(BigDecimal amount, Currency currency) implements Comparable<Money> {
 
     public static final Money ZERO = new Money(BigDecimal.ZERO, Currency.KRW);
 
@@ -750,6 +750,12 @@ public record Money(BigDecimal amount, Currency currency) {
 
     public boolean isNegative() {
         return amount.compareTo(BigDecimal.ZERO) < 0;
+    }
+
+    @Override
+    public int compareTo(Money other) {
+        validateSameCurrency(other);
+        return amount.compareTo(other.amount);
     }
 
     private void validateSameCurrency(Money other) {
