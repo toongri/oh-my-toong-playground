@@ -74,7 +74,7 @@ See `references/error-handling.md` for ErrorType enum and patterns.
 ### 4. DTO Flow
 
 ```
-Request.toCriteria() -> Criteria.to() -> Command -> Entity -> Info.from() -> Response.from()
+Request.toCriteria() -> Criteria.toCommand() -> Command -> Entity -> Info.from() -> Response.from()
 ```
 
 See `references/dto-patterns.md` for complete layer structure.
@@ -171,8 +171,8 @@ Seven Rules:
 ```java
 public record ProductPageQuery(int page, int size) {
     public ProductPageQuery {
-        if (page < 0) throw new CoreException(ErrorType.INVALID_INPUT, "[page = " + page + "] 페이지는 0 이상이어야 합니다.");
-        if (size < 1 || size > 100) throw new CoreException(ErrorType.INVALID_INPUT, "[size = " + size + "] 페이지 크기는 1~100이어야 합니다.");
+        if (page < 0) throw new CoreException(ErrorType.BAD_REQUEST, "[page = " + page + "] 페이지는 0 이상이어야 합니다.");
+        if (size < 1 || size > 100) throw new CoreException(ErrorType.BAD_REQUEST, "[size = " + size + "] 페이지 크기는 1~100이어야 합니다.");
     }
 }
 ```
