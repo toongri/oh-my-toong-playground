@@ -8,6 +8,17 @@ Run `git branch -a` and inspect `_config.yml` on other branches to understand ex
 
 ## Step 2. JD Analysis
 
+**If the JD input is a URL, retrieve the page content first:**
+
+1. **Detect URL**: Check if the JD input starts with `http://` or `https://`.
+2. **Try WebFetch first**: Use `WebFetch` with the URL to extract the page text.
+   - If the returned text contains meaningful job description content (role, requirements, etc.), proceed with that text.
+3. **Fallback to Playwright MCP**: If WebFetch returns empty content, a login wall, or clearly incomplete text (e.g., JavaScript-rendered career sites like Greenhouse, Lever, Workday), use Playwright MCP:
+   - `mcp__playwright__browser_navigate` — navigate to the URL
+   - `mcp__playwright__browser_snapshot` — capture the rendered DOM text
+   - Extract the visible job description text from the snapshot.
+4. **Proceed with collected text**: Use the fetched text as the JD input for all analysis steps below.
+
 If a JD (Job Description) is provided, analyze it before evaluation:
 
 1. **Team identification**: Which team is hiring? (payments team, display team, CRM team, platform team, etc.) The team determines which candidate traits are most relevant.
