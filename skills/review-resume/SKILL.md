@@ -197,6 +197,7 @@ Report note status to user:
 
 Before evaluation, perform preparation: analyze the JD (if provided) and research the target company.
 
+- **Step 0**: If JD is provided as a URL — fetch the page content via WebFetch or Playwright MCP before analysis
 - **Step 1**: JD Analysis — extract team, keywords, implicit problems, and what is NOT in the JD
 - **Step 2**: Company Research — core values, tech blog, product/service, career page, recent news
 
