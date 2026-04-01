@@ -12,10 +12,7 @@ agents:
     - argus
     - chunk-reviewer
     - spec-reviewer
-    - component: sisyphus-junior
-      add-skills:
-        - testing
-        - implementation
+    - sisyphus-junior
 
 commands:
   items:
