@@ -21,7 +21,7 @@ HTTP Request
 ┌─────────────────────────────────────────────────────────┐
 │  Application Layer                                      │
 │  {Domain}Criteria.{Action}                             │
-│  → to() conversion                                     │
+│  → toCommand() conversion                              │
 └─────────────────────────────────────────────────────────┘
      │
      ▼
@@ -84,7 +84,7 @@ public class CouponCriteria {
         Long userId,
         CouponType couponType
     ) {
-        public CouponCommand.Issue to() {
+        public CouponCommand.Issue toCommand() {
             return new CouponCommand.Issue(
                 userId,
                 couponType

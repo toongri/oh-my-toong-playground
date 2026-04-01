@@ -180,7 +180,7 @@ public ProductInfo.FindProducts findProducts(ProductCriteria.FindProducts criter
         // 3. Backfill missing data to cache
         var dbCacheMap = dbProducts.stream()
             .collect(Collectors.toMap(
-                p -> new ProductCacheKeys.ProductDetail(p.productId()),
+                p -> new ProductCacheKeys.ProductDetail(p.getProductId()),
                 CachedProductDetailV1::from
             ));
         cacheTemplate.putAll(dbCacheMap);
@@ -191,12 +191,12 @@ public ProductInfo.FindProducts findProducts(ProductCriteria.FindProducts criter
 
     // Cache miss: fetch from DB and cache both List + Detail
     var slice = productService.findProducts(criteria);
-    var productIds = slice.content().stream().map(p -> p.productId()).toList();
+    var productIds = slice.content().stream().map(p -> p.getProductId()).toList();
     cacheTemplate.put(cacheKey, new CachedProductList(productIds, slice.hasNext()));
 
     var detailCacheMap = slice.content().stream()
         .collect(Collectors.toMap(
-            p -> new ProductCacheKeys.ProductDetail(p.productId()),
+            p -> new ProductCacheKeys.ProductDetail(p.getProductId()),
             CachedProductDetailV1::from
         ));
     cacheTemplate.putAll(detailCacheMap);

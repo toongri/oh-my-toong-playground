@@ -284,12 +284,10 @@ public class Point extends BaseEntity {
 ```java
 // Interface Layer - Request
 public class CouponV1Request {
-    public static class Issue {
-        @Schema(description = "사용자 ID", required = true)
-        private final Long userId;
-        @Schema(description = "쿠폰 타입", required = true)
-        private final String couponType;
-
+    public record Issue(
+            @Schema(description = "사용자 ID", required = true) Long userId,
+            @Schema(description = "쿠폰 타입", required = true) String couponType
+    ) {
         public CouponCriteria.Issue toCriteria() {
             return new CouponCriteria.Issue(userId, CouponType.valueOf(couponType));
         }
@@ -298,10 +296,7 @@ public class CouponV1Request {
 
 // Application Layer - Criteria
 public class CouponCriteria {
-    public static class Issue {
-        private final Long userId;
-        private final CouponType couponType;
-
+    public record Issue(Long userId, CouponType couponType) {
         public CouponCommand.Issue toCommand() {
             return new CouponCommand.Issue(userId, couponType);
         }
@@ -315,11 +310,7 @@ public class CouponCommand {
 
 // Application Layer - Info
 public class CouponInfo {
-    public static class Issue {
-        private final Long couponId;
-        private final String code;
-        private final LocalDateTime expirationDate;
-
+    public record Issue(Long couponId, String code, LocalDateTime expirationDate) {
         public static Issue from(Coupon coupon) {
             return new Issue(coupon.getId(), coupon.getCode(), coupon.getExpirationDate());
         }
@@ -328,13 +319,9 @@ public class CouponInfo {
 
 // Interface Layer - Response
 public class CouponV1Response {
-    public static class Issue {
-        private final Long couponId;
-        private final String code;
-        private final LocalDateTime expirationDate;
-
+    public record Issue(Long couponId, String code, LocalDateTime expirationDate) {
         public static Issue from(CouponInfo.Issue info) {
-            return new Issue(info.getCouponId(), info.getCode(), info.getExpirationDate());
+            return new Issue(info.couponId(), info.code(), info.expirationDate());
         }
     }
 }
