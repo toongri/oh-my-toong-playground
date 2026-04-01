@@ -1,0 +1,23 @@
+hooks:
+  UserPromptSubmit:
+    - component: keyword-detector.sh
+      timeout: 10
+  PreToolUse:
+    - component: pre-tool-enforcer.sh
+      timeout: 5
+  SessionStart:
+    - component: session-start.sh
+      timeout: 10
+  Stop:
+    - component: persistent-mode
+      timeout: 15
+
+config:
+  enableAllProjectMcpServers: true
+
+plugins:
+  items:
+    - name: jdtls-lsp@claude-plugins-official
+      check: jq -e '.plugins["jdtls-lsp@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add anthropics/claude-plugins-official

@@ -1,14 +1,14 @@
 #!/bin/bash
 # =============================================================================
 # Kotlin 잔재 검출 스크립트
-# projects/java-project/skills/ 하위 Markdown 파일의 코드 블록 내에서
+# projects/toong-java-spring-template/skills/ 하위 Markdown 파일의 코드 블록 내에서
 # Kotlin 문법 잔재를 검출한다.
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-TARGET_DIR="${ROOT_DIR}/projects/java-project/skills"
+TARGET_DIR="${ROOT_DIR}/projects/toong-java-spring-template/skills"
 
 # 검출 패턴 목록 (ERE 정규식)
 # var 는 Java 21에서도 사용하므로 `var \w+:` (Kotlin 타입 선언) 패턴으로 한정
