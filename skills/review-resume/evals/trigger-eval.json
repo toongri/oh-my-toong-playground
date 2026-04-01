@@ -1,10 +1,10 @@
 [
   {
-    "query": "이력서 좀 봐줘. _config.yml에 있어. 전반적으로 어떤지 피드백 부탁해",
+    "query": "Can you review my resume? It's in _config.yml. Please give me overall feedback.",
     "should_trigger": true
   },
   {
-    "query": "내 이력서 리뷰해줘. 자기소개 부분이 좀 약한 것 같은데 어떻게 개선하면 좋을지 알려줘",
+    "query": "Review my resume. The self-introduction section feels a bit weak — please tell me how to improve it.",
     "should_trigger": true
   },
   {
@@ -12,23 +12,23 @@
     "should_trigger": true
   },
   {
-    "query": "이력서 검토 부탁해. 특히 문제 해결 섹션에서 트레이드오프 분석이 충분한지 봐줘. 캐시 적용이랑 POS 연동 쪽",
+    "query": "Please review my resume. Specifically, check if the trade-off analysis in the problem-solving section is sufficient — the cache implementation and POS integration parts.",
     "should_trigger": true
   },
   {
-    "query": "이력서 피드백 좀 줘. 경력 섹션 bullet들이 임팩트 있는지, 문제 해결 섹션이 면접에서 버틸 수 있는 수준인지 전체적으로 확인해줘",
+    "query": "Give me feedback on my resume. Check overall whether the career section bullets have impact, and whether the problem-solving section is strong enough to hold up in an interview.",
     "should_trigger": true
   },
   {
-    "query": "지금 이력서 상태 어떤지 한번 봐줄래? 자기소개가 너무 긴 것 같기도 하고, 문제 해결 프로젝트 순서도 이게 맞나 모르겠어",
+    "query": "Can you take a look at my resume? The self-introduction might be too long, and I'm not sure the problem-solving project order is right either.",
     "should_trigger": true
   },
   {
-    "query": "_config.yml 이력서 전체를 S1-S5, D1-D6 기준으로 평가해줘. P.A.R.R.도 시그니처 프로젝트에 대해 해줘",
+    "query": "Evaluate the entire resume in _config.yml using S1-S5 and D1-D6 criteria. Also apply P.A.R.R. to the signature project.",
     "should_trigger": true
   },
   {
-    "query": "이력서에서 업계 표준으로 보일 수 있는 항목들 좀 찾아줘. Redis 캐시 적용이나 유닛 테스트 도입 같은 게 성과로 읽히는지 확인",
+    "query": "Find the items in my resume that might look like industry standard. Check if things like Redis cache implementation or introducing unit tests come across as actual achievements.",
     "should_trigger": true
   },
   {
@@ -36,55 +36,55 @@
     "should_trigger": true
   },
   {
-    "query": "이력서 자기소개 톤이 너무 AI스러운 것 같은데 humanizer 돌려서 체크해줄 수 있어?",
+    "query": "The self-introduction tone in my resume feels too AI-generated. Can you run the humanizer and check?",
     "should_trigger": true
   },
   {
-    "query": "토스증권 서버 개발자에 지원하려고 해. JD 보내줄게.\n\n[채용공고]\n서버 엔지니어\n- Kotlin/Java 기반 서버 개발 경험\n- 대규모 트래픽 처리 경험",
+    "query": "I want to apply to Toss Securities as a server developer. I'll send you the JD.\n\n[Job Posting]\nServer Engineer\n- Server development experience with Kotlin/Java\n- Experience handling large-scale traffic",
     "should_trigger": false
   },
   {
-    "query": "라인망가 지원 준비해야돼. JD는 cover-letters/linemanga-jd.yaml에 있어",
+    "query": "I need to prepare my application for Line Manga. The JD is in cover-letters/linemanga-jd.yaml.",
     "should_trigger": false
   },
   {
-    "query": "_config.yml에서 마인이스 경력 description에 오타가 있어. 스게줄러를 스케줄러로 고쳐줘",
+    "query": "There's a typo in the Mines career description in _config.yml. Fix 'schedular' to 'scheduler'.",
     "should_trigger": false
   },
   {
-    "query": "이력서 레이아웃에서 문제해결 섹션이 페이지 넘김이 이상하게 돼. _sass/modern-resume-theme.scss에서 page-break 관련 스타일 좀 수정해줘",
+    "query": "The problem-solving section has a weird page break in the resume layout. Please update the page-break related styles in _sass/modern-resume-theme.scss.",
     "should_trigger": false
   },
   {
-    "query": "bun run pdf 실행하면 Docker 연결 에러가 나는데 왜 그런지 봐줘. Error: connect ECONNREFUSED 라고 뜸",
+    "query": "When I run bun run pdf, I get a Docker connection error. Can you check why? It shows Error: connect ECONNREFUSED.",
     "should_trigger": false
   },
   {
-    "query": "bemyfriends/260317 브랜치랑 main 브랜치 이력서 diff 보여줘. 뭐가 달라졌는지 확인하고 싶어",
+    "query": "Show me the resume diff between the bemyfriends/260317 branch and the main branch. I want to see what changed.",
     "should_trigger": false
   },
   {
-    "query": "면접 준비 도와줘. 내 이력서 기반으로 예상 질문 뽑아줘. 특히 캐시 적용 프로젝트랑 LLM 메타데이터 추론 쪽으로",
+    "query": "Help me prepare for interviews. Generate expected questions based on my resume — especially around the cache implementation project and LLM metadata inference.",
     "should_trigger": false
   },
   {
-    "query": "기술 섹션에 Docker랑 Kubernetes 추가하고 싶어. _config.yml 수정해줘",
+    "query": "I want to add Docker and Kubernetes to the tech stack section. Please update _config.yml.",
     "should_trigger": false
   },
   {
-    "query": "generate-resume-pdf.ts 스크립트에서 margin을 좀 줄이고 싶어. top을 11mm에서 8mm로 바꿔줘",
+    "query": "I want to reduce the margin in the generate-resume-pdf.ts script. Change top from 11mm to 8mm.",
     "should_trigger": false
   },
   {
-    "query": "쿠팡 백엔드 엔지니어에 지원하려고 해. JD 기반으로 이력서 맞춤화하고 PDF까지 뽑아줘",
+    "query": "I want to apply for a backend engineer role at Coupang. Customize my resume based on the JD and generate the PDF as well.",
     "should_trigger": true
   },
   {
-    "query": "네이버 검색 백엔드 JD 보고 이력서 리뷰해줘. 경력이랑 문제해결 섹션이 이 JD에 맞는지 봐줘. _config.yml에 있어",
+    "query": "Review my resume based on the Naver Search backend JD. Check if the career and problem-solving sections fit this JD. It's in _config.yml.",
     "should_trigger": true
   },
   {
-    "query": "이 JD에 맞게 내 이력서 경력 bullet을 어떤 걸 앞에 세우고 어떤 걸 빼야 할지 추천해줘. _config.yml 기반으로",
+    "query": "Based on this JD, recommend which career bullets to move to the front and which to cut from my resume. Based on _config.yml.",
     "should_trigger": true
   }
 ]

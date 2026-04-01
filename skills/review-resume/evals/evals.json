@@ -3,8 +3,8 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘.\n\nJD 핵심:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- 대용량 트래픽, 동시성 처리, 실시간 데이터 처리\n- 유실없는 데이터 정합성과 신뢰성\n- 트러블슈팅, 성능 튜닝\n\n이력서는 _config.yml에 있어.",
-      "expected_output": "Note load, Pre-eval research (JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, 경력 6개 기준/문제해결 6개 기준, depth-based problem-solving eval, JD keyword matching + content selection, Cross-section consistency check, AI Tone Audit, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible items + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, bridge pattern check, generic opener detection, portfolio theme diversity, skill section placement",
+      "prompt": "Review my resume based on the Toss Securities server developer JD.\n\nJD highlights:\n- Java/Kotlin, Spring Framework, Redis, Kafka\n- High-volume traffic, concurrency handling, real-time data processing\n- Data consistency and reliability without data loss\n- Troubleshooting, performance tuning\n\nThe resume is in _config.yml.",
+      "expected_output": "Note load, Pre-eval research (JD + company), Self-intro type-based eval (A/B/C/D + global), C1-C5, career 6-criteria/problem-solving 6-criteria, depth-based problem-solving eval, JD keyword matching + content selection, Cross-section consistency check, AI Tone Audit, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible items + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N items, P1 N items, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, bridge pattern check, generic opener detection, portfolio theme diversity, skill section placement",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: checks $OMT_DIR/review-resume/ and reports note status (loaded or auto-seeding)"},
         {"text": "pre-eval-jd-analysis", "description": "Performs JD analysis: team identification, keyword extraction (technical/domain/culture), implicit problems from JD"},
@@ -19,8 +19,8 @@
         {"text": "type-d-no-metric-requirement", "description": "Type D not failed for lacking metrics"},
         {"text": "no-jd-keyword-quoting", "description": "Does not parrot JD keywords back in self-intro suggestions"},
         {"text": "evidence-based-jd-matching", "description": "Distinguishes weak from strong matches in JD keyword analysis"},
-        {"text": "career-differentiated-evaluation", "description": "Career bullets evaluated with career-specific criteria (인과 연결, 수치 구체성, 역할 명확성, 차별화, 면접 유도력, 섹션 적합성) in natural language"},
-        {"text": "ps-differentiated-evaluation", "description": "Problem-solving entries evaluated with PS-specific criteria (탐색적 인과, 근거 깊이, 사고 귀속, 대안 비교, 면접 심층성, 섹션 적합성) in natural language"},
+        {"text": "career-differentiated-evaluation", "description": "Career bullets evaluated with career-specific criteria (causal linkage, metric specificity, role clarity, differentiation, interview hook potential, section fit) in natural language"},
+        {"text": "ps-differentiated-evaluation", "description": "Problem-solving entries evaluated with PS-specific criteria (exploratory causation, reasoning depth, cognitive attribution, alternative comparison, interview depth, section fit) in natural language"},
         {"text": "career-hook-potential", "description": "Career bullets evaluated for interview hook quality — does this line provoke interviewer curiosity?"},
         {"text": "ps-interview-depth", "description": "Problem-solving entries evaluated for interview depth — can this entry survive 3-level pushback?"},
         {"text": "career-vs-ps-causation-distinction", "description": "Career uses linear causation (goal→action→outcome) while problem-solving uses diagnostic causation (detection→diagnosis→attempt→failure→solution)"},
@@ -38,18 +38,18 @@
         {"text": "quality-gate-approve-or-optout", "description": "Phase 11: each evaluator-eligible item requires resume-claim-examiner APPROVE or explicit user opt-out before proceeding to Phase 12. No item advances without one of these two outcomes. Mandatory Verdict Tracker blocks Phase 12 entry if any eligible item lacks a verdict."},
         {"text": "pre-examiner-interview", "description": "Phase 11: conducts pre-examiner interview with user for each evaluator-eligible item — presents findings, collects context, discusses alternatives, reaches agreement BEFORE dispatching to resume-claim-examiner"},
         {"text": "note-accumulate", "description": "Phase 13: proposes note accumulation (new candidates, updates, preferences) and asks for user confirmation"},
-        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N items, P1 N items) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 12 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
         {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"},
         {"text": "cross-section-consistency", "description": "Checks that projects/episodes mentioned in self-introduction have corresponding entries in problem-solving or career sections. Flags hooks without backing evidence."},
         {"text": "type-a-bridge-pattern", "description": "Type A evaluation considers bridge pattern: bold opener → reason(bridge) → episode 3-beat structure"},
-        {"text": "generic-opener-detection", "description": "Evaluation checks for generic openers (차별화 실패: 10명 테스트) and self-claim endings (~편입니다, ~타입입니다). Flags if found, passes if resume has no such patterns."},
-        {"text": "type-c-closing-contribution", "description": "Type C closing evaluated for contribution framing — flags desire expressions (하고 싶다) and recommends capability/contribution vision instead"},
-        {"text": "overview-problem-split-awareness", "description": "When [문제] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [개요]+[문제] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
+        {"text": "generic-opener-detection", "description": "Evaluation checks for generic openers (differentiation failure: the 10-person test) and self-claim endings (e.g., 'I am the type who...'). Flags if found, passes if resume has no such patterns."},
+        {"text": "type-c-closing-contribution", "description": "Type C closing evaluated for contribution framing — flags desire expressions ('I want to...') and recommends capability/contribution vision instead"},
+        {"text": "overview-problem-split-awareness", "description": "When [Problem] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [Overview]+[Problem] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
         {"text": "retrospective-optional-guidance", "description": "Treats retrospective as optional; flags sentimental growth narrative as anti-pattern but accepts architectural limit + extension direction (2-3 lines)"},
-        {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags when 2+ entries share the same theme (정합성, 성능, 안정성, 비즈니스 등)"},
+        {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags when 2+ entries share the same theme (consistency, performance, stability, business impact, etc.)"},
         {"text": "skill-section-placement", "description": "Evaluates technical skill section placement — checks if skill section is positioned for JD keyword matching within 7-second recruiter scan"},
         {"text": "phase-tracking-consistency", "description": "Phase tracking markers use [Phase N/13: ...] format with correct total (13), and phase names in markers match SKILL.md Phase Map: 0=Note Load, 1=Pre-Evaluation Research, 2=Self-Introduction Evaluation, 3=Target Position Gate, 4=Developer Competency Assessment, 5=Section-Specific Evaluation, 6=3-Level Pushback Simulation, 7=First-Page Primacy + JD Keyword Matching, 8=Problem-Solving Evaluation, 9=Technical Substance Verification, 10=AI Tone Audit, 11=Per-Bullet Content Quality Gate, 12=Generate HTML Report, 13=Note Accumulate"}
       ],
@@ -57,8 +57,8 @@
     },
     {
       "id": 2,
-      "prompt": "이력서 봐줘. 전반적으로 피드백 부탁해. _config.yml에 있어.",
-      "expected_output": "Note load, Pre-eval research (NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, 경력 6개 기준/문제해결 6개 기준, depth-based problem-solving eval, Cross-section consistency check, AI Tone Audit, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible items + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, bridge pattern check, portfolio theme diversity, skill section placement",
+      "prompt": "Review my resume. General feedback please. It's in _config.yml.",
+      "expected_output": "Note load, Pre-eval research (NO company research), Self-intro type-based eval (A/B/D, no Type C), C1-C5, career 6-criteria/problem-solving 6-criteria, depth-based problem-solving eval, Cross-section consistency check, AI Tone Audit, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible items + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N items, P1 N items, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, bridge pattern check, portfolio theme diversity, skill section placement",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: checks note directory and reports status"},
         {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified"},
@@ -68,8 +68,8 @@
         {"text": "type-c-absent-normal", "description": "Absence of Type C noted as normal (no target) — not flagged as problem"},
         {"text": "type-d-no-metric-requirement", "description": "Type D paragraph not failed for lacking metrics"},
         {"text": "post-evaluation-options", "description": "Concrete options offered after findings"},
-        {"text": "career-differentiated-evaluation", "description": "Career bullets evaluated with career-specific criteria in natural language"},
-        {"text": "ps-differentiated-evaluation", "description": "Problem-solving entries evaluated with PS-specific criteria in natural language"},
+        {"text": "career-differentiated-evaluation", "description": "Career bullets evaluated with career-specific criteria (causal linkage, metric specificity, role clarity, differentiation, interview hook potential, section fit) in natural language"},
+        {"text": "ps-differentiated-evaluation", "description": "Problem-solving entries evaluated with PS-specific criteria (exploratory causation, reasoning depth, cognitive attribution, alternative comparison, interview depth, section fit) in natural language"},
         {"text": "career-hook-potential", "description": "Career bullets evaluated for interview hook quality"},
         {"text": "career-vs-ps-different-criteria", "description": "Career and problem-solving sections use different evaluation criteria appropriate to each section's purpose"},
         {"text": "section-independence", "description": "Career and problem-solving sections are evaluated independently with separate section-specific criteria. Note: cross-section consistency between self-introduction and other sections IS checked separately."},
@@ -84,14 +84,14 @@
         {"text": "quality-gate-approve-or-optout", "description": "Phase 11: each evaluator-eligible item requires resume-claim-examiner APPROVE or explicit user opt-out before proceeding to Phase 12. No item advances without one of these two outcomes. Mandatory Verdict Tracker blocks Phase 12 entry if any eligible item lacks a verdict."},
         {"text": "pre-examiner-interview", "description": "Phase 11: conducts pre-examiner interview with user for each evaluator-eligible item — presents findings, collects context, discusses alternatives, reaches agreement BEFORE dispatching to resume-claim-examiner"},
         {"text": "note-accumulate", "description": "Phase 13: proposes note accumulation and asks for user confirmation"},
-        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N items, P1 N items) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 12 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
         {"text": "cross-section-consistency", "description": "Checks that projects/episodes mentioned in self-introduction have corresponding entries in problem-solving or career sections. Flags hooks without backing evidence."},
         {"text": "type-a-bridge-pattern", "description": "Type A evaluation considers bridge pattern: bold opener → reason(bridge) → episode 3-beat structure"},
-        {"text": "generic-opener-detection", "description": "Evaluation checks for generic openers (차별화 실패: 10명 테스트) and self-claim endings (~편입니다, ~타입입니다). Flags if found, passes if resume has no such patterns."},
-        {"text": "overview-problem-split-awareness", "description": "When [문제] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [개요]+[문제] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
+        {"text": "generic-opener-detection", "description": "Evaluation checks for generic openers (differentiation failure: the 10-person test) and self-claim endings (e.g., 'I am the type who...'). Flags if found, passes if resume has no such patterns."},
+        {"text": "overview-problem-split-awareness", "description": "When [Problem] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [Overview]+[Problem] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
         {"text": "retrospective-optional-guidance", "description": "Treats retrospective as optional; flags sentimental growth narrative but accepts architectural limit/extension (2-3 lines)"},
         {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags 2+ entries sharing same theme"},
         {"text": "skill-section-placement", "description": "Evaluates technical skill section placement for recruiter scan efficiency"}
@@ -100,26 +100,26 @@
     },
     {
       "id": 3,
-      "prompt": "이력서 문제해결 섹션만 리뷰해줘. 당근 결제팀 지원하려고 해. _config.yml에 있어.\n\nJD 핵심:\n- 결제 시스템 설계/운영\n- 대규모 트래픽 환경 안정성\n- 장애 대응 및 복원력\n- Kotlin, Spring Boot",
-      "expected_output": "Note load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible entries + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N건, P1 N건, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, overview/problem split awareness, portfolio theme diversity",
+      "prompt": "Review only the problem-solving section of my resume. I'm applying to Daangn's payments team. It's in _config.yml.\n\nJD highlights:\n- Payment system design/operation\n- Stability in high-volume traffic environments\n- Incident response and resilience\n- Kotlin, Spring Boot",
+      "expected_output": "Note load (with candidate pool check for problem-solving/), depth classification of all entries, depth-specific evaluation, JD keyword matching + content selection, candidate pool recommendation if available, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible entries + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 output: HTML report + user approval → Phase 13 Note accumulate: HTML file with summary statistics (P0 N items, P1 N items, etc.), Section-by-section inline HTML comment blocks with CSS classes (.comment-p0, .comment-p1, etc.) and suggested revisions, overview/problem split awareness, portfolio theme diversity",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: loads note and reports problem-solving candidate pool status"},
         {"text": "depth-classification", "description": "Classifies each problem-solving entry by depth (signature/detailed/compressed)"},
         {"text": "signature-depth-full-evaluation", "description": "Signature depth entries get comprehensive evaluation covering all P.A.R.R. dimensions (P1-P5) — problem detection, failure arc, why-chain, stopping judgment, reflection"},
         {"text": "compressed-depth-handling", "description": "Either evaluates compressed entries with volume guide, OR detects their absence and recommends adding compressed entries per career-level guide"},
         {"text": "career-level-appropriate", "description": "Evaluation criteria match the candidate's career level (not applying junior criteria to mid/senior or vice versa)"},
-        {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (결제, 장애 대응 prioritized)"},
+        {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (payments, incident response prioritized)"},
         {"text": "candidate-pool-awareness", "description": "If note has problem-solving candidates, mentions available alternatives or suggests swaps for JD fit"},
         {"text": "note-accumulate", "description": "Proposes accumulating new insights from this review session"},
         {"text": "applies-problem-solving-criteria", "description": "Uses depth classification flowchart, P.A.R.R. dimensions (P1-P5/P6-P8), or career-level criteria from references/problem-solving.md"},
-        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N items, P1 N items) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 12 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
         {"text": "jd-content-selection", "description": "When JD is provided, actively recommends which career bullets, problem-solving entries, or self-intro types to feature/swap based on JD relevance"},
-        {"text": "overview-problem-split-awareness", "description": "When [문제] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [개요]+[문제] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
+        {"text": "overview-problem-split-awareness", "description": "When [Problem] section is verbose (2+ signals: biz+tech mixed, 5+ lines, 3+ lines before core issue), recommends [Overview]+[Problem] split. When not verbose, stating 'split unnecessary' or simply not mentioning it counts as PASS."},
         {"text": "retrospective-optional-guidance", "description": "Treats retrospective as optional; flags sentimental growth narrative but accepts architectural limit/extension direction"},
-        {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags 2+ entries sharing same theme (정합성, 성능, 안정성, 비즈니스 등)"},
+        {"text": "portfolio-theme-diversity", "description": "Checks theme diversity across problem-solving entries; flags 2+ entries sharing same theme (consistency, performance, stability, business impact, etc.)"},
         {"text": "quality-gate-dispatch", "description": "Phase 11: resume-claim-examiner agent is dispatched for ALL evaluator-eligible items (career bullets, problem-solving entries, self-intro with technical content) — either actual dispatch or declaration of intent. Eligibility is by content type, not P-level findings."},
         {"text": "quality-gate-alternatives", "description": "Phase 11: generates 2-3 revision alternatives with tradeoff comparison (safe/high-impact/balanced directions) for each evaluator-eligible item, based on pre-examiner interview results, before resume-claim-examiner dispatch"},
         {"text": "quality-gate-approve-or-optout", "description": "Phase 11: each evaluator-eligible item requires resume-claim-examiner APPROVE or explicit user opt-out before proceeding to Phase 12. No item advances without one of these two outcomes. Mandatory Verdict Tracker blocks Phase 12 entry if any eligible item lacks a verdict."},
@@ -129,8 +129,8 @@
     },
     {
       "id": 4,
-      "prompt": "이력서 리뷰해줘. 신입 개발자인데 인턴 1회 경험만 있어. _config.yml에 있어.",
-      "expected_output": "Note load, Pre-eval research (no target company → no company research), Self-intro type-based eval (Type A/B/D; multiple FAIL expected due to thin experience), Phase 2 interview trigger (experience-mining.md Phase 2: 자기소개 ANY type FAIL), C1-C5 competency assessment with WEAK/ABSENT on C2/C3/C4 axes, Phase 4 interview trigger (experience-mining.md Phase 4: ANY axis WEAK/ABSENT), Section-specific evaluation, Phase 5 interview trigger (ANY criterion FAIL), 4-Stage Bypass Protocol executed per triggered phase (direct → reframing → adjacent → routine), Discovered Candidates Working Set populated with mined experiences, graceful opt-out if user declines interview, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible items + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 HTML report + user approval → Phase 13 Note accumulate",
+      "prompt": "Review my resume. I'm a new grad developer with only one internship experience. It's in _config.yml.",
+      "expected_output": "Note load, Pre-eval research (no target company → no company research), Self-intro type-based eval (Type A/B/D; multiple FAIL expected due to thin experience), Phase 2 interview trigger (experience-mining.md Phase 2: self-introduction ANY type FAIL), C1-C5 competency assessment with WEAK/ABSENT on C2/C3/C4 axes, Phase 4 interview trigger (experience-mining.md Phase 4: ANY axis WEAK/ABSENT), Section-specific evaluation, Phase 5 interview trigger (ANY criterion FAIL), 4-Stage Bypass Protocol executed per triggered phase (direct → reframing → adjacent → routine), Discovered Candidates Working Set populated with mined experiences, graceful opt-out if user declines interview, Phase 11 Quality Gate: resume-claim-examiner dispatch for ALL evaluator-eligible items + 2-3 alternatives + APPROVE/opt-out loop, Phase 12 HTML report + user approval → Phase 13 Note accumulate",
       "assertions": [
         {"text": "note-load", "description": "Phase 0: checks note directory and reports status (self-introduction/career/problem-solving candidate counts)"},
         {"text": "pre-eval-no-unnecessary-research", "description": "Does NOT perform company research when no target company is specified"},
@@ -138,9 +138,9 @@
         {"text": "global-evaluation", "description": "Global criteria evaluated after per-type (paragraph count, independence, first sentence, original framing)"},
         {"text": "no-s1-s5-codes", "description": "No S1-S5 codes anywhere in output"},
         {"text": "experience-mining-trigger", "description": "Phase 2/4/5 interview trigger activated due to WEAK/ABSENT/FAIL conditions — agent invokes experience-mining.md protocol for at least one phase"},
-        {"text": "four-stage-protocol", "description": "4-Stage Bypass Protocol executed per triggered phase: Stage 1 (직접 질문) → Stage 2 (우회/리프레이밍) → Stage 3 (인접 경험) → Stage 4 (일상 업무). Each stage only entered if previous stage yielded no source."},
+        {"text": "four-stage-protocol", "description": "4-Stage Bypass Protocol executed per triggered phase: Stage 1 (Direct Question) → Stage 2 (Bypass/Reframing) → Stage 3 (Adjacent Experience) → Stage 4 (Daily Work). Each stage only entered if previous stage yielded no source."},
         {"text": "discovered-candidates-tracking", "description": "Discovered Candidates Working Set records at least one mined experience in format: Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}"},
-        {"text": "interview-opt-out-handling", "description": "If user says '다음으로' or '넘어가자', agent exits current phase interview gracefully, falls back to static Writing Guidance, and continues to next phase — does not force interview continuation"},
+        {"text": "interview-opt-out-handling", "description": "If user says 'next' or 'move on', agent exits current phase interview gracefully, falls back to static Writing Guidance, and continues to next phase — does not force interview continuation"},
         {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT/N/A with cited evidence; C3-C5 axes may be rated N/A when not expected at the candidate's career level"},
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level (New Grad/Junior) and applies career-level expectations"},
         {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED at junior level, provides specific gap recommendations or triggers Phase 4 interview"},
@@ -149,7 +149,7 @@
         {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — P.A.R.R. dimensions, Type A-D criteria, career/PS evaluation criteria, or depth classification language"},
         {"text": "ai-tone-audit-phase", "description": "Phase 10 addresses AI Tone Audit — invokes or declares intent to invoke Skill(humanizer)"},
         {"text": "note-accumulate", "description": "Phase 13: proposes note accumulation (new candidates, updates, preferences) and asks for user confirmation"},
-        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N건, P1 N건) and total finding count"},
+        {"text": "html-summary-section", "description": "Phase 12 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N items, P1 N items) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 12 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision — not just diagnosis but also a rewritten version"},
@@ -165,7 +165,7 @@
     "latest_iteration": 14,
     "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "127 assertions across 4 evals (46+35+21+25), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 추가: experience mining trigger + 4-stage bypass + opt-out 검증. Phase 11 Quality Gate assertions 추가 (3개 × 2 evals = 6개 신규). Eval 3/4에 quality-gate assertions 추가 (3개 × 2 evals = 6개 신규)."
+    "notes": "127 assertions across 4 evals (46+35+21+25), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + self-claim endings), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 added: experience mining trigger + 4-stage bypass + opt-out verification. Phase 11 Quality Gate assertions added (3 x 2 evals = 6 new). Eval 3/4 quality-gate assertions added (3 x 2 evals = 6 new)."
   },
   "benchmark_history": [
     {
@@ -229,13 +229,13 @@
       "iteration": 12,
       "date": "2026-03-27",
       "with_skill": {"pass_rate": 0.814},
-      "changes": "D-code system fully removed (D1c-D6c/D1p-D6p → natural language criteria: 인과 연결, 수치 구체성, etc). Mandatory Evaluation Checklists added to self-introduction.md, problem-solving.md, section-evaluation.md. D-code assertions → substance-based (career-differentiated-evaluation, ps-differentiated-evaluation, etc). Pass rate 74.2% → 81.4% (+7.2%)"
+      "changes": "D-code system fully removed (D1c-D6c/D1p-D6p → natural language criteria: causal linkage, metric specificity, etc). Mandatory Evaluation Checklists added to self-introduction.md, problem-solving.md, section-evaluation.md. D-code assertions → substance-based (career-differentiated-evaluation, ps-differentiated-evaluation, etc). Pass rate 74.2% → 81.4% (+7.2%)"
     },
     {
       "iteration": 13,
       "date": "2026-03-27",
       "with_skill": {"pass_rate": 0.880},
-      "changes": "branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + ~편입니다), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. 97→92 assertions. Eval 3: 100% pass."
+      "changes": "branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + self-claim endings), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. 97→92 assertions. Eval 3: 100% pass."
     }
   ]
 }

@@ -192,31 +192,31 @@ Always provide a recommendation, but respect the user's choice if they select a 
 
 ### Purpose
 
-Examiner dispatch 전에 유저와 항목별 상세 인터뷰를 진행한다. 인터뷰의 목적은 실패 대응이 아닌 **성공을 위한 사전 준비와 합의 도출**이다.
+Conduct a detailed per-item interview with the user before examiner dispatch. The purpose of the interview is not to handle failure but to achieve **preparation for success and reaching agreement**.
 
 ### Interview Flow (Per Item)
 
-1. **Findings 공유**: Phase 0-10 평가 결과를 항목 단위로 제시
-2. **컨텍스트 수집**: 고민, 트레이드오프, 숨겨진 맥락 발굴
-3. **대안 제시 + 논의**: 2-3개 대안과 장단점 논의, 유저 선호 확인
-4. **합의 도출**: 방향성 합의 후 최종 alternatives 확정
+1. **Share Findings**: Present Phase 0-10 evaluation results item by item
+2. **Collect Context**: Uncover concerns, tradeoffs, and hidden context
+3. **Present Alternatives + Discuss**: Discuss 2-3 alternatives with pros/cons, confirm user preference
+4. **Reach Agreement**: Finalize alternatives after agreeing on direction
 
 ### Interview Rules
 
-- 메시지당 질문 하나. 복수 질문 금지.
-- 모든 findings에 대해 빠짐없이 논의. "사소하다"는 이유로 건너뛰지 않는다.
-- 유저의 모호한 답변 → 명확화 질문으로 파고든다.
-- 유저가 "다음으로" / "넘어가자" → 현재 항목 인터뷰 종료, examiner dispatch 진행.
-- PASS 항목이라도 개선 여지가 있으면 제안. "아쉽지만 PASS"도 논의 대상.
+- One question per message. Multiple questions are prohibited.
+- Discuss every finding without exception. Do not skip items on the grounds of being "minor."
+- When the user gives an ambiguous answer → follow up with a clarifying question.
+- When the user says "next" / "move on" → end the current item interview, proceed with examiner dispatch.
+- Even for PASS items, suggest improvements if room exists. "Technically a PASS, but could be better" is also a discussion topic.
 
 ### Relationship with Section 4 (Post-Examiner Interview)
 
 | Dimension | Pre-Examiner Interview | Post-Examiner Interview |
 |-----------|----------------------|------------------------|
 | Trigger | Always (every evaluator-eligible item) | REQUEST_CHANGES received |
-| Purpose | 합의 도출, 성공 준비 | FAIL axes 보충, 개선 |
+| Purpose | Reach agreement, prepare for success | Supplement FAIL axes, improve |
 | Question basis | Phase 0-10 findings | Examiner's Interview Hints |
-| Exit | 합의 완료 → examiner dispatch | Source 확보 → re-dispatch |
+| Exit | Agreement reached → examiner dispatch | Source secured → re-dispatch |
 
 ---
 
@@ -317,7 +317,7 @@ flowchart TB
     ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative in HTML]
     ALTEVAL -->|All fail| K[REQUEST_CHANGES\n+ Interview Hints]
 
-    K --> L[Additional Interview\n— FAIL axes 기반, 지옥 끝까지\n4-Stage Bypass Protocol]
+    K --> L[Additional Interview\n— FAIL axes-based, all the way\n4-Stage Bypass Protocol]
     L --> M{Source confirmed?}
     M -->|YES| D
     M -->|NO: 4-Stage exhausted| N[Best revision with current sources]
@@ -329,7 +329,7 @@ flowchart TB
     APPROVE_ALT --> J
 
     J -->|YES| C
-    J -->|NO| VERDICT[Verdict Tracker 검증]
+    J -->|NO| VERDICT[Verdict Tracker Verification]
     VERDICT --> P[Phase 12: Generate HTML]
 
     style H fill:#e74c3c,stroke:#333,color:#fff
@@ -362,13 +362,13 @@ Revisions for bullets that receive APPROVE are recorded as "confirmed revisions.
 
 ### Mandatory Verdict Tracker
 
-Phase 12 진입 전, 모든 evaluator-eligible 항목의 verdict를 내부적으로 추적한다. 빈 칸이 하나라도 있으면 Phase 12 진입이 차단된다.
+Before entering Phase 12, internally track the verdict for every evaluator-eligible item. If even one entry is blank, Phase 12 entry is blocked.
 
 | # | Section | Item | Verdict | Loop Count |
 |---|---------|------|---------|------------|
-| 1 | 자기소개 C | "데이터 정합성..." | APPROVE / user-opt-out / ??? | N |
+| 1 | Self-Introduction C | "Data consistency..." | APPROVE / user-opt-out / ??? | N |
 
-verdict가 `???`인 항목이 존재하면 → 해당 항목으로 돌아가 Quality Gate 재진행.
+If any item has a verdict of `???` → return to that item and re-run the Quality Gate.
 
 ---
 
