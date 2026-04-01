@@ -18,7 +18,7 @@ Core premise: When a user says "I don't have that," it means one of two things:
 - One question per message. Multiple questions are prohibited.
 - Question = diagnostic context + specific question. Bare questions without context are prohibited.
 - Handle ambiguous answers with clarifying questions. Do not accept insufficient answers as a source.
-- If the user says "next" / "let's move on" → end the current Phase interview → fall back to that Phase's existing static Writing Guidance → proceed to the next Phase.
+- If the user opts out ("next" / "let's move on" / "다음으로" / "넘어가자") → end the current Phase interview → fall back to that Phase's existing static Writing Guidance → proceed to the next Phase.
 
 ---
 

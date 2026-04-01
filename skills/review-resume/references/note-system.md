@@ -88,7 +88,7 @@ The candidate body contains the narrative content directly. Depth (signature/det
 # User Preferences
 
 ## Expression Style
-- Prefer formal polite sentence endings (vs. noun-form endings)
+- Prefer formal polite sentence endings (~했습니다) over noun-form endings (~함)
 - Keep technical terms in English (Redis, Kafka — do not Koreanize)
 
 ## Judgment Criteria
