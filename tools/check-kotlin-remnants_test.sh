@@ -16,7 +16,7 @@ TESTS_FAILED=0
 
 setup() {
     TEST_TMP_DIR=$(mktemp -d)
-    TEST_SKILLS_DIR="${TEST_TMP_DIR}/projects/java-project/skills"
+    TEST_SKILLS_DIR="${TEST_TMP_DIR}/projects/toong-java-spring-template/skills"
     mkdir -p "$TEST_SKILLS_DIR"
 }
 

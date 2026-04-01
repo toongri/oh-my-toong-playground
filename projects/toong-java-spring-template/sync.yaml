@@ -1,0 +1,54 @@
+name: toong-java-spring-template
+path: /Users/toong/repos/toong-java-spring-template
+
+agents:
+  items:
+    - explore
+    - librarian
+    - metis
+    - mnemosyne
+    - momus
+    - oracle
+    - argus
+    - chunk-reviewer
+    - spec-reviewer
+    - sisyphus-junior
+
+commands:
+  items:
+    - cancel-ralph
+    - hud
+    - ralph
+
+skills:
+  items:
+    - component: spec
+      platforms: [claude]
+    - component: prometheus
+      platforms: [claude]
+    - component: sisyphus
+      platforms: [claude]
+    - agent-council
+    - clarify
+    - git-master
+    - momus
+    - oracle
+    - testing
+    - qa
+    - component: code-review
+      platforms: [claude]
+    - make-pr
+    - technical-writing
+    - humanizer
+
+scripts:
+  items:
+    - hud
+    - chunk-review
+    - spec-reviewer
+
+rules:
+  items:
+    - tool-usage-policy
+    - work-principles
+    - coding-discipline

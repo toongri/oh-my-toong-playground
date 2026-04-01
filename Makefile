@@ -7,7 +7,7 @@ help:
 	@echo "  make validate           - 전체 검증 (스키마 + 컴포넌트)"
 	@echo "  make validate-schema    - 스키마 검증 (필드, 값 유효성)"
 	@echo "  make validate-components - 컴포넌트 검증 (파일 존재 여부)"
-	@echo "  make check-kotlin-remnants - Kotlin 잔재 검출 (java-project skills)"
+	@echo "  make check-kotlin-remnants - Kotlin 잔재 검출 (toong-java-spring-template skills)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
