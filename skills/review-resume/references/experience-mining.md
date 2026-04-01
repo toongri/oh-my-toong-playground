@@ -1,368 +1,368 @@
 # Experience Mining Interview Protocol
 
-> 유저는 자기 경험의 이력서적 가치를 모른다. 인터뷰어의 역할은 설문이 아닌 발굴이다.
+> Users are unaware of the resume value in their own experiences. The interviewer's role is excavation, not survey.
 
 ---
 
 ## 1. Excavator Identity
 
-이 프로토콜은 탐사 인터뷰(excavation interview)를 정의한다. 인터뷰어는 surveyor가 아닌 excavator다.
+This protocol defines the excavation interview. The interviewer is an excavator, not a surveyor.
 
-핵심 전제: 유저가 "없어요"라고 말하는 것은 두 가지를 의미한다.
-1. 정말로 해당 경험이 없다
-2. 경험이 있지만 이력서적 가치를 인식하지 못하고 있다
+Core premise: When a user says "I don't have that," it means one of two things:
+1. They genuinely lack the experience
+2. They have the experience but don't recognize its resume value
 
-"없어요"는 2번일 가능성이 높다. 4-Stage Bypass Protocol을 완료한 뒤에야 "진짜 없음"으로 판정한다.
+"I don't have that" is more likely case 2. Only after completing the 4-Stage Bypass Protocol do we declare "genuinely absent."
 
-**인터뷰 규칙:**
-- 메시지당 질문 하나. 복수 질문 금지.
-- 질문 = 진단 맥락 + 구체적 질문. 맥락 없는 bare question 금지.
-- 모호한 답변은 명확화 질문으로 처리. 불충분한 답변을 소스로 수용하지 않는다.
-- 유저가 "다음으로" / "넘어가자"라고 하면 → 현재 Phase 인터뷰 종료 → 해당 Phase의 기존 static Writing Guidance로 폴백 → 다음 Phase 진행.
+**Interview Rules:**
+- One question per message. Multiple questions are prohibited.
+- Question = diagnostic context + specific question. Bare questions without context are prohibited.
+- Handle ambiguous answers with clarifying questions. Do not accept insufficient answers as a source.
+- If the user says "next" / "let's move on" → end the current Phase interview → fall back to that Phase's existing static Writing Guidance → proceed to the next Phase.
 
 ---
 
 ## 2. 4-Stage Bypass Protocol
 
-각 Stage는 이전 Stage에서 소스가 확보되지 않을 때만 진입한다. Stage 4 소진 후 소스가 없으면 해당 토픽을 "진짜 없음"으로 표시하고 다음 토픽으로 이동한다.
+Enter each Stage only when no source has been secured from the previous Stage. If no source is found after exhausting Stage 4, mark that topic as "genuinely absent" and move to the next topic.
 
 ### Stage 1: Direct Question
-특정 갭을 정조준한다. 갭의 이름을 직접 언급하지 않되, 해당 경험을 명확히 타겟팅한다.
+Take precise aim at a specific gap. Do not name the gap directly, but clearly target that experience.
 
-예: "장애를 사전에 감지했던 경험이 있으신가요? 배포 이후 문제를 발견한 상황이라면 어떤 것이든요."
+Example: "Have you ever detected an issue before it became a full incident? Even something you noticed after deployment would count."
 
 ### Stage 2: Bypass Question
-같은 갭을 3가지 다른 각도로 리프레이밍한다.
+Reframe the same gap from 3 different angles.
 
-각도 예시:
-- 시점 변환: "운영 중에" → "배포 직후", "사이드 프로젝트에서", "인턴/첫 직장에서"
-- 규모 변환: "팀 전체 장애" → "본인만 겪은 버그", "고객 문의가 먼저 온 상황"
-- 형식 변환: "공식 온콜" → "비공식으로 슬랙 DM 받은 경우", "동료의 배포 이후 같이 봤던 경험"
+Angle examples:
+- Time shift: "during operations" → "right after deployment", "in a side project", "at an internship/first job"
+- Scale shift: "full team outage" → "a bug only you encountered", "a situation where a customer reported it first"
+- Format shift: "official on-call" → "an informal Slack DM you received", "something you looked at together after a colleague's deployment"
 
 ### Stage 3: Adjacent Experience
-갭과 관련된 2-3개 인접 상황을 탐색한다.
+Explore 2-3 adjacent situations related to the gap.
 
-예: C2(운영/모니터링) 갭 → "배포 후 확인 과정이 있었나요?", "로그를 직접 본 적 있나요?", "성능이 예상과 달랐던 적 있나요?"
+Example: C2 (operations/monitoring) gap → "Did you have a routine for checking service status after deployment?", "Have you ever read logs directly?", "Was there ever a time when performance was different from what you expected?"
 
 ### Stage 4: Daily Work
-루틴 업무 속에 숨겨진 소스를 탐색한다. 특별한 사건이 아닌, 반복적으로 했던 일에서 채굴한다.
+Explore sources hidden in routine work. Mine from what was done repeatedly, not from special incidents.
 
-예: "매일 하는 작업 중에 '이 부분은 내가 신경 써서 챙긴다'는 게 있었나요?", "팀에서 유독 본인에게 물어보는 부분이 있었나요?"
+Example: "Was there anything in your daily tasks where you thought 'this is something I make sure to handle carefully'?", "Was there anything your team tended to ask specifically you about?"
 
-> **Cross-reference:** Phase 11 (Per-Bullet Content Quality Gate)에서 이 프로토콜을 extend하여 resume-claim-examiner REQUEST_CHANGES 시 소스 확보 인터뷰에 사용합니다. 상세: `references/content-quality-gate.md` §4 Interview Loop Protocol.
+> **Cross-reference:** Phase 11 (Per-Bullet Content Quality Gate) extends this protocol for source acquisition interviews when resume-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
 
 ---
 
 ## 3. Source Quality Formula
 
-**소스 = Fact + Context + Verifiability**
+**Source = Fact + Context + Verifiability**
 
-소스 확인 기준: 이 세 요소가 모두 존재해야 소스로 인정한다.
+Source acceptance criteria: all three elements must be present for something to qualify as a source.
 
 | Element | Definition | When Absent |
 |------|------|---------|
-| Fact | 무슨 일이 있었는가 | "경험 있어요" 수준 — 내용 불명 |
-| Context | 왜/어디서/어떻게 | Fact만 있으면 이력서에 쓸 수 없음 |
-| Verifiability | 수치, 전후 비교, 측정 가능한 결과 | 검증 불가능한 주장 |
+| Fact | What happened | "I have experience" level — content unknown |
+| Context | Why / where / how | Fact alone cannot be written on a resume |
+| Verifiability | Metrics, before/after comparison, measurable result | An unverifiable claim |
 
 ### ✗ NOT Source (Not a Source)
 
-✗ "Redis 캐시를 적용한 경험 있어요" — Fact만. Context(왜 Redis인가? 어떤 문제를 해결했나?)와 Verifiability(성능이 얼마나 개선됐나?) 없음.
+✗ "I have experience applying Redis caching" — Fact only. Missing Context (why Redis? what problem did it solve?) and Verifiability (how much did performance improve?).
 
-✗ "성능 개선한 적 있어요" — Fact 자체가 불명확. 무엇을, 어떻게, 얼마나 개선했는지 없음.
+✗ "I've improved performance before" — The Fact itself is unclear. Missing what was improved, how, and by how much.
 
-✗ "모니터링은 해봤어요" — Action은 있지만 Fact(어떤 상황에서?), Context(어떤 도구로? 무엇을 관찰했나?), Verifiability 모두 없음.
+✗ "I've done monitoring" — There is an action, but Fact (in what situation?), Context (with what tool? what was being observed?), and Verifiability are all absent.
 
 ### ✓ Valid Source
 
-✓ "API 응답 시간이 3초를 넘자 고객 이탈이 늘었고 [Fact], Redis 캐시를 도입해 로컬 캐시 vs 분산 캐시를 비교 검토했습니다 [Context]. 도입 후 평균 응답 시간이 3.2초 → 0.4초로 줄었습니다 [Verifiability]."
+✓ "When API response times exceeded 3 seconds, customer drop-off increased [Fact]. I introduced Redis caching and evaluated local cache vs. distributed cache [Context]. After rollout, average response time dropped from 3.2s to 0.4s [Verifiability]."
 
-✓ "배포 후 에러율이 5%p 급등해 [Fact], 로그 추적으로 특정 API 타임아웃이 원인임을 30분 내 특정했습니다 [Context]. 핫픽스 배포 후 에러율 정상 복구, 재발방지로 해당 API에 서킷브레이커 추가 [Verifiability]."
+✓ "After a deployment, the error rate spiked by 5 percentage points [Fact]. I traced the logs and pinpointed a specific API timeout as the root cause within 30 minutes [Context]. Error rate recovered to normal after the hotfix deployment, and a circuit breaker was added to that API to prevent recurrence [Verifiability]."
 
-✓ "코드리뷰에서 반복 패턴을 발견해 [Fact], 팀 내 공통 유틸 라이브러리로 추출 제안했고 동의를 얻어 구현했습니다 [Context]. 동일 패턴 코드리뷰 지적이 이후 스프린트에서 0건으로 줄었습니다 [Verifiability]."
+✓ "I noticed a recurring pattern in code reviews [Fact]. I proposed extracting it into a shared utility library for the team, gained consensus, and implemented it [Context]. Code review comments about the same pattern dropped to zero in subsequent sprints [Verifiability]."
 
-### Source Recognition (일상 답변 속 소스 신호)
+### Source Recognition (Source Signals in Everyday Answers)
 
-유저의 답변에서 다음 패턴이 보이면 심층 탐색을 진행한다:
-- "그냥 고쳤어요" → "어떻게 원인을 찾았나요?"
-- "팀에서 제가 담당했어요" → "구체적으로 어떤 결정을 내렸나요?"
-- "잘 됐어요" / "성공했어요" → "성공 기준이 뭐였나요? 수치로 어떻게 확인했나요?"
-- "별거 없어요" → Stage 2-4 진입 신호
+When the following patterns appear in a user's answer, proceed with deeper exploration:
+- "I just fixed it" → "How did you find the root cause?"
+- "I was the one handling that on the team" → "What specific decisions did you make?"
+- "It went well" / "It was a success" → "What were the success criteria? How did you confirm it with metrics?"
+- "It's nothing special" → Signal to enter Stages 2–4
 
 ---
 
 ## 4. Discovered Candidates Working Set
 
-인터뷰를 통해 확보된 소스는 Discovered Candidates로 기록한다.
+Sources secured through interviews are recorded as Discovered Candidates.
 
-**형식:**
+**Format:**
 ```
 [Discovered Candidates]
 - Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}
 ```
 
-**라이프사이클:**
-- Created: 인터뷰 중 소스 품질 확인 직후
-- Consumed: 이후 Phase들이 note pool과 함께 추가 옵션으로 참조 (기존 PASS/FAIL 결과 변경 없음)
-- Persisted: Note Accumulate phase 시 note 시스템에 저장
+**Lifecycle:**
+- Created: Immediately after source quality is confirmed during the interview
+- Consumed: Referenced as additional options alongside the note pool by subsequent Phases (does not change existing PASS/FAIL results)
+- Persisted: Saved to the note system during the Note Accumulate phase
 
 ---
 
 ## Self-Introduction
 
-**트리거 맥락:** 자기소개 ANY type FAIL 시 (Type A-D 유형별 평가 기준 적용)
+**Trigger Context:** Any self-introduction type FAIL (applying evaluation criteria by Type A–D)
 
 **Diagnostic Context Examples:**
 
-GOOD: "자기소개에서 몇 가지 보강할 수 있는 부분을 발견했는데, 관련 경험을 여쭤봐도 될까요?"
+GOOD: "I noticed a few areas in your self-introduction that could be strengthened — would it be okay if I asked about some related experiences?"
 
-BAD (내부 지표 노출): "자기소개 4개 중 3개 FAIL, Type A에서 bridge 패턴 미달"
+BAD (internal metric exposure): "3 out of 4 self-introduction items FAIL, bridge pattern not met in Type A"
 
-**Target Topics:** 직업 정체성(어떤 엔지니어인가), 일하는 철학, 회사 연결점, 현재 관심사
+**Target Topics:** Professional identity (what kind of engineer), working philosophy, company fit, current interests
 
 **Question Templates:**
 
-Type A (엔지니어 정체성):
+Type A (Engineer Identity):
 
-BAD: "본인이 어떤 개발자인지 말씀해 주세요."
+BAD: "Please tell me what kind of developer you are."
 
-GOOD: "가장 최근에 기술적 선택을 혼자 결정해야 했던 상황이 있었나요? 어떤 판단 기준을 썼는지 궁금합니다."
+GOOD: "Have you recently been in a situation where you had to make a technical decision entirely on your own? I'm curious what criteria you used to make that call."
 
-BAD: "강점이 뭔가요?"
+BAD: "What are your strengths?"
 
-GOOD: "팀에서 특정 기술 이슈가 생겼을 때 주로 본인이 먼저 뛰어드는 분야가 있나요? 어떤 쪽인지 예시를 하나 들어주세요."
+GOOD: "When a technical issue comes up on the team, is there a particular area where you tend to be the first to jump in? Could you give one example of what that looks like?"
 
-Type D (현재 관심사):
+Type D (Current Interests):
 
-BAD: "요즘 관심 있는 기술이 있나요?"
+BAD: "Is there any technology you're interested in these days?"
 
-GOOD: "최근 몇 달 사이에 팀 일정과 무관하게 본인이 직접 파보고 싶어서 시간 투자한 기술이나 문제가 있었나요?"
+GOOD: "In the past few months, has there been a technology or problem you invested time in exploring on your own — independent of the team's schedule?"
 
 **Exhaustion Path:**
-Stage 4 완료 후 유효 소스 없음 → "해당 부분은 이후에 돌아올게요. 다음 부분으로 넘어가겠습니다."
+No valid source after Stage 4 → "Let's come back to this later. I'll move on to the next section."
 
 **Source Acquisition Path:**
-Fact + Context + Verifiability 확인 → Discovered Candidates에 기록 → Type A-D 해당 항목 보강 후보로 표시
+Fact + Context + Verifiability confirmed → Record in Discovered Candidates → Mark as reinforcement candidate for the relevant Type A–D item
 
 ---
 
 ## C1-C5 Competency
 
-**트리거 맥락:** ANY axis WEAK 또는 ABSENT 시
+**Trigger Context:** Any axis WEAK or ABSENT
 
 **Diagnostic Context Examples:**
 
-GOOD: "경력 사항에서 보강할 수 있을 것 같은 부분이 있어서 경험 몇 가지를 여쭤보고 싶습니다."
+GOOD: "There are a few areas in your career history that I think could be strengthened — I'd like to ask about a couple of related experiences."
 
-BAD (내부 지표 노출): "C2 ABSENT, C3 WEAK — 두 축이 Missing 상태입니다"
+BAD (internal metric exposure): "C2 ABSENT, C3 WEAK — both axes are in Missing status"
 
 **Target Topics (by WEAK/ABSENT axis):**
 
-C1 (기술 내부 이해):
+C1 (Deep Technical Understanding):
 
-BAD: "기술 깊이가 있는 경험이 있나요?"
+BAD: "Do you have any experience with technical depth?"
 
-GOOD: "특정 라이브러리나 프레임워크를 쓰다가 '이게 왜 이렇게 동작하지?'라고 파고들었던 경험이 있나요? 어떤 것이었는지 얘기해 주실 수 있을까요?"
+GOOD: "Have you ever been using a specific library or framework and found yourself digging in to understand 'why does this work this way?' Could you tell me about one of those moments?"
 
-C2 (운영/모니터링):
+C2 (Operations/Monitoring):
 
-BAD: "운영 경험이 있나요?"
+BAD: "Do you have any operations experience?"
 
-GOOD: "배포 후에 본인이 직접 서비스 상태를 확인하는 루틴이 있었나요? 어떤 방식으로 확인했는지 궁금합니다."
+GOOD: "After a deployment, did you have a routine for checking service health yourself? I'm curious how you went about that."
 
-C3 (비즈니스 임팩트):
+C3 (Business Impact):
 
-BAD: "사업에 영향을 준 경험이 있나요?"
+BAD: "Do you have any experience that impacted the business?"
 
-GOOD: "기술 작업이 완료된 뒤 실제로 비즈니스 수치(전환율, 이탈률, 매출 등)를 확인한 적 있나요? 어떤 결과였는지 기억하시나요?"
+GOOD: "After a technical task was completed, did you ever check actual business metrics (conversion rate, churn, revenue, etc.)? Do you remember what the results were?"
 
-C4 (협업):
+C4 (Collaboration):
 
-BAD: "협업 경험을 말씀해 주세요."
+BAD: "Please tell me about a collaboration experience."
 
-GOOD: "팀원이나 다른 직군과 기술적 의견 충돌이 있었던 상황이 있었나요? 어떻게 해결했는지 이야기해 주세요."
+GOOD: "Was there ever a situation where you had a technical disagreement with a teammate or someone from another function? Tell me how you resolved it."
 
-C5 (성장/학습):
+C5 (Growth/Learning):
 
-BAD: "학습 경험이 있나요?"
+BAD: "Do you have any learning experiences?"
 
-GOOD: "이전 직장이나 프로젝트에서 스스로 '이 부분은 내가 팀의 수준을 올렸다'고 생각하는 기여가 있었나요?"
+GOOD: "At a previous job or project, was there a contribution where you felt 'I raised the bar for this team'?"
 
 **Exhaustion Path:**
-해당 축 Stage 4 완료 후 소스 없음 → 해당 축은 Gap Guidance로 전환 (competency-assessment.md §7-8 참조)
+No source after Stage 4 for that axis → switch that axis to Gap Guidance (see competency-assessment.md §7–8)
 
 **Source Acquisition Path:**
-소스 확보 → Discovered Candidates에 기록 → 해당 C축 PRESENT/STRONG 상향 가능 여부 표시 (기존 PASS/FAIL 결과 변경 없음)
+Source secured → Record in Discovered Candidates → Indicate whether the relevant C-axis can be elevated to PRESENT/STRONG (does not change existing PASS/FAIL results)
 
 ---
 
 ## Section-Specific Evaluation
 
-**트리거 맥락:** 경력 또는 문제해결 ANY criterion FAIL 시
+**Trigger Context:** Any criterion FAIL in Career or Problem-Solving
 
 **Diagnostic Context Examples:**
 
-GOOD: "경력 사항의 일부 bullet에서 구체성을 보강할 수 있을 것 같아 관련 경험을 여쭤보겠습니다."
+GOOD: "I think there are a few bullets in your career history where we could add more specificity — I'd like to ask about some related experiences."
 
-BAD (내부 지표 노출): "D1c-D6c 중 4개 FAIL, 수치 부재 및 인과 사슬 누락"
+BAD (internal metric exposure): "4 out of D1c–D6c FAIL, missing metrics and causal chain"
 
 **Target Topics:**
 
-경력 bullet 구체화:
+Career bullet specificity:
 
-BAD: "이 성과에 대해 더 설명해 주세요."
+BAD: "Could you explain more about this achievement?"
 
-GOOD: "'{bullet 내용}'에서 '본인의 역할'이 구체적으로 무엇이었는지 궁금합니다. 이 결과가 나오기까지 본인이 직접 결정하거나 실행한 부분이 어디였나요?"
+GOOD: "I'm curious what your specific role was in '{bullet content}'. Which parts of getting to this result did you personally decide or execute?"
 
-BAD: "수치가 있나요?"
+BAD: "Do you have any numbers for this?"
 
-GOOD: "'{bullet 내용}'에서 개선 전후를 수치로 기억하시나요? 정확한 수치가 없어도 '절반 수준' 같은 대략적 비율도 괜찮습니다."
+GOOD: "For '{bullet content}', do you remember the before-and-after in numbers? Even a rough ratio like 'about half' is fine if you don't have exact figures."
 
-문제해결 과정 구체화:
+Problem-solving process specificity:
 
-BAD: "어떤 문제를 해결했나요?"
+BAD: "What problem did you solve?"
 
-GOOD: "이 문제를 처음 발견했을 때, 원인이 뭔지 파악하기까지 어떤 과정을 거쳤나요? 처음 의심한 원인이 틀렸던 경험이 있다면요?"
+GOOD: "When you first encountered this problem, what process did you go through to identify the root cause? Was there ever a time when your initial hypothesis turned out to be wrong?"
 
-BAD: "다른 방법은 검토했나요?"
+BAD: "Did you consider other approaches?"
 
-GOOD: "'{해결 방식}'을 선택하기 전에 다른 접근을 검토했나요? 왜 그것들을 제치고 이 방식을 택했는지 기억하시나요?"
+GOOD: "Before choosing '{solution approach}', did you evaluate other options? Do you remember why you chose this approach over those alternatives?"
 
 **Exhaustion Path:**
-Stage 4 완료 후 소스 없음 → section-evaluation.md §5 Writing Guidance로 전환
+No source after Stage 4 → switch to section-evaluation.md §5 Writing Guidance
 
 **Source Acquisition Path:**
-소스 확보 → 해당 bullet 보강 후보로 Discovered Candidates에 기록
+Source secured → Record in Discovered Candidates as a reinforcement candidate for the relevant bullet
 
 ---
 
 ## JD Keyword Matching
 
-**트리거 맥락:** JD 제공됨 AND 누락 키워드 3개 이상 AND 해당 키워드에 대한 노트 후보 없음
+**Trigger Context:** JD provided AND 3+ missing keywords AND no note candidates for those keywords
 
-이 Phase는 범위가 좁다. JD 키워드 미보유 경험만 탐색하며, 다른 Phase의 갭 채굴과 병행하지 않는다.
+This Phase has a narrow scope. It explores only experiences not yet covered by JD keywords, and does not run in parallel with gap mining from other Phases.
 
 **Diagnostic Context Examples:**
 
-GOOD: "JD에서 중요하게 보이는 기술/역량 중 이력서에 아직 드러나지 않은 부분이 있어 여쭤보겠습니다."
+GOOD: "There are some skills/competencies that appear important in the JD but aren't yet visible in your resume — I'd like to ask about those."
 
-BAD (내부 지표 노출): "JD 키워드 매칭: Kubernetes 0/1, Kafka 0/1, DDD 0/1"
+BAD (internal metric exposure): "JD keyword matching: Kubernetes 0/1, Kafka 0/1, DDD 0/1"
 
-**Target Topics:** 누락 키워드별 1:1 탐색
+**Target Topics:** 1:1 exploration per missing keyword
 
-BAD: "Kubernetes 경험이 있나요?"
+BAD: "Do you have Kubernetes experience?"
 
-GOOD: "컨테이너 환경에서 배포나 스케일링을 다뤄본 적 있나요? 직접 구성했든, 이미 구성된 환경을 사용했든 경험이 있으면 이야기해 주세요."
+GOOD: "Have you ever handled deployment or scaling in a containerized environment? Whether you set it up yourself or worked within an existing setup, I'd love to hear about the experience."
 
-BAD: "Kafka 써봤나요?"
+BAD: "Have you used Kafka?"
 
-GOOD: "비동기 메시징이나 이벤트 기반 처리를 써봤던 경험이 있나요? 어떤 문제를 해결하려고 썼는지 기억하시나요?"
+GOOD: "Have you used asynchronous messaging or event-driven processing? Do you remember what problem you were trying to solve with it?"
 
 **Exhaustion Path:**
-해당 키워드 Stage 4 완료 후 소스 없음 → "해당 키워드는 현재 이력서에서는 다루기 어렵습니다. 다음 키워드로 넘어갑니다."
+No source after Stage 4 for that keyword → "This keyword is difficult to address with your current resume. Let's move on to the next keyword."
 
 **Source Acquisition Path:**
-소스 확보 → Discovered Candidates에 기록 → 해당 JD 키워드 커버리지 보강 후보로 표시
+Source secured → Record in Discovered Candidates → Mark as a reinforcement candidate for that JD keyword's coverage
 
 ---
 
 ## Problem-Solving
 
-**트리거 맥락:** P.A.R.R. ANY dimension FAIL 또는 구조 부재 OR 테마 편중
+**Trigger Context:** Any P.A.R.R. dimension FAIL, or missing structure, or theme imbalance
 
 **Diagnostic Context Examples:**
 
-GOOD: "문제해결 항목에서 더 깊이 있게 보강할 수 있는 경험이 있을 것 같아 몇 가지 여쭤보겠습니다."
+GOOD: "I think there are some experiences that could add more depth to your problem-solving section — I'd like to ask about a few of them."
 
-BAD (내부 지표 노출): "P2 실패 아크 없음, P5 why-chain 1단계에서 중단"
+BAD (internal metric exposure): "P2 no failure arc, P5 why-chain stopped at step 1"
 
 **Target Topics:**
 
-실패 아크 (P2):
+Failure arc (P2):
 
-BAD: "실패 경험이 있나요?"
+BAD: "Do you have any failure experiences?"
 
-GOOD: "이 문제를 처음 시도한 방법이 안 통했던 순간이 있었나요? 어떤 이유로 안 됐고, 다음 시도로 어떻게 방향을 바꿨는지 이야기해 주세요."
+GOOD: "Was there a moment when the first approach you tried on this problem didn't work? Tell me what went wrong and how you changed direction for the next attempt."
 
 Why-chain (P5):
 
-BAD: "왜 그 기술을 선택했나요?"
+BAD: "Why did you choose that technology?"
 
-GOOD: "'{기술/방식}'을 선택하기 전에 '왜 이게 맞는 선택인지'를 스스로에게 확인하는 과정이 있었나요? 다른 옵션이 있었다면 어떤 것들이었는지 기억하시나요?"
+GOOD: "Before choosing '{technology/approach}', did you go through a process of asking yourself 'why is this the right choice'? If there were other options, do you remember what they were?"
 
-검증 깊이 (P3):
+Verification depth (P3):
 
-BAD: "어떻게 검증했나요?"
+BAD: "How did you verify the solution?"
 
-GOOD: "해결이 됐다는 것을 어떻게 확인했나요? '됐어요'를 확신하게 된 구체적인 순간이나 수치가 있나요?"
+GOOD: "How did you confirm the problem was solved? Was there a specific moment or metric that convinced you it was working?"
 
-테마 다양성 (포트폴리오 편중 시):
+Theme diversity (when portfolio is skewed):
 
-BAD: "다른 프로젝트도 있나요?"
+BAD: "Do you have any other projects?"
 
-GOOD: "현재 문제해결 항목이 {주제} 위주로 되어 있는데, 운영/협업/성능 중 다른 종류의 엔지니어링 판단을 했던 경험이 있었나요?"
+GOOD: "Your problem-solving section currently focuses heavily on {theme}. Was there an experience where you made an engineering judgment in a different area — such as operations, collaboration, or performance?"
 
 **Exhaustion Path:**
-Stage 4 완료 후 소스 없음 → problem-solving.md §15 Writing Guidance로 전환
+No source after Stage 4 → switch to problem-solving.md §15 Writing Guidance
 
 **Source Acquisition Path:**
-소스 확보 → Discovered Candidates에 기록 → P.A.R.R. 보강 후보 또는 새 entry 추가 후보로 표시
+Source secured → Record in Discovered Candidates → Mark as a P.A.R.R. reinforcement candidate or a candidate for a new entry
 
 ---
 
 ## Conversation Flow Examples
 
-### Example A: Developer Competency Assessment C2 — Stage 2 우회로 소스 발굴 후 Problem-Solving Evaluation forward-feed
+### Example A: Developer Competency Assessment C2 — Source discovery via Stage 2 bypass, then Problem-Solving Evaluation forward-feed
 
-**Context:** Mid-level 백엔드 개발자, C2(운영/모니터링) ABSENT.
+**Context:** Mid-level backend developer, C2 (operations/monitoring) ABSENT.
 
-Agent: "경력 사항을 보니 배포와 개발 관련 경험은 잘 드러나 있는데, 서비스 운영 측면에서 보강할 수 있는 경험을 여쭤봐도 될까요? 배포 후에 서비스 상태를 직접 확인하는 루틴이 있었나요?"
+Agent: "Looking at your career history, your deployment and development experience comes through clearly — would it be okay if I asked about some experiences to strengthen the service operations side? Did you have a routine for checking service health directly after a deployment?"
 
-User: "별로 없어요. 팀에 DevOps 담당자가 따로 있었거든요."
+User: "Not really. We had a dedicated DevOps person on the team."
 
-Agent: "DevOps 담당자가 있는 환경이었군요. 그렇다면 배포 직후 슬랙이나 대화로 '잘 됐나요?' 확인을 주고받은 적은 있었나요? 혹은 배포한 기능이 실제로 동작하는지 본인이 직접 로그를 열어본 경험이요."
+Agent: "So you were in an environment with a dedicated DevOps person. In that case, did you ever exchange a quick 'did everything go okay?' check over Slack or in conversation right after a deployment? Or was there a time when you opened the logs yourself to verify that the feature you deployed was actually working?"
 
-User: "아 그건 했죠. 배포하고 나면 항상 CloudWatch에서 에러율 확인했어요."
+User: "Oh, that I did. Whenever I deployed, I'd always check the error rate in CloudWatch."
 
-Agent: "CloudWatch로 에러율을 확인했군요. 그중에 에러율이 올라가서 원인을 추적했던 경험이 있었나요? 간단한 경우라도요."
+Agent: "So you were checking error rates in CloudWatch. Was there ever a time when the error rate went up and you traced the root cause? Even a simple case counts."
 
-User: "한 번 있었어요. 특정 API만 500이 뜨는데 로그 보니까 DB 쿼리 타임아웃이었어요. 인덱스 누락이었고 추가했더니 바로 정상화됐어요."
+User: "There was one time. A specific API was returning 500s, and when I checked the logs it turned out to be a DB query timeout. A missing index — I added it and things normalized right away."
 
-Agent: "좋은 경험이네요. 타임아웃이 발생한 건 배포 직후였나요, 아니면 며칠 뒤였나요? 그리고 고객 문의가 먼저였나요, 아니면 모니터링으로 먼저 발견했나요?"
+Agent: "That's a great experience. Did the timeout happen right after deployment, or a few days later? And did a customer report it first, or did you catch it through monitoring?"
 
-User: "배포 후 이틀 뒤였고, 제가 CloudWatch 알람으로 먼저 발견했어요. 고객 문의 오기 전에."
+User: "It was two days after deployment, and I caught it first through a CloudWatch alarm — before any customer complaints came in."
 
-[소스 확보 확인: DB 쿼리 타임아웃 장애 감지 — Fact: API 500 에러 / Context: CloudWatch 알람 → 로그 추적 → 인덱스 누락 발견 / Verifiable: 배포 후 이틀, 고객 문의 이전 감지]
+[Source confirmed: DB query timeout incident — Fact: API 500 error / Context: CloudWatch alarm → log trace → missing index identified / Verifiable: two days post-deployment, detected before any customer complaints]
 
-**Discovered Candidates에 기록:**
-`Developer Competency Assessment | C2-운영 | Fact: DB 인덱스 누락으로 API 타임아웃 | Context: CloudWatch 알람 감지 → 로그 추적 → 원인 특정 30분 내 | Verifiable: 고객 문의 이전 감지, 인덱스 추가 후 즉시 정상화 | Target: 경력 bullet 또는 문제해결 entry`
+**Record in Discovered Candidates:**
+`Developer Competency Assessment | C2-Operations | Fact: API timeout due to missing DB index | Context: CloudWatch alarm detected → log trace → root cause identified within 30 minutes | Verifiable: detected before customer complaints, normalized immediately after index added | Target: career bullet or problem-solving entry`
 
 **Problem-Solving Evaluation forward-feed:**
-Problem-Solving Evaluation P3(검증 깊이) 평가 시 → "Developer Competency Assessment 인터뷰에서 확보된 CloudWatch 모니터링 + 인덱스 추가 후 즉시 정상화 경험이 있습니다. 이 경험을 P3 검증 depth 보강에 활용할 수 있습니다."
+When evaluating Problem-Solving Evaluation P3 (verification depth) → "There is a CloudWatch monitoring + immediate normalization after index addition experience secured from the Developer Competency Assessment interview. This experience can be used to strengthen P3 verification depth."
 
 ---
 
-### Example B: Self-Introduction Type A — Stage 3 인접 탐색으로 직업 정체성 소스 발굴
+### Example B: Self-Introduction Type A — Professional identity source discovered via Stage 3 adjacent exploration
 
-**Context:** Junior 개발자, Type A(엔지니어 정체성) bridge 없음.
+**Context:** Junior developer, no bridge for Type A (engineer identity).
 
-Agent: "자기소개에서 보강할 수 있는 부분이 있어 경험을 여쭤보겠습니다. 기술 이슈가 생겼을 때 본인이 주로 먼저 뛰어드는 분야가 있나요?"
+Agent: "There are some areas in your self-introduction that could be strengthened — I'd like to ask about your experiences. Is there a particular area where you tend to be the first to jump in when a technical issue comes up?"
 
-User: "딱히 없어요. 시키는 일 열심히 했어요."
+User: "Not really. I just worked hard on whatever I was assigned."
 
-Agent: "시키는 일 외에, 아무도 요청하지 않았는데 본인이 먼저 '이건 좀 개선하면 좋겠다'고 느껴서 건드려 본 부분이 있었나요?"
+Agent: "Beyond the work you were assigned, was there ever something you personally felt 'this could be improved a bit' and decided to work on, even though no one asked you to?"
 
-User: "음... 그런 것도 없었던 것 같아요."
+User: "Hmm... I don't think so either."
 
-Agent: "코드리뷰나 PR 올릴 때, 주로 어떤 부분에서 지적받거나 반대로 칭찬받는 경우가 있었나요?"
+Agent: "When you submitted a code review or a PR, were there areas where you tended to get called out — or on the flip side, complimented?"
 
-User: "아, 에러 처리가 꼼꼼하다고 얘기 들었어요. 예외 케이스 항상 신경 쓴다고."
+User: "Oh, I was told my error handling was thorough. That I always pay attention to edge cases."
 
-Agent: "예외 케이스를 신경 쓴다는 게 어떤 의미인지 구체적으로 이야기해 주실 수 있나요? 본인이 예외 케이스를 미리 생각하는 방식이 있나요?"
+Agent: "Could you tell me more specifically what it means to you to pay attention to edge cases? Do you have a particular way of thinking through edge cases in advance?"
 
-User: "API 쓸 때 항상 실패 케이스를 먼저 생각해요. 성공 케이스보다 실패할 때 어떻게 처리할지를 먼저 설계하는 편이에요."
+User: "When I'm using an API, I always think about the failure cases first. I tend to design for how to handle failures before I think about the success case."
 
-[소스 확보: "실패 케이스 우선 설계" — 직업 정체성 Type A bridge 후보]
+[Source confirmed: "failure-first design" — Type A engineer identity bridge candidate]
 
-**Discovered Candidates에 기록:**
-`Self-Introduction | Type A 정체성 | Fact: API 설계 시 실패 케이스 우선 설계 | Context: PR/코드리뷰에서 예외 처리 꼼꼼함으로 인정받음 | Verifiable: 팀 피드백 (정성적) | Target: 자기소개 Type A bridge+episode`
+**Record in Discovered Candidates:**
+`Self-Introduction | Type A Identity | Fact: failure-first design when building APIs | Context: recognized for thorough error handling in PR/code reviews | Verifiable: team feedback (qualitative) | Target: self-introduction Type A bridge+episode`

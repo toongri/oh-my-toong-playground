@@ -39,23 +39,23 @@ System performance awareness — knowing where resources are wasted, understandi
 □ **Library Internals Analysis**
 - What to look for: Resume shows the candidate diagnosed problems by understanding framework/library internals — not just API-level usage
 - Resume evidence examples:
-  - STRONG: "DB Pool의 maxLifetime과 MySQL wait_timeout 불일치가 커넥션 리셋의 원인임을 파악, 설정값 조정으로 장애 해소"
-  - PRESENT: "HikariCP 설정 최적화로 커넥션 풀 안정화"
-- Absence signal: Only technology names appear ("Redis 사용", "Kafka 적용") with no indication of understanding internals
+  - STRONG: "Identified a mismatch between DB Pool maxLifetime and MySQL wait_timeout as the root cause of connection resets; resolved the incident by adjusting the configuration values"
+  - PRESENT: "Stabilized the connection pool by optimizing HikariCP settings"
+- Absence signal: Only technology names appear ("used Redis", "applied Kafka") with no indication of understanding internals
 
 □ **Design Alternatives & Best Practice Comparison**
 - What to look for: Evidence of comparing current implementation against external references, alternative architectures, or industry patterns
 - Resume evidence examples:
-  - STRONG: "Netflix Zuul의 스레드 모델을 분석하여 비동기 게이트웨이로 전환, 동일 인스턴스에서 처리량 3배 향상"
-  - PRESENT: "3가지 캐싱 전략(로컬/분산/CDN) 비교 후 분산 캐시 선택"
+  - STRONG: "Analyzed Netflix Zuul's threading model and migrated to an async gateway, achieving 3x throughput on the same instance"
+  - PRESENT: "Selected distributed cache after comparing 3 caching strategies (local / distributed / CDN)"
 - Absence signal: Only describes what was built, never what was compared against or rejected
 
 □ **System Performance Awareness**
 - What to look for: Quantified resource optimization, HA/redundancy design decisions, awareness of appropriate resource utilization levels
 - Resume evidence examples:
-  - STRONG: "피크 시간 EC2 리소스 사용률 분석 결과 CPU 90%/메모리 40% 불균형 확인, 인스턴스 타입 변경으로 비용 30% 절감하며 동일 SLO 유지"
-  - PRESENT: "캐시 적용으로 DB 부하 50% 감소"
-- Absence signal: Performance claims without targets ("성능 개선", "최적화 완료"), no resource utilization awareness
+  - STRONG: "Analyzed peak-hour EC2 resource utilization and found a CPU 90% / memory 40% imbalance; changed instance type to cut costs 30% while maintaining the same SLO"
+  - PRESENT: "Reduced DB load by 50% by applying caching"
+- Absence signal: Performance claims without targets ("performance improved", "optimization complete"), no resource utilization awareness
 
 ---
 
@@ -78,50 +78,50 @@ The forward-looking mindset: continuously optimizing performance and automating 
 □ **Proactive Failure Detection**
 - What to look for: Monitoring and alerting DESIGN — not just reacting to reported issues. System-detected failures vs customer-reported ones.
 - Resume evidence examples:
-  - STRONG: "Grafana + PagerDuty 알림 체계 구축으로 장애를 사용자 인지 전 30초 내 자동 감지, Fault Injection 테스트로 감지 누락 시나리오 사전 검증"
-  - PRESENT: "모니터링 대시보드 구축으로 장애 감지 시간 단축"
+  - STRONG: "Built a Grafana + PagerDuty alerting system to automatically detect incidents within 30 seconds before user awareness; validated detection-gap scenarios in advance with Fault Injection testing"
+  - PRESENT: "Reduced incident detection time by building a monitoring dashboard"
 - Absence signal: No mention of monitoring, alerting, or observability design
 
 □ **Resilience & Recovery Design**
 - What to look for: Graceful degradation — does a component failure cause partial service reduction or total outage? Is recovery automatic or manual?
 - Resume evidence examples:
-  - STRONG: "Circuit Breaker로 외부 POS 장애를 격리, 주문 서비스 99.9% 가용성 유지. 장애 시 자동 fallback으로 수동 개입 불필요"
-  - PRESENT: "장애 발생 시 자동 재시작 스크립트 구현"
-- Absence signal: Only mentions "장애 해결" without explaining recovery mechanism or isolation design
+  - STRONG: "Isolated external POS failures with a Circuit Breaker, maintaining 99.9% availability for the order service. Automatic fallback on failure eliminates manual intervention"
+  - PRESENT: "Implemented an automatic restart script triggered on failure"
+- Absence signal: Only mentions "resolved the incident" without explaining recovery mechanism or isolation design
 
 □ **Recurrence Prevention**
 - What to look for: Root cause analysis that leads to SYSTEMIC fixes — not workarounds. Prevention that depends on systems, not human memory.
 - Resume evidence examples:
-  - STRONG: "OOM 근본 원인을 eBPF 기반 메모리 할당 추적으로 특정, 메모리 누수 패턴을 CI 파이프라인에서 자동 감지하도록 시스템화"
-  - PRESENT: "장애 원인 분석 후 재발 방지 로직 추가"
-- Absence signal: Only "버그 수정", "핫픽스" — patching without root cause analysis or systemic prevention
+  - STRONG: "Pinpointed the OOM root cause via eBPF-based memory allocation tracing; systematized memory leak pattern detection into the CI pipeline for automatic detection"
+  - PRESENT: "Added recurrence-prevention logic after root cause analysis"
+- Absence signal: Only "bug fix", "hotfix" — patching without root cause analysis or systemic prevention
 
 □ **Production Observability**
 - What to look for: Logging and metrics designed for production debugging — not just local development. Cache hit rates, business metrics in dashboards, structured logging.
 - Resume evidence examples:
-  - STRONG: "분산 트레이싱(Jaeger) + 구조화된 JSON 로깅으로 운영 환경 장애 원인 분석 시간 80% 단축, 캐시 히트율 메트릭으로 캐시 전략 효과 실시간 모니터링"
-  - PRESENT: "로깅 개선으로 디버깅 효율화"
+  - STRONG: "Reduced production incident root-cause analysis time by 80% with distributed tracing (Jaeger) + structured JSON logging; monitored cache strategy effectiveness in real time via cache hit rate metrics"
+  - PRESENT: "Improved debugging efficiency by enhancing logging"
 - Absence signal: No mention of production debugging capabilities — implies local-only debugging
 
 □ **Hypothesis Validation**
 - What to look for: Data-driven verification of assumptions BEFORE applying fixes. Distinguishing validated hypotheses from guesswork.
 - Resume evidence examples:
-  - STRONG: "가설: 캐시 미스가 지연 원인 → 캐시 히트율 메트릭 확인 결과 98% → 실제 원인은 N+1 쿼리로 판명, 쿼리 최적화로 해결"
-  - PRESENT: "원인 분석 후 데이터 기반으로 해결 방안 선택"
+  - STRONG: "Hypothesis: cache misses are causing latency → checked cache hit rate metric: 98% → actual cause turned out to be N+1 queries; resolved via query optimization"
+  - PRESENT: "Selected a data-driven solution after root cause analysis"
 - Absence signal: Jumps from problem to solution without showing diagnostic reasoning or data validation
 
 □ **Impact Measurement**
 - What to look for: Before/after comparison of deployed changes. Verification that improvements match expectations.
 - Resume evidence examples:
-  - STRONG: "배포 후 에러율 5%→0.1% 확인, 예상 개선폭(95% 감소)과 실제 결과(98% 감소) 비교 분석"
-  - PRESENT: "성능 개선 결과를 수치로 확인"
-- Absence signal: "개선 완료", "최적화 성공" without post-deployment verification numbers
+  - STRONG: "Confirmed post-deploy error rate dropped from 5% to 0.1%; compared the expected improvement (95% reduction) against the actual result (98% reduction)"
+  - PRESENT: "Confirmed performance improvement results with metrics"
+- Absence signal: "improvement complete", "optimization successful" without post-deployment verification numbers
 
 □ **Continuous Optimization**
 - What to look for: Ongoing performance tuning, operational automation — not just initial delivery but sustained improvement. Evidence the engineer is not stuck maintaining past work.
 - Resume evidence examples:
-  - STRONG: "정산 검증 자동화로 월 3일 수작업 제거 → 운영 팀이 신규 비즈니스 분석에 집중. 이후 이상 거래 자동 감지 대시보드 추가로 2차 자동화"
-  - PRESENT: "배포 자동화로 배포 시간 절감"
+  - STRONG: "Automated reconciliation verification to eliminate 3 days of monthly manual work → ops team redirected to new business analysis. Subsequently added an anomaly transaction auto-detection dashboard as a second wave of automation"
+  - PRESENT: "Reduced deployment time through deployment automation"
 - Absence signal: Resume shows only feature development with zero operational improvement
 
 ---
@@ -141,15 +141,15 @@ Product scope — whether deep expertise in one domain or broad ownership across
 □ **Business Growth Contribution**
 - What to look for: Technical work explicitly connected to business outcomes — revenue, conversion, retention, cost savings, user growth. Not just "it got faster" but "it grew the business."
 - Resume evidence examples:
-  - STRONG: "추천 엔진 구축으로 추천 경유 구매 비중 전체의 25% 달성, 월 거래액 N억원 증가에 기여"
-  - PRESENT: "서비스 개선으로 사용자 이탈률 감소"
+  - STRONG: "Built a recommendation engine that drove recommendation-assisted purchases to 25% of total orders, contributing to an increase of N hundred million KRW in monthly transaction volume"
+  - PRESENT: "Reduced user churn through service improvements"
 - Absence signal: All achievements framed purely in technical terms (response time, memory usage) with zero business context
 
 □ **Product Scope & Ownership**
 - What to look for: Depth or breadth of product ownership — covering significant product areas, or going deep enough in one area to be irreplaceable. The resume should show the candidate's unique contribution that the team would miss.
 - Resume evidence examples:
-  - STRONG: "결제-정산-재고 전체 도메인 오너십으로 비즈니스 로직 전반을 설계·운영, 팀 내 해당 도메인 의사결정의 중심 역할"
-  - PRESENT: "주문 시스템 담당으로 주문 관련 기능 전반 개발"
+  - STRONG: "Owned the full payment-reconciliation-inventory domain, designing and operating all business logic; served as the central decision-maker for that domain within the team"
+  - PRESENT: "Developed all order-related features as the owner of the order system"
 - Absence signal: Only isolated feature development — no sense of domain ownership or sustained responsibility
 
 ---
@@ -169,15 +169,15 @@ Written documentation has compounding ROI: every documented decision, runbook, o
 □ **Data-Driven Coordination**
 - What to look for: Cross-team alignment achieved through data and evidence — not assumption-based negotiation. Decisions proposed with supporting metrics.
 - Resume evidence examples:
-  - STRONG: "트래픽 분석 결과 90% 이상이 상위 5페이지에 집중된다는 데이터를 근거로, 전체가 아닌 상위 5페이지만 캐싱하는 전략을 팀에 제안해 합의 도출"
-  - PRESENT: "데이터 기반으로 기술 방향 제안"
-- Absence signal: Mentions "팀과 협업" or "의사소통" without any evidence of HOW alignment was achieved
+  - STRONG: "Proposed to the team a strategy to cache only the top 5 pages — rather than all pages — backed by traffic analysis data showing over 90% of requests concentrated there; reached consensus"
+  - PRESENT: "Proposed technical direction based on data"
+- Absence signal: Mentions "collaborated with the team" or "communicated" without any evidence of HOW alignment was achieved
 
 □ **Context Transfer Through Documentation**
 - What to look for: Written records that reduce explanation overhead — runbooks, architecture decision records, incident postmortems, onboarding docs. Evidence that knowledge is shared through artifacts, not just conversations.
 - Resume evidence examples:
-  - STRONG: "장애 대응 플레이북 작성으로 온콜 인수인계 시간 1시간→15분 단축, 신규 입사자 온보딩 문서로 적응 기간 2주→3일"
-  - PRESENT: "기술 문서 작성으로 지식 공유"
+  - STRONG: "Wrote an incident response playbook that reduced on-call handover time from 1 hour to 15 minutes; wrote new-hire onboarding documentation that shortened ramp-up from 2 weeks to 3 days"
+  - PRESENT: "Shared knowledge by writing technical documentation"
 - Absence signal: No mention of documentation, knowledge transfer, or shared written context
 
 ---
@@ -195,15 +195,15 @@ The difference between ad-hoc improvement and systematic delivery: engineers who
 □ **Precise Technical Feedback**
 - What to look for: Evidence of code review depth, architecture feedback, or mentoring quality that demonstrates deep technical understanding applied to team improvement
 - Resume evidence examples:
-  - STRONG: "코드 리뷰 가이드 작성 + 주간 아키텍처 리뷰 세션 운영으로 팀 PR 리뷰 리드타임 3일→1일, 프로덕션 버그 30% 감소"
-  - PRESENT: "팀 코드 리뷰 프로세스 개선에 기여"
+  - STRONG: "Wrote a code review guide and ran weekly architecture review sessions, reducing team PR review lead time from 3 days to 1 and cutting production bugs by 30%"
+  - PRESENT: "Contributed to improving the team's code review process"
 - Absence signal: No mention of feedback, review, mentoring, or knowledge-sharing activities
 
 □ **Systematic Result Delivery**
 - What to look for: Goal-driven improvement methodology — setting targets, prioritizing by impact, executing sequentially, setting up anomaly detection. NOT stumbling upon improvements by chance.
 - Resume evidence examples:
-  - STRONG: "API 응답 속도 p95 500ms 목표 설정 → async profiler로 병목 식별 → 상위 3개 엔드포인트 순차 최적화 → 이상값 자동 알림 설정으로 성능 회귀 방지 체계 구축"
-  - PRESENT: "성능 목표를 설정하고 단계적으로 개선"
+  - STRONG: "Set a p95 500ms target for API response time → identified bottlenecks with async profiler → sequentially optimized the top 3 endpoints → built a performance regression prevention system with automatic anomaly alerting"
+  - PRESENT: "Set performance targets and improved them incrementally"
 - Absence signal: Improvements described as one-off events with no systematic approach or ongoing monitoring
 
 ---
@@ -279,10 +279,10 @@ Gap guidance must be specific and actionable — not abstract advice. The candid
 - "Surface your feedback experience"
 
 **Good gap guidance (specific and actionable):**
-- "C2 WEAK: 장애 감지 방식이 드러나지 않습니다. 장애를 '고객 문의로 감지 vs 시스템 알림으로 감지' 중 어떤 방식이었는지 명시하고, 재발방지 대책이 사람 의존인지 시스템 의존인지 구분하세요"
-- "C3 ABSENT: 경력 bullet에 기술 지표(응답 속도, TPS)만 있고 사업 지표(매출, 전환율, 리텐션)가 없습니다. 해당 개선이 사업에 미친 영향을 수치로 추가하세요"
-- "C1 WEAK: 기술 선택의 근거가 없습니다. 'Redis 캐시 적용' 대신 '왜 Redis인가? 로컬 캐시 vs 분산 캐시 비교 후 선택' 같은 설계 비교 흔적을 추가하세요"
-- "C5 WEAK: 팀 기여 활동이 없습니다. 코드 리뷰, 기술 공유 세션, 온보딩 문서 작성 등 팀의 엔지니어링 수준을 높인 사례가 있다면 추가하세요"
+- "C2 WEAK: How you detect incidents is not visible. Specify whether detection was via 'customer report vs. system alert', and distinguish whether your recurrence-prevention measure depends on people or on systems"
+- "C3 ABSENT: Career bullets contain only technical metrics (response time, TPS) with no business metrics (revenue, conversion, retention). Add the quantified business impact of each improvement"
+- "C1 WEAK: The rationale for technology choices is missing. Instead of 'applied Redis cache', add evidence of design comparison — e.g., 'Why Redis? Selected distributed cache after comparing local cache vs. distributed cache'"
+- "C5 WEAK: No team contribution activities are present. If you have examples of raising the team's engineering bar — code reviews, tech sharing sessions, onboarding documentation — add them"
 
 The framing principle: gap guidance should say "if you have this experience, here is how to surface it" — prompt, don't assume absence.
 
@@ -294,7 +294,7 @@ When C1-C5 assessment results show a WEAK or ABSENT axis that is EXPECTED or REQ
 
 Interview targets only axes rated WEAK/ABSENT (not all 5 axes).
 
-If the user opts out ("다음으로", "넘어가자"), fall back to the Gap Guidance above.
+If the user opts out ("next", "skip"), fall back to the Gap Guidance above.
 
 ---
 

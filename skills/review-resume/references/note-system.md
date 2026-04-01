@@ -64,12 +64,12 @@ All candidate files use Markdown with YAML frontmatter:
 
 ```markdown
 ---
-tags: [결제, 동시성, MVCC]
+tags: [payment, concurrency, MVCC]
 ---
 
-## 결제-주문 상태 동기화
+## Payment-Order Status Synchronization
 
-결제 완료 후 주문 상태 불일치가 주 15건 발생...
+15 weekly payment-order status inconsistencies occurring after payment completion...
 ```
 
 **Frontmatter fields:**
@@ -88,16 +88,16 @@ The candidate body contains the narrative content directly. Depth (signature/det
 # User Preferences
 
 ## Expression Style
-- "~했습니다" 종결 선호 (vs "~함" 명사형)
-- 기술 용어는 영문 유지 (Redis, Kafka — 한글화 하지 않음)
+- Prefer formal polite sentence endings (vs. noun-form endings)
+- Keep technical terms in English (Redis, Kafka — do not Koreanize)
 
 ## Judgment Criteria
-- 비즈니스 임팩트 > 기술 깊이 (본인 정체성)
-- 숫자가 없으면 차라리 빼는 쪽 선호
+- Business impact > technical depth (personal identity)
+- Prefer omitting lines that have no numbers
 
 ## Feedback History
-- 2025-03-15: "이 문장은 너무 AI스럽다" → payment-sync 본문 수정
-- 2025-03-20: "문제해결 순서를 시간순이 아니라 임팩트순으로"
+- 2025-03-15: "This sentence sounds too AI-generated" → revised payment-sync body
+- 2025-03-20: "Order problem-solving by impact, not chronologically"
 ```
 
 Three sections are required: **Expression Style**, **Judgment Criteria**, **Feedback History**. Add entries to each section as they emerge from review sessions. Never overwrite history — append only.
@@ -134,11 +134,11 @@ Report the load result to the user:
 
 ```
 [Note Loaded]
-- Self-Introduction Candidates: N개
-- Career Candidates: N개
-- Problem-Solving Candidates: N개
+- Self-Introduction Candidates: N entries
+- Career Candidates: N entries
+- Problem-Solving Candidates: N entries
 - User Preferences: loaded / not found
-- Research Cache: {회사명} found / none
+- Research Cache: {company name} found / none
 ```
 
 `[Phase 0/13: Note Load ✓]`
@@ -157,7 +157,7 @@ Run only when note is empty. Parse the current resume to auto-generate the initi
    - Items with detailed narrative → `depth: detailed`
    - Items in 3–5 bullet form → `depth: compressed`
 5. Create `preferences.md` as a blank template
-6. Report seeding results to the user: "노트를 초기화했습니다. 현재 이력서 기준 N개의 후보가 등록되었습니다."
+6. Report seeding results to the user: "Note initialized. N candidates registered based on the current resume."
 
 ---
 
@@ -174,8 +174,8 @@ After the review is complete, accumulate information discovered in this session 
 2. **Update existing candidates**: If an expression revised during the review is an improvement over an existing candidate → update the body directly
 
 3. **preferences.md update**: Append any new preferences or judgment criteria revealed during the review
-   - e.g., "비즈니스 임팩트 숫자를 앞에 배치하는 스타일 선호"
-   - e.g., "~했습니다 종결 대신 명사형 종결 선호"
+   - e.g., "Prefer placing business impact numbers at the front"
+   - e.g., "Prefer noun-form endings instead of formal polite endings"
 
 4. **sources/ cache**: Save information gathered during Company Research (Pre-Evaluation Research phase Step 3) as `sources/{company}-{date}.md`
 
@@ -187,13 +187,13 @@ Show a summary of changes to the user and wait for confirmation before saving:
 [Note Accumulate]
 
 New Candidates:
-  + problem-solving/search-latency-optimization.md (tags: [검색, p99, 인덱스])
+  + problem-solving/search-latency-optimization.md (tags: [search, p99, index])
 
 Updates:
-  ~ problem-solving/payment-order-sync.md → 본문 갱신
+  ~ problem-solving/payment-order-sync.md → body updated
 
 Preferences:
-  ~ preferences.md → "임팩트순 정렬 선호" 추가
+  ~ preferences.md → "Prefer impact-first ordering" added
 
 Research Cache:
   + sources/toss-backend-2025-03.md

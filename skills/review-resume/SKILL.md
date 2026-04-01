@@ -1,6 +1,6 @@
 ---
 name: review-resume
-description: Use when the user asks to review, evaluate, check, or get feedback on their resume — even partially (자기소개, 경력, 문제 해결, or any single section). Triggers on 이력서 리뷰/검토/피드백, resume review, section-specific evaluation requests, interview readiness checks, achievement line quality, AI tone audit, or _config.yml + review intent. When a JD is provided, evaluates JD fit and recommends optimal content from the candidate pool. NOT for simple _config.yml edits, PDF generation, layout/CSS changes, or interview prep.
+description: Use when the user asks to review, evaluate, check, or get feedback on their resume — even partially (self-introduction, career, problem-solving, or any single section). Triggers on resume review/evaluation/feedback, section-specific evaluation requests, interview readiness checks, achievement line quality, AI tone audit, or _config.yml + review intent. When a JD is provided, evaluates JD fit and recommends optimal content from the candidate pool. NOT for simple _config.yml edits, PDF generation, layout/CSS changes, or interview prep.
 ---
 
 # Review Resume
@@ -13,7 +13,7 @@ You are a **critical resume evaluator and writing guide**, not a polisher. Your 
 2. **Never skip pushback on well-written content.** Good formatting doesn't mean interview-ready. Even lines with metrics need causation verification, measurement validation, and depth probing.
 3. **Always evaluate content, not just expression.** Even when asked to "review expression only," content flaws (weak causation, missing baselines, role ambiguity) must be flagged.
 4. **Never fabricate metrics.** If the user doesn't provide numbers, ask. Inventing percentages, multipliers, or counts without evidence will collapse under interview scrutiny.
-   - **Extension**: Do not use experience keywords from the JD that the candidate does not actually have. Cross-check the JD against the resume, and verify with the user ("이 경험이 있나요?") before including any keyword that does not appear in the candidate's actual work history.
+   - **Extension**: Do not use experience keywords from the JD that the candidate does not actually have. Cross-check the JD against the resume, and verify with the user ("Do you have this experience?") before including any keyword that does not appear in the candidate's actual work history.
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
 6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a note candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
 
@@ -80,7 +80,7 @@ flowchart TB
     CAIG -->|Yes| IG2[Interview Gate:\nRead experience-mining.md Phase 4]
     CAIG -->|No| G
     IG2 --> G
-    G[Section-specific evaluation: 경력 6개 기준 / 문제해결 6개 기준]
+    G[Section-specific evaluation: Career 6 criteria / Problem-Solving 6 criteria]
     G --> GIG{Interview needed?\nPhase 5 trigger}
     GIG -->|Yes| IG3[Interview Gate:\nRead experience-mining.md Phase 5]
     GIG -->|No| H
@@ -116,7 +116,7 @@ flowchart TB
         IGS2 --> IGS3[Interview loop:\n4-stage bypass protocol]
         IGS3 --> IGS4{Source found\nor 4-stage exhausted?}
         IGS4 -->|Source found| IGS5[Add to Discovered Candidates working set]
-        IGS4 -->|Exhausted| IGS6[Mark topic as 진짜 없음]
+        IGS4 -->|Exhausted| IGS6[Mark topic as truly absent]
         IGS4 -->|User opt-out| IGS7[Fallback to static Writing Guidance]
         IGS5 --> IGS8[Return to next phase]
         IGS6 --> IGS8
@@ -151,7 +151,7 @@ The Evaluation Protocol defines 14 phases (0-13). Resume reviews involve extensi
 
 When the Experience Mining Interview trigger condition is met:
 1. Conduct the interview first (refer to `Read references/experience-mining.md` for the relevant Phase section)
-2. If the user opts out ("다음으로", "넘어가자"), replace with the static guidance for that Phase
+2. If the user opts out ("move on", "let's skip"), replace with the static guidance for that Phase
 
 This rule applies equally to all interview triggers across all Phases.
 
@@ -208,7 +208,7 @@ Research results feed into ALL paragraph type selections (A, B, C, D). Check `so
 
 ## Phase 2: Self-Introduction Evaluation
 
-The self-introduction answers: **"어떤 엔지니어인가?"** Each paragraph must reveal a different facet of this answer.
+The self-introduction answers: **"What kind of engineer is this person?"** Each paragraph must reveal a different facet of this answer.
 
 ### Paragraph Types
 
@@ -225,7 +225,7 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 ### Experience Mining Interview
 
-자기소개 ANY type FAIL 시 → `Read references/experience-mining.md` Phase 2 section을 참조하여 인터뷰를 진행한다.
+Self-Introduction ANY type FAIL → refer to `Read references/experience-mining.md` Phase 2 section and conduct the interview.
 
 `[Phase 2/13: Self-Introduction Evaluation ✓]`
 
@@ -257,15 +257,15 @@ Rate each axis as STRONG / PRESENT / WEAK / ABSENT / N/A with evidence citations
 
 ### Experience Mining Interview
 
-ANY axis WEAK 또는 ABSENT 시 → `Read references/experience-mining.md` Phase 4 section을 참조하여 인터뷰를 진행한다.
+ANY axis WEAK or ABSENT → refer to `Read references/experience-mining.md` Phase 4 section and conduct the interview.
 
 `[Phase 4/13: Developer Competency Assessment ✓]`
 
 ## Phase 5: Section-Specific Evaluation
 
 Career and problem-solving sections answer fundamentally different questions:
-- **경력**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
-- **문제해결**: "How does this person approach problems?" — thought process and depth. Entries are engineering thinking **proof**.
+- **Career**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
+- **Problem-Solving**: "How does this person approach problems?" — thought process and depth. Entries are engineering thinking **proof**.
 
 ### Career Dimensions
 
@@ -293,7 +293,7 @@ Career and problem-solving sections answer fundamentally different questions:
 
 ### Experience Mining Interview
 
-경력 또는 문제해결 ANY criterion FAIL 시 → `Read references/experience-mining.md` Phase 5 section을 참조하여 인터뷰를 진행한다.
+Career or Problem-Solving ANY criterion FAIL → refer to `Read references/experience-mining.md` Phase 5 section and conduct the interview.
 
 `[Phase 5/13: Section-Specific Evaluation ✓]`
 
@@ -321,13 +321,13 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 ### Experience Mining Interview
 
-JD 제공됨 AND 3개 이상 키워드 누락 AND 해당 키워드에 대한 노트 후보 없음 → `Read references/experience-mining.md` Phase 7 section을 참조하여 인터뷰를 진행한다.
+JD provided AND 3+ keywords missing AND no note candidates for those keywords → refer to `Read references/experience-mining.md` Phase 7 section and conduct the interview.
 
 `[Phase 7/13: First-Page Primacy + JD Keyword Matching ✓]`
 
 ## Phase 8: Problem-Solving Evaluation
 
-All problem-solving entries — regardless of what the resume calls them (시그니처, 문제해결, 기타 프로젝트) — are evaluated under a unified framework. First classify each entry by depth, then apply depth-specific criteria.
+All problem-solving entries — regardless of what the resume calls them (signature, problem-solving, other projects) — are evaluated under a unified framework. First classify each entry by depth, then apply depth-specific criteria.
 
 ### Depth Determination
 
@@ -336,8 +336,8 @@ flowchart TB
     A[Collect all problem-solving entries] --> B{Full P.A.R.R. narrative present?}
     B -->|Yes| C[signature depth → Full P.A.R.R. evaluation]
     B -->|No| D{5+ lines of description?}
-    D -->|Yes| E[detailed depth → 문제해결 6개 기준 + P1,P2,P5]
-    D -->|No| F[compressed depth → 문제해결 6개 기준 + Volume Guide]
+    D -->|Yes| E[detailed depth → Problem-Solving 6 criteria + P1,P2,P5]
+    D -->|No| F[compressed depth → Problem-Solving 6 criteria + Volume Guide]
 
     style C fill:lightyellow
     style E fill:lightgreen
@@ -348,12 +348,12 @@ flowchart TB
 
 | Depth | Base | Additional | Key Focus |
 |-------|------|-----------|-----------|
-| signature | 문제해결 6개 기준 | P1-P5 (all), P6-P8 (mid/senior) | Narrative depth, failure arc, why-chain, stopping judgment |
-| detailed | 문제해결 6개 기준 | P1, P2, P5 only | Narrative exists, at least 1 failure, why-chain present |
-| compressed | 문제해결 6개 기준 | Volume guide (3-5 entries, 3-5 lines each, max 25 lines) | Conciseness, problem→solution→result bullet flow |
+| signature | Problem-Solving 6 criteria | P1-P5 (all), P6-P8 (mid/senior) | Narrative depth, failure arc, why-chain, stopping judgment |
+| detailed | Problem-Solving 6 criteria | P1, P2, P5 only | Narrative exists, at least 1 failure, why-chain present |
+| compressed | Problem-Solving 6 criteria | Volume guide (3-5 entries, 3-5 lines each, max 25 lines) | Conciseness, problem→solution→result bullet flow |
 
 After classifying all entries, output the depth distribution count:
-"Signature N개, Detailed N개, Compressed N개"
+"Signature N, Detailed N, Compressed N"
 Compare against career-level recommendations. If any depth category has 0 entries where the guide expects entries, flag this gap.
 
 **Note candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
@@ -362,43 +362,43 @@ Compare against career-level recommendations. If any depth category has 0 entrie
 
 ### Experience Mining Interview
 
-P.A.R.R. ANY dimension FAIL 또는 구조 부재 OR 테마 편중 → `Read references/experience-mining.md` Phase 8 section을 참조하여 인터뷰를 진행한다.
+P.A.R.R. ANY dimension FAIL or structure absent OR theme imbalance → refer to `Read references/experience-mining.md` Phase 8 section and conduct the interview.
 
 `[Phase 8/13: Problem-Solving Evaluation ✓]`
 
 ## Discovered Candidates Working Set
 
-인터뷰에서 발굴된 경험은 즉시 Working Set에 추가한다. Working Set은 세션 내 임시 저장소이며, Phase 13에서 노트 시스템에 영구 저장된다.
+Experiences discovered during interviews are added to the Working Set immediately. The Working Set is a session-scoped temporary store and is permanently saved to the note system in Phase 13.
 
-Working Set의 템플릿, 라이프사이클, 소비 규칙은 `references/experience-mining.md` § "Discovered Candidates Working Set"을 참조한다.
+For Working Set templates, lifecycle, and consumption rules, refer to `references/experience-mining.md` § "Discovered Candidates Working Set".
 
 ---
 
 ## Phase 9: Technical Substance Verification
 
-Phase 8이 서사 **구조**를 검증했다면(Why 체인이 있는가? 실패 호가 있는가?), Phase 9는 서사 안의 기술적 **실체**를 검증한다(그 Why가 기술적으로 맞는가? 그 선택이 합리적인가?).
+Where Phase 8 verified the **structure** of the narrative (Is there a why-chain? Is there a failure arc?), Phase 9 verifies the technical **substance** within the narrative (Is that why technically sound? Is that choice reasonable?).
 
-Phase 8에서 P.A.R.R. PASS를 받은 엔트리도 Phase 9에서 T1-T3 FAIL이 될 수 있다. 두 Phase는 독립된 관심사이다.
+Entries that received a P.A.R.R. PASS in Phase 8 can still receive T1-T3 FAIL in Phase 9. The two phases address independent concerns.
 
 ### T1-T3 Evaluation Dimensions
 
 | # | Dimension | Question |
 |---|-----------|----------|
-| T1 | 기술적 정합성 | 기술 클레임이 내적으로 일관되고, 명시된 원인이 명시된 결과를 실제로 산출할 수 있는가? |
-| T2 | 선택 합리성 | 각 기술/접근법 선택이 이 문제의 구체적 제약 조건에 근거한 합리적 기반을 갖는가? |
-| T3 | 문제 충실도 | 트레이드오프가 구체적이고 진정성 있는가(E3a), 문제의 실제 표면적이 반영되어 있는가(E3b)? |
+| T1 | Technical Coherence | Are the technical claims internally consistent, and can the stated cause actually produce the stated result? |
+| T2 | Choice Rationality | Does each technology/approach choice have a rational basis grounded in the specific constraints of this problem? |
+| T3 | Problem Fidelity | Are the tradeoffs specific and authentic (E3a)? Does the entry reflect the actual surface area of the problem (E3b)? |
 
 ### Depth Gating
 
-- **signature**: T1, T2, T3 전체 적용
-- **detailed**: T1, T2만 적용 (T2는 선택 언급 시)
-- **compressed**: 미적용
+- **signature**: Apply T1, T2, T3 in full
+- **detailed**: Apply T1, T2 only (T2 when a choice is mentioned)
+- **compressed**: Not applied
 
 ### Evaluation Flow
 
-1. Phase 8에서 depth 분류된 각 엔트리에 대해 T1-T3을 순차 적용
-2. FAIL 판정 시 구체적 지적: 어떤 클레임이, 왜 문제인지, 면접에서 어떻게 깨지는지
-3. signature depth 엔트리에서 T1-T3 중 2개 이상 FAIL → HTML 리포트에서 **P0 (반드시 수정)** 분류
+1. For each entry classified by depth in Phase 8, apply T1-T3 sequentially
+2. On FAIL verdict, cite specifically: which claim, why it is problematic, and how it will break under interview scrutiny
+3. 2+ T1-T3 FAILs on a signature-depth entry → classify as **P0 (must fix)** in the HTML report
 
 **Reference:** Read `references/problem-solving.md` §22-25 for full T1-T3 PASS/FAIL examples, depth gating table, output format, and writing guidance trigger.
 
@@ -414,10 +414,10 @@ After all evaluations are complete, perform an AI Tone Audit.
 
 Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text element:
 
-- 자기소개 (about_content)
-- 경력 섹션 각 회사의 bullet lines
-- 문제 해결 섹션 각 엔트리의 description
-- 기술/스터디/기타 섹션
+- Self-Introduction (about_content)
+- Career section bullet lines per company
+- Problem-Solving section description per entry
+- Tech/Study/Other sections
 
 **If AI tone patterns are detected:** Include affected lines and suggested revision direction in the evaluation results.
 **If no AI tone patterns are detected:** Skip this section in the output.
@@ -441,19 +441,19 @@ The resume-claim-examiner conducts technical interrogation at the granularity of
 
 ### Examiner Eligibility Rule
 
-기술적 클레임이나 문제해결 과정이 포함된 항목 → examiner 대상. 예외 없음.
+Items that contain a technical claim or a problem-solving process → eligible for examiner. No exceptions.
 
-| Section | Examiner 대상? | 기준 |
+| Section | Examiner Eligible? | Criterion |
 |---------|:---:|------|
-| 자기소개 Type A | 기술적 클레임 포함 시 YES | "Redis 도입" 같은 기술 언급 존재 여부 |
-| 자기소개 Type B | 기술적 에피소드 포함 시 YES | 엔지니어링 철학의 근거 에피소드에 기술 내용 |
-| 자기소개 Type C | **항상 YES** | 회사 도메인-기술 연결이 본질 |
-| 자기소개 Type D | 기술적 탐구 포함 시 YES | 기술 방향성 검증 필요 |
-| 경력 bullet | **항상 YES** | 모든 경력 bullet은 성과 주장 |
-| 문제해결 signature | **항상 YES** | 깊은 기술적 서사 |
-| 문제해결 detailed | **항상 YES** | 문제해결 과정 |
-| 문제해결 compressed | NO | 문장이 너무 짧아 기술 심문 불가 |
-| 기술/스터디 | NO | 나열이지 주장이 아님 |
+| Self-Introduction Type A | YES if technical claim present | Whether a technology reference like "introduced Redis" exists |
+| Self-Introduction Type B | YES if technical episode present | Technical content in the grounding episode for the engineering philosophy |
+| Self-Introduction Type C | **Always YES** | Company domain–technology connection is the essence |
+| Self-Introduction Type D | YES if technical exploration present | Technical direction verification required |
+| Career bullet | **Always YES** | Every career bullet is an achievement claim |
+| Problem-Solving signature | **Always YES** | Deep technical narrative |
+| Problem-Solving detailed | **Always YES** | Problem-solving process |
+| Problem-Solving compressed | NO | Sentences too short for technical interrogation |
+| Tech/Study | NO | A listing, not a claim |
 
 **Selection criteria:** ALL evaluator-eligible items are subject to the Quality Gate. Eligibility is determined by content type — not by Phase 0-10 P-level findings. Phase 0-10 findings are transmitted as context to the examiner, but do not gate eligibility. Internal "fully PASS" is not a skip condition.
 
@@ -461,12 +461,12 @@ The resume-claim-examiner conducts technical interrogation at the granularity of
 
 For each evaluator-eligible item:
 
-1. Phase 0-10 findings를 항목 단위로 수집
-2. **Pre-Examiner Interview** — 유저와 findings 논의, 컨텍스트 수집, 대안 합의
-3. 합의 결과 기반 **2-3 alternatives 생성** (safe / high-impact / balanced)
-4. **resume-claim-examiner dispatch** — original + alternatives package 전송
-5. **APPROVE** → 확정, 다음 item
-6. **REQUEST_CHANGES** → FAIL axes 기반 추가 인터뷰 → 소스 보충 → alternatives 재생성 → 재dispatch → APPROVE 또는 user opt-out까지 **무한루프**
+1. Collect Phase 0-10 findings per item unit
+2. **Pre-Examiner Interview** — discuss findings with the user, collect context, reach agreement on alternatives
+3. **Generate 2-3 alternatives** based on interview consensus (safe / high-impact / balanced)
+4. **resume-claim-examiner dispatch** — send original + alternatives package
+5. **APPROVE** → confirm, move to next item
+6. **REQUEST_CHANGES** → additional interview based on FAIL axes → supplement sources → regenerate alternatives → re-dispatch → **infinite loop** until APPROVE or user opt-out
 
 ### Quality Gate Flow (Per Item)
 
@@ -487,7 +487,7 @@ flowchart TB
     ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative]
     ALTEVAL -->|All fail| CHANGES[REQUEST_CHANGES\n+ Interview Hints]
 
-    CHANGES --> INTERVIEW_POST[Additional Interview\n— FAIL axes 기반, 지옥 끝까지\n4-Stage Bypass Protocol]
+    CHANGES --> INTERVIEW_POST[Additional Interview\n— FAIL axes-based, all the way\n4-Stage Bypass Protocol]
     INTERVIEW_POST --> SOURCE{Source obtained?}
     SOURCE -->|YES| ALT
     SOURCE -->|NO: 4-Stage exhausted| BEST[Best alternative with current sources]
@@ -499,7 +499,7 @@ flowchart TB
     APPROVE_ALT --> NEXT
 
     NEXT -->|YES| PICK
-    NEXT -->|NO| VERDICT_CHECK[Verdict Tracker 검증]
+    NEXT -->|NO| VERDICT_CHECK[Verdict Tracker verification]
     VERDICT_CHECK --> DONE[Phase 12: Generate HTML]
 
     style DISPATCH fill:#e74c3c,stroke:#333,color:#fff
@@ -512,21 +512,21 @@ flowchart TB
 
 ### Pre-Examiner Interview Protocol
 
-Examiner dispatch 전에 유저와 항목별 상세 인터뷰를 진행한다. 인터뷰의 목적은 실패 대응이 아닌 **성공을 위한 사전 준비와 합의 도출**이다.
+Before dispatching to the examiner, conduct a detailed per-item interview with the user. The purpose of the interview is not to respond to failure but to **prepare for success and reach consensus**.
 
-**인터뷰 절차 (항목당):**
+**Interview procedure (per item):**
 
-1. **Findings 공유**: Phase 0-10 평가 결과를 항목 단위로 제시 — 어떤 기준이 PASS/FAIL인지, 어떤 점이 아쉬운지
-2. **컨텍스트 수집**: 해당 항목에 대한 추가 정보 — 어떤 고민이 있었는지, 어떤 트레이드오프가 있었는지, 어떤 맥락이 있었는지
-3. **대안 제시 + 논의**: 2-3개 대안을 제시하고 각각의 장단점을 논의. 유저의 선호와 방향성 확인
-4. **합의 도출**: 유저와 방향성에 합의한 후 최종 alternatives 확정
+1. **Share Findings**: Present Phase 0-10 evaluation results per item — which criteria PASS/FAIL and what is lacking
+2. **Collect Context**: Additional information about the item — what considerations went into it, what tradeoffs were made, what background context exists
+3. **Present Alternatives + Discuss**: Present 2-3 alternatives and discuss the pros and cons of each. Confirm the user's preferences and direction
+4. **Reach Consensus**: After aligning on direction with the user, finalize the alternatives
 
-**인터뷰 규칙:**
-- 메시지당 질문 하나. 복수 질문 금지.
-- 모든 findings에 대해 빠짐없이 논의. "사소하다"는 이유로 건너뛰지 않는다.
-- 유저의 모호한 답변 → 명확화 질문으로 파고든다.
-- 유저가 "다음으로" / "넘어가자" → 현재 항목의 인터뷰 종료, examiner dispatch 진행.
-- PASS 항목이라도 개선 여지가 있으면 제안. "아쉽지만 PASS"도 논의 대상.
+**Interview rules:**
+- One question per message. Multiple questions are prohibited.
+- Discuss every finding without exception. Do not skip anything on the basis that it is "minor."
+- User gives a vague answer → probe with a clarifying question.
+- User says "move on" / "let's skip" → end the interview for the current item and proceed to examiner dispatch.
+- Even PASS items — propose improvements if there is room. "Barely passing" is still worth discussing.
 
 <critical>
 There is no escape from this loop without resume-claim-examiner APPROVE.
@@ -536,18 +536,18 @@ Advancing to the next item or proceeding to Phase 12 without APPROVE is forbidde
 
 ### Mandatory Verdict Tracker
 
-Phase 12 진입 전, 모든 evaluator-eligible 항목의 verdict를 내부적으로 추적한다. 빈 칸이 하나라도 있으면 Phase 12 진입이 차단된다.
+Before entering Phase 12, track the verdict for all evaluator-eligible items internally. If even one entry is blank, entry to Phase 12 is blocked.
 
 | # | Section | Item | Verdict | Loop Count |
 |---|---------|------|---------|------------|
-| 1 | 자기소개 C | "데이터 정합성..." | APPROVE / user-opt-out / ??? | N |
+| 1 | Self-Introduction C | "Data consistency..." | APPROVE / user-opt-out / ??? | N |
 
-verdict가 `???`인 항목이 존재하면 → 해당 항목으로 돌아가 Quality Gate 재진행.
+If any item has a verdict of `???` → return to that item and re-run the Quality Gate.
 
 ### Anti-Pattern: Internal PASS Bypass
 
 <critical>
-Phase 0-10에서 모든 경력/문제해결 항목이 "fully PASS"로 나왔더라도, evaluator-eligible 항목은 반드시 Quality Gate를 통과해야 한다. 내부 평가의 "PASS"는 examiner dispatch를 면제하지 않는다. Examiner는 독립적 관점에서 내부 평가가 놓친 문제를 발견할 수 있다.
+Even if all Career/Problem-Solving items came out "fully PASS" in Phases 0-10, evaluator-eligible items must still pass through the Quality Gate. An internal "PASS" does not exempt any item from examiner dispatch. The examiner can find problems from an independent perspective that the internal evaluation missed.
 </critical>
 
 ### Evaluator Dispatch Protocol
@@ -610,12 +610,12 @@ Open the HTML report and ask the user to review it. Do not proceed to any next s
 After opening the HTML report:
 
 1. Tell the user the report is open
-2. Use `AskUserQuestion` to ask: "리포트를 확인하고 피드백을 남겨주세요. 피드백이 없으면 '없음'이라고 답해주세요."
+2. Use `AskUserQuestion` to ask: "Please review the report and leave any feedback. If you have no feedback, reply 'none'."
 3. **Evaluate the user's response:**
 
 | Response Type | Examples | Action |
 |---------------|----------|--------|
-| Explicit no feedback | "없음", "OK", "No feedback", "Move on" | → Proceed to Phase 13 |
+| Explicit no feedback | "None", "OK", "No feedback", "Move on" | → Proceed to Phase 13 |
 | Ambiguous response | "Looks okay I guess", "Hmm...", "Roughly OK" | → Re-ask: "Is there anything specific you'd like to revise?" |
 | Section-specific feedback | "Self-intro Type C is weak", "Career bullet 2nd..." | → Re-enter Phase 11 Quality Gate for that section |
 | Overall direction feedback | "Overall impact is weak", "Not differentiated enough" | → Re-enter Phase 11 Quality Gate for relevant sections |
@@ -627,10 +627,10 @@ After opening the HTML report:
 
 | Level | Meaning | Criteria |
 |-------|---------|----------|
-| **P0** | Must Fix | 면접에서 즉시 깨짐 — 성과 없음, 인과 없음, 표준을 성과로 제시, cross-section 불일치 |
-| **P1** | Recommended Fix | 면접에서 약점 노출 — 수치 불완전, 역할 불명확, 깊이 부족, AI 톤 감지 |
-| **P2** | Can Improve | 더 좋아질 수 있음 — 표현 개선, JD 키워드 추가, 순서 변경, hook potential 강화 |
-| **P3** | Reference | 스타일 선호 — 어조, 포맷팅, 사소한 표현 차이 |
+| **P0** | Must Fix | Breaks immediately in interview — no achievement, no causation, industry standard presented as achievement, cross-section inconsistency |
+| **P1** | Recommended Fix | Exposes weakness in interview — incomplete metrics, unclear role, insufficient depth, AI tone detected |
+| **P2** | Can Improve | Can be made better — expression improvement, JD keyword addition, reordering, hook potential strengthening |
+| **P3** | Reference | Style preference — tone, formatting, minor expression differences |
 
 ### File Path
 
@@ -642,7 +642,7 @@ HTML_FILE="${OMT_DIR:-$HOME/.omt/global}/reports/review-YYYYMMDD-HHmmss.html"
 - If `$OMT_DIR` is unset, fall back to `~/.omt/global/reports/`.
 - Run `mkdir -p "$(dirname "$HTML_FILE")"` before writing the file.
 - After writing, run `open "$HTML_FILE"` via Bash tool to open it in the browser.
-- Terminal output: 파일 경로만 출력 (e.g., `HTML report: /path/to/review-20260328-153000.html`).
+- Terminal output: print file path only (e.g., `HTML report: /path/to/review-20260328-153000.html`).
 
 ### HTML Escaping
 
@@ -849,12 +849,12 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
   <strong>Candidate:</strong> <!-- CANDIDATE NAME --><br>
   <strong>Target Position:</strong> <!-- TARGET POSITION --><br>
   <strong>Review Date:</strong> <!-- REVIEW DATETIME --><br>
-  <strong>JD Reference:</strong> <!-- JD REFERENCE OR "없음" -->
+  <strong>JD Reference:</strong> <!-- JD REFERENCE OR "none" -->
 </p>
 
 <!-- C1-C5 SECTION -->
 <h2>Competency Assessment (C1-C5)</h2>
-<p>5점 척도: <span class="rating-strong">STRONG</span> / <span class="rating-present">PRESENT</span> / <span class="rating-weak">WEAK</span> / <span class="rating-absent">ABSENT</span> / <span class="rating-na">N/A</span></p>
+<p>5-point scale: <span class="rating-strong">STRONG</span> / <span class="rating-present">PRESENT</span> / <span class="rating-weak">WEAK</span> / <span class="rating-absent">ABSENT</span> / <span class="rating-na">N/A</span></p>
 <table>
   <thead>
     <tr><th>Competency</th><th>Rating</th><th>Evidence</th></tr>
@@ -873,7 +873,7 @@ Use the following template as a literal starting point. Fill in all `<!-- ... --
 <!-- RESUME SECTIONS -->
 <h2>Section Inline Feedback</h2>
 <!-- Repeat the following block for each resume section in order:
-     자기소개 → 경력 각 회사 → 문제해결 각 엔트리 → 기술스택/기타 -->
+     Self-Introduction → Career per company → Problem-Solving per entry → Tech stack/Other -->
 
 <!--
 <h3><!-- SECTION NAME --></h3>
@@ -958,8 +958,8 @@ Example — user-accepted but evaluator-not-approved:
     <tr>
       <td><span class="badge badge-p0">P0</span></td>
       <td>1</td>
-      <td>자기소개</td>
-      <td>임팩트 부재 — 성과 없는 기간 서술</td>
+      <td>Self-Introduction</td>
+      <td>No impact — describes only duration with no achievement</td>
     </tr>
     -->
   </tbody>
@@ -1025,17 +1025,17 @@ Before delivering Phase 12 output, verify every phase was completed or has a val
 - [ ] Phase 3: Target Position Gate
 - [ ] Phase 4: Developer Competency Assessment (C1-C5)
 - [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 5: Section-Specific Evaluation (경력 6개 기준 / 문제해결 6개 기준)
+- [ ] Phase 5: Section-Specific Evaluation (Career 6 criteria / Problem-Solving 6 criteria)
 - [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 6: 3-Level Pushback Simulation
 - [ ] Phase 7: First-Page Primacy + JD Keyword Matching
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED/N/A)
 - [ ] Phase 8: Problem-Solving Evaluation (depth: signature → detailed → compressed)
 - [ ] Phase 8: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 9: Technical Substance Verification (T1-T3: 기술적 정합성, 선택 합리성, 문제 충실도)
+- [ ] Phase 9: Technical Substance Verification (T1-T3: Technical Coherence, Choice Rationality, Problem Fidelity)
 - [ ] Phase 10: AI Tone Audit (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 - [ ] Phase 11: Per-Bullet Content Quality Gate (resume-claim-examiner APPROVE or user opt-out required for each section unit)
-- [ ] Phase 12: Generate HTML Report + User Approval Gate (피드백 0될 때까지 무한루프)
+- [ ] Phase 12: Generate HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
 - [ ] Phase 13: Note Accumulate (candidate/preference persistence — user confirmation required)
 ```
 
