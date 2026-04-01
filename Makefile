@@ -1,4 +1,4 @@
-.PHONY: sync sync-dry validate validate-schema validate-components validate-tests test pull pull-dry help
+.PHONY: sync sync-dry validate validate-schema validate-components validate-tests check-kotlin-remnants test pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -7,6 +7,7 @@ help:
 	@echo "  make validate           - 전체 검증 (스키마 + 컴포넌트)"
 	@echo "  make validate-schema    - 스키마 검증 (필드, 값 유효성)"
 	@echo "  make validate-components - 컴포넌트 검증 (파일 존재 여부)"
+	@echo "  make check-kotlin-remnants - Kotlin 잔재 검출 (java-project skills)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
@@ -17,13 +18,16 @@ sync: validate validate-tests
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
-validate: validate-schema validate-components
+validate: validate-schema validate-components check-kotlin-remnants
 
 validate-schema:
 	@bun run tools/validators/schema.ts
 
 validate-components:
 	@bun run tools/validators/components.ts
+
+check-kotlin-remnants:
+	@bash tools/check-kotlin-remnants.sh
 
 validate-tests:
 	@./tools/run-tests.sh
