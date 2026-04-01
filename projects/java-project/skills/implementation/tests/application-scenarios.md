@@ -64,7 +64,7 @@ public class ProductV1Controller implements ProductV1ApiSpec {
 |----|-------|----------|
 | V1 | Facade에 @Transactional 선언 | `@Transactional` 어노테이션 존재 |
 | V2 | 다수 Service 주입 | `orderService`, `couponService`, `pointService` 주입 |
-| V3 | Facade가 비즈니스 로직 없이 조율만 수행 | if/switch 조건 분기 없음 |
+| V3 | Facade가 비즈니스 로직 없이 조율만 수행 | 비즈니스 로직 if/switch 없음 (선택적 서비스 호출을 위한 null 체크는 허용) |
 
 **Expected Correct Output**:
 ```java
@@ -1236,8 +1236,8 @@ public interface OrderJpaRepository extends JpaRepository<Order, Long> {
 | VP | Check | Expected |
 |----|-------|----------|
 | V1 | 필수 필드 Non-null | `private String name`, `private Money price` (`@Column(nullable = false)`) |
-| V2 | 선택 필드 Nullable | `@Nullable private String description` |
-| V3 | 필수 필드에 nullable 마킹 없음 | 필수 필드에 `@Nullable` 사용되지 않음 |
+| V2 | 선택 필드 Nullable | `@Column private String description` (`nullable = false` 없이 선언) |
+| V3 | 필수 필드에 nullable 마킹 없음 | 필수 필드에 `nullable = false` 누락 없음 |
 
 **Expected Correct Output**:
 ```java
