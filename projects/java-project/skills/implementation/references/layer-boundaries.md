@@ -90,7 +90,7 @@ public class OrderFacade {
         }
 
         // 3. Create order
-        final var order = orderService.create(criteria.to());
+        final var order = orderService.create(criteria.toCommand());
 
         // 4. Publish event
         eventPublisher.publishEvent(OrderCreatedEventV1.from(order));
@@ -261,7 +261,7 @@ public class OrderFacade {
 public class OrderFacade {
     @Transactional
     public OrderInfo processOrder(OrderCriteria criteria) {
-        return orderService.process(criteria.to());  // Service handles type-specific processing
+        return orderService.process(criteria.toCommand());  // Service handles type-specific processing
     }
 }
 
