@@ -1,5 +1,25 @@
 [
   {
+    "query": "이력서 리뷰해줘. _config.yml에 있어. 전체적인 피드백 부탁해.",
+    "should_trigger": true
+  },
+  {
+    "query": "이력서 검토 부탁해. 자기소개 부분이 좀 약한 것 같은데 어떻게 개선하면 좋을지 알려줘.",
+    "should_trigger": true
+  },
+  {
+    "query": "이력서 좀 봐줘. 경력 섹션 bullet들이 임팩트가 있는지, 문제해결 섹션이 면접에서 버틸 수 있는 수준인지 확인해줘.",
+    "should_trigger": true
+  },
+  {
+    "query": "토스증권 서버 개발자 JD 기반으로 이력서 리뷰해줘. JD는 Java/Kotlin, Spring, Redis, Kafka 위주야.",
+    "should_trigger": true
+  },
+  {
+    "query": "네이버 검색 백엔드 JD 기반으로 이력서 리뷰해줘. 경력이랑 문제해결 섹션이 이 JD에 맞는지 봐줘. _config.yml에 있어.",
+    "should_trigger": true
+  },
+  {
     "query": "Can you review my resume? It's in _config.yml. Please give me overall feedback.",
     "should_trigger": true
   },
@@ -86,5 +106,17 @@
   {
     "query": "Based on this JD, recommend which career bullets to move to the front and which to cut from my resume. Based on _config.yml.",
     "should_trigger": true
+  },
+  {
+    "query": "_config.yml에 있는 마인즈 경력 설명에 오타가 있어. 'schedular'를 'scheduler'로 고쳐줘.",
+    "should_trigger": false
+  },
+  {
+    "query": "이력서 레이아웃에서 문제해결 섹션 페이지 나눔이 이상해. _sass/modern-resume-theme.scss에서 page-break 관련 스타일 수정해줘.",
+    "should_trigger": false
+  },
+  {
+    "query": "기술 스택 섹션에 Docker랑 Kubernetes 추가하고 싶어. _config.yml 업데이트해줘.",
+    "should_trigger": false
   }
 ]

@@ -161,10 +161,10 @@ Apply to signature depth entries. After Problem-Solving 6 Criteria evaluation, a
 
 **Feature Listing Anti-Pattern**: If the project entry consists only of verb + feature/technology name, flag immediately as P1 FAIL:
 
-- Specific patterns to detect: `[feature name] developed` (e.g., "Pagination feature developed", "Shopping cart feature developed")
-- `[tech name] implemented` (e.g., "OAuth social login implemented", "Redis cache implemented")
-- `[tech name] applied` (e.g., "Kafka applied", "ElasticSearch applied")
-- `[tech name] integrated` (e.g., "Payment API integrated", "External API integrated")
+- Specific patterns to detect: `[feature name] developed / [기능명] 개발` (e.g., "Pagination feature developed", "페이징 기능 개발")
+- `[tech name] implemented / [기술명] 구현` (e.g., "OAuth social login implemented", "소셜 로그인 구현")
+- `[tech name] applied / [기술명] 적용` (e.g., "Kafka applied", "카프카 적용")
+- `[tech name] integrated / [기술명] 연동` (e.g., "Payment API integrated", "결제 API 연동")
 - Pattern: \[feature/tech name\] + verb only, no problem context, no outcome → flag as "Feature Listing Anti-Pattern"
 
 ---

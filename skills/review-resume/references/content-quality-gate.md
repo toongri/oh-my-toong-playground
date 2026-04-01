@@ -206,7 +206,7 @@ Conduct a detailed per-item interview with the user before examiner dispatch. Th
 - One question per message. Multiple questions are prohibited.
 - Discuss every finding without exception. Do not skip items on the grounds of being "minor."
 - When the user gives an ambiguous answer → follow up with a clarifying question.
-- When the user says "next" / "move on" → end the current item interview, proceed with examiner dispatch.
+- When the user opts out ("next" / "move on" / "다음으로" / "넘어가자") → end the current item interview, proceed with examiner dispatch.
 - Even for PASS items, suggest improvements if room exists. "Technically a PASS, but could be better" is also a discussion topic.
 
 ### Relationship with Section 4 (Post-Examiner Interview)
@@ -295,7 +295,7 @@ If sources remain unconfirmed after all 4 Stages are exhausted:
 **Interview rules (same as experience-mining.md):**
 - One question per message. Multiple questions are prohibited.
 - Treat ambiguous answers with clarifying questions. Do not accept insufficient answers as sources.
-- User says "move on" / "let's skip" → end current interview → hand off to Opt-Out handling.
+- If the user opts out ("move on" / "let's skip" / "다음으로" / "넘어가자") → end current interview → hand off to Opt-Out handling.
 
 ---
 
@@ -384,6 +384,8 @@ The Quality Gate is an infinite loop, but the user can explicitly exit.
 | "this is OK" | End current section loop → proceed to next section |
 | "skip" | End current section loop → proceed to next section |
 | "just continue" | End current section loop → proceed to next section |
+| "다음으로" | End current section loop → proceed to next section |
+| "넘어가자" | Same as "다음으로" |
 
 ### Opt-Out Status Marking
 

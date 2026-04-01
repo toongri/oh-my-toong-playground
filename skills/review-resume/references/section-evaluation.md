@@ -40,7 +40,7 @@ The following items must be checked during evaluation and included in the HTML R
 
 ### Technical Stack Placement
 - [ ] Verify that the technical stack section is placed immediately below the self-introduction (JD tech stack matching must appear in the 7-second scan to benefit both ATS and recruiters)
-- [ ] PASS: immediately after self-introduction / WARNING: 2nd section or later / FAIL: 3rd section or later, or at the bottom of the page
+- [ ] PASS: immediately after self-introduction / WARNING: after career section / FAIL: end of resume or absent
 
 ### Portfolio Theme Diversity
 - [ ] Classify problem-solving entries by theme (Consistency, Performance, Resilience, Business Metrics, Data Pipeline, etc.)
@@ -69,7 +69,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 
 | Dimension | Question | Fail Signal |
 |-----------|----------|-------------|
-| Linear Causation | Does goal→action→outcome connect in a single line as linear causation? | "improved", "enhanced", "introduced" without mechanism or outcome |
+| Linear Causation | Does goal→action→outcome connect in a single line as linear causation? | "improved/개선", "enhanced/향상", "introduced/도입" without mechanism or outcome |
 | Metric Specificity | Is the outcome supported by verifiable numbers (before→after, absolute value)? | Vague percentages, undefined baseline, unclear measurement method |
 | Role Clarity | Is individual contribution distinguished from team output? | "participated", "contributed", "N-person project" without personal scope |
 | Standard Transcendence | Is this a differentiated achievement beyond industry standard? | Webhook, CI/CD, Docker, REST API, etc. presented as a standalone achievement |
@@ -224,7 +224,7 @@ When evaluating Beyond-Standard Reasoning, additionally verify whether the alter
 
 | Verdict | Example | Reason |
 |---------|---------|--------|
-| PASS | Exploratory narrative with "[Problem] → [Resolution process] → [Verification] → [Retrospective]" structure | Narrative structure that reveals the thought process |
+| PASS | Exploratory narrative with "[Problem] → [Solution Process] → [Verification] → [Reflection]" structure | Narrative structure that reveals the thought process |
 | PASS | Exploratory narrative in the form of "First-come coupon over-issuance bug → MVCC diagnosis → 3-stage lock experiment → Redis distributed lock selection → verification → retrospective" | Narrative revealing the problem→diagnosis→attempt→resolution→retrospective arc |
 | FAIL | "Built menu metadata auto-extraction system, reduced headcount from 11 to 3" | Outcome bullet → needs to move to Career section |
 | FAIL | "Resolved first-come coupon race condition, achieved 0 over-issuances, implemented Redis distributed lock" | Result summary bullet → needs to move to Career section |
@@ -541,7 +541,7 @@ This section extends the 3-level pushback simulation (node H in the Evaluation P
 |-------|-----------------|---------------|
 | L1 | "How specifically did you implement it?" | Implementation knowledge |
 | L2 | "Why did you choose that approach?" | Technical judgment |
-| L3 | "Did you not consider any other alternatives?" | Trade-off awareness |
+| L3 | "What other alternatives did you consider?" | Trade-off awareness |
 
 Apply all three levels to every line — including well-written ones. Well-written lines get harder L1-L3, not softer ones.
 
@@ -554,7 +554,7 @@ Apply the same simulation to existing lines when reviewing. "Just polish" does n
 
 ### L3 Trade-off Quality Standard
 
-When evaluating L3 ("Did you not consider any other alternatives?"), each excluded alternative must include **both**:
+When evaluating L3 ("What other alternatives did you consider?"), each excluded alternative must include **both**:
 1. The scenario where this alternative would have been the right choice
 2. The specific reason it was ruled out in this situation
 

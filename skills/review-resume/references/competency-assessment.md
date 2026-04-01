@@ -294,7 +294,7 @@ When C1-C5 assessment results show a WEAK or ABSENT axis that is EXPECTED or REQ
 
 Interview targets only axes rated WEAK/ABSENT (not all 5 axes).
 
-If the user opts out ("next", "skip"), fall back to the Gap Guidance above.
+If the user opts out ("next" / "skip" / "다음으로" / "넘어가자"), fall back to the Gap Guidance above.
 
 ---
 

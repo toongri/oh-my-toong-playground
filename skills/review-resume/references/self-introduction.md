@@ -264,7 +264,7 @@ This trigger is not optional. If the condition is met, proceed to the Experience
 
 When the trigger condition above is met, refer to `Read references/experience-mining.md` Self-Introduction section and conduct the Experience Mining Interview.
 
-If the user opts out ("next", "skip"), replace with the Writing Guidance message above.
+If the user opts out ("next" / "skip" / "다음으로" / "넘어가자"), replace with the Writing Guidance message above.
 
 ---
 
