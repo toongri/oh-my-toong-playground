@@ -87,6 +87,8 @@ For all context file categories, each proposal follows this structure:
 
 > **Variant**: `decisions.md` uses a different format (see Step 2b) because it captures recurring tradeoff situations with the team's established position, not individual decision records.
 
+**Empty Category Rule**: If no records pass the Recurring Tradeoff Filter for a category, explicitly state 'No proposals for [category]' and run the Checkpoint to get user confirmation before proceeding to the next sub-step. Do NOT hallucinate proposals or silently skip the sub-step.
+
 ### Step 2a: project.md Proposals
 
 **What belongs here:**
@@ -226,6 +228,6 @@ Apply **Area Completion Protocol** (see SKILL.md)
 Wrapup produces context files for future spec sessions — information that shapes the **next specification's direction**.
 
 - `project.md` - Big picture: tech stack, system philosophy, external dependencies, constraints
-- `decisions.md` - Team decision-making tendencies extracted from patterns across multiple decisions (NOT individual ADR entries)
+- `decisions.md` - Recurring tradeoff situations with team's established positions (NOT individual ADR entries)
 - `conventions.md` - Repeatable coding-level patterns for implementation consistency
 - `gotchas.md` - Implementation traps that would catch someone unfamiliar with this project
