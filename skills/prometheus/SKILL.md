@@ -889,7 +889,7 @@ Every plan saved to `$OMT_DIR/plans/{name}.md` MUST follow this structure:
 | **Context** | Original Request (verbatim or faithful paraphrase of user's initial request), Interview summary (key decisions from extended interview — the WHY behind each TODO) |
 | **Work Objectives** | Core objective, Definition of Done, Must Have (non-negotiable requirements), Must NOT Have / Guardrails (explicit exclusions, scope boundaries) |
 | **TODOs** | Numbered tasks in checkbox format (`- [ ] N. Title`) -- each with: what to do, must NOT do, files, References (CRITICAL), acceptance criteria, parallelization fields, QA scenarios |
-| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: minimum 2+ tasks per wave (except final wave, or waves constrained by dependencies), circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge"). Final Verification Wave is mandatory for Scoped+ intent and contains F1-F4 verification tasks dispatched for verification. |
+| **Execution Strategy** | Wave visualization format, Dependency Matrix (abbreviated), Critical Path. Rules: target 5-8 tasks per wave. Fewer than 3 tasks in a non-bottleneck wave indicates under-splitting — re-examine whether tasks can be split further. A bottleneck wave is one where all tasks depend on a single predecessor and further splitting would not increase parallelism. Final wave and dependency-bottleneck waves are exempt from this target., circular dependencies forbidden, wave count determined by dependency structure, every wave must contain at least one numbered TODO (no phantom/conceptual waves like "Verification & Merge"). Final Verification Wave is mandatory for Scoped+ intent and contains F1-F4 verification tasks dispatched for verification. |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Per-TODO QA Scenarios serve as the primary verification mechanism; final checklist aggregates them. **Zero Human Intervention** principle applies — all verification must be agent-executable with evidence artifacts saved to `$OMT_DIR/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands (exact shell commands with expected output) + final checklist (checkbox items). Distinct from Verification Strategy (which defines methodology); Success Criteria defines the concrete done-state |
 
@@ -944,14 +944,26 @@ Self-check questions (run after drafting TODOs):
 | **Gap** | TODOs cover create/read/update but no TODO handles delete — yet AC requires full CRUD | Add a TODO for delete, or expand an existing TODO's scope to include it |
 | **False MECE** | TODOs are labeled "frontend" and "backend" but the API contract is owned by neither — each assumes the other defines it | Add explicit TODO for API contract definition, or assign contract ownership to one TODO and make the other depend on it |
 
+**Maximum Parallelism Principle**
+
+Structure task decomposition to maximize parallel execution:
+
+| Rule | Threshold | Diagnostic |
+|------|-----------|------------|
+| **Granularity** | 1 task = 1 concern = 1-3 files | If a task touches 4+ files or 2+ unrelated concerns, SPLIT IT |
+| **Parallelism Target** | 5-8 tasks per wave | Fewer than 3 tasks in a non-bottleneck wave = under-split. Bottleneck waves (all tasks depend on single predecessor) are exempt |
+| **Dependency Minimization** | Shared deps (types, interfaces, configs) as early Wave-1 tasks | Extract shared definitions first to unblock maximum parallelism in subsequent waves |
+
+Apply this principle BEFORE the Atomicity Heuristic — it sets the decomposition target, while Atomicity validates each resulting task.
+
 **Atomicity Heuristic**
 
 Each TODO must be atomic — completable by a single executor in one delegation pass without requiring mid-task coordination. If a TODO fails the atomicity check, decompose it further.
 
 | # | Condition | Threshold | Question |
 |---|-----------|-----------|----------|
-| 1 | Complexity | Moderate or below | Can a single agent understand the full context and implement this without specialized domain knowledge beyond what the plan provides? |
-| 2 | File scope | ≤ 3 logically distinct file groups | Does this task touch more than 3 unrelated file groups (where a group is files that change together for one reason)? |
+| 1 | Concern scope | 1 concern per task | Does this task address a single module or concern? 2+ unrelated concerns = SPLIT |
+| 2 | File scope | 1-3 files per task | Does this task touch 4+ files? If yes, SPLIT IT. Hard backstop — no exceptions |
 | 3 | Single-delegation completable | One pass | Can the executor finish this TODO in one delegation without needing to pause, ask questions, or wait for external input? |
 
 **Rule**: If ANY condition fails, decompose the TODO further until all sub-tasks pass all 3 conditions.
@@ -961,10 +973,15 @@ Smell-action table — common signs a TODO is not atomic:
 | Smell | Example | Action |
 |-------|---------|--------|
 | "and" in the task description | "Create the service and update all consumers" | Split into: (1) create service, (2) update consumers (blocked by 1) |
-| File groups span unrelated modules | "Update auth middleware, user model, and email templates" | Split by module boundary — one TODO per logically distinct group |
+| Task spans unrelated concerns | "Update auth middleware, user model, and email templates" | Split by concern — one TODO per responsibility unit |
 | Task requires sequential phases | "Design the schema, implement migrations, seed test data" | Each phase becomes its own TODO with `Blocked By` chain |
 | Estimated changes exceed ~200 lines | A TODO that touches 5+ files with non-trivial logic in each | Decompose by responsibility — find natural seams in the work |
 | Task requires domain knowledge not in the plan | "Optimize the query based on production usage patterns" | Either add the domain context to the plan's TODO description, or split into (1) gather metrics, (2) optimize based on findings |
+| Domain model kitchen sink | "Create all entity types, value objects, enums, and repository interfaces" | Split by aggregate root or bounded context — each entity cluster is its own TODO |
+
+**Vertical Slice Rule**
+
+When a task spans multiple layers (e.g., model + service + controller + test), prefer vertical slices (one feature end-to-end) over horizontal slices (all models, then all services). Horizontal splitting creates sequential state dependencies between tasks, degrading parallel execution. Exception: shared foundation tasks (types, interfaces, configs) belong in Wave 1 as horizontal extractions to unblock vertical slices in subsequent waves.
 
 **Zero Human Intervention Principle:**
 
