@@ -3,7 +3,6 @@ name: spec-reviewer
 description: Spec review agent - multi-AI advisory service for design decisions with synthesized Chairman advisory
 model: opus
 tools: Bash, Read
-maxTurns: 20
 ---
 
 ## Role Declaration
