@@ -14,3 +14,10 @@ hooks:
 
 config:
   enableAllProjectMcpServers: true
+
+plugins:
+  items:
+    - name: frontend-design@claude-code-plugins
+      check: jq -e '.plugins["frontend-design@claude-code-plugins"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add anthropics/claude-code
