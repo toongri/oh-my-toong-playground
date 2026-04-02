@@ -44,6 +44,11 @@ Classify undecided aspects into 3 question types, ordered by priority:
 
 Label each question with its type and address Policy/blocking questions before Extension questions.
 
+### Document Scope
+
+- **Include**: Requirements analysis artifacts — use cases, acceptance criteria, business rules, NFRs, domain glossary, validation scenarios
+- **Exclude**: Technical implementation, architecture decisions, data schema, API design
+
 ## Process
 
 ### Step 1: Project Overview

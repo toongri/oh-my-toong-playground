@@ -22,6 +22,26 @@ Clearly distinguish between synchronous patterns (in-process function calls, HTT
 - **Include**: Communication patterns, data flow designs, transaction boundaries, consistency policies, stateful component policies, error and recovery flows
 - **Exclude**: SQL statements, cache commands, specific data structures, algorithms, implementation details (covered in implementation stage)
 
+## Review Perspective
+
+**Stance**: Evaluate whether communication patterns, transaction boundaries, and failure policies are defined at the architectural level without descending into implementation specifics.
+
+**Evaluate**:
+- Communication pattern selection (sync vs. async) with rationale per integration point
+- Transaction boundary definitions and consistency policies
+- Stateful component policies (concurrency policy, lifecycle, failure behavior)
+- Error and recovery flows including degradation mode and blast radius
+- Retry and idempotency policies at integration boundaries
+
+**Do NOT evaluate**:
+- Specific data structures or algorithms (Data Schema / implementation stage)
+- SQL statements or cache commands (implementation stage)
+- API request/response schemas (Interface Contract)
+- Infrastructure-level network topology (Solution Design)
+
+**Overstepping Signal**: Mentions specific message broker configuration like partition count or replication factor; suggests concrete retry library parameters like backoff multiplier values; proposes specific lock type implementations for concurrency policy.
+→ Reframe at policy level (e.g., "retry with exponential backoff" not "3 retries at 100ms × 2^n") or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

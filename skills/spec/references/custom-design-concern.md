@@ -18,6 +18,28 @@ As an emergent design specialist, analyze and specify design concerns that were 
 - **Include**: Concern definition and boundaries, alternative analysis with pros/cons, recommended approach with explicit rationale, design elaboration (components, rules, interactions), cross-area impact assessment
 - **Exclude**: Concerns already covered by predefined Design Areas (route those through Prior Area Amendment), implementation details (SQL, framework specifics, deployment configs), operational procedures, concerns not traceable to current spec's Requirements
 
+## Review Perspective
+
+**Stance**: Evaluate whether the custom concern is precisely bounded, alternatives are genuinely explored, and the recommended approach is specified at architectural decision level without descending into implementation details.
+
+**Evaluate**:
+- Concern definition: one-sentence summary, origin traceability to a Requirement, non-overlap with existing Areas
+- Alternative analysis: 2–3 distinct approaches with concrete pros/cons and constraint surfacing
+- Recommended approach: explicit rationale referencing specific pros/cons from the analysis
+- Design elaboration: components, rules, and interactions at architectural boundary level
+- Cross-area impact: each affected Area's constraints or changes clearly stated
+
+**Do NOT evaluate**:
+- Concerns traceable to predefined Areas (route those through Prior Area Amendment)
+- Implementation details like SQL, framework-specific configs, or deployment scripts (implementation stage)
+- Operational procedures not tied to the concern's design decision (Operations Plan)
+- Concerns not traceable to the current spec's Requirements (out of scope)
+
+> **Note**: Replace the examples in Overstepping Signal with patterns specific to your custom concern's domain.
+
+**Overstepping Signal**: [PLACEHOLDER — replace with domain-specific examples] Proposes implementation-level artifact for the concern's domain (e.g., specific configuration syntax); specifies operational procedure rather than design policy; introduces requirements not traceable to the current spec.
+→ Reframe at design decision level or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

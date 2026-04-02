@@ -14,6 +14,11 @@ As an interface design specialist, systematically design and document the interf
 - **Security**: Authentication, authorization, and data protection mechanisms
 - **Performance**: Optimization of response time, throughput, and resource usage
 
+### Document Scope
+
+- **Include**: API endpoint definitions, request/response shapes, error handling contracts, versioning strategy, change documentation
+- **Exclude**: Controller/handler implementation, middleware internals, serialization code, database queries
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

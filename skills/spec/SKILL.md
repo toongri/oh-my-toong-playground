@@ -748,6 +748,9 @@ After completing all Steps in an Area, always delegate to the spec-review agent 
 ```markdown
 Review the following design and provide multi-AI advisory feedback.
 
+## 0. Review Perspective
+[Current Area's Review Perspective from reference file — verbatim]
+
 ## 1. Current Design Under Review
 [Content of current step's design.md]
 
@@ -760,9 +763,24 @@ Review the following design and provide multi-AI advisory feedback.
 ## 2. Previously Finalized Designs (Constraints)
 [Summarize relevant decisions from earlier steps that constrain this design]
 
-## 3. Context
+## 3. Deliberate Divergence (re-submission only)
+[If re-submitting: list concerns from previous review that were discussed
+ with the user and intentionally not adopted, with rationale.
+ Omit this section on initial delegation.]
+
+## 4. Context
 [Project context, tech stack, constraints]
 ```
+
+#### Deliberate Divergence (Re-submission)
+
+The `## 3. Deliberate Divergence` section is included ONLY on re-submission, never on the initial delegation. For each concern that was raised in a previous review and discussed with the user but intentionally not adopted, document:
+
+- **Concern summary**: What the reviewer flagged
+- **User's rationale for rejection**: Why the user chose not to adopt it
+- **Classification**: Whether it was deemed out-of-scope per the current Area's Review Perspective, or a deliberate trade-off within scope
+
+Purpose: stateless reviewers have no memory of prior rounds. Without this section, they will re-raise the same concerns on every re-submission, creating an infinite loop. Listing rejected concerns with rationale signals to reviewers that these points have been considered and decided.
 
 **What you receive back:**
 
@@ -803,6 +821,24 @@ After receiving spec-review feedback, YOU must:
 
 > "spec-review **REQUEST_CHANGES**. Reviewers raised a blocking concern about the event-sourcing approach for order state management. The main points were the team's limited ES experience and concerns about complexity. However, since the need for a full audit trail was confirmed in Solution Design, I propose keeping event-sourcing while adding a detailed implementation guide to the spec. Do you agree with this direction?"
 
+### Feedback Consensus Protocol
+
+**IRON RULE: When spec-review returns REQUEST_CHANGES: ZERO EDITS to any design document before user consensus. Present → Discuss → Agree → THEN edit. Violating this rule — editing design.md, requirements, or any spec artifact based on reviewer feedback without user agreement — is forbidden.**
+
+For each blocking concern, present it using this per-concern format:
+
+- **Situation**: What the reviewer found
+- **Reason**: Why the reviewer considers it a problem
+- **Scope assessment**: Is this concern within the current Area's Review Perspective? If it matches an Overstepping Signal, state this explicitly.
+- **Recommendation**: Incorporate / modify and incorporate / defer to implementation / reject
+- **User decision**: Wait for explicit agreement before proceeding
+
+After all concerns have been discussed with the user:
+
+1. Apply ONLY the changes the user explicitly agreed to
+2. Record decisions (including rationale for rejections) in `records/`
+3. Record rejected concerns as Deliberate Divergence entries for the re-submission delegation prompt (`## 3. Deliberate Divergence`)
+
 ### Verdict-Based Flow Control
 
 | Verdict | User Interaction | Next Action |
@@ -818,7 +854,7 @@ After receiving spec-review feedback, YOU must:
 4. Re-delegate to spec-review
 5. Repeat until pass received
 
-> **Note:** If a deliberate trade-off was made against previous review findings, note the decision rationale in `Key Decisions` or `Questions for Reviewers` within the re-delegation prompt. This helps reviewers understand intentional divergences but is not mandatory.
+> **Note:** Deliberate trade-offs against previous review findings are now documented in the `## 3. Deliberate Divergence` section of the re-delegation prompt (see above). This mechanism is mandatory on re-submission — not optional.
 
 **CRITICAL: Area completion cannot be declared unless spec-review passes (APPROVE or COMMENT).** Even if the user declares "Area complete" while a REQUEST_CHANGES verdict is in effect, the Area cannot be completed until a pass is received.
 

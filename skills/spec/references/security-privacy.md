@@ -27,6 +27,27 @@ As a security and privacy design specialist, systematically define how the syste
 | Secure communication | Security / Privacy | Integration Pattern | Define security requirements here, implement TLS/mTLS there |
 | Security monitoring | Security / Privacy (criteria) | Operations Plan (implementation) | Define what to monitor here, define how to measure there |
 
+## Review Perspective
+
+**Stance**: Evaluate whether authentication strategy, authorization model, data protection policy, and privacy principles are defined at the strategy and policy level without specifying cryptographic implementations or security library choices.
+
+**Evaluate**:
+- Authentication strategy per principal type (end users, service accounts, external systems)
+- Authorization model (RBAC/ABAC/hybrid) with permission boundaries defined
+- Data classification tiers and protection requirements per tier
+- PII inventory, handling policy, and data lifecycle (retention, deletion, anonymization)
+- Privacy by design principles and consent model (if applicable)
+- Threat model boundaries and mitigation approach at policy level (if applicable)
+
+**Do NOT evaluate**:
+- Specific encryption algorithms or key lengths (implementation decision)
+- Security library or tool selection (implementation decision)
+- Penetration testing procedures or compliance audit checklists (operational concern)
+- Certificate authority configuration or key rotation schedules (infrastructure concern)
+
+**Overstepping Signal**: Mentions specific encryption parameters like key length or cipher mode (e.g., AES-256-GCM); references security library API calls or JWT library configuration; proposes certificate chain details or CA pinning strategy.
+→ Reframe at policy level (e.g., "data at rest must be encrypted" not "use AES-256-GCM with PKCS#7 padding") or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to security or privacy questions, clarify with specific questions.
