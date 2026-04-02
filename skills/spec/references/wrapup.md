@@ -10,8 +10,8 @@ As a knowledge curator, extract information that shapes the **next specification
 
 ## Principles
 
-- **Next-Spec Influence Filter**: Only include information that would change how you approach the NEXT design. Ask: "이 정보가 빠지면 다음 설계에서 잘못된 방향으로 갈 수 있는가?" If no, it belongs in spec.md, not context.
-- Extract **team tendencies** from decisions, not individual decisions themselves
+- **Recurring Tradeoff Filter**: Only include information about tradeoff situations that will recur. Ask: "이 트레이드오프 상황이 다시 올까? 올 때 이 정보가 판단에 도움이 되는가?" If no, it belongs in spec.md, not context.
+- Extract **recurring tradeoff situations + team's established position** from decisions, not individual decisions themselves
 - Implementation details (chunk sizes, retry counts, timeout values) belong in spec.md — never in context files
 - Separate cross-spec influence (context files) from spec-specific detail (spec.md)
 - Make knowledge discoverable and scannable
@@ -31,12 +31,23 @@ As a knowledge curator, extract information that shapes the **next specification
 
 #### 1.2 Extract Candidates
 
-- Filter: For each record, apply the **Next-Spec Influence Test**:
-  - "이 정보가 빠지면 다음 설계에서 잘못된 방향으로 갈 수 있는가?"
+- Filter: For each record, apply the **Recurring Tradeoff Filter**:
+  - "이 트레이드오프 상황이 다시 올까? 올 때 이 정보가 판단에 도움이 되는가?"
   - YES → Context file candidate
   - NO → Stays in spec.md only
+
+  **PASS examples:**
+  - "HTTP 에러 모호 시 실패로 단정하지 않음" → ✅ 외부 API 호출이 있을 때마다 이 상황이 반복됨
+  - "낙관적 잠금 선택" → ✅ 동시성 이슈가 나올 때마다 반복됨
+  - "append-only 엔티티는 Aggregate에서 분리" → ✅ 유사 패턴 등장 시마다 반복됨
+
+  **FAIL examples:**
+  - "상태 다이어그램 모호성 해석" → ❌ 이번 과제 한정, 반복 안 됨
+  - "선택사항 제외" → ❌ 이번 스펙 한정
+  - "PostgreSQL 버전 3.15 선택" → ❌ 구체적 버전 선택은 spec.md에만 유지
+
 - Categorize passing candidates:
-  - **Team tendencies**: Decision-making patterns observable across multiple choices (e.g., "pragmatism over perfection")
+  - **Recurring tradeoff situations**: Tradeoff types that appear repeatedly, with the team's established position (e.g., "동시성 충돌 처리 → 낙관적 잠금 선호")
   - **Coding conventions**: Repeatable patterns that apply during implementation (e.g., "triple-channel failure notification")
   - **Cautionary lessons**: Pitfalls that would trap someone unfamiliar with this project
   - **Big picture**: Tech stack, philosophy, architecture vision, external constraints
@@ -52,11 +63,11 @@ Apply **Checkpoint Protocol** (see SKILL.md)
 | File | Purpose | Answers |
 |------|---------|---------|
 | `project.md` | Big picture identity | "이 프로젝트가 뭔지, 어떤 철학으로 만들어야 하는지" |
-| `decisions.md` | Team decision-making DNA | "이 팀은 어떤 성향으로 결정을 내리는가" |
+| `decisions.md` | Recurring tradeoff situations + team's established position | "이 팀이 반복되는 트레이드오프에서 어떤 포지션을 취하는가" |
 | `conventions.md` | Coding-level patterns | "코드 작성 시 어떤 패턴을 반복 적용하는가" |
 | `gotchas.md` | Implementation traps | "구현 시 어떤 함정에 빠질 수 있는가" |
 
-Present proposals ONE CATEGORY AT A TIME. For each category:
+**STRUCTURAL ENFORCEMENT**: Each category is a separate Step. Presenting multiple categories in one message is a **PROTOCOL VIOLATION**. The sub-step structure below makes skipping impossible — complete each step fully before proceeding.
 
 ### Common Proposal Format
 
@@ -74,9 +85,9 @@ For all context file categories, each proposal follows this structure:
 ---
 ```
 
-> **Variant**: `decisions.md` uses a different format (see 2.3) because it captures team tendencies synthesized from multiple decisions, not individual items.
+> **Variant**: `decisions.md` uses a different format (see Step 2b) because it captures recurring tradeoff situations with the team's established position, not individual decision records.
 
-#### 2.1 Project Context (`project.md`)
+### Step 2a: project.md Proposals
 
 **What belongs here:**
 - Tech Stack decisions with rationale
@@ -89,7 +100,49 @@ For all context file categories, each proposal follows this structure:
 - Constraints
 - Legacy considerations
 
-#### 2.2 Conventions (`conventions.md`)
+Present proposals for `project.md` only using the Common Proposal Format above.
+
+**Checkpoint:** Apply Checkpoint Protocol (see SKILL.md). Get explicit user confirmation before proceeding to next sub-step.
+
+### Step 2b: decisions.md Proposals
+
+**What belongs here:**
+- **Recurring tradeoff situations** with the team's established position — NOT individual decision records
+- Each entry captures: the **situation** (when this tradeoff appears), the **team's choice** (what they decided), and the **rationale** (why, so future specs can apply the same reasoning)
+- The goal: future spec agent should recognize the tradeoff type and know the team's established position
+
+**What does NOT belong here:**
+- Individual ADR entries (these are already in spec.md with full context)
+- Implementation parameters (chunk sizes, retry counts, timeout values)
+- One-off decisions that only affect the current spec's implementation (apply Recurring Tradeoff Filter)
+
+**How to extract entries:**
+1. Identify decisions where the tradeoff type will recur (apply Recurring Tradeoff Filter)
+2. Name the tradeoff situation (e.g., "동시성 충돌 처리", "외부 API 에러 모호성")
+3. State the team's choice and the rationale behind it
+4. Verify: "다음 스펙에서 같은 상황이 오면 이 entry가 판단에 도움이 되는가?"
+
+**Variant format for decisions.md:**
+```
+## Proposed Tradeoff Position: [Situation Name]
+
+**Source**: [Record reference]
+**Rationale**: [Why this tradeoff will recur and why preserving the position matters]
+**Recommendation**: Save (Recommended) / Skip
+
+---
+### [Situation Name]
+- **Situation**: [When does this tradeoff appear?]
+- **Team's Choice**: [What did they decide?]
+- **Rationale**: [Why — so future specs can apply the same reasoning]
+---
+```
+
+Present proposals for `decisions.md` only using the Variant format above.
+
+**Checkpoint:** Apply Checkpoint Protocol (see SKILL.md). Get explicit user confirmation before proceeding to next sub-step.
+
+### Step 2c: conventions.md Proposals
 
 **What belongs here:**
 - Repeatable **coding-level** patterns that apply during implementation
@@ -98,49 +151,17 @@ For all context file categories, each proposal follows this structure:
 - Naming conventions, code organization rules
 
 **What does NOT belong here:**
-- Team tendencies or decision-making philosophy (→ decisions.md)
+- Recurring tradeoff positions or decision-making philosophy (→ decisions.md)
 - Architecture choices or tech stack (→ project.md)
 - Spec-specific implementation details (→ spec.md)
 
-**Boundary rule**: If it guides "how to write code consistently," it's a convention. If it guides "how to make design choices," it's a tendency (decisions.md).
+**Boundary rule**: If it guides "how to write code consistently," it's a convention. If it guides "how to make design choices," it's a tradeoff position (decisions.md).
 
-#### 2.3 Decisions (`decisions.md`)
+Present proposals for `conventions.md` only using the Common Proposal Format above.
 
-**What belongs here:**
-- **Team tendencies** extracted from multiple decisions — NOT individual decision records
-- Each tendency = a pattern name + evidence decisions + summary
-- The goal: "이 팀은 어떤 성향으로 결정을 내리는가" — future spec agent should understand the team's decision-making DNA
+**Checkpoint:** Apply Checkpoint Protocol (see SKILL.md). Get explicit user confirmation before proceeding to next sub-step.
 
-**What does NOT belong here:**
-- Individual ADR entries (these are already in spec.md with full context)
-- Implementation parameters (chunk sizes, retry counts, timeout values)
-- Decisions that only affect the current spec's implementation
-
-**How to extract tendencies:**
-1. Group related decisions that share a common underlying principle
-2. Name the pattern (e.g., "Pragmatism Over Perfection", "Team Stack Alignment")
-3. List the decisions as evidence (brief, one-line each)
-4. Summarize the pattern's implication for future design decisions
-
-**Variant format for decisions.md:**
-```
-## Proposed Tendency: [Pattern Name]
-
-**Source**: Synthesized from [N] decisions across [areas]
-**Rationale**: [How this tendency influences future design direction]
-**Recommendation**: Save (Recommended) / Skip
-
----
-### [Pattern Name]
-- Evidence 1: [Brief one-line decision description]
-- Evidence 2: [Brief one-line decision description]
-- Evidence 3: [Brief one-line decision description]
-
-**패턴**: [One-sentence summary of what this means for future decisions]
----
-```
-
-#### 2.4 Gotchas (`gotchas.md`)
+### Step 2d: gotchas.md Proposals
 
 **What belongs here:**
 - Warning signs to watch for
@@ -148,9 +169,9 @@ For all context file categories, each proposal follows this structure:
 - "If you see X, watch out for Y" patterns
 - Failed approaches and why they failed
 
-#### Checkpoint: Step 2 Complete
+Present proposals for `gotchas.md` only using the Common Proposal Format above.
 
-Apply **Checkpoint Protocol** (see SKILL.md)
+**Checkpoint:** Apply Checkpoint Protocol (see SKILL.md). Get explicit user confirmation before proceeding to Step 3.
 
 ### Step 3: User Review and Approval
 
