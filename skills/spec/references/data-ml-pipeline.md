@@ -18,6 +18,27 @@ As a data and ML pipeline design specialist, systematically define how data flow
 - **Include**: Data source identification, ingestion patterns, schema evolution strategy, transformation logic, processing model selection rationale, storage layer design, partitioning strategy, access patterns, data quality validation, ML feature engineering strategy, model serving pattern, experiment tracking policy
 - **Exclude**: Specific tool recommendations (Airflow vs Prefect, Spark vs Flink, dbt vs custom), model architecture details, hyperparameter guidance, embedding parameters, specific orchestration platform configurations
 
+## Review Perspective
+
+**Stance**: Evaluate whether data pipeline architecture decisions — ingestion patterns, processing model selection, storage design, and ML serving strategy — are defined at the architectural decision level without prescribing specific tools or ML internals.
+
+**Evaluate**:
+- Data source inventory with format, volume, velocity, and reliability characterization
+- Ingestion pattern selection (batch pull, CDC, event-driven) with delivery semantics rationale
+- Processing model choice (batch, stream, hybrid) with latency SLA tradeoff documented
+- Storage tier design and partitioning strategy based on access patterns
+- Data quality validation placement, failure policy, and alerting threshold
+- ML feature engineering strategy and model serving pattern (if applicable)
+
+**Do NOT evaluate**:
+- Specific tool or platform selection (Airflow vs Prefect, Spark vs Flink — implementation decision)
+- Model architecture details or layer configurations (ML platform concern)
+- Hyperparameter guidance or embedding parameters (AI Responsibility Contract / implementation)
+- Orchestration platform-specific configuration (infrastructure concern)
+
+**Overstepping Signal**: Mentions specific ETL tool commands like dbt run flags or Spark submit options; suggests model hyperparameters like learning rate or batch size; proposes platform-specific connector configuration like Kafka consumer group settings.
+→ Reframe at pattern level (e.g., "CDC ingestion with at-least-once semantics" not "Debezium connector offset configuration") or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

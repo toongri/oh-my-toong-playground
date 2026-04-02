@@ -18,6 +18,27 @@ As a frontend architecture and UX surface design specialist, systematically anal
 - **Include**: Component architecture strategy, state management boundaries, styling architecture, responsive/adaptive design strategy, interaction patterns, loading/error/empty state handling, accessibility requirements, UX flow design
 - **Exclude**: Framework selection (React vs Vue vs Angular), CSS framework choices (Tailwind vs styled-components), implementation-level patterns (specific hooks, component APIs), build tool configuration, bundler optimization settings
 
+## Review Perspective
+
+**Stance**: Evaluate whether component architecture, state boundaries, and UX patterns are defined at the strategy level without prescribing framework choices or implementation-level component APIs.
+
+**Evaluate**:
+- Component decomposition strategy and shared vs. domain component boundaries
+- State scope classification (global, feature, local) and server vs. client state boundary
+- Styling architecture and design token scope
+- Responsive/adaptive strategy with breakpoint rationale
+- Loading, error, and empty state handling per major data-dependent surface
+- Accessibility requirements and interaction patterns with explicit accessibility design
+
+**Do NOT evaluate**:
+- Framework or library selection (React vs Vue, Tailwind vs styled-components — implementation decision)
+- Build tool or bundler configuration (infrastructure concern)
+- Specific component API calls or hook implementations (implementation stage)
+- Server infrastructure for SSR/SSG beyond hydration strategy (Solution Design)
+
+**Overstepping Signal**: Mentions specific CSS properties or pixel values for responsive breakpoints; references component library API like `useEffect` or `useState`; proposes webpack or Vite configuration options for bundle optimization.
+→ Reframe at strategy level (e.g., "mobile-first breakpoint strategy" not "max-width: 768px media query") or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

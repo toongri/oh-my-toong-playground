@@ -17,6 +17,26 @@ As an operations design specialist, systematically design the observability aspe
 - **Include**: Project-specific metrics, custom logging, feature flag strategy, failure detection design (what signals indicate failure, what data enables detection), validation & impact data requirements
 - **Exclude**: Standard APM metrics (response time, error rate, throughput), framework default logging, deployment procedures, failure recovery plans, generic operational practices
 
+## Review Perspective
+
+**Stance**: Evaluate whether custom observability design and feature flag strategy address project-specific operational needs, without reciting standard APM metrics or prescribing tool configuration.
+
+**Evaluate**:
+- Custom metrics that survive the 4-gate Metric Necessity Test (volume, action, frequency, existing coverage)
+- Custom logging with appropriate levels and production debuggability (root cause identifiable from log alone)
+- Feature flag granularity, rollout strategy, and lifecycle plan
+- Failure detection signatures: what signal indicates failure and what data enables detection
+- Validation and impact data needs mapped to specific questions
+
+**Do NOT evaluate**:
+- Standard APM metrics like response time, error rate, throughput (covered by team conventions)
+- Framework default logging (covered by team conventions)
+- Deployment procedures or recovery plans (Integration Pattern / infrastructure)
+- Infrastructure provisioning or capacity planning (Solution Design)
+
+**Overstepping Signal**: References specific monitoring tool configuration like Grafana dashboard JSON or Prometheus scrape intervals; suggests deployment script content or infrastructure manifest details; proposes alert routing rules to specific on-call systems.
+→ Reframe at signal level (e.g., "alert when buffer utilization exceeds threshold" not "configure PagerDuty routing policy") or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

@@ -31,6 +31,26 @@ Clearly distinguish between what AI decides autonomously and what requires human
 | AI quality monitoring | AI Responsibility Contract (criteria definition) | Operations Plan (metric implementation) | Define "what is quality" here, define "how to measure" there |
 | AI context strategy | AI Responsibility Contract (policy) | Data Schema (storage) | Define context window policy here, schema for storage there |
 
+## Review Perspective
+
+**Stance**: Evaluate whether AI delegation boundaries, quality criteria, and fallback strategies are defined at the policy and expectation level without prescribing model internals or prompt engineering details.
+
+**Evaluate**:
+- Delegation inventory: what each AI component decides autonomously vs. assists vs. cannot do
+- Input contracts: required fields, validation rules, invalid input behavior
+- Output quality acceptance criteria across relevant dimensions (accuracy, completeness, safety)
+- Context and knowledge strategy at policy level (RAG vs. training, freshness policy)
+- Pre/post processing pipeline gates and fallback strategies
+
+**Do NOT evaluate**:
+- Model selection or version names (implementation decision)
+- Prompt text or prompt engineering details (implementation stage)
+- Embedding dimensions or vector DB indexing strategy (Data Schema / implementation)
+- Fine-tuning datasets or training procedures (AI platform concern)
+
+**Overstepping Signal**: Mentions specific model names or parameter settings like temperature=0.7; discusses embedding dimensions or vector DB indexing strategy; includes prompt text or few-shot examples in the contract definition.
+→ Reframe at expectation level (e.g., "output must be factually grounded" not "use GPT-4 with temperature=0.3") or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.
