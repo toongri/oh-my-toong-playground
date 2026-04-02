@@ -250,7 +250,7 @@ Realist Check is an internal process. No output section is produced — its effe
 | WHY explained | Business reason documented? |
 | Task dependencies | Order specified? Parallel or sequential? |
 | Scope boundaries | What's explicitly OUT of scope? |
-| Task atomicity | Is each TODO completable in a single delegation? (complexity moderate, file scope ≤ 3 groups, single-delegation) |
+| Task atomicity | Is each TODO completable in a single delegation? (1 concern, 1-3 files, single-delegation) |
 | Dependency validity | Are Blocked By / Blocks relationships consistent? No circular deps, no phantom deps? |
 | Final Verification Wave | For Scoped+ intent: F1-F4 section exists with role definitions? Trivial intent exempt. |
 
