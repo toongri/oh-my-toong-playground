@@ -58,6 +58,7 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
     'frontend-design',
     {
       description: 'Frontend design skill — UI component design and visual implementation',
+      pluginId: 'frontend-design@claude-code-plugins',
       situationIds: ['design'],
     },
   ],
@@ -83,7 +84,7 @@ export function buildCatalog(discoveredSkillNames: string[], enabledPluginIds: S
   const seen = new Set<string>();
 
   // 1. Add hashmap skills whose plugin is enabled (regardless of scan)
-  // Design intent: Skills without a pluginId (e.g. testing, implement, frontend-design) are
+  // Design intent: Skills without a pluginId (e.g. testing, implement) are
   // intentionally excluded here. They must be physically installed in the project
   // (.claude/skills/ or ~/.claude/skills/) to appear in the catalog — discovered via scan
   // in Phase 2, where SKILL_HASHMAP metadata (description, situationIds) is applied as

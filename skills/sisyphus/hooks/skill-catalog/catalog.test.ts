@@ -2,6 +2,7 @@ import { describe, it, expect } from 'bun:test';
 import { SITUATIONS, SKILL_HASHMAP, buildCatalog, formatCatalog } from './catalog.ts';
 
 const SUPERPOWERS_PLUGIN = 'superpowers@claude-plugins-official';
+const FRONTEND_DESIGN_PLUGIN = 'frontend-design@claude-code-plugins';
 
 describe('SITUATIONS', () => {
   it('5개의 상황이 정의되어 있다', () => {
@@ -65,9 +66,10 @@ describe('SKILL_HASHMAP', () => {
     expect(impl.situationIds).toContain('refactoring');
   });
 
-  it('frontend-design 스킬은 design situationId만 가진다', () => {
+  it('frontend-design 스킬은 pluginId와 design situationId를 가진다', () => {
     const fd = SKILL_HASHMAP.get('frontend-design')!;
     expect(fd).toBeDefined();
+    expect(fd.pluginId).toBe(FRONTEND_DESIGN_PLUGIN);
     expect(fd.situationIds).toEqual(['design']);
   });
 
@@ -129,6 +131,21 @@ describe('buildCatalog', () => {
     const entries = buildCatalog(['superpowers:test-driven-development'], new Set());
     const tdd = entries.find((e) => e.name === 'superpowers:test-driven-development');
     expect(tdd).toBeUndefined();
+  });
+
+  it('frontend-design 플러그인 활성화 시 카탈로그에 포함된다', () => {
+    const enabledPlugins = new Set([FRONTEND_DESIGN_PLUGIN]);
+    const entries = buildCatalog([], enabledPlugins);
+    const fd = entries.find((e) => e.name === 'frontend-design');
+    expect(fd).toBeDefined();
+    expect(fd!.discoveredOnly).toBe(false);
+    expect(fd!.description).toBeDefined();
+  });
+
+  it('frontend-design 플러그인 비활성화 시 카탈로그에서 제외된다', () => {
+    const entries = buildCatalog([], new Set());
+    const fd = entries.find((e) => e.name === 'frontend-design');
+    expect(fd).toBeUndefined();
   });
 });
 
