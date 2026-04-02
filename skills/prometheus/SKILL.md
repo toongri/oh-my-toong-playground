@@ -660,11 +660,11 @@ Overall structure:
 
 <CRITICAL_GATE>
 
-**MANDATORY: Metis MUST approve before proceeding to plan generation.**
+**MANDATORY: Metis MUST pass (APPROVE or COMMENT) before proceeding to plan generation.**
 
 - Do NOT proceed to the next step (plan generation) until Metis returns APPROVE or COMMENT
 - On REQUEST_CHANGES, you MUST incorporate the feedback, revise, and re-invoke Metis
-- This loop repeats indefinitely until Metis returns APPROVE
+- This loop repeats indefinitely until Metis returns APPROVE or COMMENT
 - Skipping or bypassing this gate is NEVER permitted
 
 </CRITICAL_GATE>
@@ -684,7 +684,7 @@ Overall structure:
 1. Invoke metis with the 3-Section Invocation Template below
 2. Receive Metis verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 3. Act on verdict per the table below
-4. **Repeat until APPROVE**
+4. **Repeat until APPROVE or COMMENT**
 
 **Metis Invocation Template (3-Section):**
 
@@ -733,11 +733,11 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 
 <CRITICAL_GATE>
 
-**MANDATORY: Oracle MUST approve before proceeding to Momus review.**
+**MANDATORY: Oracle MUST pass (APPROVE or COMMENT) before proceeding to Momus review.**
 
 - Do NOT proceed to the next step (Momus review) until Oracle returns APPROVE or COMMENT
 - On REQUEST_CHANGES, you MUST revise the plan and re-invoke Oracle
-- This loop repeats indefinitely until Oracle returns APPROVE
+- This loop repeats indefinitely until Oracle returns APPROVE or COMMENT
 - Skipping or bypassing this gate is NEVER permitted
 
 </CRITICAL_GATE>
@@ -749,7 +749,7 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 2. Invoke oracle with the Oracle Invocation Template below
 3. Receive Oracle verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 4. Act on verdict per the table below
-5. **Repeat until APPROVE**
+5. **Repeat until APPROVE or COMMENT**
 
 **Oracle Invocation Template:**
 
@@ -757,7 +757,7 @@ Invoke oracle with this structure. Oracle will read the plan file and cross-refe
 
 ```
 ## Plan File
-$OMT_DIR/plans/[name].md
+$OMT_DIR/plans/{name}.md
 
 ## Verification Focus
 - Do the files/modules referenced in TODOs exist in the codebase?
@@ -792,11 +792,11 @@ Respond with:
 
 <CRITICAL_GATE>
 
-**MANDATORY: Momus MUST approve before presenting the plan to the user.**
+**MANDATORY: Momus MUST pass (APPROVE or COMMENT) before presenting the plan to the user.**
 
 - Do NOT proceed to the next step (user presentation) until Momus returns APPROVE or COMMENT
 - On REQUEST_CHANGES, you MUST incorporate the feedback, revise the plan, and re-invoke Momus
-- This loop repeats indefinitely until Momus returns APPROVE
+- This loop repeats indefinitely until Momus returns APPROVE or COMMENT
 - Skipping or bypassing this gate is NEVER permitted
 
 </CRITICAL_GATE>
@@ -808,14 +808,14 @@ Respond with:
 2. Invoke momus with the plan file path (see Invocation Format below)
 3. Receive Momus verdict (APPROVE / REQUEST_CHANGES / COMMENT)
 4. Act on verdict per the table below
-5. **Repeat until APPROVE**
+5. **Repeat until APPROVE or COMMENT**
 
 **Momus Invocation Format:**
 
 Invoke momus with the plan file path only. Momus reads the file and reviews according to its own 4 Criteria. On re-invocation after REQUEST_CHANGES, send the same path — the plan file content is already updated. Momus is stateless and reviews each submission independently. If a finding was considered but intentionally not adopted, document the rationale in the relevant plan section (Work Objectives guardrails, TODO constraints).
 
 ```
-$OMT_DIR/plans/[name].md
+$OMT_DIR/plans/{name}.md
 ```
 
 All review context (interview summary) is already in the plan's Context section per the Plan Template Structure. No supplementary prompt needed.
