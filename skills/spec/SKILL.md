@@ -306,16 +306,6 @@ digraph spec_workflow {
 
 **Note:** If ANY `records/` folder contains files, Wrapup is MANDATORY before completion.
 
-## Vague Answer Clarification Principle
-
-When users respond vaguely to design questions ("~is enough", "just do ~", "decide later"):
-
-1. **Do NOT accept as-is**
-2. **Ask specific clarifying questions**
-3. **Repeat until clear answer obtained**
-
-See each Design Area reference file for domain-specific clarification examples.
-
 ## Subagent Selection
 
 | Need | Agent | When |
@@ -420,7 +410,18 @@ Task(subagent_type="explore", prompt="I'm designing a spec for a new caching lay
 Task(subagent_type="librarian", prompt="I'm specifying a Redis caching strategy and need authoritative guidance on cache invalidation patterns. I'll use this to recommend the right approach in the spec. Find: cache-aside vs write-through patterns, TTL strategies, invalidation approaches, Redis best practices for [framework]. Skip introductory content — architecture-level guidance only.")
 ```
 
-## Context Brokering
+## Language
+
+- Communication: Korean / Documents: English / Code terms: Original English
+
+## Interview Quality Protocol
+
+| Scope | What Applies |
+|-------|-------------|
+| All Design Areas | Interview Quality Protocol (this section) |
+| Requirements / Solution Design only | + Ambiguity Score (Clarity Scoring) + Phase Transition Gate |
+
+### Context Brokering
 
 **NEVER burden the user with questions the codebase can answer.**
 
@@ -439,41 +440,15 @@ Task(subagent_type="librarian", prompt="I'm specifying a Redis caching strategy 
 
 When user has no preference or cannot decide, select best practice autonomously. Quality is the priority—achieve it through proactive context gathering, not user interrogation. Autonomous decisions still require full Questioning Protocol quality (Context→Tension→Question) when presenting the decision rationale.
 
-## Language
+### Vague Answer Clarification Principle
 
-- Communication: Korean / Documents: English / Code terms: Original English
+When users respond vaguely to design questions ("~is enough", "just do ~", "decide later"):
 
-## Questioning Protocol: One Question at a Time
+1. **Do NOT accept as-is**
+2. **Ask specific clarifying questions**
+3. **Repeat until clear answer obtained**
 
-**THE RULE: Ask exactly ONE question per message. Wait for answer. Then ask the next.**
-
-This applies to ALL question types - AskUserQuestion, plain text questions, clarifications. No exceptions.
-
-**Structural Verification Criteria:**
-- Each message to the user contains at most **1 question** requiring a response
-- Bundling questions into numbered lists (1. ... 2. ... 3. ...) or bulleted lists is **prohibited**
-- Context/analysis paragraphs are fine — only the question itself must be singular
-
-```
-WRONG: "Please answer the following questions: 1. ... 2. ... 3. ... 4. ..."
-RIGHT: "Are Jira comment keywords also trigger targets?"
-       → (wait for answer)
-       "Can multiple errors be reported in a single ticket?"
-       → (wait for answer)
-       ...
-```
-
-### Question Priority
-
-When multiple questions are pending within a step, ask in order: **Blocking → Important → Nice-to-have**.
-
-| Priority | Definition | Delay Cost |
-|----------|-----------|------------|
-| **Blocking** | Answer changes the structural direction of subsequent steps (scope boundary, technology constraint, architectural decision) | Rework across multiple steps |
-| **Important** | Answer affects one specific area but does not alter the overall direction | Local revision only |
-| **Nice-to-have** | Answer provides polish or detail. Can be deferred without structural impact | None — defer freely |
-
-**Constraint:** Priority ordering applies WITHIN a step. Do NOT collect questions across steps to reorder them.
+See each Design Area reference file for domain-specific clarification examples.
 
 ### Question Type Selection
 
@@ -545,10 +520,6 @@ For complex technical decisions, provide rich context via markdown BEFORE asking
 - Question must be independently understandable (include brief context + "See analysis above")
 - Options need descriptions explaining consequences, not just labels
 
-### Dialogue Persistence
-
-**Continue until YOU have no questions left.** Not after 2-3 questions. Keep the design dialogue going until every ambiguity is resolved.
-
 ### User Deferral Handling
 
 When user explicitly defers ("skip", "I don't know", "your call", "you decide", "no preference"):
@@ -556,6 +527,42 @@ When user explicitly defers ("skip", "I don't know", "your call", "you decide", 
 2. Select industry best practice or codebase-consistent approach
 3. Document in spec: "Autonomous decision: [X] - user deferred, based on [codebase pattern/best practice]"
 4. Continue spec work without blocking
+
+## Questioning Protocol: One Question at a Time
+
+**THE RULE: Ask exactly ONE question per message. Wait for answer. Then ask the next.**
+
+This applies to ALL question types - AskUserQuestion, plain text questions, clarifications. No exceptions.
+
+**Structural Verification Criteria:**
+- Each message to the user contains at most **1 question** requiring a response
+- Bundling questions into numbered lists (1. ... 2. ... 3. ...) or bulleted lists is **prohibited**
+- Context/analysis paragraphs are fine — only the question itself must be singular
+
+```
+WRONG: "Please answer the following questions: 1. ... 2. ... 3. ... 4. ..."
+RIGHT: "Are Jira comment keywords also trigger targets?"
+       → (wait for answer)
+       "Can multiple errors be reported in a single ticket?"
+       → (wait for answer)
+       ...
+```
+
+### Question Priority
+
+When multiple questions are pending within a step, ask in order: **Blocking → Important → Nice-to-have**.
+
+| Priority | Definition | Delay Cost |
+|----------|-----------|------------|
+| **Blocking** | Answer changes the structural direction of subsequent steps (scope boundary, technology constraint, architectural decision) | Rework across multiple steps |
+| **Important** | Answer affects one specific area but does not alter the overall direction | Local revision only |
+| **Nice-to-have** | Answer provides polish or detail. Can be deferred without structural impact | None — defer freely |
+
+**Constraint:** Priority ordering applies WITHIN a step. Do NOT collect questions across steps to reorder them.
+
+### Dialogue Persistence
+
+**Continue until YOU have no questions left.** Not after 2-3 questions. Keep the design dialogue going until every ambiguity is resolved.
 
 ## Checkpoint Protocol (Per Step - MANDATORY)
 
