@@ -116,6 +116,25 @@ Define operations in business terms (e.g., "atomically accumulate count", "retri
 - **Include**: Domain objects, aggregates, business rules, invariants, state transitions, domain events, repository/port interfaces (business meaning only)
 - **Exclude**: SQL statements, cache commands, framework annotations, batch strategies, and other technology-specific implementations (covered in detailed design)
 
+## Review Perspective
+
+**Stance**: Evaluate whether the domain model correctly captures business rules — aggregate boundaries, state machines, invariants, domain events.
+
+**Evaluate**:
+- Aggregate boundary correctness
+- State machine transition completeness
+- Business invariant coverage
+- Domain event granularity and triggers
+- Entity relationship ownership and cardinality
+
+**Do NOT evaluate**:
+- Persistence implementation (JPA annotations, ID generation strategy, column mappings) (→ Data Schema)
+- Repository query patterns or method signatures (→ Data Schema)
+- Method-level null checks or defensive coding (→ implementation phase)
+
+**Overstepping Signal**: Mentions ORM behavior (e.g., "IDENTITY strategy means id is null before persist"); discusses repository query patterns (e.g., "fallback lookup should use composite predicate"); suggests method-level guards (e.g., "set-if-null pattern for overwrite protection"); references database-specific concepts (e.g., unique constraints, index strategies).
+→ Reframe as domain rule completeness concern or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

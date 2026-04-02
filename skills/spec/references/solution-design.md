@@ -26,6 +26,26 @@ Architecture-level communication pattern selection is recorded here. For detaile
 - **Included**: System structure, component responsibilities, data flow between systems, communication patterns, failure handling policies, transaction boundaries, consistency policies
 - **Excluded**: SQL statements, specific data structures (e.g., Redis ZSET), cache commands, algorithms, internal component design (covered in detailed design)
 
+## Review Perspective
+
+**Stance**: Evaluate whether architecture decisions are sound for the given requirements — system structure, component boundaries, communication policies.
+
+**Evaluate**:
+- Component boundary clarity
+- Communication pattern justification
+- Failure handling policies at system boundaries
+- Data flow correctness across components
+- Transaction boundary appropriateness
+- Architectural trade-off acknowledgment
+
+**Do NOT evaluate**:
+- Code-level implementation (framework annotations, exception handling, class choices) (→ implementation phase)
+- SQL queries, repository method signatures (→ Data Schema)
+- Internal component design (method decomposition, null checks) (→ implementation phase)
+
+**Overstepping Signal**: Mentions specific framework annotation or class name (e.g., `@Transactional`, `CallerRunsPolicy`); suggests specific exception handling pattern (e.g., "catch X → re-fetch"); discusses method-level design (e.g., "`updateX()` should guard against overwrite"); references SQL predicates or WHERE clauses.
+→ Reframe at architecture-level policy or note as informational only.
+
 ## Process
 
 ### Step 1: Initial Assessment
