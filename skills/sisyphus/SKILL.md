@@ -362,7 +362,7 @@ When delegating to sisyphus-junior, include all 7-section categories:
 - Prior task results: [dependencies]
 
 ## 7. MANDATORY SKILLS
-- Skill(skill: "[name]"): [when to invoke, what it provides]
+- [skill-name]
 - [May be empty if no skills are relevant to this task]
 ```
 
@@ -403,8 +403,7 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 - Prior task results: Auth middleware was refactored in Task #3, middleware chain order matters
 
 ## 7. MANDATORY SKILLS
-- Skill(skill: "superpowers:test-driven-development"): Invoke BEFORE writing rate-limiter.ts.
-  Write tests for under-limit, at-limit, over-limit FIRST, then implement to make them pass.
+- superpowers:test-driven-development
 ```
 
 ### Prompt Quality Check
