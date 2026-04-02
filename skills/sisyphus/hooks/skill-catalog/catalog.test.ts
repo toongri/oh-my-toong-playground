@@ -19,7 +19,7 @@ describe('SITUATIONS', () => {
   it('필수 situation id가 존재한다', () => {
     const ids = SITUATIONS.map((s) => s.id);
     expect(ids).toContain('bugfix');
-    expect(ids).toContain('new-feature');
+    expect(ids).toContain('implementation');
     expect(ids).toContain('refactoring');
     expect(ids).toContain('design');
     expect(ids).toContain('analytics');
@@ -39,7 +39,7 @@ describe('SKILL_HASHMAP', () => {
     const tdd = SKILL_HASHMAP.get('superpowers:test-driven-development')!;
     expect(tdd.pluginId).toBe(SUPERPOWERS_PLUGIN);
     expect(tdd.situationIds).toContain('bugfix');
-    expect(tdd.situationIds).toContain('new-feature');
+    expect(tdd.situationIds).toContain('implementation');
     expect(tdd.situationIds).toContain('refactoring');
   });
 
@@ -54,22 +54,21 @@ describe('SKILL_HASHMAP', () => {
     expect(testing).toBeDefined();
     expect(testing.pluginId).toBeUndefined();
     expect(testing.situationIds).toContain('bugfix');
-    expect(testing.situationIds).toContain('new-feature');
+    expect(testing.situationIds).toContain('implementation');
   });
 
   it('implement 스킬은 bugfix, new-feature, refactoring situationIds를 가진다', () => {
     const impl = SKILL_HASHMAP.get('implement')!;
     expect(impl).toBeDefined();
     expect(impl.situationIds).toContain('bugfix');
-    expect(impl.situationIds).toContain('new-feature');
+    expect(impl.situationIds).toContain('implementation');
     expect(impl.situationIds).toContain('refactoring');
   });
 
-  it('frontend-design 스킬은 new-feature, design situationIds를 가진다', () => {
+  it('frontend-design 스킬은 design situationId만 가진다', () => {
     const fd = SKILL_HASHMAP.get('frontend-design')!;
     expect(fd).toBeDefined();
-    expect(fd.situationIds).toContain('new-feature');
-    expect(fd.situationIds).toContain('design');
+    expect(fd.situationIds).toEqual(['design']);
   });
 
   it('ux-design 스킬은 design situationId만 가진다', () => {
@@ -78,11 +77,10 @@ describe('SKILL_HASHMAP', () => {
     expect(ux.situationIds).toEqual(['design']);
   });
 
-  it('pm-data-analytics 스킬은 analytics, new-feature situationIds를 가진다', () => {
+  it('pm-data-analytics 스킬은 analytics situationId만 가진다', () => {
     const pm = SKILL_HASHMAP.get('pm-data-analytics')!;
     expect(pm).toBeDefined();
-    expect(pm.situationIds).toContain('analytics');
-    expect(pm.situationIds).toContain('new-feature');
+    expect(pm.situationIds).toEqual(['analytics']);
   });
 });
 
@@ -165,7 +163,7 @@ describe('formatCatalog', () => {
   });
 
   it('refactoring 행에 testing 스킬이 포함되지 않는다', () => {
-    // testing has situationIds ['bugfix', 'new-feature'] — NOT refactoring
+    // testing has situationIds ['bugfix', 'implementation'] — NOT refactoring
     const entries = buildCatalog(['testing', 'implement'], new Set());
     const output = formatCatalog(entries);
 

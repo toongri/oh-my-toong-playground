@@ -1,6 +1,7 @@
 import { HashmapSkillEntry, CatalogEntry, Situation } from './types.ts';
 
-// Situations that determine which skills are relevant
+// Situations — atomic task-level activities delegated to sisyphus-junior.
+// NOT orchestration-level concepts like "new feature" (that's sisyphus's job to decompose).
 export const SITUATIONS: Situation[] = [
   {
     id: 'bugfix',
@@ -8,9 +9,9 @@ export const SITUATIONS: Situation[] = [
     reasoning: 'Defect reproduction → fix → pass cycle required. Involves both test writing and implementation.',
   },
   {
-    id: 'new-feature',
-    label: 'New feature',
-    reasoning: 'Define expected behavior → implement → verify cycle. New functionality requires both tests and implementation.',
+    id: 'implementation',
+    label: 'Implementation',
+    reasoning: 'Define expected behavior → implement → verify cycle. Atomic task-level coding that requires both tests and implementation.',
   },
   {
     id: 'refactoring',
@@ -36,28 +37,28 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
     {
       description: 'Test-Driven Development methodology — write failing tests first, then implement to pass',
       pluginId: 'superpowers@claude-plugins-official',
-      situationIds: ['bugfix', 'new-feature', 'refactoring'],
+      situationIds: ['bugfix', 'implementation', 'refactoring'],
     },
   ],
   [
     'testing',
     {
       description: 'Testing skill — write and maintain automated tests',
-      situationIds: ['bugfix', 'new-feature'],
+      situationIds: ['bugfix', 'implementation'],
     },
   ],
   [
     'implement',
     {
       description: 'Implementation skill — focused code implementation following a spec',
-      situationIds: ['bugfix', 'new-feature', 'refactoring'],
+      situationIds: ['bugfix', 'implementation', 'refactoring'],
     },
   ],
   [
     'frontend-design',
     {
       description: 'Frontend design skill — UI component design and visual implementation',
-      situationIds: ['new-feature', 'design'],
+      situationIds: ['design'],
     },
   ],
   [
@@ -71,7 +72,7 @@ export const SKILL_HASHMAP: Map<string, HashmapSkillEntry> = new Map([
     'pm-data-analytics',
     {
       description: 'Product analytics skill — data-driven product decisions and metric definition',
-      situationIds: ['analytics', 'new-feature'],
+      situationIds: ['analytics'],
     },
   ],
 ]);
