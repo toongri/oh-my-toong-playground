@@ -62,6 +62,8 @@ digraph prometheus_flow {
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
     "Write plan to $OMT_DIR/plans/*.md" [shape=box];
+    "Oracle review" [shape=box];
+    "Oracle verdict?" [shape=diamond];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
     "Present full plan\nAsk user to finalize" [shape=box];
@@ -81,7 +83,10 @@ digraph prometheus_flow {
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
     "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE"];
-    "Write plan to $OMT_DIR/plans/*.md" -> "Momus review";
+    "Write plan to $OMT_DIR/plans/*.md" -> "Oracle review";
+    "Oracle review" -> "Oracle verdict?";
+    "Oracle verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
+    "Oracle verdict?" -> "Momus review" [label="APPROVE"];
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
     "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE"];
@@ -96,10 +101,11 @@ digraph prometheus_flow {
 | Need | Agent | When |
 |------|-------|------|
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
-| Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
+| Architecture/design analysis (interview) | oracle | Architecture decisions, risk assessment, feasibility validation during interview |
+| Codebase verification (pipeline) | oracle | **MANDATORY** — auto-invoked after plan generation. Verifies plan references exist and codebase assumptions hold |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete. Catches missing questions before plan generation |
-| Plan review | momus | **MANDATORY** after plan generation -- catches quality issues |
+| Plan review | momus | **MANDATORY** after Oracle approval -- catches quality issues |
 
 ### Do vs Delegate Decision Matrix
 
@@ -113,6 +119,7 @@ digraph prometheus_flow {
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
 | Pre-plan gap analysis | NEVER | metis |
+| Post-plan codebase verification | NEVER | oracle (MANDATORY) |
 | Plan quality review | NEVER | momus (MANDATORY) |
 | Code/pseudocode generation | NEVER | (forbidden entirely) |
 
@@ -128,6 +135,8 @@ When Prometheus asks the user about codebase facts during interview:
 → Always dispatch explore for any codebase question during interview. NEVER ask the user.
 
 ### Oracle -- Architecture Analysis
+
+> **Note**: This section covers ad-hoc Oracle consultation during interview for feasibility checks and architecture analysis. For the mandatory post-plan Oracle verification stage, see the Oracle Feedback Loop section below.
 
 Core principle: **Dispatch when interview information alone cannot determine technical feasibility.**
 
@@ -645,7 +654,7 @@ Overall structure:
 
 ## Plan Generation
 
-**Trigger**: Metis consultation passes (APPROVE or COMMENT). Proceed directly to plan generation — do NOT ask the user for confirmation at this stage. The user will review the complete plan after Momus approval.
+**Trigger**: Metis consultation passes (APPROVE or COMMENT). Proceed directly to plan generation — do NOT ask the user for confirmation at this stage. After plan generation, Oracle verifies codebase feasibility, then Momus reviews plan quality. The user will review the complete plan after Momus approval.
 
 ### Metis Feedback Loop (Auto-Invoked Before Plan Generation)
 
@@ -709,6 +718,75 @@ Invoke metis with this structure. On re-invocation after REQUEST_CHANGES, use th
 | **APPROVE** | Proceed directly to plan generation. Gate passed. |
 | **REQUEST_CHANGES** | **MANDATORY**: Return to Interview Mode. Resolve ALL blocking items. Modify content to address feedback. Re-invoke metis with updated 3-Section template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
 | **COMMENT** | Incorporate findings into the plan. Proceed to plan generation. |
+
+### Oracle Feedback Loop (MANDATORY Before Momus Review)
+
+**Three-agent pipeline roles** — each agent reviews a distinct dimension of the work:
+
+| | Metis | Oracle | Momus |
+|---|---|---|---|
+| **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Oracle |
+| **Input** | User Goal + Scope + AC | Plan + Codebase | Plan |
+| **Validates** | Requirements completeness | Codebase feasibility | Document quality |
+| **Reads code** | No | Yes (file:line) | No |
+| **Verdict** | APPROVE/REQUEST_CHANGES/COMMENT | Same | Same |
+
+<CRITICAL_GATE>
+
+**MANDATORY: Oracle MUST approve before proceeding to Momus review.**
+
+- Do NOT proceed to the next step (Momus review) until Oracle returns APPROVE or COMMENT
+- On REQUEST_CHANGES, you MUST revise the plan and re-invoke Oracle
+- This loop repeats indefinitely until Oracle returns APPROVE
+- Skipping or bypassing this gate is NEVER permitted
+
+</CRITICAL_GATE>
+
+**After generating the plan**, invoke the oracle agent to verify the plan against codebase reality. **Oracle must pass (APPROVE or COMMENT) to proceed to Momus. REQUEST_CHANGES blocks until resolved.**
+
+**Oracle Review Flow:**
+1. Generate the plan to `$OMT_DIR/plans/{name}.md`
+2. Invoke oracle with the Oracle Invocation Template below
+3. Receive Oracle verdict (APPROVE / REQUEST_CHANGES / COMMENT)
+4. Act on verdict per the table below
+5. **Repeat until APPROVE**
+
+**Oracle Invocation Template:**
+
+Invoke oracle with this structure. Oracle will read the plan file and cross-reference it against the codebase. On re-invocation after REQUEST_CHANGES, update the plan file first, then send the same template — Oracle is stateless and reviews each submission independently.
+
+```
+## Plan File
+$OMT_DIR/plans/[name].md
+
+## Verification Focus
+- Do the files/modules referenced in TODOs exist in the codebase?
+- Are the pattern references (file:line-range) still current and accurate?
+- Do dependency assumptions (Blocked By relationships) hold architecturally?
+- Are there codebase constraints that conflict with the planned approach?
+
+## Output Format
+Respond with:
+- **Verdict**: APPROVE / REQUEST_CHANGES / COMMENT
+- **Evidence**: file:line citations for each finding
+- **Rationale**: Brief justification for the verdict
+```
+
+**Invocation Anti-Patterns:**
+
+| Anti-Pattern | Example | Problem |
+|-------------|---------|---------|
+| Restating plan content | Summarizing plan TODOs in prompt | Oracle reads the file directly — token waste |
+| Asking for code review | "Is the implementation correct?" | Oracle reviews plan feasibility, not code quality |
+| Skipping after Metis APPROVE | Proceeding to Momus without Oracle | Gate violation — Oracle is mandatory regardless of Metis verdict |
+
+**Verdict Handling:**
+
+| Verdict | Action |
+|---------|--------|
+| **APPROVE** | Proceed directly to Momus review. Gate passed. |
+| **REQUEST_CHANGES** | **MANDATORY**: Revise the plan to address ALL blocking findings. Re-invoke Oracle with the same invocation template. **MUST loop until APPROVE — proceeding without approval is forbidden.** |
+| **COMMENT** | Incorporate findings into the plan. Proceed to Momus review. |
 
 ### Momus Feedback Loop (MANDATORY Before User Presentation)
 
