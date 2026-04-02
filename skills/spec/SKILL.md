@@ -580,7 +580,7 @@ Even if AI already has sufficient information for a Step, it MUST:
 4. Update progress status at document top
 4.5. **Update state.json**: Increment `steps_completed` for current area, update `updated_at`
 5. **MANDATORY: Record decisions** to `{area-directory}/records/` (see Record Workflow below)
-   - If decisions were made: Create record NOW. This is a BLOCKING gate — do NOT proceed to step 6 until record is saved.
+   - If decisions were made: Create record NOW. This is a BLOCKING gate — do NOT proceed to step 6 until record is saved. Then append the record filename to `areas[current_area].records` in state.json.
    - If no decisions were made: Explicitly state "No recordable decisions in this Step" before proceeding.
 5.5. **Emergent Concern Check**: "Are there any design or clarification needs uncovered in this Step that are not addressed by the selected Design Areas?" If found, apply Emergent Concern Protocol.
 6. Regenerate `spec.md` by concatenating all completed design.md files
@@ -1199,7 +1199,9 @@ Tracks spec progress across sessions. Provides richer data than directory-scan (
 
 **Lifecycle events that update state.json**:
 - Area Selection complete → create with initial data (`status: "in_progress"`, `selected_areas` populated, all areas set to `"pending"`)
+- Area work begins → set `steps_total` for current area (count Steps in reference file), set area `status` to `"in_progress"`
 - Each step completion → increment `steps_completed` for current area, update `updated_at`
+- Each record creation → append filename to `areas[current_area].records`
 - Each area completion → set area `status` to `"completed"`, record `review_verdict`, update `current_area`
 - Spec Completion Gate passed → set top-level `status` to `"completed"`
 
