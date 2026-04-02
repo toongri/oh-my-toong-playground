@@ -23,6 +23,8 @@ When significant decisions are made during any area, capture them for future ref
 
 The record is a **COMMITMENT DEVICE** — it captures not just WHAT was decided, but WHY, and confirms the user was part of the decision.
 
+> **Cross-reference:** This protocol must pass the Decision Interview Gate defined in `checkpoint-protocol.md` — the gate BLOCKS step completion until all decisions pass this interview.
+
 ### Decision Recognition Checklist
 
 A statement is a **recordable decision** if ANY of these apply:
