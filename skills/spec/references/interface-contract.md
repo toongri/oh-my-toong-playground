@@ -19,6 +19,26 @@ As an interface design specialist, systematically design and document the interf
 - **Include**: API endpoint definitions, request/response shapes, error handling contracts, versioning strategy, change documentation
 - **Exclude**: Controller/handler implementation, middleware internals, serialization code, database queries
 
+## Review Perspective
+
+**Stance**: Evaluate whether the interface contract is complete and consistent — endpoint definitions, request/response shapes, error contracts, versioning strategy.
+
+**Evaluate**:
+- API endpoint definition completeness (URI, method, parameters)
+- Request/response shape correctness and consistency
+- Error handling contract coverage (status codes, error body format)
+- Versioning strategy appropriateness for the consumer landscape
+- Change documentation accuracy and backward compatibility assessment
+
+**Do NOT evaluate**:
+- Controller or handler implementation details (→ implementation phase)
+- Middleware chain ordering or internals (→ implementation phase)
+- Serialization/deserialization code choices (→ implementation phase)
+- Database query patterns behind the interface (→ Data Schema)
+
+**Overstepping Signal**: Suggests specific middleware chain ordering (e.g., "authentication filter must run before rate-limiting middleware"); discusses ORM query optimization behind the endpoint (e.g., "this endpoint will cause N+1 queries"); references controller method signatures (e.g., "`handleOrderCreate()` should validate before delegating"); references serialization library configuration (e.g., "Jackson `@JsonIgnore` needed here").
+→ Reframe as contract completeness concern or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.

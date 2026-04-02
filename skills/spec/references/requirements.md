@@ -49,6 +49,25 @@ Label each question with its type and address Policy/blocking questions before E
 - **Include**: Requirements analysis artifacts — use cases, acceptance criteria, business rules, NFRs, domain glossary, validation scenarios
 - **Exclude**: Technical implementation, architecture decisions, data schema, API design
 
+## Review Perspective
+
+**Stance**: Evaluate whether requirements are complete, unambiguous, and verifiable — business rules, acceptance criteria, NFRs.
+
+**Evaluate**:
+- Business rule edge case coverage
+- Acceptance criteria measurability
+- NFR quantification
+- Domain terminology consistency
+- Use case scenario completeness (happy/exception/boundary)
+
+**Do NOT evaluate**:
+- Technical feasibility or architecture choices (→ Solution Design)
+- Implementation method (patterns, frameworks, libraries) (→ Solution Design/implementation phase)
+- Data model or schema design (→ Domain Model/Data Schema)
+
+**Overstepping Signal**: Suggests implementation approaches ("implement with X pattern", "use Y framework"); presumes specific technology constraints; makes feasibility judgments ("this requirement is technically difficult").
+→ Reframe as requirement clarity or verifiability concern.
+
 ## Process
 
 ### Step 1: Project Overview

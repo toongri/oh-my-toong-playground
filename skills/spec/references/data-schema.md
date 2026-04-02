@@ -22,6 +22,26 @@ This document provides implementation details for the Repository/Port interfaces
 - **Include**: Table schemas, column definitions, data types, constraints, SQL/cache commands, indexes, migration strategies
 - **Exclude**: Business rule definitions, domain model structures, system-level architecture decisions (already defined in previous documents)
 
+## Review Perspective
+
+**Stance**: Evaluate whether the data schema correctly implements the storage layer — table structures, column definitions, constraints, query implementations, and migration strategies.
+
+**Evaluate**:
+- Table schema completeness and column definition correctness
+- Data type appropriateness for stored values
+- Constraint coverage (NOT NULL, UNIQUE, FK referential integrity)
+- SQL/cache command correctness and performance characteristics
+- Index strategy adequacy for expected query patterns
+- Migration approach safety and rollback feasibility
+
+**Do NOT evaluate**:
+- Business rule definitions or domain invariants (→ Domain Model)
+- Aggregate boundaries or entity ownership (→ Domain Model)
+- System-level communication patterns or transaction policies (→ Solution Design)
+
+**Overstepping Signal**: Discusses aggregate boundary design (e.g., "this table implies OrderItem should be its own aggregate"); suggests changing business invariants (e.g., "the uniqueness constraint here conflicts with the cancellation policy"); references system-level communication patterns (e.g., "this schema requires synchronous cross-service queries").
+→ Reframe as schema correctness concern or note as informational only.
+
 ## Vague Answer Clarification Examples
 
 When users respond vaguely to design questions, clarify with specific questions.
