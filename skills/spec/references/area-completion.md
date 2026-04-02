@@ -67,11 +67,12 @@ digraph area_completion {
    - **APPROVE** → Proceed to step 5.5
    - **REQUEST_CHANGES** → Present blocking concerns to user with recommendation → User agrees on changes → Apply changes, update design.md, record decisions in `records/` → Re-delegate to spec-review → Return to step 5
    - **COMMENT** → Share non-blocking concerns with user, create follow-up if needed → Proceed to step 5.5
-5.5. **Update state.json**: Set area `status` to `completed`, record `review_verdict`, update `current_area` to next area (or null if last), update `updated_at`
+5.5. **Update state.json**: Record `review_verdict`, update `updated_at`
 6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
    - AI CANNOT self-declare Area completion
    - **Area completion cannot be declared without spec-review pass (APPROVE or COMMENT)** — Area cannot be completed while REQUEST_CHANGES is in effect
+6.5. **Update state.json**: Set area `status` to `completed`, update `current_area` to next area (or null if last), update `updated_at`
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 8. **Progress Dashboard**: Display the overall spec progress to the user (see below)
 

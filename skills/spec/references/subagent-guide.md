@@ -61,7 +61,7 @@ When the spec includes technology choices, information outside the codebase may 
 ### Explore/Librarian Prompt Guide
 
 Explore and librarian are contextual search agents — treat them like targeted grep, not consultants.
-Always run in background. Always parallel when independent.
+Always parallel when independent.
 
 **Prompt structure** (each field should be substantive, not a single sentence):
 - **[CONTEXT]**: What task you're working on, which files/modules are involved, and what approach you're taking

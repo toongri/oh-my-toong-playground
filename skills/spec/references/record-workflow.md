@@ -17,13 +17,11 @@ When significant decisions are made during any area, capture them for future ref
 ### Protocol Flow
 
 1. **Detect**: When any of the 9 Decision Recognition signals are identified, STOP current design work
-2. **Present**: Present the tradeoff situation to the user using the Rich Context Pattern (Context → Tension → Options → Recommendation → AskUserQuestion) — see the inline Rich Context Pattern in SKILL.md (line 502)
+2. **Present**: Present the tradeoff situation to the user using the Rich Context Pattern (Context → Tension → Options → Recommendation → AskUserQuestion) — see the Rich Context Pattern section in SKILL.md
 3. **Consensus**: Wait for explicit user agreement on the chosen option
 4. **Record**: THEN create the record using `templates/record.md` format, capturing the full interview context (options considered, tradeoffs, user's rationale)
 
 The record is a **COMMITMENT DEVICE** — it captures not just WHAT was decided, but WHY, and confirms the user was part of the decision.
-
-See `references/checkpoint-protocol.md` Decision Interview Gate for the checkpoint-level enforcement of this protocol.
 
 ### Decision Recognition Checklist
 
