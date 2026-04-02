@@ -10,12 +10,14 @@ describe('parseInput', () => {
     const result = parseInput('{"sessionId": "abc123", "cwd": "/tmp/project"}');
     expect(result.sessionId).toBe('abc123');
     expect(result.cwd).toBe('/tmp/project');
+    expect(result.hookEventName).toBe('UserPromptSubmit');
   });
 
   it('유효하지 않은 JSON이면 기본값으로 폴백한다', () => {
     const result = parseInput('not-json');
     expect(result.sessionId).toBe('default');
     expect(result.cwd).toBe(process.cwd());
+    expect(result.hookEventName).toBe('UserPromptSubmit');
   });
 
   it('snake_case session_id를 처리한다', () => {
@@ -26,6 +28,11 @@ describe('parseInput', () => {
   it('session_id보다 sessionId를 우선한다', () => {
     const result = parseInput('{"sessionId": "camel", "session_id": "snake"}');
     expect(result.sessionId).toBe('camel');
+  });
+
+  it('hook_event_name이 전달되면 해당 값을 사용한다', () => {
+    const result = parseInput('{"hook_event_name": "TestEvent"}');
+    expect(result.hookEventName).toBe('TestEvent');
   });
 });
 
@@ -84,7 +91,7 @@ describe('main (통합)', () => {
     const output = JSON.parse(consoleOutput[consoleOutput.length - 1]);
     expect(output.continue).toBe(true);
     expect(output.hookSpecificOutput).toBeDefined();
-    expect(output.hookSpecificOutput.hookEventName).toBe('SessionStart');
+    expect(output.hookSpecificOutput.hookEventName).toBe('UserPromptSubmit');
     expect(output.hookSpecificOutput.additionalContext).toContain('<skill-catalog>');
     expect(output.hookSpecificOutput.additionalContext).toContain('</skill-catalog>');
     expect(output.hookSpecificOutput.additionalContext).toContain('superpowers:test-driven-development');

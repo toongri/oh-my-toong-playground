@@ -2,7 +2,7 @@
 name: sisyphus
 description: Use when orchestrating complex multi-step tasks requiring delegation, parallelization, or systematic completion verification - especially when tempted to do everything yourself or ask user codebase questions
 hooks:
-  SessionStart:
+  UserPromptSubmit:
     - hooks:
         - type: command
           command: "bun run $CLAUDE_PROJECT_DIR/.claude/skills/sisyphus/hooks/skill-catalog/index.ts"

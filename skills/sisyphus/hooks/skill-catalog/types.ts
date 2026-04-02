@@ -1,14 +1,16 @@
-// Hook input from Claude Code (SessionStart)
+// Hook input from Claude Code (UserPromptSubmit)
 export interface HookInput {
   sessionId?: string;
   session_id?: string;
   cwd?: string;
+  hook_event_name?: string;
 }
 
 // Parsed hook input
 export interface ParsedInput {
   sessionId: string;
   cwd: string;
+  hookEventName: string;
 }
 
 // Situation — a task context that determines which skills are relevant
@@ -37,7 +39,7 @@ export interface CatalogEntry {
 export interface HookOutput {
   continue: true;
   hookSpecificOutput?: {
-    hookEventName: 'SessionStart';
+    hookEventName: string;
     additionalContext: string;
   };
 }
