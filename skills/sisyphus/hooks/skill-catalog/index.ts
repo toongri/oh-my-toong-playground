@@ -22,8 +22,9 @@ export function parseInput(raw: string): ParsedInput {
 
   const sessionId = input.sessionId || input.session_id || 'default';
   const cwd = input.cwd || process.cwd();
+  const hookEventName = input.hook_event_name || 'UserPromptSubmit';
 
-  return { sessionId, cwd };
+  return { sessionId, cwd, hookEventName };
 }
 
 export async function main(): Promise<void> {
@@ -47,7 +48,7 @@ export async function main(): Promise<void> {
     const output: HookOutput = {
       continue: true,
       hookSpecificOutput: {
-        hookEventName: 'SessionStart',
+        hookEventName: input.hookEventName,
         additionalContext,
       },
     };
