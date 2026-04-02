@@ -2,6 +2,8 @@ config:
   language: "한국어"
   outputStyle: "Explanatory"
   includeCoAuthoredBy: false
+  env:
+    CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "40"
   attribution:
     commit: ""
     pr: ""
