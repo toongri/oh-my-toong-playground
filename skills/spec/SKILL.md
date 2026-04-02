@@ -100,7 +100,7 @@ Before starting spec work, load context files from `~/.omt/$OMT_PROJECT/context/
 **Skip when:**
 - No records exist in any `records/` folder across all areas
 
-**Reference:** `references/wrapup.md`
+**Reference:** Read `references/wrapup.md` for Recurring Tradeoff Filter, context file proposals (Step 2a-2d), and save procedure. Apply when entering Wrapup.
 
 ---
 
@@ -288,7 +288,7 @@ When multiple questions are pending within a step, ask in order: **Blocking → 
 
 **Reference:** Read `references/checkpoint-protocol.md` for the full Step Completion Sequence, Decision Interview Gate, Clarity Scoring, and Final Step Checkpoint. Apply at every Step completion.
 
-**Key steps** (see reference for details): Present results → User confirmation → Save → Update state → **Decision Interview Gate (BLOCKING)** → Record decisions → Emergent Concern Check → Regenerate spec.md → Announce completion
+**Key steps** (see reference for details): Present results → User confirmation → Save → Update state → **Decision Interview Gate (BLOCKING)** → Record decisions → Emergent Concern Check → Regenerate spec.md → Announce completion → Wait for user confirmation
 
 ## Multi-AI Review Integration
 

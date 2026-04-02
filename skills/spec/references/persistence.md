@@ -2,11 +2,11 @@
 
 ## Step-by-Step Persistence
 
-**Core Principle**: Save progress to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md` whenever each Area is completed.
+**Core Principle**: Save progress to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md` at every Step completion (per Checkpoint Protocol). Area completion finalizes the content.
 
 ### When to Save
 
-Save **whenever each Area is completed**:
+Save at **every Step completion** and finalize at Area completion:
 - Create `{area-directory}/design.md` with that area's content
 - Create `{area-directory}/records/` for any decisions made during that area
 - Regenerate `spec.md` by concatenating all completed design.md files
@@ -110,7 +110,7 @@ Tracks spec progress across sessions. Provides richer data than directory-scan (
 | `created_at`, `updated_at` | ISO 8601 string | UTC timestamps |
 | `current_area` | string \| null | Active area being worked; null when spec complete |
 | `selected_areas` | string[] | Ordered list of areas chosen at Area Selection |
-| `areas[name].status` | `"pending"` \| `"in_progress"` \| `"completed"` \| `"skipped"` | Per-area status (lowercase; aligns with Progress Dashboard values) |
+| `areas[name].status` | `"pending"` \| `"in_progress"` \| `"completed"` \| `"skipped"` | Per-area status (lowercase; Progress Dashboard displays as Title Case: Complete, In Progress, etc.) |
 | `areas[name].steps_completed` | number | Steps finished in this area |
 | `areas[name].steps_total` | number \| null | Populated at area start; null until then |
 | `areas[name].records` | string[] | Filenames saved to `{area}/records/` |
