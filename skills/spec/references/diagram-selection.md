@@ -2,6 +2,18 @@
 
 A cross-cutting reference guide providing selection criteria and authoring guidelines for the 4 diagram types used in the spec skill.
 
+## Contents
+
+- **1. Diagram Types** — The four diagram types available in the spec skill (Sequence, Class, State, Flowchart), with their purpose, Mermaid syntax keyword, and the specific spec steps where each is used.
+
+- **2. Selection Decision Tree** — A Mermaid flowchart that guides diagram type selection. Start here when you need to decide which diagram to draw — it walks through questions about what you're representing and how many participants or branches are involved.
+
+- **3. Scenario Mapping** — A lookup table of concrete scenarios mapped to their correct diagram type with rationale. Use this to quickly validate your choice against real examples, including the Sequence + Decomposition Flowchart combo and same-level duplication (prohibited).
+
+- **4. Guardrails** — Rules and anti-patterns governing diagram use. Covers the necessity test, hard constraints (no duplication, 3-branch threshold, 15-node limit), anti-patterns to avoid, and the Decomposition Pattern criteria for splitting a Sequence participant into a separate Flowchart.
+
+- **5. Diagram Presentation Protocol** — The mandatory 3-part structure every diagram must follow: Why (before), Diagram, Interpretation (after). Includes a worked example and anti-patterns for generic or missing context blocks, plus how this nests inside the Rich Context Pattern.
+
 ## 1. Diagram Types
 
 | Diagram | Purpose | Mermaid Syntax | Primary Usage |

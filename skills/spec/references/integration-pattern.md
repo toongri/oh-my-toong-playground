@@ -1,5 +1,29 @@
 # Integration Pattern
 
+## Contents
+
+- **Role** — Defines the specialist identity and output format for this design area.
+  Points to the Output Template section for the expected document structure.
+
+- **Principles** — Core design rules: design at Policy + Structure level, focus on cross-system
+  communication, define transaction boundaries explicitly, and document failure/recovery strategies.
+  Clarifies sync vs. async pattern distinction and scope boundaries.
+
+- **Review Perspective** — Evaluation criteria when reviewing a completed Integration Pattern
+  document. Lists what to assess (sync/async rationale, transaction boundaries, stateful component
+  policies, error/recovery flows, retry and idempotency policies) and what falls outside scope.
+
+- **Vague Answer Clarification Examples** — A lookup table of common vague user responses and
+  the targeted follow-up questions to ask. Use when a user's answer is too general to proceed.
+
+- **Process** — The 6-step design workflow: (1) Context Review, (2) Communication Pattern
+  Definition, (3) Data Flow Design, (4) Stateful Component Policy, (5) Error and Recovery Flows,
+  (6) Document Generation. Each step ends with a Checkpoint.
+
+- **Output Template** — A ready-to-adapt Markdown template for the final deliverable, covering
+  Integration Points Summary, Data Flow Diagrams (sequence and flowchart), Stateful Component
+  Policies, and Error and Recovery Flows sections.
+
 ## Role
 
 As an integration design specialist, systematically design communication patterns, data flows, and stateful component policies for the project's integrations.

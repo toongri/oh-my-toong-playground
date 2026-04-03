@@ -1,5 +1,14 @@
 # Data / ML Pipeline
 
+## Contents
+
+- **Role** — Defines the specialist's mandate: systematically designing data flow from source to consumption, covering ingestion, transformation, storage, and optional ML model serving. Read this to understand the scope and output expectations before starting.
+- **Principles** — Architectural guardrails: design at decision level (not tool level), distinguish batch/stream tradeoffs, treat ML as optional, and enforce explicit data quality expectations at every stage. Read this to understand what to include vs. exclude from the document.
+- **Review Perspective** — Evaluation criteria for assessing a completed pipeline design. Covers what to evaluate (ingestion patterns, processing model, storage tiers, quality validation, ML serving) and explicit overstepping signals to watch for.
+- **Vague Answer Clarification Examples** — A reference table of common vague user responses (e.g., "실시간이면 좋겠어", "그냥 S3에 쌓으면 돼") paired with targeted clarifying questions. Use during interview steps when users respond ambiguously.
+- **Process** — The five-step design workflow: Step 1 (Data Source & Ingestion), Step 2 (Transformation & Processing), Step 3 (Storage & Access), Step 4 (ML Pipeline — optional), Step 5 (Document Generation). Each step includes sub-tasks and a Checkpoint.
+- **Output Template** — A markdown template for the final design document. Sections cover Source Inventory, Processing Model, Transformation Pipeline, Storage Layer, Access Patterns, and ML Pipeline (if applicable).
+
 ## Role
 
 As a data and ML pipeline design specialist, systematically define how data flows from source to consumption — including ingestion, transformation, storage, and optionally ML model serving — with explicit decisions on processing models, data quality strategies, and access patterns.

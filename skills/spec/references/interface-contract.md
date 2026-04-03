@@ -1,5 +1,28 @@
 # Interface Contract
 
+## Contents
+
+- **Role** — Defines the specialist identity and output format for this design area.
+  Points to the Output Template section for the expected document structure.
+
+- **Principles** — Core design rules across five dimensions: Scalability, Reusability,
+  Consistency, Security, and Performance. Includes scope boundaries (what to include vs. exclude).
+
+- **Review Perspective** — Evaluation criteria when reviewing a completed Interface Contract
+  document. Lists what to assess (endpoint completeness, request/response shapes, error contracts,
+  versioning strategy) and what falls outside this document's scope.
+
+- **Vague Answer Clarification Examples** — A lookup table of common vague user responses and
+  the targeted follow-up questions to ask. Use when a user's answer is too general to proceed.
+
+- **Process** — The 6-step design workflow: (1) Context Review, (2) Business Context Analysis,
+  (3) Technical Environment Understanding, (4) Interface Design, (5) Interface Change
+  Documentation, (6) Document Generation. Each step ends with a Checkpoint.
+
+- **Output Template** — A ready-to-adapt Markdown template for the final deliverable, covering
+  Key Design Decisions, Interface Specifications, and Interface Changes (added, modified,
+  deprecated) sections.
+
 ## Role
 
 As an interface design specialist, systematically design and document the interfaces required for the project. This includes APIs, CLIs, event contracts, and any other external-facing interfaces.

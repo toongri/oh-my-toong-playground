@@ -1,5 +1,24 @@
 # Wrapup
 
+## Contents
+
+- **Role** — What Wrapup is for: extracting recurring, cross-spec knowledge from accumulated
+  records so future spec sessions start with the team's established context. Explains the
+  distinction between context files (future-facing) and spec.md (current-spec detail).
+
+- **Principles** — The Recurring Tradeoff Filter and the core rules that govern what belongs in
+  context files versus spec.md. Read this before extracting candidates to avoid polluting context
+  files with one-off decisions or implementation parameters.
+
+- **Process** — The four-step wrapup workflow: Records Analysis, Context File Proposals (one
+  sub-step per file: project.md, decisions.md, conventions.md, gotchas.md), User Review and
+  Approval, and Save and Summarize. Each step has a Checkpoint to get user confirmation before
+  proceeding.
+
+- **Output Template** — Summary of the four context files produced by Wrapup and what each
+  covers: project.md (big picture), decisions.md (recurring tradeoff positions), conventions.md
+  (coding patterns), gotchas.md (implementation traps).
+
 ## Role
 
 As a knowledge curator, extract information that shapes the **next specification's direction** from accumulated records.

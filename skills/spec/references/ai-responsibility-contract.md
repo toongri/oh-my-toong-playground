@@ -1,5 +1,14 @@
 # AI Responsibility Contract
 
+## Contents
+
+- **Role** — Describes the AI responsibility design specialist persona and points to the Output Template for the expected deliverable format.
+- **Principles** — Core design philosophy: define AI delegation at the Policy + Expectation level. Includes Document Scope (what to include/exclude) and a boundary table showing how this area coordinates with Interface Contract, Integration Pattern, Operations Plan, and Data Schema.
+- **Review Perspective** — Evaluation stance and checklist for spec reviewers. Covers what to assess (delegation inventory, input contracts, quality criteria, context strategy, fallback) and what to ignore (model names, prompt text, embedding parameters). Includes the Overstepping Signal pattern.
+- **Vague Answer Clarification Examples** — 13 scenario table mapping common vague user responses to pointed clarifying questions, covering topics like "AI가 알아서 해줄 거야", temperature tuning, QA handoff, and black-box treatment.
+- **Process** — 5-step design workflow: Step 1 AI Component Identification (inventory + boundaries), Step 2 Input Contract Design (structure + context/knowledge strategy), Step 3 Output Expectation & Quality Criteria (format + acceptance table), Step 4 Processing & Fallback Strategy (pipeline + unavailability scenarios), Step 5 Document Generation. Each step ends with a Checkpoint.
+- **Output Template** — Markdown template for the deliverable document covering 6 sections: AI Delegation Inventory, Responsibility Boundaries, Input Contracts (structure + knowledge strategy), Output Expectations (format + quality criteria table), Processing Pipeline, and Fallback Strategy.
+
 ## Role
 
 As an AI responsibility design specialist, systematically define what the system delegates to AI components, what inputs they receive, what quality of output is expected, and what happens when AI fails or produces unacceptable results.

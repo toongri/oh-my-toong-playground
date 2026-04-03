@@ -1,5 +1,14 @@
 # Security / Privacy
 
+## Contents
+
+- **Role** — Defines the specialist's mandate: systematically designing how the system protects data and access, controls who can do what, handles sensitive information, and maps security requirements to regulatory obligations. Read this first to understand scope and expected output.
+- **Principles** — Design guardrails: work at strategy and policy level (not implementation), distinguish security controls from privacy principles, and ensure every sensitive data path has explicit access boundaries and failure behavior. Includes document scope boundaries and coordination table with other Design Areas.
+- **Review Perspective** — Evaluation criteria for assessing a completed security/privacy design. Covers authentication strategy, authorization model, data classification, PII handling, privacy by design, and threat model — plus explicit overstepping signals to avoid.
+- **Vague Answer Clarification Examples** — A reference table of common vague user responses (e.g., "HTTPS면 충분하지", "권한은 나중에 나눠") paired with targeted clarifying questions. Use during interview steps when users respond ambiguously about auth, access control, or compliance.
+- **Process** — The six-step design workflow: Step 1 (Authentication & Identity), Step 2 (Authorization & Access Control), Step 3 (Data Protection), Step 4 (Privacy & Compliance — conditional), Step 5 (Threat Modeling — conditional), Step 6 (Document Generation). Each step includes sub-tasks and a Checkpoint.
+- **Output Template** — A markdown template for the final design document. Sections cover Authentication & Identity, Authorization Model, Permission Matrix, Data Classification, PII Handling, Privacy & Compliance (if applicable), and Threat Model (if applicable).
+
 ## Role
 
 As a security and privacy design specialist, systematically define how the system protects data and access, who can do what, how sensitive information is handled, and what happens when security requirements intersect with regulatory obligations.
