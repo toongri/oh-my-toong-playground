@@ -103,6 +103,12 @@ Add trailers at the end of body when needed:
 - WHY goes in body (optional)
 - Many files ≠ many commits — logical cohesion decides (see Atomic Commit Splitting)
 
+**Product, Not Process** — 커밋 메시지는 변경 자체를 설명한다.
+
+- 변경의 출처(코드 리뷰, 이슈 번호, 회의 결정)가 아니라 **무엇이 바뀌었는지** 기술
+- 6개월 뒤 `git log`를 읽는 사람은 "리뷰 P1-3 수정"이 무슨 뜻인지 모른다
+- 출처/맥락은 body나 trailer(`Fixes #123`)에 기록
+
 ---
 
 ## Quick Reference
@@ -163,6 +169,7 @@ Split when ANY of these are true:
 | Independently revertable parts | Config change that works without the feature using it |
 | Description gets too long | "Fixed X and also added Y and refactored Z" |
 | Different architectural layers | Config + domain + service + test + docs for one feature |
+| Multiple independent changes (even in 1-2 files) | 리뷰 지적 3건이 각각 독립적 변경 → 3 커밋 |
 
 #### When NOT to Split
 
@@ -214,6 +221,8 @@ If any match → Unstage them before proceeding.
 - Build/config → `chore`
 - Performance → `perf`
 
+> **`fix` 타입 주의**: 코드 리뷰에서 나온 변경이 전부 `fix`는 아니다. 리뷰 지적이라도 새 기능이면 `feat`, 구조 개선이면 `refactor`. 실제 버그/오류 수정만 `fix`.
+
 ### Step 4: Generate Commit Message
 
 **Subject rules (NON-NEGOTIABLE):**
@@ -221,6 +230,11 @@ If any match → Unstage them before proceeding.
 - **Max 50 characters** ← ENFORCED, not a guideline
 - 명사형 종결 (e.g., "추가", "수정", "삭제", "구현", "개선")
 - No period at end
+
+**Subject content rule:**
+- 제목은 **변경 자체**를 기술 (Product, Not Process)
+- BAD: `fix: 코드 리뷰 P1/P2 이슈 수정` — 프로세스를 기술
+- GOOD: `fix: persistence 저장 시점을 Step 완료 단위로 변경` — 변경을 기술
 
 **If subject > 50 chars:**
 1. Identify the ONE core change
@@ -323,6 +337,8 @@ See `examples.md` for commit message examples.
 | Period at end of title | Unnecessary character | Remove period |
 | Title exceeding 50 characters | Truncated in git log | Keep core message, move details to body |
 | Committing plan.md | Workflow files mixed in | git reset HEAD plan.md |
+| Meta-commit: "리뷰 이슈 수정" | 변경 내용이 불투명, git log 무의미 | 실제 변경 기술: "저장 시점을 Step 완료 단위로 변경" |
+| Opaque reference: "P1-1, P2-3 반영" | 외부 문서 없이 해독 불가 | 참조는 body/trailer, 제목은 변경 자체 |
 
 ---
 
