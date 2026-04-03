@@ -66,6 +66,27 @@ To review what changed in a file, use `git diff -- <path>` for each file under r
 
 Single-line edits, obvious typos, or changes with no functional behavior modification skip automated checks and hands-on QA, receiving only a brief code quality check.
 
+### Trigger Independence Rule
+
+Each trigger fires independently based on its own activation condition. One trigger's success does not exempt another trigger from activating.
+
+Specifically: Stage 1 (automated checks) passing does NOT exempt Stage 3 (hands-on QA) from activation when "user-facing changes, no scenarios" is met.
+
+The only trigger that legitimately deactivates "user-facing changes, no scenarios" is "QA scenarios provided" — this is mutual exclusion by design, not an exemption chain.
+
+**Why automated tests and hands-on QA are not substitutes:**
+
+| Dimension | Automated Tests | Hands-On QA |
+|-----------|----------------|-------------|
+| Environment | Test-framework-controlled | Production startup path |
+| HTTP layer | In-process calls (MockMvc/WebTestClient bypass real network) | Real TCP connections through actual HTTP stack |
+| Dependencies | Stubbed (WireMock/Mockito) | Live or real-profile-resolved |
+| Server boot | Not under test | Application boots via production startup path |
+| Filter chain | Partially exercised at best | Full chain (CORS/Security/Auth) |
+| Config | Test application context | Actual profiles and env vars |
+
+Automated tests verify "code behaves as intended." Hands-on QA verifies "application boots and responds to real requests as in production." These are complementary, not substitutes.
+
 ---
 
 ## Self-Discovery Protocol
@@ -202,6 +223,15 @@ This trigger activates when changes affect user-facing behavior AND the request 
 
 **See** [stage3-handson.md] **for details** on applicability logic, lifecycle management, verification procedures, and output format.
 
+### Evasion Patterns (BLOCKED)
+
+| Excuse | Why Invalid |
+|--------|-------------|
+| "Tests already cover this" | Automated tests verify in-process behavior with mocks. Hands-on verifies out-of-process integration through real network. |
+| "Server setup is too complex" | If it's too complex to start locally, it's too complex to ship. Startup itself is a verification target. |
+| "E2E tests simulate HTTP" | MockMvc/WebTestClient operate without a servlet container. They are not real HTTP. |
+| "It's just a minor API change" | Minor changes break clients. Verify the contract with a real request. |
+
 ---
 
 ## Severity Classification
@@ -228,6 +258,15 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 ## Output Format
 
 ```markdown
+## Active Triggers (Required — always include)
+
+| Trigger | Status | Reason |
+|---------|--------|--------|
+| code changes present | [ACTIVE/INACTIVE] | [reason] |
+| spec or AC provided | [ACTIVE/INACTIVE] | [reason] |
+| QA scenarios provided | [ACTIVE/INACTIVE] | [reason] |
+| user-facing changes, no scenarios | [ACTIVE/INACTIVE] | [reason] |
+
 ## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
 
 ## Issues (if any)
@@ -272,4 +311,5 @@ CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
 FEEDBACK: What + Why + How (2+ options) + Benefit
 SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)
 YAGNI: New code with 0 callers = flag
+TRIGGER TRACE: Always output Active Triggers table (4 triggers × Status + Reason)
 ```
