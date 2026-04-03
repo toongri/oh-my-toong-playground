@@ -213,6 +213,25 @@ All files implement the single "포인트 적립" feature. PointController depen
 
 ---
 
+## Scenario GC-13: Product, Not Process — 코드 리뷰 수정 커밋 메시지
+
+**Input**: `git diff` shows 3 independent changes across 2 files, all originating from code review feedback:
+- `persistence.md` — 저장 시점 변경 + wrapup 레퍼런스 내용 추가
+- `PointService.kt` — 메서드명 개선
+
+User says: "코드 리뷰 피드백 반영한 내용 커밋해줘. P1-1, P2-1, P2-2 이슈야."
+
+**Primary Technique**: Product, Not Process — 변경의 출처가 아닌 변경 자체를 커밋 메시지에 기술 + 독립적 변경 분할 + fix 타입 남용 방지
+
+**Verification**:
+- V1: "코드 리뷰 이슈 수정" 같은 meta-commit 메시지를 생성하지 않음
+- V2: "P1-1", "P2-1" 같은 opaque reference를 제목에 사용하지 않음
+- V3: 각 커밋 메시지가 실제 변경 내용을 기술 (예: "저장 시점 변경", "레퍼런스에 적용 대상 명시")
+- V4: 3가지 독립적 변경을 분할 커밋으로 제안
+- V5: 메서드명 개선은 `refactor`로 분류 (`fix` 아님)
+
+---
+
 ## Test Results
 
 ### GREEN Test — 2026-02-17
