@@ -184,3 +184,48 @@ refactor: sisyphus-junior 위임 금지 규칙 강화
 **Why NOT docs?**
 - README.md, API 명세서 → 인간 독자를 위한 참조 정보 → `docs`
 - SKILL.md, agents/*.md, rules/*.md → 시스템 동작을 정의 → `feat`/`fix`/`refactor`
+
+## Example 11: 코드 리뷰 수정 — Process가 아닌 Product 기술
+
+**Situation**: 코드 리뷰에서 3가지 지적 사항 수정 — 2 파일 변경
+
+리뷰 피드백:
+- P1-1: persistence 저장 시점이 Area 완료 단위여서 중간 진행 유실 가능
+- P2-1: wrapup 레퍼런스에 적용 대상이 빠져있음
+- P2-2: PointService 메서드 네이밍이 불명확
+
+Changed files:
+- `persistence.md` — 저장 시점 변경 (P1-1) + wrapup 레퍼런스 내용 추가 (P2-1)
+- `PointService.kt` — 메서드명 개선 (P2-2)
+
+2 files → 분석 결과: 2 파일이지만 3가지 독립적 변경 → **분할 필요**
+
+| 리뷰 항목 | 실제 변경 | 타입 | 독립적? |
+|-----------|----------|------|--------|
+| P1-1 | 저장 시점을 Step 완료 단위로 변경 | fix | Yes |
+| P2-1 | wrapup 레퍼런스에 적용 대상 명시 | fix | Yes |
+| P2-2 | PointService 메서드명 개선 | refactor | Yes |
+
+**BAD (meta-commit):**
+
+```
+fix: 코드 리뷰 이슈 수정 (P1-1, P2-1~2)
+```
+
+**GOOD (product-focused, split):**
+
+```
+# Commit 1
+fix: persistence 저장 시점을 Step 완료 단위로 변경
+
+# Commit 2
+fix: wrapup 레퍼런스에 적용 대상 내용 명시
+
+# Commit 3
+refactor: PointService 메서드명 개선
+```
+
+**Why split and rename?**
+- 각 커밋이 독립적으로 revert 가능
+- `git log`만으로 변경 내용 파악 가능 (리뷰 문서 참조 불필요)
+- P2-2는 버그가 아닌 네이밍 개선 → `refactor` (리뷰에서 나왔다고 전부 `fix` 아님)
