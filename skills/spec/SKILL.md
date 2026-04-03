@@ -158,7 +158,7 @@ digraph spec_workflow {
 
 **RULE**: Workflow control, design drafting, user gates, records = Do directly. Pattern search, analysis, external docs, review = DELEGATE.
 
-**Reference:** Read `references/subagent-guide.md` for Explore, Oracle, Librarian trigger conditions and Explore/Librarian Prompt Guide. Apply when dispatching subagents.
+**Reference:** Read `references/core-protocols.md` for Explore, Oracle, Librarian trigger conditions and Explore/Librarian Prompt Guide. Apply when dispatching subagents.
 
 ## Language
 
@@ -215,7 +215,7 @@ See each Design Area reference file for domain-specific clarification examples.
 
 **Do NOT force AskUserQuestion for open-ended questions.** If the answer is open-ended, just ask in plain text.
 
-**Reference:** Read `references/question-quality.md` for Question Quality Standard with good/bad examples. Apply when crafting AskUserQuestion options.
+**Reference:** Read `references/core-protocols.md` for Question Quality Standard with good/bad examples. Apply when crafting AskUserQuestion options.
 
 ### Rich Context Pattern (For Design Decisions)
 
@@ -286,7 +286,7 @@ When multiple questions are pending within a step, ask in order: **Blocking → 
 
 **EVERY Step MUST complete this protocol. No exceptions. No skipping.**
 
-**Reference:** Read `references/checkpoint-protocol.md` for the full Step Completion Sequence, Decision Interview Gate, Clarity Scoring, and Final Step Checkpoint. Apply at every Step completion.
+**Reference:** Read `references/core-protocols.md` for the full Step Completion Sequence, Decision Interview Gate, Clarity Scoring, and Final Step Checkpoint. Apply at every Step completion.
 
 **Key steps** (see reference for details): Present results → User confirmation → Save → Update state → **Decision Interview Gate (BLOCKING)** → Record decisions → Emergent Concern Check → Regenerate spec.md → Announce completion → Wait for user confirmation
 
@@ -294,11 +294,11 @@ When multiple questions are pending within a step, ask in order: **Blocking → 
 
 **MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-review.
 
-**Reference:** Read `references/multi-ai-review.md` for feedback loop workflow, spec-review delegation template, feedback consensus protocol, and verdict handling. Apply at Area completion review.
+**Reference:** Read `references/core-protocols.md` for feedback loop workflow, spec-review delegation template, feedback consensus protocol, and verdict handling. Apply at Area completion review.
 
 ## Record Workflow
 
-**Reference:** Read `references/record-workflow.md` for Decision Recognition Checklist, Decision Interview Protocol, record creation procedure, and deferred concern records. Apply when decisions are identified.
+**Reference:** Read `references/core-protocols.md` for Decision Recognition Checklist, Decision Interview Protocol, record creation procedure, and deferred concern records. Apply when decisions are identified.
 
 **IRON RULE: No record without prior user interview.** Every recordable decision MUST be discussed with the user BEFORE creating a record.
 
@@ -363,7 +363,7 @@ For all review/confirm patterns:
 
 ## Area Completion Protocol (MANDATORY - No Area Skipping)
 
-**Reference:** Read `references/area-completion.md` for Area Completion Sequence, Progress Dashboard, and Phase Transition Gate. Apply when completing an Area.
+**Reference:** Read `references/core-protocols.md` for Area Completion Sequence, Progress Dashboard, and Phase Transition Gate. Apply when completing an Area.
 
 **Two gates must BOTH be passed:**
 1. **spec-review pass** — APPROVE or COMMENT (quality gate)

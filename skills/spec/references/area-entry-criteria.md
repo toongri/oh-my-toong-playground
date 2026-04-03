@@ -2,6 +2,52 @@
 
 **Interpretation rule:** Enter when **ANY** condition is met. Skip when **ALL** conditions are met.
 
+## Contents
+
+- **Requirements Analysis** — Entry and skip conditions for the Requirements area. Covers when
+  business requirements are too ambiguous or informal to proceed without formalization, including
+  acceptance criteria, domain glossary, and NFR gaps.
+
+- **Solution Design** — Entry and skip conditions for the Solution Design area. Covers when
+  architectural decisions are needed — new components, integration points, or competing solution
+  approaches that require evaluation before committing to an implementation path.
+
+- **Domain Model** — Entry and skip conditions for the Domain Model area. Covers when entity
+  state machines, aggregate boundaries, or rich business rules go beyond simple CRUD and need
+  explicit formalization.
+
+- **Data Schema** — Entry and skip conditions for the Data Schema area. Covers when persistent
+  storage design, schema migrations, or repository implementation details are required to support
+  the domain model.
+
+- **Interface Contract** — Entry and skip conditions for the Interface Contract area. Covers when
+  external-facing APIs, event contracts, or breaking interface changes need documented contracts
+  for consumers.
+
+- **Integration Pattern** — Entry and skip conditions for the Integration Pattern area. Covers
+  cross-system communication, async/event-driven flows, stateful components, and transaction
+  boundaries that span multiple operations or services.
+
+- **AI Responsibility Contract** — Entry and skip conditions for the AI Responsibility Contract
+  area. Covers when AI/LLM components are part of the runtime architecture and their output
+  quality directly affects user-facing business outcomes.
+
+- **Operations Plan** — Entry and skip conditions for the Operations Plan area. Covers when
+  custom metrics, business-level alerting, or feature flag strategies are needed beyond what
+  standard APM tooling provides out of the box.
+
+- **Frontend / UX Surface** — Entry and skip conditions for the Frontend / UX Surface area.
+  Covers when component architecture, state management strategy, or styling approach requires
+  explicit design decisions for a meaningful UI layer.
+
+- **Data / ML Pipeline** — Entry and skip conditions for the Data / ML Pipeline area. Covers
+  when data pipelines, multi-source transformations, data quality frameworks, or ML model serving
+  are core architectural components of the system.
+
+- **Security / Privacy** — Entry and skip conditions for the Security / Privacy area. Covers
+  authentication/authorization design, sensitive data protection, multi-tenant access control,
+  and regulatory compliance requirements.
+
 ### Requirements Analysis
 
 **Designs:** Problem definition, business requirements, domain glossary, use cases with testable acceptance criteria, non-functional requirements, validation scenarios

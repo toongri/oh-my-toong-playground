@@ -1,5 +1,30 @@
 # Requirements Analysis
 
+## Contents
+
+- **Role** — Defines the expert persona and output format pointer. Read this to understand the framing and
+  responsibilities expected of the analyst throughout the process.
+
+- **Principles** — Core guidelines for capturing requirements correctly: testability, traceability, and
+  avoiding implementation leakage. Includes sub-principles on business decisions, user action definitions,
+  requirement vs. implementation distinction, surfacing ambiguous requirements (policy/boundary/extension
+  question taxonomy), and document scope.
+
+- **Review Perspective** — Criteria for evaluating a completed requirements document: what to assess
+  (business rules, acceptance criteria, NFRs, terminology, scenarios) and what is explicitly out of scope
+  (technical feasibility, architecture, data schema). Includes overstepping signal guidance.
+
+- **Process** — Six-step analysis workflow: Step 1 (Project Overview — problem reframing, business value,
+  success metrics, completion criteria), Step 2 (Business Requirements — stakeholders, functional
+  requirements, domain terminology, business rules), Step 3 (Use Cases — users, goals, user stories,
+  acceptance criteria), Step 4 (Non-Functional Requirements — performance, consistency, reliability,
+  monitoring), Step 5 (Validation Scenarios — E2E scenarios), Step 6 (Document Generation). Each step ends
+  with a Checkpoint Protocol gate.
+
+- **Output Template** — Recommended markdown template for the final requirements document: Project
+  Overview, Domain Glossary, Primary Users and Goals, Use Case Specifications (US-N format with acceptance
+  criteria and exception scenarios), Non-Functional Requirements, and Validation Scenarios.
+
 ## Role
 
 As a software requirements analysis expert, systematically analyze project requirements and organize them into a single integrated document.

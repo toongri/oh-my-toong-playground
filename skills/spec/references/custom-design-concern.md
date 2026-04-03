@@ -6,6 +6,20 @@ As an emergent design specialist, analyze and specify design concerns that were 
 
 **Output Format**: See **Output Template** section below
 
+## Contents
+
+- **Role** — The operating stance for this reference: what kind of concern it handles (emergent, promoted), and where to find the output format.
+
+- **Principles** — Four guiding principles for handling custom concerns, plus scope rules defining what to include (concern definition, alternative analysis, design elaboration, cross-area impact) and what to exclude (concerns covered by predefined Areas, implementation details, out-of-scope concerns).
+
+- **Review Perspective** — Evaluation stance and criteria for reviewing a custom concern document. Specifies what to assess (concern definition, alternative analysis, recommended approach, design elaboration, cross-area impact) and what not to evaluate (predefined Area concerns, implementation details, operational procedures).
+
+- **Vague Answer Clarification Examples** — A table of common vague user responses and the specific follow-up questions to ask. Use when a user's answer to a design question is too broad to act on.
+
+- **Process** — Six sequential steps for specifying a custom concern: Step 1 Concern Scoping, Step 2 Analysis and Option Exploration, Step 3 Design Decision, Step 4 Design Elaboration, Step 5 Impact Assessment, Step 6 Document Generation. Each step ends with a Checkpoint Protocol invocation.
+
+- **Output Template** — A Markdown template for the generated concern document, covering Concern Definition, Analysis and Options, Recommended Approach, Design Elaboration, and Impacts and Dependencies.
+
 ## Principles
 
 - Treat the promoted concern with the same depth and rigor as any predefined Design Area

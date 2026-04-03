@@ -1,5 +1,31 @@
 # Data Schema
 
+## Contents
+
+- **Role** — Defines the specialist identity and output format for this design area.
+  Points to the Output Template section for the expected document structure.
+
+- **Principles** — Core design rules to follow: project-specific decisions only, no framework
+  defaults, rationale required, and Mermaid for diagrams. Includes scope boundaries (what to
+  include vs. exclude).
+
+- **Review Perspective** — Evaluation criteria when reviewing a completed Data Schema document.
+  Lists what to assess (schema completeness, constraints, SQL correctness, index strategy,
+  migration safety) and what falls outside this document's scope.
+
+- **Vague Answer Clarification Examples** — A lookup table of common vague user responses and
+  the targeted follow-up questions to ask. Use when a user's answer is too general to proceed.
+
+- **Baseline Assumptions** — Items already covered by team conventions (e.g., auto-generated
+  indexes, framework defaults) that do not need documentation unless customized.
+
+- **Process** — The 5-step design workflow: (1) Context Review, (2) Table Structure Design,
+  (3) Repository Implementation Details, (4) Migration Strategy, (5) Document Generation.
+  Each step ends with a Checkpoint.
+
+- **Output Template** — A ready-to-adapt Markdown template for the final deliverable, covering
+  Table Schema, Repository Implementation Details, Index Strategy, and Migration Strategy sections.
+
 ## Role
 
 As a data design specialist, systematically design the data storage layer and organize implementation details into a single integrated document.

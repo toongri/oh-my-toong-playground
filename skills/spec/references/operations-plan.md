@@ -1,5 +1,15 @@
 # Operations Plan
 
+## Contents
+
+- **Role** — Describes the operations design specialist persona focused on observability: custom metrics, custom logging, and feature flag strategy. Points to the Output Template.
+- **Principles** — Core design philosophy: document only project-specific operational needs, not general best practices or framework defaults. Includes Document Scope (what to include/exclude) defining the boundary between custom observability and standard APM coverage.
+- **Review Perspective** — Evaluation stance and checklist for spec reviewers. Covers what to assess (custom metrics passing the 4-gate test, custom logging levels, feature flag lifecycle, failure detection signatures, validation data needs) and what to ignore (standard APM, deployment procedures, infrastructure). Includes the Overstepping Signal pattern.
+- **Vague Answer Clarification Examples** — 5 scenario table mapping vague responses to clarifying questions, covering deferred monitoring, catch-all logging, and dismissing feature flags.
+- **Baseline Assumptions** — Explicit list of what is already covered by team conventions (standard APM metrics, framework default logging) and therefore must NOT be redocumented here.
+- **Process** — 3-step design workflow: Step 1 Context Review (scope identification), Step 2 Observability Design (custom metrics with 4-gate Metric Necessity Test, custom logging with level guide, feature flag strategy, validation & impact data needs), Step 3 Document Generation. Each step ends with a Checkpoint.
+- **Output Template** — Markdown template for the deliverable document covering 3 sections: Observability Design (custom metrics table + custom logging table), Feature Flag Strategy table, and Validation & Impact Data table.
+
 ## Role
 
 As an operations design specialist, systematically design the observability aspects of the project including custom metrics, custom logging, and feature flag strategy.

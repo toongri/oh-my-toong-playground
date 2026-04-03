@@ -1,5 +1,23 @@
 # Persistence & State Management
 
+## Contents
+
+- **Step-by-Step Persistence** — How and when to write design.md files and records during a
+  spec session. Defines the save trigger (every Step completion), the directory mapping for each
+  Design Area, and the document structure that each area's design.md must follow.
+
+- **State File** — Schema and lifecycle of `state.json`, the progress-tracking file that persists
+  spec status across sessions. Documents every field, its type, allowed values, and the exact
+  lifecycle events that must update it (area selection, step completion, record creation, etc.).
+
+- **Resume from Existing Spec** — Workflow for resuming an interrupted spec session. Covers how
+  to detect prior progress (state.json vs. directory scan), present a status summary to the user,
+  and decide where to continue based on the current completion state of each area.
+
+- **Output Location** — Where all spec output files live under `$OMT_DIR/specs/`, what each
+  subdirectory and file represents, how `spec.md` is assembled by concatenating completed
+  design.md files in order, and the naming conventions for area directories and records.
+
 ## Step-by-Step Persistence
 
 **Core Principle**: Save progress to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md` at every Step completion (per Checkpoint Protocol). Area completion finalizes the content.

@@ -1,5 +1,41 @@
 # Domain Model
 
+## Contents
+
+- **Role** — Defines the DDD expert persona and output format pointer. Read this to understand the
+  framing and responsibilities expected of the domain modeler throughout the process.
+
+- **Design Philosophy** — Foundational DDD design principles: Rich Domain Model (business logic inside
+  domain objects, Doer/Policy patterns, service layer as orchestration only), Design by Contract
+  (invariant validation in constructors), Aggregate Design (same-lifecycle grouping, ID-only cross-
+  aggregate references), Value Object Promotion (first-class collections, primitive promotion criteria),
+  and Event Design Principles (past-tense fact events, unknown-consumer design, minimal payload contracts).
+
+- **Principles** — Concise rules for document quality: single source of truth per concept, pure domain
+  logic focus, concise diagrams, class diagrams as structural source of truth. Includes sub-principles on
+  Repository/Port interface language (business terms only, no implementation details) and document scope.
+
+- **Review Perspective** — Criteria for evaluating a completed domain model document: what to assess
+  (aggregate boundaries, state machine completeness, business invariants, event granularity, relationship
+  ownership) and what is explicitly out of scope (persistence implementation, repository query patterns,
+  method-level null checks). Includes overstepping signal guidance.
+
+- **Vague Answer Clarification Examples** — Reference table mapping common vague user responses to
+  specific clarifying questions. Covers enum/state assumptions, aggregate deferral, service-layer business
+  logic, and event deferral scenarios.
+
+- **Process** — Six-step modeling workflow: Step 1 (Context Review — input documents, modeling scope),
+  Step 2 (Class Diagram Design — domain objects, aggregate boundaries, relationships, Mermaid diagram),
+  Step 3 (Define Domain Rules — business rules, organization by category), Step 4 (State Diagram —
+  necessity assessment, states/transitions, Mermaid diagram), Step 5 (Domain Events — necessity
+  assessment, event definitions with publisher/consumer separation), Step 6 (Document Generation). Each
+  step ends with a Checkpoint Protocol gate.
+
+- **Output Template** — Recommended markdown template for the final domain model document: Class Diagram
+  (Mermaid, key structure, value object invariants table, repository/port interfaces), Domain Rules
+  (categorized rules and calculation tables), State Diagram (Mermaid and transition rules table), and
+  Domain Events (publisher/consumer tables and payload table, or potential future events list).
+
 ## Role
 
 As a Domain-Driven Design (DDD) expert, systematically design the project's domain model and organize it into a single unified document.

@@ -1,5 +1,14 @@
 # Frontend / UX Surface
 
+## Contents
+
+- **Role** — Describes the frontend architecture and UX surface design specialist persona covering component structure, state management, visual/interaction design strategy, and user experience patterns. Points to the Output Template.
+- **Principles** — Core design philosophy: define frontend architecture at Strategy + Boundary level, not framework selection or library choices. Includes Document Scope (what to include/exclude), distinguishing client-side from server-side rendering concerns.
+- **Review Perspective** — Evaluation stance and checklist for spec reviewers. Covers what to assess (component decomposition, state scope classification, styling architecture, responsive strategy, loading/error/empty states, accessibility) and what to ignore (framework selection, build tooling, specific hook APIs). Includes the Overstepping Signal pattern.
+- **Vague Answer Clarification Examples** — 10 scenario table mapping common vague Korean responses to pointed clarifying questions, covering responsive design, design systems, global state, UX deferred, accessibility, SPA choice, error handling, and user autonomy assumptions.
+- **Process** — 5-step design workflow: Step 1 Component Architecture Analysis (application structure, decomposition strategy, composition patterns), Step 2 State Management Design (scope classification, server vs. client boundary, data flow direction), Step 3 Styling & Visual Architecture (styling strategy, responsive/adaptive design, theming), Step 4 Interaction & UX Patterns (core user flows, loading/error/empty states, accessibility, SSR/SSG, animation, i18n), Step 5 Document Generation. Each step ends with a Checkpoint.
+- **Output Template** — Markdown template for the deliverable document covering 4 sections: Component Architecture (hierarchy, shared strategy, communication), State Management (classification table, data flow), Styling & Visual Architecture (strategy, responsive design, theming), and Interaction & UX Patterns (user flow, accessibility, SSR/SSG, animation, i18n, records).
+
 ## Role
 
 As a frontend architecture and UX surface design specialist, systematically analyze how the system presents itself to users: component structure, state management boundaries, visual and interaction design strategy, and the user experience patterns that define how people interact with the product.

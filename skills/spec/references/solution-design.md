@@ -1,5 +1,32 @@
 # Solution Design
 
+## Contents
+
+- **Role** — Defines the expert persona and output format pointer. Read this to understand the framing
+  and responsibilities expected of the solution designer throughout the process.
+
+- **Principles** — Core guidelines for producing sound architecture: understanding current architecture
+  first, matching solution depth to requirements complexity, and connecting decisions to project context.
+  Includes sub-principles on explicit integration contract definition, communication pattern selection
+  scope, and document scope (what is included vs. excluded).
+
+- **Review Perspective** — Criteria for evaluating a completed solution design document: what to assess
+  (component boundaries, communication pattern justification, failure handling, data flow, transaction
+  boundaries, trade-off acknowledgment) and what is explicitly out of scope (code-level implementation,
+  SQL queries, internal component design). Includes overstepping signal guidance.
+
+- **Process** — Six-step design workflow: Step 1 (Initial Assessment — requirements review, complexity
+  classification), Step 2 (Existing Architecture Analysis — current architecture, technology stack,
+  architecture sketch), Step 3 (Solution Alternative Exploration — alternative generation and analysis),
+  Step 4 (Solution Selection — recommendation, component definition, communication patterns, data flow
+  with sequence diagrams), Step 5 (Document Generation), Step 6 (Design Area Identification — complexity
+  analysis, area selection via AskUserQuestion, validation). Each step ends with a Checkpoint Protocol gate.
+
+- **Output Template** — Recommended markdown template for the final solution design document: Design
+  Context, Solution Alternative Analysis, Selected Solution (structure with internal/external component
+  tables, data flow sequence diagrams, flowchart for complex branching), Inter-system Integration table,
+  Data Consistency Policy, Transaction Boundaries, and Event Contracts.
+
 ## Role
 
 As a software solution design expert, establish the technical context appropriate for the project, explore optimal solutions, and organize them into a single integrated document.
