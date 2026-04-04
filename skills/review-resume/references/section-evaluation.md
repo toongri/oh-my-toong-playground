@@ -70,7 +70,7 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | Dimension | Question | Fail Signal |
 |-----------|----------|-------------|
 | Linear Causation | Does goal→action→outcome connect in a single line as linear causation? | "improved/개선", "enhanced/향상", "introduced/도입" without mechanism or outcome |
-| Metric Specificity | Is the outcome supported by verifiable numbers (before→after, absolute value)? | Vague percentages, undefined baseline, unclear measurement method |
+| Metric Specificity | Is the outcome supported by verifiable numbers (before→after, absolute value)? Do outcomes span multiple impact dimensions (technical + business + operational)? | Vague percentages, undefined baseline, unclear measurement method. Single-dimension metrics only (e.g., only response time, no business or operational impact) |
 | Role Clarity | Is individual contribution distinguished from team output? | "participated", "contributed", "N-person project" without personal scope |
 | Standard Transcendence | Is this a differentiated achievement beyond industry standard? | Webhook, CI/CD, Docker, REST API, etc. presented as a standalone achievement |
 | Hook Potential | Does this single line spark the interviewer's curiosity and invite a question? | Tech name enumeration, generic description with no question-inducing power |
@@ -95,6 +95,17 @@ The two sections are **independent**. Career bullets and problem-solving entries
 | PASS | "Peak-hour DB CPU 90%→50%, average response time 1.2s→0.3s" | Multiple metrics, condition (peak hour) specified |
 | FAIL | "50% performance improvement" | 50% of what? Under what conditions? Baseline undefined |
 | FAIL | "Drastically reduced" | "Drastically" undefined, not verifiable |
+
+**Impact Breadth — multi-dimensional outcomes:**
+
+| Verdict | Example | Reason |
+|---------|---------|--------|
+| PASS (Impact Breadth) | "Applied Redis cache → response time 1.2s→0.3s (technical), page bounce rate 25%→12% (business), DB scaling deferred by 6 months saving $8K/month (operational)" | Three impact dimensions with specific metrics in each |
+| PASS (Impact Breadth) | "Redesigned batch pipeline → processing time 4h→30min, daily reconciliation error rate 0.3%→0.01%, ops team on-call pages reduced from 12/week to 1/week" | Technical + business + operational, all with before→after |
+| GAP (single dimension) | "Applied Redis cache → response time 1.2s→0.3s" | Metric is specific and verifiable (passes basic Metric Specificity), but only one impact dimension. Mid/senior career bullets should show multi-dimensional impact. Flagged as P2. |
+| GAP (single dimension) | "Migrated to MSA → deploy cycle reduced from 2 weeks to 3 days" | Single operational metric. No business or technical quality metrics. The cache improvement almost certainly had business impact (conversion, revenue) — not surfacing it is a missed opportunity. |
+
+Note: "GAP" verdict is not FAIL — it passes basic Metric Specificity but is flagged as a P2 finding for Impact Breadth. This applies primarily to mid/senior career bullets.
 
 **Role Clarity — identifying individual contribution:**
 
