@@ -308,6 +308,49 @@ No source after Stage 4 → switch to problem-solving.md §15 Writing Guidance
 **Source Acquisition Path:**
 Source secured → Record in Discovered Candidates → Mark as a P.A.R.R. reinforcement candidate or a candidate for a new entry
 
+### Entanglement Extraction (Problem-Solving sub-protocol)
+
+**Trigger:** 문제 해결 서술이 FLAT(단일 concern) 또는 LISTED(복수 concern 나열, 인과 연결 없음) 패턴을 보이는 경우. 유저가 실제로 경험한 연쇄 구조를 기술하지 않았을 가능성이 높다.
+
+**Diagnostic Context Examples:**
+
+GOOD: "이 프로젝트에서 문제들이 서로 연결되어 있었을 것 같은데 — 하나를 해결하면서 다른 문제가 드러난 경험이 있었나요?"
+
+BAD (internal metric exposure): "E3b LISTED, entanglement score 0.35 — causal chain depth 부족"
+
+BAD (too vague): "다른 문제도 있었나요?"
+
+**4-Question Chain (sequential, one per message):**
+
+Q1 — Origin:
+
+BAD: "Root cause가 뭐였나요?"
+
+GOOD: "이 문제를 처음 발견한 순간이 언제였나요? 어떤 증상을 보고 '뭔가 이상하다'고 느꼈나요? 그 순간을 걸어가 주세요."
+
+Q2 — Cascade:
+
+BAD: "다른 문제도 있었나요?"
+
+GOOD: "[Q1 답변]을 조사하기 시작했을 때, 그 전까지 잘 작동하던 다른 부분에 영향을 주진 않았나요? 아니면 미처 몰랐던 다른 문제가 드러나진 않았나요?"
+
+Q3 — Constraint:
+
+BAD: "어떤 대안을 고려했나요?"
+
+GOOD: "[Q2 답변]을 발견한 후에, 원래 생각했던 해결책 중 불가능해진 것이 있었나요? 어떤 옵션을 잃었나요?"
+
+Q4 — Resolution Shape:
+
+BAD: "어떻게 해결했나요?"
+
+GOOD: "처음에 계획했던 것과 실제로 만든 것을 비교하면 — 어디서 계획이 바뀌었나요? 왜 바뀌었나요?"
+
+**Source quality for entanglement:** 답변에 최소 2개의 인과적으로 연결된 concern이 포함되어야 한다 (A가 B를 유발했거나, A가 옵션 X를 제거). 4개 질문 모두 진행한 후에도 병렬 concern만 나오면 → genuinely non-entangled로 수용.
+
+**Exhaustion Path:**
+4개 질문 후 entanglement source 미확보 → 문제가 genuinely one-dimensional일 수 있음 → 현재 상태로 수용하고 다음 항목으로 이동.
+
 ---
 
 ## Conversation Flow Examples

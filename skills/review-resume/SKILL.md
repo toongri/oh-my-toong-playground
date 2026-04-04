@@ -21,6 +21,41 @@ Always communicate with the user and generate all output (interviews, feedback, 
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
 6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a note candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
 
+## Engineering Reasoning Graph Visibility
+
+이력서의 모든 기술 서술은 면접에서 대화를 **시작**시켜야 한다. 대화를 **종료**시키면 실패다.
+
+CTO가 이력서를 읽고 "그래서?" 하는 순간, 그 불렛은 죽는다. CTO가 "어떻게?", "왜?", "만약에?"를 물으면 — 그때 불렛이 산다.
+
+이 차이를 만드는 것은 **엔지니어링 사고 그래프가 보이는가**이다:
+
+| Pillar | 보여주는 것 | 없으면 면접에서 |
+|--------|-----------|-------------|
+| Problem Entanglement (문제 연쇄 구조) | 사고의 **입력** — 문제들이 어떻게 서로를 유발하는가 | "아, 그 문제 해결했군요" (대화 종료) |
+| Decision Tradeoff (대안 비교) | 사고의 **과정** — 왜 A가 아니라 B를 선택했는가 | "네, 좋은 선택이네요" (대화 종료) |
+| Impact Breadth (다차원 성과) | 사고의 **출력** — 성과가 기술·비즈니스·운영 등 복수 차원인가 | "성능 개선했군요" (대화 종료) |
+
+세 가지가 모두 보이면 CTO는 사고 과정을 **재구성**할 수 있고, 재구성할 수 있으면 더 깊은 질문을 하고, 더 깊은 질문이 이어지면 채용으로 간다.
+
+### Problem Entanglement
+
+"A를 해결하니 B가 드러났고, B를 해결하면서 C도 함께 풀었다" — 이 연쇄 구조가 보이는 서술이 강력하다. 문제를 나열하는 것과 문제 간의 인과를 보여주는 것은 다르다:
+
+| 수준 | 패턴 | 면접 효과 |
+|------|------|---------|
+| FLAT | "문제 A가 있어서 X로 해결했다" | 면접관의 할 말이 없음 |
+| LISTED | "문제 A, B, C가 있었고 각각 X, Y, Z로 해결했다" | 개별 문제는 물어볼 수 있지만 맥락이 없음 |
+| ENTANGLED | "문제 A를 해결하려니 B가 드러났고, B의 제약 때문에 C를 함께 풀어야 했다" | 연쇄 구조 자체가 면접 소재 |
+
+이 개념의 구체적 평가 기준은 `agents/resume-claim-examiner.md`의 E3b Entanglement Grading에 정의되어 있다.
+
+### Impact Breadth
+
+단일 차원 성과("응답시간 60초→0.5초")는 기술적으로 인상적이어도 면접에서 한 문장으로 끝난다. 다차원 성과는 각 차원이 별도 면접 질문을 유발한다:
+- 기술: "응답시간 60초→0.5초" → "어떻게?"
+- 비즈니스: "중복 건수 98% 감소" → "비즈니스 임팩트가?"
+- 운영: "신규 채널 개발비용 30% 절감" → "확장성을?"
+
 ## P.A.R.R. Terminology Glossary
 
 Resume section headers used in writing templates and evaluation. All references across documents MUST use these exact English terms. Korean equivalents are provided for user-facing output.
@@ -306,7 +341,7 @@ Career and problem-solving sections answer fundamentally different questions:
 | Criterion | Question |
 |-----------|----------|
 | Linear Causation | Goal → action → outcome connected in one line? |
-| Metric Specificity | Verifiable numbers (before → after, absolute values)? |
+| Metric Specificity | Verifiable numbers (before → after, absolute values)? Do outcomes span multiple dimensions (technical + business + operational)? Single-dimension metrics pass basic specificity but are flagged for Impact Breadth gap (see Engineering Reasoning Graph Visibility). |
 | Role Clarity | Personal contribution distinguishable from team output? |
 | Standard Transcendence | Beyond industry standard? |
 | Hook Potential | Does this line provoke interviewer curiosity? |
@@ -322,6 +357,8 @@ Career and problem-solving sections answer fundamentally different questions:
 | Beyond-Standard Reasoning | Beyond textbook solutions? |
 | Interview Depth | Does this entry provoke follow-up questions? |
 | Section Fitness | Problem narrative, not achievement statement? |
+
+**Note:** Problem Entanglement (문제 연쇄 구조) 평가는 Phase 5의 기본 6 criteria 평가에 포함되지 않는다. Entanglement는 Phase 8의 Entanglement Extraction Protocol에서 심화 평가된다. Phase 5에서는 기본 6 criteria(Diagnostic Causation, Evidence Depth, Thought Visibility, Beyond-Standard Reasoning, Interview Depth, Section Fitness)만 평가한다.
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, first-page primacy check, JD keyword matching, and writing guidance triggers.
 
@@ -397,6 +434,34 @@ Compare against career-level recommendations. If any depth category has 0 entrie
 ### Experience Mining Interview
 
 P.A.R.R. ANY dimension FAIL or structure absent OR theme imbalance → refer to `Read references/experience-mining.md` Phase 8 section and conduct the interview.
+
+### Entanglement Extraction Protocol
+
+Phase 5에서 기본 6 criteria 평가를 완료한 후, 여기서 problem entanglement 심화 평가를 수행한다.
+
+문제 해결 서술이 FLAT(단일 concern) 또는 LISTED(복수 concern 나열, 인과 연결 없음)로 판단될 때, 이 4-question chain으로 유저가 실제로 경험했지만 기술하지 않은 연쇄 구조를 추출한다.
+
+**Trigger:** 문제 해결 서술에서 concern들이 독립적으로 나열되거나 단일 결정만 보이는 경우
+
+**4-Question Chain (순차적, 메시지당 1개):**
+
+1. **Origin Question**: "이 문제가 처음 발견된 순간이 언제였나요? 최초 증상이 뭐였나요?"
+   → 목표: root cause, 최초 증상 발견
+
+2. **Cascade Question**: "이 문제를 해결하기 시작하면서, 새로 드러난 다른 문제나 영향받은 부분이 있었나요?"
+   → 목표: blast radius, 2차 효과, 모델 결합
+
+3. **Constraint Question**: "그 과정에서 원래 고려했던 해결책 중 불가능해진 것이 있었나요?"
+   → 목표: 제거된 대안, 강제된 제약, 좁아진 해결 공간
+
+4. **Resolution Shape Question**: "원래 계획했던 해결책과 최종 결과물을 비교하면, 어디서 계획이 바뀌었나요?"
+   → 목표: 해결책 진화, accepted costs, 검증 전략
+
+**Exit condition:** 유저가 2개 이상의 인과적으로 연결된 concern을 제공하면 → 충분한 entanglement source 확보. Discovered Candidates에 entanglement annotation과 함께 기록.
+
+4개 질문 모두 진행한 후에도 연쇄 구조가 확인되지 않으면 → 해당 문제가 genuinely one-dimensional일 수 있음 → 현재 상태로 수용.
+
+**Reference:** 인터뷰 기법의 상세 GOOD/BAD question pairs는 `references/experience-mining.md` Problem-Solving 섹션 참조.
 
 `[Phase 8/13: Problem-Solving Evaluation ✓]`
 
