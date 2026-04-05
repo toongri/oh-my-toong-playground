@@ -275,24 +275,24 @@ Each sub-dimension is scored 0.0-1.0. Use these anchors to calibrate scoring —
 
 | Level | Score Range | Observable Signal |
 |-------|------------|-------------------|
-| LOW | 0.0-0.3 | Single decision or parallel concerns listed independently. No "A caused B" or "A revealed B" relationship visible between any two concerns in the text. |
-| MID | 0.4-0.6 | 2-3 concerns with some causal linking, but connections are implicit — the reader must infer WHY one concern led to another. Phrases like "also", "additionally", "we handled" connect concerns without explaining the causal mechanism. |
+| LOW | 0.0-0.39 | Single decision or parallel concerns listed independently. No "A caused B" or "A revealed B" relationship visible between any two concerns in the text. |
+| MID | 0.4-0.69 | 2-3 concerns with some causal linking, but connections are implicit — the reader must infer WHY one concern led to another. Phrases like "also", "additionally", "we handled" connect concerns without explaining the causal mechanism. |
 | HIGH | 0.7-1.0 | 3+ concerns with explicit causal chain — each step names what the previous step's outcome forced or revealed. Phrases like "this constraint forced", "which revealed", "because of A, B was no longer viable" appear. |
 
 **Constraint narrowing:**
 
 | Level | Score Range | Observable Signal |
 |-------|------------|-------------------|
-| LOW | 0.0-0.3 | No alternatives mentioned, or alternatives listed without explaining why they were rejected. The solution appears as the only option considered. |
-| MID | 0.4-0.6 | Alternatives are mentioned and some are rejected, but rejection reasons are generic ("not suitable", "too complex") or context-free. The constraint that eliminated each alternative is not tied to a specific prior decision or discovery. |
+| LOW | 0.0-0.39 | No alternatives mentioned, or alternatives listed without explaining why they were rejected. The solution appears as the only option considered. |
+| MID | 0.4-0.69 | Alternatives are mentioned and some are rejected, but rejection reasons are generic ("not suitable", "too complex") or context-free. The constraint that eliminated each alternative is not tied to a specific prior decision or discovery. |
 | HIGH | 0.7-1.0 | Each eliminated alternative is rejected by a specific constraint that emerged from an earlier step in the cascade. The narrowing is progressive — the solution space visibly shrinks as each new constraint is discovered. Phrases like "X was eliminated because [prior discovery] made it unviable" appear. |
 
 **Resolution mutation:**
 
 | Level | Score Range | Observable Signal |
 |-------|------------|-------------------|
-| LOW | 0.0-0.3 | The final solution matches the initial approach. No evidence the plan changed. The solution reads as "we decided X and executed X." Well-known patterns applied without adaptation. |
-| MID | 0.4-0.6 | The solution has components that were not in the original plan, but these appear as additions (layered on top) rather than transformations. The core approach remained the same; peripheral mechanisms were added. |
+| LOW | 0.0-0.39 | The final solution matches the initial approach. No evidence the plan changed. The solution reads as "we decided X and executed X." Well-known patterns applied without adaptation. |
+| MID | 0.4-0.69 | The solution has components that were not in the original plan, but these appear as additions (layered on top) rather than transformations. The core approach remained the same; peripheral mechanisms were added. |
 | HIGH | 0.7-1.0 | The final solution is a fundamentally different shape from the initial plan. The original approach was abandoned or radically altered because cascading discoveries changed the problem definition itself. The reader can identify a specific point where "the plan broke" and the solution had to be reimagined. |
 
 Threshold: score ≥ 0.8 = ENTANGLED(PASS), 0.5-0.8 = LISTED(P1 — 권장 수정), < 0.5 = FLAT(FAIL).
