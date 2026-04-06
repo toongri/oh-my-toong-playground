@@ -997,7 +997,7 @@ describe("syncPlatformYaml - mcps scope", () => {
     }
   });
 
-  it("writes MCP to projects[targetPath].mcpServers (local scope) when scope='project' via `syncPlatformYaml`", async () => {
+  it("scope='project' 전달 시 projects[targetPath].mcpServers에 기록 via `syncPlatformYaml`", async () => {
     await adapter.syncPlatformYaml(targetPath, {
       mcps: { "project-server": { command: "npx project-server" } },
     }, false, "project");
@@ -1009,7 +1009,7 @@ describe("syncPlatformYaml - mcps scope", () => {
     expect(mcpServers["project-server"]).toEqual({ command: "npx project-server" });
   });
 
-  it("writes MCP to top-level mcpServers (user scope) when scope is not provided via `syncPlatformYaml`", async () => {
+  it("scope 미전달 시 최상위 mcpServers에 기록 via `syncPlatformYaml`", async () => {
     await adapter.syncPlatformYaml(targetPath, {
       mcps: { "user-server": { command: "npx user-server" } },
     }, false);
@@ -1017,5 +1017,15 @@ describe("syncPlatformYaml - mcps scope", () => {
     const config = await readJsonFile(claudeConfigFile);
     const mcpServers = config["mcpServers"] as Record<string, unknown>;
     expect(mcpServers["user-server"]).toEqual({ command: "npx user-server" });
+  });
+
+  it("scope=\"user\" 명시적 전달 시 최상위 mcpServers에 기록 via `syncPlatformYaml`", async () => {
+    await adapter.syncPlatformYaml(targetPath, {
+      mcps: { "explicit-user-server": { command: "npx explicit-user-server" } },
+    }, false, "user");
+
+    const config = await readJsonFile(claudeConfigFile);
+    const mcpServers = config["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["explicit-user-server"]).toEqual({ command: "npx explicit-user-server" });
   });
 });
