@@ -44,7 +44,7 @@
     "should_trigger": true
   },
   {
-    "query": "Evaluate the entire resume in _config.yml using S1-S5 and D1-D6 criteria. Also apply P.A.R.R. to the signature project.",
+    "query": "Evaluate the entire resume in _config.yml using S1-S5 and D1-D6 criteria. Also apply P.A.R. to the signature project.",
     "should_trigger": true
   },
   {

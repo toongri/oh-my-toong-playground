@@ -4,29 +4,23 @@
 
  1. [Depth Determination](#1-depth-determination)
  2. [Career-Level Depth Distribution Guide](#2-career-level-depth-distribution-guide)
- 3. [Career-Level Selection Criteria (Signature Depth)](#3-career-level-selection-criteria-signature-depth)
- 4. [P.A.R.R. Evaluation Dimensions P1-P5 (Signature Depth)](#4-parr-evaluation-dimensions-p1-p5-signature-depth)
- 5. [P.A.R.R. Additional Dimensions P6-P8 (Signature Depth Only)](#5-parr-additional-dimensions-p6-p8-signature-depth-only)
- 6. [Career-Level Misapplication Guard](#6-career-level-misapplication-guard)
- 7. [P.A.R.R. Evaluation Output Format](#7-parr-evaluation-output-format)
- 8. [Before/After Detection — New Grad / Junior](#8-beforeafter-detection--new-grad--junior)
- 9. [Before/After Detection — Mid / Senior](#9-beforeafter-detection--mid--senior)
+ 3. [Career-Level Selection Criteria](#3-career-level-selection-criteria)
+ 4. [Kick Project](#4-kick-project)
+ 5. [P.A.R. Evaluation Dimensions P1-P5](#5-par-evaluation-dimensions-p1-p5)
+ 6. [P.A.R. Additional Dimensions P6-P8](#6-par-additional-dimensions-p6-p8)
+ 7. [Career-Level Misapplication Guard](#7-career-level-misapplication-guard)
+ 8. [P.A.R. Evaluation Output Format](#8-par-evaluation-output-format)
+ 9. [Before/After Detection](#9-beforeafter-detection)
 10. [Improvement Analysis](#10-improvement-analysis)
 11. [Specific Feedback Principles](#11-specific-feedback-principles)
 12. [AI-Style Overpackaging Detection](#12-ai-style-overpackaging-detection)
 13. [Visual Material Guidelines](#13-visual-material-guidelines)
-14. [Writing Guidance: Signature Depth P.A.R.R.](#14-writing-guidance-signature-depth-parr)
-15. [Writing Guidance Trigger: Signature/Detailed Depth](#15-writing-guidance-trigger-signaturedetailed-depth)
-16. [Red Flags: Signature/Detailed Depth](#16-red-flags-signaturedetailed-depth)
-17. [Compressed Depth Evaluation](#17-compressed-depth-evaluation)
-18. [Before/After Detection (Compressed Depth)](#18-beforeafter-detection-compressed-depth)
-19. [Writing Guidance: Compressed Depth](#19-writing-guidance-compressed-depth)
-20. [Writing Guidance Trigger: Compressed Depth](#20-writing-guidance-trigger-compressed-depth)
-21. [Red Flags: Compressed Depth](#21-red-flags-compressed-depth)
-22. [Technical Substance Verification T1-T3](#22-technical-substance-verification-t1-t3)
-23. [T1-T3 Depth Gating](#23-t1-t3-depth-gating)
-24. [T1-T3 Output Format](#24-t1-t3-output-format)
-25. [T1-T3 Writing Guidance Trigger](#25-t1-t3-writing-guidance-trigger)
+14. [Writing Guidance: P.A.R.](#14-writing-guidance-par)
+15. [Writing Guidance Trigger](#15-writing-guidance-trigger)
+16. [Red Flags](#16-red-flags)
+17. [Technical Substance Verification T1-T3](#17-technical-substance-verification-t1-t3)
+18. [T1-T3 Output Format](#18-t1-t3-output-format)
+19. [T1-T3 Writing Guidance Trigger](#19-t1-t3-writing-guidance-trigger)
 
 ---
 
@@ -46,49 +40,32 @@ The following items must be checked when evaluating the problem-solving section,
 - [ ] Classify themes for all problem-solving entries (Consistency, Performance, Resilience, Business Metrics, Data Pipeline, etc.)
 - [ ] If 2+ entries share the same theme → FLAG — theme overlap warning + recommend replacement
 
-### Per-Depth Required Checks
-- [ ] Signature depth: Apply full P.A.R.R. P1-P5, check for failure arc, check for stopping judgment
-- [ ] Detailed depth: At least 1 failed attempt, why-chain check
-- [ ] Compressed depth: within 3-5 lines, problem→solution→result flow check
+### Per-Entry Required Checks
+- [ ] All entries (5+ lines): Apply P.A.R. P1-P2, P5, check for failure arc
+- [ ] Kick entry: additionally apply P3 (Verification depth)
+- [ ] Senior-level entries: additionally check for stopping judgment (P7)
 
 ---
 
 ## Overview
 
-The resume's "signature project", "problem-solving", and "other projects" are not separate categories. They are all **detailed descriptions showing how this person solves problems**, differentiated only by **depth**.
+The resume's problem-solving entries are **detailed descriptions showing how this person solves problems**. All 5-line+ entries are evaluated with the same criteria.
+
+**Minimum length rule**: 5줄 미만이면 Career 불렛으로 이동. Problem-solving entries under 5 lines do not belong in the Problem-Solving section.
 
 ---
 
 ## 1. Depth Determination
 
-Classify every problem-solving entry by depth first, then apply the evaluation criteria for each depth level.
+All problem-solving entries with 5+ lines are evaluated with the same criteria. Apply Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) to every entry, then apply P.A.R. P1-P2, P5 additionally. The kick entry additionally applies P3.
 
-```mermaid
-flowchart TB
-    A[Collect problem-solving entries] --> B{Does it have a full P.A.R.R. narrative?}
-    B -->|Yes| C[signature depth → Full P.A.R.R. evaluation]
-    B -->|No| D{Does it have 5+ lines of description?}
-    D -->|Yes| E[detailed depth → Problem-Solving 6 Criteria + P1,P2,P5 evaluation]
-    D -->|No| F[compressed depth → Problem-Solving 6 Criteria + Volume Guide]
-
-    style C fill:lightyellow
-    style E fill:lightgreen
-    style F fill:lightblue
-```
-
-**Common base**: Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) apply to all depths. **Depth-specific additions**: signature adds P1-P8, detailed adds P1+P2+P5, compressed adds volume guide.
+Entries under 5 lines belong in Career bullets, not Problem-Solving.
 
 ---
 
 ## 2. Career-Level Depth Distribution Guide
 
-The recommended depth distribution varies by years of experience. Junior candidates need to prove more detail; senior candidates should be concise.
-
-| Career Level | signature | detailed | compressed | Total problem-solving entries |
-| --- | --- | --- | --- | --- |
-| New Grad / Junior (0-3 yrs) | 1 | 2 per position | 0-2 | 5-8 |
-| Mid (3-7 yrs) | 1 | 1-2 | 3-5 | 5-8 |
-| Senior (7+ yrs) | 1 | 0-1 | 3-5 | 4-7 |
+5-8 entries recommended. Nominate 1 kick project for deeper treatment (15-25 lines).
 
 **Note candidate pool**: If candidates exist at `$OMT_DIR/review-resume/problem-solving/`, you may suggest the most JD-relevant combination from the full candidate pool — not just the entries currently in the resume.
 
@@ -104,22 +81,20 @@ When evaluating the full problem-solving portfolio, check **technical theme dive
 | Business Metrics | cost reduction, headcount, conversion rate |
 | Data Pipeline | ETL, streaming, batch processing |
 
-**Why it matters**: Multiple projects with the same theme give the impression "this person only knows this one thing." Recommend combinations where each signature/detailed entry covers a different theme.
+**Why it matters**: Multiple projects with the same theme give the impression "this person only knows this one thing." Recommend combinations where each entry covers a different theme.
 
 ---
 
-## 3. Career-Level Selection Criteria (Signature Depth)
+## 3. Career-Level Selection Criteria
 
-The framing of a signature depth entry must match the candidate's career level. The P.A.R.R. structure is the same, but what needs to be proven differs.
+The framing of a problem-solving entry must match the candidate's career level. The P.A.R. structure is the same, but what needs to be proven differs.
 
-| Career Level | Years | What to Prove | Signature Depth Focus | Key Evidence |
+| Career Level | Years | What to Prove | Focus | Key Evidence |
 | --- | --- | --- | --- | --- |
-| New Grad | 0 (bootcamp/university) | CS depth, learning velocity | Deep CS problem (e.g., concurrency, distributed systems) | 3+ failed attempts with specific learning from each |
-| Junior | 0-3 | Problem-solving depth + technical foundations | CS depth OR early production problem-solving | Clear problem→approach→result→reflection arc |
-| Mid | 3-7 | Engineering judgment, trade-off awareness | Experiment-based decisions, domain-specific failures | Trade-off analysis with data-driven reasoning |
-| Senior | 7+ | Business impact, leadership, system thinking | Business metric impact, stopping judgment, team leverage | Business outcome metrics, team/org influence |
+| Junior | 0-3 | Problem-solving depth + technical foundations | CS depth, learning velocity | Clear problem→approach→result arc; 3+ failed attempts with specific learning |
+| Senior | 3+ | Engineering judgment, trade-off awareness, business impact | Experiment-based decisions, domain-specific failures, stopping judgment | Business outcome metrics, team/org influence, trade-off analysis with data |
 
-Selection criteria (applicable across all career levels):
+Kick nomination criteria (applicable across all career levels):
 
 1. Was this technically the hardest problem you faced?
 2. Are there 2-3 failed attempts with specific numbers?
@@ -127,7 +102,7 @@ Selection criteria (applicable across all career levels):
 4. Is there data-validated evidence of the result?
 5. Can you explain "Why did I try this?" and "Why didn't it work?" for each attempt?
 
-For Mid/Senior: the four signature strengths are:
+For Senior: the four kick strengths are:
 
 1. **No single right answer** — problems where the answer requires judgment, not just CS knowledge
 2. **Experiment-based decisions** — model comparisons, A/B tests, metric-driven choices
@@ -136,7 +111,7 @@ For Mid/Senior: the four signature strengths are:
 
 **Target-Scale Awareness (all career levels):**
 
-When selecting signature depth entries, prioritize episodes that can demonstrate technical credibility at the target company's scale:
+When selecting kick entries, prioritize episodes that can demonstrate technical credibility at the target company's scale:
 - Episodes where design judgment accounts for future scaling, even at a small current scale
 - Experiences where the candidate recognized the limits of the current scale and anticipated the next stage
 - Episodes where deep problem-solving at a small scale demonstrates principles that transfer to larger scale
@@ -145,16 +120,38 @@ This selection guide is linked to the resume-claim-examiner E6 evaluation.
 
 ---
 
-## 4. P.A.R.R. Evaluation Dimensions P1-P5 (Signature Depth)
+## 4. Kick Project
 
-Apply to signature depth entries. After Problem-Solving 6 Criteria evaluation, apply the full P1-P5 as additional evaluation. For detailed depth entries, apply only P1, P2, P5.
+The kick project is the single entry nominated for deeper treatment. It receives 15-25 lines and has P3 (Verification depth) additionally applied on top of the standard P.A.R. evaluation.
+
+### Nomination Process
+
+1. **Evaluator nominates**: Based on §3 selection criteria, identify the strongest candidate. Announce: "I recommend nominating [{entry name}] as the kick project based on [reason from criteria 1-5]."
+2. **User confirms**: The user confirms or selects a different entry.
+3. **Kick evaluation**: Apply full P.A.R. P1-P3, P5, P6-P8 (for Senior) to the kick entry. Standard entries apply P1-P2, P5.
+
+### Kick Target
+
+- **Length**: 15-25 lines
+- **Additional dimension**: P3 (Verification depth) — is the verification appropriate for the domain?
+  - Junior: intentional failure scenario reproduction + edge case coverage
+  - Senior: business metric validation + error analysis per stage
+
+### Non-kick Entries
+
+All other problem-solving entries (5+ lines) apply P1-P2, P5 (and P6-P8 for Senior-level entries). P3 is kick-only.
+
+---
+
+## 5. P.A.R. Evaluation Dimensions P1-P5
+
+Apply to all problem-solving entries (5+ lines). After Problem-Solving 6 Criteria evaluation, apply P1-P2, P5 as additional evaluation. P3 applies to kick entry only.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
 | P1 | Narrative depth | Is this a story of thought process, not a technology list? | "Used Redis distributed lock", "Used GPT-4" — results only, no reasoning |
 | P2 | Failure arc | Are there 2-3 attempts with specific failure numbers? | No failure process, or jumps directly to final solution without showing failed attempts |
-| P3 | Verification depth | Is the verification appropriate for the domain? | New Grad/Junior: only "ran load test". Mid/Senior: only "85% accuracy" with no error analysis |
-| P4 | Reflection quality | Are trade-offs + acknowledged limits + honest confession present? | "Learned about distributed systems", "LLM is not a silver bullet" — abstract takeaway with no specifics |
+| P3 | Verification depth *(kick only)* | Is the verification appropriate for the domain? | Junior: only "ran load test". Senior: only "85% accuracy" with no error analysis |
 | P5 | "Why?" chain | Does every attempt include both "Why did I try this?" AND "Why didn't it work?" | Either the selection reason OR the failure reason is missing from any attempt |
 
 **P1 Target-Scale Note:** When evaluating narrative depth, check whether the narrative of technology choices stops at "optimization at current scale" or extends to "awareness of scale change." The latter earns a bonus on narrative depth. Its absence is not an automatic FAIL — this is explicitly evaluated in resume-claim-examiner E6.
@@ -169,9 +166,9 @@ Apply to signature depth entries. After Problem-Solving 6 Criteria evaluation, a
 
 ---
 
-## 5. P.A.R.R. Additional Dimensions P6-P8 (Signature Depth Only)
+## 6. P.A.R. Additional Dimensions P6-P8
 
-Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (3+ years of professional experience).
+Apply P6-P8 additionally to all problem-solving entries from Senior candidates (3+ years of professional experience). Expectations scale with career level — a Junior entry is not penalized for missing stopping judgment; a Senior entry is.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
@@ -183,11 +180,11 @@ Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (
 
 ---
 
-## 6. Career-Level Misapplication Guard
+## 7. Career-Level Misapplication Guard
 
-**IMPORTANT: Do not evaluate Mid/Senior signature projects using New Grad/Junior criteria.**
+**IMPORTANT: Do not evaluate Senior problem-solving entries using Junior criteria.**
 
-| New Grad/Junior Criterion (misapplied to Mid/Senior) | Mid/Senior Criterion (correct) |
+| Junior Criterion (misapplied to Senior) | Senior Criterion (correct) |
 | --- | --- |
 | "Insufficient CS depth" (no mention of MVCC, CAP) | "Does engineering judgment come through?" |
 | "No intentional Race Condition reproduction" | "Is the verification appropriate for the domain (error analysis, sample testing)?" |
@@ -195,32 +192,36 @@ Apply P6-P8 additionally to signature depth entries from Mid/Senior candidates (
 | "Attempt 1 failure was predictable" | "Even a predictable failure is valuable when confirmed experimentally" |
 | Treating "stopping judgment" as a weakness | "Stopping judgment" is a core strength of production-level engineering |
 
-**IMPORTANT: Do not evaluate New Grad/Junior signature projects using Mid/Senior criteria.**
+**IMPORTANT: Do not evaluate Junior problem-solving entries using Senior criteria.**
 
-| Mid/Senior Criterion (misapplied to New Grad/Junior) | New Grad/Junior Criterion (correct) |
+| Senior Criterion (misapplied to Junior) | Junior Criterion (correct) |
 | --- | --- |
 | "Where are the 3 failed attempts?" → wrong framing | "Does the CS depth come through in the failure arc?" |
 | "Where's the trade-off analysis?" | "Is the trade-off explained through CS principles like MVCC, CAP?" |
-| "Where's the business impact?" | New Grad/Junior proves CS depth and learning velocity — business impact is not the goal |
-| "No stopping judgment present" | Stopping judgment is a Mid/Senior concept — not expected from New Grad/Junior |
+| "Where's the business impact?" | Junior proves CS depth and learning velocity — business impact is not the goal |
+| "No stopping judgment present" | Stopping judgment is a Senior concept — not expected from Junior |
 
 ---
 
-## 7. P.A.R.R. Evaluation Output Format
+## 8. P.A.R. Evaluation Output Format
 
-**Signature depth** entries:
+All entries (5+ lines):
 
 ```
-[Problem-Solving: {entry name} — signature depth]
+[Problem-Solving: {entry name}]
 - Problem-Solving 6 Criteria: (output separately, refer to Section-Specific Evaluation)
 - P1 Narrative depth: PASS / FAIL (reason)
 - P2 Failure arc: PASS / FAIL (reason)
-- P3 Verification depth: PASS / FAIL (reason)
-- P4 Reflection quality: PASS / FAIL (reason)
 - P5 "Why?" chain: PASS / FAIL (reason)
 ```
 
-For Mid/Senior, append:
+Kick entry (append P3):
+
+```
+- P3 Verification depth: PASS / FAIL (reason)  ← kick only
+```
+
+For Senior entries, append:
 
 ```
 - P6 Domain-specific failure reasoning: PASS / FAIL (reason)
@@ -228,21 +229,11 @@ For Mid/Senior, append:
 - P8 Business impact: PASS / FAIL (reason)
 ```
 
-**Detailed depth** entries:
-
-```
-[Problem-Solving: {entry name} — detailed depth]
-- Problem-Solving 6 Criteria: (output separately)
-- P1 Narrative depth: PASS / FAIL (reason)
-- P2 Failure arc: PASS / FAIL (reason)
-- P5 "Why?" chain: PASS / FAIL (reason)
-```
-
-**Compressed depth** entries: Apply Problem-Solving 6 Criteria + Volume Guide only (P.A.R.R. not applied).
-
 ---
 
-## 8. Before/After Detection — New Grad / Junior
+## 9. Before/After Detection
+
+### Junior Example
 
 **Before — Feature Listing Anti-Pattern (flag immediately):**
 
@@ -262,7 +253,7 @@ Before problems:
 - Thought process: zero. Engineering depth: zero.
 - Hiring manager reaction: "So what did you actually learn?" (Skip)
 
-**After — New Grad / Junior Gold Standard (CS depth + thought process):**
+**After — Junior Gold Standard (CS depth + thought process):**
 
 ```
 Online Bookstore — First-Come-First-Served Coupon System
@@ -306,7 +297,7 @@ not finding the answer, but explaining why that answer is correct.
 
 ---
 
-## 9. Before/After Detection — Mid / Senior
+### Senior Example
 
 **Before — Result Listing Anti-Pattern (flag immediately):**
 
@@ -325,7 +316,7 @@ Before problems:
 - No reasoning behind stopping at 85%
 - Hiring manager reaction: "So what judgment call did you actually make?" (Skip)
 
-**After — Mid / Senior Gold Standard (engineering judgment + business impact):**
+**After — Senior Gold Standard (engineering judgment + business impact):**
 
 ```
 Menu Photo Metadata Auto-Extraction System
@@ -359,7 +350,7 @@ Error analysis: Stage 1 errors 45 (photo quality), Stage 2 errors 29 (mapping am
 direction per stage.
 Cost: ₩30 per item (1/100 of ₩3,000 manual cost per item).
 
-[Reflection]
+[Reflection] (optional — include when genuine architectural trade-off exists)
 Why we stopped: confirmed 93% was achievable via fine-tuning. However, +₩2M/month + retraining required
 on every model update. Judged that 85% + manual review is the TCO-optimal approach.
 Acknowledged limits: dependency on photo quality (60% accuracy for dark photos), new menu categories not learned.
@@ -370,7 +361,7 @@ Business results: headcount 11→3 (approx. ₩16M/month savings), inventory rev
 
 ## 10. Improvement Analysis
 
-### New Grad / Junior
+### Junior
 
 Why the After is better — use as review reference criteria:
 
@@ -382,7 +373,7 @@ Why the After is better — use as review reference criteria:
 - **Verification depth**: Lock Contention analysis, not just a load test — Before has only "ran load test"
 - **Acknowledged limits**: SPOF, idempotency — Before ends with "performance improvement completed"
 
-### Mid / Senior
+### Senior
 
 Why the After is better — use as review reference criteria:
 
@@ -443,19 +434,19 @@ Good narrative uses plain language:
 - Architecture diagrams with no accompanying explanation
 - Code screenshots
 
-For New Grad/Junior, plain text is often sufficient without visual materials. When needed, a simple arrow diagram showing "no lock → which lock → distributed lock" is sufficient.
+For Junior, plain text is often sufficient without visual materials. When needed, a simple arrow diagram showing "no lock → which lock → distributed lock" is sufficient.
 
 ---
 
-## 14. Writing Guidance: Signature Depth P.A.R.R.
+## 14. Writing Guidance: P.A.R.
 
-Use when the P.A.R.R. structure is missing from a signature or detailed depth entry, or when structural problems are found in P1-P5 evaluation.
+Use when the P.A.R. structure is missing from an entry, or when structural problems are found in P1-P5 evaluation.
 
-### P.A.R.R. + Depth Writing Template
+### P.A.R. + Depth Writing Template
 
-Apply the full P.A.R.R. formula, but show the depth of thought process — not a technology list.
+Apply the full P.A.R. formula, but show the depth of thought process — not a technology list.
 
-**Problem**:Why does this problem matter? What is the business risk? What is the root cause?
+**Problem**: Why does this problem matter? What is the business risk? What is the root cause?
 
 **Approach:**
 
@@ -463,20 +454,20 @@ Apply the full P.A.R.R. formula, but show the depth of thought process — not a
 - Every attempt must include both Whys:
   - **Why did I try this?** (selection reason)
   - **Why didn't it work?** (failure reason — explained in domain context)
-- New Grad/Junior: evidence of diving into CS knowledge (isolation levels, MVCC, CAP theory, etc.)
-- Mid/Senior: why this approach doesn't work in this domain ("menu name diversity defeats rule coverage", "30% hallucination makes it unreliable")
+- Junior: evidence of diving into CS knowledge (isolation levels, MVCC, CAP theory, etc.)
+- Senior: why this approach doesn't work in this domain ("menu name diversity defeats rule coverage", "30% hallucination makes it unreliable")
 
 **Result:**
 
-- New Grad/Junior: intentional Race Condition reproduction, edge case testing
-- Mid/Senior: business metrics (headcount reduction, cost savings, throughput increase), experiment result numbers
+- Junior: intentional Race Condition reproduction, edge case testing
+- Senior: business metrics (headcount reduction, cost savings, throughput increase), experiment result numbers
 
 **Reflection (optional):**
 
 Reflection is OPTIONAL. Include only when there is a genuine architectural trade-off. Remove sentimental reflection.
 - GOOD: architectural limits + expansion direction (2-3 lines). e.g., "Can switch to message queue-based architecture as traffic grows", "DB constraint changes needed if user duplicate-issuance requirement is added"
 - BAD: sentimental growth narrative. e.g., "I used to think technical perfection was the right answer, but through this project I developed the habit of also considering maintenance cost"
-- Mid/Senior additional: stopping judgment ("93% was achievable but held back at 85% due to cost")
+- Senior additional: stopping judgment ("93% was achievable but held back at 85% due to cost")
 
 ### Overview/Problem Split Pattern
 
@@ -513,12 +504,12 @@ A 2-3 attempt → failure → insight arc is strongly recommended. If the story 
 
 This is not a technical document. It is a story showing your thought process.
 
-Good examples (New Grad / Junior):
+Good examples (Junior):
 
 - "Initially I thought just using Redis would be enough"
 - "But my mentor's question 'Can't you solve it without a lock?' kept me up for 3 nights"
 
-Good examples (Mid / Senior):
+Good examples (Senior):
 
 - "Initially I thought regex would be sufficient. But a single menu name — 'Chef's Special A' — defeated the entire ruleset"
 - "Could have pushed to 93%, but fine-tuning costs an extra ₩2M/month. Stopped at 85% and replaced with manual review assistance"
@@ -565,21 +556,21 @@ Bullets written using these strategies are evaluated in E6 (Target-Scale Transfe
 
 ---
 
-## 15. Writing Guidance Trigger: Signature/Detailed Depth
+## 15. Writing Guidance Trigger
 
-After P.A.R.R. evaluation, check the following conditions:
+After P.A.R. evaluation, check the following conditions:
 
-- **Condition**: 3 or more P.A.R.R. dimensions are FAIL, or the P.A.R.R. structure is entirely absent
+- **Condition**: 3 or more P.A.R. dimensions are FAIL, or the P.A.R. structure is entirely absent
 - **Immediate trigger**: If the \[Problem\]/\[Solution Process\]/\[Verification\]/\[Reflection\] structure is completely absent — trigger immediately without counting
-- **Message to deliver**: "N of the P.A.R.R. evaluation dimensions are FAIL. This problem-solving entry requires structural rewriting. Refer to the Writing Guidance: Signature Depth P.A.R.R. section template and narrative principles."
+- **Message to deliver**: "N of the P.A.R. evaluation dimensions are FAIL. This problem-solving entry requires structural rewriting. Refer to the Writing Guidance: P.A.R. section template and narrative principles."
 
-This trigger is not optional. If the P.A.R.R. structure is absent entirely, trigger immediately.
+This trigger is not optional. If the P.A.R. structure is absent entirely, trigger immediately.
 
 When the above trigger is met, refer to the Problem-Solving section of `Read references/experience-mining.md` and conduct an Experience Mining Interview. If the user opts out, replace with the Writing Guidance message above.
 
 ---
 
-## 16. Red Flags: Signature/Detailed Depth
+## 16. Red Flags
 
 | Thought | Reality |
 | --- | --- |
@@ -588,181 +579,21 @@ When the above trigger is met, refer to the Problem-Solving section of `Read ref
 | "I'll just write what I learned in the reflection" | "Learned about distributed systems" is abstract. Specific trade-offs, acknowledged limits, and an honest confession are required. |
 | "Writing that I studied all night is impressive" | Self-promotion ≠ engineering insight. "What did I initially assume incorrectly?" is the key. |
 | "Why Redis? That's obvious" | "Obvious" means thinking has stopped. Every attempt requires both "Why did I try this?" + "Why didn't it work?" |
-| "Isn't CS theory overkill?" | New Grad/Junior: CS knowledge is evidence of depth. Mid/Senior: domain context is evidence of depth. Show the right depth for the right level. |
-| "Since I'm a working engineer, I should show CS depth" | Mid/Senior signature projects require engineering judgment, not CS depth. Experiment-based decisions, stopping judgment, business impact. |
+| "Isn't CS theory overkill?" | Junior: CS knowledge is evidence of depth. Senior: domain context is evidence of depth. Show the right depth for the right level. |
+| "Since I'm a working engineer, I should show CS depth" | Senior entries require engineering judgment, not CS depth. Experiment-based decisions, stopping judgment, business impact. |
 | "Having result numbers is enough, right?" | "40%, 65%, 85%" are results, not reasons. Why each number came out is what matters. |
-| "Achieved 85% so that's a success, right?" | Why you stopped at 85% matters more. "Stopping judgment" is the differentiator for Mid/Senior engineers. |
+| "Achieved 85% so that's a success, right?" | Why you stopped at 85% matters more. "Stopping judgment" is the differentiator for Senior engineers. |
 | "It's Feature Listing but at least there are result numbers" | Verb + feature/tech name with a number at the end is still Feature Listing. The thought process (Why → Why not) must be present. |
 
 ---
 
-## 17. Compressed Depth Evaluation
+## 17. Technical Substance Verification T1-T3
 
-Apply to compressed depth entries (items described as "other projects" or concise bullet-format entries in the resume). Do not apply P.A.R.R. (P1-P5). Use Problem-Solving 6 Criteria + Volume Guide only.
-
-### Evaluation Criteria (Problem-Solving 6 Criteria + Volume Guide)
-
-Apply Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) to each line of compressed depth entries. Additionally check the volume guide:
-
-**Volume guide:**
-
-- 3-5 projects recommended
-- 3-5 lines per project (bullet format)
-- Section total: max 25 lines
-- If 5+ projects: recommend selecting the strongest 3-5
-
-**Ordering:** Priority order — most relevant to the target position first, then technical diversity, team collaboration, other
-
-### Compressed Depth Output Format
-
-After evaluating all compressed depth entries, output a section-level check:
-
-```
-[Problem-Solving: Compressed Depth — Section Check]
-- Entry count: N (recommended 3-5) — PASS / FAIL
-- Lines per entry: avg N (recommended 3-5) — PASS / FAIL
-- Total section length: N lines (max 25) — PASS / FAIL
-- Ordering: priority order — PASS / FAIL (reason)
-```
-
-### Important Note
-
-Attempt enumeration, retrospective, and trade-off comparison are **not required** in compressed depth entries. Their absence is NOT a FAIL — those elements belong to signature/detailed depth.
-
-### Explicit Anti-Patterns (ENHANCED)
-
-**Feature Listing Anti-Pattern**: Same detection patterns as defined in the P.A.R.R. Evaluation section above (verb + feature/technology name only, no problem context, no outcome). When detected in other projects, flag as Diagnostic Causation FAIL and request the underlying problem context and outcome.
-
-**Over-Narration Anti-Pattern**: Signature-level narrative (attempts, retrospective, trade-off comparison) used in non-signature projects. Flag and recommend compression to 3-5 bullet lines.
-
----
-
-## 18. Before/After Detection (Compressed Depth)
-
-**Before — Feature Listing Anti-Pattern (flag immediately):**
-
-```
-Other Projects
-• Pagination feature developed
-• OAuth social login implemented
-• Payment API developed
-• Shopping cart feature developed
-```
-
-**After — Compressed P.A.R.R. Gold Standard (bullet format):**
-
-```
-Other Projects
-
-Product Detail View Optimization
-- Product detail view p99 10s; structural bottleneck of COUNT-aggregating like counts on every request
-- Separated aggregation table and added composite index to eliminate read load
-- p99 **10s → 500ms**, member product detail view CTR **10% → 22%** improvement
-
-First-Come-First-Served Coupon Over-Issuance Emergency Response
-- Limited-quantity (300 units) coupon over-issuance occurred; second event scheduled next day, immediate response required
-- Identified race condition between stock read and deduction; resolved with `UPDATE ... WHERE stock > 0` atomic update, no additional infrastructure needed
-- Validated concurrent request scenario with k6 200 VU load test (p95 within 1s)
-- Hotfix completed within **2 hours**, second event over-issuance **0 cases**
-
-Product Query Cache Implementation
-- Product query p95 500ms during peak hours, SLO breach; root cause was absent cache for repeatedly queried products
-- Applied Redis cache to eliminate direct DB query load
-- p95 **500ms → 150ms** achieved, DB load reduced by **50%**
-```
-
----
-
-## 19. Writing Guidance: Compressed Depth
-
-Use when content restructuring is needed for compressed depth entries based on Diagnostic Causation/Evidence Depth evaluation. Guides compressing verbose narratives or converting feature lists into problem-solving narratives.
-
-### Strategy: Supporting Backdrop
-
-If the signature depth entry shows depth, compressed depth entries show **conciseness and consistency**. Their role is to prove technical breadth without overlapping with the signature entry.
-
-### Compressed P.A.R.R. Structure Template
-
-Apply a compressed version of the full P.A.R.R. Exclude attempt enumeration, retrospective, and trade-off comparison.
-
-Bullet (`-`) format, 3-5 lines per project:
-
-```
-[Project Name]
-- Problem (1 line): phenomenon + cause (with numbers)
-- Action (1-2 lines): cause diagnosis + technology choice and rationale
-- Verification (0-1 lines): test method and conditions (if applicable)
-- Result (1 line): **bold numbers** showing Before → After
-```
-
-Required elements:
-
-- Problem: phenomenon + structural cause (1 line)
-- Action: cause diagnosis + technology selection reason (1-2 lines)
-- Verification: test method/conditions (0-1 lines, can be merged into Action)
-- Result: **bold numbers** showing Before → After (1 line)
-
-Excluded elements:
-
-- Long narrative ("Initially...", "Stayed up for 3 nights...")
-- Multiple attempt enumeration (Attempt 1, Attempt 2, Attempt 3)
-- Detailed trade-off comparison
-- \[Reflection\] section
-
-### Volume Guide and Ordering
-
-- 3-5 projects, 3-5 lines each, section total max 25 lines
-- If user has not specified ordering, recommend priority order:
-  1. Most technically impressive project after signature
-  2. Project showing technical diversity (different tech from signature)
-  3. Project demonstrating team collaboration
-  4. Other projects
-- If 5+ projects: request selection down to 3-5 — more is not more impressive
-
-### Pre-Writing Validation (Compressed Depth)
-
-Apply the standard Pre-Writing Validation flowchart. Additionally:
-
-1. Did the user provide only a feature list? → Ask: "What was the problem?", "What are the verification result numbers?"
-2. Did the user write signature-level detail (verbose narrative)? → Guide to compress to 3-5 bullet lines
-3. 5+ projects? → Request selection down to 3-5
-4. No numbers? → Always request (Absolute Rule: never fabricate metrics)
-
----
-
-## 20. Writing Guidance Trigger: Compressed Depth
-
-After completing Problem-Solving 6 Criteria evaluation on compressed depth entries, check:
-
-- **Trigger formula**: `Diagnostic Causation_FAIL_count / evaluable_lines > 0.5` OR `Evidence Depth_FAIL_count / evaluable_lines > 0.5` (evaluable_lines = bullet lines evaluated by Problem-Solving 6 Criteria, excluding titles, blank lines, and section markers)
-- **Missing section**: If there are no compressed depth entries at all, recommend adding them
-- **Message to deliver**: "More than half of the Diagnostic Causation/Evidence Depth evaluations across N lines are FAIL (Diagnostic Causation: X/N, Evidence Depth: X/N). This section needs content restructuring, not expression editing. Refer to the Writing Guidance: Compressed Depth section template."
-
-This trigger is not optional.
-
-When the above trigger is met, refer to the Problem-Solving section of `Read references/experience-mining.md` and conduct an Experience Mining Interview. If the user opts out, replace with the Writing Guidance message above.
-
----
-
-## 21. Red Flags: Compressed Depth
-
-| Thought | Reality |
-| --- | --- |
-| "I should evaluate depth using P1-P5" | Applying P1-P5 to compressed depth is an excessive requirement. Use Problem-Solving 6 Criteria + volume guide only. |
-| "No attempt→failure→insight arc means FAIL" | Attempt enumeration is signature depth only. Compressed depth passes with problem→solution→verification→result bullet flow. |
-| "It's well written so let's move on" | Even well-written entries must be checked for Diagnostic Causation and Evidence Depth. |
-| "There are 7 projects, I can just evaluate each one" | Check the volume guide (5+ entries) before individual evaluation. If 5+, recommend selection first. |
-| "No numbers, I'll just add some rough estimates" | Fabricating metrics is prohibited. If numbers are missing, always request them from the user. |
-| "It's feature listing but neatly organized" | Clean feature listing is still the Feature Listing Anti-Pattern. Problem context and outcome are required. |
-| "I should write it with signature-level depth" | Over-narration in compressed entries creates imbalance. 3-5 bullet lines per entry. |
-
----
-
-## 22. Technical Substance Verification T1-T3
-
-Problem-Solving Evaluation (P.A.R.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a reflection?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
+Problem-Solving Evaluation (P.A.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a reflection?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
 
 Key distinction: P1-P8 asks "does this element **exist**?", T1-T3 asks "is this content **correct**?"
+
+T1-T3 applies to all problem-solving entries with 5+ lines. Apply all three dimensions to every entry.
 
 ### T1 — Technical Coherence
 
@@ -830,48 +661,26 @@ Key distinction: P1-P8 asks "does this element **exist**?", T1-T3 asks "is this 
 
 ---
 
-## 23. T1-T3 Depth Gating
+## 18. T1-T3 Output Format
 
-T1-T3 verifies technical substance inside the narrative, so it applies only to depths where sufficient technical description exists.
-
-| Depth | T1 Technical Coherence | T2 Selection Rationality | T3 Trade-off Authenticity |
-|-------|-----------------|----------------|----------------------|
-| signature | Apply | Apply | Apply |
-| detailed | Apply | Apply (when selection is mentioned) | Not applied |
-| compressed | Not applied | Not applied | Not applied |
-
-Compressed depth has only 3-5 lines of content — there is not enough description to judge technical substance. Applying T1-T3 to sparse descriptions would cause nearly every item to FAIL, making it diagnostically useless.
-
----
-
-## 24. T1-T3 Output Format
-
-**Signature depth** entries (T1-T3 all applied):
+All entries (T1-T3 all applied):
 
 ```
-[Technical Substance: {entry name} — signature depth]
+[Technical Substance: {entry name}]
 - T1 Technical Coherence: PASS / FAIL (reason)
 - T2 Selection Rationality: PASS / FAIL (reason)
 - T3 Trade-off Authenticity: PASS / FAIL (reason)
-```
-
-**Detailed depth** entries (T1, T2 only):
-
-```
-[Technical Substance: {entry name} — detailed depth]
-- T1 Technical Coherence: PASS / FAIL (reason)
-- T2 Selection Rationality: PASS / FAIL (reason)
 ```
 
 When a FAIL verdict is issued, always include specific critique: which claim is the problem, why it is a problem, and how it falls apart in an interview.
 
 ---
 
-## 25. T1-T3 Writing Guidance Trigger
+## 19. T1-T3 Writing Guidance Trigger
 
 After T1-T3 evaluation, check the following conditions:
 
-- **Trigger**: 2 or more of T1-T3 are FAIL on a signature depth entry
+- **Trigger**: 2 or more of T1-T3 are FAIL on any entry
 - **Message**: "N of the Technical Substance Verification (T1-T3) dimensions are FAIL. The narrative structure is sound, but the technical content has accuracy/rationality issues. Review each FAIL item's specific critique and verify whether the technical claims can withstand interview scrutiny."
 - **Priority**: T1-T3 FAILs cause loss of technical credibility in interviews, so classify as **P0 (must fix)** in the HTML report.
 
