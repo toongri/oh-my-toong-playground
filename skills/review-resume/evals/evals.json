@@ -106,7 +106,7 @@
       "assertions": [
         {"text": "note-load", "description": "Phase 1: loads note and reports problem-solving candidate pool status"},
         {"text": "unified-evaluation-model", "description": "Evaluates all problem-solving entries (5+ lines) with unified P.A.R. criteria; nominates 1 kick entry for deeper treatment. Entries under 5 lines flagged for Career migration."},
-        {"text": "signature-depth-full-evaluation", "description": "Signature depth entries get comprehensive evaluation covering all P.A.R. dimensions (P1-P3, P5) — problem detection, failure arc, why-chain, stopping judgment"},
+        {"text": "signature-depth-full-evaluation", "description": "Kick entry gets comprehensive evaluation covering P.A.R. dimensions (P1-P3, P5) — narrative depth, failure arc, verification depth, why-chain"},
         {"text": "minimum-length-enforcement", "description": "Evaluator demonstrates awareness of 5-line minimum: either flags entries under 5 lines for Career migration, OR explicitly states line counts per entry showing all exceed threshold. Complete omission without evidence of consideration is FAIL."},
         {"text": "career-level-appropriate", "description": "Evaluation criteria match the candidate's career level (not applying junior criteria to mid/senior or vice versa)"},
         {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (payments, incident response prioritized)"},
@@ -139,13 +139,13 @@
         {"text": "per-type-evaluation", "description": "Each self-intro paragraph identified by type (A/B/D) and evaluated against type-specific criteria"},
         {"text": "global-evaluation", "description": "Global criteria evaluated after per-type (paragraph count, independence, first sentence, original framing)"},
         {"text": "no-s1-s5-codes", "description": "No S1-S5 codes anywhere in output"},
-        {"text": "experience-mining-trigger", "description": "Phase 2/4/5 interview trigger activated due to WEAK/ABSENT/FAIL conditions — agent invokes experience-mining.md protocol for at least one phase"},
+        {"text": "experience-mining-trigger", "description": "Phase 2/3/4 interview trigger activated due to WEAK/ABSENT/FAIL conditions — agent invokes experience-mining.md protocol for at least one phase"},
         {"text": "four-stage-protocol", "description": "4-Stage Bypass Protocol executed per triggered phase: Stage 1 (Direct Question) → Stage 2 (Bypass/Reframing) → Stage 3 (Adjacent Experience) → Stage 4 (Daily Work). Each stage only entered if previous stage yielded no source."},
         {"text": "discovered-candidates-tracking", "description": "Discovered Candidates Working Set records at least one mined experience in format: Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}"},
         {"text": "interview-opt-out-handling", "description": "If user says 'next' or 'move on', agent exits current phase interview gracefully, falls back to static Writing Guidance, and continues to next phase — does not force interview continuation"},
         {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT/N/A with cited evidence; C3-C5 axes may be rated N/A when not expected at the candidate's career level"},
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level (Junior) and applies 2-tier career-level expectations"},
-        {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED at junior level, provides specific gap recommendations or triggers Phase 4 interview"},
+        {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED at junior level, provides specific gap recommendations or triggers Phase 3 interview"},
         {"text": "unified-evaluation-model", "description": "Evaluates all problem-solving entries (5+ lines) with unified P.A.R. criteria; nominates 1 kick entry for deeper treatment. Entries under 5 lines flagged for Career migration."},
         {"text": "depth-specific-evaluation", "description": "Applies depth-appropriate criteria per entry type"},
         {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — P.A.R. dimensions, Type A-D criteria, career/PS evaluation criteria, or unified evaluation model language"},
@@ -178,7 +178,7 @@
         {"text": "html-summary-section", "description": "Phase 9 HTML output includes summary statistics"},
         {"text": "html-inline-feedback", "description": "Phase 9 HTML output uses div blocks with CSS classes for inline feedback"},
         {"text": "phase-1-mandatory-for-section-review", "description": "Phase 1 (사전 준비) executed even though this is a section-specific review — note load is always required"},
-        {"text": "phase-tracking-all-phases", "description": "Phases 1, 2, 7, 8, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with no gaps."}
+        {"text": "phase-tracking-all-phases", "description": "Phases 1, 2, 7, 8, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with none missing."}
       ],
       "files": ["_config.yml"]
     },
@@ -197,7 +197,7 @@
         {"text": "suggested-revisions", "description": "Each finding includes a concrete suggested revision"},
         {"text": "html-summary-section", "description": "Phase 9 HTML output includes summary statistics"},
         {"text": "html-inline-feedback", "description": "Phase 9 HTML output uses div blocks with CSS classes for inline feedback"},
-        {"text": "phase-tracking-all-phases", "description": "Phases 1, 4, 5, 7, 8, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with no gaps."}
+        {"text": "phase-tracking-all-phases", "description": "Phases 1, 4, 5, 7, 8, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with none missing."}
       ],
       "files": ["_config.yml"]
     },
@@ -220,7 +220,7 @@
     {
       "id": 8,
       "prompt": "문제해결 섹션 리뷰해줘. 토스 백엔드 JD 기반으로. _config.yml에 있어.\n\nJD highlights:\n- Java/Kotlin, Spring Boot\n- 대규모 트래픽 처리\n- 결제 시스템 안정성\n\n참고: $OMT_DIR/review-resume/problem-solving/ 에 후보 파일이 3개 있어. payment-order-sync.md, search-latency-optimization.md, notification-pipeline.md.",
-      "expected_output": "Phase 1 note load with candidate pool reporting (3 problem-solving candidates), Phase 6 P.A.R. evaluation with candidate pool awareness, JD-optimal combination recommendation from pool, Phase 8 Quality Gate, Phase 9 HTML report.",
+      "expected_output": "Phase 1 note load with candidate pool reporting (3 problem-solving candidates), Phase 4 Problem-Solving 6 criteria evaluation, Phase 5 JD keyword matching, Phase 6 P.A.R. evaluation with candidate pool awareness, JD-optimal combination recommendation from pool, Phase 7 AI tone audit, Phase 8 Quality Gate, Phase 9 HTML report.",
       "assertions": [
         {"text": "note-load-with-candidates", "description": "Phase 1 reports problem-solving candidate count > 0 from note pool"},
         {"text": "candidate-pool-referenced", "description": "Evaluation references the note candidate pool and mentions available alternatives beyond what's in the current resume"},
@@ -230,7 +230,7 @@
         {"text": "portfolio-theme-diversity", "description": "Checks theme diversity; flags overlapping themes and suggests pool alternatives"},
         {"text": "html-summary-section", "description": "Phase 9 HTML report includes summary statistics"},
         {"text": "phase-1-mandatory-for-section-review", "description": "Phase 1 executed for section-specific review — note load is always required"},
-        {"text": "phase-tracking-all-phases", "description": "Phases 1, 4, 5, 6, 7, 8, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with no gaps."}
+        {"text": "phase-tracking-all-phases", "description": "Phases 1, 4, 5, 6, 7, 8, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with none missing."}
       ],
       "files": ["_config.yml"]
     },
@@ -274,10 +274,10 @@
     }
   ],
   "benchmark_summary": {
-    "latest_iteration": 14,
+    "latest_iteration": 15,
     "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "127 assertions across 4 evals (46+35+21+25), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + self-claim endings), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 added: experience mining trigger + 4-stage bypass + opt-out verification. Phase 11 Quality Gate assertions added (3 x 2 evals = 6 new). Eval 3/4 quality-gate assertions added (3 x 2 evals = 6 new)."
+    "notes": "191 assertions across 10 evals (46+36+22+26+11+11+8+9+12+10), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + self-claim endings), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 added: experience mining trigger + 4-stage bypass + opt-out verification. Phase 11 Quality Gate assertions added (3 x 2 evals = 6 new). Eval 3/4 quality-gate assertions added (3 x 2 evals = 6 new). Evals 5-10 added: section-specific (self-intro, career, AI tone), PS+JD pool, Senior, brevity pressure scenarios."
   },
   "benchmark_history": [
     {
