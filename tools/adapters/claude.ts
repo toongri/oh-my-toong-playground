@@ -637,7 +637,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     serverName: string,
     serverJson: Record<string, unknown>,
     dryRun = false,
-    scope?: string,
+    scope?: "local",
   ): Promise<void> {
     const claudeUserConfig =
       process.env["CLAUDE_USER_CONFIG"] ??
