@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 9). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the resume-claim-examiner agent independently verifies "has that problem actually been resolved."
+The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the resume-claim-examiner agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
@@ -230,7 +230,7 @@ Quality Gate interviews **extend** the 4-Stage Bypass Protocol from experience-m
 |-----------|-----------------------------|----------------------|
 | Purpose | Discover new sources | Secure sources to resolve already-identified problems |
 | Trigger | Phase gap detected | resume-claim-examiner REQUEST_CHANGES received |
-| Target | Undiscovered experiences | Evaluation axes (E1-E6) with FAIL verdict |
+| Target | Undiscovered experiences | Evaluation axes with FAIL verdict |
 | Question basis | Gap list from Writing Guidance | Interview Hints from resume-claim-examiner |
 | When exhausted | Mark as "genuinely none," move to next topic | Generate "best revision with current sources" + state limitations |
 
@@ -289,13 +289,32 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The E3 (Problem Fidelity) axis may be difficult to PASS with current sources. If the resume-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
+2. State the limitation explicitly in the revision: "The Problem Fidelity axis may be difficult to PASS with current sources. If the resume-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
 3. Dispatch this revision to the resume-claim-examiner. If the resume-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**
 - One question per message. Multiple questions are prohibited.
 - Treat ambiguous answers with clarifying questions. Do not accept insufficient answers as sources.
 - If the user opts out ("move on" / "let's skip" / "다음으로" / "넘어가자") → end current interview → hand off to Opt-Out handling.
+
+### Interview-Impossible Mode Branch
+
+When the session operates in **interview-impossible mode** (the resume owner is not present), skip the post-examiner interview loop entirely. Apply the following protocol instead:
+
+**Trigger:** REQUEST_CHANGES received AND interview-impossible mode is active.
+
+**Protocol:**
+1. Skip the 4-Stage Bypass interview loop entirely. No questions are posed to the user.
+2. Generate 2-3 alternatives for all FAIL items using **resume content as the sole source**. No user-sourced context from the pre-examiner interview is available.
+   - Alternative 1 (Safe): Scale-Omit strategy — omit unverifiable claims, focus on reasoning and judgment within confirmed resume content.
+   - Alternative 2 (High-Impact): Scale-Project strategy — maximize impact from confirmed content; flag axes that require owner confirmation.
+   - Alternative 3 (Balanced): Compromise between Alternatives 1 and 2, or a different framing angle.
+   - Include a tradeoff table identical to Section 3 format.
+3. Dispatch the alternatives package to the resume-claim-examiner Phase B validation.
+4. If **any alternative passes** Phase B: adopt it and continue.
+5. If **all alternatives fail** Phase B: auto-opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `auto-opt-out (interview-impossible)`.
+
+**Interview Hints in interview-impossible mode:** The resume-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
 
 ---
 
@@ -330,7 +349,7 @@ flowchart TB
 
     J -->|YES| C
     J -->|NO| VERDICT[Verdict Tracker Verification]
-    VERDICT --> P[Phase 9: Generate HTML]
+    VERDICT --> P[Phase 10: Generate HTML]
 
     style H fill:#e74c3c,stroke:#333,color:#fff
     style INTERVIEW_PRE fill:#3498db,stroke:#333,color:#fff
@@ -340,29 +359,31 @@ flowchart TB
 
 > **Note:** SKILL.md "Quality Gate Flow (Per Item)" contains the primary flow that the AI follows. Changes to the loop structure must be synchronized between both files.
 
+> **interview-impossible mode:** This flowchart depicts owner-present mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped — REQUEST_CHANGES leads directly to auto-opt-out with badge "소유자 인터뷰 필요".
+
 ### Loop Entry Condition
 
-The Quality Gate loop is entered automatically after Phase 7 completes. Without a separate trigger, immediately after the final Phase 7 evaluation output, the flow proceeds to selecting ALL evaluator-eligible items and starting the pre-examiner interview for each item.
+The Quality Gate loop is entered automatically after Phase 8 completes. Without a separate trigger, immediately after the final Phase 8 evaluation output, the flow proceeds to selecting ALL evaluator-eligible items and starting the pre-examiner interview for each item.
 
 ### resume-claim-examiner dispatch
 
 The resume-claim-examiner is dispatched **1 bullet / 1 entry** at a time.
 
-The Input Format uses the template defined in SKILL.md Phase 8 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `SKILL.md`.
+The Input Format uses the template defined in SKILL.md Phase 9 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `SKILL.md`.
 
 **Key rules:**
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
 - Evaluation Phase findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
-- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 1 research results. This information is used directly in the resume-claim-examiner's E6 (Target-Scale Transferability) evaluation.
+- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results. This information is used directly in the resume-claim-examiner's Target-Scale Transferability axis evaluation.
 
 ### Post-APPROVE Handling
 
-Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 9 HTML report is generated based on these confirmed revisions.
+Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 10 HTML report is generated based on these confirmed revisions.
 
 ### Mandatory Verdict Tracker
 
-Before entering Phase 9, internally track the verdict for every evaluator-eligible item. If even one entry is blank, Phase 9 entry is blocked.
+Before entering Phase 10, internally track the verdict for every evaluator-eligible item. If even one entry is blank, Phase 10 entry is blocked.
 
 | # | Section | Item | Verdict | Loop Count |
 |---|---------|------|---------|------------|
@@ -402,16 +423,22 @@ In this case: confirm with "Is there anything still unsatisfying about this sect
 
 ### Opt-Out Display in HTML Report
 
-Opted-out sections are displayed in the HTML report as follows:
-- "Unresolved feedback" badge at the top of the section
-- Last REQUEST_CHANGES from resume-claim-examiner included as an "Unresolved feedback" block
-- Each FAIL axis and its Interview Hints provided in a collapsible state
+Two opt-out types are distinguished in the HTML report. Both use `.section-opt-out` with `.fail-axis` divs expanded — all content always visible, never collapsed.
+
+**User opt-out** (owner explicitly chose to move on):
+- `.opt-out-badge` displays "미해결 피드백"
+- Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
+
+**Auto-opt-out — interview-impossible** (owner not present, all alternatives failed):
+- `.opt-out-badge` displays "소유자 인터뷰 필요"
+- Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
+- No Interview Hints are shown to the user in this mode
 
 ---
 
 ## 7. HTML Report Alternatives Format
 
-Defines how alternatives for each finding are displayed in the Phase 9 HTML report. Actual application is handled in the SKILL.md HTML template modification task.
+Defines how alternatives for each finding are displayed in the Phase 10 HTML report. Actual application is handled in the SKILL.md HTML template modification task.
 
 ### Direction of Change
 
@@ -449,17 +476,33 @@ Defines how alternatives for each finding are displayed in the Phase 9 HTML repo
 
 ### Opt-Out Section Display Format
 
+**User opt-out** (owner explicitly moved on):
 ```html
 <div class="section-opt-out">
-  <div class="opt-out-badge">Unresolved feedback</div>
-  <details class="unresolved-feedback">
-    <summary>View unresolved feedback ({N} axes)</summary>
-    <div class="fail-axis">
-      <span class="axis-label">E3: Problem Fidelity</span>
-      <div class="axis-feedback">{feedback text from resume-claim-examiner}</div>
-      <div class="axis-hint">Interview Hint: {hint text}</div>
-    </div>
-  </details>
+  <div class="opt-out-badge">미해결 피드백</div>
+  <div class="fail-axis">
+    <span class="axis-label">트레이드오프 진정성</span>
+    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  </div>
+  <div class="fail-axis">
+    <span class="axis-label">규모 적정 설계</span>
+    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  </div>
+</div>
+```
+
+**Auto-opt-out** (interview-impossible mode — all alternatives failed):
+```html
+<div class="section-opt-out">
+  <div class="opt-out-badge">소유자 인터뷰 필요</div>
+  <div class="fail-axis">
+    <span class="axis-label">트레이드오프 진정성</span>
+    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  </div>
+  <div class="fail-axis">
+    <span class="axis-label">확장성 전이</span>
+    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  </div>
 </div>
 ```
 
@@ -550,11 +593,6 @@ CSS reference (canonical source: SKILL.md HTML template `<style>` block. This se
   margin: 4px 0;
   font-size: 0.9rem;
 }
-.axis-hint {
-  color: #6c757d;
-  font-size: 0.85rem;
-  font-style: italic;
-}
 .unresolved-note {
   background: #fff3cd;
   border-left: 4px solid #ffc107;
@@ -571,12 +609,12 @@ CSS reference (canonical source: SKILL.md HTML template `<style>` block. This se
 
 ### Purpose
 
-After generating the HTML report in Phase 9, provide a loop that allows the user to give additional feedback after reviewing the completed resume as a whole. If the per-section Quality Gate ensures the quality of individual revisions, the Whole-Resume Feedback Loop performs a final check on the consistency and direction of the resume as a whole.
+After generating the HTML report in Phase 10, provide a loop that allows the user to give additional feedback after reviewing the completed resume as a whole. If the per-section Quality Gate ensures the quality of individual revisions, the Whole-Resume Feedback Loop performs a final check on the consistency and direction of the resume as a whole.
 
 ### Loop Structure
 
 ```
-Phase 9 HTML generated + browser opened
+Phase 10 HTML generated + browser opened
     ↓
 User review → AskUserQuestion
 "Have you reviewed the full resume? Let me know if there is anything you'd like to revise."
@@ -584,7 +622,7 @@ User review → AskUserQuestion
 Feedback present?
     → YES (specific section issue): Re-enter Quality Gate for that section
     → YES (overall structure/direction issue): Re-enter Quality Gate for relevant sections
-    → NO (explicit termination signal only): Proceed to Phase 9 결과 전달
+    → NO (explicit termination signal only): Proceed to Phase 10 결과 전달
 ```
 
 ### Feedback Classification and Handling
@@ -601,7 +639,7 @@ Feedback present?
 Only the following expressions are recognized as loop termination signals:
 - "OK", "looks good", "done", "that's it"
 - "no feedback", "nothing to add"
-- "let's move on", "go to Phase 9 결과 전달"
+- "let's move on", "go to Phase 10 결과 전달"
 - "this is enough"
 
 ### Handling Ambiguous Responses
@@ -628,4 +666,4 @@ Repeat this full regeneration + re-review loop until the user sends an explicit 
 
 On force-exit signals such as "just move on":
 - Display an "Unresolved feedback" badge in the HTML report for any sections with unresolved feedback
-- Proceed to Phase 9 결과 전달
+- Proceed to Phase 10 결과 전달
