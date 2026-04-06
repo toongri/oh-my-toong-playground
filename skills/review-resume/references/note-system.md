@@ -87,6 +87,8 @@ The candidate body contains the narrative content directly. Entry depth is deter
 ```markdown
 # User Preferences
 
+owner: Gildong Hong
+
 ## Expression Style
 - Prefer formal polite sentence endings (~했습니다) over noun-form endings (~함)
 - Keep technical terms in English (Redis, Kafka — do not Koreanize)
@@ -100,7 +102,9 @@ The candidate body contains the narrative content directly. Entry depth is deter
 - 2025-03-20: "Order problem-solving by impact, not chronologically"
 ```
 
-Three sections are required: **Expression Style**, **Judgment Criteria**, **Feedback History**. Add entries to each section as they emerge from review sessions. Never overwrite history — append only.
+The `owner` field is a free-text string containing the resume candidate's name. It sits at the top level of the file, outside any section. Three sections are required: **Expression Style**, **Judgment Criteria**, **Feedback History**. Add entries to each section as they emerge from review sessions. Never overwrite history — append only.
+
+> **Backward Compatibility**: When `preferences.md` exists from a prior session but has no `owner` field, Phase 1 treats this as first-run identity (generic question). Upon owner confirmation, the `owner` field is written back to `preferences.md`.
 
 ---
 
@@ -150,7 +154,7 @@ Run only when note is empty. Parse the current resume to auto-generate the initi
 2. **Self-introduction**: Classify each paragraph as Type A/B/C/D and create files in `self-introduction/`
 3. **Career**: Create one file per bullet in `career/` (filename: company-item in kebab-case)
 4. **Problem-solving / projects**: Create one file per problem-solving/project entry
-5. Create `preferences.md` as a blank template
+5. Create `preferences.md` as a blank template, then extract the candidate's name from the resume content (e.g., from `_config.yml` header or the resume's name field) and write it as the `owner` field at the top of the file. If name extraction fails, prompt the user: "What is the candidate's name for this resume?" and use the provided answer.
 6. Report seeding results to the user: "Note initialized. N candidates registered based on the current resume."
 
 ---

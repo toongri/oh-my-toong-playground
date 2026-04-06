@@ -671,7 +671,7 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 
 ### Original Bullet Evaluation
 
-### E3b Entanglement Reasoning (reasoning-before-score)
+### Entanglement Reasoning (reasoning-before-score)
 - Causal chain depth: {0.0-1.0} — {evidence from bullet}
 - Constraint narrowing: {0.0-1.0} — {evidence from bullet}
 - Resolution mutation: {0.0-1.0} — {evidence from bullet}
@@ -693,12 +693,12 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 ### Alternative 1: {summary}
 | Axis | Verdict | Rationale |
 |---|---|---|
-| E1 Career-Level Fit | {PASS/FAIL} | {1-line rationale} |
-| E2 Logical Coherence | {PASS/FAIL} | {1-line rationale} |
-| E3 Problem Fidelity | {PASS/FAIL} [{ENTANGLED|LISTED|FLAT}] | {1-line rationale} |
-| E4 Scale-Appropriate Engineering | {PASS/FAIL} | {1-line rationale} |
-| E5 Signal-to-Noise Ratio | {PASS/FAIL} | {1-line rationale} |
-| E6 Target-Scale Transferability | {PASS/FAIL} | {1-line rationale} |
+| Career-Level Fit | {PASS/FAIL} | {1-line rationale} |
+| Logical Coherence | {PASS/FAIL} | {1-line rationale} |
+| Problem Fidelity | {PASS/FAIL} [{ENTANGLED|LISTED|FLAT}] | {1-line rationale} |
+| Scale-Appropriate Engineering | {PASS/FAIL} | {1-line rationale} |
+| Signal-to-Noise Ratio | {PASS/FAIL} | {1-line rationale} |
+| Target-Scale Transferability | {PASS/FAIL} | {1-line rationale} |
 **Verdict: {PASS — can survive technical interview | FAIL — rejected on axis N}**
 
 ### Alternative 2: {summary}
