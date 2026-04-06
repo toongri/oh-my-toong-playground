@@ -6,8 +6,8 @@
  2. [Career-Level Depth Distribution Guide](#2-career-level-depth-distribution-guide)
  3. [Career-Level Selection Criteria](#3-career-level-selection-criteria)
  4. [Kick Project](#4-kick-project)
- 5. [P.A.R. Evaluation Dimensions P1-P5](#5-par-evaluation-dimensions-p1-p5)
- 6. [P.A.R. Additional Dimensions P6-P8](#6-par-additional-dimensions-p6-p8)
+ 5. [P.A.R. Evaluation Dimensions P1-P4](#5-par-evaluation-dimensions-p1-p4)
+ 6. [P.A.R. Additional Dimensions P5-P7](#6-par-additional-dimensions-p5-p7)
  7. [Career-Level Misapplication Guard](#7-career-level-misapplication-guard)
  8. [P.A.R. Evaluation Output Format](#8-par-evaluation-output-format)
  9. [Before/After Detection](#9-beforeafter-detection)
@@ -41,9 +41,9 @@ The following items must be checked when evaluating the problem-solving section,
 - [ ] If 2+ entries share the same theme → FLAG — theme overlap warning + recommend replacement
 
 ### Per-Entry Required Checks
-- [ ] All entries (5+ lines): Apply P.A.R. P1-P2, P5, check for failure arc
+- [ ] All entries (5+ lines): Apply P.A.R. P1-P2, P4, check for failure arc
 - [ ] Kick entry: additionally apply P3 (Verification depth)
-- [ ] Senior-level entries: additionally apply P6-P8 (Domain-specific failure reasoning, Stopping judgment, Business impact)
+- [ ] Senior-level entries: additionally apply P5-P7 (Domain-specific failure reasoning, Stopping judgment, Business impact)
 
 ---
 
@@ -57,7 +57,7 @@ The resume's problem-solving entries are **detailed descriptions showing how thi
 
 ## 1. Depth Determination
 
-All problem-solving entries with 5+ lines are evaluated with the same criteria. Apply Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) to every entry, then apply P.A.R. P1-P2, P5 additionally. The kick entry additionally applies P3.
+All problem-solving entries with 5+ lines are evaluated with the same criteria. Apply Problem-Solving 6 Criteria (Diagnostic Causation · Evidence Depth · Thought Visibility · Beyond-Standard Reasoning · Interview Depth · Section Fitness) to every entry, then apply P.A.R. P1-P2, P4 additionally. The kick entry additionally applies P3.
 
 Entries under 5 lines belong in Career bullets, not Problem-Solving.
 
@@ -128,7 +128,7 @@ The kick project is the single entry nominated for deeper treatment. It receives
 
 1. **Evaluator nominates**: Based on §3 selection criteria, identify the strongest candidate. Announce: "I recommend nominating [{entry name}] as the kick project based on [reason from criteria 1-5]."
 2. **User confirms**: The user confirms or selects a different entry.
-3. **Kick evaluation**: Apply full P.A.R. P1-P3, P5, P6-P8 (for Senior) to the kick entry. Standard entries apply P1-P2, P5.
+3. **Kick evaluation**: Apply full P.A.R. P1-P3, P4, P5-P7 (for Senior) to the kick entry. Standard entries apply P1-P2, P4.
 
 ### Kick Target
 
@@ -139,20 +139,20 @@ The kick project is the single entry nominated for deeper treatment. It receives
 
 ### Non-kick Entries
 
-All other problem-solving entries (5+ lines) apply P1-P2, P5 (and P6-P8 for Senior-level entries). P3 is kick-only.
+All other problem-solving entries (5+ lines) apply P1-P2, P4 (and P5-P7 for Senior-level entries). P3 is kick-only.
 
 ---
 
-## 5. P.A.R. Evaluation Dimensions P1-P5
+## 5. P.A.R. Evaluation Dimensions P1-P4
 
-Apply to all problem-solving entries (5+ lines). After Problem-Solving 6 Criteria evaluation, apply P1-P2, P5 as additional evaluation. P3 applies to kick entry only.
+Apply to all problem-solving entries (5+ lines). After Problem-Solving 6 Criteria evaluation, apply P1-P2, P4 as additional evaluation. P3 applies to kick entry only.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
 | P1 | Narrative depth | Is this a story of thought process, not a technology list? | "Used Redis distributed lock", "Used GPT-4" — results only, no reasoning |
 | P2 | Failure arc | Are there 2-3 attempts with specific failure numbers? | No failure process, or jumps directly to final solution without showing failed attempts |
 | P3 | Verification depth *(kick only)* | Is the verification appropriate for the domain? | Junior: only "ran load test". Senior: only "85% accuracy" with no error analysis |
-| P5 | "Why?" chain | Does every attempt include both "Why did I try this?" AND "Why didn't it work?" | Either the selection reason OR the failure reason is missing from any attempt |
+| P4 | "Why?" chain | Does every attempt include both "Why did I try this?" AND "Why didn't it work?" | Either the selection reason OR the failure reason is missing from any attempt |
 
 **P1 Target-Scale Note:** When evaluating narrative depth, check whether the narrative of technology choices stops at "optimization at current scale" or extends to "awareness of scale change." The latter earns a bonus on narrative depth. Its absence is not an automatic FAIL — this is explicitly evaluated in resume-claim-examiner E6.
 
@@ -166,17 +166,17 @@ Apply to all problem-solving entries (5+ lines). After Problem-Solving 6 Criteri
 
 ---
 
-## 6. P.A.R. Additional Dimensions P6-P8
+## 6. P.A.R. Additional Dimensions P5-P7
 
-Apply P6-P8 additionally to all problem-solving entries from Senior candidates (7+ years of professional experience). Expectations scale with career level — a Junior entry is not penalized for missing stopping judgment; a Senior entry is.
+Apply P5-P7 additionally to all problem-solving entries from Senior candidates (7+ years of professional experience). Expectations scale with career level — a Junior entry is not penalized for missing stopping judgment; a Senior entry is.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
-| P6 | Domain-specific failure reasoning | Does each attempt's failure explain WHY this approach doesn't work in THIS domain (not just CS principles)? | Explains failure using only CS principles (MVCC, CAP) without domain context, or lists numbers without causal reasoning |
-| P7 | Stopping judgment | Is there an explicit, intentional decision to stop at a certain point for cost/time/risk reasons? | The final number (85%, 93%) is stated without explaining the judgment behind stopping there |
-| P8 | Business impact | Are business outcomes (headcount reduction, cost savings, revenue impact) stated in concrete terms? | Abstract language: "performance improvement", "efficiency gain". No monetary amount, ratio, or count |
+| P5 | Domain-specific failure reasoning | Does each attempt's failure explain WHY this approach doesn't work in THIS domain (not just CS principles)? | Explains failure using only CS principles (MVCC, CAP) without domain context, or lists numbers without causal reasoning |
+| P6 | Stopping judgment | Is there an explicit, intentional decision to stop at a certain point for cost/time/risk reasons? | The final number (85%, 93%) is stated without explaining the judgment behind stopping there |
+| P7 | Business impact | Are business outcomes (headcount reduction, cost savings, revenue impact) stated in concrete terms? | Abstract language: "performance improvement", "efficiency gain". No monetary amount, ratio, or count |
 
-**P8 Target-Scale Note:** Consider whether the business impact figure is impressive at the target company's scale. "Headcount reduction 11→3" is a significant result in a small team, but if the target company has 500 engineers, the relative impact of this figure changes. Prioritize "quality of judgment" and "transferability of approach" over the absolute value of the number.
+**P7 Target-Scale Note:** Consider whether the business impact figure is impressive at the target company's scale. "Headcount reduction 11→3" is a significant result in a small team, but if the target company has 500 engineers, the relative impact of this figure changes. Prioritize "quality of judgment" and "transferability of approach" over the absolute value of the number.
 
 ---
 
@@ -212,7 +212,7 @@ All entries (5+ lines):
 - Problem-Solving 6 Criteria: (output separately, refer to Section-Specific Evaluation)
 - P1 Narrative depth: PASS / FAIL (reason)
 - P2 Failure arc: PASS / FAIL (reason)
-- P5 "Why?" chain: PASS / FAIL (reason)
+- P4 "Why?" chain: PASS / FAIL (reason)
 ```
 
 Kick entry (append P3):
@@ -224,9 +224,9 @@ Kick entry (append P3):
 For Senior entries, append:
 
 ```
-- P6 Domain-specific failure reasoning: PASS / FAIL (reason)
-- P7 Stopping judgment: PASS / FAIL (reason)
-- P8 Business impact: PASS / FAIL (reason)
+- P5 Domain-specific failure reasoning: PASS / FAIL (reason)
+- P6 Stopping judgment: PASS / FAIL (reason)
+- P7 Business impact: PASS / FAIL (reason)
 ```
 
 ---
@@ -388,7 +388,7 @@ Why the After is better — use as review reference criteria:
 
 ## 11. Specific Feedback Principles
 
-Abstract feedback is prohibited. For each P1-P5 FAIL, provide a specific direction.
+Abstract feedback is prohibited. For each P1-P4 FAIL, provide a specific direction.
 
 **Bad feedback (abstract):**
 
@@ -440,7 +440,7 @@ For Junior, plain text is often sufficient without visual materials. When needed
 
 ## 14. Writing Guidance: P.A.R.
 
-Use when the P.A.R. structure is missing from an entry, or when structural problems are found in P1-P5 evaluation.
+Use when the P.A.R. structure is missing from an entry, or when structural problems are found in P1-P4 evaluation.
 
 ### P.A.R. + Depth Writing Template
 
@@ -589,9 +589,9 @@ When the above trigger is met, refer to the Problem-Solving section of `Read ref
 
 ## 17. Technical Substance Verification T1-T3
 
-Problem-Solving Evaluation (P.A.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a verification step?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
+Problem-Solving Evaluation (P.A.R. P1-P7) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a verification step?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
 
-Key distinction: P1-P8 asks "does this element **exist**?", T1-T3 asks "is this content **correct**?"
+Key distinction: P1-P7 asks "does this element **exist**?", T1-T3 asks "is this content **correct**?"
 
 T1-T3 applies to all problem-solving entries with 5+ lines. Apply all three dimensions to every entry.
 
