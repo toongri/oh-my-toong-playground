@@ -975,3 +975,47 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(await exists(hookDest)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// syncPlatformYaml — mcps scope integration
+// ---------------------------------------------------------------------------
+
+describe("syncPlatformYaml - mcps scope", () => {
+  let claudeConfigFile: string;
+  const origClaudeUserConfig = process.env["CLAUDE_USER_CONFIG"];
+
+  beforeEach(() => {
+    claudeConfigFile = path.join(tmpDir, ".claude.json");
+    process.env["CLAUDE_USER_CONFIG"] = claudeConfigFile;
+  });
+
+  afterEach(() => {
+    if (origClaudeUserConfig === undefined) {
+      delete process.env["CLAUDE_USER_CONFIG"];
+    } else {
+      process.env["CLAUDE_USER_CONFIG"] = origClaudeUserConfig;
+    }
+  });
+
+  it("writes MCP to projects[targetPath].mcpServers (local scope) when scope='project' via `syncPlatformYaml`", async () => {
+    await adapter.syncPlatformYaml(targetPath, {
+      mcps: { "project-server": { command: "npx project-server" } },
+    }, false, "project");
+
+    const config = await readJsonFile(claudeConfigFile);
+    const projects = config["projects"] as Record<string, unknown>;
+    const projectEntry = projects[targetPath] as Record<string, unknown>;
+    const mcpServers = projectEntry["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["project-server"]).toEqual({ command: "npx project-server" });
+  });
+
+  it("writes MCP to top-level mcpServers (user scope) when scope is not provided via `syncPlatformYaml`", async () => {
+    await adapter.syncPlatformYaml(targetPath, {
+      mcps: { "user-server": { command: "npx user-server" } },
+    }, false);
+
+    const config = await readJsonFile(claudeConfigFile);
+    const mcpServers = config["mcpServers"] as Record<string, unknown>;
+    expect(mcpServers["user-server"]).toEqual({ command: "npx user-server" });
+  });
+});

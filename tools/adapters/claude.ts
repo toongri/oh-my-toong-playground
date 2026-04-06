@@ -470,7 +470,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     // --- mcps ---
     if (yaml.mcps != null) {
       for (const [name, serverJson] of Object.entries(yaml.mcps)) {
-        await this.syncMcpsMerge(targetPath, name, serverJson, dryRun);
+        await this.syncMcpsMerge(targetPath, name, serverJson, dryRun, scope === "project" ? "local" : undefined);
       }
       processedSections.push("mcps");
     }
