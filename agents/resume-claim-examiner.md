@@ -261,7 +261,7 @@ grade를 부여하기 전에, 다음 3개 sub-dimension을 먼저 평가한다:
 |---------------|--------|----------|
 | Causal chain depth | 0.30 | How many causally linked steps exist? |
 | Constraint narrowing | 0.35 | Does each step narrow the solution space? (Eliminated alternatives visible?) |
-| Resolution mutation | 0.35 | Did the solution change shape because of the cascade? (vs. original plan executed as-is) |
+| Resolution mutation | 0.35 | Did the solution change shape because of the cascade? (vs. initial approach executed as-is) |
 
 `Entanglement Score = Σ(sub-dimensionᵢ × weightᵢ)` where each sub-dimension is scored 0.0-1.0.
 
@@ -323,7 +323,7 @@ LISTED (score 0.5-0.8):
 → LISTED: Multiple concerns surfaced (protocol selection, cross-instance distribution, connection resilience) with some causal connection — WebSocket choice implies need for cross-instance distribution, and distribution implies connection management. But the connections are implicit rather than explicit: no explanation of WHY WebSocket forces Redis Pub/Sub, or HOW cross-instance distribution creates the specific reconnection challenge.
   Causal chain depth: 0.7 (concerns mentioned with some causal linking between protocol choice and distribution)
   Constraint narrowing: 0.5 (alternatives mentioned, some eliminated by context)
-  Resolution mutation: 0.4 (solution partially evolved from original plan)
+  Resolution mutation: 0.4 (solution partially evolved from initial approach)
   Score: 0.7×0.30 + 0.5×0.35 + 0.4×0.35 = 0.525 → LISTED
   → CTO reaction: "You evaluated options and chose WebSocket. Tell me more about the reconnection." — One follow-up, then done.
 

@@ -407,9 +407,9 @@ When sending to resume-claim-examiner, use exactly:
 
 | Rationalization | Reality |
 |-----------------|---------|
-| "Summarized results and presented strategic options, so Phase 8 is done" | Summary ≠ resolution. REQUEST_CHANGES = unresolved. Keep looping. |
+| "Summarized results and presented per-item alternatives, so Phase 8 is done" | Summary ≠ resolution. REQUEST_CHANGES = unresolved. Keep looping. |
 | "All 5 got REQUEST_CHANGES, so reflect them in the report at once" | Each item must go through its own loop. No batch report reflection. |
-| "Wait for user to choose a strategic option, then apply" | Start interview immediately after presenting options. Don't wait for selection. |
+| "Wait for user to choose a per-item alternative, then apply" | Start interview immediately after presenting alternatives. Don't wait for selection. |
 | "Can proceed without Verdict Tracker" | Entering Phase 9 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
 
 `[Phase 8/9: Per-Bullet Content Quality Gate ✓]`
