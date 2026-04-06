@@ -213,7 +213,7 @@
         {"text": "revision-direction", "description": "For each detected AI tone pattern, provides a suggested revision direction (not just diagnosis)"},
         {"text": "html-summary-section", "description": "Phase 9 HTML report includes AI tone audit results"},
         {"text": "note-load", "description": "Phase 1 executed even for AI tone-focused review"},
-        {"text": "phase-tracking-all-phases", "description": "Phases 1, 7, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with no gaps."}
+        {"text": "phase-tracking-all-phases", "description": "Phases 1, 7, 9 appear in output. Any format acceptable — heading, inline marker, or numbered section. Check that these phase numbers are present with none missing."}
       ],
       "files": ["_config.yml"]
     },
