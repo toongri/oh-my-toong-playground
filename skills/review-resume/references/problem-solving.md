@@ -43,7 +43,7 @@ The following items must be checked when evaluating the problem-solving section,
 ### Per-Entry Required Checks
 - [ ] All entries (5+ lines): Apply P.A.R. P1-P2, P5, check for failure arc
 - [ ] Kick entry: additionally apply P3 (Verification depth)
-- [ ] Senior-level entries: additionally check for stopping judgment (P7)
+- [ ] Senior-level entries: additionally apply P6-P8 (Domain-specific failure reasoning, Stopping judgment, Business impact)
 
 ---
 
@@ -91,8 +91,8 @@ The framing of a problem-solving entry must match the candidate's career level. 
 
 | Career Level | Years | What to Prove | Focus | Key Evidence |
 | --- | --- | --- | --- | --- |
-| Junior | 0-3 | Problem-solving depth + technical foundations | CS depth, learning velocity | Clear problem→approach→result arc; 3+ failed attempts with specific learning |
-| Senior | 3+ | Engineering judgment, trade-off awareness, business impact | Experiment-based decisions, domain-specific failures, stopping judgment | Business outcome metrics, team/org influence, trade-off analysis with data |
+| Junior | <7 | Problem-solving depth + technical foundations | CS depth, learning velocity | Clear problem→approach→result arc; 3+ failed attempts with specific learning |
+| Senior | 7+ | Engineering judgment, trade-off awareness, business impact | Experiment-based decisions, domain-specific failures, stopping judgment | Business outcome metrics, team/org influence, trade-off analysis with data |
 
 Kick nomination criteria (applicable across all career levels):
 
@@ -168,7 +168,7 @@ Apply to all problem-solving entries (5+ lines). After Problem-Solving 6 Criteri
 
 ## 6. P.A.R. Additional Dimensions P6-P8
 
-Apply P6-P8 additionally to all problem-solving entries from Senior candidates (3+ years of professional experience). Expectations scale with career level — a Junior entry is not penalized for missing stopping judgment; a Senior entry is.
+Apply P6-P8 additionally to all problem-solving entries from Senior candidates (7+ years of professional experience). Expectations scale with career level — a Junior entry is not penalized for missing stopping judgment; a Senior entry is.
 
 | \# | Dimension | Question | Fail Signal |
 | --- | --- | --- | --- |
@@ -560,8 +560,8 @@ Bullets written using these strategies are evaluated in E6 (Target-Scale Transfe
 
 After P.A.R. evaluation, check the following conditions:
 
-- **Condition**: 3 or more P.A.R. dimensions are FAIL, or the P.A.R. structure is entirely absent
-- **Immediate trigger**: If the \[Problem\]/\[Solution Process\]/\[Verification\]/\[Reflection\] structure is completely absent — trigger immediately without counting
+- **Condition**: 2 or more P.A.R. dimensions are FAIL, or the P.A.R. structure is entirely absent
+- **Immediate trigger**: If the \[Problem\]/\[Solution Process\]/\[Verification\] structure is completely absent — trigger immediately without counting
 - **Message to deliver**: "N of the P.A.R. evaluation dimensions are FAIL. This problem-solving entry requires structural rewriting. Refer to the Writing Guidance: P.A.R. section template and narrative principles."
 
 This trigger is not optional. If the P.A.R. structure is absent entirely, trigger immediately.

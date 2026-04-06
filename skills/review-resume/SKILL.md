@@ -286,7 +286,7 @@ All problem-solving entries are evaluated under a unified framework combining P.
 
 **P.A.R. Evaluation (P1-P8):** Assess narrative depth, failure arc, why-chain, stopping judgment, and technical substance across all entries. T1-T3 verify technical coherence, choice rationality, and problem fidelity.
 
-**Entanglement Extraction:** When problem-solving description is FLAT or LISTED (concerns are independent or lack causal links), run the 4-question chain to extract the entanglement structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Entanglement Extraction.
+**Entanglement Extraction:** When problem-solving description is FLAT (concerns are independent or lack causal links), run the 4-question chain to extract the entanglement structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Entanglement Extraction.
 
 **Note candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
 
