@@ -289,11 +289,17 @@ Each sub-dimension is scored 0.0-1.0. Use these anchors to calibrate scoring —
 
 **Resolution mutation:**
 
+Resolution mutation measures whether the text reveals an engineer who can compare solutions under multiple constraints, adapt their approach when discoveries invalidate assumptions, and arrive at a solution whose shape was forged by encountered reality. The core question is: "Does this text show a thinking flow where the approach evolved because of what the engineer learned — not just the final answer they arrived at?"
+
+**Timing-neutral principle:** The mutation can occur during pre-implementation analysis ("evaluated X → discovered constraint → switched to Y"), prototype/PoC phase, or production execution. When the discovery happened is irrelevant — what matters is whether the text shows the approach changing shape because of a discovered constraint. A pre-implementation analysis journey counts identically to a production-incident-driven pivot.
+
+**Process vs. conclusion:** "X was possible but we chose Y" is a conclusion (LOW) — it states that a transition happened but does not show why or what discovery caused it. "We evaluated X → discovered [specific constraint] → switched to Y" is a process (MID-HIGH) — it shows the constraint-driven reshape arc. Only process generates interview follow-up questions; conclusions terminate the conversation.
+
 | Level | Score Range | Observable Signal |
 |-------|------------|-------------------|
-| LOW | 0.0-0.39 | The final solution matches the initial approach. No evidence the plan changed. The solution reads as "we decided X and executed X." Well-known patterns applied without adaptation. |
-| MID | 0.4-0.69 | The solution has components that were not in the original plan, but these appear as additions (layered on top) rather than transformations. The core approach remained the same; peripheral mechanisms were added. |
-| HIGH | 0.7-1.0 | The final solution is a fundamentally different shape from the initial plan. The original approach was abandoned or radically altered because cascading discoveries changed the problem definition itself. The reader can identify a specific point where "the plan broke" and the solution had to be reimagined. |
+| LOW | 0.0-0.39 | The final approach matches what appears to be the initial approach. No visible evidence that the approach changed shape due to a discovered constraint. The text reads as "we chose X and executed X," or mentions alternative transitions as conclusions without showing the discovery process that drove them. Well-known patterns applied without visible adaptation. |
+| MID | 0.4-0.69 | The approach expanded or adjusted beyond its initial shape, but the core remained the same. The text shows discoveries that added peripheral mechanisms or modified parameters, without fundamentally transforming the approach. The reader can see SOME constraint-driven adjustments but cannot trace a full "discovery → reshape" arc. |
+| HIGH | 0.7-1.0 | The final approach is a fundamentally different shape from the initial approach. The text shows a specific point where a discovered constraint made the original approach unviable, forcing a reshape. The reader can identify: (1) what the initial approach was, (2) what discovery invalidated it, and (3) how the approach was reimagined. Whether this discovery occurred during analysis, prototyping, or production is irrelevant — the visible reshape arc is what matters. |
 
 Threshold: score ≥ 0.8 = ENTANGLED(PASS), 0.5-0.8 = LISTED(P1 — 권장 수정), < 0.5 = FLAT(FAIL).
 
@@ -307,7 +313,7 @@ FLAT (score < 0.5):
 → FLAT: One decision (WebSocket + Redis), one metric (500ms). No cascading effects. Why WebSocket over SSE? Why Redis Pub/Sub over Kafka? What happens when connections exceed single-node capacity? The problem is presented as one-dimensional when it inherently isn't.
   Causal chain depth: 0.1 (single decision, no chain)
   Constraint narrowing: 0.1 (no alternatives eliminated)
-  Resolution mutation: 0.0 (no evidence solution shape changed)
+  Resolution mutation: 0.0 (no evidence the approach changed shape — no discovery process visible)
   Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
   → CTO reaction: "You used WebSocket and Redis. Okay." — Nothing to discuss.
 
@@ -327,7 +333,7 @@ ENTANGLED (score ≥ 0.8):
 → ENTANGLED: SSE constraint (tab limit) → forces WebSocket → introduces state management → reconnection requires message replay → Pub/Sub's fire-and-forget property blocks replay → forces message buffer → creates memory tradeoff. Each decision is caused by the previous constraint.
   Causal chain depth: 0.9 (5-step chain, each caused by previous)
   Constraint narrowing: 0.8 (SSE eliminated by tab limit, Pub/Sub alone eliminated by replay need)
-  Resolution mutation: 0.75 (original plan was SSE; final solution is WebSocket + buffer with replay window — fundamentally different architecture, original approach abandoned at two distinct points in the cascade)
+  Resolution mutation: 0.75 (initial approach was SSE; constraint discovery during evaluation (tab limit) reshaped the approach to WebSocket + buffer with replay window — fundamentally different architecture. Two distinct constraint-driven reshapes visible: SSE → tab-limit discovery → WebSocket, then Pub/Sub fire-and-forget limitation → message buffer addition)
   Score: 0.9×0.30 + 0.8×0.35 + 0.75×0.35 = 0.8125 → ENTANGLED
   → CTO asks: "How did you handle buffer overflow during notification storms? What's the reconnection window behavior for mobile clients? Did you measure the actual tab-limit impact before switching from SSE?"
 
@@ -339,7 +345,7 @@ FLAT (score < 0.5):
 → FLAT: Standard reconciliation. No cascading complexity visible. Any engineer can describe this.
   Causal chain depth: 0.1 (single statement)
   Constraint narrowing: 0.0 (no alternatives visible)
-  Resolution mutation: 0.0 (no evidence of plan change)
+  Resolution mutation: 0.0 (no evidence the approach changed shape — conclusion only, no discovery process)
   Score: 0.1×0.30 + 0.0×0.35 + 0.0×0.35 = 0.03 → FLAT
   → CTO reaction: "You built reconciliation. That's expected." — No follow-up.
 
@@ -349,7 +355,7 @@ ENTANGLED (score ≥ 0.8):
 → ENTANGLED: Timing mismatch → forces dual-state → creates two-source-of-truth problem → forces unified query layer → increases query complexity. Partial refund divergence → forces mapping table → creates schema drift risk → mitigated with contract tests. Two independent cascading chains, both visible.
   Causal chain depth: 0.9 (two independent 3+ step chains)
   Constraint narrowing: 0.8 (T+1 shift eliminated by dashboard dependency; single-state eliminated by timing gap)
-  Resolution mutation: 0.8 (original plan was simple daily reconciliation; final is unified time-context query layer — fundamentally different architecture)
+  Resolution mutation: 0.8 (initial approach was simple daily reconciliation; timing mismatch discovery reshaped the approach through a visible arc: daily reconciliation → timing mismatch forced dual-state → two-source-of-truth problem → unified time-context query layer. Three constraint-driven reshapes with the approach fundamentally transforming at each step)
   Score: 0.9×0.30 + 0.8×0.35 + 0.8×0.35 = 0.83 → ENTANGLED
   → CTO asks: "How do you handle the T+1 window for dispute resolution? What happens when a PG API version update breaks the mapping? How did you measure the 0.3% baseline?"
 
@@ -361,7 +367,7 @@ LISTED (score 0.5-0.8):
 → LISTED: Four concerns (migration, feature store, monitoring, freshness) with implied connections — batch-to-streaming naturally requires feature store redesign, and streaming introduces data quality challenges absent in batch. But these connections remain implicit: no explicit explanation of WHY streaming forces feature store changes, or WHAT new data quality challenges streaming introduced that batch didn't have.
   Causal chain depth: 0.6 (batch-to-streaming migration implies feature store redesign, implied but not explained)
   Constraint narrowing: 0.5 (batch eliminated, streaming chosen — further alternatives not discussed)
-  Resolution mutation: 0.5 (feature store and monitoring added beyond original migration scope, suggesting plan evolution)
+  Resolution mutation: 0.5 (feature store and monitoring added beyond the initial migration scope, suggesting the approach expanded. However, the discovery that drove these additions is implicit — the text does not show what specific constraint forced the feature store redesign or what streaming-specific quality challenge necessitated monitoring. Process partially visible but the constraint-driven reshape arc is incomplete)
   Score: 0.6×0.30 + 0.5×0.35 + 0.5×0.35 = 0.53 → LISTED
   → CTO reaction: "You migrated to streaming. Which part was technically challenging?" — Generic follow-up, no specific thread to pull.
 
