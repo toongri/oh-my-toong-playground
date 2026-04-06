@@ -4,8 +4,9 @@ description: Use when the user asks to review, evaluate, check, or get feedback 
 ---
 
 <Role>
-When a resume review is requested, always assume the user IS the resume owner and proceed accordingly.
-All evaluations, feedback, and interviews are conducted directly with the person who wrote the resume.
+When a resume review is requested, run Phase 1 (Identity Confirmation) first to determine whether the user is the resume owner. The result locks the session into one of two modes:
+- **owner-confirmed**: All evaluations, feedback, and interviews are conducted directly with the person who wrote the resume.
+- **interview-impossible**: All evaluations and examiner dispatch proceed normally, but interview loops across all phases are skipped. See "Interview-Impossible Mode" section for per-phase details.
 </Role>
 
 # Review Resume
@@ -85,49 +86,53 @@ Every resume review follows this sequence. No step is optional.
 
 ```mermaid
 flowchart TB
-    NOTE["섹션별 리뷰에서도 Phase 1, 8, 9는 필수"]
+    NOTE["섹션별 리뷰에서도 Phase 1, 2, 9, 10은 필수"]
     style NOTE fill:#fff3cd,stroke:#856404,color:#856404
-    NOTE -.-> P0
-    P0[Phase 1: 사전 준비\nNote Load + Pre-Evaluation Research] --> P1[Phase 2: 자기소개 평가\nper-type + global + Type C sub-step]
-    P1 --> P2[Phase 3: 개발자 역량 평가\nC1-C5 Competency]
-    P2 --> P3[Phase 4: 섹션별 평가\nCareer + Problem-Solving 6 criteria\n+ Pushback Simulation]
-    P3 --> P4[Phase 5: First-Page + JD 매칭\nFirst-Page Primacy + JD Keyword Matching]
-    P4 --> P5CHK[Phase 6a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5줄 minimum]
-    P5CHK --> P5[Phase 6b: P.A.R. + T1-T3 + Entanglement]
-    P5 --> P6[Phase 7: AI 톤 감사\nSkill humanizer audit mode]
-    P6 --> P7DISPATCH[Phase 8: Content Quality Gate\nexaminer dispatch]
+    NOTE -.-> P_ID
+    P_ID[Phase 1: Identity Confirmation\nRead owner from preferences.md] --> ID_CHK{owner\nconfirmed?}
+    ID_CHK -->|"YES: owner-confirmed"| P0[Phase 2: 사전 준비\nNote Load + Pre-Evaluation Research]
+    ID_CHK -->|"NO: interview-impossible"| P0
+    P0 --> P1[Phase 3: 자기소개 평가\nper-type + global + Type C sub-step]
+    P1 --> P2[Phase 4: 개발자 역량 평가\nC1-C5 Competency]
+    P2 --> P3[Phase 5: 섹션별 평가\nCareer + Problem-Solving 6 criteria\n+ Pushback Simulation]
+    P3 --> P4[Phase 6: First-Page + JD 매칭\nFirst-Page Primacy + JD Keyword Matching]
+    P4 --> P5CHK[Phase 7a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5줄 minimum]
+    P5CHK --> P5[Phase 7b: P.A.R. + T1-T3 + Entanglement]
+    P5 --> P6[Phase 8: AI 톤 감사\nSkill humanizer audit mode]
+    P6 --> P7DISPATCH[Phase 9: Content Quality Gate\nexaminer dispatch]
     P7DISPATCH --> P7VERDICT{All APPROVE\nor user opt-out?}
     P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\nexplain FAIL axes → interview\n→ regenerate alternatives]
     P7INTERVIEW --> P7DISPATCH
     P7VERDICT -->|YES| P7OPT[Strategic Options\n2-3 with trade-offs]
-    P7OPT --> P8[Phase 9: 결과 전달\nHTML Report + Note Accumulate]
+    P7OPT --> P8[Phase 10: 결과 전달\nHTML Report + Note Accumulate]
 
-    P1 -->|Interview trigger| IG1[Read references/experience-mining.md\n§ Self-Introduction]
-    P2 -->|Interview trigger| IG2[Read references/experience-mining.md\n§ C1-C5 Competency]
-    P3 -->|Interview trigger| IG3[Read references/experience-mining.md\n§ Section-Specific Evaluation]
-    P4 -->|Interview trigger| IG4[Read references/experience-mining.md\n§ JD Keyword Matching]
-    P5 -->|Interview trigger| IG5[Read references/experience-mining.md\n§ Problem-Solving]
+    P1 -->|"Interview trigger\n[interview-possible only]"| IG1[Read references/experience-mining.md\n§ Self-Introduction]
+    P2 -->|"Interview trigger\n[interview-possible only]"| IG2[Read references/experience-mining.md\n§ C1-C5 Competency]
+    P3 -->|"Interview trigger\n[interview-possible only]"| IG3[Read references/experience-mining.md\n§ Section-Specific Evaluation]
+    P4 -->|"Interview trigger\n[interview-possible only]"| IG4[Read references/experience-mining.md\n§ JD Keyword Matching]
+    P5 -->|"Interview trigger\n[interview-possible only]"| IG5[Read references/experience-mining.md\n§ Problem-Solving]
 ```
 
 Interview triggers: Read `references/experience-mining.md` for the full 4-stage bypass protocol and Discovered Candidates Working Set management.
 
 ## Workflow Progress Tracking
 
-The Evaluation Protocol defines 9 phases. Resume reviews involve extensive back-and-forth. Without explicit tracking, later phases are routinely skipped.
+The Evaluation Protocol defines 10 phases. Resume reviews involve extensive back-and-forth. Without explicit tracking, later phases are routinely skipped.
 
 ### Phase Map
 
 | Phase | Section | Reference |
 |-------|---------|-----------|
-| 1 | 사전 준비: Note Load + Pre-Evaluation Research | `references/note-system.md`, `references/pre-evaluation-research.md` |
-| 2 | 자기소개 평가: per-type + global + Type C sub-step | `references/self-introduction.md`, `references/experience-mining.md` § Self-Introduction |
-| 3 | 개발자 역량 평가: C1-C5 | `references/competency-assessment.md`, `references/experience-mining.md` § C1-C5 Competency |
-| 4 | 섹션별 평가: Career + Problem-Solving 6 criteria + Pushback | `references/section-evaluation.md`, `references/experience-mining.md` § Section-Specific Evaluation |
-| 5 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md`, `references/experience-mining.md` § JD Keyword Matching |
-| 6 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Entanglement | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
-| 7 | AI 톤 감사: Skill(humanizer) audit mode | (inline below) |
-| 8 | Per-Bullet Content Quality Gate | `references/content-quality-gate.md` |
-| 9 | 결과 전달: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
+| 1 | Identity Confirmation: owner check + session mode lock | (inline below) |
+| 2 | 사전 준비: Note Load + Pre-Evaluation Research | `references/note-system.md`, `references/pre-evaluation-research.md` |
+| 3 | 자기소개 평가: per-type + global + Type C sub-step | `references/self-introduction.md`, `references/experience-mining.md` § Self-Introduction |
+| 4 | 개발자 역량 평가: C1-C5 | `references/competency-assessment.md`, `references/experience-mining.md` § C1-C5 Competency |
+| 5 | 섹션별 평가: Career + Problem-Solving 6 criteria + Pushback | `references/section-evaluation.md`, `references/experience-mining.md` § Section-Specific Evaluation |
+| 6 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md`, `references/experience-mining.md` § JD Keyword Matching |
+| 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Entanglement | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
+| 8 | AI 톤 감사: Skill(humanizer) audit mode | (inline below) |
+| 9 | Per-Bullet Content Quality Gate | `references/content-quality-gate.md` |
+| 10 | 결과 전달: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
 
 ### Recognized Opt-Out Keywords
 
@@ -147,27 +152,73 @@ The following keywords are recognized as opt-out signals across all Phases. Use 
 
 When any of these is detected, end the current interview/loop and proceed to the next phase or fallback guidance.
 
+### Interview-Impossible Mode
+
+When Phase 1 sets mode to **interview-impossible** (user is not the resume owner), interview loops are suppressed for the entire session. Evaluation and examiner dispatch proceed unchanged. The table below specifies exact behavior per phase.
+
+| Phase | Normal (owner-confirmed) | Interview-Impossible |
+|-------|--------------------------|----------------------|
+| 1 | Identity confirmation → owner-confirmed | Identity confirmation → interview-impossible (no change to Phase 1 itself) |
+| 2 | Note Load + Pre-Evaluation Research | No change — same procedure |
+| 3 | 자기소개 평가: type evaluation → interview on FAIL | Skip interview. Output evaluation results and flag FAIL axes only. Proceed. |
+| 4 | 개발자 역량 평가: C1-C5 → interview on WEAK/ABSENT | Skip interview. Output axis ratings with evidence citations only. Proceed. |
+| 5 | 섹션별 평가: 6-criteria + Pushback → interview on FAIL | Skip interview. Output evaluation and Pushback Simulation results only. Proceed. |
+| 6 | First-Page Primacy + JD Matching → interview on 3+ missing keywords | Skip interview. Output keyword gap list only. Proceed. |
+| 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Entanglement → interview on FAIL | Skip interview. Output dimension scores and FLAT/ENTANGLED verdict only. Proceed. |
+| 8 | AI 톤 감사: Skill(humanizer) audit mode | No change — audit proceeds normally; no interview involved |
+| 9 | Per-Bullet Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
+| 10 | HTML Report + Note Accumulate | No change — same procedure |
+
+**Mode is locked for the session.** It cannot be changed after Phase 1 completes.
+
 ### Tracking Rules
 
 <critical>
-Before delivering Phase 9 output, you MUST verify the Completion Checklist at the bottom of this document. Every checkbox must be checked. Any unchecked item means the review is incomplete — go back and complete it before proceeding.
+Before delivering Phase 10 output, you MUST verify the Completion Checklist at the bottom of this document. Every checkbox must be checked. Any unchecked item means the review is incomplete — go back and complete it before proceeding.
 </critical>
 
-0. **Execute ALL 9 phases sequentially without skipping.** No exceptions.
+0. **Execute ALL 10 phases sequentially without skipping.** No exceptions.
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
-3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phase 8 (Per-Bullet Content Quality Gate) loops per section unit until resume-claim-examiner APPROVE or user opt-out.
-5. Phase 9 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate proceeds ONLY after approval.
+3. When user interaction interrupts the flow (e.g., extended discussion during Phase 3), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
+4. Phase 9 (Per-Bullet Content Quality Gate) loops per section unit until resume-claim-examiner APPROVE or user opt-out.
+5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate proceeds ONLY after approval.
 6. Note Accumulate proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 
 ---
 
 ### Mandatory: Phase Task Creation
 
-Before starting Phase 1, you MUST use TaskCreate to create all 9 phases as individual tasks. Mark each task as `in_progress` when starting and `completed` when done. This prevents phase skipping.
+Before starting Phase 1, you MUST use TaskCreate to create all 10 phases as individual tasks. Mark each task as `in_progress` when starting and `completed` when done. This prevents phase skipping.
 
-## Phase 1: 사전 준비
+## Phase 1: Identity Confirmation
+
+Determine whether the user is the resume owner. This result locks the session mode for all subsequent phases.
+
+**Step 1 — Check `preferences.md` for `owner` field:**
+
+Read ONLY the `owner` field from `$OMT_DIR/review-resume/preferences.md`. Do NOT perform a full Note Load here (that is Phase 2). If `preferences.md` does not exist or does not contain an `owner` field, treat as unknown.
+
+**Step 2 — Three-case logic:**
+
+| Case | Condition | Action |
+|------|-----------|--------|
+| A | `preferences.md` exists AND `owner` field is present | Confirm by name: "이 이력서는 [owner]님의 것이 맞나요?" |
+| B | `preferences.md` exists BUT no `owner` field | Ask generically: "이 이력서를 직접 작성하셨나요, 아니면 다른 분의 이력서를 검토해 달라는 요청인가요?" |
+| C | `preferences.md` does not exist | Ask generically: "이 이력서를 직접 작성하셨나요, 아니면 다른 분의 이력서를 검토해 달라는 요청인가요?" |
+
+**Step 3 — Lock session mode based on user response:**
+
+- If the user confirms they ARE the owner → set mode: **owner-confirmed**. All interview loops are active.
+- If the user confirms they are NOT the owner → set mode: **interview-impossible**. All interview loops are suppressed for this session. Announce to user:
+  ```
+  [Identity Confirmed: interview-impossible mode]
+  이력서 소유자가 아닌 것으로 확인되었습니다. 인터뷰 루프는 생략되며, 평가 및 대안 생성은 이력서 내용만으로 진행됩니다.
+  ```
+
+`[Phase 1/10: Identity Confirmation ✓]`
+
+## Phase 2: 사전 준비
 
 Load persistent note, then perform pre-evaluation research before any evaluation begins.
 
@@ -195,9 +246,9 @@ Research results feed into ALL paragraph type selections (A, B, C, D). Check `so
 
 **References:** Read `references/note-system.md` for auto-seeding procedure and file format. Read `references/pre-evaluation-research.md` for full research protocol.
 
-`[Phase 1/9: 사전 준비 ✓]`
+`[Phase 2/10: 사전 준비 ✓]`
 
-## Phase 2: 자기소개 평가
+## Phase 3: 자기소개 평가
 
 The self-introduction answers: **"What kind of engineer is this person?"** Each paragraph must reveal a different facet of this answer.
 
@@ -216,9 +267,9 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 **Reference:** Read `references/self-introduction.md` for full type-specific PASS/FAIL examples, composition guide, writing validation checklist, post-evaluation action patterns, and Type C conditional logic.
 
-`[Phase 2/9: 자기소개 평가 ✓]`
+`[Phase 3/10: 자기소개 평가 ✓]`
 
-## Phase 3: 개발자 역량 평가 (C1-C5)
+## Phase 4: 개발자 역량 평가 (C1-C5)
 
 Holistically assess the ENTIRE resume against 5 core competency axes. This answers: not "is this well-written?" but **"does this resume demonstrate a competent developer?"**
 
@@ -236,9 +287,9 @@ Rate each axis as STRONG / PRESENT / WEAK / ABSENT with evidence citations. All 
 
 **Reference:** Read `references/competency-assessment.md` for full checklists, evidence examples, and career-level expectations (Junior/Senior 2-tier).
 
-`[Phase 3/9: 개발자 역량 평가 ✓]`
+`[Phase 4/10: 개발자 역량 평가 ✓]`
 
-## Phase 4: 섹션별 평가
+## Phase 5: 섹션별 평가
 
 Career and problem-solving sections answer fundamentally different questions:
 - **Career**: "What did this person achieve?" — direction and impact. Career bullets are interview **hooks**.
@@ -280,9 +331,9 @@ If the user cannot answer all 3 levels, that line will hurt more than help.
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, 3-Level Pushback Simulation protocol, and writing guidance triggers.
 
-`[Phase 4/9: 섹션별 평가 ✓]`
+`[Phase 5/10: 섹션별 평가 ✓]`
 
-## Phase 5: First-Page Primacy + JD 매칭
+## Phase 6: First-Page Primacy + JD 매칭
 
 Check that the strongest content is on page 1 (the 7.4-second scan zone). If a JD is provided, perform keyword matching with ATS pass-rate estimation.
 
@@ -290,9 +341,9 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 **Reference:** Read `references/section-evaluation.md` § "Section Fitness Rules" for first-page primacy rules and JD keyword matching output format.
 
-`[Phase 5/9: First-Page Primacy + JD 매칭 ✓]`
+`[Phase 6/10: First-Page Primacy + JD 매칭 ✓]`
 
-## Phase 6: 문제해결 심화평가
+## Phase 7: 문제해결 심화평가
 
 All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Entanglement Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
 
@@ -306,9 +357,9 @@ All problem-solving entries (5+ lines) are evaluated under a unified framework c
 
 **Reference:** Read `references/problem-solving.md` — **먼저 Mandatory Evaluation Checklist를 실행**, 그 다음 P.A.R. dimensions, T1-T3 verification, Before/After examples 순서로 평가.
 
-`[Phase 6/9: 문제해결 심화평가 ✓]`
+`[Phase 7/10: 문제해결 심화평가 ✓]`
 
-## Phase 7: AI 톤 감사
+## Phase 8: AI 톤 감사
 
 **MUST invoke the humanizer skill via the Skill tool.** The humanizer has a catalog of 35+ specific patterns (K1-K16, E1-E17, C1-C6) with severity classification that manual scanning cannot replicate. Reading the text yourself and judging "this sounds fine" is NOT a substitute.
 
@@ -326,9 +377,9 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 **If AI tone patterns are detected:** Include affected lines and suggested revision direction in the evaluation results.
 **If no AI tone patterns are detected:** Skip this section in the output.
 
-`[Phase 7/9: AI 톤 감사 ✓]`
+`[Phase 8/10: AI 톤 감사 ✓]`
 
-## Phase 8: Per-Bullet Content Quality Gate
+## Phase 9: Per-Bullet Content Quality Gate
 
 While the Evaluation Phase diagnosed "what the problems are," Phase 8 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the resume-claim-examiner sub-agent issues APPROVE.
 
@@ -340,7 +391,9 @@ While the Evaluation Phase diagnosed "what the problems are," Phase 8 verifies "
 ### REQUEST_CHANGES Handling Protocol
 
 <critical>
-When resume-claim-examiner returns REQUEST_CHANGES:
+When resume-claim-examiner returns REQUEST_CHANGES, follow the branch that matches the current session mode:
+
+**owner-confirmed mode:**
 
 1. Explain each FAIL axis and its rationale to the user, item by item
 2. Convert Interview Hints into specific questions → conduct interview via AskUserQuestion
@@ -350,8 +403,18 @@ When resume-claim-examiner returns REQUEST_CHANGES:
 4. Source unconfirmed (all 4 Stages exhausted) → generate best revision with current sources → confirm user opt-out
 5. Repeat until APPROVE or user opt-out
 
-NEVER enter Phase 9 while ANY item remains in REQUEST_CHANGES status.
-Phase 9 entry is permitted ONLY when ALL Verdict Tracker items are APPROVE or user-opt-out.
+**interview-impossible mode:**
+
+1. Explain each FAIL axis and its rationale to the user, item by item
+2. Skip Interview Hints → question conversion entirely. Do NOT conduct interview.
+3. Generate 2-3 alternatives using only the existing resume content and evaluation findings
+4. Re-dispatch alternatives to examiner
+5. If examiner returns APPROVE → proceed
+6. If examiner returns REQUEST_CHANGES again → generate best revision with current content → auto-opt-out with note: "소유자 인터뷰 필요 — 추가 정보 없이 개선 한계에 도달했습니다"
+7. Repeat until APPROVE or auto-opt-out
+
+NEVER enter Phase 10 while ANY item remains in REQUEST_CHANGES status.
+Phase 10 entry is permitted ONLY when ALL Verdict Tracker items are APPROVE or user-opt-out.
 </critical>
 
 ### Examiner Eligibility
@@ -386,14 +449,14 @@ When sending to resume-claim-examiner, use exactly:
 
 ## Technical Context
 - Technologies/approaches mentioned in this bullet: {identified directly from bullet text}
-- JD-related keywords: {relevant JD keywords obtained in Phase 1}
+- JD-related keywords: {relevant JD keywords obtained in Phase 2}
 - Evaluation Phase findings: {verbatim P0/P1/P2 findings for this bullet}
 
 ## Target Company Context (if available)
 - Company: {company name}
 - Scale indicators: {TPS, DAU, data volume, etc.}
 - Engineering team size: {if identified}
-- Core values / engineering principles: {researched in Phase 1}
+- Core values / engineering principles: {researched in Phase 2}
 - Key technical challenges: {from JD analysis and tech blog}
 - If unavailable: "No specific target — evaluate against big tech standards"
 
@@ -403,16 +466,16 @@ When sending to resume-claim-examiner, use exactly:
 
 **Reference:** Read `references/content-quality-gate.md` for full Quality Gate loop, Pre-Examiner Interview Protocol, Mandatory Verdict Tracker, alternative suggestion format, and whole-resume feedback loop.
 
-### Phase 8 Red Flags — STOP When You Think This
+### Phase 9 Red Flags — STOP When You Think This
 
 | Rationalization | Reality |
 |-----------------|---------|
-| "Summarized results and presented per-item alternatives, so Phase 8 is done" | Summary ≠ resolution. REQUEST_CHANGES = unresolved. Keep looping. |
+| "Summarized results and presented per-item alternatives, so Phase 9 is done" | Summary ≠ resolution. REQUEST_CHANGES = unresolved. Keep looping. |
 | "All 5 got REQUEST_CHANGES, so reflect them in the report at once" | Each item must go through its own loop. No batch report reflection. |
 | "Wait for user to choose a per-item alternative, then apply" | Start interview immediately after presenting alternatives. Don't wait for selection. |
-| "Can proceed without Verdict Tracker" | Entering Phase 9 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
+| "Can proceed without Verdict Tracker" | Entering Phase 10 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
 
-`[Phase 8/9: Per-Bullet Content Quality Gate ✓]`
+`[Phase 9/10: Per-Bullet Content Quality Gate ✓]`
 
 ### Strategic Options
 
@@ -425,13 +488,13 @@ This is NOT optional — every review must end with actionable strategic options
 
 ## Discovered Candidates Working Set
 
-Experiences discovered during interviews are added to the Working Set immediately. The Working Set is a session-scoped temporary store and is permanently saved to the note system in Phase 9.
+Experiences discovered during interviews are added to the Working Set immediately. The Working Set is a session-scoped temporary store and is permanently saved to the note system in Phase 10.
 
 For Working Set templates, lifecycle, and consumption rules, refer to `references/experience-mining.md` § "Discovered Candidates Working Set".
 
 ---
 
-## Phase 9: 결과 전달
+## Phase 10: 결과 전달
 
 ### HTML Report Generation
 
@@ -466,7 +529,7 @@ HTML_FILE="${OMT_DIR:-$HOME/.omt/global}/reports/review-YYYYMMDD-HHmmss.html"
 Open the HTML report and ask the user to review it. Do not proceed to any next step until the user explicitly declares "no feedback." This rule applies even when called from within a resume-apply workflow.
 </critical>
 
-After opening the report, use `AskUserQuestion` to collect feedback. Ambiguous responses → re-ask. Section-specific feedback → re-enter Phase 8 for that section. Apply feedback → regenerate HTML → loop until explicit "no feedback."
+After opening the report, use `AskUserQuestion` to collect feedback. Ambiguous responses → re-ask. Section-specific feedback → re-enter Phase 9 for that section. Apply feedback → regenerate HTML → loop until explicit "no feedback."
 
 ### Note Accumulate
 
@@ -476,29 +539,30 @@ Accumulate: new candidates from interviews, updated expressions, tone/judgment p
 
 **Reference:** Read `references/note-system.md` § "Note Accumulate" for full accumulation rules.
 
-`[Phase 9/9: 결과 전달 ✓]`
+`[Phase 10/10: 결과 전달 ✓]`
 
 ## Completion Checklist (Internal)
 
-Before delivering Phase 9 output, verify every phase was completed or has a valid skip reason:
+Before delivering Phase 10 output, verify every phase was completed or has a valid skip reason:
 
 ```
 [Review Completion Checklist — INTERNAL]
-- [ ] Phase 1: 사전 준비 (Note Load + Pre-Evaluation Research)
-- [ ] Phase 2: 자기소개 평가 (per-type + global + Type C sub-step)
-- [ ] Phase 2: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 3: 개발자 역량 평가 (C1-C5)
-- [ ] Phase 3: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 4: 섹션별 평가 (Career + Problem-Solving 6 criteria + Pushback)
-- [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 5: First-Page Primacy + JD 매칭
-- [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 6: 문제해결 심화평가 (P.A.R. + T1-T3 + Entanglement)
-- [ ] Phase 6: Experience Mining Interview (DONE/SKIPPED/N/A)
-- [ ] Phase 7: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 8: Per-Bullet Content Quality Gate (resume-claim-examiner APPROVE or user opt-out per unit)
-- [ ] Phase 9: HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
-- [ ] Phase 9: Note Accumulate (user confirmation required)
+- [ ] Phase 1: Identity Confirmation (session mode locked: owner-confirmed / interview-impossible)
+- [ ] Phase 2: 사전 준비 (Note Load + Pre-Evaluation Research)
+- [ ] Phase 3: 자기소개 평가 (per-type + global + Type C sub-step)
+- [ ] Phase 3: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
+- [ ] Phase 4: 개발자 역량 평가 (C1-C5)
+- [ ] Phase 4: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
+- [ ] Phase 5: 섹션별 평가 (Career + Problem-Solving 6 criteria + Pushback)
+- [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
+- [ ] Phase 6: First-Page Primacy + JD 매칭
+- [ ] Phase 6: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
+- [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Entanglement)
+- [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
+- [ ] Phase 8: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
+- [ ] Phase 9: Per-Bullet Content Quality Gate (resume-claim-examiner APPROVE or user opt-out per unit)
+- [ ] Phase 10: HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
+- [ ] Phase 10: Note Accumulate (user confirmation required)
 ```
 
-A phase is SKIPPED only when its precondition is not met. Phases 1, 7, 8, 9 have NO precondition — always required. Note Accumulate has a strict precondition: User Approval in Phase 9 HTML gate. Note Accumulate counts as DONE even if the user declines to save.
+A phase is SKIPPED only when its precondition is not met. Phases 1, 2, 8, 9, 10 have NO precondition — always required. Note Accumulate has a strict precondition: User Approval in Phase 10 HTML gate. Note Accumulate counts as DONE even if the user declines to save.
