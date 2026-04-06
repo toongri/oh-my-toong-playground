@@ -95,8 +95,11 @@ flowchart TB
     P4 --> P5CHK[Phase 6a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5줄 minimum]
     P5CHK --> P5[Phase 6b: P.A.R. + T1-T3 + Entanglement]
     P5 --> P6[Phase 7: AI 톤 감사\nSkill humanizer audit mode]
-    P6 --> P7[Phase 8: Content Quality Gate\nPer-Bullet loop until APPROVE]
-    P7 --> P7OPT[전략 옵션 2-3개 제시\ntrade-off 비교]
+    P6 --> P7DISPATCH[Phase 8: Content Quality Gate\nexaminer dispatch]
+    P7DISPATCH --> P7VERDICT{All APPROVE\nor user opt-out?}
+    P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\nexplain FAIL axes → interview\n→ regenerate alternatives]
+    P7INTERVIEW --> P7DISPATCH
+    P7VERDICT -->|YES| P7OPT[Strategic Options\n2-3 with trade-offs]
     P7OPT --> P8[Phase 9: 결과 전달\nHTML Report + Note Accumulate]
 
     P1 -->|Interview trigger| IG1[Read references/experience-mining.md\n§ Self-Introduction]
@@ -334,6 +337,23 @@ While the Evaluation Phase diagnosed "what the problems are," Phase 8 verifies "
 - Loop until APPROVE per item. The only exit is user opt-out.
 - Dispatch format: Read `references/content-quality-gate.md` for full protocol.
 
+### REQUEST_CHANGES Handling Protocol
+
+<critical>
+When resume-claim-examiner returns REQUEST_CHANGES:
+
+1. Explain each FAIL axis and its rationale to the user, item by item
+2. Convert Interview Hints into specific questions → conduct interview via AskUserQuestion
+   - One question per message
+   - Apply 4-Stage Bypass Protocol (references/experience-mining.md)
+3. Source confirmed → regenerate 2-3 alternatives → re-dispatch to examiner
+4. Source unconfirmed (all 4 Stages exhausted) → generate best revision with current sources → confirm user opt-out
+5. Repeat until APPROVE or user opt-out
+
+NEVER enter Phase 9 while ANY item remains in REQUEST_CHANGES status.
+Phase 9 entry is permitted ONLY when ALL Verdict Tracker items are APPROVE or user-opt-out.
+</critical>
+
 ### Examiner Eligibility
 
 Items containing a technical claim or problem-solving process → eligible. No exceptions.
@@ -382,6 +402,15 @@ When sending to resume-claim-examiner, use exactly:
 ```
 
 **Reference:** Read `references/content-quality-gate.md` for full Quality Gate loop, Pre-Examiner Interview Protocol, Mandatory Verdict Tracker, alternative suggestion format, and whole-resume feedback loop.
+
+### Phase 8 Red Flags — STOP When You Think This
+
+| Rationalization | Reality |
+|-----------------|---------|
+| "Summarized results and presented strategic options, so Phase 8 is done" | Summary ≠ resolution. REQUEST_CHANGES = unresolved. Keep looping. |
+| "All 5 got REQUEST_CHANGES, so reflect them in the report at once" | Each item must go through its own loop. No batch report reflection. |
+| "Wait for user to choose a strategic option, then apply" | Start interview immediately after presenting options. Don't wait for selection. |
+| "Can proceed without Verdict Tracker" | Entering Phase 9 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
 
 `[Phase 8/9: Per-Bullet Content Quality Gate ✓]`
 
