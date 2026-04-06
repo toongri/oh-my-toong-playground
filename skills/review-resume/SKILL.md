@@ -178,12 +178,64 @@ Before delivering Phase 10 output, you MUST verify the Completion Checklist at t
 </critical>
 
 0. **Execute ALL 10 phases sequentially without skipping.** No exceptions.
-1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
+1. After completing each phase, internally record phase completion. Phase completion markers (`[Phase N/10: OOO ✓]`) are shown to the user as minimal progress indicators. Detailed analysis (criteria evaluation, pushback simulation, alternative generation, examiner exchange) is processed internally and not output to the terminal.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 3), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
 4. Phase 9 (Per-Bullet Content Quality Gate) loops per section unit until resume-claim-examiner APPROVE or user opt-out.
 5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate proceeds ONLY after approval.
 6. Note Accumulate proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
+
+### Output Visibility
+
+Not all processing output belongs in the terminal. The following categories define what is shown to the user and what is handled internally.
+
+**Shown to user:**
+- Phase completion markers (`[Phase N/10: OOO ✓]`)
+- Interview questions (AskUserQuestion interactions)
+- User-choice prompts (strategic options, alternative selection, approval gates)
+- Feedback summaries that require a user response
+
+**Processed internally (not output to terminal):**
+- Criteria evaluation breakdown (6-criteria analysis per career/problem-solving line)
+- Pushback simulation details (L1/L2/L3 reasoning)
+- Alternative generation process (draft alternatives before dispatch)
+- Examiner dispatch and response details (E1-E6 axis scoring, Entanglement Score sub-dimensions)
+- Competency assessment reasoning (C1-C5 axis rating evidence)
+
+### English → Korean Term Mapping
+
+When generating HTML report output, all evaluation criteria and examiner axis labels must be translated to Korean using this mapping table. Never use bare English criteria names or internal codes in user-facing HTML.
+
+#### Examiner Axes (E1–E6)
+
+| English | Korean |
+|---------|--------|
+| Career-Level Fit | 경력 수준 적합성 |
+| Logical Coherence | 논리적 일관성 |
+| Problem Fidelity | 트레이드오프 진정성 |
+| Tradeoff Authenticity | 기술 선택 근거 |
+| Problem Surface | 문제 간 인과관계 |
+| Scale-Appropriate Engineering | 규모 적정 설계 |
+| Signal-to-Noise Ratio | 핵심 신호 비율 |
+| Target-Scale Transferability | 확장성 전이 |
+| Entanglement Reasoning | 문제 연쇄 추론 |
+| Entanglement Score (FLAT/LISTED/ENTANGLED) | 연쇄 수준 (독립/나열/연쇄) |
+
+#### Section Criteria
+
+| English | Korean |
+|---------|--------|
+| Linear Causation | 인과관계 연결 |
+| Metric Specificity | 지표 구체성 |
+| Role Clarity | 역할 명확성 |
+| Standard Transcendence | 업계 표준 초월 |
+| Hook Potential | 면접관 호기심 유발 |
+| Section Fitness | 섹션 적합성 |
+| Diagnostic Causation | 진단 인과관계 |
+| Evidence Depth | 근거 깊이 |
+| Thought Visibility | 사고 과정 가시성 |
+| Beyond-Standard Reasoning | 표준 초월 추론 |
+| Interview Depth | 면접 깊이 |
 
 ---
 
@@ -381,7 +433,7 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 ## Phase 9: Per-Bullet Content Quality Gate
 
-While the Evaluation Phase diagnosed "what the problems are," Phase 8 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the resume-claim-examiner sub-agent issues APPROVE.
+While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the resume-claim-examiner sub-agent issues APPROVE.
 
 ### Core Contract
 
