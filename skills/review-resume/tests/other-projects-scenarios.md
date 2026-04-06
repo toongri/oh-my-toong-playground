@@ -36,7 +36,7 @@
 
 ---
 
-### Scenario 2: 잘 쓴 P.A.R. 통과 (Good Compressed P.A.R.)
+### Scenario 2: 잘 쓴 P.A.R. 통과 (Good Short-Form Entry)
 
 **유형:** Application — 잘 쓰인 압축 형태를 올바르게 PASS 판정하는가?
 
@@ -101,7 +101,7 @@ JMeter 테스트 결과 150ms로 90% 개선
 **FAIL 기준:**
 - 분량 문제를 지적하지 않음
 - "잘 작성되었습니다" 판정
-- 시그니처 프로젝트와 동일한 P1-P5 기준으로 평가
+- 시그니처 프로젝트와 동일한 P1-P4 기준으로 평가
 
 ---
 

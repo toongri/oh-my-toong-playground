@@ -274,7 +274,7 @@ Source secured → Record in Discovered Candidates → Mark as a reinforcement c
 
 GOOD: "I think there are some experiences that could add more depth to your problem-solving section — I'd like to ask about a few of them."
 
-BAD (internal metric exposure): "P2 no failure arc, P5 why-chain stopped at step 1"
+BAD (internal metric exposure): "P2 no failure arc, P4 why-chain stopped at step 1"
 
 **Target Topics:**
 
@@ -284,7 +284,7 @@ BAD: "Do you have any failure experiences?"
 
 GOOD: "Was there a moment when the first approach you tried on this problem didn't work? Tell me what went wrong and how you changed direction for the next attempt."
 
-Why-chain (P5):
+Why-chain (P4):
 
 BAD: "Why did you choose that technology?"
 
@@ -357,7 +357,7 @@ GOOD: "처음에 계획했던 것과 실제로 만든 것을 비교하면 — �
 
 ### Example A: Developer Competency Assessment C2 — Source discovery via Stage 2 bypass, then Problem-Solving Evaluation forward-feed
 
-**Context:** Mid-level backend developer, C2 (operations/monitoring) ABSENT.
+**Context:** Junior backend developer, C2 (operations/monitoring) ABSENT.
 
 Agent: "Looking at your career history, your deployment and development experience comes through clearly — would it be okay if I asked about some experiences to strengthen the service operations side? Did you have a routine for checking service health directly after a deployment?"
 

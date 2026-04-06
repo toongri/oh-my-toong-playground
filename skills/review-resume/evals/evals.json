@@ -30,8 +30,8 @@
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level and applies career-level expectations"},
         {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED, provides specific gap recommendations"},
         {"text": "unified-evaluation-model", "description": "Evaluates all problem-solving entries (5+ lines) with unified P.A.R. criteria; nominates 1 kick entry for deeper treatment. Entries under 5 lines flagged for Career migration."},
-        {"text": "depth-specific-evaluation", "description": "Applies P.A.R. criteria uniformly: P1, P2, P5 for all entries; P3 for kick entry; P6-P8 for Senior"},
-        {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — e.g., uses P.A.R. dimensions (P1-P3, P5/P6-P8), Type A-D criteria, career/PS evaluation criteria, or unified evaluation model. Evidence: specific dimension codes or criteria language that only exists in references/."},
+        {"text": "depth-specific-evaluation", "description": "Applies P.A.R. criteria uniformly: P1, P2, P4 for all entries; P3 for kick entry; P5-P7 for Senior"},
+        {"text": "applies-reference-criteria", "description": "Evaluation output demonstrates knowledge from reference files — e.g., uses P.A.R. dimensions (P1-P4/P5-P7), Type A-D criteria, career/PS evaluation criteria, or unified evaluation model. Evidence: specific dimension codes or criteria language that only exists in references/."},
         {"text": "ai-tone-audit-phase", "description": "Phase 7 explicitly addresses AI Tone Audit — either invokes Skill(humanizer) or declares intent to invoke it (e.g., '[Would invoke Skill(humanizer)]'). The phase must not be skipped."},
         {"text": "quality-gate-dispatch", "description": "Phase 8: resume-claim-examiner agent is dispatched for ALL evaluator-eligible items (career bullets, problem-solving entries, self-intro with technical content) — either actual dispatch or declaration of intent. Eligibility is by content type, not P-level findings."},
         {"text": "quality-gate-alternatives", "description": "Phase 8: generates 2-3 revision alternatives with tradeoff comparison (safe/high-impact/balanced directions) for each evaluator-eligible item, based on pre-examiner interview results, before resume-claim-examiner dispatch"},
@@ -106,13 +106,13 @@
       "assertions": [
         {"text": "note-load", "description": "Phase 1: loads note and reports problem-solving candidate pool status"},
         {"text": "unified-evaluation-model", "description": "Evaluates all problem-solving entries (5+ lines) with unified P.A.R. criteria; nominates 1 kick entry for deeper treatment. Entries under 5 lines flagged for Career migration."},
-        {"text": "kick-entry-full-evaluation", "description": "Kick entry gets comprehensive evaluation covering P.A.R. dimensions (P1-P3, P5) — narrative depth, failure arc, verification depth, why-chain"},
+        {"text": "kick-entry-full-evaluation", "description": "Kick entry gets comprehensive evaluation covering P.A.R. dimensions (P1-P4) — narrative depth, failure arc, verification depth, why-chain"},
         {"text": "minimum-length-enforcement", "description": "Evaluator demonstrates awareness of 5-line minimum: either flags entries under 5 lines for Career migration, OR explicitly states line counts per entry showing all exceed threshold. Complete omission without evidence of consideration is FAIL."},
         {"text": "career-level-appropriate", "description": "Evaluation criteria match the candidate's career level (not applying junior criteria to mid/senior or vice versa)"},
         {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (payments, incident response prioritized)"},
         {"text": "candidate-pool-awareness", "description": "If note has problem-solving candidates, mentions available alternatives or suggests swaps for JD fit"},
         {"text": "note-accumulate", "description": "Phase 9: proposes accumulating new insights from this review session"},
-        {"text": "applies-problem-solving-criteria", "description": "Uses unified evaluation model, P.A.R. dimensions (P1-P3, P5/P6-P8), or career-level criteria from references/problem-solving.md"},
+        {"text": "applies-problem-solving-criteria", "description": "Uses unified evaluation model, P.A.R. dimensions (P1-P4/P5-P7), or career-level criteria from references/problem-solving.md"},
         {"text": "html-summary-section", "description": "Phase 9 HTML output includes a summary statistics section showing P0-P3 severity counts (e.g., P0 N items, P1 N items) and total finding count"},
         {"text": "html-inline-feedback", "description": "Phase 9 HTML output uses div blocks with CSS classes (comment-p0, comment-p1, comment-p2, comment-p3) to display inline feedback per finding — not markdown blockquotes"},
         {"text": "priority-classification", "description": "Each finding is classified with a priority level: P0 (must fix), P1 (should fix), P2 (nice to have), or P3 (optional)"},
@@ -237,15 +237,15 @@
     {
       "id": 9,
       "prompt": "이력서 리뷰해줘. 7년차 시니어 백엔드 개발자야. _config.yml에 있어.",
-      "expected_output": "Phase 1 note load, full 9-phase review with Senior career level applied. C1-C5 with Senior expectations (all axes EXPECTED). P6-P8 applied to problem-solving entries (leadership in technical decisions, stopping judgment, business impact). Career evaluation with Senior-level differentiation expectations.",
+      "expected_output": "Phase 1 note load, full 9-phase review with Senior career level applied. C1-C5 with Senior expectations (all axes EXPECTED). P5-P7 applied to problem-solving entries (leadership in technical decisions, stopping judgment, business impact). Career evaluation with Senior-level differentiation expectations.",
       "assertions": [
         {"text": "note-load", "description": "Phase 1 note load executed"},
         {"text": "career-level-senior", "description": "C1-C5 assessment identifies Senior (7yr+) career level and applies Senior-tier expectations"},
         {"text": "all-axes-expected", "description": "All C1-C5 axes are evaluated as EXPECTED for Senior — no N/A exemptions"},
-        {"text": "p6-p8-applied", "description": "P6 (leadership in technical decisions), P7 (stopping judgment), P8 (business impact) are evaluated for problem-solving entries — these are Senior-level dimensions"},
+        {"text": "p5-p7-applied", "description": "P5 (domain-specific failure reasoning), P6 (stopping judgment), P7 (business impact) are evaluated for problem-solving entries — these are Senior-level dimensions"},
         {"text": "leadership-expectations", "description": "Evaluation explicitly checks for leadership signals: technical decision ownership, team/org impact, mentoring evidence"},
-        {"text": "stopping-judgment", "description": "P7 stopping judgment evaluated: does the entry show when and why the engineer decided to stop optimizing?"},
-        {"text": "business-impact-scope", "description": "P8 business impact evaluated at system/org scope (not just team-level) for Senior entries"},
+        {"text": "stopping-judgment", "description": "P6 stopping judgment evaluated: does the entry show when and why the engineer decided to stop optimizing?"},
+        {"text": "business-impact-scope", "description": "P7 business impact evaluated at system/org scope (not just team-level) for Senior entries"},
         {"text": "career-differentiated-evaluation", "description": "Career bullets evaluated with career-specific criteria"},
         {"text": "ps-differentiated-evaluation", "description": "Problem-solving entries evaluated with PS-specific criteria"},
         {"text": "html-summary-section", "description": "Phase 9 HTML report includes summary statistics"},
@@ -277,7 +277,7 @@
     "latest_iteration": 15,
     "date": "2026-03-30",
     "with_skill": {"pass_rate": 0.880, "avg_time_seconds": 665.4, "avg_tokens": 98159},
-    "notes": "191 assertions across 10 evals (46+36+22+26+11+11+8+9+12+10), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + self-claim endings), verbose signal criteria added, bold-topic guidance removed, Phase 8 depth count output added. Eval 3: 100% pass. Eval 4 added: experience mining trigger + 4-stage bypass + opt-out verification. Phase 11 Quality Gate assertions added (3 x 2 evals = 6 new). Eval 3/4 quality-gate assertions added (3 x 2 evals = 6 new). Evals 5-10 added: section-specific (self-intro, career, AI tone), PS+JD pool, Senior, brevity pressure scenarios."
+    "notes": "191 assertions across 10 evals (46+36+22+26+11+11+8+9+12+10), 88.0% pass. branch-check removed (moved to resume-apply), anti-pattern redefined (generic opener + self-claim endings), verbose signal criteria added, bold-topic guidance removed, Phase 6 depth count output added. Eval 3: 100% pass. Eval 4 added: experience mining trigger + 4-stage bypass + opt-out verification. Phase 8 Quality Gate assertions added (3 x 2 evals = 6 new). Eval 3/4 quality-gate assertions added (3 x 2 evals = 6 new). Evals 5-10 added: section-specific (self-intro, career, AI tone), PS+JD pool, Senior, brevity pressure scenarios."
   },
   "benchmark_history": [
     {

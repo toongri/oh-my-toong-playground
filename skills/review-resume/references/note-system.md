@@ -78,7 +78,7 @@ tags: [payment, concurrency, MVCC]
 |-------|---------|
 | `tags` | Keywords for JD matching and search |
 
-The candidate body contains the narrative content directly. Depth (signature/detailed/compressed) is determined at evaluation time from the content structure, not stored as metadata.
+The candidate body contains the narrative content directly. Entry depth is determined at evaluation time from the content structure, not stored as metadata: entries with 5+ lines are evaluated as P.A.R. candidates; entries under 5 lines are moved to career bullets or expanded before entering the pool.
 
 ---
 
