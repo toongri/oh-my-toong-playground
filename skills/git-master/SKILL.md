@@ -156,6 +156,35 @@ For each changed file, categorize:
 | 3+ files | **Pause and analyze** — are there multiple concerns? |
 | 10+ files | **Strongly consider splitting** — multiple concerns are probable |
 
+#### Mandatory Self-Check (3+ Files)
+
+3+ 파일 변경 시 커밋 전 반드시 자가 점검:
+
+```
+"N개 파일을 M개 커밋으로 만든다."
+IF M == 1 AND N >= 3:
+  → 정말 하나의 논리적 변경인가?
+  → 각 파일이 함께여야 하는 이유를 한 문장으로 쓸 수 있는가?
+  → 쓸 수 없으면 → SPLIT
+```
+
+**이것은 수치 공식이 아니다.** 3+ 파일이면 "생각을 거치라"는 것이지, "반드시 분할하라"는 것이 아니다. Example 7(포인트 적립 4파일 = 1커밋)처럼 논리적 응집성이 충분하면 단일 커밋이 정당하다.
+
+#### Commit Justification (3+ Files per Commit)
+
+하나의 커밋에 3개 이상 파일이 포함될 때, **왜 함께인지** 한 문장으로 기술해야 한다:
+
+```
+"이 커밋은 [파일들]을 포함한다. 이유: [구체적 이유]"
+```
+
+| 유효한 이유 | 무효한 이유 (→ 분할 필요) |
+|------------|------------------------|
+| 구현체 + 직접 테스트 파일 | "같은 기능 관련" (모호) |
+| 타입 정의 + 유일한 사용처 | "같은 PR에 포함" (이유 아님) |
+| 마이그레이션 + 모델 변경 (분리 시 빌드 실패) | "함께 변경됨" (이유 아님) |
+| 단일 rename 작업의 여러 파일 | "관련 있어서" (모호) |
+
 **IMPORTANT**: One feature ≠ one commit. A feature may contain multiple logical changes (config, domain, service, test, docs). Each independently meaningful layer is a separate commit. However, a single atomic operation (e.g., renaming across 10 files) IS one commit.
 
 #### When to Split
@@ -200,6 +229,20 @@ Each split commit must:
 - Leave the codebase in a buildable state
 - Be revertable without breaking other commits
 
+#### Test-Implementation Pairing
+
+테스트 파일은 반드시 대응하는 구현체와 **같은 커밋**에 포함한다:
+
+| 테스트 패턴 | 구현 파일 |
+|------------|----------|
+| `*_test.sh` | `*.sh` |
+| `*.test.ts` | `*.ts` |
+| `*.spec.ts` | `*.ts` |
+| `*Test.kt` | `*.kt` |
+| `__tests__/*` | 대응하는 소스 |
+
+**Anti-pattern**: 구현과 테스트를 별도 커밋으로 분리하는 것. 테스트 없는 구현 커밋은 중간 상태에서 검증 불가능하다.
+
 ### Step 2: Verify No Workflow Files
 
 ```bash
@@ -221,9 +264,34 @@ If any match → Unstage them before proceeding.
 - Build/config → `chore`
 - Performance → `perf`
 
+### Step 4: Output Commit Plan (3+ Files — BLOCKING)
+
+3개 이상 파일 변경 시, 커밋을 실행하기 전에 반드시 커밋 계획을 출력한다:
+
+```
+COMMIT PLAN
+───────────
+변경 파일: N개
+계획 커밋 수: M개
+
+COMMIT 1: type: 제목
+  - path/to/file1
+  - path/to/file1_test
+  Justification: 구현체 + 직접 테스트
+
+COMMIT 2: type: 제목
+  - path/to/file2
+  Justification: 독립적 설정 변경
+
+실행 순서: Commit 1 → Commit 2
+(의존성 순서: Config → Source → Test → Docs)
+```
+
+**이 출력 없이 커밋 실행으로 넘어가지 않는다.** 1-2개 파일 변경은 이 단계를 건너뛴다.
+
 > **`fix` 타입 주의**: 코드 리뷰에서 나온 변경이 전부 `fix`는 아니다. 리뷰 지적이라도 새 기능이면 `feat`, 구조 개선이면 `refactor`. 실제 버그/오류 수정만 `fix`.
 
-### Step 4: Generate Commit Message
+### Step 5: Generate Commit Message
 
 **Subject rules (NON-NEGOTIABLE):**
 - Korean (한국어)
@@ -255,7 +323,7 @@ If any match → Unstage them before proceeding.
 
 See `references/commit-conventions.md` for complete format.
 
-### Step 5: Execute Commit
+### Step 6: Execute Commit
 
 ```bash
 git add .
@@ -273,7 +341,7 @@ EOF
 )"
 ```
 
-### Step 6: Return Result
+### Step 7: Return Result
 
 ```markdown
 ## Commit Result
