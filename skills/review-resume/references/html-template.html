@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Resume Review Report — <!-- CANDIDATE NAME --></title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 24px;
+      color: #333;
+      line-height: 1.6;
+    }
+    h1 { font-size: 1.5rem; border-bottom: 2px solid #333; padding-bottom: 8px; }
+    h2 { font-size: 1.2rem; margin-top: 32px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+    h3 { font-size: 1rem; margin-top: 24px; color: #555; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 24px; }
+    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    th { background: #f0f0f0; font-weight: 600; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .badge-p0 { background: #c0392b; color: #fff; }
+    .badge-p1 { background: #e67e22; color: #fff; }
+    .badge-p2 { background: #f1c40f; color: #333; }
+    .badge-p3 { background: #95a5a6; color: #fff; }
+    .badge-strength { background: #27ae60; color: #fff; }
+    .comment-p0 {
+      background: #fdd;
+      border-left: 4px solid #c0392b;
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .comment-p1 {
+      background: #fef3cd;
+      border-left: 4px solid #e67e22;
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .comment-p2 {
+      background: #fff9c4;
+      border-left: 4px solid #f1c40f;
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .comment-p3 {
+      background: #f5f5f5;
+      border-left: 4px solid #95a5a6;
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .comment-strength {
+      background: #d4edda;
+      border-left: 4px solid #27ae60;
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+    }
+    .suggestion {
+      background: #f0fff0;
+      border-left: 4px solid #27ae60;
+      padding: 8px 14px;
+      margin: 6px 0;
+      font-family: monospace;
+      white-space: pre-wrap;
+    }
+    .alternatives {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 8px 0;
+    }
+    .alternative {
+      border-left: 3px solid #6c757d;
+      padding: 8px 12px;
+      margin: 8px 0;
+      background: #fff;
+      border-radius: 0 4px 4px 0;
+    }
+    .alt-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .alt-safe { background: #d4edda; color: #155724; }
+    .alt-impact { background: #cce5ff; color: #004085; }
+    .alt-balanced { background: #fff3cd; color: #856404; }
+    .alt-recommendation {
+      color: #e67e22;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-left: 8px;
+    }
+    .alt-pros { color: #27ae60; font-size: 0.9rem; margin: 4px 0; }
+    .alt-cons { color: #c0392b; font-size: 0.9rem; margin: 4px 0; }
+    .tradeoff-table { margin-top: 12px; font-size: 0.9rem; width: 100%; border-collapse: collapse; }
+    .tradeoff-table th { background: #e9ecef; padding: 6px 12px; text-align: left; }
+    .tradeoff-table td { padding: 6px 12px; border-bottom: 1px solid #dee2e6; }
+    .unresolved-note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 4px 4px 0;
+      font-style: italic;
+    }
+    .section-opt-out {
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 12px;
+      margin: 8px 0;
+    }
+    .opt-out-badge {
+      display: inline-block;
+      background: #ffc107;
+      color: #212529;
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .unresolved-feedback {
+      margin-top: 8px;
+    }
+    .fail-axis {
+      border-left: 3px solid #dc3545;
+      padding: 6px 12px;
+      margin: 6px 0;
+      background: #fff;
+    }
+    .axis-label {
+      font-weight: 700;
+      color: #dc3545;
+      font-size: 0.85rem;
+    }
+    .axis-feedback {
+      margin: 4px 0;
+      font-size: 0.9rem;
+    }
+    .axis-hint {
+      color: #6c757d;
+      font-size: 0.85rem;
+      font-style: italic;
+    }
+    .resume-line {
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      padding: 6px 12px;
+      margin: 4px 0;
+      border-radius: 4px;
+      font-style: italic;
+    }
+    .rating-strong { color: #27ae60; font-weight: 700; }
+    .rating-present { color: #2980b9; font-weight: 700; }
+    .rating-weak { color: #e67e22; font-weight: 700; }
+    .rating-absent { color: #c0392b; font-weight: 700; }
+    .rating-na { color: #95a5a6; font-weight: 700; }
+    .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #ddd; color: #888; font-size: 0.85rem; }
+    .stat-grid { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+    .stat-box { background: #f8f8f8; border: 1px solid #ddd; border-radius: 6px; padding: 12px 20px; text-align: center; }
+    .stat-box .count { font-size: 2rem; font-weight: 700; }
+    .stat-box .label { font-size: 0.8rem; color: #666; }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<h1>Resume Review Report</h1>
+<p>
+  <strong>Candidate:</strong> <!-- CANDIDATE NAME --><br>
+  <strong>Target Position:</strong> <!-- TARGET POSITION --><br>
+  <strong>Review Date:</strong> <!-- REVIEW DATETIME --><br>
+  <strong>JD Reference:</strong> <!-- JD REFERENCE OR "none" -->
+</p>
+
+<!-- C1-C5 SECTION -->
+<h2>Competency Assessment (C1-C5)</h2>
+<p>5-point scale: <span class="rating-strong">STRONG</span> / <span class="rating-present">PRESENT</span> / <span class="rating-weak">WEAK</span> / <span class="rating-absent">ABSENT</span> / <span class="rating-na">N/A</span></p>
+<table>
+  <thead>
+    <tr><th>Competency</th><th>Rating</th><th>Evidence</th></tr>
+  </thead>
+  <tbody>
+    <!-- For each C1-C5 competency, output one row. Example:
+    <tr>
+      <td>C1 — <!-- COMPETENCY NAME --></td>
+      <td><span class="rating-strong">STRONG</span></td>
+      <td><!-- RATIONALE --></td>
+    </tr>
+    Use rating-strong / rating-present / rating-weak / rating-absent / rating-na class on the span. -->
+  </tbody>
+</table>
+
+<!-- RESUME SECTIONS -->
+<h2>Section Inline Feedback</h2>
+<!-- Repeat the following block for each resume section in order:
+     Self-Introduction → Career per company → Problem-Solving per entry → Tech stack/Other -->
+
+<!--
+<h3><!-- SECTION NAME --></h3>
+
+For each resume line in this section:
+  - If ALL 6 evaluation criteria PASS: wrap in .comment-strength
+  - If any criterion fails: wrap in .comment-p{0|1|2|3} matching the finding priority
+
+Example — finding with comment:
+<div class="resume-line">I worked as a backend developer for 3 years.</div>
+<div class="comment-p0">
+  <span class="badge badge-p0">P0 #1</span>
+  <strong>"Worked for 3 years" is a duration fact only — no achievement. Nothing for the interviewer to remember.</strong><br>
+  <em>Violation:</em> No goal→action→outcome causation, no differentiator<br>
+  <em>Interview simulation:</em> "So what did you actually do?" — the answer is not in this sentence
+  <div class="suggestion">Revised: Designed and operated a B2B SaaS payment system over 3 years, reducing payment-order discrepancies to zero.</div>
+</div>
+
+Example — all-PASS line:
+<div class="resume-line">Achieved zero payment-order discrepancies, converting an average of 12 monthly claims to 0.</div>
+<div class="comment-strength">
+  <span class="badge badge-strength">PASS</span>
+  All 6 criteria passed — goal/action/outcome causation clear, metrics verifiable
+</div>
+
+Example — finding with multiple alternatives:
+<div class="resume-line">Built a Kafka-based async pipeline.</div>
+<div class="comment-p1">
+  <span class="badge badge-p1">P1 #3</span>
+  <strong>No explanation of why Kafka or what tradeoffs were made.</strong><br>
+  <em>Violation:</em> Tradeoff authenticity (E3) — no basis for technology choice<br>
+  <em>Interview simulation:</em> "Why Kafka instead of RabbitMQ?" — no answer
+  <div class="alternatives">
+    <h4>Alternatives</h4>
+    <div class="alternative">
+      <div><span class="alt-badge alt-safe">Alt 1: Safe</span><span class="alt-recommendation">★ Recommended</span></div>
+      <div class="alt-content">Needed ordering guarantees for 100K daily events and chose Kafka; partition-based ordering was the decisive factor over RabbitMQ.</div>
+      <div class="alt-pros">Pros: Minimal change, technology choice clearly justified</div>
+      <div class="alt-cons">Cons: Impact is weak, low differentiation</div>
+    </div>
+    <div class="alternative">
+      <div><span class="alt-badge alt-impact">Alt 2: High Impact</span></div>
+      <div class="alt-content">Processing 100K daily events while balancing the tradeoff between partition ordering and throughput, we prioritized ordering and capped partitions at 3, accepting 200ms processing latency.</div>
+      <div class="alt-pros">Pros: Tradeoff is specific, deeper interview signal ↑</div>
+      <div class="alt-cons">Cons: Metrics verification required — backfires if absent</div>
+    </div>
+    <table class="tradeoff-table">
+      <tr><th>Criterion</th><th>Alt 1</th><th>Alt 2</th></tr>
+      <tr><td>Interview safety</td><td>★★★</td><td>★★☆</td></tr>
+      <tr><td>Differentiation</td><td>★★☆</td><td>★★★</td></tr>
+      <tr><td>Source required</td><td>Low</td><td>High</td></tr>
+    </table>
+  </div>
+</div>
+
+Example — user-accepted but evaluator-not-approved:
+<div class="resume-line">Migrated to MSA and shortened the deployment cycle.</div>
+<div class="comment-p1">
+  <span class="badge badge-p1">P1 #5</span>
+  <strong>No concrete tradeoffs from the MSA migration</strong>
+  <div class="unresolved-note">
+    ⚠ Unresolved: resume-claim-examiner issued FAIL on E3 (Problem Fidelity) and E4 (Scale-Appropriate Engineering). User chose to proceed with current content.
+  </div>
+</div>
+-->
+
+<!-- SUMMARY FOOTER -->
+<h2>Review Summary</h2>
+<div class="stat-grid">
+  <div class="stat-box"><div class="count" style="color:#c0392b;"><!-- P0 COUNT --></div><div class="label">P0 Must Fix</div></div>
+  <div class="stat-box"><div class="count" style="color:#e67e22;"><!-- P1 COUNT --></div><div class="label">P1 Recommended Fix</div></div>
+  <div class="stat-box"><div class="count" style="color:#f1c40f;"><!-- P2 COUNT --></div><div class="label">P2 Can Improve</div></div>
+  <div class="stat-box"><div class="count" style="color:#95a5a6;"><!-- P3 COUNT --></div><div class="label">P3 Reference</div></div>
+  <div class="stat-box"><div class="count"><!-- TOTAL COUNT --></div><div class="label">Total</div></div>
+</div>
+<table>
+  <thead>
+    <tr><th>P</th><th>#</th><th>Section</th><th>One-Line Diagnosis</th></tr>
+  </thead>
+  <tbody>
+    <!-- One row per finding, in resume section order. Example:
+    <tr>
+      <td><span class="badge badge-p0">P0</span></td>
+      <td>1</td>
+      <td>Self-Introduction</td>
+      <td>No impact — describes only duration with no achievement</td>
+    </tr>
+    -->
+  </tbody>
+</table>
+
+<div class="footer">
+  Generated by review-resume skill · <!-- REVIEW DATETIME -->
+</div>
+
+</body>
+</html>

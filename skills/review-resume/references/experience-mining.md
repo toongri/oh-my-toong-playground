@@ -49,7 +49,7 @@ Explore sources hidden in routine work. Mine from what was done repeatedly, not 
 
 Example: "Was there anything in your daily tasks where you thought 'this is something I make sure to handle carefully'?", "Was there anything your team tended to ask specifically you about?"
 
-> **Cross-reference:** Phase 11 (Per-Bullet Content Quality Gate) extends this protocol for source acquisition interviews when resume-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
+> **Cross-reference:** Phase 8 (Per-Bullet Content Quality Gate) extends this protocol for source acquisition interviews when resume-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
 
 ---
 
@@ -268,7 +268,7 @@ Source secured → Record in Discovered Candidates → Mark as a reinforcement c
 
 ## Problem-Solving
 
-**Trigger Context:** Any P.A.R.R. dimension FAIL, or missing structure, or theme imbalance
+**Trigger Context:** Any P.A.R. dimension FAIL, or missing structure, or theme imbalance
 
 **Diagnostic Context Examples:**
 
@@ -306,7 +306,7 @@ GOOD: "Your problem-solving section currently focuses heavily on {theme}. Was th
 No source after Stage 4 → switch to problem-solving.md §15 Writing Guidance
 
 **Source Acquisition Path:**
-Source secured → Record in Discovered Candidates → Mark as a P.A.R.R. reinforcement candidate or a candidate for a new entry
+Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforcement candidate or a candidate for a new entry
 
 ### Entanglement Extraction (Problem-Solving sub-protocol)
 

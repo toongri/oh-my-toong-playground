@@ -1,6 +1,6 @@
 # Content Quality Gate Protocol
 
-> Phases 0-10 diagnose "what is the problem." The Quality Gate verifies "has the problem been resolved." Anything below the level a CTO would find convincing in an interview does not pass.
+> The Evaluation Phase diagnoses "what is the problem." The Quality Gate verifies "has the problem been resolved." Anything below the level a CTO would find convincing in an interview does not pass.
 
 ---
 
@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 12). If Phases 0-10 diagnose "what is wrong with this section," the Quality Gate is the step where the resume-claim-examiner agent independently verifies "has that problem actually been resolved."
+The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 9). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the resume-claim-examiner agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
@@ -34,9 +34,9 @@ The final reader of a resume is the hiring decision-maker. Each alternative must
 
 If even one answer is "no," that section does not pass the Quality Gate.
 
-### Difference from Phase 0-10 Evaluation
+### Difference from Evaluation Phase
 
-| Dimension | Phase 0-10 Evaluation | Quality Gate |
+| Dimension | Evaluation Phase | Quality Gate |
 |-----------|----------------------|-------------|
 | Role | Diagnosis | Verification |
 | Question | "What is the problem?" | "Has the problem been resolved?" |
@@ -53,7 +53,7 @@ The Quality Gate splits the resume into **1 bullet / 1 entry** units for process
 
 ### Target Selection
 
-**ALL evaluator-eligible items** are subject to the Quality Gate. Eligibility is determined by content type (see SKILL.md Examiner Eligibility Rule), not by Phase 0-10 P-level findings. Phase 0-10 findings are transmitted as context to the examiner, but do not gate eligibility.
+**ALL evaluator-eligible items** are subject to the Quality Gate. Eligibility is determined by content type (see SKILL.md Examiner Eligibility Rule), not by Evaluation Phase P-level findings. Evaluation Phase findings are transmitted as context to the examiner, but do not gate eligibility.
 
 ### Summary/Introduction
 
@@ -82,11 +82,11 @@ Examples:
 - Entire "payment system fault isolation" episode → 1 unit
 - Entire "search response latency optimization" episode → 1 unit
 
-**Processing order:** signature depth → detailed depth → compressed depth. Compressed is not a resume-claim-examiner target (sentences too short for technical interrogation).
+**Processing order:** All problem-solving entries with 5+ lines are evaluator-eligible. Entries under 5 lines are not subject to technical interrogation.
 
 ### Skills / Study
 
-**Not a resume-claim-examiner target.** A list of tech stacks is not subject to technical interrogation. Phase 0-10 evaluation is sufficient.
+**Not a resume-claim-examiner target.** A list of tech stacks is not subject to technical interrogation. Evaluation Phase evaluation is sufficient.
 
 ---
 
@@ -196,7 +196,7 @@ Conduct a detailed per-item interview with the user before examiner dispatch. Th
 
 ### Interview Flow (Per Item)
 
-1. **Share Findings**: Present Phase 0-10 evaluation results item by item
+1. **Share Findings**: Present Evaluation Phase results item by item
 2. **Collect Context**: Uncover concerns, tradeoffs, and hidden context
 3. **Present Alternatives + Discuss**: Discuss 2-3 alternatives with pros/cons, confirm user preference
 4. **Reach Agreement**: Finalize alternatives after agreeing on direction
@@ -215,7 +215,7 @@ Conduct a detailed per-item interview with the user before examiner dispatch. Th
 |-----------|----------------------|------------------------|
 | Trigger | Always (every evaluator-eligible item) | REQUEST_CHANGES received |
 | Purpose | Reach agreement, prepare for success | Supplement FAIL axes, improve |
-| Question basis | Phase 0-10 findings | Examiner's Interview Hints |
+| Question basis | Evaluation Phase findings | Examiner's Interview Hints |
 | Exit | Agreement reached → examiner dispatch | Source secured → re-dispatch |
 
 ---
@@ -303,9 +303,9 @@ If sources remain unconfirmed after all 4 Stages are exhausted:
 
 ```mermaid
 flowchart TB
-    A[Phase 0-10 evaluation complete] --> B[Select ALL evaluator-eligible items]
+    A[Evaluation Phase complete] --> B[Select ALL evaluator-eligible items]
     B --> C[Select next item]
-    C --> PRESENT[Present Phase 0-10 findings to user]
+    C --> PRESENT[Present Evaluation Phase findings to user]
     PRESENT --> INTERVIEW_PRE[Pre-Examiner Interview\n— discuss findings, collect context,\npropose improvements, reach agreement]
     INTERVIEW_PRE --> D[Generate 2-3 alternatives + tradeoffs]
     D --> H[resume-claim-examiner dispatch\n— send original + alternatives package]
@@ -330,7 +330,7 @@ flowchart TB
 
     J -->|YES| C
     J -->|NO| VERDICT[Verdict Tracker Verification]
-    VERDICT --> P[Phase 12: Generate HTML]
+    VERDICT --> P[Phase 9: Generate HTML]
 
     style H fill:#e74c3c,stroke:#333,color:#fff
     style INTERVIEW_PRE fill:#3498db,stroke:#333,color:#fff
@@ -342,27 +342,27 @@ flowchart TB
 
 ### Loop Entry Condition
 
-The Quality Gate loop is entered automatically after Phase 10 completes. Without a separate trigger, immediately after the final Phase 10 evaluation output, the flow proceeds to selecting ALL evaluator-eligible items and starting the pre-examiner interview for each item.
+The Quality Gate loop is entered automatically after Phase 7 completes. Without a separate trigger, immediately after the final Phase 7 evaluation output, the flow proceeds to selecting ALL evaluator-eligible items and starting the pre-examiner interview for each item.
 
 ### resume-claim-examiner dispatch
 
 The resume-claim-examiner is dispatched **1 bullet / 1 entry** at a time.
 
-The Input Format uses the template defined in SKILL.md Phase 11 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `agents/resume-claim-examiner.md`.
+The Input Format uses the template defined in SKILL.md Phase 8 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `SKILL.md`.
 
 **Key rules:**
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
-- Phase 0-10 findings are passed verbatim (no summarization)
+- Evaluation Phase findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
 - Target Company Context (company scale, core values, technical challenges) is populated based on Phase 1 research results. This information is used directly in the resume-claim-examiner's E6 (Target-Scale Transferability) evaluation.
 
 ### Post-APPROVE Handling
 
-Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 12 HTML report is generated based on these confirmed revisions.
+Revisions for bullets that receive APPROVE are recorded as "confirmed revisions." The Phase 9 HTML report is generated based on these confirmed revisions.
 
 ### Mandatory Verdict Tracker
 
-Before entering Phase 12, internally track the verdict for every evaluator-eligible item. If even one entry is blank, Phase 12 entry is blocked.
+Before entering Phase 9, internally track the verdict for every evaluator-eligible item. If even one entry is blank, Phase 9 entry is blocked.
 
 | # | Section | Item | Verdict | Loop Count |
 |---|---------|------|---------|------------|
@@ -411,7 +411,7 @@ Opted-out sections are displayed in the HTML report as follows:
 
 ## 7. HTML Report Alternatives Format
 
-Defines how alternatives for each finding are displayed in the Phase 12 HTML report. Actual application is handled in the SKILL.md HTML template modification task.
+Defines how alternatives for each finding are displayed in the Phase 9 HTML report. Actual application is handled in the SKILL.md HTML template modification task.
 
 ### Direction of Change
 
@@ -571,12 +571,12 @@ CSS reference (canonical source: SKILL.md HTML template `<style>` block. This se
 
 ### Purpose
 
-After generating the HTML report in Phase 12, provide a loop that allows the user to give additional feedback after reviewing the completed resume as a whole. If the per-section Quality Gate ensures the quality of individual revisions, the Whole-Resume Feedback Loop performs a final check on the consistency and direction of the resume as a whole.
+After generating the HTML report in Phase 9, provide a loop that allows the user to give additional feedback after reviewing the completed resume as a whole. If the per-section Quality Gate ensures the quality of individual revisions, the Whole-Resume Feedback Loop performs a final check on the consistency and direction of the resume as a whole.
 
 ### Loop Structure
 
 ```
-Phase 12 HTML generated + browser opened
+Phase 9 HTML generated + browser opened
     ↓
 User review → AskUserQuestion
 "Have you reviewed the full resume? Let me know if there is anything you'd like to revise."
@@ -584,7 +584,7 @@ User review → AskUserQuestion
 Feedback present?
     → YES (specific section issue): Re-enter Quality Gate for that section
     → YES (overall structure/direction issue): Re-enter Quality Gate for relevant sections
-    → NO (explicit termination signal only): Proceed to Phase 13
+    → NO (explicit termination signal only): Proceed to Phase 9 결과 전달
 ```
 
 ### Feedback Classification and Handling
@@ -601,7 +601,7 @@ Feedback present?
 Only the following expressions are recognized as loop termination signals:
 - "OK", "looks good", "done", "that's it"
 - "no feedback", "nothing to add"
-- "let's move on", "go to Phase 13"
+- "let's move on", "go to Phase 9 결과 전달"
 - "this is enough"
 
 ### Handling Ambiguous Responses
@@ -628,4 +628,4 @@ Repeat this full regeneration + re-review loop until the user sends an explicit 
 
 On force-exit signals such as "just move on":
 - Display an "Unresolved feedback" badge in the HTML report for any sections with unresolved feedback
-- Proceed to Phase 13
+- Proceed to Phase 9 결과 전달

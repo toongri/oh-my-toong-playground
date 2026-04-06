@@ -17,7 +17,7 @@
 
 **실패 지점:**
 - "그 외 프로젝트" 전용 평가 기준 없음 → D1-D6만으로 대응
-- 압축 P.A.R.R. 포맷을 모름 → "compressed P.A.R.R."을 즉흥 추천
+- P.A.R. 포맷을 모름 → "compressed P.A.R."을 즉흥 추천
 - **추천 리라이트에서 메트릭을 날조** ("응답속도 0.8초", "전환율 35% 향상" 등 근거 없는 숫자)
 - 분량 가이드 없음 (2-4줄 권장 미인지)
 - 에이전트 자체 평가: "section-specific formatting rules are incomplete"
@@ -27,7 +27,7 @@
 
 ---
 
-### Scenario 2: 잘 쓴 압축 P.A.R.R. 통과 — (not yet tested)
+### Scenario 2: 잘 쓴 P.A.R. 통과 — (not yet tested)
 
 ---
 
@@ -78,7 +78,7 @@
 - Absolute Rule 3 ("Always evaluate content, not just expression") 적용
 
 **실패 지점:**
-- 압축 P.A.R.R. 포맷 (2-4줄) 가이드 없음 → "compressed P.A.R.R."을 즉흥 언급
+- P.A.R. 포맷 (2-4줄) 가이드 없음 → "compressed P.A.R."을 즉흥 언급
 - 프로젝트 수 제한 (3-5개) 가이드 없음
 - 배치 순서 전략 없음
 - 에이전트 자체 평가: "The skill is philosophically strong but tactically incomplete"
@@ -119,8 +119,8 @@
 
 | 갭 | 심각도 | 설명 |
 |----|--------|------|
-| 압축 P.A.R.R. 포맷 없음 | Critical | `[문제] · [해결 + 기술 이유] · [검증 숫자]` 구조가 없음 |
+| P.A.R. 포맷 없음 | Critical | `[문제] · [해결 + 기술 이유] · [검증 숫자]` 구조가 없음 |
 | 분량 가이드 없음 | Critical | 프로젝트당 2-4줄, 전체 3-5개, 15줄 이내 미정의 |
 | 배치 전략 없음 | High | 중요도 순 배치 가이드 없음 |
 | 병풍 원칙 없음 | High | "2페이지는 보너스"라는 전략적 맥락 없음 |
-| Before/After 예시 없음 | Medium | 기능 나열 vs 압축 P.A.R.R. 비교 없음 |
+| Before/After 예시 없음 | Medium | 기능 나열 vs P.A.R. 비교 없음 |

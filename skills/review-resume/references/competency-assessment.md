@@ -212,15 +212,15 @@ The difference between ad-hoc improvement and systematic delivery: engineers who
 
 Not all competencies are equally expected at every career level. Do NOT penalize a candidate for missing competencies that are not expected at their level.
 
-| Axis | New Grad / Junior | Mid | Senior |
-|------|-------------------|-----|--------|
-| C1 Technical Design | AWARENESS — shows curiosity about internals, basic comparison | EXPECTED — demonstrates design alternatives with data | REQUIRED — drives architecture decisions with industry-level comparisons |
-| C2 Operations | AWARENESS — basic monitoring/testing understanding | EXPECTED — incident response + root cause + observability | REQUIRED — designs fault-tolerant systems, continuous optimization |
-| C3 Product | N/A — limited scope is normal | EXPECTED — connects tech to business metrics | REQUIRED — drives business outcomes as primary frame |
-| C4 Communication | N/A — collaboration evidence is a bonus | PRESENT — data-driven team coordination | REQUIRED — shapes team decisions through data + documentation |
-| C5 Culture | N/A — learning mindset is sufficient | PRESENT — gives feedback, improves processes | REQUIRED — raises team engineering bar systematically |
+| Axis | Junior (<7yr) | Senior (7yr+) |
+|------|---------------|---------------|
+| C1 Technical Design | EXPECTED — demonstrates design alternatives with data | REQUIRED — drives architecture decisions with industry-level comparisons |
+| C2 Operations | EXPECTED — incident response + root cause + observability | REQUIRED — designs fault-tolerant systems, continuous optimization |
+| C3 Product | EXPECTED — connects tech to business metrics | REQUIRED — drives business outcomes as primary frame |
+| C4 Communication | EXPECTED — data-driven team coordination | REQUIRED — shapes team decisions through data + documentation |
+| C5 Culture | EXPECTED — gives feedback, improves processes | REQUIRED — raises team engineering bar systematically; leadership expectations apply |
 
-**N/A** means the axis is not expected at that level — its absence is NOT a gap and should not be flagged.
+All levels expect judgment and impact — scope differs, not type. Leadership expectations apply to Senior only.
 
 ---
 
@@ -234,13 +234,13 @@ Each competency axis is rated on a 4-point scale:
 | **PRESENT** | At least one concrete example exists; competency is visible but not dominant |
 | **WEAK** | Evidence is vague, indirect, or a single passing mention; competency is implied but not demonstrated |
 | **ABSENT** | No evidence found anywhere in the resume |
-| **N/A** | Not expected at this career level (see Career-Level Expectations table) |
+| **N/A** | Not applicable (Career-Level Expectations table no longer uses N/A — all axes are EXPECTED or REQUIRED for both tiers) |
 
 **Output format:**
 
 ```
 [Developer Competency Assessment]
-Career level: {New Grad / Junior / Mid / Senior}
+Career level: {Junior / Senior}
 
 - C1 Technical Code & Design: STRONG / PRESENT / WEAK / ABSENT
   Evidence: {specific resume lines or sections that demonstrate this competency}
@@ -250,15 +250,15 @@ Career level: {New Grad / Junior / Mid / Senior}
   Evidence: {specific resume lines or sections}
   Gap: {specific recommendation if needed}
 
-- C3 Product: STRONG / PRESENT / WEAK / ABSENT / N/A
+- C3 Product: STRONG / PRESENT / WEAK / ABSENT
   Evidence: {specific resume lines or sections}
   Gap: {specific recommendation if needed}
 
-- C4 Communication: STRONG / PRESENT / WEAK / ABSENT / N/A
+- C4 Communication: STRONG / PRESENT / WEAK / ABSENT
   Evidence: {specific resume lines or sections}
   Gap: {specific recommendation if needed}
 
-- C5 Engineering Culture: STRONG / PRESENT / WEAK / ABSENT / N/A
+- C5 Engineering Culture: STRONG / PRESENT / WEAK / ABSENT
   Evidence: {specific resume lines or sections}
   Gap: {specific recommendation if needed}
 
@@ -290,7 +290,7 @@ The framing principle: gap guidance should say "if you have this experience, her
 
 ## Interview Trigger
 
-When C1-C5 assessment results show a WEAK or ABSENT axis that is EXPECTED or REQUIRED for the candidate's career level → refer to `Read references/experience-mining.md` Phase 4 section and conduct the Experience Mining Interview.
+When C1-C5 assessment results show a WEAK or ABSENT axis that is EXPECTED or REQUIRED for the candidate's career level → refer to `Read references/experience-mining.md` § C1-C5 Competency section and conduct the Experience Mining Interview.
 
 Interview targets only axes rated WEAK/ABSENT (not all 5 axes).
 
@@ -303,8 +303,8 @@ If the user opts out ("next" / "skip" / "다음으로" / "넘어가자"), fall b
 | Thought | Reality |
 |---------|---------|
 | "D1c-D6c already covers this — isn't this redundant?" | D1c-D6c evaluates per-line writing quality. C1-C5 evaluates cross-resume competency signals. Different dimensions. |
-| "I should expect C3 Product from a junior candidate" | Check the Career-Level Expectations table. C3-C5 are N/A for New Grad/Junior. |
+| "Junior C3-C5 should be rated STRONG or it's a gap" | Check the Career-Level Expectations table. EXPECTED means evidence is looked for — WEAK or ABSENT is a real gap, but scope is narrower than Senior. |
 | "ABSENT means there's always a problem" | ABSENT ≠ problem. Only flag when the axis is EXPECTED or REQUIRED for the candidate's career level. |
 | "If it's not written in the resume, they don't have the competency" | Resume writing gaps ≠ competency gaps. Gap guidance should prompt candidates to surface experiences they have, not assume those experiences don't exist. |
-| "A strong resume needs all five axes rated STRONG" | Mid with C1-C2 STRONG + C3 PRESENT is already a strong resume. Not all axes need to be STRONG. |
+| "A strong resume needs all five axes rated STRONG" | Junior with C1-C2 STRONG + C3 PRESENT is already a strong resume. Not all axes need to be STRONG. |
 | "This is subjective so rough evaluation is fine" | Each checklist item has concrete evidence criteria. Rate based on what is actually present in the resume, citing specific lines. |

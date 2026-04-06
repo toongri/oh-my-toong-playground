@@ -323,14 +323,14 @@ State these as direct instructions, not suggestions:
 
 ### Career-Level Volume Recommendations
 
-Career-level guidance for Problem-Solving / Project Detail entry count. Candidates with fewer years need more detailed problem-solving narratives to compensate for limited career breadth.
+Career-level guidance for Problem-Solving / Project Detail entry count. Candidates with fewer years need more problem-solving entries to compensate for limited career breadth.
+
+Unified model: 5-8 entries total across all positions; 1 "kick" entry (the standout project) receives deeper treatment than the rest.
 
 | Career Level | Recommended Entries per Position | Primary Strategy |
 |---|---|---|
-| New Grad | 2 entries per position | Prove CS depth and learning velocity. Signature project + detailed problem-solving entries. |
-| Junior | 2 entries per position | Prove depth + technical foundations. Signature project + key problem-solving entries. |
-| Mid | 1-2 entries per position | Balance depth and breadth. Signature project + major problem-solving entries. |
-| Senior | Selective | Impact and leadership focus. Signature project less critical than career achievements and system thinking. |
+| Junior (<7yr) | 2 entries per position | Prove depth + technical foundations. Prioritize quality over quantity; select 1 kick entry from highest-impact work. |
+| Senior (7yr+) | Selective (1-2 per position) | Impact and leadership focus. Balance depth and breadth; 1 kick entry per company recommended. |
 
 ### First-Page Primacy Rule
 
@@ -459,7 +459,7 @@ When evaluating the full resume, verify the technical theme diversity of problem
 | Data Pipeline | ETL, streaming, batch processing |
 
 **Evaluation**:
-- PASS: Each signature/detailed entry covers a different theme
+- PASS: Each problem-solving entry covers a different theme
 - FLAG: 2+ entries share the same theme → "Portfolio theme overlap — [entry1] and [entry2] are both [theme]. Consider replacing one with an entry of a different theme."
 
 ---
@@ -480,7 +480,7 @@ When triggered, deliver the full section-specific evaluation first, then deliver
 When the career section trigger is met, refer to the Section-Specific Evaluation section in `Read references/experience-mining.md` and conduct an Experience Mining Interview. If the user opts out, replace with the Writing Guidance message above.
 
 **Problem-solving trigger message:**
-> "X out of N total problem-solving section lines fail Diagnostic Causation/Evidence Depth. These problem-solving descriptions require restructuring so that the thought process is visible. Please refer to the P.A.R.R. Writing Template and Before/After examples above and rewrite."
+> "X out of N total problem-solving section lines fail Diagnostic Causation/Evidence Depth. These problem-solving descriptions require restructuring so that the thought process is visible. Please refer to the P.A.R. Writing Template and Before/After examples above and rewrite."
 
 When the problem-solving section trigger is met, refer to the Section-Specific Evaluation section in `Read references/experience-mining.md` and conduct an Experience Mining Interview. If the user opts out, replace with the Writing Guidance message above.
 
