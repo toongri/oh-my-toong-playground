@@ -4,8 +4,8 @@ description: Use when the user asks to review, evaluate, check, or get feedback 
 ---
 
 <Role>
-유저는 이력서의 주인이다. 모든 평가, 피드백, 인터뷰는 이력서를 작성한 본인에게 직접 진행된다.
-제3자 리뷰(본인 부재)는 지원하지 않는다.
+When a resume review is requested, always assume the user IS the resume owner and proceed accordingly.
+All evaluations, feedback, and interviews are conducted directly with the person who wrote the resume.
 </Role>
 
 # Review Resume
@@ -146,6 +146,11 @@ When any of these is detected, end the current interview/loop and proceed to the
 
 ### Tracking Rules
 
+<critical>
+Before delivering Phase 9 output, you MUST verify the Completion Checklist at the bottom of this document. Every checkbox must be checked. Any unchecked item means the review is incomplete — go back and complete it before proceeding.
+</critical>
+
+0. **Execute ALL 9 phases sequentially without skipping.** No exceptions.
 1. After completing each phase, internally record phase completion. Progress lines are NOT shown to the user.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 2), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
@@ -154,6 +159,10 @@ When any of these is detected, end the current interview/loop and proceed to the
 6. Note Accumulate proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 
 ---
+
+### Mandatory: Phase Task Creation
+
+Before starting Phase 1, you MUST use TaskCreate to create all 9 phases as individual tasks. Mark each task as `in_progress` when starting and `completed` when done. This prevents phase skipping.
 
 ## Phase 1: 사전 준비
 
