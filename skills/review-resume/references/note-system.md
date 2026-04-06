@@ -140,8 +140,6 @@ Report the load result to the user:
 - Research Cache: {company name} found / none
 ```
 
-`[Phase 0/13: Note Load ✓]`
-
 ---
 
 ## 7. Auto-Seeding (First Run)
@@ -198,5 +196,3 @@ Save? (y/n)
 ```
 
 If the user confirms, create or modify the files. If declined, do not accumulate.
-
-`[Phase 13/13: Note Accumulate ✓]`

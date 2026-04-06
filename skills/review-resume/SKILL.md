@@ -282,9 +282,9 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 ## Phase 6: 문제해결 심화평가
 
-All problem-solving entries are evaluated under a unified framework combining P.A.R. narrative evaluation (P1-P8), T1-T3 Technical Substance Verification, and Entanglement Extraction.
+All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Entanglement Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
 
-**P.A.R. Evaluation (P1-P8):** Assess narrative depth, failure arc, why-chain, stopping judgment, and technical substance across all entries. T1-T3 verify technical coherence, choice rationality, and problem fidelity.
+**P.A.R. Evaluation:** Base dimensions (P1-P2, P5) apply to all 5+ line entries. P3 is kick-only. P6-P8 apply to Senior entries only. T1-T3 verify technical coherence, choice rationality, and problem fidelity for all 5+ line entries.
 
 **Entanglement Extraction:** When problem-solving description is FLAT (concerns are independent or lack causal links), run the 4-question chain to extract the entanglement structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Entanglement Extraction.
 
