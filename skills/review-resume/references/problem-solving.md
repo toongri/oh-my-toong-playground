@@ -448,7 +448,7 @@ Apply the full P.A.R. formula, but show the depth of thought process — not a t
 
 **Problem**: Why does this problem matter? What is the business risk? What is the root cause?
 
-**Approach:**
+**Action:**
 
 - Not just technology selection: "Used Redis" (X), "Used GPT-4" (X)
 - Every attempt must include both Whys:
@@ -589,7 +589,7 @@ When the above trigger is met, refer to the Problem-Solving section of `Read ref
 
 ## 17. Technical Substance Verification T1-T3
 
-Problem-Solving Evaluation (P.A.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a reflection?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
+Problem-Solving Evaluation (P.A.R. P1-P8) verifies narrative structure: "Does the Why chain exist?", "Is there a failure arc?", "Is there a verification step?" Entries that pass this verification can still have incorrect technical content. T1-T3 verifies the **technical substance** inside the narrative.
 
 Key distinction: P1-P8 asks "does this element **exist**?", T1-T3 asks "is this content **correct**?"
 

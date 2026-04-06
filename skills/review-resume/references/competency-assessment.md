@@ -234,7 +234,6 @@ Each competency axis is rated on a 4-point scale:
 | **PRESENT** | At least one concrete example exists; competency is visible but not dominant |
 | **WEAK** | Evidence is vague, indirect, or a single passing mention; competency is implied but not demonstrated |
 | **ABSENT** | No evidence found anywhere in the resume |
-| **N/A** | Not applicable (Career-Level Expectations table no longer uses N/A — all axes are EXPECTED or REQUIRED for both tiers) |
 
 **Output format:**
 

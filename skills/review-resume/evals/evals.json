@@ -106,7 +106,7 @@
       "assertions": [
         {"text": "note-load", "description": "Phase 1: loads note and reports problem-solving candidate pool status"},
         {"text": "unified-evaluation-model", "description": "Evaluates all problem-solving entries (5+ lines) with unified P.A.R. criteria; nominates 1 kick entry for deeper treatment. Entries under 5 lines flagged for Career migration."},
-        {"text": "signature-depth-full-evaluation", "description": "Kick entry gets comprehensive evaluation covering P.A.R. dimensions (P1-P3, P5) — narrative depth, failure arc, verification depth, why-chain"},
+        {"text": "kick-entry-full-evaluation", "description": "Kick entry gets comprehensive evaluation covering P.A.R. dimensions (P1-P3, P5) — narrative depth, failure arc, verification depth, why-chain"},
         {"text": "minimum-length-enforcement", "description": "Evaluator demonstrates awareness of 5-line minimum: either flags entries under 5 lines for Career migration, OR explicitly states line counts per entry showing all exceed threshold. Complete omission without evidence of consideration is FAIL."},
         {"text": "career-level-appropriate", "description": "Evaluation criteria match the candidate's career level (not applying junior criteria to mid/senior or vice versa)"},
         {"text": "jd-relevant-ordering", "description": "Recommends ordering problem-solving entries by JD relevance (payments, incident response prioritized)"},
@@ -143,7 +143,7 @@
         {"text": "four-stage-protocol", "description": "4-Stage Bypass Protocol executed per triggered phase: Stage 1 (Direct Question) → Stage 2 (Bypass/Reframing) → Stage 3 (Adjacent Experience) → Stage 4 (Daily Work). Each stage only entered if previous stage yielded no source."},
         {"text": "discovered-candidates-tracking", "description": "Discovered Candidates Working Set records at least one mined experience in format: Phase {N} | {topic} | Fact: {fact} | Context: {context} | Verifiable: {metric} | Target: {section}"},
         {"text": "interview-opt-out-handling", "description": "If user says 'next' or 'move on', agent exits current phase interview gracefully, falls back to static Writing Guidance, and continues to next phase — does not force interview continuation"},
-        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT/N/A with cited evidence; C3-C5 axes may be rated N/A when not expected at the candidate's career level"},
+        {"text": "c1-c5-competency-assessment", "description": "Performs Developer Competency Assessment with C1-C5 axes, rating each as STRONG/PRESENT/WEAK/ABSENT with cited evidence; all C1-C5 axes are EXPECTED or REQUIRED at both career levels"},
         {"text": "c1-c5-career-level", "description": "C1-C5 assessment specifies career level (Junior) and applies 2-tier career-level expectations"},
         {"text": "c1-c5-gap-guidance", "description": "For WEAK/ABSENT axes that are EXPECTED/REQUIRED at junior level, provides specific gap recommendations or triggers Phase 3 interview"},
         {"text": "unified-evaluation-model", "description": "Evaluates all problem-solving entries (5+ lines) with unified P.A.R. criteria; nominates 1 kick entry for deeper treatment. Entries under 5 lines flagged for Career migration."},

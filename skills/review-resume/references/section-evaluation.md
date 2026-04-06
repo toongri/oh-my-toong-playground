@@ -330,7 +330,7 @@ Unified model: 5-8 entries total across all positions; 1 "kick" entry (the stand
 | Career Level | Recommended Entries per Position | Primary Strategy |
 |---|---|---|
 | Junior (<7yr) | 2 entries per position | Prove depth + technical foundations. Prioritize quality over quantity; select 1 kick entry from highest-impact work. |
-| Senior (7yr+) | Selective (1-2 per position) | Impact and leadership focus. Balance depth and breadth; 1 kick entry per company recommended. |
+| Senior (7yr+) | Selective (1-2 per position) | Impact and leadership focus. Balance depth and breadth; 1 kick entry (the standout project across entire career) for deeper treatment. |
 
 ### First-Page Primacy Rule
 
