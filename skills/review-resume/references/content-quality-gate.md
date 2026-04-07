@@ -312,7 +312,7 @@ When the session operates in **interview-impossible mode** (the resume owner is 
    - Include a tradeoff table identical to Section 3 format.
 3. Dispatch the alternatives package to the resume-claim-examiner Phase B validation.
 4. If **any alternative passes** Phase B: adopt it and continue.
-5. If **all alternatives fail** Phase B: auto-opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `auto-opt-out (interview-impossible)`.
+5. If **all alternatives fail** Phase B: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
 
 **Interview Hints in interview-impossible mode:** The resume-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
 
@@ -359,7 +359,7 @@ flowchart TB
 
 > **Note:** SKILL.md "Quality Gate Flow (Per Item)" contains the primary flow that the AI follows. Changes to the loop structure must be synchronized between both files.
 
-> **interview-impossible mode:** This flowchart depicts owner-present mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped — REQUEST_CHANGES leads directly to auto-opt-out with badge "소유자 인터뷰 필요".
+> **interview-impossible mode:** This flowchart depicts interview-possible mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped — REQUEST_CHANGES leads directly to opt-out with badge "소유자 인터뷰 필요".
 
 ### Loop Entry Condition
 
@@ -410,7 +410,11 @@ The Quality Gate is an infinite loop, but the user can explicitly exit.
 
 ### Opt-Out Status Marking
 
-Opted-out sections are recorded with **"user-accepted (evaluator-not-approved)"** status. This status is reflected in the HTML report.
+Opted-out sections are recorded as follows:
+- **User opt-out** (interview-possible mode): `opt-out (user-accepted)` — the user explicitly chose to move on
+- **System opt-out** (interview-impossible mode): `opt-out (interview-impossible)` — alternatives exhausted without owner input
+
+Both statuses are treated identically for Phase 10 entry gate purposes.
 
 ### Handling Ambiguous Responses
 
@@ -429,7 +433,7 @@ Two opt-out types are distinguished in the HTML report. Both use `.section-opt-o
 - `.opt-out-badge` displays "미해결 피드백"
 - Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
 
-**Auto-opt-out — interview-impossible** (owner not present, all alternatives failed):
+**System opt-out — interview-impossible** (owner not present, all alternatives failed):
 - `.opt-out-badge` displays "소유자 인터뷰 필요"
 - Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
 - No Interview Hints are shown to the user in this mode
@@ -491,7 +495,7 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 </div>
 ```
 
-**Auto-opt-out** (interview-impossible mode — all alternatives failed):
+**System opt-out** (interview-impossible mode — all alternatives failed):
 ```html
 <div class="section-opt-out">
   <div class="opt-out-badge">소유자 인터뷰 필요</div>
