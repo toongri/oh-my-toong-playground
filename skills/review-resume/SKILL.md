@@ -5,7 +5,7 @@ description: Use when the user asks to review, evaluate, check, or get feedback 
 
 <Role>
 When a resume review is requested, run Phase 1 (Identity Confirmation) first to determine whether the user is the resume owner. The result locks the session into one of two modes:
-- **owner-confirmed**: All evaluations, feedback, and interviews are conducted directly with the person who wrote the resume.
+- **interview-possible**: All evaluations, feedback, and interviews are conducted with someone who can answer in-depth questions about the resume's experiences and decisions.
 - **interview-impossible**: All evaluations and examiner dispatch proceed normally, but interview loops across all phases are skipped. See "Interview-Impossible Mode" section for per-phase details.
 </Role>
 
@@ -90,7 +90,7 @@ flowchart TB
     style NOTE fill:#fff3cd,stroke:#856404,color:#856404
     NOTE -.-> P_ID
     P_ID[Phase 1: Identity Confirmation\nRead owner from preferences.md] --> ID_CHK{owner\nconfirmed?}
-    ID_CHK -->|"YES: owner-confirmed"| P0[Phase 2: 사전 준비\nNote Load + Pre-Evaluation Research]
+    ID_CHK -->|"YES: interview-possible"| P0[Phase 2: 사전 준비\nNote Load + Pre-Evaluation Research]
     ID_CHK -->|"NO: interview-impossible"| P0
     P0 --> P1[Phase 3: 자기소개 평가\nper-type + global + Type C sub-step]
     P1 --> P2[Phase 4: 개발자 역량 평가\nC1-C5 Competency]
@@ -156,9 +156,9 @@ When any of these is detected, end the current interview/loop and proceed to the
 
 When Phase 1 sets mode to **interview-impossible** (user is not the resume owner), interview loops are suppressed for the entire session. Evaluation and examiner dispatch proceed unchanged. The table below specifies exact behavior per phase.
 
-| Phase | Normal (owner-confirmed) | Interview-Impossible |
+| Phase | Normal (interview-possible) | Interview-Impossible |
 |-------|--------------------------|----------------------|
-| 1 | Identity confirmation → owner-confirmed | Identity confirmation → interview-impossible (no change to Phase 1 itself) |
+| 1 | Identity confirmation → interview-possible | Identity confirmation → interview-impossible (no change to Phase 1 itself) |
 | 2 | Note Load + Pre-Evaluation Research | No change — same procedure |
 | 3 | 자기소개 평가: type evaluation → interview on FAIL | Skip interview. Output evaluation results and flag FAIL axes only. Proceed. |
 | 4 | 개발자 역량 평가: C1-C5 → interview on WEAK/ABSENT | Skip interview. Output axis ratings with evidence citations only. Proceed. |
@@ -202,40 +202,7 @@ Not all processing output belongs in the terminal. The following categories defi
 - Examiner dispatch and response details (E1-E6 axis scoring, Entanglement Score sub-dimensions)
 - Competency assessment reasoning (C1-C5 axis rating evidence)
 
-### English → Korean Term Mapping
-
-When generating HTML report output, all evaluation criteria and examiner axis labels must be translated to Korean using this mapping table. Never use bare English criteria names or internal codes in user-facing HTML.
-
-#### Examiner Axes (E1–E6)
-
-| English | Korean |
-|---------|--------|
-| Career-Level Fit | 경력 수준 적합성 |
-| Logical Coherence | 논리적 일관성 |
-| Problem Fidelity | 트레이드오프 진정성 |
-| Tradeoff Authenticity | 기술 선택 근거 |
-| Problem Surface | 문제 간 인과관계 |
-| Scale-Appropriate Engineering | 규모 적정 설계 |
-| Signal-to-Noise Ratio | 핵심 신호 비율 |
-| Target-Scale Transferability | 확장성 전이 |
-| Entanglement Reasoning | 문제 연쇄 추론 |
-| Entanglement Score (FLAT/LISTED/ENTANGLED) | 연쇄 수준 (독립/나열/연쇄) |
-
-#### Section Criteria
-
-| English | Korean |
-|---------|--------|
-| Linear Causation | 인과관계 연결 |
-| Metric Specificity | 지표 구체성 |
-| Role Clarity | 역할 명확성 |
-| Standard Transcendence | 업계 표준 초월 |
-| Hook Potential | 면접관 호기심 유발 |
-| Section Fitness | 섹션 적합성 |
-| Diagnostic Causation | 진단 인과관계 |
-| Evidence Depth | 근거 깊이 |
-| Thought Visibility | 사고 과정 가시성 |
-| Beyond-Standard Reasoning | 표준 초월 추론 |
-| Interview Depth | 면접 깊이 |
+When generating user-facing output (HTML report), translate all evaluation criteria and examiner axis labels to the user's language. Do not use bare English criteria names or internal codes in user-facing output.
 
 ---
 
@@ -261,8 +228,8 @@ Read ONLY the `owner` field from `$OMT_DIR/review-resume/preferences.md`. Do NOT
 
 **Step 3 — Lock session mode based on user response:**
 
-- If the user confirms they ARE the owner → set mode: **owner-confirmed**. All interview loops are active.
-- If the user confirms they are NOT the owner → set mode: **interview-impossible**. All interview loops are suppressed for this session. Announce to user:
+- If the user confirms they can answer in-depth questions about the resume's experiences and decisions → set mode: **interview-possible**. All interview loops are active.
+- If the user confirms they cannot answer such questions → set mode: **interview-impossible**. All interview loops are suppressed for this session. Announce to user:
   ```
   [Identity Confirmed: interview-impossible mode]
   이력서 소유자가 아닌 것으로 확인되었습니다. 인터뷰 루프는 생략되며, 평가 및 대안 생성은 이력서 내용만으로 진행됩니다.
@@ -445,7 +412,7 @@ While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "
 <critical>
 When resume-claim-examiner returns REQUEST_CHANGES, follow the branch that matches the current session mode:
 
-**owner-confirmed mode:**
+**interview-possible mode:**
 
 1. Explain each FAIL axis and its rationale to the user, item by item
 2. Convert Interview Hints into specific questions → conduct interview via AskUserQuestion
@@ -462,11 +429,11 @@ When resume-claim-examiner returns REQUEST_CHANGES, follow the branch that match
 3. Generate 2-3 alternatives using only the existing resume content and evaluation findings
 4. Re-dispatch alternatives to examiner
 5. If examiner returns APPROVE → proceed
-6. If examiner returns REQUEST_CHANGES again → generate best revision with current content → auto-opt-out with note: "소유자 인터뷰 필요 — 추가 정보 없이 개선 한계에 도달했습니다"
-7. Repeat until APPROVE or auto-opt-out
+6. If examiner returns REQUEST_CHANGES again → generate best revision with current content → opt-out with note: "소유자 인터뷰 필요 — 추가 정보 없이 개선 한계에 도달했습니다"
+7. Repeat until APPROVE or opt-out
 
 NEVER enter Phase 10 while ANY item remains in REQUEST_CHANGES status.
-Phase 10 entry is permitted ONLY when ALL Verdict Tracker items are APPROVE or user-opt-out.
+Phase 10 entry is permitted ONLY when ALL Verdict Tracker items are APPROVE or opt-out.
 </critical>
 
 ### Examiner Eligibility
@@ -599,7 +566,7 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 
 ```
 [Review Completion Checklist — INTERNAL]
-- [ ] Phase 1: Identity Confirmation (session mode locked: owner-confirmed / interview-impossible)
+- [ ] Phase 1: Identity Confirmation (session mode locked: interview-possible / interview-impossible)
 - [ ] Phase 2: 사전 준비 (Note Load + Pre-Evaluation Research)
 - [ ] Phase 3: 자기소개 평가 (per-type + global + Type C sub-step)
 - [ ] Phase 3: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
