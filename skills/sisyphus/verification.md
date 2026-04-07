@@ -58,17 +58,21 @@ Applies to **APPROVE** and **COMMENT** verdicts only. REQUEST_CHANGES bypasses t
 
 ### Expected Evidence Manifest
 
-During QA REQUEST composition, sisyphus builds a list of evidence file paths from `## Required Verification`. When manifest is empty (judgment-only review), the audit gate passes trivially.
+Build the manifest after argus responds, from two sources:
 
-**Stage 1 automated checks (auto-include)**: When code changes are present, auto-include evidence paths for Stage 1 checks that exist in this project. Only include paths for commands actually discovered during project context gathering:
+1. **From QA REQUEST** — explicit evidence file paths included in `## Required Verification` (if any)
+2. **From argus response** — all paths listed in the `## Evidence Files` section of the response
 
-```
-$OMT_DIR/evidence/adhoc-{task-slug}/build.txt
-$OMT_DIR/evidence/adhoc-{task-slug}/test.txt
-$OMT_DIR/evidence/adhoc-{task-slug}/lint.txt
-```
+Manifest = union of both sources. When manifest is empty (judgment-only review, no commands executed), the audit gate passes trivially.
 
-Sisyphus auto-includes these paths in the manifest without explicit mention in the QA REQUEST.
+**Two modes:**
+
+| QA REQUEST has explicit paths? | Manifest source | Verification |
+|-------------------------------|----------------|--------------|
+| Yes | QA REQUEST paths (argus response as cross-check) | Verify argus saved to the specified locations |
+| No | Argus response paths | Verify the files argus claims to have saved actually exist |
+
+**Stage 1 automated checks**: When composing the QA REQUEST for code changes, sisyphus may include explicit Stage 1 evidence paths in `## Required Verification` for deterministic file locations. If omitted, argus determines paths autonomously using the 3-Tier Evidence Path Priority and reports them in the response.
 
 ### Audit Procedure
 
@@ -92,11 +96,28 @@ A path passes if the file **exists and is non-empty** (`test -f "$path" && test 
 | 1-2 | APPROVE/COMMENT + evidence STILL MISSING | Re-invoke argus again |
 | 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | Interview user: explain situation + AskUserQuestion for strategy selection |
 
+**Evidence Gap Request format:**
+
+```
+# EVIDENCE GAP REQUEST
+
+## Original QA REQUEST
+[Paste the original QA REQUEST verbatim]
+
+## Missing Evidence
+- [ ] $OMT_DIR/evidence/adhoc-{task-slug}/build.txt — file not found or empty
+- [ ] [additional missing paths]
+
+## Action Required
+Re-run the verification commands that produce the missing evidence files.
+Save outputs to the exact paths listed above.
+```
+
 **Full protocol**:
 
 1. If ALL manifest paths are PRESENT → proceed to Verdict Response Protocol
 2. If ANY manifest paths are MISSING → Evidence Gap detected:
-   - Re-invoke argus with an Evidence Gap Request listing the missing paths
+   - Re-invoke argus with an Evidence Gap Request (format above) listing the missing paths
    - After re-invocation, evaluate the **new verdict first**:
      - If REQUEST_CHANGES → treat as REQUEST_CHANGES (create fix task). Evidence gap is moot.
      - If APPROVE/COMMENT → check manifest again

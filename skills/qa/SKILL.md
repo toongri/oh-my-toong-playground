@@ -131,6 +131,19 @@ Resolve the evidence file path in this order — use the first match:
    - `{check-slug}`: URL-safe slug derived from the verification description (e.g., `npm-test`, `build`, `curl-post-users`)
    - `{ext}`: file extension by domain (`.txt` for CLI/test output, `.json` for API responses, `.png` for screenshots)
 
+### Evidence Reporting in Response
+
+After all verification is complete, include a `## Evidence Files` section in the response listing every evidence file saved during this verification:
+
+```
+## Evidence Files
+- $OMT_DIR/evidence/adhoc-add-user-endpoint/build.txt
+- $OMT_DIR/evidence/adhoc-add-user-endpoint/test.txt
+- $OMT_DIR/evidence/adhoc-add-user-endpoint/curl-post-users.json
+```
+
+This section is the authoritative list of evidence produced. Downstream audit gates use these reported paths for physical file existence verification. When no commands were executed (judgment-only review), omit this section.
+
 ### Judgment-Only Trigger Exemption
 
 The **spec or AC provided** trigger (when activated with no executable commands — pure reading and analysis) produces **no evidence files**. Spec/AC compliance is a subjective judgment rendered in the response. Downstream audit gates MUST NOT flag missing evidence files for this trigger when no commands were executed.
@@ -259,7 +272,8 @@ This trigger activates when changes affect user-facing behavior AND the request 
 
 1. **Start** the server/application in background
 2. **Execute** verification against the running instance
-3. **Stop** the server/application after verification completes
+3. **Save** evidence for each verification result using the 3-tier Evidence Path Priority
+4. **Stop** the server/application after verification completes
 
 **See** [stage3-handson.md] **for details** on applicability logic, lifecycle management, verification procedures, and output format.
 
