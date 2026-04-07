@@ -102,6 +102,45 @@ When verification methods ARE specified:
 
 ---
 
+## Evidence Saving Protocol
+
+### Core Rule
+
+Every verification **command execution** produces an evidence file. No exceptions.
+
+Evidence files are the audit trail. Downstream gates check for their existence before accepting verdicts.
+
+### Objective vs. Subjective
+
+| Output Type | Disposition | Examples |
+|-------------|-------------|---------|
+| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright screenshots, CLI execution logs |
+| Subjective judgment | Response only (no file) | Code review analysis, MUST DO checklist verdicts, Scope Boundary calculations, feedback comments |
+
+### Evidence Path Priority (3-Tier)
+
+Resolve the evidence file path in this order — use the first match:
+
+1. **QA REQUEST에 명시된 경로** — caller explicitly provided a path in the QA REQUEST
+2. **Plan QA Scenario Evidence 필드** — the scenario definition includes an `evidence` field with a path
+3. **자동 생성 경로** — no path provided; generate:
+   ```
+   $OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}
+   ```
+   - `{task-slug}`: URL-safe slug from the current task or plan name (e.g., `add-user-endpoint`)
+   - `{check-slug}`: URL-safe slug derived from the verification description (e.g., `npm-test`, `build`, `curl-post-users`)
+   - `{ext}`: file extension by domain (`.txt` for CLI/test output, `.json` for API responses, `.png` for screenshots)
+
+### Judgment-Only Trigger Exemption
+
+The **spec or AC provided** trigger (when activated with no executable commands — pure reading and analysis) produces **no evidence files**. Spec/AC compliance is a subjective judgment rendered in the response. Downstream audit gates MUST NOT flag missing evidence files for this trigger when no commands were executed.
+
+### Fast-Path Exception
+
+Fast-path reviews (single-line edits, obvious typos) skip automated checks and hands-on QA. No commands executed = no evidence files expected.
+
+---
+
 ## When: code changes present
 
 ### Automated Checks
@@ -111,6 +150,7 @@ When verification methods ARE specified:
 1. Discover project commands (check memory file, then documentation, then build files)
 2. Run: Build -> Tests -> Lint
 3. ANY failure = immediate REQUEST_CHANGES
+4. Save the full output of each automated check (build, test, lint) as an evidence file using the 3-tier path priority above
 
 **See** [stage1-commands.md] **for details** on command discovery, special cases, and output format.
 
@@ -195,7 +235,7 @@ This trigger activates when the request content includes executable QA scenarios
 
 1. Execute each scenario as specified (tool, steps, expected output)
 2. Collect evidence for each scenario result
-3. Save evidence to the path specified in the scenario (if any)
+3. Save evidence to the path resolved by the 3-tier Evidence Path Priority
 4. ANY scenario failure = immediate REQUEST_CHANGES
 
 ---
