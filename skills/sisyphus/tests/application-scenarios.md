@@ -49,6 +49,8 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-31 | Skill Selection Protocol — No Relevant Skills | Skill Selection Protocol | Legitimate empty Section 7 |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | Skill Selection Protocol | Multi-skill evaluation |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | Delegation Prompt (REQUIRED TOOLS) | Tool scope violation language |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | Full workflow integration | Decision Gate + Interview + Task + Delegation + Verification + Commit |
+| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | Verification retry + Evidence Audit | REQUEST_CHANGES + fix + re-verify + evidence gap + mnemosyne |
 
 ---
 
@@ -913,6 +915,97 @@ or omit tool constraints entirely.
 
 ---
 
+## Use-Case Scenarios (End-to-End)
+
+These scenarios test whether the skill's core techniques work correctly **when combined across multiple phases**. Each scenario spans the full workflow or a significant multi-phase sequence.
+
+---
+
+## Scenario UC-S1: End-to-End — Broad Request to Completion
+
+**Primary Technique:** Full workflow integration — Decision Gate → explore → Interview → Task Creation → Parallel Delegation → Verification → Commit
+
+**Input (Multi-turn):**
+```
+Turn 1:
+User says: "API 응답 속도 개선해줘"
+No specific file, function, or metric mentioned.
+
+Turn 2 (after explore returns):
+Sisyphus asks interview question about scope. User responds:
+"GET /api/products 엔드포인트가 2초 걸려. 500ms 이하로 줄이고 싶어."
+
+Turn 3 (after interview):
+Sisyphus creates 3-task plan:
+- T1: Add database query index (unblocked)
+- T2: Implement response caching (unblocked)
+- T3: Add performance benchmark test (blocked by T1, T2)
+
+Turn 4:
+Junior A (T1) reports done. Junior B (T2) reports done.
+
+Turn 5:
+Argus approves T1. Argus approves T2. T3 unblocks.
+
+Turn 6:
+Junior C (T3) reports done. Argus approves T3.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Broad request detected → explore first | "API 응답 속도 개선해줘" classified as broad (scope-less "개선" verb). Explore dispatched BEFORE any interview question |
+| V2 | Interview uses explore results, asks preferences only | Interview question informed by explore findings (e.g., "GET /api/products가 2초 걸리는데"). Asks scope/priority preferences, NOT codebase facts |
+| V3 | Tasks created with correct dependencies | T1 and T2 unblocked (parallel), T3 blocked by both. Atomicity: each task 1-3 files |
+| V4 | T1 and T2 dispatched in parallel | Both dispatched concurrently in a single response |
+| V5 | Each junior completion → argus (not self-verify) | After each junior reports done, argus is the sole next action. No npm test or grep by sisyphus |
+| V6 | Argus approve → Evidence Audit → mnemosyne → mark complete | For each approved task: evidence file check → mnemosyne commit → mark completed. Full chain preserved |
+| V7 | T3 unblocks only after T1 AND T2 complete | T3 dispatched only after both T1 and T2 pass argus + mnemosyne + marked complete |
+| V8 | All 3 tasks complete before declaring done | Plan is not done until all 3 tasks pass the full cycle |
+
+---
+
+## Scenario UC-S2: End-to-End — Fix Cycle with Evidence Audit Gap
+
+**Primary Technique:** Verification retry loop + Evidence Audit Gate — argus reject → fix → re-verify → evidence gap → re-invoke → success
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Task T-5 delegated to junior: "Add email validation to registration form"
+Junior reports done.
+
+Turn 2:
+Argus returns REQUEST_CHANGES: "Missing format validation — only checks non-empty"
+
+Turn 3:
+Fix task created, junior fixes email validation.
+Argus returns APPROVE.
+Evidence Audit Gate: $OMT_DIR/evidence/adhoc-email-validation/test.txt is MISSING.
+
+Turn 4:
+Re-invoke argus with Evidence Gap Request listing the missing path.
+Argus returns APPROVE again.
+Evidence Audit Gate: test.txt now EXISTS and is non-empty.
+
+Turn 5:
+Mnemosyne invoked, commit created.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | REQUEST_CHANGES → fix task with verbatim argus feedback | Fix task created containing exact argus feedback ("Missing format validation — only checks non-empty"), not a summary |
+| V2 | Fix task delegated to new junior (not done directly) | Sisyphus does NOT fix the validation itself — dispatches to sisyphus-junior |
+| V3 | After argus APPROVE → Evidence Audit Gate runs | Sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V4 | Evidence gap detected → re-invoke argus (not execute tests) | Missing test.txt triggers argus re-invocation with Evidence Gap Request. Sisyphus does NOT run npm test as fallback |
+| V5 | After re-invocation → evidence re-check passes → mnemosyne | Second evidence audit passes, mnemosyne invoked to commit |
+| V6 | Iron Law preserved throughout | At NO point does sisyphus run verification commands, git commit, or any direct verification. Only file existence checks (permitted) |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -950,3 +1043,5 @@ or omit tool constraints entirely.
 | S-31 | Skill Selection Protocol — No Relevant Skills | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | PASS | 2026-02-26 | 5/5 VPs — GREEN verified (re-test after scenario Input fix: removed oracle pre-diagnosis) |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | | | Use-case scenario — needs testing |
+| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | | | Use-case scenario — needs testing |
