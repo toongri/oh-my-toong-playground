@@ -308,7 +308,7 @@ No source after Stage 4 → switch to problem-solving.md §15 Writing Guidance
 **Source Acquisition Path:**
 Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforcement candidate or a candidate for a new entry
 
-### Entanglement Extraction (Problem-Solving sub-protocol)
+### Cascade Extraction (Problem-Solving sub-protocol)
 
 **Trigger:** 문제 해결 서술이 FLAT(단일 concern) 또는 LISTED(복수 concern 나열, 인과 연결 없음) 패턴을 보이는 경우. 유저가 실제로 경험한 연쇄 구조를 기술하지 않았을 가능성이 높다.
 
@@ -316,7 +316,7 @@ Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforc
 
 GOOD: "이 프로젝트에서 문제들이 서로 연결되어 있었을 것 같은데 — 하나를 해결하면서 다른 문제가 드러난 경험이 있었나요?"
 
-BAD (internal metric exposure): "E3b LISTED, entanglement score 0.35 — causal chain depth 부족"
+BAD (internal metric exposure): "E3b LISTED, constraint cascade score 0.35 — causal chain depth 부족"
 
 BAD (too vague): "다른 문제도 있었나요?"
 
@@ -346,10 +346,10 @@ BAD: "어떻게 해결했나요?"
 
 GOOD: "처음에 계획했던 것과 실제로 만든 것을 비교하면 — 어디서 계획이 바뀌었나요? 왜 바뀌었나요?"
 
-**Source quality for entanglement:** 답변에 최소 2개의 인과적으로 연결된 concern이 포함되어야 한다 (A가 B를 유발했거나, A가 옵션 X를 제거). 4개 질문 모두 진행한 후에도 병렬 concern만 나오면 → genuinely non-entangled로 수용.
+**Source quality for cascade extraction:** 답변에 최소 2개의 인과적으로 연결된 concern이 포함되어야 한다 (A가 B를 유발했거나, A가 옵션 X를 제거). 4개 질문 모두 진행한 후에도 병렬 concern만 나오면 → genuinely non-cascading으로 수용.
 
 **Exhaustion Path:**
-4개 질문 후 entanglement source 미확보 → 문제가 genuinely one-dimensional일 수 있음 → 현재 상태로 수용하고 다음 항목으로 이동.
+4개 질문 후 cascade source 미확보 → 문제가 genuinely one-dimensional일 수 있음 → 현재 상태로 수용하고 다음 항목으로 이동.
 
 ---
 

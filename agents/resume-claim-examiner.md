@@ -239,11 +239,11 @@ Real engineering problems are never one-dimensional. Fixing a concurrency bug to
 
 **Evaluation method:**
 1. Identify the core engineering problem described in the bullet
-2. Estimate the problem's inherent surface area — what entangled concerns would a practitioner actually face? (using the dimensions above)
+2. Estimate the problem's inherent surface area — what cascading concerns would a practitioner actually face? (using the dimensions above)
 3. Check how many of these the bullet surfaces (even briefly)
 4. If the problem inherently has 3+ concerns but the bullet surfaces only 1 → FLAT → FAIL
 
-**Entanglement Grading:**
+**Constraint Cascade Grading:**
 
 E3b는 concern이 얼마나 surface 되었는지뿐 아니라, concern들이 어떻게 연결되는지도 평가한다. 3단계 grade:
 
@@ -251,9 +251,9 @@ E3b는 concern이 얼마나 surface 되었는지뿐 아니라, concern들이 어
 |-------|-------|--------|------------|
 | FLAT | Isolated | 단일 결정, 연쇄 효과 없음 | FAIL (score < 0.5) |
 | LISTED | Enumerated | 복수 concern이 나열되었지만, concern 간 인과 화살표 없음 | WEAK PASS — P1 finding ("interview-fragile") (score 0.5-0.8) |
-| ENTANGLED | Cascading | A가 B를 유발하고, B가 C를 제약 — 읽는 사람이 각 concern이 이전 것 때문에 존재하는 이유를 볼 수 있음 | PASS — interview-generating (score ≥ 0.8) |
+| CASCADING | Cascading | A가 B를 유발하고, B가 C를 제약 — 읽는 사람이 각 concern이 이전 것 때문에 존재하는 이유를 볼 수 있음 | PASS — interview-generating (score ≥ 0.8) |
 
-**Entanglement Score Formula (reasoning aid — not shown in output):**
+**Constraint Cascade Score Formula (reasoning aid — not shown in output):**
 
 grade를 부여하기 전에, 다음 3개 sub-dimension을 먼저 평가한다:
 
@@ -263,7 +263,7 @@ grade를 부여하기 전에, 다음 3개 sub-dimension을 먼저 평가한다:
 | Constraint narrowing | 0.35 | Does each step narrow the solution space? (Eliminated alternatives visible?) |
 | Resolution mutation | 0.35 | Did the solution change shape because of the cascade? (vs. initial approach executed as-is) |
 
-`Entanglement Score = Σ(sub-dimensionᵢ × weightᵢ)` where each sub-dimension is scored 0.0-1.0.
+`Constraint Cascade Score = Σ(sub-dimensionᵢ × weightᵢ)` where each sub-dimension is scored 0.0-1.0.
 
 Resolution mutation is weighted equal to constraint narrowing because it is the hardest dimension to fabricate — it requires genuine experience of solution evolution under cascading constraints, not just narrative structure.
 
@@ -301,11 +301,11 @@ Resolution mutation measures whether the text reveals an engineer who can compar
 | MID | 0.4-0.69 | The approach expanded or adjusted beyond its initial shape, but the core remained the same. The text shows discoveries that added peripheral mechanisms or modified parameters, without fundamentally transforming the approach. The reader can see SOME constraint-driven adjustments but cannot trace a full "discovery → reshape" arc. |
 | HIGH | 0.7-1.0 | The final approach is a fundamentally different shape from the initial approach. The text shows a specific point where a discovered constraint made the original approach unviable, forcing a reshape. The reader can identify: (1) what the initial approach was, (2) what discovery invalidated it, and (3) how the approach was reimagined. Whether this discovery occurred during analysis, prototyping, or production is irrelevant — the visible reshape arc is what matters. |
 
-Threshold: score ≥ 0.8 = ENTANGLED(PASS), 0.5-0.8 = LISTED(P1 — 권장 수정), < 0.5 = FLAT(FAIL).
+Threshold: score ≥ 0.8 = CASCADING(PASS), 0.5-0.8 = LISTED(P1 — 권장 수정), < 0.5 = FLAT(FAIL).
 
 **CRITICAL: Score the sub-dimensions FIRST, then derive the grade. Do not assign a grade and then rationalize scores to match. This is the reasoning-before-score rule.**
 
-**Entanglement Example A — Real-Time Notification System (3-tier 전체):**
+**Constraint Cascade Example A — Real-Time Notification System (3-tier 전체):**
 
 FLAT (score < 0.5):
 "Built real-time notification system using WebSocket + Redis Pub/Sub, delivering notifications within 500ms."
@@ -327,17 +327,17 @@ LISTED (score 0.5-0.8):
   Score: 0.7×0.30 + 0.5×0.35 + 0.4×0.35 = 0.525 → LISTED
   → CTO reaction: "You evaluated options and chose WebSocket. Tell me more about the reconnection." — One follow-up, then done.
 
-ENTANGLED (score ≥ 0.8):
+CASCADING (score ≥ 0.8):
 "Real-time notification for 50K concurrent connections — SSE evaluated first (simpler, unidirectional sufficient for notifications), but connection-per-browser-tab limit (6 per domain) meant power users with 3+ tabs would miss notifications. WebSocket removed this constraint but introduced state management: each connection needs heartbeat tracking, and reconnecting clients need message replay. Redis Pub/Sub for cross-instance fan-out — but Pub/Sub is fire-and-forget, no persistence. Missed messages during reconnection are unrecoverable. Added per-user message buffer (Redis Sorted Set, 5-min TTL) for replay window. Tradeoff accepted: 2x Redis memory vs SSE baseline, buffer expiry means messages older than 5 min are lost (acceptable for notifications, not for chat)."
 
-→ ENTANGLED: SSE constraint (tab limit) → forces WebSocket → introduces state management → reconnection requires message replay → Pub/Sub's fire-and-forget property blocks replay → forces message buffer → creates memory tradeoff. Each decision is caused by the previous constraint.
+→ CASCADING: SSE constraint (tab limit) → forces WebSocket → introduces state management → reconnection requires message replay → Pub/Sub's fire-and-forget property blocks replay → forces message buffer → creates memory tradeoff. Each decision is caused by the previous constraint.
   Causal chain depth: 0.9 (5-step chain, each caused by previous)
   Constraint narrowing: 0.8 (SSE eliminated by tab limit, Pub/Sub alone eliminated by replay need)
   Resolution mutation: 0.75 (initial approach was SSE; constraint discovery during evaluation (tab limit) reshaped the approach to WebSocket + buffer with replay window — fundamentally different architecture. Two distinct constraint-driven reshapes visible: SSE → tab-limit discovery → WebSocket, then Pub/Sub fire-and-forget limitation → message buffer addition)
-  Score: 0.9×0.30 + 0.8×0.35 + 0.75×0.35 = 0.8125 → ENTANGLED
+  Score: 0.9×0.30 + 0.8×0.35 + 0.75×0.35 = 0.8125 → CASCADING
   → CTO asks: "How did you handle buffer overflow during notification storms? What's the reconnection window behavior for mobile clients? Did you measure the actual tab-limit impact before switching from SSE?"
 
-**Entanglement Example B — Payment Reconciliation System (FLAT + ENTANGLED):**
+**Constraint Cascade Example B — Payment Reconciliation System (FLAT + CASCADING):**
 
 FLAT (score < 0.5):
 "Implemented daily payment reconciliation between internal ledger and PG settlement data, catching discrepancies within 24 hours."
@@ -349,17 +349,17 @@ FLAT (score < 0.5):
   Score: 0.1×0.30 + 0.0×0.35 + 0.0×0.35 = 0.03 → FLAT
   → CTO reaction: "You built reconciliation. That's expected." — No follow-up.
 
-ENTANGLED (score ≥ 0.8):
+CASCADING (score ≥ 0.8):
 "Payment reconciliation discrepancies at 0.3% — profiling: 60% timing mismatches (PG settlement T+1, internal ledger real-time), 30% partial refund state divergence (PG reports net, ledger tracks gross + refund separately), 10% currency rounding. Timing mismatch forced choice: shift ledger to T+1 (loses real-time dashboard accuracy) or maintain dual-state (real-time + T+1 reconciliation view). Dual-state chosen but introduced a new problem: two sources of truth during the T+1 window — customer support sees real-time, finance sees T+1, conflicting answers to the same customer query. Resolution: unified query layer with time-context parameter (as-of-now vs as-of-settlement). Tradeoff: query complexity increased, every downstream consumer must declare time context. Partial refund divergence required mapping table between PG net-settlement schema and internal gross-refund schema — schema drift risk on every PG API version update, mitigated with contract test suite."
 
-→ ENTANGLED: Timing mismatch → forces dual-state → creates two-source-of-truth problem → forces unified query layer → increases query complexity. Partial refund divergence → forces mapping table → creates schema drift risk → mitigated with contract tests. Two independent cascading chains, both visible.
+→ CASCADING: Timing mismatch → forces dual-state → creates two-source-of-truth problem → forces unified query layer → increases query complexity. Partial refund divergence → forces mapping table → creates schema drift risk → mitigated with contract tests. Two independent cascading chains, both visible.
   Causal chain depth: 0.9 (two independent 3+ step chains)
   Constraint narrowing: 0.8 (T+1 shift eliminated by dashboard dependency; single-state eliminated by timing gap)
   Resolution mutation: 0.8 (initial approach was simple daily reconciliation; timing mismatch discovery reshaped the approach through a visible arc: daily reconciliation → timing mismatch forced dual-state → two-source-of-truth problem → unified time-context query layer. Three constraint-driven reshapes with the approach fundamentally transforming at each step)
-  Score: 0.9×0.30 + 0.8×0.35 + 0.8×0.35 = 0.83 → ENTANGLED
+  Score: 0.9×0.30 + 0.8×0.35 + 0.8×0.35 = 0.83 → CASCADING
   → CTO asks: "How do you handle the T+1 window for dispute resolution? What happens when a PG API version update breaks the mapping? How did you measure the 0.3% baseline?"
 
-**Entanglement Example C — ML Feature Pipeline (LISTED only):**
+**Constraint Cascade Example C — ML Feature Pipeline (LISTED only):**
 
 LISTED (score 0.5-0.8):
 "ML feature pipeline handling 200M daily events — migrated from batch Spark to streaming Flink. Implemented feature store for serving. Added data quality monitoring. Reduced feature freshness from 4 hours to 15 minutes."
@@ -485,7 +485,7 @@ RICH (PASS):
 
 **Exception:** If the problem is genuinely one-dimensional (single decision with no cascading effects, no measurement needs, no contested alternatives), E3b PASSES automatically. The evaluator must justify WHY the problem is one-dimensional before applying this exception.
 
-**Critical guardrail:** E3b does NOT reward word count. A 15-word clause that surfaces 3 entangled concerns passes. A 200-word paragraph that belabors a single tradeoff fails. The unit of measurement is "distinct engineering concerns surfaced," not characters or sentences.
+**Critical guardrail:** E3b does NOT reward word count. A 15-word clause that surfaces 3 cascading concerns passes. A 200-word paragraph that belabors a single tradeoff fails. The unit of measurement is "distinct engineering concerns surfaced," not characters or sentences.
 
 **Technical verification questions:**
 - "What other concerns did you actually navigate when solving this?"
@@ -633,8 +633,8 @@ Does this bullet demonstrate engineering judgment that would be credible at the 
 9. **E3 is a dual evaluation.** E3a (Tradeoff Authenticity) and E3b (Problem Surface) are both evaluated. If E3a FAILs, E3 is FAIL without evaluating E3b. If E3a PASSes but E3b FAILs, E3 is still FAIL. Both must PASS for E3 to PASS.
 10. **Reasoning-before-score.** For each axis, write the technical reasoning FIRST (what evidence exists, what is missing, what questions arise), THEN derive the PASS/FAIL verdict from that reasoning. Do not assign a verdict and then construct reasoning to support it. If the reasoning does not clearly support the verdict, the verdict is wrong.
 11. **Asymmetric burden of proof.** PASS requires naming a specific verifiable element present in the bullet text (named metric, named system, named outcome with magnitude). FAIL requires only the absence of such an element. "No tradeoff is mentioned" is sufficient for E3a FAIL. "Tradeoff is mentioned" is necessary but not sufficient for E3a PASS — the tradeoff must also be context-specific and technically valid.
-12. **E3b Entanglement grading.** When E3b passes on surface count (3+ concerns surfaced), assign an entanglement grade (FLAT/LISTED/ENTANGLED) using the Entanglement Score formula. Score sub-dimensions first, then derive grade. LISTED grade triggers a P1 finding — "E3b technically passes on surface count but problem entanglement is weak; cascading narrative structure recommended." FLAT grade is an E3b FAIL regardless of surface count — isolated presentation of a multi-faceted problem does not faithfully represent the engineering reality.
-13. **Mandatory probing for ENTANGLED entries.** When E3b receives an ENTANGLED grade (score ≥ 0.8), the evaluator MUST still produce at least one specific probing question that challenges the technical soundness of the cascade narrative. High entanglement scores do not exempt entries from critical examination. The question must target the cascade's weakest link — the step where the causal connection is most implicit or where the constraint narrowing is least justified.
+12. **E3b Constraint Cascade grading.** When E3b passes on surface count (3+ concerns surfaced), assign a constraint cascade grade (FLAT/LISTED/CASCADING) using the Constraint Cascade Score formula. Score sub-dimensions first, then derive grade. LISTED grade triggers a P1 finding — "E3b technically passes on surface count but constraint cascade is weak; cascading narrative structure recommended." FLAT grade is an E3b FAIL regardless of surface count — isolated presentation of a multi-faceted problem does not faithfully represent the engineering reality.
+13. **Mandatory probing for CASCADING entries.** When E3b receives a CASCADING grade (score ≥ 0.8), the evaluator MUST still produce at least one specific probing question that challenges the technical soundness of the cascade narrative. High constraint cascade scores do not exempt entries from critical examination. The question must target the cascade's weakest link — the step where the causal connection is most implicit or where the constraint narrowing is least justified.
 
 ---
 
@@ -671,11 +671,11 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 
 ### Original Bullet Evaluation
 
-### Entanglement Reasoning (reasoning-before-score)
+### Constraint Cascade Reasoning (reasoning-before-score)
 - Causal chain depth: {0.0-1.0} — {evidence from bullet}
 - Constraint narrowing: {0.0-1.0} — {evidence from bullet}
 - Resolution mutation: {0.0-1.0} — {evidence from bullet}
-- Entanglement Score: {calculated} → {FLAT|LISTED|ENTANGLED}
+- Constraint Cascade Score: {calculated} → {FLAT|LISTED|CASCADING}
 
 {E1-E6 technical interrogation results for the original}
 {Has problem / No problem verdict + rationale}
@@ -695,7 +695,7 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 |---|---|---|
 | Career-Level Fit | {PASS/FAIL} | {1-line rationale} |
 | Logical Coherence | {PASS/FAIL} | {1-line rationale} |
-| Problem Fidelity | {PASS/FAIL} [{ENTANGLED|LISTED|FLAT}] | {1-line rationale} |
+| Problem Fidelity | {PASS/FAIL} [{CASCADING|LISTED|FLAT}] | {1-line rationale} |
 | Scale-Appropriate Engineering | {PASS/FAIL} | {1-line rationale} |
 | Signal-to-Noise Ratio | {PASS/FAIL} | {1-line rationale} |
 | Target-Scale Transferability | {PASS/FAIL} | {1-line rationale} |
