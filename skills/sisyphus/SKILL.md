@@ -55,7 +55,7 @@ RULE 4: NEVER complete without argus verification
 | Complex analysis (even 1 file) | oracle |
 | Codebase questions | explore/oracle (never ask user) |
 | Junior says "done" | invoke argus (never trust) |
-| Argus approves | invoke mnemosyne (commit) |
+| Argus approves | evidence audit → mnemosyne (commit) |
 
 ---
 
@@ -108,7 +108,9 @@ Trust protocols, role separation, and verification flow for subagent management.
 | explore | Patterns (context) | Contextual | Not required - reference material |
 | librarian | External documentation research | Reference | Not required - external source |
 | mnemosyne | Results (git commits) | **Trusted** | Not required - post-argus execution |
-| argus | Findings (review) | Advisory | Not required - verification itself |
+| argus | Findings (review) | **Audited Trust** | MANDATORY - evidence audit |
+
+**Audited Trust defined**: Trust the verdict (judgment), independently verify the evidence exists (artifacts). Argus's APPROVE/COMMENT is not re-verified for correctness — but the evidence files that should have been produced are checked for existence.
 
 #### Role Separation: YOU DO NOT VERIFY
 
@@ -151,24 +153,76 @@ digraph verification_flow {
     "junior done" [shape=ellipse];
     "IGNORE" [shape=box];
     "argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
-    "pass?" [shape=diamond];
+    "verdict?" [shape=diamond];
+    "evidence audit" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
+    "evidence OK?" [shape=diamond];
+    "re-invoke argus (1x)" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "still gap?" [shape=diamond];
+    "reject as REQUEST_CHANGES" [shape=box];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
 
-    "junior done" -> "IGNORE" -> "argus" -> "pass?";
-    "pass?" -> "mnemosyne" [label="yes"];
-    "pass?" -> "fix + retry" [label="no"];
+    "junior done" -> "IGNORE" -> "argus" -> "verdict?";
+    "verdict?" -> "fix + retry" [label="REQUEST_CHANGES"];
+    "verdict?" -> "evidence audit" [label="APPROVE/COMMENT"];
+    "evidence audit" -> "evidence OK?";
+    "evidence OK?" -> "mnemosyne" [label="yes"];
+    "evidence OK?" -> "re-invoke argus (1x)" [label="no (gap)"];
+    "re-invoke argus (1x)" -> "still gap?";
+    "still gap?" -> "mnemosyne" [label="no"];
+    "still gap?" -> "reject as REQUEST_CHANGES" [label="yes"];
     "mnemosyne" -> "complete";
     "fix + retry" -> "argus";
+    "reject as REQUEST_CHANGES" -> "fix + retry";
 }
 ```
 
 1. **IGNORE the completion claim** - Never trust "I'm done"
 2. **Invoke argus** - This is your ONLY verification action
-3. If review passes -> **Invoke mnemosyne** to commit changes
-4. If review fails -> Create fix tasks, re-delegate to sisyphus-junior
-5. **No retry limit** - Continue until argus passes
+3. If APPROVE/COMMENT -> **Run Evidence Audit Gate** before proceeding
+4. If evidence OK -> **Invoke mnemosyne** to commit changes
+5. If review fails (REQUEST_CHANGES) -> Create fix tasks, re-delegate to sisyphus-junior
+6. **No retry limit** - Continue until argus passes
+
+### Evidence Audit Gate
+
+#### Scope
+
+Applies to **APPROVE** and **COMMENT** verdicts only. **REQUEST_CHANGES bypasses the gate entirely** — no evidence is expected from failed verification.
+
+#### Expected Evidence Manifest
+
+During QA REQUEST composition, sisyphus builds a list of evidence file paths it expects argus to produce. This manifest is derived from the evidence paths included in `## Required Verification`. When the manifest is empty (judgment-only review with no executable verification), the audit gate passes trivially.
+
+#### Audit Procedure
+
+For each path in the manifest, run `test -f $path && test -s $path` (file exists and is non-empty). Classify each result as **PRESENT** or **MISSING**.
+
+| Check Type | Command | Purpose |
+|------------|---------|---------|
+| PERMITTED | `test -f $path` | File exists |
+| PERMITTED | `test -s $path` | File non-empty |
+| PERMITTED | `ls` on evidence directory | Directory listing (metadata only) |
+| FORBIDDEN | `npm test`, `curl`, `grep` for code verification | Any verification command execution |
+
+**Evidence Audit is NOT verification**: Checking file existence is orchestration metadata inspection, not code verification. This does NOT violate "Verification is NOT your job" — the Iron Law is preserved. Sisyphus inspects whether argus produced artifacts; it does not re-run the verification commands argus ran.
+
+#### Evidence Gap Handling
+
+| Retry | Condition | Action |
+|-------|-----------|--------|
+| 0 (initial) | manifest paths MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
+| 1 (after re-invocation) | STILL missing | Reject verdict → treat as REQUEST_CHANGES + create investigation task |
+
+**Full protocol**:
+
+1. If ALL manifest paths are PRESENT → proceed to Verdict Response Protocol
+2. If ANY manifest paths are MISSING → Evidence Gap detected:
+   - Re-invoke argus ONCE with an Evidence Gap Request listing the missing paths
+   - After re-invocation, check manifest again
+   - If STILL missing → **Terminal state**: Reject the verdict. Treat as REQUEST_CHANGES. Create an investigation task: "Investigate: evidence files not produced for [list of missing items]"
+3. **Sisyphus NEVER executes the verification commands itself as a fallback.** The Iron Law stands unconditionally.
 
 #### Advisory Trust for Research
 
@@ -550,6 +604,8 @@ Compose the QA REQUEST from the 7-Section delegation prompt:
 - Put the full 7-Section prompt content under `## Spec` (each section becomes a `###` heading)
 - Put the EXPECTED OUTCOME verification commands and MUST DO assertions under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
+- **Evidence paths**: Sisyphus generates adhoc evidence paths: `$OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}`. `{check-slug}` is a URL-safe slug derived from the verification item description (e.g., `npm-test`, `build-output`, `curl-post-users`). Include these paths in `## Required Verification` so argus knows where to save evidence.
+- After composing the QA REQUEST, retain the list of evidence paths as the **expected evidence manifest** for the Evidence Audit Gate.
 
 **Recipe 2: After task completion (plan-based)**
 
@@ -557,6 +613,8 @@ Compose the QA REQUEST from the relevant plan TODO:
 - Put the TODO's spec content (What to do, Must NOT do, Acceptance Criteria, QA Scenarios) under `## Spec`
 - Put the TODO's QA Scenarios and Acceptance Criteria verification methods under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
+- **Evidence paths**: Extract Evidence fields from the plan TODO's QA Scenarios. If QA Scenarios include Evidence paths, use them verbatim. If Evidence fields are absent (legacy plan compatibility), fall back to adhoc path generation as in Recipe 1.
+- After composing the QA REQUEST, retain the list of evidence paths as the **expected evidence manifest** for the Evidence Audit Gate.
 
 **Recipe 3: AC/QA Scenario verification with explicit methods**
 
@@ -564,6 +622,8 @@ When acceptance criteria and QA scenarios are explicitly provided:
 - Put acceptance criteria and QA scenarios verbatim under `## Spec`
 - Put QA scenarios verbatim under `## Required Verification` — they ARE the required verification
 - List changed files and summary under `## Scope`
+- **Evidence paths**: Use Evidence fields from the provided QA scenarios verbatim.
+- After composing the QA REQUEST, retain the list of evidence paths as the **expected evidence manifest** for the Evidence Audit Gate.
 
 ### Invocation Rules
 
