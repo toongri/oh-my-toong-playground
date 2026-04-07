@@ -121,9 +121,9 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 
 Resolve the evidence file path in this order — use the first match:
 
-1. **QA REQUEST에 명시된 경로** — caller explicitly provided a path in the QA REQUEST
-2. **Plan QA Scenario Evidence 필드** — the scenario definition includes an `evidence` field with a path
-3. **자동 생성 경로** — no path provided; generate:
+1. **Explicit path from QA REQUEST** — caller explicitly provided a path in the QA REQUEST
+2. **Plan QA Scenario Evidence field** — the scenario definition includes an `evidence` field with a path
+3. **Auto-generated path (fallback)** — no path provided; generate:
    ```
    $OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}
    ```
