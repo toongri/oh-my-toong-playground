@@ -189,10 +189,35 @@ Every plan with Scoped or higher intent MUST include Final Verification Wave. Tr
 
 > ALL F1-F4 must APPROVE. Rejection → fix task → re-enter implementation → full F1-F4 re-run.
 
-- [ ] F1. Plan Compliance Audit — read plan, verify Must Have/Must NOT Have, check evidence files
-- [ ] F2. Code Quality Review — build + linter + tests, review for as any/empty catches/console.log/AI slop
-- [ ] F3. QA Scenario Execution — execute EVERY scenario, test cross-task integration, save evidence
-- [ ] F4. Scope Fidelity Check — read spec vs diff, verify 1:1, check Must NOT do, detect cross-task contamination
+- [ ] F1. Plan Compliance Audit
+  What to verify:
+    - Read plan end-to-end
+    - For each "Must Have": verify implementation exists
+    - For each "Must NOT Have": search for forbidden patterns
+    - Check evidence files exist in $OMT_DIR/evidence/
+  Expected Output: Must Have [N/N] | Must NOT Have [N/N] | VERDICT
+
+- [ ] F2. Code Quality Review
+  What to verify:
+    - Run build + linter + tests
+    - Review changed files for: as any, empty catches, console.log, unused imports
+    - Check AI slop: excessive comments, over-abstraction, generic names
+  Expected Output: Build [PASS/FAIL] | Tests [N/N] | VERDICT
+
+- [ ] F3. QA Scenario Execution
+  What to verify:
+    - Execute EVERY QA scenario from EVERY task
+    - Test cross-task integration
+    - Save evidence to $OMT_DIR/evidence/{plan-name}/final-qa/
+  Expected Output: Scenarios [N/N pass] | Integration [N/N] | VERDICT
+
+- [ ] F4. Scope Fidelity Check
+  What to verify:
+    - For each task: read spec, read actual diff
+    - Verify 1:1 correspondence (no missing, no creep)
+    - Check "Must NOT do" compliance
+    - Detect cross-task contamination
+  Expected Output: Tasks [N/N compliant] | VERDICT
 
 Wave field: `Wave: FINAL` (literal string). Numeric rule applies to implementation tasks only.
 

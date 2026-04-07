@@ -131,7 +131,7 @@ When subagent completes only PART of a task:
 
 ### Advisory Trust for Research
 
-Results from oracle, explore, librarian, and argus are:
+Results from oracle, explore, and librarian are:
 - **Inputs to decision-making**, not assertions requiring proof
 - Used to inform planning and implementation choices
 - NOT subject to correctness verification

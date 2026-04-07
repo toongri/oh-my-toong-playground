@@ -18,8 +18,10 @@ When delegating to sisyphus-junior, include all 7 sections:
 ## 3. REQUIRED TOOLS
 - [tool]: [what to search/check]
 - context7: Look up [library] docs
-- [Explicit tool list — Junior MUST use ONLY the tools listed here]
-- Any unlisted tool usage is a scope violation.
+- Bash: [specific commands and restrictions]
+
+Standard file tools (Read, Edit, Write, Grep, Glob) are always permitted.
+List task-specific tools above — these guide Junior on WHAT to investigate and HOW to verify.
 
 ## 4. MUST DO
 - Follow pattern in [file:lines]
@@ -53,8 +55,8 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 ## 3. REQUIRED TOOLS
 - Serena find_symbol: Navigate to router setup and existing middleware chain in src/api/router.ts
 - Serena get_symbols_overview: Understand middleware structure in src/api/middleware/
-- context7: Look up rate limiting library docs for configuration options
-- Bash: Run `npm test` for verification only — no other shell commands
+- context7: Look up express-rate-limit library docs for configuration options
+- Bash: Run `npm test -- --grep "rate limit"` for verification only — no other shell commands
 
 ## 4. MUST DO
 - Follow middleware pattern in src/api/middleware/auth.ts:15-40
@@ -164,7 +166,7 @@ Read-only reasoning model for debugging and architecture. Consultation only — 
 - Performance/security deep analysis
 
 **When NOT to consult:**
-- Simple file operations, first attempt at any fix
+- Simple file operations
 - Questions answerable from code you've read
 - Trivial decisions
 
