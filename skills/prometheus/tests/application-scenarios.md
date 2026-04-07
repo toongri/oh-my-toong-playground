@@ -27,6 +27,8 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-17 | Intent Classification | Intent Classification | Interview Mode |
 | P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
+| UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Plan + Oracle + Momus + Execution |
+| UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Oracle reject + revision + Momus + User rejection + pipeline re-run |
 
 ---
 
@@ -458,6 +460,105 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 | V2 | Failure scenario is non-trivial | Edge case scenario tests an actual failure mode specific to the task (e.g., "rate limit counter resets after window expires", "concurrent requests from same IP handled correctly") — NOT generic "invalid input returns error" |
 | V3 | Non-code TODO uses full QA format with appropriate verification tool | Documentation update TODO uses grep/diff as Tool with concrete Steps — same rigor as code TODOs |
 | V4 | Tool field is executable CLI command | Names an executable CLI command (e.g., `bun test`, `curl`, `grep`, `./gradlew test`), NOT a test description ("Header validation") or generic label ("test runner"). The named command must match what Steps actually invoke |
+
+---
+
+## Use-Case Scenarios (End-to-End)
+
+These scenarios test whether the skill's core techniques work correctly **when combined across multiple phases**. Each scenario spans the full workflow or a significant multi-phase sequence.
+
+---
+
+## Scenario UC-P1: End-to-End — Full Planning Pipeline
+
+**Primary Technique:** Full workflow integration — Classification → Interview → Clearance → AC → Metis → Plan → Oracle → Momus → Presentation → Execution Bridge
+
+**Input (Multi-turn):**
+```
+Turn 1:
+User says: "결제 모듈에 환불 기능 추가해줘"
+
+Turn 2 (after explore + interview):
+Scope clarified: partial refund supported, 30-day window, existing payment patterns.
+Clearance Checklist all YES. Ambiguity ≤ 0.2.
+
+Turn 3:
+AC drafted and confirmed by user.
+
+Turn 4:
+Metis invoked → APPROVE.
+
+Turn 5:
+Plan written to $OMT_DIR/plans/refund-feature.md.
+Oracle invoked → COMMENT ("payment-service.ts reference at line 20-75 is accurate").
+Plan updated with Oracle findings.
+
+Turn 6:
+Momus invoked → APPROVE.
+
+Turn 7:
+Full plan presented to user. User approves.
+Execution Bridge: User selects "(1) Full orchestration".
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Intent classified before interview | "환불 기능 추가" classified as Scoped or Complex BEFORE interview questions begin. Explore dispatched if scope unknown |
+| V2 | Interview asks preferences, not codebase facts | Questions target scope (partial refund?), tradeoffs (refund window?), priorities — NOT "결제 모듈 어디에 있어?" |
+| V3 | Clearance gates interview exit | Interview continues until all 6 checklist items pass. Does NOT exit early after 2-3 questions |
+| V4 | AC follows two-line format with responsibility | Each criterion: Observable outcome + Verification. Work items have responsibility statements |
+| V5 | Metis invoked BEFORE plan, with 3-Section template | Metis called with USER GOAL + SCOPE + AC verbatim. No summarizing. Called before plan file is written |
+| V6 | Plan contains all required sections | TL;DR, Context (Interview Summary), Work Objectives (Must NOT Have), TODOs (References + QA), Execution Strategy, Verification Strategy, Success Criteria |
+| V7 | Oracle → Momus → User — sequential gates | Oracle MUST pass before Momus. Momus MUST pass before user sees the plan. No gate skipped |
+| V8 | Execution Bridge invokes Skill, not manual command | On "(1) Full orchestration", Prometheus invokes `Skill(skill: "sisyphus")` — does NOT tell user to run a command |
+
+---
+
+## Scenario UC-P2: End-to-End — Review Pipeline Rejection and Recovery
+
+**Primary Technique:** Review pipeline feedback loops — Oracle REQUEST_CHANGES → plan revision → Oracle re-review → Momus → User rejection → Interview re-entry
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Plan generated for "사용자 프로필에 아바타 업로드 기능 추가".
+Metis already approved.
+
+Turn 2:
+Oracle returns REQUEST_CHANGES:
+"src/service/upload-service.ts referenced in TODO 2 does not exist.
+ src/middleware/multer.ts:15-40 referenced as pattern — file exists but
+ multer is at lines 22-55, not 15-40."
+
+Turn 3:
+Prometheus revises plan: updates file references, adjusts TODO 2.
+Oracle re-invoked → APPROVE.
+
+Turn 4:
+Momus invoked → COMMENT ("TODO 3 acceptance criteria could be more specific").
+Plan updated with Momus suggestion.
+
+Turn 5:
+Full plan presented to user.
+User says: "파일 크기 제한을 10MB에서 5MB로 바꿔줘."
+
+Turn 6:
+Prometheus returns to Interview Mode to address the change.
+Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Oracle REQUEST_CHANGES → plan revised (not ignored) | Oracle's specific findings (wrong file, wrong line range) are incorporated into the plan. Prometheus does NOT ignore or defer |
+| V2 | Oracle re-invoked after revision | After updating the plan, Oracle is invoked again with the same template. Does NOT skip to Momus |
+| V3 | Momus COMMENT → incorporated, proceed | Momus advisory finding incorporated into plan. Proceeds to user presentation (COMMENT is non-blocking) |
+| V4 | User change request → Interview Mode re-entry | User's "5MB로 바꿔줘" triggers return to Interview Mode — does NOT just edit the plan in-place |
+| V5 | Full pipeline re-run after user change | After interview update, the ENTIRE pipeline re-runs: Metis → Plan → Oracle → Momus. No shortcuts |
+| V6 | No code generated at any point | Throughout all turns — including plan revision, pipeline re-run, and user change handling — Prometheus produces ZERO code, pseudocode, or code snippets |
 
 ---
 
