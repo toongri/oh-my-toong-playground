@@ -156,9 +156,11 @@ digraph verification_flow {
     "verdict?" [shape=diamond];
     "evidence audit" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
     "evidence OK?" [shape=diamond];
-    "re-invoke argus (1x)" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "re-invoke argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "new verdict?" [shape=diamond];
     "still gap?" [shape=diamond];
-    "reject as REQUEST_CHANGES" [shape=box];
+    "retries < 3?" [shape=diamond];
+    "interview user" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
@@ -168,22 +170,26 @@ digraph verification_flow {
     "verdict?" -> "evidence audit" [label="APPROVE/COMMENT"];
     "evidence audit" -> "evidence OK?";
     "evidence OK?" -> "mnemosyne" [label="yes"];
-    "evidence OK?" -> "re-invoke argus (1x)" [label="no (gap)"];
-    "re-invoke argus (1x)" -> "still gap?";
+    "evidence OK?" -> "re-invoke argus" [label="no (gap)"];
+    "re-invoke argus" -> "new verdict?";
+    "new verdict?" -> "fix + retry" [label="REQUEST_CHANGES"];
+    "new verdict?" -> "still gap?" [label="APPROVE/COMMENT"];
     "still gap?" -> "mnemosyne" [label="no"];
-    "still gap?" -> "reject as REQUEST_CHANGES" [label="yes"];
+    "still gap?" -> "retries < 3?" [label="yes"];
+    "retries < 3?" -> "re-invoke argus" [label="yes"];
+    "retries < 3?" -> "interview user" [label="no (exhausted)"];
     "mnemosyne" -> "complete";
     "fix + retry" -> "argus";
-    "reject as REQUEST_CHANGES" -> "fix + retry";
 }
 ```
 
 1. **IGNORE the completion claim** - Never trust "I'm done"
 2. **Invoke argus** - This is your ONLY verification action
 3. If APPROVE/COMMENT -> **Run Evidence Audit Gate** before proceeding
-4. If evidence OK -> **Invoke mnemosyne** to commit changes
-5. If review fails (REQUEST_CHANGES) -> Create fix tasks, re-delegate to sisyphus-junior
-6. **No retry limit** - Continue until argus passes
+4. If evidence gap detected -> re-invoke argus (evaluate new verdict first; retry up to 3x; interview user if exhausted)
+5. If evidence OK -> **Invoke mnemosyne** to commit changes
+6. If review fails (REQUEST_CHANGES) -> Create fix tasks, re-delegate to sisyphus-junior
+7. **No retry limit on fix cycle** - Continue until argus passes
 
 ### Evidence Audit Gate
 
@@ -195,33 +201,50 @@ Applies to **APPROVE** and **COMMENT** verdicts only. **REQUEST_CHANGES bypasses
 
 During QA REQUEST composition, sisyphus builds a list of evidence file paths it expects argus to produce. This manifest is derived from the evidence paths included in `## Required Verification`. When the manifest is empty (judgment-only review with no executable verification), the audit gate passes trivially.
 
+**Stage 1 automated checks (auto-include)**: Code changes가 있으면, Stage 1 automated checks (build, test, lint) evidence 경로를 manifest에 자동 포함한다. 이 경로는 공통 Evidence Path Fallback 규칙의 adhoc convention을 따른다 (check-slug: `build`, `test`, `lint`):
+
+```
+$OMT_DIR/evidence/adhoc-{task-slug}/build.{ext}
+$OMT_DIR/evidence/adhoc-{task-slug}/test.{ext}
+$OMT_DIR/evidence/adhoc-{task-slug}/lint.{ext}
+```
+
+QA REQUEST에 Stage 1 경로를 명시하지 않아도 sisyphus가 manifest에 자동으로 포함한다.
+
 #### Audit Procedure
 
-For each path in the manifest, run `test -f $path && test -s $path` (file exists and is non-empty). Classify each result as **PRESENT** or **MISSING**.
+**Stated principle**: A path passes the audit if and only if the file **exists and is non-empty** (`test -f "$path" && test -s "$path"`).
+
+For each path in the manifest, apply this existence-and-non-empty check. Classify each result as **PRESENT** or **MISSING**.
 
 | Check Type | Command | Purpose |
 |------------|---------|---------|
-| PERMITTED | `test -f $path` | File exists |
-| PERMITTED | `test -s $path` | File non-empty |
+| PERMITTED | `test -f "$path"` | File exists |
+| PERMITTED | `test -s "$path"` | File non-empty |
 | PERMITTED | `ls` on evidence directory | Directory listing (metadata only) |
 | FORBIDDEN | `npm test`, `curl`, `grep` for code verification | Any verification command execution |
 
-**Evidence Audit is NOT verification**: Checking file existence is orchestration metadata inspection, not code verification. This does NOT violate "Verification is NOT your job" — the Iron Law is preserved. Sisyphus inspects whether argus produced artifacts; it does not re-run the verification commands argus ran.
+**RULE**: Evidence Audit is NOT verification — Checking file existence is orchestration metadata inspection, not code verification. This does NOT violate "Verification is NOT your job" — the Iron Law is preserved. Sisyphus inspects whether argus produced artifacts; it does not re-run the verification commands argus ran.
 
 #### Evidence Gap Handling
 
 | Retry | Condition | Action |
 |-------|-----------|--------|
-| 0 (initial) | manifest paths MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
-| 1 (after re-invocation) | STILL missing | Reject verdict → treat as REQUEST_CHANGES + create investigation task |
+| 매 재시도 | 새 verdict = REQUEST_CHANGES | 즉시 fix task 생성 (evidence 확인 불필요) |
+| 0 (initial) | APPROVE/COMMENT + evidence MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
+| 1-2 | APPROVE/COMMENT + evidence STILL MISSING | Re-invoke argus again |
+| 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | 유저 인터뷰: 상황 설명 + AskUserQuestion으로 전략 선택 |
 
 **Full protocol**:
 
 1. If ALL manifest paths are PRESENT → proceed to Verdict Response Protocol
 2. If ANY manifest paths are MISSING → Evidence Gap detected:
-   - Re-invoke argus ONCE with an Evidence Gap Request listing the missing paths
-   - After re-invocation, check manifest again
-   - If STILL missing → **Terminal state**: Reject the verdict. Treat as REQUEST_CHANGES. Create an investigation task: "Investigate: evidence files not produced for [list of missing items]"
+   - Re-invoke argus with an Evidence Gap Request listing the missing paths
+   - After re-invocation, evaluate the **new verdict first**:
+     - If REQUEST_CHANGES → treat as REQUEST_CHANGES (create fix task). Evidence gap is moot.
+     - If APPROVE/COMMENT → check manifest again
+   - If evidence STILL missing → retry (up to 3 total re-invocations)
+   - After 3 retries with persistent gap → **Interview user**: summarize the situation (which paths are missing, what argus reported) and ask via AskUserQuestion what strategy to take
 3. **Sisyphus NEVER executes the verification commands itself as a fallback.** The Iron Law stands unconditionally.
 
 #### Advisory Trust for Research
@@ -598,13 +621,25 @@ All verification requests to argus use the QA REQUEST format:
 
 ### Composition Recipes
 
+#### Evidence Path Fallback (공통 규칙)
+
+모든 Recipe에 공통으로 적용된다. Evidence 경로의 primary source가 경로를 제공하지 않으면, adhoc 경로를 생성한다:
+
+```
+$OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}
+```
+
+`{check-slug}`는 검증 항목 설명에서 파생된 URL-safe slug다 (예: `npm-test`, `build-output`, `curl-post-users`). 이 fallback은 모든 Recipe에 동일하게 적용된다.
+
+---
+
 **Recipe 1: After task completion (no plan)**
 
 Compose the QA REQUEST from the 7-Section delegation prompt:
 - Put the full 7-Section prompt content under `## Spec` (each section becomes a `###` heading)
 - Put the EXPECTED OUTCOME verification commands and MUST DO assertions under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
-- **Evidence paths**: Sisyphus generates adhoc evidence paths: `$OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}`. `{check-slug}` is a URL-safe slug derived from the verification item description (e.g., `npm-test`, `build-output`, `curl-post-users`). Include these paths in `## Required Verification` so argus knows where to save evidence.
+- **Evidence paths**: Sisyphus가 adhoc evidence 경로를 생성하여 `## Required Verification`에 포함한다 (adhoc 공식은 위 공통 규칙 참조). Include these paths so argus knows where to save evidence.
 - After composing the QA REQUEST, retain the list of evidence paths as the **expected evidence manifest** for the Evidence Audit Gate.
 
 **Recipe 2: After task completion (plan-based)**
@@ -613,7 +648,7 @@ Compose the QA REQUEST from the relevant plan TODO:
 - Put the TODO's spec content (What to do, Must NOT do, Acceptance Criteria, QA Scenarios) under `## Spec`
 - Put the TODO's QA Scenarios and Acceptance Criteria verification methods under `## Required Verification`
 - List changed files and implementer's summary under `## Scope`
-- **Evidence paths**: Extract Evidence fields from the plan TODO's QA Scenarios. If QA Scenarios include Evidence paths, use them verbatim. If Evidence fields are absent (legacy plan compatibility), fall back to adhoc path generation as in Recipe 1.
+- **Evidence paths**: Plan TODO의 QA Scenarios에서 Evidence 필드를 추출한다. Evidence 필드가 없으면 공통 fallback 적용.
 - After composing the QA REQUEST, retain the list of evidence paths as the **expected evidence manifest** for the Evidence Audit Gate.
 
 **Recipe 3: AC/QA Scenario verification with explicit methods**
@@ -622,7 +657,7 @@ When acceptance criteria and QA scenarios are explicitly provided:
 - Put acceptance criteria and QA scenarios verbatim under `## Spec`
 - Put QA scenarios verbatim under `## Required Verification` — they ARE the required verification
 - List changed files and summary under `## Scope`
-- **Evidence paths**: Use Evidence fields from the provided QA scenarios verbatim.
+- **Evidence paths**: 제공된 QA scenarios의 Evidence 필드를 사용한다. 없으면 공통 fallback 적용.
 - After composing the QA REQUEST, retain the list of evidence paths as the **expected evidence manifest** for the Evidence Audit Gate.
 
 ### Invocation Rules
