@@ -251,7 +251,7 @@ E3b는 concern이 얼마나 surface 되었는지뿐 아니라, concern들이 어
 |-------|-------|--------|------------|
 | FLAT | Isolated | 단일 결정, 연쇄 효과 없음 | FAIL (score < 0.5) |
 | LISTED | Enumerated | 복수 concern이 나열되었지만, concern 간 인과 화살표 없음 | WEAK PASS — P1 finding ("interview-fragile") (score 0.5-0.8) |
-| CASCADING | Cascading | A가 B를 유발하고, B가 C를 제약 — 읽는 사람이 각 concern이 이전 것 때문에 존재하는 이유를 볼 수 있음 | PASS — interview-generating (score ≥ 0.8) |
+| CASCADING | Interlocked | A가 B를 유발하고, B가 C를 제약 — 읽는 사람이 각 concern이 이전 것 때문에 존재하는 이유를 볼 수 있음 | PASS — interview-generating (score ≥ 0.8) |
 
 **Constraint Cascade Score Formula (reasoning aid — not shown in output):**
 

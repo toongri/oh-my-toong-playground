@@ -316,7 +316,7 @@ Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforc
 
 GOOD: "이 프로젝트에서 문제들이 서로 연결되어 있었을 것 같은데 — 하나를 해결하면서 다른 문제가 드러난 경험이 있었나요?"
 
-BAD (internal metric exposure): "E3b LISTED, constraint cascade score 0.35 — causal chain depth 부족"
+BAD (internal metric exposure): "E3b LISTED, Constraint Cascade Score 0.35 — causal chain depth 부족"
 
 BAD (too vague): "다른 문제도 있었나요?"
 
