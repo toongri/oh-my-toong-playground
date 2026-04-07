@@ -39,7 +39,7 @@ The caller composes a QA REQUEST using this structure:
 - No mode field — the content of Spec determines which verification triggers activate
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
-To understand what changed, use `git diff -- <path>` for context. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
+To understand what changed, use `git diff -- <path>` for context. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope. (Exception: Scope Boundary Check, which must compute changed files independently.)
 
 ---
 
@@ -224,7 +224,8 @@ MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD 
 ```
 Expected files (from EXPECTED OUTCOME) = A
 Changed files (B) = git diff --name-only "$MERGE_BASE"..HEAD   # committed changes on this branch
-                   ∪ git diff --name-only                       # uncommitted changes (current task)
+                   ∪ git diff --name-only --cached              # staged changes
+                   ∪ git diff --name-only                       # unstaged changes (current task)
 
 PASS if: B ⊆ A (changes within declared scope)
 FLAG if: B - A ≠ ∅ (undeclared files in Changed files)

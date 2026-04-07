@@ -201,15 +201,15 @@ Applies to **APPROVE** and **COMMENT** verdicts only. **REQUEST_CHANGES bypasses
 
 During QA REQUEST composition, sisyphus builds a list of evidence file paths it expects argus to produce. This manifest is derived from the evidence paths included in `## Required Verification`. When the manifest is empty (judgment-only review with no executable verification), the audit gate passes trivially.
 
-**Stage 1 automated checks (auto-include)**: Code changes가 있으면, Stage 1 automated checks (build, test, lint) evidence 경로를 manifest에 자동 포함한다. 이 경로는 공통 Evidence Path Fallback 규칙의 adhoc convention을 따른다 (check-slug: `build`, `test`, `lint`):
+**Stage 1 automated checks (auto-include)**: When code changes are present, auto-include evidence paths for the Stage 1 automated checks that exist in this project. Only include paths for commands actually discovered during project context gathering (e.g., if the project has no lint command, omit `lint.txt`). Paths follow the Evidence Path Fallback adhoc convention with `.txt` extension:
 
 ```
-$OMT_DIR/evidence/adhoc-{task-slug}/build.{ext}
-$OMT_DIR/evidence/adhoc-{task-slug}/test.{ext}
-$OMT_DIR/evidence/adhoc-{task-slug}/lint.{ext}
+$OMT_DIR/evidence/adhoc-{task-slug}/build.txt
+$OMT_DIR/evidence/adhoc-{task-slug}/test.txt
+$OMT_DIR/evidence/adhoc-{task-slug}/lint.txt
 ```
 
-QA REQUEST에 Stage 1 경로를 명시하지 않아도 sisyphus가 manifest에 자동으로 포함한다.
+Sisyphus auto-includes these paths in the manifest without explicit mention in the QA REQUEST.
 
 #### Audit Procedure
 
@@ -385,7 +385,14 @@ digraph task_loop {
     "Delegate to agent\n(per Do vs Delegate)" -> "argus directly" [label="verification"];
     "sisyphus-junior" -> "argus QA";
     "argus QA" -> "Pass?";
-    "Pass?" -> "mnemosyne" [label="yes"];
+    "evidence audit" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
+    "evidence OK?" [shape=diamond];
+    "Pass?" -> "evidence audit" [label="yes"];
+    "evidence audit" -> "evidence OK?";
+    "evidence OK?" -> "mnemosyne" [label="yes"];
+    "evidence OK?" -> "re-invoke argus" [label="gap"];
+    "re-invoke argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "re-invoke argus" -> "Pass?";
     "Pass?" -> "Create fix task" [label="no"];
     "mnemosyne" -> "Mark completed";
     "argus directly" -> "APPROVE?";
@@ -403,7 +410,7 @@ digraph task_loop {
 - Multiple unblocked independent tasks → dispatch in parallel
 - Delegate each task per the Do vs Delegate Decision Matrix
 - sisyphus-junior path: each junior completion → immediately invoke argus for QA
-- sisyphus-junior path: each argus approval → immediately invoke mnemosyne to commit
+- sisyphus-junior path: each argus approval → Evidence Audit Gate → mnemosyne to commit
 - argus direct path: each argus approval → immediately mark completed (no mnemosyne — no code changes to commit)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan file to mark `- [x]` on the corresponding TODO checkbox (direct sisyphus action, not delegated)
 
