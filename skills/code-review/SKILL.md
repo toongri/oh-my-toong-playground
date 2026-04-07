@@ -182,7 +182,7 @@ git fetch origin pull/<number>/head:pr-<number>
 git fetch origin ${BASE_REF}
 ```
 
-The range `origin/<baseRefName>...pr-<number>` uses three-dot syntax to show only changes introduced by the PR (not changes on the base branch since the PR branched).
+All range formats use **three-dot syntax** (`A...B`), which is equivalent to `git diff $(git merge-base A B)..B`. This shows only changes introduced by the target since the common ancestor — not changes on the base branch. This prevents false positives when `origin/main` has moved ahead after branching.
 
 All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output.
 
