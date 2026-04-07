@@ -33,7 +33,7 @@ RULE 4: NEVER complete without argus verification
 | Action | Route | Agent |
 |--------|-------|-------|
 | Read files, create/update todos, quick non-code tasks (<10s) | **YOU** directly | — |
-| Any code change (even 1 line) | **DELEGATE** | sisyphus-junior |
+| Any file modification (code, tests, docs, config) | **DELEGATE** | sisyphus-junior |
 | Complex debugging, root cause analysis, architecture | **DELEGATE** | oracle |
 | Codebase search, finding files/patterns | **DELEGATE** | explore |
 | External documentation research | **DELEGATE** | librarian |
@@ -130,6 +130,8 @@ digraph task_loop {
     "Mark completed" [shape=box, style=filled, fillcolor=green];
     "Create fix task" [shape=box];
     "re-invoke argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
+    "retries < 3?" [shape=diamond];
+    "interview user" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "More tasks?" [shape=diamond];
     "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
 
@@ -143,7 +145,9 @@ digraph task_loop {
     "Pass?" -> "evidence audit" [label="yes"];
     "evidence audit" -> "evidence OK?";
     "evidence OK?" -> "mnemosyne" [label="yes"];
-    "evidence OK?" -> "re-invoke argus" [label="gap"];
+    "evidence OK?" -> "retries < 3?" [label="gap"];
+    "retries < 3?" -> "re-invoke argus" [label="yes"];
+    "retries < 3?" -> "interview user" [label="no (exhausted)"];
     "re-invoke argus" -> "Pass?";
     "Pass?" -> "Create fix task" [label="no"];
     "mnemosyne" -> "Mark completed";
@@ -161,6 +165,7 @@ digraph task_loop {
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
 - sisyphus-junior path: junior done → argus QA → Evidence Audit Gate → mnemosyne → mark completed
+- Evidence gap path: re-invoke argus up to 3 times → if exhausted, interview user via AskUserQuestion (see verification.md)
 - argus direct path: argus approval → mark completed (no mnemosyne — no code changes)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan to mark `- [x]` on corresponding TODO
 

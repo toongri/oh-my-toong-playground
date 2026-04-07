@@ -32,7 +32,7 @@ MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 | Verdict | Action |
 |---------|--------|
 | **APPROVE** | Proceed to next stage |
-| **REQUEST_CHANGES** | Revise, re-invoke. MUST loop until APPROVE. |
+| **REQUEST_CHANGES** | Revise, re-invoke. MUST loop until pass (APPROVE or COMMENT). |
 | **COMMENT** | Incorporate findings, proceed |
 
 ---
@@ -142,7 +142,7 @@ All context (interview summary) is already in the plan's Context section. No sup
    **On selection:**
    - Option 1: invoke `Skill(skill: "sisyphus")` with plan file path
    - Option 2: delegate directly to sisyphus-junior
-   - Option 3: return to Interview Mode → re-run Metis → Plan → Momus pipeline
+   - Option 3: return to Interview Mode → re-run Metis → Plan → Oracle → Momus pipeline
 
    | User Response | Action |
    |---------------|--------|

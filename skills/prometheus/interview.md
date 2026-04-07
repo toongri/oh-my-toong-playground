@@ -155,6 +155,13 @@ Dispatch when interview alone cannot determine technical feasibility.
 | Alternative evaluation | "Is there a better design alternative?" |
 | Dependency mapping | "What systems does this depend on?" |
 
+**Oracle trigger conditions:**
+- User requirements may conflict with existing architecture → (feasibility)
+- Large-scale migration or schema change involved → (risk assessment)
+- 2+ technical approaches competing → (alternative evaluation)
+- Change scope spans 3+ modules/services → (dependency mapping)
+- Design decision directly affects performance/security/scalability → (risk assessment, feasibility)
+
 **When NOT to dispatch:** Simple codebase facts (use explore), user preference questions, standard low-risk implementations, codebase not yet explored.
 
 Briefly announce "Consulting Oracle for [reason]" before invocation.
