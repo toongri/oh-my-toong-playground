@@ -87,10 +87,10 @@ A path passes if the file **exists and is non-empty** (`test -f "$path" && test 
 
 | Retry | Condition | Action |
 |-------|-----------|--------|
-| 매 재시도 | 새 verdict = REQUEST_CHANGES | 즉시 fix task 생성 (evidence 확인 불필요) |
+| Every retry | New verdict = REQUEST_CHANGES | Create fix task immediately (no evidence check needed) |
 | 0 (initial) | APPROVE/COMMENT + evidence MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
 | 1-2 | APPROVE/COMMENT + evidence STILL MISSING | Re-invoke argus again |
-| 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | 유저 인터뷰: 상황 설명 + AskUserQuestion으로 전략 선택 |
+| 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | Interview user: explain situation + AskUserQuestion for strategy selection |
 
 **Full protocol**:
 
@@ -159,15 +159,15 @@ Results from oracle, explore, librarian, and argus are:
 - Summary: [what the implementer claimed]
 ```
 
-### Evidence Path Fallback (공통 규칙)
+### Evidence Path Fallback (Common Rule)
 
-모든 Recipe에 공통 적용. Evidence 경로의 primary source가 경로를 제공하지 않으면, adhoc 경로를 생성한다:
+Applies to all Recipes. When the primary source does not provide an evidence path, generate an adhoc path:
 
 ```
 $OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}
 ```
 
-`{check-slug}`는 검증 항목 설명에서 파생된 URL-safe slug다.
+`{check-slug}`: URL-safe slug derived from the verification description.
 
 ### Composition Recipes
 
@@ -175,18 +175,18 @@ $OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}
 - `## Spec` ← full 7-Section delegation prompt content (each section becomes `###` heading)
 - `## Required Verification` ← EXPECTED OUTCOME verification + MUST DO assertions
 - `## Scope` ← changed files + implementer's summary
-- Evidence paths: sisyphus가 adhoc evidence 경로 생성
+- Evidence paths: Sisyphus generates adhoc evidence paths
 
 **Recipe 2: After task completion (plan-based)**
 - `## Spec` ← plan TODO의 spec content (What to do, Must NOT do, AC, QA Scenarios)
 - `## Required Verification` ← TODO의 QA Scenarios + Acceptance Criteria
 - `## Scope` ← changed files + implementer's summary
-- Evidence paths: plan TODO의 Evidence 필드, 없으면 공통 fallback
+- Evidence paths: Plan TODO's Evidence field, fallback to common rule if absent
 
 **Recipe 3: AC/QA Scenario verification with explicit methods**
 - `## Spec` ← acceptance criteria + QA scenarios verbatim
 - `## Required Verification` ← QA scenarios verbatim (they ARE the required verification)
-- Evidence paths: QA scenarios의 Evidence 필드, 없으면 공통 fallback
+- Evidence paths: QA scenarios' Evidence field, fallback to common rule if absent
 
 After composing any recipe, retain evidence paths as **expected evidence manifest** for Evidence Audit Gate.
 
