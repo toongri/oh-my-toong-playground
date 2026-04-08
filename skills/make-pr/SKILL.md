@@ -182,6 +182,16 @@ Present the candidate table, then ask the user to select the target branch. Incl
 
 Use the confirmed value as `{base-branch}` in all subsequent git commands.
 
+**Phase 5 — Record baseline merge-base:**
+
+After user confirms the target branch, record the merge-base commit hash as the CAS baseline for Step 8 freshness check:
+
+```bash
+BASELINE_MERGE_BASE=$(git merge-base HEAD origin/{base-branch})
+```
+
+This value is compared again at PR creation time (Step 8) to detect if the target branch has changed during the PR writing process.
+
 ---
 
 ### Step 0-B: Target Branch Synchronization
@@ -444,6 +454,34 @@ Present the drafted PR description to the user and collect feedback.
 
 After user approves the PR description, ask if they want to create the PR.
 
+### Pre-creation Freshness Check (CAS Pattern)
+
+Before pushing and creating the PR, verify the target branch hasn't changed since Step 0-A:
+
+```bash
+# Re-fetch target branch
+git fetch origin {base-branch}
+
+# Recompute merge-base
+CURRENT_MERGE_BASE=$(git merge-base HEAD origin/{base-branch})
+```
+
+**Compare with baseline:**
+
+| Condition | Action |
+|-----------|--------|
+| `CURRENT_MERGE_BASE == BASELINE_MERGE_BASE` | Target unchanged — proceed to push + `gh pr create` |
+| `CURRENT_MERGE_BASE != BASELINE_MERGE_BASE` | Target has moved — re-sync before creating PR |
+
+**When target has moved:**
+
+1. Inform the user that the target branch has new commits since the analysis began
+2. Re-use the merge/rebase strategy selected in Step 0-B (do NOT re-interview — apply the same choice automatically)
+3. Execute the sync (merge or rebase)
+4. If conflict arises: follow Step 0-C conflict resolution interview
+5. After successful sync: proceed to push + `gh pr create`
+6. PR description is NOT re-written (the feature branch changes are the same; only the base has moved)
+
 - If user confirms: push the branch and run `gh pr create` with the approved title and description
 - If user declines: output the final PR description only
 
@@ -503,7 +541,7 @@ Return the PR URL to the user after successful creation.
 | Scope Assessment | Analyze thesis count, propose split if multi-thesis | Proxy signals trigger analysis, thesis isolation decides |
 | Write PR Title & Description | Follow output-format.md exactly | Emoji headers, Impact Scope, file paths in Checklist |
 | User Review | Present and collect feedback | Repeat until approved |
-| PR Creation | `gh pr create` after user confirmation | Return PR URL |
+| PR Creation | CAS freshness check → re-sync if target moved → `gh pr create` after user confirmation | Re-use Step 0-B strategy; re-interview only on conflict |
 
 ---
 
@@ -537,6 +575,7 @@ Return the PR URL to the user after successful creation.
 | Proposing unnecessary split for single-thesis PR | User burden, workflow delay | If single thesis, proceed to Step 6 immediately |
 | Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
+| PR 생성 직전 freshness check 생략 | 타겟 브랜치 변경 시 gh pr create 실패 또는 잘못된 diff | Step 8에서 CAS 패턴으로 merge-base 재검증 |
 
 ---
 
