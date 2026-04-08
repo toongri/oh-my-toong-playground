@@ -39,7 +39,7 @@ The caller composes a QA REQUEST using this structure:
 - No mode field — the content of Spec determines which verification triggers activate
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
-To review what changed in a file, use `git diff -- <path>` for each file under review. Do not independently discover which files changed.
+To understand what changed, use `git diff -- <path>` for context. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
 
 ---
 
@@ -102,6 +102,75 @@ When verification methods ARE specified:
 
 ---
 
+## Evidence Saving Protocol
+
+### Core Rule
+
+Every verification **command execution** produces an evidence file.
+
+Evidence files are the audit trail. Downstream gates check for their existence before accepting verdicts.
+
+### Objective vs. Subjective
+
+| Output Type | Disposition | Examples |
+|-------------|-------------|---------|
+| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright screenshots, CLI execution logs |
+| Subjective judgment | Response only (no file) | Code review analysis, MUST DO checklist verdicts, Scope Boundary calculations, feedback comments |
+
+### Evidence File Content Requirements
+
+Evidence files must contain meaningful content that demonstrates the verification result. Empty (0-byte) files are not valid evidence — downstream audit gates reject them.
+
+The specific content varies by verification type, but the file must always allow a reader to confirm what was verified:
+- CLI execution → command and output visible
+- API call → response body and status code visible
+- Screenshot → target screen visible
+- Build/test → execution log and result visible
+
+When a command produces empty stdout, record the command executed and its exit code so the file is not empty.
+
+### Evidence Path Priority (3-Tier)
+
+Resolve the evidence file path in this order — use the first match:
+
+1. **Explicit path from QA REQUEST** — caller explicitly provided a path in the QA REQUEST
+2. **Plan QA Scenario Evidence field** — the scenario definition includes an `Evidence:` field with a path (see [plan-template.md QA Scenarios](../prometheus/plan-template.md#qa-scenarios-mandatory-per-todo))
+3. **Auto-generated path (fallback)** — no explicit path provided; generate:
+   ```
+   $OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}
+   ```
+   - `{work-slug}`: URL-safe slug for the current work unit (provided by orchestrator, or derived from task/plan name)
+   - `{N}`: task number
+   - `{check-slug}`: URL-safe slug derived from the verification description (e.g., `npm-test`, `build`, `curl-post-users`)
+   - `{ext}`: file extension by domain (`.txt` for CLI/test output, `.json` for API responses, `.png` for screenshots)
+
+   Ensure the target directory exists before saving (`mkdir -p`).
+
+### Evidence Reporting in Response
+
+After all verification is complete, include a `## Evidence Files` section in the response listing every evidence file saved during this verification:
+
+```
+## Evidence Files
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-build.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-npm-test.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-curl-post-users.json
+```
+
+**IMPORTANT**: `$OMT_DIR` must be expanded to its absolute path in the response. Report fully resolved absolute paths only — downstream audit gates perform physical file existence checks on these paths.
+
+This section is the authoritative list of evidence produced. When no commands were executed (judgment-only review), omit this section.
+
+### Judgment-Only Trigger Exemption
+
+The **spec or AC provided** trigger (when activated with no executable commands — pure reading and analysis) produces **no evidence files**. Spec/AC compliance is a subjective judgment rendered in the response. Downstream audit gates MUST NOT flag missing evidence files for this trigger when no commands were executed.
+
+### Fast-Path Exception
+
+Fast-path reviews (single-line edits, obvious typos) skip automated checks and hands-on QA. No commands executed = no evidence files expected.
+
+---
+
 ## When: code changes present
 
 ### Automated Checks
@@ -110,7 +179,8 @@ When verification methods ARE specified:
 
 1. Discover project commands (check memory file, then documentation, then build files)
 2. Run: Build -> Tests -> Lint
-3. ANY failure = immediate REQUEST_CHANGES
+3. Save the full output of each automated check (build, test, lint) as an evidence file using the 3-tier path priority above
+4. ANY failure = immediate REQUEST_CHANGES
 
 **See** [stage1-commands.md] **for details** on command discovery, special cases, and output format.
 
@@ -177,7 +247,7 @@ Convert each MUST DO bullet into a verification item:
 
 ```
 Expected files (from EXPECTED OUTCOME) = A
-Changed files = B
+Changed files (from QA REQUEST Scope) = B
 
 PASS if: B ⊆ A (changes within declared scope)
 FLAG if: B - A ≠ ∅ (undeclared files in Changed files)
@@ -195,7 +265,7 @@ This trigger activates when the request content includes executable QA scenarios
 
 1. Execute each scenario as specified (tool, steps, expected output)
 2. Collect evidence for each scenario result
-3. Save evidence to the path specified in the scenario (if any)
+3. Save evidence to the path resolved by the 3-tier Evidence Path Priority
 4. ANY scenario failure = immediate REQUEST_CHANGES
 
 ---
@@ -219,7 +289,8 @@ This trigger activates when changes affect user-facing behavior AND the request 
 
 1. **Start** the server/application in background
 2. **Execute** verification against the running instance
-3. **Stop** the server/application after verification completes
+3. **Save** evidence for each verification result using the 3-tier Evidence Path Priority
+4. **Stop** the server/application after verification completes
 
 **See** [stage3-handson.md] **for details** on applicability logic, lifecycle management, verification procedures, and output format.
 
@@ -275,6 +346,11 @@ Every issue MUST include confidence scoring and use the rich feedback format.
   - Location: [file:line]
   - What: [problem]
   - Fix: [how to resolve]
+
+## Evidence Files
+- [absolute path to each evidence file saved during this verification]
+
+(Omit this section when no commands were executed — judgment-only review)
 
 ```
 

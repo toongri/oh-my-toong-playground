@@ -27,6 +27,8 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-17 | Intent Classification | Intent Classification | Interview Mode |
 | P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
+| UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Plan + Oracle + Momus + Execution |
+| UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Oracle reject + revision + Momus + User rejection + pipeline re-run |
 
 ---
 
@@ -242,7 +244,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V1 | Metis consultation before plan | Metis agent is consulted BEFORE the plan is written (not after or skipped) |
 | V2 | Plan saved to .omt/plans/ | Plan file is saved to `.omt/plans/*.md` path |
 | V3 | Plan content in English | Plan content (body, tasks, criteria) is written in English |
-| V4 | Plan contains AC and Out of Scope | Plan includes both Acceptance Criteria and Out of Scope sections |
+| V4 | Plan contains Work Objectives and per-TODO AC | Plan includes Work Objectives (Must Have / Must NOT Have) and each TODO specifies acceptance criteria |
 
 ---
 
@@ -292,7 +294,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 ## Scenario P-13: Clearance Checklist
 
-**Primary Technique:** Clearance Checklist — 인터뷰 후 플랜 생성 전 5항목 자가 점검 수행
+**Primary Technique:** Clearance Checklist — 인터뷰 후 플랜 생성 전 6항목 자가 점검 수행
 
 **Turn 1 — Input:**
 ```
@@ -311,9 +313,9 @@ PNG랑 JPG만 지원하면 돼. 5MB 제한으로. 플랜 만들어줘.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 5-item checklist evaluated | Skill internally evaluates all 5 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach decided, (5) Test strategy confirmed |
-| V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not confirmed, technical approach not decided), skill continues interview instead of generating plan |
-| V3 | No auto-generation after clearance | Even when all 5 checks pass, Prometheus does NOT generate a plan until user explicitly triggers with a recognized trigger phrase (e.g., "Generate the plan") |
+| V1 | 6-item checklist evaluated | Skill internally evaluates all 6 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach validated, (5) Test/verification strategy identified, (6) Ambiguity Score ≤ 0.2 |
+| V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not identified, Ambiguity Score > 0.2), skill continues interview instead of generating plan |
+| V3 | Auto-proceed to AC drafting after clearance | When all 6 checks pass, Prometheus automatically proceeds to Acceptance Criteria Drafting — does NOT wait for explicit user trigger. After AC confirmation, Metis is auto-invoked (see review-pipeline.md) |
 
 ---
 
@@ -359,7 +361,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with rich outcome descriptions and two-line acceptance criteria — NOT 20-30 granular micro-steps with code snippets or planner-assumed implementation technique |
-| V2 | No plan generated before explicit trigger | For the filter feature request, skill enters interview mode and does NOT generate a plan until user explicitly requests it (e.g., "플랜 만들어줘") |
+| V2 | No plan generated before Clearance | For the filter feature request, skill enters interview mode and does NOT generate a plan until the Clearance Checklist passes — premature generation before all 6 checks pass is avoided |
 | V3 | No under-planning | Each task is broken into verifiable chunks — no single task like "Step 1: Implement the feature" without further breakdown |
 | V4 | No architecture redesign | Skill proposes targeted changes that work within existing codebase patterns — does NOT suggest rewriting the entire component or introducing new frameworks unnecessarily |
 
@@ -417,7 +419,7 @@ auth.ts, payment.ts, user.ts 3개 파일에서 에러 메시지 한글화해줘
 | V1 | Boundary judgment: multi-file simple change | "에러 메시지 3곳 한글화" involves 3 files but trivial per-file changes — classified as Scoped (multi-file = not Trivial), NOT Complex (each change is simple). Interview is standard depth, not deep |
 | V2 | Scope-unknown triggers explore before classification | "환불 기능 추가" — scope unclear from request alone (could be 1 file or 10). Skill dispatches explore to understand current payment module structure BEFORE committing to a classification |
 | V3 | Architecture triggers Oracle MANDATORY | "마이크로서비스 분해" classified as Architecture regardless of how user frames it. Oracle dispatched with NO EXCEPTIONS. explore + librarian dispatched in parallel |
-| V4 | Classification affects depth, NOT Clearance | Scoped request ("한글화") gets standard interview (3-5 questions). Architecture request ("모노리스 분해") gets deep interview with explore mandatory before questions. But BOTH go through identical 5-item Clearance Checklist |
+| V4 | Classification affects depth, NOT Clearance | Scoped request ("한글화") gets standard interview (3-5 questions). Architecture request ("모노리스 분해") gets deep interview with explore mandatory before questions. But BOTH go through identical 6-item Clearance Checklist |
 
 ---
 
@@ -461,6 +463,105 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 
 ---
 
+## Use-Case Scenarios (End-to-End)
+
+These scenarios test whether the skill's core techniques work correctly **when combined across multiple phases**. Each scenario spans the full workflow or a significant multi-phase sequence.
+
+---
+
+## Scenario UC-P1: End-to-End — Full Planning Pipeline
+
+**Primary Technique:** Full workflow integration — Classification → Interview → Clearance → AC → Metis → Plan → Oracle → Momus → Presentation → Execution Bridge
+
+**Input (Multi-turn):**
+```
+Turn 1:
+User says: "결제 모듈에 환불 기능 추가해줘"
+
+Turn 2 (after explore + interview):
+Scope clarified: partial refund supported, 30-day window, existing payment patterns.
+Clearance Checklist all YES. Ambiguity ≤ 0.2.
+
+Turn 3:
+AC drafted and confirmed by user.
+
+Turn 4:
+Metis invoked → APPROVE.
+
+Turn 5:
+Plan written to $OMT_DIR/plans/refund-feature.md.
+Oracle invoked → COMMENT ("payment-service.ts reference at line 20-75 is accurate").
+Plan updated with Oracle findings.
+
+Turn 6:
+Momus invoked → APPROVE.
+
+Turn 7:
+Full plan presented to user. User approves.
+Execution Bridge: User selects "(1) Full orchestration".
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Intent classified before interview | "환불 기능 추가" classified as Scoped or Complex BEFORE interview questions begin. Explore dispatched if scope unknown |
+| V2 | Interview asks preferences, not codebase facts | Questions target scope (partial refund?), tradeoffs (refund window?), priorities — NOT "결제 모듈 어디에 있어?" |
+| V3 | Clearance gates interview exit | Interview continues until all 6 checklist items pass. Does NOT exit early after 2-3 questions |
+| V4 | AC follows two-line format with responsibility | Each criterion: Observable outcome + Verification. Work items have responsibility statements |
+| V5 | Metis invoked BEFORE plan, with 3-Section template | Metis called with USER GOAL + SCOPE + AC verbatim. No summarizing. Called before plan file is written |
+| V6 | Plan contains all required sections | TL;DR, Context (Interview Summary), Work Objectives (Must NOT Have), TODOs (References + QA), Execution Strategy, Verification Strategy, Success Criteria |
+| V7 | Oracle → Momus → User — sequential gates | Oracle MUST pass before Momus. Momus MUST pass before user sees the plan. No gate skipped |
+| V8 | Execution Bridge invokes Skill, not manual command | On "(1) Full orchestration", Prometheus invokes `Skill(skill: "sisyphus")` — does NOT tell user to run a command |
+
+---
+
+## Scenario UC-P2: End-to-End — Review Pipeline Rejection and Recovery
+
+**Primary Technique:** Review pipeline feedback loops — Oracle REQUEST_CHANGES → plan revision → Oracle re-review → Momus → User rejection → Interview re-entry
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Plan generated for "사용자 프로필에 아바타 업로드 기능 추가".
+Metis already approved.
+
+Turn 2:
+Oracle returns REQUEST_CHANGES:
+"src/service/upload-service.ts referenced in TODO 2 does not exist.
+ src/middleware/multer.ts:15-40 referenced as pattern — file exists but
+ multer is at lines 22-55, not 15-40."
+
+Turn 3:
+Prometheus revises plan: updates file references, adjusts TODO 2.
+Oracle re-invoked → APPROVE.
+
+Turn 4:
+Momus invoked → COMMENT ("TODO 3 acceptance criteria could be more specific").
+Plan updated with Momus suggestion.
+
+Turn 5:
+Full plan presented to user.
+User says: "파일 크기 제한을 10MB에서 5MB로 바꿔줘."
+
+Turn 6:
+Prometheus returns to Interview Mode to address the change.
+Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Oracle REQUEST_CHANGES → plan revised (not ignored) | Oracle's specific findings (wrong file, wrong line range) are incorporated into the plan. Prometheus does NOT ignore or defer |
+| V2 | Oracle re-invoked after revision | After updating the plan, Oracle is invoked again with the same template. Does NOT skip to Momus |
+| V3 | Momus COMMENT → incorporated, proceed | Momus advisory finding incorporated into plan. Proceeds to user presentation (COMMENT is non-blocking) |
+| V4 | User change request → Interview Mode re-entry | User's "5MB로 바꿔줘" triggers return to Interview Mode — does NOT just edit the plan in-place |
+| V5 | Full pipeline re-run after user change | After interview update, the ENTIRE pipeline re-runs: Metis → Plan → Oracle → Momus. No shortcuts |
+| V6 | No code generated at any point | Throughout all turns — including plan revision, pipeline re-run, and user change handling — Prometheus produces ZERO code, pseudocode, or code snippets |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -477,8 +578,11 @@ API rate limiting 기능 추가하고 관련 문서도 업데이트해줘
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
 | P-12 | Plan Template Structure | **RETEST** | 2026-03-16 | V3 updated (two-line AC + rich What to do), V6 added (References). Needs re-testing |
+| P-13 | Clearance Checklist | **RETEST** | | VPs updated in this branch. Needs re-testing |
 | P-15 | Failure Mode Avoidance | **RETEST** | 2026-03-16 | V1 updated — over-planning now checks for code snippets and planner-assumed technique. Needs re-testing |
 | P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
+| UC-P1 | End-to-End — Full Planning Pipeline | | | |
+| UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | |
