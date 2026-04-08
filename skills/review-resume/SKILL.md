@@ -38,22 +38,22 @@ CTO가 이력서를 읽고 "그래서?" 하는 순간, 그 불렛은 죽는다. 
 
 | Pillar | 보여주는 것 | 없으면 면접에서 |
 |--------|-----------|-------------|
-| Problem Entanglement (문제 연쇄 구조) | 사고의 **입력** — 문제들이 어떻게 서로를 유발하는가 | "아, 그 문제 해결했군요" (대화 종료) |
+| Constraint Cascade (제약 연쇄 구조) | 사고의 **입력** — 문제들이 어떻게 서로를 유발하는가 | "아, 그 문제 해결했군요" (대화 종료) |
 | Decision Tradeoff (대안 비교) | 사고의 **과정** — 왜 A가 아니라 B를 선택했는가 | "네, 좋은 선택이네요" (대화 종료) |
 | Impact Breadth (다차원 성과) | 사고의 **출력** — 성과가 기술·비즈니스·운영 등 복수 차원인가 | "성능 개선했군요" (대화 종료) |
 
 세 가지가 모두 보이면 CTO는 사고 과정을 **재구성**할 수 있고, 재구성할 수 있으면 더 깊은 질문을 하고, 더 깊은 질문이 이어지면 채용으로 간다.
 
-### Problem Entanglement
+### Constraint Cascade
 
 "A를 해결하니 B가 드러났고, B를 해결하면서 C도 함께 풀었다" — 이 연쇄 구조가 보이는 서술이 강력하다.
 
 | 수준 | 패턴 | 면접 효과 |
 |------|------|---------|
 | FLAT | "문제 A가 있어서 X로 해결했다" | 면접관의 할 말이 없음 |
-| ENTANGLED | "문제 A를 해결하려니 B가 드러났고, B의 제약 때문에 C를 함께 풀어야 했다" | 연쇄 구조 자체가 면접 소재 |
+| CASCADING | "문제 A를 해결하려니 B가 드러났고, B의 제약 때문에 C를 함께 풀어야 했다" | 연쇄 구조 자체가 면접 소재 |
 
-구체적 평가 기준은 `references/experience-mining.md` § Entanglement Extraction에 정의되어 있다.
+구체적 평가 기준은 `references/experience-mining.md` § Cascade Extraction에 정의되어 있다.
 
 ### Impact Breadth
 
@@ -97,7 +97,7 @@ flowchart TB
     P2 --> P3[Phase 5: 섹션별 평가\nCareer + Problem-Solving 6 criteria\n+ Pushback Simulation]
     P3 --> P4[Phase 6: First-Page + JD 매칭\nFirst-Page Primacy + JD Keyword Matching]
     P4 --> P5CHK[Phase 7a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5줄 minimum]
-    P5CHK --> P5[Phase 7b: P.A.R. + T1-T3 + Entanglement]
+    P5CHK --> P5[Phase 7b: P.A.R. + T1-T3 + Constraint Cascade]
     P5 --> P6[Phase 8: AI 톤 감사\nSkill humanizer audit mode]
     P6 --> P7DISPATCH[Phase 9: Content Quality Gate\nexaminer dispatch]
     P7DISPATCH --> P7VERDICT{All APPROVE\nor user opt-out?}
@@ -129,7 +129,7 @@ The Evaluation Protocol defines 10 phases. Resume reviews involve extensive back
 | 4 | 개발자 역량 평가: C1-C5 | `references/competency-assessment.md`, `references/experience-mining.md` § C1-C5 Competency |
 | 5 | 섹션별 평가: Career + Problem-Solving 6 criteria + Pushback | `references/section-evaluation.md`, `references/experience-mining.md` § Section-Specific Evaluation |
 | 6 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md`, `references/experience-mining.md` § JD Keyword Matching |
-| 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Entanglement | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
+| 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Constraint Cascade | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
 | 8 | AI 톤 감사: Skill(humanizer) audit mode | (inline below) |
 | 9 | Per-Bullet Content Quality Gate | `references/content-quality-gate.md` |
 | 10 | 결과 전달: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
@@ -164,7 +164,7 @@ When Phase 1 sets mode to **interview-impossible** (user is not the resume owner
 | 4 | 개발자 역량 평가: C1-C5 → interview on WEAK/ABSENT | Skip interview. Output axis ratings with evidence citations only. Proceed. |
 | 5 | 섹션별 평가: 6-criteria + Pushback → interview on FAIL | Skip interview. Output evaluation and Pushback Simulation results only. Proceed. |
 | 6 | First-Page Primacy + JD Matching → interview on 3+ missing keywords | Skip interview. Output keyword gap list only. Proceed. |
-| 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Entanglement → interview on FAIL | Skip interview. Output dimension scores and FLAT/ENTANGLED verdict only. Proceed. |
+| 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Constraint Cascade → interview on FAIL | Skip interview. Output dimension scores and FLAT/CASCADING verdict only. Proceed. |
 | 8 | AI 톤 감사: Skill(humanizer) audit mode | No change — audit proceeds normally; no interview involved |
 | 9 | Per-Bullet Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
 | 10 | HTML Report + Note Accumulate | No change — same procedure |
@@ -199,7 +199,7 @@ Not all processing output belongs in the terminal. The following categories defi
 - Criteria evaluation breakdown (6-criteria analysis per career/problem-solving line)
 - Pushback simulation details (L1/L2/L3 reasoning)
 - Alternative generation process (draft alternatives before dispatch)
-- Examiner dispatch and response details (E1-E6 axis scoring, Entanglement Score sub-dimensions)
+- Examiner dispatch and response details (E1-E6 axis scoring, Constraint Cascade Score sub-dimensions)
 - Competency assessment reasoning (C1-C5 axis rating evidence)
 
 When generating user-facing output (HTML report), translate all evaluation criteria and examiner axis labels to the user's language. Do not use bare English criteria names or internal codes in user-facing output.
@@ -364,11 +364,11 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 ## Phase 7: 문제해결 심화평가
 
-All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Entanglement Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
+All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Cascade Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
 
 **P.A.R. Evaluation:** Base dimensions (P1-P2, P4) apply to all 5+ line entries. P3 is kick-only. P5-P7 apply to Senior entries only. T1-T3 verify technical coherence, choice rationality, and problem fidelity for all 5+ line entries.
 
-**Entanglement Extraction:** When problem-solving description is FLAT (concerns are independent or lack causal links), run the 4-question chain to extract the entanglement structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Entanglement Extraction.
+**Cascade Extraction:** When problem-solving description is FLAT (concerns are independent or lack causal links), run the 4-question chain to extract the cascade structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Cascade Extraction.
 
 **Note candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
 
@@ -576,7 +576,7 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 - [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
 - [ ] Phase 6: First-Page Primacy + JD 매칭
 - [ ] Phase 6: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Entanglement)
+- [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Constraint Cascade)
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
 - [ ] Phase 8: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
 - [ ] Phase 9: Per-Bullet Content Quality Gate (resume-claim-examiner APPROVE or user opt-out per unit)
