@@ -4,7 +4,7 @@ description: |
   Use this agent when a major project step has been completed and needs to be reviewed against the original plan and coding standards.
 model: sonnet
 tools: Bash, Read
-maxTurns: 12
+maxTurns: 18
 ---
 
 ## Role Declaration
