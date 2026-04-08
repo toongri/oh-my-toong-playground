@@ -119,19 +119,15 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 
 ### Evidence File Content Requirements
 
-Evidence files must contain meaningful content — empty (0-byte) files are not valid evidence. Downstream audit gates reject empty files.
+Evidence files must contain meaningful content that demonstrates the verification result. Empty (0-byte) files are not valid evidence — downstream audit gates reject them.
 
-Every evidence file must include at minimum:
-1. **Command executed** — the exact command that was run
-2. **Exit code** — the process exit code (0 for success, non-zero for failure)
-3. **Output** — the full stdout/stderr output, or "No output produced" if the command produced no output
+The specific content varies by verification type, but the file must always allow a reader to confirm what was verified:
+- CLI execution → command and output visible
+- API call → response body and status code visible
+- Screenshot → target screen visible
+- Build/test → execution log and result visible
 
-Example when a command produces no output:
-```
-$ eslint --quiet src/
-Exit code: 0
-No output produced
-```
+When a command produces empty stdout, record the command executed and its exit code so the file is not empty.
 
 ### Evidence Path Priority (3-Tier)
 
