@@ -117,6 +117,22 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 | Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright screenshots, CLI execution logs |
 | Subjective judgment | Response only (no file) | Code review analysis, MUST DO checklist verdicts, Scope Boundary calculations, feedback comments |
 
+### Evidence File Content Requirements
+
+Evidence files must contain meaningful content — empty (0-byte) files are not valid evidence. Downstream audit gates reject empty files.
+
+Every evidence file must include at minimum:
+1. **Command executed** — the exact command that was run
+2. **Exit code** — the process exit code (0 for success, non-zero for failure)
+3. **Output** — the full stdout/stderr output, or "No output produced" if the command produced no output
+
+Example when a command produces no output:
+```
+$ eslint --quiet src/
+Exit code: 0
+No output produced
+```
+
 ### Evidence Path Priority (3-Tier)
 
 Resolve the evidence file path in this order — use the first match:
