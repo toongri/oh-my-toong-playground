@@ -20,7 +20,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | Complexity Triggers | Single file ≠ simple |
 | S-3 | Subagent Selection — Correct Agent Per Situation | Subagent Selection Guide | Role matching |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | Verification Flow | Role Separation |
-| S-5 | Argus Prompt Fidelity — Verbatim 6-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
+| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
 | S-6 | Per-Task Argus — One Call Per Task | Argus Invocation (Per-Task) | No batch |
 | S-7 | File Path Specificity + No Pre-built Checklist | Argus Invocation (File Path + Checklist) | No abstractions |
 | S-8 | Verdict Response Protocol — Action Per Verdict | Verdict Response Protocol | APPROVE/REQUEST_CHANGES/COMMENT |
@@ -28,7 +28,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-10 | Partial Completion — New Tasks, Never Solo | Subagent Partial Completion | No direct execution |
 | S-11 | Parallelization — Independent = Concurrent | Parallelization Heuristic | Code tasks always delegate |
 | S-12 | Task Execution Loop — Full Cycle | Task Execution Loop | blockedBy + dispatch + argus + next |
-| S-13 | 6-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 6 sections + quality check |
+| S-13 | 7-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 7 sections + quality check |
 | S-14 | Request Classification — Routing Per Type | Decision Gate (Step 1) | 5 types: Trivial/Explicit/Exploratory/Open-ended/Ambiguous |
 | S-15 | Context Brokering — Facts vs Preferences | Context Brokering Protocol | Explore for facts, user for preferences |
 | S-16 | Interview Mode — Sequential + Quality | In-Depth Interview Mode | One Q per message + rich context |
@@ -148,7 +148,7 @@ Everything is working correctly."
 
 ---
 
-## Scenario S-5: Argus Prompt Fidelity — Verbatim 6-Section
+## Scenario S-5: Argus Prompt Fidelity — Verbatim 7-Section
 
 **Primary Technique:** Argus Invocation (Prompt Fidelity) — copy-paste VERBATIM, no summarization
 
@@ -182,8 +182,8 @@ Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 6-Section prompt copied VERBATIM to argus | The entire 6-Section prompt appears in the argus invocation without any edits |
-| V2 | No section omitted | All 6 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT) are present in the argus call |
+| V1 | 7-Section prompt copied VERBATIM to argus | The entire 7-Section prompt appears in the argus invocation without any edits |
+| V2 | No section omitted | All 7 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, MANDATORY SKILLS) are present in the argus call |
 | V3 | No paraphrasing or restructuring | Text is not summarized, rephrased, or reorganized — exact copy-paste |
 | V4 | MUST NOT DO section included | The MUST NOT DO section is explicitly included, not dropped as "less important" |
 
@@ -361,9 +361,9 @@ Junior reports: "Completed 3/6 modules. Remaining 3 follow the same pattern."
 
 ---
 
-## Scenario S-13: 6-Section Delegation Prompt — Generation Quality
+## Scenario S-13: 7-Section Delegation Prompt — Generation Quality
 
-**Primary Technique:** Delegation Prompt Structure — all 6 sections present with sufficient detail
+**Primary Technique:** Delegation Prompt Structure — all 7 sections present with sufficient detail
 
 **Input:**
 ```
@@ -381,8 +381,8 @@ Known context:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | All 6 sections present | TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, and CONTEXT sections all appear in the delegation prompt |
-| V2 | REQUIRED TOOLS section has explicit tool whitelist | REQUIRED TOOLS contains at least one tool with what to use it for — not empty or generic |
+| V1 | All 7 sections present | TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, and MANDATORY SKILLS sections all appear in the delegation prompt |
+| V2 | REQUIRED TOOLS section has explicit tool list with purposes | REQUIRED TOOLS contains at least one tool with what to use it for — not empty or generic |
 | V3 | Prompt exceeds 30 lines | The generated prompt is substantial (>30 lines), not a brief summary |
 | V4 | Includes concrete file paths | Specific files (src/api/register.ts, src/validation/user.ts) and pattern references (src/auth/login-validation.ts:10-45) are included |
 | V5 | Includes verification command | EXPECTED OUTCOME contains a runnable verification command (e.g., `npm test`) |
@@ -890,7 +890,7 @@ Junior must investigate the root cause AND implement the fix.
 
 ## Scenario S-33: REQUIRED TOOLS Whitelist Enforcement
 
-**Primary Technique:** Delegation Prompt (REQUIRED TOOLS) — Section 3 is an explicit whitelist, unlisted tool usage is a scope violation
+**Primary Technique:** Delegation Prompt (REQUIRED TOOLS) — Section 3 lists task-specific tools with purposes alongside a permitted baseline of standard file tools
 
 **Input:**
 ```
@@ -901,7 +901,7 @@ Known context:
 - Junior needs: Serena find_symbol, context7 for rate-limit library, Bash for npm test only
 
 Temptation: Leave REQUIRED TOOLS section open-ended like "Use whatever tools are needed"
-or omit tool constraints entirely.
+or list tools without specific purposes (e.g., "Bash: for commands").
 ```
 
 **Verification Points:**
@@ -909,7 +909,7 @@ or omit tool constraints entirely.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Section 3 lists specific tools with purposes | REQUIRED TOOLS contains concrete entries like "Serena find_symbol: Navigate middleware chain" — not generic "use tools as needed" |
-| V2 | Includes whitelist enforcement statement | Section 3 includes language like "Junior MUST use ONLY the tools listed here. Any unlisted tool usage is a scope violation." |
+| V2 | Includes permitted baseline + task-specific guidance | Section 3 states standard file tools (Read, Edit, Write, Grep, Glob) are always permitted, with task-specific tools listed with concrete purposes — NOT open-ended "use whatever tools you need" |
 | V3 | Bash usage explicitly scoped | If Bash is included, its allowed usage is explicitly constrained (e.g., "Run `npm test` for verification only — no other shell commands") |
 | V4 | Does NOT leave REQUIRED TOOLS empty or open-ended | Section 3 is NOT empty, NOT "use whatever tools you need", and NOT omitted from the delegation prompt |
 
@@ -982,7 +982,7 @@ Argus returns REQUEST_CHANGES: "Missing format validation — only checks non-em
 Turn 3:
 Fix task created, junior fixes email validation.
 Argus returns APPROVE.
-Evidence Audit Gate: $OMT_DIR/evidence/adhoc-email-validation/test.txt is MISSING.
+Evidence Audit Gate: $OMT_DIR/evidence/fix-email-validation/task-1-test.txt is MISSING.
 
 Turn 4:
 Re-invoke argus with Evidence Gap Request listing the missing path.

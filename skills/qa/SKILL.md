@@ -106,7 +106,7 @@ When verification methods ARE specified:
 
 ### Core Rule
 
-Every verification **command execution** produces an evidence file. No exceptions.
+Every verification **command execution** produces an evidence file.
 
 Evidence files are the audit trail. Downstream gates check for their existence before accepting verdicts.
 
@@ -123,13 +123,16 @@ Resolve the evidence file path in this order — use the first match:
 
 1. **Explicit path from QA REQUEST** — caller explicitly provided a path in the QA REQUEST
 2. **Plan QA Scenario Evidence field** — the scenario definition includes an `evidence` field with a path
-3. **Auto-generated path (fallback)** — no path provided; generate:
+3. **Auto-generated path (fallback)** — no explicit path provided; generate:
    ```
-   $OMT_DIR/evidence/adhoc-{task-slug}/{check-slug}.{ext}
+   $OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}
    ```
-   - `{task-slug}`: URL-safe slug from the current task or plan name (e.g., `add-user-endpoint`)
+   - `{work-slug}`: URL-safe slug for the current work unit (provided by orchestrator, or derived from task/plan name)
+   - `{N}`: task number
    - `{check-slug}`: URL-safe slug derived from the verification description (e.g., `npm-test`, `build`, `curl-post-users`)
    - `{ext}`: file extension by domain (`.txt` for CLI/test output, `.json` for API responses, `.png` for screenshots)
+
+   Ensure the target directory exists before saving (`mkdir -p`).
 
 ### Evidence Reporting in Response
 
@@ -137,12 +140,14 @@ After all verification is complete, include a `## Evidence Files` section in the
 
 ```
 ## Evidence Files
-- $OMT_DIR/evidence/adhoc-add-user-endpoint/build.txt
-- $OMT_DIR/evidence/adhoc-add-user-endpoint/test.txt
-- $OMT_DIR/evidence/adhoc-add-user-endpoint/curl-post-users.json
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-build.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-npm-test.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-curl-post-users.json
 ```
 
-This section is the authoritative list of evidence produced. Downstream audit gates use these reported paths for physical file existence verification. When no commands were executed (judgment-only review), omit this section.
+**IMPORTANT**: `$OMT_DIR` must be expanded to its absolute path in the response. Report fully resolved absolute paths only — downstream audit gates perform physical file existence checks on these paths.
+
+This section is the authoritative list of evidence produced. When no commands were executed (judgment-only review), omit this section.
 
 ### Judgment-Only Trigger Exemption
 

@@ -109,6 +109,16 @@ Before entering the Task Execution Loop:
 
 **RULE**: Default to parallel. Only serialize when dependencies or file conflicts exist.
 
+### Work-Unit Slug
+
+When creating the task list, also generate a **work-unit slug** — a URL-safe summary of the user's request in 3-5 words.
+
+- Derive from the user's request: "Fix login validation bug" → `fix-login-validation-bug`
+- Plan-based work: use the plan name as the slug
+- Evidence paths use this slug: `$OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}`
+
+The work-unit slug is passed to argus via explicit Tier 1 evidence paths in the QA REQUEST (see verification.md).
+
 ---
 
 ## Task Execution Loop
@@ -148,11 +158,14 @@ digraph task_loop {
     "evidence OK?" -> "retries < 3?" [label="gap"];
     "retries < 3?" -> "re-invoke argus" [label="yes"];
     "retries < 3?" -> "interview user" [label="no (exhausted)"];
+    "interview user" -> "Create fix task" [label="user: retry"];
+    "interview user" -> "mnemosyne" [label="user: accept gaps"];
+    "interview user" -> "Done" [label="user: abort"];
     "re-invoke argus" -> "Pass?";
     "Pass?" -> "Create fix task" [label="no"];
     "mnemosyne" -> "Mark completed";
     "argus directly" -> "APPROVE?";
-    "APPROVE?" -> "Mark completed" [label="yes"];
+    "APPROVE?" -> "evidence audit" [label="yes"];
     "APPROVE?" -> "Create fix task" [label="no"];
     "Mark completed" -> "More tasks?";
     "Create fix task" -> "More tasks?";
@@ -166,7 +179,8 @@ digraph task_loop {
 - Multiple unblocked independent tasks → dispatch in parallel
 - sisyphus-junior path: junior done → argus QA → Evidence Audit Gate → mnemosyne → mark completed
 - Evidence gap path: re-invoke argus up to 3 times → if exhausted, interview user via AskUserQuestion (see verification.md)
-- argus direct path: argus approval → mark completed (no mnemosyne — no code changes)
+- argus direct path: argus approval → Evidence Audit Gate → mark completed (mnemosyne skipped — no code changes to commit)
+- Post-interview path (retries exhausted): user chooses via AskUserQuestion — retry (create fix task), accept gaps (mnemosyne if code changes, then complete), or abort (skip task, report to user)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan to mark `- [x]` on corresponding TODO
 
 ### Verdict Response Protocol
