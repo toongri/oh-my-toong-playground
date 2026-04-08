@@ -167,8 +167,8 @@ Fast-path reviews (single-line edits, obvious typos) skip automated checks and h
 
 1. Discover project commands (check memory file, then documentation, then build files)
 2. Run: Build -> Tests -> Lint
-3. ANY failure = immediate REQUEST_CHANGES
-4. Save the full output of each automated check (build, test, lint) as an evidence file using the 3-tier path priority above
+3. Save the full output of each automated check (build, test, lint) as an evidence file using the 3-tier path priority above
+4. ANY failure = immediate REQUEST_CHANGES
 
 **See** [stage1-commands.md] **for details** on command discovery, special cases, and output format.
 
@@ -334,6 +334,11 @@ Every issue MUST include confidence scoring and use the rich feedback format.
   - Location: [file:line]
   - What: [problem]
   - Fix: [how to resolve]
+
+## Evidence Files
+- [absolute path to each evidence file saved during this verification]
+
+(Omit this section when no commands were executed — judgment-only review)
 
 ```
 

@@ -315,7 +315,7 @@ PNG랑 JPG만 지원하면 돼. 5MB 제한으로. 플랜 만들어줘.
 |---|-------|-------------------|
 | V1 | 6-item checklist evaluated | Skill internally evaluates all 6 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach validated, (5) Test/verification strategy identified, (6) Ambiguity Score ≤ 0.2 |
 | V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not identified, Ambiguity Score > 0.2), skill continues interview instead of generating plan |
-| V3 | No auto-generation after clearance | Even when all 6 checks pass, Prometheus does NOT generate a plan until user explicitly triggers with a recognized trigger phrase (e.g., "Generate the plan") |
+| V3 | Auto-proceed to AC drafting after clearance | When all 6 checks pass, Prometheus automatically proceeds to Acceptance Criteria Drafting — does NOT wait for explicit user trigger. After AC confirmation, Metis is auto-invoked (see review-pipeline.md) |
 
 ---
 
@@ -419,7 +419,7 @@ auth.ts, payment.ts, user.ts 3개 파일에서 에러 메시지 한글화해줘
 | V1 | Boundary judgment: multi-file simple change | "에러 메시지 3곳 한글화" involves 3 files but trivial per-file changes — classified as Scoped (multi-file = not Trivial), NOT Complex (each change is simple). Interview is standard depth, not deep |
 | V2 | Scope-unknown triggers explore before classification | "환불 기능 추가" — scope unclear from request alone (could be 1 file or 10). Skill dispatches explore to understand current payment module structure BEFORE committing to a classification |
 | V3 | Architecture triggers Oracle MANDATORY | "마이크로서비스 분해" classified as Architecture regardless of how user frames it. Oracle dispatched with NO EXCEPTIONS. explore + librarian dispatched in parallel |
-| V4 | Classification affects depth, NOT Clearance | Scoped request ("한글화") gets standard interview (3-5 questions). Architecture request ("모노리스 분해") gets deep interview with explore mandatory before questions. But BOTH go through identical 5-item Clearance Checklist |
+| V4 | Classification affects depth, NOT Clearance | Scoped request ("한글화") gets standard interview (3-5 questions). Architecture request ("모노리스 분해") gets deep interview with explore mandatory before questions. But BOTH go through identical 6-item Clearance Checklist |
 
 ---
 

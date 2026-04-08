@@ -125,7 +125,7 @@ Round {n} | Ambiguity: {score}%
 → Next question targets: {weakest dimension}
 ```
 
-The Clearance Checklist (items 1-5) remains internal. Only ambiguity scores are surfaced.
+The Clearance Checklist (items 1-6) remains internal. Only ambiguity scores are surfaced.
 
 ## Question Anti-Patterns
 

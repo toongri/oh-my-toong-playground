@@ -137,7 +137,7 @@ Overall structure:
 
 | User Response | Your Action |
 |---------------|-------------|
-| "Looks good" / "Approved" | Proceed to plan generation with these criteria |
+| "Looks good" / "Approved" | Proceed to Metis consultation with these criteria (see review-pipeline.md) |
 | Modifications requested | Update criteria, re-propose if significant changes |
 | "Just do it" / Skips review | Use your draft as-is, note in plan that criteria were AI-generated |
 
