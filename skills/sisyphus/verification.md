@@ -68,7 +68,7 @@ Build the manifest after argus responds, from two sources:
 1. **From QA REQUEST** — explicit evidence file paths included in `## Required Verification` (if any)
 2. **From argus response** — all paths listed in the `## Evidence Files` section of the response
 
-Manifest = union of both sources. When manifest is empty (judgment-only review, no commands executed), the audit gate passes trivially.
+Manifest source depends on the mode in the table below. When manifest is empty (judgment-only review, no commands executed), the audit gate passes trivially.
 
 **Two modes:**
 
@@ -136,7 +136,7 @@ After the user responds to the AskUserQuestion:
 
 | User Choice | Sisyphus Action |
 |-------------|-----------------|
-| **Retry** | Create fix task describing the evidence gap, re-delegate to sisyphus-junior |
+| **Retry** | Re-invoke argus from scratch with the original QA REQUEST (retry counter resets) |
 | **Accept gaps** | Accept current verdict despite missing evidence. Proceed to mnemosyne (if code changes exist) → mark completed |
 | **Abort** | Skip this task. Mark as aborted, report situation to user, proceed to next task |
 

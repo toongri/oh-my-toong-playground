@@ -260,10 +260,11 @@ Three argus verdicts received for different tasks:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → invoke mnemosyne, then mark complete | Task A: mnemosyne is invoked to commit changes, THEN task is marked completed |
+| V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed |
 | V2 | REQUEST_CHANGES (Task B) → create fix task and re-delegate | A new fix task is created for the XSS issue and dispatched to sisyphus-junior |
-| V3 | COMMENT (Task C) → mark complete, does NOT block progression | Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
-| V4 | Fix task contains exact issue details | The fix task for Task B includes the specific issue from argus (missing input sanitization), file location, and required fix action |
+| V3 | COMMENT (Task C) → Evidence Audit Gate → mark complete, does NOT block progression | Task C: Evidence Audit Gate runs, then Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
+| V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
+| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE/COMMENT | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -1019,15 +1020,15 @@ Mnemosyne invoked, commit created.
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | **RETEST** | | VPs updated in this branch (6-Section → 7-Section). Needs re-testing |
 | S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-8 | Verdict Response Protocol — Action Per Verdict | **RETEST** | | VPs updated in this branch (Evidence Audit Gate added). Needs re-testing |
 | S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
-| S-13 | 7-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 7/7 VPs — GREEN verified |
+| S-12 | Task Execution Loop — Full Cycle | **RETEST** | | VPs updated in this branch (Evidence Audit Gate in full cycle). Needs re-testing |
+| S-13 | 7-Section Delegation Prompt — Generation Quality | **RETEST** | | VPs updated in this branch (6-Section → 7-Section). Needs re-testing |
 | S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
