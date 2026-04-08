@@ -134,14 +134,11 @@ digraph task_loop {
     "argus QA" [shape=box, style=filled, fillcolor=red, fontcolor=white];
     "Pass?" [shape=diamond];
     "APPROVE?" [shape=diamond];
-    "evidence audit" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
-    "evidence OK?" [shape=diamond];
+    "evidence audit\n(see verification.md)" [shape=box, style=filled, fillcolor=orange, fontcolor=white];
+    "code changes?" [shape=diamond];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "Mark completed" [shape=box, style=filled, fillcolor=green];
     "Create fix task" [shape=box];
-    "re-invoke argus" [shape=box, style=filled, fillcolor=red, fontcolor=white];
-    "retries < 3?" [shape=diamond];
-    "interview user" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "More tasks?" [shape=diamond];
     "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
 
@@ -152,20 +149,14 @@ digraph task_loop {
     "Delegate to agent\n(per Agent Routing)" -> "argus directly" [label="verification"];
     "sisyphus-junior" -> "argus QA";
     "argus QA" -> "Pass?";
-    "Pass?" -> "evidence audit" [label="yes"];
-    "evidence audit" -> "evidence OK?";
-    "evidence OK?" -> "mnemosyne" [label="yes"];
-    "evidence OK?" -> "retries < 3?" [label="gap"];
-    "retries < 3?" -> "re-invoke argus" [label="yes"];
-    "retries < 3?" -> "interview user" [label="no (exhausted)"];
-    "interview user" -> "Create fix task" [label="user: retry"];
-    "interview user" -> "mnemosyne" [label="user: accept gaps"];
-    "interview user" -> "Done" [label="user: abort"];
-    "re-invoke argus" -> "Pass?";
+    "Pass?" -> "evidence audit\n(see verification.md)" [label="yes"];
     "Pass?" -> "Create fix task" [label="no"];
+    "evidence audit\n(see verification.md)" -> "code changes?";
+    "code changes?" -> "mnemosyne" [label="yes"];
+    "code changes?" -> "Mark completed" [label="no"];
     "mnemosyne" -> "Mark completed";
     "argus directly" -> "APPROVE?";
-    "APPROVE?" -> "evidence audit" [label="yes"];
+    "APPROVE?" -> "evidence audit\n(see verification.md)" [label="yes"];
     "APPROVE?" -> "Create fix task" [label="no"];
     "Mark completed" -> "More tasks?";
     "Create fix task" -> "More tasks?";
@@ -177,19 +168,18 @@ digraph task_loop {
 **Execution Rules:**
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
-- sisyphus-junior path: junior done → argus QA → Evidence Audit Gate → mnemosyne → mark completed
-- Evidence gap path: re-invoke argus up to 3 times → if exhausted, interview user via AskUserQuestion (see verification.md)
-- argus direct path: argus approval → Evidence Audit Gate → mark completed (mnemosyne skipped — no code changes to commit)
-- Post-interview path (retries exhausted): user chooses via AskUserQuestion — retry (create fix task), accept gaps (mnemosyne if code changes, then complete), or abort (skip task, report to user)
+- sisyphus-junior path: junior done → argus QA → Evidence Audit Gate (see verification.md) → mnemosyne (if code changes) → mark completed
+- argus direct path: argus approval → Evidence Audit Gate (see verification.md) → mark completed (no code changes to commit)
+- Evidence gap handling, retry logic, and user interview flow: see [verification.md](verification.md)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan to mark `- [x]` on corresponding TODO
 
 ### Verdict Response Protocol
 
 | Verdict | Sisyphus Action |
 |---------|-----------------|
-| **APPROVE** | Evidence Audit Gate → mnemosyne (commit) → mark completed |
+| **APPROVE** | Evidence Audit Gate → mnemosyne (if code changes) → mark completed |
 | **REQUEST_CHANGES** (Critical/High) | Create fix task → re-delegate to sisyphus-junior |
-| **COMMENT** (Medium only) | Evidence Audit Gate → mnemosyne (commit) → mark completed. Create follow-up task if warranted |
+| **COMMENT** (Medium only) | Evidence Audit Gate → mnemosyne (if code changes) → mark completed. Create follow-up task if warranted |
 
 **Note**: If a previous finding was intentionally not addressed due to a deliberate trade-off, the rationale can optionally be noted in delegation prompt's `## 6. CONTEXT` or QA REQUEST's `## Scope`.
 
