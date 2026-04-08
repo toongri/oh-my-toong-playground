@@ -36,10 +36,10 @@ The caller composes a QA REQUEST using this structure:
 ```
 
 - `#` QA REQUEST → `##` Spec/Scope → `###` internal subsections
-- No mode field — the content of Spec determines which verification triggers activate
+- The content of Spec determines which verification triggers activate.
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
-To understand what changed, use `git diff -- <path>` for context. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
+To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>` for context. If `main` does not exist, substitute `master`. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
 
 ---
 
@@ -239,7 +239,7 @@ Convert each MUST DO bullet into a verification item:
 
 | Violation Type | Detection Method |
 |----------------|------------------|
-| File scope ("Do NOT touch X.ts") | `git diff -- X.ts` — empty means untouched |
+| File scope ("Do NOT touch X.ts") | X.ts absent from QA REQUEST Scope Changed files list — absence means untouched by this task |
 | Pattern prohibition ("Do NOT use any") | Grep Changed files' content for prohibited pattern |
 | Behavior constraint ("Do NOT change API") | Read and review interfaces in Changed files |
 
