@@ -83,6 +83,7 @@ digraph make_pr_flow {
         "0-B: Check Diverge\n(behind count)" -> "0-B: merge/rebase\nInterview + Execute" [label="behind > 0"];
         "0-B: merge/rebase\nInterview + Execute" -> "0-C: Conflict?";
         "0-C: Conflict?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "0-C: Conflict?" -> "Collect Git Metadata" [label="NO"];
         "0-C: Per-file\nContext + Interview" -> "More Conflicts?";
         "More Conflicts?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
         "More Conflicts?" -> "Commit / Continue\nRebase" [label="NO"];
