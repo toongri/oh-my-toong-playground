@@ -130,7 +130,10 @@ digraph make_pr_flow {
     "Confirm PR Creation" -> "Output Description Only" [label="Declined"];
     "Confirm PR Creation" -> "CAS Freshness\nCheck" [label="Confirmed"];
     "CAS Freshness\nCheck" -> "gh pr create" [label="Fresh"];
-    "CAS Freshness\nCheck" -> "0-B: merge/rebase\nInterview + Execute" [label="Stale"];
+    "CAS Re-sync\n(re-use or\nnew interview)" [shape=box];
+    "CAS Freshness\nCheck" -> "CAS Re-sync\n(re-use or\nnew interview)" [label="Stale"];
+    "CAS Re-sync\n(re-use or\nnew interview)" -> "gh pr create" [label="sync complete"];
+    "CAS Re-sync\n(re-use or\nnew interview)" -> "0-C: Conflict?" [label="conflict"];
     "gh pr create" -> "Return PR URL";
 }
 ```
@@ -153,11 +156,12 @@ git fetch --all --prune
 
 **Phase 2 — Analyze all remote branches as candidates:**
 
-For every remote branch (e.g., `origin/main`, `origin/develop`, `origin/sisyphus-myth-title`), compute merge-base distance:
+For every remote branch **except the current branch's remote counterpart** (`origin/$(git branch --show-current)`) and symbolic refs (`origin/HEAD`), compute merge-base distance:
 
 ```bash
 # For each remote branch {branch}:
-MERGE_BASE=$(git merge-base HEAD origin/{branch})
+MERGE_BASE=$(git merge-base HEAD origin/{branch} 2>/dev/null || true)
+if [ -z "$MERGE_BASE" ]; then continue; fi  # Skip unrelated/orphan branches
 AHEAD=$(git rev-list --count $MERGE_BASE..HEAD)
 BEHIND=$(git rev-list --count $MERGE_BASE..origin/{branch})
 DIFF_STAT=$(git diff --stat $MERGE_BASE..HEAD | tail -1)
@@ -494,6 +498,9 @@ CURRENT_TARGET_SHA=$(git rev-parse origin/{base-branch})
 
 ```bash
 # Single PR (create after remote push)
+# If rebase was used (Step 0-B or Step 8 CAS re-sync):
+git push --force-with-lease -u origin HEAD
+# If merge was used or no sync was needed:
 git push -u origin HEAD
 TITLE=$(cat <<'EOF'
 PR title
