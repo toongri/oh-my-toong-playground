@@ -361,7 +361,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with rich outcome descriptions and two-line acceptance criteria — NOT 20-30 granular micro-steps with code snippets or planner-assumed implementation technique |
-| V2 | No plan generated before explicit trigger | For the filter feature request, skill enters interview mode and does NOT generate a plan until user explicitly requests it (e.g., "플랜 만들어줘") |
+| V2 | No plan generated before Clearance | For the filter feature request, skill enters interview mode and does NOT generate a plan until the Clearance Checklist passes — premature generation before all 6 checks pass is avoided |
 | V3 | No under-planning | Each task is broken into verifiable chunks — no single task like "Step 1: Implement the feature" without further breakdown |
 | V4 | No architecture redesign | Skill proposes targeted changes that work within existing codebase patterns — does NOT suggest rewriting the entire component or introducing new frameworks unnecessarily |
 
@@ -583,3 +583,6 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
+| UC-P1 | Use-Case Scenario 1 | | | |
+| UC-P2 | Use-Case Scenario 2 | | | |
+| P-13 | Clearance Checklist | **RETEST** | | VPs updated in this branch. Needs re-testing |
