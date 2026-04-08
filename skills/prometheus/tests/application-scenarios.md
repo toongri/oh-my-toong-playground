@@ -294,7 +294,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 ## Scenario P-13: Clearance Checklist
 
-**Primary Technique:** Clearance Checklist — 인터뷰 후 플랜 생성 전 5항목 자가 점검 수행
+**Primary Technique:** Clearance Checklist — 인터뷰 후 플랜 생성 전 6항목 자가 점검 수행
 
 **Turn 1 — Input:**
 ```
@@ -313,9 +313,9 @@ PNG랑 JPG만 지원하면 돼. 5MB 제한으로. 플랜 만들어줘.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 5-item checklist evaluated | Skill internally evaluates all 5 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach decided, (5) Test strategy confirmed |
-| V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not confirmed, technical approach not decided), skill continues interview instead of generating plan |
-| V3 | No auto-generation after clearance | Even when all 5 checks pass, Prometheus does NOT generate a plan until user explicitly triggers with a recognized trigger phrase (e.g., "Generate the plan") |
+| V1 | 6-item checklist evaluated | Skill internally evaluates all 6 clearance items: (1) Core objective defined, (2) Scope boundaries established, (3) No critical ambiguities, (4) Technical approach validated, (5) Test/verification strategy identified, (6) Ambiguity Score ≤ 0.2 |
+| V2 | Fails checklist → continues interview | If any checklist item is NOT satisfied (e.g., test strategy not identified, Ambiguity Score > 0.2), skill continues interview instead of generating plan |
+| V3 | No auto-generation after clearance | Even when all 6 checks pass, Prometheus does NOT generate a plan until user explicitly triggers with a recognized trigger phrase (e.g., "Generate the plan") |
 
 ---
 

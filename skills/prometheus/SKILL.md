@@ -82,14 +82,14 @@ digraph prometheus_flow {
     "Clearance + AC complete?" -> "Metis consultation" [label="yes"];
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
-    "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE"];
+    "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE/COMMENT"];
     "Write plan to $OMT_DIR/plans/*.md" -> "Oracle review";
     "Oracle review" -> "Oracle verdict?";
     "Oracle verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Oracle verdict?" -> "Momus review" [label="APPROVE"];
+    "Oracle verdict?" -> "Momus review" [label="APPROVE/COMMENT"];
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE"];
+    "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE/COMMENT"];
     "Present full plan\nAsk user to finalize" -> "User approves?";
     "User approves?" -> "Interview Mode" [label="no, more changes"];
     "User approves?" -> "Execution Bridge\n(AskUserQuestion)" [label="yes"];

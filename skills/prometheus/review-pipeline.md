@@ -56,7 +56,7 @@ MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
 
-On re-invocation after REQUEST_CHANGES: same structure with updated content.
+**On Metis REQUEST_CHANGES: Return to Interview Mode.** Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Ask the user to clarify the gaps Metis identified. After resolving gaps via interview, re-invoke Metis with the same 3-Section structure containing updated content.
 
 **Anti-Patterns:**
 
