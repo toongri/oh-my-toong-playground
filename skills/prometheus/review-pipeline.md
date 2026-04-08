@@ -66,6 +66,31 @@ MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 | Abstract scope | Completeness uncheckable |
 | Missing user goal | Intent unclassifiable |
 
+### Gap Classification
+
+Post-plan self-review classifies each identified gap as CRITICAL (requires user input), MINOR (self-resolve), or AMBIGUOUS (apply default) — each type handled per its protocol.
+
+| Level | Definition | Handling Protocol | Example |
+|-------|-----------|-------------------|---------|
+| **CRITICAL** | Requires user input — cannot proceed without clarification | Return to Interview Mode, ask user to resolve before continuing | Acceptance criteria missing for a core TODO |
+| **MINOR** | Self-resolvable — planner can infer correct resolution from existing context | Resolve inline during plan revision, document rationale in plan | Naming convention for a new file consistent with codebase pattern |
+| **AMBIGUOUS** | Apply default — standard convention or safe default exists | Apply the documented default, note in plan | Unclear whether to use existing utility or inline logic — apply DRY default |
+
+### Self-Review Checklist
+
+After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, zero human-intervention criteria.
+
+This checklist is planner-side (prometheus), distinct from F1-F4 executor-side verification (sisyphus/argus). Execute after plan generation and before Oracle submission.
+
+| # | Item | Check |
+|---|------|-------|
+| 1 | All TODOs have acceptance criteria | Every TODO in the plan specifies verifiable completion criteria |
+| 2 | File references exist | All file paths and line references cited in the plan resolve to actual files |
+| 3 | Guardrails from Metis incorporated | Every constraint or guardrail flagged by Metis is reflected in the plan's TODOs or notes |
+| 4 | Zero human-intervention criteria | No TODO requires manual human action mid-execution to proceed |
+
+**Failure action**: If any item fails, loop back and fix before submitting to Oracle. Do NOT submit a plan that fails this checklist.
+
 ---
 
 ## Oracle Feedback Loop

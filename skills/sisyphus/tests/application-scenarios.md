@@ -154,7 +154,7 @@ Everything is working correctly."
 
 **Input:**
 ```
-Original 6-Section delegation prompt sent to junior (45 lines):
+Original 7-Section delegation prompt sent to junior (47 lines):
 ## 1. TASK
 Add JWT authentication to the /api/users endpoint...
 ## 2. EXPECTED OUTCOME
@@ -174,6 +174,8 @@ Add JWT authentication to the /api/users endpoint...
 ## 6. CONTEXT
 - Related files: src/auth/session.ts (existing auth pattern)
 - Prior task: T-1 added the User model
+## 7. MANDATORY SKILLS
+- superpowers:test-driven-development
 
 Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
 ```
@@ -208,7 +210,7 @@ All 3 juniors report completion at roughly the same time.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | 3 separate argus invocations | Exactly 3 argus calls are made — one per completed task |
-| V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 6-Section prompt, not T-2 or T-3 |
+| V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 7-Section prompt, not T-2 or T-3 |
 | V3 | No batching of multiple tasks | Does NOT combine multiple tasks into a single argus call for "efficiency" |
 | V4 | Each argus call lists only that task's changed files | File paths in each argus call correspond exclusively to that task's scope |
 
@@ -237,7 +239,7 @@ Also tempted to include: "Please verify: 1) Tests pass, 2) No regressions, 3) Ty
 |---|-------|-------------------|
 | V1 | All 5 file paths explicitly listed | Each of the 5 files is listed by its full path in the argus invocation |
 | V2 | No glob patterns or abstract counts | Does NOT use "auth/**", "5 files", or "auth module files" — concrete paths only |
-| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 6-Section prompt |
+| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 7-Section prompt |
 | V4 | Junior's summary included as-is | Junior's completion claim is included as reference, not as verified facts |
 
 ---
@@ -710,7 +712,8 @@ Temptation: Mark T-3 as complete immediately after argus APPROVE.
 | V1 | mnemosyne invoked AFTER argus APPROVE | After receiving APPROVE from argus, sisyphus's next action is to invoke mnemosyne — not mark complete |
 | V2 | mnemosyne invoked BEFORE marking task complete | The task is NOT marked complete until mnemosyne has finished committing the changes |
 | V3 | Does NOT skip mnemosyne step | Does NOT treat argus APPROVE as sufficient to mark complete — the commit step via mnemosyne is mandatory |
-| V4 | Full flow: junior done → argus → APPROVE → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers mnemosyne, mnemosyne commits, THEN task is marked complete |
+| V4 | Full flow: junior done → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers Evidence Audit Gate, gate passes, mnemosyne commits, THEN task is marked complete |
+| V5 | Evidence Audit Gate runs before mnemosyne | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -774,11 +777,12 @@ Execute full loop for both tasks.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | T1 full cycle: dispatch junior → argus → APPROVE → mnemosyne → mark complete | T1 follows the complete loop including the mnemosyne commit step before being marked complete |
+| V1 | T1 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T1 follows the complete loop including Evidence Audit Gate and the mnemosyne commit step before being marked complete |
 | V2 | T2 unblocked after T1 complete | T2 becomes unblocked only after T1 is fully completed (including mnemosyne commit) |
-| V3 | T2 full cycle: dispatch junior → argus → APPROVE → mnemosyne → mark complete | T2 follows the same complete loop with mnemosyne commit before being marked complete |
+| V3 | T2 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T2 follows the same complete loop with Evidence Audit Gate and mnemosyne commit before being marked complete |
 | V4 | Plan NOT considered done until both tasks committed via mnemosyne | The plan is not marked as finished until both T1 and T2 have had their changes committed by mnemosyne |
 | V5 | mnemosyne invoked exactly once per task (not batched) | Each task gets its own separate mnemosyne invocation — commits are NOT batched across tasks |
+| V6 | Evidence Audit Gate runs before each mnemosyne invocation | After argus APPROVE for each task → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -798,10 +802,11 @@ Three argus verdicts received for different tasks:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → invoke mnemosyne → then mark complete | Task A: mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
+| V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
 | V2 | REQUEST_CHANGES (Task B) → create fix task, re-delegate (no mnemosyne) | A new fix task is created for the XSS issue and dispatched to sisyphus-junior — mnemosyne is NOT invoked since task is not approved |
 | V3 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
-| V4 | mnemosyne ONLY invoked when argus approves (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts, but NOT for REQUEST_CHANGES where work must be redone |
+| V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
+| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -1014,7 +1019,7 @@ Mnemosyne invoked, commit created.
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-5 | Argus Prompt Fidelity — Verbatim 6-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
@@ -1022,7 +1027,7 @@ Mnemosyne invoked, commit created.
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
-| S-13 | 6-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 7/7 VPs — GREEN verified |
+| S-13 | 7-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 7/7 VPs — GREEN verified |
 | S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
