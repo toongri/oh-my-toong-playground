@@ -101,6 +101,7 @@ digraph make_pr_flow {
     "Present to User" [shape=box];
     "User Feedback" [shape=diamond];
     "Confirm PR Creation" [shape=diamond];
+    "CAS Freshness\nCheck" [shape=diamond];
     "gh pr create" [shape=box];
     "Return PR URL" [shape=ellipse];
     "Output Description Only" [shape=ellipse];
@@ -108,6 +109,7 @@ digraph make_pr_flow {
     "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches";
     "0-B: Check Diverge\n(behind count)" -> "Collect Git Metadata" [label="behind = 0"];
     "Commit / Continue\nRebase" -> "Collect Git Metadata";
+    "Commit / Continue\nRebase" -> "0-C: Conflict?" [label="rebase:\nmore commits"];
     "Collect Git Metadata" -> "Explore Codebase Patterns";
     "Explore Codebase Patterns" -> "Interview Mode";
     "Interview Mode" -> "Clearance Checklist";
@@ -126,7 +128,9 @@ digraph make_pr_flow {
     "User Feedback" -> "Draft PR Description" [label="Revision requested"];
     "User Feedback" -> "Confirm PR Creation" [label="Approved"];
     "Confirm PR Creation" -> "Output Description Only" [label="Declined"];
-    "Confirm PR Creation" -> "gh pr create" [label="Confirmed"];
+    "Confirm PR Creation" -> "CAS Freshness\nCheck" [label="Confirmed"];
+    "CAS Freshness\nCheck" -> "gh pr create" [label="Fresh"];
+    "CAS Freshness\nCheck" -> "0-B: merge/rebase\nInterview + Execute" [label="Stale"];
     "gh pr create" -> "Return PR URL";
 }
 ```
@@ -182,15 +186,15 @@ Present the candidate table, then ask the user to select the target branch. Incl
 
 Use the confirmed value as `{base-branch}` in all subsequent git commands.
 
-**Phase 5 — Record baseline merge-base:**
+**Phase 5 — Record baseline target SHA:**
 
-After user confirms the target branch, record the merge-base commit hash as the CAS baseline for Step 8 freshness check:
+After user confirms the target branch, record the target branch tip SHA as the CAS baseline for Step 8 freshness check:
 
 ```bash
-BASELINE_MERGE_BASE=$(git merge-base HEAD origin/{base-branch})
+BASELINE_TARGET_SHA=$(git rev-parse origin/{base-branch})
 ```
 
-This value is compared again at PR creation time (Step 8) to detect if the target branch has changed during the PR writing process.
+This value is compared again at PR creation time (Step 8) to detect if the target branch tip has moved during the PR writing process.
 
 ---
 
@@ -242,14 +246,14 @@ For each conflicted file, repeat:
 
 1. Read the file contents and locate conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
 2. Analyze both sides:
-   - `HEAD` side (ours): current branch changes
-   - incoming side (theirs): target branch changes
-3. Explain the conflict in plain text to the user: what each side contains and what the conflict represents.
+   - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
+   - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
+3. Explain the conflict in plain text to the user: what each side contains and what the conflict represents. Use the correct ours/theirs mapping for the current operation (merge vs rebase).
 4. Propose a resolution with reasoning.
 5. Ask the user to choose via AskUserQuestion:
    - **제안대로 해결**: Apply the proposed resolution
-   - **현재 브랜치 유지 (ours)**: Keep only the current branch's changes
-   - **타겟 브랜치 채택 (theirs)**: Keep only the target branch's changes
+   - **현재 브랜치 유지**: Keep only the current branch's changes (merge: ours / rebase: theirs)
+   - **타겟 브랜치 채택**: Keep only the target branch's changes (merge: theirs / rebase: ours)
 6. Apply the chosen resolution and stage the file:
    ```bash
    git add {file}
@@ -261,7 +265,7 @@ After all conflicted files are resolved:
 
 ```bash
 # If merge:
-git commit   # creates the merge commit
+git commit --no-edit   # creates the merge commit with default message
 
 # If rebase:
 git rebase --continue
@@ -462,21 +466,22 @@ Before pushing and creating the PR, verify the target branch hasn't changed sinc
 # Re-fetch target branch
 git fetch origin {base-branch}
 
-# Recompute merge-base
-CURRENT_MERGE_BASE=$(git merge-base HEAD origin/{base-branch})
+# Check target branch tip
+CURRENT_TARGET_SHA=$(git rev-parse origin/{base-branch})
 ```
 
 **Compare with baseline:**
 
 | Condition | Action |
 |-----------|--------|
-| `CURRENT_MERGE_BASE == BASELINE_MERGE_BASE` | Target unchanged — proceed to push + `gh pr create` |
-| `CURRENT_MERGE_BASE != BASELINE_MERGE_BASE` | Target has moved — re-sync before creating PR |
+| `CURRENT_TARGET_SHA == BASELINE_TARGET_SHA` | Target unchanged — proceed to push + `gh pr create` |
+| `CURRENT_TARGET_SHA != BASELINE_TARGET_SHA` | Target has moved — re-sync before creating PR |
 
 **When target has moved:**
 
 1. Inform the user that the target branch has new commits since the analysis began
-2. Re-use the merge/rebase strategy selected in Step 0-B (do NOT re-interview — apply the same choice automatically)
+2. If a strategy was selected in Step 0-B: re-use it automatically (do NOT re-interview)
+   If Step 0-B was skipped (behind was 0): ask the user via AskUserQuestion which strategy to use (merge/rebase)
 3. Execute the sync (merge or rebase)
 4. If conflict arises: follow Step 0-C conflict resolution interview
 5. After successful sync: proceed to push + `gh pr create`
@@ -575,7 +580,7 @@ Return the PR URL to the user after successful creation.
 | Proposing unnecessary split for single-thesis PR | User burden, workflow delay | If single thesis, proceed to Step 6 immediately |
 | Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
-| Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern merge-base re-verification in Step 8 |
+| Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern target SHA re-verification in Step 8 |
 
 ---
 
