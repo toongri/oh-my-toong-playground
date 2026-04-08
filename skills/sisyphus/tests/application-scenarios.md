@@ -20,7 +20,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | Complexity Triggers | Single file ≠ simple |
 | S-3 | Subagent Selection — Correct Agent Per Situation | Subagent Selection Guide | Role matching |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | Verification Flow | Role Separation |
-| S-5 | Argus Prompt Fidelity — Verbatim 6-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
+| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | Argus Invocation (Prompt Fidelity) | No summarize/paraphrase |
 | S-6 | Per-Task Argus — One Call Per Task | Argus Invocation (Per-Task) | No batch |
 | S-7 | File Path Specificity + No Pre-built Checklist | Argus Invocation (File Path + Checklist) | No abstractions |
 | S-8 | Verdict Response Protocol — Action Per Verdict | Verdict Response Protocol | APPROVE/REQUEST_CHANGES/COMMENT |
@@ -28,7 +28,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-10 | Partial Completion — New Tasks, Never Solo | Subagent Partial Completion | No direct execution |
 | S-11 | Parallelization — Independent = Concurrent | Parallelization Heuristic | Code tasks always delegate |
 | S-12 | Task Execution Loop — Full Cycle | Task Execution Loop | blockedBy + dispatch + argus + next |
-| S-13 | 6-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 6 sections + quality check |
+| S-13 | 7-Section Delegation Prompt — Generation Quality | Delegation Prompt Structure | 7 sections + quality check |
 | S-14 | Request Classification — Routing Per Type | Decision Gate (Step 1) | 5 types: Trivial/Explicit/Exploratory/Open-ended/Ambiguous |
 | S-15 | Context Brokering — Facts vs Preferences | Context Brokering Protocol | Explore for facts, user for preferences |
 | S-16 | Interview Mode — Sequential + Quality | In-Depth Interview Mode | One Q per message + rich context |
@@ -49,6 +49,8 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-31 | Skill Selection Protocol — No Relevant Skills | Skill Selection Protocol | Legitimate empty Section 7 |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | Skill Selection Protocol | Multi-skill evaluation |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | Delegation Prompt (REQUIRED TOOLS) | Tool scope violation language |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | Full workflow integration | Decision Gate + Interview + Task + Delegation + Verification + Commit |
+| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | Verification retry + Evidence Audit | REQUEST_CHANGES + fix + re-verify + evidence gap + mnemosyne |
 
 ---
 
@@ -146,13 +148,13 @@ Everything is working correctly."
 
 ---
 
-## Scenario S-5: Argus Prompt Fidelity — Verbatim 6-Section
+## Scenario S-5: Argus Prompt Fidelity — Verbatim 7-Section
 
 **Primary Technique:** Argus Invocation (Prompt Fidelity) — copy-paste VERBATIM, no summarization
 
 **Input:**
 ```
-Original 6-Section delegation prompt sent to junior (45 lines):
+Original 7-Section delegation prompt sent to junior (47 lines):
 ## 1. TASK
 Add JWT authentication to the /api/users endpoint...
 ## 2. EXPECTED OUTCOME
@@ -172,6 +174,8 @@ Add JWT authentication to the /api/users endpoint...
 ## 6. CONTEXT
 - Related files: src/auth/session.ts (existing auth pattern)
 - Prior task: T-1 added the User model
+## 7. MANDATORY SKILLS
+- superpowers:test-driven-development
 
 Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
 ```
@@ -180,8 +184,8 @@ Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 6-Section prompt copied VERBATIM to argus | The entire 6-Section prompt appears in the argus invocation without any edits |
-| V2 | No section omitted | All 6 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT) are present in the argus call |
+| V1 | 7-Section prompt copied VERBATIM to argus | The entire 7-Section prompt appears in the argus invocation without any edits |
+| V2 | No section omitted | All 7 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, MANDATORY SKILLS) are present in the argus call |
 | V3 | No paraphrasing or restructuring | Text is not summarized, rephrased, or reorganized — exact copy-paste |
 | V4 | MUST NOT DO section included | The MUST NOT DO section is explicitly included, not dropped as "less important" |
 
@@ -206,7 +210,7 @@ All 3 juniors report completion at roughly the same time.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | 3 separate argus invocations | Exactly 3 argus calls are made — one per completed task |
-| V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 6-Section prompt, not T-2 or T-3 |
+| V2 | Each call contains ONLY that task's prompt | T-1's argus call contains only T-1's 7-Section prompt, not T-2 or T-3 |
 | V3 | No batching of multiple tasks | Does NOT combine multiple tasks into a single argus call for "efficiency" |
 | V4 | Each argus call lists only that task's changed files | File paths in each argus call correspond exclusively to that task's scope |
 
@@ -235,7 +239,7 @@ Also tempted to include: "Please verify: 1) Tests pass, 2) No regressions, 3) Ty
 |---|-------|-------------------|
 | V1 | All 5 file paths explicitly listed | Each of the 5 files is listed by its full path in the argus invocation |
 | V2 | No glob patterns or abstract counts | Does NOT use "auth/**", "5 files", or "auth module files" — concrete paths only |
-| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 6-Section prompt |
+| V3 | No pre-built verification checklist | Does NOT include "Here's what to verify:" or any checklist for argus — argus derives its own checks from the 7-Section prompt |
 | V4 | Junior's summary included as-is | Junior's completion claim is included as reference, not as verified facts |
 
 ---
@@ -256,10 +260,11 @@ Three argus verdicts received for different tasks:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → invoke mnemosyne, then mark complete | Task A: mnemosyne is invoked to commit changes, THEN task is marked completed |
+| V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed |
 | V2 | REQUEST_CHANGES (Task B) → create fix task and re-delegate | A new fix task is created for the XSS issue and dispatched to sisyphus-junior |
-| V3 | COMMENT (Task C) → mark complete, does NOT block progression | Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
-| V4 | Fix task contains exact issue details | The fix task for Task B includes the specific issue from argus (missing input sanitization), file location, and required fix action |
+| V3 | COMMENT (Task C) → Evidence Audit Gate → mark complete, does NOT block progression | Task C: Evidence Audit Gate runs, then Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
+| V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
+| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE/COMMENT | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -359,9 +364,9 @@ Junior reports: "Completed 3/6 modules. Remaining 3 follow the same pattern."
 
 ---
 
-## Scenario S-13: 6-Section Delegation Prompt — Generation Quality
+## Scenario S-13: 7-Section Delegation Prompt — Generation Quality
 
-**Primary Technique:** Delegation Prompt Structure — all 6 sections present with sufficient detail
+**Primary Technique:** Delegation Prompt Structure — all 7 sections present with sufficient detail
 
 **Input:**
 ```
@@ -379,8 +384,8 @@ Known context:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | All 6 sections present | TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, and CONTEXT sections all appear in the delegation prompt |
-| V2 | REQUIRED TOOLS section has explicit tool whitelist | REQUIRED TOOLS contains at least one tool with what to use it for — not empty or generic |
+| V1 | All 7 sections present | TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, and MANDATORY SKILLS sections all appear in the delegation prompt |
+| V2 | REQUIRED TOOLS section has explicit tool list with purposes | REQUIRED TOOLS contains at least one tool with what to use it for — not empty or generic |
 | V3 | Prompt exceeds 30 lines | The generated prompt is substantial (>30 lines), not a brief summary |
 | V4 | Includes concrete file paths | Specific files (src/api/register.ts, src/validation/user.ts) and pattern references (src/auth/login-validation.ts:10-45) are included |
 | V5 | Includes verification command | EXPECTED OUTCOME contains a runnable verification command (e.g., `npm test`) |
@@ -708,7 +713,8 @@ Temptation: Mark T-3 as complete immediately after argus APPROVE.
 | V1 | mnemosyne invoked AFTER argus APPROVE | After receiving APPROVE from argus, sisyphus's next action is to invoke mnemosyne — not mark complete |
 | V2 | mnemosyne invoked BEFORE marking task complete | The task is NOT marked complete until mnemosyne has finished committing the changes |
 | V3 | Does NOT skip mnemosyne step | Does NOT treat argus APPROVE as sufficient to mark complete — the commit step via mnemosyne is mandatory |
-| V4 | Full flow: junior done → argus → APPROVE → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers mnemosyne, mnemosyne commits, THEN task is marked complete |
+| V4 | Full flow: junior done → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers Evidence Audit Gate, gate passes, mnemosyne commits, THEN task is marked complete |
+| V5 | Evidence Audit Gate runs before mnemosyne | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -772,11 +778,12 @@ Execute full loop for both tasks.
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | T1 full cycle: dispatch junior → argus → APPROVE → mnemosyne → mark complete | T1 follows the complete loop including the mnemosyne commit step before being marked complete |
+| V1 | T1 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T1 follows the complete loop including Evidence Audit Gate and the mnemosyne commit step before being marked complete |
 | V2 | T2 unblocked after T1 complete | T2 becomes unblocked only after T1 is fully completed (including mnemosyne commit) |
-| V3 | T2 full cycle: dispatch junior → argus → APPROVE → mnemosyne → mark complete | T2 follows the same complete loop with mnemosyne commit before being marked complete |
+| V3 | T2 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T2 follows the same complete loop with Evidence Audit Gate and mnemosyne commit before being marked complete |
 | V4 | Plan NOT considered done until both tasks committed via mnemosyne | The plan is not marked as finished until both T1 and T2 have had their changes committed by mnemosyne |
 | V5 | mnemosyne invoked exactly once per task (not batched) | Each task gets its own separate mnemosyne invocation — commits are NOT batched across tasks |
+| V6 | Evidence Audit Gate runs before each mnemosyne invocation | After argus APPROVE for each task → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -796,10 +803,11 @@ Three argus verdicts received for different tasks:
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | APPROVE (Task A) → invoke mnemosyne → then mark complete | Task A: mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
+| V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
 | V2 | REQUEST_CHANGES (Task B) → create fix task, re-delegate (no mnemosyne) | A new fix task is created for the XSS issue and dispatched to sisyphus-junior — mnemosyne is NOT invoked since task is not approved |
 | V3 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
-| V4 | mnemosyne ONLY invoked when argus approves (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts, but NOT for REQUEST_CHANGES where work must be redone |
+| V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
+| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -888,7 +896,7 @@ Junior must investigate the root cause AND implement the fix.
 
 ## Scenario S-33: REQUIRED TOOLS Whitelist Enforcement
 
-**Primary Technique:** Delegation Prompt (REQUIRED TOOLS) — Section 3 is an explicit whitelist, unlisted tool usage is a scope violation
+**Primary Technique:** Delegation Prompt (REQUIRED TOOLS) — Section 3 lists task-specific tools with purposes alongside a permitted baseline of standard file tools
 
 **Input:**
 ```
@@ -899,7 +907,7 @@ Known context:
 - Junior needs: Serena find_symbol, context7 for rate-limit library, Bash for npm test only
 
 Temptation: Leave REQUIRED TOOLS section open-ended like "Use whatever tools are needed"
-or omit tool constraints entirely.
+or list tools without specific purposes (e.g., "Bash: for commands").
 ```
 
 **Verification Points:**
@@ -907,9 +915,100 @@ or omit tool constraints entirely.
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Section 3 lists specific tools with purposes | REQUIRED TOOLS contains concrete entries like "Serena find_symbol: Navigate middleware chain" — not generic "use tools as needed" |
-| V2 | Includes whitelist enforcement statement | Section 3 includes language like "Junior MUST use ONLY the tools listed here. Any unlisted tool usage is a scope violation." |
+| V2 | Includes permitted baseline + task-specific guidance | Section 3 states standard file tools (Read, Edit, Write, Grep, Glob) are always permitted, with task-specific tools listed with concrete purposes — NOT open-ended "use whatever tools you need" |
 | V3 | Bash usage explicitly scoped | If Bash is included, its allowed usage is explicitly constrained (e.g., "Run `npm test` for verification only — no other shell commands") |
 | V4 | Does NOT leave REQUIRED TOOLS empty or open-ended | Section 3 is NOT empty, NOT "use whatever tools you need", and NOT omitted from the delegation prompt |
+
+---
+
+## Use-Case Scenarios (End-to-End)
+
+These scenarios test whether the skill's core techniques work correctly **when combined across multiple phases**. Each scenario spans the full workflow or a significant multi-phase sequence.
+
+---
+
+## Scenario UC-S1: End-to-End — Broad Request to Completion
+
+**Primary Technique:** Full workflow integration — Decision Gate → explore → Interview → Task Creation → Parallel Delegation → Verification → Commit
+
+**Input (Multi-turn):**
+```
+Turn 1:
+User says: "API 응답 속도 개선해줘"
+No specific file, function, or metric mentioned.
+
+Turn 2 (after explore returns):
+Sisyphus asks interview question about scope. User responds:
+"GET /api/products 엔드포인트가 2초 걸려. 500ms 이하로 줄이고 싶어."
+
+Turn 3 (after interview):
+Sisyphus creates 3-task plan:
+- T1: Add database query index (unblocked)
+- T2: Implement response caching (unblocked)
+- T3: Add performance benchmark test (blocked by T1, T2)
+
+Turn 4:
+Junior A (T1) reports done. Junior B (T2) reports done.
+
+Turn 5:
+Argus approves T1. Argus approves T2. T3 unblocks.
+
+Turn 6:
+Junior C (T3) reports done. Argus approves T3.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Broad request detected → explore first | "API 응답 속도 개선해줘" classified as broad (scope-less "개선" verb). Explore dispatched BEFORE any interview question |
+| V2 | Interview uses explore results, asks preferences only | Interview question informed by explore findings (e.g., "GET /api/products가 2초 걸리는데"). Asks scope/priority preferences, NOT codebase facts |
+| V3 | Tasks created with correct dependencies | T1 and T2 unblocked (parallel), T3 blocked by both. Atomicity: each task 1-3 files |
+| V4 | T1 and T2 dispatched in parallel | Both dispatched concurrently in a single response |
+| V5 | Each junior completion → argus (not self-verify) | After each junior reports done, argus is the sole next action. No npm test or grep by sisyphus |
+| V6 | Argus approve → Evidence Audit → mnemosyne → mark complete | For each approved task: evidence file check → mnemosyne commit → mark completed. Full chain preserved |
+| V7 | T3 unblocks only after T1 AND T2 complete | T3 dispatched only after both T1 and T2 pass argus + mnemosyne + marked complete |
+| V8 | All 3 tasks complete before declaring done | Plan is not done until all 3 tasks pass the full cycle |
+
+---
+
+## Scenario UC-S2: End-to-End — Fix Cycle with Evidence Audit Gap
+
+**Primary Technique:** Verification retry loop + Evidence Audit Gate — argus reject → fix → re-verify → evidence gap → re-invoke → success
+
+**Input (Multi-turn):**
+```
+Turn 1:
+Task T-5 delegated to junior: "Add email validation to registration form"
+Junior reports done.
+
+Turn 2:
+Argus returns REQUEST_CHANGES: "Missing format validation — only checks non-empty"
+
+Turn 3:
+Fix task created, junior fixes email validation.
+Argus returns APPROVE.
+Evidence Audit Gate: $OMT_DIR/evidence/fix-email-validation/task-5-test.txt is MISSING.
+
+Turn 4:
+Re-invoke argus with Evidence Gap Request listing the missing path.
+Argus returns APPROVE again.
+Evidence Audit Gate: task-5-test.txt now EXISTS and is non-empty.
+
+Turn 5:
+Mnemosyne invoked, commit created.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | REQUEST_CHANGES → fix task with verbatim argus feedback | Fix task created containing exact argus feedback ("Missing format validation — only checks non-empty"), not a summary |
+| V2 | Fix task delegated to new junior (not done directly) | Sisyphus does NOT fix the validation itself — dispatches to sisyphus-junior |
+| V3 | After argus APPROVE → Evidence Audit Gate runs | Sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V4 | Evidence gap detected → re-invoke argus (not execute tests) | Missing test.txt triggers argus re-invocation with Evidence Gap Request. Sisyphus does NOT run npm test as fallback |
+| V5 | After re-invocation → evidence re-check passes → mnemosyne | Second evidence audit passes, mnemosyne invoked to commit |
+| V6 | Iron Law preserved throughout | At NO point does sisyphus run verification commands, git commit, or any direct verification. Only file existence checks (permitted) |
 
 ---
 
@@ -921,15 +1020,15 @@ or omit tool constraints entirely.
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-5 | Argus Prompt Fidelity — Verbatim 6-Section | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | **RETEST** | | VPs updated in this branch (6-Section → 7-Section). Needs re-testing |
 | S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
+| S-8 | Verdict Response Protocol — Action Per Verdict | **RETEST** | | VPs updated in this branch (Evidence Audit Gate added). Needs re-testing |
 | S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
-| S-13 | 6-Section Delegation Prompt — Generation Quality | PASS | 2026-02-11 | 7/7 VPs — GREEN verified |
+| S-12 | Task Execution Loop — Full Cycle | **RETEST** | | VPs updated in this branch (Evidence Audit Gate in full cycle). Needs re-testing |
+| S-13 | 7-Section Delegation Prompt — Generation Quality | **RETEST** | | VPs updated in this branch (6-Section → 7-Section). Needs re-testing |
 | S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
@@ -950,3 +1049,5 @@ or omit tool constraints entirely.
 | S-31 | Skill Selection Protocol — No Relevant Skills | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | PASS | 2026-02-26 | 5/5 VPs — GREEN verified (re-test after scenario Input fix: removed oracle pre-diagnosis) |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | | | Use-case scenario — needs testing |
+| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | | | Use-case scenario — needs testing |
