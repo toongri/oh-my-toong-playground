@@ -244,7 +244,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V1 | Metis consultation before plan | Metis agent is consulted BEFORE the plan is written (not after or skipped) |
 | V2 | Plan saved to .omt/plans/ | Plan file is saved to `.omt/plans/*.md` path |
 | V3 | Plan content in English | Plan content (body, tasks, criteria) is written in English |
-| V4 | Plan contains AC and Out of Scope | Plan includes both Acceptance Criteria and Out of Scope sections |
+| V4 | Plan contains Work Objectives and per-TODO AC | Plan includes Work Objectives (Must Have / Must NOT Have) and each TODO specifies acceptance criteria |
 
 ---
 

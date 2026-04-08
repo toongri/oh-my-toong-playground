@@ -162,7 +162,7 @@ After loading context, classify the user's request. Classification determines in
 | **Complex** | Compute + anti-pattern review | Full + anti-pattern cross-check | Full + smell-action table |
 | **Architecture** | Brownfield + oracle validation | Full validation | Full check (3 conditions) |
 
-> Detailed definitions for MECE, Atomicity, and Ambiguity Score are in [plan-template.md](plan-template.md).
+> Detailed definitions for MECE and Atomicity are in [plan-template.md](plan-template.md). Ambiguity Score is defined in the Clearance Checklist section above.
 
 **Clearance Checklist 6 items apply to ALL intents.** Only depth and rigor vary.
 
