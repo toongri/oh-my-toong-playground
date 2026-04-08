@@ -77,7 +77,7 @@ Manifest = union of both sources. When manifest is empty (judgment-only review, 
 | Yes | QA REQUEST paths (argus response as cross-check) | Verify argus saved to the specified locations |
 | No | Argus response paths | Verify the files argus claims to have saved actually exist |
 
-**Stage 1 automated checks**: When composing the QA REQUEST for code changes, sisyphus may include explicit Stage 1 evidence paths in `## Required Verification` for deterministic file locations. If omitted, argus determines paths autonomously using the 3-Tier Evidence Path Priority and reports them in the response.
+**Tier 1 automated checks**: When composing the QA REQUEST for code changes, sisyphus may include explicit Tier 1 evidence paths in `## Required Verification` for deterministic file locations. If omitted, argus determines paths autonomously using the 3-Tier Evidence Path Priority (defined in [qa/SKILL.md](../qa/SKILL.md)) and reports them in the response.
 
 ### Audit Procedure
 
