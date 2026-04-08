@@ -556,10 +556,10 @@ Return the PR URL to the user after successful creation.
 | Writing without Review Points | No focal points for reviewer feedback | Proactively identify Review Points |
 | Running `gh pr create` without user confirmation | User must approve PR creation | Always confirm before running |
 | Reading git diff file contents during PR description writing | Heavy context loading | Use git metadata + explore only (exception: Step 0-C conflict resolution) |
-| Default branch만 감지 | Stacked branch에서 거대한 diff 발생 | 모든 remote branch와 merge-base 비교 후 테이블 제시 |
-| 타겟 브랜치 자동 선택 | 유저 의도와 다른 타겟으로 PR 작성 | 항상 AskUserQuestion으로 확인 — auto-skip 금지 |
-| Diverge 무시 | 오래된 base로 PR 작성 | Step 0-B에서 merge/rebase로 최신 상태 동기화 |
-| Conflict 무시 | 불완전한 상태로 PR 진행 | Step 0-C에서 파일별 인터뷰로 모든 conflict 해결 |
+| Detecting only default branch | Stacked branches show massive diff against wrong base | Compare merge-base across all remote branches and present candidate table |
+| Auto-selecting target branch | PR written against unintended target | Always confirm via AskUserQuestion — no auto-skip |
+| Ignoring diverge | PR written against stale base | Sync via merge/rebase in Step 0-B |
+| Ignoring conflicts | PR proceeds in incomplete state | Resolve all conflicts via per-file interview in Step 0-C |
 | Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |
 | Writing PR in English | Violates project convention | Write entirely in Korean |
 | Missing emoji section headers | Inconsistent with output-format.md template | Use 📌, 🔧, 💬, ✅, 📎 prefixes |
@@ -575,7 +575,7 @@ Return the PR URL to the user after successful creation.
 | Proposing unnecessary split for single-thesis PR | User burden, workflow delay | If single thesis, proceed to Step 6 immediately |
 | Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
-| PR 생성 직전 freshness check 생략 | 타겟 브랜치 변경 시 gh pr create 실패 또는 잘못된 diff | Step 8에서 CAS 패턴으로 merge-base 재검증 |
+| Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern merge-base re-verification in Step 8 |
 
 ---
 
