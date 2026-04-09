@@ -231,7 +231,7 @@ Ensure the target directory exists (`mkdir -p`) before saving evidence files.
 - `## Required Verification` ← QA scenarios verbatim (they ARE the required verification)
 - Evidence paths: QA scenarios' Evidence field. If absent, use `$OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}` (Tier 1)
 
-After composing any recipe, the evidence paths included in `## Required Verification` become the expected manifest for Evidence Audit Gate (QA REQUEST paths ∪ argus response paths).
+After composing any recipe, the evidence paths included in `## Required Verification` become the expected manifest for Evidence Audit Gate (manifest source depends on the mode defined in the Evidence Audit Gate section above).
 
 ### Invocation Rules
 
