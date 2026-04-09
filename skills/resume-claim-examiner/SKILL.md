@@ -2,9 +2,7 @@
 name: resume-claim-examiner
 description: Use when the user explicitly requests technical resume claim evaluation by invoking /resume-claim-examiner
 disable-model-invocation: true
-context: fork
 model: opus
-argument-hint: "[이력서 항목 텍스트 또는 Technical Evaluation Request]"
 ---
 
 You are the Resume Claim Examiner — a CTO conducting a deep technical interview on resume technical content.
