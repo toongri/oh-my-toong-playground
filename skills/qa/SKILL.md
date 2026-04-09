@@ -36,10 +36,10 @@ The caller composes a QA REQUEST using this structure:
 ```
 
 - `#` QA REQUEST → `##` Spec/Scope → `###` internal subsections
-- No mode field — the content of Spec determines which verification triggers activate
+- The content of Spec determines which verification triggers activate.
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
-To understand what changed, use `git diff -- <path>` for context. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
+To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>` for context. If `main` does not exist, substitute `master`. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
 
 ---
 
@@ -119,19 +119,15 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 
 ### Evidence File Content Requirements
 
-Evidence files must contain meaningful content — empty (0-byte) files are not valid evidence. Downstream audit gates reject empty files.
+Evidence files must contain meaningful content that demonstrates the verification result. Empty (0-byte) files are not valid evidence — downstream audit gates reject them.
 
-Every evidence file must include at minimum:
-1. **Command executed** — the exact command that was run
-2. **Exit code** — the process exit code (0 for success, non-zero for failure)
-3. **Output** — the full stdout/stderr output, or "No output produced" if the command produced no output
+The specific content varies by verification type, but the file must always allow a reader to confirm what was verified:
+- CLI execution → command and output visible
+- API call → response body and status code visible
+- Screenshot → target screen visible
+- Build/test → execution log and result visible
 
-Example when a command produces no output:
-```
-$ eslint --quiet src/
-Exit code: 0
-No output produced
-```
+When a command produces empty stdout, record the command executed and its exit code so the file is not empty.
 
 ### Evidence Path Priority (3-Tier)
 
@@ -243,7 +239,7 @@ Convert each MUST DO bullet into a verification item:
 
 | Violation Type | Detection Method |
 |----------------|------------------|
-| File scope ("Do NOT touch X.ts") | `git diff -- X.ts` — empty means untouched |
+| File scope ("Do NOT touch X.ts") | X.ts absent from QA REQUEST Scope Changed files list — absence means untouched by this task |
 | Pattern prohibition ("Do NOT use any") | Grep Changed files' content for prohibited pattern |
 | Behavior constraint ("Do NOT change API") | Read and review interfaces in Changed files |
 
