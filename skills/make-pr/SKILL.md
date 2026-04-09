@@ -36,7 +36,7 @@ Never write a PR description without sufficient context. Continue the interview 
 | Clearance Checklist all YES | Insufficient info leads to inaccurate PR | "I roughly get it, just write it" | Missing context leads to wrong PR |
 | Write in Korean | Project convention | "English is easier" | Project rules take priority |
 | Never run `gh pr create` without user confirmation | PR creation requires explicit user approval | "Just create it directly" | Always confirm before creating PR |
-| Never read git diff file contents | Use metadata only | "Need to see code for accuracy" | Use explore for patterns. User interview is key |
+| Never read git diff file contents for PR description writing | Use metadata only | "Need to see code for accuracy" | Use explore for patterns. User interview is key. Exception: conflict resolution in Step 0-C requires reading file contents to analyze and resolve conflicts |
 | Never reference non-git content in PR | Reviewers can't access agent-internal files | "Memory/plan adds context" | PR is a public document; internal files are inaccessible to reviewers |
 
 </Critical_Constraints>
@@ -45,7 +45,7 @@ Never write a PR description without sufficient context. Continue the interview 
 
 ## Scope
 
-Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch and fetches latest remote state at request start, then collects metadata → interview → assessment → description. Creates the PR via `gh pr create` after user approval.
+Writes PR description body. Optionally assesses PR scope for multi-thesis splitting. Detects base branch via heuristic merge-base analysis, confirms target branch with user, performs target branch synchronization with conflict resolution at request start, then collects metadata → interview → assessment → description. Creates the PR via `gh pr create` after user approval.
 
 ---
 
@@ -63,7 +63,32 @@ digraph make_pr_flow {
     rankdir=TB;
 
     "User Request" [shape=ellipse];
-    "Step 0: Base Branch Detection" [shape=box];
+
+    subgraph cluster_step0 {
+        label="Step 0: Base Branch Detection & Synchronization";
+        style=dashed;
+        "0-A: Fetch & Analyze\nAll Remote Branches" [shape=box];
+        "Present Candidate Table\n+ AskUserQuestion" [shape=box];
+        "Target Branch\nConfirmed" [shape=box];
+        "0-B: Check Diverge\n(behind count)" [shape=diamond];
+        "0-B: merge/rebase\nInterview + Execute" [shape=box];
+        "0-C: Conflict?" [shape=diamond];
+        "0-C: Per-file\nContext + Interview" [shape=box];
+        "More Conflicts?" [shape=diamond];
+        "Commit / Continue\nRebase" [shape=box];
+
+        "0-A: Fetch & Analyze\nAll Remote Branches" -> "Present Candidate Table\n+ AskUserQuestion";
+        "Present Candidate Table\n+ AskUserQuestion" -> "Target Branch\nConfirmed";
+        "Target Branch\nConfirmed" -> "0-B: Check Diverge\n(behind count)";
+        "0-B: Check Diverge\n(behind count)" -> "0-B: merge/rebase\nInterview + Execute" [label="behind > 0"];
+        "0-B: merge/rebase\nInterview + Execute" -> "0-C: Conflict?";
+        "0-C: Conflict?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "0-C: Conflict?" -> "Collect Git Metadata" [label="NO"];
+        "0-C: Per-file\nContext + Interview" -> "More Conflicts?";
+        "More Conflicts?" -> "0-C: Per-file\nContext + Interview" [label="YES"];
+        "More Conflicts?" -> "Commit / Continue\nRebase" [label="NO"];
+    }
+
     "Collect Git Metadata" [shape=box];
     "Explore Codebase Patterns" [shape=box];
     "Interview Mode" [shape=box];
@@ -76,12 +101,15 @@ digraph make_pr_flow {
     "Present to User" [shape=box];
     "User Feedback" [shape=diamond];
     "Confirm PR Creation" [shape=diamond];
+    "CAS Freshness\nCheck" [shape=diamond];
     "gh pr create" [shape=box];
     "Return PR URL" [shape=ellipse];
     "Output Description Only" [shape=ellipse];
 
-    "User Request" -> "Step 0: Base Branch Detection";
-    "Step 0: Base Branch Detection" -> "Collect Git Metadata";
+    "User Request" -> "0-A: Fetch & Analyze\nAll Remote Branches";
+    "0-B: Check Diverge\n(behind count)" -> "Collect Git Metadata" [label="behind = 0"];
+    "Commit / Continue\nRebase" -> "Collect Git Metadata";
+    "Commit / Continue\nRebase" -> "0-C: Conflict?" [label="rebase:\nmore commits"];
     "Collect Git Metadata" -> "Explore Codebase Patterns";
     "Explore Codebase Patterns" -> "Interview Mode";
     "Interview Mode" -> "Clearance Checklist";
@@ -100,41 +128,160 @@ digraph make_pr_flow {
     "User Feedback" -> "Draft PR Description" [label="Revision requested"];
     "User Feedback" -> "Confirm PR Creation" [label="Approved"];
     "Confirm PR Creation" -> "Output Description Only" [label="Declined"];
-    "Confirm PR Creation" -> "gh pr create" [label="Confirmed"];
+    "Confirm PR Creation" -> "CAS Freshness\nCheck" [label="Confirmed"];
+    "CAS Freshness\nCheck" -> "gh pr create" [label="Fresh"];
+    "CAS Re-sync\n(re-use or\nnew interview)" [shape=box];
+    "CAS Conflict\nResolution (→ 0-C)" [shape=box];
+    "CAS Freshness\nCheck" -> "CAS Re-sync\n(re-use or\nnew interview)" [label="Stale"];
+    "CAS Re-sync\n(re-use or\nnew interview)" -> "gh pr create" [label="sync complete"];
+    "CAS Re-sync\n(re-use or\nnew interview)" -> "CAS Conflict\nResolution (→ 0-C)" [label="conflict"];
+    "CAS Conflict\nResolution (→ 0-C)" -> "gh pr create";
     "gh pr create" -> "Return PR URL";
 }
 ```
 
 ---
 
-## Step 0: Base Branch Detection
+## Step 0: Base Branch Detection & Synchronization
 
-Upon receiving a PR writing request, first detect the base branch and fetch its latest state.
+Upon receiving a PR writing request, detect the target base branch via heuristic analysis, confirm with the user, and synchronize the current branch before collecting metadata.
 
-Detect the project's base branch before any git operations:
+---
 
-```bash
-# GitHub CLI (most accurate)
-gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
+### Step 0-A: Base Branch Detection
 
-# Fallback: git remote HEAD
-git symbolic-ref refs/remotes/origin/HEAD | sed 's@refs/remotes/origin/@@'
-
-# Fallback: check if main or master exists on remote
-git ls-remote --heads origin main   # if exit 0 and non-empty → use "main"
-git ls-remote --heads origin master # if exit 0 and non-empty → use "master"
-
-# If none of the above succeed: ask the user to specify the base branch
-```
-
-Use the detected value as `{base-branch}` in all subsequent git commands.
+**Phase 1 — Fetch all remote state:**
 
 ```bash
-# Fetch latest state of base branch
-git fetch origin {base-branch}
+git fetch --all --prune
 ```
 
-Proceed to Step 1.
+**Phase 2 — Analyze all remote branches as candidates:**
+
+For every remote branch **except the current branch's remote counterpart** (`origin/$(git branch --show-current)`) and symbolic refs (`origin/HEAD`), compute merge-base distance:
+
+```bash
+# For each remote branch {branch}:
+MERGE_BASE=$(git merge-base HEAD origin/{branch} 2>/dev/null || true)
+if [ -z "$MERGE_BASE" ]; then continue; fi  # Skip unrelated/orphan branches
+AHEAD=$(git rev-list --count $MERGE_BASE..HEAD)
+BEHIND=$(git rev-list --count $MERGE_BASE..origin/{branch})
+DIFF_STAT=$(git diff --stat $MERGE_BASE..HEAD | tail -1)
+```
+
+**Phase 3 — Build candidate table:**
+
+Collect all candidates and present a table showing commits ahead/behind and change scale. Sort by `AHEAD` ascending (smallest diff from current branch = most likely true base):
+
+```
+| 후보 브랜치           | commits ahead | commits behind | 변경 규모              |
+|----------------------|---------------|----------------|----------------------|
+| sisyphus-myth-title  | 1             | 0              | +53 -70 (8 files)    |
+| main                 | 17            | 0              | +1832 -1881 (17 files)|
+```
+
+Show the top 2-3 candidates. If more branches exist, include an "other" option.
+
+**Phase 4 — Confirm with user via AskUserQuestion:**
+
+Always ask even when the default branch is the only likely candidate — never auto-skip.
+
+Present the candidate table, then ask the user to select the target branch. Include:
+- Each top candidate as a labeled option
+- An option to type a custom branch name if none of the candidates apply
+
+Use the confirmed value as `{base-branch}` in all subsequent git commands.
+
+**Phase 5 — Record baseline target SHA:**
+
+After user confirms the target branch, record the target branch tip SHA as the CAS baseline for Step 8 freshness check:
+
+```bash
+BASELINE_TARGET_SHA=$(git rev-parse origin/{base-branch})
+```
+
+This value is compared again at PR creation time (Step 8) to detect if the target branch tip has moved during the PR writing process.
+
+---
+
+### Step 0-B: Target Branch Synchronization
+
+After the target branch is confirmed, check if the current branch has diverged:
+
+```bash
+git rev-list --left-right --count origin/{base-branch}...HEAD
+# Output: {behind}\t{ahead}
+```
+
+**If behind = 0:** No synchronization needed. Proceed to Step 1.
+
+**If behind > 0:** The current branch is behind `origin/{base-branch}`. Ask the user which strategy to use via AskUserQuestion:
+
+- **merge**: 타겟 브랜치의 변경사항을 merge commit으로 통합합니다. 기존 히스토리가 보존됩니다.
+- **rebase**: 현재 브랜치의 커밋을 타겟 브랜치 위로 재배치합니다. 선형적인 히스토리를 유지합니다.
+
+Execute the chosen strategy:
+
+```bash
+# merge
+git merge origin/{base-branch}
+
+# rebase
+git rebase origin/{base-branch}
+```
+
+**If the operation completes without conflict:** Proceed to Step 1.
+
+**If conflict is detected:** Proceed to Step 0-C.
+
+---
+
+### Step 0-C: Conflict Resolution
+
+When a merge or rebase operation encounters conflicts:
+
+**Phase 1 — Enumerate conflicted files:**
+
+```bash
+git diff --name-only --diff-filter=U
+```
+
+**Phase 2 — Resolve each file interactively:**
+
+For each conflicted file, repeat:
+
+1. Read the file contents and locate conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
+2. Analyze both sides:
+   - **During merge:** `HEAD` side (ours) = current branch changes, incoming side (theirs) = target branch changes
+   - **During rebase:** `HEAD` side (ours) = target branch changes (commit being rebased onto), incoming side (theirs) = current branch changes (commit being replayed)
+3. Explain the conflict in plain text to the user: what each side contains and what the conflict represents. Use the correct ours/theirs mapping for the current operation (merge vs rebase).
+4. Propose a resolution with reasoning.
+5. Ask the user to choose via AskUserQuestion:
+   - **제안대로 해결**: Apply the proposed resolution
+   - **현재 브랜치 유지**: Keep only the current branch's changes (merge: ours / rebase: theirs)
+   - **타겟 브랜치 채택**: Keep only the target branch's changes (merge: theirs / rebase: ours)
+6. Apply the chosen resolution and stage the file:
+   ```bash
+   git add {file}
+   ```
+
+**Phase 3 — Finalize the operation:**
+
+After all conflicted files are resolved:
+
+```bash
+# If merge:
+git commit --no-edit   # creates the merge commit with default message
+
+# If rebase:
+git rebase --continue
+```
+
+**Phase 4 — Check for additional conflicts:**
+
+If `git rebase --continue` triggers a new conflict (rebase replays commits one by one), return to Phase 1 and repeat for the new conflict set.
+
+**When all conflicts are resolved and the operation completes:** Proceed to Step 1.
 
 ---
 
@@ -317,6 +464,35 @@ Present the drafted PR description to the user and collect feedback.
 
 After user approves the PR description, ask if they want to create the PR.
 
+### Pre-creation Freshness Check (CAS Pattern)
+
+Before pushing and creating the PR, verify the target branch hasn't changed since Step 0-A:
+
+```bash
+# Re-fetch target branch
+git fetch origin {base-branch}
+
+# Check target branch tip
+CURRENT_TARGET_SHA=$(git rev-parse origin/{base-branch})
+```
+
+**Compare with baseline:**
+
+| Condition | Action |
+|-----------|--------|
+| `CURRENT_TARGET_SHA == BASELINE_TARGET_SHA` | Target unchanged — proceed to push + `gh pr create` |
+| `CURRENT_TARGET_SHA != BASELINE_TARGET_SHA` | Target has moved — re-sync before creating PR |
+
+**When target has moved:**
+
+1. Inform the user that the target branch has new commits since the analysis began
+2. If a strategy was selected in Step 0-B: re-use it automatically (do NOT re-interview)
+   If Step 0-B was skipped (behind was 0): ask the user via AskUserQuestion which strategy to use (merge/rebase)
+3. Execute the sync (merge or rebase)
+4. If conflict arises: follow Step 0-C conflict resolution interview
+5. After successful sync: proceed to push + `gh pr create`
+6. PR description is NOT re-written (the feature branch changes are the same; only the base has moved)
+
 - If user confirms: push the branch and run `gh pr create` with the approved title and description
 - If user declines: output the final PR description only
 
@@ -324,6 +500,9 @@ After user approves the PR description, ask if they want to create the PR.
 
 ```bash
 # Single PR (create after remote push)
+# If rebase was used (Step 0-B or Step 8 CAS re-sync):
+git push --force-with-lease -u origin HEAD
+# If merge was used or no sync was needed:
 git push -u origin HEAD
 TITLE=$(cat <<'EOF'
 PR title
@@ -366,7 +545,9 @@ Return the PR URL to the user after successful creation.
 
 | Step | Action | Key Point |
 |------|--------|-----------|
-| Base Branch Detection | `git fetch origin {base-branch}` | Detect base branch, then fetch latest remote state |
+| 0-A: Base Branch Detection | `git fetch --all --prune`, merge-base analysis for all remote branches | Build candidate table, always confirm with AskUserQuestion — no auto-skip |
+| 0-B: Target Sync | `git rev-list --left-right --count` to detect diverge | If behind > 0: merge/rebase interview + execute |
+| 0-C: Conflict Resolution | Per-file context analysis + AskUserQuestion per conflict | Stage each resolved file, finalize with commit / rebase --continue |
 | Collect Git Metadata | Run `git log`, `git diff --stat` | Metadata only, NO file contents |
 | Explore Codebase | Use explore agent | Do NOT ask user about codebase |
 | User Interview | One question at a time, Clearance Checklist-based | Adaptive question count |
@@ -374,7 +555,7 @@ Return the PR URL to the user after successful creation.
 | Scope Assessment | Analyze thesis count, propose split if multi-thesis | Proxy signals trigger analysis, thesis isolation decides |
 | Write PR Title & Description | Follow output-format.md exactly | Emoji headers, Impact Scope, file paths in Checklist |
 | User Review | Present and collect feedback | Repeat until approved |
-| PR Creation | `gh pr create` after user confirmation | Return PR URL |
+| PR Creation | CAS freshness check → re-sync if target moved → `gh pr create` after user confirmation | Re-use Step 0-B strategy; re-interview only on conflict |
 
 ---
 
@@ -388,7 +569,11 @@ Return the PR URL to the user after successful creation.
 | Describing design concerns in Changes | Mixes Changes and Review Points | Design concerns go in Review Points |
 | Writing without Review Points | No focal points for reviewer feedback | Proactively identify Review Points |
 | Running `gh pr create` without user confirmation | User must approve PR creation | Always confirm before running |
-| Reading git diff file contents | Heavy context loading | Use git metadata + explore only |
+| Reading git diff file contents during PR description writing | Heavy context loading | Use git metadata + explore only (exception: Step 0-C conflict resolution) |
+| Detecting only default branch | Stacked branches show massive diff against wrong base | Compare merge-base across all remote branches and present candidate table |
+| Auto-selecting target branch | PR written against unintended target | Always confirm via AskUserQuestion — no auto-skip |
+| Ignoring diverge | PR written against stale base | Sync via merge/rebase in Step 0-B |
+| Ignoring conflicts | PR proceeds in incomplete state | Resolve all conflicts via per-file interview in Step 0-C |
 | Fixing question count | Required questions vary by context | Adaptive via Clearance Checklist |
 | Writing PR in English | Violates project convention | Write entirely in Korean |
 | Missing emoji section headers | Inconsistent with output-format.md template | Use 📌, 🔧, 💬, ✅, 📎 prefixes |
@@ -404,6 +589,7 @@ Return the PR URL to the user after successful creation.
 | Proposing unnecessary split for single-thesis PR | User burden, workflow delay | If single thesis, proceed to Step 6 immediately |
 | Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
+| Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern target SHA re-verification in Step 8 |
 
 ---
 
