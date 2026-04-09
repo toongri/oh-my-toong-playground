@@ -131,9 +131,11 @@ digraph make_pr_flow {
     "Confirm PR Creation" -> "CAS Freshness\nCheck" [label="Confirmed"];
     "CAS Freshness\nCheck" -> "gh pr create" [label="Fresh"];
     "CAS Re-sync\n(re-use or\nnew interview)" [shape=box];
+    "CAS Conflict\nResolution (→ 0-C)" [shape=box];
     "CAS Freshness\nCheck" -> "CAS Re-sync\n(re-use or\nnew interview)" [label="Stale"];
     "CAS Re-sync\n(re-use or\nnew interview)" -> "gh pr create" [label="sync complete"];
-    "CAS Re-sync\n(re-use or\nnew interview)" -> "0-C: Conflict?" [label="conflict"];
+    "CAS Re-sync\n(re-use or\nnew interview)" -> "CAS Conflict\nResolution (→ 0-C)" [label="conflict"];
+    "CAS Conflict\nResolution (→ 0-C)" -> "gh pr create";
     "gh pr create" -> "Return PR URL";
 }
 ```
