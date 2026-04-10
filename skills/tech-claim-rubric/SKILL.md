@@ -1,6 +1,6 @@
 ---
 name: tech-claim-rubric
-description: Use when the user explicitly requests technical claim evaluation by invoking /tech-claim-examiner
+description: Use when the user explicitly requests technical claim evaluation
 disable-model-invocation: true
 model: opus
 ---
