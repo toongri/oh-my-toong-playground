@@ -170,6 +170,40 @@ CASCADING (score ≥ 0.8) via Constraint Collision:
 
 Note: This example achieves CASCADING without a sequential A→B→C cascade. The mutation comes from simultaneous constraint analysis that reframes the problem (system-level binary choice → feature-level classification). This is the Constraint Collision pattern — the approach's shape was fundamentally reshaped by the collision of two incompatible constraints, not by a sequential chain of discoveries.
 
+**Constraint Cascade Example E — Subscription Renewal Failures (Expectation Inversion pattern):**
+
+FLAT (score < 0.5):
+"Reduced subscription renewal failure from 15% to 4% with exponential backoff retry with jitter and adding fallback payment methods."
+
+→ FLAT: Standard retry pattern applied without analysis. No root cause, no failure type breakdown, no measurement methodology. Any engineer could propose this.
+  Causal chain depth: 0.1 (single decision, no chain)
+  Constraint narrowing: 0.1 (no alternatives mentioned)
+  Resolution mutation: 0.0 (no evidence the approach changed shape — "retry improvement" is the obvious first approach executed as-is)
+  Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
+  → CTO reaction: "Retry with jitter and fallback. That's what I'd expect anyone to do." — Nothing to discuss.
+
+LISTED (score 0.5-0.8):
+"Subscription renewal failure at 15% — analyzed failure types: 60% soft declines (insufficient funds), 25% expired cards, 15% hard declines. Noticed soft declines clustered on 1st of month. Adjusted retry timing to avoid peak decline periods. Added account updater API for expired cards. Reduced to 4%."
+
+→ LISTED: Multiple concerns surfaced (failure type breakdown, timing pattern, expired card handling) with some causal connection — failure analysis leads to timing insight, which informs retry adjustment. But the key inversion ("retry logic itself was fine") is not explicitly stated. The reader must infer that the solution changed from "fix retry logic" to "fix retry timing." The conventional assumption (retry mechanism is broken) is implicitly questioned but never named.
+  Causal chain depth: 0.6 (failure breakdown → timing pattern → retry adjustment, 3 steps with some implicit links)
+  Constraint narrowing: 0.5 (alternatives not explicitly evaluated and rejected — the reader sees the chosen solution but not why other approaches were eliminated)
+  Resolution mutation: 0.5 (approach shifted from generic retry to timing-based retry, but the expectation inversion is implicit — text does not state "retry logic was functioning correctly" or explicitly name the conventional assumption that was overturned. The reader senses something changed but cannot trace the inversion arc)
+  Score: 0.6×0.30 + 0.5×0.35 + 0.5×0.35 = 0.53 → LISTED
+  → CTO reaction: "You analyzed failure types and adjusted timing. What made you look at timing specifically?" — One follow-up, but the inversion story is not self-evident.
+
+CASCADING (score ≥ 0.8) via Expectation Inversion:
+"Subscription renewal failure at 15% — failure type breakdown: 60% soft declines (insufficient funds) clustered on 1st of month (rent/mortgage day), 25% expired cards, 15% hard declines. Retry logic was functioning correctly; retry TIMING was the problem. Alternatives evaluated: aggressive retry → increases PSP decline-rate penalties on same empty accounts; pre-charge 3 days early → billing cycle mismatch, legal review required; grace period + dunning → 5-7 day cash flow delay per cohort. Selected: regional payday-pattern-based retry scheduling + account updater API for expired card pre-refresh. Tradeoff accepted: retry window extended 3→7 days (delayed revenue recognition for subset), regional payday mapping requires quarterly maintenance. Result: 15% → 4% without changing retry logic itself."
+
+→ CASCADING via Expectation Inversion: 기대한 원인(retry logic 결함)이 틀렸고, 비자명한 근본 원인(retry timing — 사용자 급여일 패턴)이 드러남. "Retry logic was functioning correctly"가 핵심 반전점. 최종 문장 "without changing retry logic itself"가 초기 기대와 최종 접근의 정반대를 명시 선언.
+  Causal chain depth: 0.85 (15% 분석 → failure type breakdown → 1일 클러스터링 발견 → "retry logic 정상, timing이 문제" 핵심 반전 → aggressive retry의 PSP penalty 제약 도출 → scheduling + updater API 이원 해결, 5단계)
+  Constraint narrowing: 0.85 (aggressive retry: PSP penalty로 기각 — timing 분석 결과와 직접 연결, pre-charge: billing cycle + legal로 기각, grace period: cash flow delay로 기각 — 세 대안 모두 구체적 제약으로 제거)
+  Resolution mutation: 0.9 (초기 기대 접근은 "retry logic 수정"(FLAT 버전 그 자체). 반전: logic이 아니라 timing이 문제. 최종 접근: regional payday-pattern scheduling — 기술 문제에서 행동 패턴 문제로 재정의. "without changing retry logic itself"가 초기 접근과의 정반대를 확인. Pattern C — Expectation Inversion에 해당)
+  Score: 0.85×0.30 + 0.85×0.35 + 0.9×0.35 = 0.8675 → CASCADING
+  → CTO asks: "Payday 가설을 어떻게 검증했나? 비표준 급여 주기(주급, 격주급)는 어떻게 처리하나? Regional payday mapping의 quarterly maintenance 프로세스는?"
+
+Note: This example achieves CASCADING through Expectation Inversion — the "obvious" answer (fix retry logic) was wrong. The mutation comes from the discovery that the mechanism was correct but the timing was wrong, shifting the problem from a technical domain (retry algorithm) to a behavioral domain (user payment patterns). The final sentence ("without changing retry logic itself") explicitly confirms the inversion.
+
 **The test:** "After reading this bullet, does the CTO say 'Yes, that's the textbook approach' (conversation over) or 'Wait — why that approach?' (conversation starts)?"
 
 **Note:** FLAT does not mean "bad engineering." It means the bullet fails to reveal the problem's surface area. The engineer may have navigated real complexity but didn't describe it. RICH examples below are expanded for pedagogical clarity — in actual resume evaluation, depth of reasoning matters, not word count.
