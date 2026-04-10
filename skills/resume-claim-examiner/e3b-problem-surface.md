@@ -26,17 +26,17 @@ Real engineering problems are never one-dimensional. Fixing a concurrency bug to
 
 **Constraint Cascade Grading:**
 
-E3b는 concern이 얼마나 surface 되었는지뿐 아니라, concern들이 어떻게 연결되는지도 평가한다. 3단계 grade:
+E3b evaluates not only how many concerns are surfaced, but how those concerns are connected. Three grades:
 
 | Grade | Label | Signal | E3b Effect |
 |-------|-------|--------|------------|
-| FLAT | Isolated | 단일 결정, 연쇄 효과 없음 | FAIL (score < 0.5) |
-| LISTED | Enumerated | 복수 concern이 나열되었지만, concern 간 인과 화살표 없음 | WEAK PASS — P1 finding ("interview-fragile") (score 0.5-0.8) |
-| CASCADING | Interlocked | concern 간 관계가 명시적 — cascade(A→B→C), collision(X∧Y→C), 또는 inversion(기대↔실제, 표면→구조 포함) 패턴이 보여 읽는 사람이 '왜 이 해결책인지' 이해 가능 | PASS — interview-generating (score ≥ 0.8) |
+| FLAT | Isolated | Single decision, no cascading effects | FAIL (score < 0.5) |
+| LISTED | Enumerated | Multiple concerns listed, but no causal arrows between concerns | WEAK PASS — P1 finding ("interview-fragile") (score 0.5-0.8) |
+| CASCADING | Interlocked | Explicit relationships between concerns — cascade(A→B→C), collision(X∧Y→C), or inversion(expected↔actual, including surface→structural) patterns visible, enabling the reader to understand 'why this solution' | PASS — interview-generating (score ≥ 0.8) |
 
 **Constraint Cascade Score Formula (reasoning aid — not shown in output):**
 
-grade를 부여하기 전에, 다음 3개 sub-dimension을 먼저 평가한다:
+Before assigning a grade, evaluate these 3 sub-dimensions first:
 
 | Sub-dimension | Weight | Question |
 |---------------|--------|----------|
@@ -84,13 +84,13 @@ Resolution mutation measures whether the text reveals an engineer who can compar
 | MID | 0.4-0.69 | The approach expanded or adjusted beyond its initial shape, but the evolution path is partially visible. The text shows some constraint-driven adjustments but cannot trace a full reshape arc — whether through sequential discovery, constraint collision, expectation inversion, or scope expansion. Connections exist but are implicit. Partial visibility by pattern: (A) constraints discovered but reshape not traced — reader sees adjustments without the discovery that triggered them; (B) two constraints mentioned but collision not explicitly recognized — reader infers tension without seeing it stated; (C) conventional approach questioned but non-obvious root cause not named — or deeper structural issue hinted at but connection to surface problem implicit — reader senses something was wrong or suspects more without the underlying cause or structural link being shown. |
 | HIGH | 0.7-1.0 | The final approach is a fundamentally different shape from what a reasonable engineer would initially attempt. The text shows at least ONE of these evolution patterns: (A) **Cascade Discovery** — A discovered constraint made the initial approach unviable, forcing a reshape. The reader traces: initial approach → constraint discovered → approach reimagined. (B) **Constraint Collision** — Two or more constraints were simultaneously incompatible with standard approaches. The solution required creative synthesis that neither constraint alone would have produced. The reader sees: constraint X requires A, constraint Y requires B, A and B conflict → novel approach C. (C) **Expectation Inversion** — The conventional/expected approach was evaluated and found ineffective for a non-obvious reason. The solution addressed the actual root cause rather than the assumed one. The reader's initial assumption is violated. This includes cases where investigation revealed the surface problem was a symptom of a deeper structural issue — the solution addressed the root cause rather than the symptom, and the reader discovers the true problem alongside the engineer. Common signal across all three patterns: the reader can identify (1) what the expected/initial approach was, (2) what made it insufficient — whether discovered sequentially, known simultaneously, or revealed through investigation, and (3) how the approach was fundamentally reshaped. Whether this occurred during analysis, prototyping, or production is irrelevant — the visible reshape arc is what matters. |
 
-Threshold: score ≥ 0.8 = CASCADING(PASS), 0.5-0.8 = LISTED(P1 — 권장 수정), < 0.5 = FLAT(FAIL).
+Threshold: score ≥ 0.8 = CASCADING(PASS), 0.5-0.8 = LISTED(P1 — revision recommended), < 0.5 = FLAT(FAIL).
 
 **CRITICAL: Score the sub-dimensions FIRST, then derive the grade. Do not assign a grade and then rationalize scores to match. This is the reasoning-before-score rule.**
 
 ---
 
-**Constraint Cascade Example A — Real-Time Notification System (3-tier 전체):**
+**Constraint Cascade Example A — Real-Time Notification System (3-tier complete):**
 
 FLAT (score < 0.5):
 "Built real-time notification system using WebSocket + Redis Pub/Sub, delivering notifications within 500ms."
@@ -244,12 +244,12 @@ LISTED (score 0.5-0.8):
 CASCADING (score ≥ 0.8) via Expectation Inversion:
 "Subscription renewal failure at 15% — failure type breakdown: 60% soft declines (insufficient funds) clustered on 1st of month (rent/mortgage day), 25% expired cards, 15% hard declines. Retry logic was functioning correctly; retry TIMING was the problem. Alternatives evaluated: aggressive retry → increases PSP decline-rate penalties on same empty accounts; pre-charge 3 days early → billing cycle mismatch, legal review required; grace period + dunning → 5-7 day cash flow delay per cohort. Selected: regional payday-pattern-based retry scheduling + account updater API for expired card pre-refresh. Tradeoff accepted: retry window extended 3→7 days (delayed revenue recognition for subset), regional payday mapping requires quarterly maintenance. Result: 15% → 4% without changing retry logic itself."
 
-→ CASCADING via Expectation Inversion: 기대한 원인(retry logic 결함)이 틀렸고, 비자명한 근본 원인(retry timing — 사용자 급여일 패턴)이 드러남. "Retry logic was functioning correctly"가 핵심 반전점. 최종 문장 "without changing retry logic itself"가 초기 기대와 최종 접근의 정반대를 명시 선언.
-  Causal chain depth: 0.85 (15% 분석 → failure type breakdown → 1일 클러스터링 발견 → "retry logic 정상, timing이 문제" 핵심 반전 → aggressive retry의 PSP penalty 제약 도출 → scheduling + updater API 이원 해결, 5단계)
-  Constraint narrowing: 0.85 (aggressive retry: PSP penalty로 기각 — timing 분석 결과와 직접 연결, pre-charge: billing cycle + legal로 기각, grace period: cash flow delay로 기각 — 세 대안 모두 구체적 제약으로 제거)
-  Resolution mutation: 0.9 (초기 기대 접근은 "retry logic 수정"(FLAT 버전 그 자체). 반전: logic이 아니라 timing이 문제. 최종 접근: regional payday-pattern scheduling — 기술 문제에서 행동 패턴 문제로 재정의. "without changing retry logic itself"가 초기 접근과의 정반대를 확인. Pattern C — Expectation Inversion에 해당)
+→ CASCADING via Expectation Inversion: The expected cause (retry logic defect) was wrong, and a non-obvious root cause (retry timing — user payday patterns) was revealed. "Retry logic was functioning correctly" is the key inversion point. The final sentence "without changing retry logic itself" explicitly declares the opposite of the initial expectation.
+  Causal chain depth: 0.85 (15% analysis → failure type breakdown → 1st-of-month clustering discovery → "retry logic fine, timing is the problem" key inversion → aggressive retry PSP penalty constraint → scheduling + updater API dual resolution, 5 steps)
+  Constraint narrowing: 0.85 (aggressive retry: rejected by PSP penalty — directly linked to timing analysis, pre-charge: rejected by billing cycle + legal, grace period: rejected by cash flow delay — all three alternatives eliminated by specific constraints)
+  Resolution mutation: 0.9 (initial expected approach was "fix retry logic" (the FLAT version itself). Inversion: not logic but timing was the problem. Final approach: regional payday-pattern scheduling — redefined from technical problem to behavioral pattern problem. "without changing retry logic itself" confirms the opposite of the initial approach. Pattern C — Expectation Inversion)
   Score: 0.85×0.30 + 0.85×0.35 + 0.9×0.35 = 0.8675 → CASCADING
-  → CTO asks: "Payday 가설을 어떻게 검증했나? 비표준 급여 주기(주급, 격주급)는 어떻게 처리하나? Regional payday mapping의 quarterly maintenance 프로세스는?"
+  → CTO asks: "How did you validate the payday hypothesis? How do you handle non-standard pay cycles (weekly, biweekly)? What's the quarterly maintenance process for regional payday mappings?"
 
 Note: This example achieves CASCADING through Expectation Inversion — the "obvious" answer (fix retry logic) was wrong. The mutation comes from the discovery that the mechanism was correct but the timing was wrong, shifting the problem from a technical domain (retry algorithm) to a behavioral domain (user payment patterns). The final sentence ("without changing retry logic itself") explicitly confirms the inversion.
 
@@ -278,12 +278,12 @@ LISTED (score 0.5-0.8):
 CASCADING (score ≥ 0.8) via Scope Expansion:
 "Search response degraded 200ms → 2s over 6 months — correlated with merchandising team adding 340 custom product attributes (290 queried by <0.1% of searches but indexed identically to high-traffic attributes). Alternatives evaluated: vertical scaling → $8K/month increase, degradation resumes as attributes continue growing; index-per-category partitioning → 15+ indices, scatter-gather adds latency for cross-category search; attribute count limit → merchandising rejected, attributes drive A/B testing. Selected: attribute tiering by query frequency — hot (top 50) in primary index, cold (290) via async enrichment path. Added self-service dashboard showing per-attribute query frequency to merchandising team. Tradeoff accepted: cold-attribute queries add 50-200ms enrichment delay (<0.3% of searches), dashboard maintenance cost, attribute creation friction. Result: 120ms p99 for 99.7% of queries; attribute creation rate dropped 40% organically — informed decisions, not enforcement."
 
-→ CASCADING via Scope Expansion: 표면 문제(검색 성능 저하) → 1차 발견(290개 저빈도 attribute 동일 인덱싱) → 2차 발견(merchandising 팀의 무제약 추가 행동이 근본 원인) → attribute count limit 비즈니스 거부 → 기술적 제한 불가, 조직적 해결 필요 → tiering(기술) + dashboard(조직 피드백 루프) 이원 해결. "informed decisions, not enforcement"가 scope expansion의 본질 — 기술 수정이 아닌 행동 변화가 진정한 해결.
-  Causal chain depth: 0.9 (점진적 저하 분석 → 290개 저빈도 attribute 발견 → merchandising 팀 무제약 추가 행동이 원인 → vertical scaling이 "attribute 계속 증가"로 근본 해결 불가 → attribute count limit 비즈니스 거부 → tiering + dashboard 이원 해결, 6단계)
-  Constraint narrowing: 0.85 (vertical scaling: $8K/mo + 재발로 기각 — 근본 원인 분석과 직접 연결, partitioning: scatter-gather latency로 기각, count limit: 비즈니스 거부로 기각 — 이 기각이 기술적 해결 불가 → 조직적 해결 필요라는 문제 공간 전환을 강제)
-  Resolution mutation: 0.9 (초기 기대 접근은 "ES 최적화"(FLAT 버전 그 자체). Scope 확장: 검색 문제 → 인덱스 문제 → attribute 문제 → 조직 행동 문제. 최종 해결의 절반이 코드가 아닌 조직 개입(dashboard). "informed decisions, not enforcement"가 기술 → 조직 전환의 완성. Pattern C — Expectation Inversion (Scope Expansion)에 해당)
+→ CASCADING via Scope Expansion: Surface problem (search performance degradation) → 1st discovery (290 low-frequency attributes indexed identically) → 2nd discovery (merchandising team's unconstrained attribute additions as root cause) → attribute count limit rejected by business → technical restriction impossible, organizational solution needed → tiering (technical) + dashboard (organizational feedback loop) dual resolution. "informed decisions, not enforcement" captures the essence of scope expansion — behavioral change, not technical fix, is the true resolution.
+  Causal chain depth: 0.9 (gradual degradation analysis → 290 low-frequency attributes discovered → merchandising team's unconstrained additions identified as cause → vertical scaling "degradation resumes as attributes grow" cannot solve root cause → attribute count limit rejected by business → tiering + dashboard dual resolution, 6 steps)
+  Constraint narrowing: 0.85 (vertical scaling: rejected by $8K/mo + recurrence — directly linked to root cause analysis, partitioning: rejected by scatter-gather latency, count limit: rejected by business — this rejection forces the problem space shift from technical fix impossible → organizational solution needed)
+  Resolution mutation: 0.9 (initial expected approach was "ES optimization" (the FLAT version itself). Scope expansion: search problem → index problem → attribute problem → organizational behavior problem. Half of the final solution is not code but organizational intervention (dashboard). "informed decisions, not enforcement" completes the technical → organizational transition. Pattern C — Expectation Inversion (Scope Expansion))
   Score: 0.9×0.30 + 0.85×0.35 + 0.9×0.35 = 0.8825 → CASCADING
-  → CTO asks: "Merchandising 팀이 실제로 dashboard 보고 행동을 바꿨나? Attribute promotion/demotion (cold→hot 전환) 기준은? Dashboard 유지보수 비용 대비 효과 측정은?"
+  → CTO asks: "Did the merchandising team actually change behavior after seeing the dashboard? What are the criteria for attribute promotion/demotion (cold→hot transition)? How do you measure dashboard maintenance cost vs. effectiveness?"
 
 Note: This example achieves CASCADING through Scope Expansion — the surface problem (search is slow) was a symptom of a deeper structural issue (no feedback loop for attribute creation impact). The mutation comes from the problem itself being redefined: from "how to optimize search" to "how to change organizational behavior that causes search degradation." The solution's most impactful component (dashboard) is not code — it's an organizational intervention. The LISTED version demonstrates what happens when scope expansion is incomplete: the organizational cause is identified but not addressed, leaving the CTO's obvious follow-up ("won't this happen again?") unanswered.
 
