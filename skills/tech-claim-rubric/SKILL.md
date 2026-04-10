@@ -1,6 +1,6 @@
 ---
-name: resume-claim-examiner
-description: Use when the user explicitly requests technical resume claim evaluation by invoking /resume-claim-examiner
+name: tech-claim-rubric
+description: Use when the user explicitly requests technical claim evaluation by invoking /tech-claim-examiner
 disable-model-invocation: true
 model: opus
 ---
