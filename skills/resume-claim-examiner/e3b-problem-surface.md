@@ -204,6 +204,40 @@ CASCADING (score ≥ 0.8) via Expectation Inversion:
 
 Note: This example achieves CASCADING through Expectation Inversion — the "obvious" answer (fix retry logic) was wrong. The mutation comes from the discovery that the mechanism was correct but the timing was wrong, shifting the problem from a technical domain (retry algorithm) to a behavioral domain (user payment patterns). The final sentence ("without changing retry logic itself") explicitly confirms the inversion.
 
+**Constraint Cascade Example F — Search Performance Degradation (Scope Expansion pattern):**
+
+FLAT (score < 0.5):
+"Optimized e-commerce search from 2s to 120ms with Elasticsearch caching and index mapping optimization."
+
+→ FLAT: Standard ES optimization. No root cause for why performance degraded, no degradation pattern analysis, no mechanism to prevent recurrence. Fixes the symptom today, allows the same degradation to repeat tomorrow.
+  Causal chain depth: 0.1 (single decision, no chain)
+  Constraint narrowing: 0.1 (no alternatives mentioned)
+  Resolution mutation: 0.0 (no evidence the approach changed shape — "ES optimization" is the obvious first approach executed as-is)
+  Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
+  → CTO reaction: "You optimized Elasticsearch. What else?" — Nothing to discuss.
+
+LISTED (score 0.5-0.8):
+"Search response degraded 200ms → 2s over 6 months. Root cause: merchandising team adding 340 custom product attributes, most rarely queried but all indexed identically. Evaluated vertical scaling ($8K/month, degradation resumes) and index partitioning (scatter-gather latency). Implemented attribute tiering — hot attributes in primary index, cold attributes via async enrichment. Result: 120ms p99."
+
+→ LISTED: Multiple concerns surfaced (root cause identification, alternatives evaluated, tiering solution) with causal connection — attribute growth causes degradation, vertical scaling doesn't address root cause. But the scope expansion is incomplete: the text identifies the organizational cause (merchandising team behavior) but does not address it. The reader sees a technical fix for an organizational problem — the deeper structural issue (no feedback loop to merchandising team) is hinted at but not resolved.
+  Causal chain depth: 0.65 (degradation → attribute growth → merchandising team behavior identified → alternatives evaluated → tiering chosen, 4 steps but the organizational dimension is mentioned without being causally linked to the solution)
+  Constraint narrowing: 0.6 (vertical scaling rejected by cost + recurrence, partitioning rejected by latency — but attribute count limit rejection by stakeholder not mentioned, so the constraint that forces organizational solution is absent)
+  Resolution mutation: 0.45 (approach expanded from "optimize ES" to "tier attributes by frequency" — a meaningful shift in framing. However, the deeper expansion from "technical problem" to "organizational behavior problem" is only hinted at, not traced. The solution remains purely technical; the scope expansion arc is incomplete)
+  Score: 0.65×0.30 + 0.6×0.35 + 0.45×0.35 = 0.5625 → LISTED
+  → CTO reaction: "You tiered attributes by frequency. But won't the same degradation happen again as more attributes accumulate?" — The prevention mechanism is missing.
+
+CASCADING (score ≥ 0.8) via Scope Expansion:
+"Search response degraded 200ms → 2s over 6 months — correlated with merchandising team adding 340 custom product attributes (290 queried by <0.1% of searches but indexed identically to high-traffic attributes). Alternatives evaluated: vertical scaling → $8K/month increase, degradation resumes as attributes continue growing; index-per-category partitioning → 15+ indices, scatter-gather adds latency for cross-category search; attribute count limit → merchandising rejected, attributes drive A/B testing. Selected: attribute tiering by query frequency — hot (top 50) in primary index, cold (290) via async enrichment path. Added self-service dashboard showing per-attribute query frequency to merchandising team. Tradeoff accepted: cold-attribute queries add 50-200ms enrichment delay (<0.3% of searches), dashboard maintenance cost, attribute creation friction. Result: 120ms p99 for 99.7% of queries; attribute creation rate dropped 40% organically — informed decisions, not enforcement."
+
+→ CASCADING via Scope Expansion: 표면 문제(검색 성능 저하) → 1차 발견(290개 저빈도 attribute 동일 인덱싱) → 2차 발견(merchandising 팀의 무제약 추가 행동이 근본 원인) → attribute count limit 비즈니스 거부 → 기술적 제한 불가, 조직적 해결 필요 → tiering(기술) + dashboard(조직 피드백 루프) 이원 해결. "informed decisions, not enforcement"가 scope expansion의 본질 — 기술 수정이 아닌 행동 변화가 진정한 해결.
+  Causal chain depth: 0.9 (점진적 저하 분석 → 290개 저빈도 attribute 발견 → merchandising 팀 무제약 추가 행동이 원인 → vertical scaling이 "attribute 계속 증가"로 근본 해결 불가 → attribute count limit 비즈니스 거부 → tiering + dashboard 이원 해결, 6단계)
+  Constraint narrowing: 0.85 (vertical scaling: $8K/mo + 재발로 기각 — 근본 원인 분석과 직접 연결, partitioning: scatter-gather latency로 기각, count limit: 비즈니스 거부로 기각 — 이 기각이 기술적 해결 불가 → 조직적 해결 필요라는 문제 공간 전환을 강제)
+  Resolution mutation: 0.9 (초기 기대 접근은 "ES 최적화"(FLAT 버전 그 자체). Scope 확장: 검색 문제 → 인덱스 문제 → attribute 문제 → 조직 행동 문제. 최종 해결의 절반이 코드가 아닌 조직 개입(dashboard). "informed decisions, not enforcement"가 기술 → 조직 전환의 완성. Pattern D — Scope Expansion에 해당)
+  Score: 0.9×0.30 + 0.85×0.35 + 0.9×0.35 = 0.8825 → CASCADING
+  → CTO asks: "Merchandising 팀이 실제로 dashboard 보고 행동을 바꿨나? Attribute promotion/demotion (cold→hot 전환) 기준은? Dashboard 유지보수 비용 대비 효과 측정은?"
+
+Note: This example achieves CASCADING through Scope Expansion — the surface problem (search is slow) was a symptom of a deeper structural issue (no feedback loop for attribute creation impact). The mutation comes from the problem itself being redefined: from "how to optimize search" to "how to change organizational behavior that causes search degradation." The solution's most impactful component (dashboard) is not code — it's an organizational intervention. The LISTED version demonstrates what happens when scope expansion is incomplete: the organizational cause is identified but not addressed, leaving the CTO's obvious follow-up ("won't this happen again?") unanswered.
+
 **The test:** "After reading this bullet, does the CTO say 'Yes, that's the textbook approach' (conversation over) or 'Wait — why that approach?' (conversation starts)?"
 
 **Note:** FLAT does not mean "bad engineering." It means the bullet fails to reveal the problem's surface area. The engineer may have navigated real complexity but didn't describe it. RICH examples below are expanded for pedagogical clarity — in actual resume evaluation, depth of reasoning matters, not word count.
