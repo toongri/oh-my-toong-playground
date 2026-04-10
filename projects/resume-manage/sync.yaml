@@ -11,7 +11,7 @@ agents:
     - oracle
     - argus
     - chunk-reviewer
-    - resume-claim-examiner
+    - tech-claim-examiner
     - spec-reviewer
     - sisyphus-junior
 
@@ -42,6 +42,7 @@ skills:
     - humanizer
     - resume-apply
     - review-resume
+    - tech-claim-rubric
 
 scripts:
   items:

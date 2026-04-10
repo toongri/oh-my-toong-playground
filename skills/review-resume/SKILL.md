@@ -181,7 +181,7 @@ Before delivering Phase 10 output, you MUST verify the Completion Checklist at t
 1. After completing each phase, internally record phase completion. Phase completion markers (`[Phase N/10: OOO ✓]`) are shown to the user as minimal progress indicators. Detailed analysis (criteria evaluation, pushback simulation, alternative generation, examiner exchange) is processed internally and not output to the terminal.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 3), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phase 9 (Per-Bullet Content Quality Gate) loops per section unit until resume-claim-examiner APPROVE or user opt-out.
+4. Phase 9 (Per-Bullet Content Quality Gate) loops per section unit until tech-claim-examiner APPROVE or user opt-out.
 5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate proceeds ONLY after approval.
 6. Note Accumulate proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 
@@ -400,7 +400,7 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 ## Phase 9: Per-Bullet Content Quality Gate
 
-While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the resume-claim-examiner sub-agent issues APPROVE.
+While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the tech-claim-examiner sub-agent issues APPROVE.
 
 ### Core Contract
 
@@ -410,7 +410,7 @@ While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "
 ### REQUEST_CHANGES Handling Protocol
 
 <critical>
-When resume-claim-examiner returns REQUEST_CHANGES, follow the branch that matches the current session mode:
+When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches the current session mode:
 
 **interview-possible mode:**
 
@@ -452,7 +452,7 @@ Items containing a technical claim or problem-solving process → eligible. No e
 
 ### Dispatch Format
 
-When sending to resume-claim-examiner, use exactly:
+When sending to tech-claim-examiner, use exactly:
 
 ```
 # Technical Evaluation Request
@@ -579,7 +579,7 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 - [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Constraint Cascade)
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
 - [ ] Phase 8: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 9: Per-Bullet Content Quality Gate (resume-claim-examiner APPROVE or user opt-out per unit)
+- [ ] Phase 9: Per-Bullet Content Quality Gate (tech-claim-examiner APPROVE or user opt-out per unit)
 - [ ] Phase 10: HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
 - [ ] Phase 10: Note Accumulate (user confirmation required)
 ```

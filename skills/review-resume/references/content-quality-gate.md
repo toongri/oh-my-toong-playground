@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the resume-claim-examiner agent independently verifies "has that problem actually been resolved."
+The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the tech-claim-examiner agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
@@ -40,7 +40,7 @@ If even one answer is "no," that section does not pass the Quality Gate.
 |-----------|----------------------|-------------|
 | Role | Diagnosis | Verification |
 | Question | "What is the problem?" | "Has the problem been resolved?" |
-| Agent | review-resume skill | resume-claim-examiner agent (independent review) |
+| Agent | review-resume skill | tech-claim-examiner agent (independent review) |
 | Output | Gap list, revision direction | APPROVE / REQUEST_CHANGES binary verdict |
 | Repetition | Single pass | Loop — repeats until APPROVE |
 | Exit | None (completing evaluation is the goal) | User Opt-Out only |
@@ -49,7 +49,7 @@ If even one answer is "no," that section does not pass the Quality Gate.
 
 ## 2. Evaluation Units
 
-The Quality Gate splits the resume into **1 bullet / 1 entry** units for processing. The minimum unit in which resume-claim-examiner conducts technical interrogation is the individual technical claim.
+The Quality Gate splits the resume into **1 bullet / 1 entry** units for processing. The minimum unit in which tech-claim-examiner conducts technical interrogation is the individual technical claim.
 
 ### Target Selection
 
@@ -86,7 +86,7 @@ Examples:
 
 ### Skills / Study
 
-**Not a resume-claim-examiner target.** A list of tech stacks is not subject to technical interrogation. Evaluation Phase evaluation is sufficient.
+**Not a tech-claim-examiner target.** A list of tech stacks is not subject to technical interrogation. Evaluation Phase evaluation is sufficient.
 
 ---
 
@@ -98,9 +98,9 @@ Examples:
 
 Presenting a single revision causes two problems:
 1. The user is forced to adopt the revision without sharing the underlying assumptions (positioning direction, risk tolerance).
-2. When the resume-claim-examiner issues a FAIL, there is no indication of which direction to revise toward.
+2. When the tech-claim-examiner issues a FAIL, there is no indication of which direction to revise toward.
 
-Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the resume-claim-examiner's FAIL axes within the chosen direction.
+Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the tech-claim-examiner's FAIL axes within the chosen direction.
 
 ### Alternative Format
 
@@ -229,20 +229,20 @@ Quality Gate interviews **extend** the 4-Stage Bypass Protocol from experience-m
 | Dimension | experience-mining interview | Quality Gate interview |
 |-----------|-----------------------------|----------------------|
 | Purpose | Discover new sources | Secure sources to resolve already-identified problems |
-| Trigger | Phase gap detected | resume-claim-examiner REQUEST_CHANGES received |
+| Trigger | Phase gap detected | tech-claim-examiner REQUEST_CHANGES received |
 | Target | Undiscovered experiences | Evaluation axes with FAIL verdict |
-| Question basis | Gap list from Writing Guidance | Interview Hints from resume-claim-examiner |
+| Question basis | Gap list from Writing Guidance | Interview Hints from tech-claim-examiner |
 | When exhausted | Mark as "genuinely none," move to next topic | Generate "best revision with current sources" + state limitations |
 
 ### Interview Loop Structure
 
 ```
-resume-claim-examiner REQUEST_CHANGES received
+tech-claim-examiner REQUEST_CHANGES received
     ↓
 Extract FAIL axis list from REQUEST_CHANGES
     ↓
 For each FAIL axis:
-    1. Check Interview Hints from resume-claim-examiner
+    1. Check Interview Hints from tech-claim-examiner
     2. Set source target that can move this axis to PASS
     3. Apply experience-mining 4-Stage Bypass:
        Stage 1: Direct Question (specific question based on Hints)
@@ -255,7 +255,7 @@ For each FAIL axis:
 
 ### How to Use Interview Hints
 
-The resume-claim-examiner provides Interview Hints for each FAIL axis with REQUEST_CHANGES. These Hints specify "what information would change this axis to PASS."
+The tech-claim-examiner provides Interview Hints for each FAIL axis with REQUEST_CHANGES. These Hints specify "what information would change this axis to PASS."
 
 Principles for converting Hints into questions:
 
@@ -289,8 +289,8 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The Problem Fidelity axis may be difficult to PASS with current sources. If the resume-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
-3. Dispatch this revision to the resume-claim-examiner. If the resume-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
+2. State the limitation explicitly in the revision: "The Problem Fidelity axis may be difficult to PASS with current sources. If the tech-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
+3. Dispatch this revision to the tech-claim-examiner. If the tech-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**
 - One question per message. Multiple questions are prohibited.
@@ -310,11 +310,11 @@ When the session operates in **interview-impossible mode** (the resume owner is 
    - Alternative 2 (High-Impact): Scale-Project strategy — maximize impact from confirmed content; flag axes that require owner confirmation.
    - Alternative 3 (Balanced): Compromise between Alternatives 1 and 2, or a different framing angle.
    - Include a tradeoff table identical to Section 3 format.
-3. Dispatch the alternatives package to the resume-claim-examiner Phase B validation.
+3. Dispatch the alternatives package to the tech-claim-examiner Phase B validation.
 4. If **any alternative passes** Phase B: adopt it and continue.
 5. If **all alternatives fail** Phase B: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
 
-**Interview Hints in interview-impossible mode:** The resume-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
+**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
 
 ---
 
@@ -327,7 +327,7 @@ flowchart TB
     C --> PRESENT[Present Evaluation Phase findings to user]
     PRESENT --> INTERVIEW_PRE[Pre-Examiner Interview\n— discuss findings, collect context,\npropose improvements, reach agreement]
     INTERVIEW_PRE --> D[Generate 2-3 alternatives + tradeoffs]
-    D --> H[resume-claim-examiner dispatch\n— send original + alternatives package]
+    D --> H[tech-claim-examiner dispatch\n— send original + alternatives package]
 
     H --> DIAG{Phase A: Interrogate original\nIs there really a problem?}
     DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
@@ -365,9 +365,9 @@ flowchart TB
 
 The Quality Gate loop is entered automatically after Phase 8 completes. Without a separate trigger, immediately after the final Phase 8 evaluation output, the flow proceeds to selecting ALL evaluator-eligible items and starting the pre-examiner interview for each item.
 
-### resume-claim-examiner dispatch
+### tech-claim-examiner dispatch
 
-The resume-claim-examiner is dispatched **1 bullet / 1 entry** at a time.
+The tech-claim-examiner is dispatched **1 bullet / 1 entry** at a time.
 
 The Input Format uses the template defined in SKILL.md Phase 9 "Evaluator Dispatch Protocol." This template exactly matches the Input Format in `SKILL.md`.
 
@@ -375,7 +375,7 @@ The Input Format uses the template defined in SKILL.md Phase 9 "Evaluator Dispat
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
 - Evaluation Phase findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
-- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results. This information is used directly in the resume-claim-examiner's Target-Scale Transferability axis evaluation.
+- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results. This information is used directly in the tech-claim-examiner's Target-Scale Transferability axis evaluation.
 
 ### Post-APPROVE Handling
 
