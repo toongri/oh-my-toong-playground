@@ -1,5 +1,5 @@
 ---
-name: resume-claim-examiner
+name: tech-claim-examiner
 description: A third-party evaluation agent that interrogates resume technical content for technical substance and engineering judgment from a CTO's perspective
 model: opus
 skills: tech-claim-rubric

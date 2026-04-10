@@ -138,7 +138,7 @@ Important: When evaluating each axis, directly name the technology/approach ment
 
 ## Two-Phase Evaluation Protocol
 
-The resume-claim-examiner evaluates in two phases:
+The tech-claim-examiner evaluates in two phases:
 
 ### Phase A: Diagnosis Validation
 The main session has diagnosed that "this bullet has a problem." Is this diagnosis correct?
