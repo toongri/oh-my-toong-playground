@@ -111,7 +111,7 @@ Is the tradeoff for the technology choice mentioned in this bullet specific to t
 
 #### E3b. Problem Surface
 
-**See** [e3b-problem-surface.md] **for details** on E3b scoring formula, anchor rubrics, 4-pattern definitions, and scored examples.
+**See** [e3b-problem-surface.md] **for details** on E3b scoring formula, anchor rubrics, 3-pattern definitions, and scored examples.
 
 ### E4. Scale-Appropriate Engineering (Cost-Benefit Rationality)
 
