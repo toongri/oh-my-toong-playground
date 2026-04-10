@@ -77,16 +77,15 @@ E2 (Logical Coherence) and E5 (Signal-to-Noise) are scale-invariant — flawed l
 
 **E3b exception**: 진정으로 1차원적 문제(단일 결정, 연쇄 효과 없음, 논쟁적 대안 없음)는 E3b 자동 PASS. 평가자가 1차원 사유를 정당화해야 적용 가능.
 
-### Resolution Mutation 4 Patterns
+### Resolution Mutation 3 Patterns
 
 | Pattern | Signal |
 |---------|--------|
 | A. Cascade Discovery | 발견된 제약 → 초기 접근 무효화 → 재설계 |
 | B. Constraint Collision | 동시 상충 제약 → 표준 접근 양립 불가 → 창의적 합성 |
-| C. Expectation Inversion | 기대한 원인/해결이 틀림 → 비자명한 근본 원인 → 다른 해결 |
-| D. Scope Expansion | 표면 문제 → 더 깊은 구조적 문제 발견 → 근본 원인 해결 |
+| C. Expectation Inversion | 기대한 원인/해결이 틀림 → 비자명한 근본 원인 → 다른 해결 (표면 문제가 더 깊은 구조적 문제의 증상인 경우 포함) |
 
-**See** [e3b-problem-surface.md] **for details** on E3b scoring formula, anchor rubrics, 4-pattern definitions, and scored examples.
+**See** [e3b-problem-surface.md] **for details** on E3b scoring formula, anchor rubrics, 3-pattern definitions, and scored examples.
 
 ---
 
