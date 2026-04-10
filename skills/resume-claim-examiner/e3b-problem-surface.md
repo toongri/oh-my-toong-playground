@@ -123,7 +123,37 @@ CASCADING (score ≥ 0.8):
   Result: 500ms p99 delivery latency maintained at 50K connections, reconnection message loss rate <0.1%.
   → CTO asks: "How did you handle buffer overflow during notification storms? What's the reconnection window behavior for mobile clients? Did you measure the actual tab-limit impact before switching from SSE?"
 
-[PLACEHOLDER: Example B — Cache Stampede / Hot Key (Pattern A)]
+**Constraint Cascade Example B — Cache Stampede / Hot Key (Pattern A: Cascade Discovery):**
+
+FLAT (score < 0.5):
+"Redis 캐시 적용으로 상품 조회 API 응답 시간 3.2s → 400ms, DB 부하 80% 절감."
+
+→ FLAT: 단일 결정(캐시 적용), 단일 결과(응답 시간). 왜 3.2초였는지, 어떤 캐시 패턴인지, 어떤 문제가 발생했는지 보이지 않음.
+  Causal chain depth: 0.1 (단일 결정, 인과 체인 없음)
+  Constraint narrowing: 0.1 (대안 언급 없음)
+  Resolution mutation: 0.0 (접근 변형 증거 없음 — "캐시 적용"이 초기 접근이자 최종 접근)
+  Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
+  → CTO reaction: "캐시 넣었군요. 그래서요?" — 논의할 내용 없음.
+
+LISTED (score 0.5-0.8):
+"상품 조회 API p99 3.2s — cache-aside 패턴 도입(TTL 5분). Cache stampede 발생하여 singleflight로 중복 요청 병합. Hot key 문제(상위 100개 상품이 캐시 요청 60% 점유)는 local cache 추가로 해결. 응답 시간 400ms, DB 부하 80% 절감."
+
+→ LISTED: 복수 concern(stampede, hot key, singleflight, local cache) 나열되어 있고 일부 인과 연결(stampede → singleflight). 그러나 singleflight가 hot key를 왜 해결하지 못하는지, local cache의 일관성 트레이드오프가 무엇인지 명시되지 않음. 각 concern이 이전 concern에서 왜 발생했는지 독자가 추론해야 함.
+  Causal chain depth: 0.6 (stampede → singleflight → hot key 별도 발견 → local cache, 4단계이나 연결이 암묵적)
+  Constraint narrowing: 0.5 (singleflight가 stampede를 해결했다고 서술하지만, hot key에 왜 불충분한지 불명확)
+  Resolution mutation: 0.4 (cache-aside에서 singleflight, local cache로 확장되었으나, 확장이 강제된 이유가 암묵적 — 발견 과정이 아닌 결과만 나열)
+  Score: 0.6×0.30 + 0.5×0.35 + 0.4×0.35 = 0.495 → FLAT (경계)
+  → CTO reaction: "Stampede랑 hot key를 해결했군요. singleflight로 왜 부족했죠?" — 질문 가능하지만 답이 bullet에 없음.
+
+CASCADING (score ≥ 0.8) via Cascade Discovery:
+"상품 조회 API p99 3.2s — cache-aside 패턴 도입 후 TTL 5분 설정. 인기 상품 TTL 동시 만료 시 cache stampede 발생, DB 순간 부하 기존 대비 3배. singleflight로 인스턴스 내 중복 요청 병합했으나, hot key 문제는 별개 차원 — 상위 100개 상품이 전체 캐시 요청의 60%를 점유하여 단일 Redis 샤드에 부하 집중. singleflight는 인스턴스 내 중복만 해소, 크로스 인스턴스 동시 요청은 여전히 Redis 단일 샤드 직격. 대안 평가: consistent hashing으로 hot key 분산 → 캐시 무효화 복잡도 증가, 운영 부담; hot key 복제(read replica) → 일관성 윈도우 + 메모리 2배. 선택: L1 local cache(Caffeine, 2초 TTL) + L2 Redis 2-tier 구조 — hot key는 L1에서 흡수, L2 미스 시에만 DB. 트레이드오프 수용: L1-L2 일관성 최대 2초 stale(상품 정보 갱신 주기 대비 허용), hot key 감지 자동화(접근 빈도 기반 L1 승격 로직) 필요, 인스턴스당 힙 200MB 증가. 결과: p99 400ms, DB 부하 80% 절감, stampede 시 DB 부하 스파이크 제거."
+
+→ CASCADING via Cascade Discovery: cache-aside 도입 → stampede 발견 → singleflight 적용 → hot key라는 별개 차원 문제 발견 → singleflight의 한계(인스턴스 내만 해소) 확인 → L1/L2 2-tier로 근본 전환. 각 단계가 이전 해결의 한계에서 발생.
+  Causal chain depth: 0.9 (cache-aside → stampede → singleflight → hot key 발견 → singleflight 한계 확인 → 대안 평가 → L1/L2 2-tier, 6단계 명시적 인과 체인)
+  Constraint narrowing: 0.8 (consistent hashing: 무효화 복잡도로 기각, read replica: 일관성+메모리로 기각 — 각 기각이 hot key라는 선행 발견에 의해 구체적으로 연결)
+  Resolution mutation: 0.8 (초기 접근은 "cache-aside + TTL"(FLAT 버전). stampede로 singleflight 추가, 그러나 hot key로 인해 단일 캐시 레이어 접근 자체가 무효화 → 2-tier 아키텍처로 근본 전환. 단순 캐시 설정에서 다층 캐시 아키텍처로 변형. Pattern A — Cascade Discovery에 해당)
+  Score: 0.9×0.30 + 0.8×0.35 + 0.8×0.35 = 0.83 → CASCADING
+  → CTO asks: "Hot key 감지 기준은? L1 승격/강등 로직은 어떻게 동작하나? Stampede 재현 테스트는 어떻게 했나? 2초 stale 윈도우에서 가격 정보 불일치 리스크는?"
 
 [PLACEHOLDER: Example C — Feature Serving Latency-Consistency (Pattern B)]
 
