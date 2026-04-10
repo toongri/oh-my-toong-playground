@@ -187,7 +187,37 @@ CASCADING (score ≥ 0.8) via Constraint Collision:
   Score: 0.8×0.30 + 0.8×0.35 + 0.85×0.35 = 0.8175 → CASCADING
   → CTO asks: "피처 분류 기준은 어떻게 정했나? 새로운 피처 유형이 추가되면 분류 프로세스는? eventual consistency 2초 윈도우에서 추천 품질 저하는 측정했나?"
 
-[PLACEHOLDER: Example D — Event-Driven Order Processing Zombie (Pattern B)]
+**Constraint Cascade Example D — Event-Driven Order Zombie (Pattern B: Constraint Collision):**
+
+FLAT (score < 0.5):
+"Kafka 기반 비동기 주문 처리 파이프라인 구축, saga 패턴으로 분산 트랜잭션 관리. 주문 처리 실패율 0.01% 이하 달성."
+
+→ FLAT: saga 도입과 결과만 서술. 왜 saga가 필요했는지, 어떤 유형의 실패가 발생했는지, 어떤 트레이드오프를 수용했는지 보이지 않음.
+  Causal chain depth: 0.1 (단일 결정, 인과 체인 없음)
+  Constraint narrowing: 0.1 (대안 언급 없음)
+  Resolution mutation: 0.0 (접근 변형 증거 없음 — "saga 도입"이 초기이자 최종 접근)
+  Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
+  → CTO reaction: "Saga 넣었군요. 그래서요?" — 논의할 내용 없음.
+
+LISTED (score 0.5-0.8):
+"주문-결제-재고 이벤트 파이프라인에서 좀비 주문 일 5건 발생. PG 콜백 지연(p99 8초)이 saga timeout(5초) 초과하여 보상 트랜잭션 발동 후 지연 콜백 충돌. orchestration saga로 전환하고 step-level timeout을 분리하여 해결. 좀비 주문 일 5건 → 월 2건."
+
+→ LISTED: 문제(좀비 주문)와 기술 과제(PG 콜백 지연 vs saga timeout)가 보이고, 해결 방향(orchestration + step-level timeout)이 명시. 그러나 두 제약(빠른 checkout UX vs PG 지연 허용)의 충돌이 명시적이지 않음. 왜 timeout을 단순 연장하지 않았는지, 지연 콜백 충돌을 어떻게 방어하는지(idempotency), 좀비 감지 메커니즘이 없음. 문제 인식은 있지만 제약 충돌의 합성 과정이 불완전.
+  Causal chain depth: 0.6 (PG 지연 → timeout 초과 → 좀비 발생 → orchestration 전환, 4단계이나 UX 제약과의 충돌이 암묵적)
+  Constraint narrowing: 0.5 (orchestration을 선택했다고 서술하지만, choreography나 timeout 연장이 왜 기각되었는지 불명확)
+  Resolution mutation: 0.5 (choreography에서 orchestration + step-level timeout으로 전환되었으나, 이 전환을 강제한 두 제약의 충돌 분석이 보이지 않음 — 결과적 전환만 서술)
+  Score: 0.6×0.30 + 0.5×0.35 + 0.5×0.35 = 0.53 → LISTED
+  → CTO reaction: "Orchestration으로 전환했군요. 왜 timeout을 그냥 늘리지 않았나요?" — 질문 가능하지만 답이 bullet에 없음.
+
+CASCADING (score ≥ 0.8) via Constraint Collision:
+"주문-결제-재고-배송 4단계 이벤트 파이프라인에서 일 평균 5건 주문이 '결제 완료-재고 미차감' 좀비 상태로 잔류 — CS 인입 직결. 프로파일링: 80% PG 콜백 지연(p99 8초)으로 saga timeout(5초) 초과 → 보상 트랜잭션 발동 → 직후 지연 콜백 도착 → 이미 취소된 주문에 결제 성공 이벤트 충돌. 두 제약이 충돌: 빠른 checkout UX(saga timeout 5초 이내) vs PG 콜백 지연 허용(최소 15초 필요). timeout 단순 연장은 checkout 체감 지연 — 비즈니스 거부. 대안 평가: choreography saga → step-level 가시성 부재로 좀비 감지 불가, 운영 부담; saga timeout 15초 연장 → checkout UX 악화, 비즈니스 거부; PG 콜백을 동기 polling 전환 → PG rate limit + polling 비용. 선택: orchestration saga + step-level timeout 분리 — 결제 step만 15초(PG p99 커버), 나머지 step 3초 유지로 전체 saga 체감 지연 최소화. 지연 콜백 충돌은 idempotency key(주문번호+이벤트 시퀀스) + 상태 머신으로 방어 — COMPENSATED 상태에서 SUCCESS 이벤트 무시. 좀비 감지: step별 SLA 기반 미완료 saga 15분 주기 스캔 + Slack 알림, 일 1회 reconciliation batch로 최종 정합성 검증. 트레이드오프 수용: step-level timeout 관리 복잡도(PG 변경 시 재조정 필요), orchestrator 단일 장애점(active-passive failover), reconciliation 윈도우 최대 24시간 불일치. 결과: 좀비 주문 일 5건 → 월 2건 미만, 감지-복구 평균 4시간 → 15분."
+
+→ CASCADING via Constraint Collision: 두 제약(빠른 checkout UX 5초 vs PG 콜백 지연 15초)이 표준 접근(단일 timeout)에서 양립 불가 → step-level timeout 분리라는 문제 재프레이밍 + 지연 콜백 방어(idempotency 상태 머신) + 좀비 감지(주기적 스캔 + reconciliation)의 3중 해결. 단일 timeout 접근에서 step-level 분화 + 상태 머신 + 모니터링 복합 접근으로 근본 전환.
+  Causal chain depth: 0.85 (PG 지연 프로파일링 → timeout 충돌 발견 → 두 제약(UX vs PG) 양립 불가 → 대안 3개 평가 기각 → step-level timeout 분리 + idempotency 상태 머신 + 좀비 스캔, 5+ 단계 분석적 추론 체인)
+  Constraint narrowing: 0.8 (choreography: 가시성 부재로 기각, timeout 연장: UX 악화로 기각, polling: rate limit + 비용으로 기각 — 각 기각이 두 제약 충돌의 맥락에서 구체적)
+  Resolution mutation: 0.85 (초기 접근은 "단일 saga timeout 설정"(FLAT 버전). 두 제약 충돌로 단일 timeout이 불가능 → step-level 분리라는 새로운 차원 도입 + idempotency 상태 머신 + reconciliation으로 3중 방어. 단일 설정에서 복합 아키텍처로 문제 자체가 재프레이밍됨. Pattern B — Constraint Collision에 해당)
+  Score: 0.85×0.30 + 0.8×0.35 + 0.85×0.35 = 0.8325 → CASCADING
+  → CTO asks: "Step-level timeout 값은 어떻게 결정했나? PG 변경 시 timeout 재조정 프로세스는? COMPENSATED 상태에서 SUCCESS 무시 시 결제 금액은 어떻게 환불하나? Reconciliation에서 발견된 불일치의 자동 복구 범위는?"
 
 **Constraint Cascade Example E — Subscription Renewal Failures (Expectation Inversion pattern):**
 
