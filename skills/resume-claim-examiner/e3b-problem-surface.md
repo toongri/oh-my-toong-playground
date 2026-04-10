@@ -155,7 +155,37 @@ CASCADING (score ≥ 0.8) via Cascade Discovery:
   Score: 0.9×0.30 + 0.8×0.35 + 0.8×0.35 = 0.83 → CASCADING
   → CTO asks: "Hot key 감지 기준은? L1 승격/강등 로직은 어떻게 동작하나? Stampede 재현 테스트는 어떻게 했나? 2초 stale 윈도우에서 가격 정보 불일치 리스크는?"
 
-[PLACEHOLDER: Example C — Feature Serving Latency-Consistency (Pattern B)]
+**Constraint Cascade Example C — Feature Serving Latency-Consistency (Pattern B: Constraint Collision):**
+
+FLAT (score < 0.5):
+"실시간 추천 서비스에서 Redis 캐시와 크로스 리전 데이터 동기화를 구현하여 sub-10ms 응답과 데이터 일관성을 달성."
+
+→ FLAT: 두 기술(캐시, 동기화)을 적용했다는 서술뿐. sub-10ms와 일관성이 동시에 달성되었다고 하지만, 이 두 요구가 왜 어려운지, 어떤 충돌이 있었는지, 무엇을 포기했는지 보이지 않음.
+  Causal chain depth: 0.1 (두 기술 병렬 나열, 인과 관계 없음)
+  Constraint narrowing: 0.1 (대안 언급 없음)
+  Resolution mutation: 0.0 (접근 변형 증거 없음)
+  Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
+  → CTO reaction: "캐시랑 동기화를 했군요." — 논의할 내용 없음.
+
+LISTED (score 0.5-0.8):
+"실시간 추천 서비스에서 sub-10ms 응답 SLA와 크로스 리전 일관성을 동시에 요구. 로컬 캐시는 빠르지만 리전 간 30초 불일치 발생, 강한 일관성은 RTT 50ms 추가로 SLA 위반. 피처별 일관성 수준을 분류하여 해결. 가격은 강한 일관성, 추천 스코어는 eventual consistency 적용."
+
+→ LISTED: 두 제약(SLA vs 일관성)과 충돌이 명시되고, 해결 방향(피처별 분류)이 보임. 그러나 분류 기준이 무엇인지(왜 가격은 강한 일관성?), 표준 접근이 왜 양립 불가능한지의 분석 과정, 트레이드오프가 구체적으로 서술되지 않음. 충돌은 인식되었지만 합성 과정이 암묵적.
+  Causal chain depth: 0.55 (SLA 제약 + 일관성 제약 → 충돌 인식 → 피처별 분류, 3단계이나 분석 과정이 압축됨)
+  Constraint narrowing: 0.5 (로컬 캐시: 일관성 실패, 강한 일관성: SLA 위반으로 각각 기각되었지만, 기각 근거가 간략)
+  Resolution mutation: 0.55 (캐시 vs 일관성 이진 선택에서 피처별 분류로 전환되었으나, 이 전환이 어떤 분석에서 비롯되었는지 과정이 보이지 않음 — 결론만 제시)
+  Score: 0.55×0.30 + 0.5×0.35 + 0.55×0.35 = 0.5325 → LISTED
+  → CTO reaction: "피처별 일관성 분류를 했군요. 분류 기준은 어떻게 정했나요?" — 한 단계 후속 질문, 그러나 분류 로직이 bullet에 없음.
+
+CASCADING (score ≥ 0.8) via Constraint Collision:
+"실시간 추천 서비스에서 sub-10ms 응답 SLA와 크로스 리전 데이터 일관성을 동시에 달성해야 했다. 로컬 캐시로 지연시간을 충족하면 리전 간 데이터 불일치(최대 30초) — 가격 불일치 시 CS 인입 직결. 강한 일관성을 적용하면 크로스 리전 RTT 50ms 추가로 SLA 위반. 두 제약이 표준 접근(캐시 단독 or 일관성 단독)에서는 양립 불가. 피처의 비즈니스 임팩트를 기준으로 일관성 분류를 도입 — 가격·재고(부정확 시 CS 인입)는 강한 일관성(응답의 일부 항목이므로 전체 p95 영향 미미), 추천 스코어·카테고리 랭킹은 eventual consistency(2초 stale 허용). 분류 기준은 'CS 인입 확률'이라는 비즈니스 메트릭으로 정량화. 트레이드오프: 피처 추가 시 일관성 분류 의무화(관리 복잡도), 분류 오류 시 가격 불일치 노출 리스크를 A/B 모니터링으로 완화. 결과: 전체 p95 응답 9ms 유지, 가격 불일치 CS 인입 0건, eventual consistency 피처의 stale 영향 추천 CTR 변화 <0.1%."
+
+→ CASCADING via Constraint Collision: 두 제약(sub-10ms SLA, 크로스 리전 일관성)이 표준 접근에서는 양립 불가 → 문제를 시스템 레벨에서 피처 레벨로 재프레이밍 → 비즈니스 임팩트 기반 분류라는 이전 프레이밍에는 없던 새로운 차원을 도입. Cascade가 아닌 동시 제약 분석에서 접근 자체가 근본적으로 변형됨.
+  Causal chain depth: 0.8 (제약 충돌 → 표준 접근 양립 불가 → 문제 재프레이밍 → 피처별 분류 → 비즈니스 메트릭 기반 정량화, 4+ 단계의 분석적 추론 체인)
+  Constraint narrowing: 0.8 (캐시 단독: 일관성 실패로 기각, 강한 일관성 단독: SLA 위반으로 기각 — 각 기각이 구체적 제약에 연결되어 표준 접근 양립 불가를 명시적으로 보여줌)
+  Resolution mutation: 0.85 (초기 프레이밍은 "캐시 vs 일관성" 이진 선택. 최종 접근은 "피처별 일관성 분류"로 문제 자체를 재정의 — 시스템 레벨 → 피처 레벨 전환. 두 제약의 동시 분석이 이진 프레이밍을 깨뜨림. Pattern B — Constraint Collision에 해당)
+  Score: 0.8×0.30 + 0.8×0.35 + 0.85×0.35 = 0.8175 → CASCADING
+  → CTO asks: "피처 분류 기준은 어떻게 정했나? 새로운 피처 유형이 추가되면 분류 프로세스는? eventual consistency 2초 윈도우에서 추천 품질 저하는 측정했나?"
 
 [PLACEHOLDER: Example D — Event-Driven Order Processing Zombie (Pattern B)]
 
