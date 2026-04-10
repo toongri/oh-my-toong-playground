@@ -126,98 +126,98 @@ CASCADING (score ≥ 0.8) via Cascade Discovery:
 **Constraint Cascade Example B — Cache Stampede / Hot Key (Pattern A: Cascade Discovery):**
 
 FLAT (score < 0.5):
-"Redis 캐시 적용으로 상품 조회 API 응답 시간 3.2s → 400ms, DB 부하 80% 절감."
+"Applied Redis cache to product lookup API: response time 3.2s → 400ms, DB load reduced 80%."
 
-→ FLAT: 단일 결정(캐시 적용), 단일 결과(응답 시간). 왜 3.2초였는지, 어떤 캐시 패턴인지, 어떤 문제가 발생했는지 보이지 않음.
-  Causal chain depth: 0.1 (단일 결정, 인과 체인 없음)
-  Constraint narrowing: 0.1 (대안 언급 없음)
-  Resolution mutation: 0.0 (접근 변형 증거 없음 — "캐시 적용"이 초기 접근이자 최종 접근)
+→ FLAT: Single decision (cache applied), single result (response time). No explanation of why 3.2s was the baseline, which cache pattern was chosen, or what problems emerged.
+  Causal chain depth: 0.1 (single decision, no chain)
+  Constraint narrowing: 0.1 (no alternatives mentioned)
+  Resolution mutation: 0.0 (no evidence the approach changed shape — "cache applied" is both the initial and final approach)
   Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
-  → CTO reaction: "캐시 넣었군요. 그래서요?" — 논의할 내용 없음.
+  → CTO reaction: "You added a cache. Okay." — Nothing to discuss.
 
 LISTED (score 0.5-0.8):
-"상품 조회 API p99 3.2s — cache-aside 패턴 도입(TTL 5분). Cache stampede 발생하여 singleflight로 중복 요청 병합. Hot key 문제(상위 100개 상품이 캐시 요청 60% 점유)는 local cache 추가로 해결. 응답 시간 400ms, DB 부하 80% 절감."
+"Product lookup API p99 3.2s — introduced cache-aside pattern (TTL 5 min). Cache stampede occurred; merged duplicate requests with singleflight. Hot key issue (top 100 products occupy 60% of cache requests) resolved by adding local cache. Response time 400ms, DB load 80% reduced."
 
-→ LISTED: 복수 concern(stampede, hot key, singleflight, local cache) 나열되어 있고 일부 인과 연결(stampede → singleflight). 그러나 singleflight가 hot key를 왜 해결하지 못하는지, local cache의 일관성 트레이드오프가 무엇인지 명시되지 않음. 각 concern이 이전 concern에서 왜 발생했는지 독자가 추론해야 함.
-  Causal chain depth: 0.6 (stampede → singleflight → hot key 별도 발견 → local cache, 4단계이나 연결이 암묵적)
-  Constraint narrowing: 0.5 (singleflight가 stampede를 해결했다고 서술하지만, hot key에 왜 불충분한지 불명확)
-  Resolution mutation: 0.45 (cache-aside에서 singleflight, local cache로 확장되었으나, 확장이 강제된 이유가 암묵적 — 발견 과정이 아닌 결과만 나열)
-  Score: 0.6×0.30 + 0.5×0.35 + 0.45×0.35 = 0.5125 → LISTED (하단)
-  → CTO reaction: "Stampede랑 hot key를 해결했군요. singleflight로 왜 부족했죠?" — 질문 가능하지만 답이 bullet에 없음.
+→ LISTED: Multiple concerns (stampede, hot key, singleflight, local cache) are listed with some causal connection (stampede → singleflight). But why singleflight is insufficient for hot key, and what the consistency tradeoff of local cache is, are not stated. The reader must infer why each concern arose from the previous one.
+  Causal chain depth: 0.6 (stampede → singleflight → hot key discovered separately → local cache, 4 steps but connections are implicit)
+  Constraint narrowing: 0.5 (singleflight is described as solving stampede, but why it's insufficient for hot key is unclear)
+  Resolution mutation: 0.45 (expanded from cache-aside to singleflight and local cache, but why the expansion was forced is implicit — results listed without discovery process)
+  Score: 0.6×0.30 + 0.5×0.35 + 0.45×0.35 = 0.5125 → LISTED (lower band)
+  → CTO reaction: "You solved stampede and hot key. Why wasn't singleflight enough?" — Question possible but answer not in the bullet.
 
 CASCADING (score ≥ 0.8) via Cascade Discovery:
-"상품 조회 API p99 3.2s — cache-aside 패턴 도입 후 TTL 5분 설정. 인기 상품 TTL 동시 만료 시 cache stampede 발생, DB 순간 부하 기존 대비 3배. singleflight로 인스턴스 내 중복 요청 병합했으나, hot key 문제는 별개 차원 — 상위 100개 상품이 전체 캐시 요청의 60%를 점유하여 단일 Redis 샤드에 부하 집중. singleflight는 인스턴스 내 중복만 해소, 크로스 인스턴스 동시 요청은 여전히 Redis 단일 샤드 직격. 대안 평가: consistent hashing으로 hot key 분산 → 캐시 무효화 복잡도 증가, 운영 부담; hot key 복제(read replica) → 일관성 윈도우 + 메모리 2배. 선택: L1 local cache(Caffeine, 2초 TTL) + L2 Redis 2-tier 구조 — hot key는 L1에서 흡수, L2 미스 시에만 DB. 트레이드오프 수용: L1-L2 일관성 최대 2초 stale(상품 정보 갱신 주기 대비 허용), hot key 감지 자동화(접근 빈도 기반 L1 승격 로직) 필요, 인스턴스당 힙 200MB 증가. 결과: p99 400ms, DB 부하 80% 절감, stampede 시 DB 부하 스파이크 제거."
+"Product lookup API p99 3.2s — introduced cache-aside pattern with 5-min TTL. Simultaneous TTL expiry on popular products triggered cache stampede: DB instantaneous load 3x baseline. Merged intra-instance duplicate requests with singleflight, but hot key was a separate dimension — top 100 products occupied 60% of all cache requests, concentrating load on a single Redis shard. singleflight only resolves intra-instance duplicates; cross-instance concurrent requests still hit the single Redis shard directly. Alternatives evaluated: consistent hashing for hot key distribution → increased cache invalidation complexity, operational burden; hot key replication (read replica) → consistency window + 2x memory. Chosen: L1 local cache (Caffeine, 2s TTL) + L2 Redis 2-tier — hot keys absorbed at L1, DB only on L2 miss. Tradeoffs accepted: up to 2s L1-L2 consistency stale (acceptable given product update frequency), hot key detection automation required (access-frequency-based L1 promotion logic), 200MB heap increase per instance. Result: p99 400ms, DB load 80% reduced, DB spike on stampede eliminated."
 
-→ CASCADING via Cascade Discovery: cache-aside 도입 → stampede 발견 → singleflight 적용 → hot key라는 별개 차원 문제 발견 → singleflight의 한계(인스턴스 내만 해소) 확인 → L1/L2 2-tier로 근본 전환. 각 단계가 이전 해결의 한계에서 발생.
-  Causal chain depth: 0.9 (cache-aside → stampede → singleflight → hot key 발견 → singleflight 한계 확인 → 대안 평가 → L1/L2 2-tier, 6단계 명시적 인과 체인)
-  Constraint narrowing: 0.8 (consistent hashing: 무효화 복잡도로 기각, read replica: 일관성+메모리로 기각 — 각 기각이 hot key라는 선행 발견에 의해 구체적으로 연결)
-  Resolution mutation: 0.8 (초기 접근은 "cache-aside + TTL"(FLAT 버전). stampede로 singleflight 추가, 그러나 hot key로 인해 단일 캐시 레이어 접근 자체가 무효화 → 2-tier 아키텍처로 근본 전환. 단순 캐시 설정에서 다층 캐시 아키텍처로 변형. Pattern A — Cascade Discovery에 해당)
+→ CASCADING via Cascade Discovery: cache-aside introduced → stampede discovered → singleflight applied → hot key identified as a separate dimension → singleflight's limit confirmed (intra-instance only) → fundamental shift to L1/L2 2-tier. Each step arises from the limit of the previous resolution.
+  Causal chain depth: 0.9 (cache-aside → stampede → singleflight → hot key discovered → singleflight limit confirmed → alternatives evaluated → L1/L2 2-tier, 6-step explicit causal chain)
+  Constraint narrowing: 0.8 (consistent hashing: rejected by invalidation complexity, read replica: rejected by consistency window + memory — each rejection specifically tied to the preceding hot key discovery)
+  Resolution mutation: 0.8 (initial approach was "cache-aside + TTL" (FLAT version). singleflight added for stampede, but hot key invalidated the single-cache-layer approach entirely → fundamental shift to 2-tier architecture. Simple cache configuration transformed into multi-layer cache architecture. Pattern A — Cascade Discovery)
   Score: 0.9×0.30 + 0.8×0.35 + 0.8×0.35 = 0.83 → CASCADING
-  → CTO asks: "Hot key 감지 기준은? L1 승격/강등 로직은 어떻게 동작하나? Stampede 재현 테스트는 어떻게 했나? 2초 stale 윈도우에서 가격 정보 불일치 리스크는?"
+  → CTO asks: "What's the hot key detection threshold? How does L1 promotion/demotion logic work? How did you reproduce stampede in testing? What's the price-data inconsistency risk within the 2s stale window?"
 
 **Constraint Cascade Example C — Feature Serving Latency-Consistency (Pattern B: Constraint Collision):**
 
 FLAT (score < 0.5):
-"실시간 추천 서비스에서 Redis 캐시와 크로스 리전 데이터 동기화를 구현하여 sub-10ms 응답과 데이터 일관성을 달성."
+"Implemented Redis cache and cross-region data sync in real-time recommendation service, achieving sub-10ms response and data consistency."
 
-→ FLAT: 두 기술(캐시, 동기화)을 적용했다는 서술뿐. sub-10ms와 일관성이 동시에 달성되었다고 하지만, 이 두 요구가 왜 어려운지, 어떤 충돌이 있었는지, 무엇을 포기했는지 보이지 않음.
-  Causal chain depth: 0.1 (두 기술 병렬 나열, 인과 관계 없음)
-  Constraint narrowing: 0.1 (대안 언급 없음)
-  Resolution mutation: 0.0 (접근 변형 증거 없음)
+→ FLAT: States two technologies were applied (cache, sync). Claims sub-10ms and consistency are both achieved simultaneously, but gives no explanation of why these two requirements are difficult together, what conflict arose, or what was sacrificed.
+  Causal chain depth: 0.1 (two technologies listed in parallel, no causal relationship)
+  Constraint narrowing: 0.1 (no alternatives mentioned)
+  Resolution mutation: 0.0 (no evidence the approach changed shape)
   Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
-  → CTO reaction: "캐시랑 동기화를 했군요." — 논의할 내용 없음.
+  → CTO reaction: "You added cache and sync." — Nothing to discuss.
 
 LISTED (score 0.5-0.8):
-"실시간 추천 서비스에서 sub-10ms 응답 SLA와 크로스 리전 일관성을 동시에 요구. 로컬 캐시는 빠르지만 리전 간 30초 불일치 발생, 강한 일관성은 RTT 50ms 추가로 SLA 위반. 피처별 일관성 수준을 분류하여 해결. 가격은 강한 일관성, 추천 스코어는 eventual consistency 적용."
+"Real-time recommendation service required sub-10ms response SLA and cross-region consistency simultaneously. Local cache is fast but causes up to 30s inter-region inconsistency; strong consistency adds 50ms RTT, violating SLA. Resolved by classifying consistency level per feature. Price uses strong consistency; recommendation score uses eventual consistency."
 
-→ LISTED: 두 제약(SLA vs 일관성)과 충돌이 명시되고, 해결 방향(피처별 분류)이 보임. 그러나 분류 기준이 무엇인지(왜 가격은 강한 일관성?), 표준 접근이 왜 양립 불가능한지의 분석 과정, 트레이드오프가 구체적으로 서술되지 않음. 충돌은 인식되었지만 합성 과정이 암묵적.
-  Causal chain depth: 0.55 (SLA 제약 + 일관성 제약 → 충돌 인식 → 피처별 분류, 3단계이나 분석 과정이 압축됨)
-  Constraint narrowing: 0.5 (로컬 캐시: 일관성 실패, 강한 일관성: SLA 위반으로 각각 기각되었지만, 기각 근거가 간략)
-  Resolution mutation: 0.55 (캐시 vs 일관성 이진 선택에서 피처별 분류로 전환되었으나, 이 전환이 어떤 분석에서 비롯되었는지 과정이 보이지 않음 — 결론만 제시)
+→ LISTED: Two constraints (SLA vs consistency) and their collision are stated, and the resolution direction (per-feature classification) is visible. But what the classification criteria are (why strong consistency for price?), the analysis of why standard approaches are incompatible, and the specific tradeoffs are not described. The collision is recognized but the synthesis process is implicit.
+  Causal chain depth: 0.55 (SLA constraint + consistency constraint → collision recognized → per-feature classification, 3 steps but analysis is compressed)
+  Constraint narrowing: 0.5 (local cache: consistency failure, strong consistency: SLA violation — each eliminated, but the elimination rationale is brief)
+  Resolution mutation: 0.55 (shifted from binary cache-vs-consistency choice to per-feature classification, but what analysis drove this shift is not shown — conclusion only)
   Score: 0.55×0.30 + 0.5×0.35 + 0.55×0.35 = 0.5325 → LISTED
-  → CTO reaction: "피처별 일관성 분류를 했군요. 분류 기준은 어떻게 정했나요?" — 한 단계 후속 질문, 그러나 분류 로직이 bullet에 없음.
+  → CTO reaction: "You did per-feature consistency classification. How did you decide the classification criteria?" — One follow-up, but the classification logic is not in the bullet.
 
 CASCADING (score ≥ 0.8) via Constraint Collision:
-"실시간 추천 서비스에서 sub-10ms 응답 SLA와 크로스 리전 데이터 일관성을 동시에 달성해야 했다. 로컬 캐시로 지연시간을 충족하면 리전 간 데이터 불일치(최대 30초) — 가격 불일치 시 CS 인입 직결. 강한 일관성을 적용하면 크로스 리전 RTT 50ms 추가로 SLA 위반. 두 제약이 표준 접근(캐시 단독 or 일관성 단독)에서는 양립 불가. 피처의 비즈니스 임팩트를 기준으로 일관성 분류를 도입 — 가격·재고(부정확 시 CS 인입)는 강한 일관성(응답의 일부 항목이므로 전체 p95 영향 미미), 추천 스코어·카테고리 랭킹은 eventual consistency(2초 stale 허용). 분류 기준은 'CS 인입 확률'이라는 비즈니스 메트릭으로 정량화. 트레이드오프: 피처 추가 시 일관성 분류 의무화(관리 복잡도), 분류 오류 시 가격 불일치 노출 리스크를 A/B 모니터링으로 완화. 결과: 전체 p95 응답 9ms 유지, 가격 불일치 CS 인입 0건, eventual consistency 피처의 stale 영향 추천 CTR 변화 <0.1%."
+"Real-time recommendation service required sub-10ms response SLA and cross-region data consistency simultaneously. Meeting latency with local cache causes up to 30s inter-region inconsistency — price inconsistency directly triggers customer support tickets. Applying strong consistency adds 50ms cross-region RTT, violating SLA. The two constraints are incompatible under standard approaches (cache alone or consistency alone). Introduced per-feature consistency classification based on business impact — price and inventory (CS tickets when inaccurate) use strong consistency (partial response items, negligible effect on overall p95), recommendation score and category ranking use eventual consistency (2s stale acceptable). Classification criteria quantified as a business metric: 'CS ticket probability'. Tradeoffs: new features require mandatory consistency classification (management complexity), misclassification risk (price inconsistency exposure) mitigated by A/B monitoring. Result: overall p95 response 9ms maintained, 0 price-inconsistency CS tickets, stale impact on eventual consistency features: recommendation CTR change <0.1%."
 
-→ CASCADING via Constraint Collision: 두 제약(sub-10ms SLA, 크로스 리전 일관성)이 표준 접근에서는 양립 불가 → 문제를 시스템 레벨에서 피처 레벨로 재프레이밍 → 비즈니스 임팩트 기반 분류라는 이전 프레이밍에는 없던 새로운 차원을 도입. Cascade가 아닌 동시 제약 분석에서 접근 자체가 근본적으로 변형됨.
-  Causal chain depth: 0.8 (제약 충돌 → 표준 접근 양립 불가 → 문제 재프레이밍 → 피처별 분류 → 비즈니스 메트릭 기반 정량화, 4+ 단계의 분석적 추론 체인)
-  Constraint narrowing: 0.8 (캐시 단독: 일관성 실패로 기각, 강한 일관성 단독: SLA 위반으로 기각 — 각 기각이 구체적 제약에 연결되어 표준 접근 양립 불가를 명시적으로 보여줌)
-  Resolution mutation: 0.85 (초기 프레이밍은 "캐시 vs 일관성" 이진 선택. 최종 접근은 "피처별 일관성 분류"로 문제 자체를 재정의 — 시스템 레벨 → 피처 레벨 전환. 두 제약의 동시 분석이 이진 프레이밍을 깨뜨림. Pattern B — Constraint Collision에 해당)
+→ CASCADING via Constraint Collision: two constraints (sub-10ms SLA, cross-region consistency) cannot coexist under standard approaches → problem reframed from system level to feature level → introduced per-feature business-impact-based classification, a new dimension absent from the original framing. The approach is fundamentally reshaped by simultaneous constraint analysis rather than sequential discovery.
+  Causal chain depth: 0.8 (constraint collision → standard approaches incompatible → problem reframing → per-feature classification → business metric quantification, 4+ step analytical reasoning chain)
+  Constraint narrowing: 0.8 (cache alone: rejected by consistency failure, strong consistency alone: rejected by SLA violation — each rejection tied to a specific constraint, explicitly demonstrating incompatibility of standard approaches)
+  Resolution mutation: 0.85 (initial framing was binary "cache vs consistency" choice. Final approach redefines the problem as "per-feature consistency classification" — system level → feature level shift. Simultaneous analysis of two constraints breaks the binary framing. Pattern B — Constraint Collision)
   Score: 0.8×0.30 + 0.8×0.35 + 0.85×0.35 = 0.8175 → CASCADING
-  → CTO asks: "피처 분류 기준은 어떻게 정했나? 새로운 피처 유형이 추가되면 분류 프로세스는? eventual consistency 2초 윈도우에서 추천 품질 저하는 측정했나?"
+  → CTO asks: "How did you determine the feature classification criteria? What's the process when a new feature type is added? Did you measure recommendation quality degradation within the 2s eventual consistency window?"
 
 **Constraint Cascade Example D — Event-Driven Order Zombie (Pattern B: Constraint Collision):**
 
 FLAT (score < 0.5):
-"Kafka 기반 비동기 주문 처리 파이프라인 구축, saga 패턴으로 분산 트랜잭션 관리. 주문 처리 실패율 0.01% 이하 달성."
+"Built Kafka-based async order processing pipeline, managed distributed transactions with saga pattern. Achieved order processing failure rate below 0.01%."
 
-→ FLAT: saga 도입과 결과만 서술. 왜 saga가 필요했는지, 어떤 유형의 실패가 발생했는지, 어떤 트레이드오프를 수용했는지 보이지 않음.
-  Causal chain depth: 0.1 (단일 결정, 인과 체인 없음)
-  Constraint narrowing: 0.1 (대안 언급 없음)
-  Resolution mutation: 0.0 (접근 변형 증거 없음 — "saga 도입"이 초기이자 최종 접근)
+→ FLAT: States saga adoption and outcome only. No explanation of why saga was needed, what types of failures occurred, or what tradeoffs were accepted.
+  Causal chain depth: 0.1 (single decision, no chain)
+  Constraint narrowing: 0.1 (no alternatives mentioned)
+  Resolution mutation: 0.0 (no evidence the approach changed shape — "saga adopted" is both the initial and final approach)
   Score: 0.1×0.30 + 0.1×0.35 + 0.0×0.35 = 0.065 → FLAT
-  → CTO reaction: "Saga 넣었군요. 그래서요?" — 논의할 내용 없음.
+  → CTO reaction: "You added saga. Okay." — Nothing to discuss.
 
 LISTED (score 0.5-0.8):
-"주문-결제-재고 이벤트 파이프라인에서 좀비 주문 일 5건 발생. PG 콜백 지연(p99 8초)이 saga timeout(5초) 초과하여 보상 트랜잭션 발동 후 지연 콜백 충돌. orchestration saga로 전환하고 step-level timeout을 분리하여 해결. 좀비 주문 일 5건 → 월 2건."
+"Order-payment-inventory event pipeline produced 5 zombie orders per day. PG callback delay (p99 8s) exceeded saga timeout (5s), triggering compensation transaction, then delayed callback arrived and collided. Switched to orchestration saga and separated step-level timeout. Zombie orders: 5/day → 2/month."
 
-→ LISTED: 문제(좀비 주문)와 기술 과제(PG 콜백 지연 vs saga timeout)가 보이고, 해결 방향(orchestration + step-level timeout)이 명시. 그러나 두 제약(빠른 checkout UX vs PG 지연 허용)의 충돌이 명시적이지 않음. 왜 timeout을 단순 연장하지 않았는지, 지연 콜백 충돌을 어떻게 방어하는지(idempotency), 좀비 감지 메커니즘이 없음. 문제 인식은 있지만 제약 충돌의 합성 과정이 불완전.
-  Causal chain depth: 0.6 (PG 지연 → timeout 초과 → 좀비 발생 → orchestration 전환, 4단계이나 UX 제약과의 충돌이 암묵적)
-  Constraint narrowing: 0.5 (orchestration을 선택했다고 서술하지만, choreography나 timeout 연장이 왜 기각되었는지 불명확)
-  Resolution mutation: 0.5 (choreography에서 orchestration + step-level timeout으로 전환되었으나, 이 전환을 강제한 두 제약의 충돌 분석이 보이지 않음 — 결과적 전환만 서술)
+→ LISTED: The problem (zombie orders) and technical challenge (PG callback delay vs saga timeout) are visible, and the resolution direction (orchestration + step-level timeout) is stated. But the collision between two constraints (fast checkout UX vs tolerating PG delay) is not explicit. No explanation of why simply extending timeout was rejected, how delayed callback collision is defended (idempotency), or zombie detection mechanism. Problem is recognized but the synthesis process of constraint collision is incomplete.
+  Causal chain depth: 0.6 (PG delay → timeout exceeded → zombie order → orchestration switch, 4 steps but collision with UX constraint is implicit)
+  Constraint narrowing: 0.5 (orchestration is stated as the choice, but why choreography or timeout extension were eliminated is unclear)
+  Resolution mutation: 0.5 (switched from choreography to orchestration + step-level timeout, but the constraint collision analysis that forced this switch is not shown — result only)
   Score: 0.6×0.30 + 0.5×0.35 + 0.5×0.35 = 0.53 → LISTED
-  → CTO reaction: "Orchestration으로 전환했군요. 왜 timeout을 그냥 늘리지 않았나요?" — 질문 가능하지만 답이 bullet에 없음.
+  → CTO reaction: "You switched to orchestration. Why didn't you just extend the timeout?" — Question possible but answer not in the bullet.
 
 CASCADING (score ≥ 0.8) via Constraint Collision:
-"주문-결제-재고-배송 4단계 이벤트 파이프라인에서 일 평균 5건 주문이 '결제 완료-재고 미차감' 좀비 상태로 잔류 — CS 인입 직결. 프로파일링: 80% PG 콜백 지연(p99 8초)으로 saga timeout(5초) 초과 → 보상 트랜잭션 발동 → 직후 지연 콜백 도착 → 이미 취소된 주문에 결제 성공 이벤트 충돌. 두 제약이 충돌: 빠른 checkout UX(saga timeout 5초 이내) vs PG 콜백 지연 허용(최소 15초 필요). timeout 단순 연장은 checkout 체감 지연 — 비즈니스 거부. 대안 평가: choreography saga → step-level 가시성 부재로 좀비 감지 불가, 운영 부담; saga timeout 15초 연장 → checkout UX 악화, 비즈니스 거부; PG 콜백을 동기 polling 전환 → PG rate limit + polling 비용. 선택: orchestration saga + step-level timeout 분리 — 결제 step만 15초(PG p99 커버), 나머지 step 3초 유지로 전체 saga 체감 지연 최소화. 지연 콜백 충돌은 idempotency key(주문번호+이벤트 시퀀스) + 상태 머신으로 방어 — COMPENSATED 상태에서 SUCCESS 이벤트 무시. 좀비 감지: step별 SLA 기반 미완료 saga 15분 주기 스캔 + Slack 알림, 일 1회 reconciliation batch로 최종 정합성 검증. 트레이드오프 수용: step-level timeout 관리 복잡도(PG 변경 시 재조정 필요), orchestrator 단일 장애점(active-passive failover), reconciliation 윈도우 최대 24시간 불일치. 결과: 좀비 주문 일 5건 → 월 2건 미만, 감지-복구 평균 4시간 → 15분."
+"Order-payment-inventory-shipping 4-step event pipeline produced an average of 5 orders per day stuck in 'payment complete, inventory not deducted' zombie state — directly triggering customer support tickets. Profiling: 80% of cases traced to PG callback delay (p99 8s) exceeding saga timeout (5s) → compensation transaction triggered → delayed callback arrived immediately after → payment success event collided with an already-cancelled order. Two constraints in collision: fast checkout UX (saga timeout within 5s) vs tolerating PG callback delay (minimum 15s required). Simply extending timeout degrades checkout UX — rejected by business. Alternatives evaluated: choreography saga → no step-level visibility, zombie detection impossible, operational burden; saga timeout extended to 15s → checkout UX degradation, rejected by business; convert PG callback to synchronous polling → PG rate limit + polling cost. Chosen: orchestration saga + step-level timeout separation — payment step alone set to 15s (covers PG p99), remaining steps kept at 3s to minimize overall perceived saga delay. Delayed callback collision defended by idempotency key (order number + event sequence) + state machine — SUCCESS event ignored in COMPENSATED state. Zombie detection: incomplete saga scan every 15 min based on per-step SLA + Slack alert, daily reconciliation batch for final consistency verification. Tradeoffs accepted: step-level timeout management complexity (re-tuning required on PG changes), orchestrator single point of failure (active-passive failover), reconciliation window up to 24h inconsistency. Result: zombie orders 5/day → under 2/month, detection-to-recovery average 4h → 15min."
 
-→ CASCADING via Constraint Collision: 두 제약(빠른 checkout UX 5초 vs PG 콜백 지연 15초)이 표준 접근(단일 timeout)에서 양립 불가 → step-level timeout 분리라는 문제 재프레이밍 + 지연 콜백 방어(idempotency 상태 머신) + 좀비 감지(주기적 스캔 + reconciliation)의 3중 해결. 단일 timeout 접근에서 step-level 분화 + 상태 머신 + 모니터링 복합 접근으로 근본 전환.
-  Causal chain depth: 0.85 (PG 지연 프로파일링 → timeout 충돌 발견 → 두 제약(UX vs PG) 양립 불가 → 대안 3개 평가 기각 → step-level timeout 분리 + idempotency 상태 머신 + 좀비 스캔, 5+ 단계 분석적 추론 체인)
-  Constraint narrowing: 0.8 (choreography: 가시성 부재로 기각, timeout 연장: UX 악화로 기각, polling: rate limit + 비용으로 기각 — 각 기각이 두 제약 충돌의 맥락에서 구체적)
-  Resolution mutation: 0.85 (초기 접근은 "단일 saga timeout 설정"(FLAT 버전). 두 제약 충돌로 단일 timeout이 불가능 → step-level 분리라는 새로운 차원 도입 + idempotency 상태 머신 + reconciliation으로 3중 방어. 단일 설정에서 복합 아키텍처로 문제 자체가 재프레이밍됨. Pattern B — Constraint Collision에 해당)
+→ CASCADING via Constraint Collision: two constraints (fast checkout UX 5s vs PG callback delay 15s) cannot coexist under standard approach (single timeout) → problem reframed as step-level timeout separation + delayed callback defense (idempotency state machine) + zombie detection (periodic scan + reconciliation) as a 3-layer resolution. Fundamental shift from single timeout approach to step-level differentiation + state machine + monitoring composite architecture.
+  Causal chain depth: 0.85 (PG delay profiled → timeout collision discovered → two constraints (UX vs PG) cannot coexist → 3 alternatives evaluated and rejected → step-level timeout separation + idempotency state machine + zombie scan, 5+ step analytical reasoning chain)
+  Constraint narrowing: 0.8 (choreography: rejected by lack of visibility, timeout extension: rejected by UX degradation, polling: rejected by rate limit + cost — each rejection specific within the context of the two-constraint collision)
+  Resolution mutation: 0.85 (initial approach was "single saga timeout configuration" (FLAT version). Two-constraint collision makes single timeout impossible → introduced step-level separation as a new dimension + idempotency state machine + reconciliation as 3-layer defense. Problem itself reframed from single configuration to composite architecture. Pattern B — Constraint Collision)
   Score: 0.85×0.30 + 0.8×0.35 + 0.85×0.35 = 0.8325 → CASCADING
-  → CTO asks: "Step-level timeout 값은 어떻게 결정했나? PG 변경 시 timeout 재조정 프로세스는? COMPENSATED 상태에서 SUCCESS 무시 시 결제 금액은 어떻게 환불하나? Reconciliation에서 발견된 불일치의 자동 복구 범위는?"
+  → CTO asks: "How did you determine step-level timeout values? What's the re-tuning process when PG changes? When SUCCESS is ignored in COMPENSATED state, how is the payment amount refunded? What's the automatic recovery scope for inconsistencies found in reconciliation?"
 
 **Constraint Cascade Example E — Subscription Renewal Failures (Expectation Inversion pattern):**
 
