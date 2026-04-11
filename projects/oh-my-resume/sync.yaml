@@ -17,10 +17,12 @@ skills:
     - sisyphus
     - git-master
     - humanizer
+    - oracle
     - qa
     - resume-apply
     - review-resume
     - tech-claim-rubric
+    - resume-forge
 
 rules:
   items:
