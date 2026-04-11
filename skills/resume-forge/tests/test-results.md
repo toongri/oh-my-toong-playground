@@ -56,6 +56,41 @@ Failures observed in manual workflow BEFORE skill was written:
 
 Oracle verified all 10 user requirements met. Two non-critical gaps patched (examiner invocation hint, note-system.md path).
 
+---
+
+## Test Campaign: 2026-04-11 (Context Bootstrap)
+
+### Summary
+
+| Phase | Scenarios Run | Result |
+|-------|--------------|--------|
+| RED (Baseline) | B-1, B-2, B-3 against unmodified SKILL.md | 6/8 FAIL |
+| GREEN (Patched) | B-1, B-2, B-3 against patched SKILL.md | 8/8 PASS |
+
+### RED Phase: Baseline Failures
+
+| # | Question | Verdict | Failure Pattern |
+|---|----------|---------|-----------------|
+| Q2 | Session Recovery forge-references 스캔 지시 | FAIL | Session Recovery에 forge-references 언급 없음 |
+| Q3 | 도메인 컨텍스트 확보 시점 | FAIL | 명시적 시점 미정의 — examiner 프롬프트 작성 시에야 암묵적으로 필요 |
+| Q4 | Loop 2 전 reference 읽기 지시 | FAIL | Loop 2 흐름에 "read references" 단계 없음 |
+| Q5 | 관련 reference 전문 읽기 여부 | FAIL | 지시 부재로 안 읽음 |
+| Q7 | dedup/차별화 지시 | FAIL | Phase 0 step 1 "scan + show"만, 목적 미명시 |
+| Q8 | 중복 시나리오 플래깅 | FAIL | "critical partner" 원칙만으로 커버 불충분 |
+
+### GREEN Phase: Patches Applied
+
+| # | Patch | Location |
+|---|-------|----------|
+| 1 | Session Recovery에 forge-references 스캔 단계(step 3) 추가 — ls → 앞부분 스캔 → 관련 reference 전문 읽기 | Session Recovery |
+| 2 | Phase 0 step 1에 problem-solving/ dedup 목적 명시 — 동일 주제 재제안 금지, 유사 도메인 다른 각도 접근 | Phase 0: Setup |
+
+### GREEN Phase: Re-test Results
+
+All 8 questions PASS. No additional gaps found — no REFACTOR needed.
+
+---
+
 ### Remaining: Untested Scenarios
 
 | Scenario | Why Untested | Plan |
