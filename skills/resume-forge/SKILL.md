@@ -34,7 +34,7 @@ digraph resume_forge {
 
 ### Phase 0: Setup
 
-1. **Load existing state** — scan `$OMT_DIR/review-resume/` (drafts/, problem-solving/, forge-references/) and check for prior state in `$OMT_DIR/state/resume-forge/`. Show the user what already exists
+1. **Load existing state** — scan `$OMT_DIR/review-resume/` (drafts/, problem-solving/, forge-references/) and check for prior state in `$OMT_DIR/state/resume-forge/`. Show the user what already exists. **Use existing problem-solving/ entries as dedup and differentiation criteria when proposing new scenarios** — never re-propose the same topic; approach similar domains from a different angle
 2. **CRITICAL: Source mining + User interview (ALWAYS, NEVER SKIP)** — The user IS a source. Mine from everywhere until good problems emerge:
    - **Interview the user**: Ask about their hardest problems, biggest wins, what kept them up at night. Dig deep. Follow up. The user's memory is the richest source
    - **External sources**: company Notion (MCP), Jira/Linear, file system docs, Slack threads, past Claude sessions, reference resumes — whatever the user can provide access to
@@ -216,8 +216,9 @@ loop1_score: 0.85
 On new session start:
 1. List `$OMT_DIR/state/resume-forge-*.json` and pick the most recent by `created_at` field
 2. Read the state JSON. Skip scenarios where `loop1.status == "passed"` (go to Loop 2). Skip scenarios where `loop2.status == "passed"` (fully complete)
-3. If all scenarios have `loop1.status == "passed"`, skip directly to Phase 2
-4. Candidate Profile info (user role, experience): ask the user once in Phase 0 setup, or infer from `caption` field in drafts
+3. **Scan forge-references/** — `ls $OMT_DIR/review-resume/forge-references/` → read the first ~10 lines of each file to understand domain/content. Read in full any reference relevant to the current scenario
+4. If all scenarios have `loop1.status == "passed"`, skip directly to Phase 2
+5. Candidate Profile info (user role, experience): ask the user once in Phase 0 setup, or infer from `caption` field in drafts
 
 ### Cleanup
 

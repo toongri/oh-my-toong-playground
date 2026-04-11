@@ -18,6 +18,9 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 | A-10 | Mining continues in Loop 1 | Cross-phase mining | 문제 작성 중 추가 마이닝 필요 시 |
 | A-11 | Anti-pattern: structured choices | Free-form principle | AskUserQuestion에서 선택지 강제하지 않음 |
 | A-12 | Anti-pattern: blind acceptance | Critical partner principle | 유저 의견에 반박 + 대안 제시 |
+| B-1 | Session Recovery — forge-references 스캔 | Context Bootstrap | 세션 복구 시 forge-references 먼저 스캔 |
+| B-2 | Session Recovery — 관련 reference 적극 읽기 | Context Bootstrap | 현재 작업 시나리오 관련 reference 전문 읽기 |
+| B-3 | Phase 0 — problem-solving/ dedup 참조 | Phase 0 Setup | 기존 완성 항목과 중복 방지 |
 
 ---
 
@@ -220,3 +223,59 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 - [ ] "좋은 생각이에요"로 수용하지 않음
 - [ ] 기술적 근거로 반박
 - [ ] 대안을 함께 제시
+
+---
+
+## B-1: Session Recovery — forge-references 스캔
+
+**Context:** 유저가 새 세션에서 "이력서 재료 이어서 하자"라고 요청. state JSON에 9개 시나리오(loop1 전부 passed, loop2는 c1만 passed). forge-references/에 3개 파일 존재:
+- `mineiss-consignment-model.md` (마인이스 위탁판매 비즈니스 모델 분석)
+- `mineiss-tech-stack.md` (마인이스 기술 스택 — Kotlin, Spring, Kafka 등)
+- `aswemake-mart-system.md` (애즈위메이크 마트 시스템 구조)
+
+**Expected behavior:**
+1. State JSON 로드 → 현황 파악
+2. forge-references/ 목록 확인 (ls)
+3. 각 파일의 앞부분을 읽어서 어떤 도메인/내용을 다루는지 파악
+4. Loop 2 작업 시작 전에 도메인 배경 지식 확보
+
+**Verification:**
+- [ ] state JSON 로드 후 바로 Loop 진입하지 않음
+- [ ] forge-references/ 파일 목록을 먼저 확인
+- [ ] 각 파일 앞부분을 읽어서 내용 파악
+- [ ] 도메인 배경을 확보한 뒤에 Loop 2 진입
+
+---
+
+## B-2: Session Recovery — 관련 reference 적극 읽기
+
+**Context:** B-1과 동일 상태. c2(위탁판매 반품 워크플로우)부터 Loop 2 시작. forge-references/에 `mineiss-consignment-model.md`가 위탁판매 비즈니스 모델을 상세히 설명.
+
+**Expected behavior:**
+1. c2가 위탁판매 반품 관련 → `mineiss-consignment-model.md`가 직접 관련됨을 판단
+2. 해당 파일을 헤더만이 아니라 전문 읽기
+3. 읽은 내용을 기반으로 c2 솔루션 인터뷰에서 깊이 있는 질문
+
+**Verification:**
+- [ ] 관련 reference를 적극적으로 전문 읽기 (lazy하게 미루지 않음)
+- [ ] 읽은 도메인 지식이 인터뷰 질문에 반영됨
+- [ ] 비관련 파일(aswemake-mart-system.md)은 헤더 스캔으로 충분
+
+---
+
+## B-3: Phase 0 — problem-solving/ dedup 참조
+
+**Context:** 유저가 새 세션에서 "이력서 재료 좀 더 추가하자"라고 요청. problem-solving/에 이미 완성된 항목 2개 존재:
+- `attribute-inference-pipeline.md` (상품 속성 추론 파이프라인)
+- `return-workflow-automation.md` (위탁판매 반품 워크플로우)
+
+**Expected behavior:**
+1. Phase 0에서 problem-solving/ 스캔
+2. 이미 완성된 항목의 주제/도메인 파악
+3. Source mining 시 기존 항목과 중복되는 시나리오를 제안하지 않음
+4. 기존 항목과 차별화되는 새로운 각도의 시나리오 제안
+
+**Verification:**
+- [ ] problem-solving/ 기존 항목을 스캔하고 내용 파악
+- [ ] 중복 시나리오를 제안하지 않음 (예: "상품 속성 추론" 재제안 안 함)
+- [ ] 기존 항목과의 차별점을 의식한 새 시나리오 제안
