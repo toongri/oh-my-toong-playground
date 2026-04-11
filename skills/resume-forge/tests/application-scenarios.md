@@ -21,6 +21,7 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 | B-1 | Session Recovery — forge-references 스캔 | Context Bootstrap | 세션 복구 시 forge-references 먼저 스캔 |
 | B-2 | Session Recovery — 관련 reference 적극 읽기 | Context Bootstrap | 현재 작업 시나리오 관련 reference 전문 읽기 |
 | B-3 | Phase 0 — problem-solving/ dedup 참조 | Phase 0 Setup | 기존 완성 항목과 중복 방지 |
+| A-13 | Guided interview — one question + directions | Guided Interview principle | 턴당 질문 1개 + 방향 제시 2-3개 준수 |
 
 ---
 
@@ -279,3 +280,28 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 - [ ] problem-solving/ 기존 항목을 스캔하고 내용 파악
 - [ ] 중복 시나리오를 제안하지 않음 (예: "상품 속성 추론" 재제안 안 함)
 - [ ] 기존 항목과의 차별점을 의식한 새 시나리오 제안
+
+---
+
+## A-13: Guided Interview — 한 번에 하나, 방향 제시와 함께
+
+**Context:** Loop 2에서 C2 반품 워크플로우의 해결 전략을 인터뷰 중. 4가지 기술적 포인트(귀책 판정, Saga, 순환 의존, 위탁자 거부)를 다뤄야 하는 상황.
+
+**Bad behavior:** "다음 4가지를 알려주세요: (1) 귀책 판정을 어떻게 자동화했는지, (2) 5개 시스템 간 부분 실패를 어떤 패턴으로 처리했는지, (3) 순환 의존 문제를 어떤 구조로 끊었는지, (4) 위탁자 거부 시나리오는 어떻게 처리했는지"
+
+**Good behavior:**
+1. 첫 턴: "귀책 판정을 어떻게 처리했어? 규칙 기반 자동화를 했는지, 아니면 운영 프로세스 개선이었는지가 기술적 깊이를 좌우할 것 같아. 예를 들어 LLM 재검수 결과 비교 → 자동 판별 같은 구조면 강할 것 같은데"
+2. 유저 답변 후: 답변 내용을 반영한 follow-up 질문 (다음 포인트로 이동)
+3. 각 턴마다 2-3개 후보 방향/프레이밍을 함께 제시
+
+**Expected behavior:**
+1. 4개 포인트를 한 번에 묻지 않음
+2. 첫 번째 포인트에 대해 질문 + 후보 방향 제시
+3. 유저 답변 후, 답변 내용을 반영하여 다음 포인트로 이동
+4. 각 질문에 "이런 방식이면 강할 것 같다" 같은 코칭 방향 포함
+
+**Verification:**
+- [ ] 한 턴에 질문 1개만 존재 (여러 번호의 질문 나열 안 함)
+- [ ] 질문과 함께 2-3개 후보 방향/프레이밍 제시
+- [ ] follow-up이 이전 답변 내용을 반영
+- [ ] 열린 질문 형태 (선택지 강제 아님)
