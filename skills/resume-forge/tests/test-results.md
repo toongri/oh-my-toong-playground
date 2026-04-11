@@ -101,3 +101,7 @@ All 8 questions PASS. No additional gaps found — no REFACTOR needed.
 | A-7 (Solution interview) | Interactive — needs user | Test when C2 Loop 2 starts |
 | A-10 (Cross-phase mining) | Interactive — needs user | Test in next real session |
 | A-11, A-12 (Anti-patterns) | Behavioral — needs observation | Monitor in real sessions |
+| A-13 (Guided interview) | Behavioral — needs observation | Monitor in real sessions |
+| A-14 (Loop 2 fail+retry) | Interactive — needs user | Test when examiner fail occurs |
+| A-15, A-16, A-17, A-18 (Show fragments, Direct scoring, E3b without solution, Technical terms) | Behavioral — needs observation | Monitor in real sessions |
+| B-4 (Session cleanup) | Needs all scenarios passed | Test at session completion |

@@ -121,7 +121,7 @@ digraph loop2 {
 
 **Solution interview protocol:**
 - **One question per turn**: Never batch multiple questions. Ask a single focused question, wait for the answer, then follow up
-- **Suggest directions**: With each question, propose 2-3 candidate answers or framings based on what you know. Example: "Saga 패턴으로 명시적으로 구현한 건지, 이벤트 체인 + 수동 보정이었는지가 기술적 깊이를 좌우할 것 같아" — show what strong material looks like
+- **Suggest directions**: With each question, propose 2-3 candidate directions or framings based on what you know. Example: "Saga 패턴으로 명시적으로 구현한 건지, 이벤트 체인 + 수동 보정이었는지가 기술적 깊이를 좌우할 것 같아" — show what strong material looks like
 - **Real experience validation**: if real, dig deep into specifics; if fabricated, validate technical plausibility
 - **Alternative surfacing**: why this approach was chosen and what alternatives were rejected (and why)
 - **Trade-off extraction**: limitations of chosen approach and why they were accepted
@@ -219,7 +219,7 @@ loop1_score: 0.85
 On new session start:
 1. List `$OMT_DIR/state/resume-forge-*.json` and pick the most recent by `created_at` field
 2. Read the state JSON. Skip scenarios where `loop1.status == "passed"` (go to Loop 2). Skip scenarios where `loop2.status == "passed"` (fully complete)
-3. **Scan forge-references/** — `ls $OMT_DIR/review-resume/forge-references/` → read the first ~10 lines of each file to understand domain/content. Read in full any reference relevant to the current scenario
+3. **Scan forge-references/** (if directory exists) — `ls $OMT_DIR/review-resume/forge-references/` → read the first ~10 lines of each file to understand domain/content. Read in full any reference relevant to the current scenario
 4. If all scenarios have `loop1.status == "passed"`, skip directly to Phase 2
 5. Candidate Profile info (user role, experience): ask the user once in Phase 0 setup, or infer from `caption` field in drafts
 

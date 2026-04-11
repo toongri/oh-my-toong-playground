@@ -18,15 +18,15 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 | A-10 | Mining continues in Loop 1 | Cross-phase mining | 문제 작성 중 추가 마이닝 필요 시 |
 | A-11 | Anti-pattern: structured choices | Free-form principle | AskUserQuestion에서 선택지 강제하지 않음 |
 | A-12 | Anti-pattern: blind acceptance | Critical partner principle | 유저 의견에 반박 + 대안 제시 |
-| B-1 | Session Recovery — forge-references 스캔 | Context Bootstrap | 세션 복구 시 forge-references 먼저 스캔 |
-| B-2 | Session Recovery — 관련 reference 적극 읽기 | Context Bootstrap | 현재 작업 시나리오 관련 reference 전문 읽기 |
-| B-3 | Phase 0 — problem-solving/ dedup 참조 | Phase 0 Setup | 기존 완성 항목과 중복 방지 |
 | A-13 | Guided interview — one question + directions | Guided Interview principle | 턴당 질문 1개 + 방향 제시 2-3개 준수 |
 | A-14 | Loop 2 — examiner fail + retry | Loop 2 feedback loop | E3b < 0.8 시 피드백 + 대안 → 재토론 → 재제출 |
 | A-15 | Anti-pattern: show fragments | Show full text principle | 조각이 아닌 전체 엔트리 보여주기 |
 | A-16 | Anti-pattern: direct scoring | Delegate scoring principle | examiner 위임 없이 자체 채점 금지 |
 | A-17 | Anti-pattern: E3b without solution | Examiner invocation guard | 해결 전략 없이 E3b 평가 시도 금지 |
 | A-18 | Anti-pattern: technical terms w/o verification | Term alignment | 기술 용어 정의 합의 없이 사용 금지 |
+| B-1 | Session Recovery — forge-references 스캔 | Context Bootstrap | 세션 복구 시 forge-references 먼저 스캔 |
+| B-2 | Session Recovery — 관련 reference 적극 읽기 | Context Bootstrap | 현재 작업 시나리오 관련 reference 전문 읽기 |
+| B-3 | Phase 0 — problem-solving/ dedup 참조 | Phase 0 Setup | 기존 완성 항목과 중복 방지 |
 | B-4 | Session cleanup — all scenarios done | Cleanup behavior | 모든 loop2 passed 시 state 파일 삭제 |
 
 ---
@@ -146,7 +146,7 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 
 **Expected behavior:**
 1. draft 파일의 문제 정의를 보여줌
-2. 유저에게 해결 경험 질문: "실제로 어떻게 접근했어?", "기각한 대안은?", "트레이드오프는?"
+2. 해결 전략 인터뷰 시작 — 첫 질문 1개 + 후보 방향 2-3개 제시: "실제로 어떻게 접근했어? Saga 패턴으로 명시적으로 구현한 건지, 아니면 이벤트 체인 + 수동 보정 방식이었는지가 기술적 깊이를 좌우할 것 같아. 아니면 아예 다른 방향이었으면 알려줘"
 3. 유저 응답을 기반으로 해결 전략 초안 작성
 4. 전체 엔트리(문제+과제+해결+결과) 보여주고 토론
 
@@ -383,10 +383,10 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 
 ## A-18: Anti-Pattern — Technical Terms Without Verification
 
-**Context:** Loop 2 인터뷰 중. 유저가 "부분 실패는 Outbox로 처리했어"라고 답변.
+**Context:** Loop 2 인터뷰 중. 유저가 "읽기 성능은 CQRS로 개선했어"라고 답변.
 
-**Bad behavior:** "Outbox 패턴으로 부분 실패를 복구했군요. 그럼 다음으로..." (정의 검증 없이 수용)
-**Good behavior:** "Outbox 패턴이라고 하면 at-least-once delivery 보장을 위한 패턴인데, 부분 실패 복구 맥락에서 어떻게 사용한 건지 좀 더 설명해줄래? 혹시 Saga나 retry topic 같은 다른 패턴과 혼용한 건 아닌지 확인하고 싶어."
+**Bad behavior:** "CQRS로 읽기 성능을 개선했군요. 그럼 다음으로..." (정의 검증 없이 수용)
+**Good behavior:** "CQRS라고 하면 커맨드와 쿼리의 책임을 분리하는 아키텍처 패턴인데, 읽기 성능 개선 맥락에서 어떻게 적용한 건지 좀 더 설명해줄래? 읽기 전용 모델을 별도로 두고 이벤트로 동기화한 건지, 아니면 단순히 읽기 전용 레플리카를 분리한 건지 확인하고 싶어. 두 경우는 기술적 깊이가 많이 달라."
 
 **Verification:**
 - [ ] 기술 용어를 그대로 수용하지 않음
