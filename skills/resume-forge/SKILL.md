@@ -13,6 +13,7 @@ Collaboratively source, refine, and complete resume problem-solving entries with
 - **Free-form discussion**: Never force structured choices in AskUserQuestion. Use open-ended questions
 - **Critical partner**: Do not blindly accept user input. Challenge, propose alternatives, surface trade-offs
 - **Show full text**: Always show the complete entry before discussing. Never show fragments
+- **Guided interview**: Ask ONE focused question per turn. With each question, propose 2-3 candidate directions or framings — show the user what strong material looks like and how to frame their experience. Don't just extract raw facts; coach toward a compelling entry
 
 ## Workflow
 
@@ -36,7 +37,7 @@ digraph resume_forge {
 
 1. **Load existing state** — scan `$OMT_DIR/review-resume/` (drafts/, problem-solving/, forge-references/) and check for prior state in `$OMT_DIR/state/resume-forge/`. Show the user what already exists. **Use existing problem-solving/ entries as dedup and differentiation criteria when proposing new scenarios** — never re-propose the same topic; approach similar domains from a different angle
 2. **CRITICAL: Source mining + User interview (ALWAYS, NEVER SKIP)** — The user IS a source. Mine from everywhere until good problems emerge:
-   - **Interview the user**: Ask about their hardest problems, biggest wins, what kept them up at night. Dig deep. Follow up. The user's memory is the richest source
+   - **Interview the user**: Ask about their hardest problems, biggest wins, what kept them up at night. **One question per turn** — with each question, suggest candidate directions: "이런 포인트가 있으면 차별화될 것 같은데", "이 각도로 풀어내면 강할 것 같아". Dig deep. Follow up. The user's memory is the richest source
    - **External sources**: company Notion (MCP), Jira/Linear, file system docs, Slack threads, past Claude sessions, reference resumes — whatever the user can provide access to
    - **Iterate**: propose candidate problems from what you've gathered, get user feedback, mine more, propose again. This loop continues until enough good problems are found — NOT a one-shot questionnaire
    - Save digested analysis to `$OMT_DIR/review-resume/forge-references/`. Record filenames in state JSON `sources` array
@@ -118,10 +119,12 @@ digraph loop2 {
 }
 ```
 
-**Solution interview focus:**
-- Real experience vs fabrication: if real, dig deep; if fabricated, validate technical plausibility
-- Why this approach was chosen and what alternatives were rejected (and why)
-- Trade-offs: limitations of chosen approach and why they were accepted
+**Solution interview protocol:**
+- **One question per turn**: Never batch multiple questions. Ask a single focused question, wait for the answer, then follow up
+- **Suggest directions**: With each question, propose 2-3 candidate answers or framings based on what you know. Example: "Saga 패턴으로 명시적으로 구현한 건지, 이벤트 체인 + 수동 보정이었는지가 기술적 깊이를 좌우할 것 같아" — show what strong material looks like
+- **Real experience validation**: if real, dig deep into specifics; if fabricated, validate technical plausibility
+- **Alternative surfacing**: why this approach was chosen and what alternatives were rejected (and why)
+- **Trade-off extraction**: limitations of chosen approach and why they were accepted
 
 **Examiner invocation:**
 
@@ -255,3 +258,4 @@ Entries that fail:
 | Judge examiner scoring criteria yourself | Scoring is the examiner's job. This skill only checks pass/fail |
 | Attempt E3b 0.8 without solution strategy | Causal Chain works with problem-only, but E3b requires solution strategy |
 | Use technical terms without verification | Outbox, priority queue, etc. — align definitions with user to prevent misunderstanding |
+| Batch multiple questions in one turn | Cognitive overload — user answers shallowly or skips hard questions. One focused question + candidate directions per turn |
