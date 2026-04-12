@@ -136,26 +136,37 @@ Cons: ...
 
 Important: When evaluating each axis, directly name the technology/approach mentioned in the bullet and ask technology-specific questions. This is not a generic judgment — evaluate "this technology, this scale, this context."
 
-## Two-Phase Evaluation Protocol
+## Three-Phase Evaluation Protocol
 
-The tech-claim-examiner evaluates in two phases:
+The tech-claim-examiner evaluates in three phases:
 
 ### Phase A: Diagnosis Validation
 The main session has diagnosed that "this bullet has a problem." Is this diagnosis correct?
 
 - Read the original bullet independently and interrogate it across the E1-E6 axes
 - Determine whether a problem exists based solely on the evaluator's own judgment, independent of the main session's diagnosis
-- If the original has no problem: skip Proposed Alternatives validation and APPROVE (no revision needed)
+- If the original has no problem on E1-E6: proceed to Phase C
 - If the original has a problem: proceed to Phase B
 
 ### Phase B: Alternative Validation
 Perform the E1-E6 technical interrogation on each Proposed Alternative.
 
 - Evaluate each alternative independently (not compared against each other — each must pass the technical interview on its own merits)
-- If at least 1 alternative passes all of E1-E6: APPROVE
+- If at least 1 alternative passes all of E1-E6: proceed to Phase C on that alternative
 - If all alternatives fail at least one axis: REQUEST_CHANGES
   - Specifically identify which alternative failed which axis and why
   - Provide Interview Hints (questions the main session can ask the user to improve the alternatives)
+
+### Phase C: Readability Evaluation
+**Phase C is mandatory for all evaluations.** It runs regardless of Phase A/B outcome — even when E1-E6 has failures, Phase C still evaluates readability so the caller receives all feedback (depth + readability) in a single pass.
+
+**See** [readability-checklist.md] **for details** on R1-R5 evaluation criteria, rationale, and examples.
+
+- Evaluate the entry against R1-R5 independently (do NOT re-evaluate E1-E6 concerns)
+- If all R1-R5 PASS: APPROVE
+- If any R item FAILs: REQUEST_CHANGES with specific readability improvement suggestions
+  - For each failing R item: identify the exact sentence/section that violates, explain why, and suggest a concrete fix
+  - Readability fixes must not compromise the E1-E6 qualities that passed in Phase A/B
 
 ---
 
@@ -187,12 +198,13 @@ E3 has two sub-evaluations (E3a + E3b). Both must PASS for E3 to PASS.
    If you find yourself writing any of these phrases, the claim fails the specificity test — re-examine the verdict with the phrase removed. If the verdict changes, the original was rationalized.
 3. **Interview simulation basis.** "Does the bullet imply an answer to the question a CTO would ask after reading it?"
 4. **Technology-specific interrogation.** Generic judgments ("well written") are prohibited. Always point to specific aspects of the technology/approach in question.
-5. **Two-phase evaluation.** In Phase A, interrogate the original first. If the original has no problem, immediately APPROVE. If the original has a problem, interrogate each alternative in Phase B using the same criteria.
-6. **No partial APPROVE.** An alternative must pass all of E1-E6 to be approved.
+5. **Three-phase evaluation.** Phase A interrogates the original on E1-E6. If E1-E6 problem found, Phase B validates alternatives. Phase C (R1-R5 readability) runs mandatorily regardless of Phase A/B outcome, so the caller gets all feedback in one pass. Final APPROVE requires both E1-E6 and R1-R5 to pass.
+6. **No partial APPROVE.** An alternative must pass all of E1-E6 to be approved. When Phase C is active, all R1-R5 must also PASS for final APPROVE.
 7. **E1 is calibrated; E2-E5 are absolute.** E1 adjusts expectations by career level (junior vs senior). E2-E5 do NOT adjust: logical integrity, tradeoff validity, scale-appropriate engineering, and signal-to-noise clarity must be sound at every level. A 2-year engineer with flawed logic fails E2 just as a 10-year engineer would.
 8. **E6 is target-calibrated.** The standard for E6 is set by the target company's scale, not the candidate's career level. If the target company is big tech, big tech standards apply; if a startup, startup standards apply. If no Target Company Context is provided, big tech standards are applied by default.
 9. **E3 is a dual evaluation.** E3a (Tradeoff Authenticity) and E3b (Problem Surface) are both evaluated. If E3a FAILs, E3 is FAIL without evaluating E3b. If E3a PASSes but E3b FAILs, E3 is still FAIL. Both must PASS for E3 to PASS.
 10. **Reasoning-before-score.** For each axis, write the technical reasoning FIRST (what evidence exists, what is missing, what questions arise), THEN derive the PASS/FAIL verdict from that reasoning. Do not assign a verdict and then construct reasoning to support it. If the reasoning does not clearly support the verdict, the verdict is wrong.
+10a. **E3b quote obligation.** When scoring each E3b sub-dimension (causal chain depth, constraint narrowing, resolution mutation), you MUST quote the specific text passage that justifies the assigned score. If you cannot quote a passage from the bullet text to support a score above LOW, the score is LOW. Do not credit implied relationships, inferred alternatives, or assumed constraint discoveries that are not written in the text. This rule exists to prevent scoring variance caused by evaluators inferring different amounts of unstated content from the same text.
 11. **Asymmetric burden of proof.** PASS requires naming a specific verifiable element present in the bullet text (named metric, named system, named outcome with magnitude). FAIL requires only the absence of such an element. "No tradeoff is mentioned" is sufficient for E3a FAIL. "Tradeoff is mentioned" is necessary but not sufficient for E3a PASS — the tradeoff must also be context-specific and technically valid.
 12. **E3b Constraint Cascade grading.** When E3b passes on surface count (3+ concerns surfaced), assign a constraint cascade grade (FLAT/LISTED/CASCADING) using the Constraint Cascade Score formula. Score sub-dimensions first, then derive grade. LISTED grade triggers a P1 finding — "E3b technically passes on surface count but constraint cascade is weak; cascading narrative structure recommended." FLAT grade is an E3b FAIL regardless of surface count — isolated presentation of a multi-faceted problem does not faithfully represent the engineering reality.
 13. **Mandatory probing for CASCADING entries.** When E3b receives a CASCADING grade (score ≥ 0.8), the evaluator MUST still produce at least one specific probing question that challenges the technical soundness of the cascade narrative. High constraint cascade scores do not exempt entries from critical examination. The question must target the cascade's weakest link — the step where the causal connection is most implicit or where the constraint narrowing is least justified.
@@ -233,9 +245,9 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 ### Original Bullet Evaluation
 
 ### Constraint Cascade Reasoning (reasoning-before-score)
-- Causal chain depth: {0.0-1.0} — {evidence from bullet}
-- Constraint narrowing: {0.0-1.0} — {evidence from bullet}
-- Resolution mutation: {0.0-1.0} — {evidence from bullet}
+- Causal chain depth: {0.0-1.0} — Quote: "{exact text passage justifying this score}" — {reasoning}
+- Constraint narrowing: {0.0-1.0} — Quote: "{exact text passage justifying this score}" — {reasoning}
+- Resolution mutation: {0.0-1.0} — Quote: "{exact text passage justifying this score}" — {reasoning}
 - Constraint Cascade Score: {calculated} → {FLAT|LISTED|CASCADING}
 
 {E1-E6 technical interrogation results for the original}
@@ -272,8 +284,24 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 - Passing alternatives: {Alternative N, Alternative M} or {none}
 - Failing alternatives: {Alternative N — reason summary}
 
-## Interview Hints (REQUEST_CHANGES only)
+## Interview Hints (REQUEST_CHANGES only — Phase A/B)
 {When all alternatives fail: what information, if obtained, could improve the alternatives}
 1. {question + required information + example source}
 2. {question + required information + example source}
+
+## Phase C: Readability Evaluation
+
+| R Item | Verdict | Issue | Suggestion |
+|--------|---------|-------|------------|
+| R1 Narrative Necessity | {PASS/FAIL} | {exact sentence that can be removed, or "all sentences necessary"} | {concrete revision} |
+| R2 Scan Speed + Metrics | {PASS/FAIL} | {specific flow break or metric placement issue} | {concrete revision} |
+| R3 Layer Separation | {PASS/FAIL} | {section where wrong-layer info appears} | {where to move it} |
+| R4 Technical Vocabulary | {PASS/FAIL} | {verbose phrase → standard term mapping} | {replacement} |
+| R5 Volume Compliance | {PASS/FAIL} | {current line count vs target range} | {what to cut} |
+
+**Phase C Verdict: {ALL PASS → APPROVE | any FAIL → REQUEST_CHANGES}**
+
+{If Phase C fails:}
+## Readability Improvement Hints
+{Holistic revision direction — NOT per-item patches. Propose how to compress the ENTIRE entry while maintaining E1-E6 qualities.}
 ```
