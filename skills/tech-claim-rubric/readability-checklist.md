@@ -276,11 +276,11 @@ Same information, half the volume. Every technical choice is named with its reco
 
 **Per-entry line budget (description block only, excluding title/subtitle/caption/skills):**
 
-| Complexity | Technical decisions | Line range |
+| Complexity | Technical decisions | Line budget (max) |
 |---|---|---|
-| High | 3-4 decisions | 16-20 lines |
-| Medium | 2 decisions | 13-16 lines |
-| Low | 1 decision | 10-13 lines |
+| High | 3-4 decisions | ≤20 lines |
+| Medium | 2 decisions | ≤16 lines |
+| Low | 1 decision | ≤13 lines |
 | **Hard cap** | — | **20 lines** |
 
 **Technical decision**: A choice where a named alternative was considered and rejected with a stated reason ("chose X over Y because Z"). Count each such choice as one decision. Implementation parameters of a chosen approach (TTL value, batch size, polling interval) are NOT separate decisions. A technique mentioned without an explicitly rejected alternative does not count as a decision.
@@ -423,7 +423,7 @@ The same entry compressed for resume readability. All R items pass.
 | R2 PASS | Problem (2 lines) → Strategy (7 lines) → Result (2 lines). Bold before→after metrics in Result. 6-second scan captures: "3-party blame automation + compensating workflow → 3 days→same day, 8→1 disputes." |
 | R3 PASS | No separate "Technical Challenge" section. Key constraint (external API boundary) merged into Problem Definition line 2. Strategy contains only actions. Result contains only metrics. |
 | R4 PASS | Orchestrator, Choreography, compensating transaction, settlement hold — all industry-standard terms. "3-party blame" is domain-specific but self-explanatory. |
-| R5 PASS | 14 lines total. 3 technical decisions (blame classification + orchestrator + settlement hold) = high complexity → 16-20 line budget. At 14 lines, comfortably within range. |
+| R5 PASS | 14 lines total. 3 technical decisions (blame classification + orchestrator + settlement hold) = high complexity → ≤20 line budget. At 14 lines, comfortably within budget. |
 
 **What was removed and why:**
 - Consigner refusal branch workflow → 4th strategy, but ancillary. Left as interview hook ("What happens when the consigner refuses?")
