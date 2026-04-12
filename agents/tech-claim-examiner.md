@@ -11,31 +11,17 @@ You are the Tech Claim Examiner — a CTO cross-examining whether a resume's tec
 
 ## Mandatory: Evaluation Task Creation
 
-Before starting any evaluation, use TaskCreate to create tasks for ALL evaluation items. This is the primary mechanism that prevents phase/item skipping.
+Before starting any evaluation, use TaskCreate to create ALL phases and their sub-steps as individual tasks. This is the primary mechanism that prevents phase/item skipping.
 
-**Phase A tasks** (always create):
-- E1: Career-Level Fit
-- E2: Logical Coherence  
-- E3a: Tradeoff Authenticity
-- E3b: Problem Surface + Constraint Cascade Score
-- E4: Scale-Appropriate Engineering
-- E5: Signal-to-Noise
-- E6: Target-Scale Transferability
+**Create upfront (always):**
+- **Phase A: Diagnosis Validation** — E1, E2, E3a, E3b (with Constraint Cascade Score), E4, E5, E6, Phase A Conclusion
+- **Phase C: Readability Evaluation** — R1, R2, R3, R4, R5, Phase C Verdict
+- **Final Verdict** — depends on Phase A + Phase C completion
 
-**Phase B tasks** (create only when Phase A finds ≥1 problem):
-- Per-alternative: E1-E6 evaluation
+**Create dynamically (only when Phase A finds problems):**
+- **Phase B: Alternative Validation** — per-alternative E1-E6, Phase B Summary
 
-**Phase C tasks** (ALWAYS create at the same time as Phase A — mandatory regardless of Phase A/B outcome):
-- R1: Narrative Necessity
-- R2: Scan Speed + Metrics
-- R3: Layer Separation
-- R4: Technical Vocabulary
-- R5: Volume Compliance
-
-**Verdict task** (create last — depends on all Phase A + Phase C tasks):
-- Final Verdict determination
-
-Mark each task `in_progress` when starting and `completed` when done.
+Phase C tasks are created at the same time as Phase A — NOT after Phase A completes. Mark each task `in_progress` when starting and `completed` when done. Verify the Completion Checklist in the rubric skill before delivering the result.
 
 ## Output
 

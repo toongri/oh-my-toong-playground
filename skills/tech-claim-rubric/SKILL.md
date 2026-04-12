@@ -160,27 +160,45 @@ Important: When evaluating each axis, directly name the technology/approach ment
 
 ### Mandatory: Evaluation Task Creation
 
-Before starting Phase A, you MUST use TaskCreate to create tasks for ALL evaluation items across all phases. This prevents evaluation item skipping — the primary failure mode observed in production.
+Before starting Phase A, you MUST use TaskCreate to create ALL phases and their sub-steps as individual tasks. This is the primary mechanism that prevents phase/item skipping — the most common failure mode observed in production.
 
-**Phase A tasks** (always create):
-- E1: Career-Level Fit
-- E2: Logical Coherence
-- E3a: Tradeoff Authenticity
-- E3b: Problem Surface + Constraint Cascade Score
-- E4: Scale-Appropriate Engineering
-- E5: Signal-to-Noise
-- E6: Target-Scale Transferability
+**Create these tasks upfront (always):**
 
-**Phase C tasks** (ALWAYS create at the same time as Phase A — Phase C is mandatory on ALL paths):
-- R1: Narrative Necessity
-- R2: Scan Speed + Metrics
-- R3: Layer Separation
-- R4: Technical Vocabulary
-- R5: Volume Compliance
+| Task | Sub-steps |
+|------|-----------|
+| Phase A: Diagnosis Validation | E1: Career-Level Fit |
+| | E2: Logical Coherence |
+| | E3a: Tradeoff Authenticity |
+| | E3b: Problem Surface + Constraint Cascade Score |
+| | E4: Scale-Appropriate Engineering |
+| | E5: Signal-to-Noise |
+| | E6: Target-Scale Transferability |
+| | Phase A Conclusion |
+| Phase C: Readability Evaluation | R1: Narrative Necessity |
+| | R2: Scan Speed + Metrics |
+| | R3: Layer Separation |
+| | R4: Technical Vocabulary |
+| | R5: Volume Compliance |
+| | Phase C Verdict |
+| Final Verdict | (depends on Phase A + Phase C completion) |
 
-**Verdict task**: Final Verdict (depends on all Phase A + Phase C tasks)
+**Create dynamically (only when Phase A finds ≥1 problem):**
 
-Mark each task `in_progress` when starting and `completed` when done. Phase B tasks are created dynamically only when Phase A finds problems.
+| Task | Sub-steps |
+|------|-----------|
+| Phase B: Alternative Validation | Per-alternative E1-E6 evaluation |
+| | Phase B Summary + Interview Hints |
+
+Phase C tasks are created at the same time as Phase A — NOT after Phase A completes. Phase C is mandatory on ALL paths.
+
+### Tracking Rules
+
+0. **Execute ALL phases sequentially without skipping.** Phase A → (Phase B if needed) → Phase C → Final Verdict. No exceptions.
+1. Mark each task `in_progress` when starting and `completed` when done.
+2. For E3b specifically: complete Constraint Cascade Reasoning (with mandatory quotes per Rule 10a) BEFORE assigning the score. If CASCADING (≥0.8), produce the probing question (Rule 13) before marking E3b completed.
+3. Before starting Phase C, verify Phase A was completed. If Phase A was interrupted, complete it first.
+4. Do NOT generate Final Verdict until Phase C is completed and Phase C Verdict is recorded.
+5. When the evaluation is complete, verify the Completion Checklist at the bottom of this document before delivering the result.
 
 ## Three-Phase Evaluation Protocol
 
@@ -399,4 +417,34 @@ APPROVE requires BOTH:
 - R1-R5: all PASS (Phase C)
 
 If either condition fails → REQUEST_CHANGES with specific axes/items listed.
+```
+
+---
+
+## Completion Checklist
+
+Before delivering the evaluation result, verify every item was completed. Every checkbox must be checked — any unchecked item means the evaluation is incomplete.
+
+```
+[Evaluation Completion Checklist — INTERNAL]
+- [ ] Phase A: E1 Career-Level Fit (reasoning-before-score)
+- [ ] Phase A: E2 Logical Coherence (reasoning-before-score)
+- [ ] Phase A: E3a Tradeoff Authenticity (reasoning-before-score)
+- [ ] Phase A: E3b Problem Surface — Causal chain depth (with quote, Rule 10a)
+- [ ] Phase A: E3b Problem Surface — Constraint narrowing (with quote, Rule 10a)
+- [ ] Phase A: E3b Problem Surface — Resolution mutation (with quote, Rule 10a)
+- [ ] Phase A: E3b Constraint Cascade Score calculated → grade assigned
+- [ ] Phase A: E3b CASCADING probing question (Rule 13, skip if not CASCADING)
+- [ ] Phase A: E4 Scale-Appropriate Engineering (reasoning-before-score)
+- [ ] Phase A: E5 Signal-to-Noise (reasoning-before-score)
+- [ ] Phase A: E6 Target-Scale Transferability (reasoning-before-score)
+- [ ] Phase A: Conclusion (problem found / no problem)
+- [ ] Phase B: Alternative Validation (DONE / N/A — only when Phase A found problems)
+- [ ] Phase C: R1 Narrative Necessity — per readability-checklist.md definition
+- [ ] Phase C: R2 Scan Speed + Metrics — per readability-checklist.md definition
+- [ ] Phase C: R3 Layer Separation — per readability-checklist.md definition
+- [ ] Phase C: R4 Technical Vocabulary — per readability-checklist.md definition
+- [ ] Phase C: R5 Volume Compliance — per readability-checklist.md definition
+- [ ] Phase C: Phase C Verdict recorded
+- [ ] Final Verdict: based on BOTH Phase A (E1-E6) AND Phase C (R1-R5) results
 ```
