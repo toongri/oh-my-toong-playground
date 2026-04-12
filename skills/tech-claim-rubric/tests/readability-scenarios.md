@@ -165,3 +165,41 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R5 FAIL: ~33줄로 hard cap 20줄 초과
 - R3 FAIL: "기술 과제" 별도 섹션 존재 (문제 정의에 병합 필요)
 - R1 FAIL: 문제 정의 5줄 + 기술 과제 4줄 = 9줄이 해결 시작 전에 소비됨. 복수의 문장이 병합 또는 제거 가능
+
+---
+
+## Scenario 7: R5 Fail — 볼륨만 초과 (hard cap 경계값)
+
+**Input:**
+```
+**문제 정의**
+- 실시간 주문 이벤트를 Kafka로 수신하여 PG·재고·CRM 세 외부 시스템에 동기화하는 파이프라인에서 일 평균 이벤트 150만 건 중 피크 시 처리 지연 p99 8초, 재고 불일치 주 평균 340건 발생
+- 외부 시스템 응답 지연(PG 평균 1.2초, CRM 3초)이 단일 Consumer를 블로킹하고, 외부 API 부분 실패 시 보상 경로가 없어 불일치 상태로 잔류
+- 세 시스템의 처리량 한계가 달라(PG 고속·CRM 저속) 단일 처리 흐름에서 가장 느린 시스템이 전체 파이프라인 처리 속도를 결정
+
+**해결 전략**
+- 시스템별 독립 토픽(order-pg, order-inventory, order-crm) 분리 + Consumer 그룹 격리
+  - PG·재고·CRM 응답 지연 차이가 크므로 단일 토픽에서는 느린 시스템이 빠른 시스템 처리를 블로킹
+  - 단일 토픽 멀티 컨슈머는 파티션 수 조정만으로 시스템 간 지연 격리 불가해 기각
+  - 토픽 분리 후 시스템별 Consumer 수를 독립적으로 조정 가능해 운영 유연성 확보
+- Outbox Pattern으로 외부 API 호출 실패 시 보상 이벤트를 DB 트랜잭션 내에 원자적으로 기록
+  - Choreography(이벤트 체인)도 검토했지만 3개 시스템 간 인과 추적이 복잡하고 부분 실패 롤백 경로 보장 불가해 기각
+  - Outbox 테이블 처리 상태(PENDING·IN_FLIGHT·DONE·FAILED) 컬럼으로 재시도 멱등성 보장
+  - 재시도 상한 5회 초과 건 알람 채널 에스컬레이션, 운영자 수동 확인 플로우 연동
+- Consumer별 goroutine pool(PG×50, 재고×100, CRM×20)로 시스템 처리량 한계에 맞는 동시성 제어
+  - 단일 global pool은 CRM 처리량 한계를 PG·재고가 점유하는 noisy neighbor 문제 발생해 기각
+  - Consumer lag > 5,000 시 Auto Scaling 트리거, Graceful Shutdown으로 진행 중 메시지 커밋 후 종료
+  - 파티션 재할당 시 Rebalance Listener로 진행 중 오프셋 커밋 완료 후 재할당 허용
+
+**결과**
+- 피크 시 처리 지연 p99 **8초 → 0.9초**, 재고 불일치 **주 340건 → 3건**
+- Outbox + 재시도로 외부 API 일시 장애 시 이벤트 유실 **0건**
+- Consumer 독립 토픽 분리 후 CRM 지연이 PG·재고 처리에 영향 없음
+```
+
+**Expected:**
+- R1 PASS: 모든 문장이 서사에 필수. 각 전략 bullet은 결정 + 기각 사유로 구성되어 제거 시 선택 근거가 사라짐. 운영 세부(스케줄러, Auto Scaling)도 재시도 상한·확장 조건이 명시되어 있어 제거 시 구멍 발생
+- R2 PASS: 문제(지연·불일치 수치) → 전략(격리·보상·병렬화) → 결과(p99·불일치 건수) 순서 명확. 결과에 정량 메트릭 bold 처리
+- R3 PASS: 문제 정의에 원인 포함, 해결 전략에 기각 사유 포함(문제 배경 아님), 결과 섹션에 수치만 존재. 섹션 역할 분리 깨끗
+- R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown — 표준 기술 용어 적절 활용
+- R5 FAIL: 21줄, hard cap 20줄 초과. 3 technical decisions → High complexity budget (16-20줄)이지만 1줄 초과.
