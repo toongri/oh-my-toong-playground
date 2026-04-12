@@ -116,8 +116,10 @@ digraph loop2 {
     show -> exam;
     exam -> check;
     check -> save [label="APPROVE"];
-    check -> e_fail [label="E1-E6 fail"];
-    check -> r_fail [label="R1-R5 fail"];
+    check -> classify [label="REQUEST_CHANGES"];
+    classify [shape=box, label="Step 1: Classify\n(E vs R)", style=filled, fillcolor=lightyellow];
+    classify -> r_fail [label="R1-R5 fail\n(apply immediately)"];
+    classify -> e_fail [label="E1-E6 fail\n(Source Extraction)"];
     e_fail -> revise;
     r_fail -> revise;
     revise -> show;

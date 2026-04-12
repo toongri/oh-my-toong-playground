@@ -208,7 +208,7 @@ When generating user-facing output (HTML report), translate all evaluation crite
 
 ### Mandatory: Phase Task Creation
 
-Before starting Phase 1, you MUST use TaskCreate to create all 10 phases as individual tasks. Mark each task as `in_progress` when starting and `completed` when done. This prevents phase skipping.
+Before starting Phase 1, you MUST create all 10 phases as individual tasks. Mark each task as `in_progress` when starting and `completed` when done. This prevents phase skipping.
 
 ## Phase 1: Identity Confirmation
 
