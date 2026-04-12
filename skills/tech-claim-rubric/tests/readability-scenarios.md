@@ -202,7 +202,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제(지연·불일치 수치) → 전략(격리·보상·병렬화) → 결과(p99·불일치 건수) 순서 명확. 결과에 정량 메트릭 bold 처리
 - R3 PASS: 문제 정의에 원인 포함, 해결 전략에 기각 사유 포함(문제 배경 아님), 결과 섹션에 수치만 존재. 섹션 역할 분리 깨끗
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown — 표준 기술 용어 적절 활용
-- R5 FAIL: 21줄, hard cap 20줄 초과. 3 technical decisions → High complexity budget (16-20줄)이지만 1줄 초과.
+- R5 FAIL: 21줄, hard cap 20줄 초과. 3 technical decisions → High complexity budget (≤20줄)이지만 1줄 초과.
 
 ---
 
@@ -233,7 +233,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
 - R3 PASS: 섹션 역할 분리 깨끗. 문제 정의에 원인, 전략에 선택 근거, 결과에 수치만 존재.
 - R4 PASS: goroutine pool, noisy neighbor, Redis Pub/Sub, Kafka, Prometheus — 표준 용어 적절 활용.
-- R5 PASS: technical decision 2개 (goroutine pool — global pool 기각, Redis Pub/Sub — Kafka 기각). Medium complexity → 13-16줄 budget. 실제 blank 제외 14줄 (범위 내). 세 번째 기술 적용(Prometheus 메트릭 수집)은 대안 기각이 명시되지 않아 decision으로 세지 않음.
+- R5 PASS: technical decision 2개 (goroutine pool — global pool 기각, Redis Pub/Sub — Kafka 기각). Medium complexity → ≤16줄 budget. 실제 blank 제외 14줄 (범위 내). 세 번째 기술 적용(Prometheus 메트릭 수집)은 대안 기각이 명시되지 않아 decision으로 세지 않음.
 
 ---
 
@@ -270,7 +270,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
 - R3 PASS: 섹션 역할 분리 깨끗. 기술 과제 별도 섹션 없음.
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, at-least-once, 백프레셔, DLQ — 표준 기술 용어 적절 활용.
-- R5 PASS: technical decision 3개 (토픽 분리 — 단일 토픽 기각, Outbox — Choreography 기각, goroutine pool — global pool 기각). High complexity → 16-20줄 budget. 실제 줄 수 22줄이지만 규칙("Blank lines between sections do NOT count") 적용 시 blank 2개 제외 → 20줄. hard cap 이내.
+- R5 PASS: technical decision 3개 (토픽 분리 — 단일 토픽 기각, Outbox — Choreography 기각, goroutine pool — global pool 기각). High complexity → ≤20줄 budget. 실제 줄 수 22줄이지만 규칙("Blank lines between sections do NOT count") 적용 시 blank 2개 제외 → 20줄. hard cap 이내.
 
 ---
 
