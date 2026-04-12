@@ -158,6 +158,30 @@ Cons: ...
 
 Important: When evaluating each axis, directly name the technology/approach mentioned in the bullet and ask technology-specific questions. This is not a generic judgment — evaluate "this technology, this scale, this context."
 
+### Mandatory: Evaluation Task Creation
+
+Before starting Phase A, you MUST use TaskCreate to create tasks for ALL evaluation items across all phases. This prevents evaluation item skipping — the primary failure mode observed in production.
+
+**Phase A tasks** (always create):
+- E1: Career-Level Fit
+- E2: Logical Coherence
+- E3a: Tradeoff Authenticity
+- E3b: Problem Surface + Constraint Cascade Score
+- E4: Scale-Appropriate Engineering
+- E5: Signal-to-Noise
+- E6: Target-Scale Transferability
+
+**Phase C tasks** (ALWAYS create at the same time as Phase A — Phase C is mandatory on ALL paths):
+- R1: Narrative Necessity
+- R2: Scan Speed + Metrics
+- R3: Layer Separation
+- R4: Technical Vocabulary
+- R5: Volume Compliance
+
+**Verdict task**: Final Verdict (depends on all Phase A + Phase C tasks)
+
+Mark each task `in_progress` when starting and `completed` when done. Phase B tasks are created dynamically only when Phase A finds problems.
+
 ## Three-Phase Evaluation Protocol
 
 The tech-claim-examiner evaluates in three phases:
@@ -219,6 +243,8 @@ Perform the E1-E6 technical interrogation on each Proposed Alternative.
   - Specifically identify which alternative failed which axis and why
   - Provide Interview Hints (questions the main session can ask the user to improve the alternatives)
   - Still proceed to Phase C on the original entry for baseline readability feedback
+
+**After Phase B, proceed to Phase C. Do NOT generate Verdict yet.**
 
 ### Phase C: Readability Evaluation
 **Phase C is mandatory for all evaluations.** It runs regardless of Phase A/B outcome — even when E1-E6 has failures, Phase C still evaluates readability so the caller receives all feedback (depth + readability) in a single pass.
@@ -297,8 +323,6 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 ```
 # Technical Evaluation Result
 
-## Verdict: {APPROVE | REQUEST_CHANGES}
-
 ## Bullet: "{original text}"
 ## Candidate: {years} years / {position}
 ## Technology/Approach: {identified core technology/approach}
@@ -317,7 +341,7 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 {Has problem / No problem verdict + rationale}
 
 {If no problem:}
-**Conclusion: The original passes the technical interview bar. No revision needed. APPROVE.**
+**Conclusion: The original passes E1-E6. Proceed to Phase C for readability evaluation.**
 
 {If problem found:}
 **Conclusion: The original has the following problems. Proceed to Phase B to validate alternatives.**
@@ -362,9 +386,17 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 | R4 Technical Vocabulary | {PASS/FAIL} | {verbose phrase → standard term mapping} | {replacement} |
 | R5 Volume Compliance | {PASS/FAIL} | {current line count vs target range} | {what to cut} |
 
-**Phase C Verdict: {ALL PASS → APPROVE | any FAIL → REQUEST_CHANGES}**
+**Phase C Verdict: {ALL PASS | any FAIL → list failing R items}**
 
 {If Phase C fails:}
 ## Readability Improvement Hints
 {Holistic revision direction — NOT per-item patches. Propose how to compress the ENTIRE entry while maintaining E1-E6 qualities.}
+
+## Final Verdict: {APPROVE | REQUEST_CHANGES}
+
+APPROVE requires BOTH:
+- E1-E6: all PASS (Phase A) or at least one alternative all-PASS (Phase B)
+- R1-R5: all PASS (Phase C)
+
+If either condition fails → REQUEST_CHANGES with specific axes/items listed.
 ```

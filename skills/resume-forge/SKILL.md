@@ -104,18 +104,23 @@ digraph loop2 {
     pick [shape=box, label="Pick a draft"];
     interview [shape=box, label="Interview: solution strategy\n(AskUserQuestion)", style=filled, fillcolor=lightyellow];
     show [shape=box, label="Show full entry\n(problem+challenge+solution+result)"];
-    exam [shape=box, label="Submit to\ntech-claim-examiner", style=filled, fillcolor=orange];
-    check [shape=diamond, label="E3b ≥ 0.8\nCASCADING?"];
+    exam [shape=box, label="Submit to\ntech-claim-examiner\n(full Input Format)", style=filled, fillcolor=orange];
+    check [shape=diamond, label="Final Verdict\nAPPROVE?"];
     save [shape=box, label="Save to\nproblem-solving/", style=filled, fillcolor=lightgreen];
-    feedback [shape=box, label="Show examiner feedback\n+ propose alternatives\n→ re-discuss", style=filled, fillcolor=lightyellow];
+    e_fail [shape=box, label="E1-E6 failures:\nshow per-axis feedback\n→ interview for depth", style=filled, fillcolor=lightyellow];
+    r_fail [shape=box, label="R1-R5 failures:\nshow per-item feedback\n→ propose structure fixes", style=filled, fillcolor=lightyellow];
+    revise [shape=box, label="Regenerate entry\n+ show to user"];
 
     pick -> interview;
     interview -> show;
     show -> exam;
     exam -> check;
-    check -> save [label="yes"];
-    check -> feedback [label="no"];
-    feedback -> show;
+    check -> save [label="APPROVE"];
+    check -> e_fail [label="E1-E6 fail"];
+    check -> r_fail [label="R1-R5 fail"];
+    e_fail -> revise;
+    r_fail -> revise;
+    revise -> show;
 }
 ```
 
@@ -128,23 +133,64 @@ digraph loop2 {
 
 **Examiner invocation:**
 
+Use the rubric's full Input Format. Missing fields cause loose evaluation.
+
 ```
-Evaluate this complete resume entry.
+# Technical Evaluation Request
 
 ## Candidate Profile
-{user role, experience level, domain}
+- Experience: {years} years
+- Position: {position}
+- Target Company/Role: {company} / {role} (if unknown: "No specific target — evaluate against big tech standards")
 
 ## Bullet Under Review
-{full entry: problem definition + technical challenges + solution strategy + results}
+- Section: Problem-Solving > {scenario title}
+- Original: "{MUST be the full original text from the draft file — never summarize}"
 
 ## Technical Context
-{tech stack, system scale, domain background}
+- Technologies/approaches mentioned in this bullet: {identified directly from bullet text}
+- JD-related keywords: {if available from Phase 0 sources, else "N/A"}
+- Loop 1 findings: {Causal Chain Depth score and any notes from Loop 1}
+
+## Target Company Context
+- If known: {company, scale indicators, team size, core values, key challenges}
+- If unknown: "No specific target — evaluate against big tech standards"
+
+## Proposed Alternatives (if re-dispatching after feedback)
+### Alternative 1: {summary}
+{revised text}
+### Alternative 2: {summary}
+{revised text}
+(On first dispatch: "None — Phase A evaluation of the original entry only.")
 ```
 
-Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`. Check **Constraint Cascade Score (E3b)** in response. ≥ 0.8 = pass. ("CASCADING" is the examiner's grade label for ≥ 0.8 — no separate check needed.)
+<critical>
+MUST send the full original text from the draft file. NEVER summarize, paraphrase, or shorten the entry. Less text → LLM fills gaps with charity → inflated scores. Read the draft file and copy the full content verbatim.
+</critical>
 
-On pass: remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"` with score.
-On fail: state stays `"pending"`. Show examiner feedback + propose alternatives → re-discuss.
+Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
+
+**Pass criteria — ALL must be met:**
+- E1-E6: all PASS
+- E3b Constraint Cascade Score ≥ 0.8 (CASCADING)
+- R1-R5: all PASS
+- Final Verdict: APPROVE
+
+**On APPROVE:** Remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"` with examiner scores.
+
+**On REQUEST_CHANGES:**
+
+1. Show examiner's per-axis/per-item feedback to user, organized by failure category:
+   - **E1-E6 failures**: explain which axis failed and why → interview user for missing technical depth/specifics
+   - **R1-R5 failures**: explain which readability item failed → propose structural/formatting fixes directly
+2. For each failure, propose 2-3 revision directions
+3. Interview the user: one question per turn, suggest candidate directions (same protocol as solution interview)
+4. Regenerate the entry incorporating interview results + readability fixes
+5. Show full revised entry to user for confirmation
+6. Re-dispatch to examiner with the revised entry as Proposed Alternative
+7. Repeat until APPROVE or user opt-out ("다음")
+
+State stays `"pending"` until APPROVE.
 
 ---
 
