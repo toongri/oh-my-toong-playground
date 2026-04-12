@@ -92,22 +92,63 @@ This check is informational — it does not change the E2 PASS/FAIL verdict. It 
 
 Does this bullet faithfully represent the engineering reality? Two sub-evaluations:
 
-#### E3a. Tradeoff Authenticity
+#### E3a. Tradeoff Authenticity (Proportional Depth)
 
-Is the tradeoff for the technology choice mentioned in this bullet specific to this problem context?
+**Absolute standard — no career-level calibration.** A tradeoff that doesn't hold logically fails at any experience level.
+
+Any technology choice can qualify as a technical decision depending on context. Standard practices are not automatically exempt — the depth of justification required scales with narrative weight.
+
+**Proportional Depth Model:**
+
+E3a evaluates tradeoff authenticity at three tiers, based on the decision's role in the narrative:
+
+| Tier | Definition | Required Depth | FAIL Condition |
+|------|-----------|----------------|----------------|
+| **Core decision** | A choice the entry's quantified outcome directly depends on. Removing this decision breaks the narrative. | Full tradeoff analysis: (1) alternative named, (2) context-specific rejection reason, (3) accepted cost/downside | Core decision without any of the 3 elements → **FAIL** |
+| **Supporting decision** | A choice the narrative holds without, but engineering quality degrades. | Brief justification: why-this-over-that in one clause or sentence | Supporting decision with zero justification → **P1** (finding attached to PASS, same pattern as E3b LISTED) |
+| **Incidental mention** | Technology/tool mentioned as environment context, not as a deliberate choice. | None required. But if no justification is needed, evaluate under R1 whether the mention belongs in the entry at all. | — |
+
+**Classification test:** "A decision is core if the entry's quantified outcome depends on it. A decision is supporting if the narrative holds without it but engineering quality degrades. A mention is incidental if removing it changes nothing about the narrative."
+
+**Degenerate path prevention:** If ALL decisions in a bullet are classified as incidental (no core, no supporting), E3a FAILs automatically — this indicates the bullet contains no meaningful technical decisions.
 
 **Evaluation method:**
-1. Identify the technology choice/decision in the bullet
-2. Check whether "why this was chosen and what was given up" is stated explicitly
-3. Verify whether what was given up is real in this context (not textbook)
+1. Read the strategy section and identify all technical choices mentioned
+2. Classify each as core / supporting / incidental using the classification test
+3. For each core decision: verify (1) alternative named, (2) rejection reason is context-specific (not textbook), (3) accepted cost stated
+4. For each supporting decision: verify at minimum a brief why-this-over-that
+5. Incidental mentions: no tradeoff check, but flag under R1 if the mention adds no narrative value
 
-**Example:**
-- "Adopted MSA for scalability" → FAIL: "scalability" is a textbook benefit of MSA. No mention of what specifically needed to scale in this system, or what problem existed in the monolith
-- "Adopted MSA for deployment independence. Accepted increased network overhead between services and distributed transaction complexity. Converted order-payment service to eventual consistency model, allowing up to 2s delay in payment confirmation" → PASS: concrete tradeoffs (network, distributed transactions, 2s eventual consistency delay) are real in this problem context
+**E3a and R1/R5 alignment:** The proportional depth model is designed to coexist with readability constraints. Core decisions need ~3-4 lines of tradeoff depth. Supporting decisions need ~1 clause. Incidental mentions need 0 lines. This prevents the E3a×R5 conflict where demanding tradeoff analysis on every choice would exceed the 20-line cap.
+
+**Example (Core decision — PASS):**
+- "Chose gRPC over REST for internal service mesh — REST's per-request JSON serialization added 15ms p99 overhead at 10K RPS internal calls. Accepted operational complexity of proto schema management and reduced browser debugging capability."
+→ PASS: Alternative named (REST), context-specific rejection (15ms overhead at 10K RPS — tied to this system's internal call volume), accepted cost (proto management + debugging).
+
+**Example (Core decision — FAIL):**
+- "Used DynamoDB for order storage to handle high write throughput."
+→ FAIL: No alternative named, no rejection reasoning, no accepted cost. "High write throughput" is the expected benefit, not a tradeoff. A CTO asks: "Why DynamoDB over PostgreSQL with partitioning? Over Cassandra? What consistency guarantees did you give up?" — the bullet provides no answer.
+
+**Example (Core decision — FAIL, generic rejection):**
+- "Chose PostgreSQL over MySQL because PostgreSQL has more advanced features and better community support."
+→ FAIL: Alternative named (MySQL), but rejection reason is generic — "more advanced features" applies to any PostgreSQL vs MySQL comparison regardless of context. No accepted cost mentioned. Compare with PASS version: "PostgreSQL over MySQL for JSONB native indexing on product attributes (500+ dynamic fields) — accepted higher memory footprint per connection and slower connection establishment under burst traffic."
+
+**Example (Supporting decision — PASS):**
+- "Circuit breaker with Resilience4j (Hystrix rejected — Netflix deprecated, no active maintenance for critical path dependency)"
+→ PASS: Brief why-this-over-that in one clause. The rejection reason (deprecation + no maintenance) is context-specific for a critical path dependency.
+
+**Example (Supporting decision — FAIL → P1):**
+- "Added DynamoDB Streams and CloudWatch alarms to improve system reliability."
+→ P1: Technologies listed without any justification. Why DynamoDB Streams over Change Data Capture alternatives? Why CloudWatch over Grafana/PagerDuty? No brief reasoning provided. This is a P1 finding (revision recommended), not outright FAIL — the narrative may hold without these decisions, but their unjustified presence weakens interview defensibility.
 
 **Technical verification questions:**
-- "What was the actual impact of what you gave up in this tradeoff?"
-- "If you did this again, would you make the same choice?"
+- "For each core decision: can you name the alternative, explain why it was rejected in THIS context, and state what was given up?"
+- "For supporting decisions: is there at least a one-line 'why this over that'?"
+- "Are any incidental mentions taking space without adding narrative value?" (→ defer to R1)
+
+**Interview simulation:**
+"You mentioned using [technology X]. What alternatives did you consider, and why did you choose this one for THIS specific situation?"
+→ Does the bullet imply an answer to this question? If yes for core decisions and partially for supporting decisions → PASS.
 
 #### E3b. Problem Surface
 

@@ -40,13 +40,13 @@ Before assigning a grade, evaluate these 3 sub-dimensions first:
 
 | Sub-dimension | Weight | Question |
 |---------------|--------|----------|
-| Causal chain depth | 0.30 | How many causally linked steps exist? |
-| Constraint narrowing | 0.35 | Does each step narrow the solution space? (Eliminated alternatives visible?) |
-| Resolution mutation | 0.35 | Did the solution change shape because of the cascade? (vs. initial approach executed as-is) |
+| Causal chain depth | 0.25 | How many causally linked steps exist? |
+| Constraint narrowing | 0.45 | Does each step narrow the solution space? (Eliminated alternatives visible?) |
+| Resolution mutation | 0.30 | Did the solution change shape because of the cascade? (vs. initial approach executed as-is) |
 
 `Constraint Cascade Score = Σ(sub-dimensionᵢ × weightᵢ)` where each sub-dimension is scored 0.0-1.0.
 
-Resolution mutation is weighted equal to constraint narrowing because it is the hardest dimension to fabricate — it requires genuine experience of solution evolution under discovered or analyzed constraints, not just narrative structure.
+Constraint narrowing carries the highest weight because it is the strongest proxy for engineering judgment — specific rejection reasons tied to discovered constraints cannot be fabricated without genuine problem experience. Resolution mutation is weighted lower than constraint narrowing but remains significant: it requires genuine experience of solution evolution under discovered or analyzed constraints, not just narrative structure.
 
 **Score Anchor Rubric:**
 
@@ -58,7 +58,11 @@ Each sub-dimension is scored 0.0-1.0. Use these anchors to calibrate scoring —
 |-------|------------|-------------------|
 | LOW | 0.0-0.39 | Single decision or parallel concerns listed independently. No "A caused B" or "A revealed B" relationship visible between any two concerns in the text. |
 | MID | 0.4-0.69 | 2-3 concerns with some causal linking, but connections are implicit — the reader must infer WHY one concern led to another. Phrases like "also", "additionally", "we handled" connect concerns without explaining the causal mechanism. |
-| HIGH | 0.7-1.0 | 3+ concerns with explicit causal chain — each step names what the previous step's outcome forced or revealed. Phrases like "this constraint forced", "which revealed", "because of A, B was no longer viable" appear. Additionally, analytical reasoning chains count as HIGH: when simultaneous constraint analysis produces a sequential reasoning flow (e.g., "constraint X requires A → constraint Y requires B → A and B conflict → novel approach C"), the REASONING steps form the causal chain even if the events did not occur sequentially. The unit is "ordered steps of reasoning or discovery," not "events in chronological order." |
+| HIGH | 0.7-1.0 | 3+ concerns connected by a **forcing-chain**: each step names what the previous step's outcome forced or revealed, and the chain may include problem→solution→new-problem cycles (not just problem→problem sequences). Phrases like "this constraint forced", "which revealed", "because of A, B was no longer viable" appear. **Litmus test:** Step B must be materially forced by step A's outcome — if step B would have been done regardless of step A's outcome, it is routine sequencing, not a forcing chain. Additionally, analytical reasoning chains count as HIGH: when simultaneous constraint analysis produces a sequential reasoning flow (e.g., "constraint X requires A → constraint Y requires B → A and B conflict → novel approach C"), the REASONING steps form the causal chain even if the events did not occur sequentially. The unit is "ordered steps of reasoning or discovery," not "events in chronological order." |
+
+**NOT a cascade:** "Chose Spring Boot → needed DB config → added Hibernate → configured connection pool → tuned pool size." This is a 5-step implementation sequence, not a constraint cascade — each step is a standard configuration choice, not a forced reaction to an emergent constraint.
+
+**Evaluator litmus test:** Remove step N from the text — if step N+1 is still independently justified without it, the two are co-listed concerns, not a cascade.
 
 **Constraint narrowing:**
 
@@ -76,19 +80,25 @@ Resolution mutation measures whether the text reveals an engineer who can compar
 
 **Path-neutral principle:** The mutation can occur through multiple distinct patterns. Sequential discovery (cascade) is one path, but simultaneous constraint analysis (collision) and expectation inversion (including scope expansion) are equally valid paths to HIGH. The anchor evaluates "did the approach fundamentally change shape?" not "did it change shape through a specific narrative structure?"
 
-**Process vs. conclusion:** "X was possible but we chose Y" is a conclusion (LOW). "We evaluated X → discovered [specific constraint] → switched to Y" OR "Constraints A and B were simultaneously incompatible → standard approaches failed both → creative synthesis C" are processes (MID-HIGH) — they show the constraint-driven reshape arc. Only process generates interview follow-up questions; conclusions terminate the conversation.
+**Process vs. conclusion:** See HIGH Observable Signal for the full test. Summary: conclusions are MID; processes are MID-HIGH.
 
 | Level | Score Range | Observable Signal |
 |-------|------------|-------------------|
 | LOW | 0.0-0.39 | The final approach matches what appears to be the initial approach. No visible evidence that the approach changed shape due to discovered or analyzed constraints. The text reads as "we chose X and executed X," or mentions alternative transitions as conclusions without showing the discovery/analysis process that drove them. Well-known patterns applied without visible adaptation. |
 | MID | 0.4-0.69 | The approach expanded or adjusted beyond its initial shape, but the evolution path is partially visible. The text shows some constraint-driven adjustments but cannot trace a full reshape arc — whether through sequential discovery, constraint collision, expectation inversion, or scope expansion. Connections exist but are implicit. Partial visibility by pattern: (A) constraints discovered but reshape not traced — reader sees adjustments without the discovery that triggered them; (B) two constraints mentioned but collision not explicitly recognized — reader infers tension without seeing it stated; (C) conventional approach questioned but non-obvious root cause not named — or deeper structural issue hinted at but connection to surface problem implicit — reader senses something was wrong or suspects more without the underlying cause or structural link being shown. |
-| HIGH | 0.7-1.0 | The final approach is a fundamentally different shape from what a reasonable engineer would initially attempt. The text shows at least ONE of these evolution patterns: (A) **Cascade Discovery** — A discovered constraint made the initial approach unviable, forcing a reshape. The reader traces: initial approach → constraint discovered → approach reimagined. (B) **Constraint Collision** — Two or more constraints were simultaneously incompatible with standard approaches. The solution required creative synthesis that neither constraint alone would have produced. The reader sees: constraint X requires A, constraint Y requires B, A and B conflict → novel approach C. (C) **Expectation Inversion** — The conventional/expected approach was evaluated and found ineffective for a non-obvious reason. The solution addressed the actual root cause rather than the assumed one. The reader's initial assumption is violated. This includes cases where investigation revealed the surface problem was a symptom of a deeper structural issue — the solution addressed the root cause rather than the symptom, and the reader discovers the true problem alongside the engineer. Common signal across all three patterns: the reader can identify (1) what the expected/initial approach was, (2) what made it insufficient — whether discovered sequentially, known simultaneously, or revealed through investigation, and (3) how the approach was fundamentally reshaped. Whether this occurred during analysis, prototyping, or production is irrelevant — the visible reshape arc is what matters. |
+| HIGH | 0.7-1.0 | The final approach is a fundamentally different shape from what a reasonable engineer would initially attempt. The text shows at least ONE of these evolution patterns: (A) **Cascade Discovery** — A discovered constraint made the initial approach unviable, forcing a reshape. The reader traces: initial approach → constraint discovered → approach reimagined. (B) **Constraint Collision** — Two or more constraints were simultaneously incompatible with standard approaches. The solution required creative synthesis that neither constraint alone would have produced. The reader sees: constraint X requires A, constraint Y requires B, A and B conflict → novel approach C. (C) **Expectation Inversion** — The conventional/expected approach was evaluated and found ineffective for a non-obvious reason. The solution addressed the actual root cause rather than the assumed one. The reader's initial assumption is violated. This includes cases where investigation revealed the surface problem was a symptom of a deeper structural issue — the solution addressed the root cause rather than the symptom, and the reader discovers the true problem alongside the engineer. Common signal across all three patterns: the reader can identify (1) what the expected/initial approach was, (2) what made it insufficient — whether discovered sequentially, known simultaneously, or revealed through investigation, and (3) how the approach was fundamentally reshaped. Whether this occurred during analysis, prototyping, or production is irrelevant — the visible reshape arc is what matters. **The text must show the evolution process — whether through sequential discovery, analytical reasoning, or experience-based constraint recognition. Conclusions without visible process ("X was possible but we chose Y") remain at MID regardless of how different the final approach is.** |
+
+**Analytical thinking flow example (valid HIGH mutation):**
+"Initially considered horizontal Consumer scaling (standard approach for throughput). Analyzed attribute-level processing time distribution — category ~30s vs others ~5s — revealed that per-item latency, not throughput, was the bottleneck. This analysis invalidated the scaling approach: adding Consumers reduces queue wait but doesn't reduce per-item processing time. Pivoted to in-Consumer goroutine parallelization, reducing per-item time from 80s to 30s (bounded by slowest attribute)."
+→ The approach was reshaped by pre-implementation analysis, not by runtime failure. The evolution process is visible in the text.
 
 Threshold: score ≥ 0.8 = CASCADING(PASS), 0.5-0.8 = LISTED(P1 — revision recommended), < 0.5 = FLAT(FAIL).
 
 **CRITICAL: Score the sub-dimensions FIRST, then derive the grade. Do not assign a grade and then rationalize scores to match. This is the reasoning-before-score rule.**
 
 ---
+
+> **Note:** Examples below use pre-revision weights (0.30/0.35/0.35). Current weights are (0.25/0.45/0.30). Scores are illustrative of the grading methodology; numeric results will differ under current weights.
 
 **Constraint Cascade Example A — Real-Time Notification System (3-tier complete):**
 

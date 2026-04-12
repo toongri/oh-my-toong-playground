@@ -91,9 +91,9 @@ E2 (Logical Coherence) and E5 (Signal-to-Noise) are scale-invariant — flawed l
 
 | Sub-dimension | Weight | Measures |
 |---------------|:------:|----------|
-| Causal chain depth | 0.30 | 인과적으로 연결된 단계 수 |
-| Constraint narrowing | 0.35 | 대안 제거의 구체성 |
-| Resolution mutation | 0.35 | 접근 방식의 근본적 변형 여부 |
+| Causal chain depth | 0.25 | forcing step으로 연결된 단계 수 |
+| Constraint narrowing | 0.45 | 대안 제거의 구체성 |
+| Resolution mutation | 0.30 | 접근 방식의 근본적 변형 여부 |
 
 **Thresholds**: ≥0.8 CASCADING (PASS) · 0.5-0.8 LISTED (P1) · <0.5 FLAT (FAIL)
 
@@ -103,7 +103,7 @@ E2 (Logical Coherence) and E5 (Signal-to-Noise) are scale-invariant — flawed l
 
 | Pattern | Signal |
 |---------|--------|
-| A. Cascade Discovery | 발견된 제약 → 초기 접근 무효화 → 재설계 |
+| A. Cascade Discovery | 발견된 제약 → 초기 접근 무효화 → 재설계 (includes pre-implementation analysis where constraint discovery during evaluation invalidated the initial approach) |
 | B. Constraint Collision | 동시 상충 제약 → 표준 접근 양립 불가 → 창의적 합성 |
 | C. Expectation Inversion | 기대한 원인/해결이 틀림 → 비자명한 근본 원인 → 다른 해결 (표면 문제가 더 깊은 구조적 문제의 증상인 경우 포함) |
 
@@ -315,6 +315,7 @@ E3 has two sub-evaluations (E3a + E3b). Both must PASS for E3 to PASS.
 11. **Asymmetric burden of proof.** PASS requires naming a specific verifiable element present in the bullet text (named metric, named system, named outcome with magnitude). FAIL requires only the absence of such an element. "No tradeoff is mentioned" is sufficient for E3a FAIL. "Tradeoff is mentioned" is necessary but not sufficient for E3a PASS — the tradeoff must also be context-specific and technically valid.
 12. **E3b Constraint Cascade grading.** When E3b passes on surface count (3+ concerns surfaced), assign a constraint cascade grade (FLAT/LISTED/CASCADING) using the Constraint Cascade Score formula. Score sub-dimensions first, then derive grade. LISTED grade triggers a P1 finding — "E3b technically passes on surface count but constraint cascade is weak; cascading narrative structure recommended." FLAT grade is an E3b FAIL regardless of surface count — isolated presentation of a multi-faceted problem does not faithfully represent the engineering reality.
 13. **Mandatory probing for CASCADING entries.** When E3b receives a CASCADING grade (score ≥ 0.8), the evaluator MUST still produce at least one specific probing question that challenges the technical soundness of the cascade narrative. High constraint cascade scores do not exempt entries from critical examination. The question must target the cascade's weakest link — the step where the causal connection is most implicit or where the constraint narrowing is least justified.
+14. **Sub-dimension score immutability after grade calculation.** Once sub-dimension scores are assigned and used to calculate a Constraint Cascade grade, they MUST NOT be revised in response to the grade outcome. Any score revision must be performed BEFORE grade calculation, based solely on evidence in the bullet text. Exception: arithmetic errors (incorrect multiplication or addition) may be corrected at any time.
 
 ---
 
