@@ -253,23 +253,23 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
   - Outbox 테이블 처리 상태 컬럼(PENDING·IN_FLIGHT·DONE·FAILED)으로 재시도 멱등성 보장
 - Consumer별 goroutine pool(PG×50, 재고×100, CRM×20)로 시스템 처리량 한계에 맞는 동시성 제어
   - 단일 global pool은 CRM 처리량 한계를 PG·재고가 점유하는 noisy neighbor 문제로 기각
-  - Consumer lag > 5,000 시 Auto Scaling 트리거
-  - Graceful Shutdown으로 진행 중 메시지 커밋 후 종료
-  - 파티션 재할당 시 Rebalance Listener로 진행 중 오프셋 커밋 완료 후 재할당 허용
-  - 시스템별 pool 크기를 처리량 한계에 맞게 독립 조정 가능
+  - Consumer 수 증가만으로 처리량 확보 검토했지만 Kafka 파티션 수 상한으로 수평 확장 불가해 기각
+  - CRM 처리량 한계가 PG 대비 측정 결과 낮아 균등 배분 시 CRM 과부하 확인, 측정 처리량 비 기반 pool 크기 독립 산정 필수
+  - goroutine 완료를 채널로 집계 후 가장 낮은 오프셋 일괄 커밋, 병렬 처리 중 순서 역전 없이 at-least-once 보장
+  - goroutine pool 포화 시 Consumer 블로킹으로 Kafka 백프레셔 자동 적용, DLQ 분리 방식 대비 유실 위험 없음
 
 **결과**
 - 피크 시 처리 지연 p99 **8초 → 0.9초**, 재고 불일치 **주 340건 → 3건**
 - Outbox + 재시도로 외부 API 일시 장애 시 이벤트 유실 **0건**
 - Consumer 독립 토픽 분리 후 CRM 지연이 PG·재고 처리에 영향 없음
-- 시스템별 Consumer 수 독립 조정으로 운영 유연성 확보
+- Consumer pool 시스템별 독립 배분으로 CRM 처리 백로그 해소, 세 시스템 동시 SLO 달성
 ```
 
 **Expected:**
-- R1 PASS: 모든 문장이 서사에 필수.
+- R1 PASS: 모든 문장이 서사에 필수. 전략 내 goroutine pool 하위 bullet들은 각각 "왜 Consumer 수 확장이 아닌가"(파티션 상한 제약), "왜 pool 크기가 시스템별로 다른가"(측정 처리량 비 불균형), "어떻게 병렬 goroutine이 오프셋 정합성을 보장하는가"(채널 집계·일괄 커밋), "pool 포화 시 이벤트 유실을 어떻게 막는가"(백프레셔·DLQ 기각) 질문에 답하며 제거 시 각각 서사에 구멍 발생. 결과 4번째 bullet은 goroutine pool 시스템별 배분이 실제로 CRM 과부하 없이 작동했음을 확인하며 제거 시 설계 효과 검증 공백.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
-- R3 PASS: 섹션 역할 분리 깨끗.
-- R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown, Rebalance Listener — 표준 기술 용어 적절 활용.
+- R3 PASS: 섹션 역할 분리 깨끗. 기술 과제 별도 섹션 없음.
+- R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, at-least-once, 백프레셔, DLQ — 표준 기술 용어 적절 활용.
 - R5 PASS: technical decision 3개 (토픽 분리 — 단일 토픽 기각, Outbox — Choreography 기각, goroutine pool — global pool 기각). High complexity → 16-20줄 budget. 실제 줄 수 22줄이지만 규칙("Blank lines between sections do NOT count") 적용 시 blank 2개 제외 → 20줄. hard cap 이내.
 
 ---
