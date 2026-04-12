@@ -124,7 +124,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 
 **Expected:**
 - R1 PASS: 모든 문장이 제거 시 서사에 구멍 남김
-- R2 PASS: 문제→전략→결과 6초 내 파악 가능, 결과에 bold 메트릭
+- R2 PASS: 문제→전략→결과 6초 내 파악 가능, 결과에 정량 메트릭 배치
 - R3 PASS: 문제/전략/결과 층위 깨끗이 분리
 - R4 PASS: Cache-Aside, singleflight, TTL jitter, eviction — 표준 용어 적절 활용
 - R5 PASS: 약 9줄, 기술 결정 2개인 중간 복잡도에 적합
@@ -203,3 +203,95 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R3 PASS: 문제 정의에 원인 포함, 해결 전략에 기각 사유 포함(문제 배경 아님), 결과 섹션에 수치만 존재. 섹션 역할 분리 깨끗
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown — 표준 기술 용어 적절 활용
 - R5 FAIL: 21줄, hard cap 20줄 초과. 3 technical decisions → High complexity budget (16-20줄)이지만 1줄 초과.
+
+---
+
+## Scenario 8: R5 Pass — technical decision 경계 (명확한 decision 2개 + 모호한 기술 적용 1개)
+
+**Input:**
+```
+**문제 정의**
+- 피크 시 결제 이벤트 처리 p99 4.2초로 SLO(1초) 미달, 단일 스레드 Consumer가 느린 이벤트에 블로킹됨
+- 이벤트 타입별 처리 시간 편차 큼 (결제 확정 ~3초, 상태 갱신 ~0.2초). 단일 큐에서 느린 타입이 빠른 타입을 지연시키는 구조
+
+**해결 전략**
+- 이벤트 타입별 독립 goroutine pool 분리 (결제 확정×10, 상태 갱신×100)
+  - 단일 global pool은 느린 이벤트가 빠른 이벤트를 블로킹하는 noisy neighbor 문제로 기각
+  - 타입별 pool 크기를 처리 시간·처리량 한계에 맞게 독립 조정 가능
+- Redis Pub/Sub로 처리 완료 이벤트 실시간 브로드캐스트
+  - Kafka는 소규모 트래픽 대비 브로커 운영 부담으로 기각
+- Prometheus 메트릭으로 pool별 큐 깊이·처리 지연 수집
+
+**결과**
+- 결제 이벤트 처리 p99 **4.2초 → 0.7초**, SLO 달성
+- Consumer 처리량 **20건/초 → 1,100건/초**
+- 이벤트 타입별 pool 분리 후 결제 확정 지연이 상태 갱신 처리에 영향 없음
+```
+
+**Expected:**
+- R1 PASS: 모든 문장이 서사에 필수. 문제 정의 2줄은 각각 다른 원인(블로킹·편차)을 전달. 전략 각 bullet은 제거 시 선택 근거 소멸.
+- R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
+- R3 PASS: 섹션 역할 분리 깨끗. 문제 정의에 원인, 전략에 선택 근거, 결과에 수치만 존재.
+- R4 PASS: goroutine pool, noisy neighbor, Redis Pub/Sub, Kafka, Prometheus — 표준 용어 적절 활용.
+- R5 PASS: technical decision 2개 (goroutine pool — global pool 기각, Redis Pub/Sub — Kafka 기각). Medium complexity → 13-16줄 budget. 실제 blank 제외 14줄 (범위 내). 세 번째 기술 적용(Prometheus 메트릭 수집)은 대안 기각이 명시되지 않아 decision으로 세지 않음.
+
+---
+
+## Scenario 9: R5 Pass — blank counting 경계 (blank 포함 22줄, blank 제외 20줄)
+
+**Input:**
+```
+**문제 정의**
+- 주문 처리 파이프라인에서 PG·재고·CRM 세 외부 시스템 동기화 시 부분 실패로 불일치 상태 주 평균 340건 발생
+- 세 시스템의 응답 시간 편차로 단일 Consumer가 가장 느린 시스템에 의해 블로킹, 피크 시 처리 지연 p99 8초
+
+**해결 전략**
+- 시스템별 독립 토픽 분리 + Consumer 그룹 격리 (order-pg, order-inventory, order-crm)
+  - 단일 토픽 멀티 컨슈머는 파티션 수 조정만으로 시스템 간 지연 격리 불가해 기각
+- Outbox Pattern으로 외부 API 호출 실패 시 보상 이벤트를 DB 트랜잭션 내 원자적 기록
+  - Choreography는 3개 시스템 간 인과 추적 복잡, 부분 실패 롤백 경로 보장 불가해 기각
+  - Outbox 테이블 처리 상태 컬럼(PENDING·IN_FLIGHT·DONE·FAILED)으로 재시도 멱등성 보장
+- Consumer별 goroutine pool(PG×50, 재고×100, CRM×20)로 시스템 처리량 한계에 맞는 동시성 제어
+  - 단일 global pool은 CRM 처리량 한계를 PG·재고가 점유하는 noisy neighbor 문제로 기각
+  - Consumer lag > 5,000 시 Auto Scaling 트리거
+  - Graceful Shutdown으로 진행 중 메시지 커밋 후 종료
+  - 파티션 재할당 시 Rebalance Listener로 진행 중 오프셋 커밋 완료 후 재할당 허용
+  - 시스템별 pool 크기를 처리량 한계에 맞게 독립 조정 가능
+
+**결과**
+- 피크 시 처리 지연 p99 **8초 → 0.9초**, 재고 불일치 **주 340건 → 3건**
+- Outbox + 재시도로 외부 API 일시 장애 시 이벤트 유실 **0건**
+- Consumer 독립 토픽 분리 후 CRM 지연이 PG·재고 처리에 영향 없음
+- 시스템별 Consumer 수 독립 조정으로 운영 유연성 확보
+```
+
+**Expected:**
+- R1 PASS: 모든 문장이 서사에 필수.
+- R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
+- R3 PASS: 섹션 역할 분리 깨끗.
+- R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown, Rebalance Listener — 표준 기술 용어 적절 활용.
+- R5 PASS: technical decision 3개 (토픽 분리 — 단일 토픽 기각, Outbox — Choreography 기각, goroutine pool — global pool 기각). High complexity → 16-20줄 budget. 실제 줄 수 22줄이지만 규칙("Blank lines between sections do NOT count") 적용 시 blank 2개 제외 → 20줄. hard cap 이내.
+
+---
+
+## Scenario 10: R3 Violation 3 — Result에 action 혼입
+
+**Input:**
+```
+**문제 정의**
+- POS 연동 시스템에서 외부 API 응답이 간헐적으로 10초 이상 지연되어 주문 처리가 밀림. 피크타임 주문~배달 완료 평균 90분
+
+**해결 전략**
+- SQS로 외부 API 호출 비동기 분리. Circuit Breaker로 외부 장애 시 빠른 실패 처리 (slow call 기준 5초, 실패율 50% 임계값)
+
+**결과**
+- SQS로 비동기 분리하여 외부 장애 시에도 주문 접수 지연 없이 안정적 처리
+- Circuit Breaker 적용으로 외부 API 장애 전파 차단
+```
+
+**Expected:**
+- R1 PASS: 문제 정의와 전략 각 문장이 서사에 필수.
+- R2 FAIL: 결과 섹션에 정량 메트릭 없음. "90분"은 문제 정의에만 있고 개선 수치가 결과에 없어 anti-qualitative test 실패.
+- R3 FAIL: 결과 첫 번째 bullet("SQS로 비동기 분리하여...")이 action 서술로, Strategy 내용이 Result에 혼입됨 (Violation 3).
+- R4 PASS: SQS, Circuit Breaker — 표준 용어 사용.
+- R5 PASS: 약 8줄, hard cap 이내.
