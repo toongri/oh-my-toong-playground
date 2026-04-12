@@ -180,72 +180,72 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 **On REQUEST_CHANGES:**
 
-**Step 1. Feedback 분류**
+**Step 1. Classify Feedback**
 
-Examiner 결과를 두 카테고리로 분리:
-- **E1-E6 failures** (소재 깊이 부족) → Source Extraction으로 해결
-- **R1-R5 failures** (가독성 문제) → 구조/포맷 수정으로 해결 (인터뷰 불필요)
+Split examiner results into two categories:
+- **E1-E6 failures** (insufficient source depth) → resolve via Source Extraction
+- **R1-R5 failures** (readability issues) → resolve via structural/formatting fixes (no interview needed)
 
-R1-R5 failures는 같은 소재를 재배치/압축하면 되므로 즉시 수정. E1-E6 failures가 핵심 — 아래 Source Extraction 프로토콜을 적용.
+R1-R5 failures can be fixed by rearranging/compressing the same material — apply fixes immediately. E1-E6 failures are the core problem — apply the Source Extraction protocol below.
 
-**Step 2. Interview Hints → 질문 변환**
+**Step 2. Convert Interview Hints → Specific Questions**
 
-Examiner는 각 FAIL axis에 Interview Hints를 제공합니다. 이걸 그대로 사용하지 말고, **기술 맥락 + 구체적 상황 + 예시**를 포함한 질문으로 변환:
+The examiner provides Interview Hints for each FAIL axis. Do NOT use them verbatim — transform them into questions that include **technical context + specific situation + examples**:
 
 ```
-BAD (추상적):
+BAD (abstract):
   "Were there any tradeoffs?"
 
-GOOD (구체적, 맥락 포함):
+GOOD (specific, with context):
   "Redis 도입할 때 cache consistency와 response speed 사이에서 고민한 적 있나요?
    예를 들어 cache TTL 기준은 어떻게 정했고, stale data로 문제된 적은?"
 ```
 
-변환 원칙:
-1. **진단 맥락**: 왜 이 질문을 하는지 배경 제공
-2. **구체적 타겟**: 막연한 "경험"이 아니라 특정 상황/결정/수치를 타겟
-3. **예시 포함**: 사용자가 유사 사례를 떠올릴 수 있도록
+Conversion principles:
+1. **Diagnostic context**: explain why you are asking this question
+2. **Specific target**: target a specific situation/decision/metric, not vague "experience"
+3. **Include examples**: help the user recall similar cases
 
 **Step 3. Source Extraction (5-Stage)**
 
-FAIL axis별로 순차 진행. 각 Stage에서 **한 번에 하나의 질문만**:
+Progress sequentially per FAIL axis. **One question per turn** at each Stage:
 
-| Stage | 방법 | 설명 |
-|-------|------|------|
-| 1. Direct | Hints 기반 직접 질문 | "이 부분에서 구체적으로 어떤 결정을 했나요?" |
-| 2. Bypass | 같은 gap을 3가지 각도로 | "다른 방식으로 물어볼게요 — 그때 가장 어려웠던 제약이 뭐였나요?" |
-| 3. Adjacent | 관련 인접 경험 탐색 | "비슷한 문제를 다른 프로젝트에서 겪은 적은?" |
-| 4. Daily Work | 일상 업무 속 숨겨진 소재 | "운영하면서 반복적으로 불편했던 것, 모니터링하면서 발견한 것은?" |
-| 5. Domain Suggest | 도메인 기반 소재 제안 | AI가 회사/도메인/기술 스택 맥락에서 "보통 이런 일이 생기는데" 제안 |
+| Stage | Method | Description |
+|-------|--------|-------------|
+| 1. Direct | Hints-based direct question | Ask specifically about the decision the examiner flagged |
+| 2. Bypass | Same gap from 3 different angles | Reframe the question to approach the gap differently |
+| 3. Adjacent | Explore related adjacent experience | Ask about similar problems in other projects |
+| 4. Daily Work | Hidden sources in routine work | Ask about recurring pain points, monitoring discoveries, operational friction |
+| 5. Domain Suggest | Domain-informed source proposals | AI proposes scenarios typical for the user's company/domain/tech stack |
 
-**Stage 5 — 도메인 기반 소재 제안:**
+**Stage 5 — Domain-Informed Source Proposals:**
 
-4-Stage로 사용자 기억에서 더 이상 못 뽑으면, AI가 도메인 전문가로서 소재를 제안합니다:
-- 사용자의 회사 규모, 도메인, 기술 스택, FAIL axis를 종합
-- "이 맥락이면 보통 이런 문제가 생기는데, 혹시 이런 경험 있었나요?" 형태로 2-3개 제안
-- 예: "위탁판매 정산이면 PG 환불 타이밍이랑 정산 주기가 안 맞아서 차액이 생기는 케이스가 많은데, 이런 경험 있나요?"
-- 예: "Go로 concurrent processing 하면 goroutine leak이나 channel deadlock이 흔한데, 그런 이슈 겪으셨나요?"
-- 사용자가 "아 맞다 그거!" → 새 소재로 엔트리 재구성
-- 사용자가 전부 부정 → 현재 소재로 best entry 생성 → 마지막 dispatch
+When Stages 1-4 exhaust the user's memory, the AI acts as a domain expert and proposes sources:
+- Synthesize the user's company scale, domain, tech stack, and the specific FAIL axis
+- Propose 2-3 scenarios in the form: "In this context, this problem typically occurs — did you experience something like this?"
+- Example: "위탁판매 정산이면 PG 환불 타이밍이랑 정산 주기가 안 맞아서 차액이 생기는 케이스가 많은데, 이런 경험 있나요?"
+- Example: "Go로 concurrent processing 하면 goroutine leak이나 channel deadlock이 흔한데, 그런 이슈 겪으셨나요?"
+- User confirms → use as new source material → reconstruct entry
+- User denies all → build best entry with current sources → final dispatch
 
 **Source Quality Check:**
 
-각 Stage에서 사용자가 소재를 제공할 때마다 3요소를 확인:
+At each Stage, verify 3 elements whenever the user provides source material:
 
-| 요소 | 정의 | 없으면 |
-|------|------|-------|
-| Fact | 무엇이 일어났는가 | "경험 있음" — 내용 불명 → 다음 Stage |
-| Context | 왜/어디서/어떻게 | Fact만으로는 엔트리화 불가 → 추가 질문 |
-| Verifiability | 수치, before/after, 측정 가능한 결과 | 검증 불가 → examiner FAIL 예상 → 추가 질문 |
+| Element | Definition | When absent |
+|---------|------------|-------------|
+| Fact | What happened | "I have experience" — content unknown → next Stage |
+| Context | Why / where / how | Fact alone cannot be shaped into an entry → ask follow-up |
+| Verifiability | Metrics, before/after, measurable outcome | Unverifiable → examiner FAIL expected → ask follow-up |
 
-3요소 충족 시 → 엔트리 재구성. 미충족 시 → 다음 Stage.
+All 3 elements confirmed → reconstruct entry. Any element missing → proceed to next Stage.
 
-**Step 4. 엔트리 재구성 + Re-dispatch**
+**Step 4. Reconstruct Entry + Re-dispatch**
 
-1. 발굴한 소재 + R1-R5 수정을 반영하여 엔트리 재구성
-2. 전체 엔트리를 사용자에게 보여주고 확인
-3. Examiner에 re-dispatch (revised entry를 Proposed Alternative로)
-4. APPROVE될 때까지 반복, 또는 사용자 opt-out ("다음")
+1. Incorporate extracted sources + R1-R5 fixes into a reconstructed entry
+2. Show full entry to user for confirmation
+3. Re-dispatch to examiner with the revised entry as Proposed Alternative
+4. Repeat until APPROVE or user opt-out ("다음")
 
 State stays `"pending"` until APPROVE.
 
