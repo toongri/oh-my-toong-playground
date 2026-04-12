@@ -160,7 +160,7 @@ Important: When evaluating each axis, directly name the technology/approach ment
 
 ### Mandatory: Evaluation Task Creation
 
-Before starting Phase A, you MUST use TaskCreate to create ALL phases and their sub-steps as individual tasks. This is the primary mechanism that prevents phase/item skipping — the most common failure mode observed in production.
+Before starting Phase A, you MUST create ALL phases and their sub-steps as individual tasks. This is the primary mechanism that prevents phase/item skipping — the most common failure mode observed in production.
 
 **Create these tasks upfront (always):**
 
@@ -434,7 +434,7 @@ Before delivering the evaluation result, verify every item was completed. Every 
 - [ ] Phase A: E3b Problem Surface — Constraint narrowing (with quote, Rule 10a)
 - [ ] Phase A: E3b Problem Surface — Resolution mutation (with quote, Rule 10a)
 - [ ] Phase A: E3b Constraint Cascade Score calculated → grade assigned
-- [ ] Phase A: E3b CASCADING probing question (Rule 13, skip if not CASCADING)
+- [ ] Phase A: E3b CASCADING probing question (Rule 13, DONE / N/A — skip if not CASCADING)
 - [ ] Phase A: E4 Scale-Appropriate Engineering (reasoning-before-score)
 - [ ] Phase A: E5 Signal-to-Noise (reasoning-before-score)
 - [ ] Phase A: E6 Target-Scale Transferability (reasoning-before-score)
