@@ -28,6 +28,12 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 | B-2 | Session Recovery — 관련 reference 적극 읽기 | Context Bootstrap | 현재 작업 시나리오 관련 reference 전문 읽기 |
 | B-3 | Phase 0 — problem-solving/ dedup 참조 | Phase 0 Setup | 기존 완성 항목과 중복 방지 |
 | B-4 | Session cleanup — all scenarios done | Cleanup behavior | 모든 loop2 passed 시 state 파일 삭제 |
+| A-19 | Loop 2 — full Input Format enforcement | Examiner dispatch template | 정식 5-section template 준수 |
+| A-20 | Loop 2 — full text enforcement | `<critical>` compliance | 원문 전체 전송, 요약 금지 |
+| A-21 | Loop 2 — Interview Hints conversion | Hints → question transformation | BAD/GOOD 변환 원칙 준수 |
+| A-22 | Loop 2 — Source Quality Formula | Source validation | Fact + Context + Verifiability 3요소 검증 |
+| A-23 | Loop 2 — Stage 5 Domain Suggest | Domain-informed proposals | 도메인 기반 소재 제안 |
+| A-24 | Loop 2 — E/R category separation | Feedback classification | E1-E6 vs R1-R5 처리 경로 분리 |
 
 ---
 
@@ -161,18 +167,24 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 
 ---
 
-## A-8: Loop 2 — Examiner CASCADING
+## A-8: Loop 2 — Examiner APPROVE (Full Verdict)
 
-**Context:** 유저와 완성한 전체 엔트리를 examiner에게 제출. E3b 0.82 반환.
+**Context:** 유저와 완성한 전체 엔트리를 examiner에게 제출. Examiner returns: E1-E6 all PASS, E3b 0.82 (CASCADING), R1-R5 all PASS, Final Verdict APPROVE.
 
 **Expected behavior:**
-1. Constraint Cascade Score (E3b) ≥ 0.8 확인 → PASS
+1. Verify ALL pass criteria met:
+   - E1-E6: all PASS
+   - E3b Constraint Cascade Score ≥ 0.8 (CASCADING)
+   - R1-R5: all PASS
+   - Final Verdict: APPROVE
 2. `$OMT_DIR/review-resume/drafts/{file}.md` 삭제
 3. `$OMT_DIR/review-resume/problem-solving/{file}.md`에 완성 엔트리 저장
-4. state JSON `loop2.status = "passed"`, `loop2.score = 0.82` 기록
+4. state JSON `loop2.status = "passed"` with examiner scores
 
 **Verification:**
-- [ ] 0.8 경계값에서 PASS (≥ 0.8)
+- [ ] E3b ≥ 0.8 alone is NOT sufficient — all 4 criteria must be met
+- [ ] If E3b ≥ 0.8 but any E-axis FAIL → still REQUEST_CHANGES
+- [ ] If E1-E6 all PASS but any R-item FAIL → still REQUEST_CHANGES
 - [ ] drafts/에서 제거 + problem-solving/에 저장
 - [ ] note-system.md 형식 준수 (tags frontmatter + body)
 
@@ -319,22 +331,26 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 
 ---
 
-## A-14: Loop 2 — Examiner Fail + Retry
+## A-14: Loop 2 — Examiner REQUEST_CHANGES + 5-Stage Source Extraction
 
-**Context:** C3 정산 시스템 시나리오의 전체 엔트리를 examiner에게 제출. E3b 0.62 반환.
+**Context:** C3 정산 시스템 시나리오의 전체 엔트리를 examiner에게 제출. Result: E3a FAIL (no tradeoff), E3b 0.62 (LISTED), R3 FAIL (layer separation), Final Verdict REQUEST_CHANGES.
 
 **Expected behavior:**
-1. examiner 피드백을 유저에게 보여줌
-2. 낮은 점수의 원인 분석 + 대안 제시 ("해결 전략에서 기각한 대안과 이유가 빠져있어서 점수가 낮은 것 같아. 이런 방향으로 보강하면 어떨까")
-3. 유저와 재토론 (Solution interview protocol 준수 — 한 번에 하나씩)
-4. 수정된 전체 엔트리를 다시 examiner에게 제출
-5. state는 `pending` 유지 (fail로 바꾸지 않음)
+1. **Step 1 — Classify feedback**: E3a/E3b are E1-E6 failures (source depth) → Source Extraction. R3 is R1-R5 failure (readability) → structural fix.
+2. **R1-R5 fix**: Propose R3 layer separation fix directly (no interview needed)
+3. **Step 2 — Convert Interview Hints**: Transform examiner's E3a Interview Hints into specific question with diagnostic context + specific target + examples
+4. **Step 3 — Source Extraction**: Start Stage 1 (Direct) for E3a FAIL axis
+   - If user provides source → check Source Quality (Fact + Context + Verifiability)
+   - If insufficient → Stage 2 (Bypass) → Stage 3 (Adjacent) → Stage 4 (Daily Work) → Stage 5 (Domain Suggest)
+5. **Step 4 — Reconstruct**: Incorporate extracted sources + R3 fix → show full entry → re-dispatch
+6. state stays `pending`
 
 **Verification:**
-- [ ] 피드백만 보여주고 끝내지 않음 (대안 제시 필수)
-- [ ] 재토론 시에도 Solution interview protocol 준수 (1 question + directions per turn)
-- [ ] 유저에게 직접 채점하지 않음 (examiner 위임)
-- [ ] 재제출 루프가 올바르게 동작
+- [ ] E1-E6 failures and R1-R5 failures handled differently (Source Extraction vs structural fix)
+- [ ] Interview Hints converted to specific questions (not used verbatim)
+- [ ] Source Quality check applied (Fact + Context + Verifiability)
+- [ ] Stages progress sequentially (not jump to Stage 5 immediately)
+- [ ] One question per turn maintained throughout extraction
 - [ ] state를 "failed"로 바꾸지 않음 (pending 유지)
 
 ---
@@ -408,3 +424,108 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 - [ ] 모든 loop2 passed 확인 후 state 파일 삭제
 - [ ] state 파일을 남겨두지 않음
 - [ ] drafts/와 problem-solving/ 파일은 유지 (삭제 안 함)
+
+---
+
+## A-19: Loop 2 — Full Input Format Enforcement
+
+**Context:** Loop 2에서 C4 시나리오의 전체 엔트리를 examiner에게 제출하는 시점.
+
+**Expected behavior:**
+1. Examiner invocation template has ALL 5 sections:
+   - `## Candidate Profile` (Experience, Position, Target Company/Role)
+   - `## Bullet Under Review` (Section: Problem-Solving > title, Original: full text)
+   - `## Technical Context` (Technologies, JD keywords, Loop 1 findings)
+   - `## Target Company Context` (known details or "big tech standards" default)
+   - `## Proposed Alternatives` ("None" on first dispatch, revised text on re-dispatch)
+2. Loop 1 findings (Causal Chain score) included in Technical Context
+
+**Verification:**
+- [ ] All 5 sections present in examiner dispatch
+- [ ] Target Company Context not omitted (explicit "big tech standards" if unknown)
+- [ ] Loop 1 Causal Chain score forwarded as context
+- [ ] Proposed Alternatives section present (even if "None" on first dispatch)
+
+---
+
+## A-20: Loop 2 — Full Text Enforcement (`<critical>`)
+
+**Context:** Loop 2에서 examiner에게 제출할 때, draft 파일의 원문이 5개 섹션(Problem Definition, Technical Challenges, Strategy, Result)을 포함하는 15줄 엔트리.
+
+**Bad behavior:** "Parallelized 7-attribute LLM inference via goroutine pool, reducing per-item processing from 80s to 30s" (요약본)
+**Good behavior:** Draft 파일의 전체 원문을 Bullet Under Review > Original 필드에 그대로 복사
+
+**Verification:**
+- [ ] Examiner에게 전달된 Original 필드가 draft 파일의 전문과 일치
+- [ ] 요약, 압축, 의역하지 않음
+- [ ] `<critical>` 블록의 "NEVER summarize" 원칙 준수
+
+---
+
+## A-21: Loop 2 — Interview Hints → Question Conversion
+
+**Context:** Examiner가 E3a FAIL을 반환하면서 Interview Hint: "What tradeoff was made in choosing this approach?"
+
+**Bad behavior:** "Were there any tradeoffs?" (Hint를 그대로 사용)
+**Good behavior:** "Kafka 대신 SQS를 선택할 때, ordering guarantee를 포기한 건지, 아니면 partition key로 순서를 보장한 건지가 궁금해. 어떤 제약 때문에 이 선택을 하게 됐어?"
+
+**Verification:**
+- [ ] Examiner의 Interview Hint를 그대로 사용하지 않음
+- [ ] 변환된 질문에 3요소 포함: (1) 진단 맥락, (2) 구체적 타겟, (3) 예시
+- [ ] 한 번에 하나의 질문만 (batch 금지)
+
+---
+
+## A-22: Loop 2 — Source Quality Formula
+
+**Context:** Stage 2에서 유저가 "아 Redis 캐시 썼어"라고 답변.
+
+**Expected behavior:**
+1. Fact check: "Redis를 썼다" → Fact 있음 ✓
+2. Context check: "왜 Redis를 선택했는지, 어떤 패턴으로 적용했는지" → Context 없음 ✗
+3. → 추가 질문: "Cache-Aside였어, Write-Through였어? TTL은 어떤 기준으로 설정했어?"
+4. Verifiability check: after/before 수치, 측정 방법 → 미확인 시 추가 질문
+
+**Verification:**
+- [ ] "Redis 썼어"만으로 source 확인 완료하지 않음
+- [ ] Fact만 있고 Context 없으면 추가 질문
+- [ ] 3요소 전부 충족될 때까지 추가 질문 계속
+- [ ] 3요소 충족 시 → 엔트리 재구성으로 진행
+
+---
+
+## A-23: Loop 2 — Stage 5 Domain Suggest
+
+**Context:** C5 시나리오. Stage 1-4 진행했으나 E4 (Scale-Appropriate Engineering) FAIL axis에 대한 소재가 부족. 유저는 Go + Kafka + PostgreSQL 스택의 위탁판매 플랫폼 2년차 백엔드.
+
+**Expected behavior:**
+1. Stages 1-4 exhausted → proceed to Stage 5
+2. AI synthesizes: 위탁판매 + Go + Kafka + 2년차 + E4(규모 적정) 맥락
+3. Domain-specific proposals: "위탁판매 플랫폼이면 상품 입고량이 급증하는 시즌에 Consumer lag이 쌓이는 문제가 흔한데, goroutine pool 크기를 동적으로 조정하거나 Auto Scaling을 적용한 경험 있나요?"
+4. If user confirms → use as source → Source Quality check → reconstruct
+5. If user denies all → build best entry with current sources → final dispatch
+
+**Verification:**
+- [ ] Stage 5에서 유저의 도메인/기술/경력을 종합한 제안
+- [ ] 제안이 추상적이지 않음 (구체적 기술 시나리오)
+- [ ] 유저 확인 시 Source Quality check 적용
+- [ ] 유저가 전부 부정해도 바로 포기하지 않음 (best entry → 마지막 dispatch)
+
+---
+
+## A-24: Loop 2 — E/R Category Separation
+
+**Context:** Examiner가 E3b LISTED (0.65) + R1 FAIL (unnecessary sentence) + R5 FAIL (volume exceeded)을 동시에 반환.
+
+**Expected behavior:**
+1. **Step 1 — Classify**: E3b는 E1-E6 failure (source depth) → Source Extraction. R1, R5는 R1-R5 failure (readability) → structural fix.
+2. R1 fix: identify and remove the unnecessary sentence directly
+3. R5 fix: compress entry to fit within line budget directly
+4. E3b fix: Start Source Extraction (Stage 1 → ...) to deepen the constraint cascade
+5. Both tracks addressed before re-dispatch
+
+**Verification:**
+- [ ] R1-R5 failures는 인터뷰 없이 직접 수정
+- [ ] E1-E6 failures는 Source Extraction 프로토콜로 처리
+- [ ] 두 카테고리 모두 처리된 후 re-dispatch (한쪽만 처리하고 제출하지 않음)
+- [ ] R fix가 E1-E6 품질을 훼손하지 않는지 확인
