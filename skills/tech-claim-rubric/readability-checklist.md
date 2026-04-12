@@ -45,6 +45,8 @@ For each sentence in the entry, apply this test:
 
 **Important:** R1 does NOT judge whether content is technically interesting — only whether it is narratively necessary. A fascinating implementation detail that doesn't serve the problem→solution→result arc is still removable.
 
+> For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
+
 ### Examples
 
 **FAIL — Removable sentence:**
@@ -95,16 +97,15 @@ Remove the problem definition → "why was parallelization needed?" is unanswere
 
 ### Why This Matters
 
-The resume is submitted to companies — not displayed as a casual portfolio. In Korean tech hiring (네카라쿠배 and mid-large startups), first-pass screening often involves a dedicated reviewer processing dozens of resumes. They are not reading for comprehension; they are scanning for signals. If the strongest metric ("3 days → same day") is buried in a strategy paragraph, it might as well not exist.
-
-Metric prominence also serves a psychological function: bold before→after numbers are the fastest way to establish credibility. "**p95 500ms → 150ms**" takes 0.5 seconds to process and immediately communicates "this person delivered measurable results." The same information in prose ("we reduced the 95th percentile latency from approximately half a second to about 150 milliseconds") takes 5x longer to process and carries less impact.
+Recruiters scan in 6-30 seconds. If the strongest metric is buried in a strategy paragraph, it might as well not exist. R2 ensures impact numbers are immediately visible during rapid scanning.
 
 ### What to Check
 
 1. **Flow test:** Does the entry read top-to-bottom as problem → action → result, with no backtracking required?
 2. **Metric placement test:** Are all quantitative before→after metrics in the **Result** section (not buried in Strategy or Problem Definition)?
-3. **Bold test:** Are key metrics bold-formatted for visual scanning?
-4. **Anti-qualitative test:** Does the Result section contain only vague/qualitative statements without numbers? ("stable processing", "improved reliability")
+3. **Anti-qualitative test:** Does the Result section contain only vague/qualitative statements without numbers? ("stable processing", "improved reliability")
+
+> For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
 
 ### Examples
 
@@ -119,7 +120,7 @@ Metric prominence also serves a psychological function: bold before→after numb
 ```
 The strongest metric (90min → 67min) is in Strategy. The Result section has no numbers — just a qualitative claim that cannot be verified or compared.
 
-**PASS — Metrics in result, bold-formatted:**
+**PASS — Metrics in result section:**
 ```
 **Strategy**
 - Decoupled external API calls via SQS, removing POS response blocking
@@ -141,9 +142,7 @@ Strategy describes the action. Result quantifies the impact with bold formatting
 
 ### Why This Matters
 
-When a reader encounters a **Strategy** section, they expect to learn "what was done." If the first sentence explains a problem constraint ("Because external APIs cannot participate in DB transactions..."), the reader must context-switch: "Wait, is this still the problem or the solution?" This micro-confusion, repeated across multiple bullets, creates cumulative cognitive load that makes the entry feel "hard to read" even when each individual sentence is clear.
-
-Layer separation is particularly critical for resume entries because they compress complex engineering stories into 10-20 lines. In a technical blog post, mixing context and solution across paragraphs is fine — the reader has pages of space to re-orient. In a 15-line resume entry, every section transition must be instant and unambiguous.
+In a 10-20 line resume entry, every section transition must be instant. When a Strategy section starts with problem context, the reader must context-switch — "is this still the problem or the solution?" — creating cumulative cognitive load.
 
 ### What to Check
 
@@ -162,6 +161,21 @@ Layer separation is particularly critical for resume entries because they compre
    - The constraint ("external APIs outside DB transaction boundary") belongs in Problem Definition.
 
 3. **Strategy content in Result** — Result bullets that describe additional actions rather than metrics.
+
+**FAIL — Action in Result:**
+```
+**Result**
+- SQS로 비동기 분리하여 외부 장애 시에도 안정적 주문 접수 처리
+```
+The Result contains an action description ("SQS로 비동기 분리"), not a metric. This belongs in Strategy.
+
+**PASS — Metric in Result:**
+```
+**Result**
+- Peak-hour order-to-delivery time **90 min → 67 min**
+```
+
+> For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
 
 ### Examples
 
@@ -197,13 +211,7 @@ The problem section establishes "indexes aren't enough" — the reader enters St
 
 ### Why This Matters
 
-Technical vocabulary serves two functions simultaneously:
-
-**1. Compression.** "Saga pattern" conveys in 2 words what would otherwise require 3 sentences: "a sequence of local transactions where each step has a compensating action, and on failure the system executes compensating actions in reverse order to maintain eventual consistency." When a resume entry uses standard terms, it achieves the same depth in far fewer lines — directly enabling R5 (Volume Compliance).
-
-**2. Competence signaling.** When a 2-3 year backend developer writes "SKIP LOCKED-based lock-free parallel issuance," the reader immediately knows: (a) the candidate knows this specific PostgreSQL mechanism, (b) they understand the lock-free concurrency concept, (c) they can name patterns precisely. Compare: "we made it so locked rows are skipped" — same mechanism, zero competence signal.
-
-The risk of verbose paraphrasing is not just extra words — it's that the reader may fail to recognize the pattern at all. "We stored successful results immediately and only retried the failed parts" is a valid description, but a hiring manager scanning for distributed systems competence may not recognize it as "partial failure isolation with selective retry."
+Standard terminology compresses and signals simultaneously. "SKIP LOCKED-based lock-free issuance" in 5 words conveys what verbose paraphrasing takes 3 sentences to explain, while also signaling the candidate knows the mechanism by its proper name.
 
 **Important caveat:** Only use terms that are **widely recognized in the industry**. Niche terms (specific library internals, company-specific jargon) create confusion rather than compression. The test: "Would a backend engineer at a different company recognize this term?"
 
@@ -212,6 +220,7 @@ The risk of verbose paraphrasing is not just extra words — it's that the reade
 1. Scan each sentence for verbose descriptions that have standard term equivalents
 2. Verify that used terms are industry-standard (not niche or company-specific)
 3. Check that terms are used correctly (misused terminology is worse than verbose description)
+4. **Burden of proof on evaluator:** R4 FAIL requires the evaluator to name the specific standard term that should replace the verbose description. If the evaluator cannot name a widely-recognized replacement, R4 PASSes by default. This prevents false FAILs from evaluator vocabulary variance.
 
 **Common substitutions:**
 
@@ -220,10 +229,12 @@ The risk of verbose paraphrasing is not just extra words — it's that the reade
 | "Locked rows are skipped, unlocked row is taken" | `SKIP LOCKED` / lock-free issuance |
 | "Cache server" | Redis |
 | "Reverse completed steps on failure" | Compensating transaction / Saga |
-| "Put messages in a queue for async processing" | Kafka Consumer-based async processing |
+| "Put messages in a queue for async processing" | Message Queue Consumer-based async processing (e.g., Kafka, SQS) |
 | "Check periodically for missed items" | Reconciliation scheduler |
 | "Store results in cache to avoid DB hits" | Cache-Aside pattern |
 | "Single execution per process to prevent thundering herd" | singleflight |
+
+> For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
 
 ### Examples
 
@@ -259,9 +270,7 @@ Same information, half the volume. Every technical choice is named with its reco
 
 ### Why This Matters
 
-A problem-solving section with 4-5 entries at 20+ lines each produces 80-100+ lines — a wall of text that defeats the purpose of structured resume entries. Each entry must be short enough that the entire problem-solving section remains scannable.
-
-Volume compliance is not about arbitrary line limits — it's about the relationship between entry complexity and allocated space. A simple caching optimization doesn't need 20 lines. A complex multi-party workflow coordination might justify 20 lines. The line budget should match the problem's inherent complexity, measured by the number of independent technical decisions required.
+4-5 entries at 20+ lines each produces 80-100+ lines — a wall of text that defeats scannability. The line budget matches entry length to problem complexity.
 
 ### Evaluation Criteria
 
@@ -274,7 +283,9 @@ Volume compliance is not about arbitrary line limits — it's about the relation
 | Low | 1 decision | 10-13 lines |
 | **Hard cap** | — | **20 lines** |
 
-**Line counting:** Count authored lines in the description block, including blank lines and section headings (**Problem Definition**, **Strategy**, **Result**).
+**Technical decision**: A choice where a named alternative was considered and rejected with a stated reason ("chose X over Y because Z"). Count each such choice as one decision. Implementation parameters of a chosen approach (TTL value, batch size, polling interval) are NOT separate decisions. A technique mentioned without an explicitly rejected alternative does not count as a decision.
+
+**Line counting:** Count source markdown lines in the description block. One newline = one line. Section headings (**Problem Definition**, **Strategy**, **Result**) count. Blank lines between sections do NOT count — they are formatting, not content.
 
 **Section budget guide:**
 - Problem Definition: 2-3 lines
@@ -287,6 +298,8 @@ Volume compliance is not about arbitrary line limits — it's about the relation
 2. Count technical decisions in Strategy — does line count match complexity?
 3. Check Problem Definition length — exceeds 3 lines?
 4. Check if 4+ strategy bullets each span 3+ lines — likely over-detailed
+
+> For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
 
 ### Examples
 
