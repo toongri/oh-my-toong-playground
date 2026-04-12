@@ -153,7 +153,7 @@ In a 10-20 line resume entry, every section transition must be instant. When a S
 
 **Specific violations to detect:**
 
-1. **"기술 과제" (Technical Challenge) as a separate section** — In resume format, this must be merged into Problem Definition. A separate section fragments the narrative and delays the reader from reaching the Strategy.
+1. **Problem domain structure is free** — The problem area (Problem Definition, Technical Challenge, etc.) may use any internal structure, including separate subsections. The requirement is that problem→strategy→result flow exists, not that the problem domain uses a specific format. However, content duplication across layers (restating the same constraint in both Problem Definition and Strategy) still violates R3.
 
 2. **Problem context in Strategy** — Strategy bullets that start with problem explanations:
    - FAIL: "Since external APIs cannot participate in DB transactions, we implemented..."
@@ -161,6 +161,29 @@ In a 10-20 line resume entry, every section transition must be instant. When a S
    - The constraint ("external APIs outside DB transaction boundary") belongs in Problem Definition.
 
 3. **Strategy content in Result** — Result bullets that describe additional actions rather than metrics.
+
+**PASS — Separate "기술 과제" section (structural choice, not layer bleeding):**
+```
+**Problem Definition**
+- Daily intake doubled to 5,000 items; display SLA dropped to 55%
+
+**Technical Challenge**
+- Per-item processing takes ~80s sequentially; 5,000 items = 111 hours vs 2-hour SLA
+- Single attribute failure discards all 7 results → full re-inference
+
+**Strategy**
+- Goroutine pool for parallel inference, reducing per-item time to 30s
+```
+The "기술 과제" section is a structural subdivision within the problem domain. It does not bleed into Strategy — Strategy contains only actions.
+
+**FAIL — Problem context in Strategy (layer bleeding, regardless of structure):**
+```
+**Strategy**
+- Because external API calls take 30 seconds on average and cannot
+  participate in DB transactions, we implemented an orchestrator-based
+  compensating workflow
+```
+The first clause ("Because external API calls take 30 seconds...cannot participate in DB transactions") is problem context. It belongs in Problem Definition or Technical Challenge, not in Strategy. The strategy should start with the action: "Orchestrator-based compensating workflow for multi-step operations across external API boundaries."
 
 **FAIL — Action in Result:**
 ```
@@ -304,7 +327,7 @@ Same information, half the volume. Every technical choice is named with its reco
 ### Examples
 
 **FAIL — 33 lines, hard cap exceeded:**
-An entry with 5-line problem definition + 4-line technical challenge section + 20-line strategy + 4-line result. Even though each section is individually reasonable, the total far exceeds the 20-line cap. The "technical challenge" section alone (which should be merged into problem definition per R3) adds 4 lines of structural overhead.
+An entry with 5-line problem definition + 4-line technical challenge section + 20-line strategy + 4-line result. Even though each section is individually reasonable, the total far exceeds the 20-line cap. The "technical challenge" section alone adds 4 lines of structural overhead.
 
 **PASS — 12 lines, medium complexity:**
 ```
@@ -385,7 +408,7 @@ This entry passed E3b CASCADING (0.85) — the technical depth is validated. But
 |---|---|---|
 | R1 | FAIL | Problem Definition bullets 4-5 (re-inspection dependency, consigner refusal) are narratively resolved by Strategy bullets 3-4. Removing them creates no gap — the reader encounters the solutions that address these concerns naturally. Technical Challenge section (4 lines) largely repeats Problem Definition constraints. |
 | R2 | PASS | Result section has bold metrics, flow is top-to-bottom |
-| R3 | FAIL | "Technical Challenge" exists as a separate section — must merge into Problem Definition. Strategy bullet 2 starts with problem context ("External APIs cannot participate in DB transactions") |
+| R3 | FAIL | Strategy bullet 2 starts with problem context ("External APIs cannot participate in DB transactions") — this constraint belongs in Problem Definition. Strategy bullet 3 opens with "Return triggers hold marking" without context bleed, demonstrating correct separation. |
 | R4 | PASS | Orchestrator, Choreography, compensating transaction — standard terms used |
 | R5 | FAIL | ~33 lines total, far exceeds 20-line hard cap. Problem Definition (5 lines) + Technical Challenge (4 lines) = 9 lines before Strategy even begins |
 
@@ -421,7 +444,7 @@ The same entry compressed for resume readability. All R items pass.
 |---|---|---|
 | R1 PASS | Every sentence is load-bearing. Remove "PG/carrier APIs outside DB transaction boundary" → orchestrator introduction has no motivation. Remove "LLM photo analysis rejected" → rule-based choice appears unexamined. Consigner refusal workflow removed entirely — serves as interview hook. |
 | R2 PASS | Problem (2 lines) → Strategy (7 lines) → Result (2 lines). Bold before→after metrics in Result. 6-second scan captures: "3-party blame automation + compensating workflow → 3 days→same day, 8→1 disputes." |
-| R3 PASS | No separate "Technical Challenge" section. Key constraint (external API boundary) merged into Problem Definition line 2. Strategy contains only actions. Result contains only metrics. |
+| R3 PASS | No layer bleeding — key constraint (external API boundary) in Problem Definition, all Strategy bullets are actions, Result contains only metrics. Problem domain structure (whether using separate "Technical Challenge" or not) is a free choice. |
 | R4 PASS | Orchestrator, Choreography, compensating transaction, settlement hold — all industry-standard terms. "3-party blame" is domain-specific but self-explanatory. |
 | R5 PASS | 14 lines total. 3 technical decisions (blame classification + orchestrator + settlement hold) = high complexity → ≤20 line budget. At 14 lines, comfortably within budget. |
 
