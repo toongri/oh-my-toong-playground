@@ -18,7 +18,7 @@ The hiring pipeline has a brutal funnel: recruiters scan in 6-30 seconds, hiring
 
 **Unit of evaluation:** Each individual sentence
 
-**Core question:** "Is this sentence essential? If removed, does the problem → solution → result narrative break?"
+**Core question:** "Does this sentence earn its space?" R1 is the compactness gate — it asks whether deleting a sentence would leave a gap in the problem→solution→result arc. If the narrative reads equally well without it, the sentence is expendable regardless of how interesting or technically valid its content is.
 
 ### Why This Matters
 
