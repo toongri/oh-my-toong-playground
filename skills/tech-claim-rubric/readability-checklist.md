@@ -153,7 +153,7 @@ In a 10-20 line resume entry, every section transition must be instant. When a S
 
 **Specific violations to detect:**
 
-1. **Problem domain structure is free** — The problem area (Problem Definition, Technical Challenge, etc.) may use any internal structure, including separate subsections. The requirement is that problem→strategy→result flow exists, not that the problem domain uses a specific format. However, content duplication across layers (restating the same constraint in both Problem Definition and Strategy) still violates R3.
+1. **Cross-layer content duplication** — Restating the same constraint in both Problem Definition and Strategy. If the problem section establishes a constraint, Strategy should not re-explain it — the reader already knows.
 
 2. **Problem context in Strategy** — Strategy bullets that start with problem explanations:
    - FAIL: "Since external APIs cannot participate in DB transactions, we implemented..."
@@ -162,21 +162,7 @@ In a 10-20 line resume entry, every section transition must be instant. When a S
 
 3. **Strategy content in Result** — Result bullets that describe additional actions rather than metrics.
 
-**PASS — Separate "기술 과제" section (structural choice, not layer bleeding):**
-```
-**Problem Definition**
-- Daily intake doubled to 5,000 items; display SLA dropped to 55%
-
-**Technical Challenge**
-- Per-item processing takes ~80s sequentially; 5,000 items = 111 hours vs 2-hour SLA
-- Single attribute failure discards all 7 results → full re-inference
-
-**Strategy**
-- Goroutine pool for parallel inference, reducing per-item time to 30s
-```
-The "기술 과제" section is a structural subdivision within the problem domain. It does not bleed into Strategy — Strategy contains only actions.
-
-**FAIL — Problem context in Strategy (layer bleeding, regardless of structure):**
+**FAIL — Problem context in Strategy (layer bleeding):**
 ```
 **Strategy**
 - Because external API calls take 30 seconds on average and cannot
@@ -444,7 +430,7 @@ The same entry compressed for resume readability. All R items pass.
 |---|---|---|
 | R1 PASS | Every sentence is load-bearing. Remove "PG/carrier APIs outside DB transaction boundary" → orchestrator introduction has no motivation. Remove "LLM photo analysis rejected" → rule-based choice appears unexamined. Consigner refusal workflow removed entirely — serves as interview hook. |
 | R2 PASS | Problem (2 lines) → Strategy (7 lines) → Result (2 lines). Bold before→after metrics in Result. 6-second scan captures: "3-party blame automation + compensating workflow → 3 days→same day, 8→1 disputes." |
-| R3 PASS | No layer bleeding — key constraint (external API boundary) in Problem Definition, all Strategy bullets are actions, Result contains only metrics. Problem domain structure (whether using separate "Technical Challenge" or not) is a free choice. |
+| R3 PASS | No layer bleeding — key constraint (external API boundary) in Problem Definition, all Strategy bullets are actions, Result contains only metrics. |
 | R4 PASS | Orchestrator, Choreography, compensating transaction, settlement hold — all industry-standard terms. "3-party blame" is domain-specific but self-explanatory. |
 | R5 PASS | 14 lines total. 3 technical decisions (blame classification + orchestrator + settlement hold) = high complexity → ≤20 line budget. At 14 lines, comfortably within budget. |
 
