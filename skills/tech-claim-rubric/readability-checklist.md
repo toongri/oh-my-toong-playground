@@ -96,6 +96,27 @@ Remove the problem definition → "why was parallelization needed?" is unanswere
 ```
 This shows an engineering decision (idempotency strategy with a specific key structure). Removing it would leave the reader unable to understand how the system prevents duplication — the "why this approach" disappears entirely. Design rationale that makes a decision visible is not removable under R1.
 
+**PASS — Design rationale earns its space (reasoning visibility):**
+```
+**Strategy**
+- Orchestrator-based compensating workflow for multi-step operations
+  - Choreography evaluated: blame-type-dependent downstream branching
+    creates consistency risk across independent services — rejected
+  - Accepted: orchestrator as single coordination point, mitigated by
+    active-passive failover
+```
+Under the old "arc test," covering the Choreography rejection and the accepted tradeoff leaves the narrative intact — "orchestrator-based compensating workflow → Result" still holds. But under R1's expanded narrative, removing these sub-bullets leaves the reader unable to understand WHY orchestration was chosen and WHAT was given up.
+
+**Key distinction:** "narrative arc intact" ≠ "reasoning visible." The arc may survive without a sentence, but if removing it makes the reader unable to understand WHY a decision was made, the sentence is load-bearing under R1. R1 requires the rejection to include a *reason* — merely mentioning an alternative ("Choreography rejected") without a context-specific rationale does not pass.
+
+**FAIL — Trivial rationale does not earn space:**
+```
+**Strategy**
+- MongoDB for document storage
+  - MySQL evaluated — rejected. MongoDB selected.
+```
+While structured as a tradeoff, the content provides no reasoning — no context-specific rejection reason, no constraint that led to the choice. The entry reads identically as "MongoDB for document storage" without the sub-bullet. This is a decision *mention*, not design *rationale*. R1 protects reasoning, not name-drops.
+
 ---
 
 ## R2. Scan Speed + Metric Prominence
@@ -171,6 +192,32 @@ A "Technical Challenge" section establishing engineering complexity (attribute p
 
 **FAIL — Additional section duplicating required area:**
 A "Technical Challenge" section that restates the same constraints already in Problem Definition (e.g., both sections mention "PG API partial failure causes inconsistency"). This is cross-layer content duplication.
+
+**PASS — 4-section structure with distinct roles:**
+```
+**Problem Definition**
+- Return processing 3 days, 8+ weekly disputes from manual blame attribution
+
+**Technical Challenge**
+- Inspection is manual (free-text input) — structured data extraction
+  required for automated classification
+- PG/carrier APIs outside DB transaction boundary — partial completion
+  states require compensation
+
+**Strategy**
+- Structured inspection checklist + rule-based blame auto-classification
+  (~80% auto; LLM photo analysis rejected — insufficient accuracy for
+  monetary decisions)
+- Orchestrator-based compensating workflow per blame type, reverse
+  compensation on failure
+
+**Result**
+- Processing **3 days → same day**, disputes **8/week → 1/week**
+```
+Problem Definition establishes business impact (processing time, disputes). Technical Challenge establishes engineering constraints (manual input, transaction boundaries). Each section has a distinct role — no content overlap.
+
+**FAIL — Additional section that duplicates a required area:**
+A "Technical Challenge" section restating "수동 귀책 판정으로 처리 지연과 분쟁이 발생" when Problem Definition already says "return processing 3 days, 8+ weekly disputes." This is the same information (processing delay + disputes) rephrased in technical language — cross-layer content duplication regardless of the section name.
 
 ### Design Rationale in Solution Area
 
@@ -323,11 +370,96 @@ Tier guidelines are advisory: they inform the evaluator's calibration for entrie
 
 ### Examples
 
-**FAIL — 28 lines, sub-bullet cover test reveals removable content:**
-An entry with 28 lines where strategy sub-bullets include "10초 주기로 스케줄러 실행" (implementation parameter) and "command 토픽이라 단일 서비스만 retry를 소비하므로 cross-service 오염 없음" (defensive explanation removable without breaking narrative). Sub-bullet cover test catches these → R5 FAIL.
-
 **PASS — 27 lines, every sub-bullet justified:**
-An entry with 27 lines, 3 technical decisions, each with sub-bullets showing rejected alternatives with context-specific reasons and accepted tradeoffs. Every sub-bullet independently passes the cover test — removing any one would leave a gap in understanding why the decision was made. R5 PASS despite exceeding 25-line advisory threshold.
+```
+**Problem Definition**
+- Daily intake 2,500→5,000 items; display SLA (2hr) achievement 90%→55%
+- Premium brands (40% revenue) delayed by FIFO, no priority mechanism
+
+**Technical Challenge**
+- 7-attribute LLM inference per item, display only after all complete.
+  Per-item 80s sequential, 5,000 items = SLA structurally impossible
+- Single-attribute failure triggers full re-inference → API cost amplification
+
+**Strategy**
+- **In-consumer goroutine pool for parallel attribute inference**
+  - Consumer horizontal scaling evaluated: increases throughput but
+    per-item 80s latency unchanged — SLA metric is per-item completion
+  - Per-attribute topic separation evaluated: 7×2×3 = 42 topics +
+    orchestrator overhead; Kafka as event transport, not processing engine
+  - Per-item 80s→30s (bounded by slowest attribute). Accepted: no
+    independent per-attribute scaling; revisit at team/model separation
+- **Premium/standard topic separation + differential consumer allocation**
+  - Kafka lacks priority queue; RabbitMQ rejected for dual-infra burden
+- **Partial failure non-blocking retry**
+  - At small volume, full re-inference acceptable. Volume doubling
+    revealed 7× API cost amplification → save-success, retry-failure-only
+  - Success persisted immediately; failed attributes to retry topic
+- **Reconciliation scheduler** for message loss/crash recovery,
+  idempotency (image_id + attribute) for deduplication
+
+**Result**
+- Display SLA **55%→95%**, premium display **2hr→40min**
+- Failed-attribute-only retry → API cost **80% reduction**
+```
+27 lines > 25-line threshold → sub-bullet cover test applied:
+- "Consumer horizontal scaling evaluated..." → removing it: reader doesn't know why not just add consumers. PASS.
+- "Per-attribute topic separation evaluated..." → removing it: reader doesn't know why not separate topics. PASS.
+- "Accepted: no independent per-attribute scaling..." → removing it: hides the cost of this design. PASS.
+- "At small volume, full re-inference acceptable..." → removing it: eliminates the resolution mutation narrative. PASS.
+
+Every sub-bullet independently passes. **If even 1 sub-bullet fails the cover test, the entry is R5 FAIL.** R5 PASS.
+
+**FAIL — 26 lines, sub-bullet cover test reveals removable content:**
+```
+**Problem Definition**
+- Display SLA (2hr) achievement 90%→55% after daily intake doubled to 5,000
+- Premium brands (40% revenue) delayed; no priority mechanism in FIFO consumer
+
+**Strategy**
+- **Goroutine pool for parallel attribute inference**, per-item 80s→30s
+  - Pool size set to 14 (2× attribute count); channel buffer size 512
+  - WaitGroup for goroutine fan-in at code level
+  - Context cancellation timeout per attribute call: 15 seconds
+- **Premium/standard topic separation** for priority processing
+  - Consumer group naming convention: `{service}-{tier}-consumer-group`
+  - Premium topic partition count: 12; standard topic partition count: 6
+  - Kafka consumer poll timeout set to 1,000ms per tier
+- **Reconciliation scheduler** to detect and recover unprocessed items
+  - Polling query: SELECT WHERE status='PENDING' AND updated_at < NOW()-5min
+  - Scan interval: 10 seconds; DB connection timeout: 3 seconds per cycle
+  - Batch size per scan capped at 100 rows
+- **Idempotency** via (image_id + attribute) composite key for deduplication
+  - Redis TTL for idempotency key set to 24 hours
+  - Key format: `idem:{image_id}:{attribute_name}`
+- **Partial failure non-blocking retry**: success saved, failures to retry topic
+  - Exponential backoff base 2s, cap 30s, jitter factor 0.2
+  - 3 retries then DLQ; DLQ retention period 7 days
+  - Retry topic max.poll.records set to 50; offset commit interval: 500ms
+
+**Result**
+- SLA **55%→95%**, premium display **2hr→40min**
+- Failed-attribute-only retry → API cost **80% reduction**
+```
+26 lines > 25-line threshold → sub-bullet cover test applied:
+- "Pool size set to 14 (2× attribute count); channel buffer size 512" → configuration values; pool role is understood without specific sizing. FAIL.
+- "WaitGroup for goroutine fan-in at code level" → code-level implementation detail, not a design decision. FAIL.
+- "Context cancellation timeout per attribute call: 15 seconds" → operational parameter; parallel inference is understood without the specific timeout. FAIL.
+- "Consumer group naming convention: `{service}-{tier}-consumer-group`" → naming convention detail; topic separation strategy is understood without it. FAIL.
+- "Premium topic partition count: 12; standard topic partition count: 6" → infrastructure parameter; priority separation concept needs no specific numbers. FAIL.
+- "Kafka consumer poll timeout set to 1,000ms per tier" → operational parameter. FAIL.
+- "Polling query: SELECT WHERE status='PENDING' AND updated_at < NOW()-5min" → implementation detail; scheduler role is understood without the exact query. FAIL.
+- "Scan interval: 10 seconds; DB connection timeout: 3 seconds per cycle" → operational parameters. FAIL.
+- "Batch size per scan capped at 100 rows" → configuration value; scheduler function is understood without the batch limit. FAIL.
+- "Redis TTL for idempotency key set to 24 hours" → configuration value; idempotency strategy is understood without the TTL. FAIL.
+- "Key format: `idem:{image_id}:{attribute_name}`" → implementation detail; composite key strategy is understood without the exact format. FAIL.
+- "Exponential backoff base 2s, cap 30s, jitter factor 0.2" → configuration detail; backoff strategy is understood without the exact values. FAIL.
+- "DLQ retention period 7 days" → operational parameter. FAIL.
+- "Retry topic max.poll.records set to 50; offset commit interval: 500ms" → operational parameters. FAIL.
+
+14 sub-bullets fail the cover test → R5 FAIL. Same domain as the PASS example — the difference is reasoning density, not topic.
+
+**Note on implementation parameters vs design decisions:** A parameter CAN be a design decision when paired with its systemic consequence (e.g., "reduced max.poll.records from 500 to 50 to prevent rebalance loops within 30s session timeout"). The test is whether removing the parameter hides a *decision rationale*, not whether it contains a number.
 
 ---
 
@@ -406,7 +538,7 @@ This entry passed E3b CASCADING (0.85) — the technical depth is validated. But
 
 | R Item | Verdict | Specific Issue |
 |---|---|---|
-| R1 | FAIL | Problem Definition bullets 4-5 (re-inspection dependency, consigner refusal) are narratively resolved by Strategy bullets 3-4. Removing them creates no gap — the reader encounters the solutions that address these concerns naturally. Technical Challenge section (4 lines) largely repeats Problem Definition constraints. |
+| R1 | FAIL | Problem Definition bullets 4-5 (re-inspection dependency, consigner refusal) establish constraints that Strategy bullets 3-4 address. However, Strategy bullets 3-4 reintroduce these constraints within their own framing ('decouple return resolution from settlement pipeline', 'platform absorption workflow'), making the Problem Definition statements redundant. The test is not 'does the information appear elsewhere' but 'is the reasoning visible without this sentence' — and Strategy makes the reasoning self-contained. Technical Challenge section (4 lines) largely repeats Problem Definition constraints. |
 | R2 | PASS | Result section has bold metrics, flow is top-to-bottom |
 | R3 | PASS | Strategy bullet 2 ("External APIs cannot participate in DB transactions, so steps execute sequentially per blame type with reverse compensation on failure") — technical constraint ('External APIs cannot participate in DB transactions') directly motivates orchestrator choice. This is design rationale, not problem context bleeding. |
 | R4 | PASS | Orchestrator, Choreography, compensating transaction — standard terms used |
@@ -450,6 +582,6 @@ The same entry compressed for resume readability. All R items pass.
 
 **What was removed and why:**
 - Consigner refusal branch workflow → 4th strategy, but ancillary. Left as interview hook ("What happens when the consigner refuses?")
-- Technical Challenge section → could be valid as an additional section with distinct role, but removed here for compactness. Key constraints merged into Problem Definition
+- Technical Challenge section → Key constraint (API transaction boundary) merged into Problem Definition because this entry's two constraints could be presented alongside business context without diluting distinct signal. In entries with numerous complex engineering constraints, a separate Technical Challenge section would serve a distinct role.
 - Problem Definition bullets 3-5 → settlement axis detail, re-inspection dependency, consigner refusal are all addressed by their corresponding Strategy bullets
 - Result bullets 3-4 → "compensating transactions" kept (core value); "consigner refusal automation" removed (strategy was also removed)
