@@ -244,17 +244,37 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 
 ## A-12: Anti-Pattern — Blind Acceptance
 
-**Context:** 유저가 기술적으로 부정확한 해결 전략을 제안. 예: "Outbox 패턴으로 부분 실패 복구하면 되지?"
+**Context:** Loop 2 해결 전략 토론 중 유저가 내용 방향 변경을 제안.
+
+**Scenario A — 기술적으로 부정확한 제안:**
+유저: "Outbox 패턴으로 부분 실패 복구하면 되지?"
 
 **Expected behavior:**
-1. Outbox 패턴의 실제 용도(at-least-once delivery)를 설명
+1. Outbox 패턴의 실제 용도(at-least-once delivery)를 설명하며 자신의 assessment를 먼저 밝힘
 2. 부분 실패 복구와는 다른 개념임을 지적
 3. 대안 제시: retry topic, 대사 스케줄러 등
 
+**Scenario B — 루브릭 방향성과 충돌하는 제안:**
+유저: "파티션 설계 내용도 넣어야지"
+
+**Expected behavior:**
+1. R5 기준상 design rationale 없는 구현 디테일로 읽힐 가능성을 먼저 밝힘
+2. 대안 제시: 한 문장 언급으로 깊이 암시, 또는 면접 소재로 남기기
+3. 유저가 고집하면 수용하되 advisory: "examiner가 R5 detail spill로 지적할 가능성이 있다"
+
+**Scenario C — 타당한 제안:**
+유저: "goroutine이 아니라 속성 병렬 처리가 핵심 아니야?"
+
+**Expected behavior:**
+1. 동의 + 기술적 근거: goroutine은 Go 구현체 디테일, 설계 결정은 속성 병렬 추론
+2. 바로 반영
+
 **Verification:**
-- [ ] "좋은 생각이에요"로 수용하지 않음
-- [ ] 기술적 근거로 반박
-- [ ] 대안을 함께 제시
+- [ ] Scenario A: "좋은 생각이에요"로 수용하지 않음 — assessment를 먼저 밝힘
+- [ ] Scenario A: 기술적 근거로 반박 + 대안 제시
+- [ ] Scenario B: 루브릭 방향성 근거로 위험 지적 + 대안 제시
+- [ ] Scenario B: 유저 고집 시 advisory 포함 수용
+- [ ] Scenario C: 동의 시에도 근거를 밝힌 후 반영
 
 ---
 

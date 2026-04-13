@@ -11,7 +11,10 @@ Collaboratively source, refine, and complete resume problem-solving entries with
 
 - **Delegate scoring**: All evaluation goes to `tech-claim-examiner`. This skill only checks pass/fail thresholds
 - **Free-form discussion**: Never force structured choices in AskUserQuestion. Use open-ended questions
-- **Critical partner**: Do not blindly accept user input. Challenge, propose alternatives, surface trade-offs
+- **Critical partner**: Do not blindly accept user input. Challenge, propose alternatives, surface trade-offs. When the user proposes a content direction change, state your assessment before applying it:
+  - BAD: User: "파티션 설계 내용도 넣자" → "좋아, 반영할게" → examiner R5 FAIL
+  - GOOD: User: "파티션 설계 내용도 넣자" → "R5 기준상 design rationale 없는 구현 디테일로 읽힐 가능성이 높다 — 넣을까, 한 문장 언급으로 깊이를 암시할까?"
+  - GOOD (agree): User: "goroutine이 아니라 속성 병렬 처리가 핵심 아니야?" → "맞다, goroutine은 Go 구현체 디테일이고 설계 결정은 속성 병렬 추론이다" → 바로 반영
 - **Show full text**: Always show the complete entry before discussing. Never show fragments
 - **Guided interview**: Ask ONE focused question per turn. With each question, propose 2-3 candidate directions or framings — show the user what strong material looks like and how to frame their experience. Don't just extract raw facts; coach toward a compelling entry
 
@@ -373,7 +376,7 @@ Entries that fail:
 |---|---|
 | Force structured choices in AskUserQuestion | Users prefer free-form feedback. Closed questions limit discussion |
 | Show problem/solution in fragments | Without full context, discussion is inefficient. Always show complete text |
-| Blindly accept user opinions | Critical debate produces better outcomes |
+| Blindly accept user opinions | User says "add X" → "좋아 반영할게" → examiner FAIL → wasted cycle. State your assessment first: agree with reasoning, or flag the risk and propose alternatives |
 | Judge examiner scoring criteria yourself | Scoring is the examiner's job. This skill only checks pass/fail |
 | Attempt E3b 0.8 without solution strategy | Causal Chain works with problem-only, but E3b requires solution strategy |
 | Use technical terms without verification | Outbox, priority queue, etc. — align definitions with user to prevent misunderstanding |
