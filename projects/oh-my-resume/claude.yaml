@@ -1,3 +1,8 @@
+hooks:
+  SessionStart:
+    - component: resume-forge-start.sh
+      timeout: 10
+
 plugins:
   items:
     - name: frontend-design@claude-code-plugins
