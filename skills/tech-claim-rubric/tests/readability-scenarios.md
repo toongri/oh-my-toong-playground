@@ -162,7 +162,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 ```
 
 **Expected:**
-- R5 FAIL: ~33줄 > 25줄 임계값. Sub-bullet cover test에서 제거 가능 내용 발견 (R1 findings 참조)
+- R5 FAIL: Sub-bullet cover test에서 제거 가능 내용 발견 — 기술 과제 섹션의 중복 content와 문제 정의의 불필요 bullet이 cover test 통과 실패. 33줄(> 25줄 임계값)이므로 sub-bullet 단위 검증 적용
 - R3 FAIL: "기술 과제" bullet 2("PG 환불·택배사 정산 API는 DB 트랜잭션 경계 밖이라 부분 완료 상태가 발생하며 보상 처리가 필요")가 문제 정의 bullet 3("PG 환불과 배송비 정산은 외부 API라 부분 실패 시 불일치 상태 발생")과 cross-layer content duplication (violation type 1)
 - R1 FAIL: 문제 정의 5줄 + 기술 과제 4줄 = 9줄이 해결 시작 전에 소비됨. 복수의 문장이 병합 또는 제거 가능
 
