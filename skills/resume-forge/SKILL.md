@@ -57,19 +57,26 @@ digraph loop1 {
     rankdir=TB;
     draft [shape=box, label="Draft problem\n(domain + user input)"];
     discuss [shape=box, label="Discuss with user\n(AskUserQuestion)", style=filled, fillcolor=lightyellow];
+    confirm [shape=box, label="Confirm with user\n(AskUserQuestion:\n이걸로 제출할까?)", style=filled, fillcolor=lightyellow];
     exam [shape=box, label="Submit to\ntech-claim-examiner", style=filled, fillcolor=orange];
     check [shape=diamond, label="Causal Chain\n≥ 0.7?"];
     save [shape=box, label="Save to drafts/", style=filled, fillcolor=lightgreen];
     feedback [shape=box, label="Show examiner feedback\n+ propose alternatives\n→ re-discuss", style=filled, fillcolor=lightyellow];
 
     draft -> discuss;
-    discuss -> exam;
+    discuss -> confirm;
+    confirm -> exam [label="user: 제출"];
+    confirm -> discuss [label="user: 아직"];
     exam -> check;
     check -> save [label="yes"];
     check -> feedback [label="no"];
-    feedback -> exam;
+    feedback -> discuss;
 }
 ```
+
+**Confirmation Gate** — After discussing the problem definition with the user, show the complete draft and ask via AskUserQuestion: "이 문제 정의로 examiner에게 제출할까요?" User responds:
+- **"제출" / 확인**: Proceed to examiner
+- **"아직"**: Return to discuss — refine together, then confirm again. This is NOT "다음" (skip). "아직" means "keep improving this scenario"; "다음" means "skip to next scenario"
 
 **User says "다음" (next)** → skip current scenario, move on. Allowed at any point in both Loop 1 and Loop 2. Skipped scenarios stay in their current location (drafts/ or wherever they are) with state unchanged (`pending`).
 
@@ -104,6 +111,7 @@ digraph loop2 {
     pick [shape=box, label="Pick a draft"];
     interview [shape=box, label="Interview: solution strategy\n(AskUserQuestion)", style=filled, fillcolor=lightyellow];
     show [shape=box, label="Show full entry\n(problem+challenge+solution+result)"];
+    confirm [shape=box, label="Confirm with user\n(AskUserQuestion:\n이 엔트리로 제출할까?)", style=filled, fillcolor=lightyellow];
     exam [shape=box, label="Submit to\ntech-claim-examiner\n(full Input Format)", style=filled, fillcolor=orange];
     check [shape=diamond, label="Final Verdict\nAPPROVE?"];
     save [shape=box, label="Save to\nproblem-solving/", style=filled, fillcolor=lightgreen];
@@ -113,7 +121,9 @@ digraph loop2 {
 
     pick -> interview;
     interview -> show;
-    show -> exam;
+    show -> confirm;
+    confirm -> exam [label="user: 제출"];
+    confirm -> interview [label="user: 아직"];
     exam -> check;
     check -> save [label="APPROVE"];
     check -> classify [label="REQUEST_CHANGES"];
@@ -125,6 +135,10 @@ digraph loop2 {
     revise -> show;
 }
 ```
+
+**Confirmation Gate** — After showing the full entry to the user, ask via AskUserQuestion: "이 엔트리로 examiner에게 제출할까요?" User responds:
+- **"제출" / 확인**: Proceed to examiner
+- **"아직"**: Return to interview — dig deeper into solution details, refine the entry, then confirm again. This is NOT "다음" (skip). "아직" means "keep improving this entry"; "다음" means "skip to next scenario"
 
 **Solution interview protocol:**
 - **One question per turn**: Never batch multiple questions. Ask a single focused question, wait for the answer, then follow up

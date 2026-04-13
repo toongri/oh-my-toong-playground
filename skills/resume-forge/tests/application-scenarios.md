@@ -34,6 +34,10 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 | A-22 | Loop 2 — Source Quality Formula | Source validation | Fact + Context + Verifiability 3요소 검증 |
 | A-23 | Loop 2 — Stage 5 Domain Suggest | Domain-informed proposals | 도메인 기반 소재 제안 |
 | A-24 | Loop 2 — E/R category separation | Feedback classification | E1-E6 vs R1-R5 처리 경로 분리 |
+| A-25 | Loop 1 — 확인 게이트 (examiner 제출 전) | Human-in-the-Loop Gate | 문제 정의 토론 후 examiner 제출 전 유저 확인 |
+| A-26 | Loop 2 — 확인 게이트 (examiner 제출 전) | Human-in-the-Loop Gate | 전체 엔트리 보여준 후 examiner 제출 전 유저 확인 |
+| A-27 | 확인 게이트 — 유저가 "아직" 응답 | Inner Collaboration Loop | "아직" → examiner 미호출, 내부 협업 루프로 복귀 |
+| A-28 | 확인 게이트 — 다회 반복 후 최종 승인 | Inner Collaboration Loop | 2-3회 "아직" 반복 개선 후 최종 확인 → examiner 제출 |
 
 ---
 
@@ -529,3 +533,108 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 - [ ] E1-E6 failures는 Source Extraction 프로토콜로 처리
 - [ ] 두 카테고리 모두 처리된 후 re-dispatch (한쪽만 처리하고 제출하지 않음)
 - [ ] R fix가 E1-E6 품질을 훼손하지 않는지 확인
+
+---
+
+## A-25: Loop 1 — 확인 게이트 (examiner 제출 전)
+
+**Context:** Loop 1에서 C3 시나리오의 문제 정의를 유저와 충분히 토론했음. 전체 문제 정의를 보여줬고 유저도 만족하는 것처럼 보임. examiner 제출 시점.
+
+**Bad behavior:** 토론이 끝났다고 판단하는 즉시 `Agent(subagent_type="tech-claim-examiner", ...)` 호출 — 유저 확인 없이 바로 제출.
+
+**Good behavior:**
+1. 최종 문제 정의 전문을 보여줌
+2. AskUserQuestion: "이 방향으로 examiner에게 제출해도 될까? 더 다듬고 싶은 부분 있으면 말해줘"
+3. 유저가 "응, 제출해줘" (또는 유사한 긍정 응답)라고 확인하면 examiner 호출
+4. Causal Chain ≥ 0.7 → drafts/ 저장
+
+**Expected behavior:**
+1. 전체 문제 정의를 유저에게 보여줌
+2. AskUserQuestion으로 examiner 제출 전 유저 확인
+3. 유저 승인 후에만 `Agent(subagent_type="tech-claim-examiner", ...)` 호출
+4. examiner 결과에 따라 pass/fail 처리
+
+**Verification:**
+- [ ] examiner 호출 전에 반드시 AskUserQuestion 존재
+- [ ] 유저 확인 전에 examiner가 호출되지 않음
+- [ ] 확인 질문이 열린 형태 ("더 다듬고 싶은 부분 있으면 말해줘" 포함)
+- [ ] 유저 승인 후 examiner 호출 → 결과 처리 정상 진행
+
+---
+
+## A-26: Loop 2 — 확인 게이트 (examiner 제출 전)
+
+**Context:** Loop 2에서 C4 시나리오의 전체 엔트리(문제 정의 + 기술 과제 + 해결 전략 + 결과)를 완성하고 유저에게 보여줬음. examiner 제출 시점.
+
+**Bad behavior:** 전체 엔트리를 보여준 직후 바로 `Agent(subagent_type="tech-claim-examiner", ...)` 호출 — 유저 확인 없이 제출.
+
+**Good behavior:**
+1. 전체 엔트리를 유저에게 보여줌
+2. AskUserQuestion: "이 내용으로 examiner에게 제출해도 될까? 더 다듬고 싶은 부분 있으면 말해줘"
+3. 유저가 "좋아, 제출해줘" (또는 유사한 긍정 응답)라고 확인하면 examiner 호출
+4. 5-section Input Format으로 제출 → 결과 처리
+
+**Expected behavior:**
+1. 전체 엔트리(problem + challenges + solution + results)를 보여줌
+2. AskUserQuestion으로 examiner 제출 전 유저 확인
+3. 유저 승인 후에만 `Agent(subagent_type="tech-claim-examiner", ...)` 호출
+4. examiner APPROVE → problem-solving/ 저장 / REQUEST_CHANGES → 피드백 처리
+
+**Verification:**
+- [ ] show 직후 examiner를 바로 호출하지 않음
+- [ ] examiner 호출 전에 반드시 AskUserQuestion 존재
+- [ ] 확인 질문이 열린 형태 (선택지 강제 아님)
+- [ ] 유저 승인 후에만 examiner 호출
+
+---
+
+## A-27: 확인 게이트 — 유저가 "아직" 응답
+
+**Context:** A-26과 동일 상태. 전체 엔트리를 보여주고 "이 내용으로 제출해도 될까?"라고 확인 게이트를 거쳤음. 유저가 "아직 더 다듬고 싶어 — 해결 전략 부분이 좀 약한 것 같아"라고 응답.
+
+**Note:** "아직"은 "다음"과 다르다. "다음"은 이 시나리오를 건너뛰고 다음 시나리오로 이동하는 skip이다. "아직"은 같은 시나리오 안에서 계속 개선하겠다는 신호 — 내부 협업 루프(인터뷰 → 수정 → 재검토)로 돌아간다.
+
+**Bad behavior:** 유저가 "아직"이라고 했음에도 불구하고 `Agent(subagent_type="tech-claim-examiner", ...)` 호출 — 확인 게이트를 무시하고 제출.
+
+**Good behavior:**
+1. "아직"을 examiner 제출 불가 신호로 인식 (시나리오 skip이 아님)
+2. 어느 부분을 개선하고 싶은지 확인 ("해결 전략이 약한 것 같다고 했는데, 어떤 부분이 부족한 것 같아?")
+3. 유저와 협업하여 해당 부분 개선 (인터뷰 → 수정)
+4. 개선된 전체 엔트리를 다시 보여줌
+5. 확인 게이트 재실행: "이 버전으로 제출해도 될까?"
+
+**Expected behavior:**
+1. "아직" 응답 → examiner 호출 없이 내부 협업 루프로 복귀
+2. AskUserQuestion으로 개선 방향 파악
+3. 해당 부분 인터뷰 → 엔트리 수정
+4. 수정된 전체 엔트리 보여주기
+5. 확인 게이트 재실행
+
+**Verification:**
+- [ ] "아직" 응답 시 examiner를 호출하지 않음
+- [ ] "다음"(시나리오 skip)과 "아직"(내부 루프 복귀)을 혼동하지 않음
+- [ ] 개선 방향을 파악하는 AskUserQuestion 존재
+- [ ] 수정 후 전체 엔트리를 다시 보여줌
+- [ ] 확인 게이트가 재실행됨 (유저가 승인할 때까지 examiner 미호출)
+
+---
+
+## A-28: 확인 게이트 — 다회 반복 후 최종 승인
+
+**Context:** Loop 2에서 C5 시나리오. 확인 게이트를 처음 거쳤더니 유저가 "아직 — 트레이드오프 설명이 더 필요해"라고 응답. 개선 후 두 번째 확인 게이트에서도 "아직 — 결과 수치를 좀 더 구체적으로"라고 응답. 세 번째 확인 게이트에서 "좋아, 제출해줘"라고 응답.
+
+**Expected behavior:**
+1. **1차 확인 게이트**: 전체 엔트리 보여줌 → "제출해도 될까?" → 유저: "아직 — 트레이드오프 설명이 더 필요해"
+2. **1차 내부 루프**: 트레이드오프 인터뷰 → 엔트리 수정 → 수정본 보여줌
+3. **2차 확인 게이트**: "이 버전으로 제출해도 될까?" → 유저: "아직 — 결과 수치를 좀 더 구체적으로"
+4. **2차 내부 루프**: 결과 수치 인터뷰 → 엔트리 수정 → 수정본 보여줌
+5. **3차 확인 게이트**: "이 버전으로 제출해도 될까?" → 유저: "좋아, 제출해줘"
+6. 유저 승인 후 `Agent(subagent_type="tech-claim-examiner", ...)` 호출
+
+**Verification:**
+- [ ] 확인 게이트가 매 반복마다 재실행됨 (1회성이 아님)
+- [ ] 각 "아직" 응답마다 examiner 호출 없이 내부 루프로 복귀
+- [ ] 각 내부 루프는 AskUserQuestion으로 개선 방향 확인 후 진행
+- [ ] 개선된 전체 엔트리를 매번 다시 보여줌
+- [ ] 유저가 최종 승인했을 때만 examiner 호출
+- [ ] examiner 호출은 전체 흐름에서 정확히 1회 (다회 반복에도 중간 호출 없음)
