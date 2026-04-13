@@ -32,11 +32,11 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 **Expected:**
 - R1 FAIL: "기술 과제" 섹션의 3번째 bullet("1개 속성 추론 실패 시 나머지 6개까지 폐기...") 내용이 해결 전략 3번째 bullet과 결과 3번째 bullet에서 이미 전달됨. 빼도 서사에 구멍 없음.
 - R1 FAIL: "대사 스케줄러를 10초 주기로 운용" — 10초라는 구현 세부가 서사에 필수가 아님. "대사 스케줄러로 미처리 건 복구" 정도면 충분.
-- R3 FAIL: "기술 과제" 섹션이 별도로 존재하여 문제 정의와 층위 분리가 안 됨 (문제 정의에 병합 가능)
+- R3 PASS: "기술 과제" 섹션은 엔지니어링 복잡도(속성별 처리 시간 편차, 순차 처리의 구조적 한계)를 확립하는 반면, 문제 정의는 비즈니스 임팩트(SLA 달성률 하락, 프리미엄 브랜드 지연)를 다룬다. 두 섹션은 서로 다른 역할을 수행하며 내용 중복이 없다 (R1에서 잡히는 3번째 bullet 중복 제외). R3 기준상 역할이 구분된 추가 섹션은 허용된다.
 
 ---
 
-## Scenario 2: R3 Fail — 전략에 문제 배경이 섞인 엔트리
+## Scenario 2: R3 Pass — 설계 근거가 해결 전략에 포함된 엔트리
 
 **Input:**
 ```
@@ -58,8 +58,8 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 ```
 
 **Expected:**
-- R3 FAIL: "쿼리 최적화는 인덱스 이미 적용 완료로 한계, Local Cache는 다중 서버에서 상품 상태 빈번 변경 시 일관성 보장 불가" — 이건 문제 배경/기각 사유이지 해결 전략이 아님. 해결 전략 섹션에 문제 정보가 섞여 있음.
-- R5: 경계선 (15줄, 범위 내이지만 문제 정의가 1줄뿐이라 비율이 비대칭)
+- R3 PASS: "쿼리 최적화는 인덱스 이미 적용 완료로 한계, Local Cache는 다중 서버에서 상품 상태 빈번 변경 시 일관성 보장 불가" — 소진된 대안을 제시하여 Cache-Aside 선택을 직접 정당화하는 설계 근거다. R3 기준상 특정 결정을 동기화하는 기술적 제약은 해결 전략 영역의 design rationale로 PASS.
+- R5 PASS: 15줄, 25줄 임계값 미만 자동 PASS
 
 ---
 
@@ -127,11 +127,11 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 6초 내 파악 가능, 결과에 정량 메트릭 배치
 - R3 PASS: 문제/전략/결과 층위 깨끗이 분리
 - R4 PASS: Cache-Aside, singleflight, TTL jitter, eviction — 표준 용어 적절 활용
-- R5 PASS: 약 9줄, 기술 결정 2개인 중간 복잡도에 적합
+- R5 PASS: 약 9줄, 25줄 미만 자동 PASS
 
 ---
 
-## Scenario 6: R5 Fail — 볼륨 초과 엔트리 (hard cap 위반)
+## Scenario 6: R5 Fail — 볼륨 초과 엔트리 (25줄 임계값 초과)
 
 **Input:**
 ```
@@ -162,13 +162,13 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 ```
 
 **Expected:**
-- R5 FAIL: ~33줄로 hard cap 20줄 초과
-- R3 FAIL: "기술 과제" 별도 섹션 존재 (문제 정의에 병합 필요)
+- R5 FAIL: ~33줄 > 25줄 임계값. Sub-bullet cover test에서 제거 가능 내용 발견 (R1 findings 참조)
+- R3 FAIL: "기술 과제" bullet 2("PG 환불·택배사 정산 API는 DB 트랜잭션 경계 밖이라 부분 완료 상태가 발생하며 보상 처리가 필요")가 문제 정의 bullet 3("PG 환불과 배송비 정산은 외부 API라 부분 실패 시 불일치 상태 발생")과 cross-layer content duplication (violation type 1)
 - R1 FAIL: 문제 정의 5줄 + 기술 과제 4줄 = 9줄이 해결 시작 전에 소비됨. 복수의 문장이 병합 또는 제거 가능
 
 ---
 
-## Scenario 7: R5 Fail — 볼륨만 초과 (hard cap 경계값)
+## Scenario 7: All Pass — 가이드라인 소폭 초과 (25줄 미만)
 
 **Input:**
 ```
@@ -202,7 +202,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제(지연·불일치 수치) → 전략(격리·보상·병렬화) → 결과(p99·불일치 건수) 순서 명확. 결과에 정량 메트릭 bold 처리
 - R3 PASS: 문제 정의에 원인 포함, 해결 전략에 기각 사유 포함(문제 배경 아님), 결과 섹션에 수치만 존재. 섹션 역할 분리 깨끗
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown — 표준 기술 용어 적절 활용
-- R5 FAIL: 21줄, hard cap 20줄 초과. 3 technical decisions → High complexity budget (≤20줄)이지만 1줄 초과.
+- R5 PASS: 21줄 < 25줄 임계값, 자동 PASS. (참고: High complexity 가이드라인 ≤20줄)
 
 ---
 
@@ -233,7 +233,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
 - R3 PASS: 섹션 역할 분리 깨끗. 문제 정의에 원인, 전략에 선택 근거, 결과에 수치만 존재.
 - R4 PASS: goroutine pool, noisy neighbor, Redis Pub/Sub, Kafka, Prometheus — 표준 용어 적절 활용.
-- R5 PASS: technical decision 2개 (goroutine pool — global pool 기각, Redis Pub/Sub — Kafka 기각). Medium complexity → ≤16줄 budget. 실제 blank 제외 14줄 (범위 내). 세 번째 기술 적용(Prometheus 메트릭 수집)은 대안 기각이 명시되지 않아 decision으로 세지 않음.
+- R5 PASS: 14줄 < 25줄 임계값, 자동 PASS. (참고: Medium complexity 가이드라인 ≤16줄)
 
 ---
 
@@ -270,7 +270,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
 - R3 PASS: 섹션 역할 분리 깨끗. 기술 과제 별도 섹션 없음.
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, at-least-once, 백프레셔, DLQ — 표준 기술 용어 적절 활용.
-- R5 PASS: technical decision 3개 (토픽 분리 — 단일 토픽 기각, Outbox — Choreography 기각, goroutine pool — global pool 기각). High complexity → ≤20줄 budget. 실제 줄 수 22줄이지만 규칙("Blank lines between sections do NOT count") 적용 시 blank 2개 제외 → 20줄. hard cap 이내.
+- R5 PASS: 20줄 < 25줄 임계값, 자동 PASS. (참고: High complexity 가이드라인 ≤20줄)
 
 ---
 
@@ -294,4 +294,4 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 FAIL: 결과 섹션에 정량 메트릭 없음. "90분"은 문제 정의에만 있고 개선 수치가 결과에 없어 anti-qualitative test 실패.
 - R3 FAIL: 결과 첫 번째 bullet("SQS로 비동기 분리하여...")이 action 서술로, Strategy 내용이 Result에 혼입됨 (Violation 3).
 - R4 PASS: SQS, Circuit Breaker — 표준 용어 사용.
-- R5 PASS: 약 8줄, hard cap 이내.
+- R5 PASS: 약 8줄, 25줄 미만 자동 PASS
