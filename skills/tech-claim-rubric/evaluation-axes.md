@@ -86,6 +86,67 @@ Single-dimension impact does NOT fail E2 — E2 evaluates causal validity, not b
 
 This check is informational — it does not change the E2 PASS/FAIL verdict. It provides context for E6 (Target-Scale Transferability), where multi-dimensional impact demonstrates transferable judgment.
 
+**Constraint Resolution Verification (E2 supplement):**
+
+When the problem area states explicit constraints, verify that the solution area addresses each one:
+
+**Verification procedure:**
+1. List all constraints explicitly stated in the problem area (scale limits, SLA requirements, failure modes, architectural restrictions)
+2. For each constraint, identify the corresponding solution in the solution area
+3. If a constraint has no corresponding solution AND is not explicitly accepted as a tradeoff → E2 FAIL
+
+**Tradeoff acceptance:** If a constraint is deliberately unresolved and stated as an accepted cost/limitation in the solution area, this counts as "addressed" — PASS.
+
+**Scope:** Per-entry only. Do not cross-reference constraints between different resume entries.
+
+**Example (FAIL):**
+```
+Problem: "5,000 items/day, 80s per item = 111 hours total processing"
+Strategy: "goroutine pool parallelization, reducing per-item time from 80s to 30s"
+```
+Per-item latency is addressed (80s→30s), but total throughput (5,000×30s = 41.67 hours > 24 hours) is not. The solution addresses one constraint but leaves another unresolved without explanation. → E2 FAIL: unstated how daily volume fits within processing capacity.
+
+**Example (PASS):**
+```
+Problem: "5,000 items/day, 80s per item = 111 hours total processing"
+Strategy: "goroutine pool parallelization, per-item 80s→30s. 3 Consumer instances handle daily throughput within 12-hour business window"
+```
+Both per-item latency and total throughput are addressed. → E2 PASS.
+
+This check is informational when constraints are implicit — only fail when constraints are **explicitly stated** in the problem area and left unaddressed.
+
+**Arithmetic Consistency Check (E2 supplement):**
+
+When an entry contains quantitative claims (throughput, latency, SLA, cost reduction), verify internal arithmetic consistency.
+
+**Scope:** Applies to parallelism, throughput, and latency claims. Does NOT apply to classification rates, success percentages, or other non-parallelism approximations (e.g., "~80% auto-classified" is not subject to arithmetic verification).
+
+**Concurrency Extraction:** When an entry claims parallelism-based performance improvement, extract these 4 elements before calculating:
+
+| Element | Description | Example |
+|---------|-------------|---------|
+| Total Workload | Items to process in the time window | 5,000 items/day |
+| Latency per Unit | Processing time per item | 30 seconds |
+| Concurrency Factor | Parallel processing capacity | 7 goroutines per item, 3 Consumer instances |
+| Execution Model | Sequential / Parallel / Pipeline | Consumer-internal goroutine parallelism |
+
+**Verification formula:**
+- Sequential: `Total Time = Workload × Latency`
+- Parallel: `Total Time = (Workload × Latency) / Concurrency`
+
+**Severity:**
+- **E2 FAIL:** Arithmetic produces a logical impossibility with the stated architecture. Example: a single sequential processor claimed to handle workload exceeding 24 hours, with no mention of horizontal scaling or concurrency.
+- **E2 P1 (finding, not FAIL):** Arithmetic requires unstated assumptions to work. Example: throughput claim only closes with 3+ Consumer instances, but the entry doesn't specify instance count. Recommend the candidate make the assumption explicit.
+
+**Approximate values:** Numbers explicitly marked as estimates (~, 약, approximately) are exempt from strict arithmetic verification. Only fail when the approximation changes the architectural conclusion.
+
+**Example:**
+"7 attributes at 5-30s each processed in parallel via goroutine pool → wall-clock time ≈ max(individual times) ≈ 30s per item."
+→ Arithmetic is consistent: parallel execution bounded by the slowest attribute (~30s), not the sum (~80s).
+
+"Per-item processing 80s → 10s via goroutine parallelization of 7 attributes"
+→ Arithmetic inconsistency: the slowest attribute alone takes ~30s. Even with perfect parallelism, 10s is impossible. → E2 FAIL.
+
 ### E3. Problem Fidelity (Tradeoff Authenticity + Problem Surface)
 
 **Absolute standard — no career-level calibration.** A tradeoff that doesn't hold logically, or a bullet that compresses a complex reality into a flat description, fails at any experience level.
