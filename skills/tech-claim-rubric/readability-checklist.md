@@ -10,7 +10,7 @@ The hiring pipeline has a brutal funnel: recruiters scan in 6-30 seconds, hiring
 - Tradeoff presence/authenticity → E3a (do NOT re-evaluate in Phase C)
 - Causal cascade depth → E3b (do NOT re-evaluate in Phase C)
 - Signal clarity → E5 (do NOT re-evaluate in Phase C)
-- Phase C evaluates **physical form, structure, and density** only
+- Phase C evaluates **physical form, structure, density, and reasoning visibility**
 
 ---
 
@@ -18,7 +18,7 @@ The hiring pipeline has a brutal funnel: recruiters scan in 6-30 seconds, hiring
 
 **Unit of evaluation:** Each individual sentence
 
-**Core question:** "Does this sentence earn its space?" R1 is the compactness gate — it asks whether deleting a sentence would leave a gap in the problem→solution→result arc. If the narrative reads equally well without it, the sentence is expendable regardless of how interesting or technically valid its content is.
+**Core question:** "Does this sentence earn its space by contributing to the reader's understanding of what was done, why it was done (reasoning, alternatives, tradeoffs), or what changed?" R1 is the compactness gate — it asks whether deleting a sentence would leave a gap in the problem→reasoning→solution→result arc. If the narrative reads equally well without it, the sentence is expendable regardless of how interesting or technically valid its content is.
 
 ### Why This Matters
 
@@ -34,16 +34,18 @@ For each sentence in the entry, apply this test:
 
 1. Cover the sentence
 2. Read the preceding and following sentences together
-3. Ask: "Does the problem → solution → result arc still hold? Is there a logical gap?"
+3. Ask: "Does the problem → reasoning → solution → result arc still hold? Is there a logical gap?"
 4. If the arc holds without the sentence → the sentence is unnecessary → R1 FAIL
 
 **Common removable patterns:**
-- Implementation details that don't affect the narrative (scheduler polling interval, batch size, specific timeout values)
+- Implementation parameters that don't affect the narrative (scheduler polling interval, batch size, specific timeout values). Note: design rationale is NOT removable — rejected alternatives with context-specific reasons, accepted costs/limitations, and verification methods earn their space by making the reasoning visible.
 - Problem context that is already resolved by the solution or proven by the result metrics
 - Defensive explanations for obvious choices
 - Information repeated across sections (constraint stated in problem definition AND re-explained in strategy)
 
-**Important:** R1 does NOT judge whether content is technically interesting — only whether it is narratively necessary. A fascinating implementation detail that doesn't serve the problem→solution→result arc is still removable.
+**Important:** R1 does NOT judge whether content is technically interesting — only whether it is narratively necessary. A fascinating implementation parameter that doesn't serve the problem→reasoning→solution→result arc is still removable.
+
+**R1/E3a boundary:** R1 checks whether reasoning is visible to the reader (presence/form). Whether the reasoning is technically valid or the tradeoff is sound is E3a's scope (substance/quality). R1 does not evaluate tradeoff quality — only whether the reasoning is present and visible.
 
 > For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
 
@@ -86,6 +88,13 @@ The "30 seconds" constraint appears in both sections. In the strategy, the reade
 - Display SLA achievement **55% → 95%**
 ```
 Remove the problem definition → "why was parallelization needed?" is unanswered. Remove the strategy → "how was the SLA recovered?" is unanswered. Remove the result → "did it work?" is unanswered. Every sentence is load-bearing.
+
+**PASS — Design rationale retained:**
+```
+**Strategy**
+- 멱등성(image_id + attribute)으로 중복 방지
+```
+This shows an engineering decision (idempotency strategy with a specific key structure). Removing it would leave the reader unable to understand how the system prevents duplication — the "why this approach" disappears entirely. Design rationale that makes a decision visible is not removable under R1.
 
 ---
 
@@ -134,42 +143,55 @@ Strategy describes the action. Result quantifies the impact with bold formatting
 
 ---
 
-## R3. Layer Separation
+## R3. Narrative Flow
 
-**Unit of evaluation:** Section boundaries
+**Unit of evaluation:** Entry structure
 
-**Core question:** "Does each section (Problem Definition / Strategy / Result) serve exactly one role, with no cross-contamination?"
+**Core question:** "Can the reader trace the flow of problem → reasoning → solution → result without backtracking?"
 
 ### Why This Matters
 
-In a 10-20 line resume entry, every section transition must be instant. When a Strategy section starts with problem context, the reader must context-switch — "is this still the problem or the solution?" — creating cumulative cognitive load.
+In a resume entry, every section transition must be instant. When content is placed in the wrong area — problem context in the solution area, business symptoms without decision linkage, actions described in the result — the reader must context-switch, creating cumulative cognitive load. R3 checks that the entry's overall flow is coherent and navigable.
 
-### What to Check
+### Required Elements
 
-**Section role definitions:**
-- **Problem Definition**: What was broken? (symptom + root cause + key constraint)
-- **Strategy**: What was done? (chosen approach + brief rejection signal where needed)
-- **Result**: What changed? (quantitative before→after metrics)
+The entry must contain content fulfilling these three roles (section names and count are flexible):
+- **Problem area**: What was broken? (symptom, root cause, key constraints)
+- **Solution area**: What was done and why? (chosen approach + reasoning behind the choice)
+- **Result area**: What changed? (quantitative before→after metrics)
 
-**Specific violations to detect:**
+### Additional Sections
 
-1. **Cross-layer content duplication** — Restating the same constraint in both Problem Definition and Strategy. If the problem section establishes a constraint, Strategy should not re-explain it — the reader already knows.
+Sections beyond the three required roles (e.g., Technical Challenge, Team Context, Background) are permitted when:
+1. The section serves a role distinct from the three required areas
+2. The section does not duplicate content already present in a required area
 
-2. **Problem context in Strategy** — Strategy bullets that start with problem explanations:
-   - FAIL: "Since external APIs cannot participate in DB transactions, we implemented..."
-   - PASS: "Orchestrator-based compensating workflow for multi-step operations across external API boundaries"
-   - The constraint ("external APIs outside DB transaction boundary") belongs in Problem Definition.
+**PASS — Additional section with distinct role:**
+A "Technical Challenge" section establishing engineering complexity (attribute processing time variance, structural impossibility of meeting SLA) when Problem Definition covers business impact (SLA achievement drop, premium brand delay). Different roles, no content duplication.
 
-3. **Strategy content in Result** — Result bullets that describe additional actions rather than metrics.
+**FAIL — Additional section duplicating required area:**
+A "Technical Challenge" section that restates the same constraints already in Problem Definition (e.g., both sections mention "PG API partial failure causes inconsistency"). This is cross-layer content duplication.
 
-**FAIL — Problem context in Strategy (layer bleeding):**
-```
-**Strategy**
-- Because external API calls take 30 seconds on average and cannot
-  participate in DB transactions, we implemented an orchestrator-based
-  compensating workflow
-```
-The first clause ("Because external API calls take 30 seconds...cannot participate in DB transactions") is problem context. It belongs in Problem Definition or Technical Challenge, not in Strategy. The strategy should start with the action: "Orchestrator-based compensating workflow for multi-step operations across external API boundaries."
+### Design Rationale in Solution Area
+
+Technical constraints used as decision motivation in the solution area are **design rationale**, not problem context bleeding. The distinction:
+
+- **Design rationale (PASS):** Technical constraint directly linked to a specific decision
+- **Business symptom without decision linkage (FAIL):** Business metrics (revenue, SLA numbers, customer impact) appearing in the solution area without motivating a specific decision
+
+**PASS examples:**
+- "외부 API가 DB 트랜잭션에 참여할 수 없으므로 오케스트레이터 기반 보상 워크플로우 선택" — technical constraint (transaction boundary) directly motivates the decision (orchestrator)
+- "쿼리 최적화는 인덱스 이미 적용 완료로 한계 → Redis Cache-Aside 도입" — exhausted alternative directly motivates the next decision
+
+**FAIL examples:**
+- "매출 기여 40%인 프리미엄 브랜드의 전시가 지연되어 고객 불만이 증가했다" in solution area — business symptom with no decision linkage (belongs in problem area)
+- "일일 접수량이 5,000건으로 증가하여 SLA 달성률이 55%로 하락했다" in solution area — business metric describing the problem, not motivating a specific solution decision
+
+### Violations (3 types)
+
+1. **Cross-layer content duplication** — The same constraint, fact, or metric appears in multiple sections. If the problem area states a constraint, the solution area should not re-explain it.
+2. **Business symptom in solution area without decision linkage** — Business metrics or customer impact in the solution area that don't directly motivate a specific technical decision.
+3. **Action description in result area** — Result sections should contain quantitative before→after metrics, not descriptions of additional actions taken.
 
 **FAIL — Action in Result:**
 ```
@@ -178,6 +200,14 @@ The first clause ("Because external API calls take 30 seconds...cannot participa
 ```
 The Result contains an action description ("SQS로 비동기 분리"), not a metric. This belongs in Strategy.
 
+**FAIL — Business symptom without decision linkage in solution area:**
+```
+**Strategy**
+- 일일 접수량이 5,000건으로 증가하여 SLA 달성률이 55%로 하락했다
+- Redis Cache-Aside 도입
+```
+The first bullet is a business metric describing the problem — it belongs in the problem area. It does not motivate a specific decision in the solution area.
+
 **PASS — Metric in Result:**
 ```
 **Result**
@@ -185,30 +215,6 @@ The Result contains an action description ("SQS로 비동기 분리"), not a met
 ```
 
 > For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
-
-### Examples
-
-**FAIL — Problem context bleeds into Strategy:**
-```
-**Strategy**
-- Redis Cache-Aside to reduce DB hits
-  - Query optimization was already at its limit with indexes fully applied
-  - Local Cache was ruled out due to inconsistency across multiple servers
-    with frequent product state changes
-```
-"Query optimization at its limit" and "Local Cache ruled out" are problem context (what was tried/considered), not strategy (what was done). They explain WHY Cache-Aside was chosen, but in a format that mixes layers.
-
-**PASS — Clean separation:**
-```
-**Problem Definition**
-- Product listing API p95 500ms+, DB CPU 90%. Index optimization already
-  applied; remaining bottleneck is per-request DB hit volume
-
-**Strategy**
-- Redis Cache-Aside with separate invalidation policies: list cache
-  (TTL 5min) and detail cache (event-driven eviction on state change)
-```
-The problem section establishes "indexes aren't enough" — the reader enters Strategy already knowing why caching was needed.
 
 ---
 
@@ -271,66 +277,74 @@ Same information, half the volume. Every technical choice is named with its reco
 
 ---
 
-## R5. Volume Compliance
+## R5. Length Awareness
 
 **Unit of evaluation:** Entire entry
 
-**Core question:** "Does this entry fit within the physical length appropriate for a formal resume?"
+**Core question:** "Is this entry's length proportional to its content density?"
 
 ### Why This Matters
 
-4-5 entries at 20+ lines each produces 80-100+ lines — a wall of text that defeats scannability. The line budget matches entry length to problem complexity.
+Resume entries compete for limited reader attention. Longer entries must justify every additional line. However, length alone is not a quality signal — an entry where every sentence demonstrates engineering judgment is stronger than a shorter entry that omits key reasoning.
 
 ### Evaluation Criteria
 
-**Per-entry line budget (description block only, excluding title/subtitle/caption/skills):**
+**Per-entry complexity guidelines (참고 수치, 강제가 아님):**
 
-| Complexity | Technical decisions | Line budget (max) |
+| Complexity | Technical decisions | Line guideline |
 |---|---|---|
-| High | 3-4 decisions | ≤20 lines |
-| Medium | 2 decisions | ≤16 lines |
-| Low | 1 decision | ≤13 lines |
-| **Hard cap** | — | **20 lines** |
+| High | 3-4 decisions | ~20 lines |
+| Medium | 2 decisions | ~16 lines |
+| Low | 1 decision | ~13 lines |
 
-**Technical decision**: A choice where a named alternative was considered and rejected with a stated reason ("chose X over Y because Z"). Count each such choice as one decision. Implementation parameters of a chosen approach (TTL value, batch size, polling interval) are NOT separate decisions. A technique mentioned without an explicitly rejected alternative does not count as a decision.
+These guidelines inform the evaluator's calibration but do not trigger FAIL independently. They help gauge whether an entry's length is proportionate to its complexity.
 
-**Line counting:** Count source markdown lines in the description block. One newline = one line. Section headings (**Problem Definition**, **Strategy**, **Result**) count. Blank lines between sections do NOT count — they are formatting, not content.
+**R5 evaluation logic:**
 
-**Section budget guide:**
-- Problem Definition: 2-3 lines
-- Strategy: 6-12 lines (flexible based on complexity)
-- Result: 2-3 lines
+| Line count | Action | Verdict |
+|---|---|---|
+| ≤25 lines | No additional checks needed | R5 PASS |
+| >25 lines | Apply R1 cover test at **sub-bullet level**: each markdown `- ` item (including indented sub-bullets) must independently pass R1's cover test | All pass → R5 PASS; any fail → R5 FAIL |
+
+"Sub-bullet" means any item with its own markdown `- ` bullet marker, including indented items.
+
+Tier guidelines are advisory: they inform the evaluator's calibration for entries ≤25 lines but do not trigger FAIL. Only the 25-line threshold + sub-bullet cover test produces R5 FAIL.
+
+**Line counting:** Count source markdown lines in the description block. One newline = one line. Section headings count. Blank lines between sections do NOT count.
 
 ### What to Check
 
-1. Count total description lines — exceeds hard cap 20?
-2. Count technical decisions in Strategy — does line count match complexity?
-3. Check Problem Definition length — exceeds 3 lines?
-4. Check if 4+ strategy bullets each span 3+ lines — likely over-detailed
+1. Count total description lines
+2. If ≤25 lines → R5 PASS
+3. If >25 lines → Apply R1 cover test to each individual sub-bullet. Any sub-bullet that fails the cover test → R5 FAIL
+4. Check complexity tier guidelines for calibration reference (advisory only)
 
 > For a complete entry passing all R1-R5, see [Cross-Validated Complete Examples](#cross-validated-complete-examples) at the end of this document.
 
 ### Examples
 
-**FAIL — 33 lines, hard cap exceeded:**
-An entry with 5-line problem definition + 4-line technical challenge section + 20-line strategy + 4-line result. Even though each section is individually reasonable, the total far exceeds the 20-line cap. The "technical challenge" section alone adds 4 lines of structural overhead.
+**FAIL — 28 lines, sub-bullet cover test reveals removable content:**
+An entry with 28 lines where strategy sub-bullets include "10초 주기로 스케줄러 실행" (implementation parameter) and "command 토픽이라 단일 서비스만 retry를 소비하므로 cross-service 오염 없음" (defensive explanation removable without breaking narrative). Sub-bullet cover test catches these → R5 FAIL.
 
-**PASS — 12 lines, medium complexity:**
-```
-**Problem Definition**
-- Product listing API p95 500ms+, DB CPU 90%. Per-request DB direct
-  query is the bottleneck
+**PASS — 27 lines, every sub-bullet justified:**
+An entry with 27 lines, 3 technical decisions, each with sub-bullets showing rejected alternatives with context-specific reasons and accepted tradeoffs. Every sub-bullet independently passes the cover test — removing any one would leave a gap in understanding why the decision was made. R5 PASS despite exceeding 25-line advisory threshold.
 
-**Strategy**
-- Redis Cache-Aside with dual invalidation: list cache (5min TTL) and
-  detail cache (event-driven eviction on state change)
-- singleflight + TTL jitter for cache stampede defense (lower operational
-  overhead vs distributed lock)
+---
 
-**Result**
-- Product API p95 **500ms → 150ms**, peak DB CPU **90% → 45%**
-```
-2 technical decisions, 12 lines total. Problem definition is 2 lines. Strategy is 6 lines. Result is 2 lines. Clean within the medium complexity budget.
+## Structural Guide
+
+### 2-Level Bullet Structure
+
+2-level bullet structure is permitted and may improve readability for complex decision entries:
+
+- **Main bullet (bold):** Core decision or approach
+  - Sub-bullet: Rejected alternative with context-specific reason
+  - Sub-bullet: Accepted tradeoff or limitation
+  - Sub-bullet: Design constraint motivating the choice
+
+**Purpose:** Scanning readers can read main bullets only to grasp the overall strategy. Depth-seeking readers (hiring managers, technical interviewers) can read sub-bullets for reasoning detail.
+
+This is guidance, not a rule. Single-level bullets remain valid when the decision is straightforward.
 
 ---
 
@@ -394,9 +408,9 @@ This entry passed E3b CASCADING (0.85) — the technical depth is validated. But
 |---|---|---|
 | R1 | FAIL | Problem Definition bullets 4-5 (re-inspection dependency, consigner refusal) are narratively resolved by Strategy bullets 3-4. Removing them creates no gap — the reader encounters the solutions that address these concerns naturally. Technical Challenge section (4 lines) largely repeats Problem Definition constraints. |
 | R2 | PASS | Result section has bold metrics, flow is top-to-bottom |
-| R3 | FAIL | Strategy bullet 2 starts with problem context ("External APIs cannot participate in DB transactions") — this constraint belongs in Problem Definition. Strategy bullet 3 opens with "Return triggers hold marking" without context bleed, demonstrating correct separation. |
+| R3 | PASS | Strategy bullet 2 ("External APIs cannot participate in DB transactions, so steps execute sequentially per blame type with reverse compensation on failure") — technical constraint ('External APIs cannot participate in DB transactions') directly motivates orchestrator choice. This is design rationale, not problem context bleeding. |
 | R4 | PASS | Orchestrator, Choreography, compensating transaction — standard terms used |
-| R5 | FAIL | ~33 lines total, far exceeds 20-line hard cap. Problem Definition (5 lines) + Technical Challenge (4 lines) = 9 lines before Strategy even begins |
+| R5 | FAIL | ~33 lines > 25-line threshold. Sub-bullet cover test reveals removable content: Problem Definition bullets 4-5 and Technical Challenge section contain sentences that fail individual cover test (see R1 findings). |
 
 ### Complete Entry: PASS (All R1-R5)
 
@@ -432,10 +446,10 @@ The same entry compressed for resume readability. All R items pass.
 | R2 PASS | Problem (2 lines) → Strategy (7 lines) → Result (2 lines). Bold before→after metrics in Result. 6-second scan captures: "3-party blame automation + compensating workflow → 3 days→same day, 8→1 disputes." |
 | R3 PASS | No layer bleeding — key constraint (external API boundary) in Problem Definition, all Strategy bullets are actions, Result contains only metrics. |
 | R4 PASS | Orchestrator, Choreography, compensating transaction, settlement hold — all industry-standard terms. "3-party blame" is domain-specific but self-explanatory. |
-| R5 PASS | 14 lines total. 3 technical decisions (blame classification + orchestrator + settlement hold) = high complexity → ≤20 line budget. At 14 lines, comfortably within budget. |
+| R5 PASS | 14 lines total. Well within 25-line threshold. (Guideline: 3 technical decisions = high complexity, ~20 lines.) |
 
 **What was removed and why:**
 - Consigner refusal branch workflow → 4th strategy, but ancillary. Left as interview hook ("What happens when the consigner refuses?")
-- Technical Challenge section → key constraints merged into Problem Definition in 1 line
+- Technical Challenge section → could be valid as an additional section with distinct role, but removed here for compactness. Key constraints merged into Problem Definition
 - Problem Definition bullets 3-5 → settlement axis detail, re-inspection dependency, consigner refusal are all addressed by their corresponding Strategy bullets
 - Result bullets 3-4 → "compensating transactions" kept (core value); "consigner refusal automation" removed (strategy was also removed)
