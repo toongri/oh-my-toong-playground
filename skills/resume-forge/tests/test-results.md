@@ -105,3 +105,52 @@ All 8 questions PASS. No additional gaps found — no REFACTOR needed.
 | A-14 (Loop 2 fail+retry) | Interactive — needs user | Test when examiner fail occurs |
 | A-15, A-16, A-17, A-18 (Show fragments, Direct scoring, E3b without solution, Technical terms) | Behavioral — needs observation | Monitor in real sessions |
 | B-4 (Session cleanup) | Needs all scenarios passed | Test at session completion |
+
+---
+
+## Test Campaign: 2026-04-13 (Human-in-the-Loop Gate)
+
+### Summary
+
+| Phase | Scenarios Run | Result |
+|-------|--------------|--------|
+| RED (Baseline) | Q-25, Q-26, Q-27, Q-28 against unmodified SKILL.md | 4/4 FAIL |
+| GREEN (Patched) | Q-25, Q-26, Q-27, Q-28 against patched SKILL.md | 4/4 PASS |
+| REFACTOR | Loop 1 feedback→exam bypass fixed | 1 loophole closed |
+
+### RED Phase: Baseline Failures
+
+| # | Question | Verdict | Failure Pattern |
+|---|----------|---------|-----------------|
+| Q-25 | Loop 1 examiner 제출 전 유저 확인 | FAIL | `discuss → exam` 직행, 중간 확인 없음 |
+| Q-26 | Loop 2 examiner 제출 전 유저 확인 | FAIL | `show → exam` 직행, 중간 확인 없음 |
+| Q-27 | "아직" 응답 시 내부 루프 복귀 | FAIL | "다음"(skip)만 정의, "아직" 미정의 |
+| Q-28 | Pre-examiner 다회 반복 루프 | FAIL | Pre-examiner 반복 루프 패턴 부재 |
+
+### GREEN Phase: Patches Applied
+
+| # | Patch | Location |
+|---|-------|----------|
+| 1 | Loop 1 flowchart에 `confirm` 노드 + 양방향 edge 추가 | Phase 1 flowchart |
+| 2 | Loop 2 flowchart에 `confirm` 노드 + 양방향 edge 추가 | Phase 2 flowchart |
+| 3 | Loop 1 Confirmation Gate 프로토콜 텍스트 추가 | Phase 1 (confirm 설명) |
+| 4 | Loop 2 Confirmation Gate 프로토콜 텍스트 추가 | Phase 2 (confirm 설명) |
+
+### GREEN Phase: Re-test Results
+
+All 4 questions PASS. Agent correctly identified confirm gate, "아직" vs "다음" distinction, and multi-iteration inner loop.
+
+### REFACTOR Phase
+
+| # | Loophole | Fix |
+|---|----------|-----|
+| 1 | Loop 1 `feedback → exam` bypasses confirm gate (examiner 실패 재시도 시 유저 확인 우회) | `feedback → discuss`로 변경 — discuss → confirm → exam 경로 거침 |
+
+### Remaining: New Untested Scenarios
+
+| Scenario | Why Untested | Plan |
+|----------|-------------|------|
+| A-25 (Loop 1 confirm gate) | Interactive — needs user | Test in next real session |
+| A-26 (Loop 2 confirm gate) | Interactive — needs user | Test in next real session |
+| A-27 ("아직" inner loop return) | Interactive — needs user | Test in next real session |
+| A-28 (Multi-iteration inner loop) | Interactive — needs user | Test in next real session |
