@@ -104,7 +104,7 @@ E3a evaluates tradeoff authenticity at three tiers, based on the decision's role
 
 | Tier | Definition | Required Depth | FAIL Condition |
 |------|-----------|----------------|----------------|
-| **Core decision** | A choice the entry's quantified outcome directly depends on. Removing this decision breaks the narrative. | Full tradeoff analysis: (1) alternative named, (2) context-specific rejection reason, (3) accepted cost/downside | Core decision without any of the 3 elements → **FAIL** |
+| **Core decision** | A choice the entry's quantified outcome directly depends on. Removing this decision breaks the narrative. | Full tradeoff analysis: (1) alternative named, (2) context-specific rejection reason, (3) accepted cost/downside | Core decision missing any of the 3 required elements → **FAIL** |
 | **Supporting decision** | A choice the narrative holds without, but engineering quality degrades. | Brief justification: why-this-over-that in one clause or sentence | Supporting decision with zero justification → **P1** (finding attached to PASS, same pattern as E3b LISTED) |
 | **Incidental mention** | Technology/tool mentioned as environment context, not as a deliberate choice. | None required. But if no justification is needed, evaluate under R1 whether the mention belongs in the entry at all. | — |
 
