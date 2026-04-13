@@ -101,7 +101,7 @@ When the problem area states explicit constraints, verify that the solution area
 
 **Example (FAIL):**
 ```
-Problem: "5,000 items/day, 80s per item = 111 hours total processing"
+Problem: "5,000 items/day, 80s per item = 111 hours total processing within 24-hour processing window"
 Strategy: "goroutine pool parallelization, reducing per-item time from 80s to 30s"
 ```
 Per-item latency is addressed (80s→30s), but total throughput (5,000×30s = 41.67 hours > 24 hours) is not. The solution addresses one constraint but leaves another unresolved without explanation. → E2 FAIL: unstated how daily volume fits within processing capacity.
@@ -119,20 +119,12 @@ This check is informational when constraints are implicit — only fail when con
 
 When an entry contains quantitative claims (throughput, latency, SLA, cost reduction), verify internal arithmetic consistency.
 
-**Scope:** Applies to parallelism, throughput, and latency claims. Does NOT apply to classification rates, success percentages, or other non-parallelism approximations (e.g., "~80% auto-classified" is not subject to arithmetic verification).
+**Scope:** Applies to throughput, latency, cost, and performance claims. Does NOT apply to classification rates, success percentages, or other non-arithmetic approximations (e.g., "~80% auto-classified" is not subject to arithmetic verification).
 
-**Concurrency Extraction:** When an entry claims parallelism-based performance improvement, extract these 4 elements before calculating:
-
-| Element | Description | Example |
-|---------|-------------|---------|
-| Total Workload | Items to process in the time window | 5,000 items/day |
-| Latency per Unit | Processing time per item | 30 seconds |
-| Concurrency Factor | Parallel processing capacity | 7 goroutines per item, 3 Consumer instances |
-| Execution Model | Sequential / Parallel / Pipeline | Consumer-internal goroutine parallelism |
-
-**Verification formula:**
-- Sequential: `Total Time = Workload × Latency`
-- Parallel: `Total Time = (Workload × Latency) / Concurrency`
+**Verification procedure:**
+1. Extract all quantitative claims from the entry (throughput, latency, cost reduction, etc.)
+2. Verify arithmetic consistency against the stated architecture — do the claimed numbers follow from the described approach?
+3. If arithmetic produces a logical impossibility → E2 FAIL; if arithmetic only works with unstated assumptions → E2 P1
 
 **Severity:**
 - **E2 FAIL:** Arithmetic produces a logical impossibility with the stated architecture. Example: a single sequential processor claimed to handle workload exceeding 24 hours, with no mention of horizontal scaling or concurrency.
