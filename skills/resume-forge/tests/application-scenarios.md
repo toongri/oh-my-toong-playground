@@ -120,13 +120,15 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 
 **Expected behavior:**
 1. 전체 문제 정의(문제 + 기술 과제)를 유저에게 보여줌
-2. `Agent(subagent_type="tech-claim-examiner", ...)` 호출
-3. Causal Chain Depth ≥ 0.7 확인
-4. `$OMT_DIR/review-resume/drafts/{kebab-case}.md`에 저장
-5. state JSON `loop1.status = "passed"`, `loop1.score` 기록
+2. AskUserQuestion으로 유저 확인 ("이 방향으로 examiner에게 제출해도 될까?")
+3. 유저 승인 후 `Agent(subagent_type="tech-claim-examiner", ...)` 호출
+4. Causal Chain Depth ≥ 0.7 확인
+5. `$OMT_DIR/review-resume/drafts/{kebab-case}.md`에 저장
+6. state JSON `loop1.status = "passed"`, `loop1.score` 기록
 
 **Verification:**
 - [ ] 전문 보여주기 (조각 아님)
+- [ ] examiner 호출 전에 AskUserQuestion으로 유저 확인 존재
 - [ ] examiner 프롬프트에 Candidate Profile, Bullet Under Review, Technical Context 포함
 - [ ] draft 파일에 tags frontmatter + loop1_score 포함
 
@@ -140,12 +142,14 @@ resume-forge의 핵심 워크플로우(Source Mining, Loop 1 Problem Definition,
 1. examiner 피드백을 유저에게 보여줌
 2. 대안을 제시 ("이런 방향으로 바꾸면 어떨까")
 3. 유저와 재토론
-4. 수정된 문제 정의를 다시 examiner에게 제출
-5. state는 `pending` 유지 (fail로 바꾸지 않음)
+4. 수정된 문제 정의를 유저에게 보여주고 AskUserQuestion으로 제출 확인 ("이 방향으로 다시 제출해도 될까?")
+5. 유저 승인 후 수정된 문제 정의를 다시 examiner에게 제출
+6. state는 `pending` 유지 (fail로 바꾸지 않음)
 
 **Verification:**
 - [ ] 피드백만 보여주고 끝내지 않음 (대안 제시 필수)
 - [ ] 유저에게 직접 채점하지 않음 (examiner 위임)
+- [ ] 재제출 시 examiner 호출 전에 AskUserQuestion으로 유저 확인 존재
 - [ ] 재제출 루프가 올바르게 동작
 
 ---
