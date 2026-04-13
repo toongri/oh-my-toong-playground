@@ -180,7 +180,7 @@ E3a evaluates tradeoff authenticity at three tiers, based on the decision's role
 4. For each supporting decision: verify at minimum a brief why-this-over-that
 5. Incidental mentions: no tradeoff check, but flag under R1 if the mention adds no narrative value
 
-**E3a and R1/R5 alignment:** The proportional depth model is designed to coexist with readability constraints. Core decisions need ~3-4 lines of tradeoff depth. Supporting decisions need ~1 clause. Incidental mentions need 0 lines. This prevents the E3a×R5 conflict where demanding tradeoff analysis on every choice would exceed the 20-line cap.
+**E3a and R1/R5 alignment:** The proportional depth model is designed to coexist with readability constraints. Core decisions need ~3-4 lines of tradeoff depth. Supporting decisions need ~1 clause. Incidental mentions need 0 lines. This prevents the E3a×R5 conflict where demanding tradeoff analysis on every choice would push entries past the 25-line threshold where sub-bullet cover testing applies.
 
 **Example (Core decision — PASS):**
 - "Chose gRPC over REST for internal service mesh — REST's per-request JSON serialization added 15ms p99 overhead at 10K RPS internal calls. Accepted operational complexity of proto schema management and reduced browser debugging capability."
