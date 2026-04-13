@@ -401,7 +401,7 @@ The loop continues until APPROVE. There is no exit unless the user opts out.
 |--------|---------|-------|------------|
 | R1 Narrative Necessity | {PASS/FAIL} | {exact sentence that can be removed, or "all sentences necessary"} | {concrete revision} |
 | R2 Scan Speed + Metrics | {PASS/FAIL} | {specific flow break or metric placement issue} | {concrete revision} |
-| R3 Narrative Flow | {PASS/FAIL} | {section where wrong-layer info appears} | {where to move it} |
+| R3 Narrative Flow | {PASS/FAIL} | {specific narrative flow violation} | {concrete revision} |
 | R4 Technical Vocabulary | {PASS/FAIL} | {verbose phrase → standard term mapping} | {replacement} |
 | R5 Length Awareness | {PASS/FAIL} | {line count vs 25-line threshold, sub-bullet cover test results if applicable} | {what to cut} |
 

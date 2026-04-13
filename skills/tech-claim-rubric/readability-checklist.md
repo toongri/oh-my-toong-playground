@@ -370,7 +370,7 @@ Tier guidelines are advisory: they inform the evaluator's calibration for entrie
 
 ### Examples
 
-**PASS — 27 lines, every sub-bullet justified:**
+**PASS — 30 lines, every sub-bullet justified:**
 ```
 **Problem Definition**
 - Daily intake 2,500→5,000 items; display SLA (2hr) achievement 90%→55%
@@ -391,22 +391,28 @@ Tier guidelines are advisory: they inform the evaluator's calibration for entrie
     independent per-attribute scaling; revisit at team/model separation
 - **Premium/standard topic separation + differential consumer allocation**
   - Kafka lacks priority queue; RabbitMQ rejected for dual-infra burden
+  - Premium consumers allocated 3× standard ratio; rebalanced after observing
+    premium lag spike during intake surge — ratio was the fix, not partition count
 - **Partial failure non-blocking retry**
   - At small volume, full re-inference acceptable. Volume doubling
     revealed 7× API cost amplification → save-success, retry-failure-only
   - Success persisted immediately; failed attributes to retry topic
 - **Reconciliation scheduler** for message loss/crash recovery,
   idempotency (image_id + attribute) for deduplication
+  - Periodic re-delivery considered but rejected — re-delivery re-runs all
+    attributes including already-succeeded ones, defeating partial-failure savings
 
 **Result**
 - Display SLA **55%→95%**, premium display **2hr→40min**
 - Failed-attribute-only retry → API cost **80% reduction**
 ```
-27 lines > 25-line threshold → sub-bullet cover test applied:
+30 lines > 25-line threshold → sub-bullet cover test applied:
 - "Consumer horizontal scaling evaluated..." → removing it: reader doesn't know why not just add consumers. PASS.
 - "Per-attribute topic separation evaluated..." → removing it: reader doesn't know why not separate topics. PASS.
 - "Accepted: no independent per-attribute scaling..." → removing it: hides the cost of this design. PASS.
 - "At small volume, full re-inference acceptable..." → removing it: eliminates the resolution mutation narrative. PASS.
+- "Premium consumers allocated 3× standard ratio; rebalanced after observing premium lag spike during intake surge — ratio was the fix, not partition count" → removing it: reader doesn't know why consumer ratio matters or how it was determined; topic separation appears fully solved by the 1-sub-bullet above. PASS.
+- "Periodic re-delivery considered but rejected — re-delivery re-runs all attributes including already-succeeded ones, defeating partial-failure savings" → removing it: reader doesn't know what alternative was considered for recovery; reconciliation scheduler appears as the obvious choice with no examined alternative. PASS.
 
 Every sub-bullet independently passes. **If even 1 sub-bullet fails the cover test, the entry is R5 FAIL.** R5 PASS.
 
@@ -540,9 +546,9 @@ This entry passed E3b CASCADING (0.85) — the technical depth is validated. But
 |---|---|---|
 | R1 | FAIL | Problem Definition bullets 4-5 (re-inspection dependency, consigner refusal) establish constraints that Strategy bullets 3-4 address. However, Strategy bullets 3-4 reintroduce these constraints within their own framing ('decouple return resolution from settlement pipeline', 'platform absorption workflow'), making the Problem Definition statements redundant. The test is not 'does the information appear elsewhere' but 'is the reasoning visible without this sentence' — and Strategy makes the reasoning self-contained. Technical Challenge section (4 lines) largely repeats Problem Definition constraints. |
 | R2 | PASS | Result section has bold metrics, flow is top-to-bottom |
-| R3 | PASS | Strategy bullet 2 ("External APIs cannot participate in DB transactions, so steps execute sequentially per blame type with reverse compensation on failure") — technical constraint ('External APIs cannot participate in DB transactions') directly motivates orchestrator choice. This is design rationale, not problem context bleeding. |
+| R3 | FAIL | Problem Definition bullet 3 ("PG and carrier APIs are outside DB transaction boundary → partial failure inconsistency") and Technical Challenge bullet 2 ("PG/carrier APIs outside DB transaction boundary → partial completion states require compensation") state the same constraint in two different layers — this is cross-layer content duplication (violation type 1). The constraint belongs in one place; restating it in Technical Challenge adds no new information. Note: Strategy bullet 2's design rationale ("External APIs cannot participate in DB transactions, so steps execute sequentially per blame type with reverse compensation on failure") is the correct pattern — constraint motivates orchestrator choice inline, which is valid. R3 FAIL is for structural duplication between Problem Definition and Technical Challenge, not for the Strategy rationale. |
 | R4 | PASS | Orchestrator, Choreography, compensating transaction — standard terms used |
-| R5 | FAIL | ~33 lines > 25-line threshold. Sub-bullet cover test reveals removable content: Problem Definition bullets 4-5 and Technical Challenge section contain sentences that fail individual cover test (see R1 findings). |
+| R5 | FAIL | ~33 lines > 25-line threshold. Sub-bullet cover test reveals 6 failing sub-bullets: Problem Definition bullet 4 (re-inspection dependency — Strategy bullet 3 makes it self-contained by explaining the 2-phase hold approach), Problem Definition bullet 5 (consigner refusal — Strategy bullet 4 makes it self-contained by describing the platform absorption workflow), Technical Challenge bullet 1 (manual inspection / unstructured input — restates the Problem Definition constraint on blame attribution in technical language), Technical Challenge bullet 2 (PG/carrier APIs outside DB transaction boundary — restates Problem Definition bullet 3 constraint), Technical Challenge bullet 3 (settlement amount uncertain until re-inspection — restates Problem Definition bullet 4 constraint), Technical Challenge bullet 4 (consigner refusal creates workflow branch divergence — restates Problem Definition bullet 5 constraint). All 4 Technical Challenge bullets restate Problem Definition constraints without adding new information. |
 
 ### Complete Entry: PASS (All R1-R5)
 
