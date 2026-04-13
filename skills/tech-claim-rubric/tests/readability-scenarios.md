@@ -59,7 +59,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 
 **Expected:**
 - R3 PASS: "쿼리 최적화는 인덱스 이미 적용 완료로 한계, Local Cache는 다중 서버에서 상품 상태 빈번 변경 시 일관성 보장 불가" — 소진된 대안을 제시하여 Cache-Aside 선택을 직접 정당화하는 설계 근거다. R3 기준상 특정 결정을 동기화하는 기술적 제약은 해결 전략 영역의 design rationale로 PASS.
-- R5 PASS: 15줄, 25줄 임계값 미만 자동 PASS
+- R5 PASS: Layer 1 (skim test: problem→strategy→result visible at top level), Layer 2 (Cache-Aside + singleflight both meet Judgment — rejection reasons provided), Layer 3 no symptoms
 
 ---
 
@@ -127,11 +127,11 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 6초 내 파악 가능, 결과에 정량 메트릭 배치
 - R3 PASS: 문제/전략/결과 층위 깨끗이 분리
 - R4 PASS: Cache-Aside, singleflight, TTL jitter, eviction — 표준 용어 적절 활용
-- R5 PASS: 약 9줄, 25줄 미만 자동 PASS
+- R5 PASS: Layer 1 PASS (problem→strategy→result top-level scannable), Layer 2 PASS (Cache-Aside + singleflight meet Judgment), Layer 3 no symptoms
 
 ---
 
-## Scenario 6: R5 Fail — 볼륨 초과 엔트리 (25줄 임계값 초과)
+## Scenario 6: R5 Fail — 큐레이션 부재 엔트리 (exhaustive listing + weak Point Selection)
 
 **Input:**
 ```
@@ -162,13 +162,13 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 ```
 
 **Expected:**
-- R5 FAIL: Sub-bullet cover test에서 제거 가능 내용 발견 — 기술 과제 섹션의 중복 content와 문제 정의의 불필요 bullet이 cover test 통과 실패. 33줄(> 25줄 임계값)이므로 sub-bullet 단위 검증 적용
+- R5 FAIL: Layer 2 — Technical Challenge 4 bullets each describe a constraint but none independently demonstrate Impact (no quantified outcome), Judgment (no alternative rejected), or Depth (no constraint discovery — constraints are stated, not discovered). These are problem context, not selected engineering decisions. Layer 3 — exhaustive listing (Problem Definition 5 bullets + Technical Challenge 4 bullets = all constraints enumerated without curation)
 - R3 FAIL: "기술 과제" bullet 2("PG 환불·택배사 정산 API는 DB 트랜잭션 경계 밖이라 부분 완료 상태가 발생하며 보상 처리가 필요")가 문제 정의 bullet 3("PG 환불과 배송비 정산은 외부 API라 부분 실패 시 불일치 상태 발생")과 cross-layer content duplication (violation type 1)
 - R1 FAIL: 문제 정의 5줄 + 기술 과제 4줄 = 9줄이 해결 시작 전에 소비됨. 복수의 문장이 병합 또는 제거 가능
 
 ---
 
-## Scenario 7: All Pass — 가이드라인 소폭 초과 (25줄 미만)
+## Scenario 7: All Pass — 결정별 기각 사유가 포함된 3전략 엔트리
 
 **Input:**
 ```
@@ -202,7 +202,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제(지연·불일치 수치) → 전략(격리·보상·병렬화) → 결과(p99·불일치 건수) 순서 명확. 결과에 정량 메트릭 bold 처리
 - R3 PASS: 문제 정의에 원인 포함, 해결 전략에 기각 사유 포함(문제 배경 아님), 결과 섹션에 수치만 존재. 섹션 역할 분리 깨끗
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, Consumer lag, Auto Scaling, Graceful Shutdown — 표준 기술 용어 적절 활용
-- R5 PASS: 21줄 < 25줄 임계값, 자동 PASS. (참고: High complexity 가이드라인 ≤20줄)
+- R5 PASS: Layer 1 (3 strategies visible at top level with sub-bullet structure), Layer 2 (each strategy includes rejection reason — Judgment met), Layer 3 no symptoms
 
 ---
 
@@ -233,11 +233,11 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
 - R3 PASS: 섹션 역할 분리 깨끗. 문제 정의에 원인, 전략에 선택 근거, 결과에 수치만 존재.
 - R4 PASS: goroutine pool, noisy neighbor, Redis Pub/Sub, Kafka, Prometheus — 표준 용어 적절 활용.
-- R5 PASS: 14줄 < 25줄 임계값, 자동 PASS. (참고: Medium complexity 가이드라인 ≤16줄)
+- R5 PASS: Layer 1 PASS, Layer 2 (goroutine pool meets Judgment — noisy neighbor rejection; Redis Pub/Sub meets Judgment — Kafka rejected for operational burden). Prometheus metrics bullet: Layer 2 borderline — monitoring is a supporting decision with weak standalone Impact, but it directly enables the pool-per-type design's observability. PASS. Layer 3 no symptoms
 
 ---
 
-## Scenario 9: R5 Pass — blank counting 경계 (blank 포함 22줄, blank 제외 20줄)
+## Scenario 9: R5 Pass — constraint cascade 구조의 깊이 있는 엔트리
 
 **Input:**
 ```
@@ -270,7 +270,7 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 PASS: 문제→전략→결과 순서 명확. 결과에 정량 메트릭 배치.
 - R3 PASS: 섹션 역할 분리 깨끗. 기술 과제 별도 섹션 없음.
 - R4 PASS: Outbox Pattern, Choreography, goroutine pool, noisy neighbor, at-least-once, 백프레셔, DLQ — 표준 기술 용어 적절 활용.
-- R5 PASS: 20줄 < 25줄 임계값, 자동 PASS. (참고: High complexity 가이드라인 ≤20줄)
+- R5 PASS: Layer 1 PASS (3 strategies scannable at top level), Layer 2 (all 3 strategies meet Judgment + Depth — constraint cascade structure where each strategy is forced by the previous one's limitation), Layer 3 no symptoms
 
 ---
 
@@ -294,4 +294,4 @@ Phase C (R1-R5) 평가가 정확히 작동하는지 검증하는 시나리오.
 - R2 FAIL: 결과 섹션에 정량 메트릭 없음. "90분"은 문제 정의에만 있고 개선 수치가 결과에 없어 anti-qualitative test 실패.
 - R3 FAIL: 결과 첫 번째 bullet("SQS로 비동기 분리하여...")이 action 서술로, Strategy 내용이 Result에 혼입됨 (Violation 3).
 - R4 PASS: SQS, Circuit Breaker — 표준 용어 사용.
-- R5 PASS: 약 8줄, 25줄 미만 자동 PASS
+- R5 PASS: Layer 1 PASS, Layer 2 PASS, Layer 3 no symptoms
