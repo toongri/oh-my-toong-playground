@@ -298,7 +298,7 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 ## Step 5: Agent Dispatch
 
-1. Read dispatch template from `../../scripts/chunk-review/chunk-reviewer-prompt.md`
+1. Read dispatch template from `../orchestrate-review/scripts/chunk-reviewer-prompt.md`
 2. Interpolate placeholders with context from Steps 0-4:
    - {WHAT_WAS_IMPLEMENTED} ← Step 0 description
    - {DESCRIPTION} ← Step 0 or commit messages

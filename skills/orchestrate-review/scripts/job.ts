@@ -312,7 +312,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir);
 
-  const hostRole = detectHostRole(path.resolve(SCRIPT_DIR, '../../skills/code-review'));
+  const hostRole = detectHostRole(path.resolve(SCRIPT_DIR, '../../code-review'));
   const config = await parseChunkReviewConfig(configPath);
   const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.CHUNK_REVIEW_CHAIRMAN || config['chunk-review'].chairman.role || 'auto';
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
