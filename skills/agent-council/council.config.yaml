@@ -31,7 +31,7 @@ council:
       emoji: "🤖"
       color: "BLUE"
       model: "gpt-5.4"
-      effort_level: "xhigh"
+      effort_level: "high"
       output_format: "text"
 
     - name: gemini
