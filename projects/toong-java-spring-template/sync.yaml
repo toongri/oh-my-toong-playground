@@ -41,12 +41,12 @@ skills:
     - make-pr
     - technical-writing
     - humanizer
+    - spec-review
+    - orchestrate-review
 
 scripts:
   items:
     - hud
-    - chunk-review
-    - spec-reviewer
 
 rules:
   items:

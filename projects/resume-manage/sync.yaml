@@ -44,12 +44,12 @@ skills:
     - review-resume
     - tech-claim-rubric
     - resume-forge
+    - spec-review
+    - orchestrate-review
 
 scripts:
   items:
     - hud
-    - chunk-review
-    - spec-reviewer
 
 rules:
   items:
