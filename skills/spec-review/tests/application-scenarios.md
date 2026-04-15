@@ -1,196 +1,201 @@
-# Spec-Review Application Test Scenarios
+# Spec-Review Skill — Application Test Scenarios
 
-> Phase 1 of spec-review Application TDD — tests each core technique with explicit verification points.
+## Purpose
 
----
+These scenarios test whether the **spec-review skill's** Chairman orchestration behavior is correctly applied. Each scenario targets a distinct phase or constraint of the 4-Phase Protocol (Assess → Dispatch → Collect → Synthesize) as defined in `SKILL.md`.
 
-## Scenarios
+## Technique Coverage Map
 
-### SR-1: Chairman Role — Script Execution, Not Direct Review
-
-**Input**: User provides a spec file path: "이 스펙을 리뷰해줘: `.omt/specs/payment/spec.md`"
-
-**Primary Technique**: Chairman Role Boundaries — "Execute script, don't predict responses"
-
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | `bun $SCRIPTS_DIR/spec-reviewer/job.ts start` 실행을 시도 (또는 실행 환경 부재 시 스크립트 실행 필요성 명시) |
-| V2 | 직접 리뷰 의견("Based on typical patterns..." 등)을 제시하지 않음 |
-| V3 | "I can review this directly" 패턴 없음 — 리뷰어 역할을 자임하지 않음 |
+| # | Scenario | Primary Technique | Secondary |
+|---|---------|-------------------|-----------|
+| SR-A1 | Full review cycle | 4-Phase Protocol end-to-end | Dispatch + Collect + Synthesize |
+| SR-A2 | Reviewer CLI failure | Degradation Policy — partial synthesis | Advisory output modification |
+| SR-A3 | No Review Needed | Phase 0 — trivial request shortcut | Immediate APPROVE response |
+| SR-A4 | Start exactly once | Execution Constraint — EXACTLY ONCE | No re-start on partial results |
+| SR-A5 | Synthesis accuracy — dissent | Faithful dissent representation | STRONG DISAGREE preserved |
+| SR-A6 | Chairman additions violation | Synthesis Accuracy Rules | No additions in non-Recommendation sections |
 
 ---
 
-### SR-2: Input Handling — File Path Provided
+## Scenario SR-A1: Full Review Cycle (Happy Path)
 
-**Input**: "`.omt/specs/auth/spec.md` 이 파일을 spec review 해줘"
+**Primary Technique:** 4-Phase Protocol — Assess → Dispatch → Collect → Synthesize
 
-**Primary Technique**: Input Handling — File path → Read and review
+**Given:**
+- User provides: "이 API 설계 스펙을 리뷰해줘" with a spec file path (`.omt/specs/payment/spec.md`)
+- The spec describes an event-driven payment API with async webhook callbacks — a substantive architecture decision
+- All three reviewer CLIs (claude, gemini, codex) are available and respond successfully
 
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | 지정된 파일 읽기 시도 |
-| V2 | 파일 내용을 리뷰 요청의 기반으로 사용 |
-| V3 | 추가 입력 요청 없이 진행 |
+**When:**
+- The Chairman processes the request
 
----
+**Then:**
 
-### SR-3: Input Handling — Content Provided Directly
-
-**Input**: User pastes spec content inline (markdown block with design decisions, API contracts, domain model)
-
-**Primary Technique**: Input Handling — Content provided → Review directly
-
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | 별도 파일 경로 요청 없이 제공된 콘텐츠로 리뷰 프로세스 진행 |
-| V2 | 인라인 콘텐츠를 리뷰 요청에 포함 |
+| # | Verification Point | Expected Behavior |
+|---|-------------------|-------------------|
+| V1 | Phase 0 — Complexity assessment | Chairman recognizes this as an architecture decision requiring full review (not a "No Review Needed" case) |
+| V2 | Phase 1 — Single dispatch | `bun .claude/skills/spec-review/scripts/job.ts start` is invoked EXACTLY ONCE |
+| V3 | Phase 1 — Prompt content | Review prompt written to temp file contains design content from the provided spec file |
+| V4 | Phase 2 — Collect loop | `collect` is called until `"overallState": "done"` is returned |
+| V5 | Phase 3 — Read outputs | Each reviewer's `outputFilePath` is read via the Read tool; null entries are skipped |
+| V6 | Phase 4 — Advisory format | All 6 mandatory sections present: Consensus, Divergence, Concerns Raised, Recommendation, Action Items, Review Verdict |
+| V7 | Phase 4 — Termination | No additional tools run after the advisory is output |
 
 ---
 
-### SR-4: Input Handling — No Input
+## Scenario SR-A2: Reviewer CLI Failure — Partial Advisory Synthesis (Degradation)
 
-**Input**: "스펙 리뷰 해줘" (without any file path or content)
+**Primary Technique:** Degradation Policy — partial synthesis when reviewer infrastructure fails
 
-**Primary Technique**: Input Handling — Neither → Ask for input
+**Given:**
+- User provides a domain modeling spec for review
+- `collect` returns `"overallState": "done"` with the following manifest:
+  ```json
+  {
+    "overallState": "done",
+    "members": [
+      { "member": "claude", "outputFilePath": "/tmp/job/claude/output.txt", "errorMessage": null },
+      { "member": "gemini", "outputFilePath": "/tmp/job/gemini/output.txt", "errorMessage": null },
+      { "member": "codex", "outputFilePath": null, "errorMessage": "timed_out" }
+    ]
+  }
+  ```
 
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | 리뷰 대상(파일 경로 또는 콘텐츠)을 요청 |
-| V2 | 빈 상태로 리뷰를 진행하지 않음 |
-| V3 | 관용적 수용 — 다양한 입력 형식 안내 |
+**When:**
+- The Chairman reads the collect manifest and proceeds to Phase 3 and Phase 4
 
----
+**Then:**
 
-### SR-5: "No Review Needed" Decision
-
-**Input**: "이 함수 이름을 `getUserById`에서 `findUserById`로 바꾸는 게 나을까?"
-
-**Primary Technique**: "No Review Needed" — Trivial changes, non-design decisions
-
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | 전체 리뷰 프로세스 불필요 판단 |
-| V2 | 간단한 답변 또는 의견 제공 (리뷰어 호출 없이) |
-| V3 | 불필요한 스크립트 실행 없음 |
-
----
-
-### SR-6: Advisory Output Format — All 5 Sections Mandatory
-
-**Setup**: 3명의 리뷰어 응답이 제공된 상태 (mock reviewer outputs)
-- Claude: "Event-driven architecture 추천. CQRS 패턴 적용 제안."
-- Gemini: "Event-driven 동의. 단, eventual consistency 리스크 지적."
-- Codex: "Event-driven 반대. Synchronous 호출이 현 규모에 적합. STRONG DISAGREE on CQRS."
-
-**Primary Technique**: Advisory Output Format — ALL 5 sections
-
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | `### Consensus` 섹션 존재 |
-| V2 | `### Divergence` 섹션 존재 |
-| V3 | `### Concerns Raised` 섹션 존재 |
-| V4 | `### Recommendation` 섹션 존재 |
-| V5 | `### Action Items` 섹션 존재 |
-| V6 | 어떤 섹션도 생략되지 않음 (빈 섹션이라도 존재) |
+| # | Verification Point | Expected Behavior |
+|---|-------------------|-------------------|
+| V1 | No job restart | Chairman does NOT re-invoke `start` due to the codex failure |
+| V2 | Read only non-null paths | Only claude and gemini `outputFilePath` values are read; the null codex entry is skipped |
+| V3 | Partial synthesis prefix | Advisory begins with "Partial advisory (2/3 respondents). codex unavailable: timed_out. Synthesis lacks codex's perspective." |
+| V4 | Partial consensus language | Consensus section uses "partial consensus (2/3 respondents)" phrasing, not plain "consensus" |
+| V5 | Missing model gap noted | Divergence section notes that codex's perspective (implementation feasibility) is absent |
+| V6 | No extrapolation | Chairman does NOT speculate what codex "would have said" |
+| V7 | All 6 sections present | Advisory still includes all 6 mandatory sections despite partial results |
 
 ---
 
-### SR-7: Synthesis Accuracy — Consensus = ALL Three Agree
+## Scenario SR-A3: No Review Needed — Trivial Request (Edge Case)
 
-**Setup**: 3명 리뷰어 모두 동일한 접근 방식 추천
-- Claude: "Repository Pattern 적용 추천"
-- Gemini: "Repository Pattern 적용이 적절"
-- Codex: "Repository Pattern 사용 권장"
+**Primary Technique:** Phase 0 — "No Review Needed" shortcut for trivial, non-design requests
 
-**Primary Technique**: Synthesis Accuracy — "Consensus = ALL three reviewers agree on SAME recommendation"
+**Given:**
+- User provides: "함수 이름을 `processPayment`에서 `handlePayment`로 바꾸는 게 더 나을까요?"
+- This is a naming preference question with no architectural trade-offs
 
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | Consensus 섹션에 "세 리뷰어 모두 Repository Pattern 동의" 명시 |
-| V2 | 공통 추천을 Consensus로 정확히 기록 |
+**When:**
+- The Chairman assesses the request in Phase 0
 
----
+**Then:**
 
-### SR-8: Synthesis Accuracy — Faithful Dissent Representation
-
-**Setup**: 1명이 STRONG DISAGREE
-- Claude: "Microservices 전환 추천"
-- Gemini: "Microservices 동의, 단계적 전환 제안"
-- Codex: "**STRONG DISAGREE**. 현 팀 규모에서 microservices는 과도한 복잡성. Modular monolith 유지 권장."
-
-**Primary Technique**: Synthesis Accuracy — "STRONG DISAGREE must appear as STRONG DISAGREE"
-
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | Divergence 섹션에 Codex의 STRONG DISAGREE 원문 그대로 반영 |
-| V2 | "minor concern" 또는 "일부 우려" 등으로 약화하지 않음 |
-| V3 | 2/3 동의를 consensus로 기록하지 않음 (1명 STRONG DISAGREE이므로 consensus 아님) |
+| # | Verification Point | Expected Behavior |
+|---|-------------------|-------------------|
+| V1 | No dispatch | `start` is NOT invoked; no review job is created |
+| V2 | Immediate response | Chairman responds directly without entering Phase 1 |
+| V3 | No Review Needed format | Response includes `**Status**: No Review Needed` |
+| V4 | Reason provided | Response includes a brief explanation (e.g., "단순 명칭 변경으로 설계 결정 사항 아님") |
+| V5 | APPROVE verdict | Response includes `**Verdict**: APPROVE` |
+| V6 | No fabricated review | Chairman does not simulate what reviewers "would" say about the naming choice |
 
 ---
 
-### SR-9: Synthesis Accuracy — No Chairman Additions
+## Scenario SR-A4: Execution Constraint — start Runs Exactly Once
 
-**Setup**: 리뷰어들이 보안 측면을 전혀 언급하지 않은 경우
-- Claude: "API 설계가 RESTful 원칙에 부합"
-- Gemini: "응답 형식의 일관성 확보 필요"
-- Codex: "페이지네이션 구현 방식이 적절"
+**Primary Technique:** CRITICAL Execution Constraint — `start` subcommand runs EXACTLY ONCE
 
-**Primary Technique**: Synthesis Accuracy — "Chairman Additions = VIOLATION"
+**Given:**
+- User provides a tech stack architecture decision spec for review
+- First `collect` call returns `"overallState": "running"` (reviewers not yet complete)
 
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | Chairman이 "보안 검토도 필요합니다" 같은 자체 의견을 추가하지 않음 |
-| V2 | "리뷰어들이 언급하지 않았지만..." 패턴 없음 |
-| V3 | 리뷰어 발언만으로 합성 |
+**When:**
+- The Chairman receives the running state response
+
+**Then:**
+
+| # | Verification Point | Expected Behavior |
+|---|-------------------|-------------------|
+| V1 | No second start | Chairman does NOT call `start` again due to the running state |
+| V2 | Collect retry | Chairman calls `collect "$JOB_DIR"` again (same command) to poll for completion |
+| V3 | Job dir preserved | The same `JOB_DIR` from the original `start` output is used in the retry `collect` call |
+| V4 | Foreground execution | All Bash calls run in foreground (no background execution) |
+| V5 | Collect until done | Chairman continues calling `collect` until `"overallState": "done"` is received |
 
 ---
 
-### SR-10: Wait for ALL Means ALL
+## Scenario SR-A5: Synthesis Accuracy — Dissent Must Be Faithfully Reported
 
-**Setup**: 2명만 응답 완료, 1명 미응답 상태
-- Claude: 응답 완료
-- Gemini: 응답 완료
-- Codex: 타임아웃 또는 미완료
+**Primary Technique:** Synthesis Accuracy Rules — STRONG DISAGREE must appear as STRONG DISAGREE
 
-**Primary Technique**: Chairman Role — "Wait for ALL Means ALL"
+**Given:**
+- All three reviewers have responded with the following outputs:
+  - claude: "Event-driven architecture를 권장합니다. CQRS 패턴 적용이 이 규모에 적합합니다."
+  - gemini: "Event-driven 방향에 동의합니다. 다만 eventual consistency 리스크를 사전 검토해야 합니다."
+  - codex: "**STRONGLY DISAGREE** — 현재 팀 규모(5인)에서 CQRS는 과도한 복잡성입니다. 동기 호출 기반 Modular Monolith가 적합합니다. Event-driven으로 전환 시 개발 비용이 3배 증가할 것으로 예상됩니다."
 
-**Verification Points**:
-| ID | Expected Behavior |
-|----|-------------------|
-| V1 | 2명 응답만으로 합성 진행하지 않음 |
-| V2 | 3번째 리뷰어 응답 대기 필요성 명시 |
-| V3 | "2/3 is a reasonable quorum" 패턴 없음 |
+**When:**
+- The Chairman synthesizes the advisory in Phase 4
+
+**Then:**
+
+| # | Verification Point | Expected Behavior |
+|---|-------------------|-------------------|
+| V1 | Dissent preserved verbatim | Divergence section includes codex's STRONGLY DISAGREE in its original strength; not softened to "minor concern" or "일부 우려" |
+| V2 | No false consensus | Consensus section does NOT report "consensus toward event-driven" — 2/3 agreement with one STRONG DISAGREE is not consensus |
+| V3 | Codex reasoning included | Divergence section includes the specific rationale: team size (5인), 3x development cost estimate |
+| V4 | Model weighting applied | Recommendation section notes codex's perspective carries additional weight as an implementation feasibility question (per Model Characteristics table) |
+| V5 | Chairman label in Recommendation | Any Chairman-added contextual commentary in the Recommendation section is explicitly labeled as "Chairman commentary" |
+
+---
+
+## Scenario SR-A6: Synthesis Accuracy — No Chairman Additions Outside Recommendation
+
+**Primary Technique:** Chairman Additions Rule — Chairman observations belong in Recommendation section ONLY
+
+**Given:**
+- All three reviewers respond about an API design, and none mention security concerns:
+  - claude: "RESTful 원칙에 부합하는 API 설계입니다."
+  - gemini: "응답 형식의 일관성 확보가 필요합니다."
+  - codex: "페이지네이션 구현 방식이 스펙에 적절합니다."
+
+**When:**
+- The Chairman synthesizes the advisory
+
+**Then:**
+
+| # | Verification Point | Expected Behavior |
+|---|-------------------|-------------------|
+| V1 | No unprompted additions | Chairman does NOT add "보안 검토가 추가로 필요합니다" or similar observations to Consensus, Divergence, or Concerns Raised sections |
+| V2 | No "reviewers didn't mention but..." pattern | Phrases like "리뷰어들이 언급하지 않았지만..." do not appear in sections reporting reviewer findings |
+| V3 | Reviewer-only content in synthesis sections | Consensus, Divergence, and Concerns Raised contain only what reviewers actually said |
+| V4 | Chairman label if added to Recommendation | If Chairman adds contextual commentary, it appears ONLY in the Recommendation section and is labeled "Chairman commentary" |
+| V5 | Review Verdict section present | Advisory includes the mandatory `### Review Verdict` section with Verdict, Blocking Concerns, and Rationale |
+
+---
+
+## Evaluation Criteria
+
+각 시나리오의 verification point를 ALL PASS해야 시나리오 PASS.
+
+| Verdict | Meaning |
+|---------|---------|
+| PASS | Verification point 완전히 충족 |
+| PARTIAL | 언급했으나 불충분하거나 프레이밍이 부정확 |
+| FAIL | 미언급 또는 잘못된 판정 |
 
 ---
 
 ## Test Results
 
-> GREEN 테스트 실행 결과 — Phase 0 cleanup 후 수정된 SKILL.md 기준
+> GREEN 테스트 결과는 실행 후 이 섹션에 기록합니다.
 
-**테스트 일시**: 2026-02-10
-**테스트 방법**: Subagent invocation — 각 subagent에 스킬 프롬프트 + 시나리오 입력 제공, 출력을 verification points와 대조
-
-| Scenario | Verdict | Notes |
-|----------|---------|-------|
-| SR-1 | **PASS** | V1-V3 통과. 스크립트 실행 시도, 직접 리뷰 미제공, 리뷰어 역할 자임 없음 |
-| SR-2 | **PASS** | V1-V3 통과. 파일 읽기 시도, 파일 기반 리뷰 진행, 추가 입력 요청 없음 |
-| SR-3 | **PASS** | V1-V2 통과. 파일 경로 요청 없이 인라인 콘텐츠로 즉시 리뷰 프로세스 진행 |
-| SR-4 | **PASS** | V1-V3 통과. 리뷰 대상 요청, 빈 상태 리뷰 미진행, 다양한 입력 형식 안내 |
-| SR-5 | **PASS** | V1-V3 통과. No Review Needed 판단, 간단 의견 제공, 스크립트 미실행 |
-| SR-6 | **PASS** | V1-V6 통과. 5개 필수 섹션(Consensus, Divergence, Concerns Raised, Recommendation, Action Items) 모두 존재 |
-| SR-7 | **PASS** | V1-V2 통과. 3명 합의를 Consensus로 정확히 기록 |
-| SR-8 | **PASS** | V1-V3 통과. STRONG DISAGREE 원문 보존, 약화 표현 없음, 2/3를 consensus로 미기록 |
-| SR-9 | **PASS** | V1-V3 통과. Chairman 자체 의견 추가 없음, "언급하지 않았지만" 패턴 없음, 리뷰어 발언만으로 합성 |
-| SR-10 | **PASS** | V1-V3 통과. 2명만으로 합성 거부, 3번째 리뷰어 대기 필요성 명시, quorum 패턴 없음 |
-
-**전체 결과**: 10/10 시나리오 PASS (31/31 verification points 통과)
-**반복 횟수**: 0회 (첫 실행에서 전원 통과)
+| Scenario | Verdict | V-Points | Key Evidence |
+|----------|---------|----------|-------------|
+| SR-A1: Full review cycle | — | —/7 | |
+| SR-A2: Reviewer CLI failure | — | —/7 | |
+| SR-A3: No Review Needed | — | —/6 | |
+| SR-A4: Execution constraint | — | —/5 | |
+| SR-A5: Dissent faithfully reported | — | —/5 | |
+| SR-A6: No Chairman additions | — | —/5 | |
