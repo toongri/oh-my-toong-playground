@@ -64,7 +64,7 @@ stdin으로 전달. CLI 명령어는 `chunk-review.config.yaml`에 정의된 그
 
 ### WP-1: Claude (reviewer.md fallback)
 
-**CLI**: `claude -p --allowedTools Bash,Read,Glob,Grep --model claude-opus-4-6`
+**CLI**: `claude -p --allowedTools Bash,Read,Glob,Grep --model claude-opus-4-7`
 **Prompt file**: `prompts/reviewer.md` (fallback — no `prompts/claude.md` exists)
 
 ### WP-2: Codex (reviewer.md fallback)
