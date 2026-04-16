@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>클라우드 네이티브 배포 전략</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <style>
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-aLt.woff2); font-weight: 300; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-bRg.woff2); font-weight: 400; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-cBd.woff2); font-weight: 700; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-dEb.woff2); font-weight: 800; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-eHv.woff2); font-weight: 900; font-display: swap; }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    body {
+      font-family: 'NanumSquareNeo', -apple-system, sans-serif;
+      background: #0a0a0a;
+      color: #f5f5f5;
+      line-height: 1.7;
+      overflow-x: hidden;
+      counter-reset: slide;
+    }
+
+    /* === Slide Base === */
+    .slide {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 80px;
+      position: relative;
+      overflow: hidden;
+      scroll-snap-align: start;
+      counter-increment: slide;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .slide::after {
+      content: counter(slide, decimal-leading-zero) ' / 15';
+      position: absolute;
+      bottom: 24px;
+      right: 32px;
+      font-size: 13px;
+      color: rgba(255,255,255,0.15);
+      font-weight: 500;
+    }
+    .slide__inner { max-width: 720px; margin: 0 auto; width: 100%; }
+    .slide__inner--wide { max-width: 960px; margin: 0 auto; width: 100%; }
+
+    /* === Title Slide === */
+    .slide--title {
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+      text-align: center;
+    }
+    .slide--title .badge {
+      display: inline-block;
+      padding: 8px 24px;
+      border: 1px solid rgba(0,210,255,0.4);
+      border-radius: 100px;
+      font-size: 14px;
+      color: #00d2ff;
+      letter-spacing: 2px;
+      margin-bottom: 40px;
+      text-transform: uppercase;
+      align-self: center;
+      width: fit-content;
+    }
+    .slide--title h1 {
+      font-size: clamp(2.25rem, 8vw, 4rem);
+      font-weight: 900;
+      line-height: 1.2;
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, #00d2ff, #7b2ff7, #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .slide--title .subtitle {
+      font-size: 22px;
+      color: rgba(255,255,255,0.6);
+      font-weight: 300;
+      line-height: 1.6;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* === Typography === */
+    .label {
+      font-size: 13px;
+      letter-spacing: 3px;
+      color: #00d2ff;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+    h2 {
+      font-size: clamp(1.75rem, 5vw, 2.625rem);
+      font-weight: 900;
+      margin-bottom: 20px;
+      line-height: 1.3;
+    }
+    h2 .em { color: #00d2ff; }
+    h2 .em2 { color: #7b2ff7; }
+    h2 .em3 { color: #ff6b6b; }
+    h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; }
+    .desc {
+      font-size: 16px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.8;
+      margin-bottom: 32px;
+      max-width: 700px;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #00d2ff, #7b2ff7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* === Comparison === */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 16px;
+      align-items: stretch;
+    }
+    .comparison-col {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 28px;
+    }
+    .comparison-col h3 { font-size: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .comparison-col ul { list-style: none; padding: 0; }
+    .comparison-col ul li { font-size: 14px; color: rgba(255,255,255,0.6); line-height: 1.8; padding: 4px 0; }
+    .comparison-col ul li::before { margin-right: 8px; }
+    .comparison-col--dim ul li::before { content: '✕'; color: #ff6b6b; }
+    .comparison-col--bright ul li::before { content: '✓'; color: #00d2ff; }
+    .comparison-divider { display: flex; align-items: center; font-size: 24px; color: rgba(255,255,255,0.2); flex-shrink: 0; }
+
+    /* === Card Grid === */
+    .card-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 28px;
+    }
+    .card-icon { font-size: 2.2rem; margin-bottom: 14px; }
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+    .card-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.7; }
+    .card-limit { font-size: 12px; color: rgba(255,255,255,0.3); margin-top: 10px; font-style: italic; }
+
+    /* === Stat Grid === */
+    .stat-row { display: flex; gap: 16px; margin-bottom: 32px; }
+    .stat-box {
+      flex: 1;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 24px;
+      text-align: center;
+    }
+    .stat-num { font-size: clamp(1.75rem, 5vw, 2.5rem); font-weight: 800; }
+    .stat-num--cyan { color: #00d2ff; }
+    .stat-num--purple { color: #7b2ff7; }
+    .stat-num--coral { color: #ff6b6b; }
+    .stat-label { font-size: 13px; color: rgba(255,255,255,0.4); margin-top: 8px; }
+    .stat-sublabel { font-size: 11px; color: rgba(255,255,255,0.25); margin-top: 4px; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+    /* === Code Block === */
+    pre { border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+    pre code { font-size: 13px; line-height: 1.6; padding: 20px 24px !important; }
+    .code-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .code-label { font-size: 12px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; font-weight: 600; }
+
+    /* === Flow Diagram === */
+    .flow-container { display: flex; align-items: stretch; gap: 0; }
+    .flow-step {
+      flex: 1; text-align: center; padding: 24px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .flow-step:first-child { border-radius: 16px 0 0 16px; }
+    .flow-step:last-child { border-radius: 0 16px 16px 0; }
+    .flow-num {
+      display: inline-block; width: 32px; height: 32px; line-height: 32px;
+      border-radius: 50%; background: linear-gradient(135deg, #00d2ff, #7b2ff7);
+      color: #fff; font-size: 14px; font-weight: 700; margin-bottom: 10px;
+    }
+    .flow-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .flow-desc { font-size: 12px; color: rgba(255,255,255,0.4); }
+    .flow-arrow { display: flex; align-items: center; font-size: 18px; color: rgba(255,255,255,0.2); flex-shrink: 0; padding: 0 2px; }
+
+    /* === Timeline === */
+    .timeline { position: relative; padding-left: 32px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 11px; top: 8px; bottom: 8px;
+      width: 2px; background: rgba(255,255,255,0.08);
+    }
+    .tl-item { position: relative; margin-bottom: 24px; }
+    .tl-item:last-child { margin-bottom: 0; }
+    .tl-dot {
+      position: absolute; left: -27px; top: 6px;
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 3px solid #00d2ff; background: #0a0a0a;
+    }
+    .tl-dot--active { background: #00d2ff; }
+    .tl-dot--purple { border-color: #7b2ff7; }
+    .tl-dot--purple.tl-dot--active { background: #7b2ff7; }
+    .tl-dot--coral { border-color: #ff6b6b; }
+    .tl-dot--coral.tl-dot--active { background: #ff6b6b; }
+    .tl-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .tl-desc { font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.6; }
+    .tl-tag { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+    .tl-tag--cyan { background: rgba(0,210,255,0.15); color: #00d2ff; }
+    .tl-tag--purple { background: rgba(123,47,247,0.15); color: #7b2ff7; }
+    .tl-tag--coral { background: rgba(255,107,107,0.15); color: #ff6b6b; }
+
+    /* === Quote Box === */
+    .quote-box {
+      background: rgba(255,255,255,0.04);
+      border-left: 4px solid #00d2ff;
+      border-radius: 0 14px 14px 0;
+      padding: 24px; margin-bottom: 24px;
+    }
+    .quote-text { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.85); line-height: 1.8; }
+
+    /* === Waterfall Diagram (CSS) === */
+    .waterfall { margin-bottom: 24px; }
+    .wf-row { display: flex; align-items: center; margin-bottom: 6px; font-size: 13px; }
+    .wf-label { width: 180px; flex-shrink: 0; color: rgba(255,255,255,0.6); text-align: right; padding-right: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+    .wf-bar-container { flex: 1; height: 28px; position: relative; }
+    .wf-bar { position: absolute; height: 100%; border-radius: 4px; display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 600; color: #fff; white-space: nowrap; }
+
+    /* === Tag === */
+    .tag { display: inline-block; background: rgba(0,210,255,0.12); color: #00d2ff; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 600; margin: 0 4px 8px 0; }
+
+    /* === Closing Slide === */
+    .slide--closing {
+      text-align: center;
+      background: linear-gradient(135deg, #16213e, #1a1a2e, #0a0a0a);
+    }
+    .slide--closing h2 {
+      font-size: clamp(2rem, 6vw, 3rem);
+      background: linear-gradient(135deg, #00d2ff, #7b2ff7);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .slide--closing .desc { margin: 0 auto; }
+    .ref-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 600px; margin: 0 auto; text-align: left; }
+    .ref-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 18px; font-size: 13px; color: rgba(255,255,255,0.5); }
+    .ref-item strong { color: rgba(255,255,255,0.8); font-weight: 600; }
+
+    /* === Inline SVG Diagram === */
+    :root {
+      --surface: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --border-accent: rgba(255,255,255,0.12);
+      --text-primary: #f5f5f5;
+      --text-secondary: rgba(255,255,255,0.6);
+      --text-muted: rgba(255,255,255,0.35);
+      --accent-1: #00d2ff;
+      --accent-2: #7b2ff7;
+      --accent-3: #ff6b6b;
+      --accent-gradient: linear-gradient(135deg, #00d2ff, #7b2ff7);
+      --tag-bg: rgba(0,210,255,0.12);
+      --tag-color: #00d2ff;
+      --font-family: 'NanumSquareNeo', -apple-system, sans-serif;
+    }
+
+    /* === Fullscreen Toggle Button === */
+    .fs-btn {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 100;
+      width: 40px;
+      height: 40px;
+      border-radius: 99px;
+      background: var(--surface);
+      border: 1px solid var(--border-accent);
+      color: var(--text-secondary);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: border-color 0.2s ease, color 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      padding: 0;
+    }
+    .fs-btn:hover { border-color: rgba(255,255,255,0.3); color: #fff; }
+    @media print { .fs-btn { display: none; } }
+
+    .diagram-wrap { width: 100%; max-width: 640px; margin: 0 auto; }
+    .diagram-wrap svg { width: 100%; height: auto; overflow: visible; }
+    .diagram-wrap .diag-node rect { fill: var(--surface); stroke: var(--border-accent); }
+    .diagram-wrap .diag-node text { font-size: 13px; font-weight: 600; fill: var(--text-primary); font-family: var(--font-family); }
+    .diagram-wrap .diag-node--accent rect { fill: none; stroke: var(--accent-1); stroke-width: 2; }
+    .diagram-wrap .diag-node--accent text { fill: var(--accent-1); }
+    .diagram-wrap .diag-edge { fill: none; stroke: var(--border-accent); stroke-width: 1.5; }
+    .diagram-wrap .diag-label { font-size: 11px; fill: var(--text-muted); font-family: var(--font-family); }
+
+    /* === Workflow Grid (5-step) === */
+    .workflow-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; }
+    .wf-step {
+      position: relative; text-align: center; padding: 28px 16px;
+      background: var(--surface); border: 1px solid var(--border); border-right: none;
+    }
+    .wf-step:first-child { border-radius: 16px 0 0 16px; }
+    .wf-step:last-child { border-radius: 0 16px 16px 0; border-right: 1px solid var(--border); }
+    .wf-step::after {
+      content: ''; position: absolute; right: -10px; top: 50%; transform: translateY(-50%);
+      width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent;
+      border-left: 10px solid var(--border-accent); z-index: 1;
+    }
+    .wf-step:last-child::after { display: none; }
+    .wf-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--accent-gradient); color: #fff;
+      font-size: 12px; font-weight: 700; margin: 0 auto 10px;
+    }
+    .wf-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary); }
+    .wf-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+    /* === Hero Badge Row === */
+    .hero-badge-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; align-self: center; width: fit-content; }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: var(--surface); border: 1px solid var(--border-accent);
+      border-radius: 99px; padding: 6px 14px 6px 10px;
+      font-size: 13px; font-weight: 500; color: var(--text-secondary); white-space: nowrap;
+    }
+    .hero-badge::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-1); flex-shrink: 0; }
+    .hero-badge--2::before { background: var(--accent-2); }
+    .hero-badge--3::before { background: var(--accent-3); }
+
+    /* === Responsive === */
+    @media (max-width: 768px) {
+      .slide { padding: 40px 24px; }
+      .card-grid { grid-template-columns: 1fr; }
+      .stat-row { flex-direction: column; }
+      .flow-container { flex-direction: column; }
+      .flow-step:first-child { border-radius: 16px 16px 0 0; }
+      .flow-step:last-child { border-radius: 0 0 16px 16px; }
+      .flow-arrow { transform: rotate(90deg); justify-content: center; padding: 4px 0; }
+      .comparison { grid-template-columns: 1fr; }
+      .comparison-divider { transform: rotate(90deg); justify-content: center; }
+      .code-pair { grid-template-columns: 1fr; }
+      .wf-label { width: 120px; font-size: 11px; }
+      .ref-grid { grid-template-columns: 1fr; }
+      .workflow-grid { grid-template-columns: 1fr; }
+      .wf-step { border-right: 1px solid var(--border); border-bottom: none; border-radius: 0; }
+      .wf-step:first-child { border-radius: 16px 16px 0 0; }
+      .wf-step:last-child { border-radius: 0 0 16px 16px; border-bottom: 1px solid var(--border); }
+      .wf-step::after { right: auto; left: 50%; top: auto; bottom: -10px; transform: translateX(-50%); border-left: 8px solid transparent; border-right: 8px solid transparent; border-top: 10px solid var(--border-accent); border-bottom: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Slide 1: Title -->
+  <section class="slide slide--title">
+    <div class="badge">DevOps Talk &mdash; 30 min</div>
+    <h1>클라우드 네이티브<br>배포 전략</h1>
+    <p class="subtitle">
+      VM 배포의 시대는 끝났다<br>
+      컨테이너 + <strong style="color:#00d2ff;">무중단 배포</strong>로 전환하면,<br>
+      장애를 <strong style="color:#ff6b6b;">빠르게</strong> 회복할 수 있다
+    </p>
+  </section>
+
+  <!-- Slide 2: Comparison -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">Core Concept</div>
+      <h2><span class="em">VM 배포</span> vs <span class="em2">컨테이너 배포</span></h2>
+      <p class="desc">같은 장애, 완전히 다른 복구 시간</p>
+      <div class="comparison">
+        <div class="comparison-col comparison-col--dim">
+          <h3>🖥 VM 배포 &mdash; 수동 관리</h3>
+          <ul>
+            <li>서버마다 직접 SSH 접속해 배포</li>
+            <li>롤백은 이전 바이너리를 수동 복원</li>
+            <li>배포 중 서비스 다운 불가피</li>
+            <li>장애 복구 <strong style="color:#ff6b6b;">30분+</strong></li>
+          </ul>
+        </div>
+        <div class="comparison-divider">→</div>
+        <div class="comparison-col comparison-col--bright">
+          <h3>🐳 컨테이너 배포 &mdash; 선언형</h3>
+          <ul>
+            <li>이미지 태그 하나만 바꾸면 배포</li>
+            <li>롤백은 이전 이미지로 즉시 전환</li>
+            <li>Rolling/Blue-Green 무중단 배포</li>
+            <li>장애 복구 <strong style="color:#00d2ff;">수 분 내</strong></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 3: Card Grid -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">Deployment Patterns</div>
+      <h2>세 가지 배포 전략, <span class="em">상황에 맞게</span></h2>
+      <p class="desc">각각 서로 다른 요구사항에 답한다. 하나만 알면 선택지가 없다.</p>
+      <div class="card-grid">
+        <div class="card" style="border-top: 3px solid #00d2ff;">
+          <div class="card-icon">🔵</div>
+          <div class="card-title" style="color:#00d2ff;">Blue-Green</div>
+          <div class="card-desc">현재(Blue)와 신규(Green) 환경을 동시에 운영</div>
+          <div class="card-desc" style="margin-top:10px;">트래픽을 한 번에 전환, 즉각 롤백 가능</div>
+          <div class="card-limit">한계: 리소스 2배 필요</div>
+        </div>
+        <div class="card" style="border-top: 3px solid #7b2ff7;">
+          <div class="card-icon">🐦</div>
+          <div class="card-title" style="color:#7b2ff7;">Canary</div>
+          <div class="card-desc">신규 버전에 일부 트래픽(1~5%)만 먼저 전달</div>
+          <div class="card-desc" style="margin-top:10px;">실사용자로 검증 후 단계적 확대</div>
+          <div class="card-limit">한계: 모니터링 복잡도 증가</div>
+        </div>
+        <div class="card" style="border-top: 3px solid #ff6b6b;">
+          <div class="card-icon">🔄</div>
+          <div class="card-title" style="color:#ff6b6b;">Rolling Update</div>
+          <div class="card-desc">구 버전 Pod를 순차적으로 신 버전으로 교체</div>
+          <div class="card-desc" style="margin-top:10px;">리소스 절약, 자동 헬스체크</div>
+          <div class="card-limit">한계: 롤백 시간 소요</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 4: Code Pair -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">Container</div>
+      <h2><span class="em">좋은 Dockerfile</span>과 <span class="em2">나쁜 Dockerfile</span></h2>
+      <p class="desc">레이어 캐싱을 이해하면 빌드 시간을 80% 줄일 수 있다</p>
+      <div class="code-pair">
+        <div>
+          <div class="code-label">✕ 레이어 캐시 미활용</div>
+          <pre><code class="language-dockerfile">FROM node:20-alpine
+WORKDIR /app
+COPY . .
+RUN npm install
+RUN npm run build</code></pre>
+        </div>
+        <div>
+          <div class="code-label">✓ 의존성 레이어 분리</div>
+          <pre><code class="language-dockerfile">FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build</code></pre>
+        </div>
+      </div>
+      <div class="quote-box">
+        <div class="quote-text">
+          <strong style="color:#00d2ff;">핵심 원칙</strong> &mdash; 변경 빈도가 낮은 레이어를 먼저 배치한다.<br>
+          <code style="color:#00d2ff;">package.json</code>은 소스 코드보다 훨씬 덜 바뀐다. 순서 하나로 캐시 적중률이 90%+로 오른다.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 5: Stat Row (3-col) -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">DORA Metrics</div>
+      <h2><span class="em3">D</span><span class="em2">O</span><span class="em">R</span>A &mdash; 배포 조직의 건강 지표</h2>
+      <p class="desc">Google이 제시한 4가지 지표. 이 숫자가 올라가면 비즈니스 성과도 함께 올라간다.</p>
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-num stat-num--coral" style="font-size:clamp(1.5rem,4vw,2rem);">Deployment</div>
+          <div class="stat-label" style="margin-top:12px; font-size:14px; color:rgba(255,255,255,0.6);">배포 빈도</div>
+          <div class="stat-sublabel">Elite: 하루 여러 번</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num stat-num--purple" style="font-size:clamp(1.5rem,4vw,2rem);">Lead Time</div>
+          <div class="stat-label" style="margin-top:12px; font-size:14px; color:rgba(255,255,255,0.6);">커밋→배포 시간</div>
+          <div class="stat-sublabel">Elite: 1시간 미만</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num stat-num--cyan" style="font-size:clamp(1.5rem,4vw,2rem);">MTTR</div>
+          <div class="stat-label" style="margin-top:12px; font-size:rgba(255,255,255,0.6); font-size:14px;">장애 복구 시간</div>
+          <div class="stat-sublabel">Elite: 1시간 미만</div>
+        </div>
+      </div>
+      <div class="quote-box">
+        <div class="quote-text">배포 빈도가 낮으면 한 번에 많은 변경이 묶여 장애 시 원인 파악이 어렵다. 자주 배포하는 팀이 더 안전하다.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 6: Stat + Tags -->
+  <section class="slide">
+    <div class="slide__inner">
+      <div class="label">SLA / SLO</div>
+      <h2><span class="em3">99%는 약속이 아니다</span> &mdash; 나인을 이해하라</h2>
+      <p class="desc">SLA 99%와 99.99%의 차이는 단순히 숫자가 아니다. 연간 허용 다운타임이 87.6시간 vs 52분이다.</p>
+      <div class="stat-row">
+        <div class="stat-box">
+          <div class="stat-num stat-num--cyan">52분</div>
+          <div class="stat-label">99.99% SLA 연간 다운타임</div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.25); margin-top:4px;">😴 "충분히 안정적이네"</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num stat-num--coral" style="font-size:clamp(2rem,6vw,3rem);">87.6h</div>
+          <div class="stat-label">99% SLA 연간 다운타임</div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.25); margin-top:4px;">🔥 3일 넘게 서비스 불가</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:16px; margin-bottom:24px;">
+        <div class="tag">99% = 3.65일/년</div>
+        <div class="tag" style="background:rgba(123,47,247,0.12); color:#7b2ff7;">99.9% = 8.7시간/년</div>
+        <div class="tag" style="background:rgba(255,107,107,0.12); color:#ff6b6b;">99.99% = 52분/년</div>
+      </div>
+      <div class="quote-box" style="border-left-color:#ff6b6b;">
+        <div class="quote-text">Error Budget = 1 - SLO. 이 예산이 남아 있어야 새 기능을 배포할 수 있다. 예산이 소진되면 배포를 멈추고 안정성에 집중한다.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 7: Flow (4-step) -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">CI/CD</div>
+      <h2>코드가 <span class="em3">프로덕션</span>까지 가는 여정</h2>
+      <p class="desc">자동화된 파이프라인이 없으면 사람이 게이트를 지킨다. 사람은 지치고, 자동화는 지치지 않는다.</p>
+      <div class="flow-container">
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <div class="flow-title">Commit</div>
+          <div class="flow-desc">PR 오픈, 린트·테스트</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <div class="flow-title">Build</div>
+          <div class="flow-desc">Docker 이미지 빌드 및 레지스트리 푸시</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:rgba(255,107,107,0.3);">
+          <div class="flow-num" style="background:linear-gradient(135deg,#ff6b6b,#7b2ff7);">3</div>
+          <div class="flow-title" style="color:#ff6b6b;">Staging</div>
+          <div class="flow-desc">E2E 테스트, 성능 검증</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+          <div class="flow-num">4</div>
+          <div class="flow-title">Deploy</div>
+          <div class="flow-desc">Canary 1% → 점진 확대</div>
+        </div>
+      </div>
+      <div style="margin-top:24px;">
+        <div class="quote-box" style="border-left-color:#7b2ff7;">
+          <div class="quote-text">
+            <strong style="color:#7b2ff7;">Shift Left</strong>: 테스트를 오른쪽(배포 직전)에서 왼쪽(커밋 시점)으로 옮긴다. 발견이 늦을수록 수정 비용은 기하급수적으로 증가한다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 8: Waterfall -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">Startup Order</div>
+      <h2>의존성 체인 &mdash; <span class="em3">어디서 막히는지</span> 한눈에</h2>
+      <p class="desc">컨테이너 오케스트레이션에서 의존성 순서를 잘못 설정하면 앱이 뜨기 전에 DB 연결을 시도하다 크래시된다.</p>
+      <div class="waterfall">
+        <div class="wf-row">
+          <div class="wf-label">PostgreSQL</div>
+          <div class="wf-bar-container">
+            <div class="wf-bar" style="left:0; width:25%; background:rgba(0,210,255,0.25); color:rgba(255,255,255,0.6);">800ms</div>
+          </div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-label" style="padding-left:16px;">Redis</div>
+          <div class="wf-bar-container">
+            <div class="wf-bar" style="left:0; width:12%; background:rgba(123,47,247,0.3); color:rgba(255,255,255,0.6);">400ms</div>
+          </div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-label" style="padding-left:16px; color:#ff6b6b;">App Server</div>
+          <div class="wf-bar-container">
+            <div class="wf-bar" style="left:25%; width:45%; background:rgba(255,107,107,0.35); color:#fff; font-weight:700;">1400ms ← 의존성 대기</div>
+          </div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-label" style="padding-left:32px;">API Gateway</div>
+          <div class="wf-bar-container">
+            <div class="wf-bar" style="left:70%; width:15%; background:rgba(0,210,255,0.25); color:rgba(255,255,255,0.6);">480ms</div>
+          </div>
+        </div>
+        <div class="wf-row">
+          <div class="wf-label" style="padding-left:32px;">Health Check</div>
+          <div class="wf-bar-container">
+            <div class="wf-bar" style="left:85%; width:15%; background:rgba(74,222,128,0.3); color:rgba(255,255,255,0.8);">Ready ✓</div>
+          </div>
+        </div>
+      </div>
+      <div class="quote-box" style="border-left-color:#ff6b6b;">
+        <div class="quote-text">readinessProbe + initContainer로 의존성이 준비된 뒤에만 앱이 기동되게 한다. 순서를 코드로 선언하면 환경마다 다시 겪는 문제가 사라진다.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 9: Flow 3-step + stat -->
+  <section class="slide">
+    <div class="slide__inner--wide">
+      <div class="label">Blue-Green</div>
+      <h2>트래픽 전환 &mdash; <span class="em">클릭 한 번이면 끝</span></h2>
+      <p class="desc">Blue-Green 배포는 두 환경을 동시에 운영하다가 로드밸런서 타겟만 바꿔 전환한다.</p>
+      <div class="flow-container">
+        <div class="flow-step" style="border-color:rgba(0,210,255,0.3);">
+          <div class="flow-num" style="background:#00d2ff;">1</div>
+          <div class="flow-title" style="color:#00d2ff;">🔵 Blue (현재)</div>
+          <div class="flow-desc">v1.2.0 운영 중<br><span style="color:#00d2ff;">100% 트래픽 수신</span></div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:rgba(123,47,247,0.3);">
+          <div class="flow-num" style="background:#7b2ff7;">2</div>
+          <div class="flow-title" style="color:#7b2ff7;">🟢 Green (신규)</div>
+          <div class="flow-desc">v1.3.0 준비 완료<br><span style="color:#7b2ff7;">전환 대기 중</span></div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:rgba(74,222,128,0.3);">
+          <div class="flow-num" style="background:linear-gradient(135deg,#00d2ff,#4ade80);">3</div>
+          <div class="flow-title" style="color:#4ade80;">전환 완료</div>
+          <div class="flow-desc">Green이 100% 수신<br>Blue는 롤백 대기</div>
+        </div>
+      </div>
+      <div style="margin-top:24px; display:flex; gap:16px;">
+        <div class="stat-box" style="flex:1; border-color:rgba(255,107,107,0.2);">
+          <div style="font-size:13px; color:rgba(255,255,255,0.4); margin-bottom:4px;">수동 전환</div>
+          <div class="stat-num stat-num--coral" style="font-size:1.5rem;">30분+</div>
+          <div class="stat-label">SSH + Nginx 설정 직접 수정</div>
+        </div>
+        <div class="stat-box" style="flex:1; border-color:rgba(0,210,255,0.2);">
+          <div style="font-size:13px; color:rgba(255,255,255,0.4); margin-bottom:4px;">자동 전환</div>
+          <div class="stat-num stat-num--cyan" style="font-size:1.5rem;">수 초</div>
+          <div class="stat-label">ALB 타겟 그룹 전환 1회</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 10: Timeline Scenario -->
+  <section class="slide" style="min-height:100vh; overflow:visible;">
+    <div class="slide__inner">
+      <div class="label">Incident</div>
+      <h2>실전: <span class="em3">"배포 후 에러율 급증"</span></h2>
+      <p class="desc">오후 3시, 신규 배포 직후 5xx 에러율이 0.01%에서 2%로 급증. 컨테이너 배포로 빠르게 대응한다.</p>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--purple tl-dot--active"></div>
+          <div class="tl-title">Step 1. 알람 수신 및 확인 <span class="tl-tag tl-tag--purple">Grafana</span></div>
+          <div class="tl-desc">배포 이벤트 마커와 에러율 급등 그래프가 일치 → 신규 버전 문제 확정<br>Canary 1% 단계에서 조기 발견</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--coral tl-dot--active"></div>
+          <div class="tl-title">Step 2. 즉시 롤백 <span class="tl-tag tl-tag--coral">kubectl</span></div>
+          <div class="tl-desc"><code style="color:#ff6b6b;">kubectl rollout undo deployment/api-server</code><br>이전 이미지로 Rolling Update 자동 시작. 30초 내 완료.</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--active"></div>
+          <div class="tl-title">Step 3. 원인 분석 <span class="tl-tag tl-tag--cyan">Traces</span></div>
+          <div class="tl-desc">신규 버전의 DB 커넥션 풀 설정 오류 확인: <code style="color:#00d2ff;">maxPoolSize: 1</code><br>설정 파일 누락으로 기본값 1이 적용됨</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--active" style="border-color:#4ade80; background:#4ade80;"></div>
+          <div class="tl-title" style="color:#4ade80;">Step 4. 수정 후 재배포</div>
+          <div class="tl-desc">설정 ConfigMap 수정 후 재배포. 에러율 0.01%로 복귀.<br>Canary 덕분에 전체 트래픽 1%만 영향받아 <strong style="color:#4ade80;">신속 해결</strong></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 11: Roadmap -->
+  <section class="slide">
+    <div class="slide__inner">
+      <div class="label">Getting Started</div>
+      <h2>월요일에 <span class="em">바로</span> 시작하기</h2>
+      <p class="desc">처음부터 Kubernetes를 도입하려 하지 않는다. Docker Compose 하나에서 시작한다.</p>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--active"></div>
+          <div class="tl-title">이번 주 <span class="tl-tag tl-tag--cyan">2-4시간</span></div>
+          <div class="tl-desc">Dockerfile 작성 + docker-compose.yml로 로컬 환경 통일<br>레이어 캐싱 최적화, .dockerignore 추가</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--purple tl-dot--active"></div>
+          <div class="tl-title">다음 주 <span class="tl-tag tl-tag--purple">반나절</span></div>
+          <div class="tl-desc">GitHub Actions 기본 파이프라인: 빌드 → 테스트 → 이미지 푸시<br>ECR 또는 Docker Hub에 자동 업로드</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot tl-dot--coral tl-dot--active"></div>
+          <div class="tl-title">이번 달 <span class="tl-tag tl-tag--coral">1-2일</span></div>
+          <div class="tl-desc">ECS Fargate 또는 k8s 도입 → Rolling Update 자동화<br>Health Check + readinessProbe 설정</div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot" style="border-color:#4ade80;"></div>
+          <div class="tl-title">다음 분기 <span class="tl-tag" style="background:rgba(74,222,128,0.15); color:#4ade80;">지속적</span></div>
+          <div class="tl-desc">Blue-Green / Canary 전략 도입<br>DORA Metrics 측정 → 배포 빈도 목표 설정</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 12: Closing -->
+  <section class="slide slide--closing">
+    <h2>Ship Fast,<br>Recover Faster</h2>
+    <p class="desc" style="font-size:18px; color:rgba(255,255,255,0.5); margin-top:12px;">
+      빠르게 배포하는 팀이 더 안전하다<br>
+      자동화된 파이프라인 + 무중단 전략으로 시작하라
+    </p>
+    <div style="margin-top:40px;">
+      <div class="ref-grid">
+        <div class="ref-item"><strong>DORA State of DevOps</strong><br>dora.dev (무료 보고서)</div>
+        <div class="ref-item"><strong>Kubernetes Docs</strong><br>kubernetes.io/docs</div>
+        <div class="ref-item"><strong>GitHub Actions</strong><br>docs.github.com/actions</div>
+        <div class="ref-item"><strong>The DevOps Handbook</strong><br>Gene Kim, O'Reilly</div>
+      </div>
+    </div>
+    <p style="font-size:15px; color:rgba(255,255,255,0.3); margin-top:40px;">Q&A</p>
+  </section>
+
+  <!-- Slide 13: Inline SVG Diagram -->
+  <section class="slide">
+    <div class="slide__inner" style="max-width:720px;">
+      <div class="label">Architecture</div>
+      <h2>배포 <span class="em">아키텍처</span></h2>
+      <p class="desc" style="margin-bottom:20px;">3-tier 구조: 트래픽이 Gateway → App → DB를 거치는 흐름을 인라인 SVG로 표현한다.</p>
+      <div class="diagram-wrap">
+        <svg viewBox="0 0 600 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="diag-arrow-s13" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" style="fill:var(--border-accent)" />
+            </marker>
+            <marker id="diag-arrow-accent-s13" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" style="fill:var(--accent-1)" />
+            </marker>
+          </defs>
+          <g class="diag-node">
+            <rect x="20" y="68" width="120" height="44" rx="10" ry="10" />
+            <text x="80" y="95" text-anchor="middle">API Gateway</text>
+          </g>
+          <line class="diag-edge diag-edge--accent" x1="140" y1="90" x2="218" y2="90" marker-end="url(#diag-arrow-accent-s13)" />
+          <g class="diag-node diag-node--accent">
+            <rect x="220" y="58" width="140" height="64" rx="10" ry="10" />
+            <text x="290" y="86" text-anchor="middle">App Server</text>
+            <text x="290" y="106" text-anchor="middle" class="diag-label">x3 replicas</text>
+          </g>
+          <line class="diag-edge" x1="360" y1="90" x2="438" y2="90" marker-end="url(#diag-arrow-s13)" />
+          <g class="diag-node">
+            <rect x="440" y="68" width="130" height="44" rx="10" ry="10" />
+            <text x="505" y="95" text-anchor="middle">PostgreSQL</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 14: Workflow Grid (5-step) -->
+  <section class="slide">
+    <div class="slide__inner" style="max-width:960px;">
+      <div class="label">Pipeline</div>
+      <h2>CI/CD <span class="em">5단계 파이프라인</span></h2>
+      <p class="desc" style="margin-bottom:24px;">코드 커밋부터 프로덕션 배포까지 완전 자동화. 각 단계가 실패하면 다음 단계로 진행하지 않는다.</p>
+      <div class="workflow-grid">
+        <div class="wf-step">
+          <div class="wf-num">1</div>
+          <div class="wf-title">Lint & Test</div>
+          <div class="wf-desc">코드 품질 검사 및 단위 테스트</div>
+        </div>
+        <div class="wf-step">
+          <div class="wf-num">2</div>
+          <div class="wf-title">Build</div>
+          <div class="wf-desc">Docker 이미지 빌드 및 레지스트리 푸시</div>
+        </div>
+        <div class="wf-step">
+          <div class="wf-num">3</div>
+          <div class="wf-title">Staging</div>
+          <div class="wf-desc">E2E 테스트 및 성능 검증</div>
+        </div>
+        <div class="wf-step">
+          <div class="wf-num">4</div>
+          <div class="wf-title">Canary</div>
+          <div class="wf-desc">트래픽 1% → 에러율 모니터링</div>
+        </div>
+        <div class="wf-step">
+          <div class="wf-num">5</div>
+          <div class="wf-title">Full Deploy</div>
+          <div class="wf-desc">100% 트래픽 전환 완료</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 15: Hero Badge (title variant) -->
+  <section class="slide slide--title">
+    <div class="badge">Part 2</div>
+    <h1 style="font-size:clamp(2rem,7vw,3.5rem);">실전 배포<br><span style="background:linear-gradient(135deg,#00d2ff,#7b2ff7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">체크리스트</span></h1>
+    <p class="subtitle" style="font-size:18px; margin-top:8px;">배포 전 반드시 확인해야 할 항목들</p>
+    <div class="hero-badge-row" style="justify-content:center; margin:24px auto 0;">
+      <span class="hero-badge">Health Check 설정</span>
+      <span class="hero-badge hero-badge--2">Rollback 계획</span>
+      <span class="hero-badge hero-badge--3">Feature Flag</span>
+    </div>
+  </section>
+
+  <button class="fs-btn" id="fsBtn" type="button" aria-label="전체화면 전환" title="전체화면 (F)">⛶</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <script>
+  (function () {
+    var btn = document.getElementById('fsBtn');
+    if (!btn) return;
+    var root = document.documentElement;
+    if (!root.requestFullscreen) { btn.style.display = 'none'; return; }
+    function sync() { btn.textContent = document.fullscreenElement ? '\u2715' : '\u26F6'; }
+    btn.addEventListener('click', function () {
+      if (document.fullscreenElement) { document.exitFullscreen(); }
+      else { root.requestFullscreen(); }
+    });
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'f' && e.key !== 'F') return;
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      btn.click();
+    });
+  })();
+  </script>
+</body>
+</html>
