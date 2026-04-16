@@ -22,8 +22,8 @@ council:
       command: "claude -p"
       emoji: "🧠"
       color: "CYAN"
-      model: "claude-opus-4-6"
-      effort_level: "high"
+      model: "claude-opus-4-7"
+      effort_level: "xhigh"
       output_format: "text"
 
     - name: codex
@@ -31,7 +31,7 @@ council:
       emoji: "🤖"
       color: "BLUE"
       model: "gpt-5.4"
-      effort_level: "high"
+      effort_level: "xhigh"
       output_format: "text"
 
     - name: gemini
