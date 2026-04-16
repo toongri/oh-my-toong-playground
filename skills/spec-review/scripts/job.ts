@@ -55,9 +55,10 @@ const JOB_CONFIG: JobConfig = {
 
 const SCRIPT_DIR = import.meta.dirname;
 const PROJECT_ROOT = findProjectRoot();
+const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
-const SKILL_CONFIG_FILE = path.join(SCRIPT_DIR, 'spec-reviewer.config.yaml');
+const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'spec-reviewer.config.yaml');
 const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'spec-reviewer.config.yaml');
 
 // ---------------------------------------------------------------------------
