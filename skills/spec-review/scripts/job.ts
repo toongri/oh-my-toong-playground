@@ -58,8 +58,8 @@ const PROJECT_ROOT = findProjectRoot();
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
-const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'spec-reviewer.config.yaml');
-const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'spec-reviewer.config.yaml');
+const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'spec-review.config.yaml');
+const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'spec-review.config.yaml');
 
 // ---------------------------------------------------------------------------
 // Spec-review wrappers — pre-apply JOB_CONFIG so callers/tests need no config arg
@@ -347,9 +347,10 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const chairmanRoleRaw = (options.chairman || process.env.SPEC_REVIEW_CHAIRMAN || config['spec-review'].chairman.role || 'auto') as string;
   const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
-  const includeChairman = normalizeBool(options['include-chairman']);
+  const includeChairmanValue = normalizeBool(options['include-chairman']);
+  const includeChairman = includeChairmanValue === true;
   const excludeChairmanOverride =
-    options['exclude-chairman'] != null ? true : options['include-chairman'] != null ? false : null;
+    options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : includeChairmanValue === true ? false : null;
 
   const excludeSetting = normalizeBool(config['spec-review'].settings.exclude_chairman_from_members);
   const excludeChairmanFromMembers =

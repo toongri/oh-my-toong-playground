@@ -52,8 +52,8 @@ const PROJECT_ROOT = findProjectRoot(SCRIPT_DIR);
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
-const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'chunk-review.config.yaml');
-const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'chunk-review.config.yaml');
+const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'orchestrate-review.config.yaml');
+const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'orchestrate-review.config.yaml');
 
 const DEFAULT_JOBS_DIR = process.env.CHUNK_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
