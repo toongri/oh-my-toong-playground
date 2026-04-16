@@ -1,6 +1,7 @@
 ---
 name: orchestrate-review
 description: Code review orchestration skill - multi-AI advisory service for code changes with aggregated Chairman report
+disable-model-invocation: true
 ---
 
 ## Role Declaration
