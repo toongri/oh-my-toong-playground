@@ -1,5 +1,5 @@
 ---
-name: yowu-create-slides
+name: create-slides
 description: 깔끔하고 전문적인 HTML 기반 발표자료를 단일 파일로 생성한다.  수직 스크롤 + scroll-snap 방식의 스크롤텔링 프레젠테이션으로, 슬라이드 라이브러리 없이 순수 HTML+CSS로 구현한다.  다크/라이트 테마, highlight.js 코드 블럭, 디자인 시스템을 지원하며 frontend-design 스킬 연동으로 화려한 비주얼도 선택 가능하다.  트리거: "make a presentation", "create slides", "build a deck", "발표자료", "프레젠테이션", "슬라이드", "제안서", "발표 만들어", "ppt", "keynote", "pitch deck", "tech talk", "발표 만들어줘".
 ---
 
@@ -208,12 +208,12 @@ Edit:
 
 ### Step 7: Gemini 디자인 리뷰 (선택적)
 
-`gemini-design-review` 스킬을 호출하여 HTML 디자인을 보완한다.
+`slides-review` 스킬을 호출하여 HTML 디자인을 보완한다.
 gemini CLI 미설치 시 자동으로 quiet pass되므로 별도 분기 처리가 필요 없다.
 
 **호출 방법:**
 
-`gemini-design-review` 스킬에 아래 컨텍스트를 전달한다:
+`slides-review` 스킬에 아래 컨텍스트를 전달한다:
 - **HTML 파일 경로**: 방금 생성한 HTML 파일의 절대 경로
 - **보호 규칙**: `scroll-snap 보호`, `폰트 보호: NanumSquareNeo`, `레이아웃 보호: 100vh`
 
@@ -504,7 +504,7 @@ AI는 이 값을 **하한선**으로 사용하되, 콘텐츠 밀도와 슬라이
 
 Gemini 디자인 리뷰 (Step 7):
 
-- `gemini-design-review` 스킬: HTML 디자인 리뷰를 Gemini CLI로 수행하는 전용 스킬. 리뷰 프롬프트와 실행 로직이 해당 스킬에 캡슐화되어 있다.
+- `slides-review` 스킬: HTML 디자인 리뷰를 Gemini CLI로 수행하는 전용 스킬. 리뷰 프롬프트와 실행 로직이 해당 스킬에 캡슐화되어 있다.
 
 품질 레퍼런스 (참고용, 복사 대상 아님):
 

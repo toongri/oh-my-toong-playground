@@ -42,6 +42,8 @@ skills:
     - humanizer
     - spec-review
     - orchestrate-review
+    - create-slides
+    - slides-review
 
 scripts:
   items:
