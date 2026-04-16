@@ -1,14 +1,14 @@
 ---
-name: gemini-design-review
-description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTML 파일을 Gemini에게 전달하여 시각 디자인 개선 지침을 받고, 메인 세션에서 CSS/HTML을 수정한다. gemini CLI 미설치 시 quiet pass. 트리거: "디자인 리뷰", "gemini review", "design review", "디자인 검토", "디자인 보완".
+name: slides-review
+description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTML 파일을 Gemini에게 전달하여 시각 디자인 개선 지침을 받고, 메인 세션에서 CSS/HTML을 수정한다. gemini CLI 미설치 시 quiet pass. 트리거: "디자인 리뷰", "gemini review", "design review", "디자인 검토", "디자인 보완", "slides review", "슬라이드 리뷰".
 ---
 
-# Gemini Design Review
+# Slides Review
 
 ## Overview
 
 HTML 파일의 시각 디자인 품질을 Gemini CLI로 검토하고, 반환된 개선 지침을 메인 세션(Claude)이 직접 적용하는 스킬이다.
-다른 스킬(예: `yowu-create-slides`)의 후처리 단계로 호출되거나, 사용자가 직접 호출할 수 있다.
+다른 스킬(예: `create-slides`)의 후처리 단계로 호출되거나, 사용자가 직접 호출할 수 있다.
 
 **핵심 원칙**: gemini CLI가 없으면 아무 일도 하지 않는다 (quiet pass).
 
