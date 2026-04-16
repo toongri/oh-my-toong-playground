@@ -1,0 +1,13 @@
+# Slides Review Configuration
+# Single-reviewer configuration for Gemini-based design review.
+
+review:
+  members:
+    - name: gemini
+      command: "gemini"
+      emoji: "💎"
+      color: "GREEN"
+      output_format: "text"
+
+  settings:
+    timeout: 120
