@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2025 Q2 제품 전략</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <style>
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-aLt.woff2); font-weight: 300; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-bRg.woff2); font-weight: 400; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-cBd.woff2); font-weight: 700; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-dEb.woff2); font-weight: 800; font-display: swap; }
+    @font-face { font-family: 'NanumSquareNeo'; src: url(https://hangeul.pstatic.net/hangeul_static/webfont/NanumSquareNeo/NanumSquareNeoTTF-eHv.woff2); font-weight: 900; font-display: swap; }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    body {
+      font-family: 'NanumSquareNeo', -apple-system, sans-serif;
+      background: #FAFAF8;
+      color: #1A1A1A;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    section {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 24px;
+      max-width: 720px;
+      margin: 0 auto;
+      overflow: hidden;
+      scroll-snap-align: start;
+    }
+
+    .hero { text-align: center; }
+    .hero .eyebrow {
+      font-size: 14px;
+      color: #888;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(2.25rem, 8vw, 3.5rem);
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 20px;
+    }
+    .hero h1 .highlight {
+      background: linear-gradient(135deg, #6C5CE7, #00B894);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero .subtitle {
+      font-size: 18px;
+      color: #666;
+      line-height: 1.8;
+    }
+    .scroll-hint {
+      margin-top: 40px;
+      font-size: 13px;
+      color: #bbb;
+      animation: bounce 2s infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(8px); }
+    }
+
+    /* === Fullscreen Toggle Button === */
+    .fs-btn {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 100;
+      width: 40px;
+      height: 40px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid #E5E4E2;
+      color: #666;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: border-color 0.2s ease, color 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      padding: 0;
+    }
+    .fs-btn:hover { border-color: #6C5CE7; color: #6C5CE7; }
+    @media print { .fs-btn { display: none; } }
+
+    .label {
+      font-size: 12px;
+      color: #6C5CE7;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-size: clamp(1.75rem, 5vw, 2.5rem);
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 16px;
+    }
+    h2 .em { color: #6C5CE7; }
+
+    .desc {
+      font-size: 16px;
+      color: #555;
+      line-height: 1.8;
+      margin-bottom: 32px;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #EEEDEB;
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .card-icon { font-size: 2rem; margin-bottom: 10px; }
+    .card-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .card-desc { font-size: 13px; color: #888; line-height: 1.6; }
+
+    .stat-row { display: flex; gap: 12px; margin-bottom: 32px; }
+    .stat-box {
+      flex: 1;
+      background: #fff;
+      border: 1px solid #EEEDEB;
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-num { font-size: 28px; font-weight: 700; color: #6C5CE7; }
+    .stat-label { font-size: 12px; color: #888; margin-top: 4px; }
+
+    pre { border-radius: 12px; overflow: hidden; margin-bottom: 24px; border: 1px solid #EEEDEB; }
+    pre code { font-size: 14px; line-height: 1.6; padding: 24px !important; }
+
+    .cta-section { text-align: center; }
+    .cta-tag {
+      display: inline-block;
+      background: linear-gradient(135deg, #6C5CE7, #00B894);
+      color: #fff;
+      padding: 12px 32px;
+      border-radius: 99px;
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 480px) {
+      section { padding: 48px 20px; }
+      .card-grid { grid-template-columns: 1fr; }
+      .stat-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <div class="eyebrow">2025 Q2 Product Strategy</div>
+    <h1><span class="highlight">사용자 경험</span>을<br>재정의합니다</h1>
+    <p class="subtitle">
+      데이터 기반의 의사결정으로<br>
+      핵심 지표를 2배 성장시키는 전략
+    </p>
+    <div class="scroll-hint">&#8595; 스크롤해서 계속 읽기</div>
+  </section>
+
+  <section>
+    <div class="label">Current Status</div>
+    <h2>Q1 핵심 지표<br><span class="em">요약</span></h2>
+    <p class="desc">
+      1분기 동안 사용자 기반이 크게 성장했으며,
+      특히 리텐션 지표에서 유의미한 개선을 확인했습니다.
+    </p>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-num">2.4M</div>
+        <div class="stat-label">월간 활성 사용자</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">68%</div>
+        <div class="stat-label">D7 리텐션</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">+34%</div>
+        <div class="stat-label">전분기 대비 매출</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label">Strategy</div>
+    <h2>Q2 <span class="em">핵심 전략</span><br>4가지</h2>
+    <p class="desc">
+      사용자 여정의 각 단계에서 마찰을 줄이고,
+      핵심 가치 전달 속도를 높이는 데 집중합니다.
+    </p>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">&#9889;</div>
+        <div class="card-title">온보딩 개선</div>
+        <div class="card-desc">첫 경험까지의 시간을 50% 단축</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#127919;</div>
+        <div class="card-title">개인화 강화</div>
+        <div class="card-desc">AI 기반 맞춤 추천 시스템 도입</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128172;</div>
+        <div class="card-title">커뮤니티 기능</div>
+        <div class="card-desc">사용자 간 연결과 공유 활성화</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128200;</div>
+        <div class="card-title">수익화 고도화</div>
+        <div class="card-desc">프리미엄 티어 재설계</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section">
+    <div class="label">Next Steps</div>
+    <h2>함께<br><span class="em">만들어 갑시다</span></h2>
+    <p class="desc">
+      Q2 전략의 성공은 팀 전체의 협업에 달려 있습니다.<br>
+      각 스쿼드별 상세 로드맵은 다음 주 공유됩니다.
+    </p>
+    <div class="cta-tag">Q2 킥오프 미팅 참여하기</div>
+  </section>
+
+  <button class="fs-btn" id="fsBtn" type="button" aria-label="전체화면 전환" title="전체화면 (F)">⛶</button>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>hljs.highlightAll();</script>
+  <script>
+  (function () {
+    var btn = document.getElementById('fsBtn');
+    if (!btn) return;
+    var root = document.documentElement;
+    if (!root.requestFullscreen) { btn.style.display = 'none'; return; }
+    function sync() { btn.textContent = document.fullscreenElement ? '\u2715' : '\u26F6'; }
+    btn.addEventListener('click', function () {
+      if (document.fullscreenElement) { document.exitFullscreen(); }
+      else { root.requestFullscreen(); }
+    });
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'f' && e.key !== 'F') return;
+      var t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      btn.click();
+    });
+  })();
+  </script>
+</body>
+</html>
