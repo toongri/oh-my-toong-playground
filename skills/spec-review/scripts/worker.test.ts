@@ -758,6 +758,57 @@ describe('main - logging lifecycle', () => {
 });
 
 // ---------------------------------------------------------------------------
+// assemblePrompt() — reviewer.md fallback (M-6)
+// ---------------------------------------------------------------------------
+
+import { assemblePrompt } from './worker.ts';
+
+describe('assemblePrompt - reviewer.md fallback', () => {
+  let tmpDir;
+  let promptsDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    promptsDir = path.join(tmpDir, 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('reviewer.md로 폴백: 모델 파일 없을 때 reviewer.md 사용', () => {
+    fs.writeFileSync(path.join(promptsDir, 'reviewer.md'), 'generic reviewer instructions', 'utf8');
+
+    const { assembled, isStructured } = assemblePrompt({
+      promptsDir,
+      entityName: 'grok',
+      rawPrompt: 'review this spec',
+      reviewContent: undefined,
+      fallbackFile: undefined,
+    });
+
+    expect(isStructured).toBe(true);
+    expect(assembled.includes('generic reviewer instructions')).toBe(true);
+    expect(assembled.includes('review this spec')).toBe(true);
+  });
+
+  test('폴백 없음: reviewer.md 없을 때 비정형 프롬프트 반환', () => {
+    // No reviewer.md, no model-specific file
+    const { assembled, isStructured } = assemblePrompt({
+      promptsDir,
+      entityName: 'grok',
+      rawPrompt: 'review this spec',
+      reviewContent: undefined,
+      fallbackFile: undefined,
+    });
+
+    expect(isStructured).toBe(false);
+    expect(assembled).toBe('review this spec');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // runOnce() — assembled-prompt.txt creation (M-5)
 // ---------------------------------------------------------------------------
 

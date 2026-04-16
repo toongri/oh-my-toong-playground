@@ -10,7 +10,7 @@ import {
   splitCommand,
   atomicWriteJson,
   sleepMsAsync,
-  assemblePrompt,
+  assemblePrompt as sharedAssemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
   MAX_RETRIES,
@@ -18,14 +18,33 @@ import {
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
+const FALLBACK_FILE = 'reviewer.md';
 
-// Wrappers that default promptsDir to this worker's PROMPTS_DIR
+// ---------------------------------------------------------------------------
+// Spec-review wrappers (reviewer.md fallback default)
+// ---------------------------------------------------------------------------
+
+function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent, fallbackFile }) {
+  return sharedAssemblePrompt({
+    promptsDir, entityName, rawPrompt, reviewContent,
+    fallbackFile: fallbackFile || FALLBACK_FILE,
+  });
+}
+
 function runOnce(opts) {
-  return sharedRunOnce({ promptsDir: PROMPTS_DIR, ...opts });
+  return sharedRunOnce({
+    ...opts,
+    fallbackFile: opts.fallbackFile || FALLBACK_FILE,
+    promptsDir: PROMPTS_DIR,
+  });
 }
 
 function runWithRetry(opts) {
-  return sharedRunWithRetry({ promptsDir: PROMPTS_DIR, ...opts });
+  return sharedRunWithRetry({
+    ...opts,
+    fallbackFile: opts.fallbackFile || FALLBACK_FILE,
+    promptsDir: PROMPTS_DIR,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -86,7 +105,6 @@ function main() {
 
   runWithRetry({
     program, args, prompt, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
-    promptsDir: PROMPTS_DIR,
   }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
     logEnd();

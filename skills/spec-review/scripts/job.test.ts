@@ -821,6 +821,97 @@ describe('findProjectRoot', () => {
 });
 
 // ---------------------------------------------------------------------------
+// excludeChairmanOverride 플래그 파싱 (boolean flag parsing bug regression)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// cmdStart: --exclude-chairman 플래그 boolean 파싱 (회귀 방지)
+// ---------------------------------------------------------------------------
+
+describe('cmdStart: --exclude-chairman 플래그 boolean 파싱', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeConfig(chairmanRole: string, jobsDir: string): string {
+    const configPath = path.join(tmpDir, 'spec-review.config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      `    role: ${chairmanRole}`,
+      '  members:',
+      '    - name: claude',
+      '      command: claude -p',
+      `    - name: ${chairmanRole}`,
+      '      command: echo test',
+      '  settings:',
+      '    exclude_chairman_from_members: true',
+      '    timeout: 0',
+    ].join('\n'));
+    return configPath;
+  }
+
+  test('--exclude-chairman=false이면 job.json에 excludeChairmanFromMembers가 false로 저장된다', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    const configPath = makeConfig('codex', jobsDir);
+    execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--exclude-chairman=false',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const jobDirs = fs.readdirSync(jobsDir).map(d => path.join(jobsDir, d));
+    expect(jobDirs.length).toBe(1);
+    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDirs[0], 'job.json'), 'utf8'));
+    expect(jobMeta.settings.excludeChairmanFromMembers).toBe(false);
+  });
+
+  test('--exclude-chairman=true이면 job.json에 excludeChairmanFromMembers가 true로 저장된다', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    const configPath = makeConfig('codex', jobsDir);
+    execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--exclude-chairman=true',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const jobDirs = fs.readdirSync(jobsDir).map(d => path.join(jobsDir, d));
+    expect(jobDirs.length).toBe(1);
+    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDirs[0], 'job.json'), 'utf8'));
+    expect(jobMeta.settings.excludeChairmanFromMembers).toBe(true);
+  });
+
+  test('--exclude-chairman=false이면 chairman 역할이 members에 포함된다', () => {
+    const jobsDir = path.join(tmpDir, 'jobs');
+    const configPath = makeConfig('codex', jobsDir);
+    execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'codex',
+      '--exclude-chairman=false',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const jobDirs = fs.readdirSync(jobsDir).map(d => path.join(jobsDir, d));
+    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDirs[0], 'job.json'), 'utf8'));
+    const memberNames = jobMeta.members.map((m: any) => m.name);
+    expect(memberNames.includes('codex')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // cmdResults
 // ---------------------------------------------------------------------------
 
