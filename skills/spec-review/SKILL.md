@@ -1,6 +1,7 @@
 ---
 name: spec-review
 description: Spec review agent - multi-AI advisory service for design decisions with synthesized Chairman advisory
+disable-model-invocation: true
 ---
 
 ## Role Declaration
