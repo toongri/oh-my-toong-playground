@@ -14,9 +14,9 @@ Calibrated — 평가 기준은 경력 레벨(junior / mid / senior)별로 calib
 
 | Level | Years | PASS bar |
 |-------|-------|----------|
-| Junior | 0–3 yr | 시스템 이름 + 참여한 부분 명시. rationale은 팀/선배 결정 인용도 OK. at least one alternative or limitation 인식 |
-| Mid | 3–7 yr | 시스템 이름 + 자기 결정 논리 + trade-off 인식. constraint-based reasoning, independent judgment visible |
-| Senior | 7+ yr | Named systems + architectural rationale + constraint/scale context 포함. org-level tradeoffs, team impact, or multi-system consequences visible |
+| Junior | 0-2 yr | 시스템 이름 + 참여한 부분 명시. rationale은 팀/선배 결정 인용도 OK. at least one alternative or limitation 인식 |
+| Mid | 3-5 yr | 시스템 이름 + 자기 결정 논리 + trade-off 인식. constraint-based reasoning, independent judgment visible |
+| Senior | 6+ yr | Named systems + architectural rationale + constraint/scale context 포함. org-level tradeoffs, team impact, or multi-system consequences visible |
 
 A senior bullet evaluated at junior bar automatically fails A1 — upward calibration is not available to candidates.
 
