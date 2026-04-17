@@ -23,6 +23,7 @@ import {
   generateJobId,
   findProjectRoot,
   stripAnsi,
+  resolveChairmanExclusion,
 } from './job-utils.ts';
 
 // ---------------------------------------------------------------------------
@@ -782,5 +783,93 @@ describe('stripAnsi', () => {
 
   test('OSC 8 하이퍼링크 (ST 종료) 제거', () => {
     expect(stripAnsi('\x1b]8;;https://example.com\x1b\\link text\x1b]8;;\x1b\\')).toBe('link text');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveChairmanExclusion
+// ---------------------------------------------------------------------------
+
+describe('resolveChairmanExclusion', () => {
+  const baseInput = {
+    hostRole: 'claude',
+    chairmanRoleRaw: 'claude',
+    configExcludeSetting: null as boolean | null | undefined,
+  };
+
+  test('flag absent → includeChairman=false, chairman excluded (default true)', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: {} });
+    expect(r.includeChairman).toBe(false);
+    expect(r.excludeChairmanFromMembers).toBe(true);
+    expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(false);
+    expect(r.filterMember({ name: 'gemini', command: 'x' })).toBe(true);
+  });
+
+  test('--include-chairman → includeChairman=true, chairman included', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: { 'include-chairman': true } });
+    expect(r.includeChairman).toBe(true);
+    expect(r.excludeChairmanFromMembers).toBe(false);
+    expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(true);
+  });
+
+  test('--exclude-chairman without value (true) → override=true, chairman excluded', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: { 'exclude-chairman': true } });
+    expect(r.excludeChairmanFromMembers).toBe(true);
+    expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(false);
+  });
+
+  test('--exclude-chairman true (string) → override=true', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: { 'exclude-chairman': 'true' } });
+    expect(r.excludeChairmanFromMembers).toBe(true);
+  });
+
+  test('--exclude-chairman false → override=false, chairman kept (VALUE RESPECTED)', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: { 'exclude-chairman': 'false' } });
+    expect(r.excludeChairmanFromMembers).toBe(false);
+    expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(true);
+  });
+
+  test('--include-chairman + --exclude-chairman conflict → exclude wins (override=true)', () => {
+    const r = resolveChairmanExclusion({
+      ...baseInput,
+      options: { 'include-chairman': true, 'exclude-chairman': true },
+    });
+    expect(r.includeChairman).toBe(true);
+    expect(r.excludeChairmanFromMembers).toBe(true);
+    expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(false);
+  });
+
+  test('filterMember rejects falsy name or command', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: {} });
+    expect(r.filterMember(null)).toBe(false);
+    expect(r.filterMember({ name: '', command: 'x' })).toBe(false);
+    expect(r.filterMember({ name: 'ok', command: '' })).toBe(false);
+    expect(r.filterMember(undefined)).toBe(false);
+  });
+
+  test('filterMember is case-insensitive on chairman name', () => {
+    const r = resolveChairmanExclusion({ ...baseInput, options: {} });
+    expect(r.filterMember({ name: 'CLAUDE', command: 'x' })).toBe(false);
+    expect(r.filterMember({ name: 'Claude', command: 'x' })).toBe(false);
+  });
+
+  test('configExcludeSetting=false + no flags → chairman kept', () => {
+    const r = resolveChairmanExclusion({
+      ...baseInput,
+      configExcludeSetting: false,
+      options: {},
+    });
+    expect(r.excludeChairmanFromMembers).toBe(false);
+    expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(true);
+  });
+
+  test('chairmanRoleRaw=auto uses hostRole via resolveAutoRole', () => {
+    const r = resolveChairmanExclusion({
+      options: {},
+      configExcludeSetting: null,
+      hostRole: 'codex',
+      chairmanRoleRaw: 'auto',
+    });
+    expect(r.chairmanRole).toBe('codex');
   });
 });
