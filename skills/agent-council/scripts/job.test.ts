@@ -781,7 +781,7 @@ describe('computeStatus', () => {
 // --exclude-chairman / --include-chairman flag semantics (post-migration)
 // ---------------------------------------------------------------------------
 
-describe('agent-council chairman flag semantics', () => {
+describe('agent-council 의장 플래그 시맨틱스', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
   let tmpDir: string;
 
@@ -809,7 +809,7 @@ describe('agent-council chairman flag semantics', () => {
     ].join('\n'));
   }
 
-  test('--exclude-chairman=false keeps chairman (value respected)', () => {
+  test('--exclude-chairman=false는 값이 존중되어 의장이 유지된다', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     writeConfig(configPath, true);
     const jobsDir = path.join(tmpDir, 'jobs');
@@ -834,7 +834,7 @@ describe('agent-council chairman flag semantics', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 
-  test('--exclude-chairman=true excludes chairman', () => {
+  test('--exclude-chairman=true는 의장을 제외한다', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     writeConfig(configPath, false);
     const jobsDir = path.join(tmpDir, 'jobs');
@@ -859,7 +859,7 @@ describe('agent-council chairman flag semantics', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 
-  test('--include-chairman force-includes chairman even when config excludes', () => {
+  test('--include-chairman은 config가 제외로 설정돼도 의장을 강제 포함한다', () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     writeConfig(configPath, true);
     const jobsDir = path.join(tmpDir, 'jobs');
