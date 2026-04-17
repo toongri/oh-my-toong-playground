@@ -1,5 +1,7 @@
 # Review Resume Skill — Test Results
 
+> **Note**: These tests relate to Phase 5's 6-criterion evaluation dimensions (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness). Examiner behavior (A1-A5 phases) is tested separately in `phase9-loop-scenarios.md`.
+
 ---
 
 ## Part 1: Application Test Results
@@ -10,9 +12,9 @@
 
 | Scenario | Baseline | With Skill | Delta |
 |----------|----------|------------|-------|
-| 1 (D1-D2 Causation + Specificity) | 6/7 | **7/7** | +1 (D1-D6 포맷 출력) |
-| 2 (D3-D4 Role + Standard) | 6/6 | **6/6** | No change — baseline already handles |
-| 3 (D5-D6 Depth + Section Fitness) | **1/7** | **7/7** | **+6** Critical improvement |
+| 1 (Linear Causation + Metric Specificity) | 6/7 | **7/7** | +1 (6-dimension 포맷 출력) |
+| 2 (Role Clarity + Standard Transcendence) | 6/6 | **6/6** | No change — baseline already handles |
+| 3 (Hook Potential + Section Fitness) | **1/7** | **7/7** | **+6** Critical improvement |
 | 4 (Writing Guidance Trigger) | **2/6** | **6/6** | **+4** Critical improvement |
 | 5 (JD Keyword Matching) | (not yet tested) | (not yet tested) | - |
 
@@ -32,23 +34,23 @@
 
 ### Detailed Analysis
 
-#### Scenario 1: D1-D2 Causation + Specificity
+#### Scenario 1: Linear Causation + Metric Specificity
 
 **검증 대상:** 모호한 인과관계와 맥락 없는 수치를 정확히 잡아내는가?
 
 **Baseline:** 6/7 PASS
-- D1/D2 관련 지적은 자연스럽게 수행됨 (V1-V6 PASS)
-- **V7 FAIL** — D1-D6 포맷 출력 없이 자유 형식 리뷰
+- Linear Causation/Metric Specificity 관련 지적은 자연스럽게 수행됨 (V1-V6 PASS)
+- **V7 FAIL** — 6-dimension 포맷 출력 없이 자유 형식 리뷰
 
 **With Skill:** 7/7 PASS
-- 동일한 D1/D2 지적 + D1-D6 포맷 출력 완료
+- 동일한 Linear Causation/Metric Specificity 지적 + 6-dimension 포맷 출력 완료
 - 라인별 summary count 포함, Writing Guidance Trigger 판정까지 연결
 
 **Delta:** 포맷 출력이 스킬의 차별점. 내용 지적 자체는 baseline도 양호.
 
 ---
 
-#### Scenario 2: D3-D4 Role Clarity + Standard Detection
+#### Scenario 2: Role Clarity + Standard Transcendence Detection
 
 **검증 대상:** 팀 기여도 불명과 업계 표준 포장을 구분하는가?
 
@@ -57,13 +59,13 @@
 - L2 pushback도 각 라인에 적용
 
 **With Skill:** 6/6 PASS
-- 동일한 지적 + D1-D6 포맷 구조화 + summary count 추가
+- 동일한 지적 + 6-dimension 포맷 구조화 + summary count 추가
 
-**Delta:** 없음. D3/D4는 baseline에서도 잘 처리되는 영역.
+**Delta:** 없음. Role Clarity/Standard Transcendence는 baseline에서도 잘 처리되는 영역.
 
 ---
 
-#### Scenario 3: D5-D6 Interview Depth + Section Fitness — CRITICAL DELTA
+#### Scenario 3: Hook Potential + Section Fitness — CRITICAL DELTA
 
 **검증 대상:** 3단계 pushback을 생성하고, 잘못된 섹션을 교정하는가?
 
@@ -91,7 +93,7 @@
 
 #### Scenario 4: Writing Guidance Trigger — CRITICAL DELTA
 
-**검증 대상:** D1/D2 다수 실패 시 인라인 작성 가이드가 자연스럽게 제공되는가?
+**검증 대상:** Linear Causation/Metric Specificity 다수 실패 시 인라인 작성 가이드가 자연스럽게 제공되는가?
 
 **Baseline:** 2/6 (2 PASS, 2 PARTIAL, 2 FAIL)
 - **V1 PARTIAL** — 각 라인의 구체성 부족은 지적했으나, "goal→execution→outcome 체인"이라는 체계적 진단 부재
@@ -99,15 +101,15 @@
 - **V3 FAIL** — Writing Guidance Trigger 임계값 판단 로직 완전 부재. "재구성 필요"는 말했으나 체계적 판단 기준 없음
 - **V4 FAIL** — 인라인 Writing Guidance 안내 전혀 없음. "재구성하라"는 조언에 그침
 - **V5 PASS** — 건설적 톤 유지
-- **V6 PARTIAL** — 라인별 피드백은 줬으나 D1-D6 구조화된 평가 아닌 자유 형식
+- **V6 PARTIAL** — 라인별 피드백은 줬으나 6-dimension 구조화된 평가 아닌 자유 형식
 
 **With Skill:** 6/6 PASS
-- **V1 PASS** — 5/5 D1 FAIL 판정 완료
-- **V2 PASS** — 5/5 D2 FAIL 판정 완료
-- **V3 PASS** — "D1/D2 FAIL 5개 >= 3개 임계값 충족" 명시적 판단
-- **V4 PASS** — "전체 5개 라인 중 5개가 D1/D2 FAIL입니다. Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요." 정확한 인라인 가이드 전달
+- **V1 PASS** — 5/5 Linear Causation FAIL 판정 완료
+- **V2 PASS** — 5/5 Metric Specificity FAIL 판정 완료
+- **V3 PASS** — "Linear Causation/Metric Specificity FAIL 5개 >= 3개 임계값 충족" 명시적 판단
+- **V4 PASS** — "전체 5개 라인 중 5개가 Linear Causation/Metric Specificity FAIL입니다. Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요." 정확한 인라인 가이드 전달
 - **V5 PASS** — 비난 없이 각 FAIL에 구체적 사유 명시
-- **V6 PASS** — 5개 라인 전체 D1-D6 평가 완료 후 가이드 전달
+- **V6 PASS** — 5개 라인 전체 6-dimension 평가 완료 후 가이드 전달
 
 **Delta: CRITICAL.** Writing Guidance Trigger 로직은 baseline에 완전히 부재하며, 스킬만이 제공하는 기능.
 
@@ -117,15 +119,15 @@
 
 #### 1. 스킬의 핵심 가치: 섹션 분류 + Writing Guidance Trigger
 
-Baseline이 잘 처리하는 것 (D1 인과관계, D2 구체성, D3 역할, D4 업계 표준 탐지)과 달리, **D6 섹션 분류**와 **Writing Guidance Trigger 판단**은 스킬 없이는 작동하지 않는 영역.
+Baseline이 잘 처리하는 것 (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence 탐지)과 달리, **Section Fitness 섹션 분류**와 **Writing Guidance Trigger 판단**은 스킬 없이는 작동하지 않는 영역.
 
-#### 2. D1-D6 포맷이 체계적 리뷰를 강제
+#### 2. 6-dimension 포맷이 체계적 리뷰를 강제
 
-자유 형식 리뷰에서는 "잘 쓴 라인을 칭찬하고 넘어가는" 편향이 발생. D1-D6 포맷은 모든 라인에 동일한 진단을 강제하여 누락을 방지.
+자유 형식 리뷰에서는 "잘 쓴 라인을 칭찬하고 넘어가는" 편향이 발생. 6-dimension 포맷은 모든 라인에 동일한 진단을 강제하여 누락을 방지.
 
-#### 3. Baseline은 D3/D4에 이미 강함
+#### 3. Baseline은 Role Clarity/Standard Transcendence에 이미 강함
 
-역할 불명확(D3)과 업계 표준 탐지(D4)는 baseline에서도 자연스럽게 지적됨. 스킬의 가치는 이 영역이 아님.
+역할 불명확(Role Clarity)과 업계 표준 탐지(Standard Transcendence)는 baseline에서도 자연스럽게 지적됨. 스킬의 가치는 이 영역이 아님.
 
 #### 4. Pushback 균일성은 스킬이 보장
 
@@ -143,14 +145,14 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 
 | 기법 | Baseline 처리 | 스킬 필요성 |
 |------|-------------|-----------|
-| D1 Causation | 양호 | 포맷 구조화 |
-| D2 Specificity | 양호 | 포맷 구조화 |
-| D3 Role | 양호 | 낮음 |
-| D4 Standard | 양호 | 낮음 |
-| D5 Depth (pushback) | 불균일 | 균일성 보장 |
-| D6 Section fitness | **약함** | **필수** |
+| Linear Causation | 양호 | 포맷 구조화 |
+| Metric Specificity | 양호 | 포맷 구조화 |
+| Role Clarity | 양호 | 낮음 |
+| Standard Transcendence | 양호 | 낮음 |
+| Hook Potential (pushback) | 불균일 | 균일성 보장 |
+| Section Fitness | **약함** | **필수** |
 | Writing Guidance Trigger | **부재** | **필수** |
-| D1-D6 포맷 | 부재 | 필수 |
+| 6-dimension 포맷 | 부재 | 필수 |
 
 ---
 
@@ -170,7 +172,7 @@ review-resume 스킬은 **시나리오 3(섹션 분류)과 4(Writing Guidance Tr
 | #1 Metrics Fabrication | Never fabricate metrics | PASS (refused) | PASS (refused) | Baseline already handles |
 | #2 Unrealistic Premise | Always evaluate content, not just expression | (not yet tested) | (not yet tested) | - |
 | #3 Industry Standard | Never claim standards as achievements | PASS (pushed back) | PASS (pushed back harder) | Skill adds structure |
-| #4 Section Fitness Confusion | D6 Section fitness | (not yet tested) | (not yet tested) | - |
+| #4 Section Fitness Confusion | Section Fitness | (not yet tested) | (not yet tested) | - |
 | #5 Abstract Keyword Trap | Always evaluate content, not just expression | (not yet tested) | (not yet tested) | - |
 | #6 Multi-Rule Violation | ALL rules | **FAIL** (polished as-is) | PASS (flagged all 5 issues) | **Skill is critical** |
 | #7 Interview Simulation Skip | Writing Guidance Trigger | (not yet tested) | (not yet tested) | - |
