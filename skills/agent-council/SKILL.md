@@ -146,7 +146,7 @@ bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
 - `--include-chairman` / `--include-chairman=true`: Force-include the chairman as a member regardless of config.
 - `--exclude-chairman` / `--exclude-chairman=true`: Force-exclude the chairman from members.
 - `--exclude-chairman=false`: Explicitly request the chairman BE included (value-respecting).
-- Without any flag: falls back to `exclude_chairman_from_members` in config (default `false` = chairman included).
+- Without any flag: falls back to `exclude_chairman_from_members` in config. The semantic default is `true` (chairman excluded) when the config key is absent; shipped configs override this to `false` to include the chairman as a member.
 
 > Flag values are respected (value-respecting parsing). `--exclude-chairman=false` does NOT exclude the chairman — it explicitly keeps them.
 
