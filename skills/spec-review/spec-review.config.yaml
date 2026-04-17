@@ -43,6 +43,7 @@ spec-review:
 
   # Execution settings
   settings:
+    exclude_chairman_from_members: false  # Chairman also participates as a review member
     timeout: 1200                         # Timeout seconds per reviewer (spec reviews take longer)
 
   # Spec context configuration
