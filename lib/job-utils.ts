@@ -270,6 +270,62 @@ export function findProjectRoot(scriptDir: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Chairman exclusion resolution
+// ---------------------------------------------------------------------------
+
+export interface ChairmanExclusionInput {
+  options: Record<string, unknown>;
+  configExcludeSetting: boolean | null | undefined;
+  hostRole: string;
+  chairmanRoleRaw: string;
+}
+
+export interface ChairmanExclusionResult {
+  chairmanRole: string;
+  includeChairman: boolean;
+  excludeChairmanFromMembers: boolean;
+  filterMember: (m: { name?: unknown; command?: unknown } | null | undefined) => boolean;
+}
+
+export function resolveChairmanExclusion(input: ChairmanExclusionInput): ChairmanExclusionResult {
+  const { options, configExcludeSetting, hostRole, chairmanRoleRaw } = input;
+  const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
+
+  const includeChairmanValue = normalizeBool(options['include-chairman']);
+  const includeChairman = includeChairmanValue === true;
+
+  const excludeChairmanOverride =
+    options['exclude-chairman'] != null
+      ? normalizeBool(options['exclude-chairman'])
+      : includeChairman
+        ? false
+        : null;
+
+  const excludeSetting =
+    typeof configExcludeSetting === 'boolean'
+      ? configExcludeSetting
+      : normalizeBool(configExcludeSetting);
+
+  const excludeChairmanFromMembers =
+    excludeChairmanOverride != null
+      ? excludeChairmanOverride
+      : excludeSetting != null
+        ? excludeSetting
+        : true;
+
+  const filterMember = (m: { name?: unknown; command?: unknown } | null | undefined): boolean => {
+    if (!m || !m.name || !m.command) return false;
+    if (excludeChairmanFromMembers) {
+      const nameLc = String(m.name).toLowerCase();
+      if (nameLc === chairmanRole) return false;
+    }
+    return true;
+  };
+
+  return { chairmanRole, includeChairman, excludeChairmanFromMembers, filterMember };
+}
+
+// ---------------------------------------------------------------------------
 // ANSI stripping
 // ---------------------------------------------------------------------------
 
