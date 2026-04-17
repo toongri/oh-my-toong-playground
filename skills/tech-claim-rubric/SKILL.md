@@ -1,7 +1,6 @@
 ---
 name: tech-claim-rubric
 description: Use when evaluating resume bullet technical claims for depth, fidelity, and readability (E1-E6 + R1-R5). Triggers on "기술 심사", "이력서 평가", "resume evaluation", "tech claim review"
-disable-model-invocation: true
 model: opus
 ---
 
