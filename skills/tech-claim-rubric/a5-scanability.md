@@ -1,0 +1,91 @@
+# A5. Scanability
+
+## Standard
+Absolute — **structure-agnostic**. 구조 형식이 아닌 signal density + 핵심 포착 가능성으로 평가.
+
+## Structure Agnosticism
+A5는 의도적으로 structure-neutral. 다음 구조 모두 PASS 가능:
+- **Impact-first one-liner**: "Reduced incident MTTR 4h→15min by automated rollback (5M DAU marketplace)"
+- **Problem-Strategy-Result**: 명시적 PSR 구조
+- **Chronological**: 시간 흐름으로 문제→해결→결과
+- **Compressed case study**: 길지만 signal density 충분한 multi-line
+
+**v1 deprecation**: Problem/Strategy/Result 구조 강제, metric-in-Result 강제, Additional Sections distinct role 룰은 **적용 안 함**. v3는 "format → free, signal density → strict".
+
+## What We Evaluate
+- **Scan time**: 6-30초 내에 "무엇을 해결? 핵심 결정? 결과?" 세 답변 획득 가능한가
+- **Signal density**: 단어당 정보량. filler words (successfully, efficiently, collaboratively) 많으면 density 낮음
+- **Burial check**: 핵심 메시지가 detail에 파묻혀 있는가
+- **Detail spill**: rationale 없는 config 값, 메서드 시그니처 등이 scan을 방해하는가
+
+## PASS Exemplars
+
+### PASS Exemplar 1 — Impact-first one-liner
+Bullet: "Reduced incident MTTR 4h→15min by automated rollback pipeline (5M DAU marketplace)"
+
+Why PASS: 한 줄로 outcome + mechanism + context 모두 scan 가능. Signal density 극대.
+
+### PASS Exemplar 2 — Chronological compressed
+Bullet: "Profiled checkout API, found N+1 on inventory lookup, introduced batched cache + 5-minute TTL, cut p99 from 2.1s to 320ms peak season"
+
+Why PASS: 시간 흐름(profiled → found → introduced → cut). 각 단계가 scan에 포착. 4 steps 10초 내 읽음.
+
+### PASS Exemplar 3 — Problem-Strategy-Result (explicit structure, still OK)
+Bullet:
+> **Problem**: Authentication service 수평 확장 시 session cache thrashing (2k RPS에서 40% miss rate)
+> **Strategy**: Consistent hashing + per-pod local L1 cache (60s TTL) + shared L2 (Redis)
+> **Result**: Miss rate 40%→4%, p99 latency 280ms→45ms, pod 1 → 6 scale-out 지원
+
+Why PASS: PSR 구조가 과거 v1에서 강제됐지만 v3에서도 허용. 각 섹션 scan 가능.
+
+## FAIL Exemplars
+
+### FAIL Exemplar 1 — Detail spill (rationale 없는 config)
+Bullet: "Set Redis maxmemory=8GB, maxmemory-policy=allkeys-lru, timeout=300, tcp-keepalive=60, hz=50, stop-writes-on-bgsave-error=no, replica-priority=100 for improved caching"
+
+Why FAIL: config values 나열만. 어떤 문제, 왜 이 값, 결과 없음. scan으로는 spam.
+
+### FAIL Exemplar 2 — Key message burial
+Bullet: "As part of the quarterly resilience initiative spearheaded by the platform reliability working group comprising 8 cross-functional contributors from infrastructure, SRE, backend, and platform teams, I participated in implementing circuit breakers that reduced 5xx by 70%"
+
+Why FAIL: 핵심(circuit breakers → 5xx 70% 감소)이 organizational preamble에 파묻힘. 30초 scan에 놓침.
+
+### FAIL Exemplar 3 — Exhaustive listing
+Bullet: "Used AWS, GCP, Azure, Kubernetes, Docker, Terraform, Ansible, Jenkins, GitLab CI, GitHub Actions, Prometheus, Grafana, Datadog, New Relic, Sentry, ELK, Splunk for operational maturity"
+
+Why FAIL: Tool parade. 어떤 문제에 무엇을 적용, outcome 없음. signal density 제로.
+
+## Boundary Cases
+
+### EDGE 1 — Long but high-signal
+10 lines이지만 각 line이 signal dense — A5 PASS 가능. Length 자체는 disqualifier 아님.
+
+### EDGE 2 — Short but vague
+"Improved performance" — 1 line이라도 scan으로 얻는 정보 없음. FAIL.
+
+### EDGE 3 — Structure-agnostic test
+동일 내용 one-liner와 PSR 구조 비교:
+- "Reduced p99 from 2s to 200ms via read-replica for list endpoints (8M daily queries)"
+- PSR version: same content
+둘 다 PASS. 구조가 중요하지 않고 signal density가 중요.
+
+## A5 Co-failure Disambiguation
+A5는 단독 FAIL과 co-failure 의미가 다름:
+- **A5 FAIL alone (A1, A2, A3 모두 PASS)**: Readability-only issue. Formatting fix만 필요.
+- **A5 FAIL + (A1/A2/A3 중 하나 FAIL)**: 깊이 부족이 scanability로 발현. Source extraction 필요 (resume-forge 라우팅).
+
+이 분기는 `output-schema.md`와 downstream orchestrator(resume-forge)에서 사용.
+
+## Evaluator Guidance
+1. **Mental scan**: bullet을 실제 6-30초 안에 읽어 "문제 / 핵심 결정 / 결과" 파악 시도
+2. **Signal density estimate**: filler words 비율, tech-noun density
+3. **Burial check**: 핵심 메시지 위치 (앞? 중간? 마지막?)
+4. **Detail spill**: rationale 없는 값, 메서드 시그니처, tool parade
+5. **Verdict**: PASS | FAIL
+6. **Evidence quote**: burial 또는 detail spill 발생 시 해당 문구 인용
+
+## Common Evaluation Pitfalls
+- v1 Problem-Strategy-Result 구조 없으면 FAIL (deprecated — A5는 structure-agnostic)
+- One-liner 단순 짧다고 FAIL (signal density 충분하면 PASS)
+- Length 기반 rule (over-enforcement)
+- Detail-rich bullet이 무조건 FAIL (signal dense하면 PASS)
