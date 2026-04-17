@@ -1,5 +1,7 @@
 # Review Resume Skill — Application Test Scenarios
 
+> **Note**: This file tests the current 6-dimension evaluation criteria (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness) as defined in SKILL.md Phase 5. Axis numbering labels are retired; dimension names are used throughout. Phase 9 tech-claim-examiner is consumed as a blackbox by review-resume — its A1–A5 internal schema does not appear in these scenarios.
+
 ## Purpose
 
 These scenarios test whether the review-resume skill's **core techniques** are correctly applied. Each scenario targets specific dimensions of the 6-dimension evaluation framework, pushback simulation, section fitness rules, and writing guidance trigger logic.
@@ -8,15 +10,15 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 | # | Scenario | Primary Techniques | Secondary |
 |---|---------|-------------------|-----------|
-| 1 | D1-D2: Causation + Specificity | 6-dim D1, D2 | Pushback L1 |
-| 2 | D3-D4: Role Clarity + Standard Detection | 6-dim D3, D4 | Pushback L2 |
-| 3 | D5-D6: Interview Depth + Section Fitness | 6-dim D5, D6 + 3-level pushback | Section migration |
-| 4 | Writing Guidance Trigger | Writing Guidance Trigger (3+ D1/D2 fail) | Inline writing guidance |
+| 1 | Linear Causation + Metric Specificity | 6-dim Linear Causation, Metric Specificity | Pushback L1 |
+| 2 | Role Clarity + Standard Transcendence | 6-dim Role Clarity, Standard Transcendence | Pushback L2 |
+| 3 | Hook Potential + Section Fitness | 6-dim Hook Potential, Section Fitness + 3-level pushback | Section migration |
+| 4 | Writing Guidance Trigger | Writing Guidance Trigger (3+ Linear Causation/Metric Specificity fail) | Inline writing guidance |
 | 5 | JD Keyword Matching | JD keyword extraction + match rate | Absolute Rule 4 compliance |
 
 ---
 
-## Scenario 1: D1-D2 Causation + Specificity
+## Scenario 1: Linear Causation + Metric Specificity
 
 **검증 대상:** 모호한 인과관계와 맥락 없는 수치를 정확히 잡아내는가?
 
@@ -35,17 +37,17 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | D1 on line 1 | FAIL — "Redis 캐시 적용" → "70% 개선" 인과관계 불충분. 어떤 API? 캐시 전략은? |
-| V2 | D2 on line 1 | FAIL — "70%"의 baseline 없음. 어떤 측정 방법? 어떤 조건에서? |
-| V3 | D1 on line 2 | FAIL — "리팩토링" → "안정성 향상" 메커니즘 누락. 무엇을 어떻게 바꿨는지? |
-| V4 | D2 on line 2 | FAIL — "안정성 향상" 비정량적. 에러율? 장애 빈도? 구체적 수치 없음 |
-| V5 | D2 on line 3 | FAIL — "50% 단축" baseline 없음. 원래 몇 분이 몇 분으로? |
-| V6 | D2 on line 4 | FAIL — "개선" 정량화 없음. 몇 분이 몇 분으로? |
-| V7 | Output format | 각 라인별 D1-D6 평가 포맷으로 출력 |
+| V1 | Linear Causation on line 1 | FAIL — "Redis 캐시 적용" → "70% 개선" 인과관계 불충분. 어떤 API? 캐시 전략은? |
+| V2 | Metric Specificity on line 1 | FAIL — "70%"의 baseline 없음. 어떤 측정 방법? 어떤 조건에서? |
+| V3 | Linear Causation on line 2 | FAIL — "리팩토링" → "안정성 향상" 메커니즘 누락. 무엇을 어떻게 바꿨는지? |
+| V4 | Metric Specificity on line 2 | FAIL — "안정성 향상" 비정량적. 에러율? 장애 빈도? 구체적 수치 없음 |
+| V5 | Metric Specificity on line 3 | FAIL — "50% 단축" baseline 없음. 원래 몇 분이 몇 분으로? |
+| V6 | Metric Specificity on line 4 | FAIL — "개선" 정량화 없음. 몇 분이 몇 분으로? |
+| V7 | Output format | 각 라인별 6-criterion 평가 포맷으로 출력 |
 
 ---
 
-## Scenario 2: D3-D4 Role Clarity + Standard Detection
+## Scenario 2: Role Clarity + Standard Transcendence
 
 **검증 대상:** 팀 기여도 불명과 업계 표준 포장을 구분하는가?
 
@@ -64,16 +66,16 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | D3 on line 1 | FAIL — "참여"만으로 개인 기여 범위 불명. 6인 중 본인 역할/담당 범위는? |
-| V2 | D4 on line 2 | FAIL — CI/CD + Docker는 업계 표준. "구축"만으로 차별화 아님 |
-| V3 | D4 on line 3 | Kafka 이벤트 처리 자체는 표준 패턴. 위에 무엇을 더 했는지? 처리량? 장애 대응? |
-| V4 | D4 on line 4 | FAIL — REST API + Swagger는 기본 실무. 독립 성과로 부적절 |
-| V5 | D3 on line 3 | "시스템 구축"이 본인 단독인지 팀인지 불명 |
+| V1 | Role Clarity on line 1 | FAIL — "참여"만으로 개인 기여 범위 불명. 6인 중 본인 역할/담당 범위는? |
+| V2 | Standard Transcendence on line 2 | FAIL — CI/CD + Docker는 업계 표준. "구축"만으로 차별화 아님 |
+| V3 | Standard Transcendence on line 3 | Kafka 이벤트 처리 자체는 표준 패턴. 위에 무엇을 더 했는지? 처리량? 장애 대응? |
+| V4 | Standard Transcendence on line 4 | FAIL — REST API + Swagger는 기본 실무. 독립 성과로 부적절 |
+| V5 | Role Clarity on line 3 | "시스템 구축"이 본인 단독인지 팀인지 불명 |
 | V6 | Pushback L2 | 각 라인에 "왜 그 방식을 선택했나요?" 시뮬레이션 포함 |
 
 ---
 
-## Scenario 3: D5-D6 Interview Depth + Section Fitness
+## Scenario 3: Hook Potential + Section Fitness
 
 **검증 대상:** 3단계 pushback을 실제로 생성하고, 잘못된 섹션을 교정하는가?
 
@@ -93,11 +95,11 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | D6 on 경력 line 1 | FAIL — "문제를 발견하고 해결했다" 패턴 → 문제해결 섹션으로 이동 권고 |
-| V2 | D6 on 경력 line 2 | FAIL — "발견 및 해결" → 문제해결 섹션 소속 |
-| V3 | D6 on 문제해결 line 1 | FAIL — "캐시 적용하여 성과 달성" → 경력 섹션 소속 |
-| V4 | D5 on 경력 line 1 | 3-level pushback 생성: L1 "5분 주기 어떻게 구현?", L2 "왜 5분?", L3 "스케줄러 실패 시?" |
-| V5 | D5 on 경력 line 2 | FAIL — 한 줄짜리, 서사 없음. 어떻게 발견? 해결 방식? 대안 검토? |
+| V1 | Section Fitness on 경력 line 1 | FAIL — "문제를 발견하고 해결했다" 패턴 → 문제해결 섹션으로 이동 권고 |
+| V2 | Section Fitness on 경력 line 2 | FAIL — "발견 및 해결" → 문제해결 섹션 소속 |
+| V3 | Section Fitness on 문제해결 line 1 | FAIL — "캐시 적용하여 성과 달성" → 경력 섹션 소속 |
+| V4 | Hook Potential on 경력 line 1 | 3-level pushback 생성: L1 "5분 주기 어떻게 구현?", L2 "왜 5분?", L3 "스케줄러 실패 시?" |
+| V5 | Hook Potential on 경력 line 2 | FAIL — 한 줄짜리, 서사 없음. 어떻게 발견? 해결 방식? 대안 검토? |
 | V6 | Section migration | 구체적 이동 방향 제시 (어떤 라인이 어느 섹션으로) |
 | V7 | Pushback depth | 잘 쓴 라인(line 1)에도 동일 수준의 pushback 적용 |
 
@@ -105,7 +107,7 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 ## Scenario 4: Writing Guidance Trigger
 
-**검증 대상:** D1/D2 다수 실패 시 인라인 작성 가이드가 자연스럽게 제공되는가?
+**검증 대상:** Linear Causation/Metric Specificity 다수 실패 시 인라인 작성 가이드가 자연스럽게 제공되는가?
 
 **Prompt:**
 ```
@@ -123,12 +125,12 @@ These scenarios test whether the review-resume skill's **core techniques** are c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | D1 all lines | 5/5 FAIL — 모든 라인에 goal→execution→outcome 체인 없음 |
-| V2 | D2 all lines | 5/5 FAIL — 어떤 라인도 구체적 수치/근거 없음 |
-| V3 | Writing Guidance Trigger | 3+ lines D1/D2 FAIL → Writing Guidance Trigger 조건 충족 인지 |
-| V4 | Guidance message | "전체 N개 라인 중 X개가 D1/D2 FAIL입니다. 이 이력서는 표현 수정이 아니라 내용 재구성이 필요합니다. Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요." 또는 동등한 안내 |
+| V1 | Linear Causation all lines | 5/5 FAIL — 모든 라인에 goal→execution→outcome 체인 없음 |
+| V2 | Metric Specificity all lines | 5/5 FAIL — 어떤 라인도 구체적 수치/근거 없음 |
+| V3 | Writing Guidance Trigger | 3+ lines Linear Causation/Metric Specificity FAIL → Writing Guidance Trigger 조건 충족 인지 |
+| V4 | Guidance message | "전체 N개 라인 중 X개가 Linear Causation/Metric Specificity FAIL입니다. 이 이력서는 표현 수정이 아니라 내용 재구성이 필요합니다. Writing Guidance: Achievement Lines 섹션의 템플릿과 사전 검증 플로우차트를 참고하여 재작성해 보세요." 또는 동등한 안내 |
 | V5 | Tone | 비난이 아닌 건설적 안내. "이 이력서는 리뷰가 아닌 재작성이 필요한 수준" |
-| V6 | Per-line evaluation | 가이드 전에도 각 라인별 D1-D6 평가는 완료 |
+| V6 | Per-line evaluation | 가이드 전에도 각 라인별 6-criterion 평가는 완료 |
 
 ---
 

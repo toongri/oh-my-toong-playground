@@ -10,13 +10,13 @@
 
 | Scenario | Key Failures | Result |
 |----------|-------------|--------|
-| S1: Before Pattern Detection | D1-D6로 평가했으나 P.A.R. 전용 P1-P4 평가 차원 없음. 7포인트 개선 분석 체계적 참조 없음 | PARTIAL |
+| S1: Before Pattern Detection | Career Dimensions으로 평가했으나 P.A.R. 전용 P1-P4 평가 차원 없음. 7포인트 개선 분석 체계적 참조 없음 | PARTIAL |
 | S2: Partial P.A.R. — Missing Depth | 피드백 제공했으나 Writing Template 참조 없음, 깊이 기준 비체계적 | PARTIAL |
 | S3: Good P.A.R. — Should Pass | 긍정 평가했으나 개선 분석 기준으로 강점 체계적 매핑 안됨 | PARTIAL |
 | S4: AI-Sounding Overpackaging | 과포장 감지했으나 서사 원칙 Good example 참조 없음 | PARTIAL |
 
 ### Key Baseline Failures:
-- No P1-P4 evaluation format — agents used general D1-D6 framework only
+- No P1-P4 evaluation format — agents used general Career Dimensions framework (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness) only
 - No 7-point improvement analysis reference — feedback was ad-hoc, not systematic
 - No concrete feedback examples from skill — agents generated their own
 - No Writing Template reference — no structural guidance for users
