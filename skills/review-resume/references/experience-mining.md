@@ -308,15 +308,15 @@ No source after Stage 4 → switch to problem-solving.md §15 Writing Guidance
 **Source Acquisition Path:**
 Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforcement candidate or a candidate for a new entry
 
-### Cascade Extraction (Problem-Solving sub-protocol)
+### Problem Chain Extraction (Problem-Solving sub-protocol)
 
-**Trigger:** 문제 해결 서술이 FLAT(단일 concern) 또는 LISTED(복수 concern 나열, 인과 연결 없음) 패턴을 보이는 경우. 유저가 실제로 경험한 연쇄 구조를 기술하지 않았을 가능성이 높다.
+**Trigger:** 문제 해결 서술이 Isolated(단일 concern) 또는 Listed(복수 concern 나열, 인과 연결 없음) 패턴을 보이는 경우. 유저가 실제로 경험한 chained 구조를 기술하지 않았을 가능성이 높다.
 
 **Diagnostic Context Examples:**
 
 GOOD: "이 프로젝트에서 문제들이 서로 연결되어 있었을 것 같은데 — 하나를 해결하면서 다른 문제가 드러난 경험이 있었나요?"
 
-BAD (internal metric exposure): "E3b LISTED, Constraint Cascade Score 0.35 — causal chain depth 부족"
+BAD (internal metric exposure): "Internal scoring details exposed (auto-grader axis labels, sub-dimension scores) instead of natural problem-solving narrative"
 
 BAD (too vague): "다른 문제도 있었나요?"
 

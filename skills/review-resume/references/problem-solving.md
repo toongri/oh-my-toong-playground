@@ -116,7 +116,7 @@ When selecting kick entries, prioritize episodes that can demonstrate technical 
 - Experiences where the candidate recognized the limits of the current scale and anticipated the next stage
 - Episodes where deep problem-solving at a small scale demonstrates principles that transfer to larger scale
 
-This selection guide is linked to the tech-claim-examiner E6 evaluation.
+This selection guide informs the tech-claim-examiner's axis evaluation when assessing scale transferability.
 
 ---
 
@@ -154,7 +154,7 @@ Apply to all problem-solving entries (5+ lines). After Problem-Solving 6 Criteri
 | P3 | Verification depth *(kick only)* | Is the verification appropriate for the domain? | Junior: only "ran load test". Senior: only "85% accuracy" with no error analysis |
 | P4 | "Why?" chain | Does every attempt include both "Why did I try this?" AND "Why didn't it work?" | Either the selection reason OR the failure reason is missing from any attempt |
 
-**P1 Target-Scale Note:** When evaluating narrative depth, check whether the narrative of technology choices stops at "optimization at current scale" or extends to "awareness of scale change." The latter earns a bonus on narrative depth. Its absence is not an automatic FAIL — this is explicitly evaluated in tech-claim-examiner E6.
+**P1 Target-Scale Note:** When evaluating narrative depth, check whether the narrative of technology choices stops at "optimization at current scale" or extends to "awareness of scale change." The latter earns a bonus on narrative depth. Its absence is not an automatic FAIL — this is explicitly evaluated by tech-claim-examiner as part of overall axis assessment.
 
 **Feature Listing Anti-Pattern**: If the project entry consists only of verb + feature/technology name, flag immediately as P1 FAIL:
 
@@ -551,8 +551,8 @@ Show competency appropriate to the current system, but what matters more is givi
 - Conversely, writing a figure the candidate cannot explain means collapsing on one question. This is a natural filter
 - Ultimately there is only one criterion: **"When a CTO asks 2 levels deep about this number, can the candidate answer?"**
 
-**tech-claim-examiner E6 integration:**
-Bullets written using these strategies are evaluated in E6 (Target-Scale Transferability) with interview defensibility as the criterion. The key is not whether the figure is factually accurate, but whether the candidate can logically defend that figure and the design behind it.
+**tech-claim-examiner integration:**
+Bullets written using these strategies are evaluated by tech-claim-examiner with interview defensibility as the criterion. The key is not whether the figure is factually accurate, but whether the candidate can logically defend that figure and the design behind it.
 
 ---
 

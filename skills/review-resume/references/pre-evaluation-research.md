@@ -70,7 +70,7 @@ When targeting a specific company, research through these channels using WebSear
 - Search: `{company name} TPS` or `{company name} DAU` or `{company name} traffic | 트래픽` or `{company name} tech blog architecture`
 - Look for: transaction volume (TPS/RPM), daily active users (DAU/MAU), data scale (TB/PB), engineering team size, infrastructure scale (server count, cluster size)
 - Example findings: "1 million daily payment transactions" (Toss), "18 million MAU" (Daangn), "3 million daily orders" (Coupang)
-- **Why this matters**: The gap between the candidate's experience scale and the target company's operational scale must be measured. The larger this gap, the more the candidate needs to demonstrate "judgment under scale" in their resume to build credibility. This data is directly used in tech-claim-examiner's E6 (Target-Scale Transferability) evaluation.
+- **Why this matters**: The gap between the candidate's experience scale and the target company's operational scale must be measured. The larger this gap, the more the candidate needs to demonstrate "judgment under scale" in their resume to build credibility. This data is directly used in tech-claim-examiner's evaluation of scale transferability.
 - **Fallback**: If specific scale indicators cannot be found, estimate using the company's growth stage (Series A/B/C, public listing status) and service category — "Exact MAU figure not found; Series C + payments domain → estimated minimum 100K+ daily transactions"
 
 ## How research feeds into each Type
@@ -81,6 +81,6 @@ When targeting a specific company, research through these channels using WebSear
 | B (Working Style) | Which working style to emphasize — aligned with team culture signals |
 | C (Company Connection) | Company-specific domain/product/values for connection paragraph |
 | D (Current Interest) | Which interest to surface — aligned with JD tech stack and company direction |
-| **All Evaluations** | **Scale context — baseline for tech-claim-examiner E6 (Target-Scale Transferability) evaluation. The candidate experience scale vs. target company scale gap is passed when dispatching Phase 8 evaluator** |
+| **All Evaluations** | **Scale context — baseline for tech-claim-examiner's scale evaluation. The candidate experience scale vs. target company scale gap is passed when dispatching Phase 8 evaluator** |
 
 If targeting a specific company and no meaningful research results are found, note this limitation. A strong A + B self-introduction without company-specific context is always better than forced connections based on guesswork.
