@@ -6,8 +6,6 @@ import path from 'path';
 import {
   exitWithError,
   detectHostRole,
-  normalizeBool,
-  resolveAutoRole,
   ensureDir,
   safeFileName as _safeFileName,
   atomicWriteJson,
@@ -21,6 +19,7 @@ import {
   resolveBucketSize,
   generateJobId,
   findProjectRoot,
+  resolveChairmanExclusion,
 } from '@lib/job-utils';
 
 import { initLogger, logInfo, logStart, logEnd } from '@lib/logging';
@@ -313,31 +312,23 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir);
 
-  const hostRole = detectHostRole(path.resolve(SCRIPT_DIR, '../../code-review'));
+  const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseChunkReviewConfig(configPath);
   const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.CHUNK_REVIEW_CHAIRMAN || config['chunk-review'].chairman.role || 'auto';
-  const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
-  const includeChairmanValue = normalizeBool(options['include-chairman']);
-  const includeChairman = includeChairmanValue === true;
-  const excludeChairmanOverride =
-    options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : includeChairmanValue === true ? false : null;
-
-  const excludeSetting = normalizeBool(config['chunk-review'].settings.exclude_chairman_from_members);
-  const excludeChairmanFromMembers =
-    excludeChairmanOverride != null ? excludeChairmanOverride : excludeSetting != null ? excludeSetting : true;
+  const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
+    options,
+    configExcludeSetting: config['chunk-review'].settings.exclude_chairman_from_members,
+    hostRole,
+    chairmanRoleRaw,
+  });
 
   const timeoutSetting = Number(config['chunk-review'].settings.timeout || 0);
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
   const timeoutSec = Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : timeoutSetting > 0 ? timeoutSetting : 0;
 
   const requestedMembers = config['chunk-review'].members || [];
-  const members = requestedMembers.filter((r: any) => {
-    if (!r || !r.name || !r.command) return false;
-    const nameLc = String(r.name).toLowerCase();
-    if (excludeChairmanFromMembers && !includeChairman && nameLc === chairmanRole) return false;
-    return true;
-  });
+  const members = requestedMembers.filter(filterMember);
 
   if (members.length === 0) exitWithError('start: no members remaining after filtering');
 
