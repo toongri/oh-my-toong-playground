@@ -282,7 +282,6 @@ export interface ChairmanExclusionInput {
 
 export interface ChairmanExclusionResult {
   chairmanRole: string;
-  includeChairman: boolean;
   excludeChairmanFromMembers: boolean;
   filterMember: (m: { name?: unknown; command?: unknown } | null | undefined) => boolean;
 }
@@ -322,7 +321,7 @@ export function resolveChairmanExclusion(input: ChairmanExclusionInput): Chairma
     return true;
   };
 
-  return { chairmanRole, includeChairman, excludeChairmanFromMembers, filterMember };
+  return { chairmanRole, excludeChairmanFromMembers, filterMember };
 }
 
 // ---------------------------------------------------------------------------
