@@ -7,8 +7,7 @@ import os from 'os';
 import {
   exitWithError,
   detectHostRole,
-  normalizeBool,
-  resolveAutoRole,
+  resolveChairmanExclusion,
   ensureDir,
   atomicWriteJson,
   readJsonIfExists,
@@ -342,31 +341,23 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, JOB_CONFIG);
 
-  const hostRole = detectHostRole(SCRIPT_DIR);
+  const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseSpecReviewConfig(configPath);
   const chairmanRoleRaw = (options.chairman || process.env.SPEC_REVIEW_CHAIRMAN || config['spec-review'].chairman.role || 'auto') as string;
-  const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
-  const includeChairmanValue = normalizeBool(options['include-chairman']);
-  const includeChairman = includeChairmanValue === true;
-  const excludeChairmanOverride =
-    options['exclude-chairman'] != null ? normalizeBool(options['exclude-chairman']) : includeChairmanValue === true ? false : null;
-
-  const excludeSetting = normalizeBool(config['spec-review'].settings.exclude_chairman_from_members);
-  const excludeChairmanFromMembers =
-    excludeChairmanOverride != null ? excludeChairmanOverride : excludeSetting != null ? excludeSetting : true;
+  const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
+    options,
+    configExcludeSetting: config['spec-review'].settings.exclude_chairman_from_members,
+    hostRole,
+    chairmanRoleRaw,
+  });
 
   const timeoutSetting = Number(config['spec-review'].settings.timeout || 0);
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
   const timeoutSec = Number.isFinite(timeoutOverride!) && timeoutOverride! > 0 ? timeoutOverride! : timeoutSetting > 0 ? timeoutSetting : 0;
 
   const requestedMembers = config['spec-review'].members || [];
-  const members = requestedMembers.filter((r: any) => {
-    if (!r || !r.name || !r.command) return false;
-    const nameLc = String(r.name).toLowerCase();
-    if (excludeChairmanFromMembers && !includeChairman && nameLc === chairmanRole) return false;
-    return true;
-  });
+  const members = requestedMembers.filter(filterMember);
 
   const specName = (options.spec || null) as string | null;
   let specContext: { context: string; files: string[] } = { context: '', files: [] };
