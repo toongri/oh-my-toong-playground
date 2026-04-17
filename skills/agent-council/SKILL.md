@@ -150,6 +150,8 @@ bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
 
 > Flag values are respected (value-respecting parsing). `--exclude-chairman=false` does NOT exclude the chairman — it explicitly keeps them.
 
+> When both `--include-chairman` and `--exclude-chairman` are passed simultaneously, `--exclude-chairman` wins (override precedence).
+
 ### Synthesis Protocol
 
 When synthesizing raw outputs:

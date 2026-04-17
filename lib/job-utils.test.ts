@@ -790,56 +790,53 @@ describe('stripAnsi', () => {
 // resolveChairmanExclusion
 // ---------------------------------------------------------------------------
 
-describe('resolveChairmanExclusion', () => {
+describe('resolveChairmanExclusion — 의장 제외 규칙 해소', () => {
   const baseInput = {
     hostRole: 'claude',
     chairmanRoleRaw: 'claude',
     configExcludeSetting: null as boolean | null | undefined,
   };
 
-  test('flag absent → includeChairman=false, chairman excluded (default true)', () => {
+  test('플래그 부재 시 코드 fallback(true)에 따라 의장 제외', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: {} });
-    expect(r.includeChairman).toBe(false);
     expect(r.excludeChairmanFromMembers).toBe(true);
     expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(false);
     expect(r.filterMember({ name: 'gemini', command: 'x' })).toBe(true);
   });
 
-  test('--include-chairman → includeChairman=true, chairman included', () => {
+  test('--include-chairman이 주어지면 의장이 포함된다', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: { 'include-chairman': true } });
-    expect(r.includeChairman).toBe(true);
     expect(r.excludeChairmanFromMembers).toBe(false);
     expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(true);
   });
 
-  test('--exclude-chairman without value (true) → override=true, chairman excluded', () => {
+  test('--exclude-chairman이 값 없이 주어지면 의장이 제외된다', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: { 'exclude-chairman': true } });
     expect(r.excludeChairmanFromMembers).toBe(true);
     expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(false);
   });
 
-  test('--exclude-chairman true (string) → override=true', () => {
+  test('--exclude-chairman=true 문자열도 true로 해석된다', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: { 'exclude-chairman': 'true' } });
     expect(r.excludeChairmanFromMembers).toBe(true);
   });
 
-  test('--exclude-chairman false → override=false, chairman kept (VALUE RESPECTED)', () => {
+  test('--exclude-chairman=false는 값이 존중되어 의장이 유지된다', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: { 'exclude-chairman': 'false' } });
     expect(r.excludeChairmanFromMembers).toBe(false);
     expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(true);
   });
 
-  test('--include-chairman + --exclude-chairman conflict → exclude wins (override=true)', () => {
+  test('두 플래그가 충돌하면 --exclude-chairman이 우선한다', () => {
     const r = resolveChairmanExclusion({
       ...baseInput,
       options: { 'include-chairman': true, 'exclude-chairman': true },
     });
-    expect(r.includeChairman).toBe(true);
     expect(r.excludeChairmanFromMembers).toBe(true);
     expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(false);
   });
 
-  test('filterMember rejects falsy name or command', () => {
+  test('filterMember는 name 또는 command가 비어있으면 거부한다', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: {} });
     expect(r.filterMember(null)).toBe(false);
     expect(r.filterMember({ name: '', command: 'x' })).toBe(false);
@@ -847,13 +844,13 @@ describe('resolveChairmanExclusion', () => {
     expect(r.filterMember(undefined)).toBe(false);
   });
 
-  test('filterMember is case-insensitive on chairman name', () => {
+  test('filterMember는 의장 이름 비교 시 대소문자를 무시한다', () => {
     const r = resolveChairmanExclusion({ ...baseInput, options: {} });
     expect(r.filterMember({ name: 'CLAUDE', command: 'x' })).toBe(false);
     expect(r.filterMember({ name: 'Claude', command: 'x' })).toBe(false);
   });
 
-  test('configExcludeSetting=false + no flags → chairman kept', () => {
+  test('configExcludeSetting=false면 플래그 없이도 의장이 유지된다', () => {
     const r = resolveChairmanExclusion({
       ...baseInput,
       configExcludeSetting: false,
@@ -863,7 +860,7 @@ describe('resolveChairmanExclusion', () => {
     expect(r.filterMember({ name: 'claude', command: 'x' })).toBe(true);
   });
 
-  test('chairmanRoleRaw=auto uses hostRole via resolveAutoRole', () => {
+  test('chairmanRoleRaw=auto는 resolveAutoRole로 hostRole에 위임된다', () => {
     const r = resolveChairmanExclusion({
       options: {},
       configExcludeSetting: null,
