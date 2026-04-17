@@ -310,9 +310,9 @@ When the session operates in **interview-impossible mode** (the resume owner is 
    - Alternative 2 (High-Impact): Scale-Project strategy — maximize impact from confirmed content; flag axes that require owner confirmation.
    - Alternative 3 (Balanced): Compromise between Alternatives 1 and 2, or a different framing angle.
    - Include a tradeoff table identical to Section 3 format.
-3. Dispatch the alternatives package to the tech-claim-examiner Phase B validation.
-4. If **any alternative passes** Phase B: adopt it and continue.
-5. If **all alternatives fail** Phase B: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
+3. Dispatch the alternatives package to tech-claim-examiner.
+4. If **any alternative receives `final_verdict: APPROVE`**: adopt it and continue.
+5. If **all alternatives receive `final_verdict: REQUEST_CHANGES`**: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
 
 **Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
 
@@ -329,9 +329,9 @@ flowchart TB
     INTERVIEW_PRE --> D[Generate 2-3 alternatives + tradeoffs]
     D --> H[tech-claim-examiner dispatch\n— send original + alternatives package]
 
-    H --> DIAG{Phase A: Interrogate original\nIs there really a problem?}
+    H --> DIAG{Step 1: Interrogate original\nIs there really a problem?}
     DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
-    DIAG -->|Problem found| ALTEVAL{Phase B: Interrogate alternatives\nIs each one valid?}
+    DIAG -->|Problem found| ALTEVAL{Step 2: Interrogate alternatives\nIs each one valid?}
 
     ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative in HTML]
     ALTEVAL -->|All fail| K[REQUEST_CHANGES\n+ Interview Hints]
@@ -375,7 +375,7 @@ The Input Format uses the template defined in SKILL.md Phase 9 "Evaluator Dispat
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
 - Evaluation Phase findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
-- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results. This information is used directly in the tech-claim-examiner's Target-Scale Transferability axis evaluation.
+- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results and passed to the tech-claim-examiner via the dispatch template.
 
 ### Post-APPROVE Handling
 
@@ -431,11 +431,11 @@ Two opt-out types are distinguished in the HTML report. Both use `.section-opt-o
 
 **User opt-out** (owner explicitly chose to move on):
 - `.opt-out-badge` displays "미해결 피드백"
-- Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
+- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.axis-label` and `.axis-feedback` content (examiner's finding)
 
 **System opt-out — interview-impossible** (owner not present, all alternatives failed):
 - `.opt-out-badge` displays "소유자 인터뷰 필요"
-- Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
+- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.axis-label` and `.axis-feedback` content (examiner's finding)
 - No Interview Hints are shown to the user in this mode
 
 ---
@@ -485,11 +485,11 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 <div class="section-opt-out">
   <div class="opt-out-badge">미해결 피드백</div>
   <div class="fail-axis">
-    <span class="axis-label">트레이드오프 진정성</span>
+    <span class="axis-label">Tech Claim Check FAIL</span>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
   <div class="fail-axis">
-    <span class="axis-label">규모 적정 설계</span>
+    <span class="axis-label">Tech Claim Check FAIL</span>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
 </div>
@@ -500,11 +500,11 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 <div class="section-opt-out">
   <div class="opt-out-badge">소유자 인터뷰 필요</div>
   <div class="fail-axis">
-    <span class="axis-label">트레이드오프 진정성</span>
+    <span class="axis-label">Tech Claim Check FAIL</span>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
   <div class="fail-axis">
-    <span class="axis-label">확장성 전이</span>
+    <span class="axis-label">Tech Claim Check FAIL</span>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
 </div>
