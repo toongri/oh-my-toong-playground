@@ -141,6 +141,15 @@ You as the Chairman must synthesize raw outputs into the Advisory Format (see be
 bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
 ```
 
+### CLI Flags — Chairman Inclusion
+
+- `--include-chairman` / `--include-chairman=true`: Force-include the chairman as a member regardless of config.
+- `--exclude-chairman` / `--exclude-chairman=true`: Force-exclude the chairman from members.
+- `--exclude-chairman=false`: Explicitly request the chairman BE included (value-respecting).
+- Without any flag: falls back to `exclude_chairman_from_members` in config (default `false` = chairman included).
+
+> Flag values are respected (value-respecting parsing). `--exclude-chairman=false` does NOT exclude the chairman — it explicitly keeps them.
+
 ### Synthesis Protocol
 
 When synthesizing raw outputs:

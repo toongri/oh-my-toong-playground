@@ -6,8 +6,7 @@ import path from 'path';
 import {
   exitWithError,
   detectHostRole,
-  normalizeBool,
-  resolveAutoRole,
+  resolveChairmanExclusion,
   ensureDir,
   atomicWriteJson,
   readJsonIfExists,
@@ -323,27 +322,20 @@ async function cmdStart(options, prompt) {
   const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseCouncilConfig(configPath);
   const chairmanRoleRaw = options.chairman || process.env.COUNCIL_CHAIRMAN || config.council.chairman.role || 'auto';
-  const chairmanRole = resolveAutoRole(chairmanRoleRaw, hostRole);
 
-  const includeChairman = normalizeBool(options['include-chairman']);
-  const excludeChairmanOverride =
-    options['exclude-chairman'] != null ? true : options['include-chairman'] != null ? false : null;
-
-  const excludeSetting = normalizeBool(config.council.settings.exclude_chairman_from_members);
-  const excludeChairmanFromMembers =
-    excludeChairmanOverride != null ? excludeChairmanOverride : excludeSetting != null ? excludeSetting : true;
+  const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
+    options,
+    configExcludeSetting: config.council.settings.exclude_chairman_from_members,
+    hostRole,
+    chairmanRoleRaw,
+  });
 
   const timeoutSetting = Number(config.council.settings.timeout || 0);
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
   const timeoutSec = Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : timeoutSetting > 0 ? timeoutSetting : 0;
 
   const requestedMembers = config.council.members || [];
-  const members = requestedMembers.filter((m) => {
-    if (!m || !m.name || !m.command) return false;
-    const nameLc = String(m.name).toLowerCase();
-    if (excludeChairmanFromMembers && !includeChairman && nameLc === chairmanRole) return false;
-    return true;
-  });
+  const members = requestedMembers.filter(filterMember);
 
   const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `council-${jobId}`);
@@ -464,8 +456,6 @@ if (import.meta.main) {
 
 export {
   detectHostRole,
-  normalizeBool,
-  resolveAutoRole,
   ensureDir,
   safeFileName,
   atomicWriteJson,

@@ -776,3 +776,110 @@ describe('computeStatus', () => {
     expect(result.counts.done).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// --exclude-chairman / --include-chairman flag semantics (post-migration)
+// ---------------------------------------------------------------------------
+
+describe('agent-council chairman flag semantics', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeConfig(configPath: string, excludeSetting: boolean) {
+    fs.writeFileSync(configPath, [
+      'council:',
+      '  chairman:',
+      '    role: claude',
+      '  members:',
+      '    - name: claude',
+      '      command: echo claude',
+      '    - name: gemini',
+      '      command: echo gemini',
+      '  settings:',
+      `    exclude_chairman_from_members: ${excludeSetting}`,
+      '    timeout: 10',
+    ].join('\n'));
+  }
+
+  test('--exclude-chairman=false keeps chairman (value respected)', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    writeConfig(configPath, true);
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--exclude-chairman=false',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const memberNames = output.members.map((r: { name: string }) => r.name);
+    expect(memberNames.includes('claude')).toBe(true);
+    expect(output.settings.excludeChairmanFromMembers).toBe(false);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  test('--exclude-chairman=true excludes chairman', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    writeConfig(configPath, false);
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--exclude-chairman=true',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const memberNames = output.members.map((r: { name: string }) => r.name);
+    expect(memberNames.includes('claude')).toBe(false);
+    expect(output.settings.excludeChairmanFromMembers).toBe(true);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  test('--include-chairman force-includes chairman even when config excludes', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    writeConfig(configPath, true);
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--chairman', 'claude',
+      '--include-chairman',
+      '--json',
+      'test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const memberNames = output.members.map((r: { name: string }) => r.name);
+    expect(memberNames.includes('claude')).toBe(true);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
+  });
+});
