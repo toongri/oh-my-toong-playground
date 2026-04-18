@@ -250,7 +250,7 @@ Progress per FAIL axis. **One question per turn** at each Stage:
 
 **Stage 5 — Domain-Informed Source Proposals:**
 
-When Stages 1-4 exhaust the user's memory, the AI acts as a domain expert and proposes sources:
+When axis-specific extraction (Stages 1-4) fails to surface material, OR when a5+co-failure triggers multi-axis synthesis, the AI acts as a domain expert and proposes sources:
 - Synthesize the user's company scale, domain, tech stack, and the specific FAIL axis
 - Propose 2-3 scenarios in the form: "In this context, this problem typically occurs — did you experience something like this?"
 - Example: "위탁판매 정산이면 PG 환불 타이밍이랑 정산 주기가 안 맞아서 차액이 생기는 케이스가 많은데, 이런 경험 있나요?"
