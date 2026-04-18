@@ -48,6 +48,30 @@ Why PASS:
 - Junior level에서 named (DynamoDB, conditional writes) + 참여 scope 명시
 - 기술 결정 과정 (선배 리뷰) 인용 — junior bar에서 팀/선배 결정 인용은 PASS 조건에 명시적으로 포함
 
+### PASS Exemplar 4 — Senior, Frontend rendering optimization
+
+Candidate context: Senior frontend engineer, 6 years.
+
+Bullet: "Rewrote React reconciliation strategy to reduce re-render cascades in checkout flow, used memoization + selector-level equality to drop wasted renders from 1200/min to 140/min; measured via Performance Observer"
+
+Why PASS:
+- Named: React, Performance Observer
+- Specific mechanisms: reconciliation strategy, memoization, selector-level equality — 무엇을 했는지 메커니즘 수준에서 명시
+- Quantified baseline/post: 1200/min → 140/min, measured via 구체 도구
+- Senior level depth: rendering pipeline 내부 동작 이해 + instrumentation 방법까지 포함. 6+ yr 전제의 architectural depth 부합
+
+### PASS Exemplar 5 — Mid, Infra cluster upgrade
+
+Candidate context: Platform engineer, 4 years.
+
+Bullet: "Designed multi-AZ Kubernetes upgrade runbook leveraging PodDisruptionBudget + surge replicas; rolled 30-node cluster through minor version bumps with 0 user-facing 503"
+
+Why PASS:
+- Named: Kubernetes, PodDisruptionBudget
+- Specific mechanisms: PodDisruptionBudget + surge replicas — availability 보장을 위한 구체 도구 선택
+- Quantified scope: 30-node cluster, 0 user-facing 503 — 검증 가능한 결과 지표
+- Mid level depth: 자기 결정 논리(runbook 설계)와 trade-off 인식(가용성 vs 업그레이드 속도). 3-5yr 전제와 부합
+
 ## FAIL Exemplars
 
 ### FAIL Exemplar 1 — Surface-level mention (any level)
@@ -76,6 +100,15 @@ Why FAIL:
 - Tech name parade. 어떤 문제에 어떤 기술을 적용했는지 전혀 없음
 - Named systems는 다수지만 mechanism, trade-off, rationale 완전 부재
 - 기여 범위, 결정 근거, 설계 판단 없음 — 모든 레벨에서 FAIL
+
+### FAIL Exemplar 4 — Terminology without mechanism
+
+Bullet: "Optimized database query performance by implementing advanced indexing strategies"
+
+Why FAIL:
+- "advanced indexing strategies"는 lexical signal만 있고 구체 내용 부재 — composite index / functional index / partial index 중 무엇인지, 어떤 쿼리 패턴에 적용했는지 없음
+- "Optimized" + "advanced" 조합은 depth를 암시하지만 mechanism을 대체하지 못함
+- 기존 FAIL 패턴(surface-level name, name parade)과 달리 용어는 기술적으로 들리나 실제 설계 판단 없음 — 모든 레벨에서 FAIL
 
 ## Boundary Cases
 
