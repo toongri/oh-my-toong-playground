@@ -22,15 +22,15 @@ candidate_context:                  # INTERNAL
 
 verdicts:                           # INTERNAL (orchestrator-only)
   a1_technical_credibility:
-    verdict: PASS | FAIL            # INTERNAL
+    verdict: PASS | FAIL | P1       # INTERNAL
     reasoning: string               # INTERNAL
     evidence_quote: string          # INTERNAL
   a2_causal_honesty:
-    verdict: PASS | FAIL            # INTERNAL
+    verdict: PASS | FAIL | P1       # INTERNAL
     reasoning: string               # INTERNAL
     evidence_quote: string          # INTERNAL
   a3_outcome_significance:
-    verdict: PASS | FAIL            # INTERNAL
+    verdict: PASS | FAIL | P1       # INTERNAL
     reasoning: string               # INTERNAL
     evidence_quote: string          # INTERNAL
   a4_ownership_scope:
@@ -38,7 +38,7 @@ verdicts:                           # INTERNAL (orchestrator-only)
     reasoning: string               # INTERNAL
     evidence_quote: string          # INTERNAL
   a5_scanability:
-    verdict: PASS | FAIL            # INTERNAL
+    verdict: PASS | FAIL | P1       # INTERNAL
     reasoning: string               # INTERNAL
     evidence_quote: string          # INTERNAL
 
