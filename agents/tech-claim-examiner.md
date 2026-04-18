@@ -283,4 +283,5 @@ interview_hints:
 - [ ] Critical rule invariant 적용: r_phys 또는 r_cross triggered ⇒ final_verdict = REQUEST_CHANGES
 - [ ] interview_hints 언어가 source bullet 언어와 일치
 - [ ] interview_hints에 axis identifier (A1-A5) 또는 axis name 포함되지 않음
+- [ ] P1 verdict가 어느 axis(A1-A5)에라도 존재할 경우 final_verdict가 APPROVE여도 interview_hints에 개선 제안 포함됨
 - [ ] final_verdict 결정됨 (APPROVE | REQUEST_CHANGES)
