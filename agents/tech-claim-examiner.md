@@ -173,10 +173,13 @@ Examples:
 - "Designed entire system" + 1년차 junior
 
 **Worked example**:
-> Candidate: 1 year experience, junior position
-> Bullet: "Led cross-functional 30-person initiative to redesign company-wide API standards"
-> Reasoning: 1년차에게 30-person cross-functional initiative led는 비현실적. decision authority + team management 근거 없음. P1 flag.
-> triggered: true → P1 flag (final_verdict는 A4 verdict에 따름)
+
+- bullet: "Led cross-functional 10-person effort to migrate order pipeline, coordinating with ops/product across 2 quarters"
+- candidate_context: "Staff engineer with 8 years tenure, prior lead of 2 migrations. Team composition: 10 cross-functional engineers (3 backend, 2 SRE, 3 ops, 2 product ops) — candidate held tech lead role."
+
+R-Scope 토큰('Led cross-functional')은 trigger된다. triggered: true. 그러나 `candidate_context`의 tenure(8yr) + 기존 2회 migration 리드 이력 + 명시된 팀 구성이 bullet과 coherent하여 overclaim 아님 → A4 verdict: PASS.
+
+(R-Scope는 lexical signal일 뿐이며 A4 verdict는 candidate_context를 종합하여 독립 판정한다. R-Scope overlaps with A4 but is tracked separately as an integrity signal.)
 
 ### Critical Rule Invariant (MUST guarantee)
 
