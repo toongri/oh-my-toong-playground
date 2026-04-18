@@ -193,15 +193,15 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 **Pass criteria — ALL must be met:**
 - `final_verdict == APPROVE`
-- `verdicts.a1_technical_credibility.verdict == PASS`
-- `verdicts.a2_causal_honesty.verdict == PASS`
-- `verdicts.a3_outcome_significance.verdict == PASS`
-- `verdicts.a4_ownership_scope.verdict == PASS`
-- `verdicts.a5_scanability.verdict == PASS`
+- `verdicts.a1_technical_credibility.verdict != FAIL`
+- `verdicts.a2_causal_honesty.verdict != FAIL`
+- `verdicts.a3_outcome_significance.verdict != FAIL`
+- `verdicts.a4_ownership_scope.verdict != FAIL`
+- `verdicts.a5_scanability.verdict != FAIL`
 - `critical_rule_flags.r_phys.triggered == false`
 - `critical_rule_flags.r_cross.triggered == false`
 
-(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`.)
+(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`. As of v3.1 verdict arity unification, this applies to A1-A5 uniformly — formerly only A4 emitted P1.)
 
 **On APPROVE:** Remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"`.
 
