@@ -217,24 +217,24 @@ candidate_context:
 
 verdicts:
   a1_technical_credibility:
-    verdict: PASS | FAIL
     reasoning: <reasoning paragraph — verdict보다 먼저 작성>
+    verdict: PASS | FAIL
     evidence_quote: <bullet 본문에서 직접 인용 — paraphrase 금지>
   a2_causal_honesty:
-    verdict: PASS | FAIL
     reasoning: <reasoning paragraph>
+    verdict: PASS | FAIL
     evidence_quote: <bullet 본문에서 직접 인용>
   a3_outcome_significance:
-    verdict: PASS | FAIL
     reasoning: <reasoning paragraph>
+    verdict: PASS | FAIL
     evidence_quote: <bullet 본문에서 직접 인용>
   a4_ownership_scope:
-    verdict: PASS | FAIL | P1
     reasoning: <reasoning paragraph>
+    verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용>
   a5_scanability:
-    verdict: PASS | FAIL
     reasoning: <reasoning paragraph>
+    verdict: PASS | FAIL
     evidence_quote: <bullet 본문에서 직접 인용>
 
 critical_rule_flags:
