@@ -30,6 +30,23 @@ Bullet: "Enabled eventual consistency on session store (accepted 1-2s propagatio
 
 Why PASS: constraint (eventual consistency의 propagation 지연)를 explicit accept. 결과(RTT 감소) 직접 연결.
 
+### PASS Exemplar 4 — Data domain: controlled before/after with mechanism
+Bullet: "Pipeline p95 latency dropped from 47min to 12min after repartitioning Spark job on high-cardinality key + enabling adaptive query execution; measured pre/post over 4 weeks to control for weekly traffic patterns"
+
+Why PASS:
+- Causal mechanism 명시: repartitioning on high-cardinality key → data skew 제거, adaptive query execution → runtime plan optimization
+- Before/after 수치 명확 (47min → 12min)
+- 측정 기간(4주) 명시로 weekly traffic pattern confound 통제 — correlation-only 해석 배제
+
+### PASS Exemplar 5 — Frontend domain: mechanism + verification tool + downstream metric
+Bullet: "Frontend bundle size reduced 2.3MB → 680KB by route-level code splitting + tree shaking unused lodash imports; verified via Webpack Bundle Analyzer before deploy, LCP metric improved 1.8s → 0.9s on p75"
+
+Why PASS:
+- Mechanism 이중 명시: route-level code splitting (lazy load) + tree shaking (dead code elimination)
+- 검증 도구(Webpack Bundle Analyzer) 명시 — 측정 신뢰성 보강
+- Downstream metric(LCP p75) 연결로 browser rendering 개선까지 causal chain 완성
+- 숨겨진 변수(서버 변경, 마케팅) 개입 경로 없음 — bundle size는 직접 측정 가능한 technical artifact
+
 ---
 
 ## FAIL Exemplars
@@ -50,6 +67,15 @@ Why FAIL: 10→15 = 1.5x, not 2x. 내부 수치 모순.
 Bullet: "Achieved 99.99% uptime on payment API while migrating from MySQL to PostgreSQL"
 
 Why FAIL: Migration 자체가 downtime을 암시하는 constraint. 99.99% 달성 방식(blue-green? read-replica first?) 없음 — constraint 미해결.
+
+### FAIL Exemplar 4 — Correlation disguised as causation (confounded multi-variable change)
+Bullet: "Migrated to React 18, saw 40% performance improvement across all pages"
+
+Why FAIL:
+- Framework 버전 전환과 동시에 인프라 업그레이드, 트래픽 감소, 캐시 설정 변경 등 다수 변수 동시 변경 가능성 높음
+- "40% performance improvement" — 어떤 metric인지 불명 (LCP? TTI? 서버 응답시간?)
+- React 18 자체의 개선(Concurrent features, automatic batching)이 어느 부분에서 기여했는지 mechanism 미명시
+- baseline/공변수 통제 없음 — 시간적 선후관계만 존재, causation 추론 불가
 
 ---
 
