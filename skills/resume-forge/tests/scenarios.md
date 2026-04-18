@@ -23,7 +23,10 @@
 **Setup**: examiner output:
 - final_verdict = REQUEST_CHANGES
 - verdicts.a5_scanability = FAIL
-- verdicts.a1, a2, a3 모두 PASS
+- verdicts.a1_technical_credibility: PASS
+- verdicts.a2_causal_honesty: PASS
+- verdicts.a3_outcome_significance: PASS
+- verdicts.a4_ownership_scope: PASS
 **Expected**: Readability-only fix (formatting 수정), source extraction 미수행
 
 ## SCN-5: A5 + co-failure → source extraction
