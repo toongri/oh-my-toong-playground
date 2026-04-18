@@ -418,7 +418,7 @@ When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches
 
 **interview-possible mode:**
 
-1. Explain each FAIL axis and its rationale to the user, item by item
+1. Present `interview_hints` to the user as-is, in source bullet language, item by item
 2. Convert Interview Hints into specific questions → conduct interview via AskUserQuestion
    - One question per message
    - Apply 4-Stage Bypass Protocol (references/experience-mining.md)
@@ -428,7 +428,7 @@ When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches
 
 **interview-impossible mode:**
 
-1. Explain each FAIL axis and its rationale to the user, item by item
+1. Present `interview_hints` to the user as-is, in source bullet language, item by item
 2. Skip Interview Hints → question conversion entirely. Do NOT conduct interview.
 3. Generate 2-3 alternatives using only the existing resume content and evaluation findings
 4. Re-dispatch alternatives to examiner

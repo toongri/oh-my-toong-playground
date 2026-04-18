@@ -239,9 +239,9 @@ Quality Gate interviews **extend** the 4-Stage Bypass Protocol from experience-m
 ```
 tech-claim-examiner REQUEST_CHANGES received
     ↓
-Extract FAIL axis list from REQUEST_CHANGES
+Iterate interview_hints from REQUEST_CHANGES
     ↓
-For each FAIL axis:
+For each hint:
     1. Check Interview Hints from tech-claim-examiner
     2. Set source target that can move this axis to PASS
     3. Apply experience-mining 4-Stage Bypass:
@@ -255,7 +255,7 @@ For each FAIL axis:
 
 ### How to Use Interview Hints
 
-The tech-claim-examiner provides Interview Hints for each FAIL axis with REQUEST_CHANGES. These Hints specify "what information would change this axis to PASS."
+The tech-claim-examiner provides `interview_hints` with REQUEST_CHANGES. These hints specify "what information would change this axis to PASS."
 
 Principles for converting Hints into questions:
 
@@ -314,7 +314,7 @@ When the session operates in **interview-impossible mode** (the resume owner is 
 4. If **any alternative receives `final_verdict: APPROVE`**: adopt it and continue.
 5. If **all alternatives receive `final_verdict: REQUEST_CHANGES`**: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
 
-**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
+**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates `interview_hints` (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
 
 ---
 
