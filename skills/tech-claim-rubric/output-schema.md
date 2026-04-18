@@ -112,7 +112,7 @@ downstream skill들이 v1 examiner output 참조를 v3로 갱신할 때 사용:
 | `Causal Chain Depth score >= 0.7` | `verdicts.a2_causal_honesty.verdict == PASS` | Loop 1 gate (resume-forge) |
 | `E3b Constraint Cascade Score >= 0.8 (CASCADING)` | `final_verdict == APPROVE && verdicts.a1-a5 모두 PASS` | Loop 2 gate (resume-forge) |
 | `E1-E6 failures` | `{a1, a2, a3, a4} 중 FAIL 있음` OR `a5 FAIL AND {a1, a2, a3} 중 FAIL co-occur` | Source extraction trigger |
-| `R1-R5 failures` | `a5_scanability == FAIL AND {a1, a2, a3} 모두 PASS` | Readability-only fix trigger |
+| `R1-R5 failures` | `a5_scanability == FAIL AND {a1, a2, a3, a4} 모두 PASS` | Readability-only fix trigger |
 
 ---
 
