@@ -310,7 +310,7 @@ Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforc
 
 ### Problem Chain Extraction (Problem-Solving sub-protocol)
 
-**Trigger:** 문제 해결 서술이 Isolated(단일 concern) 또는 Listed(복수 concern 나열, 인과 연결 없음) 패턴을 보이는 경우. 유저가 실제로 경험한 chained 구조를 기술하지 않았을 가능성이 높다.
+**Trigger:** 문제 해결 서술이 Isolated(단일 concern 또는 인과 연결 없는 복수 concern 나열) 패턴을 보이는 경우. 유저가 실제로 경험한 chained 구조를 기술하지 않았을 가능성이 높다.
 
 **Diagnostic Context Examples:**
 
