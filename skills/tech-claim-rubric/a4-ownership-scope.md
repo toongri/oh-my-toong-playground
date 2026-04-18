@@ -61,10 +61,25 @@ Why FAIL: 동사(improved)는 낮지만 scope("all services")는 과대. 어떤 
 
 ## P1 Flag Exemplars
 
-### P1 Exemplar 1 — Led solo project
+### P1 Exemplar 1 — PASS boundary: Solo open-source project with 'led' idiom
 Bullet: "Led development of personal open-source library for date parsing"
 
-Why P1 (not FAIL): "led" + solo project. Technically overclaim but may be legitimate idiom. 고의성 불명확. Interview에서 clarify.
+Why P1 (not FAIL): "led" + solo project. Technically overclaim but may be legitimate idiom. 고의성 불명확. Interview에서 clarify. → PASS boundary P1.
+
+### P1 Exemplar 2 — PASS boundary: Led cross-team initiative with explicit coordination bounds
+- Candidate context: Mid-level engineer, 4 years.
+- Bullet: "Led cross-team initiative with 3 engineers from 2 teams to standardize API versioning; my contribution was architecture + migration script; team members owned their service-specific refactors"
+- Reasoning: 'Led cross-team' R-Scope trigger, 그러나 scope narrowing("my contribution was X; team members owned Y")으로 overclaim boundary에 걸쳐있지만 정당화됨 → PASS boundary P1.
+
+### P1 Exemplar 3 — FAIL boundary: Stand-up facilitation framed as 'led team'
+- Candidate context: Junior engineer, 2 years.
+- Bullet: "Led daily stand-ups for 5-person team during sprint planning cycles"
+- Reasoning: 'Led' + '5-person team' lexical trigger. Context narrowing은 "daily stand-ups"로 관용적 사용이지만 이력서 독자가 "team lead" 오해 risk. Scope 좁힘 없이 팀 리더십으로 오독될 여지 → FAIL boundary P1.
+
+### P1 Exemplar 4 — FAIL boundary: 'Owned' entire product without scope qualification
+- Candidate context: Junior engineer, 1.5 years.
+- Bullet: "Owned end-to-end product strategy and roadmap for the checkout feature"
+- Reasoning: 'Owned' + 'end-to-end' + 'product strategy/roadmap'은 PM/lead-level 어휘. Junior 1.5년 context와 심각한 mismatch. Scope narrowing 없음, 고의적 inflation signal 강함 → FAIL boundary P1.
 
 ## Boundary Cases
 
