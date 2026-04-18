@@ -147,6 +147,14 @@ Examples:
 > Reasoning: 50000% improvement는 latency가 원래의 0.002배로 압축됐다는 의미. latency는 절대 0초로 수렴 불가 — 50000%는 물리적으로 불가능한 inflated claim.
 > triggered: true → invariant 적용: final_verdict = REQUEST_CHANGES
 
+**Worked example:**
+
+- bullet: "Throughput increased 3x after adding 2 additional workers to the Celery pool"
+- candidate_context: "Backend engineer, 3 years."
+
+R-Phys pattern(multiplicative increase)이 trigger되는지 평가: 3x는 workers 3배 증가에 비례하므로 물리적으로 plausible.
+triggered: false (numeric과 mechanism이 coherent)
+
 ### R-Cross: Cross-Entry Contradiction
 
 **Trigger** (cross-entry context 제공됐을 때만): 같은 resume 내 다른 entry와 직접 모순 — 두 주장이 동시에 참일 수 없음.
@@ -162,6 +170,14 @@ Examples:
 > Bullet: "Led 8-engineer platform team at Company A (2019-2021)"
 > Reasoning: 동일 회사, 동일 시기에 solo project와 led 8-engineer team은 동시에 참일 수 없음. 직접 모순.
 > triggered: true → invariant 적용: final_verdict = REQUEST_CHANGES
+
+**Worked example:**
+
+- bullet: "Collaborated with data team on schema migration for shared events table; I owned consumer-side changes, their team owned producer-side"
+- candidate_context: "Mid-level engineer."
+
+R-Cross pattern(cross-team)이 trigger되는지 평가: collaboration 언어가 ownership boundary를 명확히 하여 overclaim 없음.
+triggered: false
 
 ### R-Scope: Verb-Scope Inflation
 
@@ -180,6 +196,14 @@ Examples:
 R-Scope 토큰('Led cross-functional')은 trigger된다. triggered: true. 그러나 `candidate_context`의 tenure(8yr) + 기존 2회 migration 리드 이력 + 명시된 팀 구성이 bullet과 coherent하여 overclaim 아님 → A4 verdict: PASS.
 
 (R-Scope는 lexical signal일 뿐이며 A4 verdict는 candidate_context를 종합하여 독립 판정한다. R-Scope overlaps with A4 but is tracked separately as an integrity signal.)
+
+**Worked example:**
+
+- bullet: "Implemented caching layer in user profile service using Redis, reduced DB query load by 40%"
+- candidate_context: "Backend engineer, 4 years."
+
+R-Scope pattern(verb-scope signal like 'led', 'owned', 'drove')이 trigger되는지 평가: 'Implemented'는 중립 기여 동사로 scope claim 없음.
+triggered: false
 
 ### Critical Rule Invariant (MUST guarantee)
 
