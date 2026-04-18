@@ -38,6 +38,29 @@ Bullet:
 
 Why PASS: PSR 구조가 과거 v1에서 강제됐지만 v3에서도 허용. 각 섹션 scan 가능.
 
+### PASS Exemplar 4 — Compressed case study (long but high-signal)
+
+- Candidate context: Senior infra engineer, 8 years.
+- Bullet (multi-line compressed case study):
+  > "Led incident recovery for production Postgres outage: identified runaway autovacuum worker
+  > consuming CPU by correlating pg_stat_activity query durations with pg_stat_bgwriter buffer_alloc
+  > spikes. Tuned autovacuum_work_mem + scale_factor per table, verified via query-time histograms
+  > over 72h post-change. Outage window cut from 38min to 7min mean for subsequent incidents
+  > (n=4 over 2 quarters)."
+- Reasoning: 5줄 multi-line이지만 high-signal density — problem statement + diagnostic method + mechanism + verification + quantified outcome 포함. SKILL.md L73의 "compressed case study" 4번째 valid 구조 시연.
+
+Why PASS: Length 자체는 disqualifier 아님. 각 line이 signal dense하고 scan 30초 내에 "Postgres outage / autovacuum 진단 + tuning / outage 38→7min" 파악 가능.
+
+### PASS Exemplar 5 — Multi-bullet concise list
+
+- Candidate context: Backend engineer, 5 years.
+- Bullets:
+  - "Migrated monolith auth module to dedicated service: JWT + refresh token rotation, 0 session leaks in 6-month prod window"
+  - "Replaced cron-based report pipeline with event-driven Kafka consumer: delivery latency 45min→90s, eliminated 3 weekly on-call pages"
+  - "Introduced circuit breaker on 3rd-party payment gateway calls: 5xx error rate 8%→0.3% during partner outages"
+
+Why PASS: 3-bullet list, 각 bullet이 독립적으로 problem + approach + outcome scan 가능. multi-bullet 구조도 structure-agnostic PASS의 valid 형태.
+
 ## FAIL Exemplars
 
 ### FAIL Exemplar 1 — Detail spill (rationale 없는 config)
@@ -55,10 +78,16 @@ Bullet: "Used AWS, GCP, Azure, Kubernetes, Docker, Terraform, Ansible, Jenkins, 
 
 Why FAIL: Tool parade. 어떤 문제에 무엇을 적용, outcome 없음. signal density 제로.
 
+### FAIL Exemplar 4 — Wall-of-text with buried lede
+
+Bullet: "Over the course of the two-year platform migration program I was deeply involved in, working alongside a distributed team spanning three time zones and coordinating with product, QA, and infrastructure stakeholders on a weekly basis, I contributed to various aspects of the Kubernetes adoption effort including writing some Helm charts and participating in the migration of several services, which ultimately resulted in improved deployment consistency and some reduction in manual toil for the operations team."
+
+Why FAIL: wall-of-text 1문장. 핵심 행동(Helm chart 작성, 서비스 마이그레이션)과 결과(deployment consistency, toil reduction)가 organizational context와 qualifier에 파묻혀 30초 scan으로 파악 불가. "some reduction", "various aspects", "deeply involved" 등 filler density 극대.
+
 ## Boundary Cases
 
 ### EDGE 1 — Long but high-signal
-10 lines이지만 각 line이 signal dense — A5 PASS 가능. Length 자체는 disqualifier 아님.
+10 lines이지만 각 line이 signal dense — A5 PASS 가능. Length 자체는 disqualifier 아님. (상세 시연: PASS Exemplar 4 참조)
 
 ### EDGE 2 — Short but vague
 "Improved performance" — 1 line이라도 scan으로 얻는 정보 없음. FAIL.
