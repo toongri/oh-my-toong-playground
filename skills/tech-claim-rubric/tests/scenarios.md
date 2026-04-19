@@ -254,6 +254,198 @@ r_phys:
 
 ---
 
+### SCN-10: A1 P1 — Senior Kafka adoption with thin partitioning rationale
+
+**Bullet**: "Adopted Kafka for async event processing with consumer-group partitioning to handle the order pipeline load (4M daily events, backlog p95 drop from 8min to 45s)"
+
+**Candidate context**: { years: 7, position: "Senior Backend", target_company: "commerce-platform" }
+
+**Expected verdicts**:
+- A1: P1 — Named systems (Kafka, consumer group, partitioning) + quantified scale (4M daily events) + measurable result (backlog p95 8min→45s). Mechanism-plus-scale lifts above a name-drop, but Senior-7yr calibration expects partition-key rationale, rebalancing/DLQ handling, at-least-once semantics discussion — none given. Depth is marginal for level: A1 rule "mechanism named but depth insufficient for calibrated level" triggered.
+- A2: PASS — Cause (Kafka adoption with consumer-group partitioning) → effect (backlog p95 8min→45s). Causal chain coherent. Arithmetic: 8min→45s ≈ 89% reduction, no contradiction.
+- A3: PASS — Tech outcome (backlog p95 latency) + scale context (4M daily events). before/after 명확. "so what?" 명확.
+- A4: PASS — "Adopted" + Senior 7yr + order pipeline scope. Coherent.
+- A5: PASS — Mechanism (Kafka partitioning), scale (4M), result (p95 8min→45s) scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A1 P1 triggers interview clarification)
+
+**Purpose**: A1 P1 boundary 검증 — Senior level에서 mechanism을 명시했으나 partition-key rationale, DLQ handling 등 depth가 부족한 패턴이 A1 P1을 트리거함을 확인. A1 rule: "mechanism named but depth insufficient for calibrated level."
+
+---
+
+### SCN-11: A2 P1 — LCP improvement with unaccounted concurrent changes
+
+**Bullet**: "Switched product-listing thumbnails to WebP with srcset responsive loading; LCP p75 improved from 2.4s to 1.1s, measured in RUM over the 2-week rollout window"
+
+**Candidate context**: { years: 4, position: "Mid Frontend", target_company: "commerce-platform" }
+
+**Expected verdicts**:
+- A1: PASS — Named mechanism (WebP, srcset responsive loading). Mid-level에서 format + delivery mechanism 선택 + RUM measurement window 명시. Deliberate selection visible.
+- A2: P1 — Full chain present (format change + delivery mechanism → reduced image weight → LCP improvement) with baseline, delta, and stated measurement window (2-week RUM). One link remains unverified: whether concurrent CDN/config changes during that window contributed. One confounder dimension open while other core links are closed — A2 rule "cause→effect stated but one link unverified" triggered.
+- A3: PASS — Tech outcome (LCP p75) + before/after (2.4s→1.1s). "so what?" — 54% LCP 개선.
+- A4: PASS — "Switched" + mid-level + frontend feature scope. Coherent.
+- A5: PASS — mechanism (WebP/srcset), result (LCP 2.4s→1.1s), measurement context (2-week RUM) scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A2 P1 triggers interview clarification)
+
+**Purpose**: A2 P1 boundary 검증 — cause→effect chain이 명시됐으나 측정 window 중 concurrent 변경 가능성이 unverified link로 남는 패턴이 A2 P1을 트리거함을 확인. A2 rule: "cause→effect stated but one link unverified."
+
+---
+
+### SCN-12: A3 P1 — Checkout retry completion rate with outcome type ambiguity
+
+**Bullet**: "Hardened error recovery on the checkout retry path; successful completion rate improved from 91% to 97%"
+
+**Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Named mechanism (error recovery hardening on retry path). Mid-level에서 specific path + hardening approach 명시. Deliberate intervention visible.
+- A2: PASS — Cause (error recovery hardening) → effect (completion rate 91%→97%). Causal chain coherent. Arithmetic: 6pp improvement on retry path, no contradiction.
+- A3: P1 — Magnitude present (91%→97%), so magnitude-absence guardrail not the issue. "Successful completion rate" is dual-coded: HTTP/API success on retry (tech) versus business checkout conversion (business). "retry path" lexical context nudges toward tech success-rate reading — type resolvable within one interpretive step, but remains ambiguous. A3 rule "outcome type boundary unclear" triggered.
+- A4: PASS — "Hardened" + mid-level + checkout retry path scope. Coherent.
+- A5: PASS — problem (retry path error recovery), result (91%→97%) scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A3 P1 triggers interview clarification)
+
+**Purpose**: A3 P1 boundary 검증 — outcome magnitude가 있어도 outcome type(tech vs business)이 dual-coded로 해석되는 패턴이 A3 P1을 트리거함을 확인. A3 rule: "outcome type boundary unclear."
+
+---
+
+### SCN-13: A2 FAIL — Q4 전환율 seasonality confound
+
+**Bullet**: "Q4 구매 전환율 8.4% 달성, 직전 대비 2.1%p 개선"
+
+**Candidate context**: { years: 4, position: "Mid Frontend", target_company: "analytics-saas" }
+
+**Expected verdicts**:
+- A1: FAIL — 어떤 기술적 mechanism으로 전환율을 개선했는지 없음. "달성"만 있고 named intervention 없음.
+- A2: FAIL — "직전"이 Q3인지 작년 Q4인지 불분명. Q3→Q4는 연말 프로모션 트래픽이라 cohort 자체가 다름 → seasonality confound. 동일 cohort·동일 시즌 baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가. A2 violated rule: "Missing comparable baseline."
+- A3: PASS — 전환율 수치(8.4%) + before/after(+2.1%p). magnitude 존재.
+- A4: PASS — scope 및 동사 수준 특정 불가하나 overclaim 없음.
+- A5: P1 — 짧고 수치는 있으나 mechanism context 없어 6초 scan으로 "무엇을 해서 개선됐는지" 불명. FAIL까지는 아님.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A1 + A2 FAIL)
+
+**Purpose**: A2 FAIL — violated rule: "Missing comparable baseline." Q3 vs Q4 seasonality 미통제로 비교 기준이 동일 cohort가 아닌 패턴. baseline 조건 불일치가 causal verification을 무너뜨림을 검증.
+
+---
+
+### SCN-14: A2 FAIL — Redis 캐시 응답 시간 측정 기간 + baseline 누락
+
+**Bullet**: "Redis 캐시 레이어 도입으로 주요 API 응답 시간을 320ms에서 85ms로 단축"
+
+**Candidate context**: { years: 3, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Named system (Redis 캐시 레이어). Mid-level에서 cache layer 도입 선택 명시. Deliberate intervention visible.
+- A2: FAIL — "320ms→85ms"라는 수치가 언제·어떤 트래픽 조건에서 측정됐는지 없음. cache hit→응답 단축 인과 자체는 타당하나, baseline이 캐시 warm 상태인지 cold 상태인지, 같은 쿼리 분포였는지 확인 불가 → 인과 검증이 아닌 숫자 대조. A2 violated rule: "Missing time window / operating conditions" (+ Missing comparable baseline).
+- A3: PASS — Tech outcome (API 응답 시간) + before/after (320ms→85ms). magnitude 명확.
+- A4: PASS — "도입" + mid-level + API layer scope. Coherent.
+- A5: PASS — mechanism (Redis 캐시), result (320ms→85ms) scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A2 FAIL)
+
+**Purpose**: A2 FAIL — violated rule: "Missing time window / operating conditions." 측정 기간 및 트래픽 조건 누락으로 수치의 재현 가능성이 검증 불가한 패턴. window 없이는 snapshot인지 평균인지도 알 수 없음을 검증.
+
+---
+
+### SCN-15: A2 FAIL — Offline F1 score → production chargeback savings
+
+**Bullet**: "Trained a new gradient boosting model for fraud detection, improving the F1 score from 0.82 to 0.89 and saving $100k in chargebacks."
+
+**Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Named technique (gradient boosting, fraud detection model). Mid-level에서 model choice + task 명시. Deliberate selection visible.
+- A2: FAIL — F1 score improvement (0.82→0.89)은 offline/backtest metric이나 production financial impact ("saving $100k in chargebacks")로 seamless하게 연결. Production deployment 증명 없음. Offline accuracy → production chargeback reduction 고리에서 data drift, latency constraints, integration bugs 가능성 미통제. A2 violated rule: "Offline metric presented as production impact."
+- A3: PASS — F1 0.82→0.89 + $100k chargeback savings. outcome magnitude 존재. (A2 FAIL이 검증 문제를 지적)
+- A4: PASS — "Trained" + mid-level + fraud detection model scope. Coherent.
+- A5: PASS — mechanism (gradient boosting), result (F1 + $100k) scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A2 FAIL)
+
+**Purpose**: A2 FAIL — violated rule: "Offline metric presented as production impact." holdout F1 개선을 실제 chargeback 절감으로 제시하는 offline→production attribution 오류 패턴 검증.
+
+---
+
+### SCN-16: A2 FAIL — 트래픽 5배 스케일 클레임에서 분포 누락
+
+**Bullet**: "트래픽 5배 증가 상황에서 평균 latency 250ms 유지로 안정적 확장성 증명"
+
+**Candidate context**: { years: 6, position: "Senior Backend", target_company: "video-platform" }
+
+**Expected verdicts**:
+- A1: PASS — "트래픽 5배 증가" 라는 scale context + latency 유지라는 결과 목표 명시. Senior-level에서 단순하나 load test/scaling mechanism implied.
+- A2: FAIL — scale claim(5배 증가)에서 평균 유지는 p95/p99이 폭증해도 성립 가능. 평균은 throughput 증가 시 tail에 의해 잘 움직이지 않음 → "확장성 증명"은 tail latency 안정성으로만 검증됨에도 평균만 제시. A2 violated rule: "Missing distribution (avg vs p99) for scale claims."
+- A3: PASS — 스케일 context(5배) + latency 수치(250ms) 존재. outcome 기술됨.
+- A4: PASS — Senior level + "증명" 표현이지만 scope 부재하나 overclaim은 아님.
+- A5: PASS — mechanism (scale 5배), result (250ms 유지) 6초 내 scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A2 FAIL)
+
+**Purpose**: A2 FAIL — violated rule: "Missing distribution (avg vs p99) for scale claims." scale 주장에서 평균만 제시하고 tail latency(p95/p99) 분포를 생략한 패턴이 A2 검증 불가를 유발함을 확인.
+
+---
+
+### SCN-17: A2 FAIL — 운영 장애 0건 절대 주장 (scope + period 누락)
+
+**Bullet**: "안정화 작업을 통해 운영 서비스 장애 0건 달성"
+
+**Candidate context**: { years: 4, position: "Mid Backend", target_company: "recruitment-platform" }
+
+**Expected verdicts**:
+- A1: PASS — "안정화 작업"이라는 intervention 명시. Mid-level에서 최소한의 action 언급. Thin이나 FAIL까지는 아님.
+- A2: FAIL — 어느 서비스인지(scope) 없음 — 전체 서비스 vs 담당 서비스 vs 특정 컴포넌트 구분 불가. 어느 기간인지(period) 없음 — 1주? 분기? 연간? 절대 주장(0건)은 scope·period 없이는 반증 불가능 → 인과 검증이 아니라 수사. A2 violated rule: "Absolute claim without scope and period."
+- A3: PASS — "장애 0건"이라는 outcome 존재. 절대값 주장이나 A3 magnitude 기준은 충족.
+- A4: PASS — "달성" + mid-level. Coherent.
+- A5: P1 — 짧고 결과는 있으나 context(어느 서비스, 언제) 없어 scan으로 의미 파악이 불완전. FAIL까지는 아님.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: REQUEST_CHANGES (A2 FAIL)
+
+**Purpose**: A2 FAIL — violated rule: "Absolute claim without scope and period." "장애 0건" 같은 절대 주장이 scope(서비스)와 period(기간) 없이 제시돼 반증 불가능한 수사가 되는 패턴 검증.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | Pattern Type |
@@ -267,21 +459,29 @@ r_phys:
 | SCN-7 | A3 vanity metric | REQUEST_CHANGES | Vanity metric + A1 depth absent |
 | SCN-8 | A4 contributed boundary | APPROVE | Junior PASS via correct ownership verb |
 | SCN-9 | R-Cross triggered | REQUEST_CHANGES | Cross-entry timeline contradiction |
+| SCN-10 | A1 P1 (Kafka thin rationale) | REQUEST_CHANGES | A1 P1 boundary (mechanism named, depth insufficient) |
+| SCN-11 | A2 P1 (LCP unaccounted concurrent) | REQUEST_CHANGES | A2 P1 boundary (one link unverified) |
+| SCN-12 | A3 P1 (retry completion type ambiguity) | REQUEST_CHANGES | A3 P1 boundary (outcome type unclear) |
+| SCN-13 | A2 FAIL rule 1 (seasonality) | REQUEST_CHANGES | Missing comparable baseline |
+| SCN-14 | A2 FAIL rule 2 (time window) | REQUEST_CHANGES | Missing time window / operating conditions |
+| SCN-15 | A2 FAIL rule 3 (offline→production) | REQUEST_CHANGES | Offline metric as production impact |
+| SCN-16 | A2 FAIL rule 4 (distribution) | REQUEST_CHANGES | Missing distribution for scale claims |
+| SCN-17 | A2 FAIL rule 5 (absolute claim) | REQUEST_CHANGES | Absolute claim without scope and period |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-6, SCN-8, SCN-9 | SCN-3, SCN-4, SCN-7 | SCN-5 (P1) |
-| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9 | SCN-3, SCN-4 | — |
-| A3 | SCN-1, SCN-6, SCN-8, SCN-9 | SCN-3, SCN-4, SCN-5, SCN-7 | — |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9 | SCN-5, SCN-7 | — |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1) |
+| A1 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-3, SCN-4, SCN-7, SCN-13 | SCN-5 (P1), SCN-10 (P1) |
+| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12 | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1) |
+| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-5, SCN-7 | — |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | — |
 |------|-----------|----------------------|----|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8 (단일 bullet 평가, false) | — |
-| R-Scope | SCN-5 | SCN-1,2,3,4,6,7,8 | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,10,11,12,13,14,15,16,17 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17 (단일 bullet 평가, false) | — |
+| R-Scope | SCN-5 | SCN-1,2,3,4,6,7,8,10,11,12,13,14,15,16,17 | — |
