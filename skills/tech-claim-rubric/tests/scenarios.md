@@ -272,9 +272,9 @@ r_phys:
 - r_cross.triggered: false (reasoning: "cross-entry context not provided")
 - r_scope.triggered: false
 
-**Expected final_verdict**: REQUEST_CHANGES (A1 P1 triggers interview clarification)
+**Expected final_verdict**: APPROVE (P1은 blocking 아님; interview_hints에 A1 depth 보강 suggestion 포함)
 
-**Purpose**: A1 P1 boundary 검증 — Senior level에서 mechanism을 명시했으나 partition-key rationale, DLQ handling 등 depth가 부족한 패턴이 A1 P1을 트리거함을 확인. A1 rule: "mechanism named but depth insufficient for calibrated level."
+**Purpose**: A1 P1 boundary 검증 — Senior level에서 mechanism을 명시했으나 partition-key rationale, DLQ handling 등 depth가 부족한 패턴이 A1 P1을 트리거함을 확인. A1 rule: "mechanism named but depth insufficient for calibrated level." + final_verdict는 APPROVE 유지(P1은 non-blocking) + interview_hints에 improvement suggestion 포함 검증.
 
 ---
 
@@ -296,9 +296,9 @@ r_phys:
 - r_cross.triggered: false (reasoning: "cross-entry context not provided")
 - r_scope.triggered: false
 
-**Expected final_verdict**: REQUEST_CHANGES (A2 P1 triggers interview clarification)
+**Expected final_verdict**: APPROVE (P1은 blocking 아님; interview_hints에 A2 unverified link clarification suggestion 포함)
 
-**Purpose**: A2 P1 boundary 검증 — cause→effect chain이 명시됐으나 측정 window 중 concurrent 변경 가능성이 unverified link로 남는 패턴이 A2 P1을 트리거함을 확인. A2 rule: "cause→effect stated but one link unverified."
+**Purpose**: A2 P1 boundary 검증 — cause→effect chain이 명시됐으나 측정 window 중 concurrent 변경 가능성이 unverified link로 남는 패턴이 A2 P1을 트리거함을 확인. A2 rule: "cause→effect stated but one link unverified." + final_verdict는 APPROVE 유지(P1은 non-blocking) + interview_hints에 improvement suggestion 포함 검증.
 
 ---
 
@@ -320,9 +320,9 @@ r_phys:
 - r_cross.triggered: false (reasoning: "cross-entry context not provided")
 - r_scope.triggered: false
 
-**Expected final_verdict**: REQUEST_CHANGES (A3 P1 triggers interview clarification)
+**Expected final_verdict**: APPROVE (P1은 blocking 아님; interview_hints에 A3 outcome type disambiguation suggestion 포함)
 
-**Purpose**: A3 P1 boundary 검증 — outcome magnitude가 있어도 outcome type(tech vs business)이 dual-coded로 해석되는 패턴이 A3 P1을 트리거함을 확인. A3 rule: "outcome type boundary unclear."
+**Purpose**: A3 P1 boundary 검증 — outcome magnitude가 있어도 outcome type(tech vs business)이 dual-coded로 해석되는 패턴이 A3 P1을 트리거함을 확인. A3 rule: "outcome type boundary unclear." + final_verdict는 APPROVE 유지(P1은 non-blocking) + interview_hints에 improvement suggestion 포함 검증.
 
 ---
 
@@ -459,9 +459,9 @@ r_phys:
 | SCN-7 | A3 vanity metric | REQUEST_CHANGES | Vanity metric + A1 depth absent |
 | SCN-8 | A4 contributed boundary | APPROVE | Junior PASS via correct ownership verb |
 | SCN-9 | R-Cross triggered | REQUEST_CHANGES | Cross-entry timeline contradiction |
-| SCN-10 | A1 P1 (Kafka thin rationale) | REQUEST_CHANGES | A1 P1 boundary (mechanism named, depth insufficient) |
-| SCN-11 | A2 P1 (LCP unaccounted concurrent) | REQUEST_CHANGES | A2 P1 boundary (one link unverified) |
-| SCN-12 | A3 P1 (retry completion type ambiguity) | REQUEST_CHANGES | A3 P1 boundary (outcome type unclear) |
+| SCN-10 | A1 P1 (Kafka thin rationale) | APPROVE | A1 P1 boundary (mechanism named, depth insufficient) (non-blocking) |
+| SCN-11 | A2 P1 (LCP unaccounted concurrent) | APPROVE | A2 P1 boundary (one link unverified) (non-blocking) |
+| SCN-12 | A3 P1 (retry completion type ambiguity) | APPROVE | A3 P1 boundary (outcome type unclear) (non-blocking) |
 | SCN-13 | A2 FAIL rule 1 (seasonality) | REQUEST_CHANGES | Missing comparable baseline |
 | SCN-14 | A2 FAIL rule 2 (time window) | REQUEST_CHANGES | Missing time window / operating conditions |
 | SCN-15 | A2 FAIL rule 3 (offline→production) | REQUEST_CHANGES | Offline metric as production impact |
