@@ -118,10 +118,13 @@ downstream skill들이 v1 examiner output 참조를 v3로 갱신할 때 사용:
 
 ## interview_hints Constraints
 
-1. **Language rule**: hint 언어는 source `bullet_text` 언어와 일치 (Korean bullet → Korean hints, English bullet → English hints)
-2. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Significance, Outcome Presence & Clarity, Ownership, Scanability) 포함 금지. 자연스러운 서술로만 ("기술 깊이가 부족합니다" OK, "A1 Technical Credibility FAIL" 금지)
+1. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Presence & Clarity, Ownership & Scope, Scanability) 포함 금지. 자연스러운 서술로만.
+   - OK: "사용한 시스템과 선택 이유를 추가하면 기술 깊이가 더 잘 드러납니다"
+   - 금지: "A1 Technical Credibility FAIL — 시스템 명시 필요"
+2. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
+3. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
 
-이 두 규칙은 `tech-claim-examiner.md` prompt에 명시되어야 함.
+이 규칙들은 `agents/tech-claim-examiner.md` prompt에서 본문 복제 없이 참조된다.
 
 ---
 
