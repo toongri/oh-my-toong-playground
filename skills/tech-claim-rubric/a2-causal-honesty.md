@@ -52,7 +52,7 @@ Bullet: "Enabled eventual consistency on session store (accepted 1-2s propagatio
 
 Why PASS: constraint (eventual consistency의 propagation 지연)를 explicit accept. 결과(RTT 감소) 직접 연결.
 
-### PASS Exemplar 4 — Data domain: controlled before/after with mechanism
+### PASS Exemplar 4 — controlled before/after with mechanism
 Bullet: "Pipeline p95 latency dropped from 47min to 12min after repartitioning Spark job on high-cardinality key + enabling adaptive query execution; measured pre/post over 4 weeks to control for weekly traffic patterns"
 
 Why PASS:
@@ -60,7 +60,7 @@ Why PASS:
 - Before/after 수치 명확 (47min → 12min)
 - 측정 기간(4주) 명시로 weekly traffic pattern confound 통제 — correlation-only 해석 배제
 
-### PASS Exemplar 5 — Frontend domain: mechanism + verification tool + downstream metric
+### PASS Exemplar 5 — mechanism + verification tool + downstream metric
 Bullet: "Frontend bundle size reduced 2.3MB → 680KB by route-level code splitting + tree shaking unused lodash imports; verified via Webpack Bundle Analyzer before deploy, LCP metric improved 1.8s → 0.9s on p75"
 
 Why PASS:
