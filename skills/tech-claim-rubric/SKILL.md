@@ -9,7 +9,7 @@ This document is the authoritative rubric definition used by the `tech-claim-exa
 
 The rubric consists of:
 
-- **Five evaluation axes (A1–A5)**: The core evaluation framework. A1 through A4 produce absolute or calibrated verdicts (PASS / FAIL / P1). A5 evaluates scanability as a structural lens.
+- **Five evaluation axes (A1–A5)**: The core evaluation framework. Each axis produces one of three verdicts (PASS / FAIL / P1). A1 is calibrated by experience level; A2–A5 use an absolute standard. A5 is additionally structure-agnostic.
 - **Three critical authenticity rules (R-Phys, R-Cross, R-Scope)**: Integrity gates evaluated separately from the axes. Two of the three can trigger automatic REQUEST_CHANGES regardless of axis verdicts.
 
 **Evaluation structure:**
