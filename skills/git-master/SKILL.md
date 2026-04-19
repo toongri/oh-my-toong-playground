@@ -1,6 +1,6 @@
 ---
 name: git-master
-description: Use when committing changes to git or naming branches. Triggers include "commit", "커밋", "git commit", "finalize changes", "save to git", "commit my work", "branch name", "브랜치 이름", "what should I name this branch".
+description: "Analyzes staged changes and generates Korean commit messages following Conventional Commits, and suggests branch names following project naming conventions. Use when committing changes to git or naming branches. Triggers include commit, 커밋, git commit, finalize changes, save to git, commit my work, branch name, 브랜치 이름, what should I name this branch."
 ---
 
 <Role>

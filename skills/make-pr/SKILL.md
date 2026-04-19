@@ -1,6 +1,6 @@
 ---
 name: make-pr
-description: Use when creating a PR description. Triggers include "PR 작성", "PR description", "make PR", "PR 만들어", "풀리퀘", "pull request 작성".
+description: "Analyzes git diffs and generates structured Korean PR descriptions with motivation, changes overview, and review points from a senior engineer perspective. Use when the user asks to create a PR, write a PR description, PR 작성, make PR, PR 만들어, 풀리퀘, or pull request 작성."
 ---
 
 <Role>

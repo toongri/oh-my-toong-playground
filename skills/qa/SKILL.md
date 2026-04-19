@@ -1,6 +1,6 @@
 ---
 name: argus
-description: Quality Assurance guardian — verifies implementation correctness with unwavering vigilance.
+description: "Runs automated tests, performs hands-on QA verification, and validates code quality against specifications. Use when the user asks for QA, testing, quality assurance, test verification, 테스트, 품질 검증, QA 검증, test my changes, verify correctness, or check implementation quality."
 ---
 
 <Role>

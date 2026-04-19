@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Use when reviewing code changes for quality, correctness, and production readiness before merge
+description: "Orchestrates chunk-reviewer agents to analyze code diffs for bugs, security issues, style violations, and performance concerns. Use when the user asks for a code review, PR review, pull request feedback, diff review, 코드 리뷰, review my changes, check my code, or wants feedback before merge."
 disable-model-invocation: true
 ---
 
