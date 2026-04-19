@@ -14,7 +14,7 @@ Calibrated — 평가 기준은 경력 레벨(junior / mid / senior)별로 calib
 
 | Level | Years | PASS bar |
 |-------|-------|----------|
-| Junior | 0-2 yr | 시스템 이름 + 참여한 부분 명시. rationale은 팀/선배 결정 인용도 OK. at least one alternative or limitation 인식 |
+| Junior | 0-2 yr | 시스템 이름 + 참여한 부분 명시 + 본인 관점의 이유(무엇을 왜 썼는지) 간단 서술. at least one alternative or limitation 인식 |
 | Mid | 3-5 yr | 시스템 이름 + 자기 결정 논리 + trade-off 인식. constraint-based reasoning, independent judgment visible |
 | Senior | 6+ yr | Named systems + architectural rationale + constraint/scale context 포함. multi-system consequences or long-term maintenance implications visible |
 
@@ -48,11 +48,12 @@ Why PASS:
 
 ### PASS Exemplar 3 — Junior, contributing to a system
 
-Bullet: "Contributed payment idempotency key handler in 팀의 order service; implemented DynamoDB conditional writes per 선배 기술 리뷰 후 피드백 반영"
+Bullet: "Contributed payment idempotency key handler in 팀의 order service; chose DynamoDB conditional writes (vs Redis SETNX) — 영속성 보장과 operations overhead 균형으로 판단. 중복 결제 incident 주당 3건→0건"
 
 Why PASS:
-- Junior level에서 named (DynamoDB, conditional writes) + 참여 scope 명시
-- 기술 결정 과정 (선배 리뷰) 인용 — junior bar에서 팀/선배 결정 인용은 PASS 조건에 명시적으로 포함
+- Junior level에서 named (DynamoDB, conditional writes, Redis SETNX) + 참여 scope 명시
+- 본인 관점의 rationale (영속성 vs ops overhead) + 대안(Redis SETNX) 1건 명시적 언급
+- 결과 quantification (3건→0건) — 새 Junior bar "본인 관점 이유 + 대안/한계 인식" 조건 충족
 
 ### PASS Exemplar 4 — Senior, Frontend rendering optimization
 
