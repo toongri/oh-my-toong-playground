@@ -3,6 +3,12 @@
 ## Standard
 Absolute — **structure-agnostic**. 구조 형식이 아닌 signal density + 핵심 포착 가능성으로 평가.
 
+## P1 Decision Rule
+
+**A5 P1 rule**: "Key signal scannable but surrounding context insufficient for full comprehension."
+
+핵심 signal(숫자·결과·결정 동사)은 6-30초 scan에 포착되나 surrounding context(시스템명·기간·범위·mechanism) 중 하나 이상이 부재해 "무엇을 해서 어떻게 이 결과가 나왔는지" 완전 파악이 불가능한 경계. FAIL(signal 자체 부재 또는 detail spill)과 달리 key signal은 살아 있으므로 완전 공허는 아니며, PASS(signal + context 모두)에 미치지 못하는 중간.
+
 ## Structure Agnosticism
 A5는 의도적으로 structure-neutral. 다음 구조 모두 PASS 가능:
 - **Impact-first one-liner**: "Reduced incident MTTR 4h→15min by automated rollback (5M DAU marketplace)"
@@ -84,6 +90,18 @@ Bullet: "Over the course of the two-year platform migration program I was deeply
 
 Why FAIL: wall-of-text 1문장. 핵심 행동(Helm chart 작성, 서비스 마이그레이션)과 결과(deployment consistency, toil reduction)가 organizational context와 qualifier에 파묻혀 30초 scan으로 파악 불가. "some reduction", "various aspects", "deeply involved" 등 filler density 극대.
 
+## P1 Exemplars
+
+### P1 Exemplar 1 — PASS boundary: Quantified metrics present but baseline and period absent
+- Candidate context: Senior Backend, 6 years.
+- Bullet: "Maintained p99 under 200ms and 99.99% uptime on production APIs."
+- Reasoning: A5 P1 rule is "Key signal scannable but surrounding context insufficient for full comprehension." Key signals (p99 200ms, 99.99% uptime) are numeric and popped from scan. However, surrounding context is absent: no system name, no measurement period, no baseline (was this 5000ms before?), no mechanism behind the achievement. Scan yields "good numbers" but not "what was done and how this was achieved" — context gap prevents full comprehension. Signal is alive (not buried, not spill), placing this on the PASS side of the P1 boundary.
+
+### P1 Exemplar 2 — FAIL boundary: Thin key signal with scope and period both absent
+- Candidate context: Mid Backend, 4 years.
+- Bullet: "안정화 작업을 완료하여 운영 서비스 장애를 완전히 없앰"
+- Reasoning: A5 P1 rule is "Key signal scannable but surrounding context insufficient for full comprehension." An outcome signal ("장애 없음") is technically present but thin — "완전히 없앰" is an absolute claim with no number, no timeframe, and no identified service scope. Surrounding context (which services, what period, what stabilization actions) is entirely absent, making scan yield near-zero comprehension of what was done or what the result means in practice. The signal is too thin to anchor any reading, and the dual absence of scope and period makes the gap wide enough to push this to the FAIL side of the P1 boundary.
+
 ## Boundary Cases
 
 ### EDGE 1 — Long but high-signal
@@ -110,7 +128,7 @@ A5는 단독 FAIL과 co-failure 의미가 다름:
 2. **Signal density estimate**: filler words 비율, tech-noun density
 3. **Burial check**: 핵심 메시지 위치 (앞? 중간? 마지막?)
 4. **Detail spill**: rationale 없는 값, 메서드 시그니처, tool parade
-5. **Verdict**: PASS | FAIL
+5. **Verdict**: PASS | FAIL | P1 (signal scannable 하나 context 부족 시)
 6. **Evidence quote**: burial 또는 detail spill 발생 시 해당 문구 인용
 
 ## Common Evaluation Pitfalls
