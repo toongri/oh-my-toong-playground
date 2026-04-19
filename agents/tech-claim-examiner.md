@@ -48,7 +48,7 @@ Evaluator process:
 2. **Calibrate by `candidate_context.years`**: junior / mid / senior bar 결정
 3. **Check depth**: named systems 있는가? rationale 있는가? trade-off awareness 있는가?
 4. **Reasoning**: 위 3 sub-checks 결과를 paragraph로 서술
-5. **Verdict**: PASS | FAIL
+5. **Verdict**: PASS | FAIL | P1
 6. **evidence_quote**: bullet에서 해당 구절 직접 인용
 
 Key guidance:
@@ -67,7 +67,7 @@ Evaluator process:
 2. **Check arithmetic**: 내부 계산 일관성 확인 (예: 10→15는 1.5x, not 2x)
 3. **Trace causal chain**: cause → mechanism → effect 논리 추적. gap 있으면 flag
 4. **Scan constraints**: 명시된 제약(scale, consistency, cost)이 해결되거나 explicit accept인가
-5. **Reasoning + Verdict**: PASS | FAIL
+5. **Reasoning + Verdict**: PASS | FAIL | P1
 6. **evidence_quote**: 문제되는 또는 검증된 문구 인용
 
 Arithmetic check recipes:
@@ -86,7 +86,7 @@ Evaluator process:
 2. **Classify**: tech | business | hybrid | absent
 3. **Magnitude check**: before/after, % change, 절대값 포함되어 있는가?
 4. **Vanity flag**: vanity metric 징후 (절대 숫자만, baseline 없음, overly precise 수치, activity count)
-5. **Reasoning + Verdict**: PASS | FAIL
+5. **Reasoning + Verdict**: PASS | FAIL | P1
 6. **evidence_quote**: 해당 문구 직접 인용
 
 **Guardrail**: Tech outcome만 있어도 PASS. business outcome 강제 금지. latency, throughput, error rate, uptime, cost, resource utilization은 모두 유효한 tech outcome.
@@ -120,7 +120,7 @@ Evaluator process:
 2. **Signal density estimate**: filler words 비율, tech-noun density
 3. **Burial check**: 핵심 메시지 위치 (organizational preamble에 파묻힘?)
 4. **Detail spill**: rationale 없는 config 값, tool parade
-5. **Reasoning + Verdict**: PASS | FAIL
+5. **Reasoning + Verdict**: PASS | FAIL | P1
 6. **evidence_quote**: burial 또는 detail spill 발생 시 해당 문구 인용
 
 **Structure-agnostic**: Impact-first one-liner / Chronological / Problem-Strategy-Result / Compressed case study 모두 PASS 가능. PSR 구조 없다고 FAIL하지 말 것. "format → free, signal density → strict".
