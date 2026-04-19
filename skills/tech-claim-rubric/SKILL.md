@@ -9,14 +9,14 @@ This document is the authoritative rubric definition used by the `tech-claim-exa
 
 The rubric consists of:
 
-- **Five evaluation axes (A1–A5)**: The core evaluation framework. Each axis produces one of three verdicts (PASS / FAIL / P1). A1 is calibrated by experience level; A2–A5 use an absolute standard. A5 is additionally structure-agnostic.
+- **Five evaluation axes (A1–A5)**: The core evaluation framework. Each axis produces one of three verdicts (PASS / FAIL / P1). All five axes use an absolute standard. A5 is additionally structure-agnostic.
 - **Three critical authenticity rules (R-Phys, R-Cross, R-Scope)**: Integrity gates evaluated separately from the axes. Two of the three can trigger automatic REQUEST_CHANGES regardless of axis verdicts.
 
 **Evaluation structure:**
 
 | Layer | Components | Verdict contribution |
 |-------|------------|---------------------|
-| Depth | A1, A2 | Absolute / Calibrated |
+| Depth | A1, A2 | Absolute |
 | Significance | A3, A4 | Absolute |
 | Presentation | A5 | Absolute (structure-agnostic) |
 | Integrity | R-Phys, R-Cross, R-Scope | Auto-fail triggers / P1 flag |
@@ -38,7 +38,7 @@ The 5-axis redesign compresses the evaluation into five clear questions:
 
 | Question | Axis |
 |----------|------|
-| Is the technical depth appropriate for this experience level? | A1 |
+| Does this bullet reveal technical judgment? | A1 |
 | Is the cause-and-effect logic and arithmetic internally consistent? | A2 |
 | Is there a stated outcome that matters (tech or business)? | A3 |
 | Is the ownership claim coherent with the described scope? | A4 |
@@ -52,7 +52,7 @@ These five questions cover the full evaluation surface without sub-weighting for
 
 | Axis | Standard | One-line | Reference file |
 |------|----------|----------|----------------|
-| **A1 Technical Credibility** | Calibrated | 경력 레벨에 부합하는 기술 이해 깊이 | `a1-technical-credibility.md` |
+| **A1 Technical Credibility** | Absolute | 기술적 판단이 드러나는가 (2+ signals) | `a1-technical-credibility.md` |
 | **A2 Causal Honesty** | Absolute | 원인→결과 logic + arithmetic 일관성 | `a2-causal-honesty.md` |
 | **A3 Outcome Presence & Clarity** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-significance.md` |
 | **A4 Ownership & Scope** | Absolute | 동사-scope coherence (led/built/contributed) | `a4-ownership-scope.md` |
@@ -68,19 +68,30 @@ Each axis (A1–A5) produces one of three verdicts:
 | **FAIL** | The claim clearly violates the axis criterion; revision required |
 | **P1** | The claim partially satisfies the criterion; improvement recommended but not blocking |
 
-A1 uses a **Calibrated** standard: passing bar scales with stated years of experience (junior / mid / senior). A2, A3, A4, and A5 use an **Absolute** standard: the bar does not move with experience level.
+All five axes (A1–A5) use an **Absolute** standard: the passing bar does not move with experience level. `candidate_context.years` is referenced only by A4 for scope evaluation, not by A1.
 
 A5 is **structure-agnostic**: it does not require a specific format (e.g., "action verb + metric + outcome"). It asks only whether the core message is extractable by a scanning reader within 6–30 seconds, regardless of how the bullet is structured.
 
-### Career-Level Calibration for A1
+### A1 Evaluation Criteria
 
-| Level | Years | A1 Passing Bar |
-|-------|-------|----------------|
-| Junior | 0-2 yr | Demonstrates basic understanding of what was used and why — awareness of at least one alternative or limitation |
-| Mid | 3-5 yr | Demonstrates deliberate selection — constraint-based reasoning, independent judgment visible |
-| Senior | 6+ yr | Demonstrates systemic evaluation — constraint-driven architectural decisions, multi-system consequences, or long-term maintenance implications visible |
+**Question**: Does this bullet reveal technical judgment? (이 bullet에 기술적 판단이 드러나는가?)
 
-A senior bullet evaluated at junior bar automatically fails A1 — upward calibration is not available to candidates.
+**PASS** — Bullet body explicitly shows **2 or more** of the following 5 signals:
+1. **Constraint awareness** — technical constraint to solve (throughput bottleneck, race condition, consistency gap, legacy coupling, cost ceiling, etc.)
+2. **Technology selection** — a specific system/algorithm/pattern deliberately chosen
+3. **Mechanism** — how the chosen technology works (partitioning key, memoization strategy, eviction policy, cutover path, etc.)
+4. **Trade-off / risk** — cost/risk accepted, or rejection-reason for a rejected alternative
+5. **Rationale** — context-based "why X over Y"
+
+**FAIL**:
+- Tool/library name drop only (no rationale)
+- Outcome metrics only, no selection or mechanism grounding
+- Generic verbs ("도입", "구축", "개선", "활용") with no what/how/why
+- Feature noun-phrases ("seamless multi-step flow") masquerading as mechanism
+
+**P1**: Two or more signals present but at least one stays at name-level (no mechanism depth). Not vacuous enough to FAIL, but below the Absolute PASS bar — examiner returns improvement hint targeting the shallowest signal.
+
+Years are not referenced for A1. Ownership signals belong to A4, not A1.
 
 ---
 
