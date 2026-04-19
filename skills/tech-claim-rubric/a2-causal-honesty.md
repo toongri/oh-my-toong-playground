@@ -29,6 +29,7 @@ A2는 주장한 cause → effect가 "제시된 근거로 검증 가능한가"를
 1. **Causal Chain Validity**: 원인→결과 chain이 직접적 or 각 단계 명시
 2. **Arithmetic Consistency**: 수치(%, 배수, 절대값)가 내부 일관
 3. **Constraint Resolution**: 명시된 제약이 해결되거나 explicit accept
+4. **(Trigger-conditioned) Chained vs Isolated problem resolution**: bullet이 2+ 문제/제약을 언급할 때만 판정. 단일 문제 bullet은 이 sub-check 대상이 아니며 자동 PASS (N/A). 다중 문제일 때 — **Chained**(선행 해결이 후행 문제를 드러냄, 제약이 연쇄적으로 풀림)는 강한 긍정 신호, **Isolated**(병렬 나열, 독립적 해결)는 중립 PASS. 어느 쪽이든 penalty는 없음. Junior/Mid/Senior 구분 없이 모든 경력 레벨에 동일 적용 — calibration 없음 (A2는 Absolute 축).
 
 ---
 
