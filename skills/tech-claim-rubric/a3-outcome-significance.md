@@ -1,12 +1,22 @@
-# A3. Outcome Significance
+# A3. Outcome Presence & Clarity
 
 ## Standard
 
 Absolute — 모든 level에서 "so what?" 답변 필수. 크기나 도메인과 무관하게 outcome이 명시되어야 함.
 
+## P1 Decision Rule
+
+**A3 P1 rule**: "Outcome type boundary unclear."
+
+bullet이 어떤 outcome(효과)를 시사하나, 그것이 tech metric(latency, throughput, error rate 등)인지 business metric(revenue, conversion 등)인지 분류 불가한 경우 P1. "improved performance", "enhanced user experience" 등이 전형적 type-ambiguous 표현. 이 경우 FAIL 2(no magnitude)처럼 outcome이 완전히 공허하지는 않으나, PASS 조건도 충족 못 함.
+
+**중요 guardrail 보존**: Tech outcome이 수치화되지 않더라도 여전히 PASS. 본 P1 rule은 outcome *type*의 모호성을 대상으로 하며 *magnitude* 부재는 대상이 아니다.
+
 ## Guardrail
 
 비즈니스 결과(revenue, conversion 등)는 조직/마케팅/외부 factor의 영향을 받음. 엔지니어 개인의 통제 밖일 수 있음. **기술 결과(latency, throughput, error rate, uptime 등)만 있어도 PASS**. 가능하면 둘 다가 이상적이나 강제 아님.
+
+Tech outcome unquantified remains PASS — the P1 rule targets outcome *type* ambiguity, not *magnitude* absence.
 
 ## PASS Exemplars
 
@@ -94,6 +104,18 @@ Why FAIL:
 - 테스트 작성 자체는 activity. outcome이 아님
 - "so what?" — coverage %, bug escape rate 감소, 배포 빈도 변화 등 없음
 - 200 tests written ≠ quality improved (관찰 가능한 outcome 필요)
+
+## P1 Exemplars
+
+### P1 Exemplar 1 — PASS boundary: Checkout retry completion rate
+- Candidate context: Mid, 5 years.
+- Bullet: "Hardened error recovery on the checkout retry path; successful completion rate improved from 91% to 97%"
+- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (91%→97%), so the guardrail "tech outcome without quantified magnitude is still PASS" is not the issue — this is genuinely about type ambiguity. "Successful completion rate" is dual-coded: HTTP/API success on retry (tech) versus business checkout conversion (business). The "retry path" lexical context nudges the reader toward the tech success-rate reading — type is resolvable within one interpretive step. This sits on the PASS side of the P1 boundary.
+
+### P1 Exemplar 2 — FAIL boundary: "Target metric" score delta
+- Candidate context: Senior, 7 years.
+- Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
+- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88), so the A3 guardrail for magnitude-less tech outcomes does not apply — this is strictly about type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Type wholly unresolved — this sits on the FAIL side of the P1 boundary.
 
 ## Boundary Cases
 
