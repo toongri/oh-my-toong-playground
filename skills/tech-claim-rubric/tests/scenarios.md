@@ -446,6 +446,27 @@ r_phys:
 
 ---
 
+### SCN-18: A2 Chained pattern — 다중 제약 순차 해결
+
+**Bullet**: "주문 이벤트 파이프라인에서 p99 800ms 지연을 분석 → DB write contention이 주요 원인으로 식별되어 user_id 기반 파티셔닝 도입 → 파티셔닝 이후 드러난 hot key rebalance 문제를 consistent hashing 키 재설계로 해결 → 최종 p99 800ms→120ms, hot key imbalance <5%"
+
+**Candidate context**: { years: 5, position: "Backend Engineer", target_company: "커머스 플랫폼" }
+
+**Expected verdicts**:
+- A1: PASS (named systems + rationale)
+- A2: PASS (Chained pattern — 선행 해결이 후행 문제 드러냄, trigger-conditioned sub-check 4 강한 긍정 신호)
+- A3: PASS (quantified outcomes)
+- A4: PASS (scope clear)
+- A5: PASS
+
+**Expected critical rules**: r_phys false / r_cross false (single entry) / r_scope false
+
+**Expected final_verdict**: APPROVE
+
+**Purpose**: A2 sub-check 4번(Chained vs Isolated)의 Chained 신호 검증 — 2+ 제약이 순차적으로 해결되는 bullet이 trigger-conditioned sub-check에서 Chained로 분류되어 A2 PASS 강한 긍정 신호로 인정받는지.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | Pattern Type |
@@ -467,21 +488,22 @@ r_phys:
 | SCN-15 | A2 FAIL rule 3 (offline→production) | REQUEST_CHANGES | Offline metric as production impact |
 | SCN-16 | A2 FAIL rule 4 (distribution) | REQUEST_CHANGES | Missing distribution for scale claims |
 | SCN-17 | A2 FAIL rule 5 (absolute claim) | REQUEST_CHANGES | Absolute claim without scope and period |
+| SCN-18 | A2 sub-check 4 Chained pattern | APPROVE | Trigger-conditioned Chained vs Isolated (Chained 신호) |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-3, SCN-4, SCN-7, SCN-13 | SCN-5 (P1), SCN-10 (P1) |
-| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12 | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1) |
-| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-5, SCN-7 | — |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1) |
+| A1 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18 | SCN-3, SCN-4, SCN-7, SCN-13 | SCN-5 (P1), SCN-10 (P1) |
+| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18 | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1) |
+| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18 | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18 | SCN-5, SCN-7 | — |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | — |
 |------|-----------|----------------------|----|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,10,11,12,13,14,15,16,17 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17 (단일 bullet 평가, false) | — |
-| R-Scope | SCN-5 | SCN-1,2,3,4,6,7,8,10,11,12,13,14,15,16,17 | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,10,11,12,13,14,15,16,17,18 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18 (단일 bullet 평가, false) | — |
+| R-Scope | SCN-5 | SCN-1,2,3,4,6,7,8,10,11,12,13,14,15,16,17,18 | — |
