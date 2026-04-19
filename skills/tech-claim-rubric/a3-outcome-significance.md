@@ -155,7 +155,7 @@ Why FAIL:
 2. **Classify**: tech | business | hybrid | absent
 3. **Magnitude check**: before/after, % change, 절대값 포함?
 4. **Vanity flag**: vanity metric 징후 있는지
-5. **Verdict**: PASS | FAIL
+5. **Verdict**: PASS | FAIL | P1 (outcome type 모호 시)
 6. **Evidence quote**: bullet의 해당 문구 직접 인용
 
 ## Common Evaluation Pitfalls
