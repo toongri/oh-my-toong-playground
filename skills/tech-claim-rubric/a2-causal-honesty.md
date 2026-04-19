@@ -103,7 +103,7 @@ Why FAIL:
 
 Bullet: "Redis 캐시 레이어 도입으로 주요 API 응답 시간을 320ms에서 85ms로 단축"
 
-**violated rule**: Missing time window / operating conditions + Missing comparable baseline
+**violated rule**: Missing time window / operating conditions
 
 Why FAIL:
 - "320ms → 85ms"라는 수치가 언제·어떤 트래픽 조건에서 측정됐는지 없음. 피크 시간대인지, 평시인지, 동일 트래픽 프로파일 비교인지 모름.
@@ -185,7 +185,7 @@ Why FAIL:
 2. **Check arithmetic**: 계산 일관 확인
 3. **Trace causal chain**: cause → mechanism → effect 논리 추적. gap 있으면 flag
 4. **Scan constraints**: bullet에 언급된 제약 (scale, consistency, cost 등) 해결 여부
-5. **Verdict**: PASS | FAIL
+5. **Verdict**: PASS | FAIL | P1 (evidence hygiene 한 항목만 미충족 시)
 6. **Evidence quote**: 문제되는 문구 인용
 
 ## Arithmetic Check Recipes
