@@ -279,14 +279,9 @@ interview_hints:
   - ...
 ```
 
-### interview_hints Constraints (output-schema.md AC15)
+### interview_hints Constraints
 
-1. **Language rule**: hint 언어는 source `bullet_text` 언어와 일치 (Korean bullet → Korean hints, English bullet → English hints)
-2. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Significance, Outcome Presence & Clarity, Ownership, Scanability) 포함 **금지**.
-   - OK: "사용한 시스템과 선택 이유를 추가하면 기술 깊이가 더 잘 드러납니다"
-   - 금지: "A1 Technical Credibility FAIL — 시스템 명시 필요"
-3. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
-4. **P1 coverage**: P1 verdict는 final_verdict가 APPROVE여도 interview_hints에 improvement suggestion으로 포함.
+Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints (Vocabulary / Actionability / P1 coverage rules). Do not duplicate rule bodies here.
 
 ---
 
@@ -305,7 +300,7 @@ interview_hints:
 - [ ] R-Cross: triggered 여부 + reasoning 명시 (true / false). cross-entry context 없으면 false + reasoning에 absence 명시
 - [ ] R-Scope: triggered 여부 + reasoning 명시 (true / false)
 - [ ] Critical rule invariant 적용: r_phys 또는 r_cross triggered ⇒ final_verdict = REQUEST_CHANGES
-- [ ] interview_hints 언어가 source bullet 언어와 일치
-- [ ] interview_hints에 axis identifier (A1-A5) 또는 axis name 포함되지 않음
-- [ ] P1 verdict가 어느 axis(A1-A5)에라도 존재할 경우 final_verdict가 APPROVE여도 interview_hints에 개선 제안 포함됨
+- [ ] interview_hints에 axis identifier (A1-A5) 또는 axis name 포함되지 않음 (Vocabulary rule)
+- [ ] 각 hint가 구체적이고 실행 가능함 — generic 표현 없음 (Actionability rule)
+- [ ] P1 verdict가 어느 axis(A1-A5)에라도 존재할 경우 final_verdict가 APPROVE여도 interview_hints에 개선 제안 포함됨 (P1 coverage rule)
 - [ ] final_verdict 결정됨 (APPROVE | REQUEST_CHANGES)
