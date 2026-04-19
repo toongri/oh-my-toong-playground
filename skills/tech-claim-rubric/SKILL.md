@@ -1,6 +1,6 @@
 ---
 name: tech-claim-rubric
-description: Use when evaluating technical claims in resume bullets. Defines the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Significance, A4 Ownership & Scope, A5 Scanability) plus 3 critical authenticity rules (R-Phys, R-Cross, R-Scope) used by tech-claim-examiner agent.
+description: Use when evaluating technical claims in resume bullets. Defines the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 3 critical authenticity rules (R-Phys, R-Cross, R-Scope) used by tech-claim-examiner agent.
 ---
 
 # Overview
@@ -54,7 +54,7 @@ These five questions cover the full evaluation surface without sub-weighting for
 |------|----------|----------|----------------|
 | **A1 Technical Credibility** | Calibrated | 경력 레벨에 부합하는 기술 이해 깊이 | `a1-technical-credibility.md` |
 | **A2 Causal Honesty** | Absolute | 원인→결과 logic + arithmetic 일관성 | `a2-causal-honesty.md` |
-| **A3 Outcome Significance** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-significance.md` |
+| **A3 Outcome Presence & Clarity** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-significance.md` |
 | **A4 Ownership & Scope** | Absolute | 동사-scope coherence (led/built/contributed) | `a4-ownership-scope.md` |
 | **A5 Scanability** | Absolute (structure-agnostic) | 6-30s scan에 핵심 파악 가능 | `a5-scanability.md` |
 
@@ -206,7 +206,7 @@ The examiner verifies all of the following before delivering output:
 
 - [ ] A1 Technical Credibility: reasoning written, evidence_quote included, verdict assigned
 - [ ] A2 Causal Honesty: reasoning written, evidence_quote included, verdict assigned
-- [ ] A3 Outcome Significance: reasoning written, evidence_quote included, verdict assigned
+- [ ] A3 Outcome Presence & Clarity: reasoning written, evidence_quote included, verdict assigned
 - [ ] A4 Ownership & Scope: reasoning written, evidence_quote included, verdict assigned
 - [ ] A5 Scanability: reasoning written, evidence_quote included, verdict assigned
 - [ ] R-Phys: triggered status explicitly stated (true / false / N/A)
