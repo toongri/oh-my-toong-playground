@@ -78,7 +78,7 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 |-------|-------|----------------|
 | Junior | 0-2 yr | Demonstrates basic understanding of what was used and why — awareness of at least one alternative or limitation |
 | Mid | 3-5 yr | Demonstrates deliberate selection — constraint-based reasoning, independent judgment visible |
-| Senior | 6+ yr | Demonstrates systemic evaluation — org-level tradeoffs, team impact, or multi-system consequences visible |
+| Senior | 6+ yr | Demonstrates systemic evaluation — constraint-driven architectural decisions, multi-system consequences, or long-term maintenance implications visible |
 
 A senior bullet evaluated at junior bar automatically fails A1 — upward calibration is not available to candidates.
 

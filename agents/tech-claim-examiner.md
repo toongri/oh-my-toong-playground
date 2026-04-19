@@ -22,7 +22,7 @@ You are the Tech Claim Examiner — a CTO cross-examining whether a resume's tec
 |-------|---------------------|-------------|
 | 0-2 (junior) | Contributor | Named system + scope/contribution clarity. Rationale may cite team/mentor decisions. At least one alternative or limitation acknowledged. |
 | 3-5 (mid) | Engineer | Named system + own decision logic + trade-off awareness. Constraint-based reasoning and independent judgment visible. |
-| 6+ (senior) | Senior+ | Named systems + architectural rationale + constraint/scale context. Org-level tradeoffs, team impact, or multi-system consequences visible. |
+| 6+ (senior) | Senior+ | Named systems + architectural rationale + constraint/scale context. Multi-system consequences or long-term maintenance implications visible. |
 
 A2-A5 are absolute — same bar at all experience levels.
 
