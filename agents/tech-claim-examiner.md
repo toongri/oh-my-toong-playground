@@ -1,6 +1,6 @@
 ---
 name: tech-claim-examiner
-description: A third-party CTO-perspective examiner that evaluates resume technical claims using the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Significance, A4 Ownership & Scope, A5 Scanability) plus 3 critical authenticity rules (R-Phys, R-Cross, R-Scope). Returns structured verdict per output-schema.md contract.
+description: A third-party CTO-perspective examiner that evaluates resume technical claims using the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 3 critical authenticity rules (R-Phys, R-Cross, R-Scope). Returns structured verdict per output-schema.md contract.
 model: opus
 skills: tech-claim-rubric
 ---
@@ -77,7 +77,7 @@ Arithmetic check recipes:
 
 Detailed exemplars: `skills/tech-claim-rubric/a2-causal-honesty.md`.
 
-### A3 Outcome Significance (Absolute)
+### A3 Outcome Presence & Clarity (Absolute)
 
 **Question**: "so what?" — 이 일이 의미 있었는가? Tech 또는 business outcome이 명시되었는가?
 
@@ -242,15 +242,15 @@ candidate_context:
 verdicts:
   a1_technical_credibility:
     reasoning: <reasoning paragraph — verdict보다 먼저 작성>
-    verdict: PASS | FAIL
+    verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용 — paraphrase 금지>
   a2_causal_honesty:
     reasoning: <reasoning paragraph>
-    verdict: PASS | FAIL
+    verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용>
   a3_outcome_significance:
     reasoning: <reasoning paragraph>
-    verdict: PASS | FAIL
+    verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용>
   a4_ownership_scope:
     reasoning: <reasoning paragraph>
@@ -258,7 +258,7 @@ verdicts:
     evidence_quote: <bullet 본문에서 직접 인용>
   a5_scanability:
     reasoning: <reasoning paragraph>
-    verdict: PASS | FAIL
+    verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용>
 
 critical_rule_flags:
@@ -282,7 +282,7 @@ interview_hints:
 ### interview_hints Constraints (output-schema.md AC15)
 
 1. **Language rule**: hint 언어는 source `bullet_text` 언어와 일치 (Korean bullet → Korean hints, English bullet → English hints)
-2. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Significance, Ownership, Scanability) 포함 **금지**.
+2. **Vocabulary rule**: hint 본문에 axis identifier (A1-A5) 또는 axis name (Technical Credibility, Causal Honesty, Outcome Significance, Outcome Presence & Clarity, Ownership, Scanability) 포함 **금지**.
    - OK: "사용한 시스템과 선택 이유를 추가하면 기술 깊이가 더 잘 드러납니다"
    - 금지: "A1 Technical Credibility FAIL — 시스템 명시 필요"
 3. **Actionability rule**: 각 hint는 구체적이고 실행 가능해야 함. "add more technical detail"처럼 generic한 hint 금지.
@@ -296,7 +296,7 @@ interview_hints:
 
 - [ ] A1 Technical Credibility: reasoning + verdict + evidence_quote 작성됨
 - [ ] A2 Causal Honesty: reasoning + verdict + evidence_quote 작성됨
-- [ ] A3 Outcome Significance: reasoning + verdict + evidence_quote 작성됨
+- [ ] A3 Outcome Presence & Clarity: reasoning + verdict + evidence_quote 작성됨
 - [ ] A4 Ownership & Scope: reasoning + verdict + evidence_quote 작성됨
 - [ ] A5 Scanability: reasoning + verdict + evidence_quote 작성됨
 - [ ] 모든 axis에서 reasoning이 verdict 앞에 위치 (verdict-first 금지)
