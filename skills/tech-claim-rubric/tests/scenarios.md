@@ -42,7 +42,7 @@ r_phys:
 **Candidate context**: { years: 7, position: "Senior Backend", target_company: "commerce-platform" }
 
 **Expected verdicts**:
-- A1: PASS — Named systems (Kafka Streams, Kinesis, REST), partitioning key 선택 이유 (write hotspot), Kafka vs Kinesis trade-off (in-house monitoring). Senior 기준 architectural rationale + multi-system comparison 충족.
+- A1: PASS — Signal 1 (Constraint): write hotspot on order_log primary key. Signal 2 (Technology): Kafka Streams/Kinesis/REST 명시. Signal 3 (Mechanism): partitioning by user_id로 write hotspot 제거. Signal 4 (Trade-off): Kafka vs Kinesis (in-house monitoring). Signal 5 (Rationale): architectural comparison 근거 명시. 5 signals → PASS.
 - A2: PASS — Cause (REST → Kafka Streams, partitioned by user_id) → mechanism (write hotspot 제거) → effect (p99 800ms→120ms, incidents 12→0). 단계별 chain 명시. 수치 모순 없음.
 - A3: PASS — Tech outcome 2개 (p99 latency, contention incidents) + scale context (8M daily events). before/after 모두 존재. "so what?" 명확.
 - A4: PASS — "Redesigned" (high ownership) + senior level + scope 명시 (order event pipeline). Coherent.
@@ -66,7 +66,7 @@ r_phys:
 **Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: PASS — Named (Redis cluster, consistent hashing, allkeys-lru). Mid level에서 cluster topology 선택 + eviction 정책 명시. Deliberate selection visible.
+- A1: PASS — Signal 2 (Technology): Redis cluster/consistent hashing/allkeys-lru 명시. Signal 3 (Mechanism): hash-slot 기반 sharding으로 single-instance 대체. Signal 4 (Trade-off): cluster topology 선택 + eviction 정책 명시. 3 signals → PASS.
 - A2: PASS — Cause (single-instance → cluster + sharding) → effect (failover 개선, latency 개선). Arithmetic 없는 배수 서술이나 수치 모순 없음. 3x traffic growth는 causal chain의 결과로 coherent.
 - A3: PASS — Tech outcomes 3개 (p99 cache read, failover time, traffic capacity). before/after 명확. "so what?" 충분.
 - A4: PASS — "Deployed" + mid-level + infra-level scope. Coherent.
@@ -90,7 +90,7 @@ r_phys:
 **Candidate context**: { years: 5, position: "Mid Backend", target_company: "saas" }
 
 **Expected verdicts**:
-- A1: FAIL — "various approaches" + vague "distributed caching, LRU policies, memory management techniques". Mid-level에서 요구되는 deliberate selection, constraint-based reasoning, independent judgment 전무. Named systems 없음 ("Redis", "Memcached" 등 미명시). "cache system" 수준으로는 insufficient.
+- A1: FAIL — Signal 1-5 모두 부재. "various approaches" + vague "distributed caching, LRU policies, memory management techniques" — Named systems 없음 ("Redis", "Memcached" 등 미명시), constraint 미정의, mechanism/trade-off/rationale 전무. 이름 나열 수준 → FAIL.
 - A2: FAIL — Causal chain 없음. "used approaches → better response times" 간 논리 gap. 어떤 approach가 어떤 mechanism으로 응답 개선을 이끌었는지 불명확. Hidden variable 가득.
 - A3: FAIL — "better response times" 만 있고 before/after, magnitude 없음. Vanity metric 수준에도 미달 (절대값 조차 없음). "so what?" 불가.
 - A4: PASS — "Worked on"은 participated 수준. Mid-level이지만 contributed-equivalent 동사로 scope와 coherent.
@@ -114,7 +114,7 @@ r_phys:
 **Candidate context**: { years: 5, position: "Backend", target_company: "tech" }
 
 **Expected verdicts**:
-- A1: FAIL — "optimization" 외 어떤 mechanism도 없음. Named system, rationale, trade-off 전무. Mid-level에서 FAIL.
+- A1: FAIL — Signal 1-5 모두 부재. "optimization" 외 어떤 signal도 없음. Named system, constraint, mechanism, trade-off, rationale 전무 → FAIL.
 - A2: FAIL — "50000% improvement" 수학적 불가. 50000% 개선 = 500배 감소를 의미하나, latency를 0ms 이하로 줄일 수 없음. 내부 arithmetic 자체가 physically incoherent. Arithmetic consistency 위반.
 - A3: FAIL — before/after 없음. "improved latency" 수준이며 magnitude가 physically 불가능한 허위 값. Outcome 없음.
 - A4: PASS — "Improved"는 participation-level. scope 부재하나 동사 자체는 overclaim 아님.
@@ -138,7 +138,7 @@ r_phys:
 **Candidate context**: { years: 2, position: "Junior Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: P1 — "legacy payment gateway → microservices" 언급은 있으나 Junior 2년차에서 architectural rationale 부재. Migration 방식 (blue-green? strangler fig? big bang?) 없음. Named mechanism 없음. FAIL까지는 아니나 depth insufficient.
+- A1: P1 — Signal 2 (Technology): microservices 언급. Signal 1 (Constraint): legacy payment gateway 이전 필요성 implied. Signal 3 (Mechanism) 부재: migration 방식 (blue-green? strangler fig? big bang?) 없음. Signal 4 (Trade-off)/Signal 5 (Rationale) 부재: architectural rationale 없음. 2 signals이나 Mechanism/Trade-off/Rationale depth 부족 → P1.
 - A2: PASS — Migration cause → architecture 변경이라는 causal description. Arithmetic 없고 수치 모순도 없음. Chain이 단순하지만 contradiction은 없음.
 - A3: FAIL — outcome 없음. "migrate to modern microservices" 자체는 activity. 결과 (latency, reliability, deployment frequency) 없음. "so what?" 불가.
 - A4: FAIL — "Led" + 30-person + cross-functional + entire organization = Junior 2년차에 명백한 scope inflation. Decision authority, direct/matrix leadership 근거 없음. 실질적 overclaim.
@@ -163,7 +163,7 @@ r_phys:
 **Candidate context**: { years: 4, position: "Mid Frontend", target_company: "ecommerce" }
 
 **Expected verdicts**:
-- A1: PASS — Named mechanism (single-click address autofill). Mid-level에서 UX mechanism 명시 + 결과 측정. "adding 2 weeks delivery delay to gather data"는 deliberate trade-off 인식. Independent judgment visible.
+- A1: PASS — Signal 1 (Constraint): checkout abandonment 문제. Signal 2 (Technology): single-click address autofill 명시. Signal 3 (Mechanism): autofill로 friction 제거. Signal 4 (Trade-off): "adding 2 weeks delivery delay to gather data" — deliberate trade-off 명시. 4 signals → PASS.
 - A2: PASS — Cause (address autofill 도입) → effect (abandonment 18%→9%) 직접 연결. Arithmetic: 18→9 = 50% reduction, internally consistent. Trade-off (delivery delay for data) explicit accept.
 - A3: PASS — Business outcome (checkout abandonment %) + scale context (8M monthly sessions). before/after 명확. "so what?" — 이탈율 50% 개선.
 - A4: PASS — "Cut" (execution ownership) + mid-level + feature-level scope. Coherent.
@@ -187,7 +187,7 @@ r_phys:
 **Candidate context**: { years: 6, position: "Senior Backend", target_company: "tech" }
 
 **Expected verdicts**:
-- A1: FAIL — "Achieved p99 200ms" — 어떤 mechanism으로 달성했는지 없음. Senior level에서 architectural rationale, named systems, constraint 없음. 성과 수치만 있고 깊이 없음.
+- A1: FAIL — Signal 1-5 모두 부재. "Achieved p99 200ms" — 어떤 mechanism으로 달성했는지 없음. Named systems 없음, constraint/trade-off/rationale 전무. 성과 수치만 있고 signal 없음 → FAIL.
 - A2: PASS — Arithmetic 없고 수치 모순도 없음. Causal chain 자체가 없어서 A2 위반은 없음 (A3 문제로 귀속).
 - A3: FAIL — Vanity metric. "p99 200ms", "99.99% uptime" 모두 절대 숫자만. before/after 없음. baseline 없음. p99 200ms가 5000ms에서 개선된 것인지 원래 그랬는지 불명. "so what?" 불가.
 - A4: FAIL — "Achieved ... across all production services" — 동사(achieved)는 낮으나 scope("all production services")가 Senior 6년차 개인 기여로 비현실적. 팀 기여, 본인 ownership 범위 없음.
@@ -200,7 +200,7 @@ r_phys:
 
 **Expected final_verdict**: REQUEST_CHANGES (A1 + A3 + A4 FAIL)
 
-**Purpose**: A3 vanity metric 감지 검증. 절대 숫자만 있고 before/after 없는 패턴이 A3 FAIL을 트리거함을 확인. Senior bullet에서 mechanism 없는 성과 나열이 A1도 FAIL임을 확인.
+**Purpose**: A3 vanity metric 감지 검증. 절대 숫자만 있고 before/after 없는 패턴이 A3 FAIL을 트리거함을 확인. mechanism 없는 성과 나열이 Signal 1-5 모두 부재 → A1 FAIL임을 확인.
 
 ---
 
@@ -211,7 +211,7 @@ r_phys:
 **Candidate context**: { years: 2, position: "Junior Backend", target_company: "commerce" }
 
 **Expected verdicts**:
-- A1: PASS — Named (N+1 query, batched JOIN). Junior에서 query pattern 명시 + 본인 결정 (proposed batched JOIN). 선배 결정이 아닌 proposal이나 Junior bar에서 mechanism 명시 + 참여 scope 명시는 PASS.
+- A1: PASS — Signal 1 (Constraint): N+1 query 성능 문제. Signal 2 (Technology): batched JOIN 명시. Signal 3 (Mechanism): query pattern 전환으로 round-trip 감소. 3 signals → PASS.
 - A2: PASS — Cause (N+1 → batched JOIN으로 round-trip 감소) → effect (p95 2.1s→380ms). Causal chain 직접적. Arithmetic: 2100ms / 380ms ≈ 5.5x speedup, 명시 안 됐으나 수치 모순 없음.
 - A3: PASS — Tech outcome (p95 page load). before/after 명확. 2.1s→380ms = 5x 이상 개선. "so what?" 명확.
 - A4: PASS — "Contributed" + partial scope 명시 (my part: profiling + proposed pattern) + team context 명시 (team implemented). Clarity에 부합. Junior에서 "contributed + 자기 portion 명시"는 PASS 패턴.
@@ -237,7 +237,7 @@ r_phys:
 **Candidate context**: { years: 6, position: "Senior Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: PASS — Senior bar: named systems (Kafka event log, Saga pattern, monolithic order-service, 6 domain services), architectural rationale (Saga over 2PC for fault tolerance), scale context (15M daily orders), multi-system trade-off articulated.
+- A1: PASS — Signal 1 (Constraint): monolith contention at 15M daily orders. Signal 2 (Technology): Kafka event log, Saga pattern, 6 domain services 명시. Signal 3 (Mechanism): 모놀리스 → 도메인 서비스 분리로 contention 제거. Signal 4 (Trade-off): Saga over 2PC (fault tolerance). Signal 5 (Rationale): architectural comparison 근거 명시. 5 signals → PASS.
 - A2: PASS — Internal arithmetic coherent: 2.5y duration, p99 1200→280ms ≈ 77% reduction, tx failure 2.1→0.08% ≈ 26x improvement. Causal chain (monolith contention → service split + Saga → latency/reliability gain) explicit and self-consistent.
 - A3: PASS — Tech outcomes 2개 (p99 latency, tx failure rate) + scale context (15M daily orders) + delivery count (3 launches). before/after 모두 명시.
 - A4: PASS — "architected" + 2.5-year Senior scope + multi-service redesign 범위 coherent.
@@ -261,7 +261,7 @@ r_phys:
 **Candidate context**: { years: 7, position: "Senior Backend", target_company: "commerce-platform" }
 
 **Expected verdicts**:
-- A1: P1 — Named systems (Kafka, consumer group, partitioning) + quantified scale (4M daily events) + measurable result (backlog p95 8min→45s). Mechanism-plus-scale lifts above a name-drop, but Senior-7yr calibration expects partition-key rationale, rebalancing/DLQ handling, at-least-once semantics discussion — none given. Depth is marginal for level: A1 rule "mechanism named but depth insufficient for calibrated level" triggered.
+- A1: P1 — Signal 2 (Technology): Kafka/consumer group/partitioning 명시. Signal 3 (Mechanism): partitioning으로 backlog 해소 implied. Signal 4 (Trade-off) 부재: partition-key rationale, DLQ handling, at-least-once semantics 미언급. Signal 5 (Rationale) 부재. 2 signals (Technology + weak Mechanism)이나 Trade-off/Rationale depth 부족 → P1.
 - A2: PASS — Cause (Kafka adoption with consumer-group partitioning) → effect (backlog p95 8min→45s). Causal chain coherent. Arithmetic: 8min→45s ≈ 89% reduction, no contradiction.
 - A3: PASS — Tech outcome (backlog p95 latency) + scale context (4M daily events). before/after 명확. "so what?" 명확.
 - A4: PASS — "Adopted" + Senior 7yr + order pipeline scope. Coherent.
@@ -274,7 +274,7 @@ r_phys:
 
 **Expected final_verdict**: APPROVE (P1은 blocking 아님; interview_hints에 A1 depth 보강 suggestion 포함)
 
-**Purpose**: A1 P1 boundary 검증 — Senior level에서 mechanism을 명시했으나 partition-key rationale, DLQ handling 등 depth가 부족한 패턴이 A1 P1을 트리거함을 확인. A1 rule: "mechanism named but depth insufficient for calibrated level." + final_verdict는 APPROVE 유지(P1은 non-blocking) + interview_hints에 improvement suggestion 포함 검증.
+**Purpose**: A1 P1 boundary 검증 — mechanism을 명시했으나 partition-key rationale, DLQ handling 등 Trade-off/Rationale signal depth가 부족한 패턴이 A1 P1을 트리거함을 확인. A1 rule: mechanism named but Trade-off/Rationale signals absent → P1. + final_verdict는 APPROVE 유지(P1은 non-blocking) + interview_hints에 improvement suggestion 포함 검증.
 
 ---
 
@@ -285,7 +285,7 @@ r_phys:
 **Candidate context**: { years: 4, position: "Mid Frontend", target_company: "commerce-platform" }
 
 **Expected verdicts**:
-- A1: PASS — Named mechanism (WebP, srcset responsive loading). Mid-level에서 format + delivery mechanism 선택 + RUM measurement window 명시. Deliberate selection visible.
+- A1: PASS — Signal 2 (Technology): WebP/srcset responsive loading 명시. Signal 3 (Mechanism): format 전환 + delivery mechanism 선택으로 image weight 감소. Signal 5 (Rationale): RUM measurement window 명시로 deliberate 측정 접근 visible. 3 signals → PASS.
 - A2: P1 — Full chain present (format change + delivery mechanism → reduced image weight → LCP improvement) with baseline, delta, and stated measurement window (2-week RUM). One link remains unverified: whether concurrent CDN/config changes during that window contributed. One confounder dimension open while other core links are closed — A2 rule "cause→effect stated but one link unverified" triggered.
 - A3: PASS — Tech outcome (LCP p75) + before/after (2.4s→1.1s). "so what?" — 54% LCP 개선.
 - A4: PASS — "Switched" + mid-level + frontend feature scope. Coherent.
@@ -309,7 +309,7 @@ r_phys:
 **Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: PASS — Named mechanism (error recovery hardening on retry path). Mid-level에서 specific path + hardening approach 명시. Deliberate intervention visible.
+- A1: PASS — Signal 1 (Constraint): checkout retry path error recovery 문제. Signal 2 (Technology): error recovery hardening 명시. Signal 3 (Mechanism): retry path 경로 특정 + hardening approach. 3 signals → PASS.
 - A2: PASS — Cause (error recovery hardening) → effect (completion rate 91%→97%). Causal chain coherent. Arithmetic: 6pp improvement on retry path, no contradiction.
 - A3: P1 — Magnitude present (91%→97%), so magnitude-absence guardrail not the issue. "Successful completion rate" is dual-coded: HTTP/API success on retry (tech) versus business checkout conversion (business). "retry path" lexical context nudges toward tech success-rate reading — type resolvable within one interpretive step, but remains ambiguous. A3 rule "outcome type boundary unclear" triggered.
 - A4: PASS — "Hardened" + mid-level + checkout retry path scope. Coherent.
@@ -333,7 +333,7 @@ r_phys:
 **Candidate context**: { years: 4, position: "Mid Frontend", target_company: "analytics-saas" }
 
 **Expected verdicts**:
-- A1: FAIL — 어떤 기술적 mechanism으로 전환율을 개선했는지 없음. "달성"만 있고 named intervention 없음.
+- A1: FAIL — Signal 2 (Technology) 부재: named intervention 없음 ("달성"만). Signal 3 (Mechanism) 부재: 어떤 기술적 mechanism으로 전환율을 개선했는지 없음. Signal 5 (Rationale) 부재: 선택 근거 전무 → FAIL.
 - A2: FAIL — "직전"이 Q3인지 작년 Q4인지 불분명. Q3→Q4는 연말 프로모션 트래픽이라 cohort 자체가 다름 → seasonality confound. 동일 cohort·동일 시즌 baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가. A2 violated rule: "Missing comparable baseline."
 - A3: PASS — 전환율 수치(8.4%) + before/after(+2.1%p). magnitude 존재.
 - A4: PASS — scope 및 동사 수준 특정 불가하나 overclaim 없음.
@@ -357,7 +357,7 @@ r_phys:
 **Candidate context**: { years: 3, position: "Mid Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: PASS — Named system (Redis 캐시 레이어). Mid-level에서 cache layer 도입 선택 명시. Deliberate intervention visible.
+- A1: PASS — Signal 1 (Constraint): 주요 API 응답 시간 개선 필요. Signal 2 (Technology): Redis 캐시 레이어 명시. Signal 3 (Mechanism): 캐시 레이어 도입으로 직접 DB 조회 감소. 3 signals → PASS.
 - A2: FAIL — "320ms→85ms"라는 수치가 언제·어떤 트래픽 조건에서 측정됐는지 없음. cache hit→응답 단축 인과 자체는 타당하나, baseline이 캐시 warm 상태인지 cold 상태인지, 같은 쿼리 분포였는지 확인 불가 → 인과 검증이 아닌 숫자 대조. A2 violated rule: "Missing time window / operating conditions" (+ Missing comparable baseline).
 - A3: PASS — Tech outcome (API 응답 시간) + before/after (320ms→85ms). magnitude 명확.
 - A4: PASS — "도입" + mid-level + API layer scope. Coherent.
@@ -381,7 +381,7 @@ r_phys:
 **Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: PASS — Named technique (gradient boosting, fraud detection model). Mid-level에서 model choice + task 명시. Deliberate selection visible.
+- A1: PASS — Signal 1 (Constraint): 사기 탐지 모델 성능 개선. Signal 2 (Technology): gradient boosting 명시. Signal 3 (Mechanism): fraud detection task에 model 적용. 3 signals → PASS.
 - A2: FAIL — F1 score improvement (0.82→0.89)은 offline/backtest metric이나 production financial impact ("saving $100k in chargebacks")로 seamless하게 연결. Production deployment 증명 없음. Offline accuracy → production chargeback reduction 고리에서 data drift, latency constraints, integration bugs 가능성 미통제. A2 violated rule: "Offline metric presented as production impact."
 - A3: PASS — F1 0.82→0.89 + $100k chargeback savings. outcome magnitude 존재. (A2 FAIL이 검증 문제를 지적)
 - A4: PASS — "Trained" + mid-level + fraud detection model scope. Coherent.
@@ -405,7 +405,7 @@ r_phys:
 **Candidate context**: { years: 6, position: "Senior Backend", target_company: "video-platform" }
 
 **Expected verdicts**:
-- A1: PASS — "트래픽 5배 증가" 라는 scale context + latency 유지라는 결과 목표 명시. Senior-level에서 단순하나 load test/scaling mechanism implied.
+- A1: PASS — Signal 1 (Constraint): 트래픽 5배 증가 상황에서 latency 유지 필요. Signal 3 (Mechanism): 안정화 작업으로 scaling 처리 implied. 2 signals → PASS. (단순하나 constraint + mechanism 최소 충족.)
 - A2: FAIL — scale claim(5배 증가)에서 평균 유지는 p95/p99이 폭증해도 성립 가능. 평균은 throughput 증가 시 tail에 의해 잘 움직이지 않음 → "확장성 증명"은 tail latency 안정성으로만 검증됨에도 평균만 제시. A2 violated rule: "Missing distribution (avg vs p99) for scale claims."
 - A3: PASS — 스케일 context(5배) + latency 수치(250ms) 존재. outcome 기술됨.
 - A4: PASS — Senior level + "증명" 표현이지만 scope 부재하나 overclaim은 아님.
@@ -429,7 +429,7 @@ r_phys:
 **Candidate context**: { years: 4, position: "Mid Backend", target_company: "recruitment-platform" }
 
 **Expected verdicts**:
-- A1: PASS — "안정화 작업"이라는 intervention 명시. Mid-level에서 최소한의 action 언급. Thin이나 FAIL까지는 아님.
+- A1: PASS — Signal 1 (Constraint): 운영 서비스 장애 제거 목표. Signal 3 (Mechanism): "안정화 작업"이라는 intervention 명시. 2 signals (thin) → PASS.
 - A2: FAIL — 어느 서비스인지(scope) 없음 — 전체 서비스 vs 담당 서비스 vs 특정 컴포넌트 구분 불가. 어느 기간인지(period) 없음 — 1주? 분기? 연간? 절대 주장(0건)은 scope·period 없이는 반증 불가능 → 인과 검증이 아니라 수사. A2 violated rule: "Absolute claim without scope and period."
 - A3: PASS — "장애 0건"이라는 outcome 존재. 절대값 주장이나 A3 magnitude 기준은 충족.
 - A4: PASS — "달성" + mid-level. Coherent.
@@ -453,7 +453,7 @@ r_phys:
 **Candidate context**: { years: 5, position: "Backend Engineer", target_company: "커머스 플랫폼" }
 
 **Expected verdicts**:
-- A1: PASS (named systems + rationale)
+- A1: PASS — Signal 1 (Constraint): p99 800ms 지연 + DB write contention + hot key imbalance. Signal 2 (Technology): user_id 기반 파티셔닝, consistent hashing 키 재설계 명시. Signal 3 (Mechanism): 파티셔닝으로 contention 분산, hashing 재설계로 hot key 재균형. Signal 5 (Rationale): 선행 해결이 후행 문제를 드러낸 분석 흐름 명시. 4 signals → PASS.
 - A2: PASS (Chained pattern — 선행 해결이 후행 문제 드러냄, trigger-conditioned sub-check 4 강한 긍정 신호)
 - A3: PASS (quantified outcomes)
 - A4: PASS (scope clear)
