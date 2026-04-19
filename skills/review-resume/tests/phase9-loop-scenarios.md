@@ -131,9 +131,11 @@ interview_hints:
 
 **Setup:** SCN-1 또는 SCN-2의 examiner output으로 HTML report 렌더링.
 
-**Expected:** HTML 출력에 다음 패턴 0 matches:
-- INTERNAL_AXIS_NAME (axis name in 5축 분류)
-- INTERNAL_FIELD_PREFIX (internal axis identifier prefix 패턴)
-- INTERNAL_STRUCT_NAME (verdicts struct 또는 critical_rule_flags struct)
+**Expected:** HTML report 출력에 `output-schema.md §Prohibited Token Patterns for review-resume` 의 3개 정규식 각각에 대해 0 matches.
 
-**Verification**: HTML 출력에 위 패턴이 0 matches여야 함. 상세 grep pattern은 `skills/tech-claim-rubric/output-schema.md` Consumer Boundaries 섹션 + AC15 vocabulary rule 참조.
+**Verification**: 각 pattern을 rendered HTML에 `grep -E` 실행:
+- Axis identifier `\bA[1-5]\b` → 0 matches
+- Axis name (5축 정식 이름 alternation) → 0 matches
+- Internal struct (`verdicts.`, `critical_rule_flags.`, `evidence_quote`, `reasoning:`) → 0 matches
+
+Pattern 본문은 `skills/tech-claim-rubric/output-schema.md §Prohibited Token Patterns for review-resume`에서 canonical 관리. 축 이름 변경 시 그 표만 갱신하면 SCN-6은 자동으로 따라간다.

@@ -141,3 +141,17 @@ downstream skill들이 v1 examiner output 참조를 v3로 갱신할 때 사용:
 - **Allowed**: `schema_version`, `final_verdict`, `interview_hints`만
 - **Forbidden**: verdicts.a*, critical_rule_flags.*, evidence_quote, axis name 노출
 - **Use case**: Phase 9 quality gate, HTML report user-facing hints
+
+### Prohibited Token Patterns for review-resume
+
+review-resume가 생성하는 HTML report의 user-facing surface에 examiner internal tokens이 누출되지 않도록, 다음 정규식 3개를 canonical로 관리한다. `tests/phase9-loop-scenarios.md` SCN-6은 이 패턴 목록을 참조한다.
+
+| Category | Pattern (ripgrep / PCRE) | What it forbids |
+|----------|--------------------------|-----------------|
+| Axis identifier | `\bA[1-5]\b` | `A1`~`A5` 단독 토큰. CSS class `.badge-p1` 등은 `P[0-3]`이라 false positive 없음 |
+| Axis name | `Technical Credibility\|Causal Honesty\|Outcome Presence & Clarity\|Ownership & Scope\|Scanability` | 5축 정식 이름 누출. `Ownership & Scope`는 일반 `Ownership`과 구분하기 위해 정확 매치 |
+| Internal struct | `verdicts\.\|critical_rule_flags\.\|evidence_quote\|reasoning:` | examiner output schema의 field key 누출 |
+
+**Verification usage**: `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각에 대해 실행. 모두 0 matches이면 noleak 통과.
+
+**축 이름 변경 시**: A1-A5 이름이 변경되면 두 위치를 동시에 갱신한다 — 본 §Prohibited Token Patterns + §interview_hints Constraints Vocabulary rule. 갱신 누락 시 SCN-6은 stale pattern으로 false pass를 낸다.
