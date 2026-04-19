@@ -70,3 +70,47 @@ scenarios.md 축소 rationale:
 - `{a1, a2, a3, a4} 중 FAIL` 조건 만족 → Source Extraction trigger.
 - a4_ownership_scope: FAIL → ownership/scope 관련 context 재확인 질문 생성.
 - readability-only fix trigger(`{a1, a2, a3, a4} 모두 PASS`) 조건 미충족 → readability fix 경로 불가.
+
+## SCN-8: Loop 2 confirm gate — 사용자 "아직" 응답 → inner loop 복귀
+
+**Setup**: Loop 2 gate에서 examiner가 다음과 같이 반환:
+- `final_verdict: APPROVE`
+- `verdicts.a1-a5` 모두 `PASS`
+- `critical_rule_flags` 모두 `false`
+
+resume-forge가 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"아직"** 으로 응답.
+
+**Expected**: resume-forge가 해당 bullet의 확정을 보류하고 수정 루프를 다시 진입 (Entry 확정 안 함, inner loop으로 복귀).
+
+**Verification**:
+- examiner APPROVE 상태임에도 Entry 확정 안 함.
+- 사용자 입력 "아직"을 "추가 수정 의사"로 해석 → Loop 진입.
+- 다음 iteration에서 사용자가 수정 요청을 구체화하도록 유도.
+
+## SCN-9: Loop 2 confirm gate — 사용자 "다음" 응답 → skip + pending 유지
+
+**Setup**: Loop 2 gate에서 examiner가 다음과 같이 반환:
+- `final_verdict: APPROVE`
+- `verdicts.a1-a5` 모두 `PASS`
+- `critical_rule_flags` 모두 `false`
+
+resume-forge가 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"다음"** 으로 응답.
+
+**Expected**: resume-forge가 해당 bullet을 **skip** 처리하고 다음 bullet으로 이동. bullet state는 **pending 유지** (확정 아님).
+
+**Verification**:
+- 해당 bullet이 Entry로 확정되지 않음.
+- pending state로 기록 — 세션 종료 시 미확정 목록에 포함.
+- 다음 bullet의 Loop 진입.
+- 단순 skip과 opt-out의 구분: skip은 나중에 재진입 가능, opt-out은 사용자가 명시적으로 '이 bullet은 현 상태 유지' 의사를 표명한 경우(Unresolved feedback 배지 표시).
+
+## SCN-10: Loop 1 중 cross-phase mining 진입
+
+**Setup**: Loop 1 gate에서 `verdicts.a2_causal_honesty` PASS이지만 bullet 내용 보강 중 다른 phase에서 수집한 context(예: 회사 조직 구조, 이전 bullet의 tech stack)가 필요한 상황. examiner는 현재 bullet만 평가하므로 cross-phase info 누락 신호가 `interview_hints`에 암시됨.
+
+**Expected**: resume-forge가 다른 phase의 기 수집 context를 재사용하거나, 필요 시 cross-phase mining interview 진입.
+
+**Verification**:
+- bullet 단독 정보로 충족되지 않는 context 요구 감지.
+- 이미 mining한 phase의 정보가 있으면 재활용.
+- 없으면 cross-phase mining sub-loop 진입 → 정보 수집 후 Loop 1 복귀.
