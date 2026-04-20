@@ -167,15 +167,14 @@ Block A는 A2 evidence hygiene rule 위반을 하나씩 격리한 6개의 한국
 
 Why FAIL: arithmetic 표현이 "4배 향상"(before/after = 4:1)과 "75% 단축"(감소율)을 동시에 사용해 내부 일관성 붕괴. 검증 가능한 수치가 서로 다른 결과를 가리킴.
 
-### A-2 — FAIL (Rule 2: missing time window + unscoped absolute compound)
+### A-2 — P1 (Rule 2: missing time window — measurement window 부재)
 
-API 게이트웨이 응답 지연이 핵심 제약 조건으로 식별됐고, 팀 내 아키텍처 검토를 통해 인메모리 캐시 레이어 선정을 결정했다. 메커니즘은 DB 조회를 캐시 hit로 대체해 왕복 지연을 제거하는 것이며, 캐시 일관성 비용과 응답 속도 향상 간 트레이드오프를 비교해 채택 근거를 확보했다. 이 작업으로 모든 서비스 API 응답 시간 80% 단축을 달성했으며, 개인 기여로 캐시 레이어 구현을 주도했다.
+API 게이트웨이 응답 지연이 핵심 제약 조건으로 식별됐고, 팀 내 아키텍처 검토를 통해 인메모리 캐시 레이어 선정을 결정했다. 메커니즘은 DB 조회를 캐시 hit로 대체해 왕복 지연을 제거하는 것이며, 캐시 일관성 비용과 응답 속도 향상 간 트레이드오프를 비교해 채택 근거를 확보했다. 이 작업으로 결제 API 응답 시간 80% 단축을 달성했으며, 개인 기여로 캐시 레이어 구현을 주도했다.
 
-**violated rule**: Rule 2 + Rule 5 복합 위반 (Hard FAIL)
+**violated rule**: Rule 2 — missing time window / operating conditions (Soft P1)
 - Rule 2 위반: "80% 단축"이 언제·어떤 트래픽 조건에서 측정됐는지 없음. 측정 기간, 트래픽 프로파일, 캐시 warm/cold 상태 미명시.
-- Rule 5 위반: "모든 서비스 API"라는 scope 무한정 절대 주장 — 어느 서비스·컴포넌트가 대상인지 미명시.
 
-Why FAIL: 2+ rule 동시 위반 → Hard FAIL 격상. Rule 2 단독이라면 P1이나 Rule 5 복합으로 FAIL.
+Why P1: Rule 2 (Missing comparable baseline) — measurement window 부재로 seasonality/traffic condition 미통제. 인과 chain(캐시 레이어 → DB 조회 감소 → 응답 시간 단축)은 논리적으로 성립하나, 언제·어떤 조건에서 측정했는지 없어 evidence hygiene 한 항목 미충족 → Soft P1. Rule 2 standalone은 Hard FAIL이 아닌 P1 경계.
 
 ### A-3 — P1 (Rule 4: missing distribution — p99 absent when p50 cited)
 
