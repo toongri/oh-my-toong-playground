@@ -109,16 +109,17 @@ Why FAIL:
 - React 18 자체의 개선(Concurrent features, automatic batching)이 어느 부분에서 기여했는지 mechanism 미명시
 - baseline/공변수 통제 없음 — 시간적 선후관계만 존재, causation 추론 불가
 
-### FAIL Exemplar 5 — 분기 매출 전환의 seasonality 혼입
+### FAIL Exemplar 5 — 분기 매출 전환의 seasonality 혼입 + 인과 단정
 
-Bullet: "Q4 구매 전환율 8.4% 달성, 직전 대비 2.1%p 개선"
+Bullet: "Q4 구매 전환율 8.4% 달성, 직전 대비 2.1%p 개선 — 결제 플로우 개편으로 인한 이탈 감소가 전환율 상승을 견인"
 
-**violated rule**: Missing comparable baseline
+**violated rules**: Rule 1 (Missing comparable baseline) + Rule 4 (causation overreach without control group)
 
 Why FAIL:
-- "직전"이 Q3인지 작년 Q4인지 불분명. Q3 → Q4는 연말 프로모션 트래픽이라 cohort 자체가 다름 → seasonality confound.
-- 동일 조건(동일 분기, 동일 프로모션 강도) baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가.
-- 필요 근거: YoY(작년 Q4 대비) 비교 또는 프로모션 통제 조건 하의 A/B lift.
+- **Rule 1 위반**: "직전"이 Q3인지 작년 Q4인지 불분명. Q3 → Q4는 연말 프로모션 트래픽이라 cohort 자체가 다름 → seasonality confound. 동일 조건(동일 분기, 동일 프로모션 강도) baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가.
+- **Rule 4 위반**: "결제 플로우 개편으로 인한 이탈 감소가 견인"은 control group 없이 단일 개입의 인과 효과를 단정. 동 기간 마케팅 강화, 경쟁사 이슈, 프로모션 조건 변경 등 공변수가 통제되지 않았음에도 플로우 개편을 직접 원인으로 제시 → causation overreach.
+- **Compound violation**: Rule 1 + Rule 4 동시 위반 → Hard FAIL (두 개 이상의 rule 위반).
+- 필요 근거: YoY(작년 Q4 대비) 비교 또는 프로모션 통제 조건 하의 A/B lift; 플로우 개편 이외 변수를 통제한 실험 설계 또는 hold-out 비교군.
 
 ### FAIL Exemplar 6 — Backtest metric tied to realized financial impact
 
