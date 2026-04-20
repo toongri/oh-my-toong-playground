@@ -81,6 +81,6 @@ When targeting a specific company, research through these channels using WebSear
 | B (Working Style) | Which working style to emphasize — aligned with team culture signals |
 | C (Company Connection) | Company-specific domain/product/values for connection paragraph |
 | D (Current Interest) | Which interest to surface — aligned with JD tech stack and company direction |
-| **All Evaluations** | **Scale context — baseline for tech-claim-examiner's scale evaluation. The candidate experience scale vs. target company scale gap is passed when dispatching Phase 8 evaluator** |
+| **All Evaluations** | **Scale context — baseline for tech-claim-examiner's scale evaluation. The candidate experience scale vs. target company scale gap is passed when dispatching tech-claim-examiner** |
 
 If targeting a specific company and no meaningful research results are found, note this limitation. A strong A + B self-introduction without company-specific context is always better than forced connections based on guesswork.
