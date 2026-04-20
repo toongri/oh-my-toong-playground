@@ -512,7 +512,7 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 
 ### CSS Class Definitions
 
-CSS reference (canonical source: SKILL.md HTML template `<style>` block. This section is for documentation only — do not modify CSS here; update SKILL.md instead):
+CSS reference (canonical source: `references/html-template.html` `<style>` block. This section is for documentation only — do not modify CSS here; update html-template.html instead):
 
 ```css
 .alternatives {
@@ -587,6 +587,11 @@ CSS reference (canonical source: SKILL.md HTML template `<style>` block. This se
   padding: 6px 12px;
   margin: 6px 0;
   background: #fff;
+}
+.hint-category {
+  font-weight: 700;
+  color: #dc3545;
+  font-size: 0.85rem;
 }
 .axis-feedback {
   margin: 4px 0;
