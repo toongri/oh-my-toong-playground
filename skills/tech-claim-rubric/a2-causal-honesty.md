@@ -25,7 +25,16 @@ A2는 주장한 cause → effect가 "제시된 근거로 검증 가능한가"를
 
 6. **Fuzzy outcome noun without measurement definition** — "생산성", "품질", "adoption", "engagement" 같은 모호한 명사를 어떻게 측정했는지 정의 없이 결과로 제시하는 경우. 측정 정의가 없으면 동일 단어가 서로 다른 지표를 가리킬 수 있어 인과 검증이 성립하지 않는다. Example violation: "개발팀 생산성 30% 향상" (lead time? PR throughput? 자기 보고?).
 
-## Three Sub-checks
+## FAIL vs P1 Severity Tier
+
+| Tier | Triggered by |
+|------|-------------|
+| **Hard FAIL** | Rule 3 (offline-as-production) \| Rule 5 (unscoped absolute) \| 2+ concurrent rule violations \| Sub-check 2 (Arithmetic Consistency) failure |
+| **Soft P1** | Rule 1 (missing comparable baseline) standalone \| Rule 2 (missing time window / operating conditions) standalone \| Rule 4 (missing distribution) standalone \| Rule 6 (fuzzy outcome noun) standalone |
+
+**Compound violations**: 두 개 이상의 rule 위반이 동시에 존재하면 개별 tier에 관계없이 Hard FAIL로 격상.
+
+## Four Sub-checks
 1. **Causal Chain Validity**: 원인→결과 chain이 직접적 or 각 단계 명시
 2. **Arithmetic Consistency**: 수치(%, 배수, 절대값)가 내부 일관
 3. **Constraint Resolution**: 명시된 제약이 해결되거나 explicit accept
@@ -100,18 +109,7 @@ Why FAIL:
 - React 18 자체의 개선(Concurrent features, automatic batching)이 어느 부분에서 기여했는지 mechanism 미명시
 - baseline/공변수 통제 없음 — 시간적 선후관계만 존재, causation 추론 불가
 
-### FAIL Exemplar 5 — 측정 기간 누락 + 비교 기준 누락
-
-Bullet: "Redis 캐시 레이어 도입으로 주요 API 응답 시간을 320ms에서 85ms로 단축"
-
-**violated rule**: Missing time window / operating conditions
-
-Why FAIL:
-- "320ms → 85ms"라는 수치가 언제·어떤 트래픽 조건에서 측정됐는지 없음. 피크 시간대인지, 평시인지, 동일 트래픽 프로파일 비교인지 모름.
-- "cache hit → 응답 단축"이라는 인과 자체는 타당하나, baseline이 캐시 warm 상태인지 cold 상태인지, 같은 쿼리 분포였는지 확인 불가 → 인과 검증이 아닌 숫자 대조에 그침.
-- 필요 근거: 측정 기간(예: "2주간 평시 트래픽"), baseline 조건(예: "동일 endpoint, 동일 쿼리 cardinality, 캐시 warm 상태 기준").
-
-### FAIL Exemplar 6 — 분기 매출 전환의 seasonality 혼입
+### FAIL Exemplar 5 — 분기 매출 전환의 seasonality 혼입
 
 Bullet: "Q4 구매 전환율 8.4% 달성, 직전 대비 2.1%p 개선"
 
@@ -122,7 +120,7 @@ Why FAIL:
 - 동일 조건(동일 분기, 동일 프로모션 강도) baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가.
 - 필요 근거: YoY(작년 Q4 대비) 비교 또는 프로모션 통제 조건 하의 A/B lift.
 
-### FAIL Exemplar 7 — Backtest metric tied to realized financial impact
+### FAIL Exemplar 6 — Backtest metric tied to realized financial impact
 
 Bullet: "Trained a new gradient boosting model for fraud detection, improving the F1 score from 0.82 to 0.89 and saving $100k in chargebacks."
 
@@ -133,7 +131,7 @@ Why FAIL:
 - Offline accuracy does not guarantee production performance due to real-world data drift, latency constraints, or integration bugs — the link from holdout metric to realized chargeback reduction is the unverified step.
 - 필요 근거: offline 지표(F1 on holdout set)와 production 영향(실제 chargeback 감소, 정해진 기간·traffic slice 기준)을 분리해 각각 측정값으로 제시.
 
-### FAIL Exemplar 8 — 스케일 속 평균 유지만 제시
+### FAIL Exemplar 7 — 스케일 속 평균 유지만 제시
 
 Bullet: "트래픽 5배 증가 상황에서 평균 latency 250ms 유지로 안정적 확장성 증명"
 
@@ -144,7 +142,7 @@ Why FAIL:
 - "확장성 증명"은 tail latency의 안정성으로만 검증됨에도 평균만 제시 → scale → 안정성 인과 고리에서 tail 증거가 비어 있음.
 - 필요 근거: 5배 트래픽 시점의 p95/p99, error rate, saturation point 부근에서의 latency 분포 shape.
 
-### FAIL Exemplar 9 — 장애 0건 달성
+### FAIL Exemplar 8 — 장애 0건 달성
 
 Bullet: "안정화 작업을 통해 운영 서비스 장애 0건 달성"
 
@@ -154,6 +152,62 @@ Why FAIL:
 - 어느 서비스인지(scope) 없음 — 전체 회사 서비스 vs 담당 서비스 vs 특정 컴포넌트?
 - 어느 기간인지(period) 없음 — 1주? 분기? 연간? 배포 이후 3일? 절대 주장은 scope·period 없이는 반증 불가능해 인과 검증이 아니라 수사가 됨.
 - 필요 근거: 대상 서비스명, 관측 기간, incident 정의(severity threshold), SLO 기준.
+
+---
+
+## Block A Exemplars
+
+Block A는 A2 evidence hygiene rule 위반을 하나씩 격리한 6개의 한국어 prose 예시다. 각 exemplar는 A1 (5 sub-marker 전부), A3 (numeric outcome + 달성/개선 동사), A4 (팀 내·개인 기여 등 scope qualifier) 조건을 갖추되, 지정된 A2 rule 하나만 위반한다.
+
+### A-1 — FAIL (Sub-check 2: Arithmetic Consistency error)
+
+주문 처리 서비스의 N+1 쿼리 문제를 배치 JOIN으로 전환하는 것이 핵심 제약 조건이었고, 팀 내 논의를 거쳐 Hibernate batch fetch 방식을 채택했다. 메커니즘은 쿼리 왕복 횟수를 N+1회에서 1회로 줄여 DB 락 경합을 제거하는 것이며, 트레이드오프로 쿼리 복잡도가 증가하는 대신 응답 시간이 단축되는 장단점을 비교해 결정했으며 이 선택의 근거는 페이지 로드 SLA 위반이 반복됐다는 프로파일링 데이터였다. 이 개선을 통해 주문 목록 조회 API 응답 시간을 800ms에서 200ms로 단축해 75% 개선을 달성했으며, 개인 기여로 쿼리 레이어 전체를 주도했다. 단, "800ms에서 200ms로 75% 단축"은 내부 산술이 맞지 않는다: (800−200)/800 = 75%이지만 bullet에서는 "4배 단축"이라 표현해 1/4배(25% of original)와 75% 개선을 혼용하여 수치 모순이 발생한다.
+
+**violated check**: Sub-check 2 — Arithmetic Consistency (75% 개선 = 4배 단축이 아님; 4배 단축이면 원래의 25% = 75% 감소로 표현은 같지만, bullet이 동시에 "4배 빨라졌다"와 "75% 단축"을 혼재해 배수와 퍼센트 감소를 같은 scale로 제시한 모순)
+
+Why FAIL: arithmetic 표현이 "4배 향상"(before/after = 4:1)과 "75% 단축"(감소율)을 동시에 사용해 내부 일관성 붕괴. 검증 가능한 수치가 서로 다른 결과를 가리킴.
+
+### A-2 — FAIL (Rule 2: missing time window + unscoped absolute compound)
+
+API 게이트웨이 응답 지연이 핵심 제약 조건으로 식별됐고, 팀 내 아키텍처 검토를 통해 인메모리 캐시 레이어 선정을 결정했다. 메커니즘은 DB 조회를 캐시 hit로 대체해 왕복 지연을 제거하는 것이며, 캐시 일관성 비용과 응답 속도 향상 간 트레이드오프를 비교해 채택 근거를 확보했다. 이 작업으로 모든 서비스 API 응답 시간 80% 단축을 달성했으며, 개인 기여로 캐시 레이어 구현을 주도했다.
+
+**violated rule**: Rule 2 + Rule 5 복합 위반 (Hard FAIL)
+- Rule 2 위반: "80% 단축"이 언제·어떤 트래픽 조건에서 측정됐는지 없음. 측정 기간, 트래픽 프로파일, 캐시 warm/cold 상태 미명시.
+- Rule 5 위반: "모든 서비스 API"라는 scope 무한정 절대 주장 — 어느 서비스·컴포넌트가 대상인지 미명시.
+
+Why FAIL: 2+ rule 동시 위반 → Hard FAIL 격상. Rule 2 단독이라면 P1이나 Rule 5 복합으로 FAIL.
+
+### A-3 — P1 (Rule 4: missing distribution — p99 absent when p50 cited)
+
+검색 서비스 latency 스파이크가 제약 조건으로 식별됐고, 팀 내 성능 검토를 거쳐 Elasticsearch 샤드 재분배 방식을 채택했다. 메커니즘은 hot shard 집중을 분산해 처리 균형을 맞추는 것이며, 운영 복잡도 증가 대비 응답 안정성 향상의 트레이드오프를 비교한 근거 하에 결정했다. 이 개선으로 검색 API 중앙값(p50) latency를 420ms에서 180ms로 57% 단축해 달성했으며, 개인 기여로 샤드 전략 설계를 주도했다.
+
+**violated rule**: Rule 4 — missing distribution: p50만 제시, p99 미공개.
+
+Why P1: scale 또는 안정성 주장에서 p50 단독 제시는 tail behavior를 숨긴다. 평균/중앙값이 개선돼도 p99가 폭증하면 SLA 위반 가능 — 분포 없는 주장은 evidence hygiene 한 항목 미충족으로 P1.
+
+### A-4 — FAIL (Rule 3: offline-as-production)
+
+모델 서빙 지연이 핵심 제약 조건이었고, 팀 내 ML 검토를 거쳐 경량화 모델 구조 선정을 결정했다. 메커니즘은 레이어 수를 줄여 추론 연산을 감소시키는 것이며, 정확도 손실 대비 서빙 속도 향상의 트레이드오프를 비교한 근거로 채택했다. 부하 테스트 환경에서 초당 처리 건수를 1,200건에서 4,800건으로 300% 증가를 달성했으며, 개인 기여로 모델 경량화 작업을 주도했다.
+
+**violated rule**: Rule 3 — offline metric presented as production impact: 부하 테스트(load test) 수치를 운영 처리량인 것처럼 제시.
+
+Why FAIL: 부하 테스트 환경은 실제 트래픽 분포, 데이터 다양성, 연계 서비스 latency를 반영하지 않음. "부하 테스트 환경에서"라는 단서가 있어도 production 영향으로 치환해 제시 → offline-as-prod FAIL.
+
+### A-5 — FAIL (Rule 5: unscoped absolute — "100% reliable")
+
+서비스 안정성 저하가 제약 조건으로 식별됐고, 팀 내 SRE 검토를 거쳐 Circuit Breaker 패턴 도입을 채택했다. 메커니즘은 downstream 장애 시 fail-fast로 전파를 차단해 cascading failure를 방지하는 것이며, 응답 지연 허용 대비 가용성 향상의 트레이드오프를 비교한 근거로 결정했다. 이 작업으로 서비스 100% 안정적 운영을 달성했으며, 개인 기여로 Circuit Breaker 구성 전체를 주도했다.
+
+**violated rule**: Rule 5 — unscoped absolute: "100% 안정적 운영" — 어느 서비스인지(scope), 어느 기간인지(period) 미명시.
+
+Why FAIL: scope·period 없는 절대 주장은 반증 불가능한 수사. "100% reliable"은 정의 불가한 절대 주장으로 인과 검증 대상이 아님 → Hard FAIL.
+
+### A-6 — P1 (Rule 6: fuzzy outcome noun — "처리량 향상" 미정의)
+
+배치 파이프라인 병목이 핵심 제약 조건으로 식별됐고, 팀 내 데이터 엔지니어링 검토를 거쳐 Spark 파티셔닝 전략 재설계를 채택했다. 메커니즘은 카디널리티 높은 키 기준으로 파티션을 재분배해 skew를 제거하는 것이며, 파티션 수 증가에 따른 셔플 비용 대비 처리 균형 향상의 트레이드오프를 비교한 근거로 결정했다. 이 개선으로 일별 배치 잡 실행 시간을 81% 단축 달성했으며, 전반적인 처리량 향상을 이루었고, 개인 기여로 파티셔닝 설계를 주도했다.
+
+**violated rule**: Rule 6 — fuzzy outcome noun: "처리량 향상"이 어떻게 측정됐는지 정의 없음. 건/초인지, 잡 완료 시간 단축인지, 리소스 효율인지 불명.
+
+Why P1: 인과 chain(파티션 재설계 → skew 제거 → 처리량 개선)은 논리적이나, 결과 지표의 측정 정의가 없어 evidence hygiene 한 항목 미충족 → P1. 다른 모든 A2 rule은 충족.
 
 ---
 
