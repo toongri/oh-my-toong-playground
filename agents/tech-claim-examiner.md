@@ -41,9 +41,9 @@ Evaluate **sequentially A1 → A5**. For each axis: extract claim → reasoning 
 2. Signal 개수 집계.
 3. Depth 판단: 각 signal이 name-level인지 mechanism depth까지인지.
 4. Verdict:
-   - **PASS**: Signal 2개 이상 + depth 충분
-   - **P1**: Signal 2개 이상 존재하지만 하나 이상이 name-level에 머물러 mechanism depth 얕음
-   - **FAIL**: Signal 0-1개 또는 전적으로 depth 부재 (tool name drop, 결과 숫자만, 범용 동사만)
+   - **PASS**: Signal 5 of 5 모두 명시 + 각 signal의 mechanism depth 충분
+   - **P1**: Signal 4/5 (1개 누락)이거나 5개 모두 존재하지만 1개 이상이 name-level 수준 (mechanism 부재)
+   - **FAIL**: Signal ≤3/5 또는 전적으로 depth 부재 (tool name drop, 결과 숫자만, 범용 동사만)
 
 **Years/Calibration 없음**: candidate_context.years는 A1 scoring과 무관 (A4에서만 참조).
 
@@ -137,7 +137,7 @@ Examples:
 - "100% cost reduction with 2x growth" (비용 0 + 성장 — 산술 모순)
 - "Zero downtime over 5 years on a single bare-metal instance" (인프라 한계 무시)
 
-**Worked example (Block E-2 — false trigger, plausible claim)**:
+**Worked example (R-Phys false trigger reference — plausible claim)**:
 
 - bullet: "Throughput increased 3x after adding 2 additional workers to the Celery pool"
 - candidate_context: "Backend engineer, 3 years."
@@ -265,6 +265,7 @@ verdicts:
     reasoning: <reasoning paragraph>
     verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용>
+    integrity_suspected: bool  # true if verb-scope inflation detected (v4 sub-flag, see a4-ownership-scope.md)
   a5_scanability:
     reasoning: <reasoning paragraph>
     verdict: PASS | FAIL | P1
