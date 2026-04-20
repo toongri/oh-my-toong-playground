@@ -1,16 +1,18 @@
 ---
 name: tech-claim-rubric
-description: Use when evaluating technical claims in resume bullets. Defines the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 3 critical authenticity rules (R-Phys, R-Cross, R-Scope) used by tech-claim-examiner agent.
+description: Use when evaluating technical claims in high-depth content section units (예: 문제 해결 / 상세 프로젝트 / 경력 기술서). Defines the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 2 critical authenticity rules (R-Phys, R-Cross) used by tech-claim-examiner agent. Verb-scope inflation (previously a separate rule) is now caught by A4 integrity_suspected sub-flag (see a4-ownership-scope.md).
 ---
+
+<!-- Purpose: 면접관 5각도 follow-up hook 보장 — 평가된 모든 section block이 5개 면접관 각도(기술 판단 / 인과 정직 / 결과 존재 / 오너십 정합 / 스캔 가독성)에서 follow-up 질문을 생성할 수 있는 깊이를 갖추도록 보장한다. -->
 
 # Overview
 
-This document is the authoritative rubric definition used by the `tech-claim-examiner` agent to evaluate technical claims in resume bullets. It does NOT perform evaluation itself — it defines the evaluation contract that the examiner follows.
+This document is the authoritative rubric definition used by the `tech-claim-examiner` agent to evaluate technical claims in high-depth content section units (예: 문제 해결 / 상세 프로젝트 / 경력 기술서). It does NOT perform evaluation itself — it defines the evaluation contract that the examiner follows.
 
 The rubric consists of:
 
 - **Five evaluation axes (A1–A5)**: The core evaluation framework. Each axis produces one of three verdicts (PASS / FAIL / P1). All five axes use an absolute standard. A5 is additionally structure-agnostic.
-- **Three critical authenticity rules (R-Phys, R-Cross, R-Scope)**: Integrity gates evaluated separately from the axes. Two of the three can trigger automatic REQUEST_CHANGES regardless of axis verdicts.
+- **Two critical authenticity rules (R-Phys, R-Cross)**: Integrity gates evaluated separately from the axes. Both can trigger automatic REQUEST_CHANGES regardless of A1–A4 verdicts and structural_verdict. Verb-scope inflation (previously a separate rule, retired in v4) is now caught by A4 `integrity_suspected` sub-flag (see `a4-ownership-scope.md`).
 
 **Evaluation structure:**
 
@@ -19,7 +21,7 @@ The rubric consists of:
 | Depth | A1, A2 | Absolute |
 | Significance | A3, A4 | Absolute |
 | Presentation | A5 | Absolute (structure-agnostic) |
-| Integrity | R-Phys, R-Cross, R-Scope | Auto-fail triggers / P1 flag |
+| Integrity | R-Phys, R-Cross | Auto-fail triggers (verb-scope inflation rule retired in v4 — see A4 `integrity_suspected`) |
 
 Downstream consumers: `resume-forge` and `review-resume` skills consume the examiner's output schema (see `output-schema.md`).
 
@@ -91,6 +93,8 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 
 **P1**: Two or more signals present but at least one stays at name-level (no mechanism depth). Not vacuous enough to FAIL, but below the Absolute PASS bar — examiner returns improvement hint targeting the shallowest signal.
 
+> **Section-wide signal mapping**: real-world에서 signal이 sub-bullets로 분산 가능 — section 전체에서 매핑 허용. 단일 bullet line에 모든 signal이 집중되지 않아도 section block 전체에서 2+ signals가 확인되면 PASS 판정 가능.
+
 Years are not referenced for A1. Ownership signals belong to A4, not A1.
 
 ---
@@ -107,7 +111,7 @@ Examples of R-Phys violations:
 - "Reduced latency by 50,000%" (percentage improvement cannot exceed 100% of the baseline for latency reduction)
 - "Increased throughput from 10 RPS to 10,000,000 RPS with a config change" (plausible magnitude would require hardware, not config)
 
-**Effect**: Automatic REQUEST_CHANGES regardless of A1–A5 verdicts. The examiner must name the specific number and explain why it is physically incoherent.
+**Effect**: Automatic REQUEST_CHANGES regardless of A1–A4 verdicts and structural_verdict. The examiner must name the specific number and explain why it is physically incoherent.
 
 ### R-Cross — Cross-Entry Contradiction
 
@@ -117,17 +121,11 @@ Example: Entry A claims "Designed and implemented the entire payment microservic
 
 **Applicability**: R-Cross is only evaluated when cross-entry context is provided to the examiner. If only a single bullet is provided, R-Cross is marked N/A.
 
-**Effect**: Automatic REQUEST_CHANGES regardless of A1–A5 verdicts. The examiner must cite both entries and identify the specific contradiction.
+**Effect**: Automatic REQUEST_CHANGES regardless of A1–A4 verdicts and structural_verdict. The examiner must cite both entries and identify the specific contradiction.
 
-### R-Scope — Verb-Scope Inflation
+### Verb-Scope Inflation — Retired in v4
 
-**Trigger condition**: The ownership verb (led, designed, built, contributed) is mismatched with the described scope of work — specifically, the verb implies more individual ownership than the scope evidence supports.
-
-Example: "Led migration of monolith to microservices" + description of a personal side project with no team context. "Led" implies team leadership; the scope implies solo work.
-
-**Effect**: P1 flag only — NOT an automatic REQUEST_CHANGES. The examiner raises the flag and notes the specific verb-scope mismatch. The bullet is not automatically rejected.
-
-Note: R-Scope overlaps with A4 Ownership & Scope but is tracked separately as an integrity signal rather than a scored verdict. Detailed worked examples for all three rules are in `agents/tech-claim-examiner.md`.
+The verb-scope inflation check (previously a standalone critical rule) is retired as a separate rule in v4. Detection is now handled by the A4 `integrity_suspected` sub-flag (see `a4-ownership-scope.md`). Detailed worked examples for R-Phys and R-Cross are in `agents/tech-claim-examiner.md`.
 
 ---
 
@@ -146,22 +144,23 @@ If the reasoning does not support the verdict, the verdict is wrong. Verdict-fir
 
 ### Critical Rule Invariant
 
-After A1–A5 are scored, the following invariant is applied before generating `final_verdict`:
+After A1–A4 are scored and A5 emits structural_verdict, the following invariant is applied before generating `final_verdict`:
 
 ```
 IF r_phys.triggered == true OR r_cross.triggered == true
 THEN final_verdict = REQUEST_CHANGES
-(regardless of A1–A5 verdicts)
+(regardless of A1–A4 verdicts and structural_verdict)
 ```
-
-R-Scope does not trigger this invariant — it contributes a P1 flag but does not force REQUEST_CHANGES.
 
 ### Final Verdict Derivation (when invariant does not apply)
 
 | Condition | final_verdict |
 |-----------|---------------|
-| All of A1–A5 are PASS (P1 tolerated) | APPROVE |
-| Any of A1–A5 is FAIL | REQUEST_CHANGES |
+| All of A1–A4 are PASS (P1 tolerated, count(P1) < 3) | APPROVE |
+| Any of A1–A4 is FAIL | REQUEST_CHANGES |
+| `count(P1 across A1-A4) ≥ 3` | REQUEST_CHANGES |
+
+> **Note**: A5 result is emitted as `structural_verdict` and does NOT contribute to `final_verdict`. See `output-schema.md` and `a5-scanability.md`.
 
 P1 verdicts do not block APPROVE but are surfaced in `interview_hints` as improvement recommendations.
 
@@ -180,7 +179,6 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 | `verdicts.a1_*` through `verdicts.a5_*` | Per-axis reasoning, evidence_quote, verdict |
 | `critical_rule_flags.r_phys` | triggered (bool), explanation |
 | `critical_rule_flags.r_cross` | triggered (bool), contradiction description, cited entries |
-| `critical_rule_flags.r_scope` | triggered (bool), verb-scope mismatch description |
 
 **PUBLIC fields** (returned to downstream caller):
 
@@ -204,7 +202,7 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 |------------|---------------|
 | E1–E6 (depth axes) | A1 + A2 (depth + causal) |
 | R1–R5 (readability axes) | A5 alone (structure-agnostic) |
-| Phase A/B/C protocol | Sequential A1→A5 + 3 critical rules |
+| Phase A/B/C protocol | Sequential A1→A4 + A5 (structural) + 2 critical rules |
 | Constraint Cascade Score | A2 causal_honesty + A3 outcome_significance |
 
 All v1 axis tokens (E1–E6, R1–R5, E3b, Constraint Cascade, CASCADING, LISTED, FLAT, Narrative Necessity, Layer 2, Phase A/B/C) are retired. They must not appear in examiner output or downstream skill prompts outside of this migration reference.
@@ -220,9 +218,8 @@ The examiner verifies all of the following before delivering output:
 - [ ] A3 Outcome Presence & Clarity: reasoning written, evidence_quote included, verdict assigned
 - [ ] A4 Ownership & Scope: reasoning written, evidence_quote included, verdict assigned
 - [ ] A5 Scanability: reasoning written, evidence_quote included, verdict assigned
-- [ ] R-Phys: triggered status explicitly stated (true / false / N/A)
-- [ ] R-Cross: triggered status explicitly stated (true / false / N/A — N/A if no cross-entry context)
-- [ ] R-Scope: triggered status explicitly stated (true / false)
+- [ ] R-Phys: triggered status explicitly stated (true / false)
+- [ ] R-Cross: triggered status explicitly stated (true / false — omit if no cross-entry context provided)
 - [ ] Critical rule invariant applied: if r_phys or r_cross triggered, final_verdict is REQUEST_CHANGES
 - [ ] interview_hints written in source bullet language, no axis identifiers in hint text
 - [ ] final_verdict determined and recorded
