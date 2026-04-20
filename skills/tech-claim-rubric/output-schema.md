@@ -171,4 +171,18 @@ review-resume가 생성하는 HTML report의 user-facing surface에 examiner int
 
 **Verification usage**: `grep -E '<pattern>' <rendered-html>`을 3개 pattern 각각에 대해 실행. 모두 0 matches이면 noleak 통과.
 
+**Canonical regex** (shell에서 직접 사용, escape 없이):
+```
+# Axis identifier
+\bA[1-5]\b
+
+# Axis name
+Technical Credibility|Causal Honesty|Outcome Presence & Clarity|Ownership & Scope|Scanability
+
+# Internal struct
+verdicts\.|critical_rule_flags\.|evidence_quote|reasoning:
+```
+
+> **Note**: 위 table 내 `\|`는 markdown table cell pipe 이스케이프로서 rendered 출력에서는 `|`로 표시된다. shell에서는 위 코드블럭 form을 사용할 것.
+
 **축 이름 변경 시**: A1-A5 이름이 변경되면 두 위치를 동시에 갱신한다 — 본 §Prohibited Token Patterns + §interview_hints Constraints Vocabulary rule. 갱신 누락 시 SCN-6은 stale pattern으로 false pass를 낸다.
