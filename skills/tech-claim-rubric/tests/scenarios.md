@@ -467,6 +467,60 @@ r_phys:
 
 ---
 
+### SCN-A1-5strict-PASS: A1 5/5 strict bar — all signals in one bullet
+
+**Bullet**: "Migrated order-service DB writes from single-node PostgreSQL to CockroachDB multi-region (us-east/eu-west/ap-southeast) after hitting 4.2k TPS primary-key contention ceiling on order_events. Chose CockroachDB over Aurora Global for its serializable isolation without application-level conflict resolution. Range-based geo-partitioning eliminated cross-region write amplification; 30-day rollout with shadow write validation. p99 write latency 640ms → 58ms, cross-region write amplification incidents per week 17 → 0 (15M daily events)."
+
+**Candidate context**: { years: 8, position: "Senior Backend", target_company: "global-commerce" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 1 (Constraint): 4.2k TPS primary-key contention ceiling on order_events. Signal 2 (Technology): CockroachDB multi-region / range-based geo-partitioning 명시. Signal 3 (Mechanism): geo-partitioning으로 cross-region write amplification 제거. Signal 4 (Trade-off): CockroachDB vs Aurora Global (serializable isolation without app-level conflict resolution). Signal 5 (Rationale): architectural comparison 근거 + scale qualifier (15M daily events) 명시. 5 signals JOINTLY present in single bullet → PASS (strict bar satisfied: Constraint + Selection + Mechanism + Trade-off + Rationale + numeric outcome + scope qualifier).
+- A2: PASS — Cause (single-node → multi-region + geo-partitioning) → mechanism (write amplification 제거) → effect (p99 640ms→58ms, incidents 17→0). 30-day rollout + shadow write validation으로 measurement control 명시. 수치 모순 없음.
+- A3: PASS — Tech outcomes 2개 (p99 write latency, write amplification incidents) + scale context (15M daily events). before/after 모두 명시. "so what?" 명확.
+- A4: PASS — "Migrated" (high ownership) + Senior 8yr + cross-region infrastructure scope. Coherent.
+- A5: PASS — 한 단락에 problem (contention ceiling) / decision (CockroachDB, geo-partitioning) / result (latency + incidents) scan 가능. Signal density 충분.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: APPROVE
+**structural_verdict**: PASS
+
+**routing_target**: standard APPROVE path — no readability fix routing triggered (A5 PASS, structural_verdict PASS)
+
+**Purpose**: A1 5/5 strict bar PASS의 reference case. 단일 bullet에 Constraint + Selection + Mechanism + Trade-off + Rationale 5 signals이 jointly 존재하고 numeric outcome + scope qualifier를 갖춘 패턴이 A1 strict PASS를 트리거함을 검증. resume-forge에서 source extraction 없이 standard APPROVE path로 라우팅됨을 확인.
+
+---
+
+### SCN-A5-demote-routing: A5 P1 structural demotion — APPROVE 유지, readability-fix loop 트리거
+
+**Bullet**: "Rewrote the authentication token refresh pipeline using a sliding-window expiry model backed by Redis Sorted Sets (ZRANGEBYSCORE sweep for expired tokens, ZADD with score=expiry_epoch), replacing the previous polling-based expiry check that held a DB advisory lock per session. Chose Redis Sorted Set over TTL-key approach for O(log N) range-delete semantics and atomic sweep without hotspot contention. Added circuit breaker (Resilience4j, 50% error threshold, 10s open window) for Redis unavailability fallback to DB. Instrumented with Micrometer (redis_sweep_duration_ms p99, circuit_breaker_state transitions). Result: token refresh latency p99 420ms → 34ms, DB lock contention events per hour 310 → 0, auth service CPU p99 utilization 73% → 28% (peak 50k concurrent sessions)."
+
+**Candidate context**: { years: 6, position: "Senior Backend", target_company: "identity-platform" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 1 (Constraint): polling-based expiry check + DB advisory lock per session. Signal 2 (Technology): Redis Sorted Sets / ZRANGEBYSCORE / Resilience4j circuit breaker 명시. Signal 3 (Mechanism): sliding-window + atomic range-delete로 lock contention 제거. Signal 4 (Trade-off): Sorted Set vs TTL-key (O(log N) semantics + atomic sweep). Signal 5 (Rationale): architectural comparison 근거 명시. 5 signals → PASS.
+- A2: PASS — Cause (polling+lock → sliding-window ZRANGEBYSCORE sweep) → mechanism (lock contention 제거) → effect (p99 420ms→34ms, lock events 310→0, CPU 73→28%). Instrumentation (Micrometer) 명시. 수치 모순 없음.
+- A3: PASS — Tech outcomes 3개 (p99 token refresh latency, DB lock events/hr, CPU p99) + scale context (50k concurrent sessions). before/after 모두 명시.
+- A4: PASS — "Rewrote" + Senior 6yr + auth pipeline scope. Coherent.
+- A5: P1 — Implementation detail spill: `ZRANGEBYSCORE sweep for expired tokens, ZADD with score=expiry_epoch`, `Micrometer redis_sweep_duration_ms p99, circuit_breaker_state transitions`, `Resilience4j, 50% error threshold, 10s open window` 등 config/instrumentation details가 rationale 없이 나열되어 핵심 결과(latency, lock events, CPU)를 6-30초 scan에서 방해. Key signal 포착은 가능하나 density 최적화 미흡 → P1.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+- r_scope.triggered: false
+
+**Expected final_verdict**: APPROVE
+**structural_verdict**: P1
+
+**routing_target**: forge Loop 2 gate readability-fix path triggered — A5 P1(structural_verdict P1)이 readability-fix routing을 유발하나, A5 단독으로는 REQUEST_CHANGES를 강제하지 않음. final_verdict는 APPROVE 유지.
+
+**Purpose**: A5 demote 검증 — A5 P1(structural_verdict P1)이 있어도 A1-A4 모두 PASS이면 final_verdict는 APPROVE임을 확인. A5 alone은 REQUEST_CHANGES를 트리거하지 않는다는 invariant 검증. structural_verdict가 P1로 surfaced되고 forge Loop 2 readability-fix 라우팅이 트리거됨을 확인 (SCN-2의 A5 FAIL → REQUEST_CHANGES 패턴과 대비: P1은 non-blocking).
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | Pattern Type |
@@ -489,21 +543,23 @@ r_phys:
 | SCN-16 | A2 FAIL rule 4 (distribution) | REQUEST_CHANGES | Missing distribution for scale claims |
 | SCN-17 | A2 FAIL rule 5 (absolute claim) | REQUEST_CHANGES | Absolute claim without scope and period |
 | SCN-18 | A2 sub-check 4 Chained pattern | APPROVE | Trigger-conditioned Chained vs Isolated (Chained 신호) |
+| SCN-A1-5strict-PASS | A1 5/5 strict bar | APPROVE | 5 signals jointly present — strict PASS reference |
+| SCN-A5-demote-routing | A5 P1 structural demotion | APPROVE | A5 P1 non-blocking — forge readability-fix routing |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18 | SCN-3, SCN-4, SCN-7, SCN-13 | SCN-5 (P1), SCN-10 (P1) |
-| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18 | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1) |
-| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18 | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18 | SCN-5, SCN-7 | — |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1) |
+| A1 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-13 | SCN-5 (P1), SCN-10 (P1) |
+| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1) |
+| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-5, SCN-7 | — |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-A1-5strict-PASS | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | — |
 |------|-----------|----------------------|----|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,10,11,12,13,14,15,16,17,18 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18 (단일 bullet 평가, false) | — |
-| R-Scope | SCN-5 | SCN-1,2,3,4,6,7,8,10,11,12,13,14,15,16,17,18 | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing (단일 bullet 평가, false) | — |
+| R-Scope | SCN-5 | SCN-1,2,3,4,6,7,8,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing | — |
