@@ -133,7 +133,7 @@ The Evaluation Protocol defines 10 phases. Resume reviews involve extensive back
 | 6 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md`, `references/experience-mining.md` § JD Keyword Matching |
 | 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Problem Chain | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
 | 8 | AI 톤 감사: Skill(humanizer) audit mode | (inline below) |
-| 9 | Per-Bullet Content Quality Gate | `references/content-quality-gate.md` |
+| 9 | Per-Section-Unit Content Quality Gate | `references/content-quality-gate.md` |
 | 10 | 결과 전달: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
 
 ### Recognized Opt-Out Keywords
@@ -168,7 +168,7 @@ When Phase 1 sets mode to **interview-impossible** (user is not the resume owner
 | 6 | First-Page Primacy + JD Matching → interview on 3+ missing keywords | Skip interview. Output keyword gap list only. Proceed. |
 | 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Problem Chain → interview on FAIL | Skip interview. Output dimension scores and Isolated/Chained verdict only. Proceed. |
 | 8 | AI 톤 감사: Skill(humanizer) audit mode | No change — audit proceeds normally; no interview involved |
-| 9 | Per-Bullet Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
+| 9 | Per-Section-Unit Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
 | 10 | HTML Report + Note Accumulate | No change — same procedure |
 
 **Mode is locked for the session.** It cannot be changed after Phase 1 completes.
@@ -183,7 +183,7 @@ Before delivering Phase 10 output, you MUST verify the Completion Checklist at t
 1. After completing each phase, internally record phase completion. Phase completion markers (`[Phase N/10: OOO ✓]`) are shown to the user as minimal progress indicators. Detailed analysis (criteria evaluation, pushback simulation, alternative generation, examiner exchange) is processed internally and not output to the terminal.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 3), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phase 9 (Per-Bullet Content Quality Gate) loops per section unit until tech-claim-examiner APPROVE or user opt-out.
+4. Phase 9 (Per-Section-Unit Content Quality Gate) loops per section unit until tech-claim-examiner APPROVE or user opt-out.
 5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate proceeds ONLY after approval.
 6. Note Accumulate proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 
@@ -400,7 +400,7 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 `[Phase 8/10: AI 톤 감사 ✓]`
 
-## Phase 9: Per-Bullet Content Quality Gate
+## Phase 9: Per-Section-Unit Content Quality Gate
 
 While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the tech-claim-examiner sub-agent issues APPROVE.
 
@@ -498,7 +498,7 @@ When sending to tech-claim-examiner, use exactly:
 | "Wait for user to choose a per-item alternative, then apply" | Start interview immediately after presenting alternatives. Don't wait for selection. |
 | "Can proceed without Verdict Tracker" | Entering Phase 10 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
 
-`[Phase 9/10: Per-Bullet Content Quality Gate ✓]`
+`[Phase 9/10: Per-Section-Unit Content Quality Gate ✓]`
 
 ### Strategic Options
 
@@ -583,7 +583,7 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 - [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Problem Chain)
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
 - [ ] Phase 8: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 9: Per-Bullet Content Quality Gate (tech-claim-examiner APPROVE or user opt-out per unit)
+- [ ] Phase 9: Per-Section-Unit Content Quality Gate (tech-claim-examiner APPROVE or user opt-out per unit)
 - [ ] Phase 10: HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
 - [ ] Phase 10: Note Accumulate (user confirmation required)
 ```
