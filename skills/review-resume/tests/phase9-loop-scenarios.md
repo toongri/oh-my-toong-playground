@@ -1,6 +1,6 @@
 # Phase 9 Loop Scenarios (5-axis blackbox contract)
 
-review-resume의 Phase 9 (Per-Bullet Content Quality Gate) loop 동작 검증. examiner는 blackbox로 호출되며 review-resume은 PUBLIC contract만 소비.
+review-resume의 Phase 9 (Per-Section-Unit Content Quality Gate) loop 동작 검증. examiner는 blackbox로 호출되며 review-resume은 PUBLIC contract만 소비.
 
 ---
 

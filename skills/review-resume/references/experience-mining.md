@@ -49,7 +49,7 @@ Explore sources hidden in routine work. Mine from what was done repeatedly, not 
 
 Example: "Was there anything in your daily tasks where you thought 'this is something I make sure to handle carefully'?", "Was there anything your team tended to ask specifically you about?"
 
-> **Cross-reference:** Phase 8 (Per-Bullet Content Quality Gate) extends this protocol for source acquisition interviews when tech-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
+> **Cross-reference:** Phase 9 (Per-Section-Unit Content Quality Gate) extends this protocol for source acquisition interviews when tech-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
 
 ---
 
