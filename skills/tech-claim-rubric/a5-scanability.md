@@ -57,7 +57,7 @@ Why PASS: PSR 구조가 과거 v1에서 강제됐지만 v3에서도 허용. 각 
   > spikes. Tuned autovacuum_work_mem + scale_factor per table, verified via query-time histograms
   > over 72h post-change. Outage window cut from 38min to 7min mean for subsequent incidents
   > (n=4 over 2 quarters)."
-- Reasoning: 5줄 multi-line이지만 high-signal density — problem statement + diagnostic method + mechanism + verification + quantified outcome 포함. SKILL.md L73의 "compressed case study" 4번째 valid 구조 시연.
+- Reasoning: 5줄 multi-line이지만 high-signal density — problem statement + diagnostic method + mechanism + verification + quantified outcome 포함. see "Structure Agnosticism" section above (this file), 4번째 valid 구조 시연.
 
 Why PASS: Length 자체는 disqualifier 아님. 각 line이 signal dense하고 scan 30초 내에 "Postgres outage / autovacuum 진단 + tuning / outage 38→7min" 파악 가능.
 
