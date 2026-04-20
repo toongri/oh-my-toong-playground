@@ -314,7 +314,7 @@ When the session operates in **interview-impossible mode** (the resume owner is 
 4. If **any alternative receives `final_verdict: APPROVE`**: adopt it and continue.
 5. If **all alternatives receive `final_verdict: REQUEST_CHANGES`**: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
 
-**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates `interview_hints` (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
+**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates `interview_hints`. Present them to the user as-is, in source bullet language, item by item — identical to the standard flow. Skip the interview → question conversion step; do NOT conduct an interview. Hints are shown so the user understands what information would have changed the verdict.
 
 ---
 
