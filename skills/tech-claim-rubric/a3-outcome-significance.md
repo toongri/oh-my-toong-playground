@@ -106,20 +106,20 @@ Why FAIL:
 ### C-1 — FAIL: Outcome absent
 
 - Candidate context: Mid, 5 years.
-- Bullet: "결제 서비스의 인증 모듈 리팩터링 작업에서 레거시 의존성 제거 방향을 선택했고, 클린 아키텍처 원칙 적용이라는 구현 방식을 채택했다. 팀 내 코드 리뷰 과정에서 공동으로 검토한 결과, 모듈 교체 비용과 유지보수 용이성 간 트레이드오프를 고려했으며 결국 유지보수성 향상이 기대된다는 판단 근거로 변경을 승인했다."
-- Reasoning: A1 sub-marker 모두 존재 — (i) "요구사항", (ii) "선택", (iii) "구현 방식", (iv) "트레이드오프", (v) "판단 근거". A4 scope qualifier "팀 내", "공동". A2 기술 context는 상위 이력에서 충족. 그러나 A3 PASS 조건인 numeric outcome + outcome verb가 전혀 없음. "유지보수성 향상이 기대된다"는 관찰 가능한 수치 없는 activity 서술. **A3 FAIL — outcome absent**.
+- Bullet: "결제 서비스 인증 모듈의 레거시 의존성 제거라는 요구사항을 해결하기 위해 의존성 분리 방향을 선택했고, 클린 아키텍처 원칙 적용이라는 구현 방식을 채택했다. 팀 내 코드 리뷰 과정에서 공동으로 검토한 결과, 모듈 교체 비용과 유지보수 용이성 간 트레이드오프를 고려했으며 결국 유지보수 부담이 낮아질 것으로 예상된다는 판단 근거로 변경을 승인했다. 리팩터링 작업은 3개월 로드맵 기준으로 진행되었고, 피크 시 메모리 사용량 512MB를 측정 지표로 삼았다."
+- Reasoning: A1 sub-marker 모두 존재 — (i) "요구사항", (ii) "선택", (iii) "구현 방식", (iv) "트레이드오프", (v) "판단 근거". A4 scope qualifier "팀 내", "공동". A2 — "512MB"(numeric+MB), "3개월"(temporal). 그러나 A3 PASS 조건인 numeric outcome + outcome verb가 전혀 없음. "유지보수 부담이 낮아질 것으로 예상된다"는 관찰 가능한 수치 없는 activity 서술. **A3 FAIL — outcome absent**.
 
 ### C-2 — FAIL: Vanity outcome
 
 - Candidate context: Mid, 4 years.
-- Bullet: "온보딩 플로우의 API 응답 구조를 개선하는 설계 방향을 선정하고, 비동기 처리 메커니즘으로 전환하는 구현 방식을 채택했다. 팀 내 협업 리뷰를 통해 동기/비동기 처리 간 트레이드오프를 검토했으며, 개발 속도와 안정성 사이의 대안 비교를 근거로 최종 결정했다. 배포 후 팀 만족도가 향상되었다."
-- Reasoning: A1 sub-marker 모두 존재 — (i) "개선", (ii) "선정", (iii) "메커니즘", "구현 방식", (iv) "트레이드오프", "대안 비교", (v) "근거". A4 "팀 내", "협업". A2 context 충족. 그러나 A3의 numeric outcome + outcome verb 패턴이 없음. "팀 만족도가 향상되었다"는 측정 지표 없는 vanity outcome — 수치화되지 않은 감정적 결과물은 PASS 불가. **A3 FAIL — vanity outcome**.
+- Bullet: "온보딩 플로우의 응답 지연 요구사항을 해결하기 위해 API 응답 구조를 재설계하는 방향을 선정하고, 비동기 처리 메커니즘으로 전환하는 구현 방식을 채택했다. 팀 내 협업 리뷰를 통해 동기/비동기 처리 간 트레이드오프를 검토했으며, 개발 속도와 안정성 사이의 대안 비교를 근거로 최종 결정했다. 전환 작업은 1개월 내 완료를 목표로 했고, 배포 패키지 크기 2GB를 기준 측정치로 삼았으며, 평균 배포 완료 후 팀 만족도가 올라갔다."
+- Reasoning: A1 sub-marker 모두 존재 — (i) "요구사항", (ii) "선정", (iii) "메커니즘", "구현 방식", (iv) "트레이드오프", "대안 비교", (v) "근거". A4 "팀 내", "협업". A2 — "2GB"(numeric+GB), "1개월"(temporal), "평균"(분포). 그러나 A3의 numeric outcome + outcome verb 패턴이 없음. "팀 만족도가 올라갔다"는 측정 지표 없는 vanity outcome — 수치화되지 않은 감정적 결과물은 PASS 불가. **A3 FAIL — vanity outcome**.
 
 ### C-3 — P1: Fuzzy noun outcome
 
 - Candidate context: Junior, 3 years.
-- Bullet: "검색 API의 쿼리 처리 방식에서 인덱싱 전략 선택을 검토했고, 복합 인덱스 적용이라는 구현 방식을 채택했다. 팀 내 코드 리뷰에서 인덱스 적용 비용과 조회 성능 간의 트레이드오프를 공동으로 분석했으며, 쿼리 실행 시간 단축이 우선이라는 판단을 근거로 결정했다. 결과적으로 성능 개선이 이루어졌다."
-- Reasoning: A1 sub-marker 모두 존재 — (i) "처리 방식", (ii) "선택", (iii) "구현 방식", (iv) "트레이드오프", (v) "판단을 근거". A4 "팀 내", "공동". A2 context 충족. "성능 개선"은 outcome을 시사하지만 numeric outcome(`\d+\s*(ms|초|배|%)` 등) 없이 fuzzy noun만 제시됨. outcome type은 tech로 분류 가능하나 magnitude 부재로 type-boundary가 불명확. **A3 P1 — fuzzy noun outcome**.
+- Bullet: "검색 API의 쿼리 응답 지연 요구사항을 해결하기 위해 인덱싱 전략 선택을 검토했고, 복합 인덱스 적용이라는 구현 방식을 채택했다. 팀 내 코드 리뷰에서 인덱스 적용 비용과 조회 성능 간의 트레이드오프를 공동으로 분석했으며, 쿼리 실행 시간이 우선이라는 판단을 근거로 결정했다. 배포 아티팩트 크기 1GB 기준으로 2개월간 측정했고, 결과적으로 쿼리 속도가 빨라졌다."
+- Reasoning: A1 sub-marker 모두 존재 — (i) "요구사항", (ii) "선택", (iii) "구현 방식", (iv) "트레이드오프", (v) "판단을 근거". A4 "팀 내", "공동". A2 — "1GB"(numeric+GB), "2개월"(temporal). "쿼리 속도가 빨라졌다"는 outcome을 시사하지만 numeric outcome(`\d+\s*(ms|초|배|%)` 등) 없이 fuzzy noun만 제시됨. outcome type은 tech로 분류 가능하나 magnitude 부재로 type-boundary가 불명확. **A3 P1 — fuzzy noun outcome**.
 
 ## P1 Exemplars
 
