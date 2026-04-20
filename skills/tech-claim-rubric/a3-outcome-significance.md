@@ -10,13 +10,7 @@ Absolute — 모든 level에서 "so what?" 답변 필수. 크기나 도메인과
 
 bullet이 어떤 outcome(효과)를 시사하나, 그것이 tech metric(latency, throughput, error rate 등)인지 business metric(revenue, conversion 등)인지 분류 불가한 경우 P1. "improved performance", "enhanced user experience" 등이 전형적 type-ambiguous 표현. 이 경우 FAIL 2(no magnitude)처럼 outcome이 완전히 공허하지는 않으나, PASS 조건도 충족 못 함.
 
-**중요 guardrail 보존**: Tech outcome이 수치화되지 않더라도 여전히 PASS. 본 P1 rule은 outcome *type*의 모호성을 대상으로 하며 *magnitude* 부재는 대상이 아니다.
-
-## Guardrail
-
-비즈니스 결과(revenue, conversion 등)는 조직/마케팅/외부 factor의 영향을 받음. 엔지니어 개인의 통제 밖일 수 있음. **기술 결과(latency, throughput, error rate, uptime 등)만 있어도 PASS**. 가능하면 둘 다가 이상적이나 강제 아님.
-
-Tech outcome unquantified remains PASS — the P1 rule targets outcome *type* ambiguity, not *magnitude* absence.
+**A3 PASS 조건**: numeric outcome(`\d+\s*%|\d+\s*(ms|초|배|건|회|명)`)이 outcome verb(`달성|개선|단축|증가|감소|확보|향상`)와 함께 명시되어야 PASS. 수치 없는 fuzzy noun("성능 개선", "속도 향상")은 P1. outcome 자체가 없거나 vanity outcome("팀 만족도 향상" 지표 없음)은 FAIL.
 
 ## PASS Exemplars
 
@@ -105,17 +99,39 @@ Why FAIL:
 - "so what?" — coverage %, bug escape rate 감소, 배포 빈도 변화 등 없음
 - 200 tests written ≠ quality improved (관찰 가능한 outcome 필요)
 
+## Block C — Isolated A3 Violation Exemplars
+
+아래 3개 exemplar는 A3 위반만을 격리하여 검증한다. A1(5개 sub-marker 모두), A2, A4, A5는 각 예시에서 PASS 조건을 충족한다.
+
+### C-1 — FAIL: Outcome absent
+
+- Candidate context: Mid, 5 years.
+- Bullet: "결제 서비스의 인증 모듈 리팩터링 작업에서 레거시 의존성 제거 방향을 선택했고, 클린 아키텍처 원칙 적용이라는 구현 방식을 채택했다. 팀 내 코드 리뷰 과정에서 공동으로 검토한 결과, 모듈 교체 비용과 유지보수 용이성 간 트레이드오프를 고려했으며 결국 유지보수성 향상이 기대된다는 판단 근거로 변경을 승인했다."
+- Reasoning: A1 sub-marker 모두 존재 — (i) "요구사항", (ii) "선택", (iii) "구현 방식", (iv) "트레이드오프", (v) "판단 근거". A4 scope qualifier "팀 내", "공동". A2 기술 context는 상위 이력에서 충족. 그러나 A3 PASS 조건인 numeric outcome + outcome verb가 전혀 없음. "유지보수성 향상이 기대된다"는 관찰 가능한 수치 없는 activity 서술. **A3 FAIL — outcome absent**.
+
+### C-2 — FAIL: Vanity outcome
+
+- Candidate context: Mid, 4 years.
+- Bullet: "온보딩 플로우의 API 응답 구조를 개선하는 설계 방향을 선정하고, 비동기 처리 메커니즘으로 전환하는 구현 방식을 채택했다. 팀 내 협업 리뷰를 통해 동기/비동기 처리 간 트레이드오프를 검토했으며, 개발 속도와 안정성 사이의 대안 비교를 근거로 최종 결정했다. 배포 후 팀 만족도가 향상되었다."
+- Reasoning: A1 sub-marker 모두 존재 — (i) "개선", (ii) "선정", (iii) "메커니즘", "구현 방식", (iv) "트레이드오프", "대안 비교", (v) "근거". A4 "팀 내", "협업". A2 context 충족. 그러나 A3의 numeric outcome + outcome verb 패턴이 없음. "팀 만족도가 향상되었다"는 측정 지표 없는 vanity outcome — 수치화되지 않은 감정적 결과물은 PASS 불가. **A3 FAIL — vanity outcome**.
+
+### C-3 — P1: Fuzzy noun outcome
+
+- Candidate context: Junior, 3 years.
+- Bullet: "검색 API의 쿼리 처리 방식에서 인덱싱 전략 선택을 검토했고, 복합 인덱스 적용이라는 구현 방식을 채택했다. 팀 내 코드 리뷰에서 인덱스 적용 비용과 조회 성능 간의 트레이드오프를 공동으로 분석했으며, 쿼리 실행 시간 단축이 우선이라는 판단을 근거로 결정했다. 결과적으로 성능 개선이 이루어졌다."
+- Reasoning: A1 sub-marker 모두 존재 — (i) "처리 방식", (ii) "선택", (iii) "구현 방식", (iv) "트레이드오프", (v) "판단을 근거". A4 "팀 내", "공동". A2 context 충족. "성능 개선"은 outcome을 시사하지만 numeric outcome(`\d+\s*(ms|초|배|%)` 등) 없이 fuzzy noun만 제시됨. outcome type은 tech로 분류 가능하나 magnitude 부재로 type-boundary가 불명확. **A3 P1 — fuzzy noun outcome**.
+
 ## P1 Exemplars
 
 ### P1 Exemplar 1 — PASS boundary: Checkout retry completion rate
 - Candidate context: Mid, 5 years.
 - Bullet: "Hardened error recovery on the checkout retry path; successful completion rate improved from 91% to 97%"
-- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (91%→97%), so the guardrail "tech outcome without quantified magnitude is still PASS" is not the issue — this is genuinely about type ambiguity. "Successful completion rate" is dual-coded: HTTP/API success on retry (tech) versus business checkout conversion (business). The "retry path" lexical context nudges the reader toward the tech success-rate reading — type is resolvable within one interpretive step. This sits on the PASS side of the P1 boundary.
+- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (91%→97%) so the numeric outcome condition is met; the question is type resolution. "Successful completion rate" is dual-coded: HTTP/API success on retry (tech) versus business checkout conversion (business). The "retry path" lexical context nudges the reader toward the tech success-rate reading — type is resolvable within one interpretive step. This sits on the PASS side of the P1 boundary.
 
 ### P1 Exemplar 2 — FAIL boundary: "Target metric" score delta
 - Candidate context: Senior, 7 years.
 - Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
-- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88), so the A3 guardrail for magnitude-less tech outcomes does not apply — this is strictly about type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Type wholly unresolved — this sits on the FAIL side of the P1 boundary.
+- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88) so the numeric outcome condition is met; the question is type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Type wholly unresolved — this sits on the FAIL side of the P1 boundary.
 
 ## Boundary Cases
 
@@ -160,7 +176,7 @@ Why FAIL:
 
 ## Common Evaluation Pitfalls
 
-- Tech outcome 있어도 비즈니스 outcome 없으면 무조건 FAIL로 판정 — guardrail 위반. 비즈니스 outcome 강제 금지
+- Tech outcome 있어도 비즈니스 outcome 없으면 무조건 FAIL로 판정 — 오류. 비즈니스 outcome 강제 금지; tech outcome만으로 PASS 가능
 - Magnitude 없는 "improved X"를 PASS — FAIL이어야 함. quantify 없으면 "so what?" 답변 불가
 - Activity를 outcome으로 혼동 — "wrote tests", "ran migration", "refactored X"는 activity, outcome이 아님
 - Qualitative outcome을 무조건 FAIL로 판정 — unblocking, enabling 등 명확한 causality가 있으면 boundary PASS 가능
