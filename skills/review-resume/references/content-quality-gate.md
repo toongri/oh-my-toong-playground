@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the tech-claim-examiner agent independently verifies "has that problem actually been resolved."
+The Per-Section-Unit Content Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the tech-claim-examiner agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
