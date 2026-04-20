@@ -702,8 +702,8 @@ r_phys:
 
 ## Critical Rule Coverage
 
-| Rule | Triggered | Not triggered (false) | — |
-|------|-----------|----------------------|----|
+| Rule | Triggered | Not triggered (false) | Notes |
+|------|-----------|----------------------|-------|
 | R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
 | R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false) | — |
-| A4 integrity_suspected | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL | SCN-5 | SCN-5: `integrity_suspected: true` → A4 FAIL → REQUEST_CHANGES |
+| A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
