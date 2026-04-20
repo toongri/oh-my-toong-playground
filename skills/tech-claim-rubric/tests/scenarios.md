@@ -93,12 +93,12 @@ r_phys:
 - r_phys.triggered: false
 - r_cross.triggered: false (reasoning: "cross-entry context not provided")
 
-**Expected final_verdict**: APPROVE
+**Expected final_verdict**: REQUEST_CHANGES
 **structural_verdict**: FAIL
 
-**routing_target**: forge readability-fix loop — A5 FAIL(structural_verdict FAIL)이 readability-fix routing을 유발하나, A5 단독으로는 REQUEST_CHANGES를 강제하지 않음. final_verdict는 APPROVE 유지.
+**routing_target**: forge readability-fix loop — A5 FAIL(structural_verdict FAIL)이 REQUEST_CHANGES를 유발하되, routing lane은 source-extraction이 아닌 readability-fix로 분화.
 
-**Purpose**: A5 FAIL alone (A1-A4 모두 PASS) 시나리오. v4에서 A5 FAIL은 structural_verdict=FAIL을 emit하고 forge readability-fix loop를 트리거하나 final_verdict에 기여하지 않으므로 APPROVE. source extraction 없이 readability-fix 라우팅이 적절함을 검증.
+**Purpose**: A5 FAIL alone (A1-A4 모두 PASS) 시나리오. A5 FAIL → final_verdict=REQUEST_CHANGES이되 consumer routing은 readability-fix (source-extraction 아님). source extraction 없이 readability-fix 라우팅이 적절함을 검증.
 
 ---
 
@@ -664,17 +664,50 @@ r_phys:
 
 ---
 
+### SCN-19: A4 P1 boundary — verb-scope 혼용 (소유 동사 + 공동 기여 혼재)
+
+**Bullet**: "결제 모듈의 주요 API를 설계하고 운영하며, 팀 내 공동 개선 사항을 기여함"
+<!-- 5-signal mapping
+- Signal 1 (Constraint): (intentionally minimal — A4 P1 경계 검증에 집중; 결제 모듈 API 운영 문제라는 암시적 맥락)
+- Signal 2 (Technology): "결제 모듈 API" — named system 수준
+- Signal 3 (Mechanism): "설계하고 운영" — 동작 서술 있으나 mechanism depth 낮음
+- Signal 4 (Trade-off): (absent — A4 isolation 목적)
+- Signal 5 (Rationale): (absent — A4 isolation 목적)
+-->
+
+**Candidate context**: { years: 4, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 2 (Technology): 결제 모듈 주요 API 명시. Signal 3 (Mechanism): 설계 + 운영 동작 서술. 나머지 signals 부재이나 이 시나리오는 A4 P1 boundary 격리 목적 — A1은 경계 허용 PASS 처리 (scenario isolation).
+- A2: PASS — 단방향 활동 서술이며 arithmetic contradiction 없음. causal chain 없으나 A2 violation도 없음.
+- A3: PASS — 결제 모듈 API 운영이라는 scope는 명시됨. outcome magnitude 부재이나 A4 P1 격리 목적상 A3 PASS 설정.
+- A4: P1 — "설계하고 운영" (소유 동사 — 개인 주도 표현)과 "팀 내 공동 개선 사항을 기여" (공동 기여 표현)가 동일 bullet에 혼재. Korean Verb Taxonomy 상 개인 소유 동사(설계, 운영)와 공동 기여 동사(기여)의 scope 불일치가 경미한 모호성을 형성. P1 boundary — FAIL까지는 아니지만 verb-scope coherence 불완전.
+- A5: PASS — 짧은 bullet이라 핵심 claim (결제 모듈 API 설계/운영)은 6초 내 scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**A4 integrity_suspected**: false — scope qualifier 없는 boundary 케이스이나 solo verb + org-wide scope 구조적 overclaim 패턴에 해당하지 않음. 혼재 표현으로 인한 P1 boundary.
+
+**Expected final_verdict**: APPROVE (count(P1 across A1-A4) = 1 < 3, structural_verdict PASS ∈ {PASS, P1})
+**structural_verdict**: PASS
+
+**Purpose**: A4 P1 경계 회귀 검출 — cumulative P1 invariant 기여 축으로서 A4의 P1 output 패턴 보장. 소유 동사와 공동 기여 표현 혼재가 A4 P1 boundary를 유발하되 단독으로는 APPROVE를 유지함을 검증.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
 |----------|-------------------|---------------|--------------------|--------------|
 | SCN-1 | All PASS | APPROVE | PASS | Reference case |
-| SCN-2 | A5 FAIL alone (A1-A4 PASS) | APPROVE | FAIL | A5 structural demotion — readability-fix routing (non-blocking) |
+| SCN-2 | A5 FAIL alone (A1-A4 PASS) | REQUEST_CHANGES | FAIL | A5 structural FAIL — REQUEST_CHANGES with readability-fix routing lane |
 | SCN-3 | A1+A2+A3 co-failure | REQUEST_CHANGES | FAIL | Multi-axis co-failure (source extraction) |
 | SCN-4 | R-Phys triggered | REQUEST_CHANGES | FAIL | Critical rule invariant |
 | SCN-5 | A4 integrity_suspected + A3+A4 FAIL | REQUEST_CHANGES | PASS | Scope inflation via A4 integrity_suspected sub-flag (verb-scope inflation detection) |
 | SCN-6 | A5 structure-agnostic | APPROVE | PASS | Impact-first one-liner |
-| SCN-7 | A3 vanity metric + A1 FAIL | REQUEST_CHANGES | P1 | Vanity metric + A1 depth absent |
+| SCN-7 | A3 vanity metric + A1+A4 FAIL | REQUEST_CHANGES | P1 | Vanity metric + A1/A4 depth absent |
 | SCN-8 | A4 contributed boundary | APPROVE | PASS | Junior PASS via correct ownership verb |
 | SCN-9 | R-Cross triggered | REQUEST_CHANGES | PASS | Cross-entry timeline contradiction |
 | SCN-10 | A1 P1 (Kafka thin rationale) | APPROVE | PASS | A1 P1 boundary — 4/5 signal, Signal 5 Rationale absent (non-blocking) |
@@ -689,21 +722,22 @@ r_phys:
 | SCN-A1-5strict-PASS | A1 5/5 strict bar | APPROVE | PASS | 5 signals jointly present — strict PASS reference |
 | SCN-A5-demote-routing | A5 P1 structural demotion | APPROVE | P1 | A5 P1 non-blocking — forge readability-fix routing |
 | SCN-A1-cumP1-3 | Cumulative P1 ≥ 3 invariant | REQUEST_CHANGES | PASS | A1+A2+A3 P1, A4 PASS — cumulative trigger (no individual FAIL) |
+| SCN-19 | A4 P1 (verb-scope boundary) | APPROVE | PASS | A4 P1 boundary — cumulative P1 contribution |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1) |
-| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1) |
-| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | — |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
+| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1) |
+| A2 | SCN-1, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1) |
+| A3 | SCN-1, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
