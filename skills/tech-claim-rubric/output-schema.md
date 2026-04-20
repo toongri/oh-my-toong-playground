@@ -49,6 +49,7 @@ verdicts:                           # INTERNAL (orchestrator-only)
     evidence_quote: string          # INTERNAL
     integrity_suspected: bool       # INTERNAL. default: false.
                                     # true if verb-scope inflation detected — v4 A4 sub-flag. See a4-ownership-scope.md
+    integrity_note: string          # INTERNAL (optional, present when integrity_suspected == true)
   a5_scanability:
     verdict: PASS | FAIL | P1       # INTERNAL
     reasoning: string               # INTERNAL
