@@ -1,6 +1,6 @@
 ---
 name: performance-optimizer
-description: Use when analyzing and optimizing system performance - provides systematic performance analysis, bottleneck identification, and improvement verification through iterative optimization cycles
+description: "Profiles system performance, identifies bottlenecks, and verifies improvements through iterative measurement-driven optimization cycles. Use when the user reports slow response times, latency issues, throughput problems, 성능 최적화, 성능 분석, performance tuning, or asks to optimize API, database, or system performance."
 ---
 
 <Role>
@@ -22,75 +22,12 @@ As a performance optimization expert, systematically analyze, improve, and verif
 - Document trade-offs: All optimizations have costs - make them explicit
 - Iterate: Performance optimization is a cycle, not a one-time event
 
-## Workflow Decision Tree
+## Workflow
 
-```dot
-digraph perf_workflow {
-    rankdir=TB;
-    node [shape=box];
+Steps 1–10 in sequence: Define Goals → Design Test → Measure Baseline → Analyze System → Identify Bottlenecks → Design Improvements → Plan Implementation → Verify → Document → Final Report.
 
-    // Entry
-    start [label="Performance Issue\nIdentified" shape=ellipse];
-
-    // Step 1: Goals
-    goals [label="Step 1: Define Performance Goals\n(Set SLO)"];
-
-    // Step 2: Test Scenario
-    test_scenario [label="Step 2: Design Test Scenario\n(Load profile, Success criteria)"];
-
-    // Step 3: Baseline
-    baseline [label="Step 3: Measure Baseline\n(Record current performance)"];
-
-    // Step 4: Analysis
-    analysis [label="Step 4: System/Code Analysis\n(Request flow, Code, DB, Infra)"];
-
-    // Step 5: Bottleneck
-    bottleneck [label="Step 5: Identify Bottlenecks\n(Prioritize)"];
-
-    // Step 6: Design
-    design [label="Step 6: Design Improvements\n(Alternative analysis, Trade-offs)"];
-
-    // Step 7: Implementation
-    implementation [label="Step 7: Implementation Plan\n(Deployment order, Rollback criteria)"];
-
-    // Step 8: Verify
-    verify [label="Step 8: Verify Improvements\n(Measure with same test)"];
-
-    // Decision
-    slo_met [label="SLO Met?" shape=diamond];
-
-    // Step 9: Document
-    document [label="Step 9: Document Results\n(Record Before/After)"];
-
-    // More bottlenecks?
-    more_bottlenecks [label="More bottlenecks\nto improve?" shape=diamond];
-
-    // Step 10: Final Report
-    report [label="Step 10: Generate Final Report\n($OMT_DIR/performance-reports/*.md)"];
-
-    // End
-    complete [label="Optimization\nComplete" shape=ellipse];
-
-    // Flow
-    start -> goals;
-    goals -> test_scenario;
-    test_scenario -> baseline;
-    baseline -> analysis;
-    analysis -> bottleneck;
-    bottleneck -> design;
-    design -> implementation;
-    implementation -> verify;
-    verify -> slo_met;
-
-    slo_met -> document [label="yes"];
-    slo_met -> bottleneck [label="no\n(analyze next bottleneck)"];
-
-    document -> more_bottlenecks;
-    more_bottlenecks -> bottleneck [label="yes"];
-    more_bottlenecks -> report [label="no"];
-    report -> complete;
-}
-```
+- If SLO not met after Step 8: return to Step 5 for next bottleneck
+- If more bottlenecks remain after Step 9: return to Step 5 for next iteration
 
 ## Subagent Utilization Guide
 
@@ -169,40 +106,9 @@ Follow the Human-in-the-loop pattern at all steps.
 
 ### AskUserQuestion Quality Standards
 
-```yaml
-Bad example:
-  question: "How should we do it?"
-  options:
-    - label: "A"
-    - label: "B"
+Structure each question with: (1) Current Situation, (2) Tension/Problem, (3) Clear question with options including trade-offs.
 
-Good example:
-  question: "The current product list API returns 100 items per page.
-    From a performance perspective, fewer items reduce response time but users must navigate more pages.
-    From a UX perspective, more items are convenient for scrolling but slow down initial loading.
-    How should we approach pagination strategy?"
-  header: "Pagination Strategy"
-  multiSelect: false
-  options:
-    - label: "Performance First (Recommended)"
-      description: "Reduce to 20 items per page. Expected 80% response time improvement.
-        Users navigate pages more frequently but each load is fast."
-    - label: "UX First"
-      description: "Keep current 100 items. Longer loading time but users see
-        more products at once."
-    - label: "Hybrid Approach"
-      description: "Switch to infinite scroll. Load initial 20, then load more on scroll.
-        Increased implementation complexity but combines both advantages."
-```
-
-**Question Structure:**
-1. **Current Situation** - What exists now, what's the context
-2. **Tension/Problem** - Why this decision matters, conflicting concerns
-3. **Actual Question** - Clear question with "How should we..." or "Which approach..."
-
-### Interview Continuation Rules
-
-**Continue until there are no more questions.** Not after 2-3 questions. Not when the user seems tired. Continue the interview until all ambiguity is resolved.
+Continue the interview until all ambiguity is resolved — not after 2-3 questions.
 
 ## Process Steps
 
@@ -428,97 +334,7 @@ All performance optimization reports are stored in the `$OMT_DIR/performance-rep
 
 ## Output Format
 
-The final document is generated with the following structure.
-
-```markdown
-# Performance Optimization Report
-
-## 1. Overview
-
-### 1.1 Background
-[Problem situation and business impact]
-
-### 1.2 Goals (SLO)
-| Metric | Before | Target | Achieved |
-|--------|--------|--------|----------|
-| p50 latency | ... | ... | ... |
-| p95 latency | ... | ... | ... |
-| p99 latency | ... | ... | ... |
-| Throughput | ... | ... | ... |
-| Error rate | ... | ... | ... |
-
-## 2. Test Scenario
-
-### 2.1 Test Target
-- API: [endpoint]
-- Test Data: [data scale]
-
-### 2.2 Load Profile
-- Concurrent Users: [N users]
-- Request Pattern: [pattern description]
-- Test Duration: [N minutes]
-
-### 2.3 Test Environment
-- Test Tool: [k6, JMeter, etc.]
-- Environment: [environment description]
-
-## 3. Analysis
-
-### 3.1 System Flow
-[Request flow diagram]
-
-### 3.2 Code Analysis
-[Discovered code-level issues]
-
-### 3.3 Database Analysis
-[DDL, execution plan analysis results]
-
-### 3.4 Bottleneck Identification
-| Rank | Bottleneck | Impact | Evidence |
-|------|------------|--------|----------|
-| 1 | ... | ... | ... |
-
-## 4. Improvements
-
-### 4.1 Applied Improvements
-
-#### [Improvement 1: Title]
-- **Problem**: [Original problem]
-- **Solution**: [Applied solution]
-- **Code Changes**: [Change details]
-
-### 4.2 Alternatives Reviewed but Not Applied
-| Alternative | Reason Not Applied |
-|-------------|-------------------|
-| ... | ... |
-
-## 5. Results
-
-### 5.1 Before/After Comparison
-| Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
-| p50 latency | ... | ... | ...% |
-| p95 latency | ... | ... | ...% |
-| p99 latency | ... | ... | ...% |
-| Throughput | ... | ... | ...% |
-| Error rate | ... | ... | ...% |
-
-### 5.2 Resource Usage Changes
-| Resource | Before | After | Change |
-|----------|--------|-------|--------|
-| ... | ... | ... | ... |
-
-## 6. Future Plans
-
-### 6.1 Additional Optimization Opportunities
-[Identified additional improvement areas]
-
-### 6.2 Monitoring Plan
-[Plan for continuous monitoring]
-
-## 7. References
-- [Related document links]
-```
+Report sections: (1) Overview with SLO table, (2) Test Scenario, (3) Analysis with bottleneck ranking, (4) Applied improvements with before/after code, (5) Results with metric comparison tables, (6) Future plans, (7) References.
 
 ## Language
 
