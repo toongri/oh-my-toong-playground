@@ -172,11 +172,12 @@ THEN final_verdict = REQUEST_CHANGES
 
 | Condition | final_verdict |
 |-----------|---------------|
-| All of A1–A4 are PASS (P1 tolerated, count(P1) < 3) | APPROVE |
+| No A1–A4 axis is FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} | APPROVE |
 | Any of A1–A4 is FAIL | REQUEST_CHANGES |
 | `count(P1 across A1-A4) ≥ 3` | REQUEST_CHANGES |
+| `structural_verdict == FAIL` | REQUEST_CHANGES |
 
-> **Note**: A5 result is emitted as `structural_verdict` and does NOT contribute to `final_verdict`. See `output-schema.md` and `a5-scanability.md`.
+> **Note**: A5 verdict는 `structural_verdict`로 노출된다. `structural_verdict == FAIL`은 `final_verdict = REQUEST_CHANGES`를 트리거하되, consumer routing은 source-extraction이 아닌 readability-fix lane으로 처리된다. See `output-schema.md` §A5 Co-failure Disambiguation and `a5-scanability.md`.
 
 P1 verdicts do not block APPROVE but are surfaced in `interview_hints` as improvement recommendations.
 

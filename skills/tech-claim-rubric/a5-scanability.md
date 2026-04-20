@@ -1,6 +1,6 @@
 # A5. Scanability
 
-> **Role**: A5는 `structural_verdict` lane을 생성하며, `review-resume` readability-fix 라우팅에 사용됨. A5 단독 FAIL은 `final_verdict` REQUEST_CHANGES를 트리거하지 않음 — 깊이 부족(A1/A2/A3)과 무관한 가독성 레이어임.
+> **Role**: A5는 `structural_verdict` lane을 담당한다. A5 FAIL은 `final_verdict = REQUEST_CHANGES`를 트리거하지만, consumer는 source-extraction이 아닌 **readability-fix** routing으로 처리한다 (review-resume/resume-forge가 `structural_verdict == FAIL AND {a1-a4} 모두 PASS` 패턴을 감지해 분기). 즉 final_verdict 관점에서는 blocking이나, 수정 경로 관점에서는 경량 (문서 재구성만).
 
 ## Standard
 Absolute — **structure-agnostic**. 구조 형식이 아닌 signal density + 핵심 포착 가능성으로 평가.
