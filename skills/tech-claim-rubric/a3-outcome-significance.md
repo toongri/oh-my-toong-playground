@@ -131,7 +131,8 @@ Why FAIL:
 ### P1 Exemplar 2 — FAIL boundary: "Target metric" score delta
 - Candidate context: Senior, 7 years.
 - Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
-- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88) so the numeric outcome condition is met; the question is type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Type wholly unresolved — this sits on the FAIL side of the P1 boundary.
+- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88) so the numeric outcome condition is met; the question is type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Missing numeric baseline for type disambiguation; type wholly unresolved — does not qualify as P1.
+- **Final Verdict: FAIL**
 
 ## Boundary Cases
 
