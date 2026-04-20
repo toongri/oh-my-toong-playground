@@ -169,10 +169,10 @@ Why FAIL:
 - Bullet: "Adopted Kafka for async event processing with consumer-group partitioning to handle the order pipeline load (4M daily events, backlog p95 drop from 8min to 45s); chose Kafka over RabbitMQ for throughput, accepting operational complexity"
 - Reasoning: Signal 1 (constraint: order pipeline load), Signal 2 (Kafka 선택), Signal 3 (consumer-group partitioning), Signal 4 (RabbitMQ 기각, operational complexity 수용) 존재하나 Signal 5 (Rationale: 왜 throughput이 이 맥락에서 결정적인지) 부재. 4/5 signal — ALL 5 of 5 PASS bar에 1개 미달. P1.
 
-#### P1 Exemplar 2 — P1 boundary: CQRS with mechanism but no constraint or rationale (3/5)
+#### P1 Exemplar 2 — P1 boundary: CQRS with constraint but no rationale (4/5)
 - Candidate context: dashboard 성능 개선 담당.
-- Bullet: "Introduced CQRS with separate read/write models to improve dashboard read performance; chose over single-model approach accepting eventual consistency"
-- Reasoning: Signal 2 (CQRS 선택), Signal 3 (read/write model 분리), Signal 4 (eventual consistency 수용) 존재하나 Signal 1 (Constraint: 구체적 bottleneck)과 Signal 5 (Rationale: 왜 이 시점에 CQRS가 정답인지) 부재. 3/5 signal — FAIL에 가까운 P1.
+- Bullet: "단일 write DB의 쓰기 락 경합으로 인한 dashboard API latency SLA 위반 (Constraint) — CQRS 분리로 read/write model을 격리하여 dashboard 읽기 성능을 개선; single-model 대비 eventual consistency를 trade-off로 수용"
+- Reasoning: Signal 1 (Constraint: 쓰기 락 경합으로 인한 latency SLA 위반), Signal 2 (CQRS 선택), Signal 3 (read/write model 분리), Signal 4 (eventual consistency 수용) 존재하나 Signal 5 (Rationale: 언제 CQRS를 포기해야 하는지의 적용 경계) 부재. 4/5 signal — ALL 5 of 5 PASS bar에 1개 미달. P1.
 
 ## Block B Exemplars
 
