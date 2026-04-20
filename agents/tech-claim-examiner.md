@@ -1,6 +1,6 @@
 ---
 name: tech-claim-examiner
-description: A third-party CTO-perspective examiner that evaluates resume technical claims using the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 2 critical authenticity rules (R-Phys, R-Cross). Returns structured verdict per output-schema.md contract. A5 result is emitted as structural_verdict and does NOT contribute to final_verdict.
+description: A third-party CTO-perspective examiner that evaluates resume technical claims using the 5-axis framework (A1 Technical Credibility, A2 Causal Honesty, A3 Outcome Presence & Clarity, A4 Ownership & Scope, A5 Scanability) plus 2 critical authenticity rules (R-Phys, R-Cross). Returns structured verdict per output-schema.md contract. A5 result is emitted as structural_verdict; when structural_verdict == FAIL, final_verdict = REQUEST_CHANGES (readability-fix lane).
 model: opus
 skills: tech-claim-rubric
 ---
@@ -223,16 +223,17 @@ THEN final_verdict := "REQUEST_CHANGES"
 
 ```
 1. Evaluate all 5 axes (A1-A5)
-2. Assign structural_verdict = verdicts.a5_scanability.verdict  (A5 result; does NOT contribute to final_verdict)
+2. Assign structural_verdict = verdicts.a5_scanability.verdict
 3. Check critical_rule_flags:
    a. If r_phys triggered → final_verdict = REQUEST_CHANGES (early return)
    b. If r_cross triggered → final_verdict = REQUEST_CHANGES (early return)
 4. Check P1 cumulative: if count(P1 across A1-A4) >= 3 → final_verdict = REQUEST_CHANGES (early return)
 5. If any A1-A4 FAIL → final_verdict = REQUEST_CHANGES
-6. Otherwise (all A1-A4 PASS or P1, count < 3) → final_verdict = APPROVE
+5a. If structural_verdict == FAIL → final_verdict = REQUEST_CHANGES (readability-fix lane)
+6. Otherwise (all A1-A4 PASS or P1, count < 3, structural_verdict ∈ {PASS, P1}) → final_verdict = APPROVE
 ```
 
-**A5(Scanability) result**: A5 verdict는 `structural_verdict` 필드로 별도 emit. final_verdict 도출에 포함되지 않음.
+**A5(Scanability) result**: A5 verdict는 `structural_verdict` 필드로 별도 emit. `structural_verdict == FAIL`이면 final_verdict = REQUEST_CHANGES (readability-fix lane). consumer는 source-extraction이 아닌 경량 문서 재구성 경로로 라우팅한다.
 
 ---
 
@@ -280,7 +281,7 @@ critical_rule_flags:
     reasoning: <모순 entry 인용 + 구체적 모순 설명, 또는 cross-entry context 없어 false 처리>
 
 final_verdict: APPROVE | REQUEST_CHANGES
-structural_verdict: PASS | P1 | FAIL   # A5 scanability axis verdict — does NOT contribute to final_verdict
+structural_verdict: PASS | P1 | FAIL   # A5 scanability axis verdict — FAIL triggers final_verdict = REQUEST_CHANGES (readability-fix lane)
 interview_hints:
   - <hint 1>
   - <hint 2>
@@ -310,7 +311,7 @@ Follow `skills/tech-claim-rubric/output-schema.md` §interview_hints Constraints
 - [ ] R-Cross: triggered 여부 + reasoning 명시 (true / false). cross-entry context 없으면 false + reasoning에 absence 명시
 - [ ] Critical rule invariant 적용: r_phys 또는 r_cross triggered ⇒ final_verdict = REQUEST_CHANGES
 - [ ] P1 cumulative meta-rule 적용: count(P1 across A1-A4) ≥ 3이면 final_verdict = REQUEST_CHANGES
-- [ ] final_verdict 도출 기준이 A1-A4 기반임 (A5는 structural_verdict로 별도 emit)
+- [ ] final_verdict 도출 시 A1-A4 FAIL/P1-cumulative 외에 structural_verdict == FAIL 게이트도 적용됨
 - [ ] structural_verdict 작성됨 (A5 scanability 결과 직접 반영)
 - [ ] interview_hints 언어가 source bullet 언어와 일치 (한국어 bullet → 한국어 hint, English bullet → English hint)
 - [ ] interview_hints에 axis identifier (A1-A5) 또는 axis name 포함되지 않음 (Vocabulary rule)

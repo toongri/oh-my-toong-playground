@@ -199,6 +199,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 - `verdicts.a2_causal_honesty.verdict != FAIL`
 - `verdicts.a3_outcome_significance.verdict != FAIL`
 - `verdicts.a4_ownership_scope.verdict != FAIL`
+- `count(P1 across A1-A4) < 3`  ← cumulative P1 허용 상한: P1 최대 2개
 - `structural_verdict ∈ {PASS, P1}`
 - `critical_rule_flags.r_phys.triggered == false`
 - `critical_rule_flags.r_cross.triggered == false`
