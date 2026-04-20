@@ -267,6 +267,7 @@ verdicts:
     verdict: PASS | FAIL | P1
     evidence_quote: <bullet 본문에서 직접 인용>
     integrity_suspected: bool  # true if verb-scope inflation detected (v4 sub-flag, see a4-ownership-scope.md)
+    integrity_note: string  # INTERNAL (optional, present when integrity_suspected == true)
   a5_scanability:
     reasoning: <reasoning paragraph>
     verdict: PASS | FAIL | P1

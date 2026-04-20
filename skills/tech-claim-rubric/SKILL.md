@@ -70,7 +70,7 @@ Common resume bullet anti-patterns, the axis that catches them, and the verdict 
 
 | Axis | Standard | One-line | Reference file |
 |------|----------|----------|----------------|
-| **A1 Technical Credibility** | Absolute | 기술적 판단이 드러나는가 (2+ signals) | `a1-technical-credibility.md` |
+| **A1 Technical Credibility** | Absolute | 기술적 판단이 드러나는가 (5/5 signals strict) | `a1-technical-credibility.md` |
 | **A2 Causal Honesty** | Absolute | 원인→결과 logic + arithmetic 일관성 | `a2-causal-honesty.md` |
 | **A3 Outcome Presence & Clarity** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-significance.md` |
 | **A4 Ownership & Scope** | Absolute | 동사-scope coherence (led/built/contributed) | `a4-ownership-scope.md` |
@@ -94,7 +94,7 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 
 **Question**: Does this bullet reveal technical judgment? (이 bullet에 기술적 판단이 드러나는가?)
 
-**PASS** — Bullet body explicitly shows **2 or more** of the following 5 signals:
+**PASS** — Bullet body explicitly shows **all 5 of the following** signals:
 1. **Constraint awareness** — technical constraint to solve (throughput bottleneck, race condition, consistency gap, legacy coupling, cost ceiling, etc.)
 2. **Technology selection** — a specific system/algorithm/pattern deliberately chosen
 3. **Mechanism** — how the chosen technology works (partitioning key, memoization strategy, eviction policy, cutover path, etc.)
@@ -107,9 +107,9 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 - Generic verbs ("도입", "구축", "개선", "활용") with no what/how/why
 - Feature noun-phrases ("seamless multi-step flow") masquerading as mechanism
 
-**P1**: Two or more signals present but at least one stays at name-level (no mechanism depth). Not vacuous enough to FAIL, but below the Absolute PASS bar — examiner returns improvement hint targeting the shallowest signal.
+**P1**: 4 of 5 signals present (one signal missing or at name-level only); does not reach the 5/5 strict PASS bar. Not vacuous enough to FAIL — examiner returns improvement hint targeting the shallowest signal.
 
-> **Section-wide signal mapping**: real-world에서 signal이 sub-bullets로 분산 가능 — section 전체에서 매핑 허용. 단일 bullet line에 모든 signal이 집중되지 않아도 section block 전체에서 2+ signals가 확인되면 PASS 판정 가능.
+> **Section-wide signal mapping**: real-world에서 signal이 sub-bullets로 분산 가능 — section 전체에서 매핑 허용. 단일 bullet line에 모든 signal이 집중되지 않아도 section 전체에서 5 signals 모두 확인되면 PASS 판정 가능 — 단일 bullet line에 집중되지 않아도 허용.
 
 Years are not referenced for A1. Ownership signals belong to A4, not A1.
 
