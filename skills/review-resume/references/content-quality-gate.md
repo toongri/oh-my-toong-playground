@@ -431,12 +431,12 @@ Two opt-out types are distinguished in the HTML report. Both use `.section-opt-o
 
 **User opt-out** (owner explicitly chose to move on):
 - `.opt-out-badge` displays "미해결 피드백"
-- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.axis-label` and `.axis-feedback` content (examiner's finding)
+- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.hint-category` and `.axis-feedback` content (examiner's finding)
 
 **System opt-out — interview-impossible** (owner not present, all alternatives failed):
 - `.opt-out-badge` displays "소유자 인터뷰 필요"
-- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.axis-label` and `.axis-feedback` content (examiner's finding)
-- No Interview Hints are shown to the user in this mode
+- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.hint-category` and `.axis-feedback` content (examiner's finding)
+- Interview Hints are displayed to the user as-is, item by item, in source bullet language (per §4 Interview-Impossible Mode Branch). Hints 제공의 의도는 "owner가 어떤 정보를 확인해줘야 할지"를 reviewer에게 시각화하는 것.
 
 ---
 
@@ -485,11 +485,11 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 <div class="section-opt-out">
   <div class="opt-out-badge">미해결 피드백</div>
   <div class="fail-axis">
-    <span class="axis-label">Tech Claim Check FAIL</span>
+    <div class="hint-category">Tech Claim Check FAIL</div>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
   <div class="fail-axis">
-    <span class="axis-label">Tech Claim Check FAIL</span>
+    <div class="hint-category">Tech Claim Check FAIL</div>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
 </div>
@@ -500,11 +500,11 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 <div class="section-opt-out">
   <div class="opt-out-badge">소유자 인터뷰 필요</div>
   <div class="fail-axis">
-    <span class="axis-label">Tech Claim Check FAIL</span>
+    <div class="hint-category">Tech Claim Check FAIL</div>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
   <div class="fail-axis">
-    <span class="axis-label">Tech Claim Check FAIL</span>
+    <div class="hint-category">Tech Claim Check FAIL</div>
     <div class="axis-feedback">{examiner 피드백 내용}</div>
   </div>
 </div>
@@ -587,11 +587,6 @@ CSS reference (canonical source: SKILL.md HTML template `<style>` block. This se
   padding: 6px 12px;
   margin: 6px 0;
   background: #fff;
-}
-.axis-label {
-  font-weight: 700;
-  color: #dc3545;
-  font-size: 0.85rem;
 }
 .axis-feedback {
   margin: 4px 0;
