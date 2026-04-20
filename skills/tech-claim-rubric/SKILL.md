@@ -50,6 +50,22 @@ These five questions cover the full evaluation surface without sub-weighting for
 
 ---
 
+## Anti-pattern → Axis Traceability Matrix
+
+Common resume bullet anti-patterns, the axis that catches them, and the verdict tier produced.
+
+| Anti-pattern | Axis | Verdict |
+|---|---|---|
+| Name-only mention (도구 이름만 나열, 메커니즘 없음) | A1 | FAIL or P1 |
+| Vanity outcome (팀 만족도 향상 등 정량 metric 없는 결과) | A3 | FAIL |
+| Verb inflation (주도/총괄 + scope marker 없음) | A4 | FAIL or A4 `integrity_suspected` |
+| Missing baseline (응답 시간 80% 단축 with no before/after window) | A2 | P1 (Soft) |
+| Fuzzy noun outcome (성능 개선 / 처리량 향상 정량화 없음) | A3 (or A2 Rule 6) | P1 |
+| Offline-as-production (load-test 수치를 production metric으로 표기) | A2 (Rule 4) | FAIL (Hard) |
+| Arithmetic error (claimed delta math 일치 안 함) | A2 (Rule 1) | FAIL (Hard) |
+
+---
+
 ## Five Axes — Quick Reference
 
 | Axis | Standard | One-line | Reference file |
