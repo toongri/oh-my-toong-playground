@@ -61,6 +61,7 @@ scenarios.md 축소 rationale:
 
 **Setup**: examiner가 다음과 같이 반환:
 - `verdicts.a4_ownership_scope.verdict: FAIL`
+  - 위반 사유: Korean Verb Taxonomy solo 동사("주도함", "총괄함") 사용 + scope marker 없음 → `integrity_suspected: true`
 - 나머지 4축(`a1_technical_credibility`, `a2_causal_honesty`, `a3_outcome_significance`)과 `structural_verdict`는 모두 `PASS`
 - `final_verdict: REQUEST_CHANGES`
 
@@ -68,7 +69,7 @@ scenarios.md 축소 rationale:
 
 **Verification**:
 - `{a1, a2, a3, a4} 중 FAIL` 조건 만족 → Source Extraction trigger.
-- a4_ownership_scope: FAIL → ownership/scope 관련 context 재확인 질문 생성.
+- a4_ownership_scope: FAIL — Korean Verb Taxonomy solo 동사 + scope marker 없음 + `integrity_suspected: true` 조합으로 구조적 overclaim 판정 → ownership/scope 관련 context 재확인 질문 생성.
 - readability-only fix trigger(`{a1, a2, a3, a4} 모두 PASS`) 조건 미충족 → readability fix 경로 불가.
 
 ## SCN-8: Loop 2 confirm gate — 사용자 "아직" 응답 → inner loop 복귀
