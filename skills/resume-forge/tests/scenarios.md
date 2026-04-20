@@ -14,35 +14,35 @@ scenarios.md 축소 rationale:
 ## SCN-2: Loop 2 gate (full 5축 PASS) — Entry approved
 **Setup**: examiner output 전체:
 - final_verdict = APPROVE
-- verdicts.a1-a5 모두 PASS
+- verdicts.a1-a4 모두 PASS, structural_verdict = PASS
 - critical_rule_flags 모두 false
-**Expected**: Entry로 confirm. resume-forge가 다음 bullet 처리.
+**Expected**: Entry로 confirm (post-APPROVE confirm gate). resume-forge가 다음 bullet 처리.
 
 ## SCN-3: Source extraction triggered (A1 FAIL)
 **Setup**: examiner output:
 - final_verdict = REQUEST_CHANGES
 - verdicts.a1_technical_credibility = FAIL ("named systems 부족")
-- verdicts.a2-a5 = PASS
+- verdicts.a2-a4 = PASS, structural_verdict = PASS
 - critical_rule_flags 모두 false
 **Expected**: Stage 1 source extraction (named systems 보강)
 
-## SCN-4: Readability-only fix (A5 alone FAIL)
+## SCN-4: Readability-only fix (structural_verdict FAIL alone)
 **Setup**: examiner output:
 - final_verdict = REQUEST_CHANGES
-- verdicts.a5_scanability = FAIL
+- structural_verdict = FAIL
 - verdicts.a1_technical_credibility: PASS
 - verdicts.a2_causal_honesty: PASS
 - verdicts.a3_outcome_significance: PASS
 - verdicts.a4_ownership_scope: PASS
 **Expected**: Readability-only fix (formatting 수정), source extraction 미수행
 
-## SCN-5: A5 + co-failure → source extraction
+## SCN-5: structural_verdict + co-failure → source extraction
 **Setup**: examiner output:
 - final_verdict = REQUEST_CHANGES
-- verdicts.a5_scanability = FAIL
+- structural_verdict = FAIL
 - verdicts.a1_technical_credibility = FAIL (co-failure)
 - critical_rule_flags 모두 false
-**Expected**: Source extraction (A5 alone fix가 아닌 multi-axis)
+**Expected**: Source extraction (structural_verdict alone fix가 아닌 multi-axis)
 
 ## SCN-6: r_phys invariant — critical rule forces REQUEST_CHANGES
 
@@ -61,7 +61,7 @@ scenarios.md 축소 rationale:
 
 **Setup**: examiner가 다음과 같이 반환:
 - `verdicts.a4_ownership_scope.verdict: FAIL`
-- 나머지 4축(`a1_technical_credibility`, `a2_causal_honesty`, `a3_outcome_significance`, `a5_scanability`)은 모두 `PASS`
+- 나머지 4축(`a1_technical_credibility`, `a2_causal_honesty`, `a3_outcome_significance`)과 `structural_verdict`는 모두 `PASS`
 - `final_verdict: REQUEST_CHANGES`
 
 **Expected**: AC4 trigger condition(`{a1, a2, a3, a4}` 중 FAIL 있음)에 의해 source extraction으로 라우팅. a4 관련 context(role/team/ownership)를 Stage 4로 수집.
@@ -75,10 +75,10 @@ scenarios.md 축소 rationale:
 
 **Setup**: Loop 2 gate에서 examiner가 다음과 같이 반환:
 - `final_verdict: APPROVE`
-- `verdicts.a1-a5` 모두 `PASS`
+- `verdicts.a1-a4` 모두 `PASS`, `structural_verdict ∈ {PASS, P1}`
 - `critical_rule_flags` 모두 `false`
 
-resume-forge가 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"아직"** 으로 응답.
+resume-forge가 post-APPROVE confirm gate에서 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"아직"** 으로 응답.
 
 **Expected**: resume-forge가 해당 bullet의 확정을 보류하고 수정 루프를 다시 진입 (Entry 확정 안 함, inner loop으로 복귀).
 
@@ -91,10 +91,10 @@ resume-forge가 사용자에게 "이 bullet으로 확정하시겠습니까?" 질
 
 **Setup**: Loop 2 gate에서 examiner가 다음과 같이 반환:
 - `final_verdict: APPROVE`
-- `verdicts.a1-a5` 모두 `PASS`
+- `verdicts.a1-a4` 모두 `PASS`, `structural_verdict ∈ {PASS, P1}`
 - `critical_rule_flags` 모두 `false`
 
-resume-forge가 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"다음"** 으로 응답.
+resume-forge가 post-APPROVE confirm gate에서 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"다음"** 으로 응답.
 
 **Expected**: resume-forge가 해당 bullet을 **skip** 처리하고 다음 bullet으로 이동. bullet state는 **pending 유지** (확정 아님).
 

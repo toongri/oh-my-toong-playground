@@ -14,8 +14,8 @@ Collaboratively source, refine, and complete resume problem-solving entries with
 - **Delegate scoring**: All evaluation goes to `tech-claim-examiner`. This skill only checks pass/fail thresholds
 - **Free-form discussion**: Never force structured choices in AskUserQuestion. Use open-ended questions
 - **Critical partner**: Do not blindly accept user input. Challenge, propose alternatives, surface trade-offs. When the user proposes a content direction change, state your assessment before applying it:
-  - BAD: User: "파티션 설계 내용도 넣자" → "좋아, 반영할게" → examiner A5 FAIL (scanability low: detail spill)
-  - GOOD: User: "파티션 설계 내용도 넣자" → "A5 기준상 design rationale 없는 구현 디테일로 읽힐 가능성이 높다 — 넣을까, 한 문장 언급으로 깊이를 암시할까?"
+  - BAD: User: "파티션 설계 내용도 넣자" → "좋아, 반영할게" → structural_verdict FAIL (scanability low: detail spill)
+  - GOOD: User: "파티션 설계 내용도 넣자" → "structural_verdict 기준상 design rationale 없는 구현 디테일로 읽힐 가능성이 높다 — 넣을까, 한 문장 언급으로 깊이를 암시할까?"
   - GOOD (agree): User: "goroutine이 아니라 속성 병렬 처리가 핵심 아니야?" → "맞다, goroutine은 Go 구현체 디테일이고 설계 결정은 속성 병렬 추론이다" → 바로 반영
 - **Show full text**: Always show the complete entry before discussing. Never show fragments
 - **Guided interview**: Ask ONE focused question per turn. With each question, propose 2-3 candidate directions or framings — show the user what strong material looks like and how to frame their experience. Don't just extract raw facts; coach toward a compelling entry
@@ -120,30 +120,32 @@ digraph loop2 {
     exam [shape=box, label="Submit to\ntech-claim-examiner\n(full Input Format)", style=filled, fillcolor=orange];
     check [shape=diamond, label="Final Verdict\nAPPROVE?"];
     save [shape=box, label="Save to\nproblem-solving/", style=filled, fillcolor=lightgreen];
-    e_fail [shape=box, label="Source extraction:\n{a1/a2/a3/a4} FAIL\nOR a5+co-failure\n→ interview for depth", style=filled, fillcolor=lightyellow];
-    r_fail [shape=box, label="Readability-only fix:\na5 FAIL alone\n→ propose structure fixes", style=filled, fillcolor=lightyellow];
+    e_fail [shape=box, label="Source extraction:\n{a1/a2/a3/a4} FAIL\nOR structural_verdict+co-failure\n→ interview for depth", style=filled, fillcolor=lightyellow];
+    r_fail [shape=box, label="Readability-only fix:\nstructural_verdict FAIL alone\n→ propose structure fixes", style=filled, fillcolor=lightyellow];
     revise [shape=box, label="Regenerate entry\n+ show to user"];
 
     pick -> interview;
     interview -> show;
-    show -> confirm;
-    confirm -> exam [label="user: 제출"];
-    confirm -> interview [label="user: 아직"];
+    show -> exam [label="dispatch"];
     exam -> check;
-    check -> save [label="APPROVE"];
+    check -> confirm [label="APPROVE"];
     check -> classify [label="REQUEST_CHANGES"];
+    confirm -> save [label="user: 확정"];
+    confirm -> interview [label="user: 아직"];
+    confirm -> pick [label="user: 다음\n(skip)"];
     classify [shape=box, label="Step 1: Classify\n(5축 verdict 패턴)", style=filled, fillcolor=lightyellow];
-    classify -> r_fail [label="a5 FAIL alone\n(apply immediately)"];
-    classify -> e_fail [label="{a1/a2/a3/a4} FAIL\nor a5+co-failure"];
+    classify -> r_fail [label="structural_verdict FAIL alone\n(apply immediately)"];
+    classify -> e_fail [label="{a1/a2/a3/a4} FAIL\nor structural_verdict+co-failure"];
     e_fail -> revise;
     r_fail -> revise;
     revise -> show;
 }
 ```
 
-**Confirmation Gate** — After showing the full entry to the user, ask via AskUserQuestion: "이 엔트리로 examiner에게 제출할까요?" User responds:
-- **"제출" / 확인**: Proceed to examiner
-- **"아직"**: Return to interview — dig deeper into solution details, refine the entry, then confirm again. This is NOT "다음" (skip). "아직" means "keep improving this entry"; "다음" means "skip to next scenario"
+**Confirmation Gate (post-APPROVE confirm)** — After examiner returns `final_verdict == APPROVE`, ask via AskUserQuestion: "이 엔트리로 확정하시겠습니까?" User responds:
+- **"확정" / 확인**: Save to problem-solving/ and update state
+- **"아직"**: Return to interview — dig deeper into solution details, refine the entry, then re-dispatch to examiner. This is NOT "다음" (skip). "아직" means "keep improving this entry"; "다음" means "skip to next scenario"
+- **"다음"**: Skip current scenario (stays in drafts/, state remains `pending`), move to next
 
 **Solution interview protocol:**
 - **One question per turn**: Never batch multiple questions. Ask a single focused question, wait for the answer, then follow up
@@ -197,13 +199,13 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 - `verdicts.a2_causal_honesty.verdict != FAIL`
 - `verdicts.a3_outcome_significance.verdict != FAIL`
 - `verdicts.a4_ownership_scope.verdict != FAIL`
-- `verdicts.a5_scanability.verdict != FAIL`
+- `structural_verdict ∈ {PASS, P1}`
 - `critical_rule_flags.r_phys.triggered == false`
 - `critical_rule_flags.r_cross.triggered == false`
 
-(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`. As of v3.1 verdict arity unification, this applies to A1-A5 uniformly — formerly only A4 emitted P1.)
+(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`. As of v3.1 verdict arity unification, this applies to A1-A4 + structural_verdict uniformly — formerly only A4 emitted P1.)
 
-**On APPROVE:** Remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"`.
+**On APPROVE:** Present entry to user via Confirmation Gate (post-APPROVE). On user "확정": Remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"`. On user "아직": return to interview for further refinement and re-dispatch.
 
 **On REQUEST_CHANGES:**
 
@@ -211,10 +213,10 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 Check examiner output `verdicts.*` fields directly and apply the following routing:
 
-- **Source extraction trigger**: `{a1, a2, a3, a4}` 중 FAIL 있음 OR (`a5_scanability == FAIL` AND `{a1, a2, a3}` 중 FAIL co-occur) → resolve via Source Extraction
-- **Readability-only fix trigger**: `a5_scanability == FAIL` AND {a1, a2, a3, a4} 모두 PASS → resolve via structural/formatting fixes (no interview needed)
+- **Source extraction trigger**: `{a1, a2, a3, a4}` 중 FAIL 있음 OR (`structural_verdict == FAIL` AND `{a1, a2, a3}` 중 FAIL co-occur) → resolve via Source Extraction
+- **Readability-only fix trigger**: `structural_verdict == FAIL` AND {a1, a2, a3, a4} 모두 PASS → resolve via structural/formatting fixes (no interview needed)
 
-**A5 co-failure disambiguation**: A5 FAIL alone ({a1, a2, a3, a4} 모두 PASS) = formatting issue only → readability fix. A5 FAIL + {a1, a2, a3, a4} 중 하나라도 FAIL = 깊이 부족이 scanability에도 영향 → source extraction.
+**Structural co-failure disambiguation**: `structural_verdict == FAIL` alone ({a1, a2, a3, a4} 모두 PASS) = formatting issue only → readability fix. `structural_verdict == FAIL` + {a1, a2, a3, a4} 중 하나라도 FAIL = 깊이 부족이 scanability에도 영향 → source extraction.
 
 Readability-only fixes can be applied by rearranging/compressing the same material — apply immediately. Source extraction failures require new depth material — apply the Source Extraction protocol below.
 
@@ -246,11 +248,11 @@ Progress per FAIL axis. **One question per turn** at each Stage:
 | Stage 2 | `a2_causal_honesty` FAIL | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic |
 | Stage 3 | `a3_outcome_significance` FAIL | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results |
 | Stage 4 | `a4_ownership_scope` FAIL | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context |
-| Stage 5 | `a5_scanability` + (`a1`/`a2`/`a3`) co-failure | Source extraction 종합 (multi-axis): AI synthesizes user's domain/stack and proposes scenarios typical for the context |
+| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`) co-failure | Source extraction 종합 (multi-axis): AI synthesizes user's domain/stack and proposes scenarios typical for the context |
 
 **Stage 5 — Domain-Informed Source Proposals:**
 
-When axis-specific extraction (Stages 1-4) fails to surface material, OR when a5+co-failure triggers multi-axis synthesis, the AI acts as a domain expert and proposes sources:
+When axis-specific extraction (Stages 1-4) fails to surface material, OR when structural_verdict co-failure triggers multi-axis synthesis, the AI acts as a domain expert and proposes sources:
 - Synthesize the user's company scale, domain, tech stack, and the specific FAIL axis
 - Propose 2-3 scenarios in the form: "In this context, this problem typically occurs — did you experience something like this?"
 - Example: "위탁판매 정산이면 PG 환불 타이밍이랑 정산 주기가 안 맞아서 차액이 생기는 케이스가 많은데, 이런 경험 있나요?"
@@ -273,9 +275,10 @@ All 3 elements confirmed → reconstruct entry. Any element missing → proceed 
 **Step 4. Reconstruct Entry + Re-dispatch**
 
 1. Incorporate extracted sources + readability-only fixes into a reconstructed entry
-2. Show full entry to user for confirmation
-3. Re-dispatch to examiner with the revised entry as Proposed Alternative
-4. Repeat until APPROVE or user opt-out ("다음")
+2. **Cognitive depth check** (before final emission): verify that the reconstructed entry surfaces at least one concrete decision point — a rejected alternative, a constraint that forced the approach, or a measurable trade-off. If absent, return to source extraction for the weakest FAIL axis before emitting
+3. Show full entry to user for confirmation
+4. Re-dispatch to examiner with the revised entry as Proposed Alternative
+5. Repeat until APPROVE or user opt-out ("다음")
 
 State stays `"pending"` until APPROVE.
 
