@@ -135,7 +135,7 @@ Examples of R-Phys violations:
 
 Example: Entry A claims "Designed and implemented the entire payment microservice from scratch." Entry B claims "Contributed to payment microservice API design alongside a team of 8 engineers." These contradict each other on ownership scope.
 
-**Applicability**: R-Cross is only evaluated when cross-entry context is provided to the examiner. If only a single bullet is provided, R-Cross is marked N/A.
+**Applicability**: R-Cross는 항상 emit된다. cross-entry context가 제공되지 않은 경우 triggered: false로 기록하고, reasoning에 "cross-entry context not provided"와 같이 absence를 명시한다.
 
 **Effect**: Automatic REQUEST_CHANGES regardless of A1–A4 verdicts and structural_verdict. The examiner must cite both entries and identify the specific contradiction.
 
@@ -236,7 +236,7 @@ The examiner verifies all of the following before delivering output:
 - [ ] A4 Ownership & Scope: reasoning written, evidence_quote included, verdict assigned
 - [ ] A5 Scanability: reasoning written, evidence_quote included, verdict assigned
 - [ ] R-Phys: triggered status explicitly stated (true / false)
-- [ ] R-Cross: triggered status explicitly stated (true / false — omit if no cross-entry context provided)
+- [ ] R-Cross: triggered status explicitly stated (true / false). cross-entry context not provided인 경우 false로 기록하고 reasoning에 absence 명시
 - [ ] Critical rule invariant applied: if r_phys or r_cross triggered, final_verdict is REQUEST_CHANGES
 - [ ] interview_hints written in source bullet language, no axis identifiers in hint text
 - [ ] final_verdict determined and recorded

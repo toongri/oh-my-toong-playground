@@ -214,7 +214,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 Check examiner output `verdicts.*` fields directly and apply the following routing:
 
-- **Source extraction trigger**: `{a1, a2, a3, a4}` 중 FAIL 있음 OR (`structural_verdict == FAIL` AND `{a1, a2, a3}` 중 FAIL co-occur) → resolve via Source Extraction
+- **Source extraction trigger**: `{a1, a2, a3, a4}` 중 FAIL 있음 OR (`structural_verdict == FAIL` AND `{a1, a2, a3, a4}` 중 FAIL co-occur) → resolve via Source Extraction
 - **Readability-only fix trigger**: `structural_verdict == FAIL` AND {a1, a2, a3, a4} 모두 PASS → resolve via structural/formatting fixes (no interview needed)
 
 **Structural co-failure disambiguation**: `structural_verdict == FAIL` alone ({a1, a2, a3, a4} 모두 PASS) = formatting issue only → readability fix. `structural_verdict == FAIL` + {a1, a2, a3, a4} 중 하나라도 FAIL = 깊이 부족이 scanability에도 영향 → source extraction.
