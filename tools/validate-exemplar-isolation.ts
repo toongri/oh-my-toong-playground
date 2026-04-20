@@ -155,6 +155,9 @@ interface ParsedBlock {
  * For each match, captures everything up to the next ### header.
  */
 function parseExemplarBlocks(markdown: string): ParsedBlock[] {
+  // WARNING: Form 1 (\d+[^\n(]*) rejects inner parens in exemplar titles.
+  // If future rubric adds titles like "Title with (note) (F-2)", Form 1 must be
+  // anchored with /\d+.*?(?=\(([FBACD])-)/.
   // The header regex captures three header forms:
   //   Form 1 (trailing-parens): ### PASS Exemplar 1 — Frontend perf (F-1)
   //     groups 1,2: letter and number from trailing parens
@@ -390,7 +393,7 @@ async function main(): Promise<void> {
         `violating_axis_marker_present=${JSON.stringify(f.violating_axis_marker_present)}\n`
       );
     }
-    process.exit(failures.length);
+    process.exit(failures.length > 0 ? 1 : 0);
   }
 
   process.stdout.write(

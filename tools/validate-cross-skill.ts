@@ -13,7 +13,6 @@
 
 import fs from "fs/promises";
 import path from "path";
-import { existsSync } from "fs";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -21,7 +20,7 @@ import { existsSync } from "fs";
 
 const REPO_ROOT = path.resolve(import.meta.dir, "..");
 
-/** Symbols that must appear in ALL three source groups. */
+// Verdict/flag surface symbols that must stay symmetric across rubric ↔ examiner ↔ consumers
 const SYMBOLS = [
   "final_verdict",
   "structural_verdict",
@@ -29,6 +28,7 @@ const SYMBOLS = [
   "interview_hints",
   "triggered",
   "schema_version",
+  "r_cross",
 ] as const;
 
 type Symbol = (typeof SYMBOLS)[number];
@@ -91,7 +91,7 @@ function containsSymbol(content: string, symbol: Symbol): boolean {
  *    `triggered` directly, but they must reference the public API symbols)
  *
  * Public symbols (must appear in all 3 groups):
- *   final_verdict, structural_verdict, interview_hints
+ *   final_verdict, structural_verdict, interview_hints, r_cross
  *
  * Examiner-internal symbols (must appear in rubric + examiner, consumer optional):
  *   integrity_suspected, triggered, schema_version
@@ -100,6 +100,7 @@ const PUBLIC_SYMBOLS: Symbol[] = [
   "final_verdict",
   "structural_verdict",
   "interview_hints",
+  "r_cross",
 ];
 
 const EXAMINER_INTERNAL_SYMBOLS: Symbol[] = [
@@ -161,6 +162,20 @@ async function main(): Promise<void> {
         message: `Symbol '${symbol}' (examiner-internal) missing from: ${missingFrom.join(", ")}`,
       });
     }
+  }
+
+  // Semantic check: examiner.md A1 PASS criterion must state the canonical 5/5 strict bar.
+  // Accepts "**PASS**: Signal 5 of 5" or "ALL 5 of 5" (flexible whitespace).
+  // Missing = v3 regression risk where threshold drift may have occurred.
+  const A1_STRICT_BAR_RE = /(\*\*PASS\*\*:\s*Signal\s+5\s+of\s+5|ALL\s+5\s+of\s+5)/;
+  if (!A1_STRICT_BAR_RE.test(examinerContent)) {
+    errors.push({
+      symbol: "final_verdict" as Symbol, // closest public symbol; used as placeholder
+      missingFrom: ["examiner"],
+      message:
+        "examiner.md A1 PASS criterion이 canonical 5/5 strict bar와 drift (v3 leak 가능성). " +
+        'Expected "**PASS**: Signal 5 of 5" or "ALL 5 of 5" in agents/tech-claim-examiner.md',
+    });
   }
 
   if (errors.length > 0) {
