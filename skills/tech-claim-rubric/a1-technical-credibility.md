@@ -112,7 +112,7 @@ A4 marker: `개인 기여로 렌더링 모듈 일부를 최적화`
 
 ## FAIL Exemplars
 
-### FAIL Exemplar 1 — Surface-level mention (any level)
+#### FAIL Exemplar 1 — Surface-level mention (any level)
 
 Bullet: "Used React, TypeScript, and Next.js to build web application"
 
@@ -124,7 +124,7 @@ Why FAIL:
 - Signal 5 (Rationale) 부재: 근거 없음
 - 0 signal depth → FAIL
 
-### FAIL Exemplar 2 — Generic verb + tech name
+#### FAIL Exemplar 2 — Generic verb + tech name
 
 Bullet: "Led backend team to build microservices with Spring Boot and Kafka for scalability"
 
@@ -134,7 +134,7 @@ Why FAIL:
 - Signal 1개 수준으로 FAIL
 → FAIL
 
-### FAIL Exemplar 3 — Tech name parade without depth
+#### FAIL Exemplar 3 — Tech name parade without depth
 
 Bullet: "Experience with AWS (EC2, S3, RDS, Lambda, CloudFront, Route53, CloudWatch), Docker, Kubernetes, Terraform, Jenkins, GitLab CI"
 
@@ -143,7 +143,7 @@ Why FAIL:
 - Signal 2 (Technology)에 해당하는 이름들은 나열되나 Signal 1/3/4/5 완전 부재 — 기여 범위, 결정 근거, 설계 판단 없음
 → FAIL
 
-### FAIL Exemplar 4 — Terminology without mechanism
+#### FAIL Exemplar 4 — Terminology without mechanism
 
 Bullet: "Optimized database query performance by implementing advanced indexing strategies"
 
@@ -152,7 +152,7 @@ Why FAIL:
 - Signal 1/4/5 부재. "Optimized" + "advanced" 조합은 depth를 암시하나 mechanism을 대체하지 못함
 → FAIL
 
-### FAIL Exemplar 5 — Feature-framed mechanism hiding
+#### FAIL Exemplar 5 — Feature-framed mechanism hiding
 
 Bullet: "Developed mobile-first checkout flow with multi-step form validation and seamless payment experience across devices"
 
@@ -164,15 +164,161 @@ Why FAIL:
 
 ## P1 Exemplars
 
-### P1 Exemplar 1 — P1 boundary: Kafka adoption with thin partitioning rationale (4/5)
+#### P1 Exemplar 1 — P1 boundary: Kafka adoption with thin partitioning rationale (4/5)
 - Candidate context: async event processing 담당.
 - Bullet: "Adopted Kafka for async event processing with consumer-group partitioning to handle the order pipeline load (4M daily events, backlog p95 drop from 8min to 45s); chose Kafka over RabbitMQ for throughput, accepting operational complexity"
 - Reasoning: Signal 1 (constraint: order pipeline load), Signal 2 (Kafka 선택), Signal 3 (consumer-group partitioning), Signal 4 (RabbitMQ 기각, operational complexity 수용) 존재하나 Signal 5 (Rationale: 왜 throughput이 이 맥락에서 결정적인지) 부재. 4/5 signal — ALL 5 of 5 PASS bar에 1개 미달. P1.
 
-### P1 Exemplar 2 — P1 boundary: CQRS with mechanism but no constraint or rationale (3/5)
+#### P1 Exemplar 2 — P1 boundary: CQRS with mechanism but no constraint or rationale (3/5)
 - Candidate context: dashboard 성능 개선 담당.
 - Bullet: "Introduced CQRS with separate read/write models to improve dashboard read performance; chose over single-model approach accepting eventual consistency"
 - Reasoning: Signal 2 (CQRS 선택), Signal 3 (read/write model 분리), Signal 4 (eventual consistency 수용) 존재하나 Signal 1 (Constraint: 구체적 bottleneck)과 Signal 5 (Rationale: 왜 이 시점에 CQRS가 정답인지) 부재. 3/5 signal — FAIL에 가까운 P1.
+
+## Block B Exemplars
+
+### P1 Exemplar B-1 — Constraint missing (4/5: Selection+Mechanism+Trade-off+Rationale present)
+
+Candidate context: 결제 서비스 백엔드 엔지니어.
+
+Bullet: "결제 이벤트 처리를 위해 Kafka·RabbitMQ·ActiveMQ 세 메시지 큐 옵션을 비교한 뒤 Kafka를 선택·채택했다. Kafka의 동작 원리는 파티션 키 기반으로 메시지를 분산 저장하고 consumer-group이 각 파티션을 독립적으로 구독하는 메커니즘으로, RabbitMQ 대비 높은 처리량을 확보했다. 트레이드오프로 RabbitMQ 대비 운영 복잡도와 메시지 순서 보장의 파티션-범위 제한을 수용했으며, 이 판단의 근거는 결제 이벤트의 멱등성 처리가 가능하여 순서 역전 리스크를 허용할 수 있다는 아키텍처 이유였다. 팀 내 이벤트 파이프라인 모듈 일부를 주도하여 메시지 처리량을 3개월 내 1,200건/초에서 8,500건/초로 개선했고, 결제 이벤트 유실률 0% 달성을 확보했다."
+
+Why P1:
+- Signal 1 (Constraint) 부재: 어떤 기술적 제약 조건(throughput bottleneck, 유실률 임계치 등) 이 trigger가 되었는지 명시 없음
+- Signal 2 (Selection): Kafka·RabbitMQ·ActiveMQ 비교 후 Kafka 선택·채택 ✓
+- Signal 3 (Mechanism): 파티션 키 기반 분산 저장 + consumer-group 독립 구독 메커니즘 ✓
+- Signal 4 (Trade-off): 운영 복잡도 + 파티션-범위 순서 보장 제한 트레이드오프 ✓
+- Signal 5 (Rationale): 멱등성 처리로 순서 역전 리스크 허용 가능하다는 근거 ✓
+→ 4/5 signal — Signal 1 (Constraint) 누락으로 P1
+
+A2 marker: `1,200건/초`, `8,500건/초`, `3개월`
+A3 marker: `메시지 처리량을 3개월 내 1,200건/초에서 8,500건/초로 개선`, `결제 이벤트 유실률 0% 달성을 확보`
+A4 marker: `팀 내 이벤트 파이프라인 모듈 일부를 주도`
+
+### P1 Exemplar B-2 — Selection missing (4/5: Constraint+Mechanism+Trade-off+Rationale present)
+
+Candidate context: 검색 서비스 백엔드 엔지니어.
+
+Bullet: "상품 검색 응답시간 p99 500ms 초과라는 검색 레이턴시 제약 조건을 해결하기 위해 역색인 기반 풀텍스트 검색 엔진을 도입했다. 동작 원리는 문서 색인 시 형태소 분석기를 통해 토큰을 추출하고 역색인에 posting list 형태로 저장하여 쿼리 시 O(1)에 근접한 용어 검색을 가능하게 하는 구현 방식이다. 트레이드오프로 인덱스 갱신 지연(near-realtime, 약 1초)을 수용하는 대신 쿼리 레이턴시를 확보했으며, 이 판단의 근거는 검색 결과의 1초 내 최신성 미보장이 사용자 이탈에 큰 영향을 주지 않는다는 A/B 테스트 데이터였다. 팀 내 검색 모듈 일부를 주도하여 p99 응답시간을 520ms에서 80ms로 단축했고, 6주 내 검색 전환율 22% 증가를 달성했다."
+
+Why P1:
+- Signal 1 (Constraint): 상품 검색 응답시간 p99 500ms 초과 제약 조건 ✓
+- Signal 2 (Selection) 부재: 어떤 기술(Elasticsearch, OpenSearch, Solr 등)을 선택·채택했는지 대안 비교 없이 "역색인 기반 검색 엔진"만 언급 — 선택·채택 신호 부재
+- Signal 3 (Mechanism): 형태소 분석기 토큰 추출 + 역색인 posting list 저장 구현 방식 ✓
+- Signal 4 (Trade-off): 인덱스 갱신 지연(near-realtime ~1초) 트레이드오프 ✓
+- Signal 5 (Rationale): A/B 테스트 데이터 기반 근거 ✓
+→ 4/5 signal — Signal 2 (Selection) 누락으로 P1
+
+A2 marker: `p99`, `500ms`, `520ms`, `80ms`, `6주`
+A3 marker: `p99 응답시간을 520ms에서 80ms로 단축`, `검색 전환율 22% 증가를 달성`
+A4 marker: `팀 내 검색 모듈 일부를 주도`
+
+### P1 Exemplar B-3 — Mechanism missing (4/5: Constraint+Selection+Trade-off+Rationale present)
+
+Candidate context: 스트리밍 플랫폼 백엔드 엔지니어.
+
+Bullet: "실시간 영상 스트리밍 서비스의 메시지 유실 없는 이벤트 전달 요구사항이라는 at-least-once 전달 제약 조건을 해결하기 위해 SQS·SNS·Kinesis 세 AWS 메시징 서비스를 비교한 뒤 Kafka 도입을 결정·채택했다. RabbitMQ 대비 파티션 보존 기간 연장으로 인한 저장 비용을 트레이드오프로 수용했으며, 이 판단의 근거는 영상 이벤트 재처리 SLA가 72시간이어서 최소 3일 보존이 필수라는 비즈니스 요구사항이었다. 개인 기여로 이벤트 수집 모듈 일부를 구현하여 이벤트 유실률을 0.8%에서 0%로 개선했고, 2개월 내 스트리밍 이벤트 처리량 15,000건/초 확보를 달성했다."
+
+Why P1:
+- Signal 1 (Constraint): at-least-once 전달 요구사항 제약 조건 ✓
+- Signal 2 (Selection): SQS·SNS·Kinesis 비교 후 Kafka 결정·채택 ✓
+- Signal 3 (Mechanism) 부재: Kafka가 어떻게 동작하는지(파티셔닝, consumer-group, offset commit 등) 메커니즘 설명 없음 — "Kafka 도입"만 언급
+- Signal 4 (Trade-off): RabbitMQ 대비 저장 비용 증가 트레이드오프 ✓
+- Signal 5 (Rationale): 영상 이벤트 재처리 SLA 72시간, 3일 보존 필수 비즈니스 요구사항 근거 ✓
+→ 4/5 signal — Signal 3 (Mechanism) 누락으로 P1
+
+A2 marker: `0.8%`, `15,000건/초`, `2개월`
+A3 marker: `이벤트 유실률을 0.8%에서 0%로 개선`, `스트리밍 이벤트 처리량 15,000건/초 확보를 달성`
+A4 marker: `개인 기여로 이벤트 수집 모듈 일부를 구현`
+
+### P1 Exemplar B-4 — Trade-off missing (4/5: Constraint+Selection+Mechanism+Rationale present)
+
+Candidate context: 핀테크 백엔드 엔지니어.
+
+Bullet: "계좌 잔액 조회 API p95 지연시간 300ms 초과라는 응답 레이턴시 제약 조건을 해결하기 위해 Redis·Memcached·Hazelcast 세 캐시 솔루션을 평가하여 Redis를 선택·채택했다. Redis의 동작 원리는 메모리 내 해시 테이블에 key-value를 저장하고 단일 스레드 이벤트 루프로 명령을 처리하는 방식으로, 잔액 데이터를 TTL 30초로 캐싱하여 DB 읽기를 차단했다. 이 판단의 근거는 잔액 조회의 99%가 단순 읽기이고 30초 이내 잔액 오차가 서비스 정책상 허용된다는 비즈니스 배경이었다. 함께 캐싱 레이어 컴포넌트를 구현하여 p95 지연시간을 320ms에서 18ms로 단축했고, 4개월 내 DB 읽기 부하 70% 감소를 달성했다."
+
+Why P1:
+- Signal 1 (Constraint): 계좌 잔액 조회 API p95 지연시간 300ms 초과 제약 조건 ✓
+- Signal 2 (Selection): Redis·Memcached·Hazelcast 비교 후 Redis 선택·채택 ✓
+- Signal 3 (Mechanism): 메모리 내 해시 테이블 key-value 저장 + 단일 스레드 이벤트 루프 방식 ✓
+- Signal 4 (Trade-off) 부재: Memcached·Hazelcast 대비 대안을 기각한 비용·위험 없음 — 대안 비교 없이 Redis만 "선택"
+- Signal 5 (Rationale): 잔액 조회 99% 단순 읽기 + 30초 오차 허용 비즈니스 배경 근거 ✓
+→ 4/5 signal — Signal 4 (Trade-off) 누락으로 P1
+
+A2 marker: `p95`, `300ms`, `320ms`, `18ms`, `4개월`
+A3 marker: `p95 지연시간을 320ms에서 18ms로 단축`, `DB 읽기 부하 70% 감소를 달성`
+A4 marker: `함께 캐싱 레이어 컴포넌트를 구현`
+
+### P1 Exemplar B-5 — Rationale missing (4/5: Constraint+Selection+Mechanism+Trade-off present)
+
+Candidate context: 게임 백엔드 엔지니어.
+
+Bullet: "유저 세션 상태 동기화 지연 50ms 초과라는 세션 일관성 제약 조건을 해결하기 위해 Sticky Session·JWT Stateless·Redis Cluster 세 세션 관리 방식을 비교·검토한 후 Redis Cluster를 선택·채택했다. Redis Cluster의 동작 원리는 16,384개 해시 슬롯을 노드 간 분산하고 클라이언트가 MOVED 리다이렉션으로 올바른 노드에 직접 접속하는 구현 방식으로, 단일 노드 Redis 대비 수평 확장을 가능하게 했다. 트레이드오프로 Sticky Session 대비 클러스터 구성 운영 비용과 MULTI/EXEC 트랜잭션 크로스 슬롯 제한을 수용했다. 개인 기여로 세션 동기화 모듈 일부를 최적화하여 세션 지연을 60ms에서 12ms로 단축했고, 3개월 내 동시 접속자 50,000명 처리 확보를 달성했다."
+
+Why P1:
+- Signal 1 (Constraint): 유저 세션 상태 동기화 지연 50ms 초과 제약 조건 ✓
+- Signal 2 (Selection): Sticky Session·JWT Stateless·Redis Cluster 비교 후 Redis Cluster 선택·채택 ✓
+- Signal 3 (Mechanism): 16,384 해시 슬롯 분산 + MOVED 리다이렉션 구현 방식 ✓
+- Signal 4 (Trade-off): 클러스터 운영 비용 + MULTI/EXEC 크로스 슬롯 제한 트레이드오프 ✓
+- Signal 5 (Rationale) 부재: 왜 Redis Cluster가 이 맥락에서 최선인지 판단 이유·배경 없음 — "비교 후 선택"만 있고 맥락 기반 이유 제시 없음
+→ 4/5 signal — Signal 5 (Rationale) 누락으로 P1
+
+A2 marker: `50ms`, `60ms`, `12ms`, `50,000명`, `3개월`
+A3 marker: `세션 지연을 60ms에서 12ms로 단축`, `동시 접속자 50,000명 처리 확보를 달성`
+A4 marker: `개인 기여로 세션 동기화 모듈 일부를 최적화`
+
+### FAIL Exemplar B-6 — 3/5 A1 signals present (graduated thinning)
+
+Candidate context: 이커머스 플랫폼 백엔드 엔지니어.
+
+Bullet: "주문 처리량 급증 시 API 응답 지연이라는 부하 제약 조건에서 RabbitMQ·Kafka를 비교한 뒤 Kafka를 선택·채택했다. Kafka의 동작 원리는 파티션 키로 메시지를 분산 저장하는 메커니즘이다. 팀 내 주문 이벤트 파이프라인 일부를 구현하여 주문 처리 지연을 4개월 내 850ms에서 95ms로 단축했고, 주문 처리량 2,500건/초 확보를 달성했다."
+
+Why FAIL:
+- Signal 1 (Constraint): 부하 제약 조건 ✓
+- Signal 2 (Selection): RabbitMQ·Kafka 비교 후 Kafka 선택·채택 ✓
+- Signal 3 (Mechanism): 파티션 키 분산 저장 메커니즘 ✓
+- Signal 4 (Trade-off) 부재: RabbitMQ 대비 수용한 비용·위험 없음
+- Signal 5 (Rationale) 부재: 이 맥락에서 Kafka가 최선인 근거·이유·판단 없음
+→ 3/5 signal — FAIL
+
+A2 marker: `850ms`, `95ms`, `4개월`, `2,500건/초`
+A3 marker: `주문 처리 지연을 4개월 내 850ms에서 95ms로 단축`, `주문 처리량 2,500건/초 확보를 달성`
+A4 marker: `팀 내 주문 이벤트 파이프라인 일부를 구현`
+
+### FAIL Exemplar B-7 — 2/5 A1 signals present (graduated thinning)
+
+Candidate context: SaaS 플랫폼 백엔드 엔지니어.
+
+Bullet: "API 응답 성능 개선을 위해 PostgreSQL에서 Elasticsearch로 검색 기능을 선택·채택했다. Elasticsearch의 동작 원리는 역색인 구조로 풀텍스트 검색을 지원하는 메커니즘이다. 공동으로 검색 서비스 모듈을 개발하여 3개월 내 검색 응답시간을 1,200ms에서 90ms로 단축했고, 사용자 검색 만족도 35% 증가를 달성했다."
+
+Why FAIL:
+- Signal 1 (Constraint) 부재: 어떤 기술적 제약 조건(응답시간 임계치, 검색 정확도 SLA 등)이 없음
+- Signal 2 (Selection): Elasticsearch 선택·채택 ✓
+- Signal 3 (Mechanism): 역색인 구조 풀텍스트 검색 메커니즘 ✓
+- Signal 4 (Trade-off) 부재: PostgreSQL 대비 수용한 비용·위험 없음
+- Signal 5 (Rationale) 부재: 판단 근거·배경·이유 없음
+→ 2/5 signal — FAIL
+
+A2 marker: `1,200ms`, `90ms`, `3개월`, `35%`
+A3 marker: `검색 응답시간을 1,200ms에서 90ms로 단축`, `사용자 검색 만족도 35% 증가를 달성`
+A4 marker: `공동으로 검색 서비스 모듈을 개발`
+
+### FAIL Exemplar B-8 — 1/5 A1 signal (name-level only)
+
+Candidate context: 스타트업 풀스택 엔지니어.
+
+Bullet: "서비스 확장성을 위해 Kafka를 도입했다. 개인 기여로 메시지 파이프라인 모듈 일부를 구현하여 2개월 내 메시지 처리량을 500건/초에서 3,000건/초로 증가했고, 이벤트 처리 지연 60% 감소를 달성했다."
+
+Why FAIL:
+- Signal 1 (Constraint) 부재: "서비스 확장성"은 추상적 키워드로 구체적 제약 조건 없음
+- Signal 2 (Selection) 부재: Kafka 이름만 있고 대안 비교·선택 없음
+- Signal 3 (Mechanism) 부재: "도입"만 있고 동작 원리·구현 방식 없음
+- Signal 4 (Trade-off) 부재: 수용한 비용·위험 없음
+- Signal 5 (Rationale): "서비스 확장성"이 근거처럼 쓰였으나 이유·판단·배경 수준에 미달 — 1/5 name-level
+→ 1/5 signal (Rationale partial, name-level only) — FAIL
+
+A2 marker: `500건/초`, `3,000건/초`, `2개월`
+A3 marker: `메시지 처리량을 500건/초에서 3,000건/초로 증가`, `이벤트 처리 지연 60% 감소를 달성`
+A4 marker: `개인 기여로 메시지 파이프라인 모듈 일부를 구현`
 
 ## Boundary Cases
 
