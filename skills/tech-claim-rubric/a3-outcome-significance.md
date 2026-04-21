@@ -99,6 +99,13 @@ Why FAIL:
 - "so what?" — coverage %, bug escape rate 감소, 배포 빈도 변화 등 없음
 - 200 tests written ≠ quality improved (관찰 가능한 outcome 필요)
 
+### FAIL Exemplar 5 — Unresolvable metric type
+
+- Candidate context: Senior, 7 years.
+- Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
+- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88) so the numeric outcome condition is met; the question is type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Missing numeric baseline for type disambiguation; type wholly unresolved — does not qualify as P1.
+- **Final Verdict: FAIL**
+
 ## Block C — Isolated A3 Violation Exemplars
 
 아래 3개 exemplar는 A3 위반만을 격리하여 검증한다. A1(5개 sub-marker 모두), A2, A4, A5는 각 예시에서 PASS 조건을 충족한다.
@@ -127,12 +134,6 @@ Why FAIL:
 - Candidate context: Mid, 5 years.
 - Bullet: "Hardened error recovery on the checkout retry path; successful completion rate improved from 91% to 97%"
 - Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (91%→97%) so the numeric outcome condition is met; the question is type resolution. "Successful completion rate" is dual-coded: HTTP/API success on retry (tech) versus business checkout conversion (business). The "retry path" lexical context nudges the reader toward the tech success-rate reading — type is resolvable within one interpretive step. This sits on the PASS side of the P1 boundary.
-
-### P1 Exemplar 2 — FAIL boundary: "Target metric" score delta
-- Candidate context: Senior, 7 years.
-- Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
-- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88) so the numeric outcome condition is met; the question is type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Missing numeric baseline for type disambiguation; type wholly unresolved — does not qualify as P1.
-- **Final Verdict: FAIL**
 
 ## Boundary Cases
 
