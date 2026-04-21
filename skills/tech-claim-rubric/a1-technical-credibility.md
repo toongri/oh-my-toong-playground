@@ -327,7 +327,7 @@ A4 marker: `개인 기여로 메시지 파이프라인 모듈 일부를 구현`
 "Used jQuery to validate forms"
 
 - jQuery는 named지만 mechanism/rationale/trade-off 부재
-- Signal 2 (Technology) 1개만 충족, Signal 1/3/4/5 없음 → **P1 또는 FAIL** (권장: P1, boundary 표시)
+- Signal 2 (Technology) 1개만 충족, Signal 1/3/4/5 없음 → **FAIL** (1/5 signal — named-only, 기술적 판단 전무)
 
 ### EDGE 2 — Deep but incomplete (3/5)
 
@@ -335,7 +335,7 @@ A4 marker: `개인 기여로 메시지 파이프라인 모듈 일부를 구현`
 
 - 구체적 mechanism 설명 (consistent hashing + virtual nodes + distribution 목적)
 - Signal 3 (Mechanism) + Signal 5 (Rationale partial) 존재하나 Signal 1 (Constraint: 어떤 분산 문제), Signal 2 (Technology: 다른 대안과 비교), Signal 4 (Trade-off) 부재
-- ALL 5 of 5 PASS bar 미달 → P1 (mechanism depth는 있으나 constraint·trade-off 누락)
+- ALL 5 of 5 PASS bar 미달 → **FAIL** (3/5 signal — Guidance rule ≤3/5 → FAIL, mechanism depth만으로 PASS bar 미충족)
 
 ## Evaluator Guidance
 
