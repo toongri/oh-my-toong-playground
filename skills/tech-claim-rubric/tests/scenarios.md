@@ -625,7 +625,7 @@ r_phys:
 **Expected final_verdict**: APPROVE
 **structural_verdict**: P1
 
-**routing_target**: forge Loop 2 gate readability-fix path triggered — A5 P1(structural_verdict P1)이 readability-fix routing을 유발하나, A5 단독으로는 REQUEST_CHANGES를 강제하지 않음. final_verdict는 APPROVE 유지.
+**routing_target**: forge Loop 2 gate APPROVE lane — A1-A4 모두 PASS/P1 AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE. structural_verdict P1은 readability-fix를 강제하지 않는다 (readability-fix는 structural_verdict == FAIL 조건). A5 P1은 non-blocking; interview_hints에 improvement suggestion으로만 surfaced.
 
 **Purpose**: A5 demote 검증 — A5 P1(structural_verdict P1)이 있어도 A1-A4 모두 PASS이면 final_verdict는 APPROVE임을 확인. A5 alone은 REQUEST_CHANGES를 트리거하지 않는다는 invariant 검증. structural_verdict가 P1로 surfaced되고 forge Loop 2 readability-fix 라우팅이 트리거됨을 확인 (SCN-2의 A5 FAIL → REQUEST_CHANGES 패턴과 대비: P1은 non-blocking).
 

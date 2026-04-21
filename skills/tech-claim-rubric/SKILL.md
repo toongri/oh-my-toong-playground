@@ -177,7 +177,7 @@ THEN final_verdict = REQUEST_CHANGES
 | `count(P1 across A1-A4) ≥ 3` | REQUEST_CHANGES |
 | `structural_verdict == FAIL` | REQUEST_CHANGES |
 
-> **Note**: A5 verdict는 `structural_verdict`로 노출된다. `structural_verdict == FAIL`은 `final_verdict = REQUEST_CHANGES`를 트리거하되, consumer routing은 source-extraction이 아닌 readability-fix lane으로 처리된다. See `output-schema.md` §A5 Co-failure Disambiguation and `a5-scanability.md`.
+> **Note**: A5 verdict는 `structural_verdict`로 노출된다. `structural_verdict == FAIL AND A1-A4 모두 PASS/P1 AND count(P1 across A1-A4) < 3`인 경우 `final_verdict = REQUEST_CHANGES`를 트리거하되, consumer routing은 source-extraction이 아닌 readability-fix lane으로 처리된다. See `output-schema.md` §A5 Co-failure Disambiguation and `a5-scanability.md`.
 
 P1 verdicts do not block APPROVE but are surfaced in `interview_hints` as improvement recommendations.
 
