@@ -633,23 +633,24 @@ r_phys:
 
 ### SCN-A1-cumP1-3: 누적 P1 3개 → REQUEST_CHANGES 발동 검증
 
-**Bullet**: "결제 이벤트 처리를 위해 Kafka·RabbitMQ를 비교한 뒤 Kafka를 선택했다. Kafka의 파티션 키 기반 메시지 분산으로 consumer-group이 각 파티션을 독립적으로 구독하여 처리량을 확보했다. RabbitMQ 대비 운영 복잡도를 수용했으며, 이 판단의 근거는 결제 이벤트의 멱등성 처리 가능 여부였다. 팀 내 이벤트 파이프라인 모듈 일부를 기여하여 메시지 처리량을 3개월 내 1,200건/초에서 8,500건/초로 개선했고, 결제 이벤트 유실률 0% 달성을 확보했다."
+**Bullet**: "결제 이벤트 처리를 위해 Kafka·RabbitMQ를 비교한 뒤 Kafka를 선택했다. Kafka의 파티션 키 기반 메시지 분산으로 consumer-group이 각 파티션을 독립적으로 구독하여 처리량을 확보했다. RabbitMQ 대비 운영 복잡도를 수용했으며, 이 판단의 근거는 결제 이벤트의 멱등성 처리 가능 여부였다. 팀 내 이벤트 파이프라인 모듈 일부를 기여하여 결제 이벤트 파이프라인의 운영 효율과 처리 안정성을 향상시켰다."
 <!-- 5-signal mapping
 - Signal 1 (Constraint): (intentionally absent — preserves A1 P1 isolation; "결제 이벤트 처리"는 구체적 제약 조건 미명시)
 - Signal 2 (Technology): "Kafka·RabbitMQ 비교 후 Kafka 선택"
 - Signal 3 (Mechanism): "파티션 키 기반 메시지 분산으로 consumer-group이 각 파티션 독립 구독"
 - Signal 4 (Trade-off): "RabbitMQ 대비 운영 복잡도 수용"
 - Signal 5 (Rationale): "결제 이벤트의 멱등성 처리 가능 여부" — P1 boundary: rationale가 결정 근거로는 얕음 (왜 멱등성이 이 scale에서 결정적인지 depth 없음)
+- A3 signal: "운영 효율과 처리 안정성을 향상시켰다" — outcome을 시사하나 운영 효율(ops/business metric?)인지 처리 안정성(tech reliability metric?)인지 type 분류 불가. numeric 수치 없는 fuzzy outcome 표현 → A3 P1 boundary
 -->
 
 **Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
 
 **Expected verdicts**:
 - A1: P1 — Signal 1 (Constraint) 부재: "결제 이벤트 처리"는 추상적으로 구체적 제약 조건(처리량 한계, 유실률 임계치, backlog 문제 등) 없음. Signal 2 (Technology): Kafka·RabbitMQ 비교 후 Kafka 선택. Signal 3 (Mechanism): 파티션 키 기반 분산 + consumer-group 독립 구독. Signal 4 (Trade-off): 운영 복잡도 수용. Signal 5 (Rationale): 멱등성 처리 가능 여부 — rationale는 있으나 왜 이 맥락에서 결정적인지 depth 얕음. 4/5 signal (Signal 1 부재) → P1.
-- A2: P1 — Cause (Kafka 파티션 기반 분산) → effect (처리량 1,200→8,500건/초). Causal chain은 있으나 3개월이라는 측정 기간 중 다른 변경사항(인프라 증설, 코드 최적화) 가능성 unverified. A2 rule "cause→effect stated but one link unverified" → P1.
-- A3: P1 — Tech outcome (처리량, 유실률) + before/after 명시. 단, "1,200건/초에서 8,500건/초"는 7배 증가로 magnitude 명확하나 scale context(총 트래픽, 파이프라인 규모)가 없어 "so what?" 판단이 불완전. outcome type은 명확(처리량). Magnitude는 있으나 scale context 부재로 significance 불명 → P1 boundary.
+- A2: P1 — Cause (Kafka 파티션 기반 분산) → effect ("운영 효율과 처리 안정성 향상"). Causal chain은 있으나 effect 자체가 fuzzy하여 인과 연결의 검증이 불가능하며, 병행 변경(인프라 증설, 코드 최적화 등) 가능성 unverified. A2 rule "cause→effect stated but one link unverified" → P1.
+- A3: P1 — "운영 효율과 처리 안정성을 향상시켰다"는 outcome을 시사하나 outcome type boundary unclear: 운영 효율은 ops/business metric(운영 비용, SLA 준수율 등)으로도, tech metric(throughput, error rate 등)으로도 해석 가능하며, 처리 안정성 역시 tech reliability(유실률, 가용성)인지 business continuity metric인지 분류 불가. numeric outcome 부재로 magnitude도 불명. A3 P1 rule "outcome type boundary unclear" 직접 해당.
 - A4: PASS — "팀 내 이벤트 파이프라인 모듈 일부를 기여" — partial ownership verb + scope 명시. Mid-level + 기여 범위 coherent.
-- A5: PASS — mechanism (Kafka 파티션), result (1,200→8,500건/초) 6초 내 scan 가능.
+- A5: PASS — tech decision (Kafka 선택, 파티션 기반 분산 mechanism) 6초 내 scan 가능. outcome이 fuzzy하나 핵심 tech claim 파악에는 지장 없음.
 
 **P1 count across A1-A4**: A1=P1, A2=P1, A3=P1, A4=PASS → count(P1) = 3 ≥ 3 → cumulative P1 invariant 발동.
 
