@@ -116,7 +116,7 @@ digraph loop2 {
     pick [shape=box, label="Pick a draft"];
     interview [shape=box, label="Interview: solution strategy\n(AskUserQuestion)", style=filled, fillcolor=lightyellow];
     show [shape=box, label="Show full entry\n(problem+challenge+solution+result)"];
-    confirm [shape=box, label="Confirm with user\n(AskUserQuestion:\n이 엔트리로 제출할까?)", style=filled, fillcolor=lightyellow];
+    confirm [shape=box, label="Confirm with user\n(AskUserQuestion:\n이 엔트리로 확정할까?)", style=filled, fillcolor=lightyellow];
     exam [shape=box, label="Submit to\ntech-claim-examiner\n(full Input Format)", style=filled, fillcolor=orange];
     check [shape=diamond, label="Final Verdict\nAPPROVE?"];
     save [shape=box, label="Save to\nproblem-solving/", style=filled, fillcolor=lightgreen];
@@ -278,7 +278,7 @@ All 3 elements confirmed → reconstruct entry. Any element missing → proceed 
 
 1. Incorporate extracted sources + readability-only fixes into a reconstructed entry
 2. **Cognitive depth check** (before final emission): verify that the reconstructed entry surfaces at least one concrete decision point — a rejected alternative, a constraint that forced the approach, or a measurable trade-off. If absent, return to source extraction for the weakest FAIL axis before emitting
-3. Show full entry to user for confirmation
+3. Show full entry to user for visual review (no confirmation gate — entry already APPROVED by examiner)
 4. Re-dispatch to examiner with the revised entry as Proposed Alternative
 5. Repeat until APPROVE or user opt-out ("다음")
 
