@@ -64,8 +64,10 @@ Evaluator process:
 6. **evidence_quote**: 문제되는 또는 검증된 문구 인용
 
 Arithmetic check recipes:
-- % improvement: `(after - before) / before * 100`
-- multiplier: `before / after`
+- multiplier (increase, throughput-like): `after / before`  — e.g., 10→15 throughput = 15/10 = 1.5x
+- multiplier (reduction, latency-like): `before / after`  — e.g., 200ms→50ms latency = 200/50 = 4x
+- % improvement (increase): `(after - before) / before * 100`  — e.g., 10→15 = 50%
+- % improvement (reduction): `(before - after) / before * 100`  — e.g., 200ms→50ms = 75%
 - "5x" vs "500%" 일관성 확인
 
 Detailed exemplars: `skills/tech-claim-rubric/a2-causal-honesty.md`.
