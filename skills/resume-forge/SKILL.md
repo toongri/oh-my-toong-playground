@@ -212,12 +212,13 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 **Step 1. Classify Feedback (5축 verdict 패턴)**
 
-Check examiner output `verdicts.*` fields directly and apply the following routing:
+`skills/tech-claim-rubric/output-schema.md` §A5 Co-failure Disambiguation Full Routing Matrix를 참조하여 emitted verdicts와 flags 기반으로 routing을 결정한다. 우선순위 순:
 
-- **Source extraction trigger**: `{a1, a2, a3, a4}` 중 FAIL 있음 OR (`structural_verdict == FAIL` AND `{a1, a2, a3, a4}` 중 FAIL co-occur) → resolve via Source Extraction
-- **Readability-only fix trigger**: `structural_verdict == FAIL` AND {a1, a2, a3, a4} 모두 PASS → resolve via structural/formatting fixes (no interview needed)
-
-**Structural co-failure disambiguation**: `structural_verdict == FAIL` alone ({a1, a2, a3, a4} 모두 PASS) = formatting issue only → readability fix. `structural_verdict == FAIL` + {a1, a2, a3, a4} 중 하나라도 FAIL = 깊이 부족이 scanability에도 영향 → source extraction.
+- **r_phys.triggered == true** → Source extraction with impossibility explanation (사용자에게 physically impossible 수치 설명 요청)
+- **r_cross.triggered == true** → Source extraction with contradiction explanation (사용자에게 cross-entry contradiction 설명 요청)
+- **count(P1 across A1-A4) >= 3** → Source extraction starting with weakest P1 axis
+- **{a1, a2, a3, a4} 중 FAIL 있음** → Source extraction (FAIL 축 interview hints 기반 depth 보강)
+- **structural_verdict == FAIL + {a1, a2, a3, a4} 모두 PASS/P1 (count < 3)** → Readability-only fix (no interview needed — 재구성·압축만으로 해결)
 
 Readability-only fixes can be applied by rearranging/compressing the same material — apply immediately. Source extraction failures require new depth material — apply the Source Extraction protocol below.
 
@@ -249,7 +250,7 @@ Progress per FAIL axis. **One question per turn** at each Stage:
 | Stage 2 | `a2_causal_honesty` FAIL | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic |
 | Stage 3 | `a3_outcome_significance` FAIL | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results |
 | Stage 4 | `a4_ownership_scope` FAIL | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context |
-| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`) co-failure | Source extraction 종합 (multi-axis): AI synthesizes user's domain/stack and proposes scenarios typical for the context |
+| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`/`a4`) co-failure | Source extraction 종합 (multi-axis): AI synthesizes user's domain/stack and proposes scenarios typical for the context |
 
 **Stage 5 — Domain-Informed Source Proposals:**
 

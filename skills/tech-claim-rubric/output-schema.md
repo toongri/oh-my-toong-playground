@@ -108,16 +108,29 @@ ownership-scope flag는 v4에서 제거됨 — retired in v4, see `a4-ownership-
 
 ---
 
-## A5 Co-failure Disambiguation
+## A5 Co-failure Disambiguation — Full Routing Matrix
 
-A5(Scanability)는 다른 axis와의 co-failure 패턴에 따라 라우팅 의미가 다름:
+이 matrix는 examiner Decision Sequence(`agents/tech-claim-examiner.md` §final_verdict Decision Sequence)와 1:1 대응하는 Single Source of Truth이다. `resume-forge/SKILL.md` §Step 1 Classify Feedback은 이 table을 참조한다.
 
-| 패턴 | 의미 | 라우팅 |
-|------|------|--------|
-| A5 FAIL alone (A1-A4 모두 PASS) | Readability-only — formatting issue | review-resume readability fix |
-| A5 FAIL + (A1-A4 중 하나 이상 FAIL) | 깊이 부족이 scanability에도 영향 | resume-forge source extraction |
+평가 순서는 early-return 우선순위를 반영한다: critical flags → cumulative P1 → axis FAIL → structural FAIL → APPROVE.
 
-이 분기는 resume-forge SKILL.md §"Phase 2: Loop 2 — Complete Entry" > Step 1. Classify Feedback (5축 verdict 패턴)의 라우팅 로직 + review-resume Phase 7b/9 gate에 명시되어야 함.
+| 우선순위 | 조건 | `final_verdict` | Consumer routing lane |
+|---------|------|----------------|----------------------|
+| 1 | `r_phys.triggered == true` | `REQUEST_CHANGES` | Source extraction — 사용자에게 physically impossible 수치 설명 및 수정 요청 |
+| 2 | `r_cross.triggered == true` | `REQUEST_CHANGES` | Source extraction — 사용자에게 cross-entry contradiction 설명 및 수정 요청 |
+| 3 | `count(P1 across A1-A4) >= 3` | `REQUEST_CHANGES` | Source extraction — 가장 약한 P1 축부터 순서대로 보강 |
+| 4 | A1-A4 중 하나 이상 `FAIL` (structural 무관) | `REQUEST_CHANGES` | Source extraction — FAIL 축 interview hints 기반 depth 보강 |
+| 5 | A1-A4 모두 PASS/P1 (count < 3) + `structural_verdict == FAIL` | `REQUEST_CHANGES` | Readability-only fix — depth 충분, scan 실패. 재구성·압축만으로 해결 (추가 인터뷰 불필요) |
+| 6 | A1-A4 모두 PASS/P1 (count < 3) + `structural_verdict ∈ {PASS, P1}` | `APPROVE` | Approve lane |
+
+**우선순위 4 세부 분기** (A1-A4 FAIL 있는 경우, structural_verdict 패턴별 의미):
+
+| structural_verdict | A1-A4 FAIL 여부 | 의미 | 라우팅 |
+|-------------------|----------------|------|--------|
+| FAIL | A1-A4 중 FAIL 있음 | 깊이 부족이 scanability에도 영향 | Source extraction |
+| PASS 또는 P1 | A1-A4 중 FAIL 있음 | 내용 깊이 부족 (scan은 OK) | Source extraction |
+
+**우선순위 5 주의사항**: A1-A4에 P1이 혼재해도 count < 3이고 FAIL이 없으면 우선순위 5(readability-only)로 라우팅. P1 존재 자체는 source extraction을 강제하지 않는다.
 
 ---
 
