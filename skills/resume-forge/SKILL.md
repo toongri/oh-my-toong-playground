@@ -101,6 +101,9 @@ Evaluate the causal honesty of this problem definition.
 ```
 
 Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`. Check `verdicts.a2_causal_honesty.verdict` in response. `PASS` = Loop 1 gate cleared.
+<!-- Loop 1 uses strict == PASS (not != FAIL) because causal honesty is the entry filter for Loop 2.
+     A P1 on a2_causal_honesty at this stage means the claim is not yet ready to elaborate; it must be
+     revised before proceeding. P1 is resolved in Loop 2 only after the user has confirmed the entry. -->
 
 ---
 
