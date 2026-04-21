@@ -6,6 +6,8 @@ examiner의 5축 evaluation 및 2 critical rule (R-Phys, R-Cross) 동작 검증�
 
 ## Scenario Format
 
+<!-- P3-13 future-work: SCN ID naming convention is mixed — numeric IDs (SCN-N) and named variants (SCN-AX-variant-name) coexist. Full unification deferred; new scenarios should prefer SCN-N numeric form unless naming a distinct variant group. -->
+
 각 시나리오는 다음 template을 따른다:
 
 ```
@@ -21,6 +23,7 @@ examiner의 5축 evaluation 및 2 critical rule (R-Phys, R-Cross) 동작 검증�
 **Expected critical rules**: r_phys / r_cross triggered 여부
 **Expected final_verdict**: APPROVE | REQUEST_CHANGES  (canonical decision sequence 적용; structural_verdict == FAIL → REQUEST_CHANGES via readability-fix lane)
 **structural_verdict**: PASS | P1 | FAIL  (A5 verdict)
+**integrity_suspected**: true | false  (A4 sub-flag; omit if false / not applicable)
 **Purpose**: 이 시나리오가 검증하는 axis 또는 rule
 ```
 
@@ -102,7 +105,7 @@ r_phys:
 
 ---
 
-### SCN-3: A1 + A2 + A5 co-failure — source extraction trigger
+### SCN-3: A1 + A2 + A3 co-failure — source extraction trigger
 
 **Bullet**: "Worked on cache system performance improvements using various approaches including distributed caching, LRU policies, and memory management techniques to achieve better response times for our application ecosystem"
 
@@ -570,7 +573,9 @@ r_phys:
 - A4: PASS (scope clear)
 - A5: PASS
 
-**Expected critical rules**: r_phys false / r_cross false (single entry, cross-entry context not provided)
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
 
 **Expected final_verdict**: APPROVE
 **structural_verdict**: PASS
