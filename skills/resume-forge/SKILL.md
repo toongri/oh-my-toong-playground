@@ -218,7 +218,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 - **r_cross.triggered == true** → Source extraction with contradiction explanation (사용자에게 cross-entry contradiction 설명 요청)
 - **count(P1 across A1-A4) >= 3** → Source extraction starting with weakest P1 axis
 - **{a1, a2, a3, a4} 중 FAIL 있음** → Source extraction (FAIL 축 interview hints 기반 depth 보강)
-- **structural_verdict == FAIL + {a1, a2, a3, a4} 모두 PASS/P1 (count < 3)** → Readability-only fix (no interview needed — 재구성·압축만으로 해결)
+- **structural_verdict == FAIL + {a1, a2, a3, a4} 모두 PASS/P1 + count(P1 across A1-A4) < 3** → Readability-only fix (no interview needed — 재구성·압축만으로 해결)
 
 Readability-only fixes can be applied by rearranging/compressing the same material — apply immediately. Source extraction failures require new depth material — apply the Source Extraction protocol below.
 
