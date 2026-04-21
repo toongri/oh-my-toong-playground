@@ -1,6 +1,6 @@
 # Review Resume Skill — Test Results
 
-> **Note**: These tests relate to Phase 5's 6-criterion evaluation dimensions (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness). Examiner behavior (A1-A5 phases) is tested separately in `phase9-loop-scenarios.md`.
+> **Note**: These tests relate to Phase 5's 6-criterion evaluation dimensions (Linear Causation, Metric Specificity, Role Clarity, Standard Transcendence, Hook Potential, Section Fitness). Phase 9 loop behavior (content quality gate) is tested separately in `phase9-loop-scenarios.md`.
 
 ---
 

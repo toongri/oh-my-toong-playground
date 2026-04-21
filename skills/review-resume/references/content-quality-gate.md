@@ -255,7 +255,7 @@ For each hint:
 
 ### How to Use Interview Hints
 
-The tech-claim-examiner provides `interview_hints` with REQUEST_CHANGES. These hints specify "what information would change this axis to PASS."
+The tech-claim-examiner provides `interview_hints` with REQUEST_CHANGES. These hints specify "what information would change this feedback item to PASS."
 
 Principles for converting Hints into questions:
 
@@ -487,11 +487,11 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
   <div class="resume-line">{원본 bullet 텍스트}</div>
   <div class="unresolved-feedback">
     <div class="fail-axis">
-      <div class="hint-category">{실패 axis 이름 (예: 근거)}</div>
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
       <div class="axis-feedback">{examiner 피드백 내용}</div>
     </div>
     <div class="fail-axis">
-      <div class="hint-category">{실패 axis 이름 (예: 역할/범위)}</div>
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
       <div class="axis-feedback">{examiner 피드백 내용}</div>
     </div>
   </div>
@@ -505,11 +505,11 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
   <div class="resume-line">{원본 bullet 텍스트}</div>
   <div class="unresolved-feedback">
     <div class="fail-axis">
-      <div class="hint-category">{실패 axis 이름 (예: 영향)}</div>
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
       <div class="axis-feedback">{examiner 피드백 내용}</div>
     </div>
     <div class="fail-axis">
-      <div class="hint-category">{실패 axis 이름 (예: 기술 깊이)}</div>
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
       <div class="axis-feedback">{examiner 피드백 내용}</div>
     </div>
   </div>
