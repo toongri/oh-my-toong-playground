@@ -218,7 +218,7 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 ## Migration from v1 (11-axis)
 
-| v1 concept | v3 equivalent | <!-- allow-forbidden -->
+| v1 concept | v4 equivalent | <!-- allow-forbidden -->
 |------------|---------------|
 | E1–E6 (depth axes) | A1 + A2 (depth + causal) | <!-- allow-forbidden -->
 | R1–R5 (readability axes) | A5 alone (structure-agnostic) | <!-- allow-forbidden -->
