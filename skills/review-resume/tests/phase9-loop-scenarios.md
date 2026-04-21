@@ -125,7 +125,7 @@ interview_hints:
 
 ---
 
-## SCN-6: HTML axis label noleak verification
+## SCN-6: HTML report internal token noleak verification
 
 **Target Rule:** HTML report에 examiner internal field가 노출되어서는 안 된다.
 
