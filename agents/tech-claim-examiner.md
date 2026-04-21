@@ -208,7 +208,7 @@ THEN final_verdict := "REQUEST_CHANGES"
 Earlier-firing invariants short-circuit later ones. Order:
 
 ```
-R-Phys → R-Cross → P1-cumulative(A1-A4 ≥ 3) → A1-A4 FAIL → A1-A4 PASS
+R-Phys → R-Cross → P1-cumulative(A1-A4 ≥ 3) → A1-A4 FAIL → structural_verdict FAIL → A1-A4 PASS
 ```
 
 #### P1 Cumulative Meta-Rule
@@ -231,8 +231,8 @@ THEN final_verdict := "REQUEST_CHANGES"
    b. If r_cross triggered → final_verdict = REQUEST_CHANGES (early return)
 4. Check P1 cumulative: if count(P1 across A1-A4) >= 3 → final_verdict = REQUEST_CHANGES (early return)
 5. If any A1-A4 FAIL → final_verdict = REQUEST_CHANGES
-5a. If structural_verdict == FAIL AND all A1-A4 PASS/P1 AND count(P1 across A1-A4) < 3 → final_verdict = REQUEST_CHANGES (readability-fix lane)
-6. Otherwise (all A1-A4 PASS or P1, count(P1 across A1-A4) < 3, structural_verdict ∈ {PASS, P1}) → final_verdict = APPROVE
+6. If structural_verdict == FAIL AND all A1-A4 PASS/P1 AND count(P1 across A1-A4) < 3 → final_verdict = REQUEST_CHANGES (readability-fix lane)
+7. Otherwise (all A1-A4 PASS or P1, count(P1 across A1-A4) < 3, structural_verdict ∈ {PASS, P1}) → final_verdict = APPROVE
 ```
 
 **A5(Scanability) result**: A5 verdict는 `structural_verdict` 필드로 별도 emit. `structural_verdict == FAIL AND A1-A4 모두 PASS/P1 AND count(P1 across A1-A4) < 3`이면 final_verdict = REQUEST_CHANGES (readability-fix lane). consumer는 source-extraction이 아닌 경량 문서 재구성 경로로 라우팅한다.
