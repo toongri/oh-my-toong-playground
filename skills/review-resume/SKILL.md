@@ -103,7 +103,7 @@ flowchart TB
     P5 --> P6[Phase 8: AI 톤 감사\nSkill humanizer audit mode]
     P6 --> P7DISPATCH[Phase 9: Content Quality Gate\nexaminer dispatch]
     P7DISPATCH --> P7VERDICT{All APPROVE\nor user opt-out?}
-    P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\nexplain FAIL axes → interview\n→ regenerate alternatives]
+    P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\npresent interview_hints → interview\n→ regenerate alternatives]
     P7INTERVIEW --> P7DISPATCH
     P7VERDICT -->|YES| P7OPT[Strategic Options\n2-3 with trade-offs]
     P7OPT --> P8[Phase 10: 결과 전달\nHTML Report + Note Accumulate]
