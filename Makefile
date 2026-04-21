@@ -1,4 +1,4 @@
-.PHONY: sync sync-dry validate validate-schema validate-components validate-forbidden-tokens validate-tests test pull pull-dry help
+.PHONY: sync sync-dry validate validate-schema validate-components validate-forbidden-tokens validate-cross-refs validate-tests test pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -8,6 +8,7 @@ help:
 	@echo "  make validate-schema    - 스키마 검증 (필드, 값 유효성)"
 	@echo "  make validate-components - 컴포넌트 검증 (파일 존재 여부)"
 	@echo "  make validate-forbidden-tokens - 금지 토큰 검증 (레거시 용어 방지)"
+	@echo "  make validate-cross-refs    - 교차 참조 대칭 검증 (7 assertion)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
 	@echo "  make pull-dry PROJ=<name> - 풀백 미리보기 (실제 변경 없음)"
@@ -28,6 +29,9 @@ validate-components:
 
 validate-forbidden-tokens:
 	@bun run tools/validators/forbidden-tokens.ts
+
+validate-cross-refs:
+	@bash tools/validators/cross-refs.sh
 
 validate-tests:
 	@./tools/run-tests.sh
