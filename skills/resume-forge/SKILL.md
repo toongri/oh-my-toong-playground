@@ -207,7 +207,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 - `critical_rule_flags.r_phys.triggered == false`
 - `critical_rule_flags.r_cross.triggered == false`
 
-(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`. As of v3.1 verdict arity unification, this applies to A1-A4 + structural_verdict uniformly — formerly only A4 emitted P1.) <!-- allow-forbidden -->
+(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`. This applies to A1-A4 + structural_verdict uniformly — formerly only A4 emitted P1.)
 
 **On APPROVE:** Present entry to user via Confirmation Gate (post-APPROVE). On user "확정": Remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"`. On user "아직": return to interview for further refinement and re-dispatch.
 
