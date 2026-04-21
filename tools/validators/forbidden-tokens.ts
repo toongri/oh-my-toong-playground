@@ -128,6 +128,18 @@ const RULES: Rule[] = [
     name: "FLAT-caps",
     pattern: /\bFLAT\b/,
   },
+
+  // Retired v1 axis name: Problem Fidelity (superseded in v4 migration)
+  {
+    name: "Problem-Fidelity-retired-v1-axis",
+    pattern: /\bProblem Fidelity\b/,
+  },
+
+  // Retired v1 axis name: Causation Validity (superseded in v4 migration)
+  {
+    name: "Causation-Validity-retired-v1-axis",
+    pattern: /\bCausation Validity\b/,
+  },
 ];
 
 // Line-level allowlist marker — must be an HTML comment to avoid false suppression on prose
