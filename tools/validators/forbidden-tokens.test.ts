@@ -142,6 +142,32 @@ describe("scanContent: forbidden token 감지", () => {
     expect(violations.length).toBeGreaterThan(0);
     expect(violations[0].token).toMatch(/FLAT/);
   });
+
+  // --- Problem Fidelity (retired v1 axis name) ---
+  it(`은퇴한 v1 axis명 "Problem Fidelity" 를 감지한다`, () => {
+    const violations = scanContent("Problem Fidelity score was 0.7 in v1.", "test.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "Problem-Fidelity-retired-v1-axis")).toBe(true);
+  });
+
+  it(`"Problem Fidelity" 가 없는 클린 픽스처는 통과한다`, () => {
+    const violations = scanContent("Fidelity to the problem is important.", "test.md");
+    const pfViolations = violations.filter((v) => v.ruleName === "Problem-Fidelity-retired-v1-axis");
+    expect(pfViolations.length).toBe(0);
+  });
+
+  // --- Causation Validity (retired v1 axis name) ---
+  it(`은퇴한 v1 axis명 "Causation Validity" 를 감지한다`, () => {
+    const violations = scanContent("The Causation Validity axis was removed in v4.", "test.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "Causation-Validity-retired-v1-axis")).toBe(true);
+  });
+
+  it(`"Causation Validity" 가 없는 클린 픽스처는 통과한다`, () => {
+    const violations = scanContent("Causal analysis ensures logical validity.", "test.md");
+    const cvViolations = violations.filter((v) => v.ruleName === "Causation-Validity-retired-v1-axis");
+    expect(cvViolations.length).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
