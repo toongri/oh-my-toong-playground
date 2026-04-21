@@ -698,6 +698,32 @@ r_phys:
 
 ---
 
+### SCN-20: R-Cross abstention — benign overlap (parallel engagement)
+
+**Bullet (current entry)**: "At Acme Corp 2022-01 → 2023-12 (2y) as Staff Engineer, designed and shipped a multi-tenant billing pipeline on Kafka (partition-per-tenant isolation) that reduced invoice generation latency from 18s to 1.2s at 500K monthly invoices; chose Kafka over SQS for per-tenant ordering guarantees, accepting higher ops overhead."
+
+**Cross-entry context**: "2023-06 → 2024-03 Part-time Technical Advisor at StartupX (3h/week contractual advisory engagement — disclosed in resume)"
+
+**Candidate context**: { years: 8, position: "Staff Engineer", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 1 (Constraint): 18s invoice generation latency at 500K monthly invoices scale. Signal 2 (Technology): Kafka with partition-per-tenant isolation, compared to SQS. Signal 3 (Mechanism): partition-per-tenant isolation guaranteeing per-tenant ordering. Signal 4 (Trade-off): higher ops overhead accepted for ordering guarantees. Signal 5 (Rationale): SQS lacks per-tenant ordering guarantees — context-specific rationale. 5 signals → PASS.
+- A2: PASS — Cause (Kafka partition-per-tenant) → effect (18s→1.2s). Arithmetic: ≈93% reduction. 500K monthly invoices scale context provided. Causal chain (SQS unordered → Kafka per-tenant isolation → latency drop) coherent and internally consistent.
+- A3: PASS — Tech outcome (invoice generation latency) + scale (500K monthly invoices) + before/after (18s→1.2s) all explicit. "so what?" — billing SLA met at fintech scale.
+- A4: PASS — "designed and shipped" (소유 동사) + 2-year Staff Engineer scope + pipeline-level redesign 범위. No shared-credit ambiguity; verb-scope coherent.
+- A5: PASS — Problem (invoice latency), technology (Kafka + partition isolation), result (18s→1.2s) all scan-visible within one bullet.
+
+**Expected critical rules**:
+- r_phys.triggered: false (reasoning: "18s→1.2s latency reduction is physically achievable via in-memory partition routing vs DB-backed SQS polling")
+- r_cross.triggered: false (reasoning: "Overlap period 2023-06→2023-12 (~6 months) is between a full-time Staff Engineer role and a disclosed part-time contractual advisory engagement (3h/week). Parallel engagement is legitimate and explicitly qualified; no full-time dual-ownership contradiction exists. R-Cross abstains — benign overlap.")
+
+**Expected final_verdict**: APPROVE (all axes PASS, r_cross.triggered false, r_phys.triggered false)
+**structural_verdict**: PASS
+
+**Purpose**: R-Cross abstention(benign overlap) 검증 — 이력서에 명시된 part-time advisory 계약과 full-time 직무 간의 기간 overlap이 R-Cross를 트리거하지 않음을 확인. SCN-9(full-time dual-ownership 모순)과 대비되는 benign overlap 패턴: parallel engagement가 명시적으로 한정(contractual advisory, 3h/week)되어 있으면 r_cross.triggered = false → final_verdict = APPROVE 유지. Examiner가 overlap 기간을 식별하되 partial/advisory scope qualifier를 인식하여 abstain해야 함을 검증.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
@@ -724,21 +750,22 @@ r_phys:
 | SCN-A5-demote-routing | A5 P1 structural demotion | APPROVE | P1 | A5 P1 non-blocking — forge readability-fix routing |
 | SCN-A1-cumP1-3 | Cumulative P1 ≥ 3 invariant | REQUEST_CHANGES | PASS | A1+A2+A3 P1, A4 PASS — cumulative trigger (no individual FAIL) |
 | SCN-19 | A4 P1 (verb-scope boundary) | APPROVE | PASS | A4 P1 boundary — cumulative P1 contribution |
+| SCN-20 | R-Cross abstention (benign overlap) | APPROVE | PASS | Part-time advisory parallel engagement — r_cross.triggered false |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1) |
-| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1) |
-| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
+| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1) |
+| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1) |
+| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
