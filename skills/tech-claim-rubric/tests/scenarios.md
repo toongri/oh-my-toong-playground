@@ -410,7 +410,7 @@ r_phys:
 
 **Expected verdicts**:
 - A1: PASS — Signal 1 (Constraint): 모바일 결제 페이지 CTA 버튼 터치 영역 미달(iOS 42pt, Android 38pt). Signal 2 (Technology): React Native 터치 이벤트 핸들러 재설계 + 공통 컴포넌트 추상화 vs 플랫폼별 조건 분기. Signal 3 (Mechanism): 탭 인식 영역 44×44pt 통일 (Apple HIG 기준). Signal 4 (Trade-off): 플랫폼별 조건 분기 대신 공통 추상화 선택 — 초기 구현 복잡도 수용. Signal 5 (Rationale): 향후 디바이스 파편화 대응 비용 절감. 5 signals → PASS.
-- A2: FAIL — "직전"이 Q3인지 작년 Q4인지 불분명. Q3→Q4는 연말 프로모션 트래픽이라 cohort 자체가 다름 → seasonality confound. 동일 cohort·동일 시즌 baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가 (Rule 1: Missing comparable baseline). 또한 Q4 내 어느 기간·어떤 트래픽 프로파일에서 8.4% 전환율이 측정됐는지 measurement window가 없어 수치의 재현 가능성 검증 불가 (Rule 2: Missing time window / operating conditions). Rule 1 + Rule 2 compound violation → Hard FAIL.
+- A2: FAIL — Rule 1 (Missing comparable baseline): "직전"이 Q3인지 작년 Q4인지 불분명하며 동일 cohort·동일 시즌 baseline 없어 개선이 작업 결과인지 계절 효과인지 분리 불가. Rule 2 (Missing time window / operating conditions): Q4 내 어느 기간·어떤 트래픽 프로파일에서 8.4% 전환율이 측정됐는지 measurement window 미명시로 수치의 재현 가능성 검증 불가. Severity Tier: Rule 1 + Rule 2 동시 위반 = 2+ concurrent rule violations → Hard FAIL (Soft P1 standalone 각각이지만 compound 시 Hard FAIL로 격상).
 - A3: PASS — 전환율 수치(8.4%) + before/after(+2.1%p). magnitude 존재.
 - A4: PASS — scope 및 동사 수준 특정 불가하나 overclaim 없음.
 - A5: P1 — 짧고 수치는 있으나 mechanism context 없어 6초 scan으로 "무엇을 해서 개선됐는지" 불명. FAIL까지는 아님.
@@ -715,7 +715,7 @@ r_phys:
 | SCN-11 | A2 P1 (LCP unaccounted concurrent) | APPROVE | PASS | A2 P1 boundary (one link unverified) (non-blocking) |
 | SCN-12 | A3 P1 (retry completion type ambiguity) | APPROVE | PASS | A3 P1 boundary (outcome type unclear) (non-blocking) |
 | SCN-13 | A2 FAIL rule 1+2 compound (seasonality + window) | REQUEST_CHANGES | P1 | Missing comparable baseline + time window compound Hard FAIL |
-| SCN-14 | A2 FAIL rule 2 (time window) | REQUEST_CHANGES | PASS | Missing time window / operating conditions |
+| SCN-14 | A2 FAIL rule 2 + rule 1 compound (missing window + missing baseline) | REQUEST_CHANGES | PASS | Missing time window / operating conditions + missing comparable baseline compound Hard FAIL |
 | SCN-15 | A2 FAIL rule 3 (offline→production) | REQUEST_CHANGES | PASS | Offline metric as production impact |
 | SCN-16 | A2 FAIL rule 4+2 compound (distribution + window) | REQUEST_CHANGES | PASS | Missing distribution + time window compound Hard FAIL |
 | SCN-17 | A2 FAIL rule 5 (absolute claim) | REQUEST_CHANGES | P1 | Absolute claim without scope and period |
