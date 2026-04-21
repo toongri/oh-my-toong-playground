@@ -905,6 +905,49 @@ r_phys:
 
 ---
 
+### SCN-26: P1-1 regression guard — count(P1) ∈ {1,2} + structural_verdict FAIL → Readability-only fix
+
+<!-- P1-1-regression guard: count(P1 across A1-A4) < 3 AND no FAIL in A1-A4 AND structural_verdict == FAIL → priority 5 readability-only fix lane (NOT source extraction) -->
+<!-- 5-signal mapping
+- Signal 1 (Constraint): "주문 처리 서비스 피크타임 오류율 3%가 SLA 0.5% 초과" — 수치 명시, SLA 임계치 존재
+- Signal 2 (Technology): "gRPC 비동기 통신 전환" — named protocol, named alternative implied (기존 동기 HTTP)
+- Signal 3 (Mechanism): "동기 블로킹 I/O를 비동기 non-blocking으로 전환해 thread pool 고갈 방지" — mechanism 명시
+- Signal 4 (Trade-off): "gRPC schema 관리 복잡도 증가를 수용" — trade-off 명시
+- Signal 5 (Rationale): (미언급 — 왜 gRPC가 대안보다 이 맥락에서 더 적합한지 근거 없음) → Signal 5 absent → A1 P1 boundary
+- A2: Cause (비동기 전환) → mechanism (thread pool 고갈 방지) → effect (오류율 3%→0.4%). Causal chain 논리 성립. 단, concurrent 요청 변화나 서버 scale-out 등 confounding 없음을 명시하지 않아 one link unverified → A2 P1.
+- A3: tech outcome: 오류율 3%→0.4%. before/after 모두 존재. SLA 달성 명시 → A3 PASS.
+- A4: "직접 구현하고 운영 배포를 주도" — 소유 동사 + 범위 coherent → A4 PASS.
+- A5: Signal 5 Rationale 전무, "gRPC schema 관리 복잡도"는 언급되나 구체적 운영 데이터 없음. bullet 전반이 단문 나열로 Constraint→Decision→Result 흐름이 scan상 압축·결절되어 6-30초 내 문제 규모와 결정 근거를 동시에 파악하기 어려움 → A5 FAIL (structural clarity 부족).
+-->
+
+**Bullet**: "주문 처리 서비스의 피크타임 오류율 3%가 SLA 0.5%를 초과하는 제약이 식별됐다. gRPC 비동기 통신으로 전환해 동기 블로킹 I/O를 제거, thread pool 고갈을 방지했으며 gRPC schema 관리 복잡도 증가를 수용했다. 직접 구현하고 운영 배포를 주도해 오류율을 3%에서 0.4%로 낮춰 SLA를 달성했다."
+
+**Candidate context**: { years: 4, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: P1 — Signal 1 (Constraint): 오류율 3%, SLA 0.5% 수치 명시. Signal 2 (Technology): gRPC 비동기 전환. Signal 3 (Mechanism): 동기 블로킹 I/O → non-blocking, thread pool 고갈 방지. Signal 4 (Trade-off): gRPC schema 관리 복잡도 증가 수용. Signal 5 (Rationale): 미언급 — 왜 gRPC가 이 맥락에서 최선인지 근거 없음. 4/5 signals 충족, Signal 5 absent → P1 경계.
+- A2: P1 — Cause (gRPC 비동기 전환) → mechanism (thread pool 고갈 방지) → effect (오류율 3%→0.4%). Causal chain 방향 식별됨. 단, concurrent 요청 변화·서버 scale-out 등 confounding factor 배제 명시 없어 one link unverified → A2 P1.
+- A3: PASS — tech outcome: 오류율 3%→0.4%. before/after 모두 존재. SLA 달성 달성 동사 명시 → numeric outcome PASS.
+- A4: PASS — "직접 구현하고 운영 배포를 주도" — 소유 동사 명시 + Mid-level coherent. PASS.
+- A5: FAIL — Structural clarity 부족: Signal 5 Rationale 전무로 결정 근거가 scan에서 포착되지 않음. bullet 단문 나열 구조로 Constraint → Decision → Result 흐름이 6-30초 scan 내에서 압축·결절됨. Detail underload 아닌 presentation 실패 → A5 FAIL.
+
+**P1 count across A1-A4**: A1=P1, A2=P1, A3=PASS, A4=PASS → count(P1) = 2 < 3 → priority 3 미발동.
+**structural_verdict**: FAIL → priority 5 발동 조건 충족.
+**Priority resolution**: A1-A4에 FAIL 없음 (no FAIL in {A1, A2, A3, A4}) → priority 4 미발동. count(P1 across A1-A4) = 2 < 3 → priority 3 미발동. structural_verdict == FAIL → priority 5 발동. routing lane = Readability-only fix.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: REQUEST_CHANGES (priority 5: A1-A4 모두 PASS/P1, count(P1 across A1-A4) = 2 < 3, structural_verdict == FAIL — Readability-only fix lane)
+**structural_verdict**: FAIL
+
+**routing_target**: Readability-only fix — depth 충분, scan 실패. 재구성·압축만으로 해결 (추가 인터뷰 불필요). source extraction 불필요.
+
+**Purpose**: P1-1 regression guard — `no FAIL in A1-A4 AND count(P1 across A1-A4) < 3 AND structural_verdict == FAIL` 조건(priority 5)이 정확히 Readability-only fix lane으로 라우팅됨을 검증. count(P1)=2로 priority 3(≥3) 경계 미만을 확인. SCN-21(count(P1)=3 + structural FAIL → source extraction, priority 3 우선)과 대조되어 count 경계에서 priority 5가 정확히 발동함을 보장. 이 SCN이 실패하면 P1-1 routing condition regression이 감지됨.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
@@ -937,21 +980,22 @@ r_phys:
 | SCN-23 | A2 Rule 4 + Sub-check 1 compound (FAIL Exemplar 7) | REQUEST_CHANGES | FAIL | Rule 4 + Sub-check 1 compound → Hard FAIL (P1-3 regression guard) |
 | SCN-24 | A2 arithmetic direction increase (throughput-like, after/before) | APPROVE | PASS | Multiplier increase = after/before — 10→15 = 1.5x correctly parsed (P1-5 regression guard) |
 | SCN-25 | A2 arithmetic direction reduction (latency-like, before/after) | APPROVE | PASS | Multiplier reduction = before/after — 200ms→50ms = 4x correctly parsed (P1-5 regression guard) |
+| SCN-26 | P1-1 regression: count(P1)=2 + structural FAIL | REQUEST_CHANGES | FAIL | count(P1 across A1-A4) < 3 + structural_verdict FAIL → priority 5 Readability-only fix (NOT source extraction) (P1-1 regression guard) |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-23 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-23 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-22 (P1 — Rule 4 standalone) |
-| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-22, SCN-23, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21, SCN-23 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
+| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-23 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-26 (P1) |
+| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-23 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-22 (P1 — Rule 4 standalone), SCN-26 (P1) |
+| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-26, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-22, SCN-23, SCN-24, SCN-25, SCN-26, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21, SCN-23, SCN-26 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,24,25,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,24,25,26,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
