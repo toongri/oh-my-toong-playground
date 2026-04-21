@@ -483,14 +483,17 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 **User opt-out** (owner explicitly moved on):
 ```html
 <div class="section-opt-out">
-  <div class="opt-out-badge">미해결 피드백</div>
-  <div class="fail-axis">
-    <div class="hint-category">Tech Claim Check FAIL</div>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
-  </div>
-  <div class="fail-axis">
-    <div class="hint-category">Tech Claim Check FAIL</div>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  <span class="opt-out-badge">미해결 피드백</span>
+  <div class="resume-line">{원본 bullet 텍스트}</div>
+  <div class="unresolved-feedback">
+    <div class="fail-axis">
+      <div class="hint-category">{실패 axis 이름 (예: 근거)}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
+    <div class="fail-axis">
+      <div class="hint-category">{실패 axis 이름 (예: 역할/범위)}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
   </div>
 </div>
 ```
@@ -498,14 +501,17 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 **System opt-out** (interview-impossible mode — all alternatives failed):
 ```html
 <div class="section-opt-out">
-  <div class="opt-out-badge">소유자 인터뷰 필요</div>
-  <div class="fail-axis">
-    <div class="hint-category">Tech Claim Check FAIL</div>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
-  </div>
-  <div class="fail-axis">
-    <div class="hint-category">Tech Claim Check FAIL</div>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  <span class="opt-out-badge">소유자 인터뷰 필요</span>
+  <div class="resume-line">{원본 bullet 텍스트}</div>
+  <div class="unresolved-feedback">
+    <div class="fail-axis">
+      <div class="hint-category">{실패 axis 이름 (예: 영향)}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
+    <div class="fail-axis">
+      <div class="hint-category">{실패 axis 이름 (예: 기술 깊이)}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
   </div>
 </div>
 ```
