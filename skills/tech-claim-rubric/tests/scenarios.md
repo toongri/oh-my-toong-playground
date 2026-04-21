@@ -837,6 +837,74 @@ r_phys:
 
 ---
 
+### SCN-24: A2 arithmetic direction — increase case (throughput-like) → APPROVE
+
+<!-- P1-5-regression guard: multiplier direction increase (after/before) — correctly parsed → PASS -->
+<!-- 5-signal mapping
+- Signal 1 (Constraint): "RPS 처리 한계가 배포 병목" — 제약 수치 명시
+- Signal 2 (Technology): "worker pool 확장" — 특정 기법 명시
+- Signal 3 (Mechanism): "병렬 처리 worker 수 증가로 throughput 향상" — mechanism 명시
+- Signal 4 (Trade-off): "메모리 사용 증가 감수" — trade-off 명시
+- Signal 5 (Rationale): "병목 지점이 CPU-bound 처리임을 프로파일링으로 확인 후 결정" — rationale 명시
+- A2: after/before = 15/10 = 1.5x. Candidate claims 1.5x. 일치 → arithmetic PASS
+-->
+
+**Bullet**: "배포 파이프라인 RPS 처리 한계가 병목으로 식별되어, CPU-bound 프로파일링 결과를 근거로 worker pool 확장 방식을 채택했다. 메모리 사용 증가를 감수하고 병렬 처리 worker 수를 늘려 throughput을 10 RPS에서 15 RPS로 향상시켰으며(1.5x), 배포 안정성 개선에 직접 기여했다."
+
+**Candidate context**: { years: 4, position: "Mid Backend", target_company: "infrastructure" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 1 (Constraint): RPS 처리 한계 명시. Signal 2 (Technology): worker pool 확장. Signal 3 (Mechanism): 병렬 처리 worker 수 증가. Signal 4 (Trade-off): 메모리 사용 증가 감수. Signal 5 (Rationale): CPU-bound 프로파일링 근거. 5 signals 충족 → PASS.
+- A2: PASS — arithmetic direction (increase, throughput-like): after/before = 15/10 = 1.5x. Candidate claim "1.5x" 일치. Causal chain (CPU-bound 병목 → worker 확장 → throughput 1.5x) 논리 성립. Rule 위반 없음 → PASS.
+- A3: PASS — tech outcome: throughput 10 RPS → 15 RPS (1.5x). before/after 모두 존재. numeric outcome 명시.
+- A4: PASS — "직접 기여" 소유 동사. Mid-level coherent.
+- A5: PASS — Constraint (RPS 한계) / Decision (worker pool 확장, 프로파일링 근거) / Result (1.5x throughput) scan 가능. Signal density 충분.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: APPROVE (all axes PASS)
+**structural_verdict**: PASS
+
+**Purpose**: P1-5 regression guard (increase case) — throughput-like 증가 시 multiplier를 after/before = 15/10 = 1.5x로 올바르게 계산함을 검증. 방향 슬립(before/after = 10/15 ≈ 0.67x로 오계산) 시 이 SCN이 실패하여 regression을 감지.
+
+---
+
+### SCN-25: A2 arithmetic direction — reduction case (latency-like) → APPROVE
+
+<!-- P1-5-regression guard: multiplier direction reduction (before/after) — correctly parsed → PASS -->
+<!-- 5-signal mapping
+- Signal 1 (Constraint): "p99 latency 200ms — SLA 100ms 초과" — 제약 수치 명시
+- Signal 2 (Technology): "Redis 캐싱 계층 도입" — named system
+- Signal 3 (Mechanism): "DB 조회를 캐시 hit으로 대체해 응답 경로 단축" — mechanism 명시
+- Signal 4 (Trade-off): "캐시 일관성 관리 복잡도 증가 수용" — trade-off 명시
+- Signal 5 (Rationale): "read-heavy 워크로드 분석으로 캐시 효용 확인" — rationale 명시
+- A2: before/after = 200/50 = 4x reduction. Candidate claims 4x reduction. 일치 → arithmetic PASS
+-->
+
+**Bullet**: "API p99 latency가 200ms로 SLA 100ms를 초과하는 제약이 식별되어, read-heavy 워크로드 분석을 근거로 Redis 캐싱 계층을 도입했다. DB 조회를 캐시 hit으로 대체해 응답 경로를 단축했으며, 캐시 일관성 관리 복잡도 증가를 감수하고 p99 latency를 200ms에서 50ms로 4x 단축했다. 캐싱 전략 설계를 개인적으로 주도했다."
+
+**Candidate context**: { years: 5, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 1 (Constraint): p99 latency 200ms, SLA 100ms 초과 명시. Signal 2 (Technology): Redis 캐싱 계층. Signal 3 (Mechanism): DB 조회 → 캐시 hit 응답 경로 단축. Signal 4 (Trade-off): 캐시 일관성 관리 복잡도. Signal 5 (Rationale): read-heavy 워크로드 분석 근거. 5 signals 충족 → PASS.
+- A2: PASS — arithmetic direction (reduction, latency-like): before/after = 200/50 = 4x. Candidate claim "4x 단축" 일치. Causal chain (read-heavy → Redis 캐시 → latency 4x reduction) 논리 성립. Rule 위반 없음 → PASS.
+- A3: PASS — tech outcome: p99 latency 200ms → 50ms (4x 단축). before/after 모두 존재. numeric outcome 명시.
+- A4: PASS — "개인적으로 주도" 소유 동사. Mid-level coherent.
+- A5: PASS — Constraint (SLA 초과) / Decision (Redis 캐싱, read-heavy 분석 근거) / Result (4x latency 단축) scan 가능. Signal density 충분.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: APPROVE (all axes PASS)
+**structural_verdict**: PASS
+
+**Purpose**: P1-5 regression guard (reduction case) — latency-like 감소 시 multiplier를 before/after = 200/50 = 4x로 올바르게 계산함을 검증. 방향 슬립(after/before = 50/200 = 0.25x로 오계산) 시 이 SCN이 실패하여 regression을 감지. SCN-24(increase)와 쌍을 이루어 양방향 arithmetic recipe를 커버.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
@@ -867,21 +935,23 @@ r_phys:
 | SCN-21 | Priority cross-trigger: count(P1)≥3 AND structural FAIL | REQUEST_CHANGES | FAIL | Priority 3 (cumulative P1) precedence over priority 5 (structural FAIL) — source extraction routing |
 | SCN-22 | A2 Rule 4 standalone (p50 only, p99 absent) | APPROVE | PASS | Rule 4 standalone = Soft P1 — non-blocking, APPROVE 유지 (P1-3 regression guard) |
 | SCN-23 | A2 Rule 4 + Sub-check 1 compound (FAIL Exemplar 7) | REQUEST_CHANGES | FAIL | Rule 4 + Sub-check 1 compound → Hard FAIL (P1-3 regression guard) |
+| SCN-24 | A2 arithmetic direction increase (throughput-like, after/before) | APPROVE | PASS | Multiplier increase = after/before — 10→15 = 1.5x correctly parsed (P1-5 regression guard) |
+| SCN-25 | A2 arithmetic direction reduction (latency-like, before/after) | APPROVE | PASS | Multiplier reduction = before/after — 200ms→50ms = 4x correctly parsed (P1-5 regression guard) |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-23 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-23 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-22 (P1 — Rule 4 standalone) |
-| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-22, SCN-23, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-22, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21, SCN-23 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
+| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-23 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-23 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-22 (P1 — Rule 4 standalone) |
+| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-22, SCN-23, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21, SCN-23 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,24,25,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
