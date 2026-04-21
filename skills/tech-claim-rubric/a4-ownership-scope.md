@@ -173,9 +173,9 @@ integrity_note: "solo 동사(주도, 총괄) 중첩 사용, scope marker 없음,
 "결제 플로우 개선 프로젝트에 기여하여, PCI-DSS 제약 조건과 레거시 카드사 API 요구사항을 분석하고 새로운 결제 게이트웨이 어댑터를 선택·채택함. 어댑터 내부의 재시도 메커니즘과 멱등성 보장 동작 원리를 구현하였으며, 직접 연동 대비 어댑터 패턴의 트레이드오프(추가 레이어 오버헤드 vs 벤더 교체 용이성)를 검토하고 도입 근거를 남김. 어댑터 전환 후 결제 성공률이 94.2%에서 99.1%로 개선되었고, 장애 복구 시간이 평균 12분에서 2분으로 단축됨."
 
 **A4 Evaluation**:
-- 위반: "결제 플로우 개선 프로젝트에 기여하여" — "기여함"은 shared 동사로 적절하나, 본인의 역할 경계가 불명확함. 어댑터 구현이 본인 단독 작업인지, 팀 협업인지, 설계는 누가 했는지 불분명. scope가 결제 플로우 전체인지 어댑터 모듈인지 모호.
+- 위반: "결제 플로우 개선 프로젝트에 기여하여" — "기여함"은 shared 동사로 적절하나, 본인의 역할 경계가 불명확함. 어댑터 구현이 본인 단독 작업인지, 팀 협업인지, 설계는 누가 했는지 불분명. scope가 결제 플로우 전체인지 어댑터 모듈인지 모호. clarification 시 확인 필요: 어댑터 구현이 solo인지 팀 협업인지, scope가 모듈 수준인지 플로우 전체인지.
 - A4 PASS marker: scope qualifier 없음, bounded-scope verb 없음 — P1 수준의 모호성.
-- `integrity_suspected`: false — 동사 자체는 overclaim이 아니나 scope 불명확으로 clarification 필요.
+- `integrity_suspected`: false — 동사 자체는 overclaim이 아니나 역할 경계 불명확으로 clarification 필요.
 
 ```yaml
 axis: A4
@@ -183,7 +183,6 @@ verdict: P1
 reasoning: "<reasoning paragraph>"
 evidence_quote: "결제 플로우 개선 프로젝트에 기여하여"
 integrity_suspected: false
-integrity_note: "역할 경계 불명확 — 어댑터 구현이 solo인지 팀 협업인지, scope가 모듈 수준인지 플로우 전체인지 clarify 필요"
 ```
 
 ---
