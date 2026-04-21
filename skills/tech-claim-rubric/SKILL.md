@@ -33,7 +33,7 @@ The previous 11-axis system (v1) was retired by agent-council unanimous vote. Th
 
 1. **Over-engineered**: Sub-axes (E3a, E3b, sub-dimensions with weighted formulas) added evaluation overhead without improving signal quality. Evaluators spent more time computing scores than assessing claims.
 2. **Backend-biased**: The v1 depth criteria implicitly favored distributed systems and infrastructure work. Frontend, data, and product-engineering bullets systematically underscored due to structural mismatch.
-3. **Structurally rigid**: Phase A/B/C routing imposed a fixed evaluation order that created decision-tree overhead. Simple bullets required the same ceremonial path as complex ones.
+3. **Structurally rigid**: Phase A/B/C routing imposed a fixed evaluation order that created decision-tree overhead. Simple bullets required the same ceremonial path as complex ones. <!-- allow-forbidden -->
 4. **Catch-22 default-FAIL**: The "FAIL unless proven" stance combined with the prohibition on inference created a rubric where legitimately strong bullets failed due to formatting choices rather than substance gaps.
 
 The 5-axis redesign compresses the evaluation into five clear questions:
@@ -218,14 +218,14 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 ## Migration from v1 (11-axis)
 
-| v1 concept | v3 equivalent |
+| v1 concept | v3 equivalent | <!-- allow-forbidden -->
 |------------|---------------|
-| E1–E6 (depth axes) | A1 + A2 (depth + causal) |
-| R1–R5 (readability axes) | A5 alone (structure-agnostic) |
-| Phase A/B/C protocol | Sequential A1→A4 + A5 (structural) + 2 critical rules |
-| Constraint Cascade Score | A2 causal_honesty + A3 outcome_significance |
+| E1–E6 (depth axes) | A1 + A2 (depth + causal) | <!-- allow-forbidden -->
+| R1–R5 (readability axes) | A5 alone (structure-agnostic) | <!-- allow-forbidden -->
+| Phase A/B/C protocol | Sequential A1→A4 + A5 (structural) + 2 critical rules | <!-- allow-forbidden -->
+| Constraint Cascade Score | A2 causal_honesty + A3 outcome_significance | <!-- allow-forbidden -->
 
-All v1 axis tokens (E1–E6, R1–R5, E3b, Constraint Cascade, CASCADING, LISTED, FLAT, Narrative Necessity, Layer 2, Phase A/B/C) are retired. They must not appear in examiner output or downstream skill prompts outside of this migration reference.
+All v1 axis tokens (E1–E6, R1–R5, E3b, Constraint Cascade, CASCADING, LISTED, FLAT, Narrative Necessity, Layer 2, Phase A/B/C) are retired. They must not appear in examiner output or downstream skill prompts outside of this migration reference. <!-- allow-forbidden -->
 
 ---
 

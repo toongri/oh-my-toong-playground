@@ -18,7 +18,7 @@ A5는 의도적으로 structure-neutral. 다음 구조 모두 PASS 가능:
 - **Chronological**: 시간 흐름으로 문제→해결→결과
 - **Compressed case study**: 길지만 signal density 충분한 multi-line
 
-**v1 deprecation**: Problem/Strategy/Result 구조 강제, metric-in-Result 강제, Additional Sections distinct role 룰은 **적용 안 함**. v3는 "format → free, signal density → strict".
+**v1 deprecation**: Problem/Strategy/Result 구조 강제, metric-in-Result 강제, Additional Sections distinct role 룰은 **적용 안 함**. v3는 "format → free, signal density → strict". <!-- allow-forbidden -->
 
 > **v4 consistency note**: A1 5/5 strict는 Constraint+Mechanism+Rationale을 jointly 강제 — PSR(Problem+Strategy+Result)의 동등 기준을 A1 depth layer에서 흡수. A5는 readability layer로 demote됨.
 
@@ -46,7 +46,7 @@ Bullet:
 > **Strategy**: Consistent hashing + per-pod local L1 cache (60s TTL) + shared L2 (Redis)
 > **Result**: Miss rate 40%→4%, p99 latency 280ms→45ms, pod 1 → 6 scale-out 지원
 
-Why PASS: PSR 구조가 과거 v1에서 강제됐지만 v3에서도 허용. 각 섹션 scan 가능.
+Why PASS: PSR 구조가 과거 v1에서 강제됐지만 v3에서도 허용. 각 섹션 scan 가능. <!-- allow-forbidden -->
 
 ### PASS Exemplar 4 — Compressed case study (long but high-signal)
 
