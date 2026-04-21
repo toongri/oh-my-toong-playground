@@ -11,12 +11,20 @@ scenarios.md 축소 rationale:
 **Setup**: examiner output에서 `verdicts.a2_causal_honesty.verdict = PASS`, 다른 축 verdict는 무관 — Loop 1 gate는 a2만 검사
 **Expected**: resume-forge가 Loop 1 gate 통과 처리 → Loop 2 진입
 
+**Verification**:
+- Loop 1 gate는 a2_causal_honesty만 검사 — 다른 축 verdict 무관.
+- a2 PASS → Loop 2 진입 처리.
+
 ## SCN-2: Loop 2 gate (full 5축 PASS) — Entry approved
 **Setup**: examiner output 전체:
 - final_verdict = APPROVE
 - verdicts.a1-a4 모두 PASS, structural_verdict = PASS
 - critical_rule_flags 모두 false
 **Expected**: Entry로 confirm (post-APPROVE confirm gate). resume-forge가 다음 bullet 처리.
+
+**Verification**:
+- pass-criteria 전 항목 충족 → APPROVE 처리.
+- post-APPROVE confirm gate 진입 → 사용자 "확정" 응답 시 Entry 저장.
 
 ## SCN-3: Source extraction triggered (A1 FAIL)
 **Setup**: examiner output:
