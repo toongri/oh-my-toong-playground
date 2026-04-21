@@ -768,6 +768,75 @@ r_phys:
 
 ---
 
+### SCN-22: A2 Rule 4 standalone — p50만 제시, p99 누락 → Soft P1
+
+<!-- P1-3-regression guard: Rule 4 standalone = Soft P1 (Severity Tier L33) -->
+<!-- 5-signal mapping
+- Signal 1 (Constraint): "검색 서비스 latency 스파이크" — 구체적 수치 없으나 제약 유형 명시
+- Signal 2 (Technology): "Elasticsearch 샤드 재분배" — named system, mechanism 명시
+- Signal 3 (Mechanism): "hot shard 집중을 분산해 처리 균형을 맞추는 것" — mechanism 명시
+- Signal 4 (Trade-off): "운영 복잡도 증가 대비 응답 안정성 향상" — trade-off 명시
+- Signal 5 (Rationale): (trade-off 비교 근거 포함) → A1 PASS
+- A2: Cause (샤드 재분배) → mechanism (hot shard 분산) → effect (p50 latency 420ms→180ms). causal chain 논리적으로 성립, 병행 변경 언급 없음. 단, scale/안정성 주장 없이 p50 단독 제시 — Rule 4(distribution 미충족) standalone → Soft P1.
+-->
+
+**Bullet**: "검색 서비스 latency 스파이크가 제약 조건으로 식별됐고, 팀 내 성능 검토를 거쳐 Elasticsearch 샤드 재분배 방식을 채택했다. 메커니즘은 hot shard 집중을 분산해 처리 균형을 맞추는 것이며, 운영 복잡도 증가 대비 응답 안정성 향상의 트레이드오프를 비교한 근거 하에 결정했다. 이 개선으로 검색 API 중앙값(p50) latency를 420ms에서 180ms로 57% 단축해 달성했으며, 개인 기여로 샤드 전략 설계를 주도했다."
+
+**Candidate context**: { years: 5, position: "Mid Backend", target_company: "e-commerce" }
+
+**Expected verdicts**:
+- A1: PASS — Signal 1 (Constraint): latency 스파이크 명시. Signal 2 (Technology): Elasticsearch 샤드 재분배. Signal 3 (Mechanism): hot shard 분산으로 처리 균형. Signal 4 (Trade-off): 운영 복잡도 vs 응답 안정성. Signal 5 (Rationale): trade-off 비교 근거 명시. 5 signals 충족 → PASS.
+- A2: P1 — Cause (샤드 재분배) → mechanism (hot shard 분산) → effect (p50 latency 420ms→180ms). Causal chain 논리적으로 성립. 단, p50(중앙값)만 제시되어 p99 tail behavior 미공개 — Rule 4 (missing distribution: p99 absent when p50 cited) standalone 위반. Rule 4 standalone = Soft P1 (Severity Tier).
+- A3: PASS — tech outcome: p50 latency 420ms→180ms (57% 단축). before/after 모두 존재. numeric outcome + 달성 동사 명시.
+- A4: PASS — "개인 기여로 샤드 전략 설계를 주도" — 소유 동사 + 범위 qualifier. Mid-level coherent.
+- A5: PASS — Constraint (latency 스파이크) / Decision (샤드 재분배, trade-off) / Result (p50 단축) scan 가능. Signal density 충분.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: APPROVE (A2 P1 단독 — non-blocking; cumulative P1 count = 1 < 3)
+**structural_verdict**: PASS
+
+**Purpose**: P1-3 regression guard — Rule 4 (missing distribution) standalone 위반이 Soft P1로 분류되어 APPROVE를 유지함을 검증. Severity Tier에서 Rule 4 standalone = Soft P1이 Hard FAIL로 격상되지 않음을 확인. a2-causal-honesty.md B-3 exemplar 기반.
+
+---
+
+### SCN-23: A2 FAIL Exemplar 7 재현 — Rule 4 + Sub-check 1 compound → Hard FAIL
+
+<!-- P1-3-regression guard: Rule 4 + Sub-check 1 compound = Hard FAIL -->
+<!-- 5-signal mapping
+- Signal 1 (Constraint): "트래픽 5배 증가 상황" — scale context 명시
+- Signal 2 (Technology): (인프라/기술 변경 미언급 — 최적화 결과만 제시)
+- Signal 3 (Mechanism): (mechanism 미언급)
+- Signal 4 (Trade-off): (미언급)
+- Signal 5 (Rationale): (미언급)
+- A1: Signal 2/3/4/5 absent → A1 FAIL
+- A2: "확장성 증명" 인과 결론이 평균 latency 유지만으로 지지됨. Rule 4 위반(p99 미제시) + Sub-check 1 failure(tail 증거 없이 scale→안정성 인과 고리 붕괴) → Compound Hard FAIL
+-->
+
+**Bullet**: "트래픽 5배 증가 상황에서 평균 latency 250ms 유지로 안정적 확장성 증명"
+
+**Candidate context**: { years: 5, position: "Mid Backend", target_company: "infrastructure" }
+
+**Expected verdicts**:
+- A1: FAIL — Signal 2 (Technology): 기술 선택 미언급. Signal 3 (Mechanism): 확장 메커니즘 미언급. Signal 4 (Trade-off): 미언급. Signal 5 (Rationale): 미언급. Signal 1 (Constraint): "트래픽 5배 증가"만 존재. 4/5 absent → A1 FAIL.
+- A2: FAIL — Rule 4 (Missing distribution: 평균 latency만 제시, p95/p99 미공개) + Sub-check 1 (Causal Chain Validity) failure: "확장성 증명"은 tail latency 안정성으로만 검증됨에도 평균만 제시 → scale→안정성 인과 고리에서 tail 증거 공백. 5배 트래픽 하 안정성 인과 결론이 tail 분포 데이터 없이 붕괴. Compound (Rule 4 + Sub-check 1) → Hard FAIL.
+- A3: FAIL — numeric outcome 제시(250ms 유지)하나 before/after 구조 없음 ("유지" 주장에 baseline latency 미언급). outcome significance 검증 불가.
+- A4: PASS — "증명" verb는 1인칭 소유 동사. Mid-level + 문맥 coherent.
+- A5: FAIL — Signal 2/3/4/5 전무. 기술 결정 근거·메커니즘·trade-off 없어 핵심 판단 요소 scan 불가. Detail underload → A5 FAIL.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: REQUEST_CHANGES (A2 Hard FAIL — A1/A3/A5 FAIL 복합; individual axis FAIL 존재)
+**structural_verdict**: FAIL
+
+**Purpose**: P1-3 regression guard — FAIL Exemplar 7 재현. Rule 4 (missing distribution) + Sub-check 1 (Causal Chain Validity) compound 위반이 Hard FAIL로 분류됨을 검증. Severity Tier에서 "2+ concurrent rule violations → Hard FAIL" 및 "Sub-check 1 failure → Hard FAIL" 규칙이 SCN-22(Rule 4 standalone = P1)와 대비되어 compound 격상 경계를 명확히 확인.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
@@ -796,21 +865,23 @@ r_phys:
 | SCN-19 | A4 P1 (verb-scope boundary) | APPROVE | PASS | A4 P1 boundary — cumulative P1 contribution |
 | SCN-20 | R-Cross abstention (benign overlap) | APPROVE | PASS | Part-time advisory parallel engagement — r_cross.triggered false |
 | SCN-21 | Priority cross-trigger: count(P1)≥3 AND structural FAIL | REQUEST_CHANGES | FAIL | Priority 3 (cumulative P1) precedence over priority 5 (structural FAIL) — source extraction routing |
+| SCN-22 | A2 Rule 4 standalone (p50 only, p99 absent) | APPROVE | PASS | Rule 4 standalone = Soft P1 — non-blocking, APPROVE 유지 (P1-3 regression guard) |
+| SCN-23 | A2 Rule 4 + Sub-check 1 compound (FAIL Exemplar 7) | REQUEST_CHANGES | FAIL | Rule 4 + Sub-check 1 compound → Hard FAIL (P1-3 regression guard) |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
+| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-23 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-23 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-22 (P1 — Rule 4 standalone) |
+| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-22, SCN-23, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-22, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21, SCN-23 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
