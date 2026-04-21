@@ -130,8 +130,8 @@ const RULES: Rule[] = [
   },
 ];
 
-// Line-level allowlist marker
-const LINE_ALLOWLIST_MARKER = "allow-forbidden";
+// Line-level allowlist marker — must be an HTML comment to avoid false suppression on prose
+const LINE_ALLOWLIST_PATTERN = /<!--\s*allow-forbidden\s*-->/;
 
 // File-level allowlist marker (checked in first 5 lines)
 const FILE_ALLOWLIST_PATTERN = /<!--\s*forbidden-tokens-allowlist\s*-->/;
@@ -159,8 +159,8 @@ export function scanContent(content: string, filePath: string): Violation[] {
     const line = lines[i];
     const lineNum = i + 1;
 
-    // Skip lines with the line-level allowlist marker
-    if (line.includes(LINE_ALLOWLIST_MARKER)) {
+    // Skip lines with the line-level allowlist marker (HTML comment form only)
+    if (LINE_ALLOWLIST_PATTERN.test(line)) {
       continue;
     }
 
