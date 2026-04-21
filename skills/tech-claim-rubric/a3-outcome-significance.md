@@ -10,7 +10,7 @@ Absolute — 모든 level에서 "so what?" 답변 필수. 크기나 도메인과
 
 bullet이 어떤 outcome(효과)를 시사하나, 그것이 tech metric(latency, throughput, error rate 등)인지 business metric(revenue, conversion 등)인지 분류 불가한 경우 P1. "improved performance", "enhanced user experience" 등이 전형적 type-ambiguous 표현. 이 경우 FAIL 2(no magnitude)처럼 outcome이 완전히 공허하지는 않으나, PASS 조건도 충족 못 함.
 
-**A3 PASS 조건**: numeric outcome(`\d+\s*%|\d+\s*(ms|초|배|건|회|명)`)이 outcome verb(`달성|개선|단축|증가|감소|확보|향상`)와 함께 명시되어야 PASS. 수치 없는 fuzzy noun("성능 개선", "속도 향상")은 P1. outcome 자체가 없거나 vanity outcome("팀 만족도 향상" 지표 없음)은 FAIL.
+**A3 PASS 조건**: numeric outcome(`\d+\s*%|\d+\s*(ms|s|sec|min|h|초|배|건|회|명|RPS|QPS|GB|MB|\$)`)이 outcome verb(`달성|개선|단축|증가|감소|확보|향상|reducing|cutting|increasing|improving|boosting|achieving`)와 함께 명시되어야 PASS. 수치 없는 fuzzy noun("성능 개선", "속도 향상")은 P1. outcome 자체가 없거나 vanity outcome("팀 만족도 향상" 지표 없음)은 FAIL.
 
 ## PASS Exemplars
 
