@@ -336,7 +336,7 @@ flowchart TB
     ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative in HTML]
     ALTEVAL -->|All fail| K[REQUEST_CHANGES\n+ Interview Hints]
 
-    K --> L[Additional Interview\n— FAIL axes-based, all the way\n4-Stage Bypass Protocol]
+    K --> L[Additional Interview\n— interview_hints-based, all the way\n4-Stage Bypass Protocol]
     L --> M{Source confirmed?}
     M -->|YES| D
     M -->|NO: 4-Stage exhausted| N[Best revision with current sources]
