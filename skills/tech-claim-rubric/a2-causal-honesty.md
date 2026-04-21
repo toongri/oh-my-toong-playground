@@ -29,7 +29,7 @@ A2는 주장한 cause → effect가 "제시된 근거로 검증 가능한가"를
 
 | Tier | Triggered by |
 |------|-------------|
-| **Hard FAIL** | Rule 3 (offline-as-production) \| Rule 5 (unscoped absolute) \| 2+ concurrent rule violations \| Sub-check 2 (Arithmetic Consistency) failure |
+| **Hard FAIL** | Rule 3 (offline-as-production) \| Rule 5 (unscoped absolute) \| 2+ concurrent rule violations \| Sub-check 1 (Causal Chain Validity) failure \| Sub-check 2 (Arithmetic Consistency) failure \| Sub-check 3 (Constraint Resolution) failure |
 | **Soft P1** | Rule 1 (missing comparable baseline) standalone \| Rule 2 (missing time window / operating conditions) standalone \| Rule 4 (missing distribution) standalone \| Rule 6 (fuzzy outcome noun) standalone |
 
 **Compound violations**: 두 개 이상의 rule 위반이 동시에 존재하면 개별 tier에 관계없이 Hard FAIL로 격상.
@@ -113,12 +113,12 @@ Why FAIL:
 
 Bullet: "Q4 구매 전환율 8.4% 달성, 직전 대비 2.1%p 개선 — 결제 플로우 개편으로 인한 이탈 감소가 전환율 상승을 견인"
 
-**violated rules**: Rule 1 (Missing comparable baseline) + Rule 4 (causation overreach without control group)
+**violated rules**: Rule 1 (Missing comparable baseline) + Sub-check 1 (Causal Chain Validity) failure
 
 Why FAIL:
 - **Rule 1 위반**: "직전"이 Q3인지 작년 Q4인지 불분명. Q3 → Q4는 연말 프로모션 트래픽이라 cohort 자체가 다름 → seasonality confound. 동일 조건(동일 분기, 동일 프로모션 강도) baseline 없으면 개선이 작업 결과인지 계절 효과인지 분리 불가.
-- **Rule 4 위반**: "결제 플로우 개편으로 인한 이탈 감소가 견인"은 control group 없이 단일 개입의 인과 효과를 단정. 동 기간 마케팅 강화, 경쟁사 이슈, 프로모션 조건 변경 등 공변수가 통제되지 않았음에도 플로우 개편을 직접 원인으로 제시 → causation overreach.
-- **Compound violation**: Rule 1 + Rule 4 동시 위반 → Hard FAIL (두 개 이상의 rule 위반).
+- **Sub-check 1 failure**: Rule 1 위반의 결과로 causal chain 자체가 붕괴됨. "결제 플로우 개편으로 인한 이탈 감소가 견인"은 control group 없이 단일 개입의 인과 효과를 단정 — 동 기간 마케팅 강화, 경쟁사 이슈, 프로모션 조건 변경 등 공변수가 통제되지 않았음에도 플로우 개편을 직접 원인으로 제시 → causation overreach로 Causal Chain Validity 붕괴.
+- **Compound**: Rule 1 + Sub-check 1 failure → Hard FAIL.
 - 필요 근거: YoY(작년 Q4 대비) 비교 또는 프로모션 통제 조건 하의 A/B lift; 플로우 개편 이외 변수를 통제한 실험 설계 또는 hold-out 비교군.
 
 ### FAIL Exemplar 6 — Backtest metric tied to realized financial impact
