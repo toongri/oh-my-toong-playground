@@ -112,7 +112,7 @@ A4 marker: `개인 기여로 렌더링 모듈 일부를 최적화`
 
 ## FAIL Exemplars
 
-#### FAIL Exemplar 1 — Surface-level mention (any level)
+### FAIL Exemplar 1 — Surface-level mention (any level)
 
 Bullet: "Used React, TypeScript, and Next.js to build web application"
 
@@ -124,7 +124,7 @@ Why FAIL:
 - Signal 5 (Rationale) 부재: 근거 없음
 - 0 signal depth → FAIL
 
-#### FAIL Exemplar 2 — Generic verb + tech name
+### FAIL Exemplar 2 — Generic verb + tech name
 
 Bullet: "Led backend team to build microservices with Spring Boot and Kafka for scalability"
 
@@ -134,7 +134,7 @@ Why FAIL:
 - Signal 1개 수준으로 FAIL
 → FAIL
 
-#### FAIL Exemplar 3 — Tech name parade without depth
+### FAIL Exemplar 3 — Tech name parade without depth
 
 Bullet: "Experience with AWS (EC2, S3, RDS, Lambda, CloudFront, Route53, CloudWatch), Docker, Kubernetes, Terraform, Jenkins, GitLab CI"
 
@@ -143,7 +143,7 @@ Why FAIL:
 - Signal 2 (Technology)에 해당하는 이름들은 나열되나 Signal 1/3/4/5 완전 부재 — 기여 범위, 결정 근거, 설계 판단 없음
 → FAIL
 
-#### FAIL Exemplar 4 — Terminology without mechanism
+### FAIL Exemplar 4 — Terminology without mechanism
 
 Bullet: "Optimized database query performance by implementing advanced indexing strategies"
 
@@ -152,7 +152,7 @@ Why FAIL:
 - Signal 1/4/5 부재. "Optimized" + "advanced" 조합은 depth를 암시하나 mechanism을 대체하지 못함
 → FAIL
 
-#### FAIL Exemplar 5 — Feature-framed mechanism hiding
+### FAIL Exemplar 5 — Feature-framed mechanism hiding
 
 Bullet: "Developed mobile-first checkout flow with multi-step form validation and seamless payment experience across devices"
 
@@ -164,19 +164,19 @@ Why FAIL:
 
 ## P1 Exemplars
 
-#### P1 Exemplar 1 — P1 boundary: Kafka adoption with thin partitioning rationale (4/5)
+### P1 Exemplar 1 — P1 boundary: Kafka adoption with thin partitioning rationale (4/5)
 - Candidate context: async event processing 담당.
 - Bullet: "Adopted Kafka for async event processing with consumer-group partitioning to handle the order pipeline load (4M daily events, backlog p95 drop from 8min to 45s); chose Kafka over RabbitMQ for throughput, accepting operational complexity"
 - Reasoning: Signal 1 (constraint: order pipeline load), Signal 2 (Kafka 선택), Signal 3 (consumer-group partitioning), Signal 4 (RabbitMQ 기각, operational complexity 수용) 존재하나 Signal 5 (Rationale: 왜 throughput이 이 맥락에서 결정적인지) 부재. 4/5 signal — ALL 5 of 5 PASS bar에 1개 미달. P1.
 
-#### P1 Exemplar 2 — P1 boundary: CQRS with constraint but no rationale (4/5)
+### P1 Exemplar 2 — P1 boundary: CQRS with constraint but no rationale (4/5)
 - Candidate context: dashboard 성능 개선 담당.
 - Bullet: "단일 write DB의 쓰기 락 경합으로 인한 dashboard API latency SLA 위반 (Constraint) — CQRS 분리로 read/write model을 격리하여 dashboard 읽기 성능을 개선; single-model 대비 eventual consistency를 trade-off로 수용"
 - Reasoning: Signal 1 (Constraint: 쓰기 락 경합으로 인한 latency SLA 위반), Signal 2 (CQRS 선택), Signal 3 (read/write model 분리), Signal 4 (eventual consistency 수용) 존재하나 Signal 5 (Rationale: 언제 CQRS를 포기해야 하는지의 적용 경계) 부재. 4/5 signal — ALL 5 of 5 PASS bar에 1개 미달. P1.
 
-## Block B Exemplars
+## Block A Exemplars
 
-### P1 Exemplar B-1 — Constraint missing (4/5: Selection+Mechanism+Trade-off+Rationale present)
+### P1 Exemplar A-1 — Constraint missing (4/5: Selection+Mechanism+Trade-off+Rationale present)
 
 Candidate context: 결제 서비스 백엔드 엔지니어.
 
@@ -194,7 +194,7 @@ A2 marker: `1,200건/초`, `8,500건/초`, `3개월`
 A3 marker: `메시지 처리량을 3개월 내 1,200건/초에서 8,500건/초로 개선`, `결제 이벤트 유실률 0% 달성을 확보`
 A4 marker: `팀 내 이벤트 파이프라인 모듈 일부를 주도`
 
-### P1 Exemplar B-2 — Selection missing (4/5: Constraint+Mechanism+Trade-off+Rationale present)
+### P1 Exemplar A-2 — Selection missing (4/5: Constraint+Mechanism+Trade-off+Rationale present)
 
 Candidate context: 검색 서비스 백엔드 엔지니어.
 
@@ -212,7 +212,7 @@ A2 marker: `p99`, `500ms`, `520ms`, `80ms`, `6주`
 A3 marker: `p99 응답시간을 520ms에서 80ms로 단축`, `검색 전환율 22% 증가를 달성`
 A4 marker: `팀 내 검색 모듈 일부를 주도`
 
-### P1 Exemplar B-3 — Mechanism missing (4/5: Constraint+Selection+Trade-off+Rationale present)
+### P1 Exemplar A-3 — Mechanism missing (4/5: Constraint+Selection+Trade-off+Rationale present)
 
 Candidate context: 스트리밍 플랫폼 백엔드 엔지니어.
 
@@ -230,7 +230,7 @@ A2 marker: `0.8%`, `15,000건/초`, `2개월`
 A3 marker: `이벤트 유실률을 0.8%에서 0%로 개선`, `스트리밍 이벤트 처리량 15,000건/초 확보를 달성`
 A4 marker: `개인 기여로 이벤트 수집 모듈 일부를 구현`
 
-### P1 Exemplar B-4 — Trade-off missing (4/5: Constraint+Selection+Mechanism+Rationale present)
+### P1 Exemplar A-4 — Trade-off missing (4/5: Constraint+Selection+Mechanism+Rationale present)
 
 Candidate context: 핀테크 백엔드 엔지니어.
 
@@ -248,7 +248,7 @@ A2 marker: `p95`, `300ms`, `320ms`, `18ms`, `4개월`
 A3 marker: `p95 지연시간을 320ms에서 18ms로 단축`, `DB 읽기 부하 70% 감소를 달성`
 A4 marker: `함께 캐싱 레이어 컴포넌트를 구현`
 
-### P1 Exemplar B-5 — Rationale missing (4/5: Constraint+Selection+Mechanism+Trade-off present)
+### P1 Exemplar A-5 — Rationale missing (4/5: Constraint+Selection+Mechanism+Trade-off present)
 
 Candidate context: 게임 백엔드 엔지니어.
 
@@ -266,7 +266,7 @@ A2 marker: `50ms`, `60ms`, `12ms`, `50,000명`, `3개월`
 A3 marker: `세션 지연을 60ms에서 12ms로 단축`, `동시 접속자 50,000명 처리 확보를 달성`
 A4 marker: `개인 기여로 세션 동기화 모듈 일부를 최적화`
 
-### FAIL Exemplar B-6 — 3/5 A1 signals present (graduated thinning)
+### FAIL Exemplar A-6 — 3/5 A1 signals present (graduated thinning)
 
 Candidate context: 이커머스 플랫폼 백엔드 엔지니어.
 
@@ -284,7 +284,7 @@ A2 marker: `850ms`, `95ms`, `4개월`, `2,500건/초`
 A3 marker: `주문 처리 지연을 4개월 내 850ms에서 95ms로 단축`, `주문 처리량 2,500건/초 확보를 달성`
 A4 marker: `팀 내 주문 이벤트 파이프라인 일부를 구현`
 
-### FAIL Exemplar B-7 — 2/5 A1 signals present (graduated thinning)
+### FAIL Exemplar A-7 — 2/5 A1 signals present (graduated thinning)
 
 Candidate context: SaaS 플랫폼 백엔드 엔지니어.
 
@@ -302,7 +302,7 @@ A2 marker: `1,200ms`, `90ms`, `3개월`, `35%`
 A3 marker: `검색 응답시간을 1,200ms에서 90ms로 단축`, `사용자 검색 만족도 35% 증가를 달성`
 A4 marker: `공동으로 검색 서비스 모듈을 개발`
 
-### FAIL Exemplar B-8 — 1/5 A1 signal (name-level only)
+### FAIL Exemplar A-8 — 1/5 A1 signal (name-level only)
 
 Candidate context: 스타트업 풀스택 엔지니어.
 

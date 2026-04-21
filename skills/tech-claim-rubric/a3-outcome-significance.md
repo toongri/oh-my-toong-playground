@@ -102,10 +102,13 @@ Why FAIL:
 
 ### FAIL Exemplar 5 — Unresolvable metric type
 
-- Candidate context: Senior, 7 years.
-- Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
-- Reasoning: A3 P1 rule is "Outcome type boundary unclear." Magnitude is present (72→88) so the numeric outcome condition is met; the question is type resolution. "Target metric" is semantically empty: it could be an inverted p99 latency score, accuracy, NPS, satisfaction index, or revenue index. No lexical or contextual cue narrows the metric type at either the bullet or surrounding-phrase level. Missing numeric baseline for type disambiguation; type wholly unresolved — does not qualify as P1.
-- **Final Verdict: FAIL**
+Bullet: "Overhauled pricing calculation service; target metric moved from 72 to 88"
+
+Why FAIL:
+- Magnitude present (72→88) so numeric outcome condition is met; question is type resolution
+- "Target metric" is semantically empty: could be p99 latency score, accuracy, NPS, satisfaction index, or revenue index
+- No lexical or contextual cue narrows the metric type at the bullet or surrounding-phrase level
+- Type wholly unresolved — does not qualify as P1 boundary; Hard FAIL
 
 ## Block C — Isolated A3 Violation Exemplars
 
@@ -142,9 +145,9 @@ Why FAIL:
 
 "Refactored payment integration to enable sandboxing, unblocking QA from coupling on production credentials"
 
-- 정량 아니지만 outcome은 명확 (unblocked). 인과 관계 명시
-- 일부 boundary PASS 가능, 하지만 정량이 훨씬 강함
-- 가능하면 "QA cycle time 단축" 등 정량 추가 권장
+- Verdict criterion: causality + unblocking verb 동시 존재 시 PASS, 아니면 P1
+- 이 예시 — causality 명시 (sandboxing enable → production 의존 제거) + "unblocking" verb 존재 → PASS
+- 정량이 없어도 PASS 가능하나, "QA cycle time 단축" 등 정량 추가 시 훨씬 강함
 
 ### EDGE 2 — Tech metric without surrounding context
 
