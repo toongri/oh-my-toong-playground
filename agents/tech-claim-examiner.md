@@ -145,7 +145,7 @@ Examples:
 R-Phys pattern(multiplicative increase)이 trigger되는지 평가: 3x는 workers 3배 증가에 비례하므로 물리적으로 plausible.
 triggered: false (numeric과 mechanism이 coherent)
 
-**Worked example (Block E-2 — true trigger, deep bullet physical impossibility)**:
+**Worked example (true trigger — deep bullet physical impossibility)**:
 
 - bullet: "Reduced inter-service API latency to 0.001ms after switching to HTTP/2 keep-alive"
 - candidate_context: "Backend engineer, 4 years. Services co-located in same data center."
@@ -163,7 +163,7 @@ Examples:
 
 **Applicability**: cross-entry context가 없으면 `triggered: false`로 설정하고, reasoning에 "cross-entry context not provided"로 absence를 기록.
 
-**Worked example (Block E-1 — true trigger, two-entry ownership contradiction)**:
+**Worked example (true trigger — two-entry ownership contradiction)**:
 
 - Entry A (bullet under evaluation): "Designed and implemented entire payment microservice from scratch"
 - Entry B (cross-entry context): "Contributed to payment microservice API design alongside team of 8"
@@ -180,11 +180,11 @@ triggered: true → invariant 적용: final_verdict = REQUEST_CHANGES
 R-Cross pattern(cross-team)이 trigger되는지 평가: collaboration 언어가 ownership boundary를 명확히 하여 cross-entry 모순 없음.
 triggered: false
 
-### Verb-Scope Inflation → A4 integrity_suspected Flow (Block E-3)
+### Verb-Scope Inflation → A4 integrity_suspected Flow
 
 **Note**: The verb-scope inflation critical_rule_flag has been retired in v4. Verb-scope inflation is now handled entirely by A4 Ownership & Scope axis via the `integrity_suspected` field. See `skills/tech-claim-rubric/a4-ownership-scope.md`.
 
-**Worked example (Block E-3 — A4 integrity_suspected true)**:
+**Worked example (A4 integrity_suspected true)**:
 
 - bullet: "전사 마이크로서비스 전환 이니셔티브를 주도하여 모놀리스 기술 부채를 해소함. Istio 서비스 메시 도입 후 서비스 간 레이턴시 120ms → 45ms 감소"
 - candidate_context: "Junior engineer, 1.5 years. 단일 서비스 팀 소속."

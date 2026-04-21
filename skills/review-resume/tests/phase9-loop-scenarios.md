@@ -59,7 +59,7 @@ interview_hints:
 결과 요약 테이블과 전략 옵션 제시 직후, 별도 user 지시 없음.
 (Note: batch dispatch + summary table은 [SKILL.md Phase 9 Red Flags](../SKILL.md#phase-9-red-flags--stop-when-you-think-this) pattern — loop continuation이 정답, Phase 10 진입이 오답.)
 
-**Expected:** 결과 요약 후에도 Phase 10으로 진입하지 않고 per-bullet 피드백 루프를 계속 실행.
+**Expected:** 결과 요약 후에도 Phase 10으로 진입하지 않고 bullet별 피드백 루프를 계속 실행.
 
 **Verification:**
 - REQUEST_CHANGES 후 Phase 10 미진입.

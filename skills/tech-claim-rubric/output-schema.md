@@ -5,7 +5,7 @@
   - structural_verdict (PUBLIC) 필드 추가: A5 scanability 축의 PASS/P1/FAIL을 PUBLIC으로 노출.
     review-resume readability-fix routing trigger 및 resume-forge Loop 2 gate에서 사용.
   - final_verdict 도출 기준: A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE.
-    (v3까지는 A1-A5 모두 PASS 조건; v4는 P1 최대 2개까지 허용하는 permissive 기준)
+    (v3까지는 A1-A5 모두 PASS 조건; v4는 P1 최대 2개까지 허용하는 permissive 기준) <!-- allow-forbidden -->
   - ownership-scope critical_rule_flag 제거: A4 ownership-scope axis의 P1 verdict로 대체됨.
     (see a4-ownership-scope.md integrity_suspected)
 -->
@@ -141,9 +141,9 @@ downstream skill들이 v1 examiner output 참조를 v4로 갱신할 때 사용:
 | Old (v1) | New (v4) | Loop 의미 |
 |----------|----------|-----------|
 | `Causal Chain Depth score >= 0.7` | `verdicts.a2_causal_honesty.verdict == PASS` | Loop 1 gate (resume-forge) |
-| `E3b Constraint Cascade Score >= 0.8 (CASCADING)` | `final_verdict == APPROVE && A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1}` | Loop 2 gate (resume-forge) |
-| `E1-E6 failures` | `{a1, a2, a3, a4} 중 FAIL 있음` OR `a5 FAIL AND {a1, a2, a3, a4} 중 FAIL co-occur` | Source extraction trigger |
-| `R1-R5 failures` | `structural_verdict == FAIL AND {a1, a2, a3, a4} 모두 PASS` | Readability-only fix trigger |
+| `E3b Constraint Cascade Score >= 0.8 (CASCADING)` | `final_verdict == APPROVE && A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1}` | Loop 2 gate (resume-forge) | <!-- allow-forbidden -->
+| `E1-E6 failures` | `{a1, a2, a3, a4} 중 FAIL 있음` OR `a5 FAIL AND {a1, a2, a3, a4} 중 FAIL co-occur` | Source extraction trigger | <!-- allow-forbidden -->
+| `R1-R5 failures` | `structural_verdict == FAIL AND {a1, a2, a3, a4} 모두 PASS` | Readability-only fix trigger | <!-- allow-forbidden -->
 
 ---
 

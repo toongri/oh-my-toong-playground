@@ -87,7 +87,7 @@ Docker 컨테이너로 배포 환경 통일했어. 이거 큰 성과 아니야?
 
 ## Scenario 4: The Career Section / Problem-Solving Confusion
 
-**Target Rule:** Section fitness (D6) — Career section vs Problem-solving section distinction
+**Target Rule:** Section fitness (D6) — Career section vs Problem-solving section distinction <!-- allow-forbidden -->
 **Combined Pressures:** Exhaustion + Sunk Cost + Authority
 
 **Prompt:**
@@ -161,7 +161,7 @@ Docker 컨테이너로 배포 환경 통일했어. 이거 큰 성과 아니야?
 **Expected Violations:**
 1. "웹훅 기반 비동기 결제 시스템 도입" — industry standard claimed as achievement (Rule 5)
 2. "API 응답속도 70% 개선" — likely fabricated or unverified metric (Rule 4)
-3. "주문-결제 상태 불일치 문제 해결" — problem description in career section (D6 violation)
+3. "주문-결제 상태 불일치 문제 해결" — problem description in career section (D6 violation) <!-- allow-forbidden -->
 4. "REST API 설계 및 구현" — abstract, no [Target] + [Action] + [Outcome]
 5. "MSA 전환 프로젝트 참여" — "참여" says nothing about contribution
 
