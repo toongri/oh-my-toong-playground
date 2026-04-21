@@ -136,11 +136,12 @@ Why FAIL:
 
 Bullet: "트래픽 5배 증가 상황에서 평균 latency 250ms 유지로 안정적 확장성 증명"
 
-**violated rule**: Missing distribution (avg vs p99) for scale claims
+**violated rules**: Rule 4 (Missing distribution — avg vs p99 for scale claims) + Sub-check 1 (Causal Chain Validity) failure
 
 Why FAIL:
-- scale claim(5배 증가)에서 평균 유지는 p95/p99이 폭증해도 성립 가능 — 평균은 throughput 증가 시 tail에 의해 잘 움직이지 않음.
-- "확장성 증명"은 tail latency의 안정성으로만 검증됨에도 평균만 제시 → scale → 안정성 인과 고리에서 tail 증거가 비어 있음.
+- **Rule 4 위반**: scale claim(5배 증가)에서 평균 유지는 p95/p99이 폭증해도 성립 가능 — 평균은 throughput 증가 시 tail에 의해 잘 움직이지 않음.
+- **Sub-check 1 failure**: "확장성 증명"은 tail latency의 안정성으로만 검증됨에도 평균만 제시 → scale → 안정성 인과 고리에서 tail 증거가 비어 있음. 5배 트래픽 하에서 안정성이 성립한다는 인과 결론이 tail 분포 데이터 없이 붕괴.
+- **Compound**: Rule 4 + Sub-check 1 failure → Hard FAIL.
 - 필요 근거: 5배 트래픽 시점의 p95/p99, error rate, saturation point 부근에서의 latency 분포 shape.
 
 ### FAIL Exemplar 8 — 장애 0건 달성
