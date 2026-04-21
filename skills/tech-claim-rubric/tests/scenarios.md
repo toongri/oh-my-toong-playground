@@ -724,6 +724,45 @@ r_phys:
 
 ---
 
+### SCN-21: Priority cross-trigger — count(P1) ≥ 3 AND structural_verdict FAIL (priority 3 precedence)
+
+**Bullet**: "검색 서비스의 응답 지연 문제를 해소하기 위해 ElasticSearch를 도입해 인덱싱 파이프라인을 구축했다. 기존 RDB full-scan 대비 역색인 기반 검색으로 응답 속도를 개선했으며, 팀 검색 쿼리 최적화 작업에도 일부 기여했다. 검색 정확도와 운영 안정성이 향상됐다."
+<!-- 5-signal mapping
+- Signal 1 (Constraint): "검색 서비스의 응답 지연 문제" — 구체적 지연 수치/SLA 임계치 없이 추상적 서술 → Signal 1 불완전
+- Signal 2 (Technology): "ElasticSearch" + "RDB full-scan 대비" — named system, alternative 명시
+- Signal 3 (Mechanism): "역색인 기반 검색으로 응답 속도 개선" — mechanism 명시
+- Signal 4 (Trade-off): (absent — 운영 복잡도, 인프라 비용 증가 등 trade-off 미언급)
+- Signal 5 (Rationale): (absent — 왜 ElasticSearch가 이 맥락에서 최선인지 근거 없음)
+- A3: "검색 정확도와 운영 안정성이 향상됐다" — outcome type 분류 불가 (검색 정확도=tech metric? business metric?), numeric 없음, before/after 없음 → A3 P1 boundary
+- A5: Signal 1 수치/SLA 없고, trade-off/rationale 전무 + outcome fuzzy → 6–30초 scan에서 문제 규모·결정 근거·결과 magnitude 중 어느 것도 포착 불가 → A5 FAIL (detail underload)
+-->
+
+**Candidate context**: { years: 4, position: "Mid Backend", target_company: "e-commerce" }
+
+**Expected verdicts**:
+- A1: P1 — Signal 1 (Constraint): "검색 서비스의 응답 지연 문제"는 제약 존재를 시사하나 수치(현재 p99, SLA 임계치, 요청량 등) 전무로 concreteness 부족. Signal 2 (Technology): ElasticSearch vs RDB full-scan 명시. Signal 3 (Mechanism): 역색인 기반 검색. Signal 4 (Trade-off): 미언급. Signal 5 (Rationale): 미언급. Signal 1 thin + Signal 4/5 absent → 2/5 absent → P1 경계 (Signal 2·3 존재하나 depth 부족으로 PASS 미달).
+- A2: P1 — Cause (ElasticSearch 역색인) → effect ("검색 정확도와 운영 안정성 향상"). Causal chain 방향은 식별되나 effect가 fuzzy하고 numeric 없어 인과 검증 불가. 병행 변경(서버 증설, 쿼리 튜닝 등) 가능성 unverified. A2 rule "cause→effect stated but one link unverified" → P1.
+- A3: P1 — "검색 정확도와 운영 안정성이 향상됐다" — outcome type boundary unclear: 검색 정확도는 tech metric(recall, precision)인지 business metric(클릭률, 전환율)인지 분류 불가. 운영 안정성도 가용성/MTTR 등 tech 지표인지 SLA 준수율 등 business 지표인지 불명. numeric outcome 전무 → magnitude 불명. A3 P1 rule "outcome type boundary unclear" 직접 해당.
+- A4: PASS — "ElasticSearch를 도입해 인덱싱 파이프라인을 구축" (소유 동사 명시) + "팀 검색 쿼리 최적화 작업에도 일부 기여" (기여 범위 한정). verb-scope 혼재이나 각 scope에 qualifier 존재. Mid-level + 기여 범위 coherent. PASS.
+- A5: FAIL — Detail underload: Signal 1 수치 없음, Signal 4/5 전무, outcome fuzzy. 6–30초 scan으로 constraint 규모·decision rationale·result magnitude 중 어느 것도 포착 불가. 핵심 signal density 부족 → A5 FAIL.
+
+**P1 count across A1-A4**: A1=P1, A2=P1, A3=P1, A4=PASS → count(P1) = 3 ≥ 3 → priority 3 발동.
+**structural_verdict**: FAIL → priority 5 발동 조건 충족.
+**Priority resolution**: priority matrix 우선순위 3 < 5 → priority 3 먼저 적용. routing lane = source extraction (A1-A4 누적 P1 보강 요청). priority 5 readability-fix lane은 적용 안 됨.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: REQUEST_CHANGES (priority 3: count(P1 across A1-A4) = 3 ≥ 3 — priority 5 structural_verdict FAIL 동시 발생하나 priority 3이 우선 적용됨)
+**structural_verdict**: FAIL
+
+**routing_target**: source extraction — 가장 약한 P1 축(A1: constraint concreteness, A2: causal chain verification, A3: outcome type clarity)부터 순서대로 보강. readability-fix lane(priority 5)은 priority 3에 의해 차단됨.
+
+**Purpose**: priority cross-trigger regression guard — `count(P1 across A1-A4) ≥ 3` (priority 3)과 `structural_verdict == FAIL` (priority 5)이 동시 발생할 때, priority matrix 정의 순서에 따라 priority 3이 우선 적용되어 routing lane이 readability-fix(priority 5)가 아닌 source extraction(priority 3)으로 결정됨을 검증. SCN-2(A5 FAIL alone → readability-fix)와 SCN-A1-cumP1-3(cumulative P1 alone → source extraction)의 조합 케이스에서 priority precedence가 정확히 동작하는지 확인.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
@@ -751,21 +790,22 @@ r_phys:
 | SCN-A1-cumP1-3 | Cumulative P1 ≥ 3 invariant | REQUEST_CHANGES | PASS | A1+A2+A3 P1, A4 PASS — cumulative trigger (no individual FAIL) |
 | SCN-19 | A4 P1 (verb-scope boundary) | APPROVE | PASS | A4 P1 boundary — cumulative P1 contribution |
 | SCN-20 | R-Cross abstention (benign overlap) | APPROVE | PASS | Part-time advisory parallel engagement — r_cross.triggered false |
+| SCN-21 | Priority cross-trigger: count(P1)≥3 AND structural FAIL | REQUEST_CHANGES | FAIL | Priority 3 (cumulative P1) precedence over priority 5 (structural FAIL) — source extraction routing |
 
 ## Axis Boundary Coverage
 
 | Axis | PASS cases | FAIL cases | Boundary/P1 cases |
 |------|-----------|-----------|-------------------|
-| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1) |
-| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1) |
-| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1) |
-| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
-| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
+| A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
+| A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
 ## Critical Rule Coverage
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
