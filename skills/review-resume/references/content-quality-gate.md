@@ -100,7 +100,7 @@ Presenting a single revision causes two problems:
 1. The user is forced to adopt the revision without sharing the underlying assumptions (positioning direction, risk tolerance).
 2. When the tech-claim-examiner issues a FAIL, there is no indication of which direction to revise toward.
 
-Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the tech-claim-examiner's FAIL axes within the chosen direction.
+Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the tech-claim-examiner's REQUEST_CHANGES feedback items within the chosen direction.
 
 ### Alternative Format
 
@@ -214,7 +214,7 @@ Conduct a detailed per-item interview with the user before examiner dispatch. Th
 | Dimension | Pre-Examiner Interview | Post-Examiner Interview |
 |-----------|----------------------|------------------------|
 | Trigger | Always (every evaluator-eligible item) | REQUEST_CHANGES received |
-| Purpose | Reach agreement, prepare for success | Supplement FAIL axes, improve |
+| Purpose | Reach agreement, prepare for success | Supplement REQUEST_CHANGES feedback items, improve |
 | Question basis | Evaluation Phase findings | Examiner's Interview Hints |
 | Exit | Agreement reached → examiner dispatch | Source secured → re-dispatch |
 
