@@ -199,9 +199,12 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 **PUBLIC fields** (returned to downstream caller):
 
+> Canonical definition: [`output-schema.md`](output-schema.md) §Output Schema. 이 테이블은 downstream consumer를 위한 요약이며 schema 변경 시 반드시 동기 수정.
+
 | Field | Description |
 |-------|-------------|
 | `final_verdict` | `APPROVE` or `REQUEST_CHANGES` |
+| `structural_verdict` | `PASS`/`P1`/`FAIL` — A5 axis verdict, readability routing key |
 | `interview_hints` | `string[]` — actionable improvement suggestions |
 
 ### interview_hints Rules
