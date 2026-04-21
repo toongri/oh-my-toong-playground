@@ -234,6 +234,35 @@ describe("scanContent: allowlist marker 처리", () => {
     const violations = scanContent(content, "test.md");
     expect(violations.length).toBe(0);
   });
+
+  it(`산문에 "allow-forbidden" 단어만 포함되면 suppress 되지 않는다 (HTML comment 형태 아님)`, () => {
+    // The word "allow-forbidden" in plain prose must NOT suppress violations on the same line
+    const content = "E1 axis is no longer used; this line says allow-forbidden in prose only.";
+    const violations = scanContent(content, "test.md");
+    // E1 should still be reported — prose mention of "allow-forbidden" is not a suppression marker
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "E-axis")).toBe(true);
+  });
+
+  it(`HTML comment 형태 <!-- allow-forbidden --> 일 때만 라인 suppress 된다`, () => {
+    const content = "E1 axis score is 0.7 <!-- allow-forbidden -->";
+    const violations = scanContent(content, "test.md");
+    expect(violations.length).toBe(0);
+  });
+
+  it(`malformed comment <!-- allow forbidden --> (공백 포함, 하이픈 없음)는 suppress 하지 않는다`, () => {
+    const content = "E1 axis score <!-- allow forbidden -->";
+    const violations = scanContent(content, "test.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "E-axis")).toBe(true);
+  });
+
+  it(`malformed comment <! -- allow-forbidden --> (태그 형식 오류)는 suppress 하지 않는다`, () => {
+    const content = "E1 axis score <! -- allow-forbidden -->";
+    const violations = scanContent(content, "test.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "E-axis")).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
