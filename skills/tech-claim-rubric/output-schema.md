@@ -70,7 +70,7 @@ structural_verdict: PASS | P1 | FAIL       # PUBLIC. A5 scanability axis의 verd
                                            #     (structural_verdict == FAIL AND {a1,a2,a3,a4} 모두 PASS/P1 AND count(P1 across A1-A4) < 3)
                                            #   - resume-forge: Loop 2 gate readability-fix path
                                            #     (A1-A4 no FAIL AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE)
-interview_hints: string[]                  # PUBLIC (REQUEST_CHANGES 시 user-facing)
+interview_hints: string[]                  # PUBLIC (APPROVE/REQUEST_CHANGES 모두 user-facing — P1 hints는 항상 surface)
                                            # language constraint: source bullet의 언어 = hint 언어.
                                            # 한국어 bullet → 한국어 hint; English bullet → English hint. (bidirectional)
 ```
