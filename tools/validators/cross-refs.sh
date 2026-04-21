@@ -269,6 +269,52 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# A8 — Resolution Log verdict completeness
+#
+# Every block with a finding_id must have a verdict that is neither missing,
+# empty, nor literally "pending".
+# ---------------------------------------------------------------------------
+ASSERTION=8
+LABEL="Resolution Log verdict completeness"
+
+if [ ! -f "$RESOLUTION_LOG" ]; then
+  fail "$ASSERTION" "$LABEL" \
+    "resolution-log.md not found at: ${RESOLUTION_LOG}"
+else
+  BAD=$(awk '
+    function flush() {
+      if (fid != "") {
+        if (verdict == "") {
+          printf "%s:empty ", fid
+        } else if (verdict == "pending") {
+          printf "%s:pending ", fid
+        }
+        checked++
+      }
+      fid=""; verdict=""
+    }
+    /^finding_id:/ { flush(); fid=$2; next }
+    /^verdict:/    { $1=""; sub(/^ +/, "", $0); verdict=$0; next }
+    /^---$/        { flush(); next }
+    END            { flush(); print "|CHECKED=" checked }
+  ' "$RESOLUTION_LOG")
+
+  # Split on the |CHECKED= marker
+  BAD_LIST="${BAD%%|CHECKED=*}"
+  CHECKED_STR="${BAD##*|CHECKED=}"
+  CHECKED="${CHECKED_STR:-0}"
+  # Trim trailing whitespace from BAD_LIST
+  BAD_LIST="$(printf '%s' "$BAD_LIST" | sed 's/[[:space:]]*$//')"
+
+  if [ -z "$BAD_LIST" ]; then
+    pass "$ASSERTION" "$LABEL (${CHECKED}/${CHECKED} valid)"
+  else
+    fail "$ASSERTION" "$LABEL" \
+      "Blocks with missing/empty/pending verdict: ${BAD_LIST}"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 printf '\n'
