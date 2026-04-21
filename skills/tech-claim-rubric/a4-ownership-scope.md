@@ -1,7 +1,7 @@
 # A4. Ownership & Scope
 
 ## Standard
-Absolute — verb와 scope의 coherence는 모든 level에서 검증. Junior가 "led org-wide initiative"라고 쓰면 FAIL. Senior가 모든 bullet에 "led"만 쓰면 FAIL.
+Absolute — verb와 scope의 coherence는 모든 level에서 검증. Junior가 "led org-wide initiative"라고 쓰면 FAIL. 단일 bullet에 "led" + no scope qualifier → P1/FAIL.
 
 ## Verb-Scope Taxonomy
 
