@@ -336,3 +336,42 @@ describe("scanFiles: 파일 스캔", () => {
     expect(violations.length).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Suite: scanContent / scanFiles — edge cases
+// ---------------------------------------------------------------------------
+
+describe("scanContent: edge case 처리", () => {
+  it(`빈 파일 입력 시 위반 0건이고 crash 없다`, () => {
+    const violations = scanContent("", "empty.md");
+    expect(violations.length).toBe(0);
+  });
+
+  it(`UTF-8 BOM(\\uFEFF) 접두사가 있는 파일도 토큰을 정상 감지한다`, () => {
+    // BOM is prepended to the first line; the forbidden token should still be detected
+    const content = "﻿The v3 system has been retired.";
+    const violations = scanContent(content, "bom.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "v3")).toBe(true);
+  });
+
+  it(`CRLF 줄바꿈(\\r\\n) 파일에서 토큰을 정상 감지한다`, () => {
+    const content = "Line one.\r\nThe per-bullet approach is outdated.\r\nLine three.";
+    const violations = scanContent(content, "crlf.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "per-bullet")).toBe(true);
+  });
+
+  it(`코드 펜스 내부의 forbidden token은 여전히 flag된다 (allow-forbidden 마커 없는 경우)`, () => {
+    const content = [
+      "Some prose above.",
+      "```",
+      "const label = 'E1';  // legacy E1 axis",
+      "```",
+      "Some prose below.",
+    ].join("\n");
+    const violations = scanContent(content, "fence.md");
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations.some((v) => v.ruleName === "E-axis")).toBe(true);
+  });
+});
