@@ -276,3 +276,52 @@ JSON 만 출력.
 
 - JD title "Backend Team Lead" + body 가 매니지먼트 위주 → `role_tags: [backend, platform]` 가능.
 - JD title "DevOps Engineer" + body 가 backend 개발도 일부 → `role_tags: [devops, backend]`.
+
+## Matching Loop (history → rules → filter) [MANDATORY]
+
+각 JD 저장 전에 현재 `profile/rules.yaml` 과 대조하여 `status` 를 결정한다. 3-phase 판정:
+
+### Phase 1: History lookup
+
+기존 `jobs/**/*.md` 에 동일 URL 혹은 slug pair 가 있으면 해당 status 승계 (사용자 reversal 은 S6 규칙으로 처리). 없으면 Phase 2.
+
+### Phase 2: Rules check (LLM ambiguity predicate)
+
+`reference/ambiguity-prompt.md` 의 pinned prompt 를 **temperature 0** 으로 호출. Output JSON:
+
+```json
+{"verdict": "match" | "mismatch" | "ambiguous", "missing_signals": [string], "explanation": "KR short"}
+```
+
+- `verdict == "match"` → `status: included` (자동)
+- `verdict == "mismatch"` → `status: excluded` (자동, 단 S4 규칙에 따라 `tags` + `reason_note` 필요 — rules 위반 이름을 tag 로 derive)
+- **`verdict == "ambiguous"` → 자동 판정 금지.** 반드시 `AskUserQuestion` 호출 (Phase 3).
+
+JSON 파싱 실패 시 1회 retry. 2회 실패 → conservative `verdict: ambiguous` + `missing_signals: ["llm_parse_failure"]` 로 Phase 3 진입.
+
+### Phase 3: Ask the user (ambiguous only)
+
+`missing_signals` 을 기반으로 한국어 질문 구성. `AskUserQuestion` 호출 시:
+
+- 질문은 **핵심 결정 신호** 중심 (예: "이 JD 의 원격 근무 정책을 확인하고 싶어요. 원격 가능이면 include, 불가능이면 exclude 로 저장할까요?")
+- 옵션: `include`, `exclude`, `defer` (= status: `ambiguous` 로 저장, 후속 배치에서 재평가)
+- 유저 답변 수집 후 `status` 확정. defer 인 경우 `status: ambiguous` + `reason_note: "deferred due to <missing>"`.
+
+**Batch mode 에서도 즉시 호출**. 체크포인트 · 배치 종료 대기 금지. 유저가 "그만" / "stop" / "defer all" 등 명시적 중단 의사 표명 시 즉시 중단 + 남은 후보 `status: ambiguous` 로 일괄 보존.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "본문에 rules 위반 언급 없으니 include" — ❌ missing_signals 있으면 ambiguous, 반드시 유저 질문.
+- "서울 사옥 기본이라 원격 불가 판정" — ❌ 명시 없으면 추론 금지, 질문해라.
+- "배치 모드 중이니 나중에 일괄 질문" — ❌ 즉시 질문 (유저가 defer 선택 시에만 저장 후 재평가).
+- "rules.yaml 없으니 자동 include" — ❌ rules.yaml 부재 시 S1 Phase 0 규칙에 따라 인터뷰 먼저.
+- "유저가 이미 URL 명시했으니 의사 분명 → include" — ❌ URL 명시 ≠ inclusion 의사.
+- "missing_signals 가 경미하니 자동 판정" — ❌ 하나라도 있으면 질문.
+
+### Auto-decision audit trail
+
+`verdict == match` 또는 `mismatch` 로 자동 저장 시 `reason_note` 에 `auto:<verdict>:<rules.yaml sha256 short 8>` 기록. 추후 rules 재평가 때 stale 판정 식별 가능.
+
+### Counterexample (정당한 auto-include)
+
+JD 가 rules 전 조건 (`remote: true`, `stack: [Kotlin, Spring]`, `seniority: senior`) 을 **명시적으로** 만족하면 `verdict: match` → 자동 include. 유저 질문 없이 저장. `reason_note: "auto:match:<sha>"`.

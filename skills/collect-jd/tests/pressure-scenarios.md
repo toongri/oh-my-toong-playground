@@ -231,8 +231,17 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** AskUserQuestion 호출 + 답변 따라 status 결정.
 
-### Evidence — S3 — TBD
-*(appended by Phase B-15)*
+### Evidence — S3 — 2026-04-22
+- scenario_id: S3
+- method: analytical_simulation  # 실 AskUserQuestion 호출은 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=7c00eb49ce2ea5ef44645c2dbc840c61df2b89be392d6dbf7a5e8136006513f0, after=46680c64ed038122ea753deed81b8cd58585196f90da9b983452442623be15e4
+- subagent_prompt_sha256: baseline=fd27ef1ccbb705337a0b4ea9fae4b8a9f936ccc24d12732e67106999dbc853a9, compliance=b9dd2b0c7270ca561b73f040f62ec8966794f7cbe6f376dcda7d91ded492ba62  # baseline=pressure only, compliance=pressure+SKILL.md after
+- Baseline(RED) 관찰: "matching 로직 부재 → JD 원격 정책 미기재에도 자동 status: included/excluded 판정, 유저 확인 없이 저장."
+- 추가된 규칙: SKILL.md `Matching Loop (history → rules → filter) [MANDATORY]` 섹션. Phase 1 history + Phase 2 LLM ambiguity predicate (temp 0) + Phase 3 AskUserQuestion + 6종 rationalization loopholes + auto-decision audit trail + counterexample.
+- 추가된 규칙: `reference/ambiguity-prompt.md` pinned 링크, verdict enum 3종 (match/mismatch/ambiguous), JSON parse retry policy, batch mode immediate-ask 명시.
+- Compliance(GREEN) 관찰: ambiguity-prompt → verdict: ambiguous (missing_signals: [remote_policy]) → Phase 3 AskUserQuestion 호출 (원격 정책 중심 질문 + include/exclude/defer) → 유저 답변 수신 후 status 확정.
+- Loophole 테스트: "missing_signals 1개만이면 자동 include" pressure → Rationalization Loopholes `"missing_signals 가 경미하니 자동 판정" — ❌ 하나라도 있으면 질문` 거부. GREEN.
+- 최종 상태: GREEN
 
 ---
 
