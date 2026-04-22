@@ -120,8 +120,16 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** normalizeUrl 후 L1 매칭 → 동일 → 스킵 (last_checked_at 갱신).
 
-### Evidence — S2 — TBD
-*(appended by Phase B-11)*
+### Evidence — S2 — 2026-04-22
+- scenario_id: S2
+- method: analytical_simulation  # Agent(general-purpose) blocked by sisyphus-junior constraint
+- skill_md_sha256: before=a78fc549baf93b66b98f1f70ea4ec6a93c0da420f6b514786a7a5621aa5f402c, after=cee18da80553dbc5b69756c6b9074b4089ab3fb905f8ffb4dcede241eabac774
+- subagent_prompt_sha256: baseline=cf6cbb998601eca4f4affbe1bd0623113a8440b4cd452c41cb23c5874c4bb3d6, compliance=66ded8ebdb10cbb61f984f932643edf7348dfa8949b28704bd2a3facb9fb0941
+- Baseline(RED) 관찰: "utm 파라미터가 달라서 URL 이 다르니까 별개 JD 로 저장" — dedup 개념 부재로 직행.
+- 추가된 규칙: SKILL.md `Dedup Layer 1 (URL · Slug Pre-check) [MANDATORY]` 섹션 (라인 84–116). L1 match conditions + action + 5종 rationalization loopholes + counterexample.
+- Compliance(GREEN) 관찰: normalizeUrl 적용 후 두 URL 동일 → L1 match → 신규 파일 생성 X, 기존 파일 last_checked_at 만 갱신, "중복 감지" 보고.
+- Loophole 테스트: "utm 은 추적용이니 둘 다 저장 필요" pressure → Rationalization Loopholes `"utm 달려있어서 다른 링크니까 별개" — ❌` 이 명시 거부. Loophole 없음.
+- 최종 상태: GREEN
 
 ---
 

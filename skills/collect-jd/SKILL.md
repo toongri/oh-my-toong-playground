@@ -51,7 +51,7 @@ If a user requests a forbidden path (examples below), refuse **immediately** and
 4. 회사명 (단, `sources.yaml` 등록 사이트 내에서만)
 5. 배치 재스캔 ("싹 돌려")
 
-이후 Phase B TODO 들에서 세부 규칙이 추가된다.
+이후 Phase B TODO 들에서 세부 규칙이 추가된다. 각 Ingest Path 실행 전 **Dedup Layer 1** (URL · Slug Pre-check) 을 반드시 수행한다.
 
 ## Phase 0: Profile Interview Required (MANDATORY)
 
@@ -80,3 +80,37 @@ These patterns are **explicit violations** regardless of how they are phrased:
 - "이미 profile 있는 것처럼 간주하고 진행" — ❌ 파일 실재 여부만 판단 기준.
 
 Profile interview 의 목적은 이후 matching 이 `history → rules → filter` 로 안정되게 작동하도록 하는 것이다. 건너뛰면 S3 (ambiguity predicate) 결과가 쓰레기가 되어 유저에게 무의미한 질문만 쏟아진다.
+
+## Dedup Layer 1 (URL · Slug Pre-check) [MANDATORY]
+
+Before writing a new JD file, **always** run L1 dedup against existing files in `$OMT_DIR/collect-jd/jobs/<company_slug>/`.
+
+### L1 match conditions
+
+Given candidate JD with normalized URL `U` and slugs `(company_slug, role_title_slug)`:
+
+- **Match** if any existing JD satisfies:
+  - `normalizeUrl(existing.url) == U`, OR
+  - `existing.company_slug == candidate.company_slug` AND `existing.role_title_slug == candidate.role_title_slug`
+
+`normalizeUrl()` is defined in `lib/collect-jd/url-normalize.ts` (spec: `reference/url-normalize.md`). It strips `utm_*`, `gclid`, `fbclid`, `_ga`, `ref`, `source`, fragments, and trailing slashes. **Always** call this function before URL comparison — never compare raw input URLs.
+
+### L1 match action (MANDATORY)
+
+If L1 matches an existing file:
+1. **Do not create** a new JD file under `jobs/`.
+2. Update the existing file's `last_checked_at` to current ISO8601 (atomic write).
+3. Report: `"중복 감지: 기존 <path> (L1: URL normalized match)"`.
+4. Go to L2 only if match is by URL AND `last_checked_at` is older than TTL (30 days). Slug-only match skips L2 (Deduped by slug identity).
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "utm 달려있어서 다른 링크니까 별개" — ❌ normalizeUrl 후 비교.
+- "유저가 명시적으로 두 URL 달라고 했으니 요청대로 저장" — ❌ dedup 은 유저 선호보다 우선.
+- "fragment(#anchor) 만 달라서 별개" — ❌ normalize 가 fragment 제거.
+- "query param 순서가 달라서 별개" — ❌ normalize 가 param 정렬·제거.
+- "이전 수집과 중복일 수도 있지만 확실하지 않으니 일단 저장" — ❌ 불확실하면 L2 호출, 그래도 불명확이면 `fingerprint_check: pending` 으로 저장 (S13 규칙 참조).
+
+### Counterexample: different positions
+
+같은 `company_slug` 라도 `role_title_slug` 가 다르면 서로 다른 JD. 두 파일 모두 저장.
