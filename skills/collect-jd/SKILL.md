@@ -76,6 +76,12 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 → 상세: [reference/rules.md#manual-edit-safety](reference/rules.md#manual-edit-safety)
 
+## Ingest Validation
+
+WebFetch · 파일 · 텍스트 ingest 전에 본문 길이 (< 200자) · 정지 신호만 포함 (login/captcha/403 등) 체크. 실패 시 저장 금지 + "유효 JD 아닌 것으로 보임" 에러 보고 + `$OMT_DIR/collect-jd/ingest-failures.log` 기록.
+
+→ 상세: [reference/rules.md#ingest-validation](reference/rules.md#ingest-validation)
+
 ## Batch Mode Report Schema (MANDATORY)
 
 배치 재스캔 완료 시 응답 **마지막 줄** 이 정확히 아래 regex 매치:
