@@ -44,7 +44,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{HTML_TITLE}}</title>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
 <style>
 :root {
   --bg: #fafafa;
@@ -179,12 +179,12 @@ article a { color: var(--accent); }
 <script>
 (function() {
   const md = JSON.parse(document.getElementById('plan-md').textContent);
-  marked.setOptions({ gfm: true, breaks: false, headerIds: true });
+  marked.setOptions({ gfm: true, breaks: false });
   const container = document.getElementById('plan-content');
   container.innerHTML = marked.parse(md);
   const toc = document.getElementById('toc');
   const headings = container.querySelectorAll('h2, h3, h4');
-  const slugify = (t) => t.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+  const slugify = (t) => t.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-') || 'sec';
   const used = new Set();
   headings.forEach(h => {
     let id = h.id || slugify(h.textContent);

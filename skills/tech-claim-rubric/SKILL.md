@@ -59,7 +59,7 @@ Common resume bullet anti-patterns, the axis that catches them, and the verdict 
 | Name-only mention (도구 이름만 나열, 메커니즘 없음) | A1 | FAIL or P1 |
 | Vanity outcome (팀 만족도 향상 등 정량 metric 없는 결과) | A3 | FAIL |
 | Verb inflation (주도/총괄 + scope marker 없음) | A4 | FAIL or A4 `integrity_suspected` |
-| Missing baseline (응답 시간 80% 단축 with no before/after window) | A2 (Rule 2) | P1 (Soft) |
+| Missing baseline (응답 시간 80% 단축 with no before/after window) | A2 (Rule 1) | P1 (Soft) |
 | Fuzzy noun outcome (성능 개선 / 처리량 향상 정량화 없음) | A3 (or A2 Rule 6) | P1 |
 | Offline-as-production (load-test 수치를 production metric으로 표기) | A2 (Rule 3) | FAIL (Hard) |
 | Arithmetic error (claimed delta math 일치 안 함) | A2 (Rule 1) | FAIL (Hard) |
@@ -72,7 +72,7 @@ Common resume bullet anti-patterns, the axis that catches them, and the verdict 
 |------|----------|----------|----------------|
 | **A1 Technical Credibility** | Absolute | 기술적 판단이 드러나는가 (5/5 signals strict) | `a1-technical-credibility.md` |
 | **A2 Causal Honesty** | Absolute | 원인→결과 logic + arithmetic 일관성 | `a2-causal-honesty.md` |
-| **A3 Outcome Presence & Clarity** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-significance.md` |
+| **A3 Outcome Presence & Clarity** | Absolute | tech OR business 결과 명시 (so what?) | `a3-outcome-presence-clarity.md` |
 | **A4 Ownership & Scope** | Absolute | 동사-scope coherence (led/built/contributed) | `a4-ownership-scope.md` |
 | **A5 Scanability** | Absolute (structure-agnostic) | 6-30s scan에 핵심 파악 가능 | `a5-scanability.md` |
 
@@ -194,9 +194,9 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 | Field | Description |
 |-------|-------------|
 | `verdicts.a1_*` through `verdicts.a5_*` | Per-axis reasoning, evidence_quote, verdict |
-| `verdicts.a4.integrity_suspected` | A4 verb-scope structural overclaim flag (bool) |
-| `critical_rule_flags.r_phys` | triggered (bool), explanation |
-| `critical_rule_flags.r_cross` | triggered (bool), contradiction description, cited entries |
+| `verdicts.a4_ownership_scope.integrity_suspected` | A4 verb-scope structural overclaim flag (bool) |
+| `critical_rule_flags.r_phys` | triggered (bool), reasoning (string) |
+| `critical_rule_flags.r_cross` | triggered (bool), reasoning (string) |
 
 **PUBLIC fields** (returned to downstream caller):
 
@@ -204,6 +204,7 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 | Field | Description |
 |-------|-------------|
+| `schema_version` | `string` — output schema contract version (e.g., `v4.0`) |
 | `final_verdict` | `APPROVE` or `REQUEST_CHANGES` |
 | `structural_verdict` | `PASS`/`P1`/`FAIL` — A5 axis verdict, readability routing key |
 | `interview_hints` | `string[]` — actionable improvement suggestions |

@@ -163,11 +163,11 @@ Block B는 A2 evidence hygiene rule 위반을 하나씩 격리한 6개의 한국
 
 ### B-1 — FAIL (Sub-check 2: Arithmetic Consistency error)
 
-주문 처리 서비스의 N+1 쿼리 문제를 배치 JOIN으로 전환하는 것이 핵심 제약 조건이었고, 팀 내 논의를 거쳐 Hibernate batch fetch 방식을 채택했다. 메커니즘은 쿼리 왕복 횟수를 N+1회에서 1회로 줄여 DB 락 경합을 제거하는 것이며, 트레이드오프로 쿼리 복잡도가 증가하는 대신 응답 시간이 단축되는 장단점을 비교해 결정했으며 이 선택의 근거는 페이지 로드 SLA 위반이 반복됐다는 프로파일링 데이터였다. 이 개선을 통해 주문 목록 조회 API 응답 시간을 800ms에서 200ms로 단축해 75% 개선을 달성했으며, 개인 기여로 쿼리 레이어 전체를 주도했다. 단, "800ms에서 200ms로 75% 단축"은 내부 산술이 맞지 않는다: (800−200)/800 = 75%이지만 bullet에서는 "4배 단축"이라 표현해 1/4배(25% of original)와 75% 개선을 혼용하여 수치 모순이 발생한다.
+주문 처리 서비스의 N+1 쿼리 문제를 배치 JOIN으로 전환하는 것이 핵심 제약 조건이었고, 팀 내 논의를 거쳐 Hibernate batch fetch 방식을 채택했다. 메커니즘은 쿼리 왕복 횟수를 N+1회에서 1회로 줄여 DB 락 경합을 제거하는 것이며, 트레이드오프로 쿼리 복잡도가 증가하는 대신 응답 시간이 단축되는 장단점을 비교해 결정했으며 이 선택의 근거는 페이지 로드 SLA 위반이 반복됐다는 프로파일링 데이터였다. 이 개선을 통해 주문 목록 조회 API 응답 시간을 800ms에서 200ms로 단축해 6배 성능 향상을 달성했으며, 개인 기여로 쿼리 레이어 전체를 주도했다.
 
-**violated check**: Sub-check 2 — Arithmetic Consistency (75% 개선 = 4배 단축이 아님; 4배 단축이면 원래의 25% = 75% 감소로 표현은 같지만, bullet이 동시에 "4배 빨라졌다"와 "75% 단축"을 혼재해 배수와 퍼센트 감소를 같은 scale로 제시한 모순)
+**violated check**: Sub-check 2 — Arithmetic Consistency (claimed 6× improvement vs actual 4× ratio; 800ms → 200ms는 before/after = 4:1이므로 4배 향상이 정확한 수치이나, bullet에서 "6배 성능 향상"으로 주장해 실측 비율과 불일치)
 
-Why FAIL: arithmetic 표현이 "4배 향상"(before/after = 4:1)과 "75% 단축"(감소율)을 동시에 사용해 내부 일관성 붕괴. 검증 가능한 수치가 서로 다른 결과를 가리킴.
+Why FAIL: 800ms → 200ms의 실제 배수는 800/200 = 4×인데 "6배 향상"이라 주장하여 arithmetic inconsistency 발생. claimed 6× vs real 4× — 수치가 서로 다른 결과를 가리켜 내부 일관성 붕괴.
 
 ### B-2 — P1 (Rule 2: missing time window — measurement window 부재)
 
