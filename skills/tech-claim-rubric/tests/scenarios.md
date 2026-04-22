@@ -610,7 +610,7 @@ r_phys:
 
 ---
 
-### SCN-A5-demote-routing: A5 P1 structural demotion — APPROVE 유지, readability-fix loop 트리거
+### SCN-A5-demote-routing: A5 P1 structural demotion — APPROVE 유지, readability-fix 루프 비트리거 (hint surfacing only)
 
 **Bullet**: "Rewrote the authentication token refresh pipeline using a sliding-window expiry model backed by Redis Sorted Sets (ZRANGEBYSCORE sweep for expired tokens, ZADD with score=expiry_epoch), replacing the previous polling-based expiry check that held a DB advisory lock per session. Chose Redis Sorted Set over TTL-key approach for O(log N) range-delete semantics and atomic sweep without hotspot contention. Added circuit breaker (Resilience4j, 50% error threshold, 10s open window) for Redis unavailability fallback to DB. Instrumented with Micrometer (redis_sweep_duration_ms p99, circuit_breaker_state transitions). Result: token refresh latency p99 420ms → 34ms, DB lock contention events per hour 310 → 0, auth service CPU p99 utilization 73% → 28% (peak 50k concurrent sessions)."
 
@@ -632,7 +632,7 @@ r_phys:
 
 **routing_target**: forge Loop 2 gate APPROVE lane — A1-A4 모두 PASS/P1 AND count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1} → APPROVE. structural_verdict P1은 readability-fix를 강제하지 않는다 (readability-fix는 structural_verdict == FAIL 조건). A5 P1은 non-blocking; interview_hints에 improvement suggestion으로만 surfaced.
 
-**Purpose**: A5 demote 검증 — A5 P1(structural_verdict P1)이 있어도 A1-A4 모두 PASS이면 final_verdict는 APPROVE임을 확인. A5 alone은 REQUEST_CHANGES를 트리거하지 않는다는 invariant 검증. structural_verdict가 P1로 surfaced되고 forge Loop 2 readability-fix 라우팅이 트리거됨을 확인 (SCN-2의 A5 FAIL → REQUEST_CHANGES 패턴과 대비: P1은 non-blocking).
+**Purpose**: A5 demote 검증 — A5 P1(structural_verdict P1)이 있어도 A1-A4 모두 PASS이면 final_verdict는 APPROVE임을 확인. A5 alone은 REQUEST_CHANGES를 트리거하지 않는다는 invariant 검증. structural_verdict P1은 readability-fix 루프를 트리거하지 않으며 interview_hints에 hint만 surfaced됨을 확인 (SCN-2의 A5 FAIL → REQUEST_CHANGES 패턴과 대비: P1은 non-blocking).
 
 ---
 
@@ -948,6 +948,68 @@ r_phys:
 
 ---
 
+### SCN-27: A3 verdict precedence — qualitative causality + unblocking verb PASS
+
+<!-- T6 regression guard: a3 Verdict Precedence rule (ii) — qualitative outcome with explicit causality AND resolution verb → PASS (no numeric required) -->
+
+**Bullet**: "Refactored payment integration to enable sandboxing, unblocking QA from environment dependency and allowing parallel test runs."
+
+**Candidate context**: { years: 4, position: "Mid Backend", target_company: "fintech" }
+
+**Expected verdicts**:
+- A1: PASS — Technology (payment integration refactor), Mechanism (sandboxing enablement), Constraint (QA environment dependency). Core signals present.
+- A2: PASS — Cause (refactoring → sandbox enablement) → effect (QA unblocked). Causal chain unambiguous.
+- A3: PASS — Verdict Precedence rule (ii): qualitative outcome ("unblocking QA from environment dependency") with explicit causality (refactor → sandboxing → unblocking) AND resolution verb ("unblocking") present → PASS. No numeric magnitude required.
+- A4: PASS — "Refactored" ownership verb + scope coherent with mid-level.
+- A5: PASS — Problem (QA environment dependency) / Decision (sandboxing) / Result (QA unblocked) scan 가능.
+
+**Expected critical rules**:
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: APPROVE
+**structural_verdict**: PASS
+
+**routing_target**: standard APPROVE path — all axes PASS, no readability-fix routing triggered.
+
+**Purpose**: regression guard for a3 Verdict Precedence rule (ii) — qualitative outcome with explicit causality AND resolution verb PASSes without numeric magnitude. "unblocking" is an explicit resolution verb satisfying rule (ii). This SCN fails if the evaluator incorrectly demands numeric evidence for qualitative-causality-with-unblocking-verb bullets.
+
+---
+
+### SCN-28: A3 regex numeric unit coverage — $-prefix, x multiplier, Korean 분
+
+<!-- T6 regression guard: a3 PASS regex expansion — $2.4M ($-prefix revenue token), 13x (bare multiplier), 45분 (Korean duration unit) must all match -->
+
+**Bullet 1 ($2.4M)**: "Redesigned checkout flow API to eliminate 3-round-trip confirmation, cutting checkout abandonment from 12% to 8%, achieving ~$2.4M annualized revenue impact."
+
+**Bullet 2 (13x)**: "Parallelized data ingestion pipeline across distributed workers, improving batch throughput 13x from baseline."
+
+**Bullet 3 (45분)**: "Optimized CI pipeline caching strategy, reducing full build time from 3시간 to 45분."
+
+**Candidate context**: { years: 5, position: "Backend Engineer", target_company: "커머스" }
+
+**Expected verdicts (per bullet)**:
+
+Bullet 1 (`$2.4M`):
+- A3: PASS — numeric token `$2.4M` matches A3 PASS regex (`[$₩]\d{1,3}(,\d{3})*(\.\d+)?[MKB]?`). Outcome verb "achieving" present → PASS.
+
+Bullet 2 (`13x`):
+- A3: PASS — numeric token `13x` matches A3 PASS regex (`\d{1,3}(,\d{3})*(\.\d+)?\s*(x)`). Outcome verb "improving" present → PASS.
+
+Bullet 3 (`45분`):
+- A3: PASS — numeric token `45분` matches A3 PASS regex (`\d{1,3}(,\d{3})*(\.\d+)?\s*(분)`). Outcome verb "reducing" present → PASS.
+
+**Expected critical rules** (all bullets):
+- r_phys.triggered: false
+- r_cross.triggered: false (reasoning: "cross-entry context not provided")
+
+**Expected final_verdict**: APPROVE (all bullets)
+**structural_verdict**: PASS (all bullets)
+
+**Purpose**: regression guard for a3 PASS regex expansion — confirms `$2.4M` ($-prefix revenue), `13x` (bare multiplier), and `45분` (Korean duration unit) each match the A3 PASS numeric regex and correctly receive A3 PASS when paired with an outcome verb. This SCN fails if regex contraction drops any of these three token forms.
+
+---
+
 ## Coverage Matrix
 
 | Scenario | Primary Axis/Rule | Final Verdict | structural_verdict | Pattern Type |
@@ -971,7 +1033,7 @@ r_phys:
 | SCN-17 | A2 FAIL rule 5 (absolute claim) | REQUEST_CHANGES | P1 | Absolute claim without scope and period |
 | SCN-18 | A2 sub-check 4 Chained pattern | APPROVE | PASS | Trigger-conditioned Chained vs Isolated (Chained 신호) |
 | SCN-A1-5strict-PASS | A1 5/5 strict bar | APPROVE | PASS | 5 signals jointly present — strict PASS reference |
-| SCN-A5-demote-routing | A5 P1 structural demotion | APPROVE | P1 | A5 P1 non-blocking — forge readability-fix routing |
+| SCN-A5-demote-routing | A5 P1 structural demotion | APPROVE | P1 | A5 P1 non-blocking — standard APPROVE lane (readability-fix 비발동) |
 | SCN-A1-cumP1-3 | Cumulative P1 ≥ 3 invariant | REQUEST_CHANGES | PASS | A1+A2+A3 P1, A4 PASS — cumulative trigger (no individual FAIL) |
 | SCN-19 | A4 P1 (verb-scope boundary) | APPROVE | PASS | A4 P1 boundary — cumulative P1 contribution |
 | SCN-20 | R-Cross abstention (benign overlap) | APPROVE | PASS | Part-time advisory parallel engagement — r_cross.triggered false |
@@ -981,6 +1043,8 @@ r_phys:
 | SCN-24 | A2 arithmetic direction increase (throughput-like, after/before) | APPROVE | PASS | Multiplier increase = after/before — 10→15 = 1.5x correctly parsed (P1-5 regression guard) |
 | SCN-25 | A2 arithmetic direction reduction (latency-like, before/after) | APPROVE | PASS | Multiplier reduction = before/after — 200ms→50ms = 4x correctly parsed (P1-5 regression guard) |
 | SCN-26 | P1-1 regression: count(P1)=2 + structural FAIL | REQUEST_CHANGES | FAIL | count(P1 across A1-A4) < 3 + structural_verdict FAIL → priority 5 Readability-only fix (NOT source extraction) (P1-1 regression guard) |
+| SCN-27 | A3 verdict precedence rule (ii): qualitative + unblocking verb | APPROVE | PASS | Qualitative causality + resolution verb → A3 PASS (no numeric required) (T6 regression guard) |
+| SCN-28 | A3 regex: $2.4M / 13x / 45분 token coverage | APPROVE | PASS | $-prefix revenue, bare multiplier, Korean duration unit each match A3 PASS regex (T6 regression guard) |
 
 ## Axis Boundary Coverage
 
@@ -988,7 +1052,7 @@ r_phys:
 |------|-----------|-----------|-------------------|
 | A1 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-8, SCN-9, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-7, SCN-23 | SCN-10 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-26 (P1) |
 | A2 | SCN-1, SCN-2, SCN-5, SCN-6, SCN-7, SCN-8, SCN-9, SCN-10, SCN-12, SCN-18, SCN-19, SCN-20, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-23 | SCN-11 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1), SCN-22 (P1 — Rule 4 standalone), SCN-26 (P1) |
-| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-26, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
+| A3 | SCN-1, SCN-2, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-26, SCN-27, SCN-28, SCN-A1-5strict-PASS, SCN-A5-demote-routing | SCN-3, SCN-4, SCN-5, SCN-7, SCN-23 | SCN-12 (P1), SCN-A1-cumP1-3 (P1), SCN-21 (P1) |
 | A4 | SCN-1, SCN-2, SCN-3, SCN-4, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-13, SCN-14, SCN-15, SCN-16, SCN-17, SCN-18, SCN-20, SCN-21, SCN-22, SCN-23, SCN-24, SCN-25, SCN-26, SCN-A1-5strict-PASS, SCN-A5-demote-routing, SCN-A1-cumP1-3 | SCN-5, SCN-7 | SCN-19 (P1) |
 | A5 | SCN-1, SCN-5, SCN-6, SCN-8, SCN-9, SCN-10, SCN-11, SCN-12, SCN-14, SCN-15, SCN-16, SCN-18, SCN-19, SCN-20, SCN-22, SCN-24, SCN-25, SCN-A1-5strict-PASS, SCN-A1-cumP1-3 | SCN-2, SCN-3, SCN-4, SCN-21, SCN-23, SCN-26 | SCN-7 (P1), SCN-13 (P1), SCN-17 (P1), SCN-A5-demote-routing (P1) |
 
@@ -996,6 +1060,6 @@ r_phys:
 
 | Rule | Triggered | Not triggered (false) | Notes |
 |------|-----------|----------------------|-------|
-| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
-| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,24,25,26,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
+| R-Phys | SCN-4 | SCN-1,2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 | — |
+| R-Cross | SCN-9 | SCN-1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,17,18,19,21,22,23,24,25,26,27,28,SCN-A1-5strict-PASS,SCN-A5-demote-routing,SCN-A1-cumP1-3 (단일 bullet 평가, false); SCN-20 (benign overlap — part-time advisory parallel engagement) | — |
 | A4 integrity_suspected | SCN-5 | (others) | verb-scope inflation 감지 sub-flag — solo verb + org-wide scope + no qualifier + Junior context → A4 FAIL escalation |
