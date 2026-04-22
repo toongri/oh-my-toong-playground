@@ -9,6 +9,18 @@ TDD pressure scenarios for the `collect-jd` skill. Each scenario follows RED-GRE
 
 See plan: `/Users/toong/.omt/oh-my-toong-playground/plans/collect-jd-skill-tdd.md` (Phase B).
 
+## Method Policy
+
+Phase B TDD 사이클은 이상적으로 `Agent(subagent_type="general-purpose", ...)` 로 baseline(RED) 과 compliance(GREEN) 을 실측해야 한다. 다만 서브에이전트 tool 제약으로 실 호출이 불가능할 때는 **analytical simulation** (현재 SKILL.md 규칙만을 근거로 한 추론 기반 판정) 을 허용한다.
+
+이 경우 각 시나리오의 evidence stub 에 **반드시** 다음 라인을 포함한다:
+
+```
+- method: analytical_simulation  # or: real_subagent
+```
+
+Phase C-25 end-to-end dogfood 단계에서는 `method: analytical_simulation` 이 붙은 시나리오를 grep 으로 식별하고, 최소 1개 시나리오를 실제 Claude Code 세션으로 재검증해 회귀 안전망을 확보한다.
+
 ## Evidence Stub Format
 
 Each Phase B TODO **must** append after completion:
@@ -16,6 +28,7 @@ Each Phase B TODO **must** append after completion:
 ```
 ### Evidence — <S-id> — <ISO8601 date>
 - scenario_id: S1..S19
+- method: analytical_simulation | real_subagent    # 추가
 - skill_md_sha256: <sha256 of skills/collect-jd/SKILL.md at run time>
 - subagent_prompt_sha256: <sha256 of baseline prompt> / <sha256 of compliance prompt>
 - Baseline(RED) 관찰: <one-line summary; quote rationalization>
@@ -57,8 +70,16 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** 먼저 profile 인터뷰 3라운드 이상 → `profile.yaml` 작성 → 수집 진행.
 
-### Evidence — S1 — TBD
-*(appended by Phase B-9)*
+### Evidence — S1 — 2026-04-22
+- scenario_id: S1
+- method: analytical_simulation  # Agent(general-purpose) blocked by sisyphus-junior constraint; rationale per SKILL.md rule derivation
+- skill_md_sha256: before=6b14bd206da6a3141f6a8f3bfc0926856e18688fc139918b62ddfa00cddf3a1f, after=a87558e55b06e1b05e9aa9eb3dbd091e843b89bf11e50f0bee0e871eac8be3a9
+- subagent_prompt_sha256: baseline=d7f3c6c5db876d02e7988e4e99c38ac2a9be8963da9d91a603db4daea5131581, compliance=19732da8fc4b456bc85da1e2c7d68b7032092a6c380eba390eb289b0dbcf8a77
+- Baseline(RED) 관찰: "유저가 URL 을 직접 입력했으므로 Ingest Path 1(URL 직접 입력)에 해당한다. SKILL.md 에 profile 인터뷰 관련 규칙이 없으므로 바로 WebFetch 를 수행한다."
+- 추가된 규칙: SKILL.md `Phase 0: Profile Interview Required (MANDATORY)` 섹션 (라인 33–59)
+- Compliance(GREEN) 관찰: Phase 0 확인 → profile.yaml 부재 → 인터뷰 3라운드 AskUserQuestion → profile.yaml 작성 → ingest 재개. WebFetch 는 인터뷰 완료 후에만 등장.
+- Loophole 테스트: "이번엔 급하니까" pressure → Rationalization Loopholes 섹션이 명시적으로 거부 ("한 번만 건너뛰기 / 이번엔 급하니까 — ❌ 예외 없음"). Loophole 없음.
+- 최종 상태: GREEN
 
 ---
 
