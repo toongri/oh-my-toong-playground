@@ -207,7 +207,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 - `critical_rule_flags.r_phys.triggered == false`
 - `critical_rule_flags.r_cross.triggered == false`
 
-(P1 verdicts on any axis do not block APPROVE but surface in `interview_hints`. This applies to A1-A4 + structural_verdict uniformly — formerly only A4 emitted P1.)
+(P1 verdicts on any axis do not block APPROVE (subject to the cumulative count(P1) < 3 gate above at L205) but surface in `interview_hints`. This applies to A1-A4 + structural_verdict uniformly — formerly only A4 emitted P1.)
 
 **On APPROVE:** Present entry to user via Confirmation Gate (post-APPROVE). On user "확정": Remove from drafts/ → save to problem-solving/. Update state `loop2.status` to `"passed"`. On user "아직": return to interview for further refinement and re-dispatch.
 
@@ -282,7 +282,7 @@ All 3 elements confirmed → reconstruct entry. Any element missing → proceed 
 
 1. Incorporate extracted sources + readability-only fixes into a reconstructed entry
 2. **Cognitive depth check** (before final emission): verify that the reconstructed entry surfaces at least one concrete decision point — a rejected alternative, a constraint that forced the approach, or a measurable trade-off. If absent, return to source extraction for the weakest FAIL axis before emitting
-3. Show full entry to user for visual review (no confirmation gate — entry already APPROVED by examiner)
+3. Show full entry to user for visual review (no pre-dispatch confirmation gate — still in REQUEST_CHANGES iteration; post-APPROVE confirm gate applies only after a future APPROVE)
 4. Re-dispatch to examiner with the revised entry as Proposed Alternative
 5. Repeat until APPROVE or user opt-out ("다음")
 
@@ -309,7 +309,6 @@ $OMT_DIR/review-resume/
 ```markdown
 ---
 tags: [go, kafka, resilience]
-loop1_score: 0.85
 ---
 
 # Scenario Title
@@ -343,13 +342,13 @@ loop1_score: 0.85
     {
       "id": "c1-pipeline-throughput",
       "title": "Attribute inference pipeline",
-      "loop1": { "status": "passed", "score": 0.85 },
-      "loop2": { "status": "passed", "score": 0.815 }
+      "loop1": { "status": "passed", "verdicts": { "a2_causal_honesty": "PASS" } },
+      "loop2": { "status": "passed", "final_verdict": "APPROVE" }
     },
     {
       "id": "c2-return-workflow",
       "title": "Return workflow automation",
-      "loop1": { "status": "passed", "score": 0.85 },
+      "loop1": { "status": "passed", "verdicts": { "a2_causal_honesty": "PASS" } },
       "loop2": { "status": "pending" }
     }
   ]

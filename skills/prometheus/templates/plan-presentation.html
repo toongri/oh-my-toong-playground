@@ -12,9 +12,13 @@
     {{WAVE_COUNT_LABEL}}   localized label (e.g. "3 Waves + Final")
     {{PLAN_FILE_LABEL}}    localized label (e.g. "Plan file")
     {{PLAN_FILE_PATH}}     absolute path to plan.md (NEVER translate)
-    {{PLAN_MARKDOWN}}      plan.md content; prose translated, code blocks / paths / CLI
-                           commands / identifiers (WI-N, AC#M, S0-S8, regex, grep patterns,
-                           file paths, function names) preserved as-is
+    {{PLAN_MARKDOWN_JSON}} plan.md content as a JSON-encoded string (JSON.stringify the
+                           markdown before embedding). The renderer MUST JSON-encode the
+                           markdown so that </script> substrings and other HTML-sensitive
+                           tokens are safely embedded without premature script-tag closure.
+                           Prose translated; code blocks / paths / CLI commands / identifiers
+                           (WI-N, AC#M, S0-S8, regex, grep patterns, file paths, function
+                           names) preserved as-is
     {{TOC_TITLE}}          localized TOC label (e.g. "Table of Contents")
     {{FOOTER_NOTE}}        localized short footer
 
@@ -171,10 +175,10 @@ article a { color: var(--accent); }
 </main>
 </div>
 
-<script type="text/markdown" id="plan-md">{{PLAN_MARKDOWN}}</script>
+<script type="application/json" id="plan-md">{{PLAN_MARKDOWN_JSON}}</script>
 <script>
 (function() {
-  const md = document.getElementById('plan-md').textContent;
+  const md = JSON.parse(document.getElementById('plan-md').textContent);
   marked.setOptions({ gfm: true, breaks: false, headerIds: true });
   const container = document.getElementById('plan-content');
   container.innerHTML = marked.parse(md);

@@ -57,7 +57,7 @@ interview_hints:
   - "[각 bullet별 구체적 피드백]"
 ```
 결과 요약 테이블과 전략 옵션 제시 직후, 별도 user 지시 없음.
-(Note: batch dispatch + summary table은 [SKILL.md Phase 9 Red Flags](../SKILL.md#phase-9-red-flags--stop-when-you-think-this) pattern — loop continuation이 정답, Phase 10 진입이 오답.)
+(Note: batch dispatch + summary table은 [SKILL.md Phase 9 Red Flags](../SKILL.md#phase-9-red-flags-stop-when-you-think-this) pattern — loop continuation이 정답, Phase 10 진입이 오답.)
 
 **Expected:** 결과 요약 후에도 Phase 10으로 진입하지 않고 bullet별 피드백 루프를 계속 실행.
 
@@ -92,7 +92,7 @@ interview_hints:
 ```
 
 **Expected:**
-1. 사용자의 의사를 존중하되, 명시적 opt-out 확인: "이 2개 bullet에 대해 현재 상태로 진행하시겠습니까? 리포트에 'Unresolved feedback' 배지가 표시됩니다."
+1. 사용자의 의사를 존중하되, 명시적 opt-out 확인: "이 2개 bullet에 대해 현재 상태로 진행하시겠습니까? 리포트에 '미해결 피드백' 배지가 표시됩니다."
 2. 사용자가 명시적으로 opt-out → 해당 bullet을 opt-out으로 기록 → Phase 10 진입.
 3. 사용자가 모호하게 답변 → 명확한 재확인 질문.
 4. 사용자가 "아니, 해보자" → 해당 bullet의 수정 루프 시작.
@@ -100,7 +100,7 @@ interview_hints:
 **Verification:**
 - 3개 APPROVE 후에도 2개 REQUEST_CHANGES 때문에 Phase 10 미진입.
 - 사용자의 "그냥 넣어도 되지" 요청에 명시적 opt-out 확인 수행.
-- opt-out 시 "Unresolved feedback" 배지 안내.
+- opt-out 시 "미해결 피드백" 배지 안내.
 - 모호한 답변을 opt-out으로 자동 변환하지 않음.
 
 ---

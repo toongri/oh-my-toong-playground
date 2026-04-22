@@ -382,7 +382,7 @@ All problem-solving entries (5+ lines) are evaluated under a unified framework c
 
 ## Phase 8: AI 톤 감사
 
-**MUST invoke the humanizer skill via the Skill tool.** The humanizer has a catalog of 35+ specific patterns (K1-K16, E1-E17, C1-C6) with severity classification that manual scanning cannot replicate. Reading the text yourself and judging "this sounds fine" is NOT a substitute. <!-- allow-forbidden -->
+**MUST invoke the humanizer skill via the Skill tool.** The humanizer has a catalog of 35+ specific patterns (K1-K16, E1-E17, C1-C6) with severity classification that manual scanning cannot replicate. Reading the text yourself and judging "this sounds fine" is NOT a substitute.
 
 <critical>
 "AI 톤 미검출"이라고 직접 판단한 후 Skill(humanizer) 호출을 생략하는 것은 이 규칙의 위반이다. 수동 스캔 결과와 무관하게 반드시 호출해야 한다.
