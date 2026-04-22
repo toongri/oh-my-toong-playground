@@ -197,3 +197,82 @@ L1 (URL · Slug) 이 **매치하지 않은 경우**, 또는 L1 매치했지만 `
 - "실 집계 안 하고 대충 반올림" — ❌ 파일 diff 실측 사용.
 - "유저가 다른 포맷 요청" — ❌ SKILL.md 규칙이 유저 선호보다 우선.
 - "업데이트 카운트 정의 애매하니 0 으로 통합" — ❌ 위 정의에 따른 실 집계.
+
+## Role Tagging (MANDATORY)
+
+JD 저장 시 frontmatter 의 두 필드를 다음 규칙으로 채운다:
+
+- `role_title_verbatim`: **JD 원문 제목** 그대로 (한 글자도 수정 금지). dedup 용 ID · 검색용.
+- `role_tags: [string]`: **LLM 호출** 로 `$OMT_DIR/collect-jd/profile/taxonomy.yaml` 의 enum 부분집합에서 1..N 개 선택. matching 파이프라인용.
+
+### Taxonomy baseline (first run default)
+
+첫 실행 시 `taxonomy.yaml` 이 없으면 다음 enum 을 유저에게 제시하고 수용/수정 받은 뒤 저장:
+
+```yaml
+version: 1
+roles:
+  - backend
+  - frontend
+  - fullstack
+  - infra
+  - data
+  - platform
+  - mobile
+  - ml
+  - devops
+```
+
+유저가 추가 role 을 요청하면 enum 에 append (예: `ai-engineer`, `security`). 삭제 요청도 동일.
+
+### LLM invocation contract (role tagging)
+
+- **Prompt file:** `reference/ambiguity-prompt.md` 는 verdict 용이므로 별도. Role tagging 은 **짧은 전용 prompt** — SKILL.md 안에 pinned inline 템플릿 유지.
+- **Temperature: 0** (deterministic, 동일 입력 → 동일 출력)
+- **Output contract:** JSON `{"role_tags": ["backend", "..."], "reasoning": "..."}`
+- **Input**: JD 원문 본문 (5000 chars truncate) + `role_title_verbatim` + taxonomy.yaml 의 `roles` enum
+- JSON 파싱 실패 시 1회 retry. 2회 실패 시 `role_tags: []` + `fingerprint_check: pending` 로 저장하지 말고 **에러 보고**해 유저 개입 요청 (role_tags 없이 저장 금지 — matching 에 치명적).
+
+### Pinned inline prompt (v1)
+
+```
+System: You are a strict JD role tagger. Output ONLY JSON:
+{"role_tags": ["<enum values>"], "reasoning": "short KR"}.
+No text outside JSON. Temperature 0.
+
+User:
+다음 JD 에 맞는 role enum 을 선택해라. taxonomy 외의 값 사용 금지. 복수 선택 가능.
+
+[Taxonomy enum]
+{{taxonomy.roles}}
+
+[JD role_title_verbatim]
+{{role_title_verbatim}}
+
+[JD body (truncated)]
+{{jd_body}}
+
+Rules:
+- 한국어 서버/backend 계열 제목 ("백엔드", "서버개발자", "서버사이드", "BE", "backend")은 **반드시** `backend` 를 포함할 것.
+- 한국어 프론트/FE 계열 ("프론트엔드", "프론트", "FE", "웹 클라이언트") 는 **반드시** `frontend` 를 포함할 것.
+- 한국어 풀스택 ("풀스택", "Full-stack", "FS") 는 **반드시** `fullstack` 포함 + 필요 시 `backend`+`frontend` 추가.
+- 한국어 데이터 ("데이터 엔지니어", "데이터 플랫폼", "DE") 는 **반드시** `data` 포함.
+- 위 규칙 외의 매핑은 JD body 기반 판단.
+- `reasoning` 은 1-2 문장 한국어.
+
+JSON 만 출력.
+```
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "백엔드 를 backend 로 매핑 안 함 (영어 표기 없어서)" — ❌ 위 Rules 에 명시.
+- "서버개발자 가 서버 롤이지 backend 는 아니다" — ❌ 동의어 매핑 강제.
+- "서버사이드 엔지니어 는 BE + Platform 두 개" — 가능하지만 `backend` 는 **반드시** 포함.
+- "JD body 가 특이해서 backend 제외" — ❌ title synonym 이 규칙보다 우선되지 않음. **Title+body 둘 다 보고 최종 판단**.
+- "taxonomy 에 backend 없어서" — ❌ default taxonomy 에 포함. 삭제되었다면 유저에게 복구 질문.
+- "role_tags 비어있어도 저장" — ❌ 빈 배열로 저장 금지.
+
+### Counterexample
+
+- JD title "Backend Team Lead" + body 가 매니지먼트 위주 → `role_tags: [backend, platform]` 가능.
+- JD title "DevOps Engineer" + body 가 backend 개발도 일부 → `role_tags: [devops, backend]`.
