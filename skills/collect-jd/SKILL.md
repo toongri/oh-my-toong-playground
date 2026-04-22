@@ -382,3 +382,19 @@ tags:
 
 - 유저: "그 JD 는 연봉이 너무 낮아. 제외." → reason_note: "연봉이 너무 낮아", tags 후보: `salary-too-low` (신규) → 저장 OK.
 - 유저: "제외" (이유 없음) → skill 이 "왜 제외하시는지 한 줄로 알려주세요?" 질문 → 답변 수집 후 저장.
+
+## Reversal (상태 전환 기록) [MANDATORY]
+
+기존 파일 `status` 를 변경할 때 **Atomic update protocol**: (1) 현재 `status` → `prev_status` 보존. (2) 새 `status` 결정. (3) `reason_note` **최상단에** prepend: `prev: <prev_status> @ <ISO8601 date>`. (4) 새 `status` 로 frontmatter 업데이트. (5) `last_checked_at` 갱신 + atomic write (`.tmp` → rename).
+예시 (included → excluded): reason_note 최상단이 `prev: included @ 2026-04-22` 로 시작하고, 그 아래에 기존 reason_note + 새 사유가 이어진다.
+
+다중 전환: `prev:` 라인 최상단에 **누적** (prepend 만, 가장 위 = 가장 최근). Rules 재평가 시: `prev: <prev_status> @ <date> (rules_reeval:<sha short 8>)`. S14 수동 편집 파일은 rules re-eval 이 status 를 덮어쓰지 않으므로 reversal 없음. **Detection** — status 변경이면 모두 reversal. 예외 (아님): 첫 저장 · L1 `last_checked_at` 갱신 · L2 `fingerprint_check` 갱신.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "status 만 갈아끼우면 되지 prev 기록은 과잉" — ❌ history 추적 · rules 재평가 감지 · 유저 질문 대응 모두 필요.
+- "reason_note 끝에 append 해도 OK" — ❌ **최상단 prepend** 강제.
+- "reason_note 가 비어있으면 prev 만 쓰기" — ❌ prev 라인 + 새 reason_note 아래에 추가.
+- "하루에 여러 번 뒤집으면 한 번만 기록" — ❌ 모든 전환 기록.
+- "rules_reeval sha 번거로우니 생략" — ❌ short 8 필수 (audit trail).
+- "atomic write 대신 직접 수정" — ❌ 중간 실패 시 파일 손상.

@@ -280,8 +280,16 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** status 덮어쓰기 + prev line prepend.
 
-### Evidence — S6 — TBD
-*(appended by Phase B-17)*
+### Evidence — S6 — 2026-04-22
+- scenario_id: S6
+- method: analytical_simulation  # 실 atomic write + multi-reversal 측정은 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=a5e0eb8efa3b6e848fb686288aea13d48704d8bdd95c91c1a6fc69d8793fd8dc, after=9d8255df59d197f72e08887360c3c4d42d0917e6bc8debd0f9e4b50dd8b9a419
+- subagent_prompt_sha256: baseline=3786de51212598e140b5d43094d2c6699fa0e3f807f162b1c5dfb73183c77718, compliance=1272122651e584029afe8960d0836f588467f8884e498b53d11d4a614846cdc3  # baseline=pressure only, compliance=pressure+SKILL.md after
+- Baseline(RED) 관찰: "reversal 규칙 부재 → status 만 덮어쓰기, 이전 status 정보 소실, history 추적 · rules 재평가 감지 불가능."
+- 추가된 규칙: SKILL.md `Reversal (상태 전환 기록) [MANDATORY]` 섹션. Atomic update protocol 5단계 + prev 라인 prepend 포맷 + 다중 전환 누적 규칙 + rules 재평가 상호작용 + reversal detection 기준 + 6종 rationalization loopholes.
+- Compliance(GREEN) 관찰: included → excluded 전환 시 prev_status 보존 → reason_note 최상단 `prev: included @ 2026-04-22` prepend → status 새 값 덮어쓰기 → atomic write. 다중 전환 시 최상단 누적.
+- Loophole 테스트: "번잡하니까 prev 라인 빼고 그냥 status 만 바꿔" → Rationalization Loopholes `"status 만 갈아끼우면 되지 prev 기록은 과잉" — ❌` 명시 거부. GREEN.
+- 최종 상태: GREEN
 
 ---
 
