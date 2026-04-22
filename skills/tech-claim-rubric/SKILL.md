@@ -33,7 +33,7 @@ The previous 11-axis system (v1) was retired by agent-council unanimous vote. Th
 
 1. **Over-engineered**: Sub-axes (E3a, E3b, sub-dimensions with weighted formulas) added evaluation overhead without improving signal quality. Evaluators spent more time computing scores than assessing claims.
 2. **Backend-biased**: The v1 depth criteria implicitly favored distributed systems and infrastructure work. Frontend, data, and product-engineering bullets systematically underscored due to structural mismatch.
-3. **Structurally rigid**: Phase A/B/C routing imposed a fixed evaluation order that created decision-tree overhead. Simple bullets required the same ceremonial path as complex ones. <!-- allow-forbidden -->
+3. **Structurally rigid**: Phase A/B/C routing imposed a fixed evaluation order that created decision-tree overhead. Simple bullets required the same ceremonial path as complex ones.
 4. **Catch-22 default-FAIL**: The "FAIL unless proven" stance combined with the prohibition on inference created a rubric where legitimately strong bullets failed due to formatting choices rather than substance gaps.
 
 The 5-axis redesign compresses the evaluation into five clear questions:
@@ -59,9 +59,9 @@ Common resume bullet anti-patterns, the axis that catches them, and the verdict 
 | Name-only mention (도구 이름만 나열, 메커니즘 없음) | A1 | FAIL or P1 |
 | Vanity outcome (팀 만족도 향상 등 정량 metric 없는 결과) | A3 | FAIL |
 | Verb inflation (주도/총괄 + scope marker 없음) | A4 | FAIL or A4 `integrity_suspected` |
-| Missing baseline (응답 시간 80% 단축 with no before/after window) | A2 | P1 (Soft) |
+| Missing baseline (응답 시간 80% 단축 with no before/after window) | A2 (Rule 2) | P1 (Soft) |
 | Fuzzy noun outcome (성능 개선 / 처리량 향상 정량화 없음) | A3 (or A2 Rule 6) | P1 |
-| Offline-as-production (load-test 수치를 production metric으로 표기) | A2 (Rule 4) | FAIL (Hard) |
+| Offline-as-production (load-test 수치를 production metric으로 표기) | A2 (Rule 3) | FAIL (Hard) |
 | Arithmetic error (claimed delta math 일치 안 함) | A2 (Rule 1) | FAIL (Hard) |
 
 ---
@@ -107,7 +107,7 @@ A5 is **structure-agnostic**: it does not require a specific format (e.g., "acti
 - Generic verbs ("도입", "구축", "개선", "활용") with no what/how/why
 - Feature noun-phrases ("seamless multi-step flow") masquerading as mechanism
 
-**P1**: 4 of 5 signals present (one signal missing or at name-level only); does not reach the 5/5 strict PASS bar. Not vacuous enough to FAIL — examiner returns improvement hint targeting the shallowest signal.
+**P1** (canonical — a1-technical-credibility.md defers to this): Exactly 4 of 5 signals present (one signal absent), OR all 5 of 5 signals present but at least one signal is at name-level only (no mechanism or rationale behind it). Either condition fails the 5/5 strict PASS bar. Not vacuous enough to FAIL — examiner returns improvement hint targeting the shallowest signal.
 
 > **Section-wide signal mapping**: real-world에서 signal이 sub-bullets로 분산 가능 — section 전체에서 매핑 허용. 단일 bullet line에 모든 signal이 집중되지 않아도 section 전체에서 5 signals 모두 확인되면 PASS 판정 가능 — 단일 bullet line에 집중되지 않아도 허용.
 
@@ -194,6 +194,7 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 | Field | Description |
 |-------|-------------|
 | `verdicts.a1_*` through `verdicts.a5_*` | Per-axis reasoning, evidence_quote, verdict |
+| `verdicts.a4.integrity_suspected` | A4 verb-scope structural overclaim flag (bool) |
 | `critical_rule_flags.r_phys` | triggered (bool), explanation |
 | `critical_rule_flags.r_cross` | triggered (bool), contradiction description, cited entries |
 
@@ -218,14 +219,14 @@ The examiner's full output schema is defined in `output-schema.md`. Key fields:
 
 ## Migration from v1 (11-axis)
 
-| v1 concept | v4 equivalent | <!-- allow-forbidden -->
+| v1 concept | v4 equivalent |
 |------------|---------------|
-| E1–E6 (depth axes) | A1 + A2 (depth + causal) | <!-- allow-forbidden -->
-| R1–R5 (readability axes) | A5 alone (structure-agnostic) | <!-- allow-forbidden -->
-| Phase A/B/C protocol | Sequential A1→A4 + A5 (structural) + 2 critical rules | <!-- allow-forbidden -->
-| Constraint Cascade Score | A2 causal_honesty + A3 outcome_significance | <!-- allow-forbidden -->
+| E1–E6 (depth axes) | A1 + A2 (depth + causal) |
+| R1–R5 (readability axes) | A5 alone (structure-agnostic) |
+| Phase A/B/C protocol | Sequential A1→A4 + A5 (structural) + 2 critical rules |
+| Constraint Cascade Score | A2 causal_honesty + A3 outcome_significance |
 
-All v1 axis tokens (E1–E6, R1–R5, E3b, Constraint Cascade, CASCADING, LISTED, FLAT, Narrative Necessity, Layer 2, Phase A/B/C) are retired. They must not appear in examiner output or downstream skill prompts outside of this migration reference. <!-- allow-forbidden -->
+All v1 axis tokens (E1–E6, R1–R5, E3b, Constraint Cascade, CASCADING, LISTED, FLAT, Narrative Necessity, Layer 2, Phase A/B/C) are retired. They must not appear in examiner output or downstream skill prompts outside of this migration reference.
 
 ---
 

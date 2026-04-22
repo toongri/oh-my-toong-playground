@@ -242,15 +242,14 @@ tech-claim-examiner REQUEST_CHANGES received
 Iterate interview_hints from REQUEST_CHANGES
     ↓
 For each hint:
-    1. Check Interview Hints from tech-claim-examiner
-    2. Set source target that can move this axis to PASS
-    3. Apply experience-mining 4-Stage Bypass:
+    1. Set source target that can resolve this hint
+    2. Apply experience-mining 4-Stage Bypass:
        Stage 1: Direct Question (specific question based on Hints)
        Stage 2: Bypass Question (reframe the same gap from 3 angles)
        Stage 3: Adjacent Experience (explore related adjacent situations)
        Stage 4: Daily Work (explore hidden sources in routine work)
-    4. Source confirmed → regenerate revision (apply Section 3 protocol)
-    5. Source not confirmed → generate "best revision with current sources" + state limitations
+    3. Source confirmed → regenerate revision (apply Section 3 protocol)
+    4. Source not confirmed → generate "best revision with current sources" + state limitations
 ```
 
 ### How to Use Interview Hints
@@ -289,7 +288,7 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The examiner's structured feedback for this item may be difficult to fully satisfy with current sources. If the tech-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
+2. State the limitation explicitly in the revision: "The examiner's structured feedback for this item may be difficult to fully satisfy with current sources. If the tech-claim-examiner returns final_verdict: REQUEST_CHANGES again, consider User Opt-Out for this item."
 3. Dispatch this revision to the tech-claim-examiner. If the tech-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**

@@ -204,7 +204,7 @@ Source secured → Record in Discovered Candidates → Indicate whether the rele
 
 GOOD: "I think there are a few bullets in your career history where we could add more specificity — I'd like to ask about some related experiences."
 
-BAD (internal metric exposure): "4 out of D1c–D6c FAIL, missing metrics and causal chain"
+BAD (internal metric exposure): "4 out of 6 evaluation criteria FAIL, missing metrics and causal chain"
 
 **Target Topics:**
 
