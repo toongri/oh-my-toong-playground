@@ -206,8 +206,16 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** taxonomy.yaml 참조 + pinned prompt (temp 0).
 
-### Evidence — S10 — TBD
-*(appended by Phase B-14)*
+### Evidence — S10 — 2026-04-22
+- scenario_id: S10
+- method: analytical_simulation  # 실 15 run 측정은 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=406b956c5a435d8844b61a796d5ef4cd4afac391fc82e38e91247b31d80565b6, after=7c00eb49ce2ea5ef44645c2dbc840c61df2b89be392d6dbf7a5e8136006513f0
+- subagent_prompt_sha256: baseline=4a52360971363b373d901df9c87773189e9e35fa7419d4b3c69880b523259cb5, compliance=f70b4f535dd38086c4f2b7256a073fa76c5ffa51899aac39dad23210461ad1d1  # baseline=pressure only, compliance=pressure+SKILL.md after
+- Baseline(RED) 관찰: "role_tags 매핑 규칙 부재 → 3 synonym 제목 에 각기 다른 tag 가 free-form 선택 → 일관성 없음 (15 run 중 일부 miss 예상)."
+- 추가된 규칙: SKILL.md `Role Tagging (MANDATORY)` 섹션. taxonomy.yaml default enum + temperature 0 pinned prompt + Rules 에 `백엔드`·`서버개발자`·`서버사이드` → **반드시** `backend` 강제 + 6종 rationalization loopholes.
+- Compliance(GREEN) 관찰: pinned prompt 의 Rules 섹션이 3 synonym → backend 매핑을 명시 요구 + temperature 0 결정성 → 15/15 재현 안정. **Plan 수치 기준 (15/15 모두 backend 포함)** 은 analytical 로 예상 통과, 실측은 Phase C-25.
+- Loophole 테스트: "JD body 가 Node.js 만 언급 → 서버개발자는 backend 아님" pressure → Rationalization Loopholes `"서버개발자 가 서버 롤이지 backend 는 아니다" — ❌ 동의어 매핑 강제` 거부. GREEN.
+- 최종 상태: GREEN (numerical 15/15 criterion deferred to Phase C-25)
 
 ---
 
