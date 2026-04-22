@@ -325,3 +325,60 @@ JSON 파싱 실패 시 1회 retry. 2회 실패 → conservative `verdict: ambigu
 ### Counterexample (정당한 auto-include)
 
 JD 가 rules 전 조건 (`remote: true`, `stack: [Kotlin, Spring]`, `seniority: senior`) 을 **명시적으로** 만족하면 `verdict: match` → 자동 include. 유저 질문 없이 저장. `reason_note: "auto:match:<sha>"`.
+
+## Exclude Flow (tags + reason_note MANDATORY)
+
+`status: excluded` 로 저장하려면 **다음 두 필드를 동시에** 채워야 한다:
+
+- `tags: [string, ...]` — 최소 1개. `$OMT_DIR/collect-jd/tags.yaml` 의 emergent taxonomy 에서 slug 로 선택 (혹은 신규 추가).
+- `reason_note: string` — 유저 발화 원문 또는 요약. 빈 문자열 금지.
+
+둘 중 하나라도 누락된 상태로 저장 시도 → **저장 전 인터뷰 발동** (아래 "Emergent tag interview").
+
+### Emergent tag interview
+
+Exclude 요청이 들어오면 skill 은 다음 순서로 진행:
+
+1. **reason 수집:** 유저에게 "왜 제외하는지 한 줄로 설명해주세요" 물어본다. 답변이 곧 `reason_note` 원문.
+2. **tag 유도:**
+   - `tags.yaml` 이 비어있거나 관련 tag 가 없으면: "이 이유를 태그로 남겨두면 비슷한 JD 를 다음번에 자동 제외할 수 있어요. 태그 이름을 지어주시겠어요? (예: `seniority-mismatch`, `commute-too-long`)" — 유저 자유 서술 후 LLM 이 slug 화하여 `tags.yaml` 에 append.
+   - `tags.yaml` 에 관련 tag 가 있으면: top-3 후보 제시 + "새로 만들기" 옵션. AskUserQuestion.
+3. **tags.yaml 업데이트:** 새 tag 가 선택되면 `tags.yaml` 에 `{slug: <slug>, description: <원문>, first_used: <ISO date>, count: 1}` append. 기존 tag 재사용 시 `count += 1`.
+4. **Frontmatter 저장:** `status: excluded`, `tags: [<slug>, ...]`, `reason_note: <원문>` atomic write.
+
+### tags.yaml schema
+
+```yaml
+version: 1
+tags:
+  - slug: seniority-mismatch
+    description: 연차/시니어리티가 맞지 않음
+    first_used: 2026-04-22
+    count: 3
+  - slug: 원격-불가
+    description: 원격 근무 불가능한 조건
+    first_used: 2026-04-22
+    count: 2
+```
+
+- `slug` 는 slugify() 적용. 한글 보존.
+- `description` 은 유저 원문 한 줄 요약 (LLM 이 유저 원문을 손대지 않고 짧으면 그대로 사용).
+- 사전 정의된 taxonomy 없음 — 순수 emergent.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "유저가 이유 안 말했으니 reason_note 비워두고 저장" — ❌ 저장 전 **반드시** 질문.
+- "tags 는 optional 이니까 넣지 말기" — ❌ exclude 때만 MANDATORY.
+- "기존 tag 재사용 귀찮으니 매번 신규" — ❌ top-3 후보 먼저 제시.
+- "reason_note 대신 `excluded` 같은 placeholder 사용" — ❌ 유저 발화 원문 필수.
+- "`status: excluded` 만 바꾸고 tags 는 나중에" — ❌ atomic write, 두 필드 동시 저장.
+- "태그 이름 재생성 피곤하니 LLM 이 임의로 slug 생성" — ❌ 유저 확인 필수 (AskUserQuestion).
+
+### included / ambiguous / pending 에는 반영 안 됨
+
+이 플로우는 **exclude 전용**. `included`, `ambiguous`, `pending` 에서는 `tags` 는 optional, `reason_note` 도 optional (단 auto-decision audit trail `auto:<verdict>:<sha>` 는 별도 규칙, Matching Loop 섹션 참조).
+
+### Counterexample
+
+- 유저: "그 JD 는 연봉이 너무 낮아. 제외." → reason_note: "연봉이 너무 낮아", tags 후보: `salary-too-low` (신규) → 저장 OK.
+- 유저: "제외" (이유 없음) → skill 이 "왜 제외하시는지 한 줄로 알려주세요?" 질문 → 답변 수집 후 저장.
