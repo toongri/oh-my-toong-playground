@@ -100,6 +100,12 @@ JD 저장 시 두 필드 필수: `role_title_verbatim` (원문 제목 그대로,
 
 → 상세 (taxonomy baseline, LLM invocation contract, pinned prompt, loopholes, counterexample): [reference/rules.md#role-tagging](reference/rules.md#role-tagging)
 
+## YAML Robustness
+
+모든 state YAML (profile/taxonomy/rules/tags/sources/config) 파싱 실패 시 crash 금지. `<file>.bak.<ISO8601>` 백업 + `AskUserQuestion` 3 옵션 (retry / edit manually / reset to default, 기본은 "edit manually") + 유저 자료 절대 자동 삭제 금지.
+
+→ 상세: [reference/rules.md#yaml-robustness](reference/rules.md#yaml-robustness)
+
 ## Reference Index
 
 - [reference/rules.md](reference/rules.md) — 모든 규칙 상세 · loopholes · 예시 (Phase B TDD 결과 총집, M3 분리)
