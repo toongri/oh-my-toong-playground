@@ -1,0 +1,31 @@
+---
+name: collect-jd
+description: Use when collecting, curating, or organizing job descriptions (JDs) — triggers include "JD 모으고 있어", "JD 수집", "JD 큐레이션", "JD 정리하고 있어", "오늘 수집 정리해줘", "오늘 본 JD", "관리 중인 JD", "쌓아둔 JD", "내 프로필에 맞는 JD 쌓아줘", "내 이력에 맞는 JD 큐레이션", and "싹 돌려" (in JD rescan context). Do NOT trigger on discovery phrases claimed by resume-apply ("JD 찾아줘", "JD 골라줘", "공고 뭐 있지", "지원할 곳", "어디 넣을까") — those belong to resume-apply. Skill maintains project-scoped state at `$OMT_DIR/collect-jd/` (never global).
+---
+
+# collect-jd
+
+JD 수집·큐레이션·정리 전담 스킬. 구체 규칙은 Phase B pressure scenario 사이클을 통해 추가된다 (TDD RED-GREEN-REFACTOR).
+
+## Scope Boundary
+
+- collect-jd: JD **탐색·수집·큐레이션·정리** (이 스킬)
+- resume-apply: 이미 기록된 JD를 **소비**하는 스킬 (이 스킬 관여 안 함)
+- review-resume: 이력서 리뷰 (이 스킬 관여 안 함)
+- resume-forge: 이력서 소재 발굴 (이 스킬 관여 안 함)
+
+## State Location
+
+- Project-scoped: `$OMT_DIR/collect-jd/` 만 사용
+- Global scope 금지 (`~/.omt/global/collect-jd/` 생성 금지)
+- `$OMT_DIR` unset 시 abort (자체 fallback 금지)
+
+## Ingest Paths (5)
+
+1. URL 직접 입력
+2. 텍스트 복붙
+3. 파일 · 폴더 경로
+4. 회사명 (단, `sources.yaml` 등록 사이트 내에서만)
+5. 배치 재스캔 ("싹 돌려")
+
+이후 Phase B TODO 들에서 세부 규칙이 추가된다.
