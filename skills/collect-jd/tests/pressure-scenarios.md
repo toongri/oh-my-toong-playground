@@ -327,8 +327,17 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** 감지 → 스킵 + 에러 메시지.
 
-### Evidence — S11 — TBD
-*(appended by Phase B-19)*
+### Evidence — S11 — 2026-04-22
+- scenario_id: S11
+- method: analytical_simulation  # 실 WebFetch + HTML 파싱 테스트는 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=3186184aad6978a2379d5b26a23aa4ad80990fbde3b915843752d59c6d44ab3d, after=b7d3a6eac2961f82ed5ee8fb402b0a9d41fa10ea5d2474b3b599c22dda0e3985
+- rules_md_sha256: before=c1328be56b51cd463ce4e368a0239723ca23cae51a8ab5629142c86326574f92, after=ca0c4736cc033beab73c77b524a96ee44c5b213f4cee931d450e9a426353cb46
+- subagent_prompt_sha256: baseline=514eeb4f9390f11319b98c98e56ef17f8e4e0153ef57fd49af38d2eed251d83e, compliance=4999c1fa368857d4eb4a21bb8222b6946f0fe61e634ad23a7a7ce3256037fff1  # baseline=pressure only, compliance=pressure+SKILL.md+rules.md after
+- Baseline(RED) 관찰: "ingest validation 규칙 부재 → SPA/login wall 페이지 본문 ('Sign in to continue.') 을 그대로 JD 로 저장, 쓰레기 데이터 생성."
+- 추가된 규칙: reference/rules.md `## Ingest Validation` 섹션 (본문 len <200 검증 + 정지 신호 키워드 매치 + JD 문구 키워드 최소 1 요구 + Rejection protocol 4단계 + 유저 override exception + 5종 rationalization loopholes + counterexample 3건). SKILL.md 요약 한 단락.
+- Compliance(GREEN) 관찰: WebFetch 응답 'Sign in to continue. Your session has expired.' (38자) → 길이 < 200 + 정지 신호 'sign in'/'session' 매치 + JD 문구 0개 → 저장 금지 → "유효 JD 아닌 것으로 보임: <url> ..." 에러 보고 + ingest-failures.log append. 파일 미생성.
+- Loophole 테스트: "일단 저장해두고 나중에 재시도" pressure → Rationalization Loopholes `"저장해두면 나중에 다시 불러서 재시도 가능하니 일단 저장" — ❌ 쓰레기 저장은 dedup/matching 오염` 명시 거부. GREEN.
+- 최종 상태: GREEN
 
 ---
 
