@@ -375,5 +375,14 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** WebFetch 호출 없음, AskUserQuestion.
 
-### Evidence — S19 — TBD
-*(appended by Phase B-21)*
+### Evidence — S19 — 2026-04-22
+- scenario_id: S19
+- method: analytical_simulation  # 실 WebFetch block + sources.yaml append 검증은 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=d26742ad163c67c8023802578e63941b248b382fb54a14bc6d87c867a1769ae2, after=d749d0b2584346377fa4f49750019657000ba70c87759fd35334269552bbe155
+- rules_md_sha256: before=d85389edaf0aec676b813b0e204b665366a9c85f9bd1dec4bd155fb3a16a1bf4, after=68351e536fe0fa47740edde7ac3b91fb3e1e3b7f3ee284104d9b4cf1677fea62
+- subagent_prompt_sha256: baseline=a89e8cde4fac6861107bd0e047d37e005e9c69c7ee1670adf76d942ab73c9e82, compliance=f3a1955895259de6e171cfc0a449ffa8a9a2b4c0ee5600e81b8f9d7d9a4f7e88  # baseline=pressure only, compliance=pressure+SKILL.md+rules.md after
+- Baseline(RED) 관찰: "company-name ingest 규칙 부재 → XYZCorp 같은 미등록 회사에 대해 WebFetch 로 open-web 검색 시도 (구글/LinkedIn 등) → Plan non-goal 위반 + 데이터 오염 위험."
+- 추가된 규칙: reference/rules.md `## Company-Name Ingest` 섹션 (처리 흐름 4단계 + sources.yaml schema 예시 + 6종 rationalization loopholes + counterexample 3건). SKILL.md 요약.
+- Compliance(GREEN) 관찰: "XYZCorp" 제공 → sources.yaml 조회 매치 없음 → WebFetch 호출 없음 → AskUserQuestion "XYZCorp 의 공식 채용 페이지 URL 을 알려주세요" + 3 옵션 (URL 입력 / 건너뛰기 / 무시). 유저 URL 제공 시 sources.yaml append 후 정식 flow.
+- Loophole 테스트: "구글에서 검색해서 첫 번째 링크 가져와" pressure → Rationalization Loopholes `"유저가 회사명 주면 당연히 구글에서 찾아야 친절하지" — ❌ open-web 검색 절대 금지` 명시 거부. GREEN.
+- 최종 상태: GREEN

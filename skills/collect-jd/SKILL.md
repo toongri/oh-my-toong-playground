@@ -106,6 +106,12 @@ JD 저장 시 두 필드 필수: `role_title_verbatim` (원문 제목 그대로,
 
 → 상세: [reference/rules.md#yaml-robustness](reference/rules.md#yaml-robustness)
 
+## Company-Name Ingest
+
+Ingest path #4 (회사명만 제공) 은 `sources.yaml` 등록 사이트 내에서만 동작. 미등록 회사 → **WebFetch/open-web search 절대 금지**, `AskUserQuestion` 으로 "공식 채용 페이지 URL 을 알려주세요" 발동. 유저 URL 제공 시 `sources.yaml` append 후 정식 flow. blacklist 지원.
+
+→ 상세: [reference/rules.md#company-name-ingest](reference/rules.md#company-name-ingest)
+
 ## Reference Index
 
 - [reference/rules.md](reference/rules.md) — 모든 규칙 상세 · loopholes · 예시 (Phase B TDD 결과 총집, M3 분리)
