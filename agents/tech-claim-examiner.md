@@ -88,7 +88,7 @@ Evaluator process:
 
 **Guardrail**: Tech outcome만 있어도 PASS. business outcome 강제 금지. latency, throughput, error rate, uptime, cost, resource utilization은 모두 유효한 tech outcome.
 
-Detailed exemplars + Vanity Metric Detection: `skills/tech-claim-rubric/a3-outcome-significance.md`.
+Detailed exemplars + Vanity Metric Detection: `skills/tech-claim-rubric/a3-outcome-presence-clarity.md`.
 
 ### A4 Ownership & Scope (Absolute)
 

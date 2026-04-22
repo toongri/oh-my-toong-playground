@@ -952,12 +952,12 @@ r_phys:
 
 <!-- T6 regression guard: a3 Verdict Precedence rule (ii) — qualitative outcome with explicit causality AND resolution verb → PASS (no numeric required) -->
 
-**Bullet**: "Refactored payment integration to enable sandboxing, unblocking QA from environment dependency and allowing parallel test runs."
+**Bullet**: "Refactored payment integration to enable sandboxing, chosen over contract-test mocks because mocks could not replicate live-gateway error paths, accepting reduced fidelity to real API responses in exchange for full environment isolation — unblocking QA from environment dependency and allowing parallel test runs."
 
 **Candidate context**: { years: 4, position: "Mid Backend", target_company: "fintech" }
 
 **Expected verdicts**:
-- A1: PASS — Technology (payment integration refactor), Mechanism (sandboxing enablement), Constraint (QA environment dependency). Core signals present.
+- A1: PASS — Technology (payment integration refactor), Mechanism (sandboxing enablement), Constraint (QA environment dependency), Trade-off (reduced API fidelity accepted in exchange for isolation), Rationale (contract-test mocks ruled out because they cannot replicate live-gateway error paths). All 5 signals present → strict PASS.
 - A2: PASS — Cause (refactoring → sandbox enablement) → effect (QA unblocked). Causal chain unambiguous.
 - A3: PASS — Verdict Precedence rule (ii): qualitative outcome ("unblocking QA from environment dependency") with explicit causality (refactor → sandboxing → unblocking) AND resolution verb ("unblocking") present → PASS. No numeric magnitude required.
 - A4: PASS — "Refactored" ownership verb + scope coherent with mid-level.
@@ -979,6 +979,8 @@ r_phys:
 ### SCN-28: A3 regex numeric unit coverage — $-prefix, x multiplier, Korean 분
 
 <!-- T6 regression guard: a3 PASS regex expansion — $2.4M ($-prefix revenue token), 13x (bare multiplier), 45분 (Korean duration unit) must all match -->
+
+**Scope**: axis-isolated A3 regex coverage only. Other axes (A1/A2/A4/A5) are not asserted for these bullets; overall `final_verdict` is not applicable to this SCN.
 
 **Bullet 1 ($2.4M)**: "Redesigned checkout flow API to eliminate 3-round-trip confirmation, cutting checkout abandonment from 12% to 8%, achieving ~$2.4M annualized revenue impact."
 
@@ -1002,9 +1004,6 @@ Bullet 3 (`45분`):
 **Expected critical rules** (all bullets):
 - r_phys.triggered: false
 - r_cross.triggered: false (reasoning: "cross-entry context not provided")
-
-**Expected final_verdict**: APPROVE (all bullets)
-**structural_verdict**: PASS (all bullets)
 
 **Purpose**: regression guard for a3 PASS regex expansion — confirms `$2.4M` ($-prefix revenue), `13x` (bare multiplier), and `45분` (Korean duration unit) each match the A3 PASS numeric regex and correctly receive A3 PASS when paired with an outcome verb. This SCN fails if regex contraction drops any of these three token forms.
 
@@ -1044,7 +1043,7 @@ Bullet 3 (`45분`):
 | SCN-25 | A2 arithmetic direction reduction (latency-like, before/after) | APPROVE | PASS | Multiplier reduction = before/after — 200ms→50ms = 4x correctly parsed (P1-5 regression guard) |
 | SCN-26 | P1-1 regression: count(P1)=2 + structural FAIL | REQUEST_CHANGES | FAIL | count(P1 across A1-A4) < 3 + structural_verdict FAIL → priority 5 Readability-only fix (NOT source extraction) (P1-1 regression guard) |
 | SCN-27 | A3 verdict precedence rule (ii): qualitative + unblocking verb | APPROVE | PASS | Qualitative causality + resolution verb → A3 PASS (no numeric required) (T6 regression guard) |
-| SCN-28 | A3 regex: $2.4M / 13x / 45분 token coverage | APPROVE | PASS | $-prefix revenue, bare multiplier, Korean duration unit each match A3 PASS regex (T6 regression guard) |
+| SCN-28 | A3 regex: $2.4M / 13x / 45분 token coverage | N/A (axis-isolated) | N/A (axis-isolated) | $-prefix revenue, bare multiplier, Korean duration unit each match A3 PASS regex (T6 regression guard) |
 
 ## Axis Boundary Coverage
 
