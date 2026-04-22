@@ -114,3 +114,44 @@ If L1 matches an existing file:
 ### Counterexample: different positions
 
 같은 `company_slug` 라도 `role_title_slug` 가 다르면 서로 다른 JD. 두 파일 모두 저장.
+
+## Dedup Layer 2 (Content Similarity LLM Judge) [MANDATORY]
+
+L1 (URL · Slug) 이 **매치하지 않은 경우**, 또는 L1 매치했지만 `last_checked_at` 이 TTL (30일) 을 초과한 경우, L2 LLM 유사도 판정을 호출한다.
+
+### When to call L2
+
+- L1 no-match + 직전 배치에서 **같은 `company_slug` 의 다른 JD** 가 이미 저장됨 → L2 비교 필수 (회사별로 유사 포지션 중복 방지)
+- L1 URL match + `last_checked_at` > 30 days → L2 재검증 (내용이 실제로 달라졌을 수 있음)
+- 단일 세션에서 L2 호출 상한 `max_l2_calls_per_batch: 50`. 초과 시 저장은 진행하되 `fingerprint_check: pending` 마킹 → 다음 배치에서 L2 재평가.
+
+### L2 invocation contract
+
+- **Prompt file:** `reference/dedup-l2-prompt.md` (pinned, version 관리)
+- **Temperature: 0** (deterministic)
+- **Output contract:** JSON `{"same": bool, "reason": str}`
+- JSON 파싱 실패 시 retry 1회. 2회 실패 시 conservative `fingerprint_check: pending` 로 저장 (dedup 건너뛰고 보존 우선).
+- **Raw URL 비교 금지**, **slug 만으로 판정 금지** — 항상 L2 prompt 거쳐야 함.
+
+### L2 match action (same == true)
+
+1. 신규 JD 파일 생성 **금지**.
+2. 기존 (매치된) 파일의 `last_checked_at` 을 현재 ISO8601 로 갱신.
+3. 기존 파일의 `fingerprint_check` 를 `duplicate_of:<candidate.url>` 로 기록 (원본이 어디에서 중복 검출되었는지 추적).
+4. 보고: `"중복 감지: 기존 <path> (L2: LLM similarity same=true, reason=<reason>)"`.
+
+### L2 non-match action (same == false)
+
+- 신규 JD 파일 저장 진행. `fingerprint_check: unique` 기록.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "URL 이 다르니 당연히 다른 JD" — ❌ L2 content 비교 필수 (회사 블로그 vs 잡포털 동일 공고 케이스).
+- "블로그는 홍보글이니 채용사이트와 별개" — ❌ 내용 같으면 중복.
+- "내용 살짝 달라서 별개" — ❌ LLM judge 에 위임. temperature 0 이므로 결과 재현.
+- "배치가 바쁘니 L2 skip 하고 저장" — ❌ `max_l2_calls_per_batch` 초과 시 `fingerprint_check: pending` 저장은 허용, **skip 이 아니다**. 다음 배치에서 반드시 재평가.
+- "L2 응답 JSON 깨졌으니 그냥 저장" — ❌ 1회 retry, 그래도 실패면 `fingerprint_check: pending`.
+
+### Counterexample: 다른 팀 · 다른 시니어리티
+
+같은 회사 · 같은 role_title 이어도 L2 응답이 `same: false` 면 별개 JD 로 저장 (예: "네이버 백엔드 시니어" vs "네이버 백엔드 주니어").
