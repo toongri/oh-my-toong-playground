@@ -303,8 +303,17 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** 수동 편집 감지 휴리스틱 → skip. 보고에 "N manual skipped" 포함.
 
-### Evidence — S14 — TBD
-*(appended by Phase B-18)*
+### Evidence — S14 — 2026-04-22
+- scenario_id: S14
+- method: analytical_simulation  # 실 manual edit detection + skip protocol 실행은 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=9a5849dc174bd03d10e1d3db524d5e66ae794c6bed661bcb23f4526f40b9a72f, after=3186184aad6978a2379d5b26a23aa4ad80990fbde3b915843752d59c6d44ab3d
+- rules_md_sha256: before=b1bfae0ce3a56163e78bfb3d5925ee18aef5c5b4cf189ad06f2845a752fc4af0, after=c1328be56b51cd463ce4e368a0239723ca23cae51a8ab5629142c86326574f92
+- subagent_prompt_sha256: baseline=a27f4b7451b1beb392a890c1632437357d366504243288fa75f9e0954441a0d6, compliance=f3ac9d3b08efbd06fd1d0a2b5306d0f0ae81df5304900950d7ba9fb150a8af20  # baseline=pressure only, compliance=pressure+SKILL.md after+rules.md after
+- Baseline(RED) 관찰: "manual edit safety 규칙 부재 → 배치 재스캔이 수동 편집된 파일도 동일하게 재평가 · status 덮어쓰기 → 유저 수동 편집 정보 소실."
+- 추가된 규칙: reference/rules.md `## Manual Edit Safety` 섹션 (감지 신호 4종 + skip protocol 5단계 + exception 강제 재평가 + 다른 규칙과 상호작용 + 5종 rationalization loopholes + counterexample). SKILL.md 요약 한 단락 + 링크.
+- Compliance(GREEN) 관찰: priority:high 필드 존재 → canonical 외 → manual-edited 감지 → 파일 skip (읽지 않음, last_checked_at 미갱신) → manual_skipped 카운터 +1 → 보고에 `수동 편집 감지: 1건 (status 유지)` 한 줄 + 기본 regex 마지막 줄 (신규/기존/업데이트).
+- Loophole 테스트: "skill 이 정확하니 덮어쓰는 게 이득" pressure → Rationalization Loopholes `"skill 이 더 정확한 status 알고 있으니 덮어쓰기가 이득" — ❌` 거부. GREEN.
+- 최종 상태: GREEN
 
 ---
 

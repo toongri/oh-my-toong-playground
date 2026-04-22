@@ -70,6 +70,12 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 → 상세 (rationalization loopholes): [reference/rules.md#reversal](reference/rules.md#reversal)
 
+## Manual Edit Safety
+
+배치 재스캔은 유저가 수동으로 frontmatter 를 편집한 파일을 **절대 덮어쓰지 않는다**. 감지 신호 (last_checked_at 미래 · 비표준 필드 · enum 외 값) 하나라도 매치 시 해당 파일 skip + 보고에 `수동 편집 감지: N건` 라인 추가.
+
+→ 상세: [reference/rules.md#manual-edit-safety](reference/rules.md#manual-edit-safety)
+
 ## Batch Mode Report Schema (MANDATORY)
 
 배치 재스캔 완료 시 응답 **마지막 줄** 이 정확히 아래 regex 매치:
