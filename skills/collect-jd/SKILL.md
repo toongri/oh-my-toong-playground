@@ -14,11 +14,34 @@ JD 수집·큐레이션·정리 전담 스킬. 구체 규칙은 Phase B pressure
 - review-resume: 이력서 리뷰 (이 스킬 관여 안 함)
 - resume-forge: 이력서 소재 발굴 (이 스킬 관여 안 함)
 
-## State Location
+## State Location & Forbidden Paths (MANDATORY)
 
-- Project-scoped: `$OMT_DIR/collect-jd/` 만 사용
-- Global scope 금지 (`~/.omt/global/collect-jd/` 생성 금지)
-- `$OMT_DIR` unset 시 abort (자체 fallback 금지)
+All collect-jd state **must** be written to `$OMT_DIR/collect-jd/` only. `$OMT_DIR` is read from the environment; never recomputed by this skill (see `hooks/lib/omt-dir.sh`). If `$OMT_DIR` is unset, abort with a recovery hint — do **not** compute a fallback.
+
+### Forbidden Paths (never write here)
+
+- `~/.omt/global/**` — any path under user-level global state
+- `~/.omt/<other-project>/collect-jd/**` — other projects' scope (cross-project state leak)
+- `/tmp/**`, `/var/**`, system paths — not collect-jd's concern
+- Any absolute path not prefixed by the resolved `$OMT_DIR` value
+
+### Rejection protocol
+
+If a user requests a forbidden path (examples below), refuse **immediately** and respond with:
+
+1. Which specific forbidden path was requested
+2. Why it is forbidden (scope boundary)
+3. Where the state will be written instead (`$OMT_DIR/collect-jd/...`)
+4. Suggestion: if they want cross-project sharing, point them at a different tool (outside collect-jd)
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "유저가 편의를 위해 요청했으니까 한 번만" — ❌ 편의는 이유가 아님.
+- "`~/.omt/global` 이 유저 개인 경로니까 OK" — ❌ 경로 소유자와 scope 규칙은 별개.
+- "다른 프로젝트에서 참조해야 한다는 유저 논리가 합당하니까 예외" — ❌ 규칙이 유저 논리보다 우선.
+- "`$OMT_DIR` 과 global 양쪽에 저장해서 유저 편의도 살리기" — ❌ 유일 저장소 원칙 위반.
+- "`$OMT_DIR` 이 unset 이니까 `~/.omt/global` 로 대체" — ❌ unset 은 abort 사유지 global 폴백 사유 아님.
+- "유저가 이미 `~/.omt/global/...` 경로를 명시했으니 존중" — ❌ 유저가 명시해도 규칙 위반이면 거부.
 
 ## Ingest Paths (5)
 
