@@ -257,8 +257,16 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** emergent tag 인터뷰 → tags + reason_note 작성.
 
-### Evidence — S4 — TBD
-*(appended by Phase B-16)*
+### Evidence — S4 — 2026-04-22
+- scenario_id: S4
+- method: analytical_simulation  # 실 AskUserQuestion + tags.yaml 업데이트는 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=46680c64ed038122ea753deed81b8cd58585196f90da9b983452442623be15e4, after=a5e0eb8efa3b6e848fb686288aea13d48704d8bdd95c91c1a6fc69d8793fd8dc
+- subagent_prompt_sha256: baseline=80150ab19a5ae2b4db5624e3a05890ddc04ad30bf18bda06c40417b7d9c46fb6, compliance=552c60299cc7d8a43932931e0e4e2e0727ca7538fa1a170eeefcf92c6ef485ce
+- Baseline(RED) 관찰: "exclude 규칙 부재 → status 만 업데이트, tags/reason_note 비어있음 → matching 재평가/검색 불가능."
+- 추가된 규칙: SKILL.md `Exclude Flow (tags + reason_note MANDATORY)` 섹션. Emergent tag interview (reason → tag 유도 → tags.yaml append → atomic write), tags.yaml schema, 6종 rationalization loopholes, counterexample.
+- Compliance(GREEN) 관찰: "별로야 / 제외" 요청 → Emergent tag interview 발동 → reason_note + tags 후보 확인 → status: excluded + tags: [salary-too-low] + reason_note 원문 atomic write, tags.yaml append.
+- Loophole 테스트: "이유 설명할 시간 없으니 reason_note 비워두고 제외" pressure → Rationalization Loopholes `"유저가 이유 안 말했으니 reason_note 비워두고 저장" — ❌` 명시 거부. GREEN.
+- 최종 상태: GREEN
 
 ---
 
