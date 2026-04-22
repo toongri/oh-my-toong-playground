@@ -21,6 +21,17 @@ Phase B TDD 사이클은 이상적으로 `Agent(subagent_type="general-purpose",
 
 Phase C-25 end-to-end dogfood 단계에서는 `method: analytical_simulation` 이 붙은 시나리오를 grep 으로 식별하고, 최소 1개 시나리오를 실제 Claude Code 세션으로 재검증해 회귀 안전망을 확보한다.
 
+### Subagent prompt SHA256 계산 규약
+
+`analytical_simulation` 방법의 경우 실제 subagent 호출이 없으므로 `subagent_prompt_sha256` 는 다음 규약으로 계산한다:
+
+- **Baseline** SHA: pressure user message + SKILL.md **현재 상태 (rule 추가 전)** 를 연결한 문자열의 sha256
+- **Compliance** SHA: pressure user message + SKILL.md **수정 후 상태** 를 연결한 문자열의 sha256
+
+두 SHA 는 보통 다르다. 다만 **pressure user message 만으로 계산하고 SKILL.md 를 prompt 에서 생략한 시나리오** (예: SKILL.md 참조 없는 단순 관찰) 에서는 baseline == compliance SHA 가 허용된다. 이 경우 evidence stub 의 해당 라인에 인라인 주석 `# analytical_simulation: prompt = pressure only` 를 명기한다.
+
+`real_subagent` 방법에서는 항상 실 Agent 호출 시 전달한 prompt 의 sha256 을 기록하며 baseline 과 compliance 는 **다른 값** 이어야 한다 (SKILL.md 반영 여부가 다르기 때문).
+
 ## Evidence Stub Format
 
 Each Phase B TODO **must** append after completion:
@@ -145,8 +156,16 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** L2 fixture → `same: true` → 스킵.
 
-### Evidence — S13 — TBD
-*(appended by Phase B-12)*
+### Evidence — S13 — 2026-04-22
+- scenario_id: S13
+- method: analytical_simulation  # Agent(general-purpose) blocked by sisyphus-junior constraint; rationale per SKILL.md rule derivation
+- skill_md_sha256: before=cee18da80553dbc5b69756c6b9074b4089ab3fb905f8ffb4dcede241eabac774, after=7e492659d5e9fc22cb70329ecf49e47e43cce9fd2b3a4319edab7188a0e84572
+- subagent_prompt_sha256: baseline=6c8492d57d50472c1a0e31c2e70ca0139ac0c63113bc00858973e38014ebba27, compliance=6c8492d57d50472c1a0e31c2e70ca0139ac0c63113bc00858973e38014ebba27  # analytical_simulation: prompt = pressure only (SKILL.md 미첨부)
+- Baseline(RED) 관찰: "두 URL 이 도메인·경로 모두 달라 L1 no-match. Dedup Layer 2 규칙 부재 → 본문 유사성 확인 없이 두 번째 JD 를 신규 파일로 저장." — L2 개념 자체가 없어 중복 저장 발생.
+- 추가된 규칙: SKILL.md `Dedup Layer 2 (Content Similarity LLM Judge) [MANDATORY]` 섹션. L1 no-match + same company_slug → L2 필수, temperature 0, same==true 시 신규 파일 금지, 5종 rationalization loopholes, counterexample.
+- Compliance(GREEN) 관찰: L1 no-match (다른 도메인·경로) → company_slug=naver 동일 → L2 발동. reference/dedup-l2-prompt.md + temperature 0 으로 본문 비교 → same:true → 신규 파일 생성 X, 기존 파일 fingerprint_check: duplicate_of:<blog url> 갱신, "중복 감지: 기존 ... (L2: LLM similarity same=true)" 보고.
+- Loophole 테스트: "블로그 URL 은 홍보용이라 원본 채용사이트와 분리해서 저장해" pressure → Rationalization Loopholes `"블로그는 홍보글이니 채용사이트와 별개" — ❌` 명시 거부. GREEN.
+- 최종 상태: GREEN
 
 ---
 
