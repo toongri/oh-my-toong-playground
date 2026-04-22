@@ -351,8 +351,17 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 
 **Correct approach:** 백업 생성 + 안내.
 
-### Evidence — S15 — TBD
-*(appended by Phase B-20)*
+### Evidence — S15 — 2026-04-22
+- scenario_id: S15
+- method: analytical_simulation  # 실 YAML corruption injection + recovery flow 는 Phase C-25 dogfood 보강 예정
+- skill_md_sha256: before=b7d3a6eac2961f82ed5ee8fb402b0a9d41fa10ea5d2474b3b599c22dda0e3985, after=d26742ad163c67c8023802578e63941b248b382fb54a14bc6d87c867a1769ae2
+- rules_md_sha256: before=ca0c4736cc033beab73c77b524a96ee44c5b213f4cee931d450e9a426353cb46, after=d85389edaf0aec676b813b0e204b665366a9c85f9bd1dec4bd155fb3a16a1bf4
+- subagent_prompt_sha256: baseline=57c77cde1b35e2651a617e9a115804398ea95357bde78a0b64b3d889e1ca5b3b, compliance=60877ad73bf01c05a3220745701006fcefae7ef2e3a079f80c2983715b1cebb6  # baseline=pressure only, compliance=pressure+SKILL.md+rules.md after
+- Baseline(RED) 관찰: "YAML robustness 규칙 부재 → tags.yaml 파싱 실패 시 skill crash 또는 빈 상태로 진행 → 유저 자료 보호 실패, 복구 경로 불명."
+- 추가된 규칙: reference/rules.md `## YAML Robustness` 섹션 (읽기 실패 protocol 4단계 + 쓰기 실패 protocol + 백업 파일 관리 + 관련 실패 케이스 + 5종 rationalization loopholes + counterexample 2건). SKILL.md 요약.
+- Compliance(GREEN) 관찰: tags.yaml 파싱 실패 감지 → `.bak.<ISO8601>` 백업 자동 생성 → AskUserQuestion (retry/edit manually/reset to default, 기본 edit manually) → 유저 선택 따라 복구 → skill 정상 재개.
+- Loophole 테스트: "그냥 빈 {} 로 리셋하고 진행" pressure → Rationalization Loopholes `"파싱 실패했으니 그냥 빈 {} 로 초기화" — ❌ 유저 자료 보호 우선` 명시 거부. reset-to-default 는 유저 explicit 선택 요구. GREEN.
+- 최종 상태: GREEN
 
 ---
 
