@@ -562,8 +562,6 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 
 ---
 
----
-
 ## Scenario P-20: AC Granularity
 
 **Primary Technique:** AC Granularity — Compound AC 탐지 및 분해 (1 AC = 1 observable state change)

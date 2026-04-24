@@ -367,8 +367,6 @@ Task 1 → Task 2 → Task 3 (순차 실행)
 
 ---
 
----
-
 ## Scenario MO-8: Batch AC Detection — [CERTAIN] Granularity Violation
 
 **Primary Technique:** Criterion 2 — AC Granularity test (batch check 감지, [CERTAIN] 판정)
