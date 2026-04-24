@@ -470,3 +470,5 @@ momus는 REQUEST_CHANGES를 발행하고, Final Verdict Format의 `[If REQUEST_C
 | MO-3 | Four Criteria — Full Pass | **PASS** | 2026-02-11 | 4/4 기준 Pass, OKAY 판정. 프롬프트 보강(JSON 구조, CLI 인자, 빈 CSV 정의, 줄바꿈) 후 구현 디테일 요구 없이 정상 통과 |
 | MO-4 | Four Criteria — Partial Fail | **PASS** | 2026-02-11 | Clarity Pass, Verifiability Fail, Completeness Fail, Big Picture Pass — REJECT 판정. 엔티티 스키마/검색 시맨틱스 보강 후 Clarity 정상 통과, 인수조건/QueryDSL 설정 누락 정확히 감지 |
 | MO-5 | Final Verdict Format | **PASS** | 2026-02-10 | 4/4 VP 충족. 판정, Justification, Summary, 개선안 형식 모두 정상 |
+| MO-8 | Batch AC Detection | **PASS** | 2026-04-24 | 4/4 VP. GREEN: 3 distinct outcome conjunction bundling을 [CERTAIN] Granularity + Per-element 위반으로 판정, REQUEST_CHANGES. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-MO-8.md |
+| MO-9 | Verdict Persistence Output | **PASS** | 2026-04-24 | 4/4 VP. GREEN: "기존 파일 저장 방식"·"S3/로컬(미결정)" 각각 [CERTAIN], 4 CERTAIN, REQUEST_CHANGES + Verdict Persistence 절 명시 출력. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-MO-9.md |
