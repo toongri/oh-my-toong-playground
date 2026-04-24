@@ -72,7 +72,7 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 ## Manual Edit Safety
 
-배치 재스캔은 유저가 수동으로 frontmatter 를 편집한 파일을 **절대 덮어쓰지 않는다**. 감지 신호 (last_checked_at 미래 · 비표준 필드 · enum 외 값) 하나라도 매치 시 해당 파일 skip + 보고에 `수동 편집 감지: N건` 라인 추가.
+배치 재스캔은 유저가 수동으로 frontmatter 를 편집한 파일을 **절대 덮어쓰지 않는다**. 감지 신호 (last_checked_at 미래 · canonical 계약 위반 [비표준 필드 OR enum 외 값]) 하나라도 매치 시 해당 파일 skip + 보고에 `수동 편집 감지: N건` 라인 추가.
 
 → 상세: [reference/rules.md#manual-edit-safety](reference/rules.md#manual-edit-safety)
 
