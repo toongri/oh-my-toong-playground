@@ -301,15 +301,11 @@ tags:
 1. **`last_checked_at` 이 skill 의 마지막 기록보다 미래**:
    - skill 은 항상 **과거 또는 현재 시점** 으로만 `last_checked_at` 을 기록.
    - 파일에 미래 timestamp 가 있으면 유저가 임의로 편집한 것으로 판정.
-2. **Skill 이 설정하지 않는 필드 존재**:
-   - skill 의 canonical frontmatter 필드: `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`.
-   - 위 외의 키가 존재 (예: `priority`, `user_note`, `deadline`, `application_status`) → 유저 커스텀 편집.
-3. **`fingerprint_check` 가 enum 외**:
-   - canonical enum: `pending`, `unique`, `duplicate_of:<url>`.
-   - 다른 값 (예: `reviewed`, `my-note`) → 유저 편집.
-4. **`status` 가 enum 외**:
-   - canonical enum: `included`, `excluded`, `ambiguous`, `pending`.
-   - 다른 값 → 유저 편집 (단 abort 가 아니라 skip + 보고).
+2. **Canonical 계약 위반** (비표준 키 OR canonical 필드의 enum 외 값):
+   - canonical 키 (13종): `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`.
+   - canonical enum: `status` ∈ {`included`, `excluded`, `ambiguous`, `pending`}, `fingerprint_check` ∈ {`pending`, `unique`, `duplicate_of:<url>`}.
+   - 위 집합을 벗어난 키의 존재, 또는 enum 필드의 정의 외 값 → 유저 편집으로 판정.
+   - 예: `priority: high` (비표준 키), `status: dream-job` (status enum 외), `fingerprint_check: reviewed` (fingerprint_check enum 외), `user_note` · `deadline` · `application_status` (비표준 키 추가 사례).
 
 ### Skip protocol
 
@@ -346,8 +342,8 @@ tags:
 ### Counterexample
 
 - 파일에 `last_checked_at: 2026-05-01T10:00:00Z` 이 있는데 현재 시각 `2026-04-22T15:00:00Z` → 미래 timestamp → manual-edited.
-- 파일에 `application_status: applied` 필드 존재 → canonical 아님 → manual-edited.
-- 파일에 `status: dream-job` → enum 외 → manual-edited (단 보고에 경고 추가 "비표준 status 발견").
+- 파일에 `application_status: applied` 필드 존재 → canonical 계약 위반 (비표준 키) → manual-edited.
+- 파일에 `status: dream-job` → canonical 계약 위반 (enum 외 값) → manual-edited (단 보고에 경고 추가 "비표준 status 발견").
 
 ---
 
