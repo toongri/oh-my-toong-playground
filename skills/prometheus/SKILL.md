@@ -66,8 +66,6 @@ digraph prometheus_flow {
     "Oracle verdict?" [shape=diamond];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
-    "Present full plan\nAsk user to finalize" [shape=box];
-    "User approves?" [shape=diamond];
     "Generate HTML render" [shape=box];
     "Compute Recommendation" [shape=box];
     "Execution Bridge\n(AskUserQuestion)" [shape=ellipse];
@@ -99,9 +97,6 @@ digraph prometheus_flow {
     "User's choice?" -> "Execution Bridge\n(AskUserQuestion)" [label="(1) Full orchestration"];
     "User's choice?" -> "Execution Bridge\n(AskUserQuestion)" [label="(2) Focused execution"];
     "User's choice?" -> "Write plan to $OMT_DIR/plans/*.md" [label="(3) Revise plan"];
-    "Present full plan\nAsk user to finalize" -> "User approves?";
-    "User approves?" -> "Interview Mode" [label="no, more changes"];
-    "User approves?" -> "Execution Bridge\n(AskUserQuestion)" [label="yes"];
 }
 ```
 
