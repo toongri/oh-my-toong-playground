@@ -20,6 +20,26 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 → 상세 (rejection protocol, rationalization loopholes): [reference/rules.md#state-location--forbidden-paths](reference/rules.md#state-location--forbidden-paths)
 
+## Session Lock (MANDATORY)
+
+스킬 트리거 시점 (Phase 0 진입 전 최우선) 에 `$OMT_DIR/collect-jd/.lock` 을 획득한다. `.lock` 이 없으면 현재 PID 로 atomic write. `.lock` 이 있으면 `kill -0 <pid>` 로 live 여부 확인 — live 이면 abort (stderr + exit non-zero), stale 이면 현재 PID 로 overwrite 후 진행. **lock 은 세션 전체 동안 유지**: AskUserQuestion 대기 중 · 파일 편집 · LLM 호출 · 배치 재스캔 모든 단계. 정상 종료 시 PID 일치 확인 후 삭제.
+
+- lock acquire 없이 스킬 진입 금지.
+- `kill -0` 없이 PID 파일 존재만 확인하는 구현 금지 (PID 재활용 위험).
+- AskUserQuestion 대기 중 lock release/re-acquire 금지.
+
+→ 상세 [reference/rules.md#session-lock](reference/rules.md#session-lock)
+
+## Atomic Write Pattern (MANDATORY)
+
+모든 state 파일 write 는 `writeAtomic(path, content)` 패턴 사용. Step: (1) `<path>.tmp` 에 content write → (2) fsync (권장) → (3) `rename(<path>.tmp, <path>)` (POSIX atomic). temp 경로는 반드시 대상 파일과 동일 디렉토리 (cross-filesystem rename 방지).
+
+- `open(path, 'w')` 직접 write 금지 — SIGKILL·디스크 full 시 파일 truncated.
+- `/tmp/xxx` 같은 별도 디렉토리 temp 경로 금지.
+- 적용 의무: 신규 JD 저장 · `last_checked_at` 갱신 · status reversal · fingerprint 갱신 · `rules.yaml.proposed` 생성 · `rules.yaml` approve overwrite · session lock `.lock` write 전부.
+
+→ 상세 [reference/rules.md#atomic-write-pattern](reference/rules.md#atomic-write-pattern)
+
 ## Ingest Paths (5)
 
 1. URL 직접 입력
