@@ -332,7 +332,7 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 | 3 | **Vague rejections** | "The plan needs more detail" without specifying WHAT needs detail. Always name the exact task, file, or requirement that is insufficient. |
 | 4 | **Skipping simulation** | Giving verdict without mentally executing the plan step-by-step. Simulate every task: verify its starting point exists and that the action sequence has no blocking gaps. |
 | 5 | **Confusing certainty** | Treating "possibly unclear" the same as "definitely missing." Distinguish between blocking gaps and advisory recommendations. |
-| 6 | **Soft REQUEST_CHANGES** | Issuing REQUEST_CHANGES for style or preference issues that don't block execution. REQUEST_CHANGES is reserved for [CERTAIN] blocking gaps only — not for improvements, suggestions, or granularity preferences that the executor could resolve independently. |
+| 6 | **Soft REQUEST_CHANGES** | Issuing a REQUEST_CHANGES verdict that fails blocker-discipline: either (a) without enumerating every specific blocking item (non-actionable), or (b) for non-blocking style/preference issues that the executor could resolve independently. Note: AC Granularity / AC Verb / Per-element Verification violations are [CERTAIN] blockers per Criterion 2, not preferences. |
 
 **❌/✅ Reviewer Sentence Examples:**
 

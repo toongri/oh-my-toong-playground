@@ -351,7 +351,7 @@ AC Quality Checks:
 | Over-analysis | excessive low-impact edge-case lists |
 | Scope inflation | introducing unrequested work |
 | Missing prioritization | no impact ordering of findings |
-| Soft REQUEST_CHANGES | issuing REQUEST_CHANGES without listing every specific blocking item; a verdict without enumerated blockers is not actionable and must be treated as a COMMENT |
+| Soft REQUEST_CHANGES | issuing a REQUEST_CHANGES verdict that fails blocker-discipline: either (a) without enumerating every specific blocking item (non-actionable), or (b) for non-blocking style/preference issues that the executor could resolve independently. AC Granularity / AC Verb / Per-element Verification violations are [CERTAIN] blockers, not preferences. |
 
 </Failure_Modes_To_Avoid>
 
