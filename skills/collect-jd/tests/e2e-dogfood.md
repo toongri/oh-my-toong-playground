@@ -64,7 +64,7 @@ AskUserQuestion 3 라운드:
 
 ### 6. Session end
 
-`.lock` 삭제 + summary 보고.
+summary 보고.
 
 ---
 
