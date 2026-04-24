@@ -70,7 +70,7 @@ digraph prometheus_flow {
     "Stage B: Execution Recommendation" [shape=box];
     "Stage C: Execution Bridge" [shape=ellipse];
     "User's choice?" [shape=diamond];
-    "Stage C: Execution Dispatch\n(invoke sisyphus/sisyphus-junior)" [shape=box];
+    "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [shape=box];
 
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Context Loading";
@@ -95,9 +95,9 @@ digraph prometheus_flow {
     "Stage A: HTML Render" -> "Stage B: Execution Recommendation";
     "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
     "Stage C: Execution Bridge" -> "User's choice?";
-    "User's choice?" -> "Stage C: Execution Dispatch\n(invoke sisyphus/sisyphus-junior)" [label="(1) Full orchestration"];
-    "User's choice?" -> "Stage C: Execution Dispatch\n(invoke sisyphus/sisyphus-junior)" [label="(2) Focused execution"];
-    "User's choice?" -> "Write plan to $OMT_DIR/plans/*.md" [label="(3) Revise plan"];
+    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(1) Full orchestration"];
+    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(2) Focused execution"];
+    "User's choice?" -> "Interview Mode" [label="(3) Revise plan"];
 }
 ```
 
@@ -216,7 +216,7 @@ This checklist is internal — do not present it to the user.
 
 ## Planning-time Task Discipline
 
-Every planning session MUST define and track phase별 할일 (per-phase tasks) from the moment intent is classified. Planning without tracked tasks는 정의되지 않은 할일을 정의할 수 없게 만든다 — gaps surface only at handoff, when correction is most expensive.
+Every planning session MUST define and track phase별 할일 (per-phase tasks) from the moment intent is classified. Untracked tasks hide their own existence — gaps surface only at handoff, when correction is most expensive.
 
 ### Phase Templates by Intent
 
