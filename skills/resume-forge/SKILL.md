@@ -248,23 +248,13 @@ Conversion principles:
 
 Progress per FAIL axis. **One question per turn** at each Stage:
 
-| Stage | Trigger axis FAIL | Action |
-|-------|-------------------|--------|
-| Stage 1 | `a1_technical_credibility` FAIL | Named systems / mechanisms 보강: ask specifically about the technical decisions the examiner flagged |
-| Stage 2 | `a2_causal_honesty` FAIL | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic |
-| Stage 3 | `a3_outcome_significance` FAIL | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results |
-| Stage 4 | `a4_ownership_scope` FAIL | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context |
-| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`/`a4`) co-failure | Source extraction 종합 (multi-axis): AI synthesizes user's domain/stack and proposes scenarios typical for the context |
-
-**Stage 5 — Domain-Informed Source Proposals:**
-
-When axis-specific extraction (Stages 1-4) fails to surface material, OR when structural_verdict co-failure triggers multi-axis synthesis, the AI acts as a domain expert and proposes sources:
-- Synthesize the user's company scale, domain, tech stack, and the specific FAIL axis
-- Propose 2-3 scenarios in the form: "In this context, this problem typically occurs — did you experience something like this?"
-- Example: "위탁판매 정산이면 PG 환불 타이밍이랑 정산 주기가 안 맞아서 차액이 생기는 케이스가 많은데, 이런 경험 있나요?"
-- Example: "Go로 concurrent processing 하면 goroutine leak이나 channel deadlock이 흔한데, 그런 이슈 겪으셨나요?"
-- User confirms → use as new source material → reconstruct entry
-- User denies all → build best entry with current sources → final dispatch
+| Stage | Trigger | Action |
+|-------|---------|--------|
+| Stage 1 | `a1_technical_credibility` FAIL | Named systems / mechanisms 보강: ask specifically about the technical decisions the examiner flagged. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 2 | `a2_causal_honesty` FAIL | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 3 | `a3_outcome_significance` FAIL | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 4 | `a4_ownership_scope` FAIL | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`/`a4`) co-failure | Source extraction 종합 (multi-axis): apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) — AI synthesizes user's domain/stack and proposes scenarios typical for the context |
 
 **Source Quality Check:**
 
@@ -277,6 +267,19 @@ At each Stage, verify 3 elements whenever the user provides source material:
 | Verifiability | Metrics, before/after, measurable outcome | Unverifiable → examiner FAIL expected → ask follow-up |
 
 All 3 elements confirmed → reconstruct entry. Any element missing → proceed to next Stage.
+
+### Domain-Informed Source Proposal
+
+**Applicable at**: Stages 1-4 (when axis-specific extraction exhausts without surfacing material) AND Stage 5 (co-failure trigger: `structural_verdict == FAIL` + at least one of `a1`/`a2`/`a3`/`a4` FAIL).
+
+When axis-specific questions fail to surface material, the AI acts as a domain expert and proposes concrete sources:
+
+- Synthesize the user's company scale, domain, tech stack, and the specific FAIL axis
+- Propose 2-3 scenarios in the form: "In this context, this problem typically occurs — did you experience something like this?"
+- Example: "위탁판매 정산이면 PG 환불 타이밍이랑 정산 주기가 안 맞아서 차액이 생기는 케이스가 많은데, 이런 경험 있나요?"
+- Example: "Go로 concurrent processing 하면 goroutine leak이나 channel deadlock이 흔한데, 그런 이슈 겪으셨나요?"
+- User confirms → use as new source material → reconstruct entry
+- User denies all → build best entry with current sources → final dispatch
 
 **Step 4. Reconstruct Entry + Re-dispatch**
 
