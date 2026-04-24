@@ -36,4 +36,14 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('https://example.com/j?fbclid=1&_ga=2&keep=y'))
       .toBe('https://example.com/j?keep=y');
   });
+
+  it('trailing slash 제거 시 userinfo(user:pass) 보존', () => {
+    expect(normalizeUrl('https://user:pass@example.com/path/'))
+      .toBe('https://user:pass@example.com/path');
+  });
+
+  it('trailing slash 제거 시 username-only userinfo 보존', () => {
+    expect(normalizeUrl('https://admin@example.com/jobs/'))
+      .toBe('https://admin@example.com/jobs');
+  });
 });
