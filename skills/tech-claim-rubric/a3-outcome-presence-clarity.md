@@ -10,17 +10,22 @@ Absolute — 모든 level에서 "so what?" 답변 필수. 크기나 도메인과
 
 bullet이 어떤 outcome(효과)를 시사하나, 그것이 tech metric(latency, throughput, error rate 등)인지 business metric(revenue, conversion 등)인지 분류 불가한 경우 P1. "improved performance", "enhanced user experience" 등이 전형적 type-ambiguous 표현. 이 경우 FAIL 2(no magnitude)처럼 outcome이 완전히 공허하지는 않으나, PASS 조건도 충족 못 함.
 
-**A3 PASS 조건**: numeric outcome(`[$₩]\d{1,3}(,\d{3})*(\.\d+)?[MKB]?|\d{1,3}(,\d{3})*(\.\d+)?\s*(ms|s|sec|min|h|초|배|건|회|명|분|시간|원|만원|RPS|QPS|GB|MB|%|x)`)이 outcome verb(`달성|개선|단축|증가|감소|확보|향상|reduced|reducing|dropped|dropping|eliminated|eliminating|cut|cutting|boosted|boosting|improved|improving|increased|increasing|achieved|achieving`)와 함께 명시되어야 PASS. 수치 없는 fuzzy noun("성능 개선", "속도 향상")은 P1. outcome 자체가 없거나 vanity outcome("팀 만족도 향상" 지표 없음)은 FAIL.
+**A3 PASS 조건**: 아래 A3 PASS Gate의 세 conjunct를 동시에 충족해야 PASS. 수치 없는 fuzzy noun("성능 개선", "속도 향상")은 conjunct 2(sufficient-form) 미충족으로 P1. outcome 자체가 없거나 vanity metric(baseline/before-after 없는 절대값)은 conjunct 1 또는 conjunct 3 미충족으로 FAIL.
 <!-- Note: unit tokens RPS, QPS, GB, MB are uppercase-only in the pattern above; lowercase variants (rps, qps, gb, mb) are not matched and should be treated as unrecognized units requiring evaluator judgment. -->
 
-### Verdict Precedence
+### A3 PASS Gate
 
-Apply these rules in order — the first matching rule wins:
+A3 PASS는 아래 세 conjunct를 **모두(AND)** 충족할 때만 성립한다. 하나라도 미충족이면 PASS 불가.
 
-1. **outcome absent OR tautological** → FAIL. "Improved performance" with no magnitude is tautological; "Wrote 200 tests" has no outcome at all.
-2. **qualitative outcome with explicit causality AND resolution verb** (e.g., `unblocking`, `eliminating`) → PASS. No numeric magnitude required when the causal chain is unambiguous.
-3. **non-numeric fuzzy noun without causality chain** → P1. Outcome is implied but metric type or magnitude is indeterminate (e.g., "쿼리 속도가 빨라졌다").
-4. **numeric outcome + outcome verb** → PASS. The numeric token matches the A3 PASS 조건 regex and an outcome verb is present.
+**Conjunct 1 — outcome-present**: outcome이 존재하고 tautological하지 않다. "Improved performance" with no magnitude는 tautological; "Wrote 200 tests"는 outcome이 아닌 activity.
+
+**Conjunct 2 — sufficient-form**: 아래 두 형식 중 하나(OR)를 충족한다.
+- **qualitative-causality form**: qualitative outcome + explicit causality chain + resolution verb(예: `unblocking`, `eliminating`). 수치 magnitude 불필요.
+- **numeric form**: numeric outcome token(`[$₩]\d{1,3}(,\d{3})*(\.\d+)?[MKB]?|\d{1,3}(,\d{3})*(\.\d+)?\s*(ms|s|sec|min|h|초|배|건|회|명|분|시간|원|만원|RPS|QPS|GB|MB|%|x)`) + outcome verb(`달성|개선|단축|증가|감소|확보|향상|reduced|reducing|dropped|dropping|eliminated|eliminating|cut|cutting|boosted|boosting|improved|improving|increased|increasing|achieved|achieving`).
+
+**Conjunct 3 — non-vanity**: vanity metric이 아니다. 아래 중 하나라도 해당하면 vanity이므로 FAIL.
+- 절대 숫자만 존재하고 before/after 또는 baseline context가 없음 (예: "Achieved p99 200ms" — 개선 여부 판별 불가).
+- qualitative-causality form을 충족하는 경우, 이 conjunct는 자동 충족(causal chain이 개선 방향을 내포).
 
 ## PASS Exemplars
 
