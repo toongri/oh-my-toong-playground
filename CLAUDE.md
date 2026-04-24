@@ -166,3 +166,25 @@ Read("skills/prometheus/SKILL.md")  // Wrong
 - **DisplayNames in tests**: Korean
 - **Method names in tests**: English with backticks
 - **Council prompts**: English (for cross-model consistency)
+
+## Pending Actions — Next Session (collect-jd)
+
+다음 Claude Code 세션 재시작 시 아래 순서로 수행 필요:
+
+1. **`.claude/skills/collect-jd/` 갱신**: `skills/collect-jd/` 의 최신 내용을 `.claude/skills/collect-jd/` 로 overwrite deploy.
+   ```bash
+   cp -r skills/collect-jd/* .claude/skills/collect-jd/
+   ```
+2. **Hot reload**: `Skill(skill: "collect-jd")` invoke 하여 새 SKILL.md (4개 MANDATORY 섹션 + 8-phase) 적용 확인.
+3. **Dogfood REFACTOR 검증**: live run 수행
+   - 8-phase Phase Task Creation (TaskCreate 8건) 선행
+   - Sources Registration (sources.yaml 로드 → 비었으면 등록 제안)
+   - Listing Pagination 2-tier (auto-detect → Tier B interview)
+   - Crawl-State HWM Ledger (crawl_state atomic 갱신)
+   - Storage Backend Interview (config.yaml 존재 시 skip)
+   - S23-S26 pressure scenarios 실측 GREEN 전환
+4. REFACTOR 결과를 `skills/collect-jd/tests/e2e-dogfood.md` Real Dogfood Evidence 섹션에 append.
+
+**근거 커밋**: `80fdfc3` (S23-S26) + `1922bbe` (4 MANDATORY) + `3c9a502` (Storage Path/Dedup Gate/Phase Task).
+
+완료 시 이 섹션 제거 또는 archive 처리.
