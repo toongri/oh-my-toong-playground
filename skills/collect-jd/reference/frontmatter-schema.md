@@ -25,14 +25,14 @@
 
 ---
 
-## Gated Fields (excluded status 전용)
+## Conditional Fields
 
-아래 두 필드는 `status: excluded`일 때만 값이 존재해야 한다. 다른 status에서 값이 있어도 무효로 취급한다.
+아래 필드는 `status` 값과 audit trail 상태에 따라 조건부 필수/허용된다.
 
-| Field | Type | Description |
+| Field | 조건 | Description |
 |---|---|---|
-| `tags` | array[string] | 제외 사유 태그. `$OMT_DIR/collect-jd/tags.yaml` emergent 사전 참조. `status: excluded`일 때 비어있으면 안 됨 |
-| `reason_note` | string | 제외 사유 서술. `status: excluded`일 때 필수. reversal 시 최상단에 `prev: <status> @ <ISO date>` 라인 prepend |
+| `tags` | `status == excluded`일 때 필수 (≥1개) | 제외 사유 태그. `$OMT_DIR/collect-jd/tags.yaml` emergent 사전 참조. `status != excluded`에서는 빈 배열 또는 부재 (유효) |
+| `reason_note` | `status == excluded`일 때 필수 (빈 문자열 금지). 그 외 status에서는 audit trail 목적으로 optional | `status == excluded`: 제외 사유 서술(유저 발화 원문 또는 auto-mismatch 시 `auto:mismatch:<sha>`). 그 외: `auto:<verdict>:<sha>` 또는 누적된 `prev: <status> @ <ISO date>` 라인들. reversal 시 최상단에 `prev: <prev status> @ <ISO date>` 라인 prepend |
 
 ---
 
@@ -99,6 +99,7 @@ role_tags:
 status: included
 last_checked_at: "2026-04-22T10:30:00+09:00"
 fingerprint_check: unique
+reason_note: "auto:match:abc12345"
 quote: "토스 백엔드 포지션 확인해봐"
 ---
 
@@ -143,3 +144,4 @@ JD 본문...
 | `role_tags`가 빈 배열 | validation 실패 — ingest 시 LLM 태깅 재시도 |
 | `fingerprint_check: duplicate_of:<url>`인데 신규 파일 생성 | 생성 금지 — 기존 파일 `last_checked_at`만 갱신 |
 | YAML 파싱 실패 | crash 금지 — `<file>.bak.<timestamp>` 백업 후 유저에게 복구 옵션 제안 |
+| `status != excluded`이고 `reason_note`에 `auto:<verdict>:<sha>` 또는 `prev:` 라인 존재 | valid (audit trail) — 저장 허용 |

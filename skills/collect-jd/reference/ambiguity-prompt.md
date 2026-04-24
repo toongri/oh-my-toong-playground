@@ -56,7 +56,7 @@ LLM 은 아래 JSON 만 출력해야 한다. preamble, markdown, JSON 외 텍스
 | verdict | 자동 동작 | 조건 |
 |---|---|---|
 | `match` | `status: included` 자동 확정 | rules 조건을 명확히 만족 |
-| `mismatch` | `status: excluded` 자동 확정. `tags` + `reason_note` 는 위반 규칙 이름으로 자동 채움 | rules 조건을 명확히 위반 |
+| `mismatch` | `status: excluded` 자동 확정. `tags`: 위반 규칙 이름을 slug화한 값 (Exclude Flow의 tags.yaml 프로토콜에 따라 append). `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (Matching Loop Auto-decision audit trail 규칙을 따름). **유저 발화 원문 대체 금지 — manual exclude 경로에만 유저 발화 사용** | rules 조건을 명확히 위반 |
 | `ambiguous` | **AskUserQuestion 호출 필수**. `missing_signals` 를 질문에 포함. status 는 잠정 `pending` | 판정에 필요한 신호 부재 또는 부분 정보만 존재 |
 
 `ambiguous` 응답에서 `missing_signals` 가 비어있으면 구현 오류로 간주한다.
@@ -171,6 +171,6 @@ JSON 만 출력해라.
 
 이 프롬프트를 수정할 때:
 
-1. `SKILL.md` 의 버전 필드를 bump 한다.
+1. 이 프롬프트 파일 상단의 version 주석(`v1`, `v2` 등)을 bump한다. (SKILL.md frontmatter에는 version 필드가 없으며, skill-source YAML에는 version 필드를 넣지 않는 것이 repo 관례 — Plan DoD H2 준수.)
 2. 위 3개 fixture (match / mismatch / ambiguous) 를 포함한 regression 재검증을 수행한다.
 3. 프롬프트 변경 이력은 git commit 메시지에 기록한다.
