@@ -72,6 +72,16 @@ Consequence: even if the planner is certain the directive has been addressed, it
 
 ---
 
+## Reviewer Freshness Rule
+
+Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an agent thread that has already issued a verdict on a prior version of the artifact.
+
+**Rationale**: Reusing the same agent thread introduces **commitment/consistency bias** (Cialdini) — the agent is more likely to rubber-stamp a revision because it already issued a prior approval or rejection. A fresh instance evaluates the current artifact without anchoring to its own prior verdict.
+
+**Enforcement**: Dispatch a new subagent via the platform's native subagent/dispatch primitive for every reviewer invocation. Do not pass prior verdict context into the new invocation prompt.
+
+---
+
 ## Pipeline State Machine
 
 The pipeline progresses through discrete states. Transitions are triggered by reviewer verdicts or user selections.
@@ -86,9 +96,9 @@ The pipeline progresses through discrete states. Transitions are triggered by re
 | **S5: Plan Presentation** | Rendering plan (Stage A) and presenting to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Computing and presenting Stage B recommendation | → S7 on user receives recommendation |
 | **S7: Execution Bridge** | Presenting Stage C options, awaiting user selection | → S8 on selection; → S0 on "Revise plan" |
-| **S8: Execution Dispatch** | Invoking skill per user selection | → S0 (Interview Mode) on "Revise plan" selection |
+| **S8: Execution Dispatch** | Invoking skill per user selection | (terminal — execution handed off to dispatched skill; "Revise plan" is routed from S7, not S8) |
 
-**S8 → S0 edge**: When the user selects "Revise plan" at Stage C, the pipeline returns to S0 (Interview Mode) — Metis → Plan → Oracle → Momus pipeline re-runs from the beginning after requirements are updated.
+**S7 → S0 edge**: When the user selects "Revise plan" at Stage C (S7), the pipeline returns to S0 (Interview Mode) — Metis → Plan → Oracle → Momus pipeline re-runs from the beginning after requirements are updated.
 
 ---
 
@@ -364,14 +374,6 @@ Present the recommendation to the user before Stage C:
 **Rationale**: [1–2 sentences citing the dominant signals from the Decision Matrix]
 **What tips the balance**: [The single strongest signal that drove the recommendation]
 ```
-
-### Reviewer Freshness Rule
-
-Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an agent thread that has already issued a verdict on a prior version of the artifact.
-
-**Rationale**: Reusing the same agent thread introduces **commitment/consistency bias** (Cialdini) — the agent is more likely to rubber-stamp a revision because it already issued a prior approval or rejection. A fresh instance evaluates the current artifact without anchoring to its own prior verdict.
-
-**Enforcement**: Dispatch a new subagent via the platform's native subagent/dispatch primitive for every reviewer invocation. Do not pass prior verdict context into the new invocation prompt.
 
 ### Stage C: Execution Bridge
 
