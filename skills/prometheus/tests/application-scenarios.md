@@ -697,14 +697,37 @@ Prometheus MUST output a Stage B recommendation block:
 **What tips the balance**: Scoped classification with no competing Strong signals.
 ```
 
+#### Variant C:
+
+**Session state signals:**
+- TODO count: 4 (≥ 4 → Strong signal toward Complex/Architecture)
+- Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
+- Ambiguity Score: 0.5 (≤ 2 → no signal)
+- Oracle verdict: APPROVE (no codebase concern)
+- Scope questions: all resolved
+
+**Expected recommendation:** `Plan more` / Full Orchestration (tie: 1 Strong Complex vs 1 Strong Trivial)
+
+Prometheus MUST apply "Plan more wins" tie-breaking:
+```
+**Recommendation**: Full orchestration
+**Execution mode**: Complex/Architecture
+**Rationale**: TODO count ≥ 4 (Strong Complex) and Scoped flag (Strong Trivial) produce a balanced signal split. "Plan more wins" conflict resolution defaults to Full Orchestration.
+**What tips the balance**: Even split between Strong Complex and Strong Trivial signals — tie-breaking rule applies.
+```
+
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | Variant A → Full Orchestration recommended | Prometheus computes "Full orchestration" recommendation when TODO ≥ 4 and Complex flag are both present |
 | V2 | Variant B → Focused Execution recommended | Prometheus computes "Focused execution" recommendation when Scoped flag and TODO < 4 are both present |
-| V3 | Conflict resolution: Plan more wins | When Decision Matrix signals split evenly, Prometheus defaults to Full Orchestration — does NOT arbitrarily pick Focused Execution |
+| V3 | Variant C tie-breaking: Plan more wins | When Decision Matrix signals split evenly (Variant C: 1 Strong Complex + 1 Strong Trivial), Prometheus applies "Plan more wins" — recommends Full Orchestration, does NOT arbitrarily pick Focused Execution |
 | V4 | Recommendation is computed, not hardcoded | The `(Recommended)` label attaches dynamically to the option matching Stage B output — Prometheus does NOT hardcode "Option 1 is recommended" |
+| V5 | Stage A template artifact produced | Prometheus renders an HTML artifact at render-time based on `skills/prometheus/templates/plan-presentation.html`; the artifact is not committed to disk as `plan.{lang}.md` |
+| V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
+| V7 | Plan markdown container is parser-resilient | The rendered HTML embeds plan markdown in a `script type="application/json" id="plan-md"` element; content is JSON-encoded with literal close-tag sequence escaped as backslash-escaped form |
+| V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
 
 ---
 

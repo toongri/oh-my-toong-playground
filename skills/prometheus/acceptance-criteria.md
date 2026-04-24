@@ -141,14 +141,14 @@ This is a Compound AC: it bundles 46 independent state changes into one assertio
 
 ### Good
 
-Decompose by concern. Each finding type becomes its own work item with its own AC:
+Decompose by concern. Each finding type becomes its own work item with its own AC, and each AC's Verification uses presence/absence observable state rather than aggregate count:
 
 ```
-- [ ] Forbidden-token violations resolved
-      Verification: grep -c "forbidden-token" report.txt → 0
+- [ ] Report contains no forbidden-token occurrence
+      Verification: grep -q "forbidden-token" report.txt && echo "FAIL: forbidden-token present" || echo "PASS: forbidden-token absent"
 
-- [ ] Missing-verdict rows resolved
-      Verification: grep -c "missing-verdict" report.txt → 0
+- [ ] Report contains no missing-verdict occurrence
+      Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
 ```
 
 If the full list is enumerated, use per-element verification:
