@@ -282,6 +282,60 @@ The canonical HTML shell is defined at:
 
 This file contains the static HTML structure with `{{placeholder}}` substitution variables, the `<!-- SESSION-DERIVED-BOXES-HERE -->` injection marker, and an embedded top-comment documenting all placeholders and the component-to-source classification contract.
 
+#### Translation Rule
+
+Three invariants govern all language translation applied during Stage A rendering.
+
+##### Invariant 1 — Session auto-detect of conversational language
+
+The rendering session detects the conversational language in use (the language the user is writing in during the current session). All prose content in the HTML output is rendered in that detected language. No language is hard-coded; detection is a render-time operation.
+
+##### Invariant 2 — Prose-only scope with preservation list
+
+Translation applies to **prose-only** content. The following elements are **never** translated, regardless of detected language:
+
+- `code block` — all fenced and inline code
+- `file path` — absolute and relative paths (e.g. `skills/prometheus/review-pipeline.md`)
+- `CLI` — command-line tool names and commands
+- `WI-N` — work-item identifiers (e.g. `WI-NEW-B`)
+- `AC#M` — acceptance criteria labels (e.g. `AC#1`)
+- `S0-S8` — pipeline state identifiers
+- `grep` — tool names used as identifiers in verification commands
+
+Translating any item from this preservation list is a rule violation.
+
+##### Invariant 3 — plan.md as single source-of-truth, render-time-only translation
+
+`plan.md` is the single source-of-truth for plan content. No translated copy (`plan.{lang}.md`) is written to disk; translation is a render-time operation only. The HTML output is ephemeral — re-rendering always draws from the unmodified `plan.md`.
+
+##### Fallback
+
+If language detection fails or yields an ambiguous result, render in original language (the language as written in `plan.md`). Do not block Stage A on a detection failure.
+
+#### Rendering Methodology
+
+Six invariants govern substitution and injection applied during Stage A rendering.
+
+**Rule 1 — Active-element-only substitution**: `{{…}}` placeholders are substituted only at their active template elements. For `{{PLAN_MARKDOWN_JSON}}`, the active container is the `script type="application/json" id="plan-md"` element; substitution occurs only at that active element line. Literal occurrences inside the top-comment documentation block are NOT substituted. Replacement patterns must be anchored to the specific enclosing element by its opening-tag signature, not to the raw placeholder token alone.
+
+**Rule 2 — Multi-occurrence guard**: When a placeholder token appears in both documentation and an active element, the substitution engine MUST skip the documentation occurrence. Implementation options: element-line regex anchored on active element (preferred), first-match-only with active-element anchor, or pre-pass element extraction. Multi-active-occurrence semantics: if a placeholder legitimately appears across multiple active elements (e.g., `{{TOC_TITLE}}` in both navigation header and footer), substitution applies to ALL active occurrences — only documentation / top-comment literals are excluded. This prevents a future-analogous bug where first-match-only logic silently drops a second occurrence of a legitimate active placeholder.
+
+**Rule 3 — Session-derived box injection sequence**: The `<!-- SESSION-DERIVED-BOXES-HERE … -->` comment block is replaced with exactly two `.section-box` elements in this exact order: (a) Stage B · Execution Recommendation, (b) Pipeline State. The entire comment block (from `<!-- SESSION-DERIVED-BOXES-HERE` to the terminating `-->`) is removed; the 2 boxes replace it verbatim in order.
+
+**Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per WI-NEW-B, fallback to original language as declared in the Translation Rule.
+
+**Rule 5 — Tool-agnostic**: The substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool that satisfies the six rules is acceptable.
+
+**Rule 6 — Parser-resilient container embedding**: The HTML element holding the plan markdown content (`{{PLAN_MARKDOWN_JSON}}` container) MUST satisfy two sub-requirements:
+
+- **(6a) Inert container**: Use an element whose content is treated as text by the HTML parser and which does not execute or render the content as DOM (i.e., a non-executable, inert element). The canonical choice is a `script` element with `type="application/json"`, which is inert under HTML5 non-executable-type rules. An alternative inert container is a `textarea` element with the `hidden` attribute.
+
+- **(6b) Content-side close-tag escape**: The content injection pipeline MUST escape the container's close-tag character sequence in the serialized payload, so legitimate close-tag substrings in plan prose do not terminate the container block prematurely at HTML parse time. Canonical approach: serialize via `JSON.stringify`, then post-process the JSON string output to replace every occurrence of `</script>` with `<\/script>`. The consumer reads via `textContent` and decodes via `JSON.parse`, which decodes the backslash-escaped form back to the original content.
+
+Using `script type="text/markdown"` (unencoded markdown stored directly as script content) is unsuitable and MUST NOT be used — it fails requirement (6b) because unencoded markdown content is stored without the close-tag escape step. Any inert container choice without the paired escape step also fails Rule 6.
+
+Implementations MAY choose their container + escape pair, but both (6a) and (6b) MUST be present. If a `textarea hidden` container is chosen, a textarea-specific close-tag escape must be applied in the content pipeline. Alternative inert containers are acceptable provided they are paired with their own close-tag escape.
+
 ### Stage B: Execution Recommendation
 
 Before asking the user to choose an execution mode, compute a recommendation using the Decision Matrix below.
