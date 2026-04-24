@@ -16,22 +16,24 @@ JD 수집·큐레이션·정리 전담 스킬. 구체 규칙은 Phase B pressure
 
 ## MANDATORY: Phase Task Creation
 
-Skill invocation 시작 시(Session Lock 획득 직전) 아래 6개 phase 를 **개별 task로 전부 선행 생성**. 각 task 는 start 시 `in_progress`, 완료 시 즉시 `completed` 마킹. Phase skipping · silent skip 방지 목적.
+Skill invocation 시작 시(Session Lock 획득 직전) 아래 8개 phase 를 **개별 task로 전부 선행 생성**. 각 task 는 start 시 `in_progress`, 완료 시 즉시 `completed` 마킹. Phase skipping · silent skip 방지 목적.
 
 **Phase 리스트 (세션 단위)**:
 
 | # | Phase | 주요 gate / 산출물 |
 |---|---|---|
-| 1 | Session Setup | Session Lock acquire, Storage Path Interview, Profile Interview (부재 시) |
-| 2 | Ingest | URL normalize, WebFetch + Ingest Validation (insane-search fallback 포함) |
-| 3 | Dedup Check Gate | L1 gate 실행 + L2 gate 평가 + fingerprint_check + dedup-audit.log append |
-| 4 | Classify | Role tagging + Matching Loop (Phase 1→2→3) |
-| 5 | Persist | JD atomic write + taxonomy/tags 업데이트 |
-| 6 | Session End | Rules Re-evaluation (해당 시) + lock release + summary 보고 |
+| 1 | Session Setup | Session Lock acquire, Storage Backend Interview, Sources Registration(비어있으면 단일 제안), Profile Interview (부재 시) |
+| 2 | Sources Load + Pagination | sources.yaml 로드 + source iterate + Listing Pagination (Tier A/B) |
+| 3 | per-JD Ingest | 개별 JD URL fetch + Ingest Validation (insane-search fallback 포함) |
+| 4 | Dedup Check Gate | L1 gate 실행 + L2 gate 평가 + fingerprint_check + dedup-audit.log append |
+| 5 | Classify | Role tagging + Matching Loop (Phase 1→2→3) |
+| 6 | Persist | JD atomic write + taxonomy/tags 업데이트 + `crawl_state` 업데이트 |
+| 7 | Source HWM Update | source-level crawl_state 갱신 + sources.yaml atomic write |
+| 8 | Session End | Rules Re-evaluation (해당 시) + lock release + summary 보고 |
 
-**Batch mode**: Phase 2-5 를 JD 건별로 반복. Phase 1/6 은 세션 단위 (1회).
+**Batch mode**: Phase 2-7 을 source/JD 건별로 반복. Phase 1/8 은 세션 단위 (1회).
 
-각 Phase 완료 시 응답 내 `[Phase N/6: <이름> ✓]` 마커로 명시. 누락 시 violation.
+각 Phase 완료 시 응답 내 `[Phase N/8: <이름> ✓]` 마커로 명시. 누락 시 violation.
 
 → 상세 (rationalization loopholes, batch mode 반복 규칙): [reference/rules.md#phase-task-creation](reference/rules.md#phase-task-creation)
 
@@ -51,15 +53,20 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 → 상세 [reference/rules.md#session-lock](reference/rules.md#session-lock)
 
-## Storage Path Interview (MANDATORY)
+## Storage Backend Interview (MANDATORY)
 
-첫 실행 시 `$OMT_DIR/collect-jd/config.yaml` 부재 확인 → **AskUserQuestion 필수** (default 제시: `$OMT_DIR/collect-jd/jobs/`). 유저 수락/변경 후 `config.yaml` atomic write (`storage_path` 필드). 이후 세션은 `config.yaml` 에서 읽어 바로 사용. **CRITICAL**: config.yaml 부재임에도 default 경로로 silent 저장 금지. "첫 실행인데 default 쓰자"는 rationalization 불가.
+첫 실행 시 `$OMT_DIR/collect-jd/config.yaml` 부재/모호 확인 → **AskUserQuestion 필수**. Config schema 는 `platform` + `how` 자유서술 2필드. `platform` 값 예시: `filesystem` | `notion` | `google_drive` | `gist` | 사용자 정의 MCP 명. `how` 는 "어디에·어떻게 저장하는지" 자유서술 (Notion page ID, 테이블명, 템플릿 파일 경로 등 포함 가능).
 
-- session lock 획득 직후, Phase 0 Profile Interview 진입 전 필수 수행.
-- `config.yaml` 존재 시 `storage_path` 재확인 인터뷰 생략 (유저가 요청하지 않는 한).
-- 경로 변경 요청 시 atomic overwrite + 기존 `jobs/` 이관은 유저 명시 승인 시에만.
+유저 수락/변경 후 `config.yaml` atomic write (`platform`/`how`/`storage_path`(platform=filesystem일 때)). 이후 세션은 `config.yaml` 읽어 바로 사용.
 
-→ 상세 (flowchart, rationalization loopholes, config.yaml schema): [reference/rules.md#storage-path-interview](reference/rules.md#storage-path-interview)
+**CRITICAL**: config.yaml 부재/모호인데 default platform=filesystem 으로 silent 저장 금지. "첫 실행인데 default" rationalization 불가.
+
+- Session lock 직후, Phase 0 Profile Interview 진입 전 필수.
+- `platform: filesystem` → `storage_path` 필수 ($OMT_DIR 하위).
+- `platform: notion | google_drive | ...` → `how` 필드에 대상 페이지/폴더/sheet ID + 템플릿 + MCP 호출 절차 자유서술.
+- 경로/백엔드 변경 요청 시 atomic overwrite. 기존 데이터 이관은 유저 명시 승인 시만.
+
+→ 상세 (flowchart, rationalization loopholes, config.yaml schema): [reference/rules.md#storage-backend-interview](reference/rules.md#storage-backend-interview)
 
 ## Atomic Write Pattern (MANDATORY)
 
@@ -80,6 +87,56 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 5. 배치 재스캔 ("싹 돌려")
 
 각 Ingest Path 실행 전 **Phase 0 profile 인터뷰 + Dedup L1/L2** 를 반드시 수행.
+
+## Sources Registration (MANDATORY)
+
+세션 시작 시 `$OMT_DIR/collect-jd/sources.yaml` 로드. 비어있거나 없으면 **단일 AskUserQuestion** 으로 "등록할 JD 소스 사이트가 있나요?" 제안 (skip 가능 — Profile Interview 만큼 강압적 아님). 유저 URL 제공 시 `{slug, name, careers_url, added_at, pagination, crawl_state}` 구조로 atomic append.
+
+**반복 긁기 (Reusable Crawl)**: 유저 발화 중 `"오늘 돌려"` / `"싹 돌려"` / `"전체 재크롤"` / `"sources 돌려"` 등 트리거 phrase 감지 → **등록된 모든 source iterate** → 각 source 에서 Listing Pagination 수행 → per-JD fetch + Dedup Gate + Classify + Persist. HWM 기준으로 신규만 수집. 자동 스케줄링 없음.
+
+**CRITICAL**: sources.yaml 비었는데 open-web 자유 크롤 금지. 유저 "싹 돌려" 발화에도 source 0건이면 "등록된 소스가 없어요" 보고 + 등록 유도.
+
+→ 상세: [reference/rules.md#sources-registration](reference/rules.md#sources-registration)
+
+## Listing Pagination (MANDATORY, 2-tier)
+
+Source 의 listing 페이지에서 **전체 JD 리스트를 끝까지 확인** 의무. 2-tier 접근:
+
+- **Tier A (Auto-detect)**: 다음 패턴 자동 시도 — query `?page=` / `?offset=` / `?after=<cursor>` / "다음"·"next" 버튼 link / infinite scroll XHR endpoint (Playwright network 감시). 성공 시 `sources.yaml.<source>.pagination = { method: auto, detected_pattern: <...> }` 기록.
+- **Tier B (Interview fallback)**: Tier A 실패 시 **AskUserQuestion 필수** — "이 사이트 전체 list 를 어떻게 가져오나요? (API URL / 전용 MCP / 스크립트 / 수동 복붙)". 유저 응답을 `sources.yaml.<source>.pagination.how` 에 자유서술 저장 (실행 스크립트 경로, API 예시, MCP 호출 절차 등 모두 허용). 다음 세션부터 `how` 재사용.
+
+**CRITICAL**: 자동 실패 시 first-page 만 저장하고 끝내는 behavior 금지. 반드시 Tier B interview 로 escalate.
+
+→ 상세 (Tier A heuristics list, Tier B interview template, loopholes): [reference/rules.md#listing-pagination](reference/rules.md#listing-pagination)
+
+## Crawl-State HWM Ledger (MANDATORY)
+
+각 source 재크롤 시 "어디부터 어디까지 이미 확인했는지" 복합 ledger 를 `sources.yaml.<source>.crawl_state` 에 유지.
+
+Schema:
+```yaml
+crawl_state:
+  marker_type: id | url | page_number | timestamp | custom
+  last_seen_marker: <value>   # 가장 마지막 확인한 marker
+  range_covered:
+    - from: <marker>
+      to: <marker>
+      run_at: <ISO8601>
+      collected_count: <int>
+      total_listed: <int or null>
+  crawl_history:
+    - run_at: <ISO8601>
+      method: auto | interview_script | mcp:<name>
+      new_jds: <int>
+      already_seen: <int>
+      pages_fetched: <int>
+```
+
+**재크롤 규칙**: 다음 run 시 `last_seen_marker` 초과 항목만 신규 후보. 단 추천순 같은 동적 정렬 site 는 전체 fetch + URL seen-set 교차 체크로 dedup 보완. `marker_type == custom` 이면 `how` 필드의 자유서술 로직 실행.
+
+**CRITICAL**: HWM 미기록 crawl 금지. `crawl_state.last_seen_marker` 부재 상태로 저장 완료 선언 금지.
+
+→ 상세 (marker_type 선택 규칙, dynamic listing handling, loopholes): [reference/rules.md#crawl-state-hwm-ledger](reference/rules.md#crawl-state-hwm-ledger)
 
 ## Phase 0: Profile Interview Required (MANDATORY)
 
