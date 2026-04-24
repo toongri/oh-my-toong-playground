@@ -532,25 +532,10 @@ JSON 만 출력.
 
 1. **Parse 실패 감지** (yq / js-yaml / bun YAML parser 예외 catch)
 2. 원본 파일을 `<file>.bak.<ISO8601-filename-safe>` 로 복사 (예: `tags.yaml` → `tags.yaml.bak.2026-04-22T15-30-00Z`)
-   - `cp -n` 또는 atomic copy. 이미 같은 timestamp 의 .bak 이 있으면 접미사 `-2`, `-3` 추가.
-3. 유저에게 `AskUserQuestion` 으로 3 옵션 제시:
-   - **retry**: 다시 읽기 시도 (유저가 수동으로 고쳤다고 할 때)
-   - **edit manually**: "`<file>` 를 수정하고 엔터" — 유저 확인 후 retry
+3. 유저에게 `AskUserQuestion` 으로 2 옵션 제시:
+   - **edit manually**: "`<file>` 를 수정하고 엔터" — 유저 확인 후 retry [기본]
    - **reset to default**: skill 의 canonical default 로 재생성 (예: `taxonomy.yaml` 은 plan 의 9 roles, `rules.yaml` 은 `{}`). **데이터 손실 주의** 경고. 기본 선택 아님.
-4. 3 옵션 중 하나 완료 후 스킬 계속 진행. 유저가 "그만" 이면 graceful shutdown + lock 해제.
-
-### 쓰기 실패 protocol
-
-1. Atomic write (`.tmp` → rename) 실패 시:
-   - `.tmp` 파일 잔류 → 다음 실행 시 삭제 (orphan cleanup)
-   - 원본 파일 무변경 (atomic write 의 보증)
-2. 디스크 full / permission error → 유저에게 에러 메시지 + `AskUserQuestion` ("디스크 공간 확인 후 다시 시도할까요?")
-
-### 백업 파일 관리
-
-- `<file>.bak.*` 파일은 skill 이 **절대 삭제하지 않음** (유저 자료). 주기적 cleanup 은 유저 책임.
-- 최대 N 개 (`max_bak_files_per_file: 10`) 초과 시 가장 오래된 `.bak` 제거 권고 메시지 (삭제 X, 안내만).
-- `.bak` 파일은 Dedup/Matching 대상이 아님 (jobs/ 디렉토리 아래 있어도 무시 — 확장자 `.bak.*` 패턴 제외).
+4. 2 옵션 중 하나 완료 후 스킬 계속 진행. 유저가 "그만" 이면 graceful shutdown + lock 해제.
 
 ### 관련 실패 케이스 (catch-all)
 
@@ -561,14 +546,11 @@ JSON 만 출력.
 ### Rationalization Loopholes (MUST REJECT)
 
 - "파싱 실패했으니 그냥 빈 {} 로 초기화" — ❌ 유저 자료 보호 우선, 백업 + 복구 옵션 필수.
-- "크래시가 더 명확하니 에러만 출력하고 종료" — ❌ graceful degradation 의무.
-- "백업 만드는 거 번거로우니 유저에게 직접 고치라고만 안내" — ❌ 복구 불가능한 상황 대비 백업 필수.
 - "reset to default 를 기본값으로 제시해 빠르게 진행" — ❌ 데이터 손실 위험 옵션은 기본 선택 아니어야 함.
-- "bak 파일은 오래되면 스킬이 정리" — ❌ 유저 자료, 자동 삭제 금지. 안내만.
 
 ### Counterexample
 
-- `tags.yaml` 중괄호 깨짐 → 파싱 실패 → `tags.yaml.bak.<ts>` 생성 → `AskUserQuestion`: retry / edit manually / reset to default → 유저 "edit manually" 선택 + 파일 수정 → retry 성공 → 배치 계속. 데이터 손실 없음.
+- `tags.yaml` 중괄호 깨짐 → 파싱 실패 → `tags.yaml.bak.<ts>` 생성 → `AskUserQuestion`: edit manually / reset to default → 유저 "edit manually" 선택 + 파일 수정 → 스킬 재실행 시 정상 로드 → 배치 계속. 데이터 손실 없음.
 - `rules.yaml` 이 빈 파일 → 파싱 실패 (혹은 `null` 반환) → 백업 (0 bytes 파일도 백업) → reset to default 제안 (`rules.yaml: {}`) → 유저 승인 시 재생성 + 계속.
 
 ---
