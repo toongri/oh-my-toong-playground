@@ -578,11 +578,11 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 Prometheus MUST decompose the batch AC into per-concern items, each with its own Verification command:
 
 ```
-- [ ] Forbidden-token violations resolved
-      Verification: grep -c "forbidden-token" report.txt → 0
+- [ ] No forbidden-token finding remains in report.txt
+      Verification: grep -qF "forbidden-token" report.txt && echo "FAIL: forbidden-token present" || echo "PASS: forbidden-token clear"
 
-- [ ] Missing-verdict rows resolved
-      Verification: grep -c "missing-verdict" report.txt → 0
+- [ ] No missing-verdict row remains in report.txt
+      Verification: grep -qF "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict clear"
 ```
 
 If the full list is enumerated, Prometheus uses a per-element loop:
