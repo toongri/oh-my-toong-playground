@@ -252,6 +252,36 @@ Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in
 
 > Stage A is intentionally tool-agnostic to allow future sub-sections (e.g. WI-NEW-A, WI-NEW-B, WI-NEW-C) to be appended here without disturbing the conversion contract above.
 
+#### HTML Components
+
+The Stage A HTML output is composed of 4 distinct components:
+
+- **hero header** — plan title, meta pills (TODO count, AC count, wave label, plan file path), and stage kicker
+- **Stage B** — execution recommendation box injected from session state (reviewer verdicts, recommendation output)
+- **Pipeline State** — pipeline state journal box injected from session state (S0 → S_current transitions)
+- **plan-content** — the full plan markdown rendered into `article#plan-content`; sourced verbatim from plan.md
+
+#### Source Classification
+
+Each component's data origin determines how it is populated at render time:
+
+| Component | Source |
+|---|---|
+| hero header | plan-derived |
+| Stage B | session-derived |
+| Pipeline State | session-derived |
+| article#plan-content | plan-derived |
+
+`plan-derived` components are populated from `$OMT_DIR/plans/{name}.md` (the plan file). `session-derived` components are composed from session state (reviewer verdicts, pipeline state transitions) and injected at render time via the `<!-- SESSION-DERIVED-BOXES-HERE -->` marker.
+
+#### Template Reference
+
+The canonical HTML shell is defined at:
+
+`skills/prometheus/templates/plan-presentation.html`
+
+This file contains the static HTML structure with `{{placeholder}}` substitution variables, the `<!-- SESSION-DERIVED-BOXES-HERE -->` injection marker, and an embedded top-comment documenting all placeholders and the component-to-source classification contract.
+
 ### Stage B: Execution Recommendation
 
 Before asking the user to choose an execution mode, compute a recommendation using the Decision Matrix below.
