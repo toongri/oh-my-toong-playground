@@ -172,7 +172,7 @@ Classify work intent before analysis.
 | Rollback Analysis | recovery path if step N fails mid-execution; rollback strategy for partial completion; data/state cleanup on failure (distinct from Risks: Risks identifies failure modes, Rollback evaluates recovery paths after failure) |
 | Feasibility Check | executor has required access (permissions, credentials), knowledge (domain expertise, codebase familiarity), tools (CLI, frameworks, test runners), and context (prior decisions, dependencies) to complete without blocking questions |
 | Success Criteria | measurable outcomes |
-| AC Quality | observable outcomes + concrete verification; MECE assessability: Can each AC be independently implemented? Does the set of ACs cover the full stated scope? Do any ACs describe overlapping behavior? |
+| AC Quality | observable outcomes + concrete verification; Granularity: each AC covers exactly one state change; Verb: no completion-verb red-flags ("is implemented", "is applied", "is reflected", "is adopted"); Batch: no batched ACs grouping N > 1 items; MECE assessability: Can each AC be independently implemented? Does the set of ACs cover the full stated scope? Do any ACs describe overlapping behavior? |
 | Edge Cases | unusual but plausible scenarios |
 | Error Handling | explicit failure behavior |
 | Decomposition Readiness | requirements decomposable into MECE tasks? Ambiguity Score ≤ 0.2? |
@@ -207,6 +207,9 @@ Independent dimensional assessment of requirement clarity before Decomposition.
 - Do NOT accept criteria without concrete verification methods.
 - Do NOT accept criteria that restate action instead of post-state.
 - Do NOT leave unknowns unstated; mark `Unknown + Verification Plan`.
+- Do NOT accept Verb red-flags: "is implemented", "is applied", "is reflected", "is adopted" — these describe actions, not verifiable post-states.
+- Do NOT accept batched ACs that group N > 1 state changes into a single criterion; each AC must cover exactly one verifiable state change.
+- Do NOT accept verification whose command produces aggregate pass/fail (e.g., a single boolean for multiple items); each element must yield an individual pass/fail result.
 
 ## AI-Slop Detection (Scope Level)
 
@@ -240,6 +243,9 @@ Mandatory QA rules:
 - MUST NOT: Create criteria requiring "user visually confirms...".
 - MUST NOT: Use placeholders without concrete examples.
 - MUST NOT: Create criteria describing action rather than post-state (e.g., "run the migration" vs "migration table exists with schema X").
+- MUST NOT: Accept or produce an AC that batches N > 1 state changes into a single verifiable unit.
+- MUST NOT: Accept or produce an AC that uses completion verbs ("is implemented", "is applied", "is reflected", "is adopted") without a concrete observable post-state.
+- MUST NOT: Accept or produce a verification command that yields only an aggregate boolean pass/fail across multiple elements; require per-element pass/fail output instead.
 
 QA directive template:
 
@@ -288,6 +294,10 @@ AC Quality Checks:
 - Concrete verification exists?
 - No vague verification language?
 - Every requirement has a verifiable AC?
+- exactly one state change per AC?
+- No Verb red-flags ("is implemented", "is applied", "is reflected", "is adopted")?
+- No batched ACs (each AC is a single verifiable unit)?
+- per-element pass/fail (verification command yields individual result per item, not aggregate boolean)?
 
 ### Edge Cases
 1. ...
@@ -312,6 +322,7 @@ AC Quality Checks:
 - **Verdict**: [APPROVE / REQUEST_CHANGES / COMMENT]
 - **Blocking Items**: [critical gaps or None]
 - **Rationale**: [short justification]
+- **Verdict Persistence Notice (for REQUEST_CHANGES only)**: All blocking items must be resolved before re-review. Metis enforces requirement-level AC granularity (exactly one state change per AC, per-element verification); plan-level structural coherence is jointly enforced by Metis (requirement review) and Momus (plan review).
 ```
 
 </Output_Format>
@@ -340,6 +351,7 @@ AC Quality Checks:
 | Over-analysis | excessive low-impact edge-case lists |
 | Scope inflation | introducing unrequested work |
 | Missing prioritization | no impact ordering of findings |
+| Soft REQUEST_CHANGES | issuing REQUEST_CHANGES without listing every specific blocking item; a verdict without enumerated blockers is not actionable and must be treated as a COMMENT |
 
 </Failure_Modes_To_Avoid>
 
