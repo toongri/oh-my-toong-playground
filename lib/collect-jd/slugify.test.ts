@@ -46,4 +46,16 @@ describe('slugify', () => {
     expect(result.length).toBeLessThanOrEqual(64);
     expect(result.endsWith('-')).toBe(false);
   });
+
+  it('`strips Latin diacritics from French loanwords`', () => {
+    expect(slugify('Café')).toBe('cafe');
+  });
+
+  it('`strips Latin diacritics from German umlauts`', () => {
+    expect(slugify('Zürich Tech')).toBe('zurich-tech');
+  });
+
+  it('`strips Latin diacritics from Scandinavian names`', () => {
+    expect(slugify('Björn & Co')).toBe('bjorn-co');
+  });
 });
