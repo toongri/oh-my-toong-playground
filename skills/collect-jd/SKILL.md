@@ -102,7 +102,7 @@ JD 저장 시 두 필드 필수: `role_title_verbatim` (원문 제목 그대로,
 
 ## YAML Robustness
 
-모든 state YAML (profile/taxonomy/rules/tags/sources/config) 파싱 실패 시 crash 금지. `<file>.bak.<ISO8601>` 백업 + `AskUserQuestion` 3 옵션 (retry / edit manually / reset to default, 기본은 "edit manually") + 유저 자료 절대 자동 삭제 금지.
+모든 state YAML (profile/taxonomy/rules/tags/sources/config) 파싱 실패 시 crash 금지. 원본을 `<file>.bak.<ISO8601>` 로 1회 복사 → `AskUserQuestion` 2 옵션 (edit manually [기본] / reset to default [데이터 손실 경고]). 유저 자료 자동 삭제·정리 금지.
 
 → 상세: [reference/rules.md#yaml-robustness](reference/rules.md#yaml-robustness)
 
