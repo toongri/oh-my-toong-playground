@@ -753,5 +753,8 @@ Prometheus MUST apply "Plan more wins" tie-breaking:
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
+| P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-P-20.md |
+| P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-P-21.md |
+| P-22 | HTML Presentation | **PASS** | 2026-04-24 | 4/4 VP. GREEN: Variant A=Full(Strong×2+Mod×1), B=Focused(Strong×1), Plan more wins 규칙 명시·미발동 조건 분석. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-P-22.md |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | |
