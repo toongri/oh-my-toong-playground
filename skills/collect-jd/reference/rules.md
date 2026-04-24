@@ -570,6 +570,23 @@ WebFetch · 파일 · 텍스트 ingest 결과를 **유효 JD** 로 저장하기 
 
 유저가 "강제 저장" 또는 "이상해도 일단 저장해" 명시 시 `AskUserQuestion` 확인 ("body 가 짧은데 정말 저장할까요?"). 기본 답변은 "건너뛰기". 유저가 "저장" 선택 시 `status: pending` + `fingerprint_check: pending` + `reason_note: "manual override (low-confidence ingest)"` 로 저장.
 
+### Optional fallback: insane-search plugin (공개 페이지 한정)
+
+WebFetch 가 SPA shell (body < 200자) / WAF 403 / Cloudflare 차단으로 실패했고 **로그인이 필요 없는 공개 JD 페이지**인 경우 `insane-search` 플러그인이 자동 에스컬레이션한다:
+
+- Phase 1: Jina Reader (`r.jina.ai`) 텍스트 변환
+- Phase 2: curl UA rotation + `curl_cffi` TLS 임퍼소네이션
+- Phase 3: Playwright MCP (JS 렌더링 + 네트워크 감시로 숨은 JSON API 역발견)
+
+설치: `/plugin marketplace add fivetaku/gptaku_plugins` → `/plugin install insane-search`.
+
+**경계 (MUST REJECT rationalization)**:
+
+- "insane-search 로 login wall 뚫기 시도" — ❌ 설계상 로그인 페이지 통과 불가. 복붙 권유가 유일 경로.
+- "insane-search 로 paywall 통과" — ❌ 유료 장벽도 통과 불가.
+- "fetch 단계만 뚫리면 저장 OK" — ❌ insane-search 는 fetch 확장일 뿐. body 길이/JD 문구 validation 게이트는 여전히 통과해야 저장.
+- "플러그인 미설치 환경에서도 억지로 우회 시도" — ❌ 설치 안 되어 있으면 기존 규칙대로 거부 + 복붙 권유.
+
 ### Rationalization Loopholes (MUST REJECT)
 
 - "저장해두면 나중에 다시 불러서 재시도 가능하니 일단 저장" — ❌ 쓰레기 저장은 dedup/matching 을 오염시킨다. 거부 + 재시도 권고.
