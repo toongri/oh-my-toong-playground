@@ -95,38 +95,9 @@ Overall structure:
 
 ## AC Granularity Principle
 
-**1 AC = exactly 1 observable state change.**
+**1 AC = exactly 1 observable state change.** Each AC must describe a single, atomic outcome confirmed by a single verification command.
 
-Each AC must describe a single, atomic outcome that can be confirmed by a single verification command. When an AC requires confirming multiple independent items, it is a Compound AC and must be decomposed.
-
-### Cardinality Red Flags
-
-Patterns in the AC description that signal a Compound AC:
-
-| Pattern | Example | Problem |
-|---------|---------|---------|
-| Universal quantifier | "All X are updated" | Hides per-element failures |
-| Explicit enumeration | "N items processed" | Count masks which items failed |
-| Distributed predicate | "Each F contains G" | Per-element pass/fail obscured |
-| Conjunction | "X and Y are enabled" | Two state changes in one |
-| Scope ambiguity | "Module A is complete" | "Complete" bundles many states |
-
-### Verb Red-Flag
-
-The following completion verbs signal that an AC describes a task rather than a verifiable state change. Rewrite as an observable outcome.
-
-| Verb | Problem |
-|------|---------|
-| is implemented | Restates the task |
-| is applied | Action, not result |
-| is reflected | Vague — reflected where, how? |
-| is adopted | Process claim, not state |
-| is addressed | Resolution unmeasurable |
-| is fixed | Same as "is addressed" |
-
-### Invariant Form
-
-When an AC covers a collection of elements (files, rules, verbs, rows), each element MUST produce per-element pass/fail output in its Verification command. Use a `for` loop or equivalent to emit one `PASS: <element>` / `FAIL: <element>` line per element rather than a single aggregate count.
+> Detail rules — verb red-flag list, batch pattern matrix, rationalization table — live in the reviewer skills (`agents/metis.md` AC Quality Detail Rules / `skills/momus/SKILL.md` AC Quality Detail Rules).
 
 ## Counter-Example: Fixing a Batch AC
 
@@ -137,11 +108,11 @@ When an AC covers a collection of elements (files, rules, verbs, rows), each ele
       Verification: grep -c "finding" report.txt → 0
 ```
 
-This is a Compound AC: it bundles 46 independent state changes into one assertion. A count of 0 does not reveal which findings remain; a single unresolved finding hides behind the aggregate.
+This is a Compound AC: it bundles 46 independent state changes into one assertion.
 
 ### Good
 
-Decompose by concern. Each finding type becomes its own work item with its own AC, and each AC's Verification uses presence/absence observable state rather than aggregate count:
+Decompose by concern. Each finding type becomes its own AC with its own Verification:
 
 ```
 - [ ] Report contains no forbidden-token occurrence
@@ -150,37 +121,6 @@ Decompose by concern. Each finding type becomes its own work item with its own A
 - [ ] Report contains no missing-verdict occurrence
       Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
 ```
-
-If the full list is enumerated, use per-element verification:
-
-```bash
-for rule in "forbidden-token" "missing-verdict" "scope-overflow"; do
-  grep -qF "$rule" report.txt && echo "FAIL: $rule still present" || echo "PASS: $rule clear"
-done
-```
-
-## Red Flags — STOP and Rewrite AC
-
-Before finalizing any AC, check: does the AC or its Verification command exhibit any of the following? If yes, stop and rewrite.
-
-- AC uses completion verbs (is implemented, is applied, is reflected, is adopted, is addressed, is fixed)
-- Verification counts N > 1 findings and asserts the count equals zero
-- Verification requires grep and check on multiple independent patterns in one command
-- Verification uses a ratio like "45 of 46" — partial completion is not a binary pass/fail
-- AC description has scope > 3 concerns bundled under one outcome
-- Verification pins a specific file/line number that will break on any refactor
-
-## Common Rationalizations
-
-Excuses for keeping Compound ACs — and why they fail:
-
-| Rationalization | Why It Fails |
-|-----------------|--------------|
-| "Work-item scope covers all of these naturally" | Scope justifies grouping work, not bundling verification — each state needs its own observable check |
-| "They're all the same type of change" | Same type ≠ same state; per-element failures are still invisible in an aggregate |
-| "AC references them elsewhere in the plan" | Cross-references do not substitute for an executable Verification command |
-| "One grep command covers all cases" | A single grep that matches any of N patterns cannot distinguish which ones passed or failed |
-| "too granular creates noise" | Granularity exposes failure signal; noise is acceptable, hidden failures are not |
 
 ## Example
 
