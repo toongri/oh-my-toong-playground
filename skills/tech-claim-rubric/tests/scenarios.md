@@ -948,7 +948,7 @@ r_phys:
 
 ---
 
-### SCN-27: A3 verdict precedence — qualitative causality + unblocking verb PASS
+### SCN-27: A3 PASS Gate sufficient-form — qualitative-causality form + unblocking verb PASS
 
 <!-- T6 regression guard: a3 PASS Gate sufficient-form (qualitative-causality form) — qualitative outcome with explicit causality AND resolution verb → PASS (no numeric required) -->
 
