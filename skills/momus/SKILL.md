@@ -306,7 +306,7 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 
 [If REQUEST_CHANGES: Top 3-5 specific improvements needed with examples]
 
-[If REQUEST_CHANGES] Verdict Persistence: findings below must be resolved before re-review.
+[If REQUEST_CHANGES] Verdict Persistence: findings above must be resolved before re-review.
 
 [COMMENT findings only]
 - Deferred to execution time: [findings that surface only when code runs — not plan-level gaps]
