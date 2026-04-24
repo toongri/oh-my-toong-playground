@@ -46,6 +46,7 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 → L1 상세 (loopholes, counterexample): [reference/rules.md#dedup-layer-1](reference/rules.md#dedup-layer-1)
 → L2 상세 (invocation contract, loopholes, counterexample): [reference/rules.md#dedup-layer-2](reference/rules.md#dedup-layer-2)
+→ 흐름도 (L1→L2 decision tree): [reference/rules.md#decision-flow](reference/rules.md#decision-flow)
 
 ## Matching Loop (history → rules → filter) (MANDATORY)
 
@@ -57,6 +58,7 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 - Auto-decision audit trail: 자동 저장 시 `reason_note` 에 `auto:<verdict>:<rules.yaml sha256 short 8>`.
 
 → 상세 (rationalization loopholes, counterexample): [reference/rules.md#matching-loop](reference/rules.md#matching-loop)
+→ 흐름도 (Phase 1→2→3 decision tree): [reference/rules.md#decision-flow](reference/rules.md#decision-flow)
 
 ## Exclude Flow (tags + reason_note MANDATORY)
 
