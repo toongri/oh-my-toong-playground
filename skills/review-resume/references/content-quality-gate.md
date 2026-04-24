@@ -358,7 +358,7 @@ flowchart TB
 
 > **Note:** SKILL.md "Quality Gate Flow (Per Item)" contains the primary flow that the AI follows. Changes to the loop structure must be synchronized between both files.
 
-> **interview-impossible mode:** This flowchart depicts interview-possible mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped — REQUEST_CHANGES leads directly to opt-out with badge "소유자 인터뷰 필요".
+> **interview-impossible mode:** This flowchart depicts interview-possible mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped. Instead: generate 2-3 alternatives from existing resume content → re-dispatch to examiner. If examiner returns APPROVE, proceed. If examiner returns REQUEST_CHANGES a second time, generate best revision with current content → opt-out with badge "소유자 인터뷰 필요". Opt-out is triggered only on the second REQUEST_CHANGES, not the first.
 
 ### Loop Entry Condition
 
