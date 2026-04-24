@@ -113,3 +113,16 @@ yq '.min_salary' "$SEED/collect-jd/profile/rules.yaml"                       # 8
 - LLM 호출 결과의 실 JSON 구조 재현성 (temperature 0 결정성)
 - Race condition 정상 감지 (수동 편집 후 approval 시 abort)
 - AskUserQuestion UX (diff 표시 포맷)
+
+---
+
+## Evidence Footer (standardized)
+
+| 필드 | 값 |
+|---|---|
+| `observed_at` | `2026-04-22` |
+| `method` | `analytical_simulation` |
+| `command` | `N/A` |
+| `exit_code` | `N/A` |
+| `key_output` | `Trigger "오늘 수집 정리해줘" → rules.yaml.proposed 생성 → diff → approve → rules.yaml atomic overwrite + .proposed 제거 chain을 analytical하게 서술. 실 LLM/파일 관찰은 T9 대기.` |
+| `verdict` | `EXPECTED_GREEN_PENDING_LIVE` |

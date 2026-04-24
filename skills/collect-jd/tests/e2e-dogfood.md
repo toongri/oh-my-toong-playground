@@ -207,3 +207,16 @@ Phase A/B 완료. Phase C는 문서화 + CLI 검증(make validate/test/sync-dry)
 ### Verdict
 - DoD #7 충족 여부: _T9 수행 후 기록_
 - DoD #5 최소 1개 real scenario 관찰 여부: _기록_
+
+---
+
+## Evidence Footer (standardized)
+
+| 필드 | 값 |
+|---|---|
+| `observed_at` | `2026-04-22` |
+| `method` | `analytical_simulation+shell_exec` |
+| `command` | `make validate / make test / bun test lib/collect-jd/ / make sync-dry` |
+| `exit_code` | `0 / 0 / 0 / 0` |
+| `key_output` | `1254 pass / 0 fail (전체 test suite); 25 pass / 0 fail (lib/collect-jd); make sync-dry 배포 프리뷰 생성. E2E Scenario 자체는 analytical — T9 대기.` |
+| `verdict` | `EXPECTED_GREEN_PENDING_LIVE` |
