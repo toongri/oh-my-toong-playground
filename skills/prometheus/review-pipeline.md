@@ -371,11 +371,11 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 
 **Rationale**: Reusing the same agent thread introduces **commitment/consistency bias** (Cialdini) — the agent is more likely to rubber-stamp a revision because it already issued a prior approval or rejection. A fresh instance evaluates the current artifact without anchoring to its own prior verdict.
 
-**Enforcement**: Use `SendMessage` to a new subagent thread for every reviewer invocation. Do not pass prior verdict context into the new invocation prompt.
+**Enforcement**: Dispatch a new subagent via the platform's native subagent/dispatch primitive for every reviewer invocation. Do not pass prior verdict context into the new invocation prompt.
 
 ### Stage C: Execution Bridge
 
-After the user reads Stage B's recommendation, present the execution options via AskUserQuestion:
+After the user reads Stage B's recommendation, present the execution options via the platform's user-prompt primitive (structured choice):
 
 **(1) Full orchestration**
 Multi-agent task orchestration with QA verification. 3+ TODOs or cross-module changes.

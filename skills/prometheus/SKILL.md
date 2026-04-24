@@ -66,10 +66,11 @@ digraph prometheus_flow {
     "Oracle verdict?" [shape=diamond];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
-    "Generate HTML render" [shape=box];
-    "Compute Recommendation" [shape=box];
-    "Execution Bridge\n(AskUserQuestion)" [shape=ellipse];
+    "Stage A: HTML Render" [shape=box];
+    "Stage B: Execution Recommendation" [shape=box];
+    "Stage C: Execution Bridge" [shape=ellipse];
     "User's choice?" [shape=diamond];
+    "Stage C: Execution Dispatch\n(invoke sisyphus/sisyphus-junior)" [shape=box];
 
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Context Loading";
@@ -90,12 +91,12 @@ digraph prometheus_flow {
     "Oracle verdict?" -> "Momus review" [label="APPROVE/COMMENT"];
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Momus verdict?" -> "Generate HTML render" [label="APPROVE/COMMENT"];
-    "Generate HTML render" -> "Compute Recommendation";
-    "Compute Recommendation" -> "Execution Bridge\n(AskUserQuestion)";
-    "Execution Bridge\n(AskUserQuestion)" -> "User's choice?";
-    "User's choice?" -> "Execution Bridge\n(AskUserQuestion)" [label="(1) Full orchestration"];
-    "User's choice?" -> "Execution Bridge\n(AskUserQuestion)" [label="(2) Focused execution"];
+    "Momus verdict?" -> "Stage A: HTML Render" [label="APPROVE/COMMENT"];
+    "Stage A: HTML Render" -> "Stage B: Execution Recommendation";
+    "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
+    "Stage C: Execution Bridge" -> "User's choice?";
+    "User's choice?" -> "Stage C: Execution Dispatch\n(invoke sisyphus/sisyphus-junior)" [label="(1) Full orchestration"];
+    "User's choice?" -> "Stage C: Execution Dispatch\n(invoke sisyphus/sisyphus-junior)" [label="(2) Focused execution"];
     "User's choice?" -> "Write plan to $OMT_DIR/plans/*.md" [label="(3) Revise plan"];
 }
 ```
@@ -269,7 +270,7 @@ The Planning-time Task Discipline is complementary (상보적) to the Pipeline S
 
 ### Reconciliation with Work-Principles Mandate
 
-`work-principles.md` mandates TaskCreate before non-trivial work. This mandate applies equally during planning sessions. The platform's native task tool is the implementation vehicle, but discipline is the invariant, not the tool. Whether using TaskCreate, a checklist, or another tracking mechanism, the obligation — create tasks, track completion, never batch-complete — is non-negotiable.
+`work-principles.md` mandates task creation before non-trivial work. This mandate applies equally during planning sessions. The platform's native task tool is the implementation vehicle, but discipline is the invariant, not the tool. Whether using the platform's native task-tracking tool, a checklist, or another tracking mechanism, the obligation — create tasks, track completion, never batch-complete — is non-negotiable.
 
 ---
 
