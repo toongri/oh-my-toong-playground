@@ -219,7 +219,7 @@ Invoke via `Agent(subagent_type="tech-claim-examiner", ...)`.
 
 - **r_phys.triggered == true** → Source extraction with impossibility explanation (사용자에게 physically impossible 수치 설명 요청)
 - **r_cross.triggered == true** → Source extraction with contradiction explanation (사용자에게 cross-entry contradiction 설명 요청)
-- **count(P1 across A1-A4) >= 3** → Source extraction starting with weakest P1 axis
+- **count(P1 across A1-A4) >= 3** → Source extraction via Step 3 Stages 1-4, starting with the weakest P1 axis (ascending strength order)
 - **{a1, a2, a3, a4} 중 FAIL 있음 AND structural_verdict ∈ {PASS, P1}** → per-axis Stage 1-4 Source extraction (FAIL 축 interview hints 기반 depth 보강)
 - **{a1, a2, a3, a4} 중 FAIL 있음 AND structural_verdict == FAIL** → Stage 5 multi-axis synthesis (co-failure: axis FAIL + structural FAIL 동시 발생)
 - **structural_verdict == FAIL + {a1, a2, a3, a4} 모두 PASS/P1 + count(P1 across A1-A4) < 3** → Readability-only fix (no interview needed — 재구성·압축만으로 해결)
@@ -246,14 +246,14 @@ Conversion principles:
 
 **Step 3. Source Extraction (5-Stage)**
 
-Progress per FAIL axis. **One question per turn** at each Stage:
+Progress per axis below PASS (FAIL first, then P1 by ascending strength). **One question per turn** at each Stage:
 
 | Stage | Trigger | Action |
 |-------|---------|--------|
-| Stage 1 | `a1_technical_credibility` FAIL | Named systems / mechanisms 보강: ask specifically about the technical decisions the examiner flagged. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 2 | `a2_causal_honesty` FAIL | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 3 | `a3_outcome_significance` FAIL | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
-| Stage 4 | `a4_ownership_scope` FAIL | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 1 | `a1_technical_credibility` FAIL or P1 | Named systems / mechanisms 보강: ask specifically about the technical decisions the examiner flagged. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 2 | `a2_causal_honesty` FAIL or P1 | Causal chain explicit화 + arithmetic 검증: reframe the question from 3 different angles to surface cause-effect logic. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 3 | `a3_outcome_significance` FAIL or P1 | Tech 또는 business outcome 추가 (vanity metric 회피): ask about adjacent experience or measurable results. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
+| Stage 4 | `a4_ownership_scope` FAIL or P1 | Verb-scope coherence 보강: probe daily work for hidden ownership evidence, monitoring discoveries, operational context. If axis-specific questions exhaust without surfacing material → apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) |
 | Stage 5 | `structural_verdict == FAIL` + (`a1`/`a2`/`a3`/`a4`) co-failure | Source extraction 종합 (multi-axis): apply [Domain-Informed Source Proposal](#domain-informed-source-proposal) — AI synthesizes user's domain/stack and proposes scenarios typical for the context |
 
 **Source Quality Check:**
@@ -284,7 +284,7 @@ When axis-specific questions fail to surface material, the AI acts as a domain e
 **Step 4. Reconstruct Entry + Re-dispatch**
 
 1. Incorporate extracted sources + readability-only fixes into a reconstructed entry
-2. **Cognitive depth check** (before final emission): verify that the reconstructed entry surfaces at least one concrete decision point — a rejected alternative, a constraint that forced the approach, or a measurable trade-off. If absent, return to source extraction for the weakest FAIL axis before emitting
+2. **Cognitive depth check** (before final emission): verify that the reconstructed entry surfaces at least one concrete decision point — a rejected alternative, a constraint that forced the approach, or a measurable trade-off. If absent, return to source extraction for the weakest axis below PASS (FAIL first, then P1 by ascending strength) before emitting
 3. Show full entry to user for visual review (no pre-dispatch confirmation gate — still in REQUEST_CHANGES iteration; post-APPROVE confirm gate applies only after a future APPROVE)
 4. Re-dispatch to examiner with the revised entry as Proposed Alternative
 5. Repeat until APPROVE or user opt-out ("다음")
