@@ -562,6 +562,154 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 
 ---
 
+---
+
+## Scenario P-20: AC Granularity
+
+**Primary Technique:** AC Granularity — Compound AC 탐지 및 분해 (1 AC = 1 observable state change)
+
+**Prompt:**
+```
+다음 인수 조건을 검토해줘:
+- [ ] All 46 lint findings are resolved
+      Verification: grep -c "finding" report.txt → 0
+```
+
+### Breakdown — Expected Output
+
+Prometheus MUST decompose the batch AC into per-concern items, each with its own Verification command:
+
+```
+- [ ] Forbidden-token violations resolved
+      Verification: grep -c "forbidden-token" report.txt → 0
+
+- [ ] Missing-verdict rows resolved
+      Verification: grep -c "missing-verdict" report.txt → 0
+```
+
+If the full list is enumerated, Prometheus uses a per-element loop:
+
+```bash
+for rule in "forbidden-token" "missing-verdict" "scope-overflow"; do
+  grep -qF "$rule" report.txt && echo "FAIL: $rule still present" || echo "PASS: $rule clear"
+done
+```
+
+### Bad Input
+
+The following is a Counter-Example of a Compound AC that MUST be rejected and decomposed:
+
+```
+- [ ] All 46 lint findings are resolved
+      Verification: grep -c "finding" report.txt → 0
+```
+
+This batch assertion bundles 46 independent state changes. A count of 0 does not reveal which findings remain; a single unresolved finding hides behind the aggregate.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Rejects the batch Compound AC | Prometheus identifies "All 46 lint findings are resolved" as a Compound AC and refuses to accept it as-is |
+| V2 | Decomposes into per-concern ACs | Skill rewrites the AC into multiple single-outcome criteria, one per concern type (e.g., forbidden-token, missing-verdict) |
+| V3 | Each decomposed AC has independent Verification | Every decomposed criterion has its own executable Verification command that emits per-element PASS/FAIL — no single grep count asserting zero across N items |
+
+---
+
+## Scenario P-21: Verdict Bypass
+
+**Primary Technique:** Verdict Bypass Prevention — REQUEST_CHANGES verdict 수신 후 리뷰어 재호출 없이 진행 차단
+
+**Turn 1 — Input:**
+```
+Metis returned REQUEST_CHANGES with directive:
+"Acceptance criteria for TODO 3 are missing. Add verifiable AC before proceeding."
+Prometheus internal reasoning: "The directive is clear. I'll incorporate this into the plan and move on."
+```
+
+**Turn 2 — Input:**
+```
+Prometheus updates TODO 3 AC in the plan file and proceeds to Oracle invocation
+without re-invoking Metis.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Detects bypass rationalization signal | Prometheus recognizes "The directive is clear" and "I'll incorporate this into the plan" as Red Flag phrases from the Rationalization Table — triggers STOP |
+| V2 | Returns to Interview Mode on Metis REQUEST_CHANGES | On Metis REQUEST_CHANGES, Prometheus returns to Interview Mode (S0) to address the gaps — does NOT self-certify the revision |
+| V3 | Re-invokes Metis after addressing gaps | After resolving gaps through interview, Prometheus re-invokes Metis with the updated 3-Section content before generating the plan |
+
+**Expected Output:**
+
+Prometheus output MUST contain evidence of all three pass indicators when a Verdict Bypass attempt is detected:
+
+- `Interview Mode` — Prometheus returns to Interview Mode (S0) to address Metis gaps
+- `STOP` — Prometheus explicitly halts forward progression on detecting a bypass-rationalization signal
+- `REQUEST_CHANGES` — The Metis verdict that triggered the bypass prevention is acknowledged and handled via loop-back, not forward skip
+
+---
+
+## Scenario P-22: HTML Presentation
+
+**Primary Technique:** HTML Presentation — Stage B Decision Matrix 신호에 따른 실행 권고 계산
+
+**Primary Technique secondary:** Stage B Execution Recommendation — Plan more wins conflict resolution
+
+**Setup:**
+Both variants assume the full review pipeline has completed (Oracle APPROVE, Momus APPROVE).
+The variants differ only in the Decision Matrix signals present in each scenario's session state.
+
+#### Variant A:
+
+**Session state signals:**
+- TODO count: 6 (≥ 4 → Strong signal toward Complex/Architecture)
+- Plan classification: Complex flag present (Strong signal toward Complex/Architecture)
+- Ambiguity Score: 2.5 (> 2 → Moderate signal toward Complex/Architecture)
+- Oracle verdict: APPROVE (no codebase concern)
+- Scope questions: all resolved
+
+**Expected recommendation:** `Plan more` / Full Orchestration
+
+Prometheus MUST output a Stage B recommendation block citing dominant signals:
+```
+**Recommendation**: Full orchestration
+**Execution mode**: Complex/Architecture
+**Rationale**: TODO count ≥ 4 (Strong) and Complex flag (Strong) dominate. Ambiguity Score > 2 adds moderate weight.
+**What tips the balance**: 6-TODO plan with Complex classification — clear Full Orchestration signal.
+```
+
+#### Variant B:
+
+**Session state signals:**
+- TODO count: 2 (< 4 → no Strong signal toward Complex)
+- Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
+- Ambiguity Score: 0.1 (≤ 2 → no moderate signal)
+- Oracle verdict: APPROVE (no codebase concern)
+- Scope questions: all resolved
+
+**Expected recommendation:** `Execute now` / Focused Execution
+
+Prometheus MUST output a Stage B recommendation block:
+```
+**Recommendation**: Focused execution
+**Execution mode**: Trivial/Scoped
+**Rationale**: Scoped flag (Strong) with only 2 TODOs and Ambiguity Score 0.1 — lightweight plan.
+**What tips the balance**: Scoped classification with no competing Strong signals.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Variant A → Full Orchestration recommended | Prometheus computes "Full orchestration" recommendation when TODO ≥ 4 and Complex flag are both present |
+| V2 | Variant B → Focused Execution recommended | Prometheus computes "Focused execution" recommendation when Scoped flag and TODO < 4 are both present |
+| V3 | Conflict resolution: Plan more wins | When Decision Matrix signals split evenly, Prometheus defaults to Full Orchestration — does NOT arbitrarily pick Focused Execution |
+| V4 | Recommendation is computed, not hardcoded | The `(Recommended)` label attaches dynamically to the option matching Stage B output — Prometheus does NOT hardcode "Option 1 is recommended" |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
