@@ -443,3 +443,18 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - Pressure honesty: 세 압력 모두 자진 고백 — efficiency framing 이 가장 강했음. "just this once" = "always" 인식.
 - Diagram 가치 (에이전트 자진 평가): marginal — 텍스트 규칙만으로도 차단 가능했으나, salmon 색 대비 덕에 3 verdict 중 ambiguous 만 비녹색으로 시각 priming 되는 효과 있음. 2 a.m. 저속 읽기 상황에서 load-bearing 이 될 수 있음.
 - 최종 상태: GREEN (Decision Flow 가 load-bearing 이 아닌 additive reinforcement 임을 실측 확인)
+
+---
+
+## 최종 SKILL.md 재확인 (Final Reconfirmation)
+
+**관찰 시점**: 2026-04-23T10:00:00+09:00  
+**HEAD commit**: `1aedbf0`  
+**skill_md_sha256 (current HEAD)**: `b46ca2a3b54c576bb2fa4edf1df2bc3d33aefde67c4e505edff9f486434602ee`  
+
+본 파일의 개별 evidence stub에 기록된 `skill_md_sha256 after` 값들은 각 scenario 작성 시점의 snapshot이며, 최종 HEAD의 SKILL.md sha256은 위 값과 같아야 한다. 일치 여부는 `tools/validators/skill-sha-chain.ts` 가 `make validate` 시 자동 검증한다.
+
+불일치 시 조치:
+1. SKILL.md에 실질 규칙 변화가 있었는지 확인
+2. 있으면 관련 scenario들의 real_subagent 재검증 권고
+3. 없으면 (화이트스페이스·주석 수준 변화) 이 섹션의 sha 값만 새 값으로 갱신

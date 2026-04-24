@@ -1,4 +1,4 @@
-.PHONY: sync sync-dry validate validate-schema validate-components validate-tests test pull pull-dry help
+.PHONY: sync sync-dry validate validate-schema validate-components validate-sha-chain validate-tests test pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -17,13 +17,16 @@ sync: validate validate-tests
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
-validate: validate-schema validate-components
+validate: validate-schema validate-components validate-sha-chain
 
 validate-schema:
 	@bun run tools/validators/schema.ts
 
 validate-components:
 	@bun run tools/validators/components.ts
+
+validate-sha-chain:
+	@bun run tools/validators/skill-sha-chain.ts
 
 validate-tests:
 	@./tools/run-tests.sh
