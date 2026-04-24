@@ -200,6 +200,46 @@ Independent dimensional assessment of requirement clarity before Decomposition.
 
 > **Note**: This is an independent validation. Prometheus computes its own Ambiguity Score during Clearance. Metis catches cases where self-assessment was optimistic.
 
+## AC Quality Detail Rules
+
+### Verb Red-Flag — 완료동사 목록
+
+다음 완료동사는 AC가 state change가 아닌 action/task를 기술함을 의미한다. [CERTAIN] unverifiable AC.
+
+- is implemented
+- is applied
+- is reflected
+- is adopted
+- is addressed
+- is fixed
+
+### Batch Pattern Cardinality Matrix
+
+| Pattern | Example | Problem |
+|---------|---------|---------|
+| Universal quantifier | "All X are updated" | Hides per-element failures |
+| Explicit enumeration | "N items processed" | Count masks which items failed |
+| Distributed predicate | "Each F contains G" | Per-element pass/fail obscured |
+| Conjunction | "X and Y are enabled" | Two state changes in one |
+| Scope ambiguity | "Module A is complete" | Complete bundles many states |
+
+### Distinct Outcomes — 보조규칙
+
+`multiple distinct outcomes` = 한 verification 커맨드로 원자적 per-element pass/fail 증거가 안 나오는 경우.
+
+- `POST /users가 201 + body.id를 반환한다` — 한 HTTP 호출 + jq 원자 검증 가능 → **distinct 아님** → COMMENT 가능
+- `All 46 lint findings resolved` — 개별 실패 은닉 → **distinct** → [CERTAIN]
+
+### Common Rationalizations
+
+| Rationalization | Why It Fails |
+|-----------------|--------------|
+| "Work-item scope covers all of these naturally" | Scope justifies grouping work, not bundling verification |
+| "They're all the same type of change" | Same type ≠ same state; per-element failures still invisible |
+| "AC references them elsewhere in the plan" | Cross-references do not substitute for an executable Verification command |
+| "One grep command covers all cases" | A single grep matching any of N patterns cannot distinguish pass/fail per pattern |
+| "Too granular creates noise" | Granularity exposes failure signal; noise is acceptable, hidden failures are not |
+
 ## Analysis Guards
 
 - Do NOT accept vague terms without definition.
@@ -207,7 +247,7 @@ Independent dimensional assessment of requirement clarity before Decomposition.
 - Do NOT accept criteria without concrete verification methods.
 - Do NOT accept criteria that restate action instead of post-state.
 - Do NOT leave unknowns unstated; mark `Unknown + Verification Plan`.
-- Do NOT accept Verb red-flags: "is implemented", "is applied", "is reflected", "is adopted" — these describe actions, not verifiable post-states.
+- Do NOT accept Verb red-flags: "is implemented", "is applied", "is reflected", "is adopted", "is addressed", "is fixed" — these describe actions, not verifiable post-states.
 - Do NOT accept batched ACs that group N > 1 state changes into a single criterion; each AC must cover exactly one verifiable state change.
 - Do NOT accept verification whose command produces aggregate pass/fail (e.g., a single boolean for multiple items); each element must yield an individual pass/fail result.
 

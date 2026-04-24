@@ -98,8 +98,10 @@ For each task in the plan:
 - **Gap test**: After all TODOs are simulated, is there any AC not addressed? If yes → [CERTAIN] coverage gap.
 - **Atomicity test**: Can each TODO be delegated as a single unit? If you'd need to say "first do A, then do B" within one TODO → [CERTAIN] not atomic.
 - **AC Granularity test**: Is each AC a single verifiable assertion, or does it bundle multiple checks? If one AC asserts multiple distinct outcomes → [CERTAIN] granularity violation.
-- **AC Verb test**: Do AC verification steps use observable-state verbs (exists, returns, equals, contains) rather than completion verbs (done, finished, verified, implemented)? If a completion verb is used → [CERTAIN] unverifiable AC.
+- **AC Verb test**: Do AC verification steps use observable-state verbs (exists, returns, equals, contains) rather than completion verbs (is implemented, is applied, is reflected, is adopted, is addressed, is fixed)? If a completion verb is used → [CERTAIN] unverifiable AC.
 - **Per-element Verification test**: For ACs that cover a list of elements (e.g., 3 new rows, 5 existing rows), does each element have an independent check? If one assertion covers all → [CERTAIN] aggregate verification, not per-element.
+
+**Distinct outcomes 정의**: 한 verification 커맨드로 원자적 per-element pass/fail 증거가 안 나오는 경우. (metis의 AC Quality Detail Rules와 동일 정의)
 
 Unresolved ambiguities → list as blocking gaps in verdict.
 
@@ -241,7 +243,7 @@ Realist Check is an internal process. No output section is produced — its effe
 | Evidence paths defined | Do QA Scenarios include `$OMT_DIR/evidence/` paths for evidence capture? |
 | QA scenario specificity | Do scenarios use concrete selectors/endpoints, specific test data, and exact assertions? (not "verify it works") |
 | **AC Granularity** | Does each AC assert exactly one observable outcome, or does it bundle multiple checks into a single assertion? |
-| **No Verb Red-Flags** | Do AC verification steps use observable-state verbs (exists, returns, equals, contains) rather than completion verbs (done, finished, verified, implemented)? |
+| **No Verb Red-Flags** | Do AC verification steps use observable-state verbs (exists, returns, equals, contains) rather than completion verbs (is implemented, is applied, is reflected, is adopted, is addressed, is fixed)? |
 | **Batch Detection** | For ACs covering a list of elements, does each element have an independent verification step rather than a single aggregate count or bulk assertion? |
 
 ### 3. Context Completeness (90% confidence required)
@@ -323,6 +325,46 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 
 **Issue Cap:** When issuing REQUEST_CHANGES, list a maximum of 5 [CERTAIN] findings. If more exist, prioritize by implementation-blocking severity. [POSSIBLE] findings have no cap.
 
+## AC Quality Detail Rules
+
+### Verb Red-Flag — 완료동사 목록
+
+다음 완료동사는 AC가 state change가 아닌 action/task를 기술함을 의미한다. [CERTAIN] unverifiable AC.
+
+- is implemented
+- is applied
+- is reflected
+- is adopted
+- is addressed
+- is fixed
+
+### Batch Pattern Cardinality Matrix
+
+| Pattern | Example | Problem |
+|---------|---------|---------|
+| Universal quantifier | "All X are updated" | Hides per-element failures |
+| Explicit enumeration | "N items processed" | Count masks which items failed |
+| Distributed predicate | "Each F contains G" | Per-element pass/fail obscured |
+| Conjunction | "X and Y are enabled" | Two state changes in one |
+| Scope ambiguity | "Module A is complete" | Complete bundles many states |
+
+### Distinct Outcomes — 보조규칙
+
+`multiple distinct outcomes` = 한 verification 커맨드로 원자적 per-element pass/fail 증거가 안 나오는 경우.
+
+- `POST /users가 201 + body.id를 반환한다` — 한 HTTP 호출 + jq 원자 검증 가능 → **distinct 아님** → COMMENT 가능
+- `All 46 lint findings resolved` — 개별 실패 은닉 → **distinct** → [CERTAIN]
+
+### Common Rationalizations
+
+| Rationalization | Why It Fails |
+|-----------------|--------------|
+| "Work-item scope covers all of these naturally" | Scope justifies grouping work, not bundling verification |
+| "They're all the same type of change" | Same type ≠ same state; per-element failures still invisible |
+| "AC references them elsewhere in the plan" | Cross-references do not substitute for an executable Verification command |
+| "One grep command covers all cases" | A single grep matching any of N patterns cannot distinguish pass/fail per pattern |
+| "Too granular creates noise" | Granularity exposes failure signal; noise is acceptable, hidden failures are not |
+
 ## Failure Modes To Avoid
 
 | # | Anti-Pattern | Description |
@@ -332,7 +374,7 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 | 3 | **Vague rejections** | "The plan needs more detail" without specifying WHAT needs detail. Always name the exact task, file, or requirement that is insufficient. |
 | 4 | **Skipping simulation** | Giving verdict without mentally executing the plan step-by-step. Simulate every task: verify its starting point exists and that the action sequence has no blocking gaps. |
 | 5 | **Confusing certainty** | Treating "possibly unclear" the same as "definitely missing." Distinguish between blocking gaps and advisory recommendations. |
-| 6 | **Soft REQUEST_CHANGES** | Issuing a REQUEST_CHANGES verdict that fails blocker-discipline: either (a) without enumerating every specific blocking item (non-actionable), or (b) for non-blocking style/preference issues that the executor could resolve independently. Note: AC Granularity / AC Verb / Per-element Verification violations are [CERTAIN] blockers per Criterion 2, not preferences. |
+| 6 | **Soft REQUEST_CHANGES** | REQUEST_CHANGES is reserved for [CERTAIN] blocking gaps. Criterion 2의 3-test (AC Granularity / AC Verb / Per-element Verification) 위반은 항상 [CERTAIN]이며 RC로 처리. 이 3-test 밖의 granularity 개선 제안(예: "AC를 좀 더 쪼개면 명확하겠다" 수준의 주관 판단)은 COMMENT로 처리. |
 
 **❌/✅ Reviewer Sentence Examples:**
 
