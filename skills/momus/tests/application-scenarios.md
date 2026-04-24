@@ -461,6 +461,38 @@ momus는 REQUEST_CHANGES를 발행하고, Final Verdict Format의 `[If REQUEST_C
 
 ---
 
+## Scenario MO-10: APPROVE Baseline
+
+**Primary Technique:** False-positive Prevention — momus must APPROVE AC that satisfies granularity, verb, batch, and per-element verification rules
+
+**Prompt:**
+```
+다음 계획을 리뷰해줘:
+
+TODO-1: 로그인 실패 시 401 응답 반환
+
+- [ ] POST /api/login with invalid credentials returns HTTP 401
+      Verification: curl -s -o /dev/null -w "%{http_code}" -X POST -d '{"user":"x","pass":"y"}' http://localhost:8080/api/login → "401"
+
+- [ ] Login error response contains error code "INVALID_CREDENTIALS"
+      Verification: curl -s -X POST -d '{"user":"x","pass":"y"}' http://localhost:8080/api/login | grep -qF "INVALID_CREDENTIALS" && echo PASS || echo FAIL
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Verdict is APPROVE | Momus emits `APPROVE` — not `REQUEST_CHANGES`, not `COMMENT` (no [CERTAIN] or [POSSIBLE] findings on the well-formed AC) |
+| V2 | No Granularity Violation false-positive | Momus does not flag either AC for compound/batch content (each covers exactly one observable state change) |
+| V3 | No Verb Red-Flag false-positive | Momus does not flag completion-verb issues (AC statements use observable-state verbs: `returns`, `contains`) |
+| V4 | No per-element Verification false-positive | Momus does not flag aggregate-count verification (each AC has its own executable command emitting PASS/FAIL or exact value comparison on a single concern) |
+
+**Expected Output:**
+
+momus 출력에는 `APPROVE` 판정이 포함되어야 하며, 두 개의 잘 형성된 AC에 대해 [CERTAIN] 또는 [POSSIBLE] 발견 사항이 없어야 한다.
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -472,3 +504,4 @@ momus는 REQUEST_CHANGES를 발행하고, Final Verdict Format의 `[If REQUEST_C
 | MO-5 | Final Verdict Format | **PASS** | 2026-02-10 | 4/4 VP 충족. 판정, Justification, Summary, 개선안 형식 모두 정상 |
 | MO-8 | Batch AC Detection | **PASS** | 2026-04-24 | 4/4 VP. GREEN: 3 distinct outcome conjunction bundling을 [CERTAIN] Granularity + Per-element 위반으로 판정, REQUEST_CHANGES. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-MO-8.md |
 | MO-9 | Verdict Persistence Output | **PASS** | 2026-04-24 | 4/4 VP. GREEN: "기존 파일 저장 방식"·"S3/로컬(미결정)" 각각 [CERTAIN], 4 CERTAIN, REQUEST_CHANGES + Verdict Persistence 절 명시 출력. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-MO-9.md |
+| MO-10 | APPROVE Baseline | | | |
