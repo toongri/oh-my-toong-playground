@@ -950,7 +950,7 @@ r_phys:
 
 ### SCN-27: A3 verdict precedence — qualitative causality + unblocking verb PASS
 
-<!-- T6 regression guard: a3 Verdict Precedence rule (ii) — qualitative outcome with explicit causality AND resolution verb → PASS (no numeric required) -->
+<!-- T6 regression guard: a3 PASS Gate sufficient-form (qualitative-causality form) — qualitative outcome with explicit causality AND resolution verb → PASS (no numeric required) -->
 
 **Bullet**: "Refactored payment integration to enable sandboxing, chosen over contract-test mocks because mocks could not replicate live-gateway error paths, accepting reduced fidelity to real API responses in exchange for full environment isolation — unblocking QA from environment dependency and allowing parallel test runs."
 
@@ -959,7 +959,7 @@ r_phys:
 **Expected verdicts**:
 - A1: PASS — Technology (payment integration refactor), Mechanism (sandboxing enablement), Constraint (QA environment dependency), Trade-off (reduced API fidelity accepted in exchange for isolation), Rationale (contract-test mocks ruled out because they cannot replicate live-gateway error paths). All 5 signals present → strict PASS.
 - A2: PASS — Cause (refactoring → sandbox enablement) → effect (QA unblocked). Causal chain unambiguous.
-- A3: PASS — Verdict Precedence rule (ii): qualitative outcome ("unblocking QA from environment dependency") with explicit causality (refactor → sandboxing → unblocking) AND resolution verb ("unblocking") present → PASS. No numeric magnitude required.
+- A3: PASS — sufficient-form (qualitative-causality form): qualitative outcome ("unblocking QA from environment dependency") with explicit causality (refactor → sandboxing → unblocking) AND resolution verb ("unblocking") present → PASS. No numeric magnitude required.
 - A4: PASS — "Refactored" ownership verb + scope coherent with mid-level.
 - A5: PASS — Problem (QA environment dependency) / Decision (sandboxing) / Result (QA unblocked) scan 가능.
 
@@ -972,7 +972,7 @@ r_phys:
 
 **routing_target**: standard APPROVE path — all axes PASS, no readability-fix routing triggered.
 
-**Purpose**: regression guard for a3 Verdict Precedence rule (ii) — qualitative outcome with explicit causality AND resolution verb PASSes without numeric magnitude. "unblocking" is an explicit resolution verb satisfying rule (ii). This SCN fails if the evaluator incorrectly demands numeric evidence for qualitative-causality-with-unblocking-verb bullets.
+**Purpose**: regression guard for A3 PASS Gate sufficient-form (qualitative-causality form) — qualitative outcome with explicit causality AND resolution verb PASSes without numeric magnitude. "unblocking" is an explicit resolution verb satisfying the qualitative-causality form of sufficient-form. This SCN fails if the evaluator incorrectly demands numeric evidence for qualitative-causality-with-unblocking-verb bullets.
 
 ---
 
@@ -1042,7 +1042,7 @@ Bullet 3 (`45분`):
 | SCN-24 | A2 arithmetic direction increase (throughput-like, after/before) | APPROVE | PASS | Multiplier increase = after/before — 10→15 = 1.5x correctly parsed (P1-5 regression guard) |
 | SCN-25 | A2 arithmetic direction reduction (latency-like, before/after) | APPROVE | PASS | Multiplier reduction = before/after — 200ms→50ms = 4x correctly parsed (P1-5 regression guard) |
 | SCN-26 | P1-1 regression: count(P1)=2 + structural FAIL | REQUEST_CHANGES | FAIL | count(P1 across A1-A4) < 3 + structural_verdict FAIL → priority 5 Readability-only fix (NOT source extraction) (P1-1 regression guard) |
-| SCN-27 | A3 verdict precedence rule (ii): qualitative + unblocking verb | APPROVE | PASS | Qualitative causality + resolution verb → A3 PASS (no numeric required) (T6 regression guard) |
+| SCN-27 | A3 PASS Gate sufficient-form: qualitative-causality form + unblocking verb | APPROVE | PASS | Qualitative causality + resolution verb → A3 PASS (no numeric required) (T6 regression guard) |
 | SCN-28 | A3 regex: $2.4M / 13x / 45분 token coverage | N/A (axis-isolated) | N/A (axis-isolated) | $-prefix revenue, bare multiplier, Korean duration unit each match A3 PASS regex (T6 regression guard) |
 
 ## Axis Boundary Coverage
