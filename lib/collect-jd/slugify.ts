@@ -2,7 +2,7 @@
  * slugify — convert a company name or job title into a URL/filesystem-safe slug.
  *
  * Policy:
- *  - Unicode NFC normalization (preserves Hangul syllables; NFKD decomposes them)
+ *  - NFKD → combining diacritic strip → NFC (Hangul syllables recomposed; Latin diacritics removed)
  *  - Latin characters lowercased
  *  - Hangul syllables (가-힣) kept as-is (no romanization)
  *  - Whitespace replaced with hyphens
@@ -12,8 +12,13 @@
  *  - Result truncated to 64 characters (trailing hyphens trimmed again after truncation)
  */
 export function slugify(input: string): string {
-  // Step 1: NFC normalization — preserves Hangul syllables intact
-  let s = input.normalize('NFC');
+  // Step 1: NFKD → combining diacritic 제거 → NFC
+  //   Hangul: NFKD가 음절을 jamo로 분해하나 NFC가 재조합 → 보존
+  //   Latin: precomposed (é, ü) → base + combining mark, mark 제거 후 base만 남음
+  let s = input
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .normalize('NFC');
 
   // Step 2: lowercase Latin characters
   s = s.toLowerCase();

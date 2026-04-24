@@ -20,7 +20,7 @@ jd/
 
 | # | 동작 | 입력 예 | 출력 예 |
 |---|------|---------|---------|
-| 1 | Unicode **NFC** 정규화 | `"토스ᄀ..."` | `"토스"` |
+| 1 | **NFKD** → combining diacritic 제거(`[̀-ͯ]`) → **NFC**. Hangul은 NFC 재조합으로 음절 보존. Latin precomposed 문자는 NFKD 분해 후 diacritic mark 스트립되어 base character만 남음. | `"Café"` | `"Cafe"` |
 | 2 | Latin 소문자화 | `"AX Backend"` | `"ax backend"` |
 | 3 | 공백 → 하이픈 | `"ax backend"` | `"ax-backend"` |
 | 4 | 허용 문자 외 제거 `[^a-z0-9가-힣-]` | `"ax-(backend)"` | `"ax-backend"` |
@@ -47,19 +47,25 @@ jd/
 - 사람이 디렉토리를 탐색할 때 원래 이름을 즉시 알아볼 수 있다.
 - 공백은 하이픈으로 치환하되 음절 자체는 손대지 않는다.
 
-### 3. NFC 사용 이유
+### 3. NFKD → diacritic 제거 → NFC 파이프라인
 
-Unicode에는 두 가지 정규화 방식이 있다:
+Latin precomposed 문자(`é`, `ü`, `ñ` 등)를 처리하면서 Hangul 음절을 보존하기 위해 세 단계 파이프라인을 사용한다:
 
-| 방식 | Hangul Syllables 처리 | 결과 |
-|------|-----------------------|------|
-| NFKD | 자모(Jamo)로 분해 | `가-힣` 정규식에 매치 안 됨 |
-| **NFC** | 음절 유지 | `가-힣` 정규식에 정상 매치 |
+| 단계 | 동작 | Hangul 결과 | Latin 결과 |
+|------|------|-------------|------------|
+| NFKD | 음절→자모 분해, precomposed→base+mark 분해 | 자모 분리 상태 | `é` → `e` + combining acute |
+| `[̀-ͯ]` 제거 | combining diacritic mark 스트립 | 자모 그대로 | combining mark 제거, base만 남음 |
+| NFC | 자모 → 음절 재조합 | 원래 음절 복원 | base character 그대로 |
 
-`"토스".normalize('NFKD') === "토스"` → **false** (분해됨)  
-`"토스".normalize('NFC') === "토스"` → **true** (보존됨)
+```
+"토스".normalize('NFKD')  → 자모 분해
+  → .replace(/[̀-ͯ]/g, '') → 자모 영향 없음 (combining mark 없음)
+  → .normalize('NFC')      → "토스" 재조합 (보존)
 
-따라서 이 라이브러리는 **NFC**를 사용한다.
+"Café".normalize('NFKD')  → "Café" (combining acute accent)
+  → .replace(/[̀-ͯ]/g, '') → "Cafe"
+  → .normalize('NFC')      → "Cafe"
+```
 
 ---
 
@@ -77,6 +83,9 @@ Unicode에는 두 가지 정규화 방식이 있다:
 | `'hello---world'` | `'hello-world'` | 연속 하이픈 압축 |
 | `'-trim-'` | `'trim'` | 선후 하이픈 트림 |
 | `'a'.repeat(63) + '-extra'` | no trailing `-`, length ≤ 64 | truncate 후 trailing 하이픈 재트림 |
+| `'Café'` | `'cafe'` | Latin precomposed diacritic 제거 (French) |
+| `'Zürich Tech'` | `'zurich-tech'` | German umlaut 제거 |
+| `'Björn & Co'` | `'bjorn-co'` | Scandinavian diacritic 제거 |
 
 ---
 
