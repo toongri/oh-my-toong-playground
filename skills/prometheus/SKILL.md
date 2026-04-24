@@ -68,7 +68,10 @@ digraph prometheus_flow {
     "Momus verdict?" [shape=diamond];
     "Present full plan\nAsk user to finalize" [shape=box];
     "User approves?" [shape=diamond];
+    "Generate HTML render" [shape=box];
+    "Compute Recommendation" [shape=box];
     "Execution Bridge\n(AskUserQuestion)" [shape=ellipse];
+    "User's choice?" [shape=diamond];
 
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Context Loading";
@@ -89,12 +92,20 @@ digraph prometheus_flow {
     "Oracle verdict?" -> "Momus review" [label="APPROVE/COMMENT"];
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Momus verdict?" -> "Present full plan\nAsk user to finalize" [label="APPROVE/COMMENT"];
+    "Momus verdict?" -> "Generate HTML render" [label="APPROVE/COMMENT"];
+    "Generate HTML render" -> "Compute Recommendation";
+    "Compute Recommendation" -> "Execution Bridge\n(AskUserQuestion)";
+    "Execution Bridge\n(AskUserQuestion)" -> "User's choice?";
+    "User's choice?" -> "Execution Bridge\n(AskUserQuestion)" [label="(1) Full orchestration"];
+    "User's choice?" -> "Execution Bridge\n(AskUserQuestion)" [label="(2) Focused execution"];
+    "User's choice?" -> "Write plan to $OMT_DIR/plans/*.md" [label="(3) Revise plan"];
     "Present full plan\nAsk user to finalize" -> "User approves?";
     "User approves?" -> "Interview Mode" [label="no, more changes"];
     "User approves?" -> "Execution Bridge\n(AskUserQuestion)" [label="yes"];
 }
 ```
+
+**Flowchart Enforcement Rule**: The review loops (Metis → Oracle → Momus REQUEST_CHANGES back to plan writing) are MANDATORY loops, not advisory paths. Skipping any review stage or proceeding past REQUEST_CHANGES without resolution violates the planning contract.
 
 ## Subagent Selection Guide
 
@@ -203,6 +214,67 @@ This checklist is internal — do not present it to the user.
 | 4 | **Skipping confirmation** | Handing off without showing plan | After Momus, ALWAYS present to user |
 | 5 | **Architecture redesign** | Proposing rewrite when targeted change suffices | Default to minimal scope |
 | 6 | **Codebase questions to user** | "Where is auth implemented?" | Use explore/oracle for facts |
+| 7 | **Missing task discipline** | Planning phases have no tracked tasks; incomplete phases go undetected | Apply Planning-time Task Discipline — create tasks per phase, enforce completion before advancing |
+
+---
+
+## Planning-time Task Discipline
+
+Every planning session MUST define and track phase별 할일 (per-phase tasks) from the moment intent is classified. Planning without tracked tasks는 정의되지 않은 할일을 정의할 수 없게 만든다 — gaps surface only at handoff, when correction is most expensive.
+
+### Phase Templates by Intent
+
+Each intent class maps to a fixed set of phases. Create tasks for each phase at planning start.
+
+**Trivial**
+- Phase 1: Clarify + scope
+- Phase 2: Write plan
+
+**Scoped**
+- Phase 1: Interview + Clearance
+- Phase 2: AC drafting + user confirmation
+- Phase 3: Metis consultation
+- Phase 4: Write plan → Oracle review → Momus review
+- Phase 5: Present plan + user approval
+
+**Complex**
+- Phase 1: Context loading + explore delegation
+- Phase 2: Deep interview + Clearance
+- Phase 3: AC drafting + user confirmation
+- Phase 4: Metis consultation
+- Phase 5: Write plan → Oracle review → Momus review
+- Phase 6: Present plan + user approval
+
+**Architecture**
+- Phase 1: Context loading + explore + librarian (parallel)
+- Phase 2: Oracle feasibility review (MANDATORY)
+- Phase 3: Deep interview + Clearance
+- Phase 4: AC drafting + user confirmation
+- Phase 5: Metis consultation
+- Phase 6: Write plan → Oracle review → Momus review
+- Phase 7: Present plan + user approval
+
+### Per-Phase Completion Triggers
+
+A phase task is complete only when its reviewer verdict is received:
+
+| Reviewer | Completion Condition |
+|----------|---------------------|
+| Metis | Verdict = APPROVE or COMMENT (proceed to plan write) |
+| Oracle | Verdict = APPROVE or COMMENT (proceed to Momus) |
+| Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
+
+REQUEST_CHANGES from any reviewer means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received.
+
+하위 phase (downstream phase) 태스크를 REQUEST_CHANGES 상태에서 시작하는 것은 planning contract 위반이다.
+
+### Relationship to Pipeline State Machine
+
+The Planning-time Task Discipline is complementary (상보적) to the Pipeline State Machine defined in `review-pipeline.md`. The Pipeline State Machine governs reviewer sequencing and verdict routing. Task Discipline governs visibility and completion tracking within each phase. Together they form a two-layer defense: the pipeline prevents wrong-order execution, task discipline prevents invisible incomplete work.
+
+### Reconciliation with Work-Principles Mandate
+
+`work-principles.md` mandates TaskCreate before non-trivial work. This mandate applies equally during planning sessions. The platform's native task tool is the implementation vehicle, but discipline is the invariant, not the tool. Whether using TaskCreate, a checklist, or another tracking mechanism, the obligation — create tasks, track completion, never batch-complete — is non-negotiable.
 
 ---
 
