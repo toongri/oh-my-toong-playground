@@ -328,7 +328,9 @@ Six invariants govern substitution and injection applied during Stage A renderin
 
 **Rule 1 — Active-element-only substitution**: `{{…}}` placeholders are substituted only at their active template elements. For `{{PLAN_MARKDOWN_JSON}}`, the active container is the `script type="application/json" id="plan-md"` element; substitution occurs only at that active element line. Literal occurrences inside the top-comment documentation block are NOT substituted. Replacement patterns must be anchored to the specific enclosing element by its opening-tag signature, not to the raw placeholder token alone.
 
-**Rule 2 — Multi-occurrence guard**: When a placeholder token appears in both documentation and an active element, the substitution engine MUST skip the documentation occurrence. Implementation options: element-line regex anchored on active element (preferred), first-match-only with active-element anchor, or pre-pass element extraction. Multi-active-occurrence semantics: if a placeholder legitimately appears across multiple active elements (e.g., `{{TOC_TITLE}}` in both navigation header and footer), substitution applies to ALL active occurrences — only documentation / top-comment literals are excluded. This prevents a future-analogous bug where first-match-only logic silently drops a second occurrence of a legitimate active placeholder.
+**Rule 2 — Multi-occurrence guard**: When a placeholder token appears in both documentation and an active element, the substitution engine MUST skip the documentation occurrence. Preferred implementation: element-line regex anchored on active element. **Alternatives:** first-match-only with active-element anchor; pre-pass element extraction.
+
+**Multi-active-occurrence semantics**: If a placeholder legitimately appears across multiple active elements (e.g., `{{TOC_TITLE}}` in both navigation header and footer), substitution applies to ALL active occurrences — only documentation / top-comment literals are excluded. This prevents a future-analogous bug where first-match-only logic silently drops a second occurrence of a legitimate active placeholder.
 
 **Rule 3 — Session-derived box injection sequence**: The `<!-- SESSION-DERIVED-BOXES-HERE … -->` comment block is replaced with exactly two `.section-box` elements in this exact order: (a) Stage B · Execution Recommendation, (b) Pipeline State. The entire comment block (from `<!-- SESSION-DERIVED-BOXES-HERE` to the terminating `-->`) is removed; the 2 boxes replace it verbatim in order.
 
@@ -338,13 +340,17 @@ Six invariants govern substitution and injection applied during Stage A renderin
 
 **Rule 6 — Parser-resilient container embedding**: The HTML element holding the plan markdown content (`{{PLAN_MARKDOWN_JSON}}` container) MUST satisfy two sub-requirements:
 
-- **(6a) Inert container**: Use an element whose content is treated as text by the HTML parser and which does not execute or render the content as DOM (i.e., a non-executable, inert element). The canonical choice is a `script` element with `type="application/json"`, which is inert under HTML5 non-executable-type rules. An alternative inert container is a `textarea` element with the `hidden` attribute.
+- **(6a) Inert container**: Element whose content the HTML parser treats as text — non-executable, inert. Canonical: `script type="application/json"` (HTML5 non-executable-type). Alternative inert container: `textarea hidden`.
 
-- **(6b) Content-side close-tag escape**: The content injection pipeline MUST escape the container's close-tag character sequence in the serialized payload, so legitimate close-tag substrings in plan prose do not terminate the container block prematurely at HTML parse time. Canonical approach: serialize via `JSON.stringify`, then post-process the JSON string output to replace every occurrence of `</script>` with `<\/script>`. The consumer reads via `textContent` and decodes via `JSON.parse`, which decodes the backslash-escaped form back to the original content.
+- **(6b) Content-side close-tag escape**: The injection pipeline MUST escape the container's close-tag sequence so plan prose cannot terminate the container prematurely at parse time. Canonical pattern:
+  ```js
+  const payload = JSON.stringify(planMarkdown).replace(/<\/script>/g, '<\\/script>');
+  // consumer: JSON.parse(container.textContent)
+  ```
 
-Using `script type="text/markdown"` (unencoded markdown stored directly as script content) is unsuitable and MUST NOT be used — it fails requirement (6b) because unencoded markdown content is stored without the close-tag escape step. Any inert container choice without the paired escape step also fails Rule 6.
+`script type="text/markdown"` MUST NOT be used — unencoded markdown without close-tag escape fails (6b).
 
-Implementations MAY choose their container + escape pair, but both (6a) and (6b) MUST be present. If a `textarea hidden` container is chosen, a textarea-specific close-tag escape must be applied in the content pipeline. Alternative inert containers are acceptable provided they are paired with their own close-tag escape.
+Both (6a) and (6b) MUST be present regardless of container choice; alternative inert containers MUST supply their own paired close-tag escape.
 
 ### Stage B: Execution Recommendation
 
