@@ -44,7 +44,7 @@ MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 **Revise** means exactly these three steps, in order:
 
 1. **Modify source material** — edit the plan file (or requirements) to address every directive in the REQUEST_CHANGES verdict.
-2. **Re-invoke the SAME reviewer** — send the updated material back to the same reviewer agent (Metis / Oracle / Momus) using the same invocation template.
+2. **Re-invoke the same reviewer type on a fresh agent instance** — send the updated material back to the same reviewer type (Metis / Oracle / Momus) using the same invocation template. Per the Reviewer Freshness Rule (§Reviewer Freshness Rule), always spawn a fresh agent instance; never reuse a thread that has already issued a verdict.
 3. **Wait for a NEW verdict** — the loop only advances when the reviewer issues a fresh APPROVE or COMMENT on the revised material.
 
 ### "Revise" is NOT:
@@ -260,7 +260,7 @@ Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in
 - **Tool choice**: The conversion tool is an execution-time choice — use whatever tool is available at runtime (Pandoc, a script, inline generation). The tool is an implementation detail (수단은 실행 시점 선택); the output must meet the single-file + browser requirement regardless of method.
 - **Graceful fallback**: If HTML conversion fails, present the raw Markdown content directly to the user and continue to Stage B.
 
-> Stage A is intentionally tool-agnostic to allow future sub-sections (e.g. WI-NEW-A, WI-NEW-B, WI-NEW-C) to be appended here without disturbing the conversion contract above.
+> Stage A is intentionally tool-agnostic to allow future sub-sections to be appended here without disturbing the conversion contract above.
 
 #### HTML Components
 
@@ -307,7 +307,7 @@ Translation applies to **prose-only** content. The following elements are **neve
 - `code block` — all fenced and inline code
 - `file path` — absolute and relative paths (e.g. `skills/prometheus/review-pipeline.md`)
 - `CLI` — command-line tool names and commands
-- `WI-N` — work-item identifiers (e.g. `WI-NEW-B`)
+- `WI-N` — work-item identifiers (e.g. `WI-1`, `WI-2`)
 - `AC#M` — acceptance criteria labels (e.g. `AC#1`)
 - `S0-S8` — pipeline state identifiers
 - `grep` — tool names used as identifiers in verification commands
