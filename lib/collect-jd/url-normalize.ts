@@ -23,14 +23,10 @@ export function normalizeUrl(input: string): string {
     }
   }
 
-  let out = u.toString();
-
   // trailing slash 제거: pathname 이 "/" 단독이면 유지
   if (u.pathname !== '/' && u.pathname.endsWith('/')) {
-    const newPath = u.pathname.replace(/\/+$/, '');
-    const search = u.search; // "?..." 또는 빈 문자열
-    out = `${u.protocol}//${u.host}${newPath}${search}`;
+    u.pathname = u.pathname.replace(/\/+$/, '');
   }
 
-  return out;
+  return u.toString();
 }
