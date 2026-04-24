@@ -14,6 +14,27 @@ JD 수집·큐레이션·정리 전담 스킬. 구체 규칙은 Phase B pressure
 - review-resume: 이력서 리뷰 (이 스킬 관여 안 함)
 - resume-forge: 이력서 소재 발굴 (이 스킬 관여 안 함)
 
+## MANDATORY: Phase Task Creation
+
+Skill invocation 시작 시(Session Lock 획득 직전) 아래 6개 phase 를 **개별 task로 전부 선행 생성**. 각 task 는 start 시 `in_progress`, 완료 시 즉시 `completed` 마킹. Phase skipping · silent skip 방지 목적.
+
+**Phase 리스트 (세션 단위)**:
+
+| # | Phase | 주요 gate / 산출물 |
+|---|---|---|
+| 1 | Session Setup | Session Lock acquire, Storage Path Interview, Profile Interview (부재 시) |
+| 2 | Ingest | URL normalize, WebFetch + Ingest Validation (insane-search fallback 포함) |
+| 3 | Dedup Check Gate | L1 gate 실행 + L2 gate 평가 + fingerprint_check + dedup-audit.log append |
+| 4 | Classify | Role tagging + Matching Loop (Phase 1→2→3) |
+| 5 | Persist | JD atomic write + taxonomy/tags 업데이트 |
+| 6 | Session End | Rules Re-evaluation (해당 시) + lock release + summary 보고 |
+
+**Batch mode**: Phase 2-5 를 JD 건별로 반복. Phase 1/6 은 세션 단위 (1회).
+
+각 Phase 완료 시 응답 내 `[Phase N/6: <이름> ✓]` 마커로 명시. 누락 시 violation.
+
+→ 상세 (rationalization loopholes, batch mode 반복 규칙): [reference/rules.md#phase-task-creation](reference/rules.md#phase-task-creation)
+
 ## State Location
 
 All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음; 이 스킬이 직접 계산 금지. `$OMT_DIR` unset 시 abort + 복구 안내 — global fallback 금지. Forbidden Paths: `~/.omt/global/**`, `~/.omt/<other-project>/collect-jd/**`, `/tmp/**`, 그 외 `$OMT_DIR` 외부 절대 경로.
@@ -29,6 +50,16 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 - AskUserQuestion 대기 중 lock release/re-acquire 금지.
 
 → 상세 [reference/rules.md#session-lock](reference/rules.md#session-lock)
+
+## Storage Path Interview (MANDATORY)
+
+첫 실행 시 `$OMT_DIR/collect-jd/config.yaml` 부재 확인 → **AskUserQuestion 필수** (default 제시: `$OMT_DIR/collect-jd/jobs/`). 유저 수락/변경 후 `config.yaml` atomic write (`storage_path` 필드). 이후 세션은 `config.yaml` 에서 읽어 바로 사용. **CRITICAL**: config.yaml 부재임에도 default 경로로 silent 저장 금지. "첫 실행인데 default 쓰자"는 rationalization 불가.
+
+- session lock 획득 직후, Phase 0 Profile Interview 진입 전 필수 수행.
+- `config.yaml` 존재 시 `storage_path` 재확인 인터뷰 생략 (유저가 요청하지 않는 한).
+- 경로 변경 요청 시 atomic overwrite + 기존 `jobs/` 이관은 유저 명시 승인 시에만.
+
+→ 상세 (flowchart, rationalization loopholes, config.yaml schema): [reference/rules.md#storage-path-interview](reference/rules.md#storage-path-interview)
 
 ## Atomic Write Pattern (MANDATORY)
 
@@ -59,6 +90,13 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 ## Dedup (L1 URL/slug + L2 LLM similarity)
 
 신규 JD 파일 작성 전 L1 → L2 순서로 dedup 실행 (MANDATORY).
+
+**CRITICAL — Dedup Check Gate 규칙**:
+- `jobs/` 비어있어도 L1 gate는 **반드시 실행** 된 것으로 기록. "jobs empty라서 skip" 금지 — trivial-pass를 silent로 처리하지 않고 "L1 gate executed: 0 candidates" 로 명시.
+- L2 조건 미성립(같은 company_slug JD 0건) 시에도 "L2 gate evaluated: not applicable" 로 audit 남김.
+- Dedup gate 미실행 저장 금지. `fingerprint_check` 필드가 비어있으면 저장 거부.
+
+→ Dedup Gate Enforcement 상세: [reference/rules.md#dedup-check-gate-enforcement](reference/rules.md#dedup-check-gate-enforcement)
 
 - **L1**: `normalizeUrl()` 후 URL 또는 `(company_slug, role_title_slug)` 매칭. 매치 시 신규 파일 금지, `last_checked_at` 만 갱신. URL match + TTL (30일) 초과 시 L2 진입.
 - **L2**: L1 no-match + 같은 `company_slug` 의 다른 JD 이미 저장 시 LLM similarity 판정 (`reference/dedup-l2-prompt.md`, temperature 0). `same: true` → 신규 금지 + `fingerprint_check: duplicate_of:<url>`. `same: false` → 신규 저장 + `fingerprint_check: unique`.
