@@ -322,7 +322,7 @@ Six invariants govern substitution and injection applied during Stage A renderin
 
 **Rule 3 — Session-derived box injection sequence**: The `<!-- SESSION-DERIVED-BOXES-HERE … -->` comment block is replaced with exactly two `.section-box` elements in this exact order: (a) Stage B · Execution Recommendation, (b) Pipeline State. The entire comment block (from `<!-- SESSION-DERIVED-BOXES-HERE` to the terminating `-->`) is removed; the 2 boxes replace it verbatim in order.
 
-**Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per WI-NEW-B, fallback to original language as declared in the Translation Rule.
+**Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per the Translation Rule, fallback to original language as declared in the Translation Rule.
 
 **Rule 5 — Tool-agnostic**: The substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool that satisfies the six rules is acceptable.
 
