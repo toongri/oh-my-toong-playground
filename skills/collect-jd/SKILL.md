@@ -102,7 +102,7 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` 은 환경에서 읽음;
 
 WebFetch · 파일 · 텍스트 ingest 전에 본문 길이 (< 200자) · 정지 신호만 포함 (login/captcha/403 등) 체크. 실패 시 저장 금지 + "유효 JD 아닌 것으로 보임" 에러 보고 + `$OMT_DIR/collect-jd/ingest-failures.log` 기록.
 
-**WebFetch 실패 fallback** (공개 페이지 한정, optional): `insane-search` 플러그인 설치 시 SPA/WAF/403 자동 에스컬레이션 (Jina Reader → curl UA → `curl_cffi` TLS 임퍼소네이션 → Playwright MCP). 단 **로그인 페이지 / paywall 은 통과 불가** — 해당 케이스는 기존대로 복붙 경로 유도.
+**WebFetch 시 `insane-search` 스킬 사용.**
 
 → 상세: [reference/rules.md#ingest-validation](reference/rules.md#ingest-validation)
 
