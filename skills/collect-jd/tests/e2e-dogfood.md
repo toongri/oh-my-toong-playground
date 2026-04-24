@@ -158,19 +158,52 @@ Exit code: `0`.
 | # | DoD 항목 | 상태 |
 |---|---|---|
 | 1 | SKILL.md + frontmatter (name, description, 트리거 문구) | ✅ |
-| 2 | trigger-eval.json flat 스키마, positive/negative ≥10 | ✅ (12/14) |
+| 2 | trigger-eval.json flat 스키마, positive/negative ≥10 | ✅ (positive 12 / negative 14) |
 | 3 | 5개 reference 문서 | ✅ (frontmatter-schema, dedup-l2-prompt, ambiguity-prompt, slugify, url-normalize) + 추가 rules.md (M3 split) |
 | 4 | lib/collect-jd/ bun test 통과 | ✅ (25/0) |
-| 5 | 13 pressure scenarios 모두 GREEN + evidence stub | ✅ |
+| 5 | 13 pressure scenarios 모두 GREEN + evidence stub | ⚠ analytical 13/13 · real 0/13 (Method Policy 허용, 최소 1개 실측 권고 미이행 — T9에서 실 세션으로 S1·S3 경로 자연 검증 예정) |
 | 6 | projects/<target>/sync.yaml 에 collect-jd 추가 | ✅ (oh-my-resume + resume-manage 두 개 타겟) |
-| 7 | End-to-end dogfood | ✅ (analytical + CLI 실행) |
+| 7 | End-to-end dogfood | ⚠ analytical + CLI only. Claude Code 세션 내 실 체인 실행은 T9(이 파일 하단 Real Dogfood Evidence 섹션)에서 수행 |
 
 ## Known Limitations
 
-- E2E Scenario 섹션은 **analytical**: 실 Claude Code 세션에서의 매 step 재현은 유저가 수동 수행.
-- Pressure scenarios S1~S19 analytical_simulation 방식 — 실 서브에이전트 호출 대신 추론 기반 RED/GREEN 판정 (pressure-scenarios.md Method Policy 섹션 참조).
+- E2E Scenario 섹션(위)은 **analytical**: 실 Claude Code 세션에서의 매 step 재현은 T9 실 dogfood(아래 Real Dogfood Evidence 섹션)에서 수행.
+- Pressure scenarios S1~S19 analytical_simulation 방식 — 실 서브에이전트 호출 대신 추론 기반 RED/GREEN 판정 (pressure-scenarios.md Method Policy 섹션 참조). T9 실 dogfood 중 S1(Profile Interview)·S3(Ambiguous → AskUserQuestion) 경로가 자연스럽게 검증될 예정.
 - `make sync` 실 배포는 유저가 직접 실행 (로컬 target 경로가 machine-specific).
 
 ## Conclusion
 
-Phase A/B/C 모두 완료. Plan Definition of Done 7 항목 전부 충족. `collect-jd` 스킬은 배포 준비 완료 상태.
+Phase A/B 완료. Phase C는 문서화 + CLI 검증(make validate/test/sync-dry) 완료, **실 Claude Code 세션 dogfood는 T9에서 수행**. DoD 중 #5·#7은 현재 analytical/CLI-only 상태 — T9 완료 후 Real Dogfood Evidence 섹션의 관찰값을 근거로 재평가. 그 외 5개 DoD 항목(#1, #2, #3, #4, #6)은 실증거로 충족.
+
+---
+
+## Real Dogfood Evidence (T9)
+
+> T9에서 실제 Claude Code 세션에서 collect-jd skill을 invoke하여 수행한 B-α dogfood의 실측 evidence를 이 섹션에 append한다. 아래 항목은 T9 수행 시 채워진다.
+
+### Session Info
+- Observed at: _T9 수행 시 ISO8601_
+- Method: `real_subagent` (B-α — sisyphus 세션 내 Skill tool로 collect-jd invoke)
+- SKILL.md sha256 at dogfood start: _T9 수행 시 기록_
+- rules.md sha256 at dogfood start: _T9 수행 시 기록_
+
+### Chain Observations
+1. Trigger 단계: _발화 / skill 응답 / 관찰_
+2. Phase 0 Profile Interview: _AskUserQuestion 3라운드 질문·답변 요약_
+3. Ingest (URL): _normalizeUrl 결과 / WebFetch 결과 / dedup 판정_
+4. Role Tagging: _LLM 응답 / role_tags 결과_
+5. Matching Loop: _verdict / status 결정_
+6. Rules re-evaluation: _"오늘 수집 정리해줘" 응답 / proposed 파일 내용 snapshot / approve flow / .proposed 제거 확인_
+7. Session end: _.lock 제거 / summary 보고_
+
+### File State Snapshots
+- profile.yaml after interview: _내용 요약 또는 byte size_
+- rules.yaml before/after: _diff 요약_
+- .proposed lifecycle: _생성 → 존재 확인 → 제거 확인_
+
+### Findings during dogfood
+- _runtime에서 드러난 규칙 누락·문구 모호함·UX 이슈 (있으면 기록)_
+
+### Verdict
+- DoD #7 충족 여부: _T9 수행 후 기록_
+- DoD #5 최소 1개 real scenario 관찰 여부: _기록_
