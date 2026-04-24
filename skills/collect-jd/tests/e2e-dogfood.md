@@ -161,14 +161,14 @@ Exit code: `0`.
 | 2 | trigger-eval.json flat 스키마, positive/negative ≥10 | ✅ (positive 12 / negative 14) |
 | 3 | 5개 reference 문서 | ✅ (frontmatter-schema, dedup-l2-prompt, ambiguity-prompt, slugify, url-normalize) + 추가 rules.md (M3 split) |
 | 4 | lib/collect-jd/ bun test 통과 | ✅ (25/0) |
-| 5 | 13 pressure scenarios 모두 GREEN + evidence stub | ⚠ analytical 13/13 · real 0/13 (Method Policy 허용, 최소 1개 실측 권고 미이행 — T9에서 실 세션으로 S1·S3 경로 자연 검증 예정) |
+| 5 | pressure scenarios 모두 GREEN + evidence stub | ⚠ 13 scenario 원본 + real_subagent retest 4건 (S14-R · S15-R · S19-R · S20 — 커밋 1847921 Iron Law 재검증). 원 13건 analytical 기준 GREEN, 그 중 S14·S15·S19는 refactor 이후 `method: real_subagent`로 **재승격**됨. S20(Decision Flow)은 real_subagent로 신규 추가. T9 E2E 체인 real 실측은 별도 수행. |
 | 6 | projects/<target>/sync.yaml 에 collect-jd 추가 | ✅ (oh-my-resume + resume-manage 두 개 타겟) |
 | 7 | End-to-end dogfood | ⚠ analytical + CLI only. Claude Code 세션 내 실 체인 실행은 T9(이 파일 하단 Real Dogfood Evidence 섹션)에서 수행 |
 
 ## Known Limitations
 
 - E2E Scenario 섹션(위)은 **analytical**: 실 Claude Code 세션에서의 매 step 재현은 T9 실 dogfood(아래 Real Dogfood Evidence 섹션)에서 수행.
-- Pressure scenarios S1~S19 analytical_simulation 방식 — 실 서브에이전트 호출 대신 추론 기반 RED/GREEN 판정 (pressure-scenarios.md Method Policy 섹션 참조). T9 실 dogfood 중 S1(Profile Interview)·S3(Ambiguous → AskUserQuestion) 경로가 자연스럽게 검증될 예정.
+- Pressure scenarios: 원본 13건은 analytical_simulation 방식 (추론 기반 RED/GREEN). 2026-04-23 Iron Law 재검증(1847921)에서 S14-R · S15-R · S19-R · S20 총 4건이 `method: real_subagent` 로 전환됨. T9 실 dogfood는 E2E 체인(Scope DoD #7)을 다루며 pressure scenario 개별 재검증과는 별도.
 - `make sync` 실 배포는 유저가 직접 실행 (로컬 target 경로가 machine-specific).
 
 ## Conclusion
