@@ -97,6 +97,9 @@ For each task in the plan:
 - **Overlap test**: Would implementing TODO X also partially complete TODO Y? If yes → [CERTAIN] MECE violation.
 - **Gap test**: After all TODOs are simulated, is there any AC not addressed? If yes → [CERTAIN] coverage gap.
 - **Atomicity test**: Can each TODO be delegated as a single unit? If you'd need to say "first do A, then do B" within one TODO → [CERTAIN] not atomic.
+- **AC Granularity test**: Is each AC a single verifiable assertion, or does it bundle multiple checks? If one AC asserts multiple distinct outcomes → [CERTAIN] granularity violation.
+- **AC Verb test**: Do AC verification steps use observable-state verbs (exists, returns, equals, contains) rather than completion verbs (done, finished, verified, implemented)? If a completion verb is used → [CERTAIN] unverifiable AC.
+- **Per-element Verification test**: For ACs that cover a list of elements (e.g., 3 new rows, 5 existing rows), does each element have an independent check? If one assertion covers all → [CERTAIN] aggregate verification, not per-element.
 
 Unresolved ambiguities → list as blocking gaps in verdict.
 
@@ -171,6 +174,9 @@ Blockers (trigger REQUEST_CHANGES as [CERTAIN]):
 - ✅ "TODO 2 and TODO 4 both modify authentication middleware's error handling — MECE overlap" — duplicate scope, blocks parallel delegation
 - ✅ "TODO 3 requires modifying 5 unrelated modules across 3 layers — exceeds atomicity threshold" — not single-delegation completable, needs decomposition
 - ✅ "QA scenario says 'verify the API works correctly' without specific endpoint, status code, or response field assertions" — vague scenario, executor cannot verify
+- ✅ "AC says 'all 3 tests pass' as a single assertion — this is a batch check; each test must be a separate AC with an individual pass/fail" — single assertion covering multiple elements blocks per-element verification
+- ✅ "AC verification uses aggregate count ('expect 5 rows') without checking each row individually — aggregate verification, not per-element; executor cannot identify which element failed"
+- ✅ "AC says 'feature is done' — completion verb with no observable-state form; executor cannot verify completion without a measurable assertion (e.g., HTTP 200, file exists, field equals X)"
 
 ### Self-Audit Refutability Check
 
@@ -234,6 +240,9 @@ Realist Check is an internal process. No output section is produced — its effe
 | Test strategy defined | Unit? Integration? Manual? Specific commands to run? |
 | Evidence paths defined | Do QA Scenarios include `$OMT_DIR/evidence/` paths for evidence capture? |
 | QA scenario specificity | Do scenarios use concrete selectors/endpoints, specific test data, and exact assertions? (not "verify it works") |
+| **AC Granularity** | Does each AC assert exactly one observable outcome, or does it bundle multiple checks into a single assertion? |
+| **No Verb Red-Flags** | Do AC verification steps use observable-state verbs (exists, returns, equals, contains) rather than completion verbs (done, finished, verified, implemented)? |
+| **Batch Detection** | For ACs covering a list of elements, does each element have an independent verification step rather than a single aggregate count or bulk assertion? |
 
 ### 3. Context Completeness (90% confidence required)
 | Check | Question |
@@ -261,7 +270,7 @@ Momus evaluates whether the plan is **executable without blocking gaps**. The fo
 - **Approach optimality** — Whether a better approach exists is not a review concern
 - **Alternative approaches** — Suggesting different solutions is out of scope
 - **Edge case completeness** — Unless missing edge cases would block implementation
-- **Acceptance criteria perfection** — Criteria must be measurable, not exhaustive
+- **Acceptance criteria perfection** — Criteria must be measurable, not exhaustive; however, granularity and verb form are IN scope per Criterion 2
 - **Architecture ideality** — Plan uses the architecture it uses; alternatives are not findings
 - **Code quality/style** — Implementation-level concern, not plan-level
 - **Performance optimization** — Unless the plan's approach is structurally infeasible
@@ -294,6 +303,12 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 - [POSSIBLE] [ambiguity description — advisory recommendation]
 
 [If REQUEST_CHANGES: Top 3-5 specific improvements needed with examples]
+
+[If REQUEST_CHANGES] Verdict Persistence: findings below must be resolved before re-review.
+
+[COMMENT findings only]
+- Deferred to execution time: [findings that surface only when code runs — not plan-level gaps]
+- Pre-execution resolution: [findings that must be clarified before any implementation begins]
 ```
 
 </Output_Format>
@@ -317,6 +332,7 @@ This section complements (not replaces) the "Plan Scope" paragraph in Criterion 
 | 3 | **Vague rejections** | "The plan needs more detail" without specifying WHAT needs detail. Always name the exact task, file, or requirement that is insufficient. |
 | 4 | **Skipping simulation** | Giving verdict without mentally executing the plan step-by-step. Simulate every task: verify its starting point exists and that the action sequence has no blocking gaps. |
 | 5 | **Confusing certainty** | Treating "possibly unclear" the same as "definitely missing." Distinguish between blocking gaps and advisory recommendations. |
+| 6 | **Soft REQUEST_CHANGES** | Issuing REQUEST_CHANGES for style or preference issues that don't block execution. REQUEST_CHANGES is reserved for [CERTAIN] blocking gaps only — not for improvements, suggestions, or granularity preferences that the executor could resolve independently. |
 
 **❌/✅ Reviewer Sentence Examples:**
 
