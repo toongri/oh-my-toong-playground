@@ -28,7 +28,7 @@ At skill invocation start (immediately before Session Lock acquire), **pre-creat
 | 4 | Dedup Check Gate | Run L1 gate + evaluate L2 gate + fingerprint_check + dedup-audit.log append |
 | 5 | Classify | Role tagging + Matching Loop (Phase 1→2→3) |
 | 6 | Persist | JD atomic write + taxonomy/tags update + `crawl_state` update |
-| 7 | Source HWM Update | Update source-level crawl_state + sources.yaml atomic write |
+| 7 | Source Crawl Memory Update | Update source-level crawl_state + sources.yaml atomic write |
 | 8 | Session End | Rules Re-evaluation (if applicable) + lock release + summary report |
 
 **Batch mode**: Repeat Phases 2-7 per source/JD. Phases 1/8 are session-scoped (once each).
@@ -92,7 +92,7 @@ Before each Ingest Path execution, **Phase 0 profile interview + Dedup L1/L2** m
 
 At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single AskUserQuestion**: "Do you have JD source sites to register?" (skippable — not as mandatory as Profile Interview). When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state}` structure.
 
-**Reusable Crawl**: When user utterance contains trigger phrases `"오늘 돌려"` / `"싹 돌려"` / `"전체 재크롤"` / `"sources 돌려"` etc. → **iterate all registered sources** → perform Listing Pagination per source → per-JD fetch + Dedup Gate + Classify + Persist. Collect only new entries by HWM. No automatic scheduling.
+**Reusable Crawl**: When user utterance contains trigger phrases `"오늘 돌려"` / `"싹 돌려"` / `"전체 재크롤"` / `"sources 돌려"` etc. → **iterate all registered sources** → perform Listing Pagination per source → per-JD fetch + Dedup Gate + Classify + Persist. Collect only new entries by Per-Site Crawl Memory set difference (`discovered − seen`). No automatic scheduling.
 
 **CRITICAL**: Open-web free crawl when sources.yaml is empty is forbidden. Even on user "싹 돌려" utterance, if source count is 0, report "등록된 소스가 없어요" and prompt registration.
 
@@ -117,7 +117,7 @@ Discovery-side proof that the listing was scraped exhaustively. After Tier A/B p
 2. **Scroll stability** — `window.scrollTo(0, document.documentElement.scrollHeight)` × ≥3 iterations → anchor count unchanged
 3. **Infinite-scroll absence** — `scrollHeight` delta across iterations == 0 → no lazy fetch triggered
 
-Persist results to `sources.yaml.<source>.crawl_state.coverage_verification` with fields:
+Persist results to `sources.yaml.<source>.crawl_state.coverage_proof` with fields:
 - `verified_at` (ISO8601)
 - `method` (e.g., `playwright_scroll_to_bottom_N_iterations`)
 - `page_declared_total`, `dom_unique_anchor_count`
@@ -126,40 +126,106 @@ Persist results to `sources.yaml.<source>.crawl_state.coverage_verification` wit
 - `conclusion` (string)
 
 **CRITICAL**:
-- Without `coverage_verification` field set, `batch_run_completed=true` declaration is forbidden.
+- Without `coverage_proof` field set, `batch_run_completed=true` declaration is forbidden.
 - Sites without a visible total count (rare) may record `page_declared_total: null` plus a note "no declared total" in Tier B `how`.
 - T11 violation case: initial run reported "236 unique URLs collected" with only 1 `browser_evaluate` call, no scroll test, no declared-total match → Coverage Verification Protocol was not performed; the claim was unverified.
 
 → Details: [reference/rules.md#listing-pagination-coverage-verification](reference/rules.md#listing-pagination-coverage-verification)
 
-## Crawl-State HWM Ledger (MANDATORY)
+## Per-Site Crawl Memory (MANDATORY)
 
-Maintain a composite ledger in `sources.yaml.<source>.crawl_state` tracking "which range has already been checked" per source rescan.
+Maintain per-source crawl memory in `sources.yaml.<source>.crawl_state` (3 sub-groups) and `$OMT_DIR/collect-jd/crawl_state/<source>/seen.jsonl` (append-only file).
 
-Schema:
+**Storage layout**:
+- `$OMT_DIR/collect-jd/crawl_state/<source>/seen.jsonl` — one JSON object per line, each < 1 KB. Append via POSIX `open(path, 'a')`. Session-lock guarantees single-writer.
+- Line schema: `{"id": "...", "url": "...", "processed_at": "<ISO8601>", "verdict": "included|excluded|ambiguous", "role_title": "..."}`
+- The `id` field is a **deterministic key** derived from the per-site `identifier_kind` strategy — NOT an auto-generated UUID.
+
+**sources.yaml schema** (`crawl_state` sub-keys):
 ```yaml
 crawl_state:
-  marker_type: id | url | page_number | timestamp | custom
-  last_seen_marker: <value>   # most recently confirmed marker
-  range_covered:
-    - from: <marker>
-      to: <marker>
-      run_at: <ISO8601>
-      collected_count: <int>
-      total_listed: <int or null>
-  crawl_history:
-    - run_at: <ISO8601>
-      method: auto | interview_script | mcp:<name>
-      new_jds: <int>
-      already_seen: <int>
-      pages_fetched: <int>
+  seen:
+    identifier_kind: id_query | url | fingerprint
+    identifier_extractor: <param-name> | null | <hash-spec>
+    items_path: "crawl_state/<source>/seen.jsonl"
+    items_count: <int>
+  audit_trail:
+    total_discovered: <int>
+    range_covered:
+      - from: <marker>
+        to: <marker>
+        run_at: <ISO8601>
+        collected_count: <int>
+        total_listed: <int or null>
+    crawl_history:
+      - run_at: <ISO8601>
+        method: auto | interview_script | mcp:<name>
+        new_jds: <int>
+        already_seen: <int>
+        pages_fetched: <int>
+  coverage_proof:
+    verified_at: <ISO8601>
+    page_declared_total: <int or null>
+    dom_unique_anchor_count: <int>
+    infinite_scroll_detected: <bool>
+    conclusion: <string>
 ```
 
-**Rescan rules**: On next run, treat only items exceeding `last_seen_marker` as new candidates. However, for dynamically sorted sites (e.g., recommendation-based), do full fetch + URL seen-set cross-check for dedup. If `marker_type == custom`, execute the free-form logic in the `how` field.
+Each source records its id extraction strategy in `sources.yaml.<source>.crawl_state.seen` via two fields: `identifier_kind` (strategy enum) + `identifier_extractor` (param name for `id_query`, `null` for `url`, hash spec for `fingerprint`).
 
-**CRITICAL**: Crawl without recording HWM is forbidden. Declaring save complete without `crawl_state.last_seen_marker` set is forbidden.
+**Re-crawl algorithm**: `discovered − seen = new` set difference. Read all lines from `seen.jsonl` → JSON.parse per line → `Set(rows.map(r => r.id))` → subtract from discovered id set → remaining are new candidates. After processing, atomic append new entries to `seen.jsonl` (single-line per entry, < 1 KB). Crash recovery: skip invalid JSON lines + warn.
 
-→ Details (marker_type selection rules, dynamic listing handling, loopholes): [reference/rules.md#crawl-state-hwm-ledger](reference/rules.md#crawl-state-hwm-ledger)
+**CRITICAL**:
+- `last_seen_marker` / cursor-based rescan is forbidden — dynamic listings have no guaranteed ordering.
+- `identifier_kind` silent default is forbidden — on first source registration, run the Identifier Kind Heuristic and confirm with user before writing.
+- Declaring save complete without appending new entries to `seen.jsonl` is forbidden.
+
+→ Details (schema field meanings, set-difference pseudocode, atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/rules.md#per-site-crawl-memory](reference/rules.md#per-site-crawl-memory)
+
+## Detail Split Auto Fan-out (MANDATORY)
+
+When a single listing anchor leads to a detail page that contains multiple distinct positions, detect split signals and fan-out into N child JDs.
+
+**Strong signals** (fan-out MANDATORY):
+- (a) Explicit subsidiary or team headers present in the body (e.g., "토스뱅크", "Tech Team" as section headings)
+- (b) Separate sub-position sections each with distinct requirements
+- (c) Multiple distinct apply CTAs within the same page
+
+**Weak signals** (keep as single combined JD):
+- Simple "외 N개 계열사" text mention without separate content blocks
+
+**Fan-out procedure**: Produce one child JD per distinct position. Each child JD frontmatter must include:
+- `parent_url`: the original anchor URL (shared by all siblings)
+- `sub_position`: the subsidiary/team name for this child
+
+`role_title_verbatim` = `"<original_title> — <sub_position>"`. `role_title_slug` includes `sub_position`.
+
+**Presence-coupling rule**: `parent_url` and `sub_position` are presence-coupled — both present or both absent. A record with only one of the two is invalid.
+
+**Dedup impact**: L1 dedup key is `(company_slug, role_title_slug)` — siblings with different `sub_position` values are naturally distinct. `parent_url` field is used for sibling relationship awareness only.
+
+**CRITICAL**:
+- Ignoring strong signals and saving as a single JD is forbidden.
+- Saving with `parent_url` present but `sub_position` absent (or vice versa) is forbidden.
+
+→ Details (strong/weak signal classification, fan-out procedure, presence-coupling, rationalization loopholes, counterexample): [reference/rules.md#detail-split-auto-fan-out](reference/rules.md#detail-split-auto-fan-out)
+
+## Identifier Kind Heuristic (MANDATORY)
+
+On first registration of a source, automatically infer the `identifier_kind` by sampling anchor URLs from the listing page.
+
+**Heuristic algorithm**:
+1. Collect all anchor URLs from the listing page.
+2. Count how many match a monotonic-looking ID query pattern: `?<param>=\d+` (e.g., `?job_id=123`, `?posting_id=456`).
+3. If ≥ 80% of anchors match a single such param → `identifier_kind: id_query`, `identifier_extractor: <param_name>`.
+4. Else if anchor URLs remain stable across runs (no query drift) → `identifier_kind: url`, `identifier_extractor: null`.
+5. Else (URLs vary per run — query params added, reordered) → `identifier_kind: fingerprint`, `identifier_extractor: <hash spec, e.g., "role_title_verbatim + first_200_chars_of_body">`.
+
+**After heuristic**: Report result to user with match statistics. Example: "Detected `identifier_kind: id_query` with extractor `job_id` (218/236 anchors match `?job_id=\d+` pattern). Confirm or override?" Wait for user confirmation before writing to `sources.yaml`. User may override by editing `sources.yaml` directly.
+
+**CRITICAL**: Silent default (`url`) without running the heuristic is forbidden.
+
+→ Details (heuristic pseudocode, user report format, override procedure, rationalization loopholes, counterexample): [reference/rules.md#identifier-kind-heuristic](reference/rules.md#identifier-kind-heuristic)
 
 ## Phase 0: Profile Interview Required (MANDATORY)
 

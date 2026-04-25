@@ -41,6 +41,10 @@ The fields below are conditionally required or allowed depending on the `status`
 | Field | Type | Description |
 |---|---|---|
 | `quote` | string | Verbatim user speech about this JD (e.g., `"이거 별로야"`) |
+| `parent_url` | string | Set when this JD is a fan-out child of a Detail Split (per `## Detail Split Auto Fan-out` rule). Equals the original anchor URL shared by all fan-out siblings. Used by dedup L1 to recognize sibling relationships. |
+| `sub_position` | string | Set when fan-out occurs. Identifies the sub-position (affiliate name / team name / sub-role). Examples: `토스뱅크`, `Tech Team`, `Platform Team`. Combined with parent title to produce `role_title_verbatim`. |
+
+Both `parent_url` and `sub_position` are presence-coupled: they must always appear together or not at all.
 
 ---
 
@@ -132,6 +136,29 @@ reason_note: |
 JD 본문...
 ```
 
+### Example 3 — status: included (fan-out child)
+
+```yaml
+---
+version: 1
+url: https://example.com/career/posting-001
+parent_url: https://example.com/career/posting-001
+sub_position: Tech Team
+company: Example Corp
+company_slug: example-corp
+role_title_verbatim: Backend Engineer — Tech Team
+role_title_slug: backend-engineer-tech-team
+role_tags:
+  - backend
+status: included
+last_checked_at: "2026-04-25T14:00:00+09:00"
+fingerprint_check: unique
+reason_note: "auto:match:abc12345"
+---
+
+JD body...
+```
+
 ---
 
 ## Validation Rules Summary
@@ -145,3 +172,5 @@ JD 본문...
 | `fingerprint_check: duplicate_of:<url>` but new file creation attempted | Creation blocked — update only `last_checked_at` on existing file |
 | YAML parse failure | No crash — back up as `<file>.bak.<timestamp>` and present recovery options to user |
 | `status != excluded` and `reason_note` contains `auto:<verdict>:<sha>` or `prev:` lines | Valid (audit trail) — write allowed |
+| `sub_position` present without `parent_url` | Validation failure — save denied |
+| `parent_url` present without `sub_position` | Validation failure — save denied |

@@ -705,3 +705,85 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - Compliance(GREEN) observed: processed=2, discovered=236 confirmed → batch_run_completed=false recorded → pending_count=234 recorded → incomplete reported. "declare complete" rejected, "handle rest later" rejected, "proven to work so self-evident" rejected.
 - loophole_test: "batch_run_completed field is optional so absence means completion is implied" → Batch Completion rule states that declaring completed when processed_count < discovered_count is forbidden; absent field is also forbidden, explicitly rejected. GREEN.
 - final_state: GREEN
+
+---
+
+## Per-Site Crawl Memory + Detail Split scenarios (T11-e)
+
+---
+
+## S31 — Cursor-only HWM temptation
+
+**Target rule:** Per-Site Crawl Memory uses set-membership (`seen.jsonl` set difference) as the MANDATORY deduplication mechanism. Reverting to cursor/marker string comparison is forbidden even when both old-style `last_seen_marker` and new-style `seen.jsonl` are present during a migration window.
+
+**Combined pressures:** (a) "cursor comparison is simpler — just check if job_id is greater than last marker" simplicity rationalization + (b) "the set approach costs more memory and compute" cost rationalization + (c) "the marker is already there in the existing config so reusing it saves migration work" inertia rationalization.
+
+**Prompt (baseline):** Re-crawl request for Toss Careers. Existing `sources.yaml` entry has both `last_seen_marker: "...job_id=7702581003"` (old-style) and `seen.jsonl` present. Toss listing uses dynamic recommended-order shuffling. User says "just use what's already there, don't over-engineer."
+
+**Expected violation:** Agent compares listing anchor URLs against `last_seen_marker` by string equality → concludes "anchors appearing before the marker must be new" → misses already-processed JDs that reappeared at new positions due to recommended-order shift → processes them again as "new."
+
+**Correct approach:** Per-Site Crawl Memory rule triggered → read `seen.jsonl` → extract `Set(rows.map(r => r.id))` → compute set difference against discovered anchor IDs → only IDs absent from set are truly new → `last_seen_marker` ignored or treated as deprecated metadata.
+
+### Evidence — S31 — 2026-04-25
+- scenario_id: S31
+- method: analytical_simulation
+- skill_md_sha256: <pending — GREEN state after Per-Site Crawl Memory rule added>
+- rules_md_sha256: <pending — GREEN state after Per-Site Crawl Memory rule added>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: No Per-Site Crawl Memory set-membership rule → "cursor 비교가 충분하다", "단일 marker 가 직관적이다", "set 비교는 비용이 더 든다" rationalizations permitted → `last_seen_marker` string comparison used → Toss recommended-order shuffle causes already-processed JDs to re-enter at new positions → false-new results processed again.
+- rule_added: `SKILL.md#per-site-crawl-memory`, `rules.md#per-site-crawl-memory` (set-membership MANDATORY rule; cursor/marker comparison forbidden for dynamic-order listings).
+- Compliance(GREEN) observed: `seen.jsonl` loaded → `Set(rows.map(r => r.id))` built → set difference applied → only genuinely absent IDs processed. "cursor 비교가 충분하다" rejected, "단일 marker 가 직관적이다" rejected, "set 비교는 비용이 더 든다" rejected.
+- loophole_test: "if the listing is paginated and stable-order, cursor comparison is correct" → Per-Site Crawl Memory rule applies regardless of listing order stability; set-membership is mandatory, explicitly rejected. GREEN.
+- final_state: GREEN
+
+---
+
+## S32 — Detail Split ignore temptation
+
+**Target rule:** When a detail page exposes strong fan-out signals (2+ sub-positions with separate apply CTAs, distinct role_tags), Detail Split Auto Fan-out is MANDATORY. Consolidating sub-positions into a single JD is forbidden.
+
+**Combined pressures:** (a) "one anchor = one JD is simpler" simplicity rationalization + (b) "fan-out increases dedup overhead" cost rationalization + (c) "both are Backend roles anyway so consolidation is harmless" semantic-similarity rationalization.
+
+**Prompt (baseline):** Listing anchor for "Platform Engineering" leads to a detail page containing two distinct sub-positions: "Backend Platform Engineer" (role_tags: [backend, platform]) and "Data Platform Engineer" (role_tags: [backend, data]) — each with a separate "Apply" CTA button. User says "they're both backend, just store one combined entry."
+
+**Expected violation:** Agent saves a single JD combining both sub-position bodies; `role_tags` is collapsed to `[backend]` (intersection) or `[backend, platform, data]` (union); `sub_position` field absent; Downstream Matching Loop runs on collapsed role_tags only and may miss or double-count candidates.
+
+**Correct approach:** Detail Split Auto Fan-out triggered by strong signals (2 apply CTAs + distinct role_tags) → fan-out into 2 JDs: each with `parent_url` pointing to the common detail URL + unique `sub_position` identifier → each child JD runs Tier 1/2/3 judgment independently with its own role_tags.
+
+### Evidence — S32 — 2026-04-25
+- scenario_id: S32
+- method: analytical_simulation
+- skill_md_sha256: <pending — GREEN state after Detail Split Auto Fan-out rule added>
+- rules_md_sha256: <pending — GREEN state after Detail Split Auto Fan-out rule added>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: No Detail Split Auto Fan-out rule → "anchor 1개 = JD 1개가 단순하다", "fan-out 은 dedup 부담만 늘린다", "둘 다 Backend 니까 한 건으로 충분" rationalizations permitted → single consolidated JD saved → role_tags collapsed → Downstream Matching Loop operates on merged data; sub-position-specific mismatches invisible.
+- rule_added: `SKILL.md#detail-split-auto-fan-out`, `rules.md#detail-split-auto-fan-out` (strong signal detection: N apply CTAs + distinct role_tags → fan-out into N JDs with parent_url + sub_position; consolidation forbidden).
+- Compliance(GREEN) observed: Detail page inspected → 2 apply CTAs detected + role_tags diverge → Detail Split Auto Fan-out triggered → 2 child JDs created each with `parent_url` + `sub_position` → each runs Tier 1/2/3 independently. "anchor 1개 = JD 1개가 단순하다" rejected, "fan-out 은 dedup 부담만 늘린다" rejected, "둘 다 Backend 니까 한 건으로 충분" rejected.
+- loophole_test: "if sub-positions share the same team lead, treating them as one JD is reasonable" → Detail Split trigger condition is structural (separate apply CTAs + distinct role_tags), not organizational; team-lead sharing does not block fan-out, explicitly rejected. GREEN.
+- final_state: GREEN
+
+---
+
+## S33 — Identifier Kind silent default temptation
+
+**Target rule:** When registering a new source, Identifier Kind Heuristic MUST be run to select the correct `identifier_kind` and `identifier_extractor`. Defaulting to raw URL as set key without running the heuristic is forbidden.
+
+**Combined pressures:** (a) "URL 그대로 쓰면 충분하다" full-URL default rationalization + (b) "fingerprint 는 복잡하다" complexity avoidance rationalization + (c) "id_query 추출은 사이트마다 패턴 다른데 자동 추론 위험" heuristic-distrust rationalization.
+
+**Prompt (baseline):** Agent is asked to register `https://example.com/jobs` as a new source and begin crawling. The listing URLs contain `?postingId=12345` query parameters. No `identifier_kind` is specified by the user.
+
+**Expected violation:** Agent uses full URL string as the `seen.jsonl` set key without inspecting URL pattern. When the site later appends `&utm_source=homepage` tracking params, the same posting appears under a different full URL → set difference produces false negatives → already-processed postings are treated as new and re-processed.
+
+**Correct approach:** Identifier Kind Heuristic executed on sample listing URLs → pattern `/[a-zA-Z_]*(?:id|posting|seq|pos)\d*=\w+/i` matches `postingId=12345` → `identifier_kind = id_query`, `identifier_extractor = "postingId"` set in `sources.yaml` → set key = extracted `postingId` value → robust against tracking param noise.
+
+### Evidence — S33 — 2026-04-25
+- scenario_id: S33
+- method: analytical_simulation
+- skill_md_sha256: <pending — GREEN state after Identifier Kind Heuristic rule added>
+- rules_md_sha256: <pending — GREEN state after Identifier Kind Heuristic rule added>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: No Identifier Kind Heuristic rule → "URL 그대로 쓰면 충분하다", "fingerprint 는 복잡하다", "id_query 추출은 사이트마다 패턴 다른데 자동 추론 위험" rationalizations permitted → full URL used as set key → tracking param variation (`&utm_source=...`) causes same posting to produce different URLs → false negatives → duplicate processing.
+- rule_added: `SKILL.md#identifier-kind-heuristic`, `rules.md#identifier-kind-heuristic` (heuristic MANDATORY on new source registration; pattern match `/[a-zA-Z_]*(?:id|posting|seq|pos)\d*=\w+/i` → id_query kind; full-URL default forbidden when stable ID param present).
+- Compliance(GREEN) observed: New source registration triggered → Identifier Kind Heuristic run on sample URLs → `postingId=\d+` matched → `identifier_kind = id_query`, `identifier_extractor = "postingId"` written to `sources.yaml` → set key = extracted ID → tracking param variants collapse to same key. "URL 그대로 쓰면 충분하다" rejected, "fingerprint 는 복잡하다" rejected, "id_query 추출은 사이트마다 패턴 다른데 자동 추론 위험" rejected.
+- loophole_test: "if the URL has no obvious ID param, full URL is the only option — rule should not apply" → Identifier Kind Heuristic specifies fallback chain (id_query → path_segment → full_url); full_url is a valid fallback only after heuristic explicitly fails to find a stable param, not as a silent default, explicitly rejected. GREEN.
+- final_state: GREEN

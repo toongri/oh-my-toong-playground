@@ -532,3 +532,72 @@ Diagnostic rule: JD never evaluated = Full Coverage defect; JD wrongly evaluated
 | `destructive_deletions` | `0` |
 | `argus_verdict` | `APPROVE` |
 | `verdict` | `GREEN_LIVE` |
+
+---
+
+## T11-e — Detail Split Auto Fan-out + Per-Site Crawl Memory + Identifier Kind Heuristic
+
+### Trigger
+
+User interview via `/superpowers:writing-skills` raised three pressure-scenario gaps observed during T11-a~d dogfood:
+
+1. **Detail Split**: a single list anchor sometimes resolves to multiple sub-positions (affiliate / team / sub-role). Toss "외 5개 계열사" anchor → 6 distinct JDs squeezed into 1.
+2. **HWM as cognitive burden**: per-site crawl-state should be auto-managed so the next run becomes a single set-difference call rather than manual re-reasoning.
+3. **Terminology drift**: "Crawl-State HWM Ledger" implies cursor/marker semantics; recommendation-sorted listings break that assumption.
+
+### Decisions
+
+| Topic | Decision | Rationale |
+|---|---|---|
+| Anchor split | Auto fan-out on strong signals (affiliate/team header, sub-position section, multiple apply CTAs) → N JDs with `parent_url` + `sub_position`. Weak signals (mere mention) keep 1 JD. | Strong vs weak signal distinction prevents both under-fan-out (S32 RED) and false multiplication. |
+| Dedup model | **Set membership** replaces cursor. `discovered − seen = new` per run. cursor / `last_seen_marker` deprecated — recommendation-sort listings break ordering guarantees. | User correctly pushed back on cursor model; ordering is not preserved on dynamic listings. |
+| Storage | Option C — `crawl_state/<source>/seen.jsonl` (line schema with metadata) over text-only / inline-yaml / split-files. POSIX append + session-lock + line < 1 KB. | User-confirmed after presenting 4 alternatives. JSONL gives audit metadata + grep-friendly + atomic single-line append. |
+| Identifier strategy | `identifier_kind` enum (id_query / url / fingerprint) + `identifier_extractor` (param name / null / hash spec) recorded per source in `sources.yaml.<source>.crawl_state.seen`. Heuristic auto-detects on first registration; user override via direct sources.yaml edit. | Per-site decided once and persisted; not re-inferred per JD. Silent default forbidden. |
+| Naming | "Crawl-State HWM Ledger" → "Per-Site Crawl Memory". Sub-keys: `seen` / `audit_trail` / `coverage_proof` (last renamed from `coverage_verification`). | HWM word implied cursor; "memory" matches set-membership semantics. |
+
+### RED-GREEN Implementation
+
+**RED phase** (`tests/pressure-scenarios.md` 707 → 789, +82 lines):
+- S31 Cursor-only HWM temptation
+- S32 Detail Split ignore temptation
+- S33 Identifier Kind silent default temptation
+
+**GREEN phase**:
+
+| File | Before | After | Change |
+|---|---|---|---|
+| `skills/collect-jd/SKILL.md` | 295 | 361 | +66; renamed Crawl-State HWM Ledger → Per-Site Crawl Memory; added Detail Split Auto Fan-out (MANDATORY) + Identifier Kind Heuristic (MANDATORY) sections |
+| `skills/collect-jd/reference/rules.md` | 1548 | 1762 | +214; expanded Per-Site Crawl Memory body (schema tables, set-difference pseudocode, rationalization loopholes, counterexamples) + Detail Split Auto Fan-out + Identifier Kind Heuristic with full loophole tables per S31/S32/S33 |
+| `skills/collect-jd/reference/frontmatter-schema.md` | 147 | 176 | +29; added optional `parent_url` + `sub_position` (presence-coupled), validation rules, fan-out child Example 3 |
+| `tests/pressure-scenarios.md` | 707 | 789 | +82; S31/S32/S33 RED baseline scenarios |
+
+**State migration** (`$OMT_DIR/collect-jd/`):
+- `sources.yaml`: 55 → 60 lines. Migrated `marker_type` + `last_seen_marker` (legacy) → `crawl_state.seen` (`identifier_kind: id_query`, `identifier_extractor: "job_id"`, `items_path: "crawl_state/toss/seen.jsonl"`). Reorganized into 3 sub-keys: `seen` / `audit_trail` / `coverage_proof`.
+- `crawl_state/toss/seen.jsonl`: new file (2 lines). Seeded with the 2 sample JDs already processed during T11-a (`7646941003` AI Engineer (Platform), `7702581003` AIOps Platform Engineer).
+
+### Verification
+
+- 4 sisyphus-junior agents dispatched in parallel (T11-e-A/B/C/D). T-B/C/D completed clean. T-A first dispatch user-rejected (storage layout not yet confirmed); re-dispatched after Option C confirmation.
+- argus QA verdict on T-A re-dispatch: **REQUEST_CHANGES** — 6 findings (3 HIGH / 1 MEDIUM / 2 LOW) all related to cross-section terminology sweep (HWM word survival outside the new sections, deprecated schema example in Sources Registration, `coverage_verification` field name not renamed in the Coverage Verification section).
+- T11-e-A-fix dispatched: junior partial-completed (stream timeout) but cleared 5/6 findings before timeout. Orchestrator directly cleared remaining LOW-6 (graphviz node id rename `hwm_update` → `crawl_memory_update` via single `replace_all`).
+- Final grep sweep: 0 occurrences of `Source HWM Update` / `by HWM` / `update HWM` / `hwm_update` (graph node id). Intentional retentions: `marker_type` / `last_seen_marker` / `coverage_verification` survive only inside Migration Mapping rows and explicit deprecation loophole bullets — historical references by design.
+- Spec invariant compliance (argus 6-item table) all PASS within new sections; cross-section sweep now also PASS.
+
+### Outstanding Work
+
+- Hot-reload deploy of skill source to `.claude/skills/collect-jd/` (this task, Part 2).
+- Git commit (mnemosyne).
+- Live batch re-run of remaining 234 pending Toss JDs using the new Per-Site Crawl Memory + Detail Split + Identifier Kind rules (deferred to next dogfood round).
+
+### Evidence Footer
+
+| Field | Value |
+|---|---|
+| `observed_at` | `2026-04-25` |
+| `method` | `interview_then_parallel_subagent_with_argus_qa_loop` |
+| `agents_dispatched` | `5 sisyphus-junior (T-A initial + T-A redispatch + T-A-fix + T-B + T-C + T-D) + 1 argus` |
+| `files_touched` | `4 skill files + 2 state files (sources.yaml, seen.jsonl)` |
+| `total_line_delta` | `+391 (SKILL.md +66, rules.md +214, frontmatter +29, pressure-scenarios +82)` |
+| `destructive_deletions` | `0 (legacy keys preserved as historical references)` |
+| `argus_verdict` | `APPROVE (after T-A-fix)` |
+| `verdict` | `GREEN_SPEC` |
