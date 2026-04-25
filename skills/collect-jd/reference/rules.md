@@ -13,7 +13,9 @@ SKILL.md retains only a summary + link for each rule. All loopholes, examples, a
 - [Sources Registration](#sources-registration)
 - [Listing Pagination](#listing-pagination)
 - [Listing Pagination Coverage Verification](#listing-pagination-coverage-verification)
-- [Crawl-State HWM Ledger](#crawl-state-hwm-ledger)
+- [Per-Site Crawl Memory](#per-site-crawl-memory)
+- [Detail Split Auto Fan-out](#detail-split-auto-fan-out)
+- [Identifier Kind Heuristic](#identifier-kind-heuristic)
 - [State Location & Forbidden Paths](#state-location--forbidden-paths)
 - [Session Lock](#session-lock)
 - [Atomic Write Pattern](#atomic-write-pattern)
@@ -51,7 +53,7 @@ digraph dedup_matching_flow {
   pagination_tierA [label="Pagination Tier A\n(auto-detect)", shape=diamond];
   pagination_tierB [label="Pagination Tier B\n(interview → record how)", style=filled, fillcolor=salmon];
   per_jd_fetch [label="per-JD fetch", style=filled, fillcolor=lightblue];
-  hwm_update [label="Update crawl_state\n(atomic)", style=filled, fillcolor=khaki];
+  crawl_memory_update [label="Update crawl_state\n(atomic)", style=filled, fillcolor=khaki];
 
   candidate [label="New JD candidate", shape=ellipse, style=filled, fillcolor=lightblue];
 
@@ -107,12 +109,12 @@ digraph dedup_matching_flow {
   phase2 -> vmatch;
   phase2 -> vmismatch;
   phase2 -> vambig;
-  audit -> hwm_update [label="on source completion"];
-  hwm_update -> phase1 [style=invis];
+  audit -> crawl_memory_update [label="on source completion"];
+  crawl_memory_update -> phase1 [style=invis];
 }
 ```
 
-**How to read**: Gray diamond = decision branch, green box = terminal path (save complete), yellow box = pending/record obligation (HWM, fingerprint: pending), orange box = user question required. `salmon` (ambiguous → Phase 3, ask_register, pagination_tierB) = forced user-intervention path. Blue box (source_iter, per_jd_fetch) = **batch iteration unit** — repeats M times for M JDs across N sources.
+**How to read**: Gray diamond = decision branch, green box = terminal path (save complete), yellow box = pending/record obligation (crawl_state update, fingerprint: pending), orange box = user question required. `salmon` (ambiguous → Phase 3, ask_register, pagination_tierB) = forced user-intervention path. Blue box (source_iter, per_jd_fetch) = **batch iteration unit** — repeats M times for M JDs across N sources.
 
 ---
 
@@ -130,7 +132,7 @@ Immediately at skill invocation start (even before Session Lock acquire — the 
   - Phase 4: Dedup Check Gate (L1/L2 + fingerprint + audit)
   - Phase 5: Classify (role tagging + matching loop)
   - Phase 6: Persist (JD atomic write + tags/taxonomy)
-  - Phase 7: Source HWM Update (crawl_state update)
+  - Phase 7: Source Crawl Memory Update (crawl_state update)
   - Phase 8: Session End (rules re-eval + lock release)
 - Each task has **a single state only**: `pending` → `in_progress` (on start) → `completed` (immediately on finish). Batching forbidden.
 - **Batch mode**: Repeat Phases 2-7 per source/JD. For multiple sources, iterate Phase 2-7 per source count; for multiple JDs within a source, iterate Phase 3-6 per JD count. Phases 1/8 are session-scoped.
@@ -152,7 +154,7 @@ digraph phase_task_creation {
   classify [label="Phase 5: Classify", style=filled, fillcolor=lightgreen];
   persist [label="Phase 6: Persist", style=filled, fillcolor=lightgreen];
   batch_jd_decision [label="More JDs?", shape=diamond, style=filled, fillcolor=lightyellow];
-  source_hwm_update [label="Phase 7: Source HWM Update", style=filled, fillcolor=lightgreen];
+  source_crawl_memory_update [label="Phase 7: Source Crawl Memory Update", style=filled, fillcolor=lightgreen];
   batch_source_decision [label="More sources?", shape=diamond, style=filled, fillcolor=lightyellow];
   session_end [label="Phase 8: Session End", style=filled, fillcolor=lightgreen];
   done [label="session complete", shape=ellipse, style=filled, fillcolor=lightgreen];
@@ -166,8 +168,8 @@ digraph phase_task_creation {
   classify -> persist;
   persist -> batch_jd_decision;
   batch_jd_decision -> per_jd_ingest [label="yes (next JD in same source)"];
-  batch_jd_decision -> source_hwm_update [label="no"];
-  source_hwm_update -> batch_source_decision;
+  batch_jd_decision -> source_crawl_memory_update [label="no"];
+  source_crawl_memory_update -> batch_source_decision;
   batch_source_decision -> sources_load_pagination [label="yes (next source)"];
   batch_source_decision -> session_end [label="no"];
   session_end -> done;
@@ -347,7 +349,7 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 
 ### Trigger phrases (Reusable Crawl)
 
-When any of the following is detected, **iterate all registered sources** → Listing Pagination → per-JD fetch + Dedup Gate + Classify + Persist (new entries by HWM only):
+When any of the following is detected, **iterate all registered sources** → Listing Pagination → per-JD fetch + Dedup Gate + Classify + Persist (new entries by Per-Site Crawl Memory set difference (`discovered − seen`) only):
 
 - "오늘 돌려" / "오늘 크롤"
 - "싹 돌려" / "전부 돌려"
@@ -371,25 +373,29 @@ companies:
       detected_pattern: "?page="   # on Tier A success
       how: ""               # Tier B interview result, free-form
     crawl_state:
-      marker_type: page_number
-      last_seen_marker: 3
-      range_covered:
-        - from: 1
-          to: 3
-          run_at: 2026-04-22T10:00:00Z
-          collected_count: 42
-          total_listed: 42
-      crawl_history:
-        - run_at: 2026-04-22T10:00:00Z
-          method: auto
-          new_jds: 42
-          already_seen: 0
-          pages_fetched: 3
+      seen:
+        identifier_kind: id_query  # or url, fingerprint
+        identifier_extractor: "job_id"  # param name for id_query; null for url; hash spec for fingerprint
+        items_path: "crawl_state/<source>/seen.jsonl"
+        items_count: 0
+      audit_trail:
+        total_discovered: 0
+        range_covered: []
+        crawl_history: []
+      coverage_proof:
+        verified_at: null
+        page_declared_total: null
+        dom_unique_anchor_count: null
+        matches_declared: null
+        infinite_scroll_detected: null
+        conclusion: null
 blacklist:
   - slug: xyz
     name: XYZCorp
     reason_note: 이미 수집 완료, 재수집 불필요
 ```
+
+See [Per-Site Crawl Memory](#per-site-crawl-memory) for full schema semantics.
 
 ### Rationalization Loopholes (MUST REJECT)
 
@@ -402,7 +408,7 @@ blacklist:
 ### Counterexample (normal flow)
 
 - Session start → sources.yaml absent → "Do you have JD source sites to register?" AskUserQuestion → user provides "https://toss.im/career" → `{slug: toss, name: Toss, careers_url: ..., added_at: today}` atomic append → crawl proceeds normally. ✓
-- User "싹 돌려" → sources.yaml has toss, kakao (2 entries) → crawl toss (Listing Pagination → per-JD) → crawl kakao → update HWM → report. ✓
+- User "싹 돌려" → sources.yaml has toss, kakao (2 entries) → crawl toss (Listing Pagination → per-JD) → crawl kakao → append `seen.jsonl` + update `audit_trail` → report. ✓
 - User "싹 돌려" → sources.yaml empty → report "등록된 소스가 없어요. 등록할 사이트가 있나요?" + prompt registration. ✓
 
 ---
@@ -497,10 +503,10 @@ Discovery-side proof that the listing was scraped exhaustively. After Tier A/B p
 2. **Scroll stability** — execute `window.scrollTo(0, document.documentElement.scrollHeight)` × ≥3 iterations via `browser_evaluate` → anchor count must remain unchanged across iterations.
 3. **Infinite-scroll absence** — `scrollHeight` delta across iterations == 0 → no lazy fetch triggered.
 
-**Persist to `sources.yaml.<source>.crawl_state.coverage_verification`:**
+**Persist to `sources.yaml.<source>.crawl_state.coverage_proof`:**
 
 ```yaml
-coverage_verification:
+coverage_proof:
   verified_at: <ISO8601>
   method: playwright_scroll_to_bottom_N_iterations
   page_declared_total: <int or null>   # null if no visible total count
@@ -518,7 +524,7 @@ coverage_verification:
 | "Scroll test takes time, skip for large listing" | ❌ Coverage verification is MANDATORY. Time cost does not justify skipping. |
 | "Site has no visible total count so declared-total check is not applicable" | ❌ Record `page_declared_total: null` + note "no declared total" in Tier B `how`. Other 2 checks must still run. |
 | "1 browser_evaluate call is enough to confirm no infinite scroll" | ❌ ≥3 iterations required to establish stability. |
-| "batch_run_completed=true already set; no need to re-verify" | ❌ coverage_verification must be set before batch_run_completed=true is ever declared. |
+| "batch_run_completed=true already set; no need to re-verify" | ❌ coverage_proof must be set before batch_run_completed=true is ever declared. |
 
 ### T11 Violation Case
 
@@ -527,7 +533,7 @@ T11 dogfood (2026-04-25) initial run:
 - **Claimed**: "236 unique URLs collected"
 - **Actual tool calls**: 1 × `browser_evaluate` (anchor count only), 0 scroll tests, no declared-total regex
 - **Violation**: Coverage Verification Protocol was not performed. The "236 URLs" claim was unverified — scroll stability and infinite-scroll absence were never confirmed.
-- **Required**: ≥3 scroll iterations + declared-total regex match + `coverage_verification` field recorded before proceeding to Tier 1 ingest.
+- **Required**: ≥3 scroll iterations + declared-total regex match + `coverage_proof` field recorded before proceeding to Tier 1 ingest.
 
 ### T11-b Compliance Example
 
@@ -547,7 +553,7 @@ matches_declared = true        # 236 == 236
 infinite_scroll_detected = false  # scrollHeight delta == 0
 
 # Step 4: persist
-coverage_verification:
+coverage_proof:
   verified_at: 2026-04-25T11:30:00Z
   method: playwright_scroll_to_bottom_5_iterations
   page_declared_total: 236
@@ -560,7 +566,7 @@ coverage_verification:
 ### Decision Flow
 
 ```dot
-digraph coverage_verification {
+digraph coverage_proof {
   rankdir=TB;
   node [shape=box, fontname="Helvetica"];
 
@@ -568,7 +574,7 @@ digraph coverage_verification {
   regex_declared_total [label="regex_declared_total\n(extract page total count)"];
   scroll_loop_N [label="scroll_loop_N\n(≥3 iterations, record anchor count + scrollHeight)"];
   compare [label="compare\n(dom_count == declared_total?\nscrollHeight delta == 0?)"];
-  record_crawl_state [label="record_crawl_state\n(coverage_verification fields atomic write)"];
+  record_crawl_state [label="record_crawl_state\n(coverage_proof fields atomic write)"];
 
   scrape_anchors -> regex_declared_total;
   regex_declared_total -> scroll_loop_N;
@@ -580,96 +586,304 @@ digraph coverage_verification {
 ```
 
 **CRITICAL**:
-- Without `coverage_verification` field set, `batch_run_completed=true` declaration is forbidden.
+- Without `coverage_proof` field set, `batch_run_completed=true` declaration is forbidden.
 - Sites without a visible total count may record `page_declared_total: null` plus a note in Tier B `how`. Scroll stability check (checks 2 & 3) must still be performed.
 
 ---
 
-## Crawl-State HWM Ledger
+## Per-Site Crawl Memory
 
 ### Specification (MANDATORY)
 
-Maintain a composite ledger in `sources.yaml.<source>.crawl_state` tracking "which range has already been checked" per source rescan. After crawl completion, always atomic write `sources.yaml`.
+Maintain per-source crawl memory using a two-layer structure: a JSONL file for the seen-set and a structured block in `sources.yaml` for audit and coverage metadata. After each crawl session, atomic write `sources.yaml`.
 
-### Schema
+### Storage Layout
+
+**seen.jsonl** — append-only flat file:
+- Path: `$OMT_DIR/collect-jd/crawl_state/<source>/seen.jsonl`
+- One JSON object per line, each line < 1 KB.
+- Append via POSIX `open(path, 'a')`. Session-lock guarantees single-writer.
+- **Line schema**:
+  ```json
+  {"id": "...", "url": "...", "processed_at": "<ISO8601>", "verdict": "included|excluded|ambiguous", "role_title": "..."}
+  ```
+- The `id` field in seen.jsonl is **NOT** an auto-generated UUID; it is a **deterministic key** derived from the per-site `identifier_kind` strategy.
+
+**sources.yaml** — structured metadata, 3 sub-groups under `crawl_state`:
 
 ```yaml
 crawl_state:
-  marker_type: id | url | page_number | timestamp | custom
-  last_seen_marker: <value>   # most recently confirmed marker
-  range_covered:
-    - from: <marker>
-      to: <marker>
-      run_at: <ISO8601>
-      collected_count: <int>
-      total_listed: <int or null>
-  crawl_history:
-    - run_at: <ISO8601>
-      method: auto | interview_script | mcp:<name>
-      new_jds: <int>
-      already_seen: <int>
-      pages_fetched: <int>
+  seen:
+    identifier_kind: id_query | url | fingerprint
+    identifier_extractor: <param-name> | null | <hash-spec>
+    items_path: "crawl_state/<source>/seen.jsonl"
+    items_count: <int>
+  audit_trail:
+    total_discovered: <int>
+    range_covered:
+      - from: <marker>
+        to: <marker>
+        run_at: <ISO8601>
+        collected_count: <int>
+        total_listed: <int or null>
+    crawl_history:
+      - run_at: <ISO8601>
+        method: auto | interview_script | mcp:<name>
+        new_jds: <int>
+        already_seen: <int>
+        pages_fetched: <int>
+  coverage_proof:
+    verified_at: <ISO8601>
+    page_declared_total: <int or null>
+    dom_unique_anchor_count: <int>
+    infinite_scroll_detected: <bool>
+    conclusion: <string>
 ```
 
-### marker_type selection guide
+### Field Definitions
 
-| Site characteristic | Recommended marker_type |
-|---|---|
-| Numeric ID in URL (`?job_id=123`) | `id` |
-| Page-based pagination (`?page=N`) | `page_number` |
-| Chronological sort (created_at desc) | `timestamp` |
-| Cursor-based (`?after=token`) | `url` (store cursor value) |
-| Dynamic sort (recommendation, relevance) | `custom` (use seen-URL set as supplement) |
+**`seen` sub-group**:
 
-### Rescan rules
+| Field | Type | Description |
+|---|---|---|
+| `identifier_kind` | enum | Strategy for deriving the `id` key: `id_query`, `url`, or `fingerprint` |
+| `identifier_extractor` | string or null | Param name for `id_query`; `null` for `url`; free-form hash spec for `fingerprint` |
+| `items_path` | string | Relative path to the seen.jsonl file from `$OMT_DIR/collect-jd/` |
+| `items_count` | int | Number of entries currently in seen.jsonl (updated after each append) |
 
-- On next run, treat only items exceeding `last_seen_marker` as new candidates.
-- **Dynamic sort sites**: Set `marker_type: custom` + full fetch + cross-check with URL seen-set for dedup. May additionally store `seen_urls` in `crawl_state`.
-- When `marker_type == custom`, execute the free-form logic in the `pagination.how` field.
-- After crawl completion, update `last_seen_marker` to the most recently confirmed marker value (atomic write).
+**`identifier_kind` — valid values and `identifier_extractor` meaning**:
+
+| `identifier_kind` | `identifier_extractor` value | How `id` is derived |
+|---|---|---|
+| `id_query` | URL query param name (e.g., `"job_id"`) | `URLSearchParams.get(extractor)` from anchor href |
+| `url` | `null` (omitted) | `normalizeUrl(href)` — the full normalized URL is the key |
+| `fingerprint` | Hash input spec (e.g., `"role_title_verbatim + first_200_chars_of_body"`) | Hash of specified fields |
+
+**`audit_trail` sub-group**: Replaces legacy `range_covered` and `crawl_history` top-level fields. Contains `total_discovered`, `range_covered` array (one entry per crawl run), and `crawl_history` array (execution metadata per run).
+
+**`coverage_proof` sub-group**: Replaces legacy `coverage_verification` field. Scalar fields capturing the exhaustiveness proof from the Coverage Verification Protocol.
+
+### Set Difference Algorithm (Re-crawl)
+
+```pseudocode
+// Load seen set
+lines = readFile("crawl_state/<source>/seen.jsonl").split("\n")
+seenIds = new Set()
+for line of lines:
+  if line.trim() == "": continue
+  try:
+    row = JSON.parse(line)
+    seenIds.add(row.id)
+  catch:
+    warn("skipping invalid JSON line: " + line)  // crash recovery
+
+// Derive discovered id set
+discoveredIds = new Set()
+for anchor of listingAnchors:
+  id = deriveId(anchor, identifier_kind, identifier_extractor)
+  discoveredIds.add(id)
+
+// Set difference
+newIds = discoveredIds.difference(seenIds)
+
+// Process new entries
+for id of newIds:
+  // ingest → classify → persist
+
+// Atomic append to seen.jsonl (POSIX open(path, 'a'))
+for entry of newEntries:
+  appendLine("crawl_state/<source>/seen.jsonl", JSON.stringify(entry))
+```
+
+### Atomic Append Safety Contract
+
+- Use POSIX `open(path, 'a')` — the OS guarantees each `write()` call is atomic at the line level when `write()` payload ≤ PIPE_BUF (typically 4 KB; our lines are < 1 KB, well within limit).
+- Session-lock (`.lock` file) ensures single-writer per session — no interleaved appends from concurrent sessions.
+- Never truncate or rewrite the file in place; always append.
+- Crash recovery: on next session load, skip any line that fails `JSON.parse()` and emit a warning. Partial lines from a crashed write are silently skipped.
+
+### Migration Mapping (from legacy schema)
+
+| Legacy field | New location | Notes |
+|---|---|---|
+| `marker_type` + `last_seen_marker` | → `seen.identifier_kind` + `seen.items_path` | Cursor-based rescan replaced by set-difference |
+| `coverage_verification` | → `coverage_proof` | Renamed; fields preserved |
+| top-level `range_covered` | → `audit_trail.range_covered` | Moved under `audit_trail` |
+| top-level `crawl_history` | → `audit_trail.crawl_history` | Moved under `audit_trail` |
 
 ### Flowchart
 
 ```dot
-digraph hwm_ledger {
+digraph per_site_crawl_memory {
   rankdir=TB;
   node [shape=box, fontname="Helvetica"];
 
   start [label="source crawl start", shape=ellipse, style=filled, fillcolor=lightblue];
-  load_marker [label="Load crawl_state\n(last_seen_marker)", style=filled, fillcolor=khaki];
+  load_seen [label="Load seen.jsonl\n→ build seenIds Set", style=filled, fillcolor=khaki];
   fetch [label="listing fetch\n(Pagination Tier A/B)", style=filled, fillcolor=lightblue];
-  filter [label="Only items exceeding\nlast_seen_marker as new candidates", shape=diamond];
-  is_custom [label="marker_type == custom?", shape=diamond];
-  seen_set [label="Full fetch +\nURL seen-set cross-check", style=filled, fillcolor=khaki];
+  derive_ids [label="Derive discoveredIds\nper identifier_kind", style=filled, fillcolor=khaki];
+  set_diff [label="newIds = discoveredIds − seenIds", shape=diamond];
   per_jd [label="per-JD ingest\n(Dedup Gate → save)", style=filled, fillcolor=lightblue];
-  update_hwm [label="Update last_seen_marker\nappend range_covered\nappend crawl_history", style=filled, fillcolor=khaki];
+  append_seen [label="Atomic append new entries\nto seen.jsonl", style=filled, fillcolor=khaki];
+  update_audit [label="Update audit_trail\n+ coverage_proof", style=filled, fillcolor=khaki];
   atomic_write [label="sources.yaml atomic write\n(.tmp → rename)", style=filled, fillcolor=lightgreen];
   done [label="source crawl complete", shape=ellipse, style=filled, fillcolor=lightgreen];
 
-  start -> load_marker -> fetch -> filter;
-  filter -> is_custom [label="new candidates exist"];
-  filter -> update_hwm [label="none (all seen)"];
-  is_custom -> seen_set [label="yes"];
-  is_custom -> per_jd [label="no"];
-  seen_set -> per_jd;
-  per_jd -> update_hwm;
-  update_hwm -> atomic_write -> done;
+  start -> load_seen -> fetch -> derive_ids -> set_diff;
+  set_diff -> per_jd [label="newIds non-empty"];
+  set_diff -> append_seen [label="newIds empty\n(skip ingest)"];
+  per_jd -> append_seen;
+  append_seen -> update_audit -> atomic_write -> done;
 }
 ```
 
 ### Rationalization Loopholes (MUST REJECT)
 
-- "Skip HWM and full re-crawl every time — Dedup will handle it" — ❌ Dedup checks per-JD duplicates. HWM is a mandatory listing-level efficiency mechanism. They are separate concerns.
-- "Record only last_seen_marker and skip range_covered" — ❌ range_covered is required for crawl range auditing. Omission forbidden.
-- "Don't update sources.yaml after crawl, re-crawl next session" — ❌ Atomic write immediately after crawl. Deferral forbidden.
-- "Always use custom marker_type because it's easier to pick" — ❌ Choose the type appropriate to the site's characteristics. Custom is only for cases with no clear sort order.
-- "Don't fill crawl_history, just update last_seen_marker" — ❌ crawl_history is for debugging and auditing. Append required every run.
+- "Dynamic listing is recommendation-sorted, but a cursor is faster than reading the whole seen.jsonl" — ❌ Cursors assume stable ordering. Recommendation-sorted listings reorder items between runs. Set difference is the only correct approach.
+- "seen.jsonl will get large — skip reading it and use last_seen_marker as a shortcut" — ❌ `last_seen_marker` is deprecated and removed. seen.jsonl is the single source of truth. Read it in full every time; at typical JD counts (hundreds to low thousands) the file is < 1 MB and fast.
+- "Recommendations always surface new items at the top, so cursor pointing to the latest item is sufficient" — ❌ Recommendation ranking changes retroactively (A/B tests, personalization). Items below the cursor can become new. Only set difference is correct.
+- "The site uses chronological sort so a timestamp cursor is safe" — ❌ Timestamp cursors fail when items are backdated, unpublished, or re-published. Set difference is universally correct regardless of sort order.
+- "Appending to seen.jsonl before confirming the JD was persisted risks false positives" — ❌ Append only after successful persist. The ingest loop appends entries for JDs that completed the persist phase. Aborted JDs are simply not appended; they will appear as new on the next run.
+- "identifier_kind defaults to url — just pick it silently and let the user fix it later" — ❌ Silent default is explicitly forbidden. Run the heuristic, report, confirm.
+- "seen.jsonl is empty (first run), so skip the set difference and treat everything as new" — ❌ The algorithm is correct: an empty seen set naturally yields `discoveredIds − ∅ = discoveredIds`. No special casing needed; just run the algorithm.
 
 ### Counterexample
 
-- **page_number marker**: Toss careers → `last_seen_marker: 3` (collected through page 3) → next run: fetch from page 4 → 7 new entries → `last_seen_marker: 5`, `range_covered += {from:4, to:5, collected_count:7}` → atomic write. ✓
-- **id marker**: Kakao careers → `last_seen_marker: 1050` → next run: fetch only items with id > 1050 → 3 new entries → `last_seen_marker: 1053` → atomic write. ✓
-- **custom marker (dynamic sort)**: Recommendation-sorted site → full fetch → URL seen-set cross-check → 2 new entries → update `crawl_state.custom_seen_urls` → atomic write. ✓
+- **id_query (Toss)**: `identifier_kind: id_query`, `identifier_extractor: job_id`. Anchor `https://toss.im/career/job-detail?job_id=4097` → `id = "4097"`. On re-crawl, `seenIds = {"4097", "3981", ...}`. New anchor with `job_id=4201` → `"4201" ∉ seenIds` → new candidate. ✓
+- **url (company without ID params)**: `identifier_kind: url`, `identifier_extractor: null`. `id = normalizeUrl(href)`. Stable URL = stable key. ✓
+- **fingerprint (obfuscated URLs)**: `identifier_kind: fingerprint`, `identifier_extractor: "role_title_verbatim + first_200_chars_of_body"`. URL changes per session (tokens, timestamps in query) → URL not usable as key. Hash of role title + body excerpt is stable. ✓
+
+---
+
+## Detail Split Auto Fan-out
+
+### Specification (MANDATORY)
+
+When a single listing anchor leads to a detail page containing multiple distinct positions, detect split signals and fan-out into N child JDs rather than saving a single combined record.
+
+### Signal Classification
+
+**Strong signals** — fan-out is MANDATORY when any of these are present:
+
+| Signal | Example |
+|---|---|
+| (a) Explicit subsidiary or team headers | Section heading "토스뱅크", "Toss Securities", "Tech Team" within the body |
+| (b) Separate sub-position sections with distinct requirements | Each sub-position has its own qualifications, responsibilities, or tech stack block |
+| (c) Multiple distinct apply CTAs | More than one "지원하기" / "Apply" button targeting different positions |
+
+**Weak signals** — keep as single combined JD (do NOT fan-out):
+
+| Signal | Example |
+|---|---|
+| Simple text mention only | "토스 외 5개 계열사" in anchor text, with no separate content blocks per company |
+
+The distinction: weak signals name multiple entities in passing; strong signals present each entity with its own content block or action.
+
+### Fan-out Procedure
+
+1. Identify N distinct positions from strong signals.
+2. Produce one child JD per distinct position.
+3. Each child JD frontmatter:
+   - `parent_url`: the original anchor URL (identical for all siblings)
+   - `sub_position`: the subsidiary or team name for this child
+   - `role_title_verbatim`: `"<original_title> — <sub_position>"`
+   - `role_title_slug`: derived from `role_title_verbatim` (includes `sub_position` via slugify)
+4. All other frontmatter fields (company_slug, tags, etc.) inherit from the parent unless the child's content overrides them.
+
+### Presence-Coupling Rule
+
+`parent_url` and `sub_position` are **presence-coupled**: both must be present or both must be absent. A JD record where exactly one of the two fields is set is structurally invalid and must be rejected before save.
+
+### Dedup Impact
+
+- L1 dedup key is `(company_slug, role_title_slug)`. Because `role_title_slug` includes `sub_position`, siblings with different `sub_position` values are naturally distinct keys — no special dedup handling required.
+- `parent_url` field is used for sibling relationship awareness (e.g., display grouping) only. It does not affect dedup logic.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "The page mentions a company name once in a header but the body describes one role — that's a strong signal" — ❌ A single mention without a separate content block is a weak signal. Only explicit sectioned content or multiple CTAs qualify as strong.
+- "Fan-out will make dedup more complex so keep it as a single combined JD" — ❌ L1 dedup handles siblings correctly via `role_title_slug`. Complexity is not a reason to violate the rule.
+- "sub_position is not always explicitly labeled so I'll just skip it or put a placeholder" — ❌ If `sub_position` cannot be reliably determined from the content, escalate to Tier 3 user interview rather than guessing. Presence-coupling forbids saving with only `parent_url`.
+- "The anchor text says 외 5개 계열사 — that's multiple companies so fan-out" — ❌ Anchor text mention alone is a weak signal. Check the detail page. If the detail page has separate content blocks per company, that is the strong signal. If not, single combined JD.
+- "parent_url is already in the frontmatter so sub_position is redundant — skip it" — ❌ Presence-coupling: if `parent_url` is set, `sub_position` must also be set.
+
+### Counterexample
+
+- **Toss "백엔드 개발자 — 외 5개 계열사" anchor** → detail page has separate sections "토스", "토스뱅크", "토스증권" each with distinct requirements + 3 apply CTAs → **strong signal** → fan-out into 3 child JDs. Each child gets `parent_url` = anchor URL, `sub_position` = "토스" / "토스뱅크" / "토스증권". ✓
+- **Simple "XYZ 외 2개 계열사" anchor** → detail page body describes a single generic role with no subsidiary separation → **weak signal** → single combined JD, no `parent_url`/`sub_position`. ✓
+
+---
+
+## Identifier Kind Heuristic
+
+### Specification (MANDATORY)
+
+On first registration of a new source, automatically infer the `identifier_kind` by sampling anchor URLs from the listing page before writing to `sources.yaml`. Report the result to the user and require confirmation before writing.
+
+### Heuristic Algorithm
+
+```pseudocode
+anchors = collectListingAnchors(source.careers_url)
+total = anchors.length
+
+// Step 1: check for monotonic ID query param
+paramCounts = {}
+for anchor of anchors:
+  params = new URLSearchParams(new URL(anchor.href).search)
+  for [key, value] of params:
+    if /^\d+$/.test(value):
+      paramCounts[key] = (paramCounts[key] ?? 0) + 1
+
+bestParam = argmax(paramCounts)
+bestCount = paramCounts[bestParam] ?? 0
+
+if bestCount / total >= 0.80:
+  return { identifier_kind: "id_query", identifier_extractor: bestParam }
+
+// Step 2: check URL stability (requires 2 separate fetches)
+anchors2 = collectListingAnchors(source.careers_url)  // second fetch
+stable = countStableUrls(anchors, anchors2)
+if stable / total >= 0.95:
+  return { identifier_kind: "url", identifier_extractor: null }
+
+// Step 3: URL varies — fingerprint
+return {
+  identifier_kind: "fingerprint",
+  identifier_extractor: "role_title_verbatim + first_200_chars_of_body"  // default spec
+}
+```
+
+### User Report Format
+
+After running the heuristic, report in this format before writing to `sources.yaml`:
+
+```
+Detected `identifier_kind: id_query` with extractor `job_id`
+(218/236 anchors match `?job_id=\d+` pattern).
+Confirm or override?
+  [confirm] → write to sources.yaml
+  [override] → edit sources.yaml manually
+```
+
+Wait for user response before writing. User can override by editing `sources.yaml` directly after confirmation.
+
+### Override Procedure
+
+User may change `identifier_kind` + `identifier_extractor` in `sources.yaml` at any time. On next rescan, the skill reads the current values from `sources.yaml` — no re-inference needed. If the user changes `identifier_kind` after seen.jsonl already has entries, re-derive all existing `id` values and rewrite `seen.jsonl` (or alert the user that a migration is needed).
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "Only one anchor was sampled — url looks fine, set it silently" — ❌ Sampling a single anchor is insufficient. Full anchor set collection is required for the 80% threshold check.
+- "User is in a hurry — default to `url` and let them fix it later" — ❌ Silent default is explicitly forbidden regardless of urgency. The heuristic takes seconds to run.
+- "80% threshold is high — 60% of anchors have an ID param so that's probably right" — ❌ The threshold is 80%. Below threshold → do not select `id_query`; fall through to `url` or `fingerprint` check.
+- "The site is well-known (e.g., Toss) so I already know it uses job_id param — skip heuristic" — ❌ Heuristic must always run. Prior knowledge does not exempt the confirmation step.
+- "identifier_extractor can be left null for id_query because the param is obvious" — ❌ `identifier_extractor` must be the specific param name when `identifier_kind` is `id_query`. `null` is only valid for `url`.
+
+### Counterexample
+
+- **Toss careers**: 236 anchors sampled → 218 match `?job_id=\d+` pattern (92.4%) → heuristic selects `id_query` + extractor `job_id`. Report shown, user confirms. Written to `sources.yaml`. ✓
+- **Company with path-based URLs** (e.g., `/careers/software-engineer-backend`): 0 anchors have ID query params. Second fetch shows 94/100 URLs stable → `url` kind selected. ✓
+- **Company with session-token URLs** (e.g., `/jobs?token=abc123&id=456`): token changes per session → < 95% stable. Hash of role title + body excerpt selected as `fingerprint`. ✓
 
 ---
 
@@ -985,7 +1199,7 @@ Matching Loop and Full Coverage Ingest Protocol are **orthogonal concerns** that
 | Scope | Verdict algorithm: match / mismatch / ambiguous | Input-depth escalation ladder: Tier 1 → 2 → 3 |
 | Runs | Once per JD, after signals are assembled | Determines which signals to assemble |
 | Entry point | Called from inside each Full Coverage tier | Wraps Matching Loop calls |
-| State written | `status`, `reason_note`, `auto:<verdict>:<sha>` | `coverage_verification`, `batch_run_completed` |
+| State written | `status`, `reason_note`, `auto:<verdict>:<sha>` | `coverage_proof`, `batch_run_completed` |
 
 **How they compose**: Full Coverage decides at which depth to stop fetching data (Tier 1: listing metadata, Tier 2: detail fetch, Tier 3: user interview). At each tier, once signals are assembled, Matching Loop is invoked to produce a verdict. Matching Loop does not know or care which tier it was called from.
 
