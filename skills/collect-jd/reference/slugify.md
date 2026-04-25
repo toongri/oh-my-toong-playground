@@ -91,8 +91,8 @@ A three-step pipeline is used to process Latin precomposed characters (e.g., `é
 
 ## Implementation Files
 
-- **TypeScript implementation**: [`lib/collect-jd/slugify.ts`](../../../lib/collect-jd/slugify.ts)
-- **Tests**: [`lib/collect-jd/slugify.test.ts`](../../../lib/collect-jd/slugify.test.ts)
+- **TypeScript implementation**: [`scripts/slugify.ts`](../scripts/slugify.ts)
+- **Tests**: [`scripts/slugify.test.ts`](../scripts/slugify.test.ts)
 
 ---
 
@@ -100,7 +100,7 @@ A three-step pipeline is used to process Latin precomposed characters (e.g., `é
 
 ```bash
 # Run tests only
-bun test lib/collect-jd/slugify.test.ts
+bun test skills/collect-jd/scripts/slugify.test.ts
 
 # Run all tests
 bun test

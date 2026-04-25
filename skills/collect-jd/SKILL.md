@@ -35,13 +35,13 @@ At skill invocation start (immediately before Session Lock acquire), **pre-creat
 
 Mark each Phase completion in response with `[Phase N/8: <name> ✓]` marker. Missing = violation.
 
-→ Details (rationalization loopholes, batch mode iteration rules): [reference/rules.md#phase-task-creation](reference/rules.md#phase-task-creation)
+→ Details (rationalization loopholes, batch mode iteration rules): [reference/bootstrap.md#phase-task-creation](reference/bootstrap.md#phase-task-creation)
 
 ## State Location
 
 All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` is read from the environment; this skill must not compute it directly. If `$OMT_DIR` is unset, abort + recovery guidance — global fallback forbidden. Forbidden Paths: `~/.omt/global/**`, `~/.omt/<other-project>/collect-jd/**`, `/tmp/**`, and any absolute path outside `$OMT_DIR`.
 
-→ Details (rejection protocol, rationalization loopholes): [reference/rules.md#state-location--forbidden-paths](reference/rules.md#state-location--forbidden-paths)
+→ Details (rejection protocol, rationalization loopholes): [reference/bootstrap.md#state-location--forbidden-paths](reference/bootstrap.md#state-location--forbidden-paths)
 
 ## Session Lock (MANDATORY)
 
@@ -51,7 +51,7 @@ At skill trigger time (top priority, before Phase 0 entry), acquire `$OMT_DIR/co
 - Implementing only existence check of PID file without `kill -0` is forbidden (PID reuse risk).
 - Releasing/re-acquiring the lock during AskUserQuestion wait is forbidden.
 
-→ Details: [reference/rules.md#session-lock](reference/rules.md#session-lock)
+→ Details: [reference/bootstrap.md#session-lock](reference/bootstrap.md#session-lock)
 
 ## Storage Backend Interview (MANDATORY)
 
@@ -66,7 +66,7 @@ After user acceptance/change, atomic write `config.yaml` (`platform`/`how`/`stor
 - `platform: notion | google_drive | ...` → `how` field must contain target page/folder/sheet ID + template + MCP call procedure as free-form description.
 - On path/backend change request: atomic overwrite. Data migration only with explicit user approval.
 
-→ Details (flowchart, rationalization loopholes, config.yaml schema): [reference/rules.md#storage-backend-interview](reference/rules.md#storage-backend-interview)
+→ Details (flowchart, rationalization loopholes, config.yaml schema): [reference/bootstrap.md#storage-backend-interview](reference/bootstrap.md#storage-backend-interview)
 
 ## Atomic Write Pattern (MANDATORY)
 
@@ -76,7 +76,7 @@ All state file writes use the `writeAtomic(path, content)` pattern. Steps: (1) w
 - Temp paths in separate directories like `/tmp/xxx` are forbidden.
 - Mandatory for: new JD save · `last_checked_at` update · status reversal · fingerprint update · `rules.yaml.proposed` creation · `rules.yaml` approve overwrite · session lock `.lock` write — all of them.
 
-→ Details: [reference/rules.md#atomic-write-pattern](reference/rules.md#atomic-write-pattern)
+→ Details: [reference/bootstrap.md#atomic-write-pattern](reference/bootstrap.md#atomic-write-pattern)
 
 ## Ingest Paths (5)
 
@@ -96,7 +96,7 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 
 **CRITICAL**: Open-web free crawl when sources.yaml is empty is forbidden. Even on user "싹 돌려" utterance, if source count is 0, report "등록된 소스가 없어요" and prompt registration.
 
-→ Details: [reference/rules.md#sources-registration](reference/rules.md#sources-registration)
+→ Details: [reference/dedup-and-discovery.md#sources-registration](reference/dedup-and-discovery.md#sources-registration)
 
 ## Listing Pagination (MANDATORY, 2-tier)
 
@@ -107,7 +107,7 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 
 **CRITICAL**: When auto-detection fails, storing only the first page and stopping is forbidden. Must escalate to Tier B interview.
 
-→ Details (Tier A heuristics list, Tier B interview template, loopholes): [reference/rules.md#listing-pagination](reference/rules.md#listing-pagination)
+→ Details (Tier A heuristics list, Tier B interview template, loopholes): [reference/dedup-and-discovery.md#listing-pagination](reference/dedup-and-discovery.md#listing-pagination)
 
 ## Listing Pagination Coverage Verification (MANDATORY, 3-check)
 
@@ -130,7 +130,7 @@ Persist results to `sources.yaml.<source>.crawl_state.coverage_proof` with field
 - Sites without a visible total count (rare) may record `page_declared_total: null` plus a note "no declared total" in Tier B `how`.
 - T11 violation case: initial run reported "236 unique URLs collected" with only 1 `browser_evaluate` call, no scroll test, no declared-total match → Coverage Verification Protocol was not performed; the claim was unverified.
 
-→ Details: [reference/rules.md#listing-pagination-coverage-verification](reference/rules.md#listing-pagination-coverage-verification)
+→ Details: [reference/dedup-and-discovery.md#listing-pagination-coverage-verification](reference/dedup-and-discovery.md#listing-pagination-coverage-verification)
 
 ## Per-Site Crawl Memory (MANDATORY)
 
@@ -180,7 +180,7 @@ Each source records its id extraction strategy in `sources.yaml.<source>.crawl_s
 - `identifier_kind` silent default is forbidden — on first source registration, run the Identifier Kind Heuristic and confirm with user before writing.
 - Declaring save complete without appending new entries to `seen.jsonl` is forbidden.
 
-→ Details (schema field meanings, set-difference pseudocode, atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/rules.md#per-site-crawl-memory](reference/rules.md#per-site-crawl-memory)
+→ Details (schema field meanings, set-difference pseudocode, atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/dedup-and-discovery.md#per-site-crawl-memory](reference/dedup-and-discovery.md#per-site-crawl-memory)
 
 ## Detail Split Auto Fan-out (MANDATORY)
 
@@ -208,7 +208,7 @@ When a single listing anchor leads to a detail page that contains multiple disti
 - Ignoring strong signals and saving as a single JD is forbidden.
 - Saving with `parent_url` present but `sub_position` absent (or vice versa) is forbidden.
 
-→ Details (strong/weak signal classification, fan-out procedure, presence-coupling, rationalization loopholes, counterexample): [reference/rules.md#detail-split-auto-fan-out](reference/rules.md#detail-split-auto-fan-out)
+→ Details (strong/weak signal classification, fan-out procedure, presence-coupling, rationalization loopholes, counterexample): [reference/ingest-and-curation.md#detail-split-auto-fan-out](reference/ingest-and-curation.md#detail-split-auto-fan-out)
 
 ## Identifier Kind Heuristic (MANDATORY)
 
@@ -225,13 +225,13 @@ On first registration of a source, automatically infer the `identifier_kind` by 
 
 **CRITICAL**: Silent default (`url`) without running the heuristic is forbidden.
 
-→ Details (heuristic pseudocode, user report format, override procedure, rationalization loopholes, counterexample): [reference/rules.md#identifier-kind-heuristic](reference/rules.md#identifier-kind-heuristic)
+→ Details (heuristic pseudocode, user report format, override procedure, rationalization loopholes, counterexample): [reference/dedup-and-discovery.md#identifier-kind-heuristic](reference/dedup-and-discovery.md#identifier-kind-heuristic)
 
 ## Phase 0: Profile Interview Required (MANDATORY)
 
 When `$OMT_DIR/collect-jd/profile/profile.yaml` is absent, a **minimum 3-round** profile interview (`AskUserQuestion`) is required before JD collection. Round 1: career history, years of experience, preferred domains. Round 2: tech stack, strengths. Round 3: company, salary, location, remote work, exclude preferences. After the interview, atomic write `profile.yaml` (includes `version: 1` field). If profile exists, proceed to normal collection. **5 rationalization patterns blocked** — urgency, being in a hurry, or having received a URL are none of them valid reasons to skip the interview.
 
-→ Details (rationalization loopholes, purpose explanation): [reference/rules.md#phase-0-profile-interview-required](reference/rules.md#phase-0-profile-interview-required)
+→ Details (rationalization loopholes, purpose explanation): [reference/bootstrap.md#phase-0-profile-interview-required](reference/bootstrap.md#phase-0-profile-interview-required)
 
 ## Dedup (L1 URL/slug + L2 LLM similarity)
 
@@ -242,15 +242,15 @@ Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 - Even when L2 conditions are not met (0 JDs for the same company_slug), record "L2 gate evaluated: not applicable" in audit.
 - Saving without running the dedup gate is forbidden. If `fingerprint_check` field is empty, reject the save.
 
-→ Dedup Gate Enforcement details: [reference/rules.md#dedup-check-gate-enforcement](reference/rules.md#dedup-check-gate-enforcement)
+→ Dedup Gate Enforcement details: [reference/dedup-and-discovery.md#dedup-check-gate-enforcement](reference/dedup-and-discovery.md#dedup-check-gate-enforcement)
 
 - **L1**: After `normalizeUrl()`, match by URL or `(company_slug, role_title_slug)`. On match, new file creation is forbidden; only `last_checked_at` is updated. URL match + TTL (30 days) exceeded → enter L2.
 - **L2**: L1 no-match + another JD for the same `company_slug` already saved → LLM similarity judgment (`reference/dedup-l2-prompt.md`, temperature 0). `same: true` → new file forbidden + `fingerprint_check: duplicate_of:<url>`. `same: false` → save new + `fingerprint_check: unique`.
 - `max_l2_calls_per_batch: 50`. If exceeded, `fingerprint_check: pending` — not a skip; re-evaluate in next batch.
 
-→ L1 details (loopholes, counterexample): [reference/rules.md#dedup-layer-1](reference/rules.md#dedup-layer-1)
-→ L2 details (invocation contract, loopholes, counterexample): [reference/rules.md#dedup-layer-2](reference/rules.md#dedup-layer-2)
-→ Flow diagram (L1→L2 decision tree): [reference/rules.md#decision-flow](reference/rules.md#decision-flow)
+→ L1 details (loopholes, counterexample): [reference/dedup-and-discovery.md#dedup-layer-1](reference/dedup-and-discovery.md#dedup-layer-1)
+→ L2 details (invocation contract, loopholes, counterexample): [reference/dedup-and-discovery.md#dedup-layer-2](reference/dedup-and-discovery.md#dedup-layer-2)
+→ Flow diagram (L1→L2 decision tree): [reference/dedup-and-discovery.md#decision-flow](reference/dedup-and-discovery.md#decision-flow)
 
 ## Matching Loop (history → rules → filter) (MANDATORY)
 
@@ -263,8 +263,8 @@ Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 
 > Note: Matching Loop is the verdict algorithm invoked inside each Full Coverage tier.
 
-→ Details (rationalization loopholes, counterexample): [reference/rules.md#matching-loop](reference/rules.md#matching-loop)
-→ Flow diagram (Phase 1→2→3 decision tree): [reference/rules.md#decision-flow](reference/rules.md#decision-flow)
+→ Details (rationalization loopholes, counterexample): [reference/ingest-and-curation.md#matching-loop](reference/ingest-and-curation.md#matching-loop)
+→ Flow diagram (Phase 1→2→3 decision tree): [reference/dedup-and-discovery.md#decision-flow](reference/dedup-and-discovery.md#decision-flow)
 
 ## Full Coverage Ingest Protocol (MANDATORY, 3-tier)
 
@@ -282,25 +282,25 @@ Process all JDs discovered from listing scrape without omission. Escalate in ord
 - Declaring `batch_run_completed=true` when `processed_count < discovered_count` is forbidden. Record `batch_run_completed=false` + `pending_count=<N>`.
 - T11 real violation: Toss Server Developer #197 — listing innerText contained "Kotlin · Java · Spring · Backend" → should have been an immediate match rule trigger for rules.yaml match rule #1, but was missed due to title-only parsing.
 
-→ Details (Tier 1/2/3 spec, decision flow chart, rationalization loopholes, counterexample): [reference/rules.md#full-coverage-ingest-protocol](reference/rules.md#full-coverage-ingest-protocol)
+→ Details (Tier 1/2/3 spec, decision flow chart, rationalization loopholes, counterexample): [reference/ingest-and-curation.md#full-coverage-ingest-protocol](reference/ingest-and-curation.md#full-coverage-ingest-protocol)
 
 ## Exclude Flow (tags + reason_note MANDATORY)
 
 When saving with `status: excluded`, **simultaneously** required: `tags: [...]` (minimum 1, `tags.yaml` emergent slug) + `reason_note` (verbatim user utterance, empty string forbidden). If missing, trigger Emergent tag interview before save: (1) collect reason (2) derive tag (top-3 candidates or new slug) (3) update `tags.yaml` (4) atomic write. This flow does NOT apply to `included` / `ambiguous` / `pending`.
 
-→ Details (emergent tag interview, tags.yaml schema, loopholes, counterexample): [reference/rules.md#exclude-flow](reference/rules.md#exclude-flow)
+→ Details (emergent tag interview, tags.yaml schema, loopholes, counterexample): [reference/ingest-and-curation.md#exclude-flow](reference/ingest-and-curation.md#exclude-flow)
 
 ## Reversal (status change record) (MANDATORY)
 
 When changing an existing file's `status`, **prepend** `prev: <prev_status> @ <ISO8601 date>` at the **top** of `reason_note`. Atomic write (`.tmp` → rename). Multiple reversals accumulate (prepend repeatedly; topmost = most recent). On rules re-evaluation: append `(rules_reeval:<sha short 8>)` suffix. No exceptions: first save · L1 `last_checked_at` update · L2 `fingerprint_check` update.
 
-→ Details (rationalization loopholes): [reference/rules.md#reversal](reference/rules.md#reversal)
+→ Details (rationalization loopholes): [reference/ingest-and-curation.md#reversal](reference/ingest-and-curation.md#reversal)
 
 ## Manual Edit Safety
 
 Batch rescan will **never overwrite** files whose frontmatter the user has manually edited. If any of the detection signals match (future `last_checked_at` · canonical contract violation [non-standard field OR value outside enum]), skip that file + add `수동 편집 감지: N건` line to the report.
 
-→ Details: [reference/rules.md#manual-edit-safety](reference/rules.md#manual-edit-safety)
+→ Details: [reference/ingest-and-curation.md#manual-edit-safety](reference/ingest-and-curation.md#manual-edit-safety)
 
 ## Ingest Validation
 
@@ -308,7 +308,7 @@ Before WebFetch · file · text ingest, check body length (< 200 chars) and stop
 
 **Use the `insane-search` skill for WebFetch.**
 
-→ Details: [reference/rules.md#ingest-validation](reference/rules.md#ingest-validation)
+→ Details: [reference/ingest-and-curation.md#ingest-validation](reference/ingest-and-curation.md#ingest-validation)
 
 ## Batch Mode Report Schema (MANDATORY)
 
@@ -320,35 +320,37 @@ On batch rescan completion, the **last line** of the response must exactly match
 
 Zero counts must not be omitted. Format variations are forbidden. Record only actual aggregate results.
 
-→ Details (definitions, examples, forbidden patterns, loopholes): [reference/rules.md#batch-mode-report-schema](reference/rules.md#batch-mode-report-schema)
+→ Details (definitions, examples, forbidden patterns, loopholes): [reference/ingest-and-curation.md#batch-mode-report-schema](reference/ingest-and-curation.md#batch-mode-report-schema)
 
 ## Role Tagging (MANDATORY)
 
 Two fields required when saving a JD: `role_title_verbatim` (verbatim original title, no modification) + `role_tags: [...]` (LLM call, subset of taxonomy.yaml enum, temperature 0). Korean synonyms (`백엔드`/`서버개발자`/`서버사이드`) must include `backend`. On JSON parse failure: retry once; on 2nd failure, report error (saving empty array is forbidden).
 
-→ Details (taxonomy baseline, LLM invocation contract, pinned prompt, loopholes, counterexample): [reference/rules.md#role-tagging](reference/rules.md#role-tagging)
+→ Details (taxonomy baseline, LLM invocation contract, pinned prompt, loopholes, counterexample): [reference/ingest-and-curation.md#role-tagging](reference/ingest-and-curation.md#role-tagging)
 
 ## YAML Robustness
 
 On parse failure for any state YAML (profile/taxonomy/rules/tags/sources/config): no crash. Copy original to `<file>.bak.<ISO8601>` once → `AskUserQuestion` with 2 options (edit manually [default] / reset to default [data loss warning]). Automatic deletion or cleanup of user data is forbidden.
 
-→ Details: [reference/rules.md#yaml-robustness](reference/rules.md#yaml-robustness)
+→ Details: [reference/ingest-and-curation.md#yaml-robustness](reference/ingest-and-curation.md#yaml-robustness)
 
 ## Company-Name Ingest
 
 Ingest path #4 (company name only) operates **only within sites registered in `sources.yaml`**. For unregistered companies → **WebFetch/open-web search is absolutely forbidden**; trigger `AskUserQuestion` with "공식 채용 페이지 URL 을 알려주세요". When user provides a URL, append to `sources.yaml` then proceed with standard flow. Blacklist supported.
 
-→ Details: [reference/rules.md#company-name-ingest](reference/rules.md#company-name-ingest)
+→ Details: [reference/dedup-and-discovery.md#company-name-ingest](reference/dedup-and-discovery.md#company-name-ingest)
 
 ## Rules Re-evaluation
 
 Re-derive `rules.yaml` based on today's collection results. Trigger phrases: "오늘 수집 정리해줘" / "오늘 본 JD로 규칙 업데이트" / "규칙 재평가" / "rules 다시 뽑아줘" / auto-propose when 1 or more include·exclude occur within a session. **Scope**: only JD files where the date portion of `last_checked_at` is today (excluding manual-edited files). **Workflow**: (1) load scope + store `rules.yaml.sha256.before` in memory (2) LLM call (temperature 0) → generate proposed rules (3) atomic write `rules.yaml.proposed` (`.tmp` → rename, includes `version:1` + `_proposed_at` + `_based_on`) (4) display diff + AskUserQuestion (`approve` / `reject` / `edit manually`) (5) on approve, **race check required**: recompute sha256 of `rules.yaml` → if mismatch with `before`, abort (6) race OK → overwrite `rules.yaml` (atomic write, excluding `_proposed_at`/`_based_on`) + remove `.proposed`. If 0 JDs today, stop immediately. Overwriting `rules.yaml` directly without approve is forbidden.
 
-→ Details: [reference/rules.md#rules-re-evaluation](reference/rules.md#rules-re-evaluation)
+→ Details: [reference/ingest-and-curation.md#rules-re-evaluation](reference/ingest-and-curation.md#rules-re-evaluation)
 
 ## Reference Index
 
-- [reference/rules.md](reference/rules.md) — All rule details · loopholes · examples (Phase B TDD results archive, M3 separated)
+- [reference/bootstrap.md](reference/bootstrap.md) — Session-init rules (Phase tasks, Session Lock, Storage Backend, Atomic Write, State Location, Profile Interview)
+- [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md) — Source/listing rules (Sources Registration, Pagination, Coverage Verification, Per-Site Crawl Memory, Identifier Kind, Dedup L1/L2, Company-Name Ingest, Decision Flow)
+- [reference/ingest-and-curation.md](reference/ingest-and-curation.md) — Per-JD rules (Detail Split, Matching Loop, Full Coverage Ingest, Exclude Flow, Reversal, Manual Edit Safety, Ingest Validation, Batch Report, Role Tagging, YAML Robustness, Rules Re-evaluation)
 - [reference/frontmatter-schema.md](reference/frontmatter-schema.md) — JD file YAML frontmatter contract
 - [reference/slugify.md](reference/slugify.md) — Slug normalization algorithm spec
 - [reference/url-normalize.md](reference/url-normalize.md) — URL normalization spec

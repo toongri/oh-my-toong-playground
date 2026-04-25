@@ -7,7 +7,7 @@ converge to the same canonical form.
 The primary goals are removing tracking parameters and unifying case,
 while preserving parameters required to identify a posting (e.g., LinkedIn `currentJobId`).
 
-Implementation: [`lib/collect-jd/url-normalize.ts`](../../../lib/collect-jd/url-normalize.ts)
+Implementation: [`scripts/url-normalize.ts`](../scripts/url-normalize.ts)
 
 ---
 
@@ -77,14 +77,14 @@ General rule: **All parameters not on the removal list are kept as-is.**
 **Implementation**
 
 ```
-lib/collect-jd/url-normalize.ts
+scripts/url-normalize.ts
 ```
 
 **Run Tests**
 
 ```bash
 # From project root
-bun test lib/collect-jd/url-normalize.test.ts
+bun test skills/collect-jd/scripts/url-normalize.test.ts
 ```
 
 Expected result: `7 pass, 0 fail`

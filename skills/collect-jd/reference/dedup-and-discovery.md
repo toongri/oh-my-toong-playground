@@ -1,0 +1,792 @@
+# Dedup and Discovery Rules Detail
+
+> Reference doc for `collect-jd` skill — source/listing domain rules (Sources Registration, Pagination, Coverage Verification, Per-Site Crawl Memory, Identifier Kind Heuristic, Dedup L1/L2, Company-Name Ingest, Decision Flow).
+> Linked from `SKILL.md` via anchor references — do not move section headings.
+
+## Table of Contents
+
+- [Decision Flow](#decision-flow)
+- [Sources Registration](#sources-registration)
+- [Listing Pagination](#listing-pagination)
+- [Listing Pagination Coverage Verification](#listing-pagination-coverage-verification)
+- [Per-Site Crawl Memory](#per-site-crawl-memory)
+- [Identifier Kind Heuristic](#identifier-kind-heuristic)
+- [Dedup Check Gate Enforcement](#dedup-check-gate-enforcement)
+- [Dedup Layer 1](#dedup-layer-1)
+- [Dedup Layer 2](#dedup-layer-2)
+- [Company-Name Ingest](#company-name-ingest)
+
+---
+
+## Decision Flow
+
+Decision tree for Dedup L1 → L2 escalation and Matching Loop Phase 1→2→3 gating. The remaining rules form a linear pipeline that needs no separate visualization — refer to each rule section directly.
+
+```dot
+digraph dedup_matching_flow {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica"];
+
+  start [label="Session start\n(Storage Backend Interview complete)", shape=ellipse, style=filled, fillcolor=lightgreen];
+  sources_load [label="sources.yaml load", style=filled, fillcolor=khaki];
+  sources_empty [label="sources empty?", shape=diamond];
+  ask_register [label="Propose registration\n(AskUserQuestion)", style=filled, fillcolor=salmon];
+  source_iter [label="Iterate each source", style=filled, fillcolor=lightblue];
+  pagination_tierA [label="Pagination Tier A\n(auto-detect)", shape=diamond];
+  pagination_tierB [label="Pagination Tier B\n(interview → record how)", style=filled, fillcolor=salmon];
+  per_jd_fetch [label="per-JD fetch", style=filled, fillcolor=lightblue];
+  crawl_memory_update [label="Update crawl_state\n(atomic)", style=filled, fillcolor=khaki];
+
+  candidate [label="New JD candidate", shape=ellipse, style=filled, fillcolor=lightblue];
+
+  l1 [label="L1: normalizeUrl(U) OR\n(company_slug, role_title_slug) match", shape=diamond];
+  l1_url [label="URL match + TTL ≤30 days?", shape=diamond];
+  update_ts [label="Update last_checked_at\n(no new file)", style=filled, fillcolor=lightgreen];
+
+  l2_eligible [label="L2 eligible?\n(another JD with same company_slug\nor TTL expired)", shape=diamond];
+  l2_cap [label="max_l2_calls_per_batch\nexceeded?", shape=diamond];
+  l2_pending [label="fingerprint: pending\n(re-evaluate next batch)", style=filled, fillcolor=khaki];
+  l2_call [label="L2 LLM similarity\n(pinned prompt, temp 0)"];
+  l2_dup [label="Existing file fingerprint:\nrecord duplicate_of", style=filled, fillcolor=lightgreen];
+  save_unique [label="Proceed to new save\nfingerprint: unique"];
+
+  audit [label="dedup-audit.log append (MANDATORY)", style=filled, fillcolor=khaki];
+  audit_end [label="audit append", style=filled, fillcolor=khaki];
+
+  phase1 [label="Matching Phase 1:\nhistory lookup (URL/slug)", shape=diamond];
+  inherit [label="Inherit status\n(preserve existing verdict)", style=filled, fillcolor=lightgreen];
+  phase2 [label="Phase 2: LLM verdict\n(ambiguity-prompt.md, temp 0)", shape=diamond];
+  vmatch [label="match → status: included\n(auto)", style=filled, fillcolor=lightgreen];
+  vmismatch [label="mismatch → status: excluded\n(auto, → Exclude Flow)", style=filled, fillcolor=lightgreen];
+  vambig [label="ambiguous → Phase 3:\nAskUserQuestion\n(auto-verdict forbidden)", style=filled, fillcolor=salmon];
+
+  start -> sources_load -> sources_empty;
+  sources_empty -> ask_register [label="yes"];
+  sources_empty -> source_iter [label="no"];
+  ask_register -> source_iter [label="after registration"];
+  source_iter -> pagination_tierA;
+  pagination_tierA -> per_jd_fetch [label="success"];
+  pagination_tierA -> pagination_tierB [label="fail"];
+  pagination_tierB -> per_jd_fetch;
+  per_jd_fetch -> candidate;
+
+  candidate -> l1;
+  l1 -> l1_url [label="match"];
+  l1 -> l2_eligible [label="no match"];
+  l1_url -> update_ts [label="yes (dedup OK)"];
+  l1_url -> l2_eligible [label="no (TTL expired)"];
+  l2_eligible -> l2_cap [label="yes"];
+  l2_eligible -> save_unique [label="no"];
+  l2_cap -> l2_pending [label="yes"];
+  l2_cap -> l2_call [label="no"];
+  l2_call -> l2_dup [label="same: true"];
+  l2_call -> save_unique [label="same: false"];
+
+  update_ts -> audit_end;
+  l2_dup -> audit_end;
+  l2_pending -> audit_end;
+  save_unique -> audit -> phase1;
+  phase1 -> inherit [label="hit"];
+  phase1 -> phase2 [label="miss"];
+  phase2 -> vmatch;
+  phase2 -> vmismatch;
+  phase2 -> vambig;
+  audit -> crawl_memory_update [label="on source completion"];
+  crawl_memory_update -> phase1 [style=invis];
+}
+```
+
+**How to read**: Gray diamond = decision branch, green box = terminal path (save complete), yellow box = pending/record obligation (crawl_state update, fingerprint: pending), orange box = user question required. `salmon` (ambiguous → Phase 3, ask_register, pagination_tierB) = forced user-intervention path. Blue box (source_iter, per_jd_fetch) = **batch iteration unit** — repeats M times for M JDs across N sources.
+
+---
+
+## Sources Registration
+
+### Specification (MANDATORY)
+
+At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single AskUserQuestion**: "Do you have JD source sites to register?" Skippable — not as mandatory as Profile Interview. When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state}` structure.
+
+### Trigger phrases (Reusable Crawl)
+
+When any of the following is detected, **iterate all registered sources** → Listing Pagination → per-JD fetch + Dedup Gate + Classify + Persist (new entries by Per-Site Crawl Memory set difference (`discovered − seen`) only):
+
+- "오늘 돌려" / "오늘 크롤"
+- "싹 돌려" / "전부 돌려"
+- "전체 재크롤" / "전체 크롤"
+- "sources 돌려" / "소스 돌려"
+- "등록된 곳 전부" / "등록 사이트 크롤"
+
+No automatic scheduling — depends on user utterance.
+
+### sources.yaml schema (complete)
+
+```yaml
+version: 1
+companies:
+  - slug: toss
+    name: Toss
+    careers_url: https://toss.im/career
+    added_at: 2026-04-01
+    pagination:
+      method: auto          # auto | interview_script | mcp:<name>
+      detected_pattern: "?page="   # on Tier A success
+      how: ""               # Tier B interview result, free-form
+    crawl_state:
+      seen:
+        identifier_kind: id_query  # or url, fingerprint
+        identifier_extractor: "job_id"  # param name for id_query; null for url; hash spec for fingerprint
+        items_path: "crawl_state/<source>/seen.jsonl"
+        items_count: 0
+      audit_trail:
+        total_discovered: 0
+        range_covered: []
+        crawl_history: []
+      coverage_proof:
+        verified_at: null
+        page_declared_total: null
+        dom_unique_anchor_count: null
+        matches_declared: null
+        infinite_scroll_detected: null
+        conclusion: null
+blacklist:
+  - slug: xyz
+    name: XYZCorp
+    reason_note: 이미 수집 완료, 재수집 불필요
+```
+
+See [Per-Site Crawl Memory](#per-site-crawl-memory) for full schema semantics.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "sources.yaml is empty so open-web free crawl" — ❌ No sources = no crawl. Only prompt for registration.
+- "User said '싹 돌려' so crawl anywhere even with 0 sources" — ❌ If source count is 0, report "등록된 소스가 없어요" and stop.
+- "Periodic auto-crawl without user utterance" — ❌ Automatic scheduling forbidden. User explicit utterance required.
+- "Add to sources.yaml by company name alone without URL" — ❌ URL required. Auto-inference forbidden.
+- "Auto-append to sources.yaml without user confirmation" — ❌ Only after user provides URL + expresses registration intent.
+
+### Counterexample (normal flow)
+
+- Session start → sources.yaml absent → "Do you have JD source sites to register?" AskUserQuestion → user provides "https://toss.im/career" → `{slug: toss, name: Toss, careers_url: ..., added_at: today}` atomic append → crawl proceeds normally. ✓
+- User "싹 돌려" → sources.yaml has toss, kakao (2 entries) → crawl toss (Listing Pagination → per-JD) → crawl kakao → append `seen.jsonl` + update `audit_trail` → report. ✓
+- User "싹 돌려" → sources.yaml empty → report "등록된 소스가 없어요. 등록할 사이트가 있나요?" + prompt registration. ✓
+
+---
+
+## Listing Pagination
+
+### Specification (MANDATORY, 2-tier)
+
+**Obligation to check the entire JD list to the end** from a source's listing page. Attempt Tier A then Tier B in order.
+
+### Tier A: Auto-detect heuristics
+
+Attempt the following patterns in order. On first success, record `pagination: { method: auto, detected_pattern: <one of> }`:
+
+1. Query param `?page=<n>` — increment from 1, stop on empty response
+2. Query param `?offset=<n>` — increment by `limit` value
+3. Query param `?after=<cursor>` or `?cursor=<token>` — extract next cursor
+4. Link/button DOM: `rel="next"` or text containing "다음", "Next", ">" in `<a>` tag
+5. Numeric pagination DOM: `<a>2</a>`, `<a>3</a>` pattern — extract last page number
+6. "더 보기" / "Load more" button → Playwright click + XHR wait
+7. Infinite scroll XHR endpoint — Playwright network intercept: capture `fetch`/`XHR` request URL then repeat calls
+8. JSON API endpoint found — `Content-Type: application/json` response + `jobs`/`positions`/`listings` key present
+9. GraphQL pagination — `pageInfo.hasNextPage` + `endCursor`
+
+Tier A success criterion: additional pages exist and can be fetched. A single-page site (no additional pages) also counts as success.
+
+### Tier B: Interview fallback
+
+When Tier A completely fails (all 9 patterns unmatched), **AskUserQuestion is mandatory**:
+
+```
+이 사이트({{source.careers_url}})의 전체 JD 목록을 어떻게 가져올 수 있나요?
+가능한 방법:
+(1) API URL 알려주기 (예: curl 명령어 또는 URL 패턴)
+(2) 전용 MCP 명 (예: mcp:notion, mcp:greenhouse)
+(3) 스크립트 경로 또는 명령어
+(4) 수동 복붙 (HTML 또는 URL 목록)
+```
+
+Store user response as free-form text in `sources.yaml.<source>.pagination.how`. From next session onward, load `how` and reuse (check for `how` existence before Tier A attempt → if present, execute `how` first).
+
+### Flowchart
+
+```dot
+digraph listing_pagination {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica"];
+
+  start [label="source listing URL", shape=ellipse, style=filled, fillcolor=lightblue];
+  how_exists [label="pagination.how exists?", shape=diamond];
+  use_how [label="Execute how\n(script/MCP/API)", style=filled, fillcolor=lightgreen];
+  tier_a [label="Tier A auto-detect\n(attempt 9 patterns)", shape=diamond];
+  record_a [label="pagination.method=auto\nrecord detected_pattern", style=filled, fillcolor=lightgreen];
+  tier_b [label="Tier B AskUserQuestion\n(interview → record how)", style=filled, fillcolor=salmon];
+  fetch_all [label="Full JD URL collection complete", style=filled, fillcolor=lightgreen];
+
+  start -> how_exists;
+  how_exists -> use_how [label="yes"];
+  how_exists -> tier_a [label="no"];
+  tier_a -> record_a [label="success"];
+  tier_a -> tier_b [label="fail (all 9 unmatched)"];
+  tier_b -> fetch_all [label="after user response"];
+  record_a -> fetch_all;
+  use_how -> fetch_all;
+}
+```
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "On Tier A failure, save first-page only and 'collection complete'" — ❌ Must escalate to Tier B interview.
+- "Use Tier B interview answer only once and skip recording in sources.yaml" — ❌ Must save to `pagination.how`. Reuse in next session is mandatory.
+- "Skip pagination pattern check and fall back to manual URL list paste" — ❌ Tier A attempt is mandatory. However, if user directly chooses manual paste, record as Tier B `how` and allow.
+- "Auto-detect succeeded but didn't confirm last page, collected only 3 pages" — ❌ Continue until empty response or `has_next_page == false`.
+- "Quietly collect first-page only and report 'list collection complete' without Tier B question" — ❌ First-page-only collection must be explicitly reported + Tier B triggered.
+
+### Counterexample
+
+- `?page=` pattern detected → sequential fetch pages 1~5 → page 6 response empty → 87 URLs total → `pagination = { method: auto, detected_pattern: "?page=" }` saved. ✓
+- All patterns fail → AskUserQuestion → user provides "API: GET /careers/api/jobs?limit=50&offset=X" → `pagination.how = "GET /careers/api/jobs?limit=50&offset=X repeat (offset += 50, stop on empty array)"` saved → reuse how in next session. ✓
+
+---
+
+## Listing Pagination Coverage Verification
+
+### Specification (MANDATORY, 3-check)
+
+Discovery-side proof that the listing was scraped exhaustively. After Tier A/B pagination collects the anchor set, three checks MUST pass before Full Coverage Tier 1 ingest begins.
+
+**The 3 checks:**
+
+1. **Declared total match** — regex-extract page-level total count (e.g., "236개의 포지션") → must equal DOM unique-anchor count. Both values must be recorded.
+2. **Scroll stability** — execute `window.scrollTo(0, document.documentElement.scrollHeight)` × ≥3 iterations via `browser_evaluate` → anchor count must remain unchanged across iterations.
+3. **Infinite-scroll absence** — `scrollHeight` delta across iterations == 0 → no lazy fetch triggered.
+
+**Persist to `sources.yaml.<source>.crawl_state.coverage_proof`:**
+
+```yaml
+coverage_proof:
+  verified_at: <ISO8601>
+  method: playwright_scroll_to_bottom_N_iterations
+  page_declared_total: <int or null>   # null if no visible total count
+  dom_unique_anchor_count: <int>
+  matches_declared: <bool>
+  infinite_scroll_detected: <bool>
+  conclusion: <string>
+```
+
+### Rationalization Loopholes (MUST REJECT)
+
+| Temptation pattern | Rejection basis |
+|---|---|
+| "Collected 236 URLs so pagination is complete — no need to verify" | ❌ Claimed count without scroll test is unverified. Verification Protocol required. |
+| "Scroll test takes time, skip for large listing" | ❌ Coverage verification is MANDATORY. Time cost does not justify skipping. |
+| "Site has no visible total count so declared-total check is not applicable" | ❌ Record `page_declared_total: null` + note "no declared total" in Tier B `how`. Other 2 checks must still run. |
+| "1 browser_evaluate call is enough to confirm no infinite scroll" | ❌ ≥3 iterations required to establish stability. |
+| "batch_run_completed=true already set; no need to re-verify" | ❌ coverage_proof must be set before batch_run_completed=true is ever declared. |
+
+### T11 Violation Case
+
+T11 dogfood (2026-04-25) initial run:
+
+- **Claimed**: "236 unique URLs collected"
+- **Actual tool calls**: 1 × `browser_evaluate` (anchor count only), 0 scroll tests, no declared-total regex
+- **Violation**: Coverage Verification Protocol was not performed. The "236 URLs" claim was unverified — scroll stability and infinite-scroll absence were never confirmed.
+- **Required**: ≥3 scroll iterations + declared-total regex match + `coverage_proof` field recorded before proceeding to Tier 1 ingest.
+
+### T11-b Compliance Example
+
+```
+# Step 1: regex-extract declared total
+page_declared_total = 236  # from "236개의 포지션"
+
+# Step 2: scroll × 5 iterations
+iteration 1: anchor_count = 236, scrollHeight = 8420
+iteration 2: anchor_count = 236, scrollHeight = 8420
+iteration 3: anchor_count = 236, scrollHeight = 8420
+iteration 4: anchor_count = 236, scrollHeight = 8420
+iteration 5: anchor_count = 236, scrollHeight = 8420
+
+# Step 3: evaluate
+matches_declared = true        # 236 == 236
+infinite_scroll_detected = false  # scrollHeight delta == 0
+
+# Step 4: persist
+coverage_proof:
+  verified_at: 2026-04-25T11:30:00Z
+  method: playwright_scroll_to_bottom_5_iterations
+  page_declared_total: 236
+  dom_unique_anchor_count: 236
+  matches_declared: true
+  infinite_scroll_detected: false
+  conclusion: "Exhaustive collection confirmed — no additional anchors loaded on scroll."
+```
+
+### Decision Flow
+
+```dot
+digraph coverage_proof {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica"];
+
+  scrape_anchors [label="scrape_anchors\n(Tier A/B pagination complete)"];
+  regex_declared_total [label="regex_declared_total\n(extract page total count)"];
+  scroll_loop_N [label="scroll_loop_N\n(≥3 iterations, record anchor count + scrollHeight)"];
+  compare [label="compare\n(dom_count == declared_total?\nscrollHeight delta == 0?)"];
+  record_crawl_state [label="record_crawl_state\n(coverage_proof fields atomic write)"];
+
+  scrape_anchors -> regex_declared_total;
+  regex_declared_total -> scroll_loop_N;
+  scroll_loop_N -> compare;
+  compare -> record_crawl_state [label="all checks recorded"];
+  record_crawl_state -> full_coverage_tier1 [label="proceed to Tier 1 ingest"];
+  full_coverage_tier1 [label="Full Coverage Tier 1 ingest", style=filled, fillcolor=lightgreen];
+}
+```
+
+**CRITICAL**:
+- Without `coverage_proof` field set, `batch_run_completed=true` declaration is forbidden.
+- Sites without a visible total count may record `page_declared_total: null` plus a note in Tier B `how`. Scroll stability check (checks 2 & 3) must still be performed.
+
+---
+
+## Per-Site Crawl Memory
+
+### Specification (MANDATORY)
+
+Maintain per-source crawl memory using a two-layer structure: a JSONL file for the seen-set and a structured block in `sources.yaml` for audit and coverage metadata. After each crawl session, atomic write `sources.yaml`.
+
+### Storage Layout
+
+**seen.jsonl** — append-only flat file:
+- Path: `$OMT_DIR/collect-jd/crawl_state/<source>/seen.jsonl`
+- One JSON object per line, each line < 1 KB.
+- Append via POSIX `open(path, 'a')`. Session-lock guarantees single-writer.
+- **Line schema**:
+  ```json
+  {"id": "...", "url": "...", "processed_at": "<ISO8601>", "verdict": "included|excluded|ambiguous", "role_title": "..."}
+  ```
+- The `id` field in seen.jsonl is **NOT** an auto-generated UUID; it is a **deterministic key** derived from the per-site `identifier_kind` strategy.
+
+**sources.yaml** — structured metadata, 3 sub-groups under `crawl_state`:
+
+```yaml
+crawl_state:
+  seen:
+    identifier_kind: id_query | url | fingerprint
+    identifier_extractor: <param-name> | null | <hash-spec>
+    items_path: "crawl_state/<source>/seen.jsonl"
+    items_count: <int>
+  audit_trail:
+    total_discovered: <int>
+    range_covered:
+      - from: <marker>
+        to: <marker>
+        run_at: <ISO8601>
+        collected_count: <int>
+        total_listed: <int or null>
+    crawl_history:
+      - run_at: <ISO8601>
+        method: auto | interview_script | mcp:<name>
+        new_jds: <int>
+        already_seen: <int>
+        pages_fetched: <int>
+  coverage_proof:
+    verified_at: <ISO8601>
+    page_declared_total: <int or null>
+    dom_unique_anchor_count: <int>
+    infinite_scroll_detected: <bool>
+    conclusion: <string>
+```
+
+### Field Definitions
+
+**`seen` sub-group**:
+
+| Field | Type | Description |
+|---|---|---|
+| `identifier_kind` | enum | Strategy for deriving the `id` key: `id_query`, `url`, or `fingerprint` |
+| `identifier_extractor` | string or null | Param name for `id_query`; `null` for `url`; free-form hash spec for `fingerprint` |
+| `items_path` | string | Relative path to the seen.jsonl file from `$OMT_DIR/collect-jd/` |
+| `items_count` | int | Number of entries currently in seen.jsonl (updated after each append) |
+
+**`identifier_kind` — valid values and `identifier_extractor` meaning**:
+
+| `identifier_kind` | `identifier_extractor` value | How `id` is derived |
+|---|---|---|
+| `id_query` | URL query param name (e.g., `"job_id"`) | `URLSearchParams.get(extractor)` from anchor href |
+| `url` | `null` (omitted) | `normalizeUrl(href)` — the full normalized URL is the key |
+| `fingerprint` | Hash input spec (e.g., `"role_title_verbatim + first_200_chars_of_body"`) | Hash of specified fields |
+
+**`audit_trail` sub-group**: Replaces legacy `range_covered` and `crawl_history` top-level fields. Contains `total_discovered`, `range_covered` array (one entry per crawl run), and `crawl_history` array (execution metadata per run).
+
+**`coverage_proof` sub-group**: Replaces legacy `coverage_verification` field. Scalar fields capturing the exhaustiveness proof from the Coverage Verification Protocol.
+
+### Set Difference Algorithm (Re-crawl)
+
+```pseudocode
+// Load seen set
+lines = readFile("crawl_state/<source>/seen.jsonl").split("\n")
+seenIds = new Set()
+for line of lines:
+  if line.trim() == "": continue
+  try:
+    row = JSON.parse(line)
+    seenIds.add(row.id)
+  catch:
+    warn("skipping invalid JSON line: " + line)  // crash recovery
+
+// Derive discovered id set
+discoveredIds = new Set()
+for anchor of listingAnchors:
+  id = deriveId(anchor, identifier_kind, identifier_extractor)
+  discoveredIds.add(id)
+
+// Set difference
+newIds = discoveredIds.difference(seenIds)
+
+// Process new entries
+for id of newIds:
+  // ingest → classify → persist
+
+// Atomic append to seen.jsonl (POSIX open(path, 'a'))
+for entry of newEntries:
+  appendLine("crawl_state/<source>/seen.jsonl", JSON.stringify(entry))
+```
+
+### Atomic Append Safety Contract
+
+- Use POSIX `open(path, 'a')` — the OS guarantees each `write()` call is atomic at the line level when `write()` payload ≤ PIPE_BUF (typically 4 KB; our lines are < 1 KB, well within limit).
+- Session-lock (`.lock` file) ensures single-writer per session — no interleaved appends from concurrent sessions.
+- Never truncate or rewrite the file in place; always append.
+- Crash recovery: on next session load, skip any line that fails `JSON.parse()` and emit a warning. Partial lines from a crashed write are silently skipped.
+
+### Migration Mapping (from legacy schema)
+
+| Legacy field | New location | Notes |
+|---|---|---|
+| `marker_type` + `last_seen_marker` | → `seen.identifier_kind` + `seen.items_path` | Cursor-based rescan replaced by set-difference |
+| `coverage_verification` | → `coverage_proof` | Renamed; fields preserved |
+| top-level `range_covered` | → `audit_trail.range_covered` | Moved under `audit_trail` |
+| top-level `crawl_history` | → `audit_trail.crawl_history` | Moved under `audit_trail` |
+
+### Flowchart
+
+```dot
+digraph per_site_crawl_memory {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica"];
+
+  start [label="source crawl start", shape=ellipse, style=filled, fillcolor=lightblue];
+  load_seen [label="Load seen.jsonl\n→ build seenIds Set", style=filled, fillcolor=khaki];
+  fetch [label="listing fetch\n(Pagination Tier A/B)", style=filled, fillcolor=lightblue];
+  derive_ids [label="Derive discoveredIds\nper identifier_kind", style=filled, fillcolor=khaki];
+  set_diff [label="newIds = discoveredIds − seenIds", shape=diamond];
+  per_jd [label="per-JD ingest\n(Dedup Gate → save)", style=filled, fillcolor=lightblue];
+  append_seen [label="Atomic append new entries\nto seen.jsonl", style=filled, fillcolor=khaki];
+  update_audit [label="Update audit_trail\n+ coverage_proof", style=filled, fillcolor=khaki];
+  atomic_write [label="sources.yaml atomic write\n(.tmp → rename)", style=filled, fillcolor=lightgreen];
+  done [label="source crawl complete", shape=ellipse, style=filled, fillcolor=lightgreen];
+
+  start -> load_seen -> fetch -> derive_ids -> set_diff;
+  set_diff -> per_jd [label="newIds non-empty"];
+  set_diff -> append_seen [label="newIds empty\n(skip ingest)"];
+  per_jd -> append_seen;
+  append_seen -> update_audit -> atomic_write -> done;
+}
+```
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "Dynamic listing is recommendation-sorted, but a cursor is faster than reading the whole seen.jsonl" — ❌ Cursors assume stable ordering. Recommendation-sorted listings reorder items between runs. Set difference is the only correct approach.
+- "seen.jsonl will get large — skip reading it and use last_seen_marker as a shortcut" — ❌ `last_seen_marker` is deprecated and removed. seen.jsonl is the single source of truth. Read it in full every time; at typical JD counts (hundreds to low thousands) the file is < 1 MB and fast.
+- "Recommendations always surface new items at the top, so cursor pointing to the latest item is sufficient" — ❌ Recommendation ranking changes retroactively (A/B tests, personalization). Items below the cursor can become new. Only set difference is correct.
+- "The site uses chronological sort so a timestamp cursor is safe" — ❌ Timestamp cursors fail when items are backdated, unpublished, or re-published. Set difference is universally correct regardless of sort order.
+- "Appending to seen.jsonl before confirming the JD was persisted risks false positives" — ❌ Append only after successful persist. The ingest loop appends entries for JDs that completed the persist phase. Aborted JDs are simply not appended; they will appear as new on the next run.
+- "identifier_kind defaults to url — just pick it silently and let the user fix it later" — ❌ Silent default is explicitly forbidden. Run the heuristic, report, confirm.
+- "seen.jsonl is empty (first run), so skip the set difference and treat everything as new" — ❌ The algorithm is correct: an empty seen set naturally yields `discoveredIds − ∅ = discoveredIds`. No special casing needed; just run the algorithm.
+
+### Counterexample
+
+- **id_query (Toss)**: `identifier_kind: id_query`, `identifier_extractor: job_id`. Anchor `https://toss.im/career/job-detail?job_id=4097` → `id = "4097"`. On re-crawl, `seenIds = {"4097", "3981", ...}`. New anchor with `job_id=4201` → `"4201" ∉ seenIds` → new candidate. ✓
+- **url (company without ID params)**: `identifier_kind: url`, `identifier_extractor: null`. `id = normalizeUrl(href)`. Stable URL = stable key. ✓
+- **fingerprint (obfuscated URLs)**: `identifier_kind: fingerprint`, `identifier_extractor: "role_title_verbatim + first_200_chars_of_body"`. URL changes per session (tokens, timestamps in query) → URL not usable as key. Hash of role title + body excerpt is stable. ✓
+
+---
+
+## Identifier Kind Heuristic
+
+### Specification (MANDATORY)
+
+On first registration of a new source, automatically infer the `identifier_kind` by sampling anchor URLs from the listing page before writing to `sources.yaml`. Report the result to the user and require confirmation before writing.
+
+### Heuristic Algorithm
+
+```pseudocode
+anchors = collectListingAnchors(source.careers_url)
+total = anchors.length
+
+// Step 1: check for monotonic ID query param
+paramCounts = {}
+for anchor of anchors:
+  params = new URLSearchParams(new URL(anchor.href).search)
+  for [key, value] of params:
+    if /^\d+$/.test(value):
+      paramCounts[key] = (paramCounts[key] ?? 0) + 1
+
+bestParam = argmax(paramCounts)
+bestCount = paramCounts[bestParam] ?? 0
+
+if bestCount / total >= 0.80:
+  return { identifier_kind: "id_query", identifier_extractor: bestParam }
+
+// Step 2: check URL stability (requires 2 separate fetches)
+anchors2 = collectListingAnchors(source.careers_url)  // second fetch
+stable = countStableUrls(anchors, anchors2)
+if stable / total >= 0.95:
+  return { identifier_kind: "url", identifier_extractor: null }
+
+// Step 3: URL varies — fingerprint
+return {
+  identifier_kind: "fingerprint",
+  identifier_extractor: "role_title_verbatim + first_200_chars_of_body"  // default spec
+}
+```
+
+### User Report Format
+
+After running the heuristic, report in this format before writing to `sources.yaml`:
+
+```
+Detected `identifier_kind: id_query` with extractor `job_id`
+(218/236 anchors match `?job_id=\d+` pattern).
+Confirm or override?
+  [confirm] → write to sources.yaml
+  [override] → edit sources.yaml manually
+```
+
+Wait for user response before writing. User can override by editing `sources.yaml` directly after confirmation.
+
+### Override Procedure
+
+User may change `identifier_kind` + `identifier_extractor` in `sources.yaml` at any time. On next rescan, the skill reads the current values from `sources.yaml` — no re-inference needed. If the user changes `identifier_kind` after seen.jsonl already has entries, re-derive all existing `id` values and rewrite `seen.jsonl` (or alert the user that a migration is needed).
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "Only one anchor was sampled — url looks fine, set it silently" — ❌ Sampling a single anchor is insufficient. Full anchor set collection is required for the 80% threshold check.
+- "User is in a hurry — default to `url` and let them fix it later" — ❌ Silent default is explicitly forbidden regardless of urgency. The heuristic takes seconds to run.
+- "80% threshold is high — 60% of anchors have an ID param so that's probably right" — ❌ The threshold is 80%. Below threshold → do not select `id_query`; fall through to `url` or `fingerprint` check.
+- "The site is well-known (e.g., Toss) so I already know it uses job_id param — skip heuristic" — ❌ Heuristic must always run. Prior knowledge does not exempt the confirmation step.
+- "identifier_extractor can be left null for id_query because the param is obvious" — ❌ `identifier_extractor` must be the specific param name when `identifier_kind` is `id_query`. `null` is only valid for `url`.
+
+### Counterexample
+
+- **Toss careers**: 236 anchors sampled → 218 match `?job_id=\d+` pattern (92.4%) → heuristic selects `id_query` + extractor `job_id`. Report shown, user confirms. Written to `sources.yaml`. ✓
+- **Company with path-based URLs** (e.g., `/careers/software-engineer-backend`): 0 anchors have ID query params. Second fetch shows 94/100 URLs stable → `url` kind selected. ✓
+- **Company with session-token URLs** (e.g., `/jobs?token=abc123&id=456`): token changes per session → < 95% stable. Hash of role title + body excerpt selected as `fingerprint`. ✓
+
+---
+
+## Dedup Check Gate Enforcement
+
+### Specification (MANDATORY)
+
+Dedup L1/L2 **must always leave a gate execution record**. Silent-skip is forbidden in cases where `jobs/` is empty or L2 conditions are not met. If the `fingerprint_check` field is not set to an explicit value before JD save, reject the save.
+
+- **L1 gate** — must execute on every JD ingest:
+  - jobs empty → `L1_candidates_checked: 0`, `fingerprint_check: unique_pending_l2`, then proceed to L2 step.
+  - candidates exist → perform normal normalize matching.
+- **L2 gate** — must be evaluated after L1 pass:
+  - 0 other JDs with same company_slug → `L2_evaluated: not_applicable (no_sibling_jds)`, `fingerprint_check: unique` (explicit).
+  - JDs with same company_slug exist → call LLM similarity → `fingerprint_check: unique | duplicate_of:<url>`.
+- **Pre-save validation**: If `fingerprint_check ∉ {unique, duplicate_of:<url>, pending}`, reject save + error log.
+
+### Dedup Gate Audit Line (MANDATORY)
+
+At the end of each ingest operation, append 1 line to `$OMT_DIR/collect-jd/dedup-audit.log` (atomic):
+
+```
+<ISO8601>\t<url>\tL1:<status>\tL2:<status>\tfingerprint:<value>
+```
+
+L1 status values: `checked_N` (N candidates) / `no_candidates`.
+L2 status values: `called` / `not_applicable` / `cap_exceeded`.
+
+### Flowchart
+
+```dot
+digraph dedup_check_gate {
+  rankdir=TB;
+  node [shape=box, fontname="Helvetica"];
+
+  candidate [label="New JD candidate", shape=ellipse, style=filled, fillcolor=lightblue];
+  l1_exec [label="Execute L1 gate\n(scan jobs/)", shape=box, style=filled, fillcolor=khaki];
+  l1_result [label="Candidates exist?", shape=diamond];
+  l1_match [label="Perform normalized URL\nor slug matching", shape=diamond];
+  l1_hit [label="L1 match → existing file\nupdate last_checked_at\n(skip save)", style=filled, fillcolor=lightgreen];
+  l2_eval [label="Evaluate L2 gate\n(other JD with same company_slug?)", shape=diamond];
+  l2_call [label="L2 LLM similarity\ncall (temp 0)"];
+  l2_dup [label="duplicate_of:<url>\n(skip save)", style=filled, fillcolor=lightgreen];
+  l2_na [label="L2: not_applicable\nfingerprint: unique", style=filled, fillcolor=lightgreen];
+  save_check [label="fingerprint_check\nexplicit value?", shape=diamond];
+  reject [label="Reject save + error log", style=filled, fillcolor=red, fontcolor=white];
+  save [label="JD atomic write +\ndedup-audit.log append", style=filled, fillcolor=lightgreen];
+
+  candidate -> l1_exec;
+  l1_exec -> l1_result;
+  l1_result -> l1_match [label="yes"];
+  l1_result -> l2_eval [label="no (empty)"];
+  l1_match -> l1_hit [label="match"];
+  l1_match -> l2_eval [label="no match"];
+  l2_eval -> l2_call [label="sibling JDs exist"];
+  l2_eval -> l2_na [label="0 siblings"];
+  l2_call -> l2_dup [label="same: true"];
+  l2_call -> save_check [label="same: false"];
+  l2_na -> save_check;
+  save_check -> save [label="yes"];
+  save_check -> reject [label="no"];
+}
+```
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "jobs/ is empty so L1 check skip produces the same result" — ❌ Without a gate execution record in the audit log, verification is impossible. Must record "executed, 0 candidates".
+- "No JD for the same company so skip L2 call" — ❌ The evaluation itself must be performed. "not_applicable" must be explicitly recorded.
+- "fingerprint_check defaults to unique so can be omitted" — ❌ Explicit write is mandatory. Omission is equivalent to dedup not being run.
+- "dedup-audit.log is optional, isn't it?" — ❌ MANDATORY. Absent = save rejected.
+- "Batch mode has duplicate L1/L2 scans, so some can be skipped" — ❌ Gate execution is mandatory per JD. Batch only adjusts the cap.
+
+### Counterexample (normal flow — 2 cases)
+
+1. **Empty jobs**: First JD ingest → L1 gate executes (candidates: 0) → L2 gate evaluates (sibling: 0) → `fingerprint_check: unique` → JD atomic write → `dedup-audit.log` appends `...\tL1:no_candidates\tL2:not_applicable\tfingerprint:unique`.
+2. **Sibling exists**: Second toss JD ingest → L1 gate (candidates: 1, normalize match: no) → L2 gate (sibling: 1) → LLM similarity (same: false) → `fingerprint_check: unique` → save. audit: `...\tL1:checked_1\tL2:called\tfingerprint:unique`.
+
+---
+
+## Dedup Layer 1
+
+Before writing a new JD file, **always** run L1 dedup against existing files in `$OMT_DIR/collect-jd/jobs/<company_slug>/`.
+
+### L1 match conditions
+
+Given candidate JD with normalized URL `U` and slugs `(company_slug, role_title_slug)`:
+
+- **Match** if any existing JD satisfies:
+  - `normalizeUrl(existing.url) == U`, OR
+  - `existing.company_slug == candidate.company_slug` AND `existing.role_title_slug == candidate.role_title_slug`
+
+`normalizeUrl()` is defined in `scripts/url-normalize.ts` (spec: `reference/url-normalize.md`). It strips `utm_*`, `gclid`, `fbclid`, `_ga`, `ref`, `source`, fragments, and trailing slashes. **Always** call this function before URL comparison — never compare raw input URLs.
+
+### L1 match action (MANDATORY)
+
+If L1 matches an existing file:
+1. **Do not create** a new JD file under `jobs/`.
+2. Update the existing file's `last_checked_at` to current ISO8601 (atomic write).
+3. Report: `"중복 감지: 기존 <path> (L1: URL normalized match)"`.
+4. Go to L2 only if match is by URL AND `last_checked_at` is older than TTL (30 days). Slug-only match skips L2 (Deduped by slug identity).
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "utm attached so different link, separate entry" — ❌ Compare after normalizeUrl.
+- "User explicitly said two URLs are different so save as requested" — ❌ Dedup takes precedence over user preference.
+- "Only fragment (#anchor) differs so separate" — ❌ normalize removes fragments.
+- "Query param order differs so separate" — ❌ normalize sorts and strips params.
+- "Might be duplicate of previous collection but uncertain, so save anyway" — ❌ If uncertain, call L2; if still unclear, save with `fingerprint_check: pending` (per S13 rule).
+
+### Counterexample: different positions
+
+Even with the same `company_slug`, different `role_title_slug` means separate JDs. Save both files.
+
+---
+
+## Dedup Layer 2
+
+When L1 (URL · Slug) **does not match**, or when L1 matched but `last_checked_at` exceeds TTL (30 days), call L2 LLM similarity judgment.
+
+### When to call L2
+
+- L1 no-match + **another JD with the same `company_slug`** already saved in the current batch → L2 comparison mandatory (prevents similar position duplicates per company)
+- L1 URL match + `last_checked_at` > 30 days → L2 re-verification (content may have actually changed)
+- Single-session L2 call cap `max_l2_calls_per_batch: 50`. If exceeded, proceed with save but mark `fingerprint_check: pending` → re-evaluate in next batch.
+
+### L2 invocation contract
+
+- **Prompt file:** `reference/dedup-l2-prompt.md` (pinned, version-controlled)
+- **Temperature: 0** (deterministic)
+- **Output contract:** JSON `{"same": bool, "reason": str}`
+- On JSON parse failure, retry once. On 2nd failure, save conservatively with `fingerprint_check: pending` (preservation takes precedence over dedup skip).
+- **Raw URL comparison forbidden**, **slug-only judgment forbidden** — must always go through L2 prompt.
+
+### L2 match action (same == true)
+
+1. **Forbid** creating new JD file.
+2. Update existing (matched) file's `last_checked_at` to current ISO8601.
+3. Record existing file's `fingerprint_check` as `duplicate_of:<candidate.url>` (tracks where duplicate was detected from).
+4. Report: `"중복 감지: 기존 <path> (L2: LLM similarity same=true, reason=<reason>)"`.
+
+### L2 non-match action (same == false)
+
+- Proceed to save new JD file. Record `fingerprint_check: unique`.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "Different URLs obviously means different JDs" — ❌ L2 content comparison is mandatory (handles company blog vs job portal same posting case).
+- "Blog is a promotional piece, separate from hiring site" — ❌ If content is the same, it's a duplicate.
+- "Content is slightly different so separate" — ❌ Delegate to LLM judge. Temperature 0 makes result reproducible.
+- "Batch is busy so skip L2 and save" — ❌ When `max_l2_calls_per_batch` is exceeded, saving with `fingerprint_check: pending` is allowed — **that is not a skip**. Re-evaluate in next batch, mandatory.
+- "L2 response JSON is broken so just save" — ❌ 1 retry; if still failing, `fingerprint_check: pending`.
+
+### Counterexample: different team · different seniority
+
+Even same company · same role_title, if L2 returns `same: false`, save as separate JDs (e.g., "네이버 백엔드 시니어" vs "네이버 백엔드 주니어").
+
+---
+
+## Company-Name Ingest
+
+Ingest path #4 (company name only) operates **only within sites registered in `sources.yaml`**. Open-web free search is **absolutely forbidden**.
+
+### Processing flow
+
+1. User provides company name only, e.g., "XYZCorp 의 JD 가져와줘".
+2. Skill looks up company slug match in `sources.yaml`'s `companies[]` (or equivalent field).
+3. **Match found:**
+   - Use the matched company's `careers_url` from `sources.yaml` to fetch JD list
+   - For each JD: standard ingest flow (Phase 0 → Dedup L1/L2 → Matching Loop → save)
+4. **Match not found (unregistered):**
+   - WebFetch call **forbidden**.
+   - LLM open-world search · Google search · LinkedIn exploration all **forbidden**.
+   - Trigger `AskUserQuestion`: "XYZCorp 의 공식 채용 페이지 URL 을 알려주세요. 등록하면 다음부터 회사명만으로 수집 가능합니다."
+   - Options:
+     - `URL input`: user provides URL → append to `sources.yaml`'s `companies[]` (`{slug, name, careers_url, added: <ISO date>}`) → return to step 3
+     - `skip`: abandon collection. Report "XYZCorp 는 등록되지 않아 건너뛰었습니다."
+     - `ignore (blacklist)`: add to `sources.yaml.blacklist[]` → immediately skip on next occurrence of this company request (optionally with reason_note).
+
+### sources.yaml schema (relevant portion)
+
+```yaml
+version: 1
+companies:
+  - slug: toss
+    name: Toss
+    careers_url: https://toss.im/career
+    added: 2026-04-01
+blacklist:
+  - slug: xyz
+    name: XYZCorp
+    reason_note: 이미 수집 완료, 재수집 불필요      # optional
+```
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "User provides company name so obviously need to search Google — that's being helpful" — ❌ Open-web search is absolutely forbidden (plan non-goal).
+- "Not registered but try WebFetch with a guessed URL anyway" — ❌ WebFetch call forbidden.
+- "Skip AskUserQuestion and quietly skip unregistered companies" — ❌ Must notify user (transparency).
+- "Let skill auto-append to sources.yaml without user confirmation" — ❌ Append only after user provides URL. Auto-inference forbidden.
+- "Blacklisted companies: skip without even asking for registration — don't even throw registration question" — ⭕ OK (blacklist is user explicit intent). But must include one line in report noting blacklist triggered.
+
+### Counterexample
+
+- User "Toss 채용공고 가져와줘" → `toss` exists in `sources.yaml.companies` → fetch `https://toss.im/career` → standard flow.
+- User "XYZCorp 채용" → unregistered → AskUserQuestion → user provides URL → append to `sources.yaml` → fetch.
+- User "어제 등록한 xyz 회사" → found in blacklist → quietly skip + report line "XYZCorp blacklist (reason: 이미 수집 완료)".
