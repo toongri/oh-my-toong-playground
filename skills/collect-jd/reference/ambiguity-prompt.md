@@ -1,39 +1,39 @@
-# ambiguity-prompt — JD-Profile 매칭 판정 Predicate
+# ambiguity-prompt — JD-Profile Matching Judgment Predicate
 
 ## 1. Purpose
 
-history → rules → filter 매칭 루프에서 각 JD 에 대해 `match | mismatch | ambiguous` verdict 를 반환하는 LLM predicate 다.
+An LLM predicate that returns a `match | mismatch | ambiguous` verdict for each JD in the history → rules → filter matching loop.
 
-`ambiguous` 일 때만 `AskUserQuestion` 을 호출한다. `match` 와 `mismatch` 는 자동으로 status 를 확정하며 사용자 개입이 없다.
+`AskUserQuestion` is called only when the verdict is `ambiguous`. `match` and `mismatch` finalize the status automatically with no user intervention.
 
 ---
 
 ## 2. Invocation Spec
 
-| 항목 | 값 |
+| Item | Value |
 |---|---|
-| Model | SKILL.md 에서 지정 (Claude) |
+| Model | Specified in SKILL.md (Claude) |
 | Temperature | **0** |
 | Max tokens | 1024 |
-| Message structure | Single user message (system + user 인라인) |
+| Message structure | Single user message (system + user inlined) |
 
 ---
 
 ## 3. Input Contract
 
-| 변수 | 타입 | 제한 | 설명 |
+| Variable | Type | Limit | Description |
 |---|---|---|---|
-| `{profile_summary}` | string | ≤ 2000 chars | 유저 taste / skills / career 요약 |
-| `{rules_yaml}` | string | ≤ 3000 chars | 현재 `rules.yaml` 내용 raw |
-| `{jd_body}` | string | ≤ 5000 chars | JD 본문 원문 |
-| `{jd_company}` | string | — | 회사명 원문 |
-| `{jd_role_title_verbatim}` | string | — | 직무 제목 원문 |
+| `{profile_summary}` | string | ≤ 2000 chars | User taste / skills / career summary |
+| `{rules_yaml}` | string | ≤ 3000 chars | Current `rules.yaml` content, raw |
+| `{jd_body}` | string | ≤ 5000 chars | JD body verbatim |
+| `{jd_company}` | string | — | Company name verbatim |
+| `{jd_role_title_verbatim}` | string | — | Role title verbatim |
 
 ---
 
 ## 4. Output Contract (JSON strict)
 
-LLM 은 아래 JSON 만 출력해야 한다. preamble, markdown, JSON 외 텍스트는 모두 파싱 실패로 처리한다.
+The LLM must output only the JSON below. Any preamble, markdown, or text outside the JSON is treated as a parse failure.
 
 ```json
 {
@@ -43,27 +43,27 @@ LLM 은 아래 JSON 만 출력해야 한다. preamble, markdown, JSON 외 텍스
 }
 ```
 
-| 필드 | 타입 | 설명 |
+| Field | Type | Description |
 |---|---|---|
 | `verdict` | enum | `match` \| `mismatch` \| `ambiguous` |
-| `missing_signals` | array[string] | JD 에서 결여된 신호 (예: `"compensation range"`, `"location"`) |
-| `explanation` | string | 판정 근거 한국어 서술 |
+| `missing_signals` | array[string] | Signals absent from the JD (e.g. `"compensation range"`, `"location"`) |
+| `explanation` | string | Korean prose stating the judgment rationale |
 
 ---
 
 ## 5. Decision Rules
 
-| verdict | 자동 동작 | 조건 |
+| verdict | Automatic behavior | Condition |
 |---|---|---|
-| `match` | `status: included` 자동 확정 | rules 조건을 명확히 만족 |
-| `mismatch` | `status: excluded` 자동 확정. `tags`: 위반 규칙 이름을 slug화한 값 (Exclude Flow의 tags.yaml 프로토콜에 따라 append). `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (Matching Loop Auto-decision audit trail 규칙을 따름). **유저 발화 원문 대체 금지 — manual exclude 경로에만 유저 발화 사용** | rules 조건을 명확히 위반 |
-| `ambiguous` | **AskUserQuestion 호출 필수**. `missing_signals` 를 질문에 포함. status 는 잠정 `pending` | 판정에 필요한 신호 부재 또는 부분 정보만 존재 |
+| `match` | `status: included` finalized automatically | Rules conditions clearly satisfied |
+| `mismatch` | `status: excluded` finalized automatically. `tags`: violated rule names slugified and appended per the Exclude Flow tags.yaml protocol. `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (follows the Matching Loop Auto-decision audit trail rule). **Verbatim user utterance must NOT be substituted — user utterance is only used in the manual exclude path** | Rules conditions clearly violated |
+| `ambiguous` | **AskUserQuestion call is MANDATORY**. Include `missing_signals` in the question. Status remains tentatively `pending` | Required signals absent or only partial information exists |
 
-`ambiguous` 응답에서 `missing_signals` 가 비어있으면 구현 오류로 간주한다.
+If `missing_signals` is empty on an `ambiguous` response, treat it as an implementation error.
 
 ---
 
-## 6. Pinned Prompt (템플릿)
+## 6. Pinned Prompt (Template)
 
 ```
 System: You are a strict JD-profile matching judge. Output ONLY JSON:
@@ -101,7 +101,7 @@ JSON 만 출력해라.
 
 ### 7-1. match fixture
 
-**Input 요약**
+**Input summary**
 
 - rules: `Kotlin + Spring + 5년 이상 경력 요구`
 - JD: `Kotlin/Spring 기반 백엔드, 5년+ 경력자 우대`
@@ -120,7 +120,7 @@ JSON 만 출력해라.
 
 ### 7-2. mismatch fixture
 
-**Input 요약**
+**Input summary**
 
 - rules: `주 5일 출근 불가 — 원격/하이브리드 필수`
 - JD: `Full on-site required (5 days a week)`
@@ -139,10 +139,10 @@ JSON 만 출력해라.
 
 ### 7-3. ambiguous fixture
 
-**Input 요약**
+**Input summary**
 
 - rules: `원격 근무 필수`
-- JD: 위치 및 근무형태 미기재
+- JD: location and work mode not specified
 
 **Expected output**
 
@@ -158,19 +158,19 @@ JSON 만 출력해라.
 
 ## 8. Retry / Failure Policy
 
-| 상황 | 동작 |
+| Situation | Behavior |
 |---|---|
-| JSON 파싱 실패 (1회차) | 동일 프롬프트로 1회 재시도 |
-| JSON 파싱 실패 (2회차) | conservative fallback: `verdict: ambiguous`, `missing_signals: ["llm_parse_failure"]` |
-| `verdict` 값이 enum 외 | 파싱 실패와 동일하게 처리 |
-| `ambiguous` 인데 `missing_signals` 빈 배열 | 구현 경고 로그 + `missing_signals: ["unknown"]` 로 보정 |
+| JSON parse failure (1st attempt) | Retry once with the same prompt |
+| JSON parse failure (2nd attempt) | Conservative fallback: `verdict: ambiguous`, `missing_signals: ["llm_parse_failure"]` |
+| `verdict` value outside the enum | Treat the same as a parse failure |
+| `ambiguous` with empty `missing_signals` array | Implementation warning log + correct to `missing_signals: ["unknown"]` |
 
 ---
 
 ## 9. Versioning Note
 
-이 프롬프트를 수정할 때:
+When modifying this prompt:
 
-1. 이 프롬프트 파일 상단의 version 주석(`v1`, `v2` 등)을 bump한다. (SKILL.md frontmatter에는 version 필드가 없으며, skill-source YAML에는 version 필드를 넣지 않는 것이 repo 관례 — Plan DoD H2 준수.)
-2. 위 3개 fixture (match / mismatch / ambiguous) 를 포함한 regression 재검증을 수행한다.
-3. 프롬프트 변경 이력은 git commit 메시지에 기록한다.
+1. Bump the version comment at the top of this prompt file (`v1`, `v2`, etc.). (There is no version field in SKILL.md frontmatter, and repo convention is not to add a version field to skill-source YAML — per Plan DoD H2.)
+2. Run regression re-validation including the 3 fixtures above (match / mismatch / ambiguous).
+3. Record the prompt change history in the git commit message.
