@@ -98,20 +98,27 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 
 → Details: [reference/dedup-and-discovery.md#sources-registration](reference/dedup-and-discovery.md#sources-registration)
 
-## Listing Pagination (MANDATORY, 2-tier)
+## Listing Pagination (MANDATORY, single-path)
 
-**Obligation to check the entire JD list to the end** from a source's listing page. 2-tier approach:
+**Single source of truth: `pagination.how`**. All listing discovery — first-time auto-detect, user-interview fallback, cached re-execution, invalidation re-interview — collapses into one algorithm `discover_listing(source)`.
 
-- **Tier A (Auto-detect)**: Automatically attempt these patterns — query `?page=` / `?offset=` / `?after=<cursor>` / "다음"·"next" button link / infinite scroll XHR endpoint (Playwright network monitoring). On success, record `sources.yaml.<source>.pagination = { method: auto, detected_pattern: <...> }`.
-- **Tier B (Interview fallback)**: On Tier A failure, **AskUserQuestion is mandatory** — "이 사이트 전체 list 를 어떻게 가져오나요? (API URL / 전용 MCP / 스크립트 / 수동 복붙)". Store user response as free-form text in `sources.yaml.<source>.pagination.how` (execution script paths, API examples, MCP call procedures all allowed). Reuse `how` in subsequent sessions.
+**Algorithm**:
+1. If `pagination.how` absent → try Tier A 9-pattern catalog → success: serialize as `how={origin: auto, pattern, params}`. fail: AskUserQuestion → `how={origin: interview, pattern, params, prose}`.
+2. Execute `pagination.how`.
+3. On execution failure → invalidate per trigger table (transient: 1-retry; structural: immediate). Push current `how` to `previous_how` 3-slot ring → AskUserQuestion 3-option (new method / Tier A retry / skip). On retry-fail → **raise** (silent empty forbidden).
 
-**CRITICAL**: When auto-detection fails, storing only the first page and stopping is forbidden. Must escalate to Tier B interview.
+**Schema**: `pagination.how = { origin: auto|interview, pattern: <13-enum>, params: {}, prose: <free-form> }`. `previous_how: []` inline ring (LRU, max 3). `invalidated_at: null` ISO timestamp.
 
-→ Details (Tier A heuristics list, Tier B interview template, loopholes): [reference/dedup-and-discovery.md#listing-pagination](reference/dedup-and-discovery.md#listing-pagination)
+**CRITICAL**:
+- First-run discovery skipping Tier A 9-pattern catalog → AskUserQuestion shortcut **forbidden**.
+- discover_listing returning empty `[]` on execution failure **forbidden** — must raise; caller skip-with-audit, no Per-Site Memory false-clean.
+- Coverage Verification fires after `was_invalidated: false` (success path) only. raise → skip Coverage + Per-Site Memory update.
+
+→ Details (γ schema, 13-pattern catalog, invalidation trigger table, previous_how ring, raise-on-failure contract, 2 new loopholes): [reference/dedup-and-discovery.md#listing-pagination](reference/dedup-and-discovery.md#listing-pagination)
 
 ## Listing Pagination Coverage Verification (MANDATORY, 3-check)
 
-Discovery-side proof that the listing was scraped exhaustively. After Tier A/B pagination collects the anchor set, three checks MUST pass before Full Coverage Tier 1 ingest begins:
+fires after `discover_listing` returns `was_invalidated: false` (or `true` after retry success). raise 시 skip. Discovery-side proof that the listing was scraped exhaustively. After pagination collects the anchor set, three checks MUST pass before Full Coverage Tier 1 ingest begins:
 
 1. **Declared total match** — regex-extract page total count (e.g., "236개의 포지션") → must equal DOM unique-anchor count
 2. **Scroll stability** — `window.scrollTo(0, document.documentElement.scrollHeight)` × ≥3 iterations → anchor count unchanged

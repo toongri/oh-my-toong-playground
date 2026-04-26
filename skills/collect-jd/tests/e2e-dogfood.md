@@ -601,3 +601,69 @@ User interview via `/superpowers:writing-skills` raised three pressure-scenario 
 | `destructive_deletions` | `0 (legacy keys preserved as historical references)` |
 | `argus_verdict` | `APPROVE (after T-A-fix)` |
 | `verdict` | `GREEN_SPEC` |
+
+---
+
+## T11-f — Pagination spec unification (`pagination.how` single-path)
+
+### Trigger
+
+User questioned "분기처리가 많아진 느낌인데 일관되게 처리할 순 없는거야?" after the previous spec proposal accumulated 4 distinct branches (Tier A 9-pattern auto-detect / Tier B interview / Reuse cached `how` / Invalidation re-interview). All four were special cases of the same question: "how does this site's listing get fetched?"
+
+### Decisions (oracle-verified)
+
+| Topic | Decision | Rationale |
+|---|---|---|
+| Single source of truth | `pagination.how` is the only field describing discovery method. Tier A success serializes its result into `how`. | Collapses 4 branches into 1; first-time discovery and cache reuse become the same path. |
+| `how` schema | γ tagged-union: `{origin: auto|interview, pattern: <13-enum>, params: {}, prose: <free-form>}`. | Determinism for Tier A patterns (parameterized) + free-form prose for interview methods. Avoids parser asymmetry. |
+| `pagination.method` field | **Drop**. Derivable from `how.origin`. | Two sources of truth invite drift. |
+| Invalidation triggers | 2-tier with retry gate: structural-immediate (HTTP 4xx, DOM miss, known-error keywords) / transient-1-retry (Playwright timeout, HTTP 5xx) / 0-anchor history-gated (only invalidate if `audit_trail.total_discovered > 0`). | Prevents false-positive invalidation on legitimate empty first-run. |
+| `previous_how` | Inline 3-slot LRU ring in sources.yaml. | Stable site changes <1x/year; ring captures ~3 years of history at <1KB; matches seen.jsonl philosophy without complexity tax. |
+| Failure mode contract | `discover_listing` on retry-fail must **raise**, not return empty `[]`. Caller (Per-Site Crawl Memory) cannot compute `discovered − seen = ∅` and false-clean. | Prevents silent false-negative — the most dangerous error class because self-undetectable. |
+| Tier A 9-pattern catalog | Preserved verbatim as `### Tier A 9-pattern Catalog` sub-section. Each pattern named with enum value (page_increment, offset, cursor, next_link, numeric_pagination, load_more_button, infinite_scroll, api_json, graphql). | Linguistic safeguard against future Claude shortcutting first-run discovery to interview. |
+
+### RED-GREEN Implementation
+
+**RED phase** (`tests/pressure-scenarios.md` 789 → 861, +72 lines, 3 scenarios):
+- S34 First-run Tier-A skip rationalization
+- S35 Silent empty on invalidation-retry-fail (false-clean)
+- S36 First-run 0-anchor false-positive invalidation
+
+**GREEN phase**:
+
+| File | Before | After | Change |
+|---|---|---|---|
+| `skills/collect-jd/SKILL.md` | 361 | 370 | +9; `## Listing Pagination` → single-path summary; `## Listing Pagination Coverage Verification` first line ordering note |
+| `skills/collect-jd/reference/dedup-and-discovery.md` | 792 | 960 | +168; `## Listing Pagination` 11 sub-sections (Specification / γ Schema / Tier A 9-pattern Catalog / Interview Patterns / Algorithm pseudocode / Invalidation Trigger Table / previous_how Ring / Flowchart / Coverage Verification Ordering / Rationalization Loopholes (7 rows, +2 new) / Counterexample); Sources Registration `### sources.yaml schema (complete)` example updated to γ schema |
+| `tests/pressure-scenarios.md` | 789 | 861 | +72; S34/S35/S36 RED scenarios with row-text-quotation cross-references to GREEN body |
+
+**State migration** (`$OMT_DIR/collect-jd/`):
+- `sources.yaml`: 60 → 65 lines. Toss source pagination converted from flat (`method: interview_playwright`, `tier_a_attempted_at`, `tier_a_result`, `detected_pattern`, `how: <prose>`) → γ schema (`how: {origin: interview, pattern: interview_script, params: {tier_a_*}, prose: <6-step Playwright>}`, `previous_how: []`, `invalidated_at: null`). 6-step Playwright procedure prose preserved byte-for-byte.
+
+### Verification
+
+- 3 sisyphus-junior agents dispatched in parallel (U-1 RED + U-2 GREEN + U-3 migration). All 3 completed clean.
+- argus QA round 1 (10 invariants I-1~I-10): **REQUEST_CHANGES** — 2 HIGH (Sources Registration schema example still flat / RED scenarios `rule_added` TBD).
+- U-2-fix dispatched: junior cleared both HIGH findings.
+- argus QA round 2: **COMMENT** — 1 MEDIUM (line numbers in citations off by 4 due to schema example expansion in same fix round).
+- U-2-fix2 dispatched: junior applied argus's recommended Option 2 (remove `(line N)` parentheticals; preserve row-text quotation as semantic anchor — drift-resistant).
+- argus QA round 3 (spotcheck): **APPROVE** — 3 invariants pass, no further issues.
+
+### Outstanding Work
+
+- Hot-reload deploy of skill source to `.claude/skills/collect-jd/` (this task, Part 2).
+- Git commit (mnemosyne).
+- Live verification of unified `discover_listing` on next dogfood round (e.g., 234 pending Toss JD batch re-run with the new schema).
+
+### Evidence Footer
+
+| Field | Value |
+|---|---|
+| `observed_at` | `2026-04-26` |
+| `method` | `oracle_architecture_verdict_then_parallel_subagent_with_argus_qa_loop` |
+| `agents_dispatched` | `1 oracle + 4 sisyphus-junior (U-1 + U-2 + U-3 + 2 fix rounds) + 3 argus rounds` |
+| `files_touched` | `3 skill files (SKILL.md, dedup-and-discovery.md, pressure-scenarios.md) + 1 state file (sources.yaml)` |
+| `total_line_delta` | `+249 (SKILL.md +9, dedup-and-discovery.md +168, pressure-scenarios.md +72) + state +5` |
+| `destructive_deletions` | `0 (legacy `pagination.method` field dropped per oracle decision; old flat keys converted to γ schema params)` |
+| `argus_verdict` | `APPROVE (round 3 final)` |
+| `verdict` | `GREEN_SPEC` |

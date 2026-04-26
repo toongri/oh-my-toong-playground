@@ -128,9 +128,13 @@ companies:
     careers_url: https://toss.im/career
     added_at: 2026-04-01
     pagination:
-      method: auto          # auto | interview_script | mcp:<name>
-      detected_pattern: "?page="   # on Tier A success
-      how: ""               # Tier B interview result, free-form
+      how:
+        origin: auto         # auto | interview
+        pattern: <enum>      # see Tier A 9-pattern catalog or interview pattern (manual_list / interview_script / interview_mcp / interview_api)
+        params: {}           # pattern-specific (e.g., {start: 1, increment: 1, stop_condition: empty_response})
+        prose: ""            # free-form description; mandatory for interview, optional for auto
+      previous_how: []       # LRU ring (max 3) — pushed on invalidation
+      invalidated_at: null   # ISO8601 if last invalidation occurred
     crawl_state:
       seen:
         identifier_kind: id_query  # or url, fingerprint
@@ -174,79 +178,243 @@ See [Per-Site Crawl Memory](#per-site-crawl-memory) for full schema semantics.
 
 ## Listing Pagination
 
-### Specification (MANDATORY, 2-tier)
+### Specification (MANDATORY, single-path)
 
-**Obligation to check the entire JD list to the end** from a source's listing page. Attempt Tier A then Tier B in order.
+**Single source of truth: `pagination.how`**. All listing discovery — first-time auto-detect, user-interview fallback, cached re-execution, invalidation re-interview — collapses into one algorithm `discover_listing(source)`.
 
-### Tier A: Auto-detect heuristics
+**Algorithm (3 steps)**:
+1. If `pagination.how` absent → try Tier A 9-pattern catalog. On success, serialize as `how={origin: auto, pattern, params}` and atomic write. On all-9-fail → AskUserQuestion mandatory → `how={origin: interview, pattern, params, prose}` and atomic write.
+2. Execute `pagination.how`.
+3. On execution failure → classify trigger (transient: 1-retry then invalidate; structural: invalidate immediately). Push current `how` to `previous_how` 3-slot ring → set `how=null`, `invalidated_at=now()` → AskUserQuestion 3-option (new method / Tier A retry / skip). skip → **raise** `InvalidationSkipped`. retry-fail → **raise** `NewMethodAlsoFailed`. Silent empty `[]` return is **forbidden**.
 
-Attempt the following patterns in order. On first success, record `pagination: { method: auto, detected_pattern: <one of> }`:
+### γ Schema for `pagination.how`
 
-1. Query param `?page=<n>` — increment from 1, stop on empty response
-2. Query param `?offset=<n>` — increment by `limit` value
-3. Query param `?after=<cursor>` or `?cursor=<token>` — extract next cursor
-4. Link/button DOM: `rel="next"` or text containing "다음", "Next", ">" in `<a>` tag
-5. Numeric pagination DOM: `<a>2</a>`, `<a>3</a>` pattern — extract last page number
-6. "더 보기" / "Load more" button → Playwright click + XHR wait
-7. Infinite scroll XHR endpoint — Playwright network intercept: capture `fetch`/`XHR` request URL then repeat calls
-8. JSON API endpoint found — `Content-Type: application/json` response + `jobs`/`positions`/`listings` key present
-9. GraphQL pagination — `pageInfo.hasNextPage` + `endCursor`
+```yaml
+pagination:
+  how:
+    origin: auto | interview         # 누가 만들었는지
+    pattern: <enum 13>               # see Tier A (9) + Interview (4)
+    params: {}                       # pattern-specific (start, increment, stop_condition 등)
+    prose: |                         # 자유서술. interview 면 mandatory, auto 면 optional
+      <free-form description>
+  previous_how: []                   # 3-slot inline ring buffer (LRU; oldest evicted on 4th push)
+  invalidated_at: null               # ISO8601 (마지막 invalidation 시각). 정상 상태는 null
+```
 
-Tier A success criterion: additional pages exist and can be fetched. A single-page site (no additional pages) also counts as success.
+기존 `pagination.method` 필드는 **drop** (derivable from `how.origin`).
 
-### Tier B: Interview fallback
+| Field | Type | Description |
+|---|---|---|
+| `origin` | `auto` \| `interview` | `auto` = Tier A 자동 감지; `interview` = 사용자 인터뷰 결과 |
+| `pattern` | enum (13) | 아래 Tier A 9-pattern + Interview 4-pattern 중 하나 |
+| `params` | object | pattern-specific 파라미터 (예: `start: 1`, `increment: 50`, `stop_condition: empty_array`) |
+| `prose` | string | 자유서술. `origin: interview` 면 mandatory. `origin: auto` 면 optional. |
+| `previous_how` | array (max 3) | 3-slot inline ring buffer — 과거 invalidated how 목록 |
+| `invalidated_at` | ISO8601 \| null | 마지막 invalidation 시각. 정상 상태는 `null` |
+
+### Tier A 9-pattern Catalog
+
+Attempt the following patterns in catalog order. On first success, record `how={origin: auto, pattern: <enum>, params: {...}}`.
+
+| # | `pattern` enum | Description |
+|---|---|---|
+| 1 | `page_increment` | `?page=N` — increment from 1, stop on empty response |
+| 2 | `offset` | `?offset=N` — increment by `limit` value |
+| 3 | `cursor` | `?after=<token>` or `?cursor=<token>` — extract next cursor from response |
+| 4 | `next_link` | `<a rel="next">` or text "다음"/"Next"/">" in `<a>` tag |
+| 5 | `numeric_pagination` | `<a>2</a><a>3</a>...` pattern — extract last page number |
+| 6 | `load_more_button` | "더 보기"/"Load more" button → Playwright click + XHR wait |
+| 7 | `infinite_scroll` | Playwright network intercept: capture `fetch`/`XHR` URL then repeat calls |
+| 8 | `api_json` | JSON API endpoint direct — `Content-Type: application/json` + `jobs`/`positions`/`listings` key |
+| 9 | `graphql` | `pageInfo.hasNextPage` + `endCursor` |
+
+Tier A success criterion: additional pages exist and can be fetched. A single-page site (no additional pages) also counts as success (pattern detected, result is 1 page).
+
+### Interview Patterns (4)
 
 When Tier A completely fails (all 9 patterns unmatched), **AskUserQuestion is mandatory**:
 
 ```
 이 사이트({{source.careers_url}})의 전체 JD 목록을 어떻게 가져올 수 있나요?
 가능한 방법:
-(1) API URL 알려주기 (예: curl 명령어 또는 URL 패턴)
-(2) 전용 MCP 명 (예: mcp:notion, mcp:greenhouse)
-(3) 스크립트 경로 또는 명령어
-(4) 수동 복붙 (HTML 또는 URL 목록)
+(1) 수동 복붙 (URL 목록 또는 HTML)
+(2) 스크립트 경로 또는 명령어
+(3) 전용 MCP (예: mcp:notion, mcp:greenhouse)
+(4) API URL (예: curl 명령어 또는 URL 패턴)
 ```
 
-Store user response as free-form text in `sources.yaml.<source>.pagination.how`. From next session onward, load `how` and reuse (check for `how` existence before Tier A attempt → if present, execute `how` first).
+| `pattern` enum | Description | `prose` requirement |
+|---|---|---|
+| `manual_list` | 사용자가 URL 목록 또는 HTML 을 직접 붙여넣기 | mandatory — 복붙 방법 및 URL 목록 기술 |
+| `interview_script` | 사용자 제공 스크립트 경로 또는 명령어 | mandatory — 스크립트 경로 + 실행 방법 |
+| `interview_mcp` | 전용 MCP (예: `mcp:notion`) | mandatory — MCP 이름 + 호출 절차 |
+| `interview_api` | 사용자 제공 API URL 패턴 | mandatory — URL 패턴 + 반복 조건 (stop on empty 등) |
+
+Store result as `how={origin: interview, pattern: <one of 4>, params: {...}, prose: <free-form>}`. From next session onward, `pagination.how` is already set → skip Tier A → execute directly.
+
+### Algorithm (pseudocode)
+
+```pseudocode
+discover_listing(source) -> { anchors, executed_how, was_invalidated }:
+  if not source.pagination.how:
+    auto_result = try_tier_a_auto_detect(source)  # attempts 9 patterns in catalog order
+    if auto_result.success:
+      source.pagination.how = {
+        origin: "auto",
+        pattern: auto_result.pattern,
+        params: auto_result.params,
+        prose: auto_result.description  # optional
+      }
+    else:
+      # all 9 patterns failed → AskUserQuestion mandatory
+      response = ask_user_for_method(source)
+      source.pagination.how = {
+        origin: "interview",
+        pattern: response.pattern,  # one of manual_list / interview_script / interview_mcp / interview_api
+        params: response.params,
+        prose: response.free_form
+      }
+    atomic_write(sources.yaml)
+
+  result = execute(source.pagination.how)
+
+  if is_invalidation_trigger(result):
+    # 1-retry-before-invalidation for transient errors
+    if result.error_class == "transient":
+      sleep(60)
+      result = execute(source.pagination.how)
+      if not is_invalidation_trigger(result):
+        return { anchors: result.anchors, executed_how: source.pagination.how, was_invalidated: false }
+
+    # invalidation confirmed → push current to previous_how ring (max 3)
+    push_to_previous_how_ring(source.pagination.how)
+    source.pagination.how = null
+    source.pagination.invalidated_at = now()
+    atomic_write(sources.yaml)
+
+    # AskUserQuestion: re-interview / Tier A retry / skip
+    response = ask_user_for_invalidation_choice(source, error=result.error)
+    if response == "skip":
+      raise InvalidationSkipped(source)  # caller handles — does NOT silently return empty
+    if response == "tier_a_retry":
+      # recurse: pagination.how is now null, so first branch fires
+      return discover_listing(source)
+    if response == "new_interview":
+      # new how recorded by ask_user_for_invalidation_choice
+      result = execute(source.pagination.how)  # retry once with new how
+      if is_invalidation_trigger(result):
+        raise NewMethodAlsoFailed(source)  # caller handles
+
+    return { anchors: result.anchors, executed_how: source.pagination.how, was_invalidated: true }
+
+  return { anchors: result.anchors, executed_how: source.pagination.how, was_invalidated: false }
+```
+
+### Invalidation Trigger Table
+
+| Trigger | Severity | Action |
+|---|---|---|
+| Playwright timeout / network exception | Transient | 1 retry (60s), then invalidate |
+| HTTP 5xx | Transient | 1 retry (60s), then invalidate |
+| HTTP 4xx (404, 410) | Structural | Invalidate immediately |
+| DOM selector match 0 (selector explicit) | Structural | Invalidate immediately |
+| Known-error keyword ("Not Found", "Access Denied", "Unauthorized") | Structural | Invalidate immediately |
+| 0 anchors collected | Ambiguous (gated) | **Invalidate ONLY if `crawl_state.audit_trail.total_discovered > 0`**. First-run 0 is legal |
+
+### previous_how Ring (LRU, max 3)
+
+On invalidation, push current `how` (plus `invalidated_at` timestamp and `invalidation_reason`) into `previous_how` ring before nulling `how`. Ring holds max 3 entries; oldest entry is evicted on 4th push (LRU).
+
+```yaml
+previous_how:
+  - origin: auto
+    pattern: page_increment
+    params: { start: 1, increment: 1 }
+    prose: ""
+    invalidated_at: "2026-04-20T10:00:00Z"
+    invalidation_reason: "HTTP 404 on page 2"
+  - origin: interview
+    pattern: interview_api
+    params: {}
+    prose: "GET /api/jobs?offset=X repeat (offset += 50, stop on empty)"
+    invalidated_at: "2026-04-22T15:30:00Z"
+    invalidation_reason: "DOM selector match 0"
+  - { ... }  # oldest slot — evicted on 4th push
+```
 
 ### Flowchart
 
 ```dot
-digraph listing_pagination {
+digraph discover_listing {
   rankdir=TB;
   node [shape=box, fontname="Helvetica"];
 
-  start [label="source listing URL", shape=ellipse, style=filled, fillcolor=lightblue];
+  start [label="discover_listing(source)", shape=ellipse, style=filled, fillcolor=lightblue];
   how_exists [label="pagination.how exists?", shape=diamond];
-  use_how [label="Execute how\n(script/MCP/API)", style=filled, fillcolor=lightgreen];
-  tier_a [label="Tier A auto-detect\n(attempt 9 patterns)", shape=diamond];
-  record_a [label="pagination.method=auto\nrecord detected_pattern", style=filled, fillcolor=lightgreen];
-  tier_b [label="Tier B AskUserQuestion\n(interview → record how)", style=filled, fillcolor=salmon];
-  fetch_all [label="Full JD URL collection complete", style=filled, fillcolor=lightgreen];
+  tier_a [label="try_tier_a_auto_detect\n(9 patterns, catalog order)", shape=diamond];
+  record_auto [label="how = {origin: auto, pattern, params}\natomic_write(sources.yaml)", style=filled, fillcolor=lightgreen];
+  ask_user [label="AskUserQuestion\n(interview: 4 options)", style=filled, fillcolor=salmon];
+  record_interview [label="how = {origin: interview, pattern, params, prose}\natomic_write(sources.yaml)", style=filled, fillcolor=lightgreen];
+  execute_how [label="execute(how)"];
+  invalidation [label="is_invalidation_trigger(result)?", shape=diamond];
+  transient [label="error_class == transient?", shape=diamond];
+  retry [label="sleep(60)\nexecute(how) retry"];
+  retry_ok [label="retry OK?", shape=diamond];
+  push_ring [label="push_to_previous_how_ring(how)\nhow = null, invalidated_at = now()\natomic_write(sources.yaml)", style=filled, fillcolor=khaki];
+  ask_choice [label="AskUserQuestion\n(new method / Tier A retry / skip)", style=filled, fillcolor=salmon];
+  skip_raise [label="raise InvalidationSkipped", style=filled, fillcolor=red, fontcolor=white];
+  tier_a_retry [label="return discover_listing(source)\n(recurse — how is null)", style=filled, fillcolor=lightblue];
+  new_interview_exec [label="execute(new how)"];
+  new_fail [label="raise NewMethodAlsoFailed", style=filled, fillcolor=red, fontcolor=white];
+  success_invalidated [label="return {anchors, executed_how,\nwas_invalidated: true}", style=filled, fillcolor=lightgreen];
+  success_clean [label="return {anchors, executed_how,\nwas_invalidated: false}", style=filled, fillcolor=lightgreen];
 
   start -> how_exists;
-  how_exists -> use_how [label="yes"];
-  how_exists -> tier_a [label="no"];
-  tier_a -> record_a [label="success"];
-  tier_a -> tier_b [label="fail (all 9 unmatched)"];
-  tier_b -> fetch_all [label="after user response"];
-  record_a -> fetch_all;
-  use_how -> fetch_all;
+  how_exists -> tier_a [label="absent"];
+  how_exists -> execute_how [label="present"];
+  tier_a -> record_auto [label="success"];
+  tier_a -> ask_user [label="all 9 fail"];
+  ask_user -> record_interview;
+  record_auto -> execute_how;
+  record_interview -> execute_how;
+  execute_how -> invalidation;
+  invalidation -> success_clean [label="no trigger"];
+  invalidation -> transient [label="trigger"];
+  transient -> retry [label="yes"];
+  retry -> retry_ok;
+  retry_ok -> success_clean [label="OK"];
+  retry_ok -> push_ring [label="still triggers"];
+  transient -> push_ring [label="no (structural)"];
+  push_ring -> ask_choice;
+  ask_choice -> skip_raise [label="skip"];
+  ask_choice -> tier_a_retry [label="tier_a_retry"];
+  ask_choice -> new_interview_exec [label="new_interview"];
+  new_interview_exec -> new_fail [label="still triggers"];
+  new_interview_exec -> success_invalidated [label="OK"];
 }
 ```
 
+### Coverage Verification Ordering
+
+`Listing Pagination Coverage Verification` (3-check protocol) fires **only after `discover_listing` returns `was_invalidated: false` (success path) or `was_invalidated: true` after retry success**. When `discover_listing` raises (`InvalidationSkipped` or `NewMethodAlsoFailed`), Coverage Verification is **skipped** and Per-Site Memory `range_covered` append is also **skipped**.
+
 ### Rationalization Loopholes (MUST REJECT)
 
-- "On Tier A failure, save first-page only and 'collection complete'" — ❌ Must escalate to Tier B interview.
-- "Use Tier B interview answer only once and skip recording in sources.yaml" — ❌ Must save to `pagination.how`. Reuse in next session is mandatory.
-- "Skip pagination pattern check and fall back to manual URL list paste" — ❌ Tier A attempt is mandatory. However, if user directly chooses manual paste, record as Tier B `how` and allow.
-- "Auto-detect succeeded but didn't confirm last page, collected only 3 pages" — ❌ Continue until empty response or `has_next_page == false`.
-- "Quietly collect first-page only and report 'list collection complete' without Tier B question" — ❌ First-page-only collection must be explicitly reported + Tier B triggered.
+| Temptation pattern | Rejection basis |
+|---|---|
+| "On Tier A failure, save first-page only and 'collection complete'" | ❌ Must escalate to AskUserQuestion interview |
+| "interview 결과 `pagination.how` 미저장 (Tier B answer used once, not recorded)" | ❌ `pagination.how` atomic write is mandatory. Reuse in next session is mandatory |
+| "first-page only 저장 + collection complete 보고" | ❌ First-page-only without exhaustive pagination is a violation |
+| "Skip pagination pattern check and fall back to manual URL list paste" | ❌ Tier A 9-pattern attempt is mandatory. Only if user explicitly says 'skip Tier A' may interview shortcut apply |
+| "Auto-detect succeeded but didn't confirm last page, collected only 3 pages" | ❌ Continue until empty response or `has_next_page == false` |
+| "First-time discovery skipping straight to AskUserQuestion without attempting Tier A 9-pattern catalog" | ❌ first-run 에 `pagination.how` 부재 시 Tier A 9 패턴 모두 시도 mandatory. user 직접 'skip Tier A' 발화 없이 인터뷰 shortcut 금지 |
+| "Returning 0 anchors when execution failed (or invalidation-retry-fail) silently" | ❌ `discover_listing` 은 raise 또는 explicit `was_invalidated: true` 반환만 허용. silent empty `[]` 반환은 Per-Site Memory 의 `discovered − seen = ∅` false-clean 위험 |
 
 ### Counterexample
 
-- `?page=` pattern detected → sequential fetch pages 1~5 → page 6 response empty → 87 URLs total → `pagination = { method: auto, detected_pattern: "?page=" }` saved. ✓
-- All patterns fail → AskUserQuestion → user provides "API: GET /careers/api/jobs?limit=50&offset=X" → `pagination.how = "GET /careers/api/jobs?limit=50&offset=X repeat (offset += 50, stop on empty array)"` saved → reuse how in next session. ✓
+- **Auto success (γ schema)**: `?page=` pattern detected → sequential fetch pages 1~5 → page 6 response empty → 87 URLs total. Saved as `how = { origin: auto, pattern: page_increment, params: { start: 1, stop_condition: empty_response } }`. `was_invalidated: false` → Coverage Verification fires. ✓
+- **Interview success (γ schema)**: All 9 patterns fail → AskUserQuestion → user provides "API: GET /careers/api/jobs?limit=50&offset=X". Saved as `how = { origin: interview, pattern: interview_api, params: { limit: 50, increment: 50, stop_condition: empty_array }, prose: "GET /careers/api/jobs?limit=50&offset=X repeat (offset += 50, stop on empty)" }`. Next session: `pagination.how` present → execute directly. ✓
+- **Invalidation → skip**: `page_increment` how executes, HTTP 404 on page 2 (structural). Push to `previous_how`, `how = null`, `invalidated_at = now()`. AskUserQuestion → user chooses "skip". `raise InvalidationSkipped`. Caller logs skip + no Coverage Verification + no `range_covered` append. ✓
 
 ---
 
