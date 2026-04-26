@@ -46,4 +46,14 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('https://admin@example.com/jobs/'))
       .toBe('https://admin@example.com/jobs');
   });
+
+  it('잔여 query param 순서 정규화 (정렬)', () => {
+    expect(normalizeUrl('https://example.com/j?lang=ko&jobId=123'))
+      .toBe('https://example.com/j?jobId=123&lang=ko');
+  });
+
+  it('서로 다른 emit 순서의 동일 URL이 같은 정규형이 됨', () => {
+    expect(normalizeUrl('https://example.com/j?lang=ko&jobId=123&utm_source=x'))
+      .toBe(normalizeUrl('https://example.com/j?utm_source=y&jobId=123&lang=ko'));
+  });
 });
