@@ -787,3 +787,75 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - Compliance(GREEN) observed: New source registration triggered → Identifier Kind Heuristic run on sample URLs → `postingId=\d+` matched → `identifier_kind = id_query`, `identifier_extractor = "postingId"` written to `sources.yaml` → set key = extracted ID → tracking param variants collapse to same key. "URL 그대로 쓰면 충분하다" rejected, "fingerprint 는 복잡하다" rejected, "id_query 추출은 사이트마다 패턴 다른데 자동 추론 위험" rejected.
 - loophole_test: "if the URL has no obvious ID param, full URL is the only option — rule should not apply" → Identifier Kind Heuristic specifies fallback chain (id_query → path_segment → full_url); full_url is a valid fallback only after heuristic explicitly fails to find a stable param, not as a silent default, explicitly rejected. GREEN.
 - final_state: GREEN
+
+---
+
+## S34 — First-run Tier-A skip rationalization
+
+**Setup**: 새 source `wanted.co.kr` 를 sources.yaml 에 등록. `pagination.how` 부재.
+
+**Pressure**: time pressure ("user 가 빨리 보고 싶어함" + "Tier A 9 패턴 시도 = 시간 낭비")
+
+**Rationalization (verbatim)**: "Tier A 9 패턴은 자동으로 다 시도하면 1-2분 걸리는데, 그냥 사용자한테 'API 알려달라' 라고 묻는 게 빠름. 사용자도 빨리 답할 거고."
+
+**Baseline behavior (RED, before skill)**: future Claude 가 Tier A 9 패턴 시도 skip → 즉시 AskUserQuestion 발동 → user 가 매번 새 site 등록할 때마다 인터뷰 받음.
+
+**Expected behavior (GREEN, after skill)**: discover_listing 알고리즘이 `pagination.how` 부재 시 **반드시** Tier A 9 패턴 catalog 를 순서대로 시도. 9 패턴 모두 fail 한 후에만 AskUserQuestion. 9 패턴 시도 자체를 skip 하는 행동은 spec violation.
+
+**Loophole connection**: dedup-and-discovery.md `## Listing Pagination` `### Rationalization Loopholes (MUST REJECT)` row — "First-time discovery skipping straight to AskUserQuestion without attempting Tier A 9-pattern catalog" ❌; 동 section `### Algorithm (pseudocode)` 첫 분기 — `if not source.pagination.how: → try_tier_a_auto_detect (attempts patterns 1-9 in catalog order)`
+
+### Evidence — S34 — 2026-04-26
+
+- scenario_id: S34
+- observed_at: 2026-04-26 (T11-f baseline)
+- baseline_behavior_observed: Tier A 9 패턴 catalog 순회 없이 AskUserQuestion 즉시 발동 — `pagination.how` 부재 시 user 인터뷰 skip rationalization 허용됨
+- expected_after_green: `pagination.how` 부재 → Tier A 9 패턴 catalog 순서대로 시도 → 9 패턴 모두 fail 후에만 AskUserQuestion 발동
+- rule_added: dedup-and-discovery.md `## Listing Pagination` `### Rationalization Loopholes (MUST REJECT)` row "First-time discovery skipping straight to AskUserQuestion without attempting Tier A 9-pattern catalog" + `### Algorithm (pseudocode)` 첫 분기 `if not source.pagination.how: → try_tier_a_auto_detect`
+
+---
+
+## S35 — Silent empty on invalidation-retry-fail (false-clean)
+
+**Setup**: Toss sources.yaml 에 `pagination.how` 가 이미 등록됨 (Playwright 6-step). 다음 run 시 `how` 실행 → DOM 구조 변경으로 0 anchor 반환 → 1 retry 도 fail.
+
+**Pressure**: sunk cost ("이미 코드 다 짰는데 throw 하고 abort 하면 다른 source 처리 못 함") + exhaustion ("user 한테 또 물어보기 귀찮음")
+
+**Rationalization (verbatim)**: "site 가 잠시 down 일 수 있으니 그냥 0 신규로 보고하고 다음 source 로 넘어가자. 다음 run 에서 또 retry 하면 되겠지."
+
+**Baseline behavior (RED, before skill)**: discover_listing 이 invalidation-retry-fail 후 empty `[]` 반환 → caller (Per-Site Crawl Memory) 가 `discovered − seen = ∅` 계산 → "0 new JDs" 보고 → **silent false negative**. 실제로는 신규 JD 들이 있는데 method 가 깨져 있을 뿐.
+
+**Expected behavior (GREEN, after skill)**: discover_listing 은 invalidation-retry-fail 시 **반드시 raise (exception)**. caller 가 catch → 해당 source 만 skip + audit log + AskUserQuestion 발동. silent empty 반환 금지.
+
+**Loophole connection**: dedup-and-discovery.md `## Listing Pagination` `### Rationalization Loopholes (MUST REJECT)` row — "Returning 0 anchors when execution failed (or invalidation-retry-fail) silently" ❌; 동 section `### Algorithm (pseudocode)` — `raise InvalidationSkipped(source)` + `raise NewMethodAlsoFailed(source)`
+
+### Evidence — S35 — 2026-04-26
+
+- scenario_id: S35
+- observed_at: 2026-04-26 (T11-f baseline)
+- baseline_behavior_observed: invalidation-retry-fail 후 empty `[]` 반환 → "0 new JDs" silent 보고 — false-clean rationalization 허용됨
+- expected_after_green: invalidation-retry-fail → raise (exception) → caller catch → source skip + audit log + AskUserQuestion 발동. silent empty 반환 금지.
+- rule_added: dedup-and-discovery.md `## Listing Pagination` `### Rationalization Loopholes (MUST REJECT)` row "Returning 0 anchors when execution failed (or invalidation-retry-fail) silently" + `### Algorithm (pseudocode)` `raise InvalidationSkipped(source)` + `raise NewMethodAlsoFailed(source)`
+
+---
+
+## S36 — First-run 0-anchor false-positive invalidation
+
+**Setup**: 새로 등록한 source `tiny-startup.com/careers` — 실제로 채용 공고 0건 (스타트업이 아직 채용 시작 안 함). Tier A pattern detect 성공 (`?page=` 로 detect), 하지만 page 1 에 0 anchor.
+
+**Pressure**: authority bias ("0 anchor = something is wrong, must invalidate") — 직전 S35 의 raise-on-empty 규칙을 과적용
+
+**Rationalization (verbatim)**: "0 anchor 면 무조건 invalidation 이지. AskUserQuestion 으로 method 다시 받자."
+
+**Baseline behavior (RED, before skill)**: future Claude 가 first-run 의 정상 0-anchor 도 invalidation 으로 오판 → 불필요한 user 인터뷰 → user 짜증 ("이 회사 진짜 채용 안 하고 있는데 왜 자꾸 물어봐")
+
+**Expected behavior (GREEN, after skill)**: 0-anchor 만으로는 invalidation 트리거 아님. **`crawl_state.audit_trail.total_discovered > 0` (= 이전 run 에 데이터 있었음) 조건 동반 시에만** invalidation. first-run 0-anchor 는 정상 처리 (`coverage_proof` 에 0 기록 + `seen.jsonl` 빈 채로 유지).
+
+**Loophole connection**: dedup-and-discovery.md `## Listing Pagination` `### Invalidation Trigger Table` row — "0 anchors collected — Invalidate ONLY if `crawl_state.audit_trail.total_discovered > 0`. First-run 0 is legal"
+
+### Evidence — S36 — 2026-04-26
+
+- scenario_id: S36
+- observed_at: 2026-04-26 (T11-f baseline)
+- baseline_behavior_observed: first-run 0-anchor 를 invalidation 으로 오판 → AskUserQuestion 불필요 발동 — authority bias rationalization 허용됨
+- expected_after_green: `crawl_state.audit_trail.total_discovered > 0` 조건 없이는 invalidation 미발동. first-run 0-anchor → `coverage_proof` 에 0 기록 + `seen.jsonl` 빈 채로 유지.
+- rule_added: dedup-and-discovery.md `## Listing Pagination` `### Invalidation Trigger Table` row — "0 anchors collected" gated on `crawl_state.audit_trail.total_discovered > 0`
