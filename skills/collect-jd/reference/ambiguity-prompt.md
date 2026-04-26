@@ -39,6 +39,7 @@ The LLM must output only the JSON below. Any preamble, markdown, or text outside
 {
   "verdict": "match" | "mismatch" | "ambiguous",
   "missing_signals": ["string", "..."],
+  "violated_rules": ["string", "..."],
   "explanation": "짧은 한국어 1-2문장"
 }
 ```
@@ -47,6 +48,7 @@ The LLM must output only the JSON below. Any preamble, markdown, or text outside
 |---|---|---|
 | `verdict` | enum | `match` \| `mismatch` \| `ambiguous` |
 | `missing_signals` | array[string] | Signals absent from the JD (e.g. `"compensation range"`, `"location"`) |
+| `violated_rules` | array[string] | `rules.yaml` key names that are violated (populated when `verdict` is `mismatch`; empty array otherwise) |
 | `explanation` | string | Korean prose stating the judgment rationale |
 
 ---
@@ -56,7 +58,7 @@ The LLM must output only the JSON below. Any preamble, markdown, or text outside
 | verdict | Automatic behavior | Condition |
 |---|---|---|
 | `match` | `status: included` finalized automatically | Rules conditions clearly satisfied |
-| `mismatch` | `status: excluded` finalized automatically. `tags`: violated rule names slugified and appended per the Exclude Flow tags.yaml protocol. `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (follows the Matching Loop Auto-decision audit trail rule). **Verbatim user utterance must NOT be substituted — user utterance is only used in the manual exclude path** | Rules conditions clearly violated |
+| `mismatch` | `status: excluded` finalized automatically. `tags`: derived from `violated_rules` — each entry is slugified and appended per the Exclude Flow tags.yaml protocol. `reason_note`: `auto:mismatch:<rules.yaml sha256 short 8>` (follows the Matching Loop Auto-decision audit trail rule). **Verbatim user utterance must NOT be substituted — user utterance is only used in the manual exclude path** | Rules conditions clearly violated |
 | `ambiguous` | **AskUserQuestion call is MANDATORY**. Include `missing_signals` in the question. Status remains tentatively `pending` | Required signals absent or only partial information exists |
 
 If `missing_signals` is empty on an `ambiguous` response, treat it as an implementation error.
@@ -67,7 +69,7 @@ If `missing_signals` is empty on an `ambiguous` response, treat it as an impleme
 
 ```
 System: You are a strict JD-profile matching judge. Output ONLY JSON:
-{"verdict": "match"|"mismatch"|"ambiguous", "missing_signals": [string], "explanation": string}.
+{"verdict": "match"|"mismatch"|"ambiguous", "missing_signals": [string], "violated_rules": [string], "explanation": string}.
 No preamble, no markdown, no text outside JSON.
 
 User:
@@ -90,6 +92,7 @@ User:
 - rules 의 조건을 명확히 위반하면 "mismatch".
 - 판정에 필요한 신호가 JD 에 **부재**하거나 rules 와 충돌 없이 부분 정보만 있으면 "ambiguous".
 - `missing_signals` 에는 JD 본문에서 결여된 신호를 bullet 로 (예: "compensation range", "location", "seniority", "원격 가능 여부").
+- verdict 가 `mismatch` 이면 `violated_rules` 배열에 위반된 rules.yaml 키 이름들을 채워라 (예: ["min_yoe", "stack_must_have"]). `match` 또는 `ambiguous` 이면 빈 배열 [] 로 출력해라.
 - `explanation` 은 한국어 1-2문장.
 
 JSON 만 출력해라.
@@ -131,6 +134,7 @@ JSON 만 출력해라.
 {
   "verdict": "mismatch",
   "missing_signals": [],
+  "violated_rules": ["min_yoe", "stack_must_have"],
   "explanation": "주 5일 전일 출근 필수로 rules 의 원격/하이브리드 조건을 위반한다."
 }
 ```
