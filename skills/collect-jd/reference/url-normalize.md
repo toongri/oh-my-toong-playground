@@ -15,11 +15,12 @@ Implementation: [`scripts/url-normalize.ts`](../scripts/url-normalize.ts)
 
 | Order | Processing | Notes |
 |------|-----------|------|
-| 1 | Parse with `new URL(input)` | Invalid URLs throw an exception |
+| 1 | Parse with `new URL(input)` | Returns `null` immediately on parse failure (see Error Handling) |
 | 2 | Lowercase `protocol` and `hostname` | Normalize case for scheme + host |
 | 3 | Remove fragment by setting `hash = ''` | Strips `#section` etc. |
 | 4 | Filter query params (see list below) | Includes `utm_*` wildcard |
-| 5 | Remove trailing slash | Root path where `pathname === '/'` is kept |
+| 5 | Sort remaining query params alphabetically by key (case-insensitive) | Ensures two URLs differing only in param order converge to the same canonical form |
+| 6 | Remove trailing slash | Root path where `pathname === '/'` is kept |
 
 ---
 
@@ -58,6 +59,19 @@ General rule: **All parameters not on the removal list are kept as-is.**
 
 ---
 
+## Error Handling
+
+If `new URL(input)` throws (malformed input, missing protocol, relative URL, empty string, etc.), `normalizeUrl` returns `null` immediately without further processing.
+
+Caller responsibility: a `null` return must be handled explicitly. The recommended action is to trigger `AskUserQuestion` to ask the user for a corrected URL. Silent skip (discarding the null without user notification) is forbidden.
+
+Examples of inputs that return `null`:
+- `""` (empty string)
+- `"invalid-url"` (no protocol)
+- `"wanted.co.kr/jobs"` (relative URL, no scheme)
+
+---
+
 ## Fixture Table
 
 | Input URL | Expected Output | Validation Point |
@@ -69,6 +83,9 @@ General rule: **All parameters not on the removal list are kept as-is.**
 | `https://example.com/` | `https://example.com/` | Trailing slash preserved (root) |
 | `HTTPS://Example.COM/Path?utm_medium=x` | `https://example.com/Path` | Host case normalized |
 | `https://example.com/j?fbclid=1&_ga=2&keep=y` | `https://example.com/j?keep=y` | fbclid + _ga removed, keep preserved |
+| `https://example.com/x?keep=y&jobId=123` | `https://example.com/x?jobId=123&keep=y` | Param order normalized: jobId < keep alphabetically |
+| `https://example.com/x?jobId=123&keep=y` | `https://example.com/x?jobId=123&keep=y` | Same output regardless of input order |
+| `wanted.co.kr/jobs` | `null` | Malformed URL (no protocol) — parse failure |
 
 ---
 
@@ -87,4 +104,4 @@ scripts/url-normalize.ts
 bun test skills/collect-jd/scripts/url-normalize.test.ts
 ```
 
-Expected result: `7 pass, 0 fail`
+Expected result: `15 pass, 0 fail`
