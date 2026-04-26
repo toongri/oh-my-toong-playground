@@ -56,4 +56,31 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('https://example.com/j?lang=ko&jobId=123&utm_source=x'))
       .toBe(normalizeUrl('https://example.com/j?utm_source=y&jobId=123&lang=ko'));
   });
+
+  it('malformed URL returns null (no protocol)', () => {
+    expect(normalizeUrl('invalid-url')).toBeNull();
+  });
+
+  it('empty string returns null', () => {
+    expect(normalizeUrl('')).toBeNull();
+  });
+
+  it('URL without protocol returns null', () => {
+    expect(normalizeUrl('wanted.co.kr/jobs')).toBeNull();
+  });
+
+  it('query param order does not affect canonical form (keep + jobId)', () => {
+    const a = normalizeUrl('https://example.com/x?keep=y&jobId=123');
+    const b = normalizeUrl('https://example.com/x?jobId=123&keep=y');
+    expect(a).not.toBeNull();
+    expect(a).toBe(b);
+    // jobId < keep alphabetically
+    expect(a).toBe('https://example.com/x?jobId=123&keep=y');
+  });
+
+  it('mixed tracking + kept params are sorted alphabetically after tracking removal', () => {
+    // utm_source removed; remaining: wd=42, category=eng → alphabetical: category, wd
+    const result = normalizeUrl('https://jobs.example.com/p?wd=42&utm_source=email&category=eng');
+    expect(result).toBe('https://jobs.example.com/p?category=eng&wd=42');
+  });
 });
