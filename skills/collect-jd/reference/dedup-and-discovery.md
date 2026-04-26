@@ -47,8 +47,10 @@ digraph dedup_matching_flow {
   l2_cap [label="max_l2_calls_per_batch\nexceeded?", shape=diamond];
   l2_pending [label="fingerprint: pending\n(re-evaluate next batch)", style=filled, fillcolor=khaki];
   l2_call [label="L2 LLM similarity\n(pinned prompt, temp 0)"];
-  l2_dup [label="Existing file fingerprint:\nrecord duplicate_of", style=filled, fillcolor=lightgreen];
+  l2_dup [label="Existing file:\nupdate last_checked_at\n(no fingerprint change)", style=filled, fillcolor=lightgreen];
   save_unique [label="Proceed to new save\nfingerprint: unique"];
+  save_check [label="fingerprint_check\nexplicit value?", shape=diamond];
+  reject [label="Reject save + error log", style=filled, fillcolor=red, fontcolor=white];
 
   audit [label="dedup-audit.log append (MANDATORY)", style=filled, fillcolor=khaki];
   audit_end [label="audit append", style=filled, fillcolor=khaki];
@@ -85,7 +87,10 @@ digraph dedup_matching_flow {
   update_ts -> audit_end;
   l2_dup -> audit_end;
   l2_pending -> audit_end;
-  save_unique -> audit -> phase1;
+  save_unique -> save_check;
+  save_check -> audit [label="yes"];
+  save_check -> reject [label="no"];
+  audit -> phase1;
   phase1 -> inherit [label="hit"];
   phase1 -> phase2 [label="miss"];
   phase2 -> vmatch;
@@ -147,11 +152,14 @@ companies:
         crawl_history: []
       coverage_proof:
         verified_at: null
+        method: null
         page_declared_total: null
         dom_unique_anchor_count: null
         matches_declared: null
         infinite_scroll_detected: null
         conclusion: null
+      batch_run_completed: false
+      pending_count: 0
 blacklist:
   - slug: xyz
     name: XYZCorp
@@ -443,6 +451,8 @@ coverage_proof:
   conclusion: <string>
 ```
 
+**Pass criteria when `page_declared_total: null`**: Check #1 (declared-total match) is **N/A**. Pass requires: (check #1 PASS OR N/A) AND check #2 PASS AND check #3 PASS.
+
 ### Rationalization Loopholes (MUST REJECT)
 
 | Temptation pattern | Rejection basis |
@@ -561,10 +571,14 @@ crawl_state:
         pages_fetched: <int>
   coverage_proof:
     verified_at: <ISO8601>
+    method: playwright_scroll_to_bottom_N_iterations
     page_declared_total: <int or null>
     dom_unique_anchor_count: <int>
+    matches_declared: <bool>
     infinite_scroll_detected: <bool>
     conclusion: <string>
+  batch_run_completed: <bool>
+  pending_count: <int>
 ```
 
 ### Field Definitions
@@ -762,11 +776,11 @@ User may change `identifier_kind` + `identifier_extractor` in `sources.yaml` at 
 Dedup L1/L2 **must always leave a gate execution record**. Silent-skip is forbidden in cases where `jobs/` is empty or L2 conditions are not met. If the `fingerprint_check` field is not set to an explicit value before JD save, reject the save.
 
 - **L1 gate** — must execute on every JD ingest:
-  - jobs empty → `L1_candidates_checked: 0`, `fingerprint_check: unique_pending_l2`, then proceed to L2 step.
+  - jobs empty → `L1_candidates_checked: 0`, `fingerprint_check: pending` (L2 미실행 표시), then proceed to L2 step.
   - candidates exist → perform normal normalize matching.
 - **L2 gate** — must be evaluated after L1 pass:
-  - 0 other JDs with same company_slug → `L2_evaluated: not_applicable (no_sibling_jds)`, `fingerprint_check: unique` (explicit).
-  - JDs with same company_slug exist → call LLM similarity → `fingerprint_check: unique | duplicate_of:<url>`.
+  - 0 other JDs with same `company_slug` in `jobs/<company_slug>/` (all sessions) → `L2_evaluated: not_applicable (no_sibling_jds)`, `fingerprint_check: unique`.
+  - JDs with same `company_slug` exist in `jobs/<company_slug>/` (all sessions) → call LLM similarity → `fingerprint_check: unique | duplicate_of:<existing.url>`.
 - **Pre-save validation**: If `fingerprint_check ∉ {unique, duplicate_of:<url>, pending}`, reject save + error log.
 
 ### Dedup Gate Audit Line (MANDATORY)
@@ -780,41 +794,7 @@ At the end of each ingest operation, append 1 line to `$OMT_DIR/collect-jd/dedup
 L1 status values: `checked_N` (N candidates) / `no_candidates`.
 L2 status values: `called` / `not_applicable` / `cap_exceeded`.
 
-### Flowchart
-
-```dot
-digraph dedup_check_gate {
-  rankdir=TB;
-  node [shape=box, fontname="Helvetica"];
-
-  candidate [label="New JD candidate", shape=ellipse, style=filled, fillcolor=lightblue];
-  l1_exec [label="Execute L1 gate\n(scan jobs/)", shape=box, style=filled, fillcolor=khaki];
-  l1_result [label="Candidates exist?", shape=diamond];
-  l1_match [label="Perform normalized URL\nor slug matching", shape=diamond];
-  l1_hit [label="L1 match → existing file\nupdate last_checked_at\n(skip save)", style=filled, fillcolor=lightgreen];
-  l2_eval [label="Evaluate L2 gate\n(other JD with same company_slug?)", shape=diamond];
-  l2_call [label="L2 LLM similarity\ncall (temp 0)"];
-  l2_dup [label="duplicate_of:<url>\n(skip save)", style=filled, fillcolor=lightgreen];
-  l2_na [label="L2: not_applicable\nfingerprint: unique", style=filled, fillcolor=lightgreen];
-  save_check [label="fingerprint_check\nexplicit value?", shape=diamond];
-  reject [label="Reject save + error log", style=filled, fillcolor=red, fontcolor=white];
-  save [label="JD atomic write +\ndedup-audit.log append", style=filled, fillcolor=lightgreen];
-
-  candidate -> l1_exec;
-  l1_exec -> l1_result;
-  l1_result -> l1_match [label="yes"];
-  l1_result -> l2_eval [label="no (empty)"];
-  l1_match -> l1_hit [label="match"];
-  l1_match -> l2_eval [label="no match"];
-  l2_eval -> l2_call [label="sibling JDs exist"];
-  l2_eval -> l2_na [label="0 siblings"];
-  l2_call -> l2_dup [label="same: true"];
-  l2_call -> save_check [label="same: false"];
-  l2_na -> save_check;
-  save_check -> save [label="yes"];
-  save_check -> reject [label="no"];
-}
-```
+→ See top-level Decision Flow at the start of this document.
 
 ### Rationalization Loopholes (MUST REJECT)
 
@@ -873,7 +853,7 @@ When L1 (URL · Slug) **does not match**, or when L1 matched but `last_checked_a
 
 ### When to call L2
 
-- L1 no-match + **another JD with the same `company_slug`** already saved in the current batch → L2 comparison mandatory (prevents similar position duplicates per company)
+- L1 no-match + **another JD with the same `company_slug`** already saved **in `jobs/<company_slug>/` (all sessions, not just current batch)** → L2 comparison mandatory (prevents cross-session same-company duplicates)
 - L1 URL match + `last_checked_at` > 30 days → L2 re-verification (content may have actually changed)
 - Single-session L2 call cap `max_l2_calls_per_batch: 50`. If exceeded, proceed with save but mark `fingerprint_check: pending` → re-evaluate in next batch.
 
@@ -888,8 +868,8 @@ When L1 (URL · Slug) **does not match**, or when L1 matched but `last_checked_a
 ### L2 match action (same == true)
 
 1. **Forbid** creating new JD file.
-2. Update existing (matched) file's `last_checked_at` to current ISO8601.
-3. Record existing file's `fingerprint_check` as `duplicate_of:<candidate.url>` (tracks where duplicate was detected from).
+2. Update existing (matched) file's `last_checked_at` to current ISO8601 (atomic write).
+3. Record candidate URL in `dedup-audit.log` (where dup was detected from). Existing file's `fingerprint_check` is **not** modified — symmetric with L1 hit behavior.
 4. Report: `"중복 감지: 기존 <path> (L2: LLM similarity same=true, reason=<reason>)"`.
 
 ### L2 non-match action (same == false)
