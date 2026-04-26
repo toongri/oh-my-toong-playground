@@ -16,13 +16,14 @@ Dedicated skill for JD collection, curation, and organization. Specific rules ar
 
 ## MANDATORY: Phase Task Creation
 
-At skill invocation start (immediately before Session Lock acquire), **pre-create all 8 phases as individual tasks**. Each task is marked `in_progress` on start, `completed` immediately on finish. Purpose: prevent phase skipping and silent skips.
+At skill invocation start (immediately before Session Lock acquire), **pre-create all 9 phases (Phase 0 + Phase 1-8) as individual tasks**. Each task is marked `in_progress` on start, `completed` immediately on finish. Purpose: prevent phase skipping and silent skips.
 
 **Phase list (per session)**:
 
 | # | Phase | Key gate / output |
 |---|---|---|
-| 1 | Session Setup | Session Lock acquire, Storage Backend Interview, Sources Registration (propose if empty), Profile Interview (if absent) |
+| 0 | Profile Interview (if absent) | profile.yaml 부재 시 3-round 인터뷰 + atomic write |
+| 1 | Session Setup | Session Lock acquire, Storage Backend Interview, Sources Registration (propose if empty) |
 | 2 | Sources Load + Pagination | Load sources.yaml + iterate sources + Listing Pagination (Tier A/B) |
 | 3 | per-JD Ingest | Individual JD URL fetch + Ingest Validation (including insane-search fallback) (Full Coverage Ingest Protocol 3-tier applied). **Phase 3 cannot be marked complete until every discovered item has a Tier 1/2/3 verdict — partial completion is forbidden.** |
 | 4 | Dedup Check Gate | Run L1 gate + evaluate L2 gate + fingerprint_check + dedup-audit.log append |
@@ -31,9 +32,9 @@ At skill invocation start (immediately before Session Lock acquire), **pre-creat
 | 7 | Source Crawl Memory Update | Update source-level crawl_state + sources.yaml atomic write |
 | 8 | Session End | Rules Re-evaluation (if applicable) + **Coverage Gate (`processed_count == discovered_count` per source; if not, refuse lock release until remaining items are processed or user explicitly approves stop)** + lock release + summary report |
 
-**Batch mode**: Repeat Phases 2-7 per source/JD. Phases 1/8 are session-scoped (once each).
+**Batch mode**: Repeat Phases 2-7 per source/JD. **Phase 0 (if absent), Phase 1, and Phase 8** are session-scoped (once each).
 
-Mark each Phase completion in response with `[Phase N/8: <name> ✓ (M/N)]` marker — where **M is the count of items actually processed in this phase, N is the count of items in scope for this phase**. Missing marker = violation. Marker missing the `(M/N)` segment = violation. **Marker with `M < N` = violation: the next phase cannot be entered until M == N or the user explicitly approves stopping.**
+Mark each Phase completion in response with `[Phase N/9: <name> ✓ (M/N)]` marker — where **M is the count of items actually processed in this phase, N is the count of items in scope for this phase**. Missing marker = violation. Marker missing the `(M/N)` segment = violation. **Marker with `M < N` = violation: the next phase cannot be entered until M == N or the user explicitly approves stopping.**
 
 Per-phase `(M/N)` semantics:
 
@@ -52,7 +53,7 @@ Rationalization loopholes (forbidden):
 
 - "Marker is informational, real work was done" — ❌ Marker is the gate, not a label. Wrong M/N or missing (M/N) blocks phase transition.
 - "I'll write `(3/234)` and add the rest later" — ❌ Phase advance with M < N is forbidden. Stop is itself a violation (see Full Coverage Ingest Protocol).
-- "Phases 1/8 don't really have items so (M/N) is optional" — ❌ Always written, even when N=1.
+- "Phase 0, Phase 1, or Phase 8 don't really have items so (M/N) is optional" — ❌ Always written, even when N=1.
 - "I'll batch the markers at the end with final counts" — ❌ Each phase's marker must appear at the moment that phase completes.
 
 → Details (rationalization loopholes, batch mode iteration rules): [reference/bootstrap.md#phase-task-creation](reference/bootstrap.md#phase-task-creation)
@@ -155,6 +156,7 @@ Persist results to `sources.yaml.<source>.crawl_state.coverage_proof` with field
 **CRITICAL**:
 - Without `coverage_proof` field set, `batch_run_completed=true` declaration is forbidden.
 - Sites without a visible total count (rare) may record `page_declared_total: null` plus a note "no declared total" in Tier B `how`.
+- If `page_declared_total: null` (no declared total visible on page), check #1 is N/A. Pass criteria: (check #1 pass OR N/A) AND check #2 pass AND check #3 pass.
 - T11 violation case: initial run reported "236 unique URLs collected" with only 1 `browser_evaluate` call, no scroll test, no declared-total match → Coverage Verification Protocol was not performed; the claim was unverified.
 
 → Details: [reference/dedup-and-discovery.md#listing-pagination-coverage-verification](reference/dedup-and-discovery.md#listing-pagination-coverage-verification)
@@ -192,10 +194,14 @@ crawl_state:
         pages_fetched: <int>
   coverage_proof:
     verified_at: <ISO8601>
+    method: playwright_scroll_to_bottom_N_iterations
     page_declared_total: <int or null>
     dom_unique_anchor_count: <int>
+    matches_declared: <bool>
     infinite_scroll_detected: <bool>
     conclusion: <string>
+  batch_run_completed: <bool>          # NEW
+  pending_count: <int>                  # NEW (남은 처리 대기 항목 수)
 ```
 
 Each source records its id extraction strategy in `sources.yaml.<source>.crawl_state.seen` via two fields: `identifier_kind` (strategy enum) + `identifier_extractor` (param name for `id_query`, `null` for `url`, hash spec for `fingerprint`).
