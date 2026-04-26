@@ -9,3 +9,11 @@ plugins:
       check: jq -e '.plugins["frontend-design@claude-code-plugins"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
       pre-commands:
         - claude plugin marketplace add anthropics/claude-code
+    - name: insane-search@gptaku-plugins
+      check: jq -e '.plugins["insane-search@gptaku-plugins"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add fivetaku/gptaku_plugins
+    - name: playwright@claude-plugins-official
+      check: jq -e '.plugins["playwright@claude-plugins-official"]' ~/.claude/plugins/installed_plugins.json >/dev/null 2>&1
+      pre-commands:
+        - claude plugin marketplace add anthropics/claude-plugins-official
