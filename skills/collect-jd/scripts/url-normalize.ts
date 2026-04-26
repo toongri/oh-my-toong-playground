@@ -23,6 +23,9 @@ export function normalizeUrl(input: string): string {
     }
   }
 
+  // 잔여 query param 순서 정규화: emit 순서가 달라도 동일 정규형이어야 L1 dedup이 동작
+  u.searchParams.sort();
+
   // trailing slash 제거: pathname 이 "/" 단독이면 유지
   if (u.pathname !== '/' && u.pathname.endsWith('/')) {
     u.pathname = u.pathname.replace(/\/+$/, '');
