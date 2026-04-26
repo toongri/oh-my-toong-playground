@@ -157,6 +157,12 @@ Matching Loop and Full Coverage Ingest Protocol are **orthogonal concerns** that
 
 Process all JDs discovered from listing scrape without omission. Escalate in order from information exposed on the discovery screen. **`batch_run_completed` declaration is forbidden until all discovered items are processed.**
 
+**Stop ≠ Compliance.** Mid-batch stop without declaring `batch_run_completed=true` is itself a violation, not a loophole. The rule binds the act of leaving items unprocessed, not just the act of declaring completion. Silent stop is equivalent to declaring `batch_run_completed=true` while `processed_count < discovered_count`.
+
+**Verification round is no exception.** "This is a dogfood / spec verification / GREEN_LIVE proof round so a sample is sufficient" is forbidden reasoning. There is no test mode separate from production: every discovered JD in every session is real and must be processed. If the user wanted a sample, they would say so explicitly with a specific N.
+
+**Letter ≡ Spirit.** Following the letter (e.g., "I didn't write `batch_run_completed=true`") while violating the spirit (leaving 231 of 234 items unprocessed) is itself a violation. The user's intent in invoking the skill is full coverage; partial coverage with a `partial_sample_run` audit note does not satisfy that intent.
+
 ### Specification
 
 #### Tier 1 — Listing Metadata Resolution
@@ -227,6 +233,11 @@ digraph full_coverage_ingest {
 | "Still ambiguous after Tier 2 → just leave as pending" | ❌ Tier 2 ambiguous = MANDATORY Tier 3 interview. Pending dump forbidden. |
 | "Sample processing confirmed rules work so batch complete" | ❌ Declaring batch_run_completed=true while processed < discovered is forbidden. |
 | "Strong mismatch inference from title means detail skip is acceptable" | ❌ Tier 1 verdict impossible = forced Tier 2 escalate. Inferred mismatch ≠ confirmed mismatch. |
+| "This run is a dogfood / spec verification / GREEN_LIVE proof — sample is sufficient" | ❌ No test mode exists separate from production. Every discovered JD must be processed. |
+| "I'll process N samples to demonstrate the pipeline; user will run the rest next round" | ❌ Single-handed scope reduction is forbidden. If sample is desired, the user names N explicitly upfront. |
+| "Leaving `partial_sample_run` note in sources.yaml preserves the audit trail, so partial is OK" | ❌ Audit trail is for transparency, not for permission. The note documents a violation; it does not grant one. |
+| "I didn't write `batch_run_completed=true` so technically I'm compliant" | ❌ Stop ≡ Declaration. Leaving items unprocessed is the violation; the declaration field is reporting, not the gate. |
+| "Tier 1 verdicts already computed for all 234 — file persistence for unmatched can be deferred" | ❌ Tier 1 verdict computation ≠ persistence. `included` items must be written; ambiguous items must escalate to Tier 2/3, not be deferred. |
 
 ### Counterexample (T11 Server Developer #197 — violation case)
 
@@ -242,6 +253,30 @@ T11 dogfood (2026-04-25) actual violation at Toss Careers:
 2. role_tags extraction: `[backend]` (taxonomy.yaml `Kotlin・Java・Spring` → `backend` enum).
 3. rules.yaml comparison: match rule #1 single trigger (`role_tags intersects [backend, data, ml]`).
 4. Tier 1 verdict complete → `status=included` persist. Detail fetch unnecessary.
+
+### Counterexample 2 (T11-f live run 2026-04-26 — repeated violation)
+
+Second occurrence of the same partial-batch pattern after a prior 2026-04-25 violation (Toss `partial_sample_run` note in `sources.yaml`):
+
+- **Discovery**: 236 anchors scraped, 2 already in `seen.jsonl` → 234 new candidates.
+- **Tier 1 verdicts computed** for all 234 (saved to `/tmp/toss-verdict-...json`): 48 match / 4 ambiguous_explicit / 151 ambiguous_outside_primary / 28 ambiguous_no_tags.
+- **Violation**: Persisted only 3 of 48 match-bucket items, dropped 45 unwritten and 183 ambiguous unescalated. Did not declare `batch_run_completed=true`, but stopped Phase 7 mid-update with a "demonstration sample is sufficient" rationalization.
+- **Verbatim rationalizations used**: "GREEN_LIVE 증명용 sample 이면 충분", "전체는 다음 round 에 user 주도로", "partial_sample_run note 남기면 audit trail 보존됨", "batch_run_completed=true 선언 안 했으니 위반 아님".
+- **Correct behavior**: Persist all 48 match-bucket items in Phase 6 atomic writes. Escalate the 183 ambiguous items to Tier 2 (Playwright detail fetch) and, when still ambiguous, to Tier 3 (`AskUserQuestion`). Only then enter Phase 7. Lock release in Phase 8 must verify `processed_count == discovered_count`.
+
+### Red Flags — STOP and Process Remaining
+
+If you catch yourself thinking any of the following mid-session, you are about to violate Full Coverage:
+
+- "Sample is enough to prove the pipeline works."
+- "User can run the rest in the next round."
+- "This is a verification / dogfood / GREEN_LIVE round, not production."
+- "I'll leave a `partial_sample_run` note for transparency."
+- "I didn't write `batch_run_completed=true` so this isn't a violation."
+- "Tier 1 verdicts are already computed; persistence/escalation can be deferred."
+- "It would take too long to process all N — user can interrupt if they want."
+
+**All of these mean: process the remaining items now. No exceptions.**
 
 ---
 
