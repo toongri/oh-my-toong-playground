@@ -21,7 +21,7 @@
 
 ### Purpose
 
-The Per-Bullet Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the tech-claim-examiner agent independently verifies "has that problem actually been resolved."
+The Per-Section-Unit Content Quality Gate is a verification loop that ensures content quality for each resume bullet/entry immediately before HTML report generation (Phase 10). If the Evaluation Phase diagnoses "what is wrong with this section," the Quality Gate is the step where the tech-claim-examiner agent independently verifies "has that problem actually been resolved."
 
 ### Core Principle
 
@@ -100,7 +100,7 @@ Presenting a single revision causes two problems:
 1. The user is forced to adopt the revision without sharing the underlying assumptions (positioning direction, risk tolerance).
 2. When the tech-claim-examiner issues a FAIL, there is no indication of which direction to revise toward.
 
-Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the tech-claim-examiner's FAIL axes within the chosen direction.
+Presenting alternatives lets the user choose a direction, and enables designing follow-up interviews to resolve the tech-claim-examiner's REQUEST_CHANGES feedback items within the chosen direction.
 
 ### Alternative Format
 
@@ -214,7 +214,7 @@ Conduct a detailed per-item interview with the user before examiner dispatch. Th
 | Dimension | Pre-Examiner Interview | Post-Examiner Interview |
 |-----------|----------------------|------------------------|
 | Trigger | Always (every evaluator-eligible item) | REQUEST_CHANGES received |
-| Purpose | Reach agreement, prepare for success | Supplement FAIL axes, improve |
+| Purpose | Reach agreement, prepare for success | Supplement REQUEST_CHANGES feedback items, improve |
 | Question basis | Evaluation Phase findings | Examiner's Interview Hints |
 | Exit | Agreement reached → examiner dispatch | Source secured → re-dispatch |
 
@@ -239,23 +239,22 @@ Quality Gate interviews **extend** the 4-Stage Bypass Protocol from experience-m
 ```
 tech-claim-examiner REQUEST_CHANGES received
     ↓
-Extract FAIL axis list from REQUEST_CHANGES
+Iterate interview_hints from REQUEST_CHANGES
     ↓
-For each FAIL axis:
-    1. Check Interview Hints from tech-claim-examiner
-    2. Set source target that can move this axis to PASS
-    3. Apply experience-mining 4-Stage Bypass:
+For each hint:
+    1. Set source target that can resolve this hint
+    2. Apply experience-mining 4-Stage Bypass:
        Stage 1: Direct Question (specific question based on Hints)
        Stage 2: Bypass Question (reframe the same gap from 3 angles)
        Stage 3: Adjacent Experience (explore related adjacent situations)
        Stage 4: Daily Work (explore hidden sources in routine work)
-    4. Source confirmed → regenerate revision (apply Section 3 protocol)
-    5. Source not confirmed → generate "best revision with current sources" + state limitations
+    3. Source confirmed → regenerate revision (apply Section 3 protocol)
+    4. Source not confirmed → generate "best revision with current sources" + state limitations
 ```
 
 ### How to Use Interview Hints
 
-The tech-claim-examiner provides Interview Hints for each FAIL axis with REQUEST_CHANGES. These Hints specify "what information would change this axis to PASS."
+The tech-claim-examiner provides `interview_hints` with REQUEST_CHANGES. These hints specify "what information would change this feedback item to PASS."
 
 Principles for converting Hints into questions:
 
@@ -289,7 +288,7 @@ If any of the three elements is missing, the source is judged unconfirmed and th
 If sources remain unconfirmed after all 4 Stages are exhausted:
 
 1. Generate a "best revision with current sources." This revision is the most improved version within the range supported by available sources.
-2. State the limitation explicitly in the revision: "The Problem Fidelity axis may be difficult to PASS with current sources. If the tech-claim-examiner issues a FAIL again, consider User Opt-Out for this item."
+2. State the limitation explicitly in the revision: "The examiner's structured feedback for this item may be difficult to fully satisfy with current sources. If the tech-claim-examiner returns final_verdict: REQUEST_CHANGES again, consider User Opt-Out for this item."
 3. Dispatch this revision to the tech-claim-examiner. If the tech-claim-examiner APPROVE, proceed; if REQUEST_CHANGES, confirm with the user whether to Opt-Out.
 
 **Interview rules (same as experience-mining.md):**
@@ -310,11 +309,11 @@ When the session operates in **interview-impossible mode** (the resume owner is 
    - Alternative 2 (High-Impact): Scale-Project strategy — maximize impact from confirmed content; flag axes that require owner confirmation.
    - Alternative 3 (Balanced): Compromise between Alternatives 1 and 2, or a different framing angle.
    - Include a tradeoff table identical to Section 3 format.
-3. Dispatch the alternatives package to the tech-claim-examiner Phase B validation.
-4. If **any alternative passes** Phase B: adopt it and continue.
-5. If **all alternatives fail** Phase B: opt-out. Mark the item with badge "소유자 인터뷰 필요" in the HTML report. Record verdict as `opt-out (interview-impossible)`.
+3. Dispatch the alternatives package to tech-claim-examiner.
+4. If **any alternative receives `final_verdict: APPROVE`**: adopt it and continue.
+5. **Termination behavior**: see `skills/review-resume/SKILL.md` §Phase 9 REQUEST_CHANGES Handling Protocol (interview-impossible mode) for the canonical opt-out conditions and HTML report badge rules.
 
-**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates Interview Hints for each FAIL axis (for consistency and future use). However, Interview Hints are **NOT displayed to the user** in interview-impossible mode — they are generated internally only.
+**Interview Hints in interview-impossible mode:** The tech-claim-examiner still generates `interview_hints`. Present them to the user as-is, in source bullet language, item by item — identical to the standard flow. Skip the interview → question conversion step; do NOT conduct an interview. Hints are shown so the user understands what information would have changed the verdict.
 
 ---
 
@@ -329,14 +328,14 @@ flowchart TB
     INTERVIEW_PRE --> D[Generate 2-3 alternatives + tradeoffs]
     D --> H[tech-claim-examiner dispatch\n— send original + alternatives package]
 
-    H --> DIAG{Phase A: Interrogate original\nIs there really a problem?}
+    H --> DIAG{Step 1: Interrogate original\nIs there really a problem?}
     DIAG -->|No problem| APPROVE_ORIG[APPROVE — no revision needed]
-    DIAG -->|Problem found| ALTEVAL{Phase B: Interrogate alternatives\nIs each one valid?}
+    DIAG -->|Problem found| ALTEVAL{Step 2: Interrogate alternatives\nIs each one valid?}
 
     ALTEVAL -->|At least 1 passes| APPROVE_ALT[APPROVE — include verified alternative in HTML]
     ALTEVAL -->|All fail| K[REQUEST_CHANGES\n+ Interview Hints]
 
-    K --> L[Additional Interview\n— FAIL axes-based, all the way\n4-Stage Bypass Protocol]
+    K --> L[Additional Interview\n— interview_hints-based, all the way\n4-Stage Bypass Protocol]
     L --> M{Source confirmed?}
     M -->|YES| D
     M -->|NO: 4-Stage exhausted| N[Best revision with current sources]
@@ -359,7 +358,7 @@ flowchart TB
 
 > **Note:** SKILL.md "Quality Gate Flow (Per Item)" contains the primary flow that the AI follows. Changes to the loop structure must be synchronized between both files.
 
-> **interview-impossible mode:** This flowchart depicts interview-possible mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped — REQUEST_CHANGES leads directly to opt-out with badge "소유자 인터뷰 필요".
+> **interview-impossible mode:** This flowchart depicts interview-possible mode. In interview-impossible mode, the "Pre-Examiner Interview" node is skipped (go directly to alternative generation), and the "Additional Interview" node (L) is also skipped. Instead: generate 2-3 alternatives from existing resume content → re-dispatch to examiner. If examiner returns APPROVE, proceed. If examiner returns REQUEST_CHANGES a second time, generate best revision with current content → opt-out with badge "소유자 인터뷰 필요". Opt-out is triggered only on the second REQUEST_CHANGES, not the first.
 
 ### Loop Entry Condition
 
@@ -375,7 +374,7 @@ The Input Format uses the template defined in SKILL.md Phase 9 "Evaluator Dispat
 - The main session directly identifies "technologies/approaches" in Technical Context from the bullet text
 - Evaluation Phase findings are passed verbatim (no summarization)
 - Each evaluation is independent. Do not resend previous evaluation results.
-- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results. This information is used directly in the tech-claim-examiner's Target-Scale Transferability axis evaluation.
+- Target Company Context (company scale, core values, technical challenges) is populated based on Phase 2 research results and passed to the tech-claim-examiner via the dispatch template.
 
 ### Post-APPROVE Handling
 
@@ -431,12 +430,12 @@ Two opt-out types are distinguished in the HTML report. Both use `.section-opt-o
 
 **User opt-out** (owner explicitly chose to move on):
 - `.opt-out-badge` displays "미해결 피드백"
-- Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
+- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.hint-category` and `.axis-feedback` content (examiner's finding)
 
 **System opt-out — interview-impossible** (owner not present, all alternatives failed):
 - `.opt-out-badge` displays "소유자 인터뷰 필요"
-- Each FAIL axis rendered as an expanded `.fail-axis` div with `.axis-label` (Korean label) and `.axis-feedback` (Korean description of the examiner's finding)
-- No Interview Hints are shown to the user in this mode
+- Each FAIL section rendered as an expanded `.fail-axis` div with generic `.hint-category` and `.axis-feedback` content (examiner's finding)
+- Interview Hints are displayed to the user as-is, item by item, in source bullet language (per §4 Interview-Impossible Mode Branch). Hints 제공의 의도는 "owner가 어떤 정보를 확인해줘야 할지"를 reviewer에게 시각화하는 것.
 
 ---
 
@@ -483,14 +482,17 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 **User opt-out** (owner explicitly moved on):
 ```html
 <div class="section-opt-out">
-  <div class="opt-out-badge">미해결 피드백</div>
-  <div class="fail-axis">
-    <span class="axis-label">트레이드오프 진정성</span>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
-  </div>
-  <div class="fail-axis">
-    <span class="axis-label">규모 적정 설계</span>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  <span class="opt-out-badge">미해결 피드백</span>
+  <div class="resume-line">{원본 bullet 텍스트}</div>
+  <div class="unresolved-feedback">
+    <div class="fail-axis">
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
+    <div class="fail-axis">
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
   </div>
 </div>
 ```
@@ -498,21 +500,24 @@ Defines how alternatives for each finding are displayed in the Phase 10 HTML rep
 **System opt-out** (interview-impossible mode — all alternatives failed):
 ```html
 <div class="section-opt-out">
-  <div class="opt-out-badge">소유자 인터뷰 필요</div>
-  <div class="fail-axis">
-    <span class="axis-label">트레이드오프 진정성</span>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
-  </div>
-  <div class="fail-axis">
-    <span class="axis-label">확장성 전이</span>
-    <div class="axis-feedback">{examiner 피드백 내용}</div>
+  <span class="opt-out-badge">소유자 인터뷰 필요</span>
+  <div class="resume-line">{원본 bullet 텍스트}</div>
+  <div class="unresolved-feedback">
+    <div class="fail-axis">
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
+    <div class="fail-axis">
+      <div class="hint-category">{interview_hints에서 도출된 피드백 카테고리 레이블}</div>
+      <div class="axis-feedback">{examiner 피드백 내용}</div>
+    </div>
   </div>
 </div>
 ```
 
 ### CSS Class Definitions
 
-CSS reference (canonical source: SKILL.md HTML template `<style>` block. This section is for documentation only — do not modify CSS here; update SKILL.md instead):
+CSS reference (canonical source: `references/html-template.html` `<style>` block. This section is for documentation only — do not modify CSS here; update html-template.html instead):
 
 ```css
 .alternatives {
@@ -588,7 +593,7 @@ CSS reference (canonical source: SKILL.md HTML template `<style>` block. This se
   margin: 6px 0;
   background: #fff;
 }
-.axis-label {
+.hint-category {
   font-weight: 700;
   color: #dc3545;
   font-size: 0.85rem;

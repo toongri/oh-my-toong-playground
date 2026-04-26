@@ -40,22 +40,22 @@ CTO가 이력서를 읽고 "그래서?" 하는 순간, 그 불렛은 죽는다. 
 
 | Pillar | 보여주는 것 | 없으면 면접에서 |
 |--------|-----------|-------------|
-| Constraint Cascade (제약 연쇄 구조) | 사고의 **입력** — 문제들이 어떻게 서로를 유발하는가 | "아, 그 문제 해결했군요" (대화 종료) |
+| Problem Chain (문제 연쇄 구조) | 사고의 **입력** — 문제들이 어떻게 서로를 유발하는가 | "아, 그 문제 해결했군요" (대화 종료) |
 | Decision Tradeoff (대안 비교) | 사고의 **과정** — 왜 A가 아니라 B를 선택했는가 | "네, 좋은 선택이네요" (대화 종료) |
 | Impact Breadth (다차원 성과) | 사고의 **출력** — 성과가 기술·비즈니스·운영 등 복수 차원인가 | "성능 개선했군요" (대화 종료) |
 
 세 가지가 모두 보이면 CTO는 사고 과정을 **재구성**할 수 있고, 재구성할 수 있으면 더 깊은 질문을 하고, 더 깊은 질문이 이어지면 채용으로 간다.
 
-### Constraint Cascade
+### Problem Chain
 
 "A를 해결하니 B가 드러났고, B를 해결하면서 C도 함께 풀었다" — 이 연쇄 구조가 보이는 서술이 강력하다.
 
 | 수준 | 패턴 | 면접 효과 |
 |------|------|---------|
-| FLAT | "문제 A가 있어서 X로 해결했다" | 면접관의 할 말이 없음 |
-| CASCADING | "문제 A를 해결하려니 B가 드러났고, B의 제약 때문에 C를 함께 풀어야 했다" | 연쇄 구조 자체가 면접 소재 |
+| Isolated | "문제 A가 있어서 X로 해결했다" | 면접관의 할 말이 없음 |
+| Chained | "문제 A를 해결하려니 B가 드러났고, B의 제약 때문에 C를 함께 풀어야 했다" | 연쇄 구조 자체가 면접 소재 |
 
-구체적 평가 기준은 `references/experience-mining.md` § Cascade Extraction에 정의되어 있다.
+구체적 평가 기준은 `references/experience-mining.md` § Problem Chain Extraction에 정의되어 있다.
 
 ### Impact Breadth
 
@@ -99,11 +99,11 @@ flowchart TB
     P2 --> P3[Phase 5: 섹션별 평가\nCareer + Problem-Solving 6 criteria\n+ Pushback Simulation]
     P3 --> P4[Phase 6: First-Page + JD 매칭\nFirst-Page Primacy + JD Keyword Matching]
     P4 --> P5CHK[Phase 7a: Mandatory Checklist\nverbose split · retrospective · portfolio diversity · 5줄 minimum]
-    P5CHK --> P5[Phase 7b: P.A.R. + T1-T3 + Constraint Cascade]
+    P5CHK --> P5[Phase 7b: P.A.R. + T1-T3 + Problem Chain]
     P5 --> P6[Phase 8: AI 톤 감사\nSkill humanizer audit mode]
     P6 --> P7DISPATCH[Phase 9: Content Quality Gate\nexaminer dispatch]
     P7DISPATCH --> P7VERDICT{All APPROVE\nor user opt-out?}
-    P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\nexplain FAIL axes → interview\n→ regenerate alternatives]
+    P7VERDICT -->|"NO: REQUEST_CHANGES"| P7INTERVIEW[Per-item feedback\npresent interview_hints → interview\n→ regenerate alternatives]
     P7INTERVIEW --> P7DISPATCH
     P7VERDICT -->|YES| P7OPT[Strategic Options\n2-3 with trade-offs]
     P7OPT --> P8[Phase 10: 결과 전달\nHTML Report + Note Accumulate]
@@ -131,9 +131,9 @@ The Evaluation Protocol defines 10 phases. Resume reviews involve extensive back
 | 4 | 개발자 역량 평가: C1-C5 | `references/competency-assessment.md`, `references/experience-mining.md` § C1-C5 Competency |
 | 5 | 섹션별 평가: Career + Problem-Solving 6 criteria + Pushback | `references/section-evaluation.md`, `references/experience-mining.md` § Section-Specific Evaluation |
 | 6 | First-Page Primacy + JD Keyword Matching | `references/section-evaluation.md`, `references/experience-mining.md` § JD Keyword Matching |
-| 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Constraint Cascade | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
+| 7 | 문제해결 심화평가: P.A.R. dimensions + T1-T3 + Problem Chain | `references/problem-solving.md`, `references/experience-mining.md` § Problem-Solving |
 | 8 | AI 톤 감사: Skill(humanizer) audit mode | (inline below) |
-| 9 | Per-Bullet Content Quality Gate | `references/content-quality-gate.md` |
+| 9 | Per-Section-Unit Content Quality Gate | `references/content-quality-gate.md` |
 | 10 | 결과 전달: HTML Report + Note Accumulate | `references/html-template.html`, `references/note-system.md` |
 
 ### Recognized Opt-Out Keywords
@@ -166,9 +166,9 @@ When Phase 1 sets mode to **interview-impossible** (user is not the resume owner
 | 4 | 개발자 역량 평가: C1-C5 → interview on WEAK/ABSENT | Skip interview. Output axis ratings with evidence citations only. Proceed. |
 | 5 | 섹션별 평가: 6-criteria + Pushback → interview on FAIL | Skip interview. Output evaluation and Pushback Simulation results only. Proceed. |
 | 6 | First-Page Primacy + JD Matching → interview on 3+ missing keywords | Skip interview. Output keyword gap list only. Proceed. |
-| 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Constraint Cascade → interview on FAIL | Skip interview. Output dimension scores and FLAT/CASCADING verdict only. Proceed. |
+| 7 | 문제해결 심화평가: P.A.R. + T1-T3 + Problem Chain → interview on FAIL | Skip interview. Output dimension scores and Isolated/Chained verdict only. Proceed. |
 | 8 | AI 톤 감사: Skill(humanizer) audit mode | No change — audit proceeds normally; no interview involved |
-| 9 | Per-Bullet Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
+| 9 | Per-Section-Unit Content Quality Gate: interview → alternatives → examiner | Skip interview step. Generate alternatives from resume content only → dispatch to examiner. On REQUEST_CHANGES: auto-generate best revision with current content → confirm user opt-out ("소유자 인터뷰 필요"). See Phase 9 REQUEST_CHANGES Handling Protocol for details. |
 | 10 | HTML Report + Note Accumulate | No change — same procedure |
 
 **Mode is locked for the session.** It cannot be changed after Phase 1 completes.
@@ -183,7 +183,7 @@ Before delivering Phase 10 output, you MUST verify the Completion Checklist at t
 1. After completing each phase, internally record phase completion. Phase completion markers (`[Phase N/10: OOO ✓]`) are shown to the user as minimal progress indicators. Detailed analysis (criteria evaluation, pushback simulation, alternative generation, examiner exchange) is processed internally and not output to the terminal.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 3), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
-4. Phase 9 (Per-Bullet Content Quality Gate) loops per section unit until tech-claim-examiner APPROVE or user opt-out.
+4. Phase 9 (Per-Section-Unit Content Quality Gate) loops per section unit until tech-claim-examiner APPROVE or user opt-out.
 5. Phase 10 generates an HTML report file and opens it in the browser. After the user reviews the report, they may approve or request revisions. Note Accumulate proceeds ONLY after approval.
 6. Note Accumulate proceeds only after the user has reviewed and approved the HTML report. Do not prompt for note saving before approval.
 
@@ -201,10 +201,10 @@ Not all processing output belongs in the terminal. The following categories defi
 - Criteria evaluation breakdown (6-criteria analysis per career/problem-solving line)
 - Pushback simulation details (L1/L2/L3 reasoning)
 - Alternative generation process (draft alternatives before dispatch)
-- Examiner dispatch and response details (E1-E6 axis scoring, Constraint Cascade Score sub-dimensions)
+- Examiner dispatch via stable contract: consumes only `final_verdict` (APPROVE/REQUEST_CHANGES) and `interview_hints`. Internal examiner schema (per-axis verdicts, critical rule flags, reasoning) is NOT accessed. See `skills/tech-claim-rubric/output-schema.md` for contract details.
 - Competency assessment reasoning (C1-C5 axis rating evidence)
 
-When generating user-facing output (HTML report), translate all evaluation criteria and examiner axis labels to the user's language. Do not use bare English criteria names or internal codes in user-facing output.
+review-resume는 examiner의 blackbox consumer — examiner axis labels는 user-facing output (HTML report)에 노출하지 않음. `interview_hints` 본문 (이미 source bullet 언어로 작성됨)만 user에게 전달. review-resume 자체 axis (P.A.R., T1-T3, Problem Chain)는 자체 vocabulary로 user 언어 번역.
 
 ---
 
@@ -366,11 +366,11 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 ## Phase 7: 문제해결 심화평가
 
-All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Cascade Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
+All problem-solving entries (5+ lines) are evaluated under a unified framework combining P.A.R. narrative evaluation, T1-T3 Technical Substance Verification, and Problem Chain Extraction. Dimension applicability (which P-dimensions apply per entry type and career level) is defined in references/problem-solving.md §4.
 
 **P.A.R. Evaluation:** Base dimensions (P1-P2, P4) apply to all 5+ line entries. P3 is kick-only. P5-P7 apply to Senior entries only. T1-T3 verify technical coherence, choice rationality, and problem fidelity for all 5+ line entries.
 
-**Cascade Extraction:** When problem-solving description is FLAT (concerns are independent or lack causal links), run the 4-question chain to extract the cascade structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Cascade Extraction.
+**Problem Chain Extraction:** When problem-solving description is Isolated (concerns are independent or lack causal links), run the 4-question chain to extract the chained structure the user experienced but didn't describe. For the full protocol: Read `references/experience-mining.md` § Problem Chain Extraction.
 
 **Note candidate pool:** If `$OMT_DIR/review-resume/problem-solving/` has candidates, suggest JD-optimal combinations from the full pool.
 
@@ -400,13 +400,15 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 
 `[Phase 8/10: AI 톤 감사 ✓]`
 
-## Phase 9: Per-Bullet Content Quality Gate
+## Phase 9: Per-Section-Unit Content Quality Gate
 
 While the Evaluation Phase diagnosed "what the problems are," Phase 9 verifies "have the problems been sufficiently resolved." Each resume section is broken into individual units, and the fix-interview-evaluate loop repeats until the tech-claim-examiner sub-agent issues APPROVE.
 
 ### Core Contract
 
-- Loop until APPROVE per item. The only exit is user opt-out.
+- Loop until `final_verdict == APPROVE` per item. The only exit is user opt-out.
+- On `final_verdict == REQUEST_CHANGES`: display `interview_hints` to user, conduct interview, regenerate, re-dispatch.
+- review-resume accesses ONLY `final_verdict` and `interview_hints` from examiner output (blackbox contract). Internal examiner fields are NOT read.
 - Dispatch format: Read `references/content-quality-gate.md` for full protocol.
 
 ### REQUEST_CHANGES Handling Protocol
@@ -416,7 +418,7 @@ When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches
 
 **interview-possible mode:**
 
-1. Explain each FAIL axis and its rationale to the user, item by item
+1. Present `interview_hints` to the user as-is, in source bullet language, item by item
 2. Convert Interview Hints into specific questions → conduct interview via AskUserQuestion
    - One question per message
    - Apply 4-Stage Bypass Protocol (references/experience-mining.md)
@@ -426,7 +428,7 @@ When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches
 
 **interview-impossible mode:**
 
-1. Explain each FAIL axis and its rationale to the user, item by item
+1. Present `interview_hints` to the user as-is, in source bullet language, item by item
 2. Skip Interview Hints → question conversion entirely. Do NOT conduct interview.
 3. Generate 2-3 alternatives using only the existing resume content and evaluation findings
 4. Re-dispatch alternatives to examiner
@@ -496,7 +498,7 @@ When sending to tech-claim-examiner, use exactly:
 | "Wait for user to choose a per-item alternative, then apply" | Start interview immediately after presenting alternatives. Don't wait for selection. |
 | "Can proceed without Verdict Tracker" | Entering Phase 10 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
 
-`[Phase 9/10: Per-Bullet Content Quality Gate ✓]`
+`[Phase 9/10: Per-Section-Unit Content Quality Gate ✓]`
 
 ### Strategic Options
 
@@ -578,10 +580,10 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 - [ ] Phase 5: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
 - [ ] Phase 6: First-Page Primacy + JD 매칭
 - [ ] Phase 6: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
-- [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Constraint Cascade)
+- [ ] Phase 7: 문제해결 심화평가 (P.A.R. + T1-T3 + Problem Chain)
 - [ ] Phase 7: Experience Mining Interview (DONE/SKIPPED-interview-impossible/N/A)
 - [ ] Phase 8: AI 톤 감사 (MUST invoke Skill(humanizer) — manual scan ≠ DONE)
-- [ ] Phase 9: Per-Bullet Content Quality Gate (tech-claim-examiner APPROVE or user opt-out per unit)
+- [ ] Phase 9: Per-Section-Unit Content Quality Gate (tech-claim-examiner APPROVE or user opt-out per unit)
 - [ ] Phase 10: HTML Report + User Approval Gate (infinite loop until feedback reaches 0)
 - [ ] Phase 10: Note Accumulate (user confirmation required)
 ```

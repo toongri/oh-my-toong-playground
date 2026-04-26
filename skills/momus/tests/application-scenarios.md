@@ -367,6 +367,132 @@ Task 1 → Task 2 → Task 3 (순차 실행)
 
 ---
 
+## Scenario MO-8: Batch AC Detection — [CERTAIN] Granularity Violation
+
+**Primary Technique:** Criterion 2 — AC Granularity test (batch check 감지, [CERTAIN] 판정)
+
+**Prompt:**
+```
+다음 작업 플랜을 리뷰해줘 (코드베이스 접근 불가 상태로 평가해줘):
+
+## 사용자 포인트 지급 API 구현 플랜
+
+### 비즈니스 이유
+이벤트 참여, 구매 완료, 친구 추천 시 포인트를 지급하는 기능 구현. CS팀에서 포인트 지급 누락 문의가 월 30건 발생 중.
+
+### Task 1: 포인트 지급 API 구현
+- POST /api/points/grant 엔드포인트 생성
+- 요청 바디: { userId, amount, reason }
+- 응답: { pointId, userId, amount, balance }
+
+### Task 2: 포인트 잔액 조회 API 구현
+- GET /api/users/{userId}/points
+- 응답: 현재 잔액 및 최근 10건 지급 이력
+
+### Task 3: 포인트 지급 이력 저장
+- 포인트 지급 시 이력 DB 저장
+- PointHistory 테이블 생성 (pointId, userId, amount, reason, createdAt)
+
+### 인수 조건
+- 포인트 지급 API 호출 시 잔액이 증가하고, 이력이 저장되고, 응답에 잔액이 포함된다 (3개 동작이 모두 정상 동작해야 함)
+
+### 기술 스택
+- Kotlin, Spring Boot 3.2, Spring Data JPA
+- PostgreSQL
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | 인수 조건의 batch 구조 감지 | "잔액 증가, 이력 저장, 응답 잔액 포함이 모두 정상 동작해야 함"이 하나의 AC에 3가지 독립 검증을 묶은 batch check임을 식별 |
+| V2 | [CERTAIN] 판정으로 분류 | 해당 batch AC를 [CERTAIN] 수준의 granularity violation으로 판정 (per-element 검증 불가로 구현 검증이 차단됨) |
+| V3 | 개별 AC 분리 개선안 제시 | 3가지 검증을 독립 AC(잔액 증가 별도 AC, 이력 저장 별도 AC, 응답 필드 별도 AC)로 분리하라는 구체적 개선안 제시 |
+| V4 | REQUEST_CHANGES 판정 | [CERTAIN] batch AC 발견으로 최종 판정이 REQUEST_CHANGES |
+
+**Expected Output:**
+
+momus는 인수 조건이 여러 독립 검증을 단일 AC에 묶은 batch 구조임을 감지하여 [CERTAIN] granularity violation으로 분류하고, REQUEST_CHANGES를 발행해야 한다. 개선안에는 batch AC를 개별 검증 단위로 분리하라는 지침이 포함되어야 한다.
+
+---
+
+## Scenario MO-9: Verdict Persistence Output — REQUEST_CHANGES 재검토 절차 명시
+
+**Primary Technique:** Final Verdict Format — [If REQUEST_CHANGES] Verdict Persistence 절 출력
+
+**Prompt:**
+```
+다음 작업 플랜을 리뷰해줘 (코드베이스 접근 불가 상태로 평가해줘):
+
+## 파일 업로드 기능 구현 플랜
+
+### 비즈니스 이유
+사용자가 프로필 이미지와 첨부 문서를 업로드할 수 있는 기능 필요. 현재 외부 링크만 허용 중이며 UX 개선 요구.
+
+### Task 1: 파일 업로드 엔드포인트 구현
+- POST /api/files/upload
+- 기존 파일 저장 방식을 따름
+- 응답: { fileId, url }
+
+### Task 2: 업로드된 파일 조회
+- GET /api/files/{fileId}
+- 파일 메타데이터와 다운로드 URL 반환
+
+### 인수 조건
+- 파일 업로드 후 조회 가능해야 함
+
+### 기술 스택
+- Kotlin, Spring Boot 3.2
+- S3 또는 로컬 스토리지 (미결정)
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | [CERTAIN] 참조 누락 감지 | "기존 파일 저장 방식을 따름"이 구체적 파일/클래스 참조 없는 모호한 지시임을 [CERTAIN]으로 분류 |
+| V2 | [CERTAIN] 스토리지 미결정 감지 | "S3 또는 로컬 스토리지 (미결정)"이 구현 시 반드시 차단되는 미결 사항임을 [CERTAIN]으로 분류 |
+| V3 | REQUEST_CHANGES 판정 | 복수의 [CERTAIN] 발견으로 최종 판정이 REQUEST_CHANGES |
+| V4 | Verdict Persistence 절 출력 | 출력에 `Verdict Persistence: findings below must be resolved before re-review.` 절이 포함됨 |
+
+**Expected Output:**
+
+momus는 REQUEST_CHANGES를 발행하고, Final Verdict Format의 `[If REQUEST_CHANGES] Verdict Persistence` 절에 따라 **Verdict Persistence** 구문을 출력해야 한다. 이 절은 재검토 전에 해결해야 할 발견 사항을 명시하는 역할을 한다.
+
+---
+
+## Scenario MO-10: APPROVE Baseline
+
+**Primary Technique:** False-positive Prevention — momus must APPROVE AC that satisfies granularity, verb, batch, and per-element verification rules
+
+**Prompt:**
+```
+다음 계획을 리뷰해줘:
+
+TODO-1: 로그인 실패 시 401 응답 반환
+
+- [ ] POST /api/login with invalid credentials returns HTTP 401
+      Verification: curl -s -o /dev/null -w "%{http_code}" -X POST -d '{"user":"x","pass":"y"}' http://localhost:8080/api/login → "401"
+
+- [ ] Login error response contains error code "INVALID_CREDENTIALS"
+      Verification: curl -s -X POST -d '{"user":"x","pass":"y"}' http://localhost:8080/api/login | grep -qF "INVALID_CREDENTIALS" && echo PASS || echo FAIL
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Verdict is APPROVE | Momus emits `APPROVE` — not `REQUEST_CHANGES`, not `COMMENT` (no [CERTAIN] or [POSSIBLE] findings on the well-formed AC) |
+| V2 | No Granularity Violation false-positive | Momus does not flag either AC for compound/batch content (each covers exactly one observable state change) |
+| V3 | No Verb Red-Flag false-positive | Momus does not flag completion-verb issues (AC statements use observable-state verbs: `returns`, `contains`) |
+| V4 | No per-element Verification false-positive | Momus does not flag aggregate-count verification (each AC has its own executable command emitting PASS/FAIL or exact value comparison on a single concern) |
+
+**Expected Output:**
+
+momus 출력에는 `APPROVE` 판정이 포함되어야 하며, 두 개의 잘 형성된 AC에 대해 [CERTAIN] 또는 [POSSIBLE] 발견 사항이 없어야 한다.
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -376,3 +502,6 @@ Task 1 → Task 2 → Task 3 (순차 실행)
 | MO-3 | Four Criteria — Full Pass | **PASS** | 2026-02-11 | 4/4 기준 Pass, OKAY 판정. 프롬프트 보강(JSON 구조, CLI 인자, 빈 CSV 정의, 줄바꿈) 후 구현 디테일 요구 없이 정상 통과 |
 | MO-4 | Four Criteria — Partial Fail | **PASS** | 2026-02-11 | Clarity Pass, Verifiability Fail, Completeness Fail, Big Picture Pass — REJECT 판정. 엔티티 스키마/검색 시맨틱스 보강 후 Clarity 정상 통과, 인수조건/QueryDSL 설정 누락 정확히 감지 |
 | MO-5 | Final Verdict Format | **PASS** | 2026-02-10 | 4/4 VP 충족. 판정, Justification, Summary, 개선안 형식 모두 정상 |
+| MO-8 | Batch AC Detection | **PASS** | 2026-04-24 | 4/4 VP. GREEN: 3 distinct outcome conjunction bundling을 [CERTAIN] Granularity + Per-element 위반으로 판정, REQUEST_CHANGES. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-MO-8.md |
+| MO-9 | Verdict Persistence Output | **PASS** | 2026-04-24 | 4/4 VP. GREEN: "기존 파일 저장 방식"·"S3/로컬(미결정)" 각각 [CERTAIN], 4 CERTAIN, REQUEST_CHANGES + Verdict Persistence 절 명시 출력. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-MO-9.md |
+| MO-10 | APPROVE Baseline | | | |

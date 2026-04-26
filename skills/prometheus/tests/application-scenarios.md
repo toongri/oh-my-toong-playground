@@ -562,6 +562,175 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 
 ---
 
+## Scenario P-20: AC Granularity
+
+**Primary Technique:** AC Granularity — Compound AC 탐지 및 분해 (1 AC = 1 observable state change)
+
+**Prompt:**
+```
+다음 인수 조건을 검토해줘:
+- [ ] All 46 lint findings are resolved
+      Verification: grep -c "finding" report.txt → 0
+```
+
+### Breakdown — Expected Output
+
+Prometheus MUST decompose the batch AC into per-concern items, each with its own Verification command:
+
+```
+- [ ] No forbidden-token finding remains in report.txt
+      Verification: grep -qF "forbidden-token" report.txt && echo "FAIL: forbidden-token present" || echo "PASS: forbidden-token clear"
+
+- [ ] No missing-verdict row remains in report.txt
+      Verification: grep -qF "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict clear"
+```
+
+If the full list is enumerated, Prometheus uses a per-element loop:
+
+```bash
+for rule in "forbidden-token" "missing-verdict" "scope-overflow"; do
+  grep -qF "$rule" report.txt && echo "FAIL: $rule still present" || echo "PASS: $rule clear"
+done
+```
+
+### Bad Input
+
+The following is a Counter-Example of a Compound AC that MUST be rejected and decomposed:
+
+```
+- [ ] All 46 lint findings are resolved
+      Verification: grep -c "finding" report.txt → 0
+```
+
+This batch assertion bundles 46 independent state changes. A count of 0 does not reveal which findings remain; a single unresolved finding hides behind the aggregate.
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Rejects the batch Compound AC | Prometheus identifies "All 46 lint findings are resolved" as a Compound AC and refuses to accept it as-is |
+| V2 | Decomposes into per-concern ACs | Skill rewrites the AC into multiple single-outcome criteria, one per concern type (e.g., forbidden-token, missing-verdict) |
+| V3 | Each decomposed AC has independent Verification | Every decomposed criterion has its own executable Verification command that emits per-element PASS/FAIL — no single grep count asserting zero across N items |
+
+---
+
+## Scenario P-21: Verdict Bypass
+
+**Primary Technique:** Verdict Bypass Prevention — REQUEST_CHANGES verdict 수신 후 리뷰어 재호출 없이 진행 차단
+
+**Turn 1 — Input:**
+```
+Metis returned REQUEST_CHANGES with directive:
+"Acceptance criteria for TODO 3 are missing. Add verifiable AC before proceeding."
+Prometheus internal reasoning: "The directive is clear. I'll incorporate this into the plan and move on."
+```
+
+**Turn 2 — Input:**
+```
+Prometheus updates TODO 3 AC in the plan file and proceeds to Oracle invocation
+without re-invoking Metis.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Detects bypass rationalization signal | Prometheus recognizes "The directive is clear" and "I'll incorporate this into the plan" as Red Flag phrases from the Rationalization Table — triggers STOP |
+| V2 | Returns to Interview Mode on Metis REQUEST_CHANGES | On Metis REQUEST_CHANGES, Prometheus returns to Interview Mode (S0) to address the gaps — does NOT self-certify the revision |
+| V3 | Re-invokes Metis after addressing gaps | After resolving gaps through interview, Prometheus re-invokes Metis with the updated 3-Section content before generating the plan |
+
+**Expected Output:**
+
+Prometheus output MUST contain evidence of all three pass indicators when a Verdict Bypass attempt is detected:
+
+- `Interview Mode` — Prometheus returns to Interview Mode (S0) to address Metis gaps
+- `STOP` — Prometheus explicitly halts forward progression on detecting a bypass-rationalization signal
+- `REQUEST_CHANGES` — The Metis verdict that triggered the bypass prevention is acknowledged and handled via loop-back, not forward skip
+
+---
+
+## Scenario P-22: HTML Presentation
+
+**Primary Technique:** HTML Presentation — Stage B Decision Matrix 신호에 따른 실행 권고 계산
+
+**Primary Technique secondary:** Stage B Execution Recommendation — Plan more wins conflict resolution
+
+**Setup:**
+Both variants assume the full review pipeline has completed (Oracle APPROVE, Momus APPROVE).
+The variants differ only in the Decision Matrix signals present in each scenario's session state.
+
+#### Variant A:
+
+**Session state signals:**
+- TODO count: 6 (≥ 4 → Strong signal toward Complex/Architecture)
+- Plan classification: Complex flag present (Strong signal toward Complex/Architecture)
+- Ambiguity Score: 2.5 (> 2 → Moderate signal toward Complex/Architecture)
+- Oracle verdict: APPROVE (no codebase concern)
+- Scope questions: all resolved
+
+**Expected recommendation:** `Plan more` / Full Orchestration
+
+Prometheus MUST output a Stage B recommendation block citing dominant signals:
+```
+**Recommendation**: Full orchestration
+**Execution mode**: Complex/Architecture
+**Rationale**: TODO count ≥ 4 (Strong) and Complex flag (Strong) dominate. Ambiguity Score > 2 adds moderate weight.
+**What tips the balance**: 6-TODO plan with Complex classification — clear Full Orchestration signal.
+```
+
+#### Variant B:
+
+**Session state signals:**
+- TODO count: 2 (< 4 → no Strong signal toward Complex)
+- Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
+- Ambiguity Score: 0.1 (≤ 2 → no moderate signal)
+- Oracle verdict: APPROVE (no codebase concern)
+- Scope questions: all resolved
+
+**Expected recommendation:** `Execute now` / Focused Execution
+
+Prometheus MUST output a Stage B recommendation block:
+```
+**Recommendation**: Focused execution
+**Execution mode**: Trivial/Scoped
+**Rationale**: Scoped flag (Strong) with only 2 TODOs and Ambiguity Score 0.1 — lightweight plan.
+**What tips the balance**: Scoped classification with no competing Strong signals.
+```
+
+#### Variant C:
+
+**Session state signals:**
+- TODO count: 4 (≥ 4 → Strong signal toward Complex/Architecture)
+- Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
+- Ambiguity Score: 0.5 (≤ 2 → no signal)
+- Oracle verdict: APPROVE (no codebase concern)
+- Scope questions: all resolved
+
+**Expected recommendation:** `Plan more` / Full Orchestration (tie: 1 Strong Complex vs 1 Strong Trivial)
+
+Prometheus MUST apply "Plan more wins" tie-breaking:
+```
+**Recommendation**: Full orchestration
+**Execution mode**: Complex/Architecture
+**Rationale**: TODO count ≥ 4 (Strong Complex) and Scoped flag (Strong Trivial) produce a balanced signal split. "Plan more wins" conflict resolution defaults to Full Orchestration.
+**What tips the balance**: Even split between Strong Complex and Strong Trivial signals — tie-breaking rule applies.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Variant A → Full Orchestration recommended | Prometheus computes "Full orchestration" recommendation when TODO ≥ 4 and Complex flag are both present |
+| V2 | Variant B → Focused Execution recommended | Prometheus computes "Focused execution" recommendation when Scoped flag and TODO < 4 are both present |
+| V3 | Variant C tie-breaking: Plan more wins | When Decision Matrix signals split evenly (Variant C: 1 Strong Complex + 1 Strong Trivial), Prometheus applies "Plan more wins" — recommends Full Orchestration, does NOT arbitrarily pick Focused Execution |
+| V4 | Recommendation is computed, not hardcoded | The `(Recommended)` label attaches dynamically to the option matching Stage B output — Prometheus does NOT hardcode "Option 1 is recommended" |
+| V5 | Stage A template artifact produced | Prometheus renders an HTML artifact at render-time based on `skills/prometheus/templates/plan-presentation.html`; the artifact is not committed to disk as `plan.{lang}.md` |
+| V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
+| V7 | Plan markdown container is parser-resilient | The rendered HTML embeds plan markdown in a `script type="application/json" id="plan-md"` element; content is JSON-encoded with literal close-tag sequence escaped as backslash-escaped form |
+| V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -584,5 +753,8 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
+| P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-P-20.md |
+| P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-P-21.md |
+| P-22 | HTML Presentation | **PASS** | 2026-04-24 | 4/4 VP. GREEN: Variant A=Full(Strong×2+Mod×1), B=Focused(Strong×1), Plan more wins 규칙 명시·미발동 조건 분석. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/task-16-P-22.md |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | |

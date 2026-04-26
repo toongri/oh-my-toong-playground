@@ -5,6 +5,7 @@
 .serena/
 .claude/
 .superset/
+.playwright-mcp/
 
 *.log
 .DS_Store

@@ -49,7 +49,7 @@ Explore sources hidden in routine work. Mine from what was done repeatedly, not 
 
 Example: "Was there anything in your daily tasks where you thought 'this is something I make sure to handle carefully'?", "Was there anything your team tended to ask specifically you about?"
 
-> **Cross-reference:** Phase 8 (Per-Bullet Content Quality Gate) extends this protocol for source acquisition interviews when tech-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
+> **Cross-reference:** Phase 9 (Per-Section-Unit Content Quality Gate) extends this protocol for source acquisition interviews when tech-claim-examiner returns REQUEST_CHANGES. Details: `references/content-quality-gate.md` §4 Interview Loop Protocol.
 
 ---
 
@@ -204,7 +204,7 @@ Source secured → Record in Discovered Candidates → Indicate whether the rele
 
 GOOD: "I think there are a few bullets in your career history where we could add more specificity — I'd like to ask about some related experiences."
 
-BAD (internal metric exposure): "4 out of D1c–D6c FAIL, missing metrics and causal chain"
+BAD (internal metric exposure): "4 out of 6 evaluation criteria FAIL, missing metrics and causal chain"
 
 **Target Topics:**
 
@@ -308,15 +308,15 @@ No source after Stage 4 → switch to problem-solving.md §15 Writing Guidance
 **Source Acquisition Path:**
 Source secured → Record in Discovered Candidates → Mark as a P.A.R. reinforcement candidate or a candidate for a new entry
 
-### Cascade Extraction (Problem-Solving sub-protocol)
+### Problem Chain Extraction (Problem-Solving sub-protocol)
 
-**Trigger:** 문제 해결 서술이 FLAT(단일 concern) 또는 LISTED(복수 concern 나열, 인과 연결 없음) 패턴을 보이는 경우. 유저가 실제로 경험한 연쇄 구조를 기술하지 않았을 가능성이 높다.
+**Trigger:** 문제 해결 서술이 Isolated(단일 concern 또는 인과 연결 없는 복수 concern 나열) 패턴을 보이는 경우. 유저가 실제로 경험한 chained 구조를 기술하지 않았을 가능성이 높다.
 
 **Diagnostic Context Examples:**
 
 GOOD: "이 프로젝트에서 문제들이 서로 연결되어 있었을 것 같은데 — 하나를 해결하면서 다른 문제가 드러난 경험이 있었나요?"
 
-BAD (internal metric exposure): "E3b LISTED, Constraint Cascade Score 0.35 — causal chain depth 부족"
+BAD (internal metric exposure): "Internal scoring details exposed (auto-grader axis labels, sub-dimension scores) instead of natural problem-solving narrative"
 
 BAD (too vague): "다른 문제도 있었나요?"
 
@@ -328,7 +328,7 @@ BAD: "Root cause가 뭐였나요?"
 
 GOOD: "이 문제를 처음 발견한 순간이 언제였나요? 어떤 증상을 보고 '뭔가 이상하다'고 느꼈나요? 그 순간을 걸어가 주세요."
 
-Q2 — Cascade:
+Q2 — Problem Chain:
 
 BAD: "다른 문제도 있었나요?"
 

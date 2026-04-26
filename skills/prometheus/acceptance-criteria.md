@@ -91,6 +91,36 @@ Overall structure:
 | **Task restatement** | "Authentication is implemented" | Restates the task | "Unauthenticated /api/* requests return 401" |
 | **Universal truths** | "All tests pass" | Always true, not plan-specific | Move to Verification Strategy |
 | **Absence-only** | "X not found in grep" | Deletion alone passes | Write presence checks first, then add absence checks |
+| **Compound AC** | "All tests pass", "46 findings resolved", "X and Y implemented" | Bundles multiple independent state changes — one failure hides others | Decompose: one AC per state change, each with its own Verification command |
+
+## AC Granularity Principle
+
+**1 AC = exactly 1 observable state change.** Each AC must describe a single, atomic outcome confirmed by a single verification command.
+
+> Detail rules — verb red-flag list, batch pattern matrix, rationalization table — live in the reviewer skills (`agents/metis.md` AC Quality Detail Rules / `skills/momus/SKILL.md` AC Quality Detail Rules).
+
+## Counter-Example: Fixing a Batch AC
+
+### Bad
+
+```
+- [ ] All 46 lint findings are resolved
+      Verification: grep -c "finding" report.txt → 0
+```
+
+This is a Compound AC: it bundles 46 independent state changes into one assertion.
+
+### Good
+
+Decompose by concern. Each finding type becomes its own AC with its own Verification:
+
+```
+- [ ] Report contains no forbidden-token occurrence
+      Verification: grep -q "forbidden-token" report.txt && echo "FAIL: forbidden-token present" || echo "PASS: forbidden-token absent"
+
+- [ ] Report contains no missing-verdict occurrence
+      Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
+```
 
 ## Example
 
