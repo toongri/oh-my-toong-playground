@@ -78,6 +78,11 @@ export function validateTriggerEvalShape(data: unknown): ShapeValidationResult {
       continue;
     }
 
+    // Validate expected_skill type whenever the field is present (positive or negative)
+    if (Object.prototype.hasOwnProperty.call(obj, 'expected_skill') && typeof obj.expected_skill !== 'string') {
+      errors.push({ code: 'WRONG_TYPE', message: `"expected_skill" at index ${i} must be a string`, index: i });
+    }
+
     if (obj.should_trigger) {
       positiveCount++;
     } else {
@@ -90,8 +95,6 @@ export function validateTriggerEvalShape(data: unknown): ShapeValidationResult {
           message: `"expected_skill" field missing at index ${i} (required for should_trigger=false entries)`,
           index: i,
         });
-      } else if (typeof obj.expected_skill !== 'string') {
-        errors.push({ code: 'WRONG_TYPE', message: `"expected_skill" at index ${i} must be a string`, index: i });
       }
     }
   }
