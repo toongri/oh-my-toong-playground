@@ -17,7 +17,7 @@ export function slugify(input: string): string {
   //   Latin: precomposed (é, ü) → base + combining mark, mark 제거 후 base만 남음
   let s = input
     .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036F]/g, '')
     .normalize('NFC');
 
   // Step 2: lowercase Latin characters
