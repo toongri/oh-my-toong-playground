@@ -1,7 +1,7 @@
 # "그 외 프로젝트" GREEN Test Results — review-resume
 
 > **테스트 일시:** 2026-02-13
-> **테스트 대상:** 개선된 review-resume 스킬 (D1-D6 + 그 외 프로젝트 평가 기준 추가)
+> **테스트 대상:** 개선된 review-resume 스킬 (Linear Causation / Metric Specificity / Role Clarity / Standard Transcendence / Hook Potential / Section Fitness + 그 외 프로젝트 평가 기준 추가)
 > **결론:** PARTIAL PASS — 실행된 시나리오(S1, S3, S6, S7) 기준 PASS. 6개 시나리오 미실행.
 
 ---
@@ -12,13 +12,13 @@
 
 **행동:**
 - 그 외 프로젝트 전용 기준으로 평가 (P1-P4 미사용)
-- "기능 나열 안티패턴" 명시적 탐지 (D1 FAIL)
+- "기능 나열 안티패턴" 명시적 탐지 (Linear Causation FAIL)
 - 4개 항목 모두 안티패턴 유형 분류
 - 리라이트 예시 숫자에 "[숫자]" 플레이스홀더 사용 (근거 미확인 수치 미기재)
 - Writing Guidance Trigger 권고
 
 **Baseline 대비 개선:**
-- 기존: D1-D6만 적용, 리라이트에서 메트릭 날조
+- 기존: Linear Causation / Metric Specificity / Role Clarity / Standard Transcendence / Hook Potential / Section Fitness만 적용, 리라이트에서 메트릭 날조
 - 개선: 그 외 프로젝트 전용 기준 + 안티패턴 탐지 + 날조 방지
 
 ---

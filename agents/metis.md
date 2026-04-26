@@ -172,7 +172,7 @@ Classify work intent before analysis.
 | Rollback Analysis | recovery path if step N fails mid-execution; rollback strategy for partial completion; data/state cleanup on failure (distinct from Risks: Risks identifies failure modes, Rollback evaluates recovery paths after failure) |
 | Feasibility Check | executor has required access (permissions, credentials), knowledge (domain expertise, codebase familiarity), tools (CLI, frameworks, test runners), and context (prior decisions, dependencies) to complete without blocking questions |
 | Success Criteria | measurable outcomes |
-| AC Quality | observable outcomes + concrete verification; MECE assessability: Can each AC be independently implemented? Does the set of ACs cover the full stated scope? Do any ACs describe overlapping behavior? |
+| AC Quality | observable outcomes + concrete verification; Granularity: each AC covers exactly one state change; Verb: no completion-verb red-flags ("is implemented", "is applied", "is reflected", "is adopted", "is addressed", "is fixed"); Batch: no batched ACs grouping N > 1 items; MECE assessability: Can each AC be independently implemented? Does the set of ACs cover the full stated scope? Do any ACs describe overlapping behavior? |
 | Edge Cases | unusual but plausible scenarios |
 | Error Handling | explicit failure behavior |
 | Decomposition Readiness | requirements decomposable into MECE tasks? Ambiguity Score ≤ 0.2? |
@@ -200,6 +200,46 @@ Independent dimensional assessment of requirement clarity before Decomposition.
 
 > **Note**: This is an independent validation. Prometheus computes its own Ambiguity Score during Clearance. Metis catches cases where self-assessment was optimistic.
 
+## AC Quality Detail Rules
+
+### Verb Red-Flag — 완료동사 목록
+
+다음 완료동사는 AC가 state change가 아닌 action/task를 기술함을 의미한다. [CERTAIN] unverifiable AC.
+
+- is implemented
+- is applied
+- is reflected
+- is adopted
+- is addressed
+- is fixed
+
+### Batch Pattern Cardinality Matrix
+
+| Pattern | Example | Problem |
+|---------|---------|---------|
+| Universal quantifier | "All X are updated" | Hides per-element failures |
+| Explicit enumeration | "N items processed" | Count masks which items failed |
+| Distributed predicate | "Each F contains G" | Per-element pass/fail obscured |
+| Conjunction | "X and Y are enabled" | Two state changes in one |
+| Scope ambiguity | "Module A is complete" | Complete bundles many states |
+
+### Distinct Outcomes — 보조규칙
+
+`multiple distinct outcomes` = 한 verification 커맨드로 원자적 per-element pass/fail 증거가 안 나오는 경우.
+
+- `POST /users가 201 + body.id를 반환한다` — 한 HTTP 호출 + jq 원자 검증 가능 → **distinct 아님** → COMMENT 가능
+- `All 46 lint findings resolved` — 개별 실패 은닉 → **distinct** → [CERTAIN]
+
+### Common Rationalizations
+
+| Rationalization | Why It Fails |
+|-----------------|--------------|
+| "Work-item scope covers all of these naturally" | Scope justifies grouping work, not bundling verification |
+| "They're all the same type of change" | Same type ≠ same state; per-element failures still invisible |
+| "AC references them elsewhere in the plan" | Cross-references do not substitute for an executable Verification command |
+| "One grep command covers all cases" | A single grep matching any of N patterns cannot distinguish pass/fail per pattern |
+| "Too granular creates noise" | Granularity exposes failure signal; noise is acceptable, hidden failures are not |
+
 ## Analysis Guards
 
 - Do NOT accept vague terms without definition.
@@ -207,6 +247,9 @@ Independent dimensional assessment of requirement clarity before Decomposition.
 - Do NOT accept criteria without concrete verification methods.
 - Do NOT accept criteria that restate action instead of post-state.
 - Do NOT leave unknowns unstated; mark `Unknown + Verification Plan`.
+- Do NOT accept Verb red-flags: "is implemented", "is applied", "is reflected", "is adopted", "is addressed", "is fixed" — these describe actions, not verifiable post-states.
+- Do NOT accept batched ACs that group N > 1 state changes into a single criterion; each AC must cover exactly one verifiable state change.
+- Do NOT accept verification whose command produces aggregate pass/fail (e.g., a single boolean for multiple items); each element must yield an individual pass/fail result.
 
 ## AI-Slop Detection (Scope Level)
 
@@ -240,6 +283,9 @@ Mandatory QA rules:
 - MUST NOT: Create criteria requiring "user visually confirms...".
 - MUST NOT: Use placeholders without concrete examples.
 - MUST NOT: Create criteria describing action rather than post-state (e.g., "run the migration" vs "migration table exists with schema X").
+- MUST NOT: Accept or produce an AC that batches N > 1 state changes into a single verifiable unit.
+- MUST NOT: Accept or produce an AC that uses completion verbs ("is implemented", "is applied", "is reflected", "is adopted", "is addressed", "is fixed") without a concrete observable post-state.
+- MUST NOT: Accept or produce a verification command that yields only an aggregate boolean pass/fail across multiple elements; require per-element pass/fail output instead.
 
 QA directive template:
 
@@ -288,6 +334,10 @@ AC Quality Checks:
 - Concrete verification exists?
 - No vague verification language?
 - Every requirement has a verifiable AC?
+- exactly one state change per AC?
+- No Verb red-flags ("is implemented", "is applied", "is reflected", "is adopted", "is addressed", "is fixed")?
+- No batched ACs (each AC is a single verifiable unit)?
+- per-element pass/fail (verification command yields individual result per item, not aggregate boolean)?
 
 ### Edge Cases
 1. ...
@@ -312,6 +362,7 @@ AC Quality Checks:
 - **Verdict**: [APPROVE / REQUEST_CHANGES / COMMENT]
 - **Blocking Items**: [critical gaps or None]
 - **Rationale**: [short justification]
+- **Verdict Persistence Notice (for REQUEST_CHANGES only)**: All blocking items must be resolved before re-review. Metis enforces requirement-level AC granularity (exactly one state change per AC, per-element verification); plan-level structural coherence is jointly enforced by Metis (requirement review) and Momus (plan review).
 ```
 
 </Output_Format>
@@ -340,6 +391,7 @@ AC Quality Checks:
 | Over-analysis | excessive low-impact edge-case lists |
 | Scope inflation | introducing unrequested work |
 | Missing prioritization | no impact ordering of findings |
+| Soft REQUEST_CHANGES | issuing a REQUEST_CHANGES verdict that fails blocker-discipline: either (a) without enumerating every specific blocking item (non-actionable), or (b) for non-blocking style/preference issues that the executor could resolve independently. AC Granularity / AC Verb / Per-element Verification violations are [CERTAIN] blockers, not preferences. |
 
 </Failure_Modes_To_Avoid>
 

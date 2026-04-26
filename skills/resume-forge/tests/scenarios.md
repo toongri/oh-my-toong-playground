@@ -1,0 +1,267 @@
+# resume-forge Test Scenarios (5-axis)
+
+<!--
+scenarios.md 축소 rationale:
+- 이전 application-scenarios.md(664L) + test-results.md(156L) 820L의 대부분은 SKILL.md inline 지시로 이관.
+- 실제 시나리오 검증은 real session 실행 + SKILL.md inline 지시로 수행.
+- 본 파일은 5축 분류 verdict 패턴을 시연하는 최소 scenarios만 유지.
+-->
+
+## Legacy Scenario Mapping (pre-v4 → v4)
+
+| Legacy ID | Subject | v4 SCN or Section | Status |
+| --- | --- | --- | --- |
+| A-1 | Fresh start — new session | §Source Mining | Retained inline in SKILL.md §Source Mining |
+| A-2 | Session recovery — resume existing | — | Retired (obsolete) |
+| A-3 | Source mining — user interview | §Source Mining | Retained inline in SKILL.md §Source Mining |
+| A-4 | Source mining — external data | §Source Mining | Retained inline in SKILL.md §Source Mining |
+| A-5 | Loop 1 — examiner pass | SCN-1 | Remapped → SCN-1 |
+| A-6 | Loop 1 — examiner fail + retry | — | Retired (obsolete) |
+| A-7 | Loop 2 — solution interview | §Loop 2 | Retained inline in SKILL.md §Loop 2 |
+| A-8 | Loop 2 — examiner CASCADING | SCN-2 | Remapped → SCN-2 |
+| A-9 | User says "다음" mid-loop | SCN-9 | Remapped → SCN-9 |
+| A-10 | Mining continues in Loop 1 | SCN-10 | Remapped → SCN-10 |
+| A-11 | Anti-pattern: structured choices | §Interview Principles | Retained inline in SKILL.md §Interview Principles |
+| A-12 | Anti-pattern: blind acceptance | §Interview Principles | Retained inline in SKILL.md §Interview Principles |
+| A-13 | Guided interview — one question + directions | §Interview Principles | Retained inline in SKILL.md §Interview Principles |
+| A-14 | Loop 2 — examiner fail + retry (E3b) | SCN-3 | Remapped → SCN-3 |
+| A-15 | Anti-pattern: show fragments | §Interview Principles | Retained inline in SKILL.md §Interview Principles |
+| A-16 | Anti-pattern: direct scoring | §Interview Principles | Retained inline in SKILL.md §Interview Principles |
+| A-17 | Anti-pattern: E3b without solution strategy | — | Retired (obsolete) |
+| A-18 | Anti-pattern: technical terms w/o verification | §Interview Principles | Retained inline in SKILL.md §Interview Principles |
+| A-19 | Loop 2 — full Input Format enforcement | §Examiner Dispatch | Retained inline in SKILL.md §Examiner Dispatch |
+| A-20 | Loop 2 — full text enforcement | §Examiner Dispatch | Retained inline in SKILL.md §Examiner Dispatch |
+| A-21 | Loop 2 — Interview Hints conversion | §Source Extraction | Retained inline in SKILL.md §Source Extraction |
+| A-22 | Loop 2 — Source Quality Formula | §Source Extraction | Retained inline in SKILL.md §Source Extraction |
+| A-23 | Loop 2 — Stage 5 Domain Suggest | §Source Extraction | Retained inline in SKILL.md §Source Extraction |
+| A-24 | Loop 2 — E/R category separation | SCN-4, SCN-5 | Remapped → SCN-4, SCN-5 |
+| A-25 | Loop 1 — 확인 게이트 (examiner 제출 전) | — | Retired (obsolete) |
+| A-26 | Loop 2 — 확인 게이트 (examiner 제출 전) | SCN-13 | Remapped → SCN-13 |
+| A-27 | 확인 게이트 — 유저가 "아직" 응답 | SCN-8 | Remapped → SCN-8 |
+| A-28 | 확인 게이트 — 다회 반복 후 최종 승인 | — | Retired (obsolete) |
+| B-1 | Session Recovery — forge-references 스캔 | — | Retired (obsolete) |
+| B-2 | Session Recovery — 관련 reference 적극 읽기 | — | Retired (obsolete) |
+| B-3 | Phase 0 — problem-solving/ dedup 참조 | — | Retired (obsolete) |
+| B-4 | Session cleanup — all scenarios done | — | Retired (obsolete) |
+
+## SCN-1: Loop 1 gate (a2 PASS) — 다음 단계 진입
+**Setup**: examiner output에서 `verdicts.a2_causal_honesty.verdict = PASS`, 다른 축 verdict는 무관 — Loop 1 gate는 a2만 검사
+**Expected**: resume-forge가 Loop 1 gate 통과 처리 → Loop 2 진입
+
+**Verification**:
+- Loop 1 gate는 a2_causal_honesty만 검사 — 다른 축 verdict 무관.
+- a2 PASS → Loop 2 진입 처리.
+
+## SCN-2: Loop 2 gate (full 5축 PASS) — Entry approved
+**Setup**: examiner output 전체:
+- final_verdict = APPROVE
+- verdicts.a1-a4 모두 PASS, structural_verdict = PASS
+- critical_rule_flags 모두 false
+**Expected**: Entry로 confirm (post-APPROVE confirm gate). resume-forge가 다음 bullet 처리.
+
+**Verification**:
+- pass-criteria 전 항목 충족 → APPROVE 처리.
+- post-APPROVE confirm gate 진입 → 사용자 "확정" 응답 시 Entry 저장.
+
+## SCN-3: Source extraction triggered (A1 FAIL)
+**Setup**: examiner output:
+- final_verdict = REQUEST_CHANGES
+- verdicts.a1_technical_credibility = FAIL ("named systems 부족")
+- verdicts.a2-a4 = PASS, structural_verdict = PASS
+- critical_rule_flags 모두 false
+**Expected**: Stage 1 source extraction (named systems 보강)
+
+**Verification**:
+- routing: r_phys false, r_cross false, count(P1) < 3, a1_technical_credibility FAIL, structural_verdict PASS → per-axis Stage 1 source extraction 경로 선택.
+- source extraction interview가 a1(named systems) 보강 질문으로 시작.
+- readability-only fix 조건(`{a1..a4} 모두 PASS`) 미충족 → formatting 경로 불가.
+
+## SCN-4: Readability-only fix (structural_verdict FAIL alone)
+**Setup**: examiner output:
+- final_verdict = REQUEST_CHANGES
+- structural_verdict = FAIL
+- verdicts.a1_technical_credibility: PASS
+- verdicts.a2_causal_honesty: PASS
+- verdicts.a3_outcome_significance: PASS
+- verdicts.a4_ownership_scope: PASS
+**Expected**: Readability-only fix (formatting 수정), source extraction 미수행
+
+**Verification**:
+- routing: r_phys false, r_cross false, count(P1) < 3, `{a1..a4}` 모두 PASS, structural_verdict FAIL → readability-only fix 경로 선택.
+- source extraction 미수행 — axis FAIL 없으므로 Stage 1-5 인터뷰 미진입.
+- formatting 수정 후 Loop 2 재진입.
+
+## SCN-5: structural_verdict + co-failure → source extraction
+**Setup**: examiner output:
+- final_verdict = REQUEST_CHANGES
+- structural_verdict = FAIL
+- verdicts.a1_technical_credibility = FAIL (co-failure)
+- critical_rule_flags 모두 false
+**Expected**: Source extraction (structural_verdict alone fix가 아닌 multi-axis)
+
+**Verification**:
+- routing: r_phys false, r_cross false, count(P1) < 3, axis FAIL 있음(a1), structural_verdict FAIL → Stage 5 multi-axis co-failure 경로 선택.
+- readability-only fix 조건(`{a1..a4}` 모두 PASS) 미충족 → formatting 경로 불가.
+- per-axis Stage 1-4 단독 경로 미적용 — structural_verdict FAIL 동반으로 Stage 5 co-failure synthesis 진입.
+
+## SCN-6: r_phys invariant — critical rule forces REQUEST_CHANGES
+
+**Setup**: examiner가 bullet을 평가 후 다음과 같이 반환:
+- `critical_rule_flags.r_phys.triggered: true`
+- `final_verdict: REQUEST_CHANGES`
+- 예: "achieved 10000% throughput increase with a single line change" 같이 물리적으로 불가능한 주장
+
+**Expected**: resume-forge Loop 2 pass-criteria가 `critical_rule_flags.r_phys.triggered == false`를 요구하므로 final_verdict가 `REQUEST_CHANGES`가 되어 Loop 2 실패 처리.
+
+**Verification**:
+- Pass criteria 체크에서 r_phys.triggered == true → Loop 2 fail → 수정 루프 진입.
+- critical rule은 axis verdict와 무관하게 invariant로 작동.
+
+## SCN-7: a4 FAIL alone — source extraction Stage 4 routing
+
+**Setup**: examiner가 다음과 같이 반환:
+- `verdicts.a4_ownership_scope.verdict: FAIL`
+  - 위반 사유: Korean Verb Taxonomy solo 동사("주도함", "총괄함") 사용 + scope marker 없음 → `integrity_suspected: true`
+- 나머지 4축(`a1_technical_credibility`, `a2_causal_honesty`, `a3_outcome_significance`)과 `structural_verdict`는 모두 `PASS`
+- `final_verdict: REQUEST_CHANGES`
+
+**Expected**: AC4 trigger condition(`{a1, a2, a3, a4}` 중 FAIL 있음)에 의해 source extraction으로 라우팅. a4 관련 context(role/team/ownership)를 Stage 4로 수집.
+
+**Verification**:
+- `{a1, a2, a3, a4} 중 FAIL` 조건 만족 → Source Extraction trigger.
+- a4_ownership_scope: FAIL — Korean Verb Taxonomy solo 동사 + scope marker 없음 + `integrity_suspected: true` 조합으로 구조적 overclaim 판정 → ownership/scope 관련 context 재확인 질문 생성.
+- readability-only fix trigger(`{a1, a2, a3, a4} 모두 PASS`) 조건 미충족 → readability fix 경로 불가.
+
+## SCN-8: Loop 2 confirm gate — 사용자 "아직" 응답 → inner loop 복귀
+
+**Setup**: Loop 2 gate에서 examiner가 다음과 같이 반환:
+- `final_verdict: APPROVE`
+- `verdicts.a1-a4` 모두 `PASS`, `structural_verdict ∈ {PASS, P1}`
+- `critical_rule_flags` 모두 `false`
+
+resume-forge가 post-APPROVE confirm gate에서 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"아직"** 으로 응답.
+
+**Expected**: resume-forge가 해당 bullet의 확정을 보류하고 수정 루프를 다시 진입 (Entry 확정 안 함, inner loop으로 복귀).
+
+**Verification**:
+- examiner APPROVE 상태임에도 Entry 확정 안 함.
+- 사용자 입력 "아직"을 "추가 수정 의사"로 해석 → Loop 진입.
+- 다음 iteration에서 사용자가 수정 요청을 구체화하도록 유도.
+
+## SCN-9: Loop 2 confirm gate — 사용자 "다음" 응답 → skip + pending 유지
+
+**Setup**: Loop 2 gate에서 examiner가 다음과 같이 반환:
+- `final_verdict: APPROVE`
+- `verdicts.a1-a4` 모두 `PASS`, `structural_verdict ∈ {PASS, P1}`
+- `critical_rule_flags` 모두 `false`
+
+resume-forge가 post-APPROVE confirm gate에서 사용자에게 "이 bullet으로 확정하시겠습니까?" 질문. 사용자가 **"다음"** 으로 응답.
+
+**Expected**: resume-forge가 해당 bullet을 **skip** 처리하고 다음 bullet으로 이동. bullet state는 **pending 유지** (확정 아님).
+
+**Verification**:
+- 해당 bullet이 Entry로 확정되지 않음.
+- pending state로 기록 — 세션 종료 시 미확정 목록에 포함.
+- 다음 bullet의 Loop 진입.
+- 단순 skip과 opt-out의 구분: skip은 나중에 재진입 가능, opt-out은 사용자가 명시적으로 '이 bullet은 현 상태 유지' 의사를 표명한 경우(Unresolved feedback 배지 표시).
+
+## SCN-10: Loop 1 중 cross-phase mining 진입
+
+**Setup**: Loop 1 gate에서 `verdicts.a2_causal_honesty` PASS이지만 bullet 내용 보강 중 다른 phase에서 수집한 context(예: 회사 조직 구조, 이전 bullet의 tech stack)가 필요한 상황. examiner는 현재 bullet만 평가하므로 cross-phase info 누락 신호가 `interview_hints`에 암시됨.
+
+**Expected**: resume-forge가 다른 phase의 기 수집 context를 재사용하거나, 필요 시 cross-phase mining interview 진입.
+
+**Verification**:
+- bullet 단독 정보로 충족되지 않는 context 요구 감지.
+- 이미 mining한 phase의 정보가 있으면 재활용.
+- 없으면 cross-phase mining sub-loop 진입 → 정보 수집 후 Loop 1 복귀.
+
+## SCN-11: r_cross invariant — cross-entry contradiction forces REQUEST_CHANGES
+
+**Setup**: examiner가 bullet을 평가 후 다음과 같이 반환:
+- `critical_rule_flags.r_cross.triggered: true`
+- `final_verdict: REQUEST_CHANGES`
+- 예: 두 entry에서 동일 프로젝트의 규모(팀원 수, 기간 등)가 서로 모순되는 주장 존재
+
+**Expected**: resume-forge Loop 2 pass-criteria가 `critical_rule_flags.r_cross.triggered == false`를 요구하므로 final_verdict가 `REQUEST_CHANGES`가 되어 Loop 2 실패 처리. routing 우선순위에 따라 r_phys 다음으로 r_cross가 평가되어 source extraction with contradiction explanation 경로 진입.
+
+**Verification**:
+- Pass criteria 체크에서 r_cross.triggered == true → Loop 2 fail → REQUEST_CHANGES 처리.
+- routing 매트릭스 우선순위: r_phys 미발동, r_cross.triggered == true → "Source extraction with contradiction explanation" 경로 선택.
+- critical rule은 axis verdict와 무관하게 invariant로 작동 (axis 전부 PASS여도 r_cross만으로 REQUEST_CHANGES 가능).
+
+## SCN-12: count(P1 across A1-A4) >= 3 — cumulative P1 blocker routing
+
+**Setup**: examiner가 bullet을 평가 후 다음과 같이 반환:
+- `verdicts.a1_technical_credibility.verdict: P1`
+- `verdicts.a2_causal_honesty.verdict: P1`
+- `verdicts.a3_outcome_significance.verdict: P1`
+- 나머지 axis(`a4_ownership_scope`)와 `structural_verdict`는 모두 `PASS`
+- `critical_rule_flags.r_phys.triggered: false`, `r_cross.triggered: false`
+- `final_verdict: REQUEST_CHANGES`
+
+**Expected**: Loop 2 pass-criteria `count(P1 across A1-A4) < 3` 위반(count == 3)으로 APPROVE 불가. routing 매트릭스에서 r_phys/r_cross 미발동 후 `count(P1 across A1-A4) >= 3` 조건 해당 → "Source extraction starting with weakest P1 axis" 경로 진입.
+
+**Verification**:
+- Pass criteria: count(P1) == 3 >= 3 → Loop 2 fail.
+- routing: r_phys false, r_cross false, count(P1) >= 3 → weakest P1 axis 기준 source extraction 시작.
+- FAIL axis 없음 → per-axis Stage 1-4 경로는 미적용; readability-only fix 조건(count(P1) < 3)도 미충족 → P1 source extraction만 해당.
+
+## SCN-13: Loop 2 confirm gate — post-APPROVE만 진입, "확정" 용어 사용
+
+**Setup**: examiner가 bullet을 평가 후 다음과 같이 반환:
+- `final_verdict: APPROVE`
+- `verdicts.a1_technical_credibility.verdict: PASS`
+- `verdicts.a2_causal_honesty.verdict: PASS`
+- `verdicts.a3_outcome_significance.verdict: PASS`
+- `verdicts.a4_ownership_scope.verdict: PASS`
+- `structural_verdict: PASS`
+- `critical_rule_flags` 모두 `false`
+
+**Expected**:
+- resume-forge가 APPROVE 판정 이후에만 confirm gate 진입 (pre-dispatch confirmation gate 없음).
+- confirm gate 질문에 "확정" 용어 사용 (예: "이 엔트리로 확정하시겠습니까?"). "제출" 용어 사용 불가.
+- 사용자가 "확정"으로 응답 시 Entry 저장.
+
+**Verification**:
+- flowchart 상 confirm 노드는 `check -> confirm [label="APPROVE"]` 경로 — APPROVE 이후에만 도달 가능.
+- confirm gate 질문: "이 엔트리로 확정할까?" 또는 "이 엔트리로 확정하시겠습니까?" — "제출" 표현 미사용.
+- REQUEST_CHANGES 경로(`check -> classify`)는 confirm 노드 우회 — pre-dispatch confirmation gate 없음.
+
+## SCN-14: axis FAIL + structural_verdict FAIL co-failure → Stage 5 routing guard
+
+**Setup**: examiner가 bullet을 평가 후 다음과 같이 반환:
+- `verdicts.a1_technical_credibility.verdict: FAIL` (1개 이상의 axis FAIL)
+- `verdicts.a2_causal_honesty.verdict: PASS`
+- `verdicts.a3_outcome_significance.verdict: PASS`
+- `verdicts.a4_ownership_scope.verdict: PASS`
+- `structural_verdict: FAIL`
+- `critical_rule_flags.r_phys.triggered: false`, `r_cross.triggered: false`
+- `final_verdict: REQUEST_CHANGES`
+
+**Expected**: Step 1 routing classifier가 `{a1..a4} 중 FAIL 있음 AND structural_verdict == FAIL` 조건 감지 → Stage 5 multi-axis synthesis로 분기. per-axis Stage 1-4 경로(axis FAIL + structural ∈ {PASS, P1})는 미적용.
+
+**Verification**:
+- routing 매트릭스: r_phys false, r_cross false, count(P1) < 3, axis FAIL 있음, structural_verdict == FAIL → Stage 5 (co-failure 경로).
+- Stage 5: AI가 domain/stack 종합 후 multi-axis source proposals 생성 — per-axis single Stage 인터뷰 미수행.
+- Anti-case: axis FAIL + structural_verdict ∈ {PASS, P1} → Stage 5 미적용, per-axis Stage 1-4 경로로 분기.
+
+## SCN-15: A2 Rule 4 standalone — p50 cited without p99 (positive P1-allow)
+
+**Setup**: examiner output:
+- `verdicts.a2_causal_honesty.verdict = P1` (A2 Rule 4 standalone: p50 metric cited without p99 counterpart; Soft P1 per `a2-causal-honesty.md` FAIL/P1 Tier table)
+- `verdicts.a1_technical_credibility.verdict = PASS`
+- `verdicts.a3_outcome_significance.verdict = PASS`
+- `verdicts.a4_ownership_scope.verdict = PASS`
+- `structural_verdict = PASS`
+- `critical_rule_flags.r_phys.triggered: false`, `r_cross.triggered: false`
+- `count(P1 across A1-A4) == 1`
+
+**Expected**: Loop 2 gate evaluates permissive condition `count(P1 across A1-A4) < 3 AND structural_verdict ∈ {PASS, P1}` → satisfied → `final_verdict = APPROVE`.
+
+**Verification**:
+- resume-forge routing: r_phys false, r_cross false, count(P1) == 1 < 3, no axis FAIL, structural_verdict PASS → Loop 2 APPROVE lane reached.
+- Source extraction not triggered — APPROVE path taken, not REQUEST_CHANGES path.
+- post-APPROVE confirm gate entered normally.
+
+Purpose: P2-11 regression guard — validates positive P1-non-blocking case (count(P1) == 1 AND structural_verdict ∈ {PASS, P1} → APPROVE), complementing SCN-12 which covers count(P1) ≥ 3 REQUEST_CHANGES rejection.
