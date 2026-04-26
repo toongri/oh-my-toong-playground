@@ -18,7 +18,7 @@
 
 ### Specification (MANDATORY)
 
-Immediately at skill invocation start (even before Session Lock acquire — the single prerequisite), pre-register all 8 phases as individual tasks. Prevents phase skipping and provides progress visibility to the user.
+Immediately at skill invocation start (even before Session Lock acquire — the single prerequisite), pre-register all 9 phases (Phase 0 + Phase 1-8) as individual tasks. Prevents phase skipping and provides progress visibility to the user.
 
 - Task creation tool: `TodoWrite` or the environment's task API (e.g., oh-my-toong's `TaskCreate`).
 - Task title examples:
@@ -31,8 +31,8 @@ Immediately at skill invocation start (even before Session Lock acquire — the 
   - Phase 7: Source Crawl Memory Update (crawl_state update)
   - Phase 8: Session End (rules re-eval + lock release)
 - Each task has **a single state only**: `pending` → `in_progress` (on start) → `completed` (immediately on finish). Batching forbidden.
-- **Batch mode**: Repeat Phases 2-7 per source/JD. For multiple sources, iterate Phase 2-7 per source count; for multiple JDs within a source, iterate Phase 3-6 per JD count. Phases 1/8 are session-scoped.
-- After each Phase completion, print `[Phase N/8: <name> ✓ (M/N)]` marker in response — where **M is items processed in this phase, N is items in scope**. Missing marker, missing `(M/N)` segment, or `M < N` all = violation. **`M < N` blocks entry to the next phase** (mechanical gate, not advisory). See SKILL.md Phase list for per-phase M/N semantics.
+- **Batch mode**: Repeat Phases 2-7 per source/JD. For multiple sources, iterate Phase 2-7 per source count; for multiple JDs within a source, iterate Phase 3-6 per JD count. Phase 0 (if absent), Phase 1, and Phase 8 are session-scoped.
+- After each Phase completion, print `[Phase N/9: <name> ✓ (M/N)]` marker in response — where **M is items processed in this phase, N is items in scope**. Missing marker, missing `(M/N)` segment, or `M < N` all = violation. **`M < N` blocks entry to the next phase** (mechanical gate, not advisory). See SKILL.md Phase list for per-phase M/N semantics.
 
 ### Flowchart
 
@@ -42,7 +42,7 @@ digraph phase_task_creation {
   node [shape=box, fontname="Helvetica"];
 
   trigger [label="skill invocation", shape=ellipse, style=filled, fillcolor=lightblue];
-  create_tasks [label="Pre-create 8 Phase tasks\n(TodoWrite/TaskCreate)", style=filled, fillcolor=khaki];
+  create_tasks [label="Pre-create 9 Phase tasks\n(TodoWrite/TaskCreate)", style=filled, fillcolor=khaki];
   session_setup [label="Phase 1: Session Setup", style=filled, fillcolor=lightgreen];
   sources_load_pagination [label="Phase 2: Sources Load + Pagination", style=filled, fillcolor=lightgreen];
   per_jd_ingest [label="Phase 3: per-JD Ingest", style=filled, fillcolor=lightgreen];
@@ -77,15 +77,15 @@ digraph phase_task_creation {
 - "Low workload so skip task creation" — Phase skipping prevention is the purpose. Low task count is not a reason to omit.
 - "Phase 4 Dedup Check Gate looks trivial-pass, so don't create task and skip" — The audit itself is the purpose. Absent task = treated as silent skip.
 - "In batch mode, merge Phase 3-6 into 1 task" — Per-JD separation is mandatory. Dedup/matching results must be audited per JD.
-- "Task marker `[Phase N/8 ✓]` is decorative, skip it" — Required for visibility + audit. Absent = no evidence of phase completion.
+- "Task marker `[Phase N/9 ✓]` is decorative, skip it" — Required for visibility + audit. Absent = no evidence of phase completion.
 - "Marker without `(M/N)` is fine, the count is informational" — ❌ `(M/N)` is the gate, not metadata. A marker without `(M/N)` is treated as if the phase wasn't completed.
 - "I'll write `(3/234)` and continue to Phase 4 — partial advance is OK" — ❌ `M < N` blocks the next phase entry. This is mechanical, not advisory.
-- "Phase 1 and 8 are session-scoped so `(M/N)` is optional" — ❌ Always `(1/1)` on success, `(0/1)` on failure. Never absent.
+- "Phase 0 (if absent), Phase 1, and Phase 8 are session-scoped so `(M/N)` is optional" — ❌ Always `(1/1)` on success, `(0/1)` on failure. Never absent.
 - "If task must be skipped mid-way, leave state as-is" — Skip decisions must also be explicit (e.g., `deleted` or `completed` with reason). Leaving `in_progress` is forbidden.
 
 ### Counterexample (normal flow)
 
-- Session start → pre-create 8 tasks → Phase 1 `in_progress` → complete `[Phase 1/8: Session Setup ✓]` → repeat Phase 2 → ... → Phase 8 `completed`. ✓
+- Session start → pre-create 9 tasks → Phase 0 (if absent) `in_progress` → complete `[Phase 0/9: Profile Interview ✓]` → Phase 1 `in_progress` → complete `[Phase 1/9: Session Setup ✓]` → repeat Phase 2 → ... → Phase 8 `completed`. ✓
 - Batch mode (1 source + 3 JDs) → Phase 1 (×1) + Phase 2 (×1) + Phase 3-6 × 3 (12) + Phase 7 (×1) + Phase 8 (×1) = 16 tasks pre-registered. ✓
 - Batch mode (2 sources + 3+2 JDs) → Phase 1 (×1) + [src1: Phase 2 (×1) + Phase 3-6 × 3 (12) + Phase 7 (×1)] + [src2: Phase 2 (×1) + Phase 3-6 × 2 (8) + Phase 7 (×1)] + Phase 8 (×1) = 25 tasks pre-registered. ✓
 
