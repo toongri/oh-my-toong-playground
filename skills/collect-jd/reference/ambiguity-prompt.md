@@ -134,7 +134,7 @@ JSON 만 출력해라.
 {
   "verdict": "mismatch",
   "missing_signals": [],
-  "violated_rules": ["min_yoe", "stack_must_have"],
+  "violated_rules": ["work_mode_required"],
   "explanation": "주 5일 전일 출근 필수로 rules 의 원격/하이브리드 조건을 위반한다."
 }
 ```
