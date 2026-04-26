@@ -6,13 +6,15 @@ This schema applies to the frontmatter of all JD files at path `$OMT_DIR/collect
 
 File name example: `$OMT_DIR/collect-jd/jobs/toss-bank/백엔드-엔지니어-260422.md`
 
+The canonical frontmatter key set is **15 keys**: `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`, `parent_url`, `sub_position`. Any key not in this list is treated as a non-standard key (triggers Manual Edit Safety detection).
+
 ---
 
 ## Required Fields
 
 | Field | Type | Description |
 |---|---|---|
-| `version` | integer | Schema version. Currently `1`. State YAML only — do not use in skill-source files |
+| `version` | integer | Schema version. Currently `1`. |
 | `url` | string | Normalized URL stored after applying `normalizeUrl()` |
 | `company` | string | Company name verbatim (e.g., `Toss Bank`) |
 | `company_slug` | string | `slugify(company)` (e.g., `toss-bank`) |
