@@ -32,7 +32,7 @@ Immediately at skill invocation start (even before Session Lock acquire — the 
   - Phase 8: Session End (rules re-eval + lock release)
 - Each task has **a single state only**: `pending` → `in_progress` (on start) → `completed` (immediately on finish). Batching forbidden.
 - **Batch mode**: Repeat Phases 2-7 per source/JD. For multiple sources, iterate Phase 2-7 per source count; for multiple JDs within a source, iterate Phase 3-6 per JD count. Phases 1/8 are session-scoped.
-- After each Phase completion, print `[Phase N/8: <name> ✓]` marker in response. Missing = reviewer flags immediately as violation.
+- After each Phase completion, print `[Phase N/8: <name> ✓ (M/N)]` marker in response — where **M is items processed in this phase, N is items in scope**. Missing marker, missing `(M/N)` segment, or `M < N` all = violation. **`M < N` blocks entry to the next phase** (mechanical gate, not advisory). See SKILL.md Phase list for per-phase M/N semantics.
 
 ### Flowchart
 
@@ -78,6 +78,9 @@ digraph phase_task_creation {
 - "Phase 4 Dedup Check Gate looks trivial-pass, so don't create task and skip" — The audit itself is the purpose. Absent task = treated as silent skip.
 - "In batch mode, merge Phase 3-6 into 1 task" — Per-JD separation is mandatory. Dedup/matching results must be audited per JD.
 - "Task marker `[Phase N/8 ✓]` is decorative, skip it" — Required for visibility + audit. Absent = no evidence of phase completion.
+- "Marker without `(M/N)` is fine, the count is informational" — ❌ `(M/N)` is the gate, not metadata. A marker without `(M/N)` is treated as if the phase wasn't completed.
+- "I'll write `(3/234)` and continue to Phase 4 — partial advance is OK" — ❌ `M < N` blocks the next phase entry. This is mechanical, not advisory.
+- "Phase 1 and 8 are session-scoped so `(M/N)` is optional" — ❌ Always `(1/1)` on success, `(0/1)` on failure. Never absent.
 - "If task must be skipped mid-way, leave state as-is" — Skip decisions must also be explicit (e.g., `deleted` or `completed` with reason). Leaving `in_progress` is forbidden.
 
 ### Counterexample (normal flow)

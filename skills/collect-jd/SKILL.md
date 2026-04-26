@@ -24,16 +24,36 @@ At skill invocation start (immediately before Session Lock acquire), **pre-creat
 |---|---|---|
 | 1 | Session Setup | Session Lock acquire, Storage Backend Interview, Sources Registration (propose if empty), Profile Interview (if absent) |
 | 2 | Sources Load + Pagination | Load sources.yaml + iterate sources + Listing Pagination (Tier A/B) |
-| 3 | per-JD Ingest | Individual JD URL fetch + Ingest Validation (including insane-search fallback) (Full Coverage Ingest Protocol 3-tier applied) |
+| 3 | per-JD Ingest | Individual JD URL fetch + Ingest Validation (including insane-search fallback) (Full Coverage Ingest Protocol 3-tier applied). **Phase 3 cannot be marked complete until every discovered item has a Tier 1/2/3 verdict — partial completion is forbidden.** |
 | 4 | Dedup Check Gate | Run L1 gate + evaluate L2 gate + fingerprint_check + dedup-audit.log append |
 | 5 | Classify | Role tagging + Matching Loop (Phase 1→2→3) |
 | 6 | Persist | JD atomic write + taxonomy/tags update + `crawl_state` update |
 | 7 | Source Crawl Memory Update | Update source-level crawl_state + sources.yaml atomic write |
-| 8 | Session End | Rules Re-evaluation (if applicable) + lock release + summary report |
+| 8 | Session End | Rules Re-evaluation (if applicable) + **Coverage Gate (`processed_count == discovered_count` per source; if not, refuse lock release until remaining items are processed or user explicitly approves stop)** + lock release + summary report |
 
 **Batch mode**: Repeat Phases 2-7 per source/JD. Phases 1/8 are session-scoped (once each).
 
-Mark each Phase completion in response with `[Phase N/8: <name> ✓]` marker. Missing = violation.
+Mark each Phase completion in response with `[Phase N/8: <name> ✓ (M/N)]` marker — where **M is the count of items actually processed in this phase, N is the count of items in scope for this phase**. Missing marker = violation. Marker missing the `(M/N)` segment = violation. **Marker with `M < N` = violation: the next phase cannot be entered until M == N or the user explicitly approves stopping.**
+
+Per-phase `(M/N)` semantics:
+
+| Phase | M (numerator) | N (denominator) |
+|---|---|---|
+| 1 Session Setup | 1 if lock + config + profile all done, else 0 | 1 (session-scoped) |
+| 2 Sources Load + Pagination | sources whose `discover_listing` succeeded + Coverage Verification passed | total sources iterated |
+| 3 per-JD Ingest | discovered JDs with a Tier 1/2/3 verdict assigned | total JDs discovered (= `discovered_count` from Phase 2) |
+| 4 Dedup Check Gate | JDs with L1+L2 evaluated and `fingerprint_check` set | JDs from Phase 3 with non-duplicate verdicts |
+| 5 Classify | JDs with `role_tags` + Matching Loop verdict | JDs from Phase 4 not blocked by dedup |
+| 6 Persist | JDs atomically written | JDs from Phase 5 with verdict ∈ {included, excluded, ambiguous} |
+| 7 Source Crawl Memory Update | sources with `crawl_state` + `seen.jsonl` updated | sources iterated in Phase 2 |
+| 8 Session End | 1 if Coverage Gate passes + lock released, else 0 | 1 (session-scoped) |
+
+Rationalization loopholes (forbidden):
+
+- "Marker is informational, real work was done" — ❌ Marker is the gate, not a label. Wrong M/N or missing (M/N) blocks phase transition.
+- "I'll write `(3/234)` and add the rest later" — ❌ Phase advance with M < N is forbidden. Stop is itself a violation (see Full Coverage Ingest Protocol).
+- "Phases 1/8 don't really have items so (M/N) is optional" — ❌ Always written, even when N=1.
+- "I'll batch the markers at the end with final counts" — ❌ Each phase's marker must appear at the moment that phase completes.
 
 → Details (rationalization loopholes, batch mode iteration rules): [reference/bootstrap.md#phase-task-creation](reference/bootstrap.md#phase-task-creation)
 
