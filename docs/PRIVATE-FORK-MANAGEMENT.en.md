@@ -16,6 +16,8 @@ find . -size +100M                 # Scan large files
 
 ### Standard mirror push
 
+**Prerequisite (security-critical)**: Before the first `git push --mirror`, disable all GitHub Actions in the new private repo at Settings → Actions → "Disable Actions". The mirror push uploads `.github/workflows/` and the push event itself triggers `on: push` workflows. Inherited upstream workflows may publish to npm/Docker/Slack/external webhooks. Disable first, audit (Section 5), re-enable selectively.
+
 ```bash
 git clone --bare https://github.com/<upstream-org>/<repo>.git
 cd <repo>.git
@@ -113,7 +115,12 @@ upstream-main  --->  (PR merge into)  ---> main
 | `main` | Internal integration (your patches live here) | PR-only, requires review |
 | `feature/*` | Internal feature work | Branched from `main` |
 
-Set branch protection on both `upstream-main` and `main`: require PR, require status checks, no force-push, no direct push (admins included).
+Branch protection (asymmetric — required for sync to work):
+
+- **`main`**: require PR, require status checks, no force-push, no direct push (admins included).
+- **`upstream-main`**: require status checks, no force-push, no manual direct push from humans. Direct push is allowed *only* from the sync automation actor (the SYNC_TOKEN owner / GitHub Actions bot identity used in Section 4 Sync Workflow). The automation pushes fast-forward commits from `upstream/main`; humans MUST use a PR.
+
+Why asymmetric: sync (Section 4) is a fast-forward push from upstream and is owned by automation, not humans. Treating both branches identically would block the sync loop on its first run.
 
 **Alternative:** If your team prefers linear history and allows force-push, use a single `company/main` rebased onto upstream/main with `--force-with-lease`. Trade-off: cleaner history, but breaks branches others have based on it.
 
@@ -175,6 +182,8 @@ Scheduled workflows only run from the default branch — keep `main` as the defa
 
 ## 5. Workflow & Secrets Audit (after first sync)
 
+This section is the audit and selective re-enable step that follows the disable-before-push prerequisite in Section 1. Actions were disabled before the mirror push to prevent inherited workflows from firing; this section covers how to audit each workflow and decide what to re-enable.
+
 Inherited workflows from upstream `.github/workflows/`. Before re-enabling Actions:
 
 | Check | Why |
@@ -205,6 +214,52 @@ You cannot open a PR from a private repo directly to a public upstream. To contr
 2. Cherry-pick or use `git format-patch` to extract the relevant commits from your private `main`.
 3. Sanitize: strip internal-only refs (ticket numbers, internal URLs, secret-shaped strings).
 4. Push to the public fork, then open a PR to upstream.
+
+---
+
+---
+
+## 8. Recovery Playbooks
+
+Procedures for the failure modes the rule's "emergency recovery procedures" mention.
+
+### 8.1 Failed sync rollback
+
+If an automated or manual sync was incorrectly merged:
+
+1. `gh pr list --base main --head upstream-main --state merged` to identify the incorrectly merged PR.
+2. Revert with a revert commit: `gh pr revert <PR#>` or `git revert -m 1 <merge-commit>`.
+3. Merge the revert commit to `main` via a separate PR (no force-push — keep main protection in place).
+4. The next sync may surface a conflict — see Section 4 for resolution.
+
+### 8.2 Accidental upstream push detection
+
+If commits were accidentally pushed to the upstream (public) repo:
+
+1. Immediately delete the branch: `git push origin --delete <branch>` or force-delete via GitHub UI.
+2. Rotate any potentially exposed secrets immediately (see 8.3 below).
+3. Request cache purge from GitHub Support — forks or clones may already carry the content.
+4. Post-incident audit: verify the pre-push hook fired (or why it didn't), re-validate `git remote -v` outputs.
+
+### 8.3 SYNC_TOKEN rotation
+
+On token exposure or scheduled renewal:
+
+1. Issue a new fine-grained PAT in GitHub UI — required scopes: `contents:write`, `pull-requests:write` (no other scopes).
+2. Expiry: 90 days or less recommended.
+3. Update the secret in private repo Settings → Secrets → `SYNC_TOKEN`.
+4. Revoke the old token.
+5. Confirm the next scheduled cron run completes without error.
+
+### 8.4 Leaked private content removal
+
+If private fork content was pushed externally:
+
+1. Rewrite history to remove the leaked path: `git filter-repo --invert-paths --path <leaked-path>` (or `--replace-text` for inline secrets).
+2. Force-push (`--force-with-lease` preferred — one-time exception; restore branch protection immediately after).
+3. Request cache purge from GitHub Support — external clones may already carry residual data.
+4. Rotate any exposed secrets in parallel (8.3).
+5. Prevention: harden the pre-push hook, tighten branch protection, and do a paranoid audit of the path that allowed the leak.
 
 ---
 
