@@ -140,7 +140,6 @@ Persist results to `sources.yaml.<source>.crawl_state.coverage_proof` with field
 - `verified_at` (ISO8601)
 - `method` (e.g., `playwright_scroll_to_bottom_N_iterations`)
 - `page_declared_total`, `dom_unique_anchor_count`
-- `matches_declared` (bool)
 - `infinite_scroll_detected` (bool)
 - `conclusion` (string)
 
@@ -188,7 +187,6 @@ crawl_state:
     method: playwright_scroll_to_bottom_N_iterations
     page_declared_total: <int or null>
     dom_unique_anchor_count: <int>
-    matches_declared: <bool>
     infinite_scroll_detected: <bool>
     conclusion: <string>
   batch_run_completed: <bool>          # NEW

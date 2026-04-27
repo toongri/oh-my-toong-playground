@@ -156,7 +156,6 @@ companies:
         method: null
         page_declared_total: null
         dom_unique_anchor_count: null
-        matches_declared: null
         infinite_scroll_detected: null
         conclusion: null
       batch_run_completed: false
@@ -449,12 +448,11 @@ coverage_proof:
   method: playwright_scroll_to_bottom_N_iterations
   page_declared_total: <int or null>   # null if no visible total count
   dom_unique_anchor_count: <int>
-  matches_declared: <bool>
   infinite_scroll_detected: <bool>
   conclusion: <string>
 ```
 
-**Pass criteria when `page_declared_total: null`**: Check #1 (declared-total match) is **N/A**. Pass requires: (check #1 PASS OR N/A) AND check #2 PASS AND check #3 PASS. When page_declared_total: null, set matches_declared: null (N/A semantics — no declared total to compare against).
+**Pass criteria when `page_declared_total: null`**: Check #1 (declared-total match) is **N/A**. Pass requires: (check #1 PASS OR N/A) AND check #2 PASS AND check #3 PASS. Check #1 is evaluated as `page_declared_total == dom_unique_anchor_count` per evaluation; no separate stored field is needed (derived from the two source fields above).
 
 ### Rationalization Loopholes (MUST REJECT)
 
@@ -489,8 +487,8 @@ iteration 4: anchor_count = 236, scrollHeight = 8420
 iteration 5: anchor_count = 236, scrollHeight = 8420
 
 # Step 3: evaluate
-matches_declared = true        # 236 == 236
 infinite_scroll_detected = false  # scrollHeight delta == 0
+# Check #1 derived: page_declared_total (236) == dom_unique_anchor_count (236) → match
 
 # Step 4: persist
 coverage_proof:
@@ -498,7 +496,6 @@ coverage_proof:
   method: playwright_scroll_to_bottom_5_iterations
   page_declared_total: 236
   dom_unique_anchor_count: 236
-  matches_declared: true
   infinite_scroll_detected: false
   conclusion: "Exhaustive collection confirmed — no additional anchors loaded on scroll."
 ```
@@ -577,7 +574,6 @@ crawl_state:
     method: playwright_scroll_to_bottom_N_iterations
     page_declared_total: <int or null>
     dom_unique_anchor_count: <int>
-    matches_declared: <bool>
     infinite_scroll_detected: <bool>
     conclusion: <string>
   batch_run_completed: <bool>
