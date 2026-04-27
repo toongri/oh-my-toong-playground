@@ -113,7 +113,7 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 
 ### Trigger phrases (Reusable Crawl)
 
-When any of the following is detected, **iterate all registered sources** → Listing Pagination → per-JD fetch + Dedup Gate + Classify + Persist (new entries by Per-Site Crawl Memory set difference (`discovered − seen`) only):
+When any of the following is detected, **iterate all registered sources** → Listing Pagination → per-JD fetch + L1 evaluation (Algorithm B) + Dedup Gate + Classify + Persist:
 
 - "오늘 돌려" / "오늘 크롤"
 - "싹 돌려" / "전부 돌려"
@@ -604,37 +604,64 @@ crawl_state:
 
 **`coverage_proof` sub-group**: Replaces legacy `coverage_verification` field. Scalar fields capturing the exhaustiveness proof from the Coverage Verification Protocol.
 
-### Set Difference Algorithm (Re-crawl)
+### Re-crawl Algorithm (Algorithm B Canonical)
+
+**Migration note (2026-04-27 spec change)**: Earlier versions specified set-difference (`discovered − seen = new`) as the re-crawl algorithm. This was deprecated in favor of Algorithm B (L1 TTL canonical) due to the "stale forever" failure mode where seen items were never re-evaluated. Implementations following the old set-difference flow should migrate to Algorithm B; existing seen.jsonl data is forward-compatible (used as fast-lookup index).
+
+Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is `jobs/<source>/<slug>.md` frontmatter; seen.jsonl mirrors it for O(1) id lookup.
+
+#### Terminal States (L1 outcome)
+
+For each discovered URL, L1 produces one of 4 **terminal states**:
+
+| Terminal state | Trigger | Action |
+|---|---|---|
+| `new_ingest` | URL not in jobs/ | Proceed to Tier 1/2/3 ingest |
+| `touch_only` | URL match in jobs/ AND `last_checked_at` within TTL (30d) | Atomic update `last_checked_at` only. No body fetch. No Tier 2/3. |
+| `ttl_recheck` | URL match in jobs/ AND `last_checked_at` exceeds TTL (30d) | Enter L2 (LLM similarity check) → re-evaluate per Matching Loop |
+| `manual_skip` | Manual Edit Safety detected (canonical contract violation or `last_checked_at` in future) | Skip, log to report |
+
+#### L1 Outcome Decision Tree
+
+```python
+function classifyL1(url, jobsDir, ttl_days=30):
+    l1Hit = lookup(url, jobsDir)            # URL-keyed only
+    if not l1Hit:
+        return TerminalState.new_ingest     # URL miss → ingest
+    if jobs[url].manual_edit_detected:
+        return TerminalState.manual_skip
+    age_days = today - jobs[url].last_checked_at
+    if age_days <= ttl_days:
+        return TerminalState.touch_only     # Within TTL
+    return TerminalState.ttl_recheck        # TTL exceeded
+```
+
+**Partition guarantee**: The 4 terminal states form a complete partition over the URL key space. Slug-level similarity is downstream concern (Matching Loop / L2). This separates URL-keyed dedup (L1) from content-keyed similarity (L2).
+
+#### Drift Detection (MANDATORY)
+
+Any of the following is an integrity error and **must be reported** (not silently ignored):
+
+- **`seen_hit + L1_miss`**: ID is in seen.jsonl but no matching frontmatter found in jobs/. Indicates seen.jsonl drift or out-of-band jobs/ deletion.
+- **`L1_hit + seen_miss`**: jobs/ frontmatter exists but ID not in seen.jsonl. Indicates seen.jsonl corruption or out-of-band jobs/ creation.
 
 ```pseudocode
-// Load seen set
-lines = readFile("crawl_state/<source>/seen.jsonl").split("\n")
-seenIds = new Set()
-for line of lines:
-  if line.trim() == "": continue
-  try:
-    row = JSON.parse(line)
-    seenIds.add(row.id)
-  catch:
-    warn("skipping invalid JSON line: " + line)  // crash recovery
+// Drift detection pseudocode (run after building both sets)
+seenIds = buildSeenIdsFromJsonl("crawl_state/<source>/seen.jsonl")  // O(1) lookup index
+l1Ids = buildL1IdsFromJobsFrontmatter("jobs/<source>/")
 
-// Derive discovered id set
-discoveredIds = new Set()
-for anchor of listingAnchors:
-  id = deriveId(anchor, identifier_kind, identifier_extractor)
-  discoveredIds.add(id)
+for id of seenIds:
+  if id not in l1Ids:
+    report_error("seen_hit + L1_miss: " + id)  // integrity error — must surface
 
-// Set difference
-newIds = discoveredIds.difference(seenIds)
-
-// Process new entries
-for id of newIds:
-  // ingest → classify → persist
-
-// Atomic append to seen.jsonl (POSIX open(path, 'a'))
-for entry of newEntries:
-  appendLine("crawl_state/<source>/seen.jsonl", JSON.stringify(entry))
+for id of l1Ids:
+  if id not in seenIds:
+    report_error("L1_hit + seen_miss: " + id)  // integrity error — must surface
 ```
+
+#### Post-processing
+
+Crash recovery: skip invalid JSON lines in seen.jsonl + warn. After processing, atomic append new entries to `seen.jsonl` **for `new_ingest` terminal states only** (POSIX `open(path, 'a')`). Do not append `touch_only`, `ttl_recheck`, or `manual_skip` entries — those already exist in seen.jsonl.
 
 ### Atomic Append Safety Contract
 
@@ -647,7 +674,7 @@ for entry of newEntries:
 
 | Legacy field | New location | Notes |
 |---|---|---|
-| `marker_type` + `last_seen_marker` | → `seen.identifier_kind` + `seen.items_path` | Cursor-based rescan replaced by set-difference |
+| `marker_type` + `last_seen_marker` | → `seen.identifier_kind` + `seen.items_path` | Cursor-based rescan replaced by Algorithm B (L1 TTL canonical) — see "Re-crawl Algorithm (Algorithm B Canonical)" 섹션. |
 | `coverage_verification` | → `coverage_proof` | Renamed; fields preserved |
 | top-level `range_covered` | → `audit_trail.range_covered` | Moved under `audit_trail` |
 | top-level `crawl_history` | → `audit_trail.crawl_history` | Moved under `audit_trail` |
@@ -660,33 +687,48 @@ digraph per_site_crawl_memory {
   node [shape=box, fontname="Helvetica"];
 
   start [label="source crawl start", shape=ellipse, style=filled, fillcolor=lightblue];
-  load_seen [label="Load seen.jsonl\n→ build seenIds Set", style=filled, fillcolor=khaki];
+  load_seen [label="Load seen.jsonl\n→ build seenIds index (O(1) lookup)", style=filled, fillcolor=khaki];
+  load_l1 [label="Build L1 index from\njobs/<source>/ frontmatter", style=filled, fillcolor=khaki];
+  drift_check [label="Drift detection\n(seen_hit+L1_miss / L1_hit+seen_miss)", shape=diamond];
+  report_drift [label="Report integrity errors\n(do not silently ignore)", style=filled, fillcolor=salmon];
   fetch [label="listing fetch\n(Pagination Tier A/B)", style=filled, fillcolor=lightblue];
-  derive_ids [label="Derive discoveredIds\nper identifier_kind", style=filled, fillcolor=khaki];
-  set_diff [label="newIds = discoveredIds − seenIds", shape=diamond];
-  per_jd [label="per-JD ingest\n(Dedup Gate → save)", style=filled, fillcolor=lightblue];
-  append_seen [label="Atomic append new entries\nto seen.jsonl", style=filled, fillcolor=khaki];
+  per_url [label="For each discovered URL:\nL1 evaluation → terminal state", shape=diamond];
+  new_ingest [label="terminal: new_ingest\n→ Tier 1/2/3 ingest", style=filled, fillcolor=lightblue];
+  touch_only [label="terminal: touch_only\n→ atomic update last_checked_at only", style=filled, fillcolor=lightgreen];
+  ttl_recheck [label="terminal: ttl_recheck\n→ L2 + Matching Loop re-eval", style=filled, fillcolor=khaki];
+  manual_skip [label="terminal: manual_skip\n→ log to report", style=filled, fillcolor=salmon];
+  append_seen [label="Atomic append new entries (new_ingest only)\nto seen.jsonl", style=filled, fillcolor=khaki];
   update_audit [label="Update audit_trail\n+ coverage_proof", style=filled, fillcolor=khaki];
   atomic_write [label="sources.yaml atomic write\n(.tmp → rename)", style=filled, fillcolor=lightgreen];
   done [label="source crawl complete", shape=ellipse, style=filled, fillcolor=lightgreen];
 
-  start -> load_seen -> fetch -> derive_ids -> set_diff;
-  set_diff -> per_jd [label="newIds non-empty"];
-  set_diff -> append_seen [label="newIds empty\n(skip ingest)"];
-  per_jd -> append_seen;
-  append_seen -> update_audit -> atomic_write -> done;
+  start -> load_seen -> load_l1 -> drift_check;
+  drift_check -> report_drift [label="errors found"];
+  drift_check -> fetch [label="OK (or after reporting)"];
+  report_drift -> fetch;
+  fetch -> per_url;
+  per_url -> new_ingest [label="not in jobs/"];
+  per_url -> touch_only [label="in jobs/, TTL OK"];
+  per_url -> ttl_recheck [label="in jobs/, TTL expired"];
+  per_url -> manual_skip [label="manual edit detected"];
+  new_ingest -> append_seen;
+  append_seen -> update_audit;
+  touch_only -> update_audit;
+  ttl_recheck -> update_audit;
+  manual_skip -> update_audit;
+  update_audit -> atomic_write -> done;
 }
 ```
 
 ### Rationalization Loopholes (MUST REJECT)
 
-- "Dynamic listing is recommendation-sorted, but a cursor is faster than reading the whole seen.jsonl" — ❌ Cursors assume stable ordering. Recommendation-sorted listings reorder items between runs. Set difference is the only correct approach.
+- "Dynamic listing is recommendation-sorted, but a cursor is faster than reading the whole seen.jsonl" — ❌ Cursors assume stable ordering. Recommendation-sorted listings reorder items between runs. Algorithm B (every URL → L1 → 4 terminal states) is the only correct approach.
 - "seen.jsonl will get large — skip reading it and use last_seen_marker as a shortcut" — ❌ `last_seen_marker` is deprecated and removed. seen.jsonl is the single source of truth. Read it in full every time; at typical JD counts (hundreds to low thousands) the file is < 1 MB and fast.
-- "Recommendations always surface new items at the top, so cursor pointing to the latest item is sufficient" — ❌ Recommendation ranking changes retroactively (A/B tests, personalization). Items below the cursor can become new. Only set difference is correct.
-- "The site uses chronological sort so a timestamp cursor is safe" — ❌ Timestamp cursors fail when items are backdated, unpublished, or re-published. Set difference is universally correct regardless of sort order.
+- "Recommendations always surface new items at the top, so cursor pointing to the latest item is sufficient" — ❌ Recommendation ranking changes retroactively (A/B tests, personalization). Items below the cursor can become new. Only Algorithm B (L1 TTL canonical) is correct. Set-difference was deprecated 2026-04-27 due to stale-forever failure mode.
+- "The site uses chronological sort so a timestamp cursor is safe" — ❌ Timestamp cursors fail when items are backdated, unpublished, or re-published. Algorithm B (L1 TTL canonical) is universally correct regardless of sort order.
 - "Appending to seen.jsonl before confirming the JD was persisted risks false positives" — ❌ Append only after successful persist. The ingest loop appends entries for JDs that completed the persist phase. Aborted JDs are simply not appended; they will appear as new on the next run.
 - "identifier_kind defaults to url — just pick it silently and let the user fix it later" — ❌ Silent default is explicitly forbidden. Run the heuristic, report, confirm.
-- "seen.jsonl is empty (first run), so skip the set difference and treat everything as new" — ❌ The algorithm is correct: an empty seen set naturally yields `discoveredIds − ∅ = discoveredIds`. No special casing needed; just run the algorithm.
+- "seen.jsonl is empty (first run), so skip L1 TTL evaluation and treat known URLs as new" — ❌ The algorithm is correct: an empty L1 index naturally routes every URL to `new_ingest`. No special casing needed; just run Algorithm B.
 
 ### Counterexample
 
