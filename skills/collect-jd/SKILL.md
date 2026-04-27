@@ -240,7 +240,7 @@ Format: append-only JSONL, one row per line, < 1 KB per row. POSIX `open(path, '
   "l1_outcome": "new_ingest|touch_only|ttl_recheck|manual_skip",
   "ttl_state": "fresh|stale|na",
   "fanout_check": "single|multi_subsidiary|na",
-  "classification": "included|excluded|ambiguous|pending",
+  "classification": "included|excluded|ambiguous|na|pending",
   "persist_status": "saved|touched|skipped|pending",
   "terminal_state": "new_ingest|touch_only|ttl_recheck|manual_skip",
   "ts": "<ISO8601>"
