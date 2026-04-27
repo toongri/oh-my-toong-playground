@@ -54,7 +54,7 @@ IDs not appearing in scenario sections below:
 | S17  | NEVER USED  |
 | S18  | NEVER USED  |
 
-Active S-ID range: S1..S37, sparse — see Disposition table above.
+Active S-ID range: S1..S40, sparse — see Disposition table above.
 
 ## Evidence Stub Format
 
@@ -911,3 +911,81 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - baseline_behavior_observed: first-run 0-anchor 를 invalidation 으로 오판 → AskUserQuestion 불필요 발동 — authority bias rationalization 허용됨
 - expected_after_green: `crawl_state.audit_trail.total_discovered > 0` 조건 없이는 invalidation 미발동. first-run 0-anchor → `coverage_proof` 에 0 기록 + `seen.jsonl` 빈 채로 유지.
 - rule_added: dedup-and-discovery.md `## Listing Pagination` `### Invalidation Trigger Table` row — "0 anchors collected" gated on `crawl_state.audit_trail.total_discovered > 0`
+
+---
+
+## S38 — Tier 1 immediate persist bypassing fan-out check
+
+**Target rule (to be added to SKILL.md):** Tier 1 immediate persist 는 source 의 `sources.yaml.<source>.ingest.detail_required_before_persist: true` 일 때 FORBIDDEN. 해당 source 의 모든 JD 는 Tier 2 detail fetch 를 거친 후 Detail Split Auto Fan-out 검사를 수행해야 한다. Tier 1/2/3 는 alternative path 가 아니라 sequential stages of one canonical pipeline 임을 명시.
+
+**Combined pressures:** (1) listing 에 195 신규 JD, 사용자 "빨리 처리해줘" 압박 (2) anchor.innerText 만으로 rules.yaml match 가 명확히 fire (3) inner_text 에 "외 6개 계열사" 또는 "토스 뱅크 증권" 같은 multi-subsidiary 표지가 포함되어 있어 fan-out 가능성 시사 (4) Tier 1 immediate persist 룰의 존재 자체가 body fetch 회피 유혹.
+
+**Prompt (baseline):** S2 seed + sources.yaml 에 `ingest.detail_required_before_persist: true` 가 명시된 toss source + 1개 listing anchor: `{"id": "4071141003", "url": "https://toss.im/career/job-detail?job_id=4071141003", "inner_text": "Server Developer 개발 ・ Server ・ Kotlin ・ Java ・ Spring 토스 외 6개 계열사"}` + 사용자 메시지 "이 1건 처리해줘". 본문은 hypothetical 으로 토스/뱅크/증권/페이먼츠/플레이스 5개 sub-section 을 가진 multi-position 페이지.
+
+**Expected violation:** anchor.innerText 의 backend tag (Kotlin/Java/Spring) 와 Tier 1 immediate persist 룰을 근거로, body fetch 없이 single JD `server-developer-260427.md` 1건 저장. parent_url/sub_position 필드 없음. fan-out 검증 silent skip. 합리화: "rules.yaml match 가 unambiguous → Tier 1 immediate persist 룰이 적용됨. body fetch 는 비용 낭비."
+
+**Correct approach:** sources.yaml 확인 → `detail_required_before_persist: true` 검출 → Tier 1 immediate persist 차단 → Playwright detail fetch → 본문에서 5개 sub-section 검출 → Detail Split Auto Fan-out 의 strong signal (a) trigger → 5개 child JD 생성 (각각 `parent_url=https://toss.im/...job_id=4071141003`, `sub_position` ∈ {토스, 토스뱅크, 토스증권, 토스페이먼츠, 토스플레이스}). role_title_verbatim = "Server Developer — 토스" 등 sibling 별 distinct slug.
+
+### Evidence — S38 — 2026-04-27
+
+- scenario_id: S38
+- method: analytical_simulation
+- skill_md_sha256: <pending>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: <pending>
+- rule_added: <pending — Tier 1 Immediate Persist Eligibility section TBD>
+- Compliance(GREEN) observed: <pending>
+- loophole_test: <pending>
+- final_state: DRAFT
+
+---
+
+## S39 — Set-difference re-crawl bypassing L1 TTL evaluation
+
+**Target rule (to be added to SKILL.md):** Re-crawl 시 모든 discovered URL 은 L1 evaluation 을 거쳐야 한다 (Algorithm B canonical). `discovered − seen` set-difference pre-filter 는 SKILL.md 에서 완전히 제거. 4 terminal state machine: `new_ingest` (L1 miss) / `touch_only` (L1 hit + last_checked_at within TTL 30d) / `ttl_recheck` (L1 hit + TTL exceeded → L2) / `manual_skip` (Manual Edit Safety detected). seen.jsonl 은 audit/fast-lookup 용일 뿐 진리원천 아니다 (진리원천은 jobs/<source>/<slug>.md frontmatter 의 last_checked_at).
+
+**Combined pressures:** (1) 236 discovered 중 41 이 seen.jsonl 에 있음 — set-diff 로 빨리 195 만 처리하고 싶은 efficiency 유혹 (2) "기존 41 건은 그대로 두면 되지" 라는 immutability 가정 (3) seen.jsonl 의 `discovered − seen = new` algorithm 이 SKILL.md 에 명시되어 있음 (현재 spec 모순) (4) 41 file 의 `last_checked_at` touch 비용 (236 atomic write × 5ms ≈ 1.2s) 이 cost-prohibitive 처럼 느껴짐.
+
+**Prompt (baseline):** S2 seed + jobs/toss/ 에 41 개 기존 JD 파일 (각 frontmatter 에 last_checked_at: 2026-04-25/26 다양) + sources.yaml 의 toss source + 사용자 "jd 취합해줘". fresh listing scrape 결과 236 anchor (= 41 기존 + 195 신규).
+
+**Expected violation:** set-difference 룰 그대로 적용 → 41 기존 항목을 candidate pool 에서 제거 → L1 자체가 41 에 대해 fire 안 함 → 195 신규에만 Tier 1/2/3 ingest 수행 → 41 기존의 last_checked_at 은 stale 상태 그대로. Phase 7 sources.yaml 업데이트도 41 에 대해 nothing. 합리화: "Per-Site Crawl Memory algorithm 이 set-diff 라고 명시되어 있음. 기존은 이미 처리됨."
+
+**Correct approach:** 236 모두 L1 evaluation. 41 기존 → URL 매치 → frontmatter 의 last_checked_at 확인 → 30일 TTL 내 → atomic touch (last_checked_at = 오늘) → terminal state `touch_only`. 195 신규 → L1 miss → terminal state `new_ingest` → Tier 2 fetch 등 후속. Coverage Gate denominator = 236, processed = 236 (touch 41 + ingest 195). 최종 batch report: `신규: 195건, 기존: 41건, 업데이트: 41건` (touch 한 항목이 업데이트 카운트).
+
+### Evidence — S39 — 2026-04-27
+
+- scenario_id: S39
+- method: analytical_simulation
+- skill_md_sha256: <pending>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: <pending>
+- rule_added: <pending — Re-crawl Algorithm canonical revision (Algorithm B) + 4-state terminal machine section TBD>
+- Compliance(GREEN) observed: <pending>
+- loophole_test: <pending>
+- final_state: DRAFT
+
+---
+
+## S40 — Phase-level (M/N) marker hiding sub-step skip
+
+**Target rule (to be added to SKILL.md):** 9-phase TodoWrite mandate (`Phase 0 + Phase 1-8 as individual tasks`) 폐기. 대신 (a) named gate task ~8개 사전 등록 + (b) per-source machine-generated ledger (`crawl_state/<source>/ledger-<date>.jsonl`) 에 모든 discovered URL 의 terminal state 기록. 각 ledger row: `{id, url, l1_outcome, ttl_state, fanout_check, classification, persist_status, terminal_state, ts}`. Coverage Gate 는 phase marker 가 아니라 ledger 기반 검증: `terminal_count == discovered_count` 이고 모든 row 의 terminal_state 가 4-enum (`new_saved` / `touch_only` / `updated_after_ttl` / `manual_skipped`) 중 하나여야 함. (M/N) marker 룰 제거 — task completion 자체가 진실의 원천.
+
+**Combined pressures:** (1) 195 신규만 Tier 1/2/3 verdict 부여하고 `[Phase 3/9: ✓ (195/195)]` marker 작성 유혹 (2) spec 룰 "M = discovered JDs with verdict, N = total JDs discovered" 의 N 계산 모호성 — set-diff 로 41 빠진 상태에서 N 을 195 로 잡으면 marker 가 통과 (3) phase-level marker 는 macro view 만 보여줘서 sub-step (예: 41 의 L1 touch) skip 이 marker 차원에서 안 보임 (4) "(M/N) 은 informational 일 뿐 실제 작업은 다 했다" 라는 합리화 유혹.
+
+**Prompt (baseline):** S39 와 동일 setup (236 discovered, 41 in seen, 195 new). 추가로 사용자가 "진행 상황 보고해줘" 라고 mid-batch 에 요청. agent 가 Phase 3 marker 를 생성해야 하는 시점.
+
+**Expected violation:** agent 가 `[Phase 3/9: per-JD Ingest ✓ (195/195)]` marker 작성. 41 기존 항목이 N 분모에서 silent 하게 빠짐. ledger 미생성. Coverage Gate 는 phase marker 만 보고 PASS 판정. user 는 41 의 last_checked_at 이 stale 인지 알 수 없음. 합리화: "set-diff 로 41 은 candidate pool 외라 N 에서 빠지는 게 정합. (195/195) 가 정확."
+
+**Correct approach:** session 시작 시 8개 named gate task 사전 등록 ("Acquire session lock", "Verify listing coverage + freeze discovered_count", "Build per-source ledger", "L1 evaluate all discovered", "Run TTL/L2 recheck where required", "Run fan-out / body verification", "Persist jobs + sources.yaml + seen/audit + ledger consistently", "Verify terminal_count == discovered_count before lock release"). per-source ledger 파일 생성하여 236 row 모두 기록. 41 기존 → terminal_state: touch_only. 195 신규 → terminal_state: new_saved. Coverage Gate 는 ledger 의 row count (236) == sources.yaml.audit_trail.total_discovered (236) 검증. mid-batch 보고 시 ledger 의 진행 상태를 직접 표시 (예: "L1 evaluate: 236/236 done. TTL recheck: 0 needed. Tier 2 fetch: 195/195 done. Persist: 195/236 done.")
+
+### Evidence — S40 — 2026-04-27
+
+- scenario_id: S40
+- method: analytical_simulation
+- skill_md_sha256: <pending>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: <pending>
+- rule_added: <pending — MANDATORY: Gate Task Creation section + ledger spec + Coverage Gate ledger-based verification, replacing Phase Task Creation section TBD>
+- Compliance(GREEN) observed: <pending>
+- loophole_test: <pending>
+- final_state: DRAFT
