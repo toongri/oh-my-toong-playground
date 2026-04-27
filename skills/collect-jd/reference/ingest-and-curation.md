@@ -412,7 +412,7 @@ For detected manual-edited files:
 
    **READ is allowed** for one specific purpose only: dedup L2 LLM similarity comparison may pass the file's body content read-only into the L2 prompt (read-only access does not modify any frontmatter field). All other reads (re-evaluation context fetch, tag derivation context fetch) are forbidden.
 2. Do not touch `last_checked_at` (preserve user-set value).
-3. Do not include in batch report counts — increment separate `manual_skipped` counter.
+3. Do not include in batch report counts — increment separate `manual_skip` counter.
 4. Add one line **before** the final line of Batch Mode Report Schema:
    ```
    수동 편집 감지: <N>건 (status 유지)
@@ -436,7 +436,7 @@ If user uses explicit phrases like "강제 재평가해" or "manual edit 무시�
 - "Just one field, minor, overwrite is fine" — ❌ All user edits are **respected**.
 - "Skill knows more accurate status so overwriting is better" — ❌ User intent takes precedence.
 - "Manual-edit detection heuristic is unreliable, re-evaluate anyway" — ❌ When uncertain, skip (conservative).
-- "Skip manual_skipped count in report" — ❌ Required for transparency.
+- "Skip manual_skip count in report" — ❌ Required for transparency.
 - "User obviously remembers their manual edit so skip notification" — ❌ Do not rely on user's memory.
 
 ### Counterexample
