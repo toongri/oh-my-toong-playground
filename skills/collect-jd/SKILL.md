@@ -285,7 +285,7 @@ When a single listing anchor leads to a detail page that contains multiple disti
 
 **Presence-coupling rule**: `parent_url` and `sub_position` are presence-coupled — both present or both absent. A record with only one of the two is invalid.
 
-**Dedup impact**: L1 dedup key is `(company_slug, role_title_slug)` — siblings with different `sub_position` values are naturally distinct. `parent_url` field is used for sibling relationship awareness only.
+**Dedup impact**: L1 dedup operates on URL only (Algorithm B canonical). Siblings each have their own URL or URL+anchor distinction, so each sibling is a separate L1 entry by URL. Slug-level conflict (same `role_title_slug` across siblings) is L2's concern, not L1's. `parent_url` field is used for sibling relationship awareness only.
 
 **CRITICAL**:
 - Ignoring strong signals and saving as a single JD is forbidden.
@@ -316,7 +316,7 @@ When `$OMT_DIR/collect-jd/profile/profile.yaml` is absent, a **minimum 3-round**
 
 → Details (rationalization loopholes, purpose explanation): [reference/bootstrap.md#phase-0-profile-interview-required](reference/bootstrap.md#phase-0-profile-interview-required)
 
-## Dedup (L1 URL/slug + L2 LLM similarity)
+## Dedup (L1 URL-only + L2 LLM similarity)
 
 Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 
