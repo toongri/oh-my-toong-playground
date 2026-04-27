@@ -70,6 +70,8 @@ Examples of inputs that return `null`:
 - `"invalid-url"` (no protocol)
 - `"wanted.co.kr/jobs"` (relative URL, no scheme)
 
+**Migration note**: prior versions threw on invalid input — callers must check for null on the return value.
+
 ---
 
 ## Fixture Table
