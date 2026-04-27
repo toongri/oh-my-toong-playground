@@ -161,6 +161,8 @@ companies:
         conclusion: null
       batch_run_completed: false
       pending_count: 0
+    ingest:
+      detail_required_before_persist: false   # default false; set true if Tier 2 fetch is mandatory before persist
 blacklist:
   - slug: xyz
     name: XYZCorp
