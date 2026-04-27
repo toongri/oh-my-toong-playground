@@ -35,9 +35,9 @@ Immediately at skill invocation start (even before Session Lock acquire — the 
 | 7 | `Persist jobs + sources.yaml + seen/audit + ledger consistently` | Atomic write each JD file; update `seen.jsonl`, `audit_trail`, `sources.yaml`; set `persist_status` on each ledger row | Ledger rows from Gates 4-6 | All `persist_status` ≠ `pending`; sources.yaml atomic write |
 | 8 | `Verify terminal_count == discovered_count before lock release` | Coverage Gate: ledger row count == `total_discovered` AND every `terminal_state` ∈ 4-enum; release lock on pass | Ledger + sources.yaml | Lock released; `batch_run_completed: true` on pass |
 
-**Batch mode**: Gates 2-7 may run per-source within a session. Gates 1 and 8 are session-scoped (once each). Per-source repetition does NOT create new tasks — one task spans all sources.
+**Batch mode (gate-major)**: Each of Gates 2-7 internally iterates over all sources in the batch before transitioning to completed. The 8 gate tasks remain constant in count regardless of source count. Gates 1 and 8 are session-scoped (once each).
 
-**State transitions**: Each task follows `pending` → `in_progress` (on entry) → `completed` (immediately on finish). Batch completion forbidden — mark `completed` the moment the gate finishes, not at session end.
+**State transitions**: Each task follows `pending` → `in_progress` (on entry) → `completed` (immediately when the gate's work is done for ALL sources in the batch). Batch completion forbidden — mark `completed` the moment the gate finishes its last source's work, not at session end.
 
 **(M/N) markers REMOVED**: Tasks (created via TaskCreate) are the source of truth for gate completion. The per-source ledger is the source of truth for per-item progress. No `[Phase N/9: ✓ (M/N)]` markers are required or expected anywhere in responses.
 
@@ -57,8 +57,8 @@ digraph gate_task_creation {
   g5 [label="Gate 5: Run TTL/L2 recheck\nwhere required", style=filled, fillcolor=lightgreen];
   g6 [label="Gate 6: Run fan-out /\nbody verification", style=filled, fillcolor=lightgreen];
   g7 [label="Gate 7: Persist jobs + sources.yaml\n+ seen/audit + ledger consistently", style=filled, fillcolor=lightgreen];
-  more_sources [label="More sources?", shape=diamond, style=filled, fillcolor=lightyellow];
   g8 [label="Gate 8: Verify terminal_count ==\ndiscovered_count before lock release", style=filled, fillcolor=lightgreen];
+  iterate_note [label="g2..g7 each iterate over all sources internally\n(gate-major batch)", shape=note, style=filled, fillcolor=lightyellow];
   done [label="session complete", shape=ellipse, style=filled, fillcolor=lightgreen];
 
   trigger -> create_tasks;
@@ -69,9 +69,8 @@ digraph gate_task_creation {
   g4 -> g5;
   g5 -> g6;
   g6 -> g7;
-  g7 -> more_sources;
-  more_sources -> g2 [label="yes (next source — Gates 2-7 repeat)"];
-  more_sources -> g8 [label="no"];
+  g7 -> g8;
+  iterate_note -> g2 [style=dashed, arrowhead=none];
   g8 -> done;
 }
 ```
@@ -90,7 +89,7 @@ digraph gate_task_creation {
 ### Counterexample (normal flow)
 
 - Session start → pre-create 8 gate tasks → Gate 1 `in_progress` → lock acquired → `completed` → Gate 2 `in_progress` → listing + coverage verified → `completed` → Gate 3 `in_progress` → ledger created → `completed` → Gate 4 `in_progress` → all L1 evaluated → `completed` → ... → Gate 8 `in_progress` → Coverage Gate passes → lock released → `completed`. ✓
-- Batch mode (2 sources): pre-create 8 tasks → Gate 1 (×1) → [src1: Gates 2-7] → [src2: Gates 2-7] → Gate 8 (×1). Each task is marked `completed` once, spanning all sources. ✓
+- Batch mode (2 sources): pre-create 8 tasks → Gate 1 → Gate 2 (iterates: src1 → src2 internally) completed → Gate 3 (src1 → src2) completed → ... → Gate 7 (src1 → src2) completed → Gate 8 completed. Each task transitions exactly once. ✓
 
 → Cross-reference: [SKILL.md#mandatory-gate-task-creation](../SKILL.md#mandatory-gate-task-creation)
 

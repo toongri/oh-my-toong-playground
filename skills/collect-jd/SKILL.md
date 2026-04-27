@@ -33,7 +33,7 @@ At skill invocation start (immediately before Session Lock acquire), **pre-creat
 | 7 | `Persist jobs + sources.yaml + seen/audit + ledger consistently` |
 | 8 | `Verify terminal_count == discovered_count before lock release` |
 
-**Batch mode**: Gates 2-7 may run per-source within a session. Gates 1 and 8 are session-scoped (once each). Per-source repetition does NOT create new tasks — one task spans all sources.
+**Batch mode (gate-major)**: Each of Gates 2-7 internally iterates over all sources before transitioning to completed. Gates 1 and 8 are session-scoped (once each). The 8 gate tasks remain constant in count regardless of source count — one task per gate, spanning all sources.
 
 **(M/N) markers REMOVED.** Tasks (created via TaskCreate) are the source of truth for gate completion. The per-source ledger is the source of truth for per-item progress. No `[Phase N/9: ✓ (M/N)]` markers are required or expected.
 
