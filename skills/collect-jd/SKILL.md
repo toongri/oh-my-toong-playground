@@ -328,7 +328,7 @@ Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 → Dedup Gate Enforcement details: [reference/dedup-and-discovery.md#dedup-check-gate-enforcement](reference/dedup-and-discovery.md#dedup-check-gate-enforcement)
 
 - **L1**: After `normalizeUrl()`, match by URL or `(company_slug, role_title_slug)`. On match, new file creation is forbidden; only `last_checked_at` is updated. URL match + TTL (30 days) exceeded → enter L2.
-- **L2**: L1 no-match + another JD for the same `company_slug` already saved → LLM similarity judgment (`reference/dedup-l2-prompt.md`, temperature 0). `same: true` → new file forbidden + `fingerprint_check: duplicate_of:<url>`. `same: false` → save new + `fingerprint_check: unique`.
+- **L2**: L1 no-match + another JD for the same `company_slug` already saved → LLM similarity judgment (`reference/dedup-l2-prompt.md`, temperature 0). `same: true` → new file forbidden, existing file's `fingerprint_check` unmodified (symmetric with L1 hit), `last_checked_at` atomic-updated, `dedup-audit.log` records `fingerprint:duplicate_of:<existing.url>`. `same: false` → save new + `fingerprint_check: unique`.
 - `max_l2_calls_per_batch: 50`. If exceeded, `fingerprint_check: pending` — not a skip; re-evaluate in next batch.
 
 → L1 details (loopholes, counterexample): [reference/dedup-and-discovery.md#dedup-layer-1](reference/dedup-and-discovery.md#dedup-layer-1)
