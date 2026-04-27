@@ -83,4 +83,22 @@ describe('normalizeUrl', () => {
     const result = normalizeUrl('https://jobs.example.com/p?wd=42&utm_source=email&category=eng');
     expect(result).toBe('https://jobs.example.com/p?category=eng&wd=42');
   });
+
+  describe('대소문자 동률 정렬 결정론성', () => {
+    it('`normalize_caseVariantKeys_isDeterministic`', () => {
+      // input A: A=1 먼저, input B: a=2 먼저 — 정규형이 동일해야 한다
+      const resultA = normalizeUrl('https://example.com/job?A=1&a=2');
+      const resultB = normalizeUrl('https://example.com/job?a=2&A=1');
+      expect(resultA).not.toBeNull();
+      expect(resultB).not.toBeNull();
+      expect(resultA).toBe(resultB);
+    });
+
+    it('`normalize_caseVariantTie_sortsByCodepoint`', () => {
+      // 코드포인트 순: 'A' (0x41) < 'a' (0x61) → A=1 이 a=2 앞에 와야 한다
+      const result = normalizeUrl('https://example.com/job?a=2&A=1');
+      expect(result).not.toBeNull();
+      expect(result).toContain('A=1&a=2');
+    });
+  });
 });
