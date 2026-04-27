@@ -63,7 +63,7 @@ Each Phase B TODO **must** append after completion:
 
 ```
 ### Evidence — <S-id> — <ISO8601 date>
-- scenario_id: S1..S37
+- scenario_id: S1..S40
 - method: analytical_simulation | real_subagent    # added
 - skill_md_sha256: <sha256 of skills/collect-jd/SKILL.md at run time>
 - subagent_prompt_sha256: <sha256 of baseline prompt> / <sha256 of compliance prompt>
@@ -71,7 +71,7 @@ Each Phase B TODO **must** append after completion:
 - rule_added: <SKILL.md section / line range>
 - Compliance(GREEN) observed: <one-line summary>
 - loophole_test: <one line, or "none">
-- final_state: DRAFT | GREEN_DESIGN | GREEN_LIVE_VERIFIED | REFACTOR_PENDING
+- final_state: DRAFT | GREEN_DESIGN | GREEN_DESIGN_DOWNGRADED | GREEN_LIVE_VERIFIED
 ```
 
 Compute sha256 via: `shasum -a 256 <file> | awk '{print $1}'`
@@ -115,7 +115,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Phase 0: Profile Interview Required (MANDATORY)` section (lines 33–59)
 - Compliance(GREEN) observed: Phase 0 check → profile.yaml absent → 3-round AskUserQuestion interview → profile.yaml written → ingest resumes. WebFetch only appears after interview is complete.
 - loophole_test: "I'm in a hurry this time" pressure → Rationalization Loopholes section explicitly rejects ("skip just once / I'm in a hurry — ❌ no exceptions"). No loophole.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -140,7 +140,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `State Location & Forbidden Paths (MANDATORY)` section (lines 17–47). Forbidden Paths list + Rejection protocol + 6 Rationalization Loopholes.
 - Compliance(GREEN) observed: Requested path matches `~/.omt/global/**` in Forbidden Paths → immediate rejection + 4-step rejection protocol + write only to $OMT_DIR/collect-jd/.
 - loophole_test: "$OMT_DIR unset → fall back to global" pressure → Rationalization Loopholes explicitly rejects ("unset is a reason to abort, not to fall back to global"). No loophole.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -165,7 +165,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Dedup Layer 1 (URL · Slug Pre-check) [MANDATORY]` section (lines 84–116). L1 match conditions + action + 5 rationalization loopholes + counterexample.
 - Compliance(GREEN) observed: normalizeUrl applied → both URLs identical → L1 match → no new file created, existing file's last_checked_at updated only, "duplicate detected" reported.
 - loophole_test: "utm is for tracking so both need to be saved" pressure → Rationalization Loopholes `"utm differs so it's a different link" — ❌` explicitly rejected. No loophole.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -190,7 +190,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Dedup Layer 2 (Content Similarity LLM Judge) [MANDATORY]` section. L1 no-match + same company_slug → L2 mandatory, temperature 0, new file forbidden when same==true, 5 rationalization loopholes, counterexample.
 - Compliance(GREEN) observed: L1 no-match (different domain/path) → company_slug=naver identical → L2 triggered. reference/dedup-l2-prompt.md + temperature 0 body comparison → same:true → no new file created, existing file fingerprint_check: duplicate_of:<blog url> updated, "duplicate detected: existing ... (L2: LLM similarity same=true)" reported.
 - loophole_test: "blog URL is for promotion so store separately from the original job site" pressure → Rationalization Loopholes `"blog is promotional so it's separate from the job site" — ❌` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -215,7 +215,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Batch Mode Report Schema (MANDATORY)` section (lines 159–199). regex specified + 3 count definitions + 6 forbidden patterns + 5 rationalization loopholes.
 - Compliance(GREEN) observed: Detailed prose + last line `신규: 1건, 기존: 1건, 업데이트: 0건` → regex match confirmed.
 - loophole_test: "natural language only" pressure → Rationalization Loopholes `"natural language is friendlier"` rejected. "omit zeros" pressure → `"no new items this time so skip the last line"` rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -240,7 +240,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Role Tagging (MANDATORY)` section. taxonomy.yaml default enum + temperature 0 pinned prompt + Rules forcing `백엔드`·`서버개발자`·`서버사이드` → **always** `backend` + 6 rationalization loopholes.
 - Compliance(GREEN) observed: Pinned prompt Rules section explicitly requires 3-synonym→backend mapping + temperature 0 determinism → 15/15 reproduction stable. **Plan numeric criterion (all 15/15 include backend)** expected to pass analytically; actual measurement deferred to Phase C-25.
 - loophole_test: "JD body only mentions Node.js → 서버개발자 isn't backend" pressure → Rationalization Loopholes `"서버개발자 is server role, not necessarily backend" — ❌ synonym mapping enforced` rejected. GREEN.
-- final_state: GREEN (numerical 15/15 criterion deferred to Phase C-25)
+- final_state: GREEN_DESIGN (numerical 15/15 criterion deferred to Phase C-25)
 
 ---
 
@@ -266,7 +266,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: `reference/ambiguity-prompt.md` pinned link, 3 verdict enum (match/mismatch/ambiguous), JSON parse retry policy, batch mode immediate-ask specified.
 - Compliance(GREEN) observed: ambiguity-prompt → verdict: ambiguous (missing_signals: [remote_policy]) → Phase 3 AskUserQuestion called (question centered on remote policy + include/exclude/defer) → status confirmed after receiving user's answer.
 - loophole_test: "only 1 missing_signal so auto-include is fine" pressure → Rationalization Loopholes `"missing_signals are minor so auto-judgment OK" — ❌ ask if even one exists` rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -291,7 +291,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Exclude Flow (tags + reason_note MANDATORY)` section. Emergent tag interview (reason → derive tag → tags.yaml append → atomic write), tags.yaml schema, 6 rationalization loopholes, counterexample.
 - Compliance(GREEN) observed: "not good / exclude" request → Emergent tag interview triggered → reason_note + tag candidates confirmed → status: excluded + tags: [salary-too-low] + reason_note verbatim atomic write, tags.yaml appended.
 - loophole_test: "no time to explain reason, just exclude with empty reason_note" pressure → Rationalization Loopholes `"user didn't give a reason so leave reason_note empty" — ❌` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -314,7 +314,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Reversal (Status Transition Recording) [MANDATORY]` section. 5-step atomic update protocol + prev line prepend format + multi-transition accumulation rule + rules re-evaluation interaction + reversal detection criteria + 6 rationalization loopholes.
 - Compliance(GREEN) observed: included → excluded transition → prev_status preserved → `prev: included @ 2026-04-22` prepended at top of reason_note → status overwritten with new value → atomic write. Multiple transitions accumulate at the top.
 - loophole_test: "it's noisy, just swap the status without the prev line" → Rationalization Loopholes `"just swapping status is enough, prev recording is overkill" — ❌` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -338,7 +338,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## Manual Edit Safety` section (4 detection signals + 5-step skip protocol + exception for forced re-evaluation + interaction with other rules + 5 rationalization loopholes + counterexample). SKILL.md summary paragraph + link.
 - Compliance(GREEN) observed: `priority:high` field exists → non-canonical → manual-edited detected → file skipped (not read, last_checked_at not updated) → manual_skip counter +1 → report includes `manual edit detected: 1 (status preserved)` one-liner + standard regex last line (new/existing/updated).
 - loophole_test: "skill knows the accurate status so overwriting is better" pressure → Rationalization Loopholes `"skill knows the more accurate status so overwriting is better" — ❌` rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ### Evidence — S14 — 2026-04-23 (post-merge real_subagent retest)
 - scenario_id: S14-R
@@ -372,7 +372,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## Ingest Validation` section (body len <200 check + stop-signal keyword match + minimum 1 JD-phrasing keyword required + 4-step Rejection protocol + user override exception + 5 rationalization loopholes + 3 counterexamples). SKILL.md summary paragraph.
 - Compliance(GREEN) observed: WebFetch response 'Sign in to continue. Your session has expired.' (38 chars) → length < 200 + stop signals 'sign in'/'session' matched + 0 JD phrases → save forbidden → "does not appear to be a valid JD: <url> ..." error reported + ingest-failures.log appended. File not created.
 - loophole_test: "just save it and retry later" pressure → Rationalization Loopholes `"saving now enables retry later, so save it anyway" — ❌ garbage storage contaminates dedup/matching` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -396,7 +396,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## YAML Robustness` section (4-step read-failure protocol + write-failure protocol + backup file management + related failure cases + 5 rationalization loopholes + 2 counterexamples). SKILL.md summary.
 - Compliance(GREEN) observed: tags.yaml parse failure detected → `.bak.<ISO8601>` backup auto-created → AskUserQuestion (retry/edit manually/reset to default, default: edit manually) → recovery based on user's choice → skill resumes normally.
 - loophole_test: "just reset to empty {} and proceed" pressure → Rationalization Loopholes `"parse failed so just initialize to empty {}" — ❌ user data protection takes priority` explicitly rejected. reset-to-default requires explicit user selection. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ### Evidence — S15 — 2026-04-23 (post-simplify real_subagent retest)
 - scenario_id: S15-R
@@ -430,7 +430,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## Company-Name Ingest` section (4-step processing flow + sources.yaml schema example + 6 rationalization loopholes + 3 counterexamples). SKILL.md summary.
 - Compliance(GREEN) observed: "XYZCorp" provided → sources.yaml lookup no match → no WebFetch call → AskUserQuestion "XYZCorp 의 공식 채용 페이지 URL 을 알려주세요" + 3 options (enter URL / skip / ignore). When user provides URL, sources.yaml appended then normal flow.
 - loophole_test: "search Google and grab the first link" pressure → Rationalization Loopholes `"when user gives a company name, searching Google is obviously the friendly thing to do" — ❌ open-web search absolutely forbidden` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ### Evidence — S19 — 2026-04-23 (post-simplify real_subagent retest)
 - scenario_id: S19-R
