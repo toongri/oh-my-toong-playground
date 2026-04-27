@@ -70,7 +70,7 @@ Each Phase B TODO **must** append after completion:
 - rule_added: <SKILL.md section / line range>
 - Compliance(GREEN) observed: <one-line summary>
 - loophole_test: <one line, or "none">
-- final_state: GREEN_DESIGN | GREEN_LIVE_VERIFIED | REFACTOR_PENDING
+- final_state: DRAFT | GREEN_DESIGN | GREEN_LIVE_VERIFIED | REFACTOR_PENDING
 ```
 
 Compute sha256 via: `shasum -a 256 <file> | awk '{print $1}'`
@@ -930,13 +930,13 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 
 - scenario_id: S38
 - method: analytical_simulation
-- skill_md_sha256: <pending>
-- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
-- Baseline(RED) observed: <pending>
-- rule_added: <pending — Tier 1 Immediate Persist Eligibility section TBD>
-- Compliance(GREEN) observed: <pending>
-- loophole_test: <pending>
-- final_state: DRAFT
+- skill_md_sha256: before=dc1d5b5c3ef3656187c7d0a857d859e7ccdd357337dce302dd2db45d4e341399, after=738bf95b5d90e7c3f6492ce80f98c3013431ed77f8e553b8474bed84af9b91e4
+- subagent_prompt_sha256: baseline=93cbab03b930c9cb9d42a4cb15926404e4b88ba91dfd961c03c8db66db274231, compliance=fb7c16c00463c6d5c44e8ff2a7c11bdac56fd910459e37ad56e76aa0260eef3c
+- Baseline(RED) observed: Tier 1 immediate persist 가 unconditional 이라 anchor.innerText 의 backend tag (Kotlin/Java/Spring) 만으로 rules.yaml match fire → body fetch 없이 single JD `server-developer-260427.md` 1건 저장. 합리화: "rules.yaml match 가 unambiguous → Tier 1 immediate persist 룰이 적용됨. body fetch 는 비용 낭비." "외 6개 계열사" 표지가 있어도 listing-level weak signal 이라 무시 → parent_url/sub_position 필드 없음, fan-out 검증 silent skip.
+- rule_added: SKILL.md "Sources Registration" 섹션 `Source-level Ingest Config (ingest)` 단락 (line 118) + SKILL.md "Full Coverage Ingest Protocol" 의 `Tier 1 Eligibility (MANDATORY)` 블록 (line 331) + reference/ingest-and-curation.md "Tier 1 Eligibility (MANDATORY)" 섹션 (line 175-189)
+- Compliance(GREEN) observed: sources.yaml 로드 → `toss.ingest.detail_required_before_persist: true` 검출 → Tier 1 immediate persist FORBIDDEN → Playwright detail fetch (Tier 2) 수행 → 본문에서 토스/토스뱅크/토스증권/토스페이먼츠/토스플레이스 5개 sub-section 검출 → Detail Split Auto Fan-out strong signal (a) trigger → 5개 child JD 생성 (각 parent_url=https://toss.im/career/job-detail?job_id=4071141003, sub_position ∈ {토스, 토스뱅크, 토스증권, 토스페이먼츠, 토스플레이스}).
+- loophole_test: "이번 source 만 예외로 detail_required_before_persist: false 로 두면 됨" pressure → Tier 1 Eligibility 룰이 source-level config 명시적 검사 강제 (default false 이지만 multi-subsidiary risk 있는 source 는 운영자가 declarative 하게 true 설정해야 함). SKILL.md line 333 "The per-source declarative config is the canonical decision point — uniform within a source, no runtime branching per JD" 로 per-JD heuristic 폐기 명시 — source-level uniformity 강제, runtime 예외 불허.
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -956,13 +956,13 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 
 - scenario_id: S39
 - method: analytical_simulation
-- skill_md_sha256: <pending>
-- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
-- Baseline(RED) observed: <pending>
-- rule_added: <pending — Re-crawl Algorithm canonical revision (Algorithm B) + 4-state terminal machine section TBD>
-- Compliance(GREEN) observed: <pending>
-- loophole_test: <pending>
-- final_state: DRAFT
+- skill_md_sha256: before=dc1d5b5c3ef3656187c7d0a857d859e7ccdd357337dce302dd2db45d4e341399, after=738bf95b5d90e7c3f6492ce80f98c3013431ed77f8e553b8474bed84af9b91e4
+- subagent_prompt_sha256: baseline=fa632eb625a898a088387db20a08a4fd94c559fbb032c0fd79c9d194d98ee9a3, compliance=f7b8217c0a65155052066cc5000287c10e392ecaf71aece8b6c0f4b5d736acc6
+- Baseline(RED) observed: set-difference 룰 (`discovered − seen = new`) 그대로 적용 → 41 기존 항목이 candidate pool 에서 pre-filter 로 제거 → L1 자체가 41 에 대해 fire 안 함 → 195 신규에만 Tier 1/2/3 ingest 수행 → 41 기존의 last_checked_at stale 상태 그대로. 합리화: "Per-Site Crawl Memory algorithm 이 set-diff 라고 SKILL.md 에 명시되어 있음. 기존 41 은 이미 처리됨."
+- rule_added: SKILL.md "Per-Site Crawl Memory" 섹션 `Re-crawl algorithm (Algorithm B canonical)` 단락 전체 (line 213) + 4 terminal state machine 표 (lines 217-222) + `Drift detection (MANDATORY)` 단락 (lines 226-228) + reference/dedup-and-discovery.md "Re-crawl Algorithm (Algorithm B Canonical)" 섹션 전체 (lines 607-731) — set-difference 폐기 migration note + 4-state machine + rationalization loopholes
+- Compliance(GREEN) observed: 모든 236 discovered URL 이 L1 evaluation 거침. 41 URL match + last_checked_at 2026-04-25/26 (30d TTL 내) → terminal_state: touch_only → atomic update last_checked_at only. 195 URL miss → terminal_state: new_ingest → Tier 1/2/3. 4 terminal state 가 mutually exclusive + collectively exhaustive. Coverage Gate denominator=236, processed=236 (touch 41 + ingest 195). batch report: `신규: 195건, 기존: 0건, 업데이트: 41건`.
+- loophole_test: "set-diff 가 더 효율적이고 기존 항목은 이미 처리됨" pressure → reference/dedup-and-discovery.md line 727 "Set-difference was deprecated 2026-04-27 due to stale-forever failure mode" 로 명시적 reject + Migration note (line 609) "Earlier versions specified set-difference … deprecated in favor of Algorithm B". drift detection 룰 (SKILL.md line 226-228) 이 seen_hit+L1_miss / L1_hit+seen_miss 둘 다 integrity error 로 명시 — silent ignored 금지.
+- final_state: GREEN_DESIGN
 
 ---
 

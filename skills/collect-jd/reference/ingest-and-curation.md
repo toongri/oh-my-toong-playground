@@ -172,6 +172,22 @@ Process all JDs discovered from listing scrape without omission. Escalate in ord
 - **Verdict condition**: This metadata alone enables `taxonomy.yaml` role_tags extraction + a single unambiguous `rules.yaml` match/mismatch rule trigger.
 - **Result**: Immediately persist (`status=included` or `status=excluded`), skip detail fetch.
 
+#### Tier 1 Eligibility (MANDATORY)
+
+Tier 1 immediate persist is allowed ONLY when `sources.yaml.<source>.ingest.detail_required_before_persist: false` (or absent — default false).
+
+**Schema location**: `sources.yaml` → `companies[].ingest.detail_required_before_persist` (bool). Default: `false` (omitted = false).
+
+**When `detail_required_before_persist: true`**:
+- Tier 1 immediate persist is **FORBIDDEN** for this source.
+- Every JD MUST escalate to Tier 2 detail body fetch before persist — no exceptions.
+- Detail Split Auto Fan-out check MUST run on the body for each JD.
+- This eliminates the operational gap where multi-subsidiary or multi-position JDs would be silently saved as a single record without fan-out detection.
+
+**Why source-level config (not per-JD heuristic)**: Listing-level signals (e.g., "외 N개 계열사" suffix) cannot reliably detect body-only fan-out signals. The per-source declarative config is the canonical decision point — uniform within a source, no runtime branching per JD. Even when `detail_required_before_persist: false`, the Detail Split Auto Fan-out rule may still force fan-out based on strong signals in the body — these are orthogonal concerns.
+
+**Migration note (2026-04-27 spec change)**: Earlier versions of the Full Coverage Ingest Protocol treated Tier 1 immediate persist as unconditional — any JD with unambiguous listing metadata could be immediately persisted without detail fetch. This was changed in 2026-04-27 to introduce source-level eligibility gating via `ingest.detail_required_before_persist`. Sources requiring body-level fan-out detection (e.g., toss) should set this flag to `true`.
+
 #### Tier 2 — Detail Fetch Verification
 
 - **Trigger condition (Tier 1 ambiguity definition)**:

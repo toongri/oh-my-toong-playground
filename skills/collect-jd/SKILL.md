@@ -5,6 +5,8 @@ description: Use when collecting, curating, or organizing job descriptions (JDs)
 
 # collect-jd
 
+> **Canonical principle**: Verification stage MUST be on the canonical path. No bypass routes. Every discovered URL goes through the same flow; "fast paths" that skip verification are forbidden.
+
 Dedicated skill for JD collection, curation, and organization. Specific rules are added through Phase B pressure scenario cycles (TDD RED-GREEN-REFACTOR).
 
 ## Scope Boundary
@@ -111,9 +113,11 @@ Before each Ingest Path execution, **Phase 0 profile interview + Dedup L1/L2** m
 
 ## Sources Registration (MANDATORY)
 
-At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single AskUserQuestion**: "Do you have JD source sites to register?" (skippable — not as mandatory as Profile Interview). When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state}` structure.
+At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, propose via a **single AskUserQuestion**: "Do you have JD source sites to register?" (skippable — not as mandatory as Profile Interview). When user provides a URL, atomic append with `{slug, name, careers_url, added_at, pagination, crawl_state, ingest}` structure.
 
-**Reusable Crawl**: When user utterance contains trigger phrases `"오늘 돌려"` / `"싹 돌려"` / `"전체 재크롤"` / `"sources 돌려"` etc. → **iterate all registered sources** → perform Listing Pagination per source → per-JD fetch + Dedup Gate + Classify + Persist. Collect only new entries by Per-Site Crawl Memory set difference (`discovered − seen`). No automatic scheduling.
+**Source-level Ingest Config (`ingest`)**: schema = `{detail_required_before_persist: bool}`. Default `false`. When `true`, the source's Full Coverage Ingest Protocol MUST run Tier 2 (detail body fetch) for every JD before persist — Tier 1 immediate persist is FORBIDDEN. See [Full Coverage Ingest Protocol](#full-coverage-ingest-protocol-mandatory-3-tier).
+
+**Reusable Crawl**: When user utterance contains trigger phrases `"오늘 돌려"` / `"싹 돌려"` / `"전체 재크롤"` / `"sources 돌려"` etc. → **iterate all registered sources** → perform Listing Pagination per source → per-JD L1 evaluation (Algorithm B) + Dedup Gate + Classify + Persist. No automatic scheduling.
 
 **CRITICAL**: Open-web free crawl when sources.yaml is empty is forbidden. Even on user "싹 돌려" utterance, if source count is 0, report "등록된 소스가 없어요" and prompt registration.
 
@@ -206,14 +210,31 @@ crawl_state:
 
 Each source records its id extraction strategy in `sources.yaml.<source>.crawl_state.seen` via two fields: `identifier_kind` (strategy enum) + `identifier_extractor` (param name for `id_query`, `null` for `url`, hash spec for `fingerprint`).
 
-**Re-crawl algorithm**: `discovered − seen = new` set difference. Read all lines from `seen.jsonl` → JSON.parse per line → `Set(rows.map(r => r.id))` → subtract from discovered id set → remaining are new candidates. After processing, atomic append new entries to `seen.jsonl` (single-line per entry, < 1 KB). Crash recovery: skip invalid JSON lines + warn.
+**Re-crawl algorithm (Algorithm B canonical)**: Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is `jobs/<source>/<slug>.md` frontmatter; seen.jsonl mirrors it for O(1) id lookup.
+
+For each discovered URL, L1 produces one of 4 **terminal states**:
+
+| Terminal state | Trigger | Action |
+|---|---|---|
+| `new_ingest` | URL not in jobs/ | Proceed to Tier 1/2/3 ingest |
+| `touch_only` | URL match in jobs/ AND `last_checked_at` within TTL (30d) | Atomic update `last_checked_at` only. No body fetch. No Tier 2/3. |
+| `ttl_recheck` | URL match in jobs/ AND `last_checked_at` exceeds TTL (30d) | Enter L2 (LLM similarity check) → re-evaluate per Matching Loop |
+| `manual_skip` | Manual Edit Safety detected (canonical contract violation or `last_checked_at` in future) | Skip, log to report |
+
+> **Note on slug match**: L1 evaluates URL match only. The `(company_slug, role_title_slug)` similarity is NOT a L1 concern in Algorithm B canonical — slug similarity is handled by Matching Loop / L2 LLM similarity downstream when content collision is suspected. This keeps L1 a pure URL-keyed gate; the 4-state machine is mutually exclusive + collectively exhaustive over the URL-key space.
+
+**Drift detection (MANDATORY)**: Any of the following is an integrity error and must be reported (not silently ignored):
+- `seen_hit + L1_miss`: ID is in seen.jsonl but no matching frontmatter found in jobs/. Indicates seen.jsonl drift or jobs/ deletion.
+- `L1_hit + seen_miss`: jobs/ frontmatter exists but ID not in seen.jsonl. Indicates seen.jsonl corruption or out-of-band jobs/ creation.
+
+Crash recovery: skip invalid JSON lines in seen.jsonl + warn. After processing, atomic append new entries to `seen.jsonl` for `new_ingest` terminal states.
 
 **CRITICAL**:
 - `last_seen_marker` / cursor-based rescan is forbidden — dynamic listings have no guaranteed ordering.
 - `identifier_kind` silent default is forbidden — on first source registration, run the Identifier Kind Heuristic and confirm with user before writing.
 - Declaring save complete without appending new entries to `seen.jsonl` is forbidden.
 
-→ Details (schema field meanings, set-difference pseudocode, atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/dedup-and-discovery.md#per-site-crawl-memory](reference/dedup-and-discovery.md#per-site-crawl-memory)
+→ Details (schema field meanings, Algorithm B canonical (4-state machine), atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/dedup-and-discovery.md#per-site-crawl-memory](reference/dedup-and-discovery.md#per-site-crawl-memory)
 
 ## Detail Split Auto Fan-out (MANDATORY)
 
@@ -306,6 +327,11 @@ Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 Process all JDs discovered from listing scrape without omission. Escalate in order from information exposed on the discovery screen.
 
 - **Tier 1 — Listing Metadata Resolution**: Extract role_tags from anchor.innerText in full (title + stack label + subsidiary badge, etc.) → immediately persist when a single rules.yaml rule triggers. **Reading only the title is forbidden**.
+
+**Tier 1 Eligibility (MANDATORY)**: Tier 1 immediate persist is allowed ONLY when `sources.yaml.<source>.ingest.detail_required_before_persist: false` (or absent — default false). When `true`, Tier 1 is FORBIDDEN: every JD MUST escalate to Tier 2 detail fetch before persist, and Detail Split Auto Fan-out check MUST run on the body. This eliminates the operational gap where multi-subsidiary or multi-position JDs would be silently saved as a single record without fan-out detection.
+
+> **Why source-level (not per-JD heuristic)**: Listing-level signals (e.g., "외 N개 계열사" suffix) cannot reliably detect body-only fan-out signals. The per-source declarative config is the canonical decision point — uniform within a source, no runtime branching per JD.
+
 - **Tier 2 — Detail Fetch Verification**: MANDATORY escalation when Tier 1 is ambiguous. Playwright `browser_navigate` → extract body → re-judge. Persist when judgment is clear.
 - **Tier 3 — User Interview**: MANDATORY `AskUserQuestion` when ambiguity persists after Tier 2 (Korean question based on missing_signals, options: include/exclude/defer).
 
