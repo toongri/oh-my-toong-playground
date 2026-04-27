@@ -16,49 +16,36 @@ Dedicated skill for JD collection, curation, and organization. Specific rules ar
 - review-resume: resume review (this skill does not participate)
 - resume-forge: resume material mining (this skill does not participate)
 
-## MANDATORY: Phase Task Creation
+## MANDATORY: Gate Task Creation
 
-At skill invocation start (immediately before Session Lock acquire), **pre-create all 9 phases (Phase 0 + Phase 1-8) as individual tasks**. Each task is marked `in_progress` on start, `completed` immediately on finish. Purpose: prevent phase skipping and silent skips.
+At skill invocation start (immediately before Session Lock acquire), **pre-create these 8 named gate tasks via TaskCreate**. Each task is marked `in_progress` on entry, `completed` immediately on finish. Purpose: prevent gate skipping and silent skips. Tasks are the source of truth for gate completion; the per-source ledger (see below) is the source of truth for per-item progress.
 
-**Phase list (per session)**:
+**Eight named gate tasks (in execution order)**:
 
-| # | Phase | Key gate / output |
-|---|---|---|
-| 0 | Profile Interview (if absent) | profile.yaml 부재 시 3-round 인터뷰 + atomic write |
-| 1 | Session Setup | Session Lock acquire, Storage Backend Interview, Sources Registration (propose if empty) |
-| 2 | Sources Load + Pagination | Load sources.yaml + iterate sources + Listing Pagination (Tier A/B) |
-| 3 | per-JD Ingest | Individual JD URL fetch + Ingest Validation (including insane-search fallback) (Full Coverage Ingest Protocol 3-tier applied). **Phase 3 cannot be marked complete until every discovered item has a Tier 1/2/3 verdict — partial completion is forbidden.** |
-| 4 | Dedup Check Gate | Run L1 gate + evaluate L2 gate + fingerprint_check + dedup-audit.log append |
-| 5 | Classify | Role tagging + Matching Loop (Phase 1→2→3) |
-| 6 | Persist | JD atomic write + taxonomy/tags update + `crawl_state` update |
-| 7 | Source Crawl Memory Update | Update source-level crawl_state + sources.yaml atomic write |
-| 8 | Session End | Rules Re-evaluation (if applicable) + **Coverage Gate (`processed_count == discovered_count` per source; if not, refuse lock release until remaining items are processed or user explicitly approves stop)** + lock release + summary report |
+| # | Gate task name |
+|---|---|
+| 1 | `Acquire session lock` |
+| 2 | `Verify listing coverage + freeze discovered_count` |
+| 3 | `Build per-source ledger` |
+| 4 | `L1 evaluate all discovered` |
+| 5 | `Run TTL/L2 recheck where required` |
+| 6 | `Run fan-out / body verification` |
+| 7 | `Persist jobs + sources.yaml + seen/audit + ledger consistently` |
+| 8 | `Verify terminal_count == discovered_count before lock release` |
 
-**Batch mode**: Repeat Phases 2-7 per source/JD. **Phase 0 (if absent), Phase 1, and Phase 8** are session-scoped (once each).
+**Batch mode**: Gates 2-7 may run per-source within a session. Gates 1 and 8 are session-scoped (once each). Per-source repetition does NOT create new tasks — one task spans all sources.
 
-Mark each Phase completion in response with `[Phase N/9: <name> ✓ (M/N)]` marker — where **M is the count of items actually processed in this phase, N is the count of items in scope for this phase**. Missing marker = violation. Marker missing the `(M/N)` segment = violation. **Marker with `M < N` = violation: the next phase cannot be entered until M == N or the user explicitly approves stopping.**
-
-Per-phase `(M/N)` semantics:
-
-| Phase | M (numerator) | N (denominator) |
-|---|---|---|
-| 1 Session Setup | 1 if lock + config + profile all done, else 0 | 1 (session-scoped) |
-| 2 Sources Load + Pagination | sources whose `discover_listing` succeeded + Coverage Verification passed | total sources iterated |
-| 3 per-JD Ingest | discovered JDs with a Tier 1/2/3 verdict assigned | total JDs discovered (= `discovered_count` from Phase 2) |
-| 4 Dedup Check Gate | JDs with L1+L2 evaluated and `fingerprint_check` set | JDs from Phase 3 with non-duplicate verdicts |
-| 5 Classify | JDs with `role_tags` + Matching Loop verdict | JDs from Phase 4 not blocked by dedup |
-| 6 Persist | JDs atomically written | JDs from Phase 5 with verdict ∈ {included, excluded, ambiguous} |
-| 7 Source Crawl Memory Update | sources with `crawl_state` + `seen.jsonl` updated | sources iterated in Phase 2 |
-| 8 Session End | 1 if Coverage Gate passes + lock released, else 0 | 1 (session-scoped) |
+**(M/N) markers REMOVED.** Tasks (created via TaskCreate) are the source of truth for gate completion. The per-source ledger is the source of truth for per-item progress. No `[Phase N/9: ✓ (M/N)]` markers are required or expected.
 
 Rationalization loopholes (forbidden):
 
-- "Marker is informational, real work was done" — ❌ Marker is the gate, not a label. Wrong M/N or missing (M/N) blocks phase transition.
-- "I'll write `(3/234)` and add the rest later" — ❌ Phase advance with M < N is forbidden. Stop is itself a violation (see Full Coverage Ingest Protocol).
-- "Phase 0, Phase 1, or Phase 8 don't really have items so (M/N) is optional" — ❌ Always written, even when N=1.
-- "I'll batch the markers at the end with final counts" — ❌ Each phase's marker must appear at the moment that phase completes.
+- "Skip the ledger, tasks alone are sufficient" — ❌ Ledger is the truth source for Coverage Gate. Without it, Gate 8 cannot pass.
+- "Append rows lazily at end of batch" — ❌ Each L1 evaluation MUST write a ledger row immediately (crash-resumability requires it).
+- "`pending` for `terminal_state` when unsure" — ❌ `pending` only in `classification`/`persist_status`. By Gate 8, every `terminal_state` must be 4-enum.
+- "Aggregate Gate 4-7 into a single task" — ❌ 8 named gates are individually mandatory. Aggregation hides skips.
+- "Add a 9th gate for X" — ❌ Exactly 8. Extensions go inside an existing gate's responsibility.
 
-→ Details (rationalization loopholes, batch mode iteration rules): [reference/bootstrap.md#phase-task-creation](reference/bootstrap.md#phase-task-creation)
+→ Details: [reference/bootstrap.md#gate-task-creation](reference/bootstrap.md#gate-task-creation)
 
 ## State Location
 
@@ -236,6 +223,48 @@ Crash recovery: skip invalid JSON lines in seen.jsonl + warn. After processing, 
 
 → Details (schema field meanings, Algorithm B canonical (4-state machine), atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/dedup-and-discovery.md#per-site-crawl-memory](reference/dedup-and-discovery.md#per-site-crawl-memory)
 
+## Per-Source Ledger (MANDATORY)
+
+One ledger file per source per session. Created at Gate 3, populated at Gates 4-7, audited at Gate 8. Without a ledger, Gate 8 cannot pass.
+
+**Path**: `$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<YYYY-MM-DD>.jsonl`
+
+Format: append-only JSONL, one row per line, < 1 KB per row. POSIX `open(path, 'a')` with session-lock as single-writer guarantee. Each L1 evaluation MUST write a row immediately (not lazily at end of batch).
+
+**Row schema** (canonical — use verbatim, do not rename fields):
+
+```json
+{
+  "id": "<deterministic id from identifier_kind strategy>",
+  "url": "<JD URL>",
+  "l1_outcome": "new_ingest|touch_only|ttl_recheck|manual_skip",
+  "ttl_state": "fresh|stale|na",
+  "fanout_check": "single|multi_subsidiary|na",
+  "classification": "included|excluded|ambiguous|pending",
+  "persist_status": "saved|touched|skipped|pending",
+  "terminal_state": "new_ingest|touch_only|ttl_recheck|manual_skip",
+  "ts": "<ISO8601>"
+}
+```
+
+`terminal_state` reuses Algorithm B's 4-enum (single source of truth — no parallel enum). `pending` is permitted only in `classification` and `persist_status` as in-flight transient values; by Gate 8 they MUST be terminal (non-`pending`).
+
+**Note**: `ledger_path` is NOT added to the `sources.yaml.crawl_state` schema. Ledger discovery uses filesystem listing (`crawl_state/<source>/ledger-*.jsonl`) — no pointer field needed.
+
+**Coverage Gate (Gate 8)** — for each source crawled in this session:
+- **Check 1**: ledger row count == `sources.yaml.<source>.crawl_state.audit_trail.total_discovered`
+- **Check 2**: every row's `terminal_state` ∈ {`new_ingest`, `touch_only`, `ttl_recheck`, `manual_skip`} (no `pending`)
+- Both checks PASS → release lock + record `batch_run_completed: true`
+- Either check FAIL → refuse lock release; require explicit user approval to set rows to `manual_skip` with reason
+
+Rationalization loopholes (forbidden):
+
+- "Skip the ledger, tasks alone are sufficient" — ❌ Ledger is the truth source for Coverage Gate. Without it, Gate 8 cannot pass.
+- "Append rows lazily at end of batch" — ❌ Each L1 evaluation MUST write a row immediately (crash-resumability requires it).
+- "`pending` for `terminal_state` when unsure" — ❌ `pending` only in `classification`/`persist_status`. By Gate 8, every `terminal_state` must be 4-enum.
+
+→ Details: [reference/dedup-and-discovery.md#per-source-ledger](reference/dedup-and-discovery.md#per-source-ledger)
+
 ## Detail Split Auto Fan-out (MANDATORY)
 
 When a single listing anchor leads to a detail page that contains multiple distinct positions, detect split signals and fan-out into N child JDs.
@@ -407,8 +436,8 @@ Re-derive `rules.yaml` based on today's collection results. Trigger phrases: "�
 
 ## Reference Index
 
-- [reference/bootstrap.md](reference/bootstrap.md) — Session-init rules (Phase tasks, Session Lock, Storage Backend, Atomic Write, State Location, Profile Interview)
-- [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md) — Source/listing rules (Sources Registration, Pagination, Coverage Verification, Per-Site Crawl Memory, Identifier Kind, Dedup L1/L2, Company-Name Ingest, Decision Flow)
+- [reference/bootstrap.md](reference/bootstrap.md) — Session-init rules (Gate tasks, Session Lock, Storage Backend, Atomic Write, State Location, Profile Interview)
+- [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md) — Source/listing rules (Sources Registration, Pagination, Coverage Verification, Per-Site Crawl Memory, Per-Source Ledger, Identifier Kind, Dedup L1/L2, Company-Name Ingest, Decision Flow)
 - [reference/ingest-and-curation.md](reference/ingest-and-curation.md) — Per-JD rules (Detail Split, Matching Loop, Full Coverage Ingest, Exclude Flow, Reversal, Manual Edit Safety, Ingest Validation, Batch Report, Role Tagging, YAML Robustness, Rules Re-evaluation)
 - [reference/frontmatter-schema.md](reference/frontmatter-schema.md) — JD file YAML frontmatter contract
 - [reference/slugify.md](reference/slugify.md) — Slug normalization algorithm spec

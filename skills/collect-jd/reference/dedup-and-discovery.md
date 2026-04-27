@@ -10,6 +10,7 @@
 - [Listing Pagination](#listing-pagination)
 - [Listing Pagination Coverage Verification](#listing-pagination-coverage-verification)
 - [Per-Site Crawl Memory](#per-site-crawl-memory)
+- [Per-Source Ledger](#per-source-ledger)
 - [Identifier Kind Heuristic](#identifier-kind-heuristic)
 - [Dedup Check Gate Enforcement](#dedup-check-gate-enforcement)
 - [Dedup Layer 1](#dedup-layer-1)
@@ -735,6 +736,124 @@ digraph per_site_crawl_memory {
 - **id_query (Toss)**: `identifier_kind: id_query`, `identifier_extractor: job_id`. Anchor `https://toss.im/career/job-detail?job_id=4097` → `id = "4097"`. On re-crawl, `seenIds = {"4097", "3981", ...}`. New anchor with `job_id=4201` → `"4201" ∉ seenIds` → new candidate. ✓
 - **url (company without ID params)**: `identifier_kind: url`, `identifier_extractor: null`. `id = normalizeUrl(href)`. Stable URL = stable key. ✓
 - **fingerprint (obfuscated URLs)**: `identifier_kind: fingerprint`, `identifier_extractor: "role_title_verbatim + first_200_chars_of_body"`. URL changes per session (tokens, timestamps in query) → URL not usable as key. Hash of role title + body excerpt is stable. ✓
+
+---
+
+## Per-Source Ledger
+
+### Overview
+
+One ledger file per source per crawl session. The ledger is the source of truth for per-item progress and Coverage Gate (Gate 8). Without a ledger, Gate 8 cannot pass. The ledger complements `seen.jsonl` (permanent audit log) — it is a session-scoped progress tracker.
+
+### Path Schema
+
+```
+$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<YYYY-MM-DD>.jsonl
+```
+
+### Row Schema (canonical — use verbatim, do not rename fields)
+
+```json
+{
+  "id": "<deterministic id from identifier_kind strategy>",
+  "url": "<JD URL>",
+  "l1_outcome": "new_ingest|touch_only|ttl_recheck|manual_skip",
+  "ttl_state": "fresh|stale|na",
+  "fanout_check": "single|multi_subsidiary|na",
+  "classification": "included|excluded|ambiguous|pending",
+  "persist_status": "saved|touched|skipped|pending",
+  "terminal_state": "new_ingest|touch_only|ttl_recheck|manual_skip",
+  "ts": "<ISO8601>"
+}
+```
+
+### Field-by-Field Semantics
+
+| Field | Type | Valid values | Description |
+|---|---|---|---|
+| `id` | string | deterministic key | Same derivation as seen.jsonl `id` — from `identifier_kind` strategy, NOT an auto-generated UUID |
+| `url` | string | URL | Raw (pre-normalize) JD URL for human readability |
+| `l1_outcome` | enum(4) | `new_ingest\|touch_only\|ttl_recheck\|manual_skip` | Result of Algorithm B L1 evaluation — written at Gate 4 |
+| `ttl_state` | enum(3) | `fresh\|stale\|na` | `fresh` = within TTL; `stale` = TTL exceeded; `na` = new_ingest (no existing file) |
+| `fanout_check` | enum(3) | `single\|multi_subsidiary\|na` | Result of Detail Split Auto Fan-out check — written at Gate 6; `na` if body not fetched |
+| `classification` | enum(4) | `included\|excluded\|ambiguous\|pending` | Matching Loop verdict — written at Gate 6; `pending` is in-flight only |
+| `persist_status` | enum(4) | `saved\|touched\|skipped\|pending` | Outcome of Gate 7 persist — `saved` (new file written), `touched` (last_checked_at updated), `skipped` (dedup/manual_skip), `pending` is in-flight only |
+| `terminal_state` | enum(4) | `new_ingest\|touch_only\|ttl_recheck\|manual_skip` | Final resolved state — reuses Algorithm B 4-enum. Must be non-pending by Gate 8 |
+| `ts` | ISO8601 | datetime string | Timestamp of the row write (or last update) |
+
+**`pending` constraint**: `pending` is permitted only in `classification` and `persist_status` as in-flight transient values. `terminal_state` MUST NEVER be `pending` — it must always be one of the 4-enum values. By Gate 8, `classification` and `persist_status` must also be resolved (non-`pending`).
+
+### Lifecycle: Which Gate Writes Which Fields
+
+```
+Gate 3  → ledger file created (empty)
+Gate 4  → row created: id, url, l1_outcome, ttl_state, ts
+            classification=pending, fanout_check=na, persist_status=pending, terminal_state=l1_outcome (initial)
+Gate 5  → update: ttl_state (stale→verdict), terminal_state updated if L2 changes outcome
+Gate 6  → update: fanout_check, classification
+Gate 7  → update: persist_status, terminal_state (finalized)
+Gate 8  → audit: verify row count == total_discovered AND all terminal_state ∈ 4-enum
+```
+
+**Immediate write rule**: Each L1 evaluation at Gate 4 MUST write a row immediately after evaluation — not lazily at batch end. This guarantees crash-resumability: on next session, rows already written indicate which URLs were processed.
+
+### Append Protocol
+
+- Format: append-only JSONL, one row per line, < 1 KB per row.
+- Open with POSIX `open(path, 'a')` — OS guarantees atomicity at line level when write payload ≤ PIPE_BUF (< 1 KB, well within limit).
+- Session-lock (`.lock` file) guarantees single-writer per session — no interleaved appends from concurrent sessions.
+- `fsync` is optional but recommended for crash safety.
+- Never truncate or rewrite the ledger file in place.
+
+### Crash Recovery
+
+On session resume, load existing ledger rows to determine which URLs were already evaluated. Skip invalid JSON lines and emit a warning (partial last-line tolerance). URLs not present in the ledger re-enter from Gate 4.
+
+### Coverage Gate Algorithm (Gate 8)
+
+For each source crawled in this session:
+
+```pseudocode
+function coverageGate(source, session_date):
+  ledger_path = "$OMT_DIR/collect-jd/crawl_state/{source}/ledger-{session_date}.jsonl"
+  rows = loadJsonlRows(ledger_path)   # skip invalid JSON lines + warn
+
+  total_discovered = sources_yaml[source].crawl_state.audit_trail.total_discovered
+
+  # Check 1: row count matches discovered count
+  if len(rows) != total_discovered:
+    fail("Coverage Gate FAIL: ledger has {len(rows)} rows, expected {total_discovered}")
+
+  # Check 2: every row has a terminal terminal_state
+  pending_rows = [r for r in rows if r.terminal_state not in TERMINAL_STATES]
+  if len(pending_rows) > 0:
+    fail("Coverage Gate FAIL: {len(pending_rows)} rows have non-terminal terminal_state")
+
+  # Both checks PASS
+  release_session_lock()
+  sources_yaml[source].crawl_state.batch_run_completed = true
+  atomic_write(sources_yaml)
+  return PASS
+
+TERMINAL_STATES = {"new_ingest", "touch_only", "ttl_recheck", "manual_skip"}
+
+function fail(reason):
+  # Refuse lock release
+  # Require explicit user approval to set remaining rows to manual_skip with reason
+  ask_user_for_approval(reason)
+```
+
+### Migration Note
+
+Prior crawl sessions (before this ledger spec) have no ledger files. Existing `seen.jsonl` and `sources.yaml` data remains valid for read-only audit. New sessions write a ledger; old data without a ledger is not back-filled automatically.
+
+### Rationalization Loopholes (MUST REJECT)
+
+- "Skip the ledger, tasks alone are sufficient" — ❌ Tasks track gate completion; the ledger tracks per-item progress. Gate 8 requires ledger row count == `total_discovered`. There is no substitute.
+- "Append rows lazily at end of batch" — ❌ Each L1 evaluation MUST write a row immediately. Crash between Gate 4 and lazy-append means all progress is lost — unacceptable for large crawls.
+- "`pending` for `terminal_state` when unsure" — ❌ `terminal_state` is resolved at Gate 4 (initial) and finalized at Gate 7. It must always be one of the 4-enum values. If outcome is unclear, that is a gate 5/6 concern — not a reason to set `terminal_state: pending`.
+- "One ledger for all sources combined" — ❌ One ledger per source per session. Mixed-source ledgers make Coverage Gate logic ambiguous.
+- "Use seen.jsonl as the ledger" — ❌ seen.jsonl is permanent cross-session audit. The ledger is session-scoped progress tracking. They serve different purposes and must not be conflated.
 
 ---
 
