@@ -115,6 +115,7 @@ JSON 만 출력해라.
 {
   "verdict": "match",
   "missing_signals": [],
+  "violated_rules": [],
   "explanation": "rules 의 Kotlin/Spring 및 5년 이상 조건을 JD 가 명확히 만족한다."
 }
 ```
@@ -154,6 +155,7 @@ JSON 만 출력해라.
 {
   "verdict": "ambiguous",
   "missing_signals": ["location", "work_mode"],
+  "violated_rules": [],
   "explanation": "JD 에 위치와 근무형태 정보가 없어 원격 가능 여부를 판정할 수 없다."
 }
 ```
@@ -165,7 +167,7 @@ JSON 만 출력해라.
 | Situation | Behavior |
 |---|---|
 | JSON parse failure (1st attempt) | Retry once with the same prompt |
-| JSON parse failure (2nd attempt) | Conservative fallback: `verdict: ambiguous`, `missing_signals: ["llm_parse_failure"]` |
+| JSON parse failure (2nd attempt) | Conservative fallback: `verdict: ambiguous`, `missing_signals: ["llm_parse_failure"]`, `violated_rules: []` |
 | `verdict` value outside the enum | Treat the same as a parse failure |
 | `ambiguous` with empty `missing_signals` array | Implementation warning log + correct to `missing_signals: ["unknown"]` |
 

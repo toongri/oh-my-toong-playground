@@ -93,7 +93,7 @@ If the same URL or slug pair exists in `jobs/**/*.md`, inherit that status (user
 Call the pinned prompt in `reference/ambiguity-prompt.md` at **temperature 0**. Output JSON:
 
 ```json
-{"verdict": "match" | "mismatch" | "ambiguous", "missing_signals": [string], "explanation": "KR short"}
+{"verdict": "match" | "mismatch" | "ambiguous", "missing_signals": [string], "violated_rules": [string], "explanation": "KR short"}
 ```
 
 - `verdict == "match"` → `status: included` (auto)
