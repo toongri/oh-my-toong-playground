@@ -646,8 +646,11 @@ Any of the following is an integrity error and **must be reported** (not silentl
 
 ```pseudocode
 // Drift detection pseudocode (run after building both sets)
+// JD files are stored under jobs/<company_slug>/, not jobs/<source>/.
+// Use a single canonical scan with a frontmatter.source filter — requires
+// the 16-key canonical schema (frontmatter-schema.md) where `source` is required.
 seenIds = buildSeenIdsFromJsonl("crawl_state/<source>/seen.jsonl")  // O(1) lookup index
-l1Ids = buildL1IdsFromJobsFrontmatter("jobs/<source>/")
+l1Ids = buildL1IdsFromJobsFrontmatter("jobs/**/*.md", filter=fm => fm.source == source)
 
 for id of seenIds:
   if id not in l1Ids:
@@ -745,8 +748,11 @@ One ledger file per source per crawl session. The ledger is the source of truth 
 
 ### Path Schema
 
+**`session_id` format**: `<UTC_ISO_compact>-<random8>` (예: `20260428T103015-a1b2c3d4`).
+한 collect-jd 호출 = 한 session_id. session_id는 호출 시점에 1회 생성되어 모든 source의 ledger 파일명에 동일 값으로 사용. 같은 날짜 재실행도 다른 session_id를 받으므로 ledger 파일이 분리되어 Coverage Gate 집계 오염을 형식적으로 봉쇄.
+
 ```
-$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<YYYY-MM-DD>.jsonl
+$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<session_id>.jsonl
 ```
 
 ### Row Schema (canonical — use verbatim, do not rename fields)
@@ -789,9 +795,17 @@ Gate 4  → row appended (event 1): id, url, l1_outcome, ttl_state, ts,
             classification = (na if l1_outcome ∈ {touch_only, manual_skip} else pending),
             fanout_check = na, persist_status = pending,
             terminal_state = l1_outcome (initial)
-Gate 5  → row appended (event 2): same id, fresh ts, ttl_state updated,
-            terminal_state mapped from L2 outcome
-              (L2 same:true → touch_only; L2 same:false → new_ingest)
+Gate 5 (L2 / TTL recheck)
+        → row appended (event 2): same id, fresh ts, ttl_state updated,
+            terminal_state mapped from L2 outcome.
+        Input scope:
+          - `ttl_recheck` URLs (L1 hit + TTL exceeded): always run L2.
+          - `new_ingest` URLs with sibling JDs in `jobs/<company_slug>/`:
+            L2 is delegated to Gate 6 / Tier 1-3 ingest as part of the
+            `fingerprint_check` save gate (see L2 Algorithm section, line 1040).
+        Mapping:
+            L2 same:true  → touch_only
+            L2 same:false → new_ingest
 Gate 6  → row appended (event 3): same id, fresh ts, fanout_check + classification updated
 Gate 7  → row appended (event 4): same id, fresh ts, persist_status set,
             terminal_state finalized
@@ -837,11 +851,15 @@ On session resume, load existing ledger rows to determine which URLs were alread
 
 ### Coverage Gate Algorithm (Gate 8)
 
-For each source crawled in this session:
+Coverage Gate runs in two layers: per-source check (`coverageGate`) and session-wide commit (`gate8AllSources`).
+Per-source check is pure (no side effect on sources.yaml or session lock).
+Session-wide commit runs once after all sources pass — single point of lock release and atomic sources.yaml write.
+
+The session lock is released exactly once per session — after `gate8AllSources` confirms all sources are fully resolved. Per-source `coverageGate` is pure and has no side effect on sources.yaml or the lock.
 
 ```pseudocode
-function coverageGate(source, session_date):
-  ledger_path = "$OMT_DIR/collect-jd/crawl_state/{source}/ledger-{session_date}.jsonl"
+function coverageGate(source, session_id):
+  ledger_path = "$OMT_DIR/collect-jd/crawl_state/{source}/ledger-{session_id}.jsonl"
   rows = loadJsonlRows(ledger_path)   # skip invalid JSON lines + warn
   latest_by_id = pickLatestByTs(rows)
 
@@ -849,17 +867,28 @@ function coverageGate(source, session_date):
 
   # Check 1: unique-id row count matches discovered count
   if len(latest_by_id) != total_discovered:
-    fail("Coverage Gate FAIL: ledger has {len(latest_by_id)} unique-id rows, expected {total_discovered}")
+    fail("Coverage Gate FAIL [{source}]: ledger has {len(latest_by_id)} unique-id rows, expected {total_discovered}")
 
-  # Check 2: every latest-by-id row has a terminal terminal_state
-  pending_rows = [r for r in latest_by_id.values() if r.terminal_state not in TERMINAL_STATES]
+  # Check 2: every latest-by-id row is fully resolved (terminal_state ∈ 4-enum AND classification non-pending AND persist_status non-pending)
+  pending_rows = [r for r in latest_by_id.values()
+                  if r.terminal_state not in TERMINAL_STATES
+                  or r.classification == "pending"
+                  or r.persist_status == "pending"]
   if len(pending_rows) > 0:
-    fail("Coverage Gate FAIL: {len(pending_rows)} rows have non-terminal terminal_state")
+    fail("Coverage Gate FAIL [{source}]: {len(pending_rows)} rows are not fully resolved (terminal_state / classification / persist_status pending)")
 
-  # Both checks PASS
-  release_session_lock()
-  sources_yaml[source].crawl_state.batch_run_completed = true
+  return PASS   # pure check, no side effect
+
+function gate8AllSources(sources, session_id):
+  for source in sources:
+    if coverageGate(source, session_id) != PASS: return FAIL
+
+  # All sources passed — single atomic commit + lock release
+  for source in sources:
+    sources_yaml[source].crawl_state.batch_run_completed = true
+    sources_yaml[source].crawl_state.pending_count = 0   # explicit reset on success
   atomic_write(sources_yaml)
+  release_session_lock()
   return PASS
 
 TERMINAL_STATES = {"new_ingest", "touch_only", "ttl_recheck", "manual_skip"}

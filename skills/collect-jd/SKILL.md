@@ -225,7 +225,7 @@ Crash recovery: skip invalid JSON lines in seen.jsonl + warn. After processing, 
 
 One ledger file per source per session. Created at Gate 3, populated at Gates 4-7, audited at Gate 8. Without a ledger, Gate 8 cannot pass.
 
-**Path**: `$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<YYYY-MM-DD>.jsonl`
+**Path**: `$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<session_id>.jsonl`
 
 Format: append-only JSONL, one row per line, < 1 KB per row. POSIX `open(path, 'a')` with session-lock as single-writer guarantee. Each L1 evaluation MUST write a row immediately (not lazily at end of batch).
 
@@ -247,7 +247,7 @@ Format: append-only JSONL, one row per line, < 1 KB per row. POSIX `open(path, '
 
 `terminal_state` reuses Algorithm B's 4-enum (single source of truth — no parallel enum). `pending` is permitted only in `classification` and `persist_status` as in-flight transient values; by Gate 8 they MUST be terminal (non-`pending`).
 
-**Note**: `ledger_path` is NOT added to the `sources.yaml.crawl_state` schema. Ledger discovery uses filesystem listing (`crawl_state/<source>/ledger-*.jsonl`) — no pointer field needed.
+**Note**: `ledger_path` is NOT added to the `sources.yaml.crawl_state` schema. Ledger discovery uses filesystem listing (`crawl_state/<source>/ledger-<session_id>.jsonl`) — no pointer field needed.
 
 **Coverage Gate (Gate 8)** — for each source crawled in this session. Ledger is an append-only event log (id당 ~4 row across Gates 4-7); Coverage Gate audits the latest-by-id projection (`pickLatestByTs(rows)`).
 - **Check 1**: latest-by-id row count == `sources.yaml.<source>.crawl_state.audit_trail.total_discovered`
