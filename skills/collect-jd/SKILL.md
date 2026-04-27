@@ -251,9 +251,9 @@ Format: append-only JSONL, one row per line, < 1 KB per row. POSIX `open(path, '
 
 **Note**: `ledger_path` is NOT added to the `sources.yaml.crawl_state` schema. Ledger discovery uses filesystem listing (`crawl_state/<source>/ledger-*.jsonl`) — no pointer field needed.
 
-**Coverage Gate (Gate 8)** — for each source crawled in this session:
-- **Check 1**: ledger row count == `sources.yaml.<source>.crawl_state.audit_trail.total_discovered`
-- **Check 2**: every row's `terminal_state` ∈ {`new_ingest`, `touch_only`, `ttl_recheck`, `manual_skip`} (no `pending`)
+**Coverage Gate (Gate 8)** — for each source crawled in this session. Ledger is an append-only event log (id당 ~4 row across Gates 4-7); Coverage Gate audits the latest-by-id projection (`pickLatestByTs(rows)`).
+- **Check 1**: latest-by-id row count == `sources.yaml.<source>.crawl_state.audit_trail.total_discovered`
+- **Check 2**: every latest-by-id row's `terminal_state` ∈ {`new_ingest`, `touch_only`, `ttl_recheck`, `manual_skip`} (no `pending`)
 - Both checks PASS → release lock + record `batch_run_completed: true`
 - Either check FAIL → refuse lock release; require explicit user approval to set rows to `manual_skip` with reason
 

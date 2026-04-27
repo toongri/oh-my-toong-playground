@@ -33,7 +33,7 @@ Immediately at skill invocation start (even before Session Lock acquire — the 
 | 5 | `Run TTL/L2 recheck where required` | For URLs with `l1_outcome: ttl_recheck`, run L2 LLM similarity check → update ledger row | Ledger rows with `ttl_recheck` | Ledger rows updated with L2 verdict |
 | 6 | `Run fan-out / body verification` | For `new_ingest` URLs: run Full Coverage Ingest (Tier 1/2/3), Detail Split fan-out, Matching Loop; update ledger `classification` + `fanout_check` | Ledger rows with `new_ingest` | Ledger rows with `classification` set; fan-out children created |
 | 7 | `Persist jobs + sources.yaml + seen/audit + ledger consistently` | Atomic write each JD file; update `seen.jsonl`, `audit_trail`, `sources.yaml`; set `persist_status` on each ledger row | Ledger rows from Gates 4-6 | All `persist_status` ≠ `pending`; sources.yaml atomic write |
-| 8 | `Verify terminal_count == discovered_count before lock release` | Coverage Gate: ledger row count == `total_discovered` AND every `terminal_state` ∈ 4-enum; release lock on pass | Ledger + sources.yaml | Lock released; `batch_run_completed: true` on pass |
+| 8 | `Verify terminal_count == discovered_count before lock release` | Coverage Gate: latest-by-id row count (`pickLatestByTs(rows)`) == `total_discovered` AND every latest-by-id row's `terminal_state` ∈ 4-enum; release lock on pass | Ledger + sources.yaml | Lock released; `batch_run_completed: true` on pass |
 
 **Batch mode (gate-major)**: Each of Gates 2-7 internally iterates over all sources in the batch before transitioning to completed. The 8 gate tasks remain constant in count regardless of source count. Gates 1 and 8 are session-scoped (once each).
 
