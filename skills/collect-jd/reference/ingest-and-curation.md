@@ -60,13 +60,13 @@ The distinction: weak signals name multiple entities in passing; strong signals 
 
 ### Dedup Impact
 
-- L1 dedup key is `(company_slug, role_title_slug)`. Because `role_title_slug` includes `sub_position`, siblings with different `sub_position` values are naturally distinct keys — no special dedup handling required.
+- L1 dedup operates on URL only (Algorithm B canonical — see [reference/dedup-and-discovery.md](dedup-and-discovery.md) Dedup Layer 1). Siblings each have their own URL or URL+anchor distinction, so each sibling is a separate L1 entry by URL. Slug-level conflict (same `role_title_slug` across siblings) is L2's concern, not L1's.
 - `parent_url` field is used for sibling relationship awareness (e.g., display grouping) only. It does not affect dedup logic.
 
 ### Rationalization Loopholes (MUST REJECT)
 
 - "The page mentions a company name once in a header but the body describes one role — that's a strong signal" — ❌ A single mention without a separate content block is a weak signal. Only explicit sectioned content or multiple CTAs qualify as strong.
-- "Fan-out will make dedup more complex so keep it as a single combined JD" — ❌ L1 dedup handles siblings correctly via `role_title_slug`. Complexity is not a reason to violate the rule.
+- "Fan-out will make dedup more complex so keep it as a single combined JD" — ❌ L1 dedup treats each sibling as a separate URL-keyed entry (each sibling has a distinct URL or URL+anchor); slug-level conflicts are L2's concern. Complexity is not a reason to violate the rule.
 - "sub_position is not always explicitly labeled so I'll just skip it or put a placeholder" — ❌ If `sub_position` cannot be reliably determined from the content, escalate to Tier 3 user interview rather than guessing. Presence-coupling forbids saving with only `parent_url`.
 - "The anchor text says 외 5개 계열사 — that's multiple companies so fan-out" — ❌ Anchor text mention alone is a weak signal. Check the detail page. If the detail page has separate content blocks per company, that is the strong signal. If not, single combined JD.
 - "parent_url is already in the frontmatter so sub_position is redundant — skip it" — ❌ Presence-coupling: if `parent_url` is set, `sub_position` must also be set.
@@ -426,7 +426,7 @@ If user uses explicit phrases like "강제 재평가해" or "manual edit 무시�
 
 ### Interaction with other rules
 
-- **Dedup L1**: existing manual-edited file CAN be checked for URL/slug match — read-only. On L1 match: existing file's `last_checked_at` is **NOT updated** (preservation takes precedence). New candidate save aborted (normal L1 hit behavior — no new file).
+- **Dedup L1**: existing manual-edited file CAN be checked for L1 URL-key match (Algorithm B canonical) — read-only. On L1 match: existing file's `last_checked_at` is **NOT updated** (preservation takes precedence). New candidate save aborted (normal L1 hit behavior — no new file).
 - **Dedup L2**: existing manual-edited file MAY be passed read-only into L2 prompt for similarity comparison. On L2 match (same=true): existing file's frontmatter is **NOT modified** (`last_checked_at` preserved per Manual Edit Safety; `fingerprint_check` not touched per Decision 3 L2-symmetric behavior). New candidate save aborted.
 - **Rules re-evaluation**: applies the same skip — manual-edited files excluded from rules_reeval scope.
 - **Reversal manually**: user can directly edit frontmatter + add `prev: <status> @ <ISO>` line at their own responsibility. Skill does not interfere.

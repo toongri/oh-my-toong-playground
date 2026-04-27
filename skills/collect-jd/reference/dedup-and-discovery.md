@@ -40,7 +40,7 @@ digraph dedup_matching_flow {
 
   candidate [label="New JD candidate", shape=ellipse, style=filled, fillcolor=lightblue];
 
-  l1 [label="L1: normalizeUrl(U) OR\n(company_slug, role_title_slug) match", shape=diamond];
+  l1 [label="L1: normalizeUrl(U) match\n(URL-keyed only)", shape=diamond];
   l1_url [label="URL match + TTL ≤30 days?", shape=diamond];
   update_ts [label="Update last_checked_at\n(no new file)", style=filled, fillcolor=lightgreen];
 
@@ -983,8 +983,7 @@ Before writing a new JD file, **always** run L1 dedup against existing files in 
 Given candidate JD with normalized URL `U` and slugs `(company_slug, role_title_slug)`:
 
 - **Match** if any existing JD satisfies:
-  - `normalizeUrl(existing.url) == U`, OR
-  - `existing.company_slug == candidate.company_slug` AND `existing.role_title_slug == candidate.role_title_slug`
+  - `normalizeUrl(existing.url) == U`
 
 `normalizeUrl()` is defined in `scripts/url-normalize.ts` (spec: `reference/url-normalize.md`). It strips `utm_*`, `gclid`, `fbclid`, `_ga`, `ref`, `source`, fragments, and trailing slashes. **Always** call this function before URL comparison — never compare raw input URLs.
 
@@ -994,7 +993,7 @@ If L1 matches an existing file:
 1. **Do not create** a new JD file under `jobs/`.
 2. Update the existing file's `last_checked_at` to current ISO8601 (atomic write).
 3. Report: `"중복 감지: 기존 <path> (L1: URL normalized match)"`.
-4. Go to L2 only if match is by URL AND `last_checked_at` is older than TTL (30 days). Slug-only match skips L2 (Deduped by slug identity).
+4. Go to L2 only if URL match AND last_checked_at is older than TTL (30 days).
 
 ### Rationalization Loopholes (MUST REJECT)
 
@@ -1006,13 +1005,13 @@ If L1 matches an existing file:
 
 ### Counterexample: different positions
 
-Even with the same `company_slug`, different `role_title_slug` means separate JDs. Save both files.
+Two JDs with the same (company_slug, role_title_slug) but different normalized URLs are SEPARATE L1 entries — slug similarity is L2's concern, not L1's. Same-URL collisions are the only L1 match condition.
 
 ---
 
 ## Dedup Layer 2
 
-When L1 (URL · Slug) **does not match**, or when L1 matched but `last_checked_at` exceeds TTL (30 days), call L2 LLM similarity judgment.
+When L1 (URL-only key) **does not match**, or when L1 matched but `last_checked_at` exceeds TTL (30 days), call L2 LLM similarity judgment.
 
 ### When to call L2
 
