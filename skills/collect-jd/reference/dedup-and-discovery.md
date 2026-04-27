@@ -454,7 +454,7 @@ coverage_proof:
   conclusion: <string>
 ```
 
-**Pass criteria when `page_declared_total: null`**: Check #1 (declared-total match) is **N/A**. Pass requires: (check #1 PASS OR N/A) AND check #2 PASS AND check #3 PASS.
+**Pass criteria when `page_declared_total: null`**: Check #1 (declared-total match) is **N/A**. Pass requires: (check #1 PASS OR N/A) AND check #2 PASS AND check #3 PASS. When page_declared_total: null, set matches_declared: null (N/A semantics — no declared total to compare against).
 
 ### Rationalization Loopholes (MUST REJECT)
 
