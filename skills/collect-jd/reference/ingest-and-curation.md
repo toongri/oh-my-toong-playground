@@ -399,7 +399,7 @@ If a file satisfies **any one** of the following, treat it as manual-edited:
    - Skill always records `last_checked_at` at **past or current timestamp** only.
    - If a file has a future timestamp, the user arbitrarily edited it.
 2. **Canonical contract violation** (non-standard key OR enum-external value on canonical field):
-   - Canonical keys (15 types): `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`, `parent_url`, `sub_position`. (Last two are fan-out child fields per `## Detail Split Auto Fan-out` rule — see [frontmatter-schema.md](frontmatter-schema.md) for full schema.)
+   - Canonical keys (16 types): `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`, `parent_url`, `sub_position`, `source`. (Last two before `source` are fan-out child fields per `## Detail Split Auto Fan-out` rule; `source` records the listing-source slug for drift detection — see [frontmatter-schema.md](frontmatter-schema.md) for full schema.)
    - Canonical enums: `status` ∈ {`included`, `excluded`, `ambiguous`, `pending`}, `fingerprint_check` ∈ {`pending`, `unique`, `duplicate_of:<url>`}.
    - Non-standard key present, or canonical field with value outside the defined set → treated as user edit.
    - Examples: `priority: high` (non-standard key), `status: dream-job` (status outside enum), `fingerprint_check: reviewed` (fingerprint_check outside enum), `user_note` · `deadline` · `application_status` (non-standard key additions).
@@ -410,7 +410,10 @@ For detected manual-edited files:
 
 1. **Do not WRITE** to manual-edited files. Specifically forbidden: re-evaluation result write, tag recalculation write, L2 fingerprint update write, status change, last_checked_at update — **none of the above**.
 
-   **READ is allowed** for one specific purpose only: dedup L2 LLM similarity comparison may pass the file's body content read-only into the L2 prompt (read-only access does not modify any frontmatter field). All other reads (re-evaluation context fetch, tag derivation context fetch) are forbidden.
+   **READ is allowed for two specific purposes only**:
+   (1) Dedup L1 URL-key match check (Algorithm B canonical) — read-only access to frontmatter `url` field;
+   (2) Dedup L2 LLM similarity comparison — read-only access to body content passed into the L2 prompt.
+   Read-only access in either case does not modify any frontmatter field. All other reads (re-evaluation context fetch, tag derivation context fetch) are forbidden.
 2. Do not touch `last_checked_at` (preserve user-set value).
 3. Do not include in batch report counts — increment separate `manual_skip` counter.
 4. Add one line **before** the final line of Batch Mode Report Schema:
