@@ -20,7 +20,7 @@ Covers bootstrap procedure, remote config, branch topology, upstream sync workfl
 
 - **LFS is not migrated by `git push --mirror`.** Run `git lfs fetch --all` + `git lfs push --all` separately, or LFS files will be silently missing.
 - **Submodules are not recursed by `--bare`/`--mirror`.** Each submodule needs its own mirror; `.gitmodules` URLs need rewriting.
-- **Disable all inherited GitHub Actions workflows immediately after first mirror push.** Re-enable selectively after review — upstream workflows can publish to npm/Docker/Slack from your private fork.
+- **Disable all inherited GitHub Actions workflows BEFORE first mirror push.** In the new private repo, set Settings → Actions → "Disable Actions" before running `git push --mirror`. Otherwise the mirror push itself can fire `on: push` workflows that publish to npm/Docker/Slack from your private fork. Re-enable selectively after review (Section 5 of the canonical guide).
 - **`git remote set-url --push upstream DISABLE` is a single-layer guard, not a safeguard.** Back it with a `pre-push` hook and branch protection. Do not rely on the DISABLE trick alone.
 - **Default branch topology: two-branch separation.** `upstream-main` fast-forwarded from upstream; `main` for internal integration via PR merge. Never mix upstream sync and internal patches on one branch.
 - **PR contributions back to upstream require a separate public personal fork.** You cannot open a PR from a private repo to a public upstream.
