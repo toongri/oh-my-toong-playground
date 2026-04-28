@@ -49,13 +49,16 @@ git lfs push --all origin
 
 ### Large repo workaround
 
-If single push exceeds GitHub's 2 GB limit, split per-branch:
+If single push exceeds GitHub's 2 GB limit, split per-branch.
+
+After a bare clone of upstream, `origin` still points at upstream — pushing to `origin` here would accidentally push to the public repo (the very incident Section 8.2 prevents). Use the explicit private URL, or reset `origin` first (`git remote set-url origin <private-url>`).
 
 ```bash
+PRIVATE_URL=https://github.com/<your-org>/<private-repo>.git
 for ref in $(git for-each-ref --format='%(refname)' refs/heads/); do
-  git push origin "$ref"
+  git push "$PRIVATE_URL" "$ref"
 done
-git push origin --tags
+git push "$PRIVATE_URL" --tags
 ```
 
 ### Post-mirror immediate actions
