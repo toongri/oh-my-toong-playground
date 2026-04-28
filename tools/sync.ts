@@ -811,6 +811,8 @@ if (import.meta.main) {
     await runProjectsLoop(rootDir, adapters, context, effectiveFilter, verbose);
 
     // 루트 sync.yaml 처리 (이미 처리된 path는 스킵, 프로젝트 필터 미적용)
+    // projectFilter(raw CLI)가 비어있을 때만 루트 실행: CLI --projects는 "이 기기에서 이 프로젝트만" 일회성 의도이므로 글로벌 루트도 제외.
+    // effectiveFilter(config enabled-projects 포함)와 다른 것은 의도된 비대칭 — config는 디바이스 프로필이라 루트(글로벌)는 항상 실행. README "루트 sync.yaml은 영향 받지 않습니다" 참조.
     if (projectFilter.size === 0) {
       const rootSyncYaml = path.join(rootDir, "sync.yaml");
       if (existsSync(rootSyncYaml)) {
