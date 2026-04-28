@@ -261,6 +261,136 @@ describe("config 모듈", () => {
   });
 
   // -------------------------------------------------------------------------
+  describe("config.local.yaml 오버레이", () => {
+    function makePathAwareFileMock(files: Record<string, string | null>) {
+      return (path: string) => {
+        const content = files[path] ?? null;
+        return {
+          size: content !== null ? content.length : 0,
+          text:
+            content !== null
+              ? async () => content
+              : async () => {
+                  throw new Error("File not found");
+                },
+        };
+      };
+    }
+
+    it("config.local.yaml 없을 때 기존 동작과 동일", async () => {
+      const baseYaml = `
+use-platforms: [claude, gemini]
+feature-platforms:
+  skills: [claude, gemini, codex]
+backup_retention_days: 5
+`.trim();
+
+      const rootDir = getRootDir();
+      const spy = spyOn(Bun, "file").mockImplementation(
+        makePathAwareFileMock({
+          [rootDir + "/config.yaml"]: baseYaml,
+        }) as unknown as typeof Bun.file,
+      );
+      try {
+        _resetConfigCache();
+        const config = await loadConfig();
+        expect(config!["use-platforms"]).toEqual(["claude", "gemini"]);
+        expect(config!["feature-platforms"]!["skills"]).toEqual(["claude", "gemini", "codex"]);
+        expect(config!.backup_retention_days).toBe(5);
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("config.local.yaml의 feature-platforms.skills가 base와 union-dedup 병합됨", async () => {
+      const baseYaml = `
+use-platforms: [claude, gemini]
+feature-platforms:
+  skills: [claude, gemini, codex]
+`.trim();
+      const localYaml = `
+feature-platforms:
+  skills: [claude]
+`.trim();
+
+      const rootDir = getRootDir();
+      const spy = spyOn(Bun, "file").mockImplementation(
+        makePathAwareFileMock({
+          [rootDir + "/config.yaml"]: baseYaml,
+          [rootDir + "/config.local.yaml"]: localYaml,
+        }) as unknown as typeof Bun.file,
+      );
+      try {
+        _resetConfigCache();
+        const platforms = await getFeaturePlatforms("skills");
+        expect(platforms).toContain("claude");
+        expect(platforms).toContain("gemini");
+        expect(platforms).toContain("codex");
+        // No duplicates
+        expect(platforms.filter((p) => p === "claude").length).toBe(1);
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("config.local.yaml의 backup_retention_days 스칼라 값이 base를 대체함", async () => {
+      const baseYaml = `backup_retention_days: 7`;
+      const localYaml = `backup_retention_days: 14`;
+
+      const rootDir = getRootDir();
+      const spy = spyOn(Bun, "file").mockImplementation(
+        makePathAwareFileMock({
+          [rootDir + "/config.yaml"]: baseYaml,
+          [rootDir + "/config.local.yaml"]: localYaml,
+        }) as unknown as typeof Bun.file,
+      );
+      try {
+        _resetConfigCache();
+        const days = await getBackupRetentionDays();
+        expect(days).toBe(14);
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("_resetConfigCache 이후 재로드 시 새로 작성된 config.local.yaml 반영됨", async () => {
+      const baseYaml = `backup_retention_days: 3`;
+      const localYaml = `backup_retention_days: 30`;
+
+      const rootDir = getRootDir();
+
+      const baseOnlyMock = makePathAwareFileMock({
+        [rootDir + "/config.yaml"]: baseYaml,
+      });
+      const spy = spyOn(Bun, "file").mockImplementation(baseOnlyMock as unknown as typeof Bun.file);
+
+      try {
+        _resetConfigCache();
+        const daysBefore = await getBackupRetentionDays();
+        expect(daysBefore).toBe(3);
+
+        // Now "write" config.local.yaml by changing the mock
+        spy.mockImplementation(
+          makePathAwareFileMock({
+            [rootDir + "/config.yaml"]: baseYaml,
+            [rootDir + "/config.local.yaml"]: localYaml,
+          }) as unknown as typeof Bun.file,
+        );
+
+        _resetConfigCache();
+        const daysAfter = await getBackupRetentionDays();
+        expect(daysAfter).toBe(30);
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
   describe("getBackupRetentionDays", () => {
     it("returns backup_retention_days value from config.yaml", async () => {
       const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(FULL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
