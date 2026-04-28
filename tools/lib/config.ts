@@ -13,6 +13,7 @@ import { deepMergeOverlay } from "./deep-merge-overlay.ts";
 type ConfigYaml = {
   "use-platforms"?: Platform[];
   "feature-platforms"?: Record<string, Platform[]>;
+  "enabled-projects"?: string[];
   backup_retention_days?: number;
 };
 
@@ -137,6 +138,20 @@ export async function getBackupRetentionDays(): Promise<number> {
     return days;
   }
   return 3;
+}
+
+/**
+ * Return the enabled projects whitelist from config.yaml `enabled-projects`.
+ * Returns undefined if the field is absent, null, or an empty array — callers treat
+ * undefined as "all projects active".
+ */
+export async function getEnabledProjects(): Promise<string[] | undefined> {
+  const config = await loadConfig();
+  const projects = config?.["enabled-projects"];
+  if (Array.isArray(projects) && projects.length > 0) {
+    return projects;
+  }
+  return undefined;
 }
 
 /**

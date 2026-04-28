@@ -8,6 +8,7 @@ import {
   getDefaultPlatforms,
   getFeaturePlatforms,
   getBackupRetentionDays,
+  getEnabledProjects,
   _resetConfigCache,
 } from "./config.ts";
 
@@ -383,6 +384,98 @@ feature-platforms:
         _resetConfigCache();
         const daysAfter = await getBackupRetentionDays();
         expect(daysAfter).toBe(30);
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  describe("getEnabledProjects", () => {
+    function makePathAwareFileMock(files: Record<string, string | null>) {
+      return (path: string) => {
+        const content = files[path] ?? null;
+        return {
+          size: content !== null ? content.length : 0,
+          text:
+            content !== null
+              ? async () => content
+              : async () => {
+                  throw new Error("File not found");
+                },
+        };
+      };
+    }
+
+    it("enabled-projects 미선언 시 undefined 반환", async () => {
+      const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(MINIMAL_CONFIG_YAML) as ReturnType<typeof Bun.file>);
+      try {
+        _resetConfigCache();
+        const result = await getEnabledProjects();
+        expect(result).toBeUndefined();
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("config.yaml 없을 때 undefined 반환", async () => {
+      const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(null) as ReturnType<typeof Bun.file>);
+      try {
+        _resetConfigCache();
+        const result = await getEnabledProjects();
+        expect(result).toBeUndefined();
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("base에서 enabled-projects 선언 시 array 반환", async () => {
+      const yaml = `enabled-projects: [foo, bar]`;
+      const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(yaml) as ReturnType<typeof Bun.file>);
+      try {
+        _resetConfigCache();
+        const result = await getEnabledProjects();
+        expect(result).toEqual(["foo", "bar"]);
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("빈 array([]) → undefined로 정규화 (footgun 방지)", async () => {
+      const yaml = `enabled-projects: []`;
+      const spy = spyOn(Bun, "file").mockReturnValue(makeFileMock(yaml) as ReturnType<typeof Bun.file>);
+      try {
+        _resetConfigCache();
+        const result = await getEnabledProjects();
+        expect(result).toBeUndefined();
+      } finally {
+        spy.mockRestore();
+        _resetConfigCache();
+      }
+    });
+
+    it("local overlay union+dedup: base [foo] + local [bar, foo] → [foo, bar]", async () => {
+      const baseYaml = `enabled-projects: [foo]`;
+      const localYaml = `enabled-projects: [bar, foo]`;
+
+      const rootDir = getRootDir();
+      const spy = spyOn(Bun, "file").mockImplementation(
+        makePathAwareFileMock({
+          [rootDir + "/config.yaml"]: baseYaml,
+          [rootDir + "/config.local.yaml"]: localYaml,
+        }) as unknown as typeof Bun.file,
+      );
+      try {
+        _resetConfigCache();
+        const result = await getEnabledProjects();
+        expect(result).toBeDefined();
+        expect(result).toContain("foo");
+        expect(result).toContain("bar");
+        expect(result!.filter((p) => p === "foo").length).toBe(1);
       } finally {
         spy.mockRestore();
         _resetConfigCache();
