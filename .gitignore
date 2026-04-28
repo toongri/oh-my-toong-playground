@@ -7,6 +7,9 @@
 .superset/
 .playwright-mcp/
 
+# local overlay files (device-specific, must not be committed)
+**/*.local.yaml
+
 *.log
 .DS_Store
 
