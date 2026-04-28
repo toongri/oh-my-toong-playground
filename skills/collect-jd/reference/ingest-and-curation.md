@@ -400,7 +400,7 @@ If a file satisfies **any one** of the following, treat it as manual-edited:
    - If a file has a future timestamp, the user arbitrarily edited it.
 2. **Canonical contract violation** (non-standard key OR enum-external value on canonical field):
    - Canonical key set (16 keys) and `status` / `fingerprint_check` enum values are defined in [frontmatter-schema.md](frontmatter-schema.md) — Manual Edit detection treats any deviation from those as a violation.
-   - Canonical enums: `status` ∈ {`included`, `excluded`, `ambiguous`, `pending`}, `fingerprint_check` ∈ {`pending`, `unique`, `duplicate_of:<url>`}.
+   - Enum values for `status` and `fingerprint_check`: see [frontmatter-schema.md](frontmatter-schema.md) — Manual Edit detection treats any deviation from the canonical enums as a violation.
    - Non-standard key present, or canonical field with value outside the defined set → treated as user edit.
    - Examples: `priority: high` (non-standard key), `status: dream-job` (status outside enum), `fingerprint_check: reviewed` (fingerprint_check outside enum), `user_note` · `deadline` · `application_status` (non-standard key additions).
 
