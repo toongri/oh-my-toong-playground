@@ -587,12 +587,13 @@ export async function processYaml(
       return;
     }
     syncYaml = parsed as SyncYaml;
+    if (syncYaml.path) syncYaml.path = expandTilde(syncYaml.path);
   } catch (err) {
     logError(`YAML 파싱 실패: ${syncYamlPath}: ${err}`);
     return;
   }
 
-  const targetPath = syncYaml.path ? expandTilde(syncYaml.path) : undefined;
+  const targetPath = syncYaml.path;
   if (!targetPath) {
     logWarn(`path가 정의되지 않음: ${syncYamlPath}`);
     return;
@@ -778,6 +779,7 @@ if (import.meta.main) {
             continue;
           }
           syncYaml = parsed as SyncYaml;
+          if (syncYaml.path) syncYaml.path = expandTilde(syncYaml.path);
         } catch {
           continue;
         }
@@ -812,6 +814,7 @@ if (import.meta.main) {
             syncYaml = {};
           } else {
             syncYaml = parsed as SyncYaml;
+            if (syncYaml.path) syncYaml.path = expandTilde(syncYaml.path);
           }
         } catch {
           syncYaml = {};
