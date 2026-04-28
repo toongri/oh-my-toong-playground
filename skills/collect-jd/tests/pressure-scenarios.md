@@ -7,7 +7,7 @@ TDD pressure scenarios for the `collect-jd` skill. Each scenario follows RED-GRE
 4. Refactor — close rationalization loopholes
 5. Evidence stub — appended to the scenario section
 
-See plan: `/Users/toong/.omt/oh-my-toong-playground/plans/collect-jd-skill-tdd.md` (Phase B).
+See plan: `~/.omt/{OMT_PROJECT}/plans/collect-jd-skill-tdd.md` (Phase B).
 
 ## Method Policy
 

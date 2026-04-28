@@ -160,7 +160,7 @@ storage_path: <absolute path, under $OMT_DIR — only when platform=filesystem>
 
 - First run → lock acquire → config.yaml absent → AskUserQuestion → user selects "filesystem, `$OMT_DIR/collect-jd/jobs/`" → `config.yaml` atomic write (`platform: filesystem`, `storage_path: $OMT_DIR/collect-jd/jobs/`) → enter Phase 0. ✓
 - First run → lock acquire → config.yaml absent → AskUserQuestion → user inputs "notion, page_id=abc123, template: JD_Template" → `config.yaml` atomic write (`platform: notion`, `how: "page_id=abc123, template: JD_Template, MCP: notion-mcp"`) → enter Phase 0. ✓
-- Second run → lock acquire → config.yaml exists (platform: filesystem, storage_path: `/Users/foo/jobs`) → load + validate OK → enter Phase 0 (interview skipped). ✓
+- Second run → lock acquire → config.yaml exists (platform: filesystem, storage_path: `~/jobs`) → load + validate OK → enter Phase 0 (interview skipped). ✓
 
 ---
 
