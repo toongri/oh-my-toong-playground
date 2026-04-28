@@ -266,7 +266,7 @@ describe("Phase 1 destinations unchanged", () => {
     _resetConfigCache();
   });
 
-  it("claude adapter는 .claude/settings.json에 기록하며 .claude/settings.local.json에는 기록하지 않음", async () => {
+  it("claude adapter는 .claude/settings.local.json에 기록하며 .claude/settings.json에는 기록하지 않음", async () => {
     const configYaml = [
       "config:",
       "  model: claude-opus-4",
@@ -277,18 +277,10 @@ describe("Phase 1 destinations unchanged", () => {
 
     const { ClaudeAdapter } = await import("./adapters/claude.ts");
 
-    const writtenFiles: string[] = [];
     const claudeAdapter = new ClaudeAdapter(
       async () => {},
       async () => ({ exitCode: 0 }),
     );
-
-    const originalSyncConfig = claudeAdapter.syncConfig.bind(claudeAdapter);
-    claudeAdapter.syncConfig = async (tp: string, configJson: Record<string, unknown>, dryRun = false) => {
-      const settingsFile = path.join(tp, ".claude", "settings.json");
-      writtenFiles.push(settingsFile);
-      return originalSyncConfig(tp, configJson, dryRun);
-    };
 
     const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
     adapters.set("claude", claudeAdapter);
@@ -297,17 +289,16 @@ describe("Phase 1 destinations unchanged", () => {
 
     await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
 
-    const expectedSettingsFile = path.join(targetPath, ".claude", "settings.json");
-    const unexpectedLocalFile = path.join(targetPath, ".claude", "settings.local.json");
+    const localSettingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
 
-    expect(writtenFiles.some((f) => f === expectedSettingsFile)).toBe(true);
-    expect(writtenFiles.some((f) => f === unexpectedLocalFile)).toBe(false);
+    const localExists = await fs.stat(localSettingsFile).then(() => true).catch(() => false);
+    expect(localExists).toBe(true);
 
-    try {
-      await fs.stat(unexpectedLocalFile);
-      expect(true).toBe(false);
-    } catch {
-      expect(true).toBe(true);
-    }
+    const content = JSON.parse(await fs.readFile(localSettingsFile, "utf8"));
+    expect(content["model"]).toBe("claude-opus-4");
+
+    const settingsExists = await fs.stat(settingsFile).then(() => true).catch(() => false);
+    expect(settingsExists).toBe(false);
   });
 });

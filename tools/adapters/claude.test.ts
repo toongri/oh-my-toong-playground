@@ -137,19 +137,19 @@ describe("buildHookEntry", () => {
 // ---------------------------------------------------------------------------
 
 describe("updateSettings", () => {
-  it("writes hooks to settings.json via `updateSettings`", async () => {
+  it("writes hooks to settings.local.json via `updateSettings`", async () => {
     const hooksEntries = {
       PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "/bin/test", timeout: 10 }] }],
     };
 
     await adapter.updateSettings(targetPath, hooksEntries);
 
-    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.json"));
+    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
     expect(settings["hooks"]).toEqual(hooksEntries);
   });
 
   it("overwrites existing hooks via `updateSettings`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
     await writeFile(settingsFile, JSON.stringify({
       hooks: { Stop: [{ matcher: "*", hooks: [] }] },
       someOtherKey: true,
@@ -165,7 +165,7 @@ describe("updateSettings", () => {
 
   it("skips file write in dry-run mode via `updateSettings`", async () => {
     await adapter.updateSettings(targetPath, { PreToolUse: [] }, true);
-    expect(await exists(path.join(targetPath, ".claude", "settings.json"))).toBe(false);
+    expect(await exists(path.join(targetPath, ".claude", "settings.local.json"))).toBe(false);
   });
 });
 
@@ -174,19 +174,19 @@ describe("updateSettings", () => {
 // ---------------------------------------------------------------------------
 
 describe("readJsonFile 동작", () => {
-  it("throws when settings.json contains corrupt JSON via `syncConfig`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+  it("throws when settings.local.json contains corrupt JSON via `syncConfig`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
     await writeFile(settingsFile, "{invalid");
 
     // syncConfig internally calls readJsonFile; corrupt JSON should propagate as throw
     await expect(adapter.syncConfig(targetPath, { foo: "bar" })).rejects.toThrow();
   });
 
-  it("creates a new file when settings.json is absent via `syncConfig`", async () => {
-    // settings.json does not exist; syncConfig should create it from scratch
+  it("creates a new file when settings.local.json is absent via `syncConfig`", async () => {
+    // settings.local.json does not exist; syncConfig should create it from scratch
     await adapter.syncConfig(targetPath, { createdFresh: true });
 
-    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.json"));
+    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
     expect(settings["createdFresh"]).toBe(true);
   });
 });
@@ -196,8 +196,8 @@ describe("readJsonFile 동작", () => {
 // ---------------------------------------------------------------------------
 
 describe("syncConfig", () => {
-  it("deep merges config into settings.json via `syncConfig`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+  it("deep merges config into settings.local.json via `syncConfig`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
     await writeFile(settingsFile, JSON.stringify({ existingKey: "value", nested: { a: 1 } }));
 
     await adapter.syncConfig(targetPath, { newKey: "hello", nested: { b: 2 } });
@@ -209,10 +209,10 @@ describe("syncConfig", () => {
     expect((settings["nested"] as Record<string, unknown>)["b"]).toBe(2);
   });
 
-  it("creates settings.json when absent via `syncConfig`", async () => {
+  it("creates settings.local.json when absent via `syncConfig`", async () => {
     await adapter.syncConfig(targetPath, { foo: "bar" });
 
-    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.json"));
+    const settings = await readJsonFile(path.join(targetPath, ".claude", "settings.local.json"));
     expect(settings["foo"]).toBe("bar");
   });
 });
@@ -222,8 +222,8 @@ describe("syncConfig", () => {
 // ---------------------------------------------------------------------------
 
 describe("setStatusline", () => {
-  it("sets statusLine in settings.json via `setStatusline`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+  it("sets statusLine in settings.local.json via `setStatusline`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
     await writeFile(settingsFile, JSON.stringify({ hooks: {} }));
 
     await adapter.setStatusline(targetPath, "bun run hud.ts");
@@ -234,8 +234,8 @@ describe("setStatusline", () => {
     expect(statusLine["command"]).toBe("bun run hud.ts");
   });
 
-  it("creates settings.json and applies statusLine when file is absent via `setStatusline`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+  it("creates settings.local.json and applies statusLine when file is absent via `setStatusline`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
 
     await adapter.setStatusline(targetPath, "bun run hud.ts");
 
@@ -243,6 +243,118 @@ describe("setStatusline", () => {
     const statusLine = settings["statusLine"] as Record<string, unknown>;
     expect(statusLine["type"]).toBe("command");
     expect(statusLine["command"]).toBe("bun run hud.ts");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// settings.local.json 목적지 이전 — 양성/음성 테스트
+// ---------------------------------------------------------------------------
+
+describe("settings.local.json 목적지 이전 — 양성", () => {
+  it("syncConfig는 .claude/settings.local.json에 기록함", async () => {
+    await adapter.syncConfig(targetPath, { permissions: { deny: ["Bash(rm -rf *)"] } });
+
+    const localFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settings = await readJsonFile(localFile);
+    expect((settings["permissions"] as Record<string, unknown>)["deny"]).toEqual(["Bash(rm -rf *)"]);
+  });
+
+  it("setStatusline은 .claude/settings.local.json에 statusLine을 기록함", async () => {
+    const localFile = path.join(targetPath, ".claude", "settings.local.json");
+    await writeFile(localFile, "{}");
+
+    await adapter.setStatusline(targetPath, "bun run hud.ts");
+
+    const settings = await readJsonFile(localFile);
+    const statusLine = settings["statusLine"] as Record<string, unknown>;
+    expect(statusLine["type"]).toBe("command");
+    expect(statusLine["command"]).toBe("bun run hud.ts");
+  });
+
+  it("updateSettings는 hooks를 .claude/settings.local.json에 기록함", async () => {
+    const hooksEntries = {
+      PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "/bin/pre-tool-enforcer.sh", timeout: 10 }] }],
+    };
+
+    await adapter.updateSettings(targetPath, hooksEntries);
+
+    const localFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settings = await readJsonFile(localFile);
+    expect(settings["hooks"]).toEqual(hooksEntries);
+  });
+});
+
+describe("settings.local.json 목적지 이전 — 음성 (.claude/settings.json 불변)", () => {
+  it("syncConfig 실행 후 .claude/settings.json 내용이 바이트 단위로 동일함", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const original = JSON.stringify({ model: "claude-sonnet-4-6", customField: 123 });
+    await writeFile(settingsFile, original);
+
+    await adapter.syncConfig(targetPath, { newKey: "managed" });
+
+    const after = await fs.readFile(settingsFile, "utf8");
+    expect(after).toBe(original);
+  });
+
+  it("setStatusline 실행 후 .claude/settings.json 내용이 바이트 단위로 동일함", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const original = JSON.stringify({ model: "claude-sonnet-4-6", customField: 123 });
+    await writeFile(settingsFile, original);
+    const localFile = path.join(targetPath, ".claude", "settings.local.json");
+    await writeFile(localFile, "{}");
+
+    await adapter.setStatusline(targetPath, "bun run hud.ts");
+
+    const after = await fs.readFile(settingsFile, "utf8");
+    expect(after).toBe(original);
+  });
+
+  it("updateSettings 실행 후 .claude/settings.json 내용이 바이트 단위로 동일함", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const original = JSON.stringify({ model: "claude-sonnet-4-6", customField: 123 });
+    await writeFile(settingsFile, original);
+
+    await adapter.updateSettings(targetPath, { PreToolUse: [] });
+
+    const after = await fs.readFile(settingsFile, "utf8");
+    expect(after).toBe(original);
+  });
+
+  it(".claude/settings.json에 statusLine 키가 추가되지 않음", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    await writeFile(settingsFile, JSON.stringify({ model: "claude-opus-4" }));
+    const localFile = path.join(targetPath, ".claude", "settings.local.json");
+    await writeFile(localFile, "{}");
+
+    await adapter.setStatusline(targetPath, "bun run hud.ts");
+
+    const settings = await readJsonFile(settingsFile);
+    expect(settings["statusLine"]).toBeUndefined();
+  });
+
+  it(".claude/settings.json에 hooks 키가 추가되지 않음", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    await writeFile(settingsFile, JSON.stringify({ model: "claude-opus-4" }));
+
+    await adapter.updateSettings(targetPath, { PreToolUse: [] });
+
+    const settings = await readJsonFile(settingsFile);
+    expect(settings["hooks"]).toBeUndefined();
+  });
+});
+
+describe("settings.local.json 딥 머지 — 기존 내용 보존", () => {
+  it("syncConfig는 .claude/settings.local.json의 기존 내용과 딥 머지함", async () => {
+    const localFile = path.join(targetPath, ".claude", "settings.local.json");
+    await writeFile(localFile, JSON.stringify({ existing: "value", nested: { a: 1 } }));
+
+    await adapter.syncConfig(targetPath, { newKey: "hello", nested: { b: 2 } });
+
+    const settings = await readJsonFile(localFile);
+    expect(settings["existing"]).toBe("value");
+    expect(settings["newKey"]).toBe("hello");
+    expect((settings["nested"] as Record<string, unknown>)["a"]).toBe(1);
+    expect((settings["nested"] as Record<string, unknown>)["b"]).toBe(2);
   });
 });
 
@@ -599,7 +711,6 @@ describe("Plugin install (DI 패턴)", () => {
     };
 
     const adapterWithMock = new ClaudeAdapter(mockInstaller);
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
     // syncPlatformYaml needs to not fail on hooks/config (no hooks/config provided)
     await adapterWithMock.syncPlatformYaml(targetPath, {
       plugins: { items: ["my-plugin", "another-plugin"] },
@@ -907,7 +1018,7 @@ describe("syncPlatformYaml - processedSections", () => {
   });
 
   it("includes 'statusLine' in processedSections after processing statusLine section via `syncPlatformYaml`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
     await writeFile(settingsFile, "{}");
 
     const result = await adapter.syncPlatformYaml(targetPath, {
@@ -927,8 +1038,8 @@ describe("syncPlatformYaml - processedSections", () => {
     expect(result.processedSections).toHaveLength(0);
   });
 
-  it("clears existing hooks and saves empty hooks to settings.json when hooks: {} via `syncPlatformYaml`", async () => {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+  it("clears existing hooks and saves empty hooks to settings.local.json when hooks: {} via `syncPlatformYaml`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
     await writeFile(settingsFile, JSON.stringify({
       hooks: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "/old", timeout: 10 }] }] },
       otherKey: "keep",

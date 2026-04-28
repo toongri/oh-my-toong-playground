@@ -504,7 +504,7 @@ export class ClaudeAdapter implements PlatformAdapter {
   // ---------------------------------------------------------------------------
 
   /**
-   * Build a hook entry object for settings.json `hooks` section.
+   * Build a hook entry object for settings.local.json `hooks` section.
    *
    * Returns an object of shape: { [event]: [{ matcher, hooks: [...] }] }
    */
@@ -538,7 +538,7 @@ export class ClaudeAdapter implements PlatformAdapter {
   // ---------------------------------------------------------------------------
 
   /**
-   * Merge hooks entries into .claude/settings.json.
+   * Merge hooks entries into .claude/settings.local.json.
    * Replaces the existing `hooks` key entirely with the new value.
    */
   async updateSettings(
@@ -546,10 +546,10 @@ export class ClaudeAdapter implements PlatformAdapter {
     hooksEntries: Record<string, unknown>,
     dryRun = false,
   ): Promise<void> {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
 
     if (dryRun) {
-      logDry(`Update settings.json: ${settingsFile}`);
+      logDry(`Update settings.local.json: ${settingsFile}`);
       return;
     }
 
@@ -559,20 +559,20 @@ export class ClaudeAdapter implements PlatformAdapter {
     const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
     const updated = { ...rest, hooks: hooksEntries };
     await writeJsonFile(settingsFile, updated);
-    logInfo(`Updated settings.json: ${settingsFile}`);
+    logInfo(`Updated settings.local.json: ${settingsFile}`);
   }
 
   // ---------------------------------------------------------------------------
   // setStatusline
   // ---------------------------------------------------------------------------
 
-  /** Set the statusLine field in .claude/settings.json. */
+  /** Set the statusLine field in .claude/settings.local.json. */
   async setStatusline(
     targetPath: string,
     statusLine: string,
     dryRun = false,
   ): Promise<void> {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
 
     if (dryRun) {
       logDry(`Set statusLine: ${statusLine} -> ${settingsFile}`);
@@ -604,13 +604,13 @@ export class ClaudeAdapter implements PlatformAdapter {
   // syncConfig
   // ---------------------------------------------------------------------------
 
-  /** Deep merge config into .claude/settings.json. */
+  /** Deep merge config into .claude/settings.local.json. */
   async syncConfig(
     targetPath: string,
     configJson: Record<string, unknown>,
     dryRun = false,
   ): Promise<void> {
-    const settingsFile = path.join(targetPath, ".claude", "settings.json");
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
 
     if (dryRun) {
       logDry(`Config merge: ${JSON.stringify(configJson)} -> ${settingsFile}`);
