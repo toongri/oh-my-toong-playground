@@ -1,5 +1,5 @@
 name: oh-my-resume
-path: /Users/toong/repos/oh-my-resume/main
+path: ~/repos/oh-my-resume/main
 platforms: [claude]
 
 agents:
