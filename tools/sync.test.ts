@@ -960,6 +960,30 @@ describe("processYaml", () => {
 
     expect(adapters.getAdapter("claude")!.calls).toHaveLength(0);
   });
+
+  it("`~/relative` 형태의 path를 homedir 기반 절대경로로 expand하여 처리한다", async () => {
+    // Create target directory inside homedir so tilde form is meaningful
+    const homeTmpDir = await fs.mkdtemp(path.join(os.homedir(), "omt-tilde-test-"));
+    try {
+      // Write sync.yaml using tilde form of the target path
+      const relativePart = path.relative(os.homedir(), homeTmpDir);
+      const tildePath = `~/${relativePart}`;
+
+      const syncYamlPath = path.join(rootDir, "sync.yaml");
+      await writeFile(syncYamlPath, `path: "${tildePath}"\n`);
+
+      const adapters = makeAdapterMap(["claude"]);
+      const context = makeContext();
+
+      await processYaml(context, syncYamlPath, adapters, rootDir);
+
+      // processYaml creates .claude/ inside the expanded target path when not dry-run
+      const claudeDir = path.join(homeTmpDir, ".claude");
+      expect(await exists(claudeDir)).toBe(true);
+    } finally {
+      await fs.rm(homeTmpDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
