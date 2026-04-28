@@ -44,6 +44,7 @@ skills:
     - orchestrate-review
     - create-slides
     - slides-review
+    - collect-jd
 
 scripts:
   items:
