@@ -1,12 +1,6 @@
 ---
 name: sisyphus
 description: Use when orchestrating complex multi-step tasks requiring delegation, parallelization, or systematic completion verification - especially when tempted to do everything yourself or ask user codebase questions
-hooks:
-  UserPromptSubmit:
-    - hooks:
-        - type: command
-          command: "bun run $CLAUDE_PROJECT_DIR/.claude/skills/sisyphus/hooks/skill-catalog/index.ts"
-          timeout: 10
 ---
 
 ## The Iron Law
@@ -182,6 +176,14 @@ digraph task_loop {
 | **COMMENT** (Medium only) | Evidence Audit Gate → mnemosyne (if code changes) → mark completed. Create follow-up task if warranted |
 
 **Note**: If a previous finding was intentionally not addressed due to a deliberate trade-off, the rationale can optionally be noted in delegation prompt's `## 6. CONTEXT` or QA REQUEST's `## Scope`.
+
+---
+
+## Skill Catalog
+
+The catalog below — refreshed at skill-load time — enumerates which skills are available, organized by situation. Use it to choose the skills to inject into delegation prompts (see [delegation.md §MANDATORY SKILLS](delegation.md)).
+
+!`bun run ${CLAUDE_SKILL_DIR}/hooks/skill-catalog/index.ts`
 
 ---
 
