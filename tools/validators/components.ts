@@ -27,6 +27,8 @@ import {
 } from "../lib/validation.ts";
 import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
 import type { SyncYaml } from "../lib/types.ts";
+import { readAndExpandSyncYaml } from "../lib/parse-sync-yaml.ts";
+import { parseAndMergePlatformYaml } from "../lib/parse-platform-yaml.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -172,22 +174,24 @@ function getItemComponent(item: unknown): string | null {
   return null;
 }
 
-export function validateSyncYamlComponents(
+export async function validateSyncYamlComponents(
   filePath: string,
   rootDir: string,
-): ValidationResult {
+): Promise<ValidationResult> {
   const result = makeResult();
 
-  const parsed = parseYaml(filePath);
-  if (parsed.error) {
-    result.errors.push(parsed.error);
+  const syncYaml = await readAndExpandSyncYaml(filePath);
+  if (syncYaml === null) {
+    const parsed = parseYaml(filePath);
+    if (parsed.error) {
+      result.errors.push(parsed.error);
+    }
     return result;
   }
 
-  const data = parsed.data;
+  const data = syncYaml as unknown as Record<string, unknown>;
   if (!isObject(data)) return result;
 
-  const syncYaml = data as SyncYaml;
   const ctx = setProjectContext(syncYaml, filePath, rootDir);
   const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
 
@@ -307,10 +311,10 @@ export function validateSyncYamlComponents(
 // P2-7: Per-platform YAML hook component validation (SOLE OWNER)
 // ---------------------------------------------------------------------------
 
-export function validatePlatformYamlHookComponents(
+export async function validatePlatformYamlHookComponents(
   yamlDir: string,
   rootDir: string,
-): ValidationResult {
+): Promise<ValidationResult> {
   const result = makeResult();
 
   // Determine project dir name for local hook resolution
@@ -322,16 +326,10 @@ export function validatePlatformYamlHookComponents(
 
   // Only claude and gemini support hooks
   for (const platform of ["claude", "gemini"] as const) {
-    const platformYaml = join(yamlDir, `${platform}.yaml`);
-    if (!existsSync(platformYaml)) continue;
+    const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+    if (merged === null) continue;
 
-    const parsed = parseYaml(platformYaml);
-    if (parsed.error) {
-      result.errors.push(parsed.error);
-      continue;
-    }
-
-    const data = parsed.data;
+    const data = merged as unknown as Record<string, unknown>;
     if (!isObject(data)) continue;
 
     const hooks = data.hooks;
@@ -389,13 +387,13 @@ function discoverSyncYamls(rootDir: string): string[] {
   return results;
 }
 
-export function validateAll(rootDir: string): ValidationResult {
+export async function validateAll(rootDir: string): Promise<ValidationResult> {
   const result = makeResult();
 
   for (const syncYamlPath of discoverSyncYamls(rootDir)) {
-    mergeResult(result, validateSyncYamlComponents(syncYamlPath, rootDir));
+    mergeResult(result, await validateSyncYamlComponents(syncYamlPath, rootDir));
     const yamlDir = dirname(syncYamlPath);
-    mergeResult(result, validatePlatformYamlHookComponents(yamlDir, rootDir));
+    mergeResult(result, await validatePlatformYamlHookComponents(yamlDir, rootDir));
   }
 
   return result;
@@ -405,14 +403,14 @@ export function validateAll(rootDir: string): ValidationResult {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-function main(): void {
+async function main(): Promise<void> {
   const rootDir = getRootDir();
   if (!rootDir) {
     process.stderr.write("[COMPONENT] config.yaml를 찾을 수 없습니다\n");
     process.exit(1);
   }
 
-  const result = validateAll(rootDir);
+  const result = await validateAll(rootDir);
 
   for (const warning of result.warnings) {
     process.stderr.write(`\x1b[1;33m[COMPONENT]\x1b[0m ${warning}\n`);
