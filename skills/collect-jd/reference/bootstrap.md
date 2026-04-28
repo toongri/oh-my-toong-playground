@@ -28,7 +28,7 @@ Immediately at skill invocation start (even before Session Lock acquire — the 
 |---|---|---|---|---|
 | 1 | `Acquire session lock` | Atomic write `.lock` with current PID; liveness check via `kill -0` | `$OMT_DIR/collect-jd/.lock` | Lock held for entire session |
 | 2 | `Verify listing coverage + freeze discovered_count` | Run Listing Pagination + Coverage Verification (3-check); freeze `audit_trail.total_discovered` | sources.yaml | `coverage_proof` written; `total_discovered` frozen |
-| 3 | `Build per-source ledger` | Create `ledger-<YYYY-MM-DD>.jsonl` for each source in this session | source list from Gate 2 | Empty ledger files exist; ready for row appends |
+| 3 | `Build per-source ledger` | Create `ledger-<session_id>.jsonl` for each source in this session | source list from Gate 2 | Empty ledger files exist; ready for row appends |
 | 4 | `L1 evaluate all discovered` | For each discovered URL: run Algorithm B L1 → write ledger row immediately | Frozen URL list from Gate 2, existing jobs/ | Ledger rows with `l1_outcome` + `ttl_state` set |
 | 5 | `Run TTL/L2 recheck where required` | For URLs with `l1_outcome: ttl_recheck`, run L2 LLM similarity check → update ledger row | Ledger rows with `ttl_recheck` | Ledger rows updated with L2 verdict |
 | 6 | `Run fan-out / body verification` | For `new_ingest` URLs: run Full Coverage Ingest (Tier 1/2/3), Detail Split fan-out, Matching Loop; update ledger `classification` + `fanout_check` | Ledger rows with `new_ingest` | Ledger rows with `classification` set; fan-out children created |
