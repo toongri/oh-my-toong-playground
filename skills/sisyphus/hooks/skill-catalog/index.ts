@@ -1,4 +1,4 @@
-import { ParsedInput, HookInput, HookOutput } from './types.ts';
+import { ParsedInput, HookInput } from './types.ts';
 import { buildCatalog, formatCatalog } from './catalog.ts';
 import { scanSkillDirectories, readEnabledPlugins } from './scanner.ts';
 
@@ -44,19 +44,10 @@ export async function main(): Promise<void> {
     // Format catalog text
     const additionalContext = formatCatalog(entries);
 
-    // Output JSON
-    const output: HookOutput = {
-      continue: true,
-      hookSpecificOutput: {
-        hookEventName: input.hookEventName,
-        additionalContext,
-      },
-    };
-
-    console.log(JSON.stringify(output));
+    console.log(additionalContext);
   } catch {
     // Fail open on any error
-    console.log('{"continue": true}');
+    console.log(formatCatalog([]));
   }
 }
 
