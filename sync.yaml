@@ -1,1 +1,7 @@
 path: "~"
+commands:
+  items:
+    - hud
+scripts:
+  items:
+    - hud
