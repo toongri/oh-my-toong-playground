@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
-import { validateSyncYaml, validatePlatformYaml, validateSyncYamlPartial, validatePlatformYamlPartial, validateAll } from "./schema.ts";
+import { validateSyncYaml, validatePlatformYaml, validateSyncYamlPartial, validatePlatformYamlPartial, validateAll, validateConfigYaml, validateConfigYamlPartial } from "./schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -747,6 +747,132 @@ config:
 });
 
 // ---------------------------------------------------------------------------
+// Suite: validateConfigYaml — enabled-projects 타입 검증
+// ---------------------------------------------------------------------------
+
+describe("validateConfigYaml", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe("enabled-projects 유효한 값", () => {
+    it("enabled-projects가 string 배열이면 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "config.yaml", `
+use-platforms: [claude]
+enabled-projects:
+  - foo
+  - bar
+`);
+      const result = validateConfigYaml(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("enabled-projects가 빈 배열이면 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "config.yaml", `
+use-platforms: [claude]
+enabled-projects: []
+`);
+      const result = validateConfigYaml(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("enabled-projects가 없어도 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "config.yaml", `
+use-platforms: [claude]
+`);
+      const result = validateConfigYaml(path);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("enabled-projects 잘못된 타입 거부", () => {
+    it("enabled-projects가 string이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "config.yaml", `
+use-platforms: [claude]
+enabled-projects: "single string"
+`);
+      const result = validateConfigYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("enabled-projects"))).toBe(true);
+    });
+
+    it("enabled-projects가 숫자이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "config.yaml", `
+use-platforms: [claude]
+enabled-projects: 123
+`);
+      const result = validateConfigYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("enabled-projects"))).toBe(true);
+    });
+
+    it("enabled-projects 오류 메시지에 config.yaml이 포함된다", () => {
+      const path = writeYaml(dir, "config.yaml", `
+enabled-projects: "bad"
+`);
+      const result = validateConfigYaml(path);
+      expect(result.errors.some((e) => e.includes("config.yaml"))).toBe(true);
+    });
+  });
+
+  describe("YAML 문법 오류", () => {
+    it("문법 오류가 있는 파일은 오류를 반환한다", () => {
+      const path = writeYaml(dir, "config.yaml", `enabled-projects: [unclosed`);
+      const result = validateConfigYaml(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateConfigYamlPartial — partial mode (config.local.yaml)
+// ---------------------------------------------------------------------------
+
+describe("validateConfigYamlPartial", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe("partial mode: enabled-projects 단독 선언", () => {
+    it("config.local.yaml에서 enabled-projects만 선언해도 통과한다", () => {
+      const path = writeYaml(dir, "config.local.yaml", `
+enabled-projects:
+  - my-project
+`);
+      const result = validateConfigYamlPartial(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("빈 파일은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "config.local.yaml", "");
+      const result = validateConfigYamlPartial(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("enabled-projects가 string이면 partial mode에서도 오류를 반환한다", () => {
+      const path = writeYaml(dir, "config.local.yaml", `
+enabled-projects: "bad"
+`);
+      const result = validateConfigYamlPartial(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("enabled-projects"))).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Suite: validateAll — local yaml 파일 탐색
 // ---------------------------------------------------------------------------
 
@@ -803,6 +929,33 @@ describe("validateAll — local yaml 탐색", () => {
 
     it("루트 gemini.local.yaml 부분 파일은 통과한다", () => {
       writeYaml(rootDir, "gemini.local.yaml", `config:\n  model: gemini-pro\n`);
+      const result = validateAll(rootDir);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("config.yaml / config.local.yaml 통합 검증", () => {
+    it("config.yaml의 enabled-projects가 string이면 validateAll 결과에 errors가 포함된다", () => {
+      writeYaml(rootDir, "config.yaml", `enabled-projects: 123\n`);
+      const result = validateAll(rootDir);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("enabled-projects"))).toBe(true);
+    });
+
+    it("config.local.yaml의 enabled-projects가 string이면 validateAll 결과에 errors가 포함된다", () => {
+      writeYaml(rootDir, "config.local.yaml", `enabled-projects: "wrong-type"\n`);
+      const result = validateAll(rootDir);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("enabled-projects"))).toBe(true);
+    });
+
+    it("config.yaml의 enabled-projects가 배열이면 errors가 없다", () => {
+      writeYaml(rootDir, "config.yaml", `enabled-projects: [foo]\n`);
+      const result = validateAll(rootDir);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("config.local.yaml이 존재하지 않으면 errors가 없다", () => {
       const result = validateAll(rootDir);
       expect(result.errors).toHaveLength(0);
     });
