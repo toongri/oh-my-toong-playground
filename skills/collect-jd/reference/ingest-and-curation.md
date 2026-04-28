@@ -60,13 +60,13 @@ The distinction: weak signals name multiple entities in passing; strong signals 
 
 ### Dedup Impact
 
-- L1 dedup key is `(company_slug, role_title_slug)`. Because `role_title_slug` includes `sub_position`, siblings with different `sub_position` values are naturally distinct keys — no special dedup handling required.
+- L1 dedup operates on URL only (Algorithm B canonical — see [reference/dedup-and-discovery.md](dedup-and-discovery.md) Dedup Layer 1). Siblings each have their own URL or URL+anchor distinction, so each sibling is a separate L1 entry by URL. Slug-level conflict (same `role_title_slug` across siblings) is L2's concern, not L1's.
 - `parent_url` field is used for sibling relationship awareness (e.g., display grouping) only. It does not affect dedup logic.
 
 ### Rationalization Loopholes (MUST REJECT)
 
 - "The page mentions a company name once in a header but the body describes one role — that's a strong signal" — ❌ A single mention without a separate content block is a weak signal. Only explicit sectioned content or multiple CTAs qualify as strong.
-- "Fan-out will make dedup more complex so keep it as a single combined JD" — ❌ L1 dedup handles siblings correctly via `role_title_slug`. Complexity is not a reason to violate the rule.
+- "Fan-out will make dedup more complex so keep it as a single combined JD" — ❌ L1 dedup treats each sibling as a separate URL-keyed entry (each sibling has a distinct URL or URL+anchor); slug-level conflicts are L2's concern. Complexity is not a reason to violate the rule.
 - "sub_position is not always explicitly labeled so I'll just skip it or put a placeholder" — ❌ If `sub_position` cannot be reliably determined from the content, escalate to Tier 3 user interview rather than guessing. Presence-coupling forbids saving with only `parent_url`.
 - "The anchor text says 외 5개 계열사 — that's multiple companies so fan-out" — ❌ Anchor text mention alone is a weak signal. Check the detail page. If the detail page has separate content blocks per company, that is the strong signal. If not, single combined JD.
 - "parent_url is already in the frontmatter so sub_position is redundant — skip it" — ❌ Presence-coupling: if `parent_url` is set, `sub_position` must also be set.
@@ -93,7 +93,7 @@ If the same URL or slug pair exists in `jobs/**/*.md`, inherit that status (user
 Call the pinned prompt in `reference/ambiguity-prompt.md` at **temperature 0**. Output JSON:
 
 ```json
-{"verdict": "match" | "mismatch" | "ambiguous", "missing_signals": [string], "explanation": "KR short"}
+{"verdict": "match" | "mismatch" | "ambiguous", "missing_signals": [string], "violated_rules": [string], "explanation": "KR short"}
 ```
 
 - `verdict == "match"` → `status: included` (auto)
@@ -171,6 +171,22 @@ Process all JDs discovered from listing scrape without omission. Escalate in ord
 - **Toss example**: anchor innerText = `"Server DeveloperKotlin ・ Java ・ Spring ・ Backend토스 외 5개 계열사"` — includes title + stack + subsidiary.
 - **Verdict condition**: This metadata alone enables `taxonomy.yaml` role_tags extraction + a single unambiguous `rules.yaml` match/mismatch rule trigger.
 - **Result**: Immediately persist (`status=included` or `status=excluded`), skip detail fetch.
+
+#### Tier 1 Eligibility (MANDATORY)
+
+Tier 1 immediate persist is allowed ONLY when `sources.yaml.<source>.ingest.detail_required_before_persist: false` (or absent — default false).
+
+**Schema location**: `sources.yaml` → `companies[].ingest.detail_required_before_persist` (bool). Default: `false` (omitted = false).
+
+**When `detail_required_before_persist: true`**:
+- Tier 1 immediate persist is **FORBIDDEN** for this source.
+- Every JD MUST escalate to Tier 2 detail body fetch before persist — no exceptions.
+- Detail Split Auto Fan-out check MUST run on the body for each JD.
+- This eliminates the operational gap where multi-subsidiary or multi-position JDs would be silently saved as a single record without fan-out detection.
+
+**Why source-level config (not per-JD heuristic)**: Listing-level signals (e.g., "외 N개 계열사" suffix) cannot reliably detect body-only fan-out signals. The per-source declarative config is the canonical decision point — uniform within a source, no runtime branching per JD. Even when `detail_required_before_persist: false`, the Detail Split Auto Fan-out rule may still force fan-out based on strong signals in the body — these are orthogonal concerns.
+
+**Migration note (2026-04-27 spec change)**: Earlier versions of the Full Coverage Ingest Protocol treated Tier 1 immediate persist as unconditional — any JD with unambiguous listing metadata could be immediately persisted without detail fetch. This was changed in 2026-04-27 to introduce source-level eligibility gating via `ingest.detail_required_before_persist`. Sources requiring body-level fan-out detection (e.g., toss) should set this flag to `true`.
 
 #### Tier 2 — Detail Fetch Verification
 
@@ -383,8 +399,8 @@ If a file satisfies **any one** of the following, treat it as manual-edited:
    - Skill always records `last_checked_at` at **past or current timestamp** only.
    - If a file has a future timestamp, the user arbitrarily edited it.
 2. **Canonical contract violation** (non-standard key OR enum-external value on canonical field):
-   - Canonical keys (13 types): `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`.
-   - Canonical enums: `status` ∈ {`included`, `excluded`, `ambiguous`, `pending`}, `fingerprint_check` ∈ {`pending`, `unique`, `duplicate_of:<url>`}.
+   - Canonical key set (16 keys) and `status` / `fingerprint_check` enum values are defined in [frontmatter-schema.md](frontmatter-schema.md) — Manual Edit detection treats any deviation from those as a violation.
+   - Enum values for `status` and `fingerprint_check`: see [frontmatter-schema.md](frontmatter-schema.md) — Manual Edit detection treats any deviation from the canonical enums as a violation.
    - Non-standard key present, or canonical field with value outside the defined set → treated as user edit.
    - Examples: `priority: high` (non-standard key), `status: dream-job` (status outside enum), `fingerprint_check: reviewed` (fingerprint_check outside enum), `user_note` · `deadline` · `application_status` (non-standard key additions).
 
@@ -392,9 +408,14 @@ If a file satisfies **any one** of the following, treat it as manual-edited:
 
 For detected manual-edited files:
 
-1. **Do not read** (no re-evaluation · tag recalculation · L2 call · status change — **none of the above**).
+1. **Do not WRITE** to manual-edited files. Specifically forbidden: re-evaluation result write, tag recalculation write, L2 fingerprint update write, status change, last_checked_at update — **none of the above**.
+
+   **READ is allowed for two specific purposes only**:
+   (1) Dedup L1 URL-key match check (Algorithm B canonical) — read-only access to frontmatter `url` field;
+   (2) Dedup L2 LLM similarity comparison — read-only access to body content passed into the L2 prompt.
+   Read-only access in either case does not modify any frontmatter field. All other reads (re-evaluation context fetch, tag derivation context fetch) are forbidden.
 2. Do not touch `last_checked_at` (preserve user-set value).
-3. Do not include in batch report counts — increment separate `manual_skipped` counter.
+3. Do not include in batch report counts — increment separate `manual_skip` counter.
 4. Add one line **before** the final line of Batch Mode Report Schema:
    ```
    수동 편집 감지: <N>건 (status 유지)
@@ -408,16 +429,17 @@ If user uses explicit phrases like "강제 재평가해" or "manual edit 무시�
 
 ### Interaction with other rules
 
-- **Rules re-evaluation** (re-judgment after `rules.yaml` change) applies the same skip. Manual-edited files are skipped in the `rules_reeval` path of the Reversal section.
-- **Dedup L1/L2** continues to operate (if a new JD L1-matches an existing manual-edited file, normal dedup applies — `last_checked_at` update even skipped — meaning "user data" is fully preserved).
-- **Reversal** manually: user can directly edit frontmatter + add `prev: <status> @ <ISO>` line at their own responsibility. Skill does not interfere.
+- **Dedup L1**: existing manual-edited file CAN be checked for L1 URL-key match (Algorithm B canonical) — read-only. On L1 match: existing file's `last_checked_at` is **NOT updated** (preservation takes precedence). New candidate save aborted (normal L1 hit behavior — no new file).
+- **Dedup L2**: existing manual-edited file MAY be passed read-only into L2 prompt for similarity comparison. On L2 match (same=true): existing file's frontmatter is **NOT modified** (`last_checked_at` preserved per Manual Edit Safety; `fingerprint_check` not touched per Decision 3 L2-symmetric behavior). New candidate save aborted.
+- **Rules re-evaluation**: applies the same skip — manual-edited files excluded from rules_reeval scope.
+- **Reversal manually**: user can directly edit frontmatter + add `prev: <status> @ <ISO>` line at their own responsibility. Skill does not interfere.
 
 ### Rationalization Loopholes (MUST REJECT)
 
 - "Just one field, minor, overwrite is fine" — ❌ All user edits are **respected**.
 - "Skill knows more accurate status so overwriting is better" — ❌ User intent takes precedence.
 - "Manual-edit detection heuristic is unreliable, re-evaluate anyway" — ❌ When uncertain, skip (conservative).
-- "Skip manual_skipped count in report" — ❌ Required for transparency.
+- "Skip manual_skip count in report" — ❌ Required for transparency.
 - "User obviously remembers their manual edit so skip notification" — ❌ Do not rely on user's memory.
 
 ### Counterexample

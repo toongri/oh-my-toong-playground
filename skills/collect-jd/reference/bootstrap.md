@@ -5,7 +5,7 @@
 
 ## Table of Contents
 
-- [Phase Task Creation](#phase-task-creation)
+- [Gate Task Creation](#gate-task-creation)
 - [Storage Backend Interview](#storage-backend-interview)
 - [State Location & Forbidden Paths](#state-location--forbidden-paths)
 - [Session Lock](#session-lock)
@@ -14,80 +14,84 @@
 
 ---
 
-## Phase Task Creation
+## Gate Task Creation
 
 ### Specification (MANDATORY)
 
-Immediately at skill invocation start (even before Session Lock acquire — the single prerequisite), pre-register all 8 phases as individual tasks. Prevents phase skipping and provides progress visibility to the user.
+Immediately at skill invocation start (even before Session Lock acquire — the single prerequisite), pre-create these 8 named gate tasks via `TaskCreate`. The gate abstraction replaces the abstract 9-phase taxonomy: gates have concrete names that map directly to executable work, making skips visible and auditable.
 
-- Task creation tool: `TodoWrite` or the environment's task API (e.g., oh-my-toong's `TaskCreate`).
-- Task title examples:
-  - Phase 1: Session Setup (lock + storage + sources + profile)
-  - Phase 2: Sources Load + Pagination (sources.yaml + Listing)
-  - Phase 3: per-JD Ingest (URL fetch + validation)
-  - Phase 4: Dedup Check Gate (L1/L2 + fingerprint + audit)
-  - Phase 5: Classify (role tagging + matching loop)
-  - Phase 6: Persist (JD atomic write + tags/taxonomy)
-  - Phase 7: Source Crawl Memory Update (crawl_state update)
-  - Phase 8: Session End (rules re-eval + lock release)
-- Each task has **a single state only**: `pending` → `in_progress` (on start) → `completed` (immediately on finish). Batching forbidden.
-- **Batch mode**: Repeat Phases 2-7 per source/JD. For multiple sources, iterate Phase 2-7 per source count; for multiple JDs within a source, iterate Phase 3-6 per JD count. Phases 1/8 are session-scoped.
-- After each Phase completion, print `[Phase N/8: <name> ✓ (M/N)]` marker in response — where **M is items processed in this phase, N is items in scope**. Missing marker, missing `(M/N)` segment, or `M < N` all = violation. **`M < N` blocks entry to the next phase** (mechanical gate, not advisory). See SKILL.md Phase list for per-phase M/N semantics.
+**Why 8 named gates (not abstract phases)**: Abstract phase numbers obscure what work is being done and make skips easy to hide behind a marker. Named gates with specific responsibilities make each skip an explicit violation.
+
+**Gate list** (pre-create all 8 before acquiring the session lock):
+
+| Gate # | Task name | Responsibility | Input | Output / Side effects |
+|---|---|---|---|---|
+| 1 | `Acquire session lock` | Atomic write `.lock` with current PID; liveness check via `kill -0` | `$OMT_DIR/collect-jd/.lock` | Lock held for entire session |
+| 2 | `Verify listing coverage + freeze discovered_count` | Run Listing Pagination + Coverage Verification (3-check); freeze `audit_trail.total_discovered` | sources.yaml | `coverage_proof` written; `total_discovered` frozen |
+| 3 | `Build per-source ledger` | Create `ledger-<session_id>.jsonl` for each source in this session | source list from Gate 2 | Empty ledger files exist; ready for row appends |
+| 4 | `L1 evaluate all discovered` | For each discovered URL: run Algorithm B L1 → write ledger row immediately | Frozen URL list from Gate 2, existing jobs/ | Ledger rows with `l1_outcome` + `ttl_state` set |
+| 5 | `Run TTL/L2 recheck where required` | For URLs with `l1_outcome: ttl_recheck`, run L2 LLM similarity check → update ledger row | Ledger rows with `ttl_recheck` | Ledger rows updated with L2 verdict |
+| 6 | `Run fan-out / body verification` | For `new_ingest` URLs: run Full Coverage Ingest (Tier 1/2/3), Detail Split fan-out, Matching Loop; update ledger `classification` + `fanout_check` | Ledger rows with `new_ingest` | Ledger rows with `classification` set; fan-out children created |
+| 7 | `Persist jobs + sources.yaml + seen/audit + ledger consistently` | Atomic write each JD file; update `seen.jsonl`, `audit_trail`, `sources.yaml`; set `persist_status` on each ledger row | Ledger rows from Gates 4-6 | All `persist_status` ≠ `pending`; sources.yaml atomic write |
+| 8 | `Verify terminal_count == discovered_count before lock release` | Coverage Gate: latest-by-id row count (`pickLatestByTs(rows)`) == `total_discovered` AND every latest-by-id row's `terminal_state` ∈ 4-enum; release lock on pass | Ledger + sources.yaml | Lock released; `batch_run_completed: true` on pass |
+
+**Batch mode (gate-major)**: Each of Gates 2-7 internally iterates over all sources in the batch before transitioning to completed. The 8 gate tasks remain constant in count regardless of source count. Gates 1 and 8 are session-scoped (once each).
+
+**State transitions**: Each task follows `pending` → `in_progress` (on entry) → `completed` (immediately when the gate's work is done for ALL sources in the batch). Batch completion forbidden — mark `completed` the moment the gate finishes its last source's work, not at session end.
+
+**(M/N) markers REMOVED**: Tasks (created via TaskCreate) are the source of truth for gate completion. The per-source ledger is the source of truth for per-item progress. No `[Phase N/9: ✓ (M/N)]` markers are required or expected anywhere in responses.
 
 ### Flowchart
 
 ```dot
-digraph phase_task_creation {
+digraph gate_task_creation {
   rankdir=TB;
   node [shape=box, fontname="Helvetica"];
 
   trigger [label="skill invocation", shape=ellipse, style=filled, fillcolor=lightblue];
-  create_tasks [label="Pre-create 8 Phase tasks\n(TodoWrite/TaskCreate)", style=filled, fillcolor=khaki];
-  session_setup [label="Phase 1: Session Setup", style=filled, fillcolor=lightgreen];
-  sources_load_pagination [label="Phase 2: Sources Load + Pagination", style=filled, fillcolor=lightgreen];
-  per_jd_ingest [label="Phase 3: per-JD Ingest", style=filled, fillcolor=lightgreen];
-  dedup [label="Phase 4: Dedup Check Gate", style=filled, fillcolor=lightgreen];
-  classify [label="Phase 5: Classify", style=filled, fillcolor=lightgreen];
-  persist [label="Phase 6: Persist", style=filled, fillcolor=lightgreen];
-  batch_jd_decision [label="More JDs?", shape=diamond, style=filled, fillcolor=lightyellow];
-  source_crawl_memory_update [label="Phase 7: Source Crawl Memory Update", style=filled, fillcolor=lightgreen];
-  batch_source_decision [label="More sources?", shape=diamond, style=filled, fillcolor=lightyellow];
-  session_end [label="Phase 8: Session End", style=filled, fillcolor=lightgreen];
+  create_tasks [label="Pre-create 8 Gate tasks\n(TaskCreate)", style=filled, fillcolor=khaki];
+  g1 [label="Gate 1: Acquire session lock", style=filled, fillcolor=lightgreen];
+  g2 [label="Gate 2: Verify listing coverage\n+ freeze discovered_count", style=filled, fillcolor=lightgreen];
+  g3 [label="Gate 3: Build per-source ledger", style=filled, fillcolor=lightgreen];
+  g4 [label="Gate 4: L1 evaluate all discovered", style=filled, fillcolor=lightgreen];
+  g5 [label="Gate 5: Run TTL/L2 recheck\nwhere required", style=filled, fillcolor=lightgreen];
+  g6 [label="Gate 6: Run fan-out /\nbody verification", style=filled, fillcolor=lightgreen];
+  g7 [label="Gate 7: Persist jobs + sources.yaml\n+ seen/audit + ledger consistently", style=filled, fillcolor=lightgreen];
+  g8 [label="Gate 8: Verify terminal_count ==\ndiscovered_count before lock release", style=filled, fillcolor=lightgreen];
+  iterate_note [label="g2..g7 each iterate over all sources internally\n(gate-major batch)", shape=note, style=filled, fillcolor=lightyellow];
   done [label="session complete", shape=ellipse, style=filled, fillcolor=lightgreen];
 
   trigger -> create_tasks;
-  create_tasks -> session_setup;
-  session_setup -> sources_load_pagination;
-  sources_load_pagination -> per_jd_ingest;
-  per_jd_ingest -> dedup;
-  dedup -> classify;
-  classify -> persist;
-  persist -> batch_jd_decision;
-  batch_jd_decision -> per_jd_ingest [label="yes (next JD in same source)"];
-  batch_jd_decision -> source_crawl_memory_update [label="no"];
-  source_crawl_memory_update -> batch_source_decision;
-  batch_source_decision -> sources_load_pagination [label="yes (next source)"];
-  batch_source_decision -> session_end [label="no"];
-  session_end -> done;
+  create_tasks -> g1;
+  g1 -> g2;
+  g2 -> g3;
+  g3 -> g4;
+  g4 -> g5;
+  g5 -> g6;
+  g6 -> g7;
+  g7 -> g8;
+  iterate_note -> g2 [style=dashed, arrowhead=none];
+  g8 -> done;
 }
 ```
 
 ### Rationalization Loopholes (MUST REJECT)
 
-- "Low workload so skip task creation" — Phase skipping prevention is the purpose. Low task count is not a reason to omit.
-- "Phase 4 Dedup Check Gate looks trivial-pass, so don't create task and skip" — The audit itself is the purpose. Absent task = treated as silent skip.
-- "In batch mode, merge Phase 3-6 into 1 task" — Per-JD separation is mandatory. Dedup/matching results must be audited per JD.
-- "Task marker `[Phase N/8 ✓]` is decorative, skip it" — Required for visibility + audit. Absent = no evidence of phase completion.
-- "Marker without `(M/N)` is fine, the count is informational" — ❌ `(M/N)` is the gate, not metadata. A marker without `(M/N)` is treated as if the phase wasn't completed.
-- "I'll write `(3/234)` and continue to Phase 4 — partial advance is OK" — ❌ `M < N` blocks the next phase entry. This is mechanical, not advisory.
-- "Phase 1 and 8 are session-scoped so `(M/N)` is optional" — ❌ Always `(1/1)` on success, `(0/1)` on failure. Never absent.
-- "If task must be skipped mid-way, leave state as-is" — Skip decisions must also be explicit (e.g., `deleted` or `completed` with reason). Leaving `in_progress` is forbidden.
+- "Low workload so skip task creation" — ❌ Gate skipping prevention is the purpose. Low task count is not a reason to omit.
+- "Gate 4 L1 evaluate looks trivial-pass, so don't create task and skip" — ❌ The audit itself is the purpose. Absent task = treated as silent skip.
+- "Aggregate Gate 4-7 into a single task" — ❌ 8 named gates are individually mandatory. Aggregation hides skips.
+- "Add a 9th gate for X" — ❌ Exactly 8. Extensions go inside an existing gate's responsibility.
+- "Skip the ledger, tasks alone are sufficient" — ❌ Ledger is the truth source for Coverage Gate. Without it, Gate 8 cannot pass.
+- "Append ledger rows lazily at end of batch" — ❌ Each L1 evaluation MUST write a row immediately (crash-resumability requires it).
+- "`pending` for `terminal_state` when unsure" — ❌ `pending` only in `classification`/`persist_status`. By Gate 8, every `terminal_state` must be 4-enum.
+- "If task must be skipped mid-way, leave state as-is" — ❌ Skip decisions must also be explicit (`completed` with reason or deleted). Leaving `in_progress` is forbidden.
 
 ### Counterexample (normal flow)
 
-- Session start → pre-create 8 tasks → Phase 1 `in_progress` → complete `[Phase 1/8: Session Setup ✓]` → repeat Phase 2 → ... → Phase 8 `completed`. ✓
-- Batch mode (1 source + 3 JDs) → Phase 1 (×1) + Phase 2 (×1) + Phase 3-6 × 3 (12) + Phase 7 (×1) + Phase 8 (×1) = 16 tasks pre-registered. ✓
-- Batch mode (2 sources + 3+2 JDs) → Phase 1 (×1) + [src1: Phase 2 (×1) + Phase 3-6 × 3 (12) + Phase 7 (×1)] + [src2: Phase 2 (×1) + Phase 3-6 × 2 (8) + Phase 7 (×1)] + Phase 8 (×1) = 25 tasks pre-registered. ✓
+- Session start → pre-create 8 gate tasks → Gate 1 `in_progress` → lock acquired → `completed` → Gate 2 `in_progress` → listing + coverage verified → `completed` → Gate 3 `in_progress` → ledger created → `completed` → Gate 4 `in_progress` → all L1 evaluated → `completed` → ... → Gate 8 `in_progress` → Coverage Gate passes → lock released → `completed`. ✓
+- Batch mode (2 sources): pre-create 8 tasks → Gate 1 → Gate 2 (iterates: src1 → src2 internally) completed → Gate 3 (src1 → src2) completed → ... → Gate 7 (src1 → src2) completed → Gate 8 completed. Each task transitions exactly once. ✓
+
+→ Cross-reference: [SKILL.md#mandatory-gate-task-creation](../SKILL.md#mandatory-gate-task-creation)
 
 ---
 

@@ -1,5 +1,33 @@
 # End-to-End Dogfood
 
+## Evidence Footer Schema (standardized — 6 fields minimum)
+
+```
+observed_at: <ISO8601 date or datetime>
+method:      <e.g., make-test, gh-pr-view, manual-review, live_skill_invocation, parallel_subagent_editing>
+command:     <exact shell command(s) or "N/A — <reason>">
+exit_code:   <int or "N/A — <reason>">
+key_output:  <one-line summary or short block>
+verdict:     <PASS / FAIL / GREEN_LIVE / GREEN_SPEC / EXPECTED_GREEN_PENDING_LIVE / archival>
+```
+
+Extension fields (optional, placed in a separate "Extension:" group below the 6 minimum fields):
+```
+# Extension (optional):
+notes:           <free-form>
+evidence_paths:  <file paths>
+follow_up:       <next action>
+agents_dispatched: <count + role>
+files_touched:   <count or list>
+total_line_delta: <+N>
+destructive_deletions: <N>
+argus_verdict:   <APPROVE / REQUEST_CHANGES / COMMENT>
+pid:             <int>
+rules_yaml_sha8: <short sha>
+```
+
+---
+
 - **Date**: 2026-04-22
 - **Task**: Phase C-25 (collect-jd-skill-tdd plan final)
 - **Method**: analytical_simulation (scenario narrative) + **actual CLI execution results** (make validate / make test / make sync-dry)
@@ -161,7 +189,7 @@ Exit code: `0`.
 | 2 | trigger-eval.json flat schema, positive/negative ≥10 | ✅ (positive 12 / negative 14) |
 | 3 | 5 reference documents | ✅ (frontmatter-schema, dedup-l2-prompt, ambiguity-prompt, slugify, url-normalize) + additional rules.md (M3 split) |
 | 4 | lib/collect-jd/ bun test passing | ✅ (25/0) |
-| 5 | All pressure scenarios GREEN + evidence stub | ⚠ 13 original scenarios + real_subagent retest 4 items (S14-R · S15-R · S19-R · S20 — commit 1847921 Iron Law re-verification). Original 13 items are GREEN by analytical standard; among them S14·S15·S19 were **re-promoted** to `method: real_subagent` after refactor. S20 (Decision Flow) added fresh as real_subagent. T9 E2E chain real measurement performed separately. |
+| 5 | All pressure scenarios GREEN + evidence stub | ✅ 31 unique scenarios (S1–S37 range; S8/S9/S12/S16/S17/S18 NEVER USED; as of pressure-scenarios.md 913 lines). Original 13 items GREEN by analytical standard; S14·S15·S19 re-promoted to `method: real_subagent` after refactor; S20 added as real_subagent (commit 1847921). S21–S26 verified live in T11 REFACTOR round; S27–S30 added in T11-c (Full Coverage Ingest Protocol); S31–S33 added in T11-e (Per-Site Crawl Memory + Detail Split); S34–S36 added in T11-f (Pagination spec unification); S37 added in T10 (Listing Pagination Coverage Verification 3-check MUST gate). T9 E2E chain performed separately. |
 | 6 | collect-jd added to projects/<target>/sync.yaml | ✅ (oh-my-resume + resume-manage two targets) |
 | 7 | End-to-end dogfood | ⚠ analytical + CLI only. Actual chain execution within a Claude Code session performed in T9 (Real Dogfood Evidence section below this file) |
 
@@ -260,18 +288,29 @@ Time-ordered points where user explicitly raised objections or challenges during
 - DoD #7 satisfied: **YES** — full chain completed within a real Claude Code session (trigger→Phase 0→ingest→validation fail→fallback→dedup→role tagging→matching→JD write→rules re-eval→session end). No interruption or skip among 11 chain steps.
 - DoD #5 minimum 1 real scenario observed: **PARTIAL** — ambiguous → Phase 3 user decision path verified + Rules re-evaluation race-check path verified. **However, Dedup L1/L2 had no algorithm invocation due to empty `jobs/` state — trivial pass only. Real dedup path observation is outside T9 scope. See Finding #7.**
 
+### Evidence Footer (standardized)
+
+| Field | Value |
+|---|---|
+| observed_at: | `2026-04-24` |
+| method: | `real_subagent` |
+| command: | `N/A — interactive skill session (B-α: collect-jd invoked via Skill tool inside sisyphus session)` |
+| exit_code: | `N/A — interactive skill session, no shell exit code` |
+| key_output: | `11 chain steps completed (trigger→Phase 0→ingest→validation fail→fallback→dedup→role tagging→matching→JD write→rules re-eval→session end); 8 findings; SKILL.md sha b46ca2a3; session PID 7529; rules.yaml sha 33278360` |
+| verdict: | `GREEN_LIVE` |
+
 ---
 
 ## Evidence Footer (standardized)
 
 | Field | Value |
 |---|---|
-| `observed_at` | `2026-04-22` |
-| `method` | `analytical_simulation+shell_exec` |
-| `command` | `make validate / make test / bun test lib/collect-jd/ / make sync-dry` |
-| `exit_code` | `0 / 0 / 0 / 0` |
-| `key_output` | `1254 pass / 0 fail (full test suite); 25 pass / 0 fail (lib/collect-jd); make sync-dry deployment preview generated. E2E Scenario itself is analytical — awaiting T9.` |
-| `verdict` | `EXPECTED_GREEN_PENDING_LIVE` |
+| observed_at: | `2026-04-22` |
+| method: | `analytical_simulation+shell_exec` |
+| command: | `make validate / make test / bun test lib/collect-jd/ / make sync-dry` |
+| exit_code: | `0 / 0 / 0 / 0` |
+| key_output: | `1254 pass / 0 fail (full test suite); 25 pass / 0 fail (lib/collect-jd); make sync-dry deployment preview generated. E2E Scenario itself is analytical — awaiting T9.` |
+| verdict: | `EXPECTED_GREEN_PENDING_LIVE` |
 
 ---
 
@@ -341,11 +380,17 @@ Time-ordered points where user explicitly raised objections or challenges during
 
 | Field | Value |
 |---|---|
-| `observed_at` | `2026-04-25` |
-| `method` | `live_skill_invocation+playwright_mcp+atomic_writes` |
-| `command` | `Skill(collect-jd) + Playwright MCP browser_navigate/evaluate + Bash atomic rename` |
-| `key_output` | `236 unique JD URL discovered · 2 samples processed · dedup L1 matched 1 + L1 miss→L2 called 1 · 1 new JD persisted · sources.yaml crawl_state ledger written · all 8 phases completed with markers` |
-| `verdict` | `GREEN_LIVE` |
+| observed_at: | `2026-04-25` |
+| method: | `live_skill_invocation+playwright_mcp+atomic_writes` |
+| command: | `Skill(collect-jd) + Playwright MCP browser_navigate/evaluate + Bash atomic rename` |
+| exit_code: | `N/A — interactive skill session, no shell exit code` |
+| key_output: | `236 unique JD URL discovered · 2 samples processed · dedup L1 matched 1 + L1 miss→L2 called 1 · 1 new JD persisted · sources.yaml crawl_state ledger written · all 8 phases completed with markers` |
+| verdict: | `GREEN_LIVE` |
+
+Extension:
+
+| Field | Value |
+|---|---|
 | `pid` | `15783` |
 | `rules_yaml_sha8` | `33278360` |
 
@@ -402,6 +447,17 @@ In the T11 main run, one call to Playwright `browser_evaluate` collected 236 uni
 - **DoD #8 (Full Coverage Verified)**: additionally confirmed in T11-b → **YES** (236/236, scroll test pass)
 - **DoD #9 (Discovered List Completeness)**: full 236 entries atomically rewritten in T11-b → **YES**
 
+### Evidence Footer (standardized)
+
+| Field | Value |
+|---|---|
+| observed_at: | `2026-04-25` |
+| method: | `live_playwright_mcp_re-verification+atomic_write` |
+| command: | `N/A — interactive Playwright MCP session (browser_evaluate scroll × 5 + querySelectorAll)` |
+| exit_code: | `N/A — interactive skill session, no shell exit code` |
+| key_output: | `236/236 match declared; scroll stable ×5; infinite_scroll_detected=false; discovered-2026-04-25.txt atomically rewritten (236 entries, 245 lines)` |
+| verdict: | `GREEN_LIVE` |
+
 ---
 
 ## Skill Rev — Full Coverage Ingest Protocol (T11-c, 2026-04-25 11:10+09:00)
@@ -451,6 +507,24 @@ Skill lacked the rule: "items where the listing-visible metadata (anchor text = 
 - Actual batch reprocessing of 234 items (Tier 1 resolution-based, prioritizing Server Developer #197, #198 + Tech Lead Server #210 + ML Backend Engineer #125 etc. as profile priority #1) — awaiting user decision
 - Current state: `$OMT_DIR/collect-jd/sources.yaml.toss.crawl_state.batch_run_completed` field unset (interpret as false recommended)
 - This T11-c completes only skill rule reinforcement (RED→GREEN). Actual data curation is in the next cycle.
+
+### Evidence Footer (standardized)
+
+| Field | Value |
+|---|---|
+| observed_at: | `2026-04-25` |
+| method: | `writing_skills_tdd+parallel_subagent_editing+argus_qa` |
+| command: | `N/A — historical artifact (spec writing session, no shell commands)` |
+| exit_code: | `N/A — historical artifact` |
+| key_output: | `S27–S30 RED scenarios added; Full Coverage Ingest Protocol section added to rules.md + SKILL.md; argus APPROVE (C-1~C-5 PASS); deploy sync diff-q returns 0` |
+| verdict: | `GREEN_SPEC` |
+
+Extension:
+
+| Field | Value |
+|---|---|
+| `files_touched` | `3 (pressure-scenarios.md +110, rules.md, SKILL.md)` |
+| `argus_verdict` | `APPROVE` |
 
 ---
 
@@ -520,18 +594,26 @@ Diagnostic rule: JD never evaluated = Full Coverage defect; JD wrongly evaluated
 - Live verification of the Coverage Verification MANDATORY rule (next dogfood round)
 - Git commit decision: 9 file changes + state migrations + e2e-dogfood evidence pending user approval
 
-### Evidence Footer
+### Evidence Footer (standardized)
 
 | Field | Value |
 |---|---|
-| `observed_at` | `2026-04-25` |
-| `method` | `parallel_subagent_editing+argus_qa` |
+| observed_at: | `2026-04-25` |
+| method: | `parallel_subagent_editing+argus_qa` |
+| command: | `N/A — historical artifact (spec writing session, no shell commands)` |
+| exit_code: | `N/A — historical artifact` |
+| key_output: | `9 files edited (2 inserts + 7 translations); +149 lines; argus APPROVE C-1~C-6 PASS; deploy sync diff-q zero output` |
+| verdict: | `GREEN_LIVE` |
+
+Extension:
+
+| Field | Value |
+|---|---|
 | `agents_dispatched` | `5 sisyphus-junior + 1 argus` |
 | `files_touched` | `9 (2 inserts + 7 translations)` |
 | `total_line_delta` | `+149 (SKILL.md +27, rules.md +122, others line-count-preserving)` |
 | `destructive_deletions` | `0` |
 | `argus_verdict` | `APPROVE` |
-| `verdict` | `GREEN_LIVE` |
 
 ---
 
@@ -589,18 +671,26 @@ User interview via `/superpowers:writing-skills` raised three pressure-scenario 
 - Git commit (mnemosyne).
 - Live batch re-run of remaining 234 pending Toss JDs using the new Per-Site Crawl Memory + Detail Split + Identifier Kind rules (deferred to next dogfood round).
 
-### Evidence Footer
+### Evidence Footer (standardized)
 
 | Field | Value |
 |---|---|
-| `observed_at` | `2026-04-25` |
-| `method` | `interview_then_parallel_subagent_with_argus_qa_loop` |
+| observed_at: | `2026-04-25` |
+| method: | `interview_then_parallel_subagent_with_argus_qa_loop` |
+| command: | `N/A — historical artifact (spec writing + state migration session)` |
+| exit_code: | `N/A — historical artifact` |
+| key_output: | `4 skill files + 2 state files updated; S31/S32/S33 RED added; argus APPROVE after T-A-fix; 6 findings cleared; final grep sweep 0 stale occurrences` |
+| verdict: | `GREEN_SPEC` |
+
+Extension:
+
+| Field | Value |
+|---|---|
 | `agents_dispatched` | `5 sisyphus-junior (T-A initial + T-A redispatch + T-A-fix + T-B + T-C + T-D) + 1 argus` |
 | `files_touched` | `4 skill files + 2 state files (sources.yaml, seen.jsonl)` |
 | `total_line_delta` | `+391 (SKILL.md +66, rules.md +214, frontmatter +29, pressure-scenarios +82)` |
 | `destructive_deletions` | `0 (legacy keys preserved as historical references)` |
 | `argus_verdict` | `APPROVE (after T-A-fix)` |
-| `verdict` | `GREEN_SPEC` |
 
 ---
 
@@ -655,15 +745,23 @@ User questioned "분기처리가 많아진 느낌인데 일관되게 처리할 �
 - Git commit (mnemosyne).
 - Live verification of unified `discover_listing` on next dogfood round (e.g., 234 pending Toss JD batch re-run with the new schema).
 
-### Evidence Footer
+### Evidence Footer (standardized)
 
 | Field | Value |
 |---|---|
-| `observed_at` | `2026-04-26` |
-| `method` | `oracle_architecture_verdict_then_parallel_subagent_with_argus_qa_loop` |
+| observed_at: | `2026-04-26` |
+| method: | `oracle_architecture_verdict_then_parallel_subagent_with_argus_qa_loop` |
+| command: | `N/A — historical artifact (oracle design review + spec writing session)` |
+| exit_code: | `N/A — historical artifact` |
+| key_output: | `3 skill files updated; S34/S35/S36 RED added; pagination.how γ schema + 11 sub-sections; argus APPROVE round 3; 2 HIGH + 1 MEDIUM cleared across fix rounds` |
+| verdict: | `GREEN_SPEC` |
+
+Extension:
+
+| Field | Value |
+|---|---|
 | `agents_dispatched` | `1 oracle + 4 sisyphus-junior (U-1 + U-2 + U-3 + 2 fix rounds) + 3 argus rounds` |
 | `files_touched` | `3 skill files (SKILL.md, dedup-and-discovery.md, pressure-scenarios.md) + 1 state file (sources.yaml)` |
 | `total_line_delta` | `+249 (SKILL.md +9, dedup-and-discovery.md +168, pressure-scenarios.md +72) + state +5` |
-| `destructive_deletions` | `0 (legacy `pagination.method` field dropped per oracle decision; old flat keys converted to γ schema params)` |
+| `destructive_deletions` | `0 (legacy pagination.method field dropped per oracle decision; old flat keys converted to γ schema params)` |
 | `argus_verdict` | `APPROVE (round 3 final)` |
-| `verdict` | `GREEN_SPEC` |

@@ -23,6 +23,7 @@ Analyze code changes and generate Korean commit messages following project conve
 NO COMMIT WITHOUT:
 1. Single logical change (or properly split)
 2. Message ≤ 50 characters
+3. Subject comprehensible to git log readers without external context
 ```
 
 **Violating the letter of these rules IS violating the spirit.**
@@ -300,9 +301,44 @@ COMMIT 2: type: 제목
 - No period at end
 
 **Subject content rule:**
-- 제목은 **변경 자체**를 기술 (Product, Not Process)
-- BAD: `fix: 코드 리뷰 P1/P2 이슈 수정` — 프로세스를 기술
-- GOOD: `fix: persistence 저장 시점을 Step 완료 단위로 변경` — 변경을 기술
+
+제목의 독자는 미래의 git log 독자다 — 6개월 뒤 또는 다른 개발자가 코드 archaeology 중에 만나는 줄. 제목은 그 독자가 외부 맥락 없이 무엇이 바뀌었는지 이해할 수 있어야 한다.
+
+**독자 모델:**
+
+| 독자가 가진 것 | 독자가 갖지 못한 것 |
+|---|---|
+| 코드베이스 자체 | PR description, review thread |
+| commit body / diff | 작업 세션의 맥락 |
+| 도메인 지식 | 내부 분류 체계 (P-등급, 심각도 라벨) |
+| 다른 commit들의 history | 회의록, Slack 메시지 |
+
+**검증 질문** — 제목을 쓴 후 자문:
+1. "독자가 이 제목만 보고 무엇이 바뀌었는지 이해하는가?"
+2. "독자가 외부 문서/세션 맥락에 접근해야만 의미를 알 수 있는가?"
+
+1번이 NO 또는 2번이 YES면 → rewrite.
+
+**자주 실패하는 패턴** (외부 맥락에 의존):
+
+| 패턴 | 왜 실패하는가 |
+|---|---|
+| 리뷰 분류 (`P0`/`P1`/`HIGH`/`CRITICAL` 등) | 독자는 그 분류 체계의 정의에 접근 불가 |
+| 워크플로우 라벨 (`잔여`/`residual`/`follow-up`) | 무엇의 잔여인지 세션 맥락 필요 |
+| 프로세스 참조 (`리뷰`/`audit`/`라운드`) | 어떤 리뷰/audit인지 외부 문서 필요 |
+| 모호한 카운트 (`3건`/`여러 건` 단독) | 무엇이 3건인지 본문 없이 불명 |
+
+이들은 작업 중인 본인에게는 명확하지만 git log 독자에게는 의미 없다. 출처/분류/카운트가 필요하면 body 또는 trailer로 — 제목은 변경 자체를 도메인 용어로 기술.
+
+**BAD vs GOOD subjects** (실제 사례):
+
+| BAD (외부 맥락 의존) | GOOD (자족적, 도메인 용어) |
+|---|---|
+| `fix: collect-jd P1 스펙 드리프트 3건 정합` | `fix: ledger filename + canonical path + Gate 5 classification 정합` |
+| `refactor: SKILL.md HIGH 잔여 3섹션 cross-ref 전환` | `refactor: SKILL.md Session Lock + Atomic Write + L1/L2 cross-ref 전환` |
+| `fix: 코드 리뷰 P1/P2 이슈 수정` | `fix: persistence 저장 시점을 Step 완료 단위로 변경` |
+
+GOOD 제목들은 외부 문서 없이도 변경 영역(파일/모듈/도메인 개념)이 직접 보인다.
 
 **If subject > 50 chars:**
 1. Identify the ONE core change
@@ -407,6 +443,7 @@ See `examples.md` for commit message examples.
 | Committing plan.md | Workflow files mixed in | git reset HEAD plan.md |
 | Meta-commit: "리뷰 이슈 수정" | 변경 내용이 불투명, git log 무의미 | 실제 변경 기술: "저장 시점을 Step 완료 단위로 변경" |
 | Opaque reference: "P1-1, P2-3 반영" | 외부 문서 없이 해독 불가 | 참조는 body/trailer, 제목은 변경 자체 |
+| 외부 맥락에 의존하는 제목 (`P1 X`, `HIGH 잔여 Y`, `리뷰 N건`) | git log 독자는 분류 체계/세션 맥락에 접근 불가 — 의미 전달 실패 | 도메인 용어로 변경 자체를 기술; 분류/맥락은 body·trailer로 |
 
 ---
 
