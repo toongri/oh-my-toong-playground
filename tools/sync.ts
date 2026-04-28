@@ -25,7 +25,7 @@ import type {
   PluginScope,
 } from "./lib/types.ts";
 import { getRootDir, getBackupRetentionDays } from "./lib/config.ts";
-import { expandTilde } from "./lib/path-utils.ts";
+import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import {
   resolvePlatforms,
   resolveComponentPath,
@@ -571,23 +571,14 @@ export async function processYaml(
   rootDir: string,
 ): Promise<void> {
   // Read and parse
-  let rawText: string;
-  try {
-    rawText = await fs.readFile(syncYamlPath, "utf8");
-  } catch {
-    logWarn(`YAML 파일 없음: ${syncYamlPath}`);
-    return;
-  }
-
   let syncYaml: SyncYaml;
   try {
-    const parsed = parseYaml(rawText);
-    if (parsed == null || typeof parsed !== "object") {
+    const result = await readAndExpandSyncYaml(syncYamlPath);
+    if (result == null) {
       logWarn(`YAML이 비어 있거나 유효한 객체가 아님: ${syncYamlPath}`);
       return;
     }
-    syncYaml = parsed as SyncYaml;
-    if (syncYaml.path) syncYaml.path = expandTilde(syncYaml.path);
+    syncYaml = result;
   } catch (err) {
     logError(`YAML 파싱 실패: ${syncYamlPath}: ${err}`);
     return;
@@ -773,13 +764,9 @@ if (import.meta.main) {
 
         let syncYaml: SyncYaml;
         try {
-          const text = await fs.readFile(projectSyncYaml, "utf8");
-          const parsed = parseYaml(text);
-          if (parsed == null || typeof parsed !== "object") {
-            continue;
-          }
-          syncYaml = parsed as SyncYaml;
-          if (syncYaml.path) syncYaml.path = expandTilde(syncYaml.path);
+          const result = await readAndExpandSyncYaml(projectSyncYaml);
+          if (result == null) continue;
+          syncYaml = result;
         } catch {
           continue;
         }
@@ -808,14 +795,8 @@ if (import.meta.main) {
       if (existsSync(rootSyncYaml)) {
         let syncYaml: SyncYaml;
         try {
-          const text = await fs.readFile(rootSyncYaml, "utf8");
-          const parsed = parseYaml(text);
-          if (parsed == null || typeof parsed !== "object") {
-            syncYaml = {};
-          } else {
-            syncYaml = parsed as SyncYaml;
-            if (syncYaml.path) syncYaml.path = expandTilde(syncYaml.path);
-          }
+          const result = await readAndExpandSyncYaml(rootSyncYaml);
+          syncYaml = result ?? {};
         } catch {
           syncYaml = {};
         }
