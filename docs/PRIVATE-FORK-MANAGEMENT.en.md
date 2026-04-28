@@ -16,7 +16,7 @@ find . -size +100M                 # Scan large files
 
 ### Standard mirror push
 
-**Prerequisite (security-critical)**: Before the first `git push --mirror`, disable all GitHub Actions in the new private repo at Settings → Actions → "Disable Actions". The mirror push uploads `.github/workflows/` and the push event itself triggers `on: push` workflows. Inherited upstream workflows may publish to npm/Docker/Slack/external webhooks. Disable first, audit (Section 5), re-enable selectively.
+**Prerequisite (security-critical)**: Before `git push --mirror`, disable all Actions in the new private repo (Settings → Actions → "Disable Actions"). The mirror push uploads `.github/workflows/` and the push itself triggers `on: push` workflows, which may publish to npm/Docker/Slack via inherited secrets. Re-enable selectively after the Section 5 audit.
 
 ```bash
 git clone --bare https://github.com/<upstream-org>/<repo>.git
@@ -60,7 +60,7 @@ git push origin --tags
 
 ### Post-mirror immediate actions
 
-1. **Disable all GitHub Actions workflows.** Settings → Actions → Disable Actions. Re-enable selectively after the audit in Section 5.
+1. **Verify Actions remain disabled** (set in Section 1 prerequisite). Re-enable selectively after the audit in Section 5.
 2. Sanitize `CODEOWNERS` — upstream usernames are invalid in your org.
 3. Decide Dependabot/Renovate posture: keep upstream config, disable, or replace with internal equivalents.
 
@@ -182,9 +182,7 @@ Scheduled workflows only run from the default branch — keep `main` as the defa
 
 ## 5. Workflow & Secrets Audit (after first sync)
 
-This section is the audit and selective re-enable step that follows the disable-before-push prerequisite in Section 1. Actions were disabled before the mirror push to prevent inherited workflows from firing; this section covers how to audit each workflow and decide what to re-enable.
-
-Inherited workflows from upstream `.github/workflows/`. Before re-enabling Actions:
+Inherited workflows from upstream `.github/workflows/` (disabled in Section 1 prerequisite). Before re-enabling Actions:
 
 | Check | Why |
 |-------|-----|
@@ -217,19 +215,15 @@ You cannot open a PR from a private repo directly to a public upstream. To contr
 
 ---
 
----
-
 ## 8. Recovery Playbooks
-
-Procedures for the failure modes the rule's "emergency recovery procedures" mention.
 
 ### 8.1 Failed sync rollback
 
 If an automated or manual sync was incorrectly merged:
 
 1. `gh pr list --base main --head upstream-main --state merged` to identify the incorrectly merged PR.
-2. Revert with a revert commit: `gh pr revert <PR#>` or `git revert -m 1 <merge-commit>`.
-3. Merge the revert commit to `main` via a separate PR (no force-push — keep main protection in place).
+2. Open a revert PR — `gh pr revert <PR#>` (creates the PR automatically), or `git revert -m 1 <merge-commit>` then open a PR manually.
+3. Merge the revert PR to `main` (no force-push — keep main protection in place).
 4. The next sync may surface a conflict — see Section 4 for resolution.
 
 ### 8.2 Accidental upstream push detection
@@ -245,11 +239,9 @@ If commits were accidentally pushed to the upstream (public) repo:
 
 On token exposure or scheduled renewal:
 
-1. Issue a new fine-grained PAT in GitHub UI — required scopes: `contents:write`, `pull-requests:write` (no other scopes).
-2. Expiry: 90 days or less recommended.
-3. Update the secret in private repo Settings → Secrets → `SYNC_TOKEN`.
-4. Revoke the old token.
-5. Confirm the next scheduled cron run completes without error.
+1. Issue a new fine-grained PAT — scopes: `contents:write`, `pull-requests:write` (no others); expiry ≤ 90 days.
+2. Update `SYNC_TOKEN` in private repo Settings → Secrets, then revoke the old token.
+3. Confirm the next scheduled cron run completes without error.
 
 ### 8.4 Leaked private content removal
 

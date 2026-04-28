@@ -14,7 +14,7 @@
 **Location:** `docs/PRIVATE-FORK-MANAGEMENT.en.md`
 **Read before:** any first commit on a newly created private fork.
 
-Covers bootstrap procedure, remote config, branch topology, upstream sync workflow, and emergency recovery procedures.
+Covers bootstrap procedure, remote config, branch topology, upstream sync workflow, and recovery playbooks.
 
 ## Non-Negotiables
 
