@@ -399,7 +399,7 @@ If a file satisfies **any one** of the following, treat it as manual-edited:
    - Skill always records `last_checked_at` at **past or current timestamp** only.
    - If a file has a future timestamp, the user arbitrarily edited it.
 2. **Canonical contract violation** (non-standard key OR enum-external value on canonical field):
-   - Canonical keys (16 types): `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`, `parent_url`, `sub_position`, `source`. (Last two before `source` are fan-out child fields per `## Detail Split Auto Fan-out` rule; `source` records the listing-source slug for drift detection — see [frontmatter-schema.md](frontmatter-schema.md) for full schema.)
+   - Canonical key set (16 keys) and `status` / `fingerprint_check` enum values are defined in [frontmatter-schema.md](frontmatter-schema.md) — Manual Edit detection treats any deviation from those as a violation.
    - Canonical enums: `status` ∈ {`included`, `excluded`, `ambiguous`, `pending`}, `fingerprint_check` ∈ {`pending`, `unique`, `duplicate_of:<url>`}.
    - Non-standard key present, or canonical field with value outside the defined set → treated as user edit.
    - Examples: `priority: high` (non-standard key), `status: dream-job` (status outside enum), `fingerprint_check: reviewed` (fingerprint_check outside enum), `user_note` · `deadline` · `application_status` (non-standard key additions).
