@@ -184,7 +184,9 @@ export async function validateSyncYamlComponents(
     syncYaml = await readAndExpandSyncYaml(filePath);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    result.errors.push(`YAML 파싱 오류 (${basename(filePath)}): ${msg}`);
+    const baseFilename = basename(filePath);
+    const localFilename = baseFilename.replace(/\.yaml$/, ".local.yaml");
+    result.errors.push(`YAML 파싱 오류 (${baseFilename} 또는 ${localFilename}): ${msg}`);
     return result;
   }
   if (syncYaml === null) return result;
@@ -331,7 +333,7 @@ export async function validatePlatformYamlHookComponents(
       merged = await parseAndMergePlatformYaml(yamlDir, platform);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      result.errors.push(`YAML 파싱 오류 (${platform}.yaml): ${msg}`);
+      result.errors.push(`YAML 파싱 오류 (${platform}.yaml 또는 ${platform}.local.yaml): ${msg}`);
       continue;
     }
     if (merged === null) continue;

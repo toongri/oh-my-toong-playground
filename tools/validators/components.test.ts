@@ -470,6 +470,21 @@ describe("overlay-aware 통합: sync.local.yaml 컴포넌트 누락 catch", () =
     rmSync(root, { recursive: true, force: true });
   });
 
+  it("sync.local.yaml YAML 파싱 오류 메시지에 sync.local.yaml 포함", async () => {
+    writeYaml(root, "sync.yaml", `
+path: ${root}
+agents:
+  items: []
+`);
+    writeYaml(root, "sync.local.yaml", `
+agents:
+  items: [invalid: yaml: parse: error
+`);
+
+    const result = await validateSyncYamlComponents(join(root, "sync.yaml"), root);
+    expect(result.errors.some((e) => e.includes("sync.local.yaml"))).toBe(true);
+  });
+
   it("sync.local.yaml에 추가된 agent 파일이 없으면 error를 반환한다", async () => {
     // base: agent A 존재
     touch(join(root, "agents", "agent-a.md"));
@@ -533,6 +548,20 @@ describe("overlay-aware 통합: claude.local.yaml hook 컴포넌트 누락 catch
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
+  });
+
+  it("claude.local.yaml YAML 파싱 오류 메시지에 claude.local.yaml 포함", async () => {
+    writeYaml(root, "claude.yaml", `
+hooks:
+  UserPromptSubmit: []
+`);
+    writeYaml(root, "claude.local.yaml", `
+hooks:
+  UserPromptSubmit: [invalid: yaml: parse: error
+`);
+
+    const result = await validatePlatformYamlHookComponents(root, root);
+    expect(result.errors.some((e) => e.includes("claude.local.yaml"))).toBe(true);
   });
 
   it("claude.local.yaml에 추가된 hook 파일이 없으면 error를 반환한다", async () => {
