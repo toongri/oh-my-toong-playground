@@ -558,6 +558,15 @@ mcps:
     });
   });
 
+  // --- 구조 오류 메시지에 실제 파일명 포함 ---
+  describe("구조 오류 메시지에 실제 파일명 포함", () => {
+    it("claude.yaml 구조 오류 메시지에 claude.yaml이 포함된다", () => {
+      const path = writeYaml(dir, "claude.yaml", `hooks: "string"`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.some((e) => e.includes("claude.yaml"))).toBe(true);
+    });
+  });
+
   // --- Non-object top-level data ---
   describe("최상위 데이터가 object가 아닌 경우", () => {
     it("returns error when claude.yaml top-level is an array via `validatePlatformYaml`", () => {
@@ -711,6 +720,28 @@ config:
       const path = writeYaml(dir, "claude.local.yaml", `hooks: []`);
       const result = validatePlatformYamlPartial(path, "claude");
       expect(result.errors.some((e) => e.includes("hooks") && e.includes("object 형식"))).toBe(true);
+    });
+  });
+
+  describe("구조 오류 메시지에 실제 파일명 포함", () => {
+    it("claude.local.yaml의 hooks 타입 오류 메시지에 claude.local.yaml이 포함된다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `hooks: "string"`);
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors.some((e) => e.includes("claude.local.yaml"))).toBe(true);
+      expect(result.errors.some((e) => e.includes("claude.yaml") && !e.includes("claude.local.yaml"))).toBe(false);
+    });
+
+    it("gemini.local.yaml의 hooks 타입 오류 메시지에 gemini.local.yaml이 포함된다", () => {
+      const path = writeYaml(dir, "gemini.local.yaml", `hooks: "string"`);
+      const result = validatePlatformYamlPartial(path, "gemini");
+      expect(result.errors.some((e) => e.includes("gemini.local.yaml"))).toBe(true);
+    });
+
+    it("claude.local.yaml의 알 수 없는 섹션 경고에 claude.local.yaml이 포함된다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `unknown-section: value`);
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.warnings.some((w) => w.includes("claude.local.yaml"))).toBe(true);
+      expect(result.warnings.some((w) => w.includes("claude.yaml") && !w.includes("claude.local.yaml"))).toBe(false);
     });
   });
 });

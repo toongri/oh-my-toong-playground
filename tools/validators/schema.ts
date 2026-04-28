@@ -338,34 +338,35 @@ export function validateSyncYamlPartial(filePath: string): ValidationResult {
 // ---------------------------------------------------------------------------
 
 function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPath: string, platform: string, result: ValidationResult): void {
+  const label = basename(platformYamlPath);
   const allowed = PLATFORM_ALLOWED_SECTIONS[platform];
   if (!allowed) return;
 
   for (const key of Object.keys(data)) {
     if (!allowed.has(key)) {
-      result.warnings.push(`${platform}.yaml: 알 수 없는 섹션 '${key}' (지원: ${[...allowed].join(", ")})`);
+      result.warnings.push(`${label}: 알 수 없는 섹션 '${key}' (지원: ${[...allowed].join(", ")})`);
     }
   }
 
   if (data.hooks !== undefined && !isObject(data.hooks)) {
-    result.errors.push(`${platform}.yaml: hooks는 object 형식이어야 합니다`);
+    result.errors.push(`${label}: hooks는 object 형식이어야 합니다`);
   } else if (isObject(data.hooks)) {
     for (const [event, value] of Object.entries(data.hooks)) {
       if (!VALID_EVENTS.has(event)) {
-        result.errors.push(`${platform}.yaml: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
+        result.errors.push(`${label}: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
       }
       if (!isArray(value)) {
-        result.errors.push(`${platform}.yaml: hooks.${event}의 값은 배열이어야 합니다`);
+        result.errors.push(`${label}: hooks.${event}의 값은 배열이어야 합니다`);
       }
     }
   }
 
   if (data.mcps !== undefined && !isObject(data.mcps)) {
-    result.errors.push(`${platform}.yaml: mcps는 object 형식이어야 합니다`);
+    result.errors.push(`${label}: mcps는 object 형식이어야 합니다`);
   } else if (isObject(data.mcps)) {
     for (const [name, value] of Object.entries(data.mcps)) {
       if (!isObject(value)) {
-        result.errors.push(`${platform}.yaml: mcps.${name}의 값은 object이어야 합니다`);
+        result.errors.push(`${label}: mcps.${name}의 값은 object이어야 합니다`);
       }
     }
   }
