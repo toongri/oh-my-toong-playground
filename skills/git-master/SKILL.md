@@ -23,6 +23,7 @@ Analyze code changes and generate Korean commit messages following project conve
 NO COMMIT WITHOUT:
 1. Single logical change (or properly split)
 2. Message ≤ 50 characters
+3. Subject describes the change itself, not review/process metadata
 ```
 
 **Violating the letter of these rules IS violating the spirit.**
@@ -301,8 +302,33 @@ COMMIT 2: type: 제목
 
 **Subject content rule:**
 - 제목은 **변경 자체**를 기술 (Product, Not Process)
-- BAD: `fix: 코드 리뷰 P1/P2 이슈 수정` — 프로세스를 기술
-- GOOD: `fix: persistence 저장 시점을 Step 완료 단위로 변경` — 변경을 기술
+- 출처/맥락(리뷰 분류, 이슈 번호, 라운드, 회의 결정)은 body 또는 trailer로 — 제목 아님
+
+**Banned tokens in subject** (review/process metadata; never in commit subject):
+
+| Category | Examples |
+|---|---|
+| Severity classifiers | `P0`, `P1`, `P2`, `P3`, `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` |
+| Workflow labels | `잔여`, `residual`, `follow-up`, `cleanup`, `미해결`, `남은` |
+| Process references | `리뷰`, `review`, `audit`, `iteration`, `라운드`, `cycle` |
+| Opaque counts | `3건`, `N개 이슈`, `여러 건` (when not describing WHAT changed) |
+
+**Red flag check before commit** — if you're tempted to write any of these, STOP and rewrite:
+
+| Tempted to write | Why it fails | Rewrite as |
+|---|---|---|
+| `fix: P1 X 정합` | "P1"은 6개월 뒤 의미 불명 | describe X 자체 |
+| `refactor: HIGH 잔여 N섹션 변경` | "HIGH 잔여"는 review jargon | 변경된 섹션을 명시 |
+| `fix: 리뷰 이슈 N건 반영` | 어떤 변경인지 불투명 | 각각 describe, 필요 시 split |
+| `fix: audit 결과 반영` | 결과가 무엇인지 빠짐 | 변경 자체 기술 |
+
+**BAD vs GOOD subjects** (실제 사례):
+
+| BAD subject | GOOD subject |
+|---|---|
+| `fix: collect-jd P1 스펙 드리프트 3건 정합` | `fix: ledger filename + canonical path + Gate 5 classification 정합` |
+| `refactor: SKILL.md HIGH 잔여 3섹션 cross-ref 전환` | `refactor: SKILL.md Session Lock + Atomic Write + L1/L2 cross-ref 전환` |
+| `fix: 코드 리뷰 P1/P2 이슈 수정` | `fix: persistence 저장 시점을 Step 완료 단위로 변경` |
 
 **If subject > 50 chars:**
 1. Identify the ONE core change
@@ -407,6 +433,7 @@ See `examples.md` for commit message examples.
 | Committing plan.md | Workflow files mixed in | git reset HEAD plan.md |
 | Meta-commit: "리뷰 이슈 수정" | 변경 내용이 불투명, git log 무의미 | 실제 변경 기술: "저장 시점을 Step 완료 단위로 변경" |
 | Opaque reference: "P1-1, P2-3 반영" | 외부 문서 없이 해독 불가 | 참조는 body/trailer, 제목은 변경 자체 |
+| Severity classifier in title: "P1 X" / "HIGH 잔여 Y" | review jargon decays — 6개월 뒤 의미 불명 | describe domain change directly; classifier는 body/trailer로 |
 
 ---
 
