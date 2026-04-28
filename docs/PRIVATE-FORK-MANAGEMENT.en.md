@@ -230,7 +230,7 @@ If an automated or manual sync was incorrectly merged:
 
 If commits were accidentally pushed to the upstream (public) repo:
 
-1. Immediately delete the branch: `git push origin --delete <branch>` or force-delete via GitHub UI.
+1. Immediately delete the branch from upstream: `git push upstream --delete <branch>` or force-delete via GitHub UI.
 2. Rotate any potentially exposed secrets immediately (see 8.3 below).
 3. Request cache purge from GitHub Support — forks or clones may already carry the content.
 4. Post-incident audit: verify the pre-push hook fired (or why it didn't), re-validate `git remote -v` outputs.
