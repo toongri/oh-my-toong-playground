@@ -11,8 +11,6 @@
 import fs from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
-import { parse as parseYaml } from "yaml";
-
 import type { SyncYaml, SyncItem, Category, Platform } from "./lib/types.ts";
 import { getRootDir } from "./lib/config.ts";
 import { CATEGORIES, SUPPORTED_CATEGORIES } from "./sync.ts";
@@ -25,6 +23,7 @@ import {
   stripInjectedFrontmatter,
 } from "./lib/pull-utils.ts";
 import { DEFAULT_EXCLUDE, isExcluded, collectFiles, collectDirs } from "./lib/sync-directory.ts";
+import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -217,13 +216,12 @@ export async function pullProject(options: PullOptions): Promise<void> {
   // Parse sync.yaml
   let syncYaml: SyncYaml;
   try {
-    const rawText = await fs.readFile(syncYamlPath, "utf8");
-    const parsed = parseYaml(rawText);
-    if (parsed == null || typeof parsed !== "object") {
-      process.stderr.write(`[ERROR] YAML이 비어 있거나 유효한 객체가 아님: ${syncYamlPath}\n`);
+    const result = await readAndExpandSyncYaml(syncYamlPath);
+    if (result == null) {
+      process.stderr.write(`[ERROR] sync.yaml이 객체가 아님: ${syncYamlPath}\n`);
       process.exit(1);
     }
-    syncYaml = parsed as SyncYaml;
+    syncYaml = result;
   } catch (err) {
     process.stderr.write(`[ERROR] YAML 파싱 실패: ${syncYamlPath}: ${err}\n`);
     process.exit(1);
