@@ -34,12 +34,3 @@ export interface CatalogEntry {
   discoveredOnly: boolean;
   situationIds?: string[];
 }
-
-// Hook output format
-export interface HookOutput {
-  continue: true;
-  hookSpecificOutput?: {
-    hookEventName: string;
-    additionalContext: string;
-  };
-}
