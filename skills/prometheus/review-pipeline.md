@@ -23,6 +23,7 @@ All three agents follow the same mandatory gate:
 MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 - Do NOT proceed until APPROVE or COMMENT
 - On REQUEST_CHANGES: revise and re-invoke
+- On missing or ambiguous verdict: treat as REQUEST_CHANGES
 - Loop repeats indefinitely until pass
 - Skipping is NEVER permitted
 ```
@@ -31,34 +32,24 @@ MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 
 **Common Verdict Handling:**
 
-| Verdict | Action | Forbidden Shortcut |
-|---------|--------|--------------------|
-| **APPROVE** | Proceed to next stage | — |
-| **REQUEST_CHANGES** | Revise, re-invoke. MUST loop until pass (APPROVE or COMMENT). | Do NOT write downstream artifacts |
-| **COMMENT** | Incorporate findings, proceed | — |
+| Verdict | Action |
+|---------|--------|
+| **APPROVE** | Proceed to next stage |
+| **COMMENT** | Incorporate findings, proceed |
+| **REQUEST_CHANGES** | Revise, re-invoke. Must loop until APPROVE or COMMENT |
+| **Missing / ambiguous** (no explicit verdict label, punch-list only, "verdict inferable") | Treat as REQUEST_CHANGES |
 
 ---
 
 ## Operational Definition of "Revise"
 
-**Revise** means exactly these three steps, in order:
+**Revise** = exactly these three steps, in order:
 
-1. **Modify source material** — edit the plan file (or requirements) to address every directive in the REQUEST_CHANGES verdict.
-2. **Re-invoke the same reviewer type on a fresh agent instance** — send the updated material back to the same reviewer type (Metis / Oracle / Momus) using the same invocation template. Per the Reviewer Freshness Rule (§Reviewer Freshness Rule), always spawn a fresh agent instance; never reuse a thread that has already issued a verdict.
-3. **Wait for a NEW verdict** — the loop only advances when the reviewer issues a fresh APPROVE or COMMENT on the revised material.
+1. **Modify source material** to address every directive in the REQUEST_CHANGES verdict.
+2. **Re-invoke the same reviewer type on a fresh agent instance** (Reviewer Freshness Rule).
+3. **Wait for a new APPROVE or COMMENT** on the revised material.
 
-### "Revise" is NOT:
-
-The following actions do **not** constitute Revise and are explicitly forbidden as substitutes:
-
-- Incorporating the directive into the next stage's artifacts without re-invoking the reviewer.
-- Paraphrasing the directive in a comment and proceeding.
-- Treating the directive as a COMMENT and moving forward.
-- Applying a partial fix and skipping re-invocation.
-- Deferring the fix to a later TODO.
-- Delegating the fix to an executor without looping back.
-- Asking the user whether to proceed instead of re-invoking.
-- Self-assessing that the fix is correct without reviewer confirmation.
+A sequence missing any of the three steps is not Revise. Self-assessment, paraphrasing the directive, partial fixes, deferring to a later TODO, executor-side fixes, and asking the user to bypass — all fail step 2 or step 3.
 
 ---
 
@@ -102,35 +93,15 @@ The pipeline progresses through discrete states. Transitions are triggered by re
 
 ---
 
-## Red Flags — STOP Before Bypass
+## Loop Termination Rule
 
-When any of the following phrases appear in prometheus's own reasoning, treat it as a bypass-rationalization signal and **STOP**. Re-invoke the blocked reviewer instead of proceeding.
+The reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the current artifact version.
 
-- "Let me apply the directive and move on"
-- "I'll incorporate this into the plan"
-- "The directive is clear"
-- "directive를 반영한"
-- "I understand what they want"
-- "Going back to interview adds"
-- "Oracle already APPROVE"
-- "dispatch the next reviewers"
+- REQUEST_CHANGES → Revise (per Operational Definition above).
+- Missing or ambiguous verdict → treat as REQUEST_CHANGES. Re-invoke.
+- Time pressure, user override ("just proceed"), self-assessment of fix correctness, and parallel dispatch on a blocked artifact do **not** terminate the loop.
 
-If any of these signals appear, the correct action is: loop back to the reviewer, not forward.
-
----
-
-## Rationalization Table — Verdict Bypass
-
-| Rationalization | Why It Is Wrong |
-|----------------|-----------------|
-| "Revise means revise — I already changed the plan" | Revise requires re-invocation; self-certified change is not a verdict |
-| "The directive content is the revision" | Directive reception is not review completion |
-| "The reviewer just need to see the final plan" | Bypasses intermediate gate; reviewer must approve current artifact |
-| "Re-invoking burns user time" | Pipeline integrity > speed; skipping creates worse downstream errors |
-| "My self-assessment is accurate" | Self-assessment cannot substitute for a reviewer verdict |
-| "I'll fix it in the next iteration" | Deferred fix violates loop-until-pass requirement |
-| "user said 'just proceed'" | User cannot override mandatory reviewer gate |
-| "Parallel dispatch saves time" | Parallel downstream work on a blocked artifact corrupts the pipeline |
+Only a fresh reviewer-issued APPROVE or COMMENT on the current artifact moves pipeline state forward.
 
 ---
 
