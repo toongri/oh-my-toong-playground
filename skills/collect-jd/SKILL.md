@@ -18,34 +18,9 @@ Dedicated skill for JD collection, curation, and organization. Specific rules ar
 
 ## MANDATORY: Gate Task Creation
 
-At skill invocation start (immediately before Session Lock acquire), **pre-create these 8 named gate tasks via TaskCreate**. Each task is marked `in_progress` on entry, `completed` immediately on finish. Purpose: prevent gate skipping and silent skips. Tasks are the source of truth for gate completion; the per-source ledger (see below) is the source of truth for per-item progress.
+**Gate Task Creation (MANDATORY)** — at skill invocation start, pre-create 8 named gate tasks via `TaskCreate`. Each task is the source of truth for gate completion; the per-source ledger is the source of truth for per-item progress.
 
-**Eight named gate tasks (in execution order)**:
-
-| # | Gate task name |
-|---|---|
-| 1 | `Acquire session lock` |
-| 2 | `Verify listing coverage + freeze discovered_count` |
-| 3 | `Build per-source ledger` |
-| 4 | `L1 evaluate all discovered` |
-| 5 | `Run TTL/L2 recheck where required` |
-| 6 | `Run fan-out / body verification` |
-| 7 | `Persist jobs + sources.yaml + seen/audit + ledger consistently` |
-| 8 | `Verify terminal_count == discovered_count before lock release` |
-
-**Batch mode (gate-major)**: Each of Gates 2-7 internally iterates over all sources before transitioning to completed. Gates 1 and 8 are session-scoped (once each). The 8 gate tasks remain constant in count regardless of source count — one task per gate, spanning all sources.
-
-**(M/N) markers REMOVED.** Tasks (created via TaskCreate) are the source of truth for gate completion. The per-source ledger is the source of truth for per-item progress. No `[Phase N/9: ✓ (M/N)]` markers are required or expected.
-
-Rationalization loopholes (forbidden):
-
-- "Skip the ledger, tasks alone are sufficient" — ❌ Ledger is the truth source for Coverage Gate. Without it, Gate 8 cannot pass.
-- "Append rows lazily at end of batch" — ❌ Each L1 evaluation MUST write a ledger row immediately (crash-resumability requires it).
-- "`pending` for `terminal_state` when unsure" — ❌ `pending` only in `classification`/`persist_status`. By Gate 8, every `terminal_state` must be 4-enum.
-- "Aggregate Gate 4-7 into a single task" — ❌ 8 named gates are individually mandatory. Aggregation hides skips.
-- "Add a 9th gate for X" — ❌ Exactly 8. Extensions go inside an existing gate's responsibility.
-
-→ Details: [reference/bootstrap.md#gate-task-creation](reference/bootstrap.md#gate-task-creation)
+→ Details: [reference/bootstrap.md](reference/bootstrap.md#gate-task-creation)
 
 ## State Location
 
@@ -65,18 +40,9 @@ At skill trigger time (top priority, before Phase 0 entry), acquire `$OMT_DIR/co
 
 ## Storage Backend Interview (MANDATORY)
 
-On first run, check for absent/ambiguous `$OMT_DIR/collect-jd/config.yaml` → **AskUserQuestion is mandatory**. Config schema has 2 fields: `platform` + `how` (free-form description). `platform` example values: `filesystem` | `notion` | `google_drive` | `gist` | user-defined MCP name. `how` is a free-form description of "where and how to store" (may include Notion page ID, table name, template file path, etc.).
+**Storage Backend Interview (MANDATORY)** — on first run, AskUserQuestion is mandatory to collect platform + how. Silent default to filesystem is forbidden.
 
-After user acceptance/change, atomic write `config.yaml` (`platform`/`how`/`storage_path` when platform=filesystem). Subsequent sessions read `config.yaml` directly.
-
-**CRITICAL**: When config.yaml is absent/ambiguous, silent default save as platform=filesystem is forbidden. "It's the first run so default" rationalization is not allowed.
-
-- Required immediately after Session lock, before Phase 0 Profile Interview entry.
-- `platform: filesystem` → `storage_path` required (must be under `$OMT_DIR`).
-- `platform: notion | google_drive | ...` → `how` field must contain target page/folder/sheet ID + template + MCP call procedure as free-form description.
-- On path/backend change request: atomic overwrite. Data migration only with explicit user approval.
-
-→ Details (flowchart, rationalization loopholes, config.yaml schema): [reference/bootstrap.md#storage-backend-interview](reference/bootstrap.md#storage-backend-interview)
+→ Details: [reference/bootstrap.md](reference/bootstrap.md#storage-backend-interview)
 
 ## Atomic Write Pattern (MANDATORY)
 
@@ -130,26 +96,9 @@ At session start, load `$OMT_DIR/collect-jd/sources.yaml`. If empty or absent, p
 
 ## Listing Pagination Coverage Verification (MANDATORY, 3-check)
 
-fires after `discover_listing` returns `was_invalidated: false` (or `true` after retry success). raise 시 skip. Discovery-side proof that the listing was scraped exhaustively. After pagination collects the anchor set, three checks MUST pass before Full Coverage Tier 1 ingest begins:
+**Coverage Verification (MANDATORY, 3-check)** — declared-total match, scroll stability, infinite-scroll absence. Without `coverage_proof`, `batch_run_completed=true` is forbidden.
 
-1. **Declared total match** — regex-extract page total count (e.g., "236개의 포지션") → must equal DOM unique-anchor count
-2. **Scroll stability** — `window.scrollTo(0, document.documentElement.scrollHeight)` × ≥3 iterations → anchor count unchanged
-3. **Infinite-scroll absence** — `scrollHeight` delta across iterations == 0 → no lazy fetch triggered
-
-Persist results to `sources.yaml.<source>.crawl_state.coverage_proof` with fields:
-- `verified_at` (ISO8601)
-- `method` (e.g., `playwright_scroll_to_bottom_N_iterations`)
-- `page_declared_total`, `dom_unique_anchor_count`
-- `infinite_scroll_detected` (bool)
-- `conclusion` (string)
-
-**CRITICAL**:
-- Without `coverage_proof` field set, `batch_run_completed=true` declaration is forbidden.
-- Sites without a visible total count (rare) may record `page_declared_total: null` plus a note "no declared total" in Tier B `how`.
-- If `page_declared_total: null` (no declared total visible on page), check #1 is N/A. Pass criteria: (check #1 pass OR N/A) AND check #2 pass AND check #3 pass.
-- T11 violation case: initial run reported "236 unique URLs collected" with only 1 `browser_evaluate` call, no scroll test, no declared-total match → Coverage Verification Protocol was not performed; the claim was unverified.
-
-→ Details: [reference/dedup-and-discovery.md#listing-pagination-coverage-verification](reference/dedup-and-discovery.md#listing-pagination-coverage-verification)
+→ Details: [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#listing-pagination-coverage-verification)
 
 ## Per-Site Crawl Memory (MANDATORY)
 
@@ -160,153 +109,31 @@ Maintain per-source crawl memory in `sources.yaml.<source>.crawl_state` (3 sub-g
 - Line schema: `{"id": "...", "url": "...", "processed_at": "<ISO8601>", "verdict": "included|excluded|ambiguous", "role_title": "..."}`
 - The `id` field is a **deterministic key** derived from the per-site `identifier_kind` strategy — NOT an auto-generated UUID.
 
-**sources.yaml schema** (`crawl_state` sub-keys):
-```yaml
-crawl_state:
-  seen:
-    identifier_kind: id_query | url | fingerprint
-    identifier_extractor: <param-name> | null | <hash-spec>
-    items_path: "crawl_state/<source>/seen.jsonl"
-    items_count: <int>
-  audit_trail:
-    total_discovered: <int>
-    range_covered:
-      - from: <marker>
-        to: <marker>
-        run_at: <ISO8601>
-        collected_count: <int>
-        total_listed: <int or null>
-    crawl_history:
-      - run_at: <ISO8601>
-        method: auto | interview_script | mcp:<name>
-        new_jds: <int>
-        already_seen: <int>
-        pages_fetched: <int>
-  coverage_proof:
-    verified_at: <ISO8601>
-    method: playwright_scroll_to_bottom_N_iterations
-    page_declared_total: <int or null>
-    dom_unique_anchor_count: <int>
-    infinite_scroll_detected: <bool>
-    conclusion: <string>
-  batch_run_completed: <bool>          # NEW
-  pending_count: <int>                  # NEW (남은 처리 대기 항목 수)
-```
+Per-Site Crawl Memory schema (sources.yaml `<source>.crawl_state` sub-keys + `seen.jsonl` line schema): see [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#per-site-crawl-memory) — do not restate inline.
 
 Each source records its id extraction strategy in `sources.yaml.<source>.crawl_state.seen` via two fields: `identifier_kind` (strategy enum) + `identifier_extractor` (param name for `id_query`, `null` for `url`, hash spec for `fingerprint`).
 
-**Re-crawl algorithm (Algorithm B canonical)**: Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is the JD file at `jobs/<company_slug>/<role_title_slug>-<YYMMDD>.md` whose `frontmatter.source` matches the current source key; seen.jsonl mirrors it for O(1) id lookup.
+**Re-crawl algorithm (Algorithm B canonical)**: every discovered URL → L1 → 1 of 4 terminal states (`new_ingest|touch_only|ttl_recheck|manual_skip`). seen.jsonl is audit/lookup index, NOT a pre-L1 exclusion gate. Drift detection (`seen_hit + L1_miss` / `L1_hit + seen_miss`) is mandatory.
 
-For each discovered URL, L1 produces one of 4 **terminal states**:
-
-| Terminal state | Trigger | Action |
-|---|---|---|
-| `new_ingest` | URL not in jobs/ | Proceed to Tier 1/2/3 ingest |
-| `touch_only` | URL match in jobs/ AND `last_checked_at` within TTL (30d) | Atomic update `last_checked_at` only. No body fetch. No Tier 2/3. |
-| `ttl_recheck` | URL match in jobs/ AND `last_checked_at` exceeds TTL (30d) | Enter L2 (LLM similarity check) → re-evaluate per Matching Loop |
-| `manual_skip` | Manual Edit Safety detected (canonical contract violation or `last_checked_at` in future) | Skip, log to report |
-
-> **Note on slug match**: L1 evaluates URL match only. The `(company_slug, role_title_slug)` similarity is NOT a L1 concern in Algorithm B canonical — slug similarity is handled by Matching Loop / L2 LLM similarity downstream when content collision is suspected. This keeps L1 a pure URL-keyed gate; the 4-state machine is mutually exclusive + collectively exhaustive over the URL-key space.
-
-**Drift detection (MANDATORY)**: Any of the following is an integrity error and must be reported (not silently ignored):
-- `seen_hit + L1_miss`: ID is in seen.jsonl but no matching frontmatter found in jobs/. Indicates seen.jsonl drift or jobs/ deletion.
-- `L1_hit + seen_miss`: jobs/ frontmatter exists but ID not in seen.jsonl. Indicates seen.jsonl corruption or out-of-band jobs/ creation.
-
-Crash recovery: skip invalid JSON lines in seen.jsonl + warn. After processing, atomic append new entries to `seen.jsonl` for `new_ingest` terminal states.
-
-**CRITICAL**:
-- `last_seen_marker` / cursor-based rescan is forbidden — dynamic listings have no guaranteed ordering.
-- `identifier_kind` silent default is forbidden — on first source registration, run the Identifier Kind Heuristic and confirm with user before writing.
-- Declaring save complete without appending new entries to `seen.jsonl` is forbidden.
-
-→ Details (schema field meanings, Algorithm B canonical (4-state machine), atomic append safety, crash recovery, migration mapping, rationalization loopholes): [reference/dedup-and-discovery.md#per-site-crawl-memory](reference/dedup-and-discovery.md#per-site-crawl-memory)
+→ Details: [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#per-site-crawl-memory)
 
 ## Per-Source Ledger (MANDATORY)
 
-One ledger file per source per session. Created at Gate 3, populated at Gates 4-7, audited at Gate 8. Without a ledger, Gate 8 cannot pass.
+One ledger file per source per session, used by Coverage Gate (Gate 8). Without it, Gate 8 cannot pass. The row schema, lifecycle (Gates 4-7), and Coverage Gate algorithm are defined canonically in dedup-and-discovery.md.
 
-**Path**: `$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<session_id>.jsonl`
-
-Format: append-only JSONL, one row per line, < 1 KB per row. POSIX `open(path, 'a')` with session-lock as single-writer guarantee. Each L1 evaluation MUST write a row immediately (not lazily at end of batch).
-
-**Row schema** (canonical — use verbatim, do not rename fields):
-
-```json
-{
-  "id": "<deterministic id from identifier_kind strategy>",
-  "url": "<JD URL>",
-  "l1_outcome": "new_ingest|touch_only|ttl_recheck|manual_skip",
-  "ttl_state": "fresh|stale|na",
-  "fanout_check": "single|multi_subsidiary|na",
-  "classification": "included|excluded|ambiguous|na|pending",
-  "persist_status": "saved|touched|skipped|pending",
-  "terminal_state": "new_ingest|touch_only|ttl_recheck|manual_skip",
-  "ts": "<ISO8601>"
-}
-```
-
-`terminal_state` reuses Algorithm B's 4-enum (single source of truth — no parallel enum). `pending` is permitted only in `classification` and `persist_status` as in-flight transient values; by Gate 8 they MUST be terminal (non-`pending`).
-
-**Note**: `ledger_path` is NOT added to the `sources.yaml.crawl_state` schema. Ledger discovery uses filesystem listing (`crawl_state/<source>/ledger-<session_id>.jsonl`) — no pointer field needed.
-
-**Coverage Gate (Gate 8)** — for each source crawled in this session. Ledger is an append-only event log (id당 ~4 row across Gates 4-7); Coverage Gate audits the latest-by-id projection (`pickLatestByTs(rows)`).
-- **Check 1**: latest-by-id row count == `sources.yaml.<source>.crawl_state.audit_trail.total_discovered`
-- **Check 2**: every latest-by-id row's `terminal_state` ∈ {`new_ingest`, `touch_only`, `ttl_recheck`, `manual_skip`} (no `pending`)
-- Both checks PASS → release lock + record `batch_run_completed: true`
-- Either check FAIL → refuse lock release; require explicit user approval to set rows to `manual_skip` with reason
-
-Rationalization loopholes (forbidden):
-
-- "Skip the ledger, tasks alone are sufficient" — ❌ Ledger is the truth source for Coverage Gate. Without it, Gate 8 cannot pass.
-- "Append rows lazily at end of batch" — ❌ Each L1 evaluation MUST write a row immediately (crash-resumability requires it).
-- "`pending` for `terminal_state` when unsure" — ❌ `pending` only in `classification`/`persist_status`. By Gate 8, every `terminal_state` must be 4-enum.
-
-→ Details: [reference/dedup-and-discovery.md#per-source-ledger](reference/dedup-and-discovery.md#per-source-ledger)
+→ Details: [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#per-source-ledger)
 
 ## Detail Split Auto Fan-out (MANDATORY)
 
-When a single listing anchor leads to a detail page that contains multiple distinct positions, detect split signals and fan-out into N child JDs.
+**Detail Split Auto Fan-out** — when a posting page advertises N positions in a single anchor, split into N separate JD files with `parent_url` + `sub_position` (presence-coupled).
 
-**Strong signals** (fan-out MANDATORY):
-- (a) Explicit subsidiary or team headers present in the body (e.g., "토스뱅크", "Tech Team" as section headings)
-- (b) Separate sub-position sections each with distinct requirements
-- (c) Multiple distinct apply CTAs within the same page
-
-**Weak signals** (keep as single combined JD):
-- Simple "외 N개 계열사" text mention without separate content blocks
-
-**Fan-out procedure**: Produce one child JD per distinct position. Each child JD frontmatter must include:
-- `parent_url`: the original anchor URL (shared by all siblings)
-- `sub_position`: the subsidiary/team name for this child
-
-`role_title_verbatim` = `"<original_title> — <sub_position>"`. `role_title_slug` includes `sub_position`.
-
-**Presence-coupling rule**: `parent_url` and `sub_position` are presence-coupled — both present or both absent. A record with only one of the two is invalid.
-
-**Dedup impact**: L1 dedup operates on URL only (Algorithm B canonical). Siblings each have their own URL or URL+anchor distinction, so each sibling is a separate L1 entry by URL. Slug-level conflict (same `role_title_slug` across siblings) is L2's concern, not L1's. `parent_url` field is used for sibling relationship awareness only.
-
-**CRITICAL**:
-- Ignoring strong signals and saving as a single JD is forbidden.
-- Saving with `parent_url` present but `sub_position` absent (or vice versa) is forbidden.
-
-→ Details (strong/weak signal classification, fan-out procedure, presence-coupling, rationalization loopholes, counterexample): [reference/ingest-and-curation.md#detail-split-auto-fan-out](reference/ingest-and-curation.md#detail-split-auto-fan-out)
+→ Details: [reference/ingest-and-curation.md](reference/ingest-and-curation.md#detail-split-auto-fan-out)
 
 ## Identifier Kind Heuristic (MANDATORY)
 
-On first registration of a source, automatically infer the `identifier_kind` by sampling anchor URLs from the listing page.
+**Identifier Kind Heuristic (MANDATORY on first source registration)** — choose `id_query` / `url` / `fingerprint` based on URL pattern; silent default forbidden.
 
-**Heuristic algorithm**:
-1. Collect all anchor URLs from the listing page.
-2. Count how many match a monotonic-looking ID query pattern: `?<param>=\d+` (e.g., `?job_id=123`, `?posting_id=456`).
-3. If ≥ 80% of anchors match a single such param → `identifier_kind: id_query`, `identifier_extractor: <param_name>`.
-4. Else if anchor URLs remain stable across runs (no query drift) → `identifier_kind: url`, `identifier_extractor: null`.
-5. Else (URLs vary per run — query params added, reordered) → `identifier_kind: fingerprint`, `identifier_extractor: <hash spec, e.g., "role_title_verbatim + first_200_chars_of_body">`.
-
-**After heuristic**: Report result to user with match statistics. Example: "Detected `identifier_kind: id_query` with extractor `job_id` (218/236 anchors match `?job_id=\d+` pattern). Confirm or override?" Wait for user confirmation before writing to `sources.yaml`. User may override by editing `sources.yaml` directly.
-
-**CRITICAL**: Silent default (`url`) without running the heuristic is forbidden.
-
-→ Details (heuristic pseudocode, user report format, override procedure, rationalization loopholes, counterexample): [reference/dedup-and-discovery.md#identifier-kind-heuristic](reference/dedup-and-discovery.md#identifier-kind-heuristic)
+→ Details: [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#identifier-kind-heuristic)
 
 ## Phase 0: Profile Interview Required (MANDATORY)
 
