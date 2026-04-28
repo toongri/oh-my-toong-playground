@@ -363,6 +363,33 @@ config:
 
 Claude 어댑터만 `.claude/settings.local.json`에 기록합니다 (다른 플랫폼은 각자의 기본 경로 유지). Claude Code는 `settings.json`과 `settings.local.json`을 자동으로 병합하고, `settings.local.json`을 자동으로 gitignore합니다. 팀 관리 `settings.json`은 oh-my-toong이 수정하지 않습니다.
 
+### 기기별 프로젝트 화이트리스트 (`enabled-projects`)
+
+기기마다 활성화할 프로젝트를 제한하고 싶을 때 `config.local.yaml`의 `enabled-projects`를 사용합니다. 예를 들어 회사 Mac에는 업무 프로젝트만, 개인 Mac에는 사이드 프로젝트만 sync하도록 설정할 수 있습니다.
+
+```yaml
+# config.local.yaml (gitignore — 이 기기 전용)
+enabled-projects:
+  - my-work-project
+  - another-work-project
+```
+
+**우선순위**: CLI `--projects` > `config.local.yaml enabled-projects` > 전부 활성 (미선언 시 기존 동작 유지)
+
+**빈 배열 (`[]`)은 "전부 활성"으로 정규화됩니다.** 의도치 않게 모든 프로젝트를 막는 실수를 방지합니다.
+
+**루트 `sync.yaml`은 영향 받지 않습니다.** `enabled-projects`는 `projects/*/sync.yaml` 처리에만 적용되며, 루트 `sync.yaml`(글로벌 skills, agents 등)은 모든 기기에서 항상 실행됩니다. 이는 의도된 비대칭입니다.
+
+**선언되지 않은 프로젝트 이름은 warn + skip**됩니다 (디렉토리가 없는 경우).
+
+#### 기기 매트릭스 예시
+
+| 기기 | `config.local.yaml` | sync 대상 |
+|------|---------------------|-----------|
+| 회사 Mac | `enabled-projects: [work-api, work-frontend]` | work-api, work-frontend만 |
+| 개인 Mac | `enabled-projects: [side-project]` | side-project만 |
+| CI / 전체 sync | 미선언 (또는 파일 없음) | 모든 프로젝트 |
+
 ## 설치
 
 ### 사전 요구사항

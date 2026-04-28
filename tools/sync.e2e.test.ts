@@ -3,7 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 
-import { syncPlatformConfigs, createContext, type AdapterMap } from "./sync.ts";
+import { syncPlatformConfigs, createContext, runProjectsLoop, resolveProjectFilter, type AdapterMap } from "./sync.ts";
 import type { Platform, PlatformConfigResult, PlatformYaml, PluginScope } from "./lib/types.ts";
 import type { PlatformAdapter } from "./adapters/types.ts";
 import { _resetConfigCache } from "./lib/config.ts";
@@ -234,6 +234,83 @@ describe("4-platform overlay E2E", () => {
     expect(opencodeProviders).toContain("anthropic");
     expect(opencodeProviders).toContain("openai");
     expect(opencodeProviders.filter((v) => v === "anthropic")).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: enabled-projects 화이트리스트 E2E
+// ---------------------------------------------------------------------------
+
+describe("enabled-projects 화이트리스트 E2E", () => {
+  let tmpDir: string;
+  let rootDir: string;
+  let targetA: string;
+  let targetB: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "omt-e2e-enabled-"));
+    rootDir = path.join(tmpDir, "root");
+    targetA = path.join(tmpDir, "target-a");
+    targetB = path.join(tmpDir, "target-b");
+
+    await fs.mkdir(path.join(rootDir, "projects", "proj-a"), { recursive: true });
+    await fs.mkdir(path.join(rootDir, "projects", "proj-b"), { recursive: true });
+    await fs.mkdir(targetA, { recursive: true });
+    await fs.mkdir(targetB, { recursive: true });
+
+    // 각 프로젝트에 sync.yaml + claude.yaml 배치
+    await writeFile(
+      path.join(rootDir, "projects", "proj-a", "sync.yaml"),
+      `path: ${targetA}\n`,
+    );
+    await writeFile(
+      path.join(rootDir, "projects", "proj-a", "claude.yaml"),
+      "config:\n  model: claude-opus-4\n",
+    );
+    await writeFile(
+      path.join(rootDir, "projects", "proj-b", "sync.yaml"),
+      `path: ${targetB}\n`,
+    );
+    await writeFile(
+      path.join(rootDir, "projects", "proj-b", "claude.yaml"),
+      "config:\n  model: claude-sonnet-4-5\n",
+    );
+
+    _resetConfigCache();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  it("config enabled-projects: [proj-a] 설정 시 proj-b 어댑터는 호출되지 않음", async () => {
+    const effectiveFilter = resolveProjectFilter(new Set(), ["proj-a"]);
+    const adapters = makeSpyAdapterMap(["claude"]);
+    const context = createContext(true);
+
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+    const spy = adapters.getSpy("claude")!;
+    const calledPaths = spy.spyCalls.map((c) => c.targetPath);
+    expect(calledPaths).toContain(targetA);
+    expect(calledPaths).not.toContain(targetB);
+  });
+
+  it("missing 프로젝트 이름은 warn + skip (어댑터 호출 없음)", async () => {
+    // proj-missing은 디렉토리가 없음 — warn하고 스킵해야 함
+    const effectiveFilter = resolveProjectFilter(new Set(), ["proj-a", "proj-missing"]);
+    const adapters = makeSpyAdapterMap(["claude"]);
+    const context = createContext(true);
+
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+    const spy = adapters.getSpy("claude")!;
+    const calledPaths = spy.spyCalls.map((c) => c.targetPath);
+    expect(calledPaths).toContain(targetA);
+    // proj-missing은 어댑터 호출 없음 (targetB도 없음 — filter에 없으므로)
+    expect(calledPaths).not.toContain(targetB);
+    expect(calledPaths).toHaveLength(1);
   });
 });
 
