@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
-import { validateSyncYaml, validatePlatformYaml } from "./schema.ts";
+import { validateSyncYaml, validatePlatformYaml, validateSyncYamlPartial, validatePlatformYamlPartial, validateAll } from "./schema.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -568,6 +568,212 @@ mcps:
       const result = validatePlatformYaml(path, "claude");
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors.some((e) => e.includes("object 형식이어야 합니다"))).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateSyncYamlPartial
+// ---------------------------------------------------------------------------
+
+describe("validateSyncYamlPartial", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe("빈 파일 처리", () => {
+    it("빈 파일(0바이트)은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", "");
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("공백만 있는 파일은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", "   \n  \n");
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("부분 overlay 허용", () => {
+    it("path 필드만 있는 파일은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", `path: "/work/project"\n`);
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("skills 섹션만 있는 파일은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", `
+skills:
+  items:
+    - prometheus
+`);
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("유효하지 않은 YAML은 오류 반환", () => {
+    it("문법 오류가 있는 파일은 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", `path: [unclosed`);
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it("오류 메시지에 파일명이 포함된다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", `path: [unclosed`);
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors[0]).toContain("sync.local.yaml");
+    });
+  });
+
+  describe("기본 검증 유지", () => {
+    it("잘못된 플랫폼 값은 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", `
+platforms: [invalid-platform]
+`);
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors.some((e) => e.includes("invalid-platform"))).toBe(true);
+    });
+
+    it("알 수 없는 최상위 필드는 오류를 반환한다", () => {
+      const path = writeYaml(dir, "sync.local.yaml", `
+unknown-field: value
+`);
+      const result = validateSyncYamlPartial(path);
+      expect(result.errors.some((e) => e.includes("unknown-field"))).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validatePlatformYamlPartial
+// ---------------------------------------------------------------------------
+
+describe("validatePlatformYamlPartial", () => {
+  let dir: string;
+
+  beforeEach(() => {
+    dir = makeTempDir();
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe("빈 파일 처리", () => {
+    it("빈 파일(0바이트)은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", "");
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("공백만 있는 파일은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", "   \n");
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("부분 overlay 허용", () => {
+    it("config 섹션만 있는 claude.local.yaml은 오류 없이 통과한다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `
+config:
+  model: claude-opus
+`);
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("유효하지 않은 YAML은 오류 반환", () => {
+    it("문법 오류가 있는 파일은 오류를 반환한다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `config: [unclosed`);
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+    });
+
+    it("오류 메시지에 파일명이 포함된다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `config: [unclosed`);
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors[0]).toContain("claude.local.yaml");
+    });
+  });
+
+  describe("기본 검증 유지", () => {
+    it("hooks가 배열이면 오류를 반환한다", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `hooks: []`);
+      const result = validatePlatformYamlPartial(path, "claude");
+      expect(result.errors.some((e) => e.includes("hooks") && e.includes("object 형식"))).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateAll — local yaml 파일 탐색
+// ---------------------------------------------------------------------------
+
+describe("validateAll — local yaml 탐색", () => {
+  let rootDir: string;
+
+  beforeEach(() => {
+    rootDir = makeTempDir();
+    mkdirSync(join(rootDir, "projects", "my-project"), { recursive: true });
+    writeYaml(rootDir, "config.yaml", `defaults:\n  use-platforms: [claude]\n`);
+    writeYaml(rootDir, "sync.yaml", `path: /target\n`);
+  });
+
+  afterEach(() => {
+    rmSync(rootDir, { recursive: true, force: true });
+  });
+
+  describe("sync.local.yaml 탐색", () => {
+    it("루트 sync.local.yaml 빈 파일은 통과한다", () => {
+      writeYaml(rootDir, "sync.local.yaml", "");
+      const result = validateAll(rootDir);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("루트 sync.local.yaml 문법 오류는 실패한다", () => {
+      writeYaml(rootDir, "sync.local.yaml", `path: [unclosed`);
+      const result = validateAll(rootDir);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("sync.local.yaml"))).toBe(true);
+    });
+
+    it("projects 하위 sync.local.yaml 문법 오류는 실패한다", () => {
+      writeYaml(rootDir, join("projects", "my-project", "sync.yaml"), `path: /proj\n`);
+      writeYaml(rootDir, join("projects", "my-project", "sync.local.yaml"), `path: [unclosed`);
+      const result = validateAll(rootDir);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("sync.local.yaml"))).toBe(true);
+    });
+  });
+
+  describe("platform.local.yaml 탐색", () => {
+    it("루트 claude.local.yaml 빈 파일은 통과한다", () => {
+      writeYaml(rootDir, "claude.local.yaml", "");
+      const result = validateAll(rootDir);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("루트 claude.local.yaml 문법 오류는 실패한다", () => {
+      writeYaml(rootDir, "claude.local.yaml", `config: [unclosed`);
+      const result = validateAll(rootDir);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("claude.local.yaml"))).toBe(true);
+    });
+
+    it("루트 gemini.local.yaml 부분 파일은 통과한다", () => {
+      writeYaml(rootDir, "gemini.local.yaml", `config:\n  model: gemini-pro\n`);
+      const result = validateAll(rootDir);
+      expect(result.errors).toHaveLength(0);
     });
   });
 });

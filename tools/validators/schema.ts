@@ -267,6 +267,30 @@ function validateAgentItems(
 // sync.yaml validator
 // ---------------------------------------------------------------------------
 
+function validateSyncYamlData(data: Record<string, unknown>, filePath: string, result: ValidationResult): void {
+  const label = basename(dirname(filePath)) + "/sync.yaml";
+
+  for (const [section, message] of Object.entries(DEPRECATED_SYNC_SECTIONS)) {
+    if (section in data) {
+      result.errors.push(message);
+    }
+  }
+
+  for (const key of Object.keys(data)) {
+    if (!VALID_SYNC_TOP_LEVEL.has(key) && !(key in DEPRECATED_SYNC_SECTIONS)) {
+      result.errors.push(`${label}: 알 수 없는 최상위 필드 '${key}'`);
+    }
+  }
+
+  validatePlatformValues(data.platforms, "platforms", result);
+
+  validateSection(data.agents, "agents", result, VALID_AGENT_ITEM_FIELDS, validateAgentItems);
+  validateSection(data.commands, "commands", result, VALID_GENERIC_ITEM_FIELDS);
+  validateSection(data.skills, "skills", result, VALID_GENERIC_ITEM_FIELDS);
+  validateSection(data.scripts, "scripts", result, VALID_GENERIC_ITEM_FIELDS);
+  validateSection(data.rules, "rules", result, VALID_GENERIC_ITEM_FIELDS);
+}
+
 export function validateSyncYaml(filePath: string): ValidationResult {
   const result = makeResult();
 
@@ -282,30 +306,29 @@ export function validateSyncYaml(filePath: string): ValidationResult {
     return result;
   }
 
-  const label = basename(dirname(filePath)) + "/sync.yaml";
+  validateSyncYamlData(data, filePath, result);
 
-  // P2-3: Check for deprecated sections
-  for (const [section, message] of Object.entries(DEPRECATED_SYNC_SECTIONS)) {
-    if (section in data) {
-      result.errors.push(message);
-    }
+  return result;
+}
+
+export function validateSyncYamlPartial(filePath: string): ValidationResult {
+  const result = makeResult();
+
+  const parsed = parseYaml(filePath);
+  if (parsed.error) {
+    result.errors.push(parsed.error);
+    return result;
   }
 
-  // Check unknown top-level fields
-  for (const key of Object.keys(data)) {
-    if (!VALID_SYNC_TOP_LEVEL.has(key) && !(key in DEPRECATED_SYNC_SECTIONS)) {
-      result.errors.push(`${label}: 알 수 없는 최상위 필드 '${key}'`);
-    }
+  const data = parsed.data;
+  if (data === null || data === undefined) return result;
+
+  if (!isObject(data)) {
+    result.errors.push(`sync.yaml: 최상위 레벨은 map 이어야 합니다`);
+    return result;
   }
 
-  validatePlatformValues(data.platforms, "platforms", result);
-
-  // Validate each section
-  validateSection(data.agents, "agents", result, VALID_AGENT_ITEM_FIELDS, validateAgentItems);
-  validateSection(data.commands, "commands", result, VALID_GENERIC_ITEM_FIELDS);
-  validateSection(data.skills, "skills", result, VALID_GENERIC_ITEM_FIELDS);
-  validateSection(data.scripts, "scripts", result, VALID_GENERIC_ITEM_FIELDS);
-  validateSection(data.rules, "rules", result, VALID_GENERIC_ITEM_FIELDS);
+  validateSyncYamlData(data, filePath, result);
 
   return result;
 }
@@ -313,6 +336,40 @@ export function validateSyncYaml(filePath: string): ValidationResult {
 // ---------------------------------------------------------------------------
 // Per-platform YAML validator
 // ---------------------------------------------------------------------------
+
+function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPath: string, platform: string, result: ValidationResult): void {
+  const allowed = PLATFORM_ALLOWED_SECTIONS[platform];
+  if (!allowed) return;
+
+  for (const key of Object.keys(data)) {
+    if (!allowed.has(key)) {
+      result.warnings.push(`${platform}.yaml: 알 수 없는 섹션 '${key}' (지원: ${[...allowed].join(", ")})`);
+    }
+  }
+
+  if (data.hooks !== undefined && !isObject(data.hooks)) {
+    result.errors.push(`${platform}.yaml: hooks는 object 형식이어야 합니다`);
+  } else if (isObject(data.hooks)) {
+    for (const [event, value] of Object.entries(data.hooks)) {
+      if (!VALID_EVENTS.has(event)) {
+        result.errors.push(`${platform}.yaml: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
+      }
+      if (!isArray(value)) {
+        result.errors.push(`${platform}.yaml: hooks.${event}의 값은 배열이어야 합니다`);
+      }
+    }
+  }
+
+  if (data.mcps !== undefined && !isObject(data.mcps)) {
+    result.errors.push(`${platform}.yaml: mcps는 object 형식이어야 합니다`);
+  } else if (isObject(data.mcps)) {
+    for (const [name, value] of Object.entries(data.mcps)) {
+      if (!isObject(value)) {
+        result.errors.push(`${platform}.yaml: mcps.${name}의 값은 object이어야 합니다`);
+      }
+    }
+  }
+}
 
 export function validatePlatformYaml(platformYamlPath: string, platform: string): ValidationResult {
   const result = makeResult();
@@ -329,42 +386,29 @@ export function validatePlatformYaml(platformYamlPath: string, platform: string)
     return result;
   }
 
-  const allowed = PLATFORM_ALLOWED_SECTIONS[platform];
-  if (!allowed) return result;
+  validatePlatformYamlData(data, platformYamlPath, platform, result);
 
-  for (const key of Object.keys(data)) {
-    if (!allowed.has(key)) {
-      result.warnings.push(`${platform}.yaml: 알 수 없는 섹션 '${key}' (지원: ${[...allowed].join(", ")})`);
-    }
+  return result;
+}
+
+export function validatePlatformYamlPartial(platformYamlPath: string, platform: string): ValidationResult {
+  const result = makeResult();
+
+  const parsed = parseYaml(platformYamlPath);
+  if (parsed.error) {
+    result.errors.push(parsed.error);
+    return result;
   }
 
-  // Hooks validation: event name and event value type
-  if (data.hooks !== undefined && !isObject(data.hooks)) {
-    result.errors.push(`${platform}.yaml: hooks는 object 형식이어야 합니다`);
-  } else if (isObject(data.hooks)) {
-    for (const [event, value] of Object.entries(data.hooks)) {
-      if (!VALID_EVENTS.has(event)) {
-        result.errors.push(`${platform}.yaml: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
-      }
-      if (!isArray(value)) {
-        result.errors.push(`${platform}.yaml: hooks.${event}의 값은 배열이어야 합니다`);
-      }
-    }
+  const data = parsed.data;
+  if (data === null || data === undefined) return result;
+
+  if (!isObject(data)) {
+    result.errors.push(`${basename(platformYamlPath)}: object 형식이어야 합니다`);
+    return result;
   }
 
-  // mcps validation: each value must be an object
-  if (data.mcps !== undefined && !isObject(data.mcps)) {
-    result.errors.push(`${platform}.yaml: mcps는 object 형식이어야 합니다`);
-  } else if (isObject(data.mcps)) {
-    for (const [name, value] of Object.entries(data.mcps)) {
-      if (!isObject(value)) {
-        result.errors.push(`${platform}.yaml: mcps.${name}의 값은 object이어야 합니다`);
-      }
-    }
-  }
-
-  // NOTE: No hook component file existence checks here (P2-7).
-  // Hook validation lives exclusively in components.ts.
+  validatePlatformYamlData(data, platformYamlPath, platform, result);
 
   return result;
 }
@@ -405,13 +449,22 @@ export function validateAll(rootDir: string): ValidationResult {
     const syncResult = validateSyncYaml(syncYamlPath);
     mergeResult(result, syncResult);
 
-    // Validate co-located per-platform YAMLs
     const yamlDir = dirname(syncYamlPath);
+
+    const localSync = join(yamlDir, "sync.local.yaml");
+    if (existsSync(localSync)) {
+      mergeResult(result, validateSyncYamlPartial(localSync));
+    }
+
     for (const platform of VALID_PLATFORMS) {
       const platformYaml = join(yamlDir, `${platform}.yaml`);
       if (existsSync(platformYaml)) {
-        const platformResult = validatePlatformYaml(platformYaml, platform);
-        mergeResult(result, platformResult);
+        mergeResult(result, validatePlatformYaml(platformYaml, platform));
+      }
+
+      const platformLocalYaml = join(yamlDir, `${platform}.local.yaml`);
+      if (existsSync(platformLocalYaml)) {
+        mergeResult(result, validatePlatformYamlPartial(platformLocalYaml, platform));
       }
     }
   }
