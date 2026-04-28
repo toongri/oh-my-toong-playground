@@ -23,7 +23,6 @@ import {
   mergeResult,
   isObject,
   isArray,
-  parseYaml,
 } from "../lib/validation.ts";
 import { resolveComponentPath, setProjectContext } from "../lib/resolver.ts";
 import type { SyncYaml } from "../lib/types.ts";
@@ -180,14 +179,15 @@ export async function validateSyncYamlComponents(
 ): Promise<ValidationResult> {
   const result = makeResult();
 
-  const syncYaml = await readAndExpandSyncYaml(filePath);
-  if (syncYaml === null) {
-    const parsed = parseYaml(filePath);
-    if (parsed.error) {
-      result.errors.push(parsed.error);
-    }
+  let syncYaml;
+  try {
+    syncYaml = await readAndExpandSyncYaml(filePath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    result.errors.push(`YAML 파싱 오류 (${basename(filePath)}): ${msg}`);
     return result;
   }
+  if (syncYaml === null) return result;
 
   const data = syncYaml as unknown as Record<string, unknown>;
   if (!isObject(data)) return result;
@@ -326,7 +326,14 @@ export async function validatePlatformYamlHookComponents(
 
   // Only claude and gemini support hooks
   for (const platform of ["claude", "gemini"] as const) {
-    const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+    let merged;
+    try {
+      merged = await parseAndMergePlatformYaml(yamlDir, platform);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push(`YAML 파싱 오류 (${platform}.yaml): ${msg}`);
+      continue;
+    }
     if (merged === null) continue;
 
     const data = merged as unknown as Record<string, unknown>;
