@@ -607,7 +607,7 @@ crawl_state:
 
 **Migration note (2026-04-27 spec change)**: Earlier versions specified set-difference (`discovered − seen = new`) as the re-crawl algorithm. This was deprecated in favor of Algorithm B (L1 TTL canonical) due to the "stale forever" failure mode where seen items were never re-evaluated. Implementations following the old set-difference flow should migrate to Algorithm B; existing seen.jsonl data is forward-compatible (used as fast-lookup index).
 
-Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is `jobs/<source>/<slug>.md` frontmatter; seen.jsonl mirrors it for O(1) id lookup.
+Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is the JD file at `jobs/<company_slug>/<role_title_slug>-<YYMMDD>.md` whose `frontmatter.source` matches the current source key; seen.jsonl mirrors it for O(1) id lookup.
 
 #### Terminal States (L1 outcome)
 
@@ -690,7 +690,7 @@ digraph per_site_crawl_memory {
 
   start [label="source crawl start", shape=ellipse, style=filled, fillcolor=lightblue];
   load_seen [label="Load seen.jsonl\n→ build seenIds index (O(1) lookup)", style=filled, fillcolor=khaki];
-  load_l1 [label="Build L1 index from\njobs/<source>/ frontmatter", style=filled, fillcolor=khaki];
+  load_l1 [label="Build L1 index from\njobs/**/*.md\n(filter by frontmatter.source)", style=filled, fillcolor=khaki];
   drift_check [label="Drift detection\n(seen_hit+L1_miss / L1_hit+seen_miss)", shape=diamond];
   report_drift [label="Report integrity errors\n(do not silently ignore)", style=filled, fillcolor=salmon];
   fetch [label="listing fetch\n(Pagination Tier A/B)", style=filled, fillcolor=lightblue];
@@ -804,8 +804,8 @@ Gate 5 (L2 / TTL recheck)
             L2 is delegated to Gate 6 / Tier 1-3 ingest as part of the
             `fingerprint_check` save gate (see L2 Algorithm section, line 1040).
         Mapping:
-            L2 same:true  → touch_only
-            L2 same:false → new_ingest
+            L2 same:true  → terminal_state=touch_only, classification=na
+            L2 same:false → terminal_state=new_ingest, classification stays pending (Gate 6 갱신)
 Gate 6  → row appended (event 3): same id, fresh ts, fanout_check + classification updated
 Gate 7  → row appended (event 4): same id, fresh ts, persist_status set,
             terminal_state finalized

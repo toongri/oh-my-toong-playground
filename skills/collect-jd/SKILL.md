@@ -195,7 +195,7 @@ crawl_state:
 
 Each source records its id extraction strategy in `sources.yaml.<source>.crawl_state.seen` via two fields: `identifier_kind` (strategy enum) + `identifier_extractor` (param name for `id_query`, `null` for `url`, hash spec for `fingerprint`).
 
-**Re-crawl algorithm (Algorithm B canonical)**: Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is `jobs/<source>/<slug>.md` frontmatter; seen.jsonl mirrors it for O(1) id lookup.
+**Re-crawl algorithm (Algorithm B canonical)**: Every discovered URL goes through L1 evaluation. **No set-difference pre-filter.** seen.jsonl is an audit/fast-lookup index, NOT a pre-L1 exclusion gate. The truth source for `last_checked_at` is the JD file at `jobs/<company_slug>/<role_title_slug>-<YYMMDD>.md` whose `frontmatter.source` matches the current source key; seen.jsonl mirrors it for O(1) id lookup.
 
 For each discovered URL, L1 produces one of 4 **terminal states**:
 
