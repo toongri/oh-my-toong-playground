@@ -56,4 +56,49 @@ describe('normalizeUrl', () => {
     expect(normalizeUrl('https://example.com/j?lang=ko&jobId=123&utm_source=x'))
       .toBe(normalizeUrl('https://example.com/j?utm_source=y&jobId=123&lang=ko'));
   });
+
+  it('malformed URL returns null (no protocol)', () => {
+    expect(normalizeUrl('invalid-url')).toBeNull();
+  });
+
+  it('empty string returns null', () => {
+    expect(normalizeUrl('')).toBeNull();
+  });
+
+  it('URL without protocol returns null', () => {
+    expect(normalizeUrl('wanted.co.kr/jobs')).toBeNull();
+  });
+
+  it('query param order does not affect canonical form (keep + jobId)', () => {
+    const a = normalizeUrl('https://example.com/x?keep=y&jobId=123');
+    const b = normalizeUrl('https://example.com/x?jobId=123&keep=y');
+    expect(a).not.toBeNull();
+    expect(a).toBe(b);
+    // jobId < keep alphabetically
+    expect(a).toBe('https://example.com/x?jobId=123&keep=y');
+  });
+
+  it('mixed tracking + kept params are sorted alphabetically after tracking removal', () => {
+    // utm_source removed; remaining: wd=42, category=eng → alphabetical: category, wd
+    const result = normalizeUrl('https://jobs.example.com/p?wd=42&utm_source=email&category=eng');
+    expect(result).toBe('https://jobs.example.com/p?category=eng&wd=42');
+  });
+
+  describe('대소문자 동률 정렬 결정론성', () => {
+    it('`normalize_caseVariantKeys_isDeterministic`', () => {
+      // input A: A=1 먼저, input B: a=2 먼저 — 정규형이 동일해야 한다
+      const resultA = normalizeUrl('https://example.com/job?A=1&a=2');
+      const resultB = normalizeUrl('https://example.com/job?a=2&A=1');
+      expect(resultA).not.toBeNull();
+      expect(resultB).not.toBeNull();
+      expect(resultA).toBe(resultB);
+    });
+
+    it('`normalize_caseVariantTie_sortsByCodepoint`', () => {
+      // 코드포인트 순: 'A' (0x41) < 'a' (0x61) → A=1 이 a=2 앞에 와야 한다
+      const result = normalizeUrl('https://example.com/job?a=2&A=1');
+      expect(result).not.toBeNull();
+      expect(result).toContain('A=1&a=2');
+    });
+  });
 });

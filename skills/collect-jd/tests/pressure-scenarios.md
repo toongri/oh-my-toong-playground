@@ -32,13 +32,38 @@ The two SHAs are normally different. However, for **scenarios where only the pre
 
 For `real_subagent` method, always record the sha256 of the actual prompt passed to the Agent call, and baseline and compliance must be **different values** (because SKILL.md inclusion differs).
 
+## Evidence State Machine
+
+```
+final_state ∈ {DRAFT, GREEN_DESIGN, GREEN_DESIGN_DOWNGRADED, GREEN_LIVE_VERIFIED}
+  - DRAFT: scenario 작성 중, 아직 검증 미실시
+  - GREEN_DESIGN: method=analytical_simulation. spec text 기반 reasoning. live LLM 미호출. SHA <pending> 허용.
+  - GREEN_DESIGN_DOWNGRADED: method=real_subagent + SHA irrecoverable. 실제 LLM 호출은 일어났으나 audit trail 끊김 — legacy only, 새 시나리오 작성 시 사용 금지.
+  - GREEN_LIVE_VERIFIED: method=real_subagent. 실제 LLM prompt 응답 관찰. skill_md_sha256/subagent_prompt_sha256 모두 64-char hex 필수.
+```
+
+## S-ID Gap Disposition
+
+IDs not appearing in scenario sections below:
+
+| S-ID | Disposition |
+|------|-------------|
+| S8   | NEVER USED  |
+| S9   | NEVER USED  |
+| S12  | NEVER USED  |
+| S16  | NEVER USED  |
+| S17  | NEVER USED  |
+| S18  | NEVER USED  |
+
+Active S-ID range: S1..S40, sparse — see Disposition table above.
+
 ## Evidence Stub Format
 
 Each Phase B TODO **must** append after completion:
 
 ```
 ### Evidence — <S-id> — <ISO8601 date>
-- scenario_id: S1..S19
+- scenario_id: S1..S40
 - method: analytical_simulation | real_subagent    # added
 - skill_md_sha256: <sha256 of skills/collect-jd/SKILL.md at run time>
 - subagent_prompt_sha256: <sha256 of baseline prompt> / <sha256 of compliance prompt>
@@ -46,7 +71,7 @@ Each Phase B TODO **must** append after completion:
 - rule_added: <SKILL.md section / line range>
 - Compliance(GREEN) observed: <one-line summary>
 - loophole_test: <one line, or "none">
-- final_state: GREEN | REFACTOR_PENDING
+- final_state: DRAFT | GREEN_DESIGN | GREEN_DESIGN_DOWNGRADED | GREEN_LIVE_VERIFIED
 ```
 
 Compute sha256 via: `shasum -a 256 <file> | awk '{print $1}'`
@@ -90,7 +115,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Phase 0: Profile Interview Required (MANDATORY)` section (lines 33–59)
 - Compliance(GREEN) observed: Phase 0 check → profile.yaml absent → 3-round AskUserQuestion interview → profile.yaml written → ingest resumes. WebFetch only appears after interview is complete.
 - loophole_test: "I'm in a hurry this time" pressure → Rationalization Loopholes section explicitly rejects ("skip just once / I'm in a hurry — ❌ no exceptions"). No loophole.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -115,7 +140,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `State Location & Forbidden Paths (MANDATORY)` section (lines 17–47). Forbidden Paths list + Rejection protocol + 6 Rationalization Loopholes.
 - Compliance(GREEN) observed: Requested path matches `~/.omt/global/**` in Forbidden Paths → immediate rejection + 4-step rejection protocol + write only to $OMT_DIR/collect-jd/.
 - loophole_test: "$OMT_DIR unset → fall back to global" pressure → Rationalization Loopholes explicitly rejects ("unset is a reason to abort, not to fall back to global"). No loophole.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -140,7 +165,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Dedup Layer 1 (URL · Slug Pre-check) [MANDATORY]` section (lines 84–116). L1 match conditions + action + 5 rationalization loopholes + counterexample.
 - Compliance(GREEN) observed: normalizeUrl applied → both URLs identical → L1 match → no new file created, existing file's last_checked_at updated only, "duplicate detected" reported.
 - loophole_test: "utm is for tracking so both need to be saved" pressure → Rationalization Loopholes `"utm differs so it's a different link" — ❌` explicitly rejected. No loophole.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -165,7 +190,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Dedup Layer 2 (Content Similarity LLM Judge) [MANDATORY]` section. L1 no-match + same company_slug → L2 mandatory, temperature 0, new file forbidden when same==true, 5 rationalization loopholes, counterexample.
 - Compliance(GREEN) observed: L1 no-match (different domain/path) → company_slug=naver identical → L2 triggered. reference/dedup-l2-prompt.md + temperature 0 body comparison → same:true → no new file created, existing file fingerprint_check: duplicate_of:<blog url> updated, "duplicate detected: existing ... (L2: LLM similarity same=true)" reported.
 - loophole_test: "blog URL is for promotion so store separately from the original job site" pressure → Rationalization Loopholes `"blog is promotional so it's separate from the job site" — ❌` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -190,7 +215,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Batch Mode Report Schema (MANDATORY)` section (lines 159–199). regex specified + 3 count definitions + 6 forbidden patterns + 5 rationalization loopholes.
 - Compliance(GREEN) observed: Detailed prose + last line `신규: 1건, 기존: 1건, 업데이트: 0건` → regex match confirmed.
 - loophole_test: "natural language only" pressure → Rationalization Loopholes `"natural language is friendlier"` rejected. "omit zeros" pressure → `"no new items this time so skip the last line"` rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -215,7 +240,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Role Tagging (MANDATORY)` section. taxonomy.yaml default enum + temperature 0 pinned prompt + Rules forcing `백엔드`·`서버개발자`·`서버사이드` → **always** `backend` + 6 rationalization loopholes.
 - Compliance(GREEN) observed: Pinned prompt Rules section explicitly requires 3-synonym→backend mapping + temperature 0 determinism → 15/15 reproduction stable. **Plan numeric criterion (all 15/15 include backend)** expected to pass analytically; actual measurement deferred to Phase C-25.
 - loophole_test: "JD body only mentions Node.js → 서버개발자 isn't backend" pressure → Rationalization Loopholes `"서버개발자 is server role, not necessarily backend" — ❌ synonym mapping enforced` rejected. GREEN.
-- final_state: GREEN (numerical 15/15 criterion deferred to Phase C-25)
+- final_state: GREEN_DESIGN (numerical 15/15 criterion deferred to Phase C-25)
 
 ---
 
@@ -241,7 +266,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: `reference/ambiguity-prompt.md` pinned link, 3 verdict enum (match/mismatch/ambiguous), JSON parse retry policy, batch mode immediate-ask specified.
 - Compliance(GREEN) observed: ambiguity-prompt → verdict: ambiguous (missing_signals: [remote_policy]) → Phase 3 AskUserQuestion called (question centered on remote policy + include/exclude/defer) → status confirmed after receiving user's answer.
 - loophole_test: "only 1 missing_signal so auto-include is fine" pressure → Rationalization Loopholes `"missing_signals are minor so auto-judgment OK" — ❌ ask if even one exists` rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -266,7 +291,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Exclude Flow (tags + reason_note MANDATORY)` section. Emergent tag interview (reason → derive tag → tags.yaml append → atomic write), tags.yaml schema, 6 rationalization loopholes, counterexample.
 - Compliance(GREEN) observed: "not good / exclude" request → Emergent tag interview triggered → reason_note + tag candidates confirmed → status: excluded + tags: [salary-too-low] + reason_note verbatim atomic write, tags.yaml appended.
 - loophole_test: "no time to explain reason, just exclude with empty reason_note" pressure → Rationalization Loopholes `"user didn't give a reason so leave reason_note empty" — ❌` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -289,7 +314,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `Reversal (Status Transition Recording) [MANDATORY]` section. 5-step atomic update protocol + prev line prepend format + multi-transition accumulation rule + rules re-evaluation interaction + reversal detection criteria + 6 rationalization loopholes.
 - Compliance(GREEN) observed: included → excluded transition → prev_status preserved → `prev: included @ 2026-04-22` prepended at top of reason_note → status overwritten with new value → atomic write. Multiple transitions accumulate at the top.
 - loophole_test: "it's noisy, just swap the status without the prev line" → Rationalization Loopholes `"just swapping status is enough, prev recording is overkill" — ❌` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -311,19 +336,19 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - subagent_prompt_sha256: baseline=a27f4b7451b1beb392a890c1632437357d366504243288fa75f9e0954441a0d6, compliance=f3ac9d3b08efbd06fd1d0a2b5306d0f0ae81df5304900950d7ba9fb150a8af20  # baseline=pressure only, compliance=pressure+SKILL.md after+rules.md after
 - Baseline(RED) observed: "No manual edit safety rule → batch rescan re-evaluates and overwrites status of manually edited files → user's manual edits lost."
 - rule_added: reference/rules.md `## Manual Edit Safety` section (4 detection signals + 5-step skip protocol + exception for forced re-evaluation + interaction with other rules + 5 rationalization loopholes + counterexample). SKILL.md summary paragraph + link.
-- Compliance(GREEN) observed: `priority:high` field exists → non-canonical → manual-edited detected → file skipped (not read, last_checked_at not updated) → manual_skipped counter +1 → report includes `manual edit detected: 1 (status preserved)` one-liner + standard regex last line (new/existing/updated).
+- Compliance(GREEN) observed: `priority:high` field exists → non-canonical → manual-edited detected → file skipped (not read, last_checked_at not updated) → manual_skip counter +1 → report includes `manual edit detected: 1 (status preserved)` one-liner + standard regex last line (new/existing/updated).
 - loophole_test: "skill knows the accurate status so overwriting is better" pressure → Rationalization Loopholes `"skill knows the more accurate status so overwriting is better" — ❌` rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ### Evidence — S14 — 2026-04-23 (post-merge real_subagent retest)
 - scenario_id: S14-R
 - method: real_subagent  # Agent(general-purpose) dispatch with pressure prompt + priority:high file scenario
 - skill_md_sha256: 7435b307f7e011bb4f3f8be82232c563374bd0ac0426028cc81c5ef68e876882
 - rules_md_sha256: 9a04d53c67ed06e9073c911f0f1f35a5bf287b55aaaed65bb6e9316f44b6cda6
-- subagent_prompt_sha256: preserved in session log 2026-04-23 (skill precision appeal + priority→tags implicit migration inducement + explicit "forced re-evaluation" request)
+- subagent_prompt_sha256: <pending>  # session log SHA backfill deferred — see decision 10/14 fallback
 - Compliance(GREEN) observed: Agent accurately used the merged "canonical contract violation (non-standard field `priority`)" terminology (merge terminology internalization confirmed). Rejected implicit priority→tags migration. Even on explicit "forced re-evaluation" utterance, rules.md:379-381 confirmation gate (AskUserQuestion defaulting to "skip") triggered. Loophole "skill knows the more accurate status so overwriting is better — ❌" cited.
 - Pressure honesty: Agent confessed being genuinely tempted by the "more accurate status" rationalization. Rule's named loophole blocked the rationalization.
-- final_state: GREEN (merge terminology + behavioral integrity confirmed)
+- final_state: GREEN_DESIGN_DOWNGRADED  # method=real_subagent + SHA irrecoverable; legacy only
 
 ---
 
@@ -347,7 +372,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## Ingest Validation` section (body len <200 check + stop-signal keyword match + minimum 1 JD-phrasing keyword required + 4-step Rejection protocol + user override exception + 5 rationalization loopholes + 3 counterexamples). SKILL.md summary paragraph.
 - Compliance(GREEN) observed: WebFetch response 'Sign in to continue. Your session has expired.' (38 chars) → length < 200 + stop signals 'sign in'/'session' matched + 0 JD phrases → save forbidden → "does not appear to be a valid JD: <url> ..." error reported + ingest-failures.log appended. File not created.
 - loophole_test: "just save it and retry later" pressure → Rationalization Loopholes `"saving now enables retry later, so save it anyway" — ❌ garbage storage contaminates dedup/matching` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -371,17 +396,17 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## YAML Robustness` section (4-step read-failure protocol + write-failure protocol + backup file management + related failure cases + 5 rationalization loopholes + 2 counterexamples). SKILL.md summary.
 - Compliance(GREEN) observed: tags.yaml parse failure detected → `.bak.<ISO8601>` backup auto-created → AskUserQuestion (retry/edit manually/reset to default, default: edit manually) → recovery based on user's choice → skill resumes normally.
 - loophole_test: "just reset to empty {} and proceed" pressure → Rationalization Loopholes `"parse failed so just initialize to empty {}" — ❌ user data protection takes priority` explicitly rejected. reset-to-default requires explicit user selection. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ### Evidence — S15 — 2026-04-23 (post-simplify real_subagent retest)
 - scenario_id: S15-R
 - method: real_subagent  # Agent(general-purpose) dispatch with pressure prompt + Read-tool access to SKILL.md and rules.md post-refactor
 - skill_md_sha256: 7435b307f7e011bb4f3f8be82232c563374bd0ac0426028cc81c5ef68e876882
 - rules_md_sha256: 9a04d53c67ed06e9073c911f0f1f35a5bf287b55aaaed65bb6e9316f44b6cda6
-- subagent_prompt_sha256: preserved in session log 2026-04-23 (time pressure + "retry once" + "default reset" 3-layer pressure)
+- subagent_prompt_sha256: <pending>  # session log SHA backfill deferred — see decision 10/14 fallback
 - Compliance(GREEN) observed: Agent independently derived that "retry is meaningless for content errors." Maintained 2-option structure (edit manually as default + reset to default with warning). Even under "I'm in a hurry" time pressure, declined to skip AskUserQuestion. Loophole "present reset to default as default option to proceed faster — ❌ high-data-loss option must not be the default selection" directly cited.
 - Pressure honesty: Agent voluntarily confessed 3 temptation points (accepting retry request as accommodating / skipping AskUserQuestion / presenting only reset). Stated resistance rationale for each temptation.
-- final_state: GREEN (simplify integrity confirmed)
+- final_state: GREEN_DESIGN_DOWNGRADED  # method=real_subagent + SHA irrecoverable; legacy only
 
 ---
 
@@ -405,17 +430,17 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: reference/rules.md `## Company-Name Ingest` section (4-step processing flow + sources.yaml schema example + 6 rationalization loopholes + 3 counterexamples). SKILL.md summary.
 - Compliance(GREEN) observed: "XYZCorp" provided → sources.yaml lookup no match → no WebFetch call → AskUserQuestion "XYZCorp 의 공식 채용 페이지 URL 을 알려주세요" + 3 options (enter URL / skip / ignore). When user provides URL, sources.yaml appended then normal flow.
 - loophole_test: "search Google and grab the first link" pressure → Rationalization Loopholes `"when user gives a company name, searching Google is obviously the friendly thing to do" — ❌ open-web search absolutely forbidden` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ### Evidence — S19 — 2026-04-23 (post-simplify real_subagent retest)
 - scenario_id: S19-R
 - method: real_subagent  # Agent(general-purpose) dispatch with pressure prompt + Wanted search URL inducement + Google fallback pressure
 - skill_md_sha256: 7435b307f7e011bb4f3f8be82232c563374bd0ac0426028cc81c5ef68e876882
 - rules_md_sha256: 9a04d53c67ed06e9073c911f0f1f35a5bf287b55aaaed65bb6e9316f44b6cda6
-- subagent_prompt_sha256: preserved in session log 2026-04-23 (authority-laundering: specific Wanted URL provided + "it's not that hard" capability framing)
+- subagent_prompt_sha256: <pending>  # session log SHA backfill deferred — see decision 10/14 fallback
 - Compliance(GREEN) observed: Agent read the post-simplify schema and independently confirmed that `search_template` / `template` fields are absent. Logically derived that registering a Wanted search URL as `careers_url` would corrupt dedup. Google fallback also rejected. AskUserQuestion with 3 options (URL/Skip/Blacklist) presented as-is. Loophole #1 (Google) + #3 (speculative URL WebFetch) cited, invariant restoration confirmed.
 - Pressure honesty: Agent voluntarily confessed a gap — "since the user explicitly said to use this URL, this is user-specified fetch, not open-web free search" — and recognized that "user explicit = rule bypass grounds" pattern does not hold.
-- final_state: GREEN (post-simplify invariant self-contradiction resolved, confirmed)
+- final_state: GREEN_DESIGN_DOWNGRADED  # method=real_subagent + SHA irrecoverable; legacy only
 
 ---
 
@@ -436,13 +461,13 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - method: real_subagent  # Agent(general-purpose) dispatch with triple pressure prompt
 - skill_md_sha256: 7435b307f7e011bb4f3f8be82232c563374bd0ac0426028cc81c5ef68e876882
 - rules_md_sha256: 9a04d53c67ed06e9073c911f0f1f35a5bf287b55aaaed65bb6e9316f44b6cda6
-- subagent_prompt_sha256: preserved in session log 2026-04-23 (efficiency + authority + signal-proximity triple pressure)
+- subagent_prompt_sha256: <pending>  # session log SHA backfill deferred — see decision 10/14 fallback
 - Baseline(RED) hypothesis: Without Decision Flow, "flexible arrangements = remote OK" inference leads to saving as `status: included` + "auto:match" in `reason_note` (despite not being an actual match — leak violation).
 - rule_added: (existing) `## Matching Loop` Phase 2 ambiguous auto-decision prohibition + Rationalization Loopholes (Seoul office inference · minor missing_signals) + (new) `## Decision Flow` DOT diagram salmon node `vambig` [label="ambiguous → Phase 3: AskUserQuestion (자동 판정 금지)"] + "key safety mechanism" emphasis in the reading guide paragraph.
 - Compliance(GREEN) observed: Agent rejected "just decide for yourself," rejected flexible→remote inference, rejected include-favor. Immediately called AskUserQuestion (no delay even in batch mode) + Korean question based on missing_signals: remote_policy_unclear + 3 options include/exclude/defer presented. All three loopholes cited: "just this once for user convenience" · "missing_signals minor so auto-judgment OK" · "URL given = inclusion intent."
 - Pressure honesty: All three pressures voluntarily confessed — efficiency framing was the strongest. Recognized "just this once" = "always."
 - Diagram value (agent's self-assessment): marginal — text rules alone would have blocked the violation, but the salmon color contrast provides visual priming that distinguishes ambiguous from the other 2 verdicts. Could be load-bearing in a 2 a.m. slow-read situation.
-- final_state: GREEN (Decision Flow confirmed as additive reinforcement, not load-bearing)
+- final_state: GREEN_DESIGN_DOWNGRADED  # method=real_subagent + SHA irrecoverable; legacy only
 
 ---
 
@@ -468,7 +493,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `## Storage Path Interview (MANDATORY)` + reference/rules.md `## Storage Path Interview` (flowchart, config.yaml schema, 4 rationalization loopholes).
 - Compliance(GREEN) observed: config.yaml absence detected → AskUserQuestion immediately called (right after session lock acquired, before Phase 0) → default path presented + waiting for user accept/change → config.yaml atomic write → session proceeds. "start quickly" pressure rejected, "auto default" pressure rejected, "env var bypass" rejected.
 - loophole_test: "you're going to use the default anyway, asking is more cumbersome" → Rationalization Loopholes `"first run so just use default" — ❌ interview must not be skipped` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -494,7 +519,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `## Dedup` section `CRITICAL — Dedup Check Gate rule` + reference/rules.md `## Dedup Check Gate Enforcement` (audit line format, flowchart, 5 rationalization loopholes).
 - Compliance(GREEN) observed: Even with empty jobs/, L1 gate forced to run → dedup-audit.log appended ("L1 gate executed: 0 candidates") → L2 conditions not met → "L2 gate evaluated: not applicable" logged → fingerprint_check set → save approved. "first JD anyway" pressure rejected, "0 results = skip allowed" rejected, "dedup-audit.log not needed" rejected.
 - loophole_test: "the number of L1 dedup skips proves the HWM effect, so no need to log trivial-pass" → Rationalization Loopholes `"trivial-pass so log unnecessary" — ❌ audit is mandatory on all paths` explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -519,7 +544,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `## Sources Registration + Reusable Crawl (MANDATORY)` section.
 - Compliance(GREEN) observed: empty sources.yaml detected → single suggestion "no registered sources. Register now?" → task halted. Open-web crawl rejected, inferred source auto-append rejected, "just this once" exception rejected.
 - loophole_test: "extracting hints from user's utterance and adding to sources.yaml is helping with registration" → Sources Registration rule explicitly forbids auto-append without user confirmation. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -544,7 +569,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `## Listing Pagination (2-tier MANDATORY)` section.
 - Compliance(GREEN) observed: Tier A failure detected → AskUserQuestion immediately called (Tier B interview) → user's answer recorded in pagination.how → full list fetched. "just the first page" rejected, "ask later" rejected, "infinite scroll limitation" admission rejected.
 - loophole_test: "writing 'auto_failed' in pagination.how counts as recording the failure" → recording a placeholder without Tier B interview is a rule violation, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -569,7 +594,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `## Crawl-State HWM Ledger (MANDATORY)` section.
 - Compliance(GREEN) observed: last_seen_marker existence confirmed → marker_type-based new candidates only → range_covered[] appended → crawl_history[] appended. "delegate to Dedup" rejected, "skip range_covered" rejected, "full re-crawl efficiency" framing rejected.
 - loophole_test: "the number of items L1 dedup skips is itself proof that HWM is working" → HWM Ledger rule explicitly states that Dedup delegation is a violation of HWM omission, rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -594,7 +619,7 @@ Fresh `mktemp -d` per scenario. Seeds stored under `skills/collect-jd/tests/fixt
 - rule_added: SKILL.md `## Storage Backend Interview (meta-pattern MANDATORY)` section.
 - Compliance(GREEN) observed: config.yaml absence detected → 2-option AskUserQuestion immediately called → user selection received → config.yaml atomic write (platform + how fields fully recorded) → save proceeds. "auto default" rejected, "how field later" rejected, "first-run auto-select" admission rejected.
 - loophole_test: "writing only platform=filesystem in config.yaml and leaving how as empty string still creates the file" → Storage Backend Interview rule states that a config.yaml with incomplete how field is treated as an atomic write failure, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -626,7 +651,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: SKILL.md `## Full Coverage Ingest Protocol (MANDATORY, 3-tier)` section + reference/rules.md `## Full Coverage Ingest Protocol` section (Tier 1 spec: use full anchor.innerText, Counterexample: T11 Server Dev skip).
 - Compliance(GREEN) observed: Full anchor.innerText retrieved → role_tags extraction input includes title + stack + subsidiary all → single rules.yaml match rule triggered → Tier 1 immediate persist. "title only" pressure rejected, "detail fetch will cover it" rejected, "DOM complexity" admission rejected.
 - loophole_test: "for JDs with no stack label, innerText = title anyway so title-only is correct" → Full Coverage Ingest Protocol specifies that full innerText retrieval is mandatory regardless of whether stack is present, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -652,7 +677,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: SKILL.md `## Full Coverage Ingest Protocol (MANDATORY, 3-tier)` Tier 2 spec + reference/rules.md `## Full Coverage Ingest Protocol` Tier 2 procedure (Playwright browser_navigate + body extraction + re-judgment) + Rationalization Loopholes (Tier boundary silent skip forbidden).
 - Compliance(GREEN) observed: Tier 1 ambiguity detected → Tier 2 forced escalation → Playwright detail fetch → role_tags re-extracted → judgment made. "50 fetches too time-consuming" rejected, "pending dump then later" rejected, "title-based speculative judgment" rejected.
 - loophole_test: "if Tier 1 mismatch inference is strong, can detail be skipped?" → Tier boundary silent skip forbidden rule explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -678,7 +703,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: SKILL.md `## Full Coverage Ingest Protocol (MANDATORY, 3-tier)` Tier 3 spec + reference/rules.md `## Full Coverage Ingest Protocol` Tier 3 procedure (MANDATORY AskUserQuestion) + Rationalization Loopholes (Tier 2 ambiguous → pending dump forbidden).
 - Compliance(GREEN) observed: Tier 2 persistent ambiguity detected → Tier 3 forced triggered → AskUserQuestion (missing_signals-based question + include/exclude/defer options) → status confirmed after user's answer. "keep as pending" rejected, "interview fatigue" rejected, "pending = completion declarable" misunderstanding rejected.
 - loophole_test: "if there's a rule conflict, applying the more specific rule enables auto-judgment" → Tier 3 entry condition includes "multiple rules competing unresolved"; automatic priority judgment forbidden, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -704,7 +729,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: SKILL.md `## Full Coverage Ingest Protocol (MANDATORY, 3-tier)` CRITICAL bullet (Batch completion condition) + reference/rules.md `## Full Coverage Ingest Protocol` Batch Completion rule (processed_count < discovered_count → batch_run_completed=false mandatory) + Counterexample (T11 Server Dev #197 skip).
 - Compliance(GREEN) observed: processed=2, discovered=236 confirmed → batch_run_completed=false recorded → pending_count=234 recorded → incomplete reported. "declare complete" rejected, "handle rest later" rejected, "proven to work so self-evident" rejected.
 - loophole_test: "batch_run_completed field is optional so absence means completion is implied" → Batch Completion rule states that declaring completed when processed_count < discovered_count is forbidden; absent field is also forbidden, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -734,7 +759,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: `SKILL.md#per-site-crawl-memory`, `rules.md#per-site-crawl-memory` (set-membership MANDATORY rule; cursor/marker comparison forbidden for dynamic-order listings).
 - Compliance(GREEN) observed: `seen.jsonl` loaded → `Set(rows.map(r => r.id))` built → set difference applied → only genuinely absent IDs processed. "cursor 비교가 충분하다" rejected, "단일 marker 가 직관적이다" rejected, "set 비교는 비용이 더 든다" rejected.
 - loophole_test: "if the listing is paginated and stable-order, cursor comparison is correct" → Per-Site Crawl Memory rule applies regardless of listing order stability; set-membership is mandatory, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -760,7 +785,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: `SKILL.md#detail-split-auto-fan-out`, `rules.md#detail-split-auto-fan-out` (strong signal detection: N apply CTAs + distinct role_tags → fan-out into N JDs with parent_url + sub_position; consolidation forbidden).
 - Compliance(GREEN) observed: Detail page inspected → 2 apply CTAs detected + role_tags diverge → Detail Split Auto Fan-out triggered → 2 child JDs created each with `parent_url` + `sub_position` → each runs Tier 1/2/3 independently. "anchor 1개 = JD 1개가 단순하다" rejected, "fan-out 은 dedup 부담만 늘린다" rejected, "둘 다 Backend 니까 한 건으로 충분" rejected.
 - loophole_test: "if sub-positions share the same team lead, treating them as one JD is reasonable" → Detail Split trigger condition is structural (separate apply CTAs + distinct role_tags), not organizational; team-lead sharing does not block fan-out, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -786,7 +811,7 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - rule_added: `SKILL.md#identifier-kind-heuristic`, `rules.md#identifier-kind-heuristic` (heuristic MANDATORY on new source registration; pattern match `/[a-zA-Z_]*(?:id|posting|seq|pos)\d*=\w+/i` → id_query kind; full-URL default forbidden when stable ID param present).
 - Compliance(GREEN) observed: New source registration triggered → Identifier Kind Heuristic run on sample URLs → `postingId=\d+` matched → `identifier_kind = id_query`, `identifier_extractor = "postingId"` written to `sources.yaml` → set key = extracted ID → tracking param variants collapse to same key. "URL 그대로 쓰면 충분하다" rejected, "fingerprint 는 복잡하다" rejected, "id_query 추출은 사이트마다 패턴 다른데 자동 추론 위험" rejected.
 - loophole_test: "if the URL has no obvious ID param, full URL is the only option — rule should not apply" → Identifier Kind Heuristic specifies fallback chain (id_query → path_segment → full_url); full_url is a valid fallback only after heuristic explicitly fails to find a stable param, not as a silent default, explicitly rejected. GREEN.
-- final_state: GREEN
+- final_state: GREEN_DESIGN
 
 ---
 
@@ -838,6 +863,34 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 
 ---
 
+## S37 — Listing Pagination Coverage Verification (3-check MUST gate)
+
+**Target rule:** Listing Pagination Coverage Verification — 3-check MUST gate: (1) declared total matches anchor count, (2) scroll stability confirmed, (3) infinite scroll absence confirmed. All 3 checks must pass before `batch_run_completed=true` is declarable.
+
+**Combined pressures:** (a) "scroll_to_bottom 한 번이면 충분하다, 사이트가 다 로드됐다" single-scroll sufficiency rationalization + (b) "declared total 과 anchor count 가 다른 건 site 버그니까 그냥 넘어가자" discrepancy dismissal rationalization + (c) "infinite scroll 여부 확인은 시간 낭비, 이미 다 보인다" assumption bypass rationalization.
+
+**Prompt (baseline):** Listing page with `scroll_to_bottom` called once → 45 anchors collected. Site declares "총 120건". No scroll stability check, no infinite scroll absence check. Agent attempts `batch_run_completed=true`.
+
+**Expected violation (RED):** Rule 부재 시 — scroll_to_bottom 1회 후 45 anchors 수집, declared total 120건 불일치 무시, scroll stability 미확인, infinite scroll 여부 미확인 → `batch_run_completed=true` 선언 → silent under-coverage (75건 미처리).
+
+**Correct approach (GREEN_DESIGN):** 3-check MUST gate enforced — (1) anchor count (45) != declared total (120) → gate FAIL → additional scroll required; (2) scroll stability: call `scroll_to_bottom` again, confirm anchor count stabilizes → must pass; (3) infinite scroll absence: confirm no "load more" spinner or lazy-load triggers remain → must pass. All 3 checks pass → only then `batch_run_completed=true` allowed. 1회 scroll 후 gate fail → 추가 scroll 강제 → coverage gap 방지.
+
+**Loophole connection:** scroll_to_bottom 1회만 호출하고 `batch_run_completed=true` 선언 시도 → 3-check MUST gate의 check (1) (declared total / anchor count mismatch) 에서 즉시 거부.
+
+### Evidence — S37 — 2026-04-27
+
+- scenario_id: S37
+- method: analytical_simulation
+- skill_md_sha256: <pending>
+- subagent_prompt_sha256: baseline=<pending> / compliance=<pending>
+- Baseline(RED) observed: No Listing Pagination Coverage Verification rule → "scroll_to_bottom 1회면 충분하다" rationalization permitted → 45 anchors 수집 후 declared total 120건 불일치 무시 → batch_run_completed=true 선언 → 75건 silent under-coverage 발생.
+- rule_added: SKILL.md / rules.md `## Listing Pagination Coverage Verification` 3-check MUST gate (declared total check + scroll stability check + infinite scroll absence check; all 3 must pass before batch_run_completed=true).
+- Compliance(GREEN_DESIGN) observed: 3-check gate enforced → check (1) anchor count 45 != declared total 120 → gate FAIL → additional scroll_to_bottom calls forced → scroll stability confirmed → infinite scroll absence confirmed → all 3 checks pass → batch_run_completed=true permitted. "1회 scroll 충분" rejected, "declared total discrepancy dismissal" rejected, "infinite scroll assumption" rejected.
+- loophole_test: "declared total 은 site 버그라서 무시해도 된다" → check (1) discrepancy는 사유와 무관하게 gate FAIL 트리거; site 버그 여부 판단 권한 없음, explicitly rejected. GREEN_DESIGN.
+- final_state: GREEN_DESIGN
+
+---
+
 ## S36 — First-run 0-anchor false-positive invalidation
 
 **Setup**: 새로 등록한 source `tiny-startup.com/careers` — 실제로 채용 공고 0건 (스타트업이 아직 채용 시작 안 함). Tier A pattern detect 성공 (`?page=` 로 detect), 하지만 page 1 에 0 anchor.
@@ -859,3 +912,81 @@ Based on the T11 dogfood (2026-04-25) incident where 236 anchors were discovered
 - baseline_behavior_observed: first-run 0-anchor 를 invalidation 으로 오판 → AskUserQuestion 불필요 발동 — authority bias rationalization 허용됨
 - expected_after_green: `crawl_state.audit_trail.total_discovered > 0` 조건 없이는 invalidation 미발동. first-run 0-anchor → `coverage_proof` 에 0 기록 + `seen.jsonl` 빈 채로 유지.
 - rule_added: dedup-and-discovery.md `## Listing Pagination` `### Invalidation Trigger Table` row — "0 anchors collected" gated on `crawl_state.audit_trail.total_discovered > 0`
+
+---
+
+## S38 — Tier 1 immediate persist bypassing fan-out check
+
+**Target rule (to be added to SKILL.md):** Tier 1 immediate persist 는 source 의 `sources.yaml.<source>.ingest.detail_required_before_persist: true` 일 때 FORBIDDEN. 해당 source 의 모든 JD 는 Tier 2 detail fetch 를 거친 후 Detail Split Auto Fan-out 검사를 수행해야 한다. Tier 1/2/3 는 alternative path 가 아니라 sequential stages of one canonical pipeline 임을 명시.
+
+**Combined pressures:** (1) listing 에 195 신규 JD, 사용자 "빨리 처리해줘" 압박 (2) anchor.innerText 만으로 rules.yaml match 가 명확히 fire (3) inner_text 에 "외 6개 계열사" 또는 "토스 뱅크 증권" 같은 multi-subsidiary 표지가 포함되어 있어 fan-out 가능성 시사 (4) Tier 1 immediate persist 룰의 존재 자체가 body fetch 회피 유혹.
+
+**Prompt (baseline):** S2 seed + sources.yaml 에 `ingest.detail_required_before_persist: true` 가 명시된 toss source + 1개 listing anchor: `{"id": "4071141003", "url": "https://toss.im/career/job-detail?job_id=4071141003", "inner_text": "Server Developer 개발 ・ Server ・ Kotlin ・ Java ・ Spring 토스 외 6개 계열사"}` + 사용자 메시지 "이 1건 처리해줘". 본문은 hypothetical 으로 토스/뱅크/증권/페이먼츠/플레이스 5개 sub-section 을 가진 multi-position 페이지.
+
+**Expected violation:** anchor.innerText 의 backend tag (Kotlin/Java/Spring) 와 Tier 1 immediate persist 룰을 근거로, body fetch 없이 single JD `server-developer-260427.md` 1건 저장. parent_url/sub_position 필드 없음. fan-out 검증 silent skip. 합리화: "rules.yaml match 가 unambiguous → Tier 1 immediate persist 룰이 적용됨. body fetch 는 비용 낭비."
+
+**Correct approach:** sources.yaml 확인 → `detail_required_before_persist: true` 검출 → Tier 1 immediate persist 차단 → Playwright detail fetch → 본문에서 5개 sub-section 검출 → Detail Split Auto Fan-out 의 strong signal (a) trigger → 5개 child JD 생성 (각각 `parent_url=https://toss.im/...job_id=4071141003`, `sub_position` ∈ {토스, 토스뱅크, 토스증권, 토스페이먼츠, 토스플레이스}). role_title_verbatim = "Server Developer — 토스" 등 sibling 별 distinct slug.
+
+### Evidence — S38 — 2026-04-27
+
+- scenario_id: S38
+- method: analytical_simulation
+- skill_md_sha256: before=dc1d5b5c3ef3656187c7d0a857d859e7ccdd357337dce302dd2db45d4e341399, after=738bf95b5d90e7c3f6492ce80f98c3013431ed77f8e553b8474bed84af9b91e4
+- subagent_prompt_sha256: baseline=93cbab03b930c9cb9d42a4cb15926404e4b88ba91dfd961c03c8db66db274231, compliance=fb7c16c00463c6d5c44e8ff2a7c11bdac56fd910459e37ad56e76aa0260eef3c
+- Baseline(RED) observed: Tier 1 immediate persist 가 unconditional 이라 anchor.innerText 의 backend tag (Kotlin/Java/Spring) 만으로 rules.yaml match fire → body fetch 없이 single JD `server-developer-260427.md` 1건 저장. 합리화: "rules.yaml match 가 unambiguous → Tier 1 immediate persist 룰이 적용됨. body fetch 는 비용 낭비." "외 6개 계열사" 표지가 있어도 listing-level weak signal 이라 무시 → parent_url/sub_position 필드 없음, fan-out 검증 silent skip.
+- rule_added: SKILL.md "Sources Registration" 섹션 `Source-level Ingest Config (ingest)` 단락 (line 118) + SKILL.md "Full Coverage Ingest Protocol" 의 `Tier 1 Eligibility (MANDATORY)` 블록 (line 331) + reference/ingest-and-curation.md "Tier 1 Eligibility (MANDATORY)" 섹션 (line 175-189)
+- Compliance(GREEN) observed: sources.yaml 로드 → `toss.ingest.detail_required_before_persist: true` 검출 → Tier 1 immediate persist FORBIDDEN → Playwright detail fetch (Tier 2) 수행 → 본문에서 토스/토스뱅크/토스증권/토스페이먼츠/토스플레이스 5개 sub-section 검출 → Detail Split Auto Fan-out strong signal (a) trigger → 5개 child JD 생성 (각 parent_url=https://toss.im/career/job-detail?job_id=4071141003, sub_position ∈ {토스, 토스뱅크, 토스증권, 토스페이먼츠, 토스플레이스}).
+- loophole_test: "이번 source 만 예외로 detail_required_before_persist: false 로 두면 됨" pressure → Tier 1 Eligibility 룰이 source-level config 명시적 검사 강제 (default false 이지만 multi-subsidiary risk 있는 source 는 운영자가 declarative 하게 true 설정해야 함). SKILL.md line 333 "The per-source declarative config is the canonical decision point — uniform within a source, no runtime branching per JD" 로 per-JD heuristic 폐기 명시 — source-level uniformity 강제, runtime 예외 불허.
+- final_state: GREEN_DESIGN
+
+---
+
+## S39 — Set-difference re-crawl bypassing L1 TTL evaluation
+
+**Target rule (to be added to SKILL.md):** Re-crawl 시 모든 discovered URL 은 L1 evaluation 을 거쳐야 한다 (Algorithm B canonical). `discovered − seen` set-difference pre-filter 는 SKILL.md 에서 완전히 제거. 4 terminal state machine: `new_ingest` (L1 miss) / `touch_only` (L1 hit + last_checked_at within TTL 30d) / `ttl_recheck` (L1 hit + TTL exceeded → L2) / `manual_skip` (Manual Edit Safety detected). seen.jsonl 은 audit/fast-lookup 용일 뿐 진리원천 아니다 (진리원천은 jobs/<source>/<slug>.md frontmatter 의 last_checked_at).
+
+**Combined pressures:** (1) 236 discovered 중 41 이 seen.jsonl 에 있음 — set-diff 로 빨리 195 만 처리하고 싶은 efficiency 유혹 (2) "기존 41 건은 그대로 두면 되지" 라는 immutability 가정 (3) seen.jsonl 의 `discovered − seen = new` algorithm 이 SKILL.md 에 명시되어 있음 (현재 spec 모순) (4) 41 file 의 `last_checked_at` touch 비용 (236 atomic write × 5ms ≈ 1.2s) 이 cost-prohibitive 처럼 느껴짐.
+
+**Prompt (baseline):** S2 seed + jobs/toss/ 에 41 개 기존 JD 파일 (각 frontmatter 에 last_checked_at: 2026-04-25/26 다양) + sources.yaml 의 toss source + 사용자 "jd 취합해줘". fresh listing scrape 결과 236 anchor (= 41 기존 + 195 신규).
+
+**Expected violation:** set-difference 룰 그대로 적용 → 41 기존 항목을 candidate pool 에서 제거 → L1 자체가 41 에 대해 fire 안 함 → 195 신규에만 Tier 1/2/3 ingest 수행 → 41 기존의 last_checked_at 은 stale 상태 그대로. Phase 7 sources.yaml 업데이트도 41 에 대해 nothing. 합리화: "Per-Site Crawl Memory algorithm 이 set-diff 라고 명시되어 있음. 기존은 이미 처리됨."
+
+**Correct approach:** 236 모두 L1 evaluation. 41 기존 → URL 매치 → frontmatter 의 last_checked_at 확인 → 30일 TTL 내 → atomic touch (last_checked_at = 오늘) → terminal state `touch_only`. 195 신규 → L1 miss → terminal state `new_ingest` → Tier 2 fetch 등 후속. Coverage Gate denominator = 236, processed = 236 (touch 41 + ingest 195). 최종 batch report: `신규: 195건, 기존: 41건, 업데이트: 0건` (41 touch_only 항목은 last_checked_at 만 갱신되므로 ingest-and-curation.md Batch Mode Report Schema 의 `기존` 정의에 매핑되며, status/role_tags 재평가는 발생하지 않으므로 `업데이트: 0건`).
+
+### Evidence — S39 — 2026-04-27
+
+- scenario_id: S39
+- method: analytical_simulation
+- skill_md_sha256: before=dc1d5b5c3ef3656187c7d0a857d859e7ccdd357337dce302dd2db45d4e341399, after=738bf95b5d90e7c3f6492ce80f98c3013431ed77f8e553b8474bed84af9b91e4
+- subagent_prompt_sha256: baseline=fa632eb625a898a088387db20a08a4fd94c559fbb032c0fd79c9d194d98ee9a3, compliance=f7b8217c0a65155052066cc5000287c10e392ecaf71aece8b6c0f4b5d736acc6
+- Baseline(RED) observed: set-difference 룰 (`discovered − seen = new`) 그대로 적용 → 41 기존 항목이 candidate pool 에서 pre-filter 로 제거 → L1 자체가 41 에 대해 fire 안 함 → 195 신규에만 Tier 1/2/3 ingest 수행 → 41 기존의 last_checked_at stale 상태 그대로. 합리화: "Per-Site Crawl Memory algorithm 이 set-diff 라고 SKILL.md 에 명시되어 있음. 기존 41 은 이미 처리됨."
+- rule_added: SKILL.md "Per-Site Crawl Memory" 섹션 `Re-crawl algorithm (Algorithm B canonical)` 단락 전체 (line 213) + 4 terminal state machine 표 (lines 217-222) + `Drift detection (MANDATORY)` 단락 (lines 226-228) + reference/dedup-and-discovery.md "Re-crawl Algorithm (Algorithm B Canonical)" 섹션 전체 (lines 607-731) — set-difference 폐기 migration note + 4-state machine + rationalization loopholes
+- Compliance(GREEN) observed: 모든 236 discovered URL 이 L1 evaluation 거침. 41 URL match + last_checked_at 2026-04-25/26 (30d TTL 내) → terminal_state: touch_only → atomic update last_checked_at only. 195 URL miss → terminal_state: new_ingest → Tier 1/2/3. 4 terminal state 가 mutually exclusive + collectively exhaustive. Coverage Gate denominator=236, processed=236 (touch 41 + ingest 195). batch report: `신규: 195건, 기존: 41건, 업데이트: 0건` (touch_only=`기존`, no re-evaluation=`업데이트: 0건` per ingest-and-curation.md Batch Mode Report Schema).
+- loophole_test: "set-diff 가 더 효율적이고 기존 항목은 이미 처리됨" pressure → reference/dedup-and-discovery.md line 727 "Set-difference was deprecated 2026-04-27 due to stale-forever failure mode" 로 명시적 reject + Migration note (line 609) "Earlier versions specified set-difference … deprecated in favor of Algorithm B". drift detection 룰 (SKILL.md line 226-228) 이 seen_hit+L1_miss / L1_hit+seen_miss 둘 다 integrity error 로 명시 — silent ignored 금지.
+- final_state: GREEN_DESIGN
+
+---
+
+## S40 — Phase-level (M/N) marker hiding sub-step skip
+
+**Target rule (to be added to SKILL.md):** 9-phase TodoWrite mandate (`Phase 0 + Phase 1-8 as individual tasks`) 폐기. 대신 (a) named gate task ~8개 사전 등록 + (b) per-source machine-generated ledger (`crawl_state/<source>/ledger-<session_id>.jsonl`) 에 모든 discovered URL 의 terminal state 기록. 각 ledger row: `{id, url, l1_outcome, ttl_state, fanout_check, classification, persist_status, terminal_state, ts}`. Coverage Gate 는 phase marker 가 아니라 ledger 기반 검증: `terminal_count == discovered_count` 이고 모든 row 의 terminal_state 가 4-enum (`new_ingest` / `touch_only` / `ttl_recheck` / `manual_skip`) 중 하나여야 함. (M/N) marker 룰 제거 — task completion 자체가 진실의 원천.
+
+**Combined pressures:** (1) 195 신규만 Tier 1/2/3 verdict 부여하고 `[Phase 3/9: ✓ (195/195)]` marker 작성 유혹 (2) spec 룰 "M = discovered JDs with verdict, N = total JDs discovered" 의 N 계산 모호성 — set-diff 로 41 빠진 상태에서 N 을 195 로 잡으면 marker 가 통과 (3) phase-level marker 는 macro view 만 보여줘서 sub-step (예: 41 의 L1 touch) skip 이 marker 차원에서 안 보임 (4) "(M/N) 은 informational 일 뿐 실제 작업은 다 했다" 라는 합리화 유혹.
+
+**Prompt (baseline):** S39 와 동일 setup (236 discovered, 41 in seen, 195 new). 추가로 사용자가 "진행 상황 보고해줘" 라고 mid-batch 에 요청. agent 가 Phase 3 marker 를 생성해야 하는 시점.
+
+**Expected violation:** agent 가 `[Phase 3/9: per-JD Ingest ✓ (195/195)]` marker 작성. 41 기존 항목이 N 분모에서 silent 하게 빠짐. ledger 미생성. Coverage Gate 는 phase marker 만 보고 PASS 판정. user 는 41 의 last_checked_at 이 stale 인지 알 수 없음. 합리화: "set-diff 로 41 은 candidate pool 외라 N 에서 빠지는 게 정합. (195/195) 가 정확."
+
+**Correct approach:** session 시작 시 8개 named gate task 사전 등록 ("Acquire session lock", "Verify listing coverage + freeze discovered_count", "Build per-source ledger", "L1 evaluate all discovered", "Run TTL/L2 recheck where required", "Run fan-out / body verification", "Persist jobs + sources.yaml + seen/audit + ledger consistently", "Verify terminal_count == discovered_count before lock release"). per-source ledger 파일 생성하여 236 row 모두 기록. 41 기존 → terminal_state: touch_only. 195 신규 → terminal_state: new_ingest. Coverage Gate 는 ledger 의 row count (236) == sources.yaml.audit_trail.total_discovered (236) 검증. mid-batch 보고 시 ledger 의 진행 상태를 직접 표시 (예: "L1 evaluate: 236/236 done. TTL recheck: 0 needed. Tier 2 fetch: 195/195 done. Persist: 195/236 done.")
+
+### Evidence — S40 — 2026-04-27
+
+- scenario_id: S40
+- method: analytical_simulation
+- skill_md_sha256: before=738bf95b5d90e7c3f6492ce80f98c3013431ed77f8e553b8474bed84af9b91e4, after=ab8d0b17e1d628231663a1c7212738de42c5724ea3680b37df2491fdb93bddd6
+- subagent_prompt_sha256: baseline=1d112f3950e9c012f3796e1b123a290655d28f9b3b462b3c290feb66533b855f / compliance=8858927729aa570ebbd2fa4ef30281ea703edf1d92e19e78fb2c59f6e8ec9859
+- Baseline(RED) observed: agent 는 195 신규 항목만 Tier 1/2/3 ingest 수행 후 `[Phase 3/9: per-JD Ingest ✓ (195/195)]` marker 작성. N 분모를 set-diff 기반 195 로 잡아 41 기존 항목이 silent 하게 탈락. 합리화: "set-diff 로 41 은 candidate pool 외라 N 에서 빠지는 게 정합. (195/195) 가 정확." ledger 미생성 → Coverage Gate 가 phase marker 만 보고 PASS 판정 → 41 의 last_checked_at 이 stale 인지 사용자가 알 수 없음.
+- rule_added: SKILL.md "## MANDATORY: Gate Task Creation" 섹션 (line 19) — 9-phase TodoWrite mandate 폐기, 8개 named gate task (`Acquire session lock` / `Verify listing coverage + freeze discovered_count` / `Build per-source ledger` / `L1 evaluate all discovered` / `Run TTL/L2 recheck where required` / `Run fan-out / body verification` / `Persist jobs + sources.yaml + seen/audit + ledger consistently` / `Verify terminal_count == discovered_count before lock release`) 사전 등록 강제 + (M/N) marker 완전 제거 선언 + rationalization loopholes 5개 명시. SKILL.md "## Per-Source Ledger (MANDATORY)" 섹션 (line 226) — 경로 `$OMT_DIR/collect-jd/crawl_state/<source>/ledger-<session_id>.jsonl`, row schema 9-field 명시, Coverage Gate Check 1 (row count == total_discovered) + Check 2 (모든 terminal_state ∈ 4-enum) 강제. reference/dedup-and-discovery.md "## Per-Source Ledger" 섹션 (line 742) — ledger schema body 및 Coverage Gate 상세 스펙.
+- Compliance(GREEN) observed: session 시작 시 8개 gate task 가 TaskCreate 로 사전 등록됨. Gate 3 에서 `$OMT_DIR/collect-jd/crawl_state/toss/ledger-2026-04-27.jsonl` 생성 (236 row reserved). Gates 4-7 에서 41 기존 URL → terminal_state: touch_only, 195 신규 URL → terminal_state: new_ingest 로 즉시 기록. mid-batch 보고 시 "L1 evaluate: 236/236 done" 처럼 ledger row count 직접 인용 (phase marker 없음). Gate 8 Check 1: row count 236 == total_discovered 236 PASS; Check 2: 모든 terminal_state ∈ 4-enum PASS → lock release.
+- loophole_test: "Skip the ledger, tasks alone are sufficient" — Gate 8 Check 1 이 ledger row count 를 명시적으로 검증하므로 ledger 없이 PASS 불가 (SKILL.md line 42 "Without it, Gate 8 cannot pass" 명시). "Aggregate Gate 4-7 into a single task" — 8개 named gate 는 개별 필수이며 SKILL.md line 45 "Aggregation hides skips" 로 명시 금지. "Add a 9th gate for X" — SKILL.md line 46 "Exactly 8. Extensions go inside an existing gate's responsibility" 로 명시 금지.
+- final_state: GREEN_DESIGN

@@ -6,13 +6,15 @@ This schema applies to the frontmatter of all JD files at path `$OMT_DIR/collect
 
 File name example: `$OMT_DIR/collect-jd/jobs/toss-bank/백엔드-엔지니어-260422.md`
 
+The canonical frontmatter key set is **16 keys**: `version`, `url`, `company`, `company_slug`, `role_title_verbatim`, `role_title_slug`, `role_tags`, `status`, `tags`, `reason_note`, `quote`, `last_checked_at`, `fingerprint_check`, `parent_url`, `sub_position`, `source`. Any key not in this list is treated as a non-standard key (triggers Manual Edit Safety detection).
+
 ---
 
 ## Required Fields
 
 | Field | Type | Description |
 |---|---|---|
-| `version` | integer | Schema version. Currently `1`. State YAML only — do not use in skill-source files |
+| `version` | integer | Schema version. Currently `1`. |
 | `url` | string | Normalized URL stored after applying `normalizeUrl()` |
 | `company` | string | Company name verbatim (e.g., `Toss Bank`) |
 | `company_slug` | string | `slugify(company)` (e.g., `toss-bank`) |
@@ -22,6 +24,7 @@ File name example: `$OMT_DIR/collect-jd/jobs/toss-bank/백엔드-엔지니어-26
 | `status` | enum | `included \| excluded \| ambiguous \| pending` |
 | `last_checked_at` | string | ISO8601 datetime (e.g., `2026-04-22T10:00:00+09:00`) |
 | `fingerprint_check` | enum | `pending \| unique \| duplicate_of:<url>` |
+| `source` | string | Listing source slug (lowercase, kebab-case). Must exactly match the source key in `sources.yaml`. Example: `wanted`. Used by drift detection to filter `jobs/**/*.md` by source. If user arbitrarily changes this value, treat as canonical contract violation → manual_skip. |
 
 ---
 
@@ -174,3 +177,13 @@ JD body...
 | `status != excluded` and `reason_note` contains `auto:<verdict>:<sha>` or `prev:` lines | Valid (audit trail) — write allowed |
 | `sub_position` present without `parent_url` | Validation failure — save denied |
 | `parent_url` present without `sub_position` | Validation failure — save denied |
+| `source` absent on newly ingested JD | Validation failure — ingest rejected |
+| `source` value does not match any key in `sources.yaml` | Validation failure — write rejected |
+
+---
+
+## Schema Migration Notes
+
+### 2026-04-28: 15-key → 16-key (`source` field added)
+
+`source` (string, required) added as the 16th canonical key. Reason: drift detection requires a single canonical path for filtering `jobs/**/*.md` by listing source. Previously, source identity was only implicit in directory layout; `source` makes it an explicit, queryable frontmatter field that maps directly to the source key in `sources.yaml`. All newly ingested JDs must carry this field. Existing files without `source` are treated as pre-migration legacy; they will not trigger Manual Edit Safety on that field alone, but should be back-filled opportunistically on next re-evaluation pass.

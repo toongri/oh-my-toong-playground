@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { validateTriggerEvalShape, type TriggerEvalEntry } from './trigger-eval-shape';
 
-const evalJsonPath = join(process.cwd(), 'skills/collect-jd/evals/trigger-eval.json');
+const evalJsonPath = join(import.meta.dir, '../evals/trigger-eval.json');
 
 function makePositives(count: number): TriggerEvalEntry[] {
   return Array.from({ length: count }, (_, i) => ({ query: `긍정 쿼리 ${i}`, should_trigger: true }));
@@ -79,5 +79,17 @@ describe('trigger-eval-shape validator', () => {
     const r = validateTriggerEvalShape(data);
     expect(r.ok).toBe(false);
     expect(r.errors.some((e) => e.code === 'EXTRA_FIELD')).toBe(true);
+  });
+
+  it('should reject expected_skill non-string on positive entry', () => {
+    const data: unknown[] = [
+      { query: 'test', should_trigger: true, expected_skill: 42 },
+      ...makePositives(9),
+      ...makeNegatives(10),
+    ];
+    const r = validateTriggerEvalShape(data);
+    expect(r.ok).toBe(false);
+    const err = r.errors.find((e) => e.code === 'WRONG_TYPE' && e.message.includes('expected_skill') && e.index === 0);
+    expect(err).toBeDefined();
   });
 });
