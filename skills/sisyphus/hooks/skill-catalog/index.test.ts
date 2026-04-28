@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { parseInput, main } from './index.ts';
-import { formatCatalog } from './catalog.ts';
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { Readable } from 'stream';
 
 describe('parseInput', () => {
   it('유효한 JSON에서 cwd와 sessionId를 파싱한다', () => {
@@ -43,16 +41,6 @@ describe('main (통합)', () => {
   let consoleOutput: string[];
   let originalLog: typeof console.log;
 
-  function createMockStdin(data: string): NodeJS.ReadableStream {
-    const readable = new Readable({
-      read() {
-        this.push(data);
-        this.push(null);
-      },
-    });
-    return readable as NodeJS.ReadableStream;
-  }
-
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'skill-catalog-integration-'));
     originalHome = process.env.HOME;
@@ -69,22 +57,11 @@ describe('main (통합)', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('유효한 입력에서 plain-text 카탈로그를 출력한다', async () => {
-    const projectDir = join(tempDir, 'project');
-    const skillsDir = join(projectDir, '.claude', 'skills');
-    await mkdir(join(skillsDir, 'my-skill'), { recursive: true });
-
+  it('플러그인 활성화 시 plain-text 카탈로그를 출력한다', async () => {
     const fakeHome = join(tempDir, 'fakehome');
     await mkdir(join(fakeHome, '.claude'), { recursive: true });
     await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
     process.env.HOME = fakeHome;
-
-    const mockStdin = createMockStdin(JSON.stringify({ sessionId: 'test', cwd: projectDir }));
-    Object.defineProperty(process, 'stdin', {
-      value: mockStdin,
-      writable: true,
-      configurable: true,
-    });
 
     await main();
 
@@ -93,7 +70,6 @@ describe('main (통합)', () => {
     expect(joined).toContain('<skill-catalog>');
     expect(joined).toContain('</skill-catalog>');
     expect(joined).toContain('superpowers:test-driven-development');
-    expect(joined).toContain('my-skill');
   });
 
   it('플러그인 활성화 시 스킬 디렉토리 없어도 plugin 스킬 포함', async () => {
@@ -101,13 +77,6 @@ describe('main (통합)', () => {
     await mkdir(join(fakeHome, '.claude'), { recursive: true });
     await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
     process.env.HOME = fakeHome;
-
-    const mockStdin = createMockStdin(JSON.stringify({ sessionId: 'test', cwd: join(tempDir, 'nonexistent') }));
-    Object.defineProperty(process, 'stdin', {
-      value: mockStdin,
-      writable: true,
-      configurable: true,
-    });
 
     await main();
 
@@ -122,51 +91,19 @@ describe('main (통합)', () => {
     await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
     process.env.HOME = fakeHome;
 
-    const mockStdin = createMockStdin(JSON.stringify({ sessionId: 'test', cwd: join(tempDir, 'nonexistent') }));
-    Object.defineProperty(process, 'stdin', {
-      value: mockStdin,
-      writable: true,
-      configurable: true,
-    });
-
     await main();
 
     const joined = consoleOutput.join('\n');
     expect(joined).toContain('## Load Skills');
   });
 
-  it('fail-open: stdin 오류 시 formatCatalog([]) 출력과 byte-identical하다', async () => {
-    const readable = new Readable({
-      read() {
-        process.nextTick(() => this.destroy(new Error('stdin broken')));
-      },
-    });
-    Object.defineProperty(process, 'stdin', {
-      value: readable,
-      writable: true,
-      configurable: true,
-    });
-
-    await main();
-
-    expect(consoleOutput.length).toBeGreaterThan(0);
-    // catch 경로는 catalog.ts:157-159의 SSOT 텍스트와 byte-identical해야 한다 (drift 방지)
-    expect(consoleOutput[consoleOutput.length - 1]).toBe(formatCatalog([]));
-  });
-
-  it('stdin-less 호출에서도 plain-text 카탈로그를 출력한다', async () => {
+  it('stdin 미패치 상태에서도 hang 없이 카탈로그를 출력한다', async () => {
     const fakeHome = join(tempDir, 'fakehome');
     await mkdir(join(fakeHome, '.claude'), { recursive: true });
     await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
     process.env.HOME = fakeHome;
 
-    const emptyStream = Readable.from([]);
-    Object.defineProperty(process, 'stdin', {
-      value: emptyStream,
-      writable: true,
-      configurable: true,
-    });
-
+    // stdin을 전혀 패치하지 않음 — 이전 구현은 stdin 'end' 이벤트를 기다리며 hang
     await main();
 
     expect(consoleOutput.length).toBeGreaterThan(0);
