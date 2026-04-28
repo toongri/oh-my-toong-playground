@@ -22,45 +22,87 @@ When user runs `/hud setup`:
    - Run `bun --version` to verify Bun is installed
    - If not available, inform user and stop
 
-2. **Check synced script exists**
-   - Verify `.claude/scripts/hud/index.ts` exists
+2. **Determine install scope and script path using `${CLAUDE_SKILL_DIR}`**
+
+   Execute the following to resolve paths:
+
+   ```bash
+   !`
+   if [[ "${CLAUDE_SKILL_DIR}" == "$HOME"* ]]; then
+     SCOPE="user-global"
+     SCRIPT_CMD="bun run $HOME/.claude/scripts/hud/index.ts"
+   else
+     SCOPE="project-local"
+     SCRIPT_CMD="bun run $CLAUDE_PROJECT_DIR/.claude/scripts/hud/index.ts"
+   fi
+   SETTINGS_FILE="${CLAUDE_SKILL_DIR}/../settings.local.json"
+   BACKUP_FILE="${CLAUDE_SKILL_DIR}/../statusLine.backup.json"
+   echo "SCOPE=$SCOPE"
+   echo "SCRIPT_CMD=$SCRIPT_CMD"
+   echo "SETTINGS_FILE=$SETTINGS_FILE"
+   echo "BACKUP_FILE=$BACKUP_FILE"
+   `
+   ```
+
+3. **Check synced script exists**
+   - For user-global scope: verify `$HOME/.claude/scripts/hud/index.ts` exists
+   - For project-local scope: verify `$CLAUDE_PROJECT_DIR/.claude/scripts/hud/index.ts` exists
    - If not exists, inform user to run sync first
 
-3. **Backup existing statusLine config**
-   - Read `.claude/settings.json`
-   - If `statusLine` key exists, save to `.claude/statusLine.backup.json`
+4. **Backup existing statusLine config**
+   - Read `${CLAUDE_SKILL_DIR}/../settings.local.json`
+   - If `statusLine` key exists, save current value to `${CLAUDE_SKILL_DIR}/../statusLine.backup.json`
    - Log backup location for user
 
-4. **Update settings.json**
-   - Read existing `.claude/settings.json` (or create empty object if not exists)
-   - Set `statusLine` configuration:
+5. **Update settings.local.json**
+   - Read existing `${CLAUDE_SKILL_DIR}/../settings.local.json` (or start from empty object if not exists)
+   - Set `statusLine` using the resolved `$SCRIPT_CMD`:
+     - user-global scope: `"command": "bun run $HOME/.claude/scripts/hud/index.ts"`
+     - project-local scope: `"command": "bun run $CLAUDE_PROJECT_DIR/.claude/scripts/hud/index.ts"`
    ```json
    {
      "statusLine": {
        "type": "command",
-       "command": "bun run .claude/scripts/hud/index.ts"
+       "command": "<resolved SCRIPT_CMD>"
      }
    }
    ```
-   - Write back to `.claude/settings.json`
+   - Write back to `${CLAUDE_SKILL_DIR}/../settings.local.json`
 
-5. **Inform user**
-   - Display success message
+6. **Inform user**
+   - Display success message including detected scope (user-global or project-local)
    - Instruct user to restart Claude Code
 
 ## Restore Process
 
 When user runs `/hud restore`:
 
-1. Check if `.claude/statusLine.backup.json` exists
-2. If exists:
-   - Read backup
-   - Read current `.claude/settings.json`
-   - Restore `statusLine` from backup (or remove if backup was empty)
-   - Write back to `.claude/settings.json`
-   - Delete backup file
-   - Inform user of restoration
-3. If not exists:
+1. **Resolve paths via `${CLAUDE_SKILL_DIR}`**
+
+   ```bash
+   !`
+   if [[ "${CLAUDE_SKILL_DIR}" == "$HOME"* ]]; then
+     SCOPE="user-global"
+   else
+     SCOPE="project-local"
+   fi
+   SETTINGS_FILE="${CLAUDE_SKILL_DIR}/../settings.local.json"
+   BACKUP_FILE="${CLAUDE_SKILL_DIR}/../statusLine.backup.json"
+   echo "SCOPE=$SCOPE"
+   echo "SETTINGS_FILE=$SETTINGS_FILE"
+   echo "BACKUP_FILE=$BACKUP_FILE"
+   `
+   ```
+
+2. Check if `${CLAUDE_SKILL_DIR}/../statusLine.backup.json` exists
+3. If exists:
+   - Read backup from `${CLAUDE_SKILL_DIR}/../statusLine.backup.json`
+   - Read current `${CLAUDE_SKILL_DIR}/../settings.local.json`
+   - Restore `statusLine` from backup (or remove key if backup recorded no value)
+   - Write back to `${CLAUDE_SKILL_DIR}/../settings.local.json`
+   - Delete `${CLAUDE_SKILL_DIR}/../statusLine.backup.json`
+   - Inform user of restoration and scope
+4. If not exists:
    - Inform user no backup found
 
 ## Display Format
