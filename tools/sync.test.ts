@@ -808,6 +808,152 @@ describe("syncPlatformConfigs", () => {
 
     expect(receivedScopes).toEqual(["project"]);
   });
+
+  it("claude.local.yaml가 claude.yaml과 병합되어 어댑터에 전달된다", async () => {
+    await writeFile(
+      path.join(yamlDir, "claude.yaml"),
+      "config:\n  theme: dark\n  lang: en\n",
+    );
+    await writeFile(
+      path.join(yamlDir, "claude.local.yaml"),
+      "config:\n  theme: light\n",
+    );
+
+    const receivedYamls: Record<string, unknown>[] = [];
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      receivedYamls.push(yaml as Record<string, unknown>);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+    const context = makeContext();
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    expect(receivedYamls).toHaveLength(1);
+    expect(receivedYamls[0]).toEqual({ config: { theme: "light", lang: "en" } });
+  });
+
+  it("local 파일만 있어도 어댑터가 정상 호출된다", async () => {
+    await writeFile(
+      path.join(yamlDir, "gemini.local.yaml"),
+      "config:\n  key: val\n",
+    );
+
+    const receivedYamls: Record<string, unknown>[] = [];
+    const geminiAdapter = makeMockAdapter("gemini");
+    geminiAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      receivedYamls.push(yaml as Record<string, unknown>);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["gemini", geminiAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => geminiAdapter;
+
+    const context = makeContext();
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    expect(receivedYamls).toHaveLength(1);
+    expect(receivedYamls[0]).toEqual({ config: { key: "val" } });
+  });
+
+  it("어댑터는 병합된 값으로 단 한 번만 호출된다 — base만으로 별도 호출 없음", async () => {
+    await writeFile(
+      path.join(yamlDir, "claude.yaml"),
+      "config:\n  theme: dark\n",
+    );
+    await writeFile(
+      path.join(yamlDir, "claude.local.yaml"),
+      "config:\n  theme: light\n",
+    );
+
+    const receivedYamls: Record<string, unknown>[] = [];
+    const claudeAdapter = makeMockAdapter("claude");
+    claudeAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      receivedYamls.push(yaml as Record<string, unknown>);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const adapters = new Map<Platform, PlatformAdapter>([["claude", claudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+    const context = makeContext();
+    await syncPlatformConfigs(context, targetPath, yamlDir, adapters, rootDir);
+
+    expect(receivedYamls).toHaveLength(1);
+    expect(receivedYamls[0]).toMatchObject({ config: { theme: "light" } });
+  });
+
+  it("프로젝트 스코프와 루트 스코프가 독립적으로 병합된다 — 크로스 스코프 오염 없음", async () => {
+    const rootYamlDir = path.join(tmpDir, "root-yaml");
+    const projectYamlDir = path.join(tmpDir, "project-yaml");
+    await fs.mkdir(rootYamlDir, { recursive: true });
+    await fs.mkdir(projectYamlDir, { recursive: true });
+
+    await writeFile(
+      path.join(rootYamlDir, "claude.yaml"),
+      "config:\n  source: root-base\n",
+    );
+    await writeFile(
+      path.join(rootYamlDir, "claude.local.yaml"),
+      "config:\n  rootLocal: true\n",
+    );
+    await writeFile(
+      path.join(projectYamlDir, "claude.yaml"),
+      "config:\n  source: project-base\n",
+    );
+    await writeFile(
+      path.join(projectYamlDir, "claude.local.yaml"),
+      "config:\n  projectLocal: true\n",
+    );
+
+    const rootReceived: Record<string, unknown>[] = [];
+    const projectReceived: Record<string, unknown>[] = [];
+
+    const rootClaudeAdapter = makeMockAdapter("claude");
+    rootClaudeAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      rootReceived.push(yaml as Record<string, unknown>);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const projectClaudeAdapter = makeMockAdapter("claude");
+    projectClaudeAdapter.syncPlatformYaml = async (_t, yaml, _d) => {
+      projectReceived.push(yaml as Record<string, unknown>);
+      return { processedSections: ["config"], modelMap: undefined };
+    };
+
+    const rootAdapters = new Map<Platform, PlatformAdapter>([["claude", rootClaudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    rootAdapters.getAdapter = (_p: Platform) => rootClaudeAdapter;
+
+    const projectAdapters = new Map<Platform, PlatformAdapter>([["claude", projectClaudeAdapter]]) as AdapterMap & {
+      getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+    };
+    projectAdapters.getAdapter = (_p: Platform) => projectClaudeAdapter;
+
+    const rootContext = makeContext({ isRootYaml: true });
+    await syncPlatformConfigs(rootContext, targetPath, rootYamlDir, rootAdapters, rootDir);
+
+    const projectContext = makeContext({ isRootYaml: false });
+    await syncPlatformConfigs(projectContext, targetPath, projectYamlDir, projectAdapters, rootDir);
+
+    expect(rootReceived).toHaveLength(1);
+    expect(rootReceived[0]).toEqual({ config: { source: "root-base", rootLocal: true } });
+    expect((rootReceived[0] as Record<string, Record<string, unknown>>)["config"]["projectLocal"]).toBeUndefined();
+
+    expect(projectReceived).toHaveLength(1);
+    expect(projectReceived[0]).toEqual({ config: { source: "project-base", projectLocal: true } });
+    expect((projectReceived[0] as Record<string, Record<string, unknown>>)["config"]["rootLocal"]).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------

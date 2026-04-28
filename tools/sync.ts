@@ -13,7 +13,6 @@
 import fs from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
-import { parse as parseYaml } from "yaml";
 
 import type {
   Platform,
@@ -26,6 +25,7 @@ import type {
 } from "./lib/types.ts";
 import { getRootDir, getBackupRetentionDays } from "./lib/config.ts";
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
+import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import {
   resolvePlatforms,
   resolveComponentPath,
@@ -298,8 +298,8 @@ export async function syncPlatformConfigs(
   rootDir: string,
 ): Promise<void> {
   for (const platform of KNOWN_PLATFORMS) {
-    const platformYamlPath = path.join(yamlDir, `${platform}.yaml`);
-    if (!existsSync(platformYamlPath)) {
+    const merged = await parseAndMergePlatformYaml(yamlDir, platform);
+    if (merged === null) {
       continue;
     }
 
@@ -311,19 +311,7 @@ export async function syncPlatformConfigs(
       continue;
     }
 
-    let parsedYaml: PlatformYaml;
-    try {
-      const text = await fs.readFile(platformYamlPath, "utf8");
-      const parsed = parseYaml(text);
-      if (parsed == null || typeof parsed !== "object") {
-        logWarn(`${platform}.yaml이 비어있거나 유효하지 않음, 스킵`);
-        continue;
-      }
-      parsedYaml = parsed as PlatformYaml;
-    } catch (err) {
-      logWarn(`${platform}.yaml 파싱 실패: ${err}`);
-      continue;
-    }
+    const parsedYaml: PlatformYaml = merged;
 
     // Pre-resolve hook component paths before passing to adapter
     if (parsedYaml.hooks != null) {
