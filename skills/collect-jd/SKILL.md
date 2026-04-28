@@ -30,13 +30,9 @@ All state under `$OMT_DIR/collect-jd/` only. `$OMT_DIR` is read from the environ
 
 ## Session Lock (MANDATORY)
 
-At skill trigger time (top priority, before Phase 0 entry), acquire `$OMT_DIR/collect-jd/.lock`. If `.lock` is absent, atomic write with current PID. If `.lock` exists, check liveness via `kill -0 <pid>` — if live, abort (stderr + exit non-zero); if stale, overwrite with current PID and proceed. **Lock is held for the entire session**: during AskUserQuestion wait, file editing, LLM calls, and batch rescan — all phases. On normal exit, verify PID match then delete.
+**Session Lock (MANDATORY)** — atomic `.lock` file with PID + liveness check (`kill -0`); single-writer per session. Acquire at Gate 1, release at Gate 8 (after Coverage Gate passes).
 
-- Entering the skill without lock acquire is forbidden.
-- Implementing only existence check of PID file without `kill -0` is forbidden (PID reuse risk).
-- Releasing/re-acquiring the lock during AskUserQuestion wait is forbidden.
-
-→ Details: [reference/bootstrap.md#session-lock](reference/bootstrap.md#session-lock)
+→ Details: [reference/bootstrap.md](reference/bootstrap.md#session-lock)
 
 ## Storage Backend Interview (MANDATORY)
 
@@ -46,13 +42,9 @@ At skill trigger time (top priority, before Phase 0 entry), acquire `$OMT_DIR/co
 
 ## Atomic Write Pattern (MANDATORY)
 
-All state file writes use the `writeAtomic(path, content)` pattern. Steps: (1) write content to `<path>.tmp` → (2) fsync (recommended) → (3) `rename(<path>.tmp, <path>)` (POSIX atomic). Temp path must always be in the same directory as the target file (prevents cross-filesystem rename).
+**Atomic Write Pattern (MANDATORY)** — `.tmp → fsync → rename` for all single-file writes; never partial overwrites. Mandatory at JD file persist, sources.yaml updates, and seen.jsonl appends.
 
-- Direct `open(path, 'w')` write is forbidden — file may be truncated on SIGKILL or disk full.
-- Temp paths in separate directories like `/tmp/xxx` are forbidden.
-- Mandatory for: new JD save · `last_checked_at` update · status reversal · fingerprint update · `rules.yaml.proposed` creation · `rules.yaml` approve overwrite · session lock `.lock` write — all of them.
-
-→ Details: [reference/bootstrap.md#atomic-write-pattern](reference/bootstrap.md#atomic-write-pattern)
+→ Details: [reference/bootstrap.md](reference/bootstrap.md#atomic-write-pattern)
 
 ## Ingest Paths (5)
 
@@ -152,12 +144,9 @@ Run dedup in L1 → L2 order before writing a new JD file (MANDATORY).
 
 → Dedup Gate Enforcement details: [reference/dedup-and-discovery.md#dedup-check-gate-enforcement](reference/dedup-and-discovery.md#dedup-check-gate-enforcement)
 
-- **L1**: After `normalizeUrl()`, match by URL only (Algorithm B canonical — slug similarity is L2's concern, not L1's). On URL match, new file creation is forbidden; only `last_checked_at` is updated. URL match + TTL (30 days) exceeded → enter L2.
-- **L2**: L1 no-match + another JD for the same `company_slug` already saved → LLM similarity judgment (`reference/dedup-l2-prompt.md`, temperature 0). `same: true` → new file forbidden, existing file's `fingerprint_check` unmodified (symmetric with L1 hit), `last_checked_at` atomic-updated, `dedup-audit.log` records `fingerprint:duplicate_of:<existing.url>` (i.e., the `<value>` field of the audit line schema is the literal string `duplicate_of:<existing.url>`; see reference/dedup-and-discovery.md Dedup Gate Audit Line). `same: false` → save new + `fingerprint_check: unique`.
-- `max_l2_calls_per_batch: 50`. If exceeded, `fingerprint_check: pending` — not a skip; re-evaluate in next batch.
+**L1 / L2 Dedup (MANDATORY)** — L1 = URL-only normalize match (single-key gate). L2 = LLM similarity check on L1 miss with same `company_slug` OR L1 hit + TTL exceeded. L2 outcomes (`same:true|false`) and persist actions are spec'd canonically in dedup-and-discovery.md.
 
-→ L1 details (loopholes, counterexample): [reference/dedup-and-discovery.md#dedup-layer-1](reference/dedup-and-discovery.md#dedup-layer-1)
-→ L2 details (invocation contract, loopholes, counterexample): [reference/dedup-and-discovery.md#dedup-layer-2](reference/dedup-and-discovery.md#dedup-layer-2)
+→ Details: [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#dedup-layer-1) + [reference/dedup-and-discovery.md](reference/dedup-and-discovery.md#dedup-layer-2)
 → Flow diagram (L1→L2 decision tree): [reference/dedup-and-discovery.md#decision-flow](reference/dedup-and-discovery.md#decision-flow)
 
 ## Matching Loop (history → rules → filter) (MANDATORY)
