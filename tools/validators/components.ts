@@ -16,6 +16,7 @@
 import { existsSync, readdirSync } from "fs";
 import { join, dirname, basename } from "path";
 import { getRootDir } from "../lib/config.ts";
+import { expandTilde } from "../lib/path-utils.ts";
 import {
   type ValidationResult,
   makeResult,
@@ -191,7 +192,8 @@ export function validateSyncYamlComponents(
   const projectDirName = ctx.isRootYaml ? undefined : ctx.projectDir;
 
   // Skip if path is not defined (template state)
-  const targetPath = typeof data.path === "string" && data.path ? data.path : null;
+  const rawPath = typeof data.path === "string" && data.path ? data.path : null;
+  const targetPath = rawPath ? expandTilde(rawPath) : null;
   if (!targetPath) {
     result.warnings.push(`${basename(filePath)}: path가 정의되지 않음 (템플릿 상태)`);
     return result;

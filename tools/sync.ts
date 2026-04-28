@@ -25,6 +25,7 @@ import type {
   PluginScope,
 } from "./lib/types.ts";
 import { getRootDir, getBackupRetentionDays } from "./lib/config.ts";
+import { expandTilde } from "./lib/path-utils.ts";
 import {
   resolvePlatforms,
   resolveComponentPath,
@@ -591,7 +592,7 @@ export async function processYaml(
     return;
   }
 
-  const targetPath = syncYaml.path;
+  const targetPath = syncYaml.path ? expandTilde(syncYaml.path) : undefined;
   if (!targetPath) {
     logWarn(`path가 정의되지 않음: ${syncYamlPath}`);
     return;
