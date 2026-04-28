@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { parseInput, main } from './index.ts';
+import { formatCatalog } from './catalog.ts';
 import { mkdtemp, mkdir, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -68,7 +69,7 @@ describe('main (통합)', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('유효한 입력에서 additionalContext가 포함된 JSON을 출력한다', async () => {
+  it('유효한 입력에서 plain-text 카탈로그를 출력한다', async () => {
     const projectDir = join(tempDir, 'project');
     const skillsDir = join(projectDir, '.claude', 'skills');
     await mkdir(join(skillsDir, 'my-skill'), { recursive: true });
@@ -88,14 +89,11 @@ describe('main (통합)', () => {
     await main();
 
     expect(consoleOutput.length).toBeGreaterThan(0);
-    const output = JSON.parse(consoleOutput[consoleOutput.length - 1]);
-    expect(output.continue).toBe(true);
-    expect(output.hookSpecificOutput).toBeDefined();
-    expect(output.hookSpecificOutput.hookEventName).toBe('UserPromptSubmit');
-    expect(output.hookSpecificOutput.additionalContext).toContain('<skill-catalog>');
-    expect(output.hookSpecificOutput.additionalContext).toContain('</skill-catalog>');
-    expect(output.hookSpecificOutput.additionalContext).toContain('superpowers:test-driven-development');
-    expect(output.hookSpecificOutput.additionalContext).toContain('my-skill');
+    const joined = consoleOutput.join('\n');
+    expect(joined).toContain('<skill-catalog>');
+    expect(joined).toContain('</skill-catalog>');
+    expect(joined).toContain('superpowers:test-driven-development');
+    expect(joined).toContain('my-skill');
   });
 
   it('플러그인 활성화 시 스킬 디렉토리 없어도 plugin 스킬 포함', async () => {
@@ -114,12 +112,11 @@ describe('main (통합)', () => {
     await main();
 
     expect(consoleOutput.length).toBeGreaterThan(0);
-    const output = JSON.parse(consoleOutput[consoleOutput.length - 1]);
-    expect(output.continue).toBe(true);
-    expect(output.hookSpecificOutput.additionalContext).toContain('superpowers:test-driven-development');
+    const joined = consoleOutput.join('\n');
+    expect(joined).toContain('superpowers:test-driven-development');
   });
 
-  it('additionalContext에 Load Skills 헤더가 포함된다', async () => {
+  it('plain-text 출력에 Load Skills 헤더가 포함된다', async () => {
     const fakeHome = join(tempDir, 'fakehome');
     await mkdir(join(fakeHome, '.claude'), { recursive: true });
     await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
@@ -134,11 +131,11 @@ describe('main (통합)', () => {
 
     await main();
 
-    const output = JSON.parse(consoleOutput[consoleOutput.length - 1]);
-    expect(output.hookSpecificOutput.additionalContext).toContain('## Load Skills');
+    const joined = consoleOutput.join('\n');
+    expect(joined).toContain('## Load Skills');
   });
 
-  it('fail-open: stdin 오류 시 continue:true를 출력한다', async () => {
+  it('fail-open: stdin 오류 시 formatCatalog([]) 출력과 byte-identical하다', async () => {
     const readable = new Readable({
       read() {
         process.nextTick(() => this.destroy(new Error('stdin broken')));
@@ -153,8 +150,28 @@ describe('main (통합)', () => {
     await main();
 
     expect(consoleOutput.length).toBeGreaterThan(0);
-    const lastOutput = consoleOutput[consoleOutput.length - 1];
-    const output = JSON.parse(lastOutput);
-    expect(output.continue).toBe(true);
+    // catch 경로는 catalog.ts:157-159의 SSOT 텍스트와 byte-identical해야 한다 (drift 방지)
+    expect(consoleOutput[consoleOutput.length - 1]).toBe(formatCatalog([]));
+  });
+
+  it('stdin-less 호출에서도 plain-text 카탈로그를 출력한다', async () => {
+    const fakeHome = join(tempDir, 'fakehome');
+    await mkdir(join(fakeHome, '.claude'), { recursive: true });
+    await writeFile(join(fakeHome, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'superpowers@claude-plugins-official': true } }));
+    process.env.HOME = fakeHome;
+
+    const emptyStream = Readable.from([]);
+    Object.defineProperty(process, 'stdin', {
+      value: emptyStream,
+      writable: true,
+      configurable: true,
+    });
+
+    await main();
+
+    expect(consoleOutput.length).toBeGreaterThan(0);
+    const joined = consoleOutput.join('\n');
+    expect(joined).toContain('<skill-catalog>');
+    expect(joined).toContain('</skill-catalog>');
   });
 });
