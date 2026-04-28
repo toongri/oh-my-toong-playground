@@ -415,6 +415,57 @@ export function validatePlatformYamlPartial(platformYamlPath: string, platform: 
 }
 
 // ---------------------------------------------------------------------------
+// config.yaml validator
+// ---------------------------------------------------------------------------
+
+function validateConfigYamlData(data: Record<string, unknown>, label: string, result: ValidationResult): void {
+  const ep = data["enabled-projects"];
+  if (ep !== undefined && !isArray(ep)) {
+    result.errors.push(`${label}: enabled-projects는 배열 형식이어야 합니다 (got ${typeof ep})`);
+  }
+}
+
+export function validateConfigYaml(filePath: string): ValidationResult {
+  const result = makeResult();
+
+  const parsed = parseYaml(filePath);
+  if (parsed.error) {
+    result.errors.push(parsed.error);
+    return result;
+  }
+
+  const data = parsed.data;
+  if (!isObject(data)) {
+    result.errors.push(`${basename(filePath)}: object 형식이어야 합니다`);
+    return result;
+  }
+
+  validateConfigYamlData(data, basename(filePath), result);
+  return result;
+}
+
+export function validateConfigYamlPartial(filePath: string): ValidationResult {
+  const result = makeResult();
+
+  const parsed = parseYaml(filePath);
+  if (parsed.error) {
+    result.errors.push(parsed.error);
+    return result;
+  }
+
+  const data = parsed.data;
+  if (data === null || data === undefined) return result;
+
+  if (!isObject(data)) {
+    result.errors.push(`${basename(filePath)}: object 형식이어야 합니다`);
+    return result;
+  }
+
+  validateConfigYamlData(data, basename(filePath), result);
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Discovery and orchestration
 // ---------------------------------------------------------------------------
 
@@ -445,6 +496,16 @@ function discoverSyncYamls(rootDir: string): string[] {
 
 export function validateAll(rootDir: string): ValidationResult {
   const result = makeResult();
+
+  const configYaml = join(rootDir, "config.yaml");
+  if (existsSync(configYaml)) {
+    mergeResult(result, validateConfigYaml(configYaml));
+  }
+
+  const configLocalYaml = join(rootDir, "config.local.yaml");
+  if (existsSync(configLocalYaml)) {
+    mergeResult(result, validateConfigYamlPartial(configLocalYaml));
+  }
 
   for (const syncYamlPath of discoverSyncYamls(rootDir)) {
     const syncResult = validateSyncYaml(syncYamlPath);
