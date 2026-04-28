@@ -15,6 +15,8 @@ import {
   createContext,
   parseCliArgs,
   printUsage,
+  resolveProjectFilter,
+  runProjectsLoop,
   type AdapterMap,
 } from "./sync.ts";
 import type { SyncContext, Platform, Category, SyncYaml } from "./lib/types.ts";
@@ -2003,5 +2005,158 @@ describe("printUsage", () => {
     expect(output).toContain("--projects");
     expect(output).toContain("--dry-run");
     expect(output).toContain("--help");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: resolveProjectFilter (enabled-projects 화이트리스트)
+// ---------------------------------------------------------------------------
+
+describe("resolveProjectFilter", () => {
+  it("CLI projectFilter가 있으면 그대로 반환 (config 무시)", () => {
+    const cliFilter = new Set(["proj-b"]);
+    const result = resolveProjectFilter(cliFilter, ["proj-a"]);
+    expect(result).toEqual(new Set(["proj-b"]));
+  });
+
+  it("CLI가 비어있고 config enabled-projects 있으면 Set으로 반환", () => {
+    const cliFilter = new Set<string>();
+    const result = resolveProjectFilter(cliFilter, ["proj-a", "proj-b"]);
+    expect(result).toEqual(new Set(["proj-a", "proj-b"]));
+  });
+
+  it("CLI/config 둘 다 없으면 undefined 반환 (전부 활성)", () => {
+    const cliFilter = new Set<string>();
+    const result = resolveProjectFilter(cliFilter, undefined);
+    expect(result).toBeUndefined();
+  });
+
+  it("CLI가 비어있고 config도 undefined면 undefined 반환", () => {
+    const result = resolveProjectFilter(new Set(), undefined);
+    expect(result).toBeUndefined();
+  });
+
+  it("CLI projectFilter가 config보다 우선 — 빈 Set이 아닌 경우", () => {
+    const cliFilter = new Set(["only-this"]);
+    const result = resolveProjectFilter(cliFilter, ["proj-a", "proj-b", "proj-c"]);
+    expect(result).toEqual(new Set(["only-this"]));
+    expect(result!.has("proj-a")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: enabled-projects 화이트리스트 — projects 루프 통합
+// ---------------------------------------------------------------------------
+
+describe("enabled-projects 화이트리스트 — projects 루프 통합", () => {
+  let tmpDir: string;
+  let rootDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "enabled-projects-test-"));
+    rootDir = path.join(tmpDir, "root");
+    await fs.mkdir(path.join(rootDir, "projects", "proj-a"), { recursive: true });
+    await fs.mkdir(path.join(rootDir, "projects", "proj-b"), { recursive: true });
+    _resetConfigCache();
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+    _resetConfigCache();
+  });
+
+  it("config enabled-projects 선언 시 비활성 프로젝트는 processYaml 호출 안 됨", async () => {
+    const targetA = path.join(tmpDir, "target-a");
+    const targetB = path.join(tmpDir, "target-b");
+    await fs.mkdir(targetA, { recursive: true });
+    await fs.mkdir(targetB, { recursive: true });
+
+    await writeFile(
+      path.join(rootDir, "config.yaml"),
+      "use-platforms: [claude]\nenabled-projects:\n  - proj-a\n",
+    );
+    await writeFile(path.join(rootDir, "projects", "proj-a", "sync.yaml"), `path: ${targetA}\n`);
+    await writeFile(path.join(rootDir, "projects", "proj-b", "sync.yaml"), `path: ${targetB}\n`);
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+    const effectiveFilter = resolveProjectFilter(new Set(), ["proj-a"]);
+
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+    expect(context.processedPaths.has(targetA)).toBe(true);
+    expect(context.processedPaths.has(targetB)).toBe(false);
+  });
+
+  it("CLI projectFilter가 config enabled-projects를 override", async () => {
+    const targetA = path.join(tmpDir, "target-a");
+    const targetB = path.join(tmpDir, "target-b");
+    await fs.mkdir(targetA, { recursive: true });
+    await fs.mkdir(targetB, { recursive: true });
+
+    await writeFile(
+      path.join(rootDir, "config.yaml"),
+      "use-platforms: [claude]\nenabled-projects:\n  - proj-a\n",
+    );
+    await writeFile(path.join(rootDir, "projects", "proj-a", "sync.yaml"), `path: ${targetA}\n`);
+    await writeFile(path.join(rootDir, "projects", "proj-b", "sync.yaml"), `path: ${targetB}\n`);
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+    const effectiveFilter = resolveProjectFilter(new Set(["proj-b"]), ["proj-a"]);
+
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+    expect(context.processedPaths.has(targetB)).toBe(true);
+    expect(context.processedPaths.has(targetA)).toBe(false);
+  });
+
+  it("CLI/config 둘 다 없으면 모든 프로젝트 처리 (기존 동작)", async () => {
+    const targetA = path.join(tmpDir, "target-a");
+    const targetB = path.join(tmpDir, "target-b");
+    await fs.mkdir(targetA, { recursive: true });
+    await fs.mkdir(targetB, { recursive: true });
+
+    await writeFile(path.join(rootDir, "config.yaml"), "use-platforms: [claude]\n");
+    await writeFile(path.join(rootDir, "projects", "proj-a", "sync.yaml"), `path: ${targetA}\n`);
+    await writeFile(path.join(rootDir, "projects", "proj-b", "sync.yaml"), `path: ${targetB}\n`);
+
+    const adapters = makeAdapterMap(["claude"]);
+    const context = makeContext();
+    const effectiveFilter = resolveProjectFilter(new Set(), undefined);
+
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+
+    expect(context.processedPaths.has(targetA)).toBe(true);
+    expect(context.processedPaths.has(targetB)).toBe(true);
+  });
+
+  it("config에 명시된 프로젝트 디렉토리가 없으면 warn 출력 후 skip (실패 아님)", async () => {
+    await writeFile(
+      path.join(rootDir, "config.yaml"),
+      "use-platforms: [claude]\nenabled-projects:\n  - does-not-exist\n",
+    );
+
+    const warns: string[] = [];
+    const origStderr = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (chunk: string | Uint8Array) => {
+      if (typeof chunk === "string") warns.push(chunk);
+      return true;
+    };
+
+    let threw = false;
+    try {
+      const adapters = makeAdapterMap(["claude"]);
+      const context = makeContext();
+      const effectiveFilter = resolveProjectFilter(new Set(), ["does-not-exist"]);
+      await runProjectsLoop(rootDir, adapters, context, effectiveFilter, false);
+    } catch {
+      threw = true;
+    } finally {
+      process.stderr.write = origStderr;
+    }
+
+    expect(threw).toBe(false);
+    expect(warns.some((w) => w.includes("does-not-exist"))).toBe(true);
   });
 });

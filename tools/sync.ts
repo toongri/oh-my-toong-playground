@@ -23,7 +23,7 @@ import type {
   SyncContext,
   PluginScope,
 } from "./lib/types.ts";
-import { getRootDir, getBackupRetentionDays } from "./lib/config.ts";
+import { getRootDir, getBackupRetentionDays, getEnabledProjects } from "./lib/config.ts";
 import { readAndExpandSyncYaml } from "./lib/parse-sync-yaml.ts";
 import { parseAndMergePlatformYaml } from "./lib/parse-platform-yaml.ts";
 import {
@@ -710,6 +710,71 @@ export function parseCliArgs(args: string[]): {
   return { dryRun, verbose, projectFilter };
 }
 
+/** Effective filter: CLI > config > undefined. */
+export function resolveProjectFilter(
+  cliFilter: Set<string>,
+  enabledProjects: string[] | undefined,
+): Set<string> | undefined {
+  if (cliFilter.size > 0) return cliFilter;
+  if (enabledProjects !== undefined && enabledProjects.length > 0) {
+    return new Set(enabledProjects);
+  }
+  return undefined;
+}
+
+export async function runProjectsLoop(
+  rootDir: string,
+  adapters: AdapterMap,
+  context: SyncContext,
+  effectiveFilter: Set<string> | undefined,
+  verbose: boolean,
+): Promise<void> {
+  const projectsDir = path.join(rootDir, "projects");
+  if (effectiveFilter !== undefined) {
+    for (const name of effectiveFilter) {
+      const projectDir = path.join(projectsDir, name);
+      if (!existsSync(projectDir)) {
+        logWarn(`프로젝트 디렉토리 없음, 스킵: ${name}`);
+      }
+    }
+  }
+
+  if (existsSync(projectsDir)) {
+    const projectEntries = await fs.readdir(projectsDir, { withFileTypes: true });
+    for (const entry of projectEntries) {
+      if (!entry.isDirectory()) continue;
+      if (effectiveFilter !== undefined && !effectiveFilter.has(entry.name)) continue;
+      const projectSyncYaml = path.join(projectsDir, entry.name, "sync.yaml");
+      if (!existsSync(projectSyncYaml)) continue;
+
+      let syncYaml: SyncYaml;
+      try {
+        const result = await readAndExpandSyncYaml(projectSyncYaml);
+        if (result == null) continue;
+        syncYaml = result;
+      } catch {
+        continue;
+      }
+
+      const targetPath = syncYaml.path;
+      if (!targetPath) continue;
+
+      if (verbose) {
+        logInfo(`[verbose] 프로젝트 시작: ${entry.name}`);
+      }
+      try {
+        await processYaml(context, projectSyncYaml, adapters, rootDir);
+        context.processedPaths.add(targetPath);
+      } catch (err) {
+        logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
+      }
+      if (verbose) {
+        logInfo(`[verbose] 프로젝트 완료: ${entry.name}`);
+      }
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
@@ -741,41 +806,9 @@ if (import.meta.main) {
 
   try {
     // projects/*/sync.yaml 먼저 처리
-    const projectsDir = path.join(rootDir, "projects");
-    if (existsSync(projectsDir)) {
-      const projectEntries = await fs.readdir(projectsDir, { withFileTypes: true });
-      for (const entry of projectEntries) {
-        if (!entry.isDirectory()) continue;
-        if (projectFilter.size > 0 && !projectFilter.has(entry.name)) continue;
-        const projectSyncYaml = path.join(projectsDir, entry.name, "sync.yaml");
-        if (!existsSync(projectSyncYaml)) continue;
-
-        let syncYaml: SyncYaml;
-        try {
-          const result = await readAndExpandSyncYaml(projectSyncYaml);
-          if (result == null) continue;
-          syncYaml = result;
-        } catch {
-          continue;
-        }
-
-        const targetPath = syncYaml.path;
-        if (!targetPath) continue;
-
-        if (verbose) {
-          logInfo(`[verbose] 프로젝트 시작: ${entry.name}`);
-        }
-        try {
-          await processYaml(context, projectSyncYaml, adapters, rootDir);
-          context.processedPaths.add(targetPath);
-        } catch (err) {
-          logError(`프로젝트 처리 실패 (계속 진행): ${projectSyncYaml}: ${err}`);
-        }
-        if (verbose) {
-          logInfo(`[verbose] 프로젝트 완료: ${entry.name}`);
-        }
-      }
-    }
+    const enabledProjects = await getEnabledProjects();
+    const effectiveFilter = resolveProjectFilter(projectFilter, enabledProjects);
+    await runProjectsLoop(rootDir, adapters, context, effectiveFilter, verbose);
 
     // 루트 sync.yaml 처리 (이미 처리된 path는 스킵, 프로젝트 필터 미적용)
     if (projectFilter.size === 0) {
