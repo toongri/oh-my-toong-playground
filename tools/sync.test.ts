@@ -984,6 +984,45 @@ describe("processYaml", () => {
       await fs.rm(homeTmpDir, { recursive: true, force: true });
     }
   });
+
+  it("`~/relative` path를 가진 sync.yaml의 skill이 syncCategory 내부에서도 expanded path로 dispatch된다", async () => {
+    const homeTmpDir = await fs.mkdtemp(path.join(os.homedir(), "omt-tilde-skill-test-"));
+    try {
+      const relativePart = path.relative(os.homedir(), homeTmpDir);
+      const tildePath = `~/${relativePart}`;
+
+      // Create a skill source
+      const skillDir = path.join(rootDir, "skills", "oracle");
+      await fs.mkdir(skillDir, { recursive: true });
+      await writeFile(path.join(skillDir, "SKILL.md"), "# Oracle\n");
+
+      const syncYamlPath = path.join(rootDir, "sync.yaml");
+      await writeFile(
+        syncYamlPath,
+        `path: "${tildePath}"\nskills:\n  platforms: [claude]\n  items:\n    - oracle\n`,
+      );
+
+      const claudeAdapter = makeMockAdapter("claude");
+      const adapters = new Map<Platform, PlatformAdapter>([
+        ["claude", claudeAdapter],
+      ]) as AdapterMap & {
+        getAdapter: (p: Platform) => ReturnType<typeof makeMockAdapter> | undefined;
+      };
+      adapters.getAdapter = (_p: Platform) => claudeAdapter;
+
+      const context = makeContext();
+      await processYaml(context, syncYamlPath, adapters, rootDir);
+
+      // syncSkillsDirect must have been called with the expanded (absolute) path, not the tilde path
+      const skillCalls = claudeAdapter.calls.filter((c) => c.method === "syncSkillsDirect");
+      expect(skillCalls.length).toBeGreaterThan(0);
+      const calledWithPath = skillCalls[0]!.args[0] as string;
+      expect(calledWithPath).toBe(homeTmpDir);
+      expect(calledWithPath.startsWith("~")).toBe(false);
+    } finally {
+      await fs.rm(homeTmpDir, { recursive: true, force: true });
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
