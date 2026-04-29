@@ -51,7 +51,7 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      authority="JH"
      tier="2"
      tags="ratelimit,billing,decision"
-     sensitivity="internal"
+     sensitivity="private"
      supersedes="decision-ratelimit-ks-2024"
      discovery_context="사용자가 KS 퇴사 사실 알려줌 — billing 정책 검토 중">
 **한 줄 요지**: rate-limit 결정권자는 JH (KS 퇴사 후 이관).
@@ -89,7 +89,7 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      authority="auth/jwt.ts:verifyToken"
      tier="1"
      tags="auth,jwt,verification"
-     sensitivity="internal"
+     sensitivity="private"
      discovery_context="billing-claim 검증 중 JWT 권위 탐색 → 코드베이스 직접 grep">
 **한 줄 요지**: JWT 토큰 검증의 SSOT는 auth/jwt.ts:142 verifyToken 함수.
 
@@ -122,12 +122,12 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
 **emit 결과**:
 
 ```xml
-<pin slug="person-billing-A-rules"
+<pin slug="person-billing-rules"
      source_url="person:A팀장"
      authority="A팀장 (billing domain owner)"
      tier="3"
      tags="billing,business-rule,person"
-     sensitivity="internal"
+     sensitivity="private"
      discovery_context="billing claim 처리 로직 구현 중 — 사용자가 A팀장이 권위자라고 알려줌">
 **한 줄 요지**: billing 비즈니스 규칙의 SSOT는 A팀장 머릿속 — 문서/코드 미존재.
 
@@ -163,9 +163,9 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
 <pin slug="finding-payment-fee-unknown"
      source_url="https://github.com/acme/backend/blob/main/payments/fee.ts"
      authority="unknown — 조사 필요"
-     tier="4"
+     tier="3"
      tags="payment,fee,placeholder,unknown"
-     sensitivity="internal"
+     sensitivity="private"
      discovery_context="payment 수수료 계산 PR 리뷰 중 권위 불명. 팀 전원 미인지.">
 **한 줄 요지**: payment 수수료 계산 로직 권위 미상 — placeholder, 향후 발견 시 supersedes로 갱신 필요.
 
