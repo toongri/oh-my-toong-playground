@@ -18,9 +18,10 @@ This skill configures the Oh-My-Toong HUD to display in Claude Code's status bar
 
 When user runs `/hud setup`:
 
-1. **Check Bun availability**
+1. **Check dependencies**
    - Run `bun --version` to verify Bun is installed.
-   - If not available, inform user and stop.
+   - Run `jq --version` to verify jq is installed.
+   - If either is unavailable, inform user and stop.
 
 2. **Resolve self-located paths**
 
@@ -42,27 +43,59 @@ When user runs `/hud setup`:
 
 4. **Backup existing statusLine config (first-time-only invariant)**
 
-   - **If `${CLAUDE_SKILL_DIR}/../../statusLine.backup.json` already exists**, skip this step entirely. The original user statusLine was preserved on first setup; subsequent setups must not overwrite the backup with hud's own value.
-   - **Otherwise** (no backup file yet — this is the first setup):
-     - Read `${CLAUDE_SKILL_DIR}/../../settings.local.json` (treat as empty object `{}` when absent).
-     - If a `statusLine` key exists, save its current value to `${CLAUDE_SKILL_DIR}/../../statusLine.backup.json`.
-     - If `statusLine` key is absent, write sentinel `{}` to `${CLAUDE_SKILL_DIR}/../../statusLine.backup.json`. The sentinel marks "no prior statusLine existed" so `/hud restore` knows to remove the key on restore.
-   - Log the backup file location.
+   ```bash
+   !`
+   set -euo pipefail
+   SETTINGS_FILE="${CLAUDE_SKILL_DIR}/../../settings.local.json"
+   BACKUP_FILE="${CLAUDE_SKILL_DIR}/../../statusLine.backup.json"
+
+   if [ -e "$BACKUP_FILE" ]; then
+     echo "backup exists — skipping (first-time-only invariant preserved)"
+     echo "BACKUP_FILE=$BACKUP_FILE"
+     exit 0
+   fi
+
+   SETTINGS_CONTENT="{}"
+   if [ -f "$SETTINGS_FILE" ]; then
+     SETTINGS_CONTENT="$(cat "$SETTINGS_FILE")"
+   fi
+
+   if echo "$SETTINGS_CONTENT" | jq -e 'has("statusLine")' > /dev/null 2>&1; then
+     echo "$SETTINGS_CONTENT" | jq '.statusLine' > "${BACKUP_FILE}.tmp"
+     mv "${BACKUP_FILE}.tmp" "$BACKUP_FILE"
+     echo "backed up existing statusLine to $BACKUP_FILE"
+   else
+     echo '{}' > "${BACKUP_FILE}.tmp"
+     mv "${BACKUP_FILE}.tmp" "$BACKUP_FILE"
+     echo "wrote sentinel {} to $BACKUP_FILE (no prior statusLine)"
+   fi
+   `
+   ```
+
+   The first-time-only invariant ensures the original user statusLine is preserved on first setup; subsequent setups must not overwrite the backup with hud's own value. The sentinel `{}` represents "no prior statusLine existed" so `/hud restore` knows to remove the key on restore.
 
 5. **Update settings.local.json with hud statusLine (always executed — supports upgrades)**
 
-   - Read `${CLAUDE_SKILL_DIR}/../../settings.local.json` (start from `{}` when the file does not exist).
-   - Set the `statusLine` key:
-     ```json
-     {
-       "statusLine": {
-         "type": "command",
-         "command": "bun run ${CLAUDE_SKILL_DIR}/scripts/index.ts"
-       }
-     }
-     ```
-   - Note: `${CLAUDE_SKILL_DIR}` in the command string is substituted by Claude Code at preprocessing time, so the value embedded in settings.local.json is an absolute path (e.g., `bun run /Users/toong/.claude/skills/hud/scripts/index.ts` for user-global deploy, or `bun run /Users/toong/repos/<project>/.claude/skills/hud/scripts/index.ts` for project-local).
-   - Write back to `${CLAUDE_SKILL_DIR}/../../settings.local.json`.
+   ```bash
+   !`
+   set -euo pipefail
+   SETTINGS_FILE="${CLAUDE_SKILL_DIR}/../../settings.local.json"
+   SCRIPT_PATH="${CLAUDE_SKILL_DIR}/scripts/index.ts"
+
+   if [ ! -f "$SETTINGS_FILE" ]; then
+     echo '{}' > "$SETTINGS_FILE"
+   fi
+
+   jq --arg cmd "bun run $SCRIPT_PATH" \
+      '.statusLine = {"type":"command","command":$cmd}' \
+      "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+   mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+
+   echo "Updated statusLine.command to: bun run $SCRIPT_PATH"
+   `
+   ```
+
+   `${CLAUDE_SKILL_DIR}` is substituted by Claude Code at preprocessing time, so `$SCRIPT_PATH` resolves to an absolute path (e.g., `/Users/toong/.claude/skills/hud/scripts/index.ts` for user-global, or `/Users/toong/repos/<project>/.claude/skills/hud/scripts/index.ts` for project-local). The jq invocation preserves all other keys in settings.local.json — only `.statusLine` is updated.
 
 6. **Inform user**
    - Display success message including the deployed statusLine.command value (so user can verify the absolute path).
@@ -86,17 +119,40 @@ When user runs `/hud restore`:
 
 2. **Check** `${CLAUDE_SKILL_DIR}/../../statusLine.backup.json` exists.
 
-3. **Backup exists** — restore based on sentinel vs object:
-   - Read backup file content.
-   - Read current `${CLAUDE_SKILL_DIR}/../../settings.local.json`.
-   - **If backup content is sentinel `{}`** (no prior statusLine recorded): remove the `statusLine` key from settings.local.json (returning to clean pre-setup state).
-   - **Otherwise** (backup is a statusLine object): restore the `statusLine` key in settings.local.json to the backup's value.
-   - Write back to `${CLAUDE_SKILL_DIR}/../../settings.local.json`.
-   - Delete `${CLAUDE_SKILL_DIR}/../../statusLine.backup.json`.
-   - Inform user of restoration.
+3. **Restore based on backup content**
 
-4. **Backup absent** — no installation found:
-   - Inform user: no backup file found, nothing to restore.
+   ```bash
+   !`
+   set -euo pipefail
+   SETTINGS_FILE="${CLAUDE_SKILL_DIR}/../../settings.local.json"
+   BACKUP_FILE="${CLAUDE_SKILL_DIR}/../../statusLine.backup.json"
+
+   if [ ! -e "$BACKUP_FILE" ]; then
+     echo "no backup found — nothing to restore"
+     exit 0
+   fi
+
+   BACKUP_CONTENT="$(cat "$BACKUP_FILE")"
+
+   if [ ! -f "$SETTINGS_FILE" ]; then
+     echo '{}' > "$SETTINGS_FILE"
+   fi
+
+   if [ "$(echo "$BACKUP_CONTENT" | jq -c '.')" = "{}" ]; then
+     jq 'del(.statusLine)' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+     echo "removed statusLine key (sentinel — pre-setup state restored)"
+   else
+     jq --argjson sl "$BACKUP_CONTENT" '.statusLine = $sl' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp"
+     echo "restored statusLine from backup"
+   fi
+
+   mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+   rm -f "$BACKUP_FILE"
+   echo "removed backup file"
+   `
+   ```
+
+   The sentinel `{}` distinguishes "no prior statusLine existed" (remove key) from "user had a custom statusLine" (restore object).
 
 ## Display Format
 
