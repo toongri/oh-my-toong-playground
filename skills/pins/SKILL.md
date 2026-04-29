@@ -41,7 +41,8 @@ pins 시스템은 두 개의 전문 스킬로 구성된다:
 | codex | O | X | X |
 | opencode | O | X | X |
 
-gemini/codex/opencode는 skills를 통한 수동 invoke는 동작하나, Stop hook 기반 lifecycle 자동화는 지원하지 않는다(M4 advisory 적용 — gemini fixture 실측 불가로 v2 연기).
+gemini/codex/opencode는 skills를 통한 수동 invoke는 동작하나 Stop hook 기반 lifecycle 자동화는 지원하지 않는다.
+M4 advisory(gemini Stop hook payload fixture 실측 불가)에 따라 AC-9는 v0.7.3에서 "gemini=skills only"로 축소 결정됐으며 lifecycle 자동 hook은 v2로 연기됐다.
 
 ## Use cases
 
