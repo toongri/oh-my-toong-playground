@@ -14,7 +14,7 @@
  * Fail-open: any unhandled error → {continue: true} + stderr WARN (AC-4, persistent-mode:51-58 pattern).
  */
 
-import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { HookInput, HookOutput, PinExtracted } from './types.ts';
 import { loadCursor, saveCursor, getCursorEntry, updateCursorEntry } from './cursor.ts';
@@ -73,18 +73,47 @@ function serializePin(
   return lines.join('\n');
 }
 
-// ─── Slug → filename (duplicate → timestamp suffix) ──────────────────────────
+// ─── Atomic pin write (wx flag + counter retry) ───────────────────────────────
 
-function slugToFilename(omtDir: string, slug: string): string {
-  const base = join(omtDir, 'pins', `${slug}.md`);
-  if (!existsSync(base)) return base;
+/**
+ * Atomically create a pin file using the O_EXCL (wx) flag.
+ *
+ * - 1st attempt: {slug}.md
+ * - EEXIST → retry with {slug}-HHMMSS.md, then {slug}-HHMMSS-1.md .. {slug}-HHMMSS-999.md
+ * - 1000 exhausted → throw Error
+ */
+export function writePinAtomically(omtDir: string, slug: string, content: string): void {
+  const pinsDir = join(omtDir, 'pins');
+  const basePath = join(pinsDir, `${slug}.md`);
 
-  // Duplicate: append HHMMSS timestamp suffix (AC-7)
+  // 1st attempt: base path (no suffix)
+  try {
+    writeFileSync(basePath, content, { flag: 'wx', encoding: 'utf-8' });
+    return;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+  }
+
+  // EEXIST: build timestamp suffix and retry with monotonic counter
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  return join(omtDir, 'pins', `${slug}-${hh}${mm}${ss}.md`);
+  const hhmmss = `${hh}${mm}${ss}`;
+
+  // counter=0 → {slug}-HHMMSS.md; counter=1..999 → {slug}-HHMMSS-{counter}.md
+  for (let counter = 0; counter < 1000; counter++) {
+    const suffix = counter === 0 ? `${slug}-${hhmmss}.md` : `${slug}-${hhmmss}-${counter}.md`;
+    const candidatePath = join(pinsDir, suffix);
+    try {
+      writeFileSync(candidatePath, content, { flag: 'wx', encoding: 'utf-8' });
+      return;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+    }
+  }
+
+  throw new Error(`failed to find unique filename for slug ${slug}`);
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -148,10 +177,14 @@ export async function main(): Promise<void> {
         continue;
       }
 
-      // Write pin file (AC-7: duplicate → timestamp suffix)
-      const filePath = slugToFilename(omtDir, pin.slug);
+      // Write pin file atomically (wx flag + counter retry — AC-7, TOCTOU-safe)
       const content = serializePin(pin.slug, pin, createdAt);
-      writeFileSync(filePath, content, 'utf-8');
+      try {
+        writePinAtomically(omtDir, pin.slug, content);
+      } catch (writeErr: unknown) {
+        const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+        process.stderr.write(`[pin-up] WARN: skipping pin "${pin.slug}" — ${msg}\n`);
+      }
     }
 
     // Step 7: save cursor (only when transcript was readable)

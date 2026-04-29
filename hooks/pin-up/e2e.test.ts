@@ -1,11 +1,12 @@
 /**
  * E2E tests for pin-up hook (AC-16).
  *
- * 4 scenarios:
+ * 5 scenarios:
  *   S1. Single <pin> emit fixture → pin-up writes file + cursor updated
  *   S2. Empty transcript → 0 files written + cursor advanced to end
  *   S3. Invalid frontmatter (missing required field) → escape.jsonl entry + no file written
- *   S4. Duplicate slug (two entries same slug) → second gets timestamp suffix, both files exist
+ *   S4. Duplicate slug (two entries same slug in one transcript) → second gets timestamp suffix, both files exist
+ *   S4-multi-process. Concurrent pin-up processes with same slug → both pin files preserved (no silent overwrite) + cursor retains both transcript keys
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
@@ -15,6 +16,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { main } from './index.ts';
 import { loadCursor, getCursorEntry } from './cursor.ts';
+import { spawnSync, spawn } from 'child_process';
 
 // ─── Fixture helpers ──────────────────────────────────────────────────────────
 
@@ -82,8 +84,6 @@ describe('pin-up e2e', () => {
     const transcriptPath = join(testDir, 's1-transcript.jsonl');
     await writeFile(transcriptPath, assistantLine(VALID_PIN_TEXT), 'utf-8');
 
-    // Simulate stdin by overriding process.stdin (use spawn subprocess approach)
-    const { spawnSync } = await import('child_process');
     const hookPath = join(import.meta.dir, 'index.ts');
     const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-s1' });
     const result = spawnSync('bun', ['run', hookPath], {
@@ -115,7 +115,6 @@ describe('pin-up e2e', () => {
     const transcriptPath = join(testDir, 's2-transcript.jsonl');
     await writeFile(transcriptPath, '', 'utf-8');
 
-    const { spawnSync } = await import('child_process');
     const hookPath = join(import.meta.dir, 'index.ts');
     const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-s2' });
     const result = spawnSync('bun', ['run', hookPath], {
@@ -140,7 +139,6 @@ describe('pin-up e2e', () => {
     const transcriptPath = join(testDir, 's3-transcript.jsonl');
     await writeFile(transcriptPath, assistantLine(INVALID_PIN_TEXT, 'uuid-s3'), 'utf-8');
 
-    const { spawnSync } = await import('child_process');
     const hookPath = join(import.meta.dir, 'index.ts');
     const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-s3' });
     const result = spawnSync('bun', ['run', hookPath], {
@@ -165,7 +163,7 @@ describe('pin-up e2e', () => {
     expect(s3Entry.pin_slug).toBe('code-bad-pin');
   });
 
-  it('S4: duplicate slug → second gets timestamp suffix', async () => {
+  it('[S4-single-process] duplicate slug in one transcript → second gets timestamp suffix, both files exist', async () => {
     // Write a pin with slug code-dup-test
     const dupPinA = VALID_PIN_TEXT
       .replace(/slug="[^"]*"/, 'slug="code-dup-test"')
@@ -182,7 +180,6 @@ describe('pin-up e2e', () => {
       'utf-8',
     );
 
-    const { spawnSync } = await import('child_process');
     const hookPath = join(import.meta.dir, 'index.ts');
     const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-s4' });
     const result = spawnSync('bun', ['run', hookPath], {
@@ -202,5 +199,119 @@ describe('pin-up e2e', () => {
     const files = await readdir(pinsDir);
     const dupFiles = files.filter((f) => f.startsWith('code-dup-test') && f.endsWith('.md'));
     expect(dupFiles.length).toBe(2);
+  });
+
+  it('[S4-multi-process] concurrent pin-up processes preserve both pin files for duplicate slug', async () => {
+    /**
+     * RED reasoning (without T4/T5 fixes):
+     *   - Without T5 (writePinAtomically / wx flag): process B's writeFileSync would
+     *     overwrite process A's file — only 1 file survives, bodies identical → FAIL
+     *     on "exactly 2 files" assertion.
+     *   - Without T4 (cursor lock / read-merge-write): process B reads cursor before A
+     *     writes → A's updateCursorEntry is overwritten by B's saveCursor → cursor
+     *     missing transcript-A key → FAIL on "both keys present" assertion.
+     *
+     * GREEN (T4+T5 applied): wx exclusive create ensures distinct filenames; lock
+     * ensures cursor merge preserves both transcript keys.
+     */
+
+    const RACE_SLUG = 'code-auth-jwt-verify';
+
+    // Pin body differs by discovery_context so we can distinguish the two files
+    function makeRacePin(label: string): string {
+      return `<pin slug="${RACE_SLUG}" source_url="auth/jwt.ts:200" authority="code" tier="L1" tags="auth,jwt" sensitivity="private" discovery_context="race-${label}">
+## 한 줄 요지
+verifyToken race ${label}
+
+## SSOT 위치
+auth/jwt.ts:200
+
+## 전후 컨텍스트
+race test fixture ${label}
+
+## 관련 cross-link
+없음
+</pin>`;
+    }
+
+    // Two separate transcripts — each from a different "session"
+    const transcriptA = join(testDir, 's4mp-transcript-a.jsonl');
+    const transcriptB = join(testDir, 's4mp-transcript-b.jsonl');
+
+    await Promise.all([
+      writeFile(transcriptA, assistantLine(makeRacePin('A'), 'uuid-s4mp-a'), 'utf-8'),
+      writeFile(transcriptB, assistantLine(makeRacePin('B'), 'uuid-s4mp-b'), 'utf-8'),
+    ]);
+
+    const hookPath = join(import.meta.dir, 'index.ts');
+    const inputA = JSON.stringify({ transcript_path: transcriptA, sessionId: 'e2e-s4mp-a' });
+    const inputB = JSON.stringify({ transcript_path: transcriptB, sessionId: 'e2e-s4mp-b' });
+
+    const env = { ...process.env, OMT_DIR: omtDir };
+
+    // Launch both processes concurrently via async spawn
+    function runProcess(input: string): Promise<{ exitCode: number; stdout: string }> {
+      return new Promise((resolve, reject) => {
+        const proc = spawn('bun', ['run', hookPath], { env });
+        let stdout = '';
+        proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+        proc.on('error', reject);
+        proc.on('exit', (code) => {
+          resolve({ exitCode: code ?? 1, stdout });
+        });
+        proc.stdin.write(input);
+        proc.stdin.end();
+      });
+    }
+
+    // Start both at the same time, wait for both to finish
+    const [resultA, resultB] = await Promise.all([
+      runProcess(inputA),
+      runProcess(inputB),
+    ]);
+
+    // Both processes must exit cleanly (fail-open)
+    expect(resultA.exitCode).toBe(0);
+    expect(resultB.exitCode).toBe(0);
+
+    const outputA = JSON.parse(resultA.stdout.trim().split('\n').pop() || '{}');
+    const outputB = JSON.parse(resultB.stdout.trim().split('\n').pop() || '{}');
+    expect(outputA.continue).toBe(true);
+    expect(outputB.continue).toBe(true);
+
+    // Exactly 2 .md files for RACE_SLUG — no silent overwrite
+    const allFiles = await readdir(pinsDir);
+    const raceFiles = allFiles.filter(
+      (f) => f.startsWith(RACE_SLUG) && f.endsWith('.md'),
+    );
+    expect(raceFiles.length).toBe(2);
+
+    // Both files are non-empty
+    for (const f of raceFiles) {
+      const content = await readFile(join(pinsDir, f), 'utf-8');
+      expect(content.length).toBeGreaterThan(0);
+    }
+
+    // The two files have different bodies (distinguishable by discovery_context label)
+    const contents = await Promise.all(
+      raceFiles.map((f) => readFile(join(pinsDir, f), 'utf-8')),
+    );
+    const hasA = contents.some((c) => c.includes('race-A'));
+    const hasB = contents.some((c) => c.includes('race-B'));
+    expect(hasA).toBe(true);
+    expect(hasB).toBe(true);
+
+    // Cursor must contain both transcript keys (T4 lock: no lost-update)
+    const cursor = loadCursor(omtDir);
+    const entryA = getCursorEntry(cursor, transcriptA);
+    const entryB = getCursorEntry(cursor, transcriptB);
+    expect(entryA).toBeDefined();
+    expect(entryB).toBeDefined();
+    expect(entryA!.byte_offset).toBeGreaterThan(0);
+    expect(entryB!.byte_offset).toBeGreaterThan(0);
+
+    // No stale lock files
+    const lockFiles = allFiles.filter((f) => f.endsWith('.lock'));
+    expect(lockFiles).toHaveLength(0);
   });
 });
