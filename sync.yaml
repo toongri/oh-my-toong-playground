@@ -1,7 +1,4 @@
 path: "~"
-commands:
-  items:
-    - hud
-scripts:
+skills:
   items:
     - hud
