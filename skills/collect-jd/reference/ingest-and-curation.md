@@ -31,7 +31,7 @@ When a single listing anchor leads to a detail page containing multiple distinct
 
 | Signal | Example |
 |---|---|
-| (a) Explicit subsidiary or team headers | Section heading "토스뱅크", "Toss Securities", "Tech Team" within the body |
+| (a) Explicit subsidiary or team headers | Section heading "토스뱅크", "Toss Securities", "Tech Team" within the body. subsidiary 헤더 직후 N개 team labels enumerate (예: '3개 포지션' 헤더 + Infra/Platform/Recommendation 라벨) → team-level fan-out 의무. 단일 단어 stack tag(Kotlin, TypeScript)와 구별. |
 | (b) Separate sub-position sections with distinct requirements | Each sub-position has its own qualifications, responsibilities, or tech stack block |
 | (c) Multiple distinct apply CTAs | More than one "지원하기" / "Apply" button targeting different positions |
 
@@ -53,6 +53,7 @@ The distinction: weak signals name multiple entities in passing; strong signals 
    - `role_title_verbatim`: `"<original_title> — <sub_position>"`
    - `role_title_slug`: derived from `role_title_verbatim` (includes `sub_position` via slugify)
 4. All other frontmatter fields (company_slug, tags, etc.) inherit from the parent unless the child's content overrides them.
+5. If team labels enumerate within a subsidiary block (header `'<N>개 포지션'` followed by N distinct labels), produce N children per subsidiary. `role_title_verbatim = '<original_title> — <subsidiary> / <team>'`, `sub_position = '<subsidiary> / <team>'`. team과 subsidiary 모두 child의 distinguishing key.
 
 ### Presence-Coupling Rule
 
@@ -70,11 +71,13 @@ The distinction: weak signals name multiple entities in passing; strong signals 
 - "sub_position is not always explicitly labeled so I'll just skip it or put a placeholder" — ❌ If `sub_position` cannot be reliably determined from the content, escalate to Tier 3 user interview rather than guessing. Presence-coupling forbids saving with only `parent_url`.
 - "The anchor text says 외 5개 계열사 — that's multiple companies so fan-out" — ❌ Anchor text mention alone is a weak signal. Check the detail page. If the detail page has separate content blocks per company, that is the strong signal. If not, single combined JD.
 - "parent_url is already in the frontmatter so sub_position is redundant — skip it" — ❌ Presence-coupling: if `parent_url` is set, `sub_position` must also be set.
+- "팀 라벨이 stack tag로 보인다고 무시" — ❌ subsidiary 헤더 직후에 enumerate된 라벨 ≥2 → team-level fan-out 의무. 단일 단어 stack tag(Kotlin)와 문맥으로 구별.
 
 ### Counterexample
 
 - **Toss "백엔드 개발자 — 외 5개 계열사" anchor** → detail page has separate sections "토스", "토스뱅크", "토스증권" each with distinct requirements + 3 apply CTAs → **strong signal** → fan-out into 3 child JDs. Each child gets `parent_url` = anchor URL, `sub_position` = "토스" / "토스뱅크" / "토스증권". ✓
 - **Simple "XYZ 외 2개 계열사" anchor** → detail page body describes a single generic role with no subsidiary separation → **weak signal** → single combined JD, no `parent_url`/`sub_position`. ✓
+- **ML Engineer 토스증권 detail body: '3개 포지션' + 추천/Infra/Platform 라벨** → team-level fan-out → 3 children. `role_title_verbatim` 예: `'ML Engineer — 토스증권 / 추천'`, `'ML Engineer — 토스증권 / Infra'`, `'ML Engineer — 토스증권 / Platform'`. `sub_position` = `'토스증권 / 추천'` 등. team과 subsidiary 모두 child의 distinguishing key. ✓
 
 ---
 
