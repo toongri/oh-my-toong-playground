@@ -110,6 +110,10 @@ Field specification:
 
 ## 6. Decision Rules (how the skill code interprets the response)
 
+### Mechanical short-circuit (LLM 호출 전 선결정)
+
+`A.parent_url == B.parent_url AND A.sub_position != B.sub_position` → `same: false` (LLM 판정 없이 결정). 같은 parent의 fan-out 자식이 다른 `sub_position`이면 항상 별개 JD.
+
 ### Normal response
 
 | `same` value | Skill behavior |
