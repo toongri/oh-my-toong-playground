@@ -8,8 +8,12 @@ hooks:
   SessionStart:
     - component: session-start.sh
       timeout: 10
+    - component: pin-session-start
+      timeout: 10
   Stop:
     - component: persistent-mode
+      timeout: 15
+    - component: pin-up
       timeout: 15
     - component: oh-my-toong:sync-component-validator.sh
       timeout: 30
