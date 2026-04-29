@@ -18,7 +18,6 @@ agents:
 commands:
   items:
     - cancel-ralph
-    - hud
     - ralph
 
 skills:
@@ -47,9 +46,6 @@ skills:
     - collect-jd
     - spec-review
     - orchestrate-review
-
-scripts:
-  items:
     - hud
 
 rules:
