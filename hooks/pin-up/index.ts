@@ -81,8 +81,16 @@ function serializePin(
  * - 1st attempt: {slug}.md
  * - EEXIST → retry with {slug}-HHMMSS.md, then {slug}-HHMMSS-1.md .. {slug}-HHMMSS-999.md
  * - 1000 exhausted → throw Error
+ *
+ * @param clock Optional clock provider (default: () => new Date()). Injected in tests
+ *              to avoid wall-clock second-boundary flakes.
  */
-export function writePinAtomically(omtDir: string, slug: string, content: string): void {
+export function writePinAtomically(
+  omtDir: string,
+  slug: string,
+  content: string,
+  clock: () => Date = () => new Date(),
+): void {
   const pinsDir = join(omtDir, 'pins');
   const basePath = join(pinsDir, `${slug}.md`);
 
@@ -95,7 +103,7 @@ export function writePinAtomically(omtDir: string, slug: string, content: string
   }
 
   // EEXIST: build timestamp suffix and retry with monotonic counter
-  const now = new Date();
+  const now = clock();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
