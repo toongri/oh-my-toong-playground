@@ -2,3 +2,6 @@ path: "~"
 skills:
   items:
     - hud
+    - pins
+    - select-pin
+    - write-pin
