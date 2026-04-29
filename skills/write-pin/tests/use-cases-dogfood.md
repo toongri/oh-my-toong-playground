@@ -79,9 +79,9 @@ verdict:     PASS
 
 ### 2-RED: skill 없는 상태 baseline
 
-사용자가 "slack://T01.../p1714 스레드에서 KS가 RateLimit을 10req/s로 결정했어"라고 말했을 때.
+사용자가 "Slack 스레드(https://team.slack.com/archives/C01.../p1714)에서 KS가 RateLimit을 10req/s로 결정했어"라고 말했을 때.
 
-**Observed behavior (simulated)**: Claude가 source_url 형식을 모름. `slack://...` 대신 `https://...`로 잘못 기입하거나 source_url 필드 누락. authority 필드에 사람 이름 대신 빈 문자열.
+**Observed behavior (simulated)**: Claude가 source_url 형식을 모름. URL을 그대로 복사하거나 source_url 필드 누락. authority 필드에 사람 이름 대신 빈 문자열.
 
 ```
 observed_at: 2026-04-29
@@ -94,14 +94,14 @@ verdict:     FAIL
 
 ### 2-GREEN: write-pin skill 적용 후
 
-write-pin skill이 source_url 형식(slack://, github://, person: 등)과 slug 3-segment 최소 원칙을 가이드.
+write-pin skill이 source_url 형식(https://... 표준 URL 또는 person:이름 자유 식별자)과 slug 3-segment 최소 원칙을 가이드.
 
 ```
 observed_at: 2026-04-29
 method:      analytical_simulation
 command:     N/A — write-pin skill 적용 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  slug="slack-ratelimit-decision", source_url="slack://T01.../p1714", authority="KS". 3-segment slug 준수. body 4섹션 포함.
+key_output:  slug="slack-ratelimit-decision", source_url="https://team.slack.com/archives/C01.../p1714", authority="KS". 3-segment slug 준수. body 4섹션 포함.
 verdict:     GREEN_LIVE
 ```
 
@@ -141,7 +141,7 @@ verdict:     FAIL
 
 ### 3-GREEN: write-pin skill 적용 후
 
-write-pin skill의 source_kind 가이드(code:// 형식)와 body 4섹션 강제.
+write-pin skill의 source_url 가이드(GitHub permalink 형식)와 body 4섹션 강제. source_kind enum은 v0.6에서 폐기됨 — source_url 하나로 위치 정보를 전달한다.
 
 ```
 observed_at: 2026-04-29
@@ -188,7 +188,7 @@ verdict:     FAIL
 
 ### 4-GREEN: write-pin skill 적용 후
 
-write-pin skill이 person: source_url 형식, sensitivity enum(public/internal/confidential), tags YAML list 형식 강제.
+write-pin skill이 person: source_url 형식, sensitivity enum(private/shared) — v1: 정의만, 분기 로직 v2 —, tags YAML list 형식 강제.
 
 ```
 observed_at: 2026-04-29
