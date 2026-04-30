@@ -146,11 +146,13 @@ There is no "I tried hard enough, just review" path. The block IS the safety mec
 
 When the user gives a vague answer that is not an explicit deferral, refine ONCE with a specific follow-up:
 
+각 follow-up 메시지는 deferral 옵션을 함께 안내하여 사용자가 "skip / 그냥 리뷰해줘 / 없어" 어휘를 몰라도 escape 가능하도록 한다.
+
 | User says | Follow-up |
 |-----------|-----------|
-| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 찾을 수 있나요? 링크나 문서 위치를 알려주세요." |
-| "그냥 성능 개선이야" | "어떤 지표를 개선하려 했나요? (latency, throughput, memory 등)" |
-| "여러 가지 고쳤어" | "가장 중요한 1-2개만 알려주세요. 나머지는 코드에서 식별하겠습니다." |
+| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 찾을 수 있나요? 링크나 문서 위치를 알려주세요. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+| "그냥 성능 개선이야" | "어떤 지표를 개선하려 했나요? (latency, throughput, memory 등 — 답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+| "여러 가지 고쳤어" | "가장 중요한 1-2개만 알려주세요. 나머지는 코드에서 식별하겠습니다. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
 
 If refinement still yields a vague answer, surface the block explicitly to the user:
 
@@ -204,20 +206,26 @@ if [ -n "$(git status --porcelain)" ]; then
   echo "Error: working directory has uncommitted changes — refusing to checkout over the user's work" >&2
   exit 1
 fi
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "Error: not running inside a git work tree (Premise 1 violation)" >&2
+# Distinguish primary repo from linked worktree.
+# In a linked worktree, --git-dir points inside .git/worktrees/<wt>,
+# while --git-common-dir points to the shared .git directory; they differ.
+# In a primary clone they are equal — refuse so we never checkout over the user's main work tree.
+if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
+  echo "Error: refusing to run in primary repo — create a dedicated linked worktree first (Premise 1)" >&2
   exit 1
 fi
 
 # 1. Get base branch name
 BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
 
-# 2. Fetch PR ref and base branch
-git fetch origin pull/<number>/head:pr-<number>
+# 2. Fetch PR ref idempotently (rerun-safe — force-update local pr-<N> on
+#    re-review after force-push) and base branch
+git fetch origin pull/<number>/head
 git fetch origin ${BASE_REF}
 
-# 3. Check out the PR ref so the working directory matches the PR state
-git checkout pr-<number>
+# 3. Reset local pr-<N> to the freshly fetched ref and check it out so the
+#    working directory matches the PR state
+git checkout -B pr-<number> FETCH_HEAD
 ```
 
 If the working directory is dirty (uncommitted changes) or the caller is not in a worktree, abort and report — do not silently checkout over the user's work. The worktree premise is the safety net; without it, the safety net is gone.
