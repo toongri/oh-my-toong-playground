@@ -44,7 +44,7 @@ ls $OMT_DIR/pins/
 
 Enumerate all `{slug}.md` files in the flat directory. The SessionStart hook surfaces a compact index (`pins:N | recent:slug1,slug2,slug3`) — use that as a pre-filter when available. If `$OMT_DIR` is unset, log a WARN and skip pin lookup (fail-open: proceed without pins context).
 
-Note the slug prefix patterns: `kind-topic-descriptor` or `YYYY-MM-DD-kind-topic-descriptor`. The `kind` component is drawn from `{jira/linear/slack/github/notion/code/person/decision/finding/gotcha/unknown}` — use it as a first rough filter before reading frontmatter.
+Note the slug prefix pattern: `kind-topic-descriptor` (with optional `-HHMMSS` suffix auto-applied by the Stop hook on collision). The `kind` component is drawn from `{jira/linear/slack/github/notion/code/person/decision/finding/gotcha/unknown}` — use it as a first rough filter before reading frontmatter.
 
 ### Step 2: Frontmatter scan
 
