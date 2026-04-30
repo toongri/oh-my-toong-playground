@@ -101,7 +101,9 @@ A clean GitHub Actions setup:
 
 ```yaml
 - name: Run Maestro
-  run: maestro test --test-output-dir=./maestro-output .maestro/
+  env:
+    MAESTRO_USING_FLOW_DIR: .maestro
+  run: maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 
 - name: Upload Maestro artifacts
   if: always()

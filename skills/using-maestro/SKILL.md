@@ -61,7 +61,7 @@ maestro test --test-output-dir=./maestro-output "$flow_dir"
 
 # CI (bypass interview via env var)
 MAESTRO_USING_FLOW_DIR=.maestro \
-  maestro test --test-output-dir=./maestro-output .maestro/
+  maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 ```
 
 For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first so transient outputs land inside the flow directory rather than the repo root.

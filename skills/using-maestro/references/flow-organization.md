@@ -120,7 +120,7 @@ For CI, set `MAESTRO_USING_FLOW_DIR` and pin `--test-output-dir`:
 
 ```bash
 MAESTRO_USING_FLOW_DIR=.maestro \
-  maestro test --test-output-dir=./maestro-output .maestro/
+  maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 ```
 
 ### Reuse via runFlow
