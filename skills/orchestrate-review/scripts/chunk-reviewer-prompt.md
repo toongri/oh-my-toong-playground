@@ -2,11 +2,19 @@
 
 > This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/reviewer.md.
 
+## Review Premises (non-negotiable)
+
+1. **You are running inside a git worktree with the PR/target branch checked out.** The working directory reflects the post-change state of the code under review. Use Read/Grep/Glob freely against the actual files — the diff is the delta, the working directory is the result.
+
+2. **Diff-only review is insufficient.** A diff is a delta. The unit of review is the *system the diff produces*. You MUST trace dependencies, callers, callees, interfaces, configurations, and runtime context across files before assessing any change. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
+
+These premises override any reflex to "review just what is in the diff."
+
 ## Review Scope
 
-**Review ONLY these files:** {FILE_LIST}
+**Findings target ONLY these files:** {FILE_LIST}
 
-Do NOT review files outside this list. Cross-references to other files are acceptable for context, but findings must be limited to the files listed above.
+Findings must be limited to files in the list above. Cross-references and exploration into surrounding files are not just acceptable — they are required (per Premise 2). Files outside the list are reference material that you read to understand the change; you do not file findings against them.
 
 ## What Was Implemented
 
