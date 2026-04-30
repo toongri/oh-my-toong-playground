@@ -37,9 +37,10 @@ export interface ExtractionResult {
 
 /**
  * Parse a <pin> XML block into structured PinExtracted.
- * Returns null if required attributes are missing.
+ * 누락 필드는 빈 문자열로 채워 partial PinExtracted를 반환한다.
+ * 필수 필드 검증은 validator의 validateRequiredFields에 위임.
  */
-export function parsePinXml(attrsStr: string, body: string): PinExtracted | null {
+export function parsePinXml(attrsStr: string, body: string): PinExtracted {
   const attrs: Record<string, string> = {};
   let match: RegExpExecArray | null;
 
@@ -49,19 +50,13 @@ export function parsePinXml(attrsStr: string, body: string): PinExtracted | null
     attrs[match[1]] = match[2];
   }
 
-  // Required fields (AC-6)
-  const required = ['slug', 'source_url', 'authority', 'tier', 'tags', 'sensitivity'];
-  for (const field of required) {
-    if (!attrs[field]) return null;
-  }
-
   return {
-    slug: attrs['slug'],
-    source_url: attrs['source_url'],
-    authority: attrs['authority'],
-    tier: attrs['tier'],
-    tags: attrs['tags'],
-    sensitivity: attrs['sensitivity'] as 'private' | 'shared',
+    slug: attrs['slug'] ?? '',
+    source_url: attrs['source_url'] ?? '',
+    authority: attrs['authority'] ?? '',
+    tier: attrs['tier'] ?? '',
+    tags: attrs['tags'] ?? '',
+    sensitivity: (attrs['sensitivity'] ?? '') as 'private' | 'shared',
     related: attrs['related'] || undefined,
     supersedes: attrs['supersedes'] || undefined,
     discovery_context: attrs['discovery_context'] || undefined,
@@ -92,8 +87,7 @@ export function extractPinsFromText(text: string): PinExtracted[] {
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
-    const parsed = parsePinXml(match[1], match[2]);
-    if (parsed) pins.push(parsed);
+    pins.push(parsePinXml(match[1], match[2]));
   }
 
   return pins;

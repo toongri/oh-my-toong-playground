@@ -10,7 +10,8 @@
  *   R1. Multi-line body in <pin>
  *   R2. Attribute order variation
  *   R3. Empty body <pin>
- *   R4. Missing required attribute → parsePinXml returns null
+ *   R4. Missing required attribute → parsePinXml returns partial PinExtracted with empty string fields
+ *       (validateRequiredFields in validator.ts가 빈 슬러그를 거부하므로 검증 책임은 validator에 있음)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
@@ -79,13 +80,16 @@ describe('parsePinXml', () => {
     expect(result?.body).toBe('body text');
   });
 
-  it('returns null when required field is missing', () => {
-    // Missing sensitivity
+  it('필수 필드 누락 시 빈 문자열로 채워진 partial PinExtracted 반환 (AC-5 R4)', () => {
+    // Missing sensitivity — extractor은 partial을 반환, validator가 거부
     const result = parsePinXml(
       'slug="test-pin" source_url="x" authority="code" tier="L1" tags="a"',
       'body',
     );
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result.slug).toBe('test-pin');
+    expect(result.sensitivity).toBe('');
+    expect(result.body).toBe('body');
   });
 
   it('captures optional related and discovery_context', () => {
