@@ -9,7 +9,7 @@ description: Use when writing, debugging, or organizing Maestro mobile E2E test 
 
 Maestro is a YAML-driven mobile E2E framework. The four non-negotiable principles:
 
-1. **Selectors: text or stable id, never coordinate.**
+1. **Selectors: text or stable id first; coordinate only as last resort.**
 2. **Every flow starts from a known state** via `clearState` plus an `isE2E` argument the app respects.
 3. **Every wait is condition-based, not timed** — `extendedWaitUntil` for any post-launch state.
 4. **Flow location is per-project, recorded once.** The skill resolves `~/.config/maestro/<id>/config.yaml` (or the `MAESTRO_USING_FLOW_DIR` env var) before every operation. If the entry is missing, interview the user — never assume `.maestro/`. See `references/flow-location-config.md`.
