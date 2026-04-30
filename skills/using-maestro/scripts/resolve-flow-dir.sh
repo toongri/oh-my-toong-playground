@@ -64,10 +64,10 @@ get_yaml_value() {
   local file="$2"
   { grep -E "^${key}:[[:space:]]" "$file" 2>/dev/null || true; } | head -1 \
     | sed -E "s/^${key}:[[:space:]]*//" \
-    | sed -E 's/^"(.*)"$/\1/' \
-    | sed -E "s/^'(.*)'\$/\1/" \
     | sed -E 's/[[:space:]]*#.*$//' \
-    | sed -E 's/[[:space:]]+$//'
+    | sed -E 's/[[:space:]]+$//' \
+    | sed -E 's/^"(.*)"$/\1/' \
+    | sed -E "s/^'(.*)'\$/\1/"
 }
 
 flow_dir=$(get_yaml_value "flow_dir" "$config_file")

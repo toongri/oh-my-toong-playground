@@ -150,6 +150,62 @@ test_missing_flow_dir_key_emits_error() {
 }
 
 # =============================================================================
+# Test C: `test_quoted_with_inline_comment_stripped`
+# Regression for P2 Defect: flow_dir: ".maestro" # team-shared
+# Expected: output is absolute path with NO literal quote characters
+# =============================================================================
+test_quoted_with_inline_comment_stripped() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myproject"
+    local fake_home="$tmp_dir/home"
+
+    setup_project "$project_root" "$fake_home" \
+        "$(printf 'version: 1\nflow_dir: ".maestro" # team-shared\n')"
+
+    local output
+    local exit_code=0
+    output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>/dev/null
+    ) || exit_code=$?
+
+    # Must exit 0
+    if [ "$exit_code" -ne 0 ]; then
+        echo "  ASSERTION FAILED: expected exit code 0, got $exit_code"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Must NOT contain literal double-quote characters
+    if printf '%s' "$output" | grep -q '"'; then
+        echo "  ASSERTION FAILED: output contains literal '\"' (unquoting failed)"
+        echo "  Got: '$output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Must end with /.maestro (the unquoted, comment-stripped value)
+    if ! printf '%s' "$output" | grep -q '/.maestro$'; then
+        echo "  ASSERTION FAILED: output does not end with '/.maestro'"
+        echo "  Got: '$output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -160,6 +216,7 @@ main() {
 
     run_test test_inline_comment_stripped
     run_test test_missing_flow_dir_key_emits_error
+    run_test test_quoted_with_inline_comment_stripped
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
