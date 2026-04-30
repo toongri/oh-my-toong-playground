@@ -171,6 +171,23 @@ Fast-path reviews (single-line edits, obvious typos) skip automated checks and h
 
 ---
 
+## Command Execution Policy: Non-Blocking Only
+
+Argus is a non-interactive headless verifier. Every command Argus runs MUST return control to the shell when finished or be explicitly backgrounded. Foreground processes that occupy the agent shell indefinitely are **forbidden**.
+
+See `stage3-handson.md` Step 3.2: "Run the server/application in background using `run_in_background`" — that same rule applies to all commands Argus executes.
+
+| Pattern | Status | Example |
+|---------|--------|---------|
+| Command exits on completion | Allowed | `bun test`, `curl http://localhost:8080/health` |
+| Command backgrounded via tool | Allowed | `run_in_background` with `emulator -avd Pixel_9` |
+| Command backgrounded in shell | Allowed | `emulator -avd Pixel_9 &` |
+| Bare blocking command | **FORBIDDEN** | `emulator -avd Pixel_9` (hangs the shell indefinitely) |
+
+**Rule**: if a command does not terminate on its own, it MUST be launched with `run_in_background` or with a trailing `&`. MUST NOT run bare blocking processes.
+
+---
+
 ## When: code changes present
 
 ### Automated Checks
