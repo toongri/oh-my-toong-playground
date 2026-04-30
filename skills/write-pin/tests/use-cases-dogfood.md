@@ -141,7 +141,7 @@ verdict:     FAIL
 
 ### 3-GREEN: write-pin skill 적용 후
 
-write-pin skill의 source_url 가이드(GitHub permalink 형식)와 body 4섹션 강제. source_kind enum은 v0.6에서 폐기됨 — source_url 하나로 위치 정보를 전달한다.
+write-pin skill의 source_url 가이드(GitHub permalink 형식)와 body 4섹션 강제. source_kind enum은 v1에서 폐기됨 — source_url 하나로 위치 정보를 전달한다.
 
 ```
 observed_at: 2026-04-29
@@ -195,7 +195,7 @@ observed_at: 2026-04-29
 method:      analytical_simulation
 command:     N/A — write-pin skill 적용 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  slug="person-billing-authority", source_url="person:KS", sensitivity="internal". tags: [person, billing, authority]. body 4섹션 완전.
+key_output:  slug="person-billing-authority", source_url="person:KS", sensitivity="private". tags: [person, billing, authority]. body 4섹션 완전.
 verdict:     GREEN_LIVE
 ```
 
