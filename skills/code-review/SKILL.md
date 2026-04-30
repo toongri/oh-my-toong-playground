@@ -218,13 +218,13 @@ fi
 # 1. Get base branch name
 BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
 
-# 2. Fetch PR ref idempotently (rerun-safe — force-update local pr-<N> on
-#    re-review after force-push) and base branch
-git fetch origin pull/<number>/head
+# 2. Fetch base branch first, then PR ref last so FETCH_HEAD points to PR head
+#    (rerun-safe — force-push on the PR is picked up on re-review)
 git fetch origin ${BASE_REF}
+git fetch origin pull/<number>/head
 
-# 3. Reset local pr-<N> to the freshly fetched ref and check it out so the
-#    working directory matches the PR state
+# 3. Reset local pr-<N> to the freshly fetched PR head (FETCH_HEAD) and check it out
+#    so the working directory matches the PR state
 git checkout -B pr-<number> FETCH_HEAD
 ```
 
