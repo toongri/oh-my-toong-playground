@@ -12,7 +12,7 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 
 These two premises are non-negotiable. They are forwarded to every chunk-reviewer dispatch and they govern every decision in this skill.
 
-1. **Worktree environment** — This review runs inside a git worktree dedicated to the PR/branch under review. Checkout has zero cost to the user's primary working directory. Therefore: **always check out the target ref and explore the codebase at the post-change state**. Do not pretend the file system is read-only or stuck at base.
+1. **Worktree environment** — This review runs inside a git worktree dedicated to the PR/branch under review. Checkout has zero cost to the user's primary working directory. Therefore: **ensure the working directory reflects the post-change state of the target ref before any analysis** — by checking it out (PR mode) or by verifying the caller already arrived on it (other modes). Do not pretend the file system is read-only or stuck at base.
 
 2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 
@@ -191,14 +191,24 @@ Determine range and setup for subsequent steps:
 | Input | Setup | Range |
 |-------|-------|-------|
 | `pr <number or URL>` | Fetch and check out PR ref into the worktree (see below) | `origin/<baseRefName>...pr-<number>` |
-| `<base> <target>` | Worktree must already be on `<target>` (caller's responsibility per Premise 1) | `<base>...<target>` |
-| (none) | Detect default branch (`origin/main` or `origin/master`); worktree is on the target branch | `<default>...HEAD` |
+| `<base> <target>` | Verify HEAD is `<target>` via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain`. Abort if mismatch or dirty. | `<base>...<target>` |
+| (none) | Detect default branch (`origin/main` or `origin/master`). Verify HEAD is the target branch via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain`. Abort if mismatch or dirty. | `<default>...HEAD` |
 
 ### PR Mode: Worktree Checkout (per Premise 1)
 
 This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 1a, Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
 
 ```bash
+# 0. Safety guards (Premise 1 enforcement) — abort BEFORE any state change
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Error: working directory has uncommitted changes — refusing to checkout over the user's work" >&2
+  exit 1
+fi
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Error: not running inside a git work tree (Premise 1 violation)" >&2
+  exit 1
+fi
+
 # 1. Get base branch name
 BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
 
