@@ -2,17 +2,20 @@
 # =============================================================================
 # Paste-Runnable Verification Examples Validator
 #
-# This test is currently warn-only. To switch to strict mode (exit 1 on any
-# finding), edit MODE='warn' to MODE='strict' AFTER fixing all existing
-# findings (review P1-1 in skills/prometheus/acceptance-criteria.md).
+# Runs in strict mode: exits 1 if any Verification: example contains an
+# unsubstituted {placeholder} token. This blocks CI on regressions.
+#
+# Rollback: if a temporary regression must be tolerated, set MODE='warn'
+# below. In warn mode the scanner prints findings but exits 0. Restore
+# MODE='strict' once the regression is fixed.
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Warn-only mode. Change to 'strict' to exit 1 on any finding.
-MODE='warn'
+# Strict mode: exits 1 on any finding. Set to 'warn' to tolerate temporary regressions.
+MODE='strict'
 
 # Colors
 RED='\033[0;31m'
@@ -233,7 +236,6 @@ main() {
     echo "Running live scan of skills/**/*.md ..."
     run_live_scan
 
-    # Always exit 0 in warn-only mode
     exit 0
 }
 
