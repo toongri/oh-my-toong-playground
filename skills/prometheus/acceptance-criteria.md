@@ -34,10 +34,12 @@ If a reference cannot produce a specific behavioral constraint, ask: "What speci
 
 ## AC Format (MANDATORY)
 
-Each criterion MUST follow this two-line structure:
+Each criterion MUST include the following two required lines:
 
 - [ ] **[Observable outcome]**: WHAT state change is visible after completion
       **Verification**: HOW to confirm — executable command, observable behavior, or state assertion
+
+Optional `Setup` / `Cleanup` lines may be added when state mutation requires them — see `## State Mutation: Setup / Cleanup` below.
 
 The criterion is the **contract between planner and executor**. The executor has NO interview context.
 
@@ -73,7 +75,7 @@ When writing Verification for each criterion, run iteratively until PASS:
 Organize by **work item** (not by functional/technical category):
 
 1. State the **responsibility** — WHY this work item exists (what goes wrong if removed)
-2. List acceptance criteria using the two-line format
+2. List acceptance criteria using the required two-line format (plus optional Setup/Cleanup)
 3. Specify what this work item does NOT cover
 
 Overall structure:
