@@ -6,7 +6,7 @@
  *   3. saveCursor + loadCursor round-trip (atomic write)
  *   4. getCursorEntry/updateCursorEntry path normalization
  *   5. Two sessions write separate cursor entries (race-safe isolation)
- *   6. [RACE] Interleaved saveCursor calls preserve both transcript entries
+ *   6. [RACE] Interleaved saveCursor calls preserve pre-existing + both new transcript entries
  *   7. lock file is removed after saveCursor completes normally
  *   8. [STALE] stale lockfile (30초 초과)이 존재할 때 saveCursor가 자가회복하고 정상 완료
  *   9. [STALE] fresh lockfile (10초 이내)이 존재할 때 saveCursor가 1초 후 throw
@@ -15,7 +15,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'bun:test';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { existsSync, utimesSync, writeFileSync, mkdirSync, unlinkSync } from 'fs';
-import type { CursorState } from './types.ts';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { loadCursor, saveCursor, getCursorEntry, updateCursorEntry } from './cursor.ts';
@@ -56,17 +55,14 @@ describe('cursor', () => {
   });
 
   it('round-trips cursor state via saveCursor + loadCursor', () => {
-    const initial = loadCursor(omtDir);
-    const updated = updateCursorEntry(initial, '/fake/transcript.jsonl', 1234, 'uuid-abc');
-    saveCursor(omtDir, updated);
+    saveCursor(omtDir, { transcriptPath: '/fake/transcript.jsonl', byteOffset: 1234, lastUuid: 'uuid-abc' });
 
     const loaded = loadCursor(omtDir);
-    // The key is the resolved absolute path of '/fake/transcript.jsonl'
-    const entry = Object.values(loaded.transcripts)[0];
+    const entry = getCursorEntry(loaded, '/fake/transcript.jsonl');
     expect(entry).toBeDefined();
-    expect(entry.byte_offset).toBe(1234);
-    expect(entry.last_uuid).toBe('uuid-abc');
-    expect(typeof entry.updated_at).toBe('string');
+    expect(entry?.byte_offset).toBe(1234);
+    expect(entry?.last_uuid).toBe('uuid-abc');
+    expect(typeof entry?.updated_at).toBe('string');
   });
 
   it('normalizes transcript_path via path.resolve', () => {
@@ -79,10 +75,8 @@ describe('cursor', () => {
   });
 
   it('stores separate entries for different transcript paths', () => {
-    const state = loadCursor(omtDir);
-    const s1 = updateCursorEntry(state, '/session/a.jsonl', 100, 'uuid-a');
-    const s2 = updateCursorEntry(s1, '/session/b.jsonl', 200, 'uuid-b');
-    saveCursor(omtDir, s2);
+    saveCursor(omtDir, { transcriptPath: '/session/a.jsonl', byteOffset: 100, lastUuid: 'uuid-a' });
+    saveCursor(omtDir, { transcriptPath: '/session/b.jsonl', byteOffset: 200, lastUuid: 'uuid-b' });
 
     const loaded = loadCursor(omtDir);
     const entryA = getCursorEntry(loaded, '/session/a.jsonl');
@@ -91,36 +85,33 @@ describe('cursor', () => {
     expect(entryB?.byte_offset).toBe(200);
   });
 
-  it('[RACE] interleaved saveCursor calls preserve both transcript entries', () => {
-    // Simulate two Stop hook processes running concurrently against the same omtDir.
+  it('[RACE] interleaved saveCursor calls preserve pre-existing entry and both new transcript entries', () => {
+    // Simulate two Stop hook processes running concurrently against the same omtDir
+    // while a third transcript entry already exists on disk from a prior session.
+    //
     // Timeline:
-    //   Session A: loadCursor → snapshot (empty)
-    //   Session B: loadCursor → same snapshot (empty)
-    //   Session A: updateCursorEntry(pathA) → saveCursor  [writes only pathA]
-    //   Session B: updateCursorEntry(pathB) → saveCursor  [must merge, preserving pathA]
-    // Expected: disk has both pathA and pathB after B's saveCursor.
+    //   Pre-existing: /race/session-pre.jsonl already on disk (from earlier run)
+    //   Session A: loadCursor → snapshot with pre-existing entry
+    //   Session B: loadCursor → same snapshot with pre-existing entry
+    //   Session A: saveCursor({transcriptPath: pathA, ...})  [writes only pathA delta]
+    //   Session B: saveCursor({transcriptPath: pathB, ...})  [writes only pathB delta]
+    // Expected: disk has all three entries (pre, A, B) after B's saveCursor.
 
-    // Clear any prior state for a clean slate
-    saveCursor(omtDir, { transcripts: {} });
+    // Seed the pre-existing entry directly
+    saveCursor(omtDir, { transcriptPath: '/race/session-pre.jsonl', byteOffset: 50, lastUuid: 'uuid-pre' });
 
-    // Session A snapshot
-    const snapshotA = loadCursor(omtDir);
-    // Session B snapshot (same disk state)
-    const snapshotB = loadCursor(omtDir);
+    // Session A saves its transcript
+    saveCursor(omtDir, { transcriptPath: '/race/session-a.jsonl', byteOffset: 111, lastUuid: 'uuid-race-a' });
 
-    // Session A updates its transcript and saves
-    const stateA = updateCursorEntry(snapshotA, '/race/session-a.jsonl', 111, 'uuid-race-a');
-    saveCursor(omtDir, stateA);
+    // Session B saves its transcript (each call does read-merge-write independently)
+    saveCursor(omtDir, { transcriptPath: '/race/session-b.jsonl', byteOffset: 222, lastUuid: 'uuid-race-b' });
 
-    // Session B updates its (stale snapshot) transcript and saves
-    // Without read-merge-write, this overwrites A's entry
-    const stateB = updateCursorEntry(snapshotB, '/race/session-b.jsonl', 222, 'uuid-race-b');
-    saveCursor(omtDir, stateB);
-
-    // Both entries must survive
+    // All three entries must survive
     const final = loadCursor(omtDir);
+    const entryPre = getCursorEntry(final, '/race/session-pre.jsonl');
     const entryA = getCursorEntry(final, '/race/session-a.jsonl');
     const entryB = getCursorEntry(final, '/race/session-b.jsonl');
+    expect(entryPre?.byte_offset).toBe(50);
     expect(entryA?.byte_offset).toBe(111);
     expect(entryB?.byte_offset).toBe(222);
   });
@@ -129,8 +120,7 @@ describe('cursor', () => {
     const cursorFilePath = join(omtDir, 'pins', '.cursor.json');
     const lockPath = `${cursorFilePath}.lock`;
 
-    const state = updateCursorEntry(loadCursor(omtDir), '/lock/test.jsonl', 999, 'uuid-lock');
-    saveCursor(omtDir, state);
+    saveCursor(omtDir, { transcriptPath: '/lock/test.jsonl', byteOffset: 999, lastUuid: 'uuid-lock' });
 
     expect(existsSync(lockPath)).toBe(false);
   });
@@ -153,18 +143,10 @@ describe('cursor', () => {
     utimesSync(lockPath, staleMtimeSec, staleMtimeSec);
 
     // 현재 코드에서는 1초 후 throw — stale detection 구현 후 즉시 복구해야 함
-    const state: CursorState = {
-      transcripts: {
-        '/test/transcript.jsonl': {
-          byte_offset: 100,
-          last_uuid: 'u1',
-          updated_at: new Date().toISOString(),
-        },
-      },
-    };
+    const delta = { transcriptPath: '/test/transcript.jsonl', byteOffset: 100, lastUuid: 'u1' };
 
     // throw 없이 완료해야 함
-    expect(() => saveCursor(staleOmtDir, state)).not.toThrow();
+    expect(() => saveCursor(staleOmtDir, delta)).not.toThrow();
 
     // cursor.json이 올바르게 기록됐는지 확인
     const loaded = loadCursor(staleOmtDir);
@@ -196,7 +178,7 @@ describe('cursor', () => {
     let threw = false;
     let errorMessage = '';
     try {
-      saveCursor(freshOmtDir, { transcripts: {} });
+      saveCursor(freshOmtDir, { transcriptPath: '/fresh/transcript.jsonl', byteOffset: 0, lastUuid: 'u-fresh' });
     } catch (err: unknown) {
       threw = true;
       errorMessage = (err as Error).message;

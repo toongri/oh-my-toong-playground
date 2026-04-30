@@ -82,7 +82,7 @@ export function loadCursor(omtDir: string): CursorState {
 }
 
 /**
- * Save cursor state atomically with inter-process lock protection.
+ * Save a single transcript cursor entry atomically with inter-process lock protection.
  *
  * Lock protocol: exclusive create (wx) on ${cursorPath}.lock, retry with
  * 10ms backoff up to 100 times (≤ 1 second), release in finally.
@@ -90,11 +90,14 @@ export function loadCursor(omtDir: string): CursorState {
  * Write protocol inside lock:
  *   1. Re-read latest disk state (another process may have written since our
  *      last loadCursor call).
- *   2. Merge: spread disk state first, then in-memory state on top, so the
- *      current session's updates always win over stale disk data.
+ *   2. Delta merge: 잠금 내부에서 disk fresh value를 기준으로, 해당 transcript 키 하나만
+ *      새 값으로 갱신. 나머지 키는 모두 disk fresh value 그대로 유지.
  *   3. Atomic write: tmp → fsync → rename.
  */
-export function saveCursor(omtDir: string, state: CursorState): void {
+export function saveCursor(
+  omtDir: string,
+  delta: { transcriptPath: string; byteOffset: number; lastUuid: string },
+): void {
   const path = cursorPath(omtDir);
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
@@ -102,14 +105,16 @@ export function saveCursor(omtDir: string, state: CursorState): void {
   const lockPath = `${path}.lock`;
   const lockFd = acquireLock(lockPath);
   try {
-    // Re-read disk to get any writes from concurrent processes
+    // 잠금 내부에서 disk를 다시 읽어 동시 프로세스의 갱신을 반영
     const latest = loadCursor(omtDir);
 
-    // Merge: disk entries first, in-memory entries win (current session is newer)
-    const merged: CursorState = {
-      ...latest,
-      transcripts: { ...latest.transcripts, ...state.transcripts },
-    };
+    // 해당 transcript 키만 새 값으로 갱신, 나머지 키는 disk fresh value 보존
+    const merged: CursorState = updateCursorEntry(
+      latest,
+      delta.transcriptPath,
+      delta.byteOffset,
+      delta.lastUuid,
+    );
 
     const tmp = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
     writeFileSync(tmp, JSON.stringify(merged, null, 2), 'utf-8');
