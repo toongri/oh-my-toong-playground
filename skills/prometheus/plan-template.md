@@ -94,7 +94,7 @@ Any condition fails → decompose further.
 Each scenario uses a structured block with 7 fields:
 - **Scenario**: `{Name} — {Purpose}`
 - **Tool**: CLI command (`curl`, `bun test`, `playwright`, `maestro`, `grep` — NOT descriptions like "Header validation")
-- **Preconditions**: Setup state required
+- **Preconditions**: Setup state required (scenario-level; for per-AC state mutation that needs teardown, use the [Setup/Cleanup](./acceptance-criteria.md#state-mutation-setup--cleanup) fields instead)
 - **Steps**: Numbered list of exact commands
 - **Expected**: Observable outcome on success
 - **Failure**: Specific failure symptoms (NOT "Expected does not happen")
