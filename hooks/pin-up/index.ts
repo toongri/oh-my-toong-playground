@@ -17,7 +17,7 @@
 import { mkdirSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { HookInput, HookOutput, PinExtracted } from './types.ts';
-import { loadCursor, saveCursor, getCursorEntry, updateCursorEntry } from './cursor.ts';
+import { loadCursor, saveCursor, getCursorEntry } from './cursor.ts';
 import { scanTranscript } from './extractor.ts';
 import { validatePin } from './validator.ts';
 import { appendEscapeEntry } from './escape-log.ts';
@@ -167,9 +167,7 @@ export async function main(): Promise<void> {
     );
 
     // Steps 5+6: validate + write
-    let newCursor = cursor;
     const createdAt = new Date().toISOString();
-    let allWritesSucceeded = true;
 
     // Pre-pass: collect all valid slugs in this batch for forward-reference resolution
     const batchSlugs = new Set<string>(
@@ -198,13 +196,14 @@ export async function main(): Promise<void> {
       } catch (writeErr: unknown) {
         const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
         process.stderr.write(`[pin-up] WARN: skipping pin "${pin.slug}" — ${msg}\n`);
-        allWritesSucceeded = false;
+        // write 실패도 audit trail에 기록 (P1-4)
+        appendEscapeEntry(omtDir, sessionId, 'write_failed', pin.slug || null, JSON.stringify(pin));
       }
     }
 
-    // Step 7: save cursor (only when transcript was readable AND all writes succeeded)
-    // — write failure 시 cursor 보류로 다음 실행에서 재처리 가능
-    if (allWritesSucceeded && (finalByteOffset > startOffset || lastUuid)) {
+    // Step 7: save cursor (transcript 진행이 있을 때 저장)
+    // — write 실패가 있어도 cursor 진행 (P1-2)
+    if (finalByteOffset > startOffset || lastUuid) {
       saveCursor(omtDir, { transcriptPath, byteOffset: finalByteOffset, lastUuid });
     }
 
