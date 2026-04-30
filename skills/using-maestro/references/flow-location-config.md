@@ -90,8 +90,8 @@ created_at: 2026-04-30T15:40:00+09:00
 | `git_remote` | no | Identification fallback / debugging aid. |
 | `project_root` | yes | Absolute path used to resolve relative `flow_dir`. |
 | `flow_dir` | yes | Absolute / `~/` / relative. Relative resolves against `project_root`. |
-| `output_dir` | no | Default `--test-output-dir`. Relative to cwd at run time. Defaults to `./maestro-output`. |
-| `launch_args_isE2E` | no | Default boolean for `arguments.isE2E`. Other flow args are not stored here. |
+| `output_dir` | reserved | Reserved for v2. v1 resolver reads only `flow_dir` (see `scripts/resolve-flow-dir.sh`); agents must apply this value manually when invoking maestro test. |
+| `launch_args_isE2E` | reserved | Reserved for v2. v1 resolver reads only `flow_dir` (see `scripts/resolve-flow-dir.sh`); agents must apply this value manually when invoking maestro test. |
 | `created_at` | yes | ISO 8601 timestamp. |
 
 Flat keys make `grep -E "^flow_dir:[[:space:]]"`-style parsing trivial in pure bash 3.2 — no `yq` dependency.
@@ -128,7 +128,7 @@ flow 파일을 어디에 둘까요?
      - 브랜치별로 다른 flow 가능 (worktree마다 별도 사본)
 
   2) ~/.maestro/projects/<id>/flows/  (external mode, 디폴트)
-     - per-user, gitignored, 같은 repo의 모든 worktree에서 공유
+     - per-user, repo 외부, 같은 repo의 모든 worktree에서 공유
      - 1인 작업, 실험적 flow, worktree 헤비 환경
 
   3) 직접 입력 (절대 경로)
