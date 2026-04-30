@@ -18,7 +18,7 @@ slug: code-auth-jwt-verify
 source_url: https://github.com/example/repo/blob/main/src/auth/jwt.ts#L142
 authority: src/auth/jwt.ts (코드베이스 정의)
 tier: 1
-tags: [auth, jwt, verification]
+tags: "auth,jwt,verification"
 sensitivity: private
 created_at: 2026-04-29T10:15:00+09:00
 ---
@@ -48,7 +48,7 @@ slug: code-billing-stripe-webhook
 source_url: https://github.com/example/repo/blob/main/src/billing/webhook.ts#L87
 authority: src/billing/webhook.ts (결제 처리 코드)
 tier: 2
-tags: [billing, stripe, webhook, idempotency]
+tags: "billing,stripe,webhook,idempotency"
 sensitivity: private
 created_at: 2026-04-29T11:30:00+09:00
 discovery_context: Stripe 이중 결제 사고 조사 중 발견
@@ -79,7 +79,7 @@ slug: code-auth-how-jwt-works
 source_url: https://github.com/example/repo/blob/main/src/auth/jwt.ts
 authority: 팀 인지
 tier: 2
-tags: [auth, jwt]
+tags: "auth,jwt"
 sensitivity: private
 created_at: 2026-04-29T10:00:00+09:00
 ---
@@ -111,7 +111,7 @@ slug: github-pr-oauth-scope-fix
 source_url: https://github.com/example/repo/pull/482
 authority: PR #482 (리뷰어: KS, merged)
 tier: 1
-tags: [auth, oauth, scope, bugfix]
+tags: "auth,oauth,scope,bugfix"
 sensitivity: private
 created_at: 2026-04-29T14:00:00+09:00
 ---
@@ -141,7 +141,7 @@ slug: github-pr-db-migration-rollback
 source_url: https://github.com/example/repo/pull/531
 authority: PR #531 (리뷰어: JH, DB 담당)
 tier: 1
-tags: [database, migration, rollback, postgres]
+tags: "database,migration,rollback,postgres"
 sensitivity: private
 created_at: 2026-04-29T15:20:00+09:00
 discovery_context: 스테이징 배포 장애 복구 작업 중 확인
@@ -172,7 +172,7 @@ slug: github-pr-recent-oauth-changes
 source_url: https://github.com/example/repo/pull/482
 authority: 팀
 tier: 2
-tags: [oauth]
+tags: "oauth"
 sensitivity: private
 created_at: 2026-04-29T14:00:00+09:00
 ---
@@ -204,7 +204,7 @@ slug: github-issue-ratelimit-decision
 source_url: https://github.com/example/repo/issues/390
 authority: Issue #390 (PM: SY, Eng: KS — 결정권자 명시)
 tier: 1
-tags: [api, ratelimit, decision, architecture]
+tags: "api,ratelimit,decision,architecture"
 sensitivity: private
 created_at: 2026-04-29T09:00:00+09:00
 ---
@@ -234,7 +234,7 @@ slug: github-issue-search-index-lag
 source_url: https://github.com/example/repo/issues/415
 authority: Issue #415 (담당: TG, Elasticsearch 담당자)
 tier: 2
-tags: [search, elasticsearch, lag, known-issue]
+tags: "search,elasticsearch,lag,known-issue"
 sensitivity: private
 created_at: 2026-04-29T16:45:00+09:00
 discovery_context: 검색 기능 디버깅 중 기존 이슈 발견
@@ -265,7 +265,7 @@ slug: github-issue-ratelimit-decision
 source_url: https://github.com/example/repo/issues/390
 authority: GitHub Issue
 tier: 2
-tags: [ratelimit]
+tags: "ratelimit"
 sensitivity: private
 created_at: 2026-04-29T09:00:00+09:00
 ---
@@ -299,7 +299,7 @@ slug: github-wiki-deployment-checklist
 source_url: https://github.com/example/repo/wiki/Deployment-Checklist
 authority: GitHub Wiki (유지보수: DevOps TG)
 tier: 1
-tags: [deployment, checklist, devops, runbook]
+tags: "deployment,checklist,devops,runbook"
 sensitivity: private
 created_at: 2026-04-29T13:00:00+09:00
 ---
@@ -329,7 +329,7 @@ slug: github-wiki-api-versioning
 source_url: https://github.com/example/repo/wiki/API-Versioning-Policy
 authority: GitHub Wiki (정책 결정: PM SY + Lead KS)
 tier: 1
-tags: [api, versioning, policy, breaking-change]
+tags: "api,versioning,policy,breaking-change"
 sensitivity: private
 created_at: 2026-04-29T14:30:00+09:00
 discovery_context: 파트너 연동 브레이킹 체인지 검토 중
@@ -360,7 +360,7 @@ slug: github-wiki-deployment-checklist
 source_url: https://github.com/example/repo/wiki/Deployment-Checklist
 authority: GitHub Wiki
 tier: 1
-tags: [deployment]
+tags: "deployment"
 sensitivity: private
 created_at: 2026-04-29T13:00:00+09:00
 ---
@@ -398,7 +398,7 @@ slug: linear-notifications-push-decision
 source_url: https://linear.app/example/issue/ENG-1234
 authority: Linear ENG-1234 (결정권자: PM SY)
 tier: 1
-tags: [notifications, push, mobile, decision]
+tags: "notifications,push,mobile,decision"
 sensitivity: private
 created_at: 2026-04-29T10:45:00+09:00
 ---
@@ -428,7 +428,7 @@ slug: linear-auth-sso-scope
 source_url: https://linear.app/example/issue/ENG-2089
 authority: Linear ENG-2089 (결정권자: Lead KS + Security JH)
 tier: 1
-tags: [auth, sso, saml, enterprise, scope]
+tags: "auth,sso,saml,enterprise,scope"
 sensitivity: private
 created_at: 2026-04-29T11:00:00+09:00
 discovery_context: 엔터프라이즈 고객 SSO 지원 스펙 검토 중
@@ -459,7 +459,7 @@ slug: linear-eng1234-notifications
 source_url: https://linear.app/example/issue/ENG-1234
 authority: Linear
 tier: 2
-tags: [notifications]
+tags: "notifications"
 sensitivity: private
 created_at: 2026-04-29T10:45:00+09:00
 ---
@@ -491,7 +491,7 @@ slug: slack-billing-stripe-keys
 source_url: https://example.slack.com/archives/C0123ABC/p1711900000000000
 authority: KS (결제 도메인 리드, Slack #billing-eng)
 tier: 1
-tags: [billing, stripe, api-key, environment]
+tags: "billing,stripe,api-key,environment"
 sensitivity: private
 created_at: 2026-04-29T17:00:00+09:00
 ---
@@ -521,7 +521,7 @@ slug: slack-deploy-freeze-period
 source_url: https://example.slack.com/archives/C0456DEF/p1712500000000000
 authority: CTO JH (Slack #engineering-all)
 tier: 1
-tags: [deployment, freeze, policy, holiday]
+tags: "deployment,freeze,policy,holiday"
 sensitivity: private
 created_at: 2026-04-29T18:00:00+09:00
 discovery_context: 연휴 직전 배포 계획 검토 중
@@ -552,7 +552,7 @@ slug: slack-billing-stripe-keys
 source_url: https://example.slack.com/archives/C0123ABC/p1711900000000000
 authority: Slack
 tier: 2
-tags: [stripe]
+tags: "stripe"
 sensitivity: private
 created_at: 2026-04-29T17:00:00+09:00
 ---
@@ -584,7 +584,7 @@ slug: notion-onboarding-engineer-setup
 source_url: https://www.notion.so/example/Engineer-Onboarding-abc123
 authority: Notion Engineer Onboarding 페이지 (유지보수: HR + TG)
 tier: 2
-tags: [onboarding, setup, environment, engineer]
+tags: "onboarding,setup,environment,engineer"
 sensitivity: private
 created_at: 2026-04-29T09:30:00+09:00
 ---
@@ -614,7 +614,7 @@ slug: notion-data-retention-policy
 source_url: https://www.notion.so/example/Data-Retention-Policy-def456
 authority: Notion Data Retention Policy (결정권자: CPO SY + Legal)
 tier: 1
-tags: [data, retention, gdpr, compliance, policy]
+tags: "data,retention,gdpr,compliance,policy"
 sensitivity: private
 created_at: 2026-04-29T10:00:00+09:00
 discovery_context: GDPR 감사 대응 준비 중
@@ -645,7 +645,7 @@ slug: notion-onboarding-engineer-setup
 source_url: https://www.notion.so/example/Engineer-Onboarding-abc123
 authority: Notion
 tier: 2
-tags: [onboarding]
+tags: "onboarding"
 sensitivity: private
 created_at: 2026-04-29T09:30:00+09:00
 ---
@@ -683,7 +683,7 @@ slug: person-billing-domain-authority
 source_url: person:KS
 authority: KS (빌링 도메인 리드, 직접 대화)
 tier: 1
-tags: [billing, domain-knowledge, ownership, person]
+tags: "billing,domain-knowledge,ownership,person"
 sensitivity: private
 created_at: 2026-04-29T15:00:00+09:00
 ---
@@ -713,7 +713,7 @@ slug: person-infra-oncall-rotation
 source_url: person:TG
 authority: TG (인프라 온콜 스케줄 관리자)
 tier: 2
-tags: [infra, oncall, rotation, person, ops]
+tags: "infra,oncall,rotation,person,ops"
 sensitivity: private
 created_at: 2026-04-29T16:00:00+09:00
 discovery_context: 새벽 인시던트 에스컬레이션 경로 확인 중
@@ -744,7 +744,7 @@ slug: person-ks-said-billing-stuff
 source_url: person:KS
 authority: KS
 tier: 2
-tags: [billing, person]
+tags: "billing,person"
 sensitivity: private
 created_at: 2026-04-29T15:00:00+09:00
 ---

@@ -47,14 +47,14 @@ verdict:     FAIL
 
 write-pin skill 로드 후 동일 요청. Claude가 `<pin>` XML을 emit하고 pin-up hook이 파일 생성.
 
-**Expected green behavior**: Claude가 `code-oauth-eng1234-pr` slug로 `<pin>` XML 생성. 7필수 필드 포함. body 4섹션 포함. pin-up hook이 `$OMT_DIR/pins/code-oauth-eng1234-pr.md` 생성.
+**Expected green behavior**: Claude가 `code-oauth-scope-decision` slug로 `<pin>` XML 생성. 7필수 필드 포함. body 4섹션 포함. pin-up hook이 `$OMT_DIR/pins/code-oauth-scope-decision.md` 생성.
 
 ```
 observed_at: 2026-04-29
 method:      analytical_simulation
 command:     N/A — write-pin skill 적용 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  <pin slug="code-oauth-eng1234-pr" authority="ENG-1234 PR" tier="1"> 생성. body 4섹션 확인.
+key_output:  <pin slug="code-oauth-scope-decision" authority="ENG-1234 PR" tier="1"> 생성. body 4섹션 확인.
 verdict:     GREEN_LIVE
 ```
 
@@ -175,27 +175,27 @@ verdict:     PASS
 
 사용자가 "billing 도메인 관련 결정은 KS님이 권위야"라고 말했을 때.
 
-**Observed behavior (simulated)**: Claude가 person: source_url 형식 미사용. sensitivity 필드 기입 기준 불명. tags 배열 형식 혼동(string 대신 YAML list).
+**Observed behavior (simulated)**: Claude가 person: source_url 형식 미사용. sensitivity 필드 기입 기준 불명. tags 형식 혼동(quoted CSV string 대신 YAML list).
 
 ```
 observed_at: 2026-04-29
 method:      analytical_simulation
 command:     N/A — skill 미적용 상태 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  source_url 없음. sensitivity 없음. tags: "person, billing" (배열 아닌 comma-string). slug 2-segment.
+key_output:  source_url 없음. sensitivity 없음. tags: [person, billing] (quoted CSV string 아닌 YAML list). slug 2-segment.
 verdict:     FAIL
 ```
 
 ### 4-GREEN: write-pin skill 적용 후
 
-write-pin skill이 person: source_url 형식, sensitivity enum(private/shared) — v1: 정의만, 분기 로직 v2 —, tags YAML list 형식 강제.
+write-pin skill이 person: source_url 형식, sensitivity enum(private/shared) — v1: 정의만, 분기 로직 v2 —, tags quoted CSV string 형식 강제.
 
 ```
 observed_at: 2026-04-29
 method:      analytical_simulation
 command:     N/A — write-pin skill 적용 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  slug="person-billing-authority", source_url="person:KS", sensitivity="private". tags: [person, billing, authority]. body 4섹션 완전.
+key_output:  slug="person-billing-authority", source_url="person:KS", sensitivity="private". tags: "person,billing,authority". body 4섹션 완전.
 verdict:     GREEN_LIVE
 ```
 
@@ -220,7 +220,7 @@ verdict:     PASS
 
 ### 5-RED: skill 없는 상태 baseline
 
-사용자가 pin A(code-oauth-eng1234-pr)를 먼저 만들고, pin B(slack-ratelimit-decision)를 만들 때 "두 pin이 관련돼"라고 말했을 때.
+사용자가 pin A(code-oauth-scope-decision)를 먼저 만들고, pin B(slack-ratelimit-decision)를 만들 때 "두 pin이 관련돼"라고 말했을 때.
 
 **Observed behavior (simulated)**: Claude가 related 필드 형식 미사용. body의 "관련 cross-link" 섹션 없음. 또는 related 필드에 파일 경로 대신 URL 기입.
 
@@ -242,7 +242,7 @@ observed_at: 2026-04-29
 method:      analytical_simulation
 command:     N/A — write-pin skill 적용 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  pin B frontmatter: related: [code-oauth-eng1234-pr]. body 4번째 섹션: "→ Details: [code-oauth-eng1234-pr.md]". validator AC-19 PASS.
+key_output:  pin B frontmatter: related: [code-oauth-scope-decision]. body 4번째 섹션: "→ Details: [code-oauth-scope-decision.md]". validator AC-19 PASS.
 verdict:     GREEN_LIVE
 ```
 
