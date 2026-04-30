@@ -59,11 +59,11 @@ export interface FrontmatterSchema {
   source_url: string;
   authority: string;
   tier: string; // TODO: narrow to 'L1'|'L2'|'L3' once plan enumerates values
-  tags: string[];
+  tags: string; // CSV scalar — matches serializePin output (`tags: "a,b,c"`)
   sensitivity: Sensitivity;
   created_at: string; // ISO8601
   // 3 optional fields
-  related?: string[];
+  related?: string; // CSV scalar — matches serializePin output
   supersedes?: string;
   discovery_context?: string;
 }
