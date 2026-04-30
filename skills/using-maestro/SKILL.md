@@ -69,6 +69,7 @@ For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first 
 ## References
 
 - **`references/flow-location-config.md`** — Per-project flow location resolution. The `~/.config/maestro/<id>/config.yaml` schema, the resolution algorithm, the interview script, the `MAESTRO_USING_FLOW_DIR` CI escape hatch.
+- **`references/scenario-design.md`** — What to test: scenario ideation heuristics (risk matrix, single intent), ISTQB-classic edge case techniques applied to mobile, kiosk/fixed-screen scenario categories (time-based, peripheral, external trigger, soak, config change, error recovery, security, accessibility), scenario→flow mapping patterns.
 - **`references/flow-organization.md`** — Inside the resolved `flow_dir`: directory structure, subflow reuse via `runFlow`, lifecycle and maintenance, data-driven repetition.
 - **`references/selectors-and-determinism.md`** — Selector priority table, the five determinism guardrails, idempotency, common selector mistakes.
 - **`references/storage-and-screenshots.md`** — `takeScreenshot` vs `assertScreenshot` policy, `--test-output-dir` for CI, `.gitignore` patterns, visual regression strategy.
