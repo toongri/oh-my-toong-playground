@@ -48,23 +48,23 @@ function parseInput(raw: string): HookInput {
  * Serialize a pin to $OMT_DIR/pins/{slug}.md with frontmatter + body.
  * created_at is added here (not in XML — not author-controlled).
  */
-function serializePin(
+export function serializePin(
   slug: string,
   pin: PinExtracted,
   createdAt: string,
 ): string {
 
   const lines: string[] = ['---'];
-  lines.push(`slug: "${slug}"`);
-  lines.push(`source_url: "${pin.source_url}"`);
-  lines.push(`authority: "${pin.authority}"`);
-  lines.push(`tier: "${pin.tier}"`);
-  lines.push(`tags: "${pin.tags}"`);
-  lines.push(`sensitivity: "${pin.sensitivity}"`);
-  lines.push(`created_at: "${createdAt}"`);
-  if (pin.related) lines.push(`related: "${pin.related}"`);
-  if (pin.supersedes) lines.push(`supersedes: "${pin.supersedes}"`);
-  if (pin.discovery_context) lines.push(`discovery_context: "${pin.discovery_context}"`);
+  lines.push(`slug: ${JSON.stringify(slug)}`);
+  lines.push(`source_url: ${JSON.stringify(pin.source_url)}`);
+  lines.push(`authority: ${JSON.stringify(pin.authority)}`);
+  lines.push(`tier: ${JSON.stringify(pin.tier)}`);
+  lines.push(`tags: ${JSON.stringify(pin.tags)}`);
+  lines.push(`sensitivity: ${JSON.stringify(pin.sensitivity)}`);
+  lines.push(`created_at: ${JSON.stringify(createdAt)}`);
+  if (pin.related) lines.push(`related: ${JSON.stringify(pin.related)}`);
+  if (pin.supersedes) lines.push(`supersedes: ${JSON.stringify(pin.supersedes)}`);
+  if (pin.discovery_context) lines.push(`discovery_context: ${JSON.stringify(pin.discovery_context)}`);
   lines.push('---');
   lines.push('');
   lines.push(pin.body);
