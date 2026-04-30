@@ -175,7 +175,7 @@ Items requiring physical hardware (push delivery, biometric enrollment, camera, 
 ```markdown
 ## Stage 3: Hands-On QA
 
-**Applicability:** [API / Frontend / CLI / SKIPPED (reason)]
+**Applicability:** [API / Frontend / Mobile / CLI / SKIPPED (reason)]
 
 | Verification | Status | Details |
 |--------------|--------|---------|
