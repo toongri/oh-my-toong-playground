@@ -65,7 +65,7 @@ The location is **resolved per-project**, not assumed. See `flow-location-config
 
 When to pick: team-shared apps where flows ship with feature PRs, CI runs against the committed YAML, and brand-new flows benefit from PR review.
 
-### External mode (Option 2 — gitignored, worktree-shared)
+### External mode (Option 2 — outside repo, worktree-shared)
 
 ```
 ~/.maestro/                      # Maestro CLI also lives here
@@ -103,7 +103,7 @@ Key conventions (apply to both):
 Examples below show internal-mode paths (`.maestro/`). External mode substitutes the absolute path (e.g., `~/.maestro/projects/<id>/flows/`) — the substitution is mechanical, the commands otherwise identical.
 
 ```bash
-flow_dir=$(bash <skill>/scripts/resolve-flow-dir.sh)
+flow_dir=$(bash <skill>/scripts/resolve-flow-dir.sh) || exit 1   # exit 2 = REGISTER_REQUIRED — see SKILL.md / flow-location-config.md
 
 maestro test "$flow_dir/auth/LoginSmoke.yaml"
 maestro test "$flow_dir"                              # whole suite

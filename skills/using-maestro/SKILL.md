@@ -45,8 +45,10 @@ brew install maestro
 
 # Resolve flow_dir for this project (interview happens on first run if absent)
 flow_dir=$(bash <skill>/scripts/resolve-flow-dir.sh) || {
-  # Exit 2 = REGISTER_REQUIRED; the agent runs the interview, writes config,
-  # then re-runs the resolver. See references/flow-location-config.md.
+  # Illustrative — exit 1 here is a placeholder. In practice, the calling
+  # agent must inspect $? and dispatch the interview when the resolver exited
+  # with code 2 (REGISTER_REQUIRED), then re-run the resolver.
+  # See references/flow-location-config.md for the interview contract.
   exit 1
 }
 
