@@ -21,7 +21,7 @@ This file collects the failure modes you will hit and the commands you will reac
 | Visual diff noise from dynamic UI | `assertScreenshot` flickers because of live clock or weather | Wrap with `cropOn: { id: "..." }` to compare only the stable region |
 | Treating `inspect_screen` as JSON | LLM parsing fails | The Maestro MCP returns CSV — feed it as CSV |
 | Running `maestro test` from repo root | PNGs scatter across the repo, `git status` clutters | Use `--test-output-dir=./maestro-output` or `cd .maestro && maestro test` |
-| Confusing `takeScreenshot` with `assertScreenshot` baselines | Either committing transient PNGs to git or gitignoring real baselines | `takeScreenshot` outputs are transient (gitignore); `assertScreenshot` baselines are committed under `.maestro/screenshots/` |
+| Confusing `takeScreenshot` with `assertScreenshot` baselines | Either committing transient PNGs to git or gitignoring real baselines | `takeScreenshot` outputs are transient (gitignore); `assertScreenshot` baselines are stored in `<flow_dir>/screenshots/` — committed to git in internal mode, backed up separately in external mode |
 
 ## CLI Cheat Sheet
 

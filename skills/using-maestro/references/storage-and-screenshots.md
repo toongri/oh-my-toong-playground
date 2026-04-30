@@ -9,7 +9,7 @@ Maestro produces PNG files in two completely different roles. The naming overlap
 | Kind | Command | Relationship to YAML | Lifetime | Storage Policy |
 |---|---|---|---|---|
 | **Transient screenshot** | `- takeScreenshot: name` | Independent — generated fresh on every run | Ephemeral | **Gitignored or deleted.** Never commit. |
-| **Assertion baseline** | `- assertScreenshot: { path: X.png, ... }` | Coupled — the YAML references this exact PNG | Permanent | Internal mode: **committed to git** in `<project>/.maestro/screenshots/`. External mode: lives at `~/.maestro/projects/<id>/screenshots/` and requires its own backup discipline. |
+| **Assertion baseline** | `- assertScreenshot: { path: X.png, ... }` | Coupled — the YAML references this exact PNG | Permanent | Both modes: stored in `<flow_dir>/screenshots/`. Internal mode: **committed to git**. External mode: kept outside the repo (under `~/.maestro/projects/<id>/flows/screenshots/`) and requires its own backup discipline. |
 
 Treat them as two different file types that happen to share an extension.
 
