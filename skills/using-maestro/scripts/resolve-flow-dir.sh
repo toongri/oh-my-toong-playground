@@ -62,12 +62,25 @@ fi
 get_yaml_value() {
   local key="$1"
   local file="$2"
-  { grep -E "^${key}:[[:space:]]" "$file" 2>/dev/null || true; } | head -1 \
-    | sed -E "s/^${key}:[[:space:]]*//" \
-    | sed -E 's/[[:space:]]*#.*$//' \
-    | sed -E 's/[[:space:]]+$//' \
-    | sed -E 's/^"(.*)"$/\1/' \
-    | sed -E "s/^'(.*)'\$/\1/"
+  local raw
+  raw=$({ grep -E "^${key}:[[:space:]]" "$file" 2>/dev/null || true; } | head -1 \
+    | sed -E "s/^${key}:[[:space:]]*//")
+  # If value is quoted, extract content between quotes (preserving '#' inside)
+  # and treat anything after the closing quote as an inline comment.
+  # If unquoted, strip inline comments and trailing whitespace as before.
+  case "$raw" in
+    '"'*)
+      printf '%s' "$raw" | sed -E 's/^"([^"]*)".*$/\1/'
+      ;;
+    "'"*)
+      printf '%s' "$raw" | sed -E "s/^'([^']*)'.*\$/\1/"
+      ;;
+    *)
+      printf '%s' "$raw" \
+        | sed -E 's/[[:space:]]*#.*$//' \
+        | sed -E 's/[[:space:]]+$//'
+      ;;
+  esac
 }
 
 flow_dir=$(get_yaml_value "flow_dir" "$config_file")
