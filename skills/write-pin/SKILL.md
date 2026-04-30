@@ -116,7 +116,7 @@ validator가 4섹션 헤더를 grep해 누락 시 escape 처리한다.
 날짜는 시간제한사가 아닌 발견 이벤트 식별자로 사용할 때만 붙인다.
 
 ### 원칙 ②
-`kind` ∈ `{jira, linear, slack, notion, code, person, decision, finding, gotcha, unknown}`.
+`kind` ∈ `{jira, linear, slack, github, notion, code, person, decision, finding, gotcha, unknown}`.
 목록에 없는 kind는 `unknown`을 사용한다.
 
 ### 원칙 ③

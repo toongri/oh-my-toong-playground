@@ -75,6 +75,18 @@ describe('validateSlug', () => {
       expect(validateSlug(`${kind}-topic-desc`).valid).toBe(true);
     }
   });
+
+  // RED: github kind 추가 (Change 2.1)
+  it('`github-pr-oauth-fix` 슬러그가 valid', () => {
+    expect(validateSlug('github-pr-oauth-fix').valid).toBe(true);
+  });
+
+  it('`github` kind 포함한 전체 valid kind 회귀 없음', () => {
+    const kinds = ['jira', 'linear', 'slack', 'github', 'notion', 'code', 'person', 'decision', 'finding', 'gotcha', 'unknown'];
+    for (const kind of kinds) {
+      expect(validateSlug(`${kind}-topic-desc`).valid).toBe(true);
+    }
+  });
 });
 
 // ─── validateRequiredFields ───────────────────────────────────────────────────
@@ -98,6 +110,23 @@ describe('validateRequiredFields', () => {
   it('fails when tags is whitespace only', () => {
     const pin = { ...VALID_PIN, tags: '   ' };
     expect(validateRequiredFields(pin).valid).toBe(false);
+  });
+
+  // RED: sensitivity enum 검증 (Change 2.2)
+  it('`sensitivity: "internal"` 거부', () => {
+    const pin = { ...VALID_PIN, sensitivity: 'internal' as 'private' };
+    const r = validateRequiredFields(pin);
+    expect(r.valid).toBe(false);
+    expect(r.reason).toBe('frontmatter_invalid');
+    expect(r.message).toMatch(/must be 'private' or 'shared'/);
+  });
+
+  it('`sensitivity: "private"` 통과 (회귀)', () => {
+    expect(validateRequiredFields({ ...VALID_PIN, sensitivity: 'private' }).valid).toBe(true);
+  });
+
+  it('`sensitivity: "shared"` 통과 (회귀)', () => {
+    expect(validateRequiredFields({ ...VALID_PIN, sensitivity: 'shared' }).valid).toBe(true);
   });
 });
 
@@ -169,6 +198,25 @@ describe('validateRelatedSlugs', () => {
     expect(r.valid).toBe(false);
     expect(r.missingSlugs).toContain('code-missing-one');
     expect(r.missingSlugs).not.toContain('code-existing-pin');
+  });
+
+  // RED: batchSlugs 인자 추가 (Change 2.3)
+  it('`batchSlugs`에 포함된 slug는 디스크 부재여도 valid', () => {
+    // batch-only-slug: 디스크에 없음, batchSlugs에 있음
+    // code-existing-pin: 디스크에 있음
+    const r = validateRelatedSlugs(
+      omtDir,
+      'batch-only-slug,code-existing-pin',
+      new Set(['batch-only-slug']),
+    );
+    expect(r.valid).toBe(true);
+    expect(r.missingSlugs).toHaveLength(0);
+  });
+
+  it('`batchSlugs` 미전달 시 디스크에 없는 slug는 invalid (회귀)', () => {
+    const r = validateRelatedSlugs(omtDir, 'code-nonexistent-slug');
+    expect(r.valid).toBe(false);
+    expect(r.missingSlugs).toContain('code-nonexistent-slug');
   });
 });
 

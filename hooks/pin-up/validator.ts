@@ -18,7 +18,7 @@ export const SLUG_REGEX = /^[a-z0-9]+(-[a-z0-9]+){2,}(-\d{6})?$/;
 
 // AC-7: valid kind values
 export const VALID_KINDS = new Set([
-  'jira', 'linear', 'slack', 'notion', 'code', 'person',
+  'jira', 'linear', 'slack', 'github', 'notion', 'code', 'person',
   'decision', 'finding', 'gotcha', 'unknown',
 ]);
 
@@ -81,6 +81,14 @@ export function validateRequiredFields(pin: PinExtracted): ValidationResult {
     }
   }
 
+  if (pin.sensitivity !== 'private' && pin.sensitivity !== 'shared') {
+    return {
+      valid: false,
+      reason: 'frontmatter_invalid',
+      message: `sensitivity "${pin.sensitivity}" must be 'private' or 'shared'`,
+    };
+  }
+
   return { valid: true };
 }
 
@@ -107,15 +115,17 @@ export function validateBodySections(body: string): ValidationResult {
 export function validateRelatedSlugs(
   omtDir: string,
   related: string | undefined,
+  batchSlugs?: Set<string>,
 ): { valid: boolean; missingSlugs: string[] } {
   if (!related || related.trim() === '') {
     return { valid: true, missingSlugs: [] };
   }
 
   const slugs = related.split(',').map((s) => s.trim()).filter(Boolean);
-  const missingSlugs = slugs.filter(
-    (slug) => !existsSync(join(omtDir, 'pins', `${slug}.md`)),
-  );
+  const missingSlugs = slugs.filter((slug) => {
+    if (batchSlugs?.has(slug)) return false;
+    return !existsSync(join(omtDir, 'pins', `${slug}.md`));
+  });
 
   return {
     valid: missingSlugs.length === 0,
@@ -130,6 +140,7 @@ export function validateRelatedSlugs(
 export function validatePin(
   pin: PinExtracted,
   omtDir: string,
+  batchSlugs?: Set<string>,
 ): ValidationResult {
   // 1. Required fields
   const fieldsResult = validateRequiredFields(pin);
@@ -144,7 +155,7 @@ export function validatePin(
   if (!bodyResult.valid) return bodyResult;
 
   // 4. Related slug existence
-  const relatedResult = validateRelatedSlugs(omtDir, pin.related);
+  const relatedResult = validateRelatedSlugs(omtDir, pin.related, batchSlugs);
   if (!relatedResult.valid) {
     return {
       valid: false,
