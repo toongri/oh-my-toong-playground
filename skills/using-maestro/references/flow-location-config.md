@@ -202,7 +202,7 @@ rm ~/.config/maestro/<id>/config.yaml
 | `git remote get-url origin` fails (no origin remote) | Skip `git_remote` field. ID = `basename "$project_root"`. |
 | Two repos with the same basename and no git remote | Both end up with same ID. Interview detects existing entry and asks for slug override. |
 | `~/.config/maestro/` does not exist | Created on first config write with `mkdir -p`. |
-| Config schema version mismatch | Skill aborts with error message. User migrates manually. |
+| `version` field (currently v1) | Reserved for future schema evolution. Not currently validated by the resolver — only `flow_dir` is read. |
 | `flow_dir` directory does not exist | Skill creates with `mkdir -p` on first use. |
 | User deletes `flow_dir` content | Skill cannot recover; restore from backup or rewrite. |
 | `MAESTRO_USING_FLOW_DIR` set to empty string | Treated as unset (env var override engages only on non-empty). |
