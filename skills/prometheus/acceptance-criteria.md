@@ -151,7 +151,7 @@ The Verification line MUST be paste-runnable. Pick the form that matches the cha
 
 - [ ] **POST /api/users (201) returns the same record on subsequent GET**
       **Setup**: `./scripts/db-reset.sh`
-      **Verification**: `curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d '{"email":"test@example.com"}' && curl -fsS http://localhost:8080/api/users/{id} | jq -e '.email == "test@example.com"'`
+      **Verification**: `id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d '{"email":"test@example.com"}' | jq -r '.id') && curl -fsS "http://localhost:8080/api/users/$id" | jq -e '.email == "test@example.com"'`
       **Cleanup**: `./scripts/db-reset.sh`
 
 ### Unit / integration test runner
