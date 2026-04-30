@@ -24,11 +24,11 @@ The design splits config (XDG-compliant) from data (Maestro-convention):
 ~/.maestro/                       # data — Maestro CLI also lives here
   projects/                       # ← namespace fence against future CLI dirs
     <id>/
-      flows/                      # flow.yaml files (external mode default)
+      flows/                      # = resolved flow_dir (external mode default)
         common/
         auth/
         sleep/
-      screenshots/                # assertScreenshot baselines (external mode)
+        screenshots/              # assertScreenshot baselines (requires separate backup)
   tests/                          # ← Maestro CLI's own debug bundles, untouched
   …                               # ← future CLI-owned directories
 ```

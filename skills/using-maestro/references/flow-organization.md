@@ -80,8 +80,8 @@ When to pick: team-shared apps where flows ship with feature PRs, CI runs agains
           LoginSmoke.yaml
         sleep/
           SleepEnterDefault.yaml
-      screenshots/               # assertScreenshot baselines (sibling, NOT inside flows/)
-        ProductCard.png
+        screenshots/             # assertScreenshot baselines (requires separate backup discipline)
+          ProductCard.png
   tests/                         # ← Maestro CLI's own debug bundles, untouched
 ```
 
@@ -93,7 +93,7 @@ Key conventions (apply to both):
 
 - **`common/` holds subflows only.** Standalone runs would fail (they assume parent context). Exclude them from default discovery via `config.yaml` `exclude` paths or by tagging with `--exclude-tags`.
 - **Feature directories group by user journey, not by screen.** `auth/`, `checkout/`, `dispense/` are user-facing concepts. Avoid `screens/login.yaml` — that bleeds implementation detail into the layout.
-- **`screenshots/` holds `assertScreenshot` baselines.** Internal mode commits them to git; external mode keeps them outside the repo and requires separate backup discipline. Transient `takeScreenshot` outputs never belong in either.
+- **`screenshots/` holds `assertScreenshot` baselines.** Both modes store baselines in `<flow_dir>/screenshots/`. Internal mode commits them to git; external mode keeps `<flow_dir>/screenshots/` outside the repo and requires separate backup discipline. Transient `takeScreenshot` outputs never belong in either.
 - **Versioning**: internal mode versions flows alongside app code on the same branch/PR. External mode versions flows in a separate inner git repo (`cd ~/.maestro/projects/<id>/flows && git init`) or accepts no versioning at all.
 
 ## How to Use Flows
