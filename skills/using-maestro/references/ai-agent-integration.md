@@ -67,14 +67,14 @@ If your CI runs 1000 flow executions per week, MCP is not the right execution pa
 3. Use `inspect_screen` and `take_screenshot` to understand the screen.
 4. Have the LLM draft a `flow.yaml`.
 5. Review the draft as a human — does it cover the real user intent? Does it use stable selectors? Is it idempotent?
-6. Commit the YAML to `.maestro/<feature>/`.
+6. Resolve the project's flow_dir first (`bash <skill>/scripts/resolve-flow-dir.sh`), then commit the YAML to `<flow_dir>/<feature>/`. See `flow-location-config.md`.
 7. CI runs the YAML via `maestro test` from now on. No further LLM involvement.
 
 This pattern captures the LLM's value during authoring without paying its cost during execution.
 
 ## Where Does MCP-Generated YAML Live?
 
-Same place as hand-written YAML: `.maestro/<feature>/`. MCP is just an authoring tool. The committed artifact is identical regardless of how it was authored — there is no "MCP-only" storage location, no separate registry. The YAML is the single source of truth.
+Same place as hand-written YAML: the resolved `<flow_dir>/<feature>/` directory (see `flow-location-config.md`). MCP is just an authoring tool. The committed artifact is identical regardless of how it was authored — there is no "MCP-only" storage location, no separate registry. The YAML is the single source of truth.
 
 ## When to Skip MCP Entirely
 

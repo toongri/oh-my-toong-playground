@@ -23,11 +23,13 @@ Generated once (typically by running the flow against a known-good build) and th
 
 ```yaml
 - assertScreenshot:
-    path: ProductCard.png
+    path: ../screenshots/ProductCard.png
     cropOn:
       id: ProductCardContainer
     thresholdPercentage: 98
 ```
+
+`path:`는 flow 파일이 있는 디렉터리를 기준으로 해석되므로, `<flow_dir>/<feature>/<flow>.yaml`에서는 정책 디렉터리(`<flow_dir>/screenshots/`)를 가리키려면 `../screenshots/<name>.png`을 사용한다.
 
 `cropOn` is essential. It restricts the comparison to a stable element, so dynamic content (clock, weather, status bar) does not produce false negatives. Tune `thresholdPercentage` per element if anti-aliasing differences cause flicker.
 

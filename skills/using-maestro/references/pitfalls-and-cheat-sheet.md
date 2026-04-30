@@ -99,7 +99,7 @@ tags:
 
 - takeScreenshot: name                     # transient debug artifact
 - assertScreenshot:                        # permanent baseline comparison
-    path: name.png
+    path: ../screenshots/<name>.png
     cropOn: { id: "container" }
     thresholdPercentage: 98
 
