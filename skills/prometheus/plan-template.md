@@ -93,7 +93,7 @@ Any condition fails → decompose further.
 
 Each scenario uses a structured block with 7 fields:
 - **Scenario**: `{Name} — {Purpose}`
-- **Tool**: CLI command (`curl`, `bun test`, `playwright`, `grep` — NOT descriptions like "Header validation")
+- **Tool**: CLI command (`curl`, `bun test`, `playwright`, `maestro`, `grep` — NOT descriptions like "Header validation")
 - **Preconditions**: Setup state required
 - **Steps**: Numbered list of exact commands
 - **Expected**: Observable outcome on success
