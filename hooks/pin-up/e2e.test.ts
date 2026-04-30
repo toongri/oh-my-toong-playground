@@ -9,6 +9,8 @@
  *   S4-multi-process. Concurrent pin-up processes with same slug → both pin files preserved (no silent overwrite) + cursor retains both transcript keys
  *   S5 (P2-3 callsite). Forward reference: pin A references pin B (same batch) → both written, no escape entry
  *   S6 (P2-2). Write failure on 1 pin → cursor NOT advanced (다음 실행에서 재처리 가능)
+ *   SA (P1-2+P1-4). write 실패 → escape log에 write_failed 기록 + cursor 진행
+ *   SB (P1-4). malformed pin (필수 필드 누락) → frontmatter_invalid escape + pin 파일 0건 + cursor 진행
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
@@ -436,19 +438,137 @@ Write will fail due to read-only dir
     expect(result!.stderr).toContain('[pin-up] WARN');
     expect(result!.stderr).toContain('code-write-fail');
 
-    // Stderr must NOT contain ERROR — cursor save should be skipped cleanly,
-    // not triggered by an uncaught exception from saveCursor.
-    // (P2-2 fix: allWritesSucceeded=false → saveCursor is never called → no ERROR thrown)
-    expect(result!.stderr).not.toContain('[pin-up] ERROR');
-
     // Pin file must NOT be written (write failed)
     expect(existsSync(join(s6PinsDir, 'code-write-fail.md'))).toBe(false);
 
-    // Cursor must NOT be advanced — byte_offset stays at 0 (or entry absent)
-    const cursor = loadCursor(s6OmtDir);
+    // pinsDir이 read-only이면 saveCursor도 EACCES → 외부 catch에서 ERROR 출력됨.
+    // Hook은 fail-open으로 정상 종료하므로 continue: true는 보장됨.
+    // (S6는 극단적인 read-only pinsDir 시나리오; 실제 write 실패 + escape log 시나리오는 SA 참조)
+  });
+
+  it('[SA] write 실패 → escape log에 write_failed 기록 (P1-4)', async () => {
+    // write 실패 시 audit trail(escape log)에 write_failed reason으로 기록됨.
+    //
+    // 강제 방법 (macOS): pinsDir read-only → 신규 파일 생성 EACCES.
+    //   단, appendFileSync는 기존 파일에 append는 허용하므로 .escape.jsonl을 미리 생성.
+    //   saveCursor도 EACCES로 실패하므로 cursor 진행은 이 시나리오에서 확인 불가.
+    //   cursor 진행(P1-2)은 validation 실패 시나리오인 SB에서 검증됨.
+    const saOmtDir = join(testDir, 'sa-omt');
+    const saPinsDir = join(saOmtDir, 'pins');
+    await mkdir(saPinsDir, { recursive: true });
+
+    // appendFileSync가 read-only dir에서도 기존 파일에는 쓸 수 있음 → 미리 생성
+    const saEscapeFile = join(saPinsDir, '.escape.jsonl');
+    await writeFile(saEscapeFile, '', 'utf-8');
+
+    const slug = 'code-sa-write-fail';
+    const pinText = `<pin slug="${slug}" source_url="src/sa.ts:1" authority="code" tier="L1" tags="test" sensitivity="private">
+## 한 줄 요지
+SA write failure test
+
+## SSOT 위치
+src/sa.ts:1
+
+## 전후 컨텍스트
+Write will fail due to read-only pinsDir (EACCES)
+
+## 관련 cross-link
+없음
+</pin>`;
+
+    const transcriptPath = join(testDir, 'sa-transcript.jsonl');
+    await writeFile(transcriptPath, assistantLine(pinText, 'uuid-sa'), 'utf-8');
+
+    // pinsDir read-only → writePinAtomically 신규 파일 생성 EACCES
+    chmodSync(saPinsDir, 0o555);
+
+    const hookPath = join(import.meta.dir, 'index.ts');
+    const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-sa' });
+    let result: ReturnType<typeof spawnSync>;
+    try {
+      result = spawnSync('bun', ['run', hookPath], {
+        input,
+        encoding: 'utf-8',
+        env: { ...process.env, OMT_DIR: saOmtDir },
+      });
+    } finally {
+      // 정리를 위해 권한 복구
+      chmodSync(saPinsDir, 0o755);
+    }
+
+    // Hook은 fail-open으로 정상 종료
+    expect(result!.status).toBe(0);
+    const output = JSON.parse(result!.stdout.trim().split('\n').pop() || '{}');
+    expect(output.continue).toBe(true);
+
+    // stderr에 WARN + slug 포함
+    expect(result!.stderr).toContain('[pin-up] WARN');
+    expect(result!.stderr).toContain(slug);
+
+    // escape.jsonl에 write_failed reason으로 1건 기록됨
+    const escapeContent = await readFile(saEscapeFile, 'utf-8');
+    const entries = escapeContent.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const saEntry = entries.find((e: { session_id: string; reason: string }) => e.session_id === 'e2e-sa');
+    expect(saEntry).toBeDefined();
+    expect(saEntry.reason).toBe('write_failed');
+    expect(saEntry.pin_slug).toBe(slug);
+  });
+
+  it('[SB] malformed pin (필수 필드 누락) → frontmatter_invalid escape + pin 파일 0건 + cursor 진행 (P1-4)', async () => {
+    // source_url/authority/tier/tags/sensitivity 누락된 pin → validator가 빈 필드 거부
+    // → escape log에 frontmatter_invalid 기록, pin 파일 미생성, cursor 진행
+    const sbOmtDir = join(testDir, 'sb-omt');
+    const sbPinsDir = join(sbOmtDir, 'pins');
+    await mkdir(sbPinsDir, { recursive: true });
+
+    // slug만 있고 나머지 필수 속성 모두 누락
+    const malformedPinText = `<pin slug="code-test-incomplete">
+## 한 줄 요지
+Incomplete pin
+
+## SSOT 위치
+unknown
+
+## 전후 컨텍스트
+Missing required attrs
+
+## 관련 cross-link
+없음
+</pin>`;
+
+    const transcriptPath = join(testDir, 'sb-transcript.jsonl');
+    await writeFile(transcriptPath, assistantLine(malformedPinText, 'uuid-sb'), 'utf-8');
+
+    const hookPath = join(import.meta.dir, 'index.ts');
+    const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-sb' });
+    const result = spawnSync('bun', ['run', hookPath], {
+      input,
+      encoding: 'utf-8',
+      env: { ...process.env, OMT_DIR: sbOmtDir },
+    });
+
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split('\n').pop() || '{}');
+    expect(output.continue).toBe(true);
+
+    // pinsDir 안에 pin .md 파일 0건
+    const files = await readdir(sbPinsDir);
+    const pinFiles = files.filter((f) => f.endsWith('.md') && !f.startsWith('.'));
+    expect(pinFiles).toHaveLength(0);
+
+    // escape.jsonl에 frontmatter_invalid로 1건 기록
+    const sbEscapeFile = join(sbPinsDir, '.escape.jsonl');
+    expect(existsSync(sbEscapeFile)).toBe(true);
+    const escapeContent = await readFile(sbEscapeFile, 'utf-8');
+    const entries = escapeContent.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const sbEntry = entries.find((e: { session_id: string; reason: string }) => e.session_id === 'e2e-sb');
+    expect(sbEntry).toBeDefined();
+    expect(sbEntry.reason).toBe('frontmatter_invalid');
+
+    // cursor 진행됨 (byte_offset > 0)
+    const cursor = loadCursor(sbOmtDir);
     const entry = getCursorEntry(cursor, transcriptPath);
-    // Either no entry at all, or byte_offset is 0 (not advanced past initial)
-    const byteOffset = entry?.byte_offset ?? 0;
-    expect(byteOffset).toBe(0);
+    expect(entry).toBeDefined();
+    expect(entry!.byte_offset).toBeGreaterThan(0);
   });
 });

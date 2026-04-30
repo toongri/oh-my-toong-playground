@@ -47,6 +47,7 @@ export interface EscapeEntry {
 export type EscapeReason =
   | 'frontmatter_invalid'
   | 'slug_violation'
+  | 'write_failed'
   | 'parse_error'
   | 'unknown';
 
