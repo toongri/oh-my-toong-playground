@@ -112,8 +112,8 @@ validator가 4섹션 헤더를 grep해 누락 시 escape 처리한다.
 ## Slug 8 원칙 (AC-7)
 
 ### 원칙 ①
-형식: `{YYYY-MM-DD}-{kind}-{topic}-{slug}` 또는 날짜 없이 `{kind}-{topic}-{slug}`.
-날짜는 시간제한사가 아닌 발견 이벤트 식별자로 사용할 때만 붙인다.
+형식: `{kind}-{topic}-{slug}` 단일 형식만 허용.
+`-HHMMSS` suffix는 `writePinAtomically`가 EEXIST 충돌 시 자동 부여하므로 author가 직접 쓰지 않는다.
 
 ### 원칙 ②
 `kind` ∈ `{jira, linear, slack, github, notion, code, person, decision, finding, gotcha, unknown}`.
@@ -133,8 +133,7 @@ validator가 4섹션 헤더를 grep해 누락 시 escape 처리한다.
 나쁜 예: `how-to-fix-auth` (동사), `broken-token` (형용사).
 
 ### 원칙 ⑦
-시간제한사 금지. `today`, `current`, `latest`, `now` 같은 단어는 쓰지 않는다.
-(날짜 접두사 `{YYYY-MM-DD}`는 허용 — 고정값이므로 시간제한사가 아님.)
+시간제한사 금지. `today`, `current`, `latest`, `now`, `2024`, `jan`, `q1` 같은 시간·날짜 표현은 쓰지 않는다.
 
 ### 원칙 ⑧
 출처 의존 금지. 슬러그는 source_url이 바뀌어도 유효해야 한다.
