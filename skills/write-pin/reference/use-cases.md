@@ -54,13 +54,17 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      sensitivity="private"
      supersedes="decision-ratelimit-ks-2024"
      discovery_context="사용자가 KS 퇴사 사실 알려줌 — billing 정책 검토 중">
-**한 줄 요지**: rate-limit 결정권자는 JH (KS 퇴사 후 이관).
+### ① 한 줄 요지
+rate-limit 결정권자는 JH (KS 퇴사 후 이관).
 
-**SSOT 위치**: Slack #eng-billing 2025-03-10 thread — JH가 직접 결정 공지.
+### ② SSOT 위치 + 도달 경로
+Slack #eng-billing 2025-03-10 thread — JH가 직접 결정 공지.
 
-**전후 컨텍스트**: billing 도메인 정책 리뷰 중 기존 pin이 stale임을 사용자가 확인. KS→JH 이관.
+### ③ 전후 컨텍스트
+billing 도메인 정책 리뷰 중 기존 pin이 stale임을 사용자가 확인. KS→JH 이관.
 
-**관련 cross-link**: related: [decision-billing-jh-2025]
+### ④ 관련 cross-link
+related: [decision-billing-jh-2025]
 </pin>
 ```
 
@@ -91,13 +95,17 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      tags="auth,jwt,verification"
      sensitivity="private"
      discovery_context="billing-claim 검증 중 JWT 권위 탐색 → 코드베이스 직접 grep">
-**한 줄 요지**: JWT 토큰 검증의 SSOT는 auth/jwt.ts:142 verifyToken 함수.
+### ① 한 줄 요지
+JWT 토큰 검증의 SSOT는 auth/jwt.ts:142 verifyToken 함수.
 
-**SSOT 위치**: auth/jwt.ts line 142 — "single source of truth for token validation" 주석 명시.
+### ② SSOT 위치 + 도달 경로
+auth/jwt.ts line 142 — "single source of truth for token validation" 주석 명시.
 
-**전후 컨텍스트**: billing claim 검증 로직 구현 중 JWT 검증 권위를 알아야 했음. 사용자도 모름 → 직접 발굴.
+### ③ 전후 컨텍스트
+billing claim 검증 로직 구현 중 JWT 검증 권위를 알아야 했음. 사용자도 모름 → 직접 발굴.
 
-**관련 cross-link**: related: []
+### ④ 관련 cross-link
+related: []
 </pin>
 ```
 
@@ -129,13 +137,17 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      tags="billing,business-rule,person"
      sensitivity="private"
      discovery_context="billing claim 처리 로직 구현 중 — 사용자가 A팀장이 권위자라고 알려줌">
-**한 줄 요지**: billing 비즈니스 규칙의 SSOT는 A팀장 머릿속 — 문서/코드 미존재.
+### ① 한 줄 요지
+billing 비즈니스 규칙의 SSOT는 A팀장 머릿속 — 문서/코드 미존재.
 
-**SSOT 위치**: person:A팀장 — 직접 인터뷰 필요. 현재 코드베이스나 문서에 명시된 위치 없음.
+### ② SSOT 위치 + 도달 경로
+person:A팀장 — 직접 인터뷰 필요. 현재 코드베이스나 문서에 명시된 위치 없음.
 
-**전후 컨텍스트**: billing claim 처리 중 규칙 불명확. 사용자 왈: "A팀장에게 있다더라". 문서화 필요.
+### ③ 전후 컨텍스트
+billing claim 처리 중 규칙 불명확. 사용자 왈: "A팀장에게 있다더라". 문서화 필요.
 
-**관련 cross-link**: related: []
+### ④ 관련 cross-link
+related: []
 </pin>
 ```
 
@@ -167,13 +179,17 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      tags="payment,fee,placeholder,unknown"
      sensitivity="private"
      discovery_context="payment 수수료 계산 PR 리뷰 중 권위 불명. 팀 전원 미인지.">
-**한 줄 요지**: payment 수수료 계산 로직 권위 미상 — placeholder, 향후 발견 시 supersedes로 갱신 필요.
+### ① 한 줄 요지
+payment 수수료 계산 로직 권위 미상 — placeholder, 향후 발견 시 supersedes로 갱신 필요.
 
-**SSOT 위치**: payments/fee.ts에 로직 존재하나 권위 명시 없음. 원작자 불명, 히스토리 불명확.
+### ② SSOT 위치 + 도달 경로
+payments/fee.ts에 로직 존재하나 권위 명시 없음. 원작자 불명, 히스토리 불명확.
 
-**전후 컨텍스트**: payment 수수료 로직 수정 PR 리뷰 중 발생. 사용자 및 팀 전원 권위 미인지. 조사 필요.
+### ③ 전후 컨텍스트
+payment 수수료 로직 수정 PR 리뷰 중 발생. 사용자 및 팀 전원 권위 미인지. 조사 필요.
 
-**관련 cross-link**: related: []
+### ④ 관련 cross-link
+related: []
 </pin>
 ```
 
