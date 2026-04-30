@@ -16,6 +16,7 @@ Verify user-facing behavior by actually running the changed code. This is not op
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
 | UI, page, component, frontend, render | Frontend | Verify with `playwright` |
+| Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
 | Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** |
 | Documentation, markdown, comments only | Non-code | **Skip Stage 3** |
@@ -121,7 +122,32 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ---
 
-## Step 3.5: CLI / TUI Verification (Interactive Bash)
+## Step 3.5: Mobile App Verification (maestro)
+
+**Verify mobile app behavior with `maestro` on iOS Simulator / Android Emulator.**
+
+### Procedure
+
+1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
+2. Boot the target simulator/emulator before the test (`xcrun simctl boot "iPhone 16"` or `emulator -avd <name>`)
+3. Run the flow: `maestro test .maestro/<flow>.yaml --format junit`
+4. Capture evidence: maestro auto-generates JUnit XML and screenshots under `~/.maestro/tests/<run-id>/`
+
+### Verification Criteria
+
+| Criterion | Pass Condition |
+|-----------|----------------|
+| Flow completes | All maestro steps `✓`, no `✗` |
+| Element assertion | `assertVisible` / `assertNotVisible` matches expected screen state |
+| Navigation | Screen transitions reach expected destination |
+
+### Real-Device Escalation
+
+Items requiring physical hardware (push delivery, biometric enrollment, camera, sensors, performance/jank, OEM-specific behavior) are out of scope for this stage's simulator/emulator verification — escalate to a device farm in nightly/release pipelines.
+
+---
+
+## Step 3.6: CLI / TUI Verification (Interactive Bash)
 
 **Verify CLI output and behavior by executing commands directly.**
 

@@ -52,7 +52,7 @@ To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>`
 | **code changes present** | Code changes present | Automated checks (build/test/lint) + Code quality (checklists.md) |
 | **spec or AC provided** | Request content includes specification or acceptance criteria | Verify implementation against provided criteria |
 | **QA scenarios provided** | Request content includes executable test scenarios | Execute scenarios as specified, collect evidence |
-| **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/bash (see stage3-handson.md) |
+| **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/maestro/bash (see stage3-handson.md) |
 
 ### Composition Examples
 
@@ -114,7 +114,7 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 
 | Output Type | Disposition | Examples |
 |-------------|-------------|---------|
-| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright screenshots, CLI execution logs |
+| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright/Maestro screenshots and test reports, CLI execution logs |
 | Subjective judgment | Response only (no file) | Code review analysis, MUST DO checklist verdicts, Scope Boundary calculations, feedback comments |
 
 ### Evidence File Content Requirements
@@ -282,6 +282,7 @@ This trigger activates when changes affect user-facing behavior AND the request 
 |-------------|---------------------|------|
 | API endpoint | HTTP request verification | `curl` |
 | Frontend / UI | Browser interaction verification | `playwright` |
+| Mobile / App | iOS Simulator / Android Emulator E2E | `maestro` |
 | CLI / TUI | Command execution verification | Interactive Bash |
 | Internal logic only | N/A (skip this trigger) | - |
 
@@ -378,7 +379,7 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 code changes present:              Automated checks (Build, Test, Lint) + Code Quality
 spec or AC provided:               Spec/AC compliance (vs QA REQUEST Spec)
 QA scenarios provided:             Execute provided scenarios + collect evidence
-user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, CLI→interactive_bash)
+user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, Mobile→maestro, CLI→interactive_bash)
 
 Automated checks: See stage1-commands.md
 Hands-On QA:      See stage3-handson.md

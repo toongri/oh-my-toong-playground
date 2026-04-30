@@ -92,12 +92,28 @@ Overall structure:
 | **Universal truths** | "All tests pass" | Always true, not plan-specific | Move to Verification Strategy |
 | **Absence-only** | "X not found in grep" | Deletion alone passes | Write presence checks first, then add absence checks |
 | **Compound AC** | "All tests pass", "46 findings resolved", "X and Y implemented" | Bundles multiple independent state changes — one failure hides others | Decompose: one AC per state change, each with its own Verification command |
+| **State-mutating without teardown** | "Insert user / Verification: `curl -X POST /users -d @fixture.json`" | Re-runs fail with 409 Conflict; CI flakes on cached runners | Add Setup/Cleanup lines, or use isolated schema (`--db-schema=test_$RANDOM`) |
 
 ## AC Granularity Principle
 
 **1 AC = exactly 1 observable state change.** Each AC must describe a single, atomic outcome confirmed by a single verification command.
 
 > Detail rules — verb red-flag list, batch pattern matrix, rationalization table — live in the reviewer skills (`agents/metis.md` AC Quality Detail Rules / `skills/momus/SKILL.md` AC Quality Detail Rules).
+
+## State Mutation: Setup / Cleanup
+
+If a Verification command mutates state (creates DB rows, writes files, registers users, holds keychain entries), the AC must declare how state is established before the run and torn down after, OR rely on isolation (ephemeral schema, randomized test IDs, container-per-run).
+
+Two optional fields:
+
+- **Setup**: command(s) that establish required state (run before Verification)
+- **Cleanup**: command(s) that revert mutations (run after Verification, even on failure)
+
+Either field may be omitted when:
+- The Verification is read-only (text scan, GET request, file existence check)
+- The runner provides isolation (`--db-schema=test_$RANDOM`, container-per-test, `xcrun simctl erase all`)
+
+When mutations cross persistent boundaries (DB, filesystem outside `/tmp`, simulator state), Setup and Cleanup are STRONGLY recommended.
 
 ## Counter-Example: Fixing a Batch AC
 
@@ -121,6 +137,37 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 - [ ] Report contains no missing-verdict occurrence
       Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
 ```
+
+## Verification Examples by Tool
+
+The Verification line MUST be paste-runnable. Pick the form that matches the change type — do not invent ad-hoc shell.
+
+### Text scan (grep) — for spec/log/output content
+
+- [ ] **Forbidden token absent from report**
+      **Verification**: `grep -q "forbidden-token" report.txt && echo FAIL || echo PASS`
+
+### HTTP API (curl + jq)
+
+- [ ] **POST /api/users (201) returns the same record on subsequent GET**
+      **Setup**: `./scripts/db-reset.sh`
+      **Verification**: `curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d '{"email":"test@example.com"}' && curl -fsS http://localhost:8080/api/users/{id} | jq -e '.email == "test@example.com"'`
+      **Cleanup**: `./scripts/db-reset.sh`
+
+### Unit / integration test runner
+
+- [ ] **`splitCommand` preserves quoted argument as a single token**
+      **Verification**: `bun test tests/splitCommand.test.ts -t "preserves quoted args"`
+
+### Web UI E2E (playwright)
+
+- [ ] **Login with valid credentials lands on Home and shows username**
+      **Verification**: `bunx playwright test tests/e2e/login.spec.ts --reporter=junit`
+
+### Mobile app E2E (maestro)
+
+- [ ] **Login flow on iOS Simulator and Android Emulator reaches Home**
+      **Verification**: `maestro test .maestro/auth/login_happy.yaml --format junit`
 
 ## Example
 
