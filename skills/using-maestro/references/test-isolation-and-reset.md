@@ -51,7 +51,7 @@ Not every scenario should reset. The exceptions are real, and pretending otherwi
 | **BLE / pairing / hardware bring-up** | Pairing can take 10–60 seconds; doing it per scenario destroys the suite budget. | Pair once at suite start; assert post-pair state at scenario start; reset app data only. |
 | **Large seed data** | Restoring a multi-GB dataset per scenario is unrealistic. | Use read-only shared fixtures. Tests must not mutate the seed. |
 | **Kiosk / IoT real device** | Factory reset is impractical or impossible (kiosk in a customer site, medical device under regulatory lock). | Reset at the app layer; treat device/OS state as a stable invariant. |
-| **CI cost ceiling on slow reinstalls** | iOS reinstall can be 30s+ per scenario. | Use `clearState` (no reinstall) for most; reinstall only for known native-module reset cases. |
+| **CI cost ceiling on slow reinstalls** | iOS reinstall can be 30s+ per scenario. | iOS `clearState` *is* a reinstall (the app data folder is destroyed) — budget 30s+ per scenario. Android `clearState` is data-only (no reinstall). Reinstall is unavoidable on iOS; the only saving is to suite-scope `launchApp` where the test design allows. |
 
 The pattern across all five exceptions: **reset what you can afford; isolate at the highest layer that gives you stability**. The kiosk case is the relevant one for this project — the device's USB peripherals and OS configuration are invariants, but app data resets every scenario.
 
