@@ -129,9 +129,11 @@ curl -s http://localhost:{port}/endpoint | jq .
 ### Procedure
 
 1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
-2. Boot the target simulator/emulator before the test (`xcrun simctl boot "iPhone 16"` or `emulator -avd <name>`)
-3. Run the flow: `maestro test .maestro/<flow>.yaml --format junit`
-4. Capture evidence: maestro auto-generates JUnit XML and screenshots under `~/.maestro/tests/<run-id>/`
+2. Boot the target simulator/emulator before the test:
+   - **iOS**: `xcrun simctl boot "iPhone 16"` (returns immediately; boot proceeds in the Simulator service)
+   - **Android**: launch in background and wait for boot — `emulator -avd <name> -no-window -no-boot-anim &` then `adb wait-for-device && adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'`
+3. Run the flow with explicit output path: `maestro test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`, where `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/task-<N>-maestro-<flow>.xml`).
+4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
 
 ### Verification Criteria
 
