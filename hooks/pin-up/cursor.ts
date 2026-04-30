@@ -10,7 +10,7 @@
  * lost-update when two Stop hooks run concurrently.
  */
 
-import { readFileSync, writeFileSync, renameSync, openSync, fsyncSync, closeSync, existsSync, mkdirSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, openSync, fsyncSync, closeSync, existsSync, mkdirSync, unlinkSync, statSync } from 'fs';
 import { join, resolve, dirname } from 'path';
 import { randomBytes } from 'crypto';
 import type { CursorState } from './types.ts';
@@ -18,6 +18,8 @@ import type { CursorState } from './types.ts';
 const CURSOR_FILE_NAME = '.cursor.json';
 const LOCK_BACKOFF_MS = 10;
 const LOCK_MAX_RETRIES = 100; // 10ms × 100 = 1 second max wait
+// 정상 saveCursor 사이클은 1초 이내 완료 → 30배 여유로 IO 폭증도 커버
+const STALE_LOCK_THRESHOLD_MS = 30_000;
 
 function cursorPath(omtDir: string): string {
   return join(omtDir, 'pins', CURSOR_FILE_NAME);
@@ -40,6 +42,16 @@ function acquireLock(lockPath: string): number {
       return openSync(lockPath, 'wx');
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      // Stale detection: lockfile older than threshold = previous holder crashed
+      try {
+        const lockMtimeMs = statSync(lockPath).mtimeMs;
+        if (Date.now() - lockMtimeMs > STALE_LOCK_THRESHOLD_MS) {
+          unlinkSync(lockPath);
+          continue; // immediate retry without backoff
+        }
+      } catch {
+        // race lost — another process unlinked or stat failed; fall through to retry
+      }
       if (i < LOCK_MAX_RETRIES - 1) sleepSync(LOCK_BACKOFF_MS);
     }
   }
