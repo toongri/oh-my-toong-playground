@@ -21,18 +21,8 @@ export function scanPins(omtDir: string): ScanResult {
   const pinsDir = join(omtDir, 'pins');
   try {
     const entries = readdirSync(pinsDir);
-    const mdFiles = entries
-      .filter((f) => f.endsWith('.md') && !f.startsWith('.'))
-      .sort((a, b) => {
-        // Sort by mtime descending (most recently modified first)
-        try {
-          const ma = statSync(join(pinsDir, a)).mtime.getTime();
-          const mb = statSync(join(pinsDir, b)).mtime.getTime();
-          return mb - ma;
-        } catch {
-          return 0;
-        }
-      });
+    // 1단계: filter
+    const mdFiles = entries.filter((f) => f.endsWith('.md') && !f.startsWith('.'));
 
     const count = mdFiles.length;
 
@@ -40,15 +30,26 @@ export function scanPins(omtDir: string): ScanResult {
       return { count: 0, recentSlugs: [], truncated: false };
     }
 
+    // 2단계: count > 30이면 sort 없이 즉시 반환 (AC-2: ≤80 token 제한)
     if (count > COUNT_ONLY_THRESHOLD) {
-      // AC-2: too many pins — emit count only to stay ≤80 tokens
       return { count, recentSlugs: [], truncated: true };
     }
 
-    // Strip .md extension to get slug names
+    // 3단계: Schwartzian transform — 파일당 statSync 1회만 호출
     const recentSlugs = mdFiles
+      .map((f) => {
+        // 디코레이션: mtime 캐시 (실패 시 0으로 fail-open)
+        let m = 0;
+        try {
+          m = statSync(join(pinsDir, f)).mtime.getTime();
+        } catch {
+          // stat 실패 시 mtime=0 (정렬 후미로 밀림)
+        }
+        return { f, m };
+      })
+      .sort((a, b) => b.m - a.m) // mtime 내림차순 (최근 수정 파일 먼저)
       .slice(0, RECENT_SLUG_LIMIT)
-      .map((f) => f.replace(/\.md$/, ''));
+      .map(({ f }) => f.replace(/\.md$/, '')); // 디코레이션 해제 + .md 제거
 
     return { count, recentSlugs, truncated: false };
   } catch {
