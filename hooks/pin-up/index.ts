@@ -169,9 +169,15 @@ export async function main(): Promise<void> {
     // Steps 5+6: validate + write
     let newCursor = cursor;
     const createdAt = new Date().toISOString();
+    let allWritesSucceeded = true;
+
+    // Pre-pass: collect all valid slugs in this batch for forward-reference resolution
+    const batchSlugs = new Set<string>(
+      extractedPins.map((p) => p.slug).filter(Boolean),
+    );
 
     for (const pin of extractedPins) {
-      const validationResult = validatePin(pin, omtDir);
+      const validationResult = validatePin(pin, omtDir, batchSlugs);
 
       if (!validationResult.valid) {
         // Append to escape log (AC-14)
@@ -192,11 +198,13 @@ export async function main(): Promise<void> {
       } catch (writeErr: unknown) {
         const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
         process.stderr.write(`[pin-up] WARN: skipping pin "${pin.slug}" — ${msg}\n`);
+        allWritesSucceeded = false;
       }
     }
 
-    // Step 7: save cursor (only when transcript was readable)
-    if (finalByteOffset > startOffset || lastUuid) {
+    // Step 7: save cursor (only when transcript was readable AND all writes succeeded)
+    // — write failure 시 cursor 보류로 다음 실행에서 재처리 가능
+    if (allWritesSucceeded && (finalByteOffset > startOffset || lastUuid)) {
       newCursor = updateCursorEntry(cursor, transcriptPath, finalByteOffset, lastUuid);
       saveCursor(omtDir, newCursor);
     }

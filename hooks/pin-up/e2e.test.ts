@@ -7,11 +7,13 @@
  *   S3. Invalid frontmatter (missing required field) → escape.jsonl entry + no file written
  *   S4. Duplicate slug (two entries same slug in one transcript) → second gets timestamp suffix, both files exist
  *   S4-multi-process. Concurrent pin-up processes with same slug → both pin files preserved (no silent overwrite) + cursor retains both transcript keys
+ *   S5 (P2-3 callsite). Forward reference: pin A references pin B (same batch) → both written, no escape entry
+ *   S6 (P2-2). Write failure on 1 pin → cursor NOT advanced (다음 실행에서 재처리 가능)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { mkdir, rm, writeFile, readFile, readdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { main } from './index.ts';
@@ -313,5 +315,140 @@ race test fixture ${label}
     // No stale lock files
     const lockFiles = allFiles.filter((f) => f.endsWith('.lock'));
     expect(lockFiles).toHaveLength(0);
+  });
+
+  it('[S5] 같은 배치에서 forward reference: A가 B를 related로 참조 → 둘 다 write됨', async () => {
+    // pin-a references pin-b via related, but pin-b does not yet exist on disk.
+    // Both are emitted in the same transcript (same batch).
+    // With batchSlugs forwarded to validatePin, both should pass validation and be written.
+    const pinA = `<pin slug="code-feature-a" source_url="src/a.ts:10" authority="code" tier="L1" tags="feat" sensitivity="private" related="code-feature-b">
+## 한 줄 요지
+Feature A depends on B
+
+## SSOT 위치
+src/a.ts:10
+
+## 전후 컨텍스트
+Forward reference to B
+
+## 관련 cross-link
+code-feature-b
+</pin>`;
+
+    const pinB = `<pin slug="code-feature-b" source_url="src/b.ts:20" authority="code" tier="L1" tags="feat" sensitivity="private">
+## 한 줄 요지
+Feature B
+
+## SSOT 위치
+src/b.ts:20
+
+## 전후 컨텍스트
+Referenced by A
+
+## 관련 cross-link
+없음
+</pin>`;
+
+    const transcriptPath = join(testDir, 's5-transcript.jsonl');
+    await writeFile(
+      transcriptPath,
+      assistantLine(pinA, 'uuid-s5a') + assistantLine(pinB, 'uuid-s5b'),
+      'utf-8',
+    );
+
+    const hookPath = join(import.meta.dir, 'index.ts');
+    const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-s5' });
+    const result = spawnSync('bun', ['run', hookPath], {
+      input,
+      encoding: 'utf-8',
+      env: { ...process.env, OMT_DIR: omtDir },
+    });
+
+    expect(result.status).toBe(0);
+    const output = JSON.parse(result.stdout.trim().split('\n').pop() || '{}');
+    expect(output.continue).toBe(true);
+
+    // Both pin files must be written
+    expect(existsSync(join(pinsDir, 'code-feature-a.md'))).toBe(true);
+    expect(existsSync(join(pinsDir, 'code-feature-b.md'))).toBe(true);
+
+    // escape.jsonl must NOT have an entry for session e2e-s5
+    if (existsSync(escapeFile)) {
+      const escapeContent = await readFile(escapeFile, 'utf-8');
+      const entries = escapeContent.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+      const s5Entries = entries.filter((e) => e.session_id === 'e2e-s5');
+      expect(s5Entries).toHaveLength(0);
+    }
+
+    // Cursor must be advanced
+    const cursor = loadCursor(omtDir);
+    const entry = getCursorEntry(cursor, transcriptPath);
+    expect(entry).toBeDefined();
+    expect(entry!.byte_offset).toBeGreaterThan(0);
+  });
+
+  it('[S6] pin write 실패 시 cursor advance 보류 → 다음 실행에서 재처리 가능', async () => {
+    // Use a separate omtDir for this test to isolate from shared state
+    const s6OmtDir = join(testDir, 's6-omt');
+    const s6PinsDir = join(s6OmtDir, 'pins');
+    await mkdir(s6PinsDir, { recursive: true });
+
+    const pinText = `<pin slug="code-write-fail" source_url="src/fail.ts:1" authority="code" tier="L1" tags="test" sensitivity="private">
+## 한 줄 요지
+Write failure test
+
+## SSOT 위치
+src/fail.ts:1
+
+## 전후 컨텍스트
+Write will fail due to read-only dir
+
+## 관련 cross-link
+없음
+</pin>`;
+
+    const transcriptPath = join(testDir, 's6-transcript.jsonl');
+    await writeFile(transcriptPath, assistantLine(pinText, 'uuid-s6'), 'utf-8');
+
+    // Make pinsDir read-only to cause EACCES on writeFileSync
+    chmodSync(s6PinsDir, 0o555);
+
+    const hookPath = join(import.meta.dir, 'index.ts');
+    const input = JSON.stringify({ transcript_path: transcriptPath, sessionId: 'e2e-s6' });
+    let result: ReturnType<typeof spawnSync>;
+    try {
+      result = spawnSync('bun', ['run', hookPath], {
+        input,
+        encoding: 'utf-8',
+        env: { ...process.env, OMT_DIR: s6OmtDir },
+      });
+    } finally {
+      // Restore permissions so cleanup can proceed
+      chmodSync(s6PinsDir, 0o755);
+    }
+
+    // Hook must still exit cleanly (fail-open)
+    expect(result!.status).toBe(0);
+    const output = JSON.parse(result!.stdout.trim().split('\n').pop() || '{}');
+    expect(output.continue).toBe(true);
+
+    // Stderr must contain WARN about the skipped pin
+    expect(result!.stderr).toContain('[pin-up] WARN');
+    expect(result!.stderr).toContain('code-write-fail');
+
+    // Stderr must NOT contain ERROR — cursor save should be skipped cleanly,
+    // not triggered by an uncaught exception from saveCursor.
+    // (P2-2 fix: allWritesSucceeded=false → saveCursor is never called → no ERROR thrown)
+    expect(result!.stderr).not.toContain('[pin-up] ERROR');
+
+    // Pin file must NOT be written (write failed)
+    expect(existsSync(join(s6PinsDir, 'code-write-fail.md'))).toBe(false);
+
+    // Cursor must NOT be advanced — byte_offset stays at 0 (or entry absent)
+    const cursor = loadCursor(s6OmtDir);
+    const entry = getCursorEntry(cursor, transcriptPath);
+    // Either no entry at all, or byte_offset is 0 (not advanced past initial)
+    const byteOffset = entry?.byte_offset ?? 0;
+    expect(byteOffset).toBe(0);
   });
 });
