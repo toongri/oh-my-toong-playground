@@ -170,6 +170,7 @@ The Verification line MUST be paste-runnable. Pick the form that matches the cha
 
 - [ ] **Login flow on iOS Simulator and Android Emulator reaches Home**
       **Verification**: `maestro test .maestro/auth/login_happy.yaml --format junit`
+      (Setup/Cleanup omitted — maestro flow begins with `clearState` + `launchApp`, so the runner provides isolation per the exemption above.)
 
 ## Example
 
