@@ -70,22 +70,14 @@ describe('validateSlug', () => {
   });
 
   it('accepts all valid kind values', () => {
-    const kinds = ['jira', 'linear', 'slack', 'notion', 'code', 'person', 'decision', 'finding', 'gotcha', 'unknown'];
-    for (const kind of kinds) {
-      expect(validateSlug(`${kind}-topic-desc`).valid).toBe(true);
-    }
-  });
-
-  // RED: github kind 추가 (Change 2.1)
-  it('`github-pr-oauth-fix` 슬러그가 valid', () => {
-    expect(validateSlug('github-pr-oauth-fix').valid).toBe(true);
-  });
-
-  it('`github` kind 포함한 전체 valid kind 회귀 없음', () => {
     const kinds = ['jira', 'linear', 'slack', 'github', 'notion', 'code', 'person', 'decision', 'finding', 'gotcha', 'unknown'];
     for (const kind of kinds) {
       expect(validateSlug(`${kind}-topic-desc`).valid).toBe(true);
     }
+  });
+
+  it('`github-pr-oauth-fix` 슬러그가 valid', () => {
+    expect(validateSlug('github-pr-oauth-fix').valid).toBe(true);
   });
 });
 
