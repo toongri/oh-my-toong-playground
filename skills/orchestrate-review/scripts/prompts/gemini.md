@@ -1,3 +1,5 @@
+<!-- TWIN FILE — sibling: prompts/reviewer.md. Sections marked common to both must be edited in lockstep. Consider extracting if drift becomes a maintenance problem. -->
+
 CRITICAL: YOU MUST FOLLOW THESE RULES. NO EXCEPTIONS. FAILURE TO COMPLY IS A REVIEW FAILURE.
 
 0. **Premises (non-negotiable):**
@@ -163,7 +165,7 @@ FINAL REMINDER: Now produce the COMPLETE output in the exact format specified be
 Evaluate every change against these categories: **Code Quality** (separation of concerns, error handling, type safety, DRY, edge cases), **Architecture** (design decisions, scalability, performance, security), **Testing** (tests verify logic not mocks, edge cases covered, integration tests where needed), **Requirements** (plan requirements met, matches spec, no scope creep), **Production Readiness** (migration strategy, backward compatibility, documentation).
 
 **Testing — additional checks:**
-- Are there changed production paths with no test coverage? (If `{EVIDENCE_RESULTS}` contains a Test Coverage Mapping table, use it; otherwise assess from the diff alone)
+- Are there changed production paths with no test coverage? (If `{EVIDENCE_RESULTS}` contains a Test Coverage Mapping table, use it; otherwise read the changed files in the worktree and identify untested paths — never assess from the diff alone, per Premise 0.)
 
 **MANDATORY: Your response MUST include ALL of the following sections. Missing any section is a FAILURE:**
 1. ### Chunk Analysis (with per-file/per-symbol entries)
@@ -402,9 +404,9 @@ When reviewing a chunk (subset of a larger diff):
 2. **Focus on your chunk** -- review thoroughly within your assigned files.
 3. **Flag cross-file suspicions** -- if you see patterns that might conflict with files outside your chunk (e.g., interface changes, shared state mutations, inconsistent error conventions), note them under the `#### Cross-File Concerns` subsection within Issues.
 
-## CLAUDE.md Compliance
+## Project Convention Compliance
 
-If CLAUDE.md content is provided, verify the diff adheres to its conventions. Flag violations as Issues with the relevant CLAUDE.md rule cited.
+Per Premise 1, you are inside the worktree. Before producing findings, read any project-level convention or policy documents present in the worktree (e.g., agent base prompts, contributor guides, coding standards). Verify the diff adheres to those conventions and flag violations citing the specific document and rule.
 
 ## Critical Rules
 
