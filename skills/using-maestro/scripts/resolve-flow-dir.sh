@@ -73,12 +73,22 @@ get_yaml_value() {
     | sed -E "s/^${key}:[[:space:]]*//")
   # If value is quoted, extract content between quotes (preserving '#' inside)
   # and treat anything after the closing quote as an inline comment.
+  # Unterminated quotes (no closing quote) are a hard parse error: emit to
+  # stderr and return 1 so callers in set -euo pipefail context exit with 1.
   # If unquoted, strip inline comments and trailing whitespace as before.
   case "$raw" in
     '"'*)
+      if ! printf '%s' "$raw" | grep -qE '^"[^"]*"'; then
+        printf 'ERROR: get_yaml_value: unterminated double-quoted value for key %s in %s\n' "$key" "$file" >&2
+        return 1
+      fi
       printf '%s' "$raw" | sed -E 's/^"([^"]*)".*$/\1/'
       ;;
     "'"*)
+      if ! printf '%s' "$raw" | grep -qE "^'[^']*'"; then
+        printf 'ERROR: get_yaml_value: unterminated single-quoted value for key %s in %s\n' "$key" "$file" >&2
+        return 1
+      fi
       printf '%s' "$raw" | sed -E "s/^'([^']*)'.*\$/\1/"
       ;;
     *)
