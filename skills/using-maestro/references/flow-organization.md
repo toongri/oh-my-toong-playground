@@ -150,8 +150,8 @@ tags:
 - runFlow:
     file: ../common/Login.yaml
     env:
-      EMAIL: ${TEST_EMAIL}
-      PASSWORD: ${TEST_PASSWORD}
+      EMAIL: ${MAESTRO_TEST_EMAIL}
+      PASSWORD: ${MAESTRO_TEST_PASSWORD}
 - assertVisible: "메인 화면"
 ```
 
@@ -179,7 +179,7 @@ Maestro's built-in `repeat` runs the same env multiple times. To run the same fl
 
 ```bash
 while IFS=, read -r email pass; do
-  TEST_EMAIL="$email" TEST_PASSWORD="$pass" \
+  MAESTRO_TEST_EMAIL="$email" MAESTRO_TEST_PASSWORD="$pass" \
     maestro test .maestro/auth/LoginSmoke.yaml || exit 1
 done < users.csv
 ```
@@ -194,7 +194,7 @@ strategy:
       - { email: b@example.com, pass: ... }
 steps:
   - run: |
-      TEST_EMAIL=${{ matrix.user.email }} TEST_PASSWORD=${{ matrix.user.pass }} \
+      MAESTRO_TEST_EMAIL=${{ matrix.user.email }} MAESTRO_TEST_PASSWORD=${{ matrix.user.pass }} \
         maestro test .maestro/auth/LoginSmoke.yaml
 ```
 
