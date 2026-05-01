@@ -43,14 +43,16 @@ if [ -z "$project_id" ]; then
 fi
 
 # Sanity-check ID slug (alphanumerics, hyphen, underscore, dot)
+# Invalid/empty slugs route through REGISTER_REQUIRED so the caller dispatches
+# the slug-override interview using the same flow as missing/colliding configs.
 case "$project_id" in
   *[!A-Za-z0-9._-]*)
-    printf 'ERROR: derived project_id %q contains unsupported characters\n' "$project_id" >&2
-    exit 1
+    printf 'REGISTER_REQUIRED:%s:%s:INVALID_SLUG\n' "$project_id" "$project_root" >&2
+    exit 2
     ;;
   '')
-    printf 'ERROR: empty project_id\n' >&2
-    exit 1
+    printf 'REGISTER_REQUIRED::%s:INVALID_SLUG\n' "$project_root" >&2
+    exit 2
     ;;
 esac
 
