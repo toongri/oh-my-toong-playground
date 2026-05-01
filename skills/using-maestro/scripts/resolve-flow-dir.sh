@@ -15,6 +15,14 @@
 #           error message on other failures (exit 1)
 #
 # macOS bash 3.2 compatible. No external deps beyond git, sed, grep, awk.
+#
+# get_yaml_value parser constraints:
+#   - Top-level scalar keys only (no nesting, no flow scalars, no multi-line strings).
+#   - Quoted values: '#' inside quotes is preserved; anything after the closing quote
+#     is treated as inline comment.
+#   - Unquoted values: '#' is stripped only when preceded by whitespace, so paths
+#     like '/tmp/team#5' survive. Escaped double quotes (\") inside strings are NOT
+#     supported — keep config values free of escape sequences.
 
 set -euo pipefail
 

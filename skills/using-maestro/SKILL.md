@@ -66,6 +66,18 @@ export MAESTRO_USING_FLOW_DIR=.maestro
 maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 ```
 
+### Resolver exit-code contract
+
+When wrapping `resolve-flow-dir.sh` in your own automation, branch on the exit code:
+
+| Exit code | Meaning | Caller action |
+|---|---|---|
+| `0` | Resolved — `flow_dir` on stdout | Use the value |
+| `1` | Hard error (parse failure, empty config value) | Fail fast; surface stderr to the user |
+| `2` | `REGISTER_REQUIRED:<id>:<root>[:<MARKER>]` on stderr | Dispatch the interview (see `references/flow-location-config.md`), write `~/.config/maestro/<id>/config.yaml`, re-invoke the resolver |
+
+Markers on `exit 2`: bare = first-time registration; `:COLLISION` = same `project_id` mapped to a different repo; `:INVALID_SLUG` = derived ID needs a manual override.
+
 For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first so any cwd-bound transient outputs (e.g., `takeScreenshot` without a path) land inside the flow directory rather than the repo root.
 
 ## References
