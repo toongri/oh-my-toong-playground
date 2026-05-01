@@ -91,7 +91,7 @@ The internal organization (`common/`, feature dirs, `screenshots/`) is identical
 
 Key conventions (apply to both):
 
-- **`common/` holds subflows only.** Standalone runs would fail (they assume parent context). Exclude them from default discovery via `config.yaml` `exclude` paths or by tagging with `--exclude-tags`.
+- **`common/` holds subflows only.** Standalone runs would fail (they assume parent context). Exclude them from default discovery by tagging `common/` flows with a marker tag and passing `--exclude-tags <marker>`, or by listing only feature directories under `flows:` in workspace `config.yaml`.
 - **Feature directories group by user journey, not by screen.** `auth/`, `checkout/`, `dispense/` are user-facing concepts. Avoid `screens/login.yaml` — that bleeds implementation detail into the layout.
 - **`screenshots/` holds `assertScreenshot` baselines.** Both modes store baselines in `<flow_dir>/screenshots/`. Internal mode commits them to git; external mode keeps `<flow_dir>/screenshots/` outside the repo and requires separate backup discipline. Transient `takeScreenshot` outputs never belong in either.
 - **Versioning**: internal mode versions flows alongside app code on the same branch/PR. External mode versions flows in a separate inner git repo (`cd ~/.maestro/projects/<id>/flows && git init`) or accepts no versioning at all.
@@ -137,7 +137,7 @@ appId: com.example.app
 - inputText: ${EMAIL}
 - inputText: ${PASSWORD}
 - hideKeyboard
-- tapOn: "로그인"
+- tapOn: "Log in"
 ```
 
 ```yaml

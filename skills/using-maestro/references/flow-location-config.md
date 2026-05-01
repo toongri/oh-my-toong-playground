@@ -90,7 +90,7 @@ created_at: 2026-04-30T15:40:00+09:00
 | `project_id` | yes | Slug used in directory paths. |
 | `git_remote` | no | Identification fallback / debugging aid. |
 | `project_root` | yes | Absolute path used to resolve relative `flow_dir`. |
-| `flow_dir` | yes | Absolute / `~/` / relative. Relative resolves against `project_root`. |
+| `flow_dir` | yes | Absolute / `~/` / relative. Relative resolves against `project_root`. The resolver does **not** canonicalize `..` segments, so `flow_dir: ../sibling/dir` will resolve outside the repo and `mkdir -p` will create the directory there — intentional but uncommon; prefer paths that stay under `project_root` unless cross-repo sharing is required. |
 | `output_dir` | reserved | Reserved for v2. v1 resolver reads only `flow_dir` (see `scripts/resolve-flow-dir.sh`); agents must apply this value manually when invoking maestro test. |
 | `launch_args_isE2E` | reserved | Reserved for v2. v1 resolver reads only `flow_dir` (see `scripts/resolve-flow-dir.sh`); agents must apply this value manually when invoking maestro test. |
 | `created_at` | yes | ISO 8601 timestamp. |
@@ -109,32 +109,32 @@ existing_count=$(find "$project_root/.maestro" -name '*.yaml' -type f 2>/dev/nul
 
 If `existing_count > 0`, prepend Option 0 to the interview.
 
-Interview text (Korean):
+Interview text:
 
 ```
-이 프로젝트의 Maestro flow 디렉토리가 등록되지 않았습니다.
+This project's Maestro flow directory is not registered yet.
 
-  프로젝트 ID:    <id>
-  프로젝트 루트:  <project_root>
-  Git remote:     <git_remote 또는 (없음)>
+  Project ID:    <id>
+  Project root:  <project_root>
+  Git remote:    <git_remote or (none)>
 
-flow 파일을 어디에 둘까요?
+Where should flow files live?
 
-  [기존 .maestro/ 감지된 경우만]
-  0) 기존 <project_root>/.maestro/ 그대로 사용 (감지: <N>개 .yaml)
-     - flow_dir = ".maestro" (상대경로)로 기록
+  [Shown only when an existing .maestro/ is detected]
+  0) Use existing <project_root>/.maestro/ as-is (<N> .yaml files detected)
+     - records flow_dir = ".maestro" (relative path)
 
   1) <project_root>/.maestro/  (internal mode)
-     - 앱 코드와 함께 git 커밋, PR 리뷰, CI 동봉
-     - 브랜치별로 다른 flow 가능 (worktree마다 별도 사본)
+     - committed with app code, surfaced in PR review, bundled in CI
+     - branch-divergent flows possible (separate copy per worktree)
 
-  2) ~/.maestro/projects/<id>/flows/  (external mode, 디폴트)
-     - per-user, repo 외부, 같은 repo의 모든 worktree에서 공유
-     - 1인 작업, 실험적 flow, worktree 헤비 환경
+  2) ~/.maestro/projects/<id>/flows/  (external mode, default)
+     - per-user, outside the repo, shared across all worktrees of the same repo
+     - solo workflow, experimental flows, worktree-heavy setups
 
-  3) 직접 입력 (절대 경로)
+  3) Custom path (absolute)
 
-선택 [0/1/2/3]:
+Choose [0/1/2/3]:
 ```
 
 After the user answers, the agent:
@@ -158,7 +158,7 @@ In CI, no user is available. Set `MAESTRO_USING_FLOW_DIR` explicitly to bypass c
     maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 ```
 
-For CI runs, also pass `--test-output-dir` explicitly — `output_dir` from `config.yaml` is not consulted when the env var override is in effect.
+For CI runs, also pass `--test-output-dir` explicitly — the v1 resolver does not read `output_dir` from `config.yaml` (it is reserved for v2; see the schema table above). Agents that want to honor `output_dir` must read it themselves and forward to `--test-output-dir`.
 
 ## Migration: Existing `.maestro/`
 

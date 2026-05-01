@@ -70,21 +70,21 @@ tags:
     clearState: true                       # idempotency
     arguments: { isE2E: "true" }           # app reads this and disables animations
 
-- assertVisible: "텍스트"                   # check user-facing text
+- assertVisible: "<text>"                   # check user-facing text
 - assertVisible: { id: "main-root" }       # check by id
 - extendedWaitUntil:                       # poll until visible (use after launch)
-    visible: "텍스트"
+    visible: "<text>"
     timeout: 30000
 
-- tapOn: "텍스트"                           # tap by text
+- tapOn: "<text>"                           # tap by text
 - tapOn: { id: "submit-btn" }              # tap by id
 - tapOn: { point: "73%, 94%" }             # last resort
 
-- inputText: "값"
+- inputText: "<value>"
 - hideKeyboard                             # after inputText, before next tap
 
 - scroll
-- scrollUntilVisible: "텍스트"
+- scrollUntilVisible: "<text>"
 - swipe: { direction: LEFT, duration: 500 }
 - back
 
@@ -103,7 +103,7 @@ tags:
     cropOn: { id: "container" }
     thresholdPercentage: 98
 
-- assertWithAI: "로그인 버튼이 활성화되어 있다"   # natural-language assertion (Maestro 1.x+)
+- assertWithAI: "<natural-language assertion>"   # experimental natural-language assertion (LLM-backed; verify availability against current Maestro version)
 
 - runScript: helper.js                     # invoke a JS helper
 ```
