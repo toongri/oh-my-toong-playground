@@ -203,6 +203,8 @@ This skill assumes the orchestrator is already running inside a worktree dedicat
 **PR ID 추출 규칙**: 사용자가 URL(`https://github.com/<org>/<repo>/pull/<N>`) 형식으로 호출하면, 아래 bash로 진입하기 *전에* trailing path segment에서 numeric `<N>`을 추출해 `<number>` 자리에 substitute하라. URL을 그대로 substitute하면 `git fetch origin pull/<URL>/head`가 invalid refspec으로 실패하고 `git checkout -B pr-<URL>`이 invalid 브랜치명으로 실패한다.
 
 ```bash
+set -euo pipefail
+
 # 0. Safety guards (Premise 1 enforcement) — abort BEFORE any state change
 # -uno: untracked files are preserved by checkout; only check tracked modifications
 if [ -n "$(git status --porcelain -uno)" ]; then
@@ -218,8 +220,12 @@ if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-di
   exit 1
 fi
 
-# 1. Get base branch name
+# 1. Get base branch name (abort if gh fails or returns empty)
 BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
+if [ -z "$BASE_REF" ]; then
+  echo "Error: gh pr view returned empty baseRefName — aborting before any fetch" >&2
+  exit 1
+fi
 
 # 2. Fetch base branch first, then PR ref last so FETCH_HEAD points to PR head
 #    (rerun-safe — force-push on the PR is picked up on re-review)
