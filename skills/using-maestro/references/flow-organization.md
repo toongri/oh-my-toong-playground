@@ -134,7 +134,9 @@ appId: com.example.app
 - launchApp:
     clearState: true
     arguments: { isE2E: "true" }
+- tapOn: { id: "email-input" }
 - inputText: ${EMAIL}
+- tapOn: { id: "password-input" }
 - inputText: ${PASSWORD}
 - hideKeyboard
 - tapOn: "Log in"
