@@ -4,14 +4,22 @@ Maestro can be driven two ways from an LLM-backed environment: **CLI** (a human 
 
 ## What the Maestro MCP Server Provides
 
-Maestro 팀은 Claude Desktop / Cursor / Windsurf 등 MCP 클라이언트가 모바일 자동화에 직접 접근할 수 있는 MCP 서버를 별도 레포로 배포한다(`mobile-dev-inc/maestro-mcp`). 등록하면 LLM이 외부 connector 없이 다음 같은 능력에 접근할 수 있다:
+Maestro CLI에 MCP 서버가 내장되어 있다 (`maestro mcp` 명령). 별도 저장소(`mobile-dev-inc/maestro-mcp`)는 archived 상태이며 더 이상 유지보수되지 않는다 — 현재는 모두 CLI 내장 경로를 사용한다. 등록하면 LLM이 외부 connector 없이 다음 같은 능력에 접근할 수 있다:
 
 - 현재 화면의 UI 계층(view hierarchy) 조회 — 셀렉터 후보 추출용
 - 인라인 YAML 스니펫 또는 파일 단위 flow 실행 — 작성→검증 사이클 가속
 - Maestro YAML 문법 참조 / 문법 유효성 검사 — LLM 자기교정 지원
 - (해당되는 경우) 클라우드 실행 제출 및 상태 조회
 
-> 정확한 도구 이름·인자·반환 포맷은 Maestro MCP 버전마다 변경된다. 등록·호출 직전에 [공식 docs](https://github.com/mobile-dev-inc/maestro-mcp)와 클라이언트의 도구 목록(예: Claude Desktop에서 등록 후 노출되는 mcp 도구)을 확인하라. 본 가이드는 도구 이름을 박지 않는다 — stale 위험을 회피하기 위함.
+**MCP 클라이언트 등록**:
+
+```json
+{ "mcpServers": { "maestro": { "command": "maestro", "args": ["mcp"] } } }
+```
+
+Claude Code CLI에서는 `claude mcp add maestro -- maestro mcp` 한 줄로 등록. Claude Desktop은 최소 셸 환경에서 실행되므로 `command`에 maestro 바이너리 full path(`/usr/local/bin/maestro` 등) 및 필요 시 `JAVA_HOME`을 명시한다.
+
+> 정확한 도구 이름·인자·반환 포맷은 Maestro 버전마다 변경된다. 등록·호출 직전에 [공식 docs](https://docs.maestro.dev/)와 클라이언트의 도구 목록(예: Claude Desktop에서 등록 후 노출되는 mcp 도구)을 확인하라. 본 가이드는 도구 이름을 박지 않는다 — stale 위험을 회피하기 위함.
 
 이로 가능해지는 agentic 루프(개념): 현재 화면 조회 → 셀렉터 추론 + YAML 초안 작성 → 인라인 실행으로 검증 → 실패 시 화면 재조회 → 셀렉터 수정 → 반복. 도구 호출 단위는 클라이언트가 노출한 실제 이름으로 대체.
 
@@ -32,15 +40,15 @@ The bottom line: **CLI is the baseline. MCP is a discovery accelerator** for sit
 
 | Environment | Recommended | Reason |
 |---|---|---|
-| Kiosk / hardware-integrated device (USB-serial peripherals, EEPROM, etc.) | **CLI only** | Three open MCP issues affect this exact setup — see "Open MCP Issues" below. |
+| Kiosk / hardware-integrated device (USB-serial peripherals, EEPROM, etc.) | **CLI only** | Two open MCP issues plus one historically relevant closed issue affect this exact setup — see "MCP Issues Affecting These Environments" below. |
 | WiFi ADB | **CLI only** | Same MCP issues. Forwarding instabilities compound. |
 | Standard RN app, fast iteration on new screens | **MCP for draft, CLI for run** | Hybrid. Draft fast, commit, run deterministically. |
 | Mature RN app, stable test suite | **CLI** | The MCP marginal value is small once the suite exists. |
 | CI / GitHub Actions / cloud runners | **CLI always** | Non-deterministic LLM calls in CI = flaky pipeline. |
 
-## Open MCP Issues to Watch
+## MCP Issues Affecting These Environments
 
-These issues currently keep MCP off the table for kiosk and WiFi-ADB environments. Re-evaluate when they close.
+These issues currently keep MCP off the table for kiosk and WiFi-ADB environments. Two are open; one is closed but historically relevant for re-evaluating WiFi-ADB MCP viability. Re-evaluate when the open ones close.
 
 > Status checked: 2026-05-01. Re-verify before relying on these decisions — issue states change.
 

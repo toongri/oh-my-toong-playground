@@ -4,16 +4,16 @@ Two pillars hold a Maestro flow together: **selectors** that find UI elements re
 
 ## Selector Priority
 
-Maestro can match elements by text, accessibility id, relational position, state, index, or coordinate. Always pick the highest-stability option that uniquely identifies the target.
+Maestro can match elements by text, accessibility id, relational position, state, index, or coordinate. Maestro 공식 권장은 stability 기준 `id > text` (Resource IDs / Accessibility Identifiers most stable, Visible Text least stable). Always pick the highest-stability option that uniquely identifies the target.
 
 ```
-text > id (accessibilityLabel/testID) > relational > state > index > point(coordinate)
+id (accessibilityLabel/testID) > text > relational > state > index > point(coordinate)
 ```
 
 | Selector | Use when | Stability |
 |---|---|---|
-| `tapOn: "로그인"` / `assertVisible: "로그인"` | The element shows user-facing text in the current locale. | ⭐⭐⭐⭐⭐ |
-| `tapOn: { id: "submit-btn" }` / `assertVisible: { id: "main-root" }` | Icon-only button, multilingual app, multiple elements share the same text. | ⭐⭐⭐⭐ |
+| `tapOn: { id: "submit-btn" }` / `assertVisible: { id: "main-root" }` | Stable across locales, copy changes, multiple matches. Default for new flows. | ⭐⭐⭐⭐⭐ |
+| `tapOn: "로그인"` / `assertVisible: "로그인"` | The element shows user-facing text in the current locale, and locale won't change. | ⭐⭐⭐⭐ |
 | `tapOn: { below: "헤더" }` | The element has no stable text/id but a stable neighbor. | ⭐⭐⭐ |
 | `tapOn: { enabled: true, text: "확인" }` | Composite condition (state plus text). | ⭐⭐⭐ |
 | `tapOn: { index: 2, text: "옵션" }` | Multiple matches and you can predict ordering. Fragile. | ⭐⭐ |

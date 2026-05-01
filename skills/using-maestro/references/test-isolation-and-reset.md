@@ -81,7 +81,7 @@ For kiosk / hardware-integrated builds where physical state is preserved across 
 |---|---|---|
 | App data (AsyncStorage, settings, auth) | `clearState: true` | Standard |
 | In-memory app state (animation counters, mocks) | `arguments: { isE2E: "true" }` | App must implement the receiver |
-| Native module state | Often requires reinstall (`launchApp: { delete: true }` style) or app-side teardown in `isE2E` mode | Depends on the module |
+| Native module state | Maestro에서는 `launchApp { clearState: true, clearKeychain: true }` (iOS는 clearState가 internal reinstall로 동작) 또는 `isE2E` 분기의 app-side teardown. Detox의 `launchApp({ delete: true })`(L24)와 개념적으로 유사하나 문법은 다름 | Depends on the module |
 | Hardware peripheral (USB serial, BLE) | **Out of scope for app E2E.** Treat as invariant or reset at suite start. | Document the assumption |
 
 ## Quick Decision Guide
