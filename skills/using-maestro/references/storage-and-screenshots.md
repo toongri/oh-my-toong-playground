@@ -37,21 +37,16 @@ Maestro's built-in `assertScreenshot` (CLI v2.2.0+) is sufficient for most needs
 
 ## Where Maestro Writes Output
 
-`maestro test` writes its main test artifacts (screenshots, recording, log, command trace) to an **OS-specific default folder** (typically under `~/.maestro/tests/<timestamp>/` on macOS) unless overridden by `--test-output-dir` or `testOutputDir` in `config.yaml`. However, `takeScreenshot` calls without an explicit path land in the current working directory — running `maestro test` from the repo root with `takeScreenshot` scatters PNGs into the repo and leaves untracked files in `git status`.
+`maestro test` writes its main test artifacts (failure screenshots, recording, log, command trace) to an **OS-specific default folder** (typically under `~/.maestro/tests/<timestamp>/` on macOS) unless overridden by `--test-output-dir` or `testOutputDir` in `config.yaml`. `takeScreenshot` calls without an explicit path land in a `.maestro/` folder inside the workspace by default — running `maestro test` from a directory without writing access (or in CI where the artifact location must be predictable) is the trigger to pin `--test-output-dir`.
 
-Two patterns prevent this:
+Pin `--test-output-dir` for predictable artifact location:
 
 ```bash
-# Pattern 1: pin the output directory (preferred for CI)
+# Pin the output directory (preferred for CI and local runs)
 maestro test --test-output-dir=./maestro-output .maestro/
 ```
 
-```bash
-# Pattern 2: run from inside .maestro/ (handy for local debugging)
-cd .maestro && maestro test sleep/SleepClockChange.yaml
-```
-
-Pattern 1 is the right default for CI: it puts everything in one place that `actions/upload-artifact` can grab, and you `gitignore` that path. Pattern 2 is a quick local trick — Maestro still writes to the cwd, but now the cwd is `.maestro/` so the noise stays inside the test directory.
+This puts everything in one place that `actions/upload-artifact` can grab, and you `gitignore` that path. For local runs without `--test-output-dir`, transient outputs go under the workspace `.maestro/` folder by default — review them with `git status` and add the relevant patterns to `.gitignore` (see below) before committing.
 
 ## Recommended `.gitignore` Entries
 
