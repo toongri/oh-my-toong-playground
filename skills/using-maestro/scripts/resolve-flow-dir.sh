@@ -10,6 +10,8 @@
 #           - When MAESTRO_USING_FLOW_DIR env is set: passed through verbatim (no
 #             normalization, no mkdir) — caller is responsible for path semantics
 #   stderr: "REGISTER_REQUIRED:<id>:<project_root>" if config missing (exit 2)
+#           "REGISTER_REQUIRED:<id>:<project_root>:COLLISION" if config belongs to
+#             a different repo with the same project_id (exit 2)
 #           error message on other failures (exit 1)
 #
 # macOS bash 3.2 compatible. No external deps beyond git, sed, grep, awk.
@@ -52,16 +54,7 @@ case "$project_id" in
     ;;
 esac
 
-# 4. Look up config
-config_dir="$HOME/.config/maestro/$project_id"
-config_file="$config_dir/config.yaml"
-
-if [ ! -f "$config_file" ]; then
-  printf 'REGISTER_REQUIRED:%s:%s\n' "$project_id" "$project_root" >&2
-  exit 2
-fi
-
-# 5. Parse flow_dir from flat YAML (bash 3.2 compatible, no yq dependency)
+# Helper: parse a flat YAML value (bash 3.2 compatible, no yq dependency)
 get_yaml_value() {
   local key="$1"
   local file="$2"
@@ -86,6 +79,46 @@ get_yaml_value() {
   esac
 }
 
+# 4. Look up config
+config_dir="$HOME/.config/maestro/$project_id"
+config_file="$config_dir/config.yaml"
+
+if [ ! -f "$config_file" ]; then
+  printf 'REGISTER_REQUIRED:%s:%s\n' "$project_id" "$project_root" >&2
+  exit 2
+fi
+
+# 4a. Collision detection — verify config belongs to current repo.
+# Compare git_remote (preferred) or project_root fallback from config vs current state.
+# On mismatch, signal REGISTER_REQUIRED:<id>:<root>:COLLISION so caller can dispatch a slug-override interview.
+config_git_remote=$(get_yaml_value "git_remote" "$config_file")
+config_project_root=$(get_yaml_value "project_root" "$config_file")
+
+# Compute current git remote for comparison
+current_git_remote=""
+if remote_url=$(git -C "$project_root" remote get-url origin 2>/dev/null); then
+  current_git_remote="$remote_url"
+fi
+
+# Mismatch rules:
+#   - If config has git_remote AND current has git_remote → both must match
+#   - If config has git_remote AND current has none → mismatch
+#   - If config has no git_remote → fall back to project_root comparison
+collision=0
+if [ -n "$config_git_remote" ]; then
+  if [ -z "$current_git_remote" ] || [ "$config_git_remote" != "$current_git_remote" ]; then
+    collision=1
+  fi
+elif [ -n "$config_project_root" ] && [ "$config_project_root" != "$project_root" ]; then
+  collision=1
+fi
+
+if [ "$collision" = "1" ]; then
+  printf 'REGISTER_REQUIRED:%s:%s:COLLISION\n' "$project_id" "$project_root" >&2
+  exit 2
+fi
+
+# 5. Read flow_dir from config
 flow_dir=$(get_yaml_value "flow_dir" "$config_file")
 
 if [ -z "$flow_dir" ]; then

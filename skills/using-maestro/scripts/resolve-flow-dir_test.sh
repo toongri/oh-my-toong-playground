@@ -308,6 +308,65 @@ test_unquoted_hash_in_path_preserved() {
 }
 
 # =============================================================================
+# Test F: `test_collision_detection_emits_register_required_with_collision_marker`
+# Regression for P2-1: config exists for same project_id but different git_remote
+# Expected: exit 2 AND stderr contains 'REGISTER_REQUIRED:<id>:<root>:COLLISION'
+# =============================================================================
+test_collision_detection_emits_register_required_with_collision_marker() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myproject"
+    local fake_home="$tmp_dir/home"
+
+    # Initialize a real git repo for the "current" project
+    mkdir -p "$project_root"
+    git -C "$project_root" init -q
+    # Set a git remote for the current repo
+    git -C "$project_root" remote add origin "https://github.com/org-current/myproject.git"
+
+    # Create a config with the SAME project_id (basename = myproject) but DIFFERENT git_remote
+    local config_dir="$fake_home/.config/maestro/myproject"
+    mkdir -p "$config_dir"
+    printf 'version: 1\nproject_id: myproject\ngit_remote: https://github.com/different-org/myproject.git\nproject_root: /some/other/path\nflow_dir: /tmp/somewhere\ncreated_at: 2026-01-01T00:00:00+00:00\n' \
+        > "$config_dir/config.yaml"
+
+    local stderr_output
+    local exit_code=0
+
+    # Capture stderr; allow non-zero exit
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit with code 2 (REGISTER_REQUIRED)
+    if [ "$exit_code" -ne 2 ]; then
+        echo "  ASSERTION FAILED: expected exit code 2 (REGISTER_REQUIRED on collision), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain REGISTER_REQUIRED:<id>:<root>:COLLISION marker
+    if ! printf '%s' "$stderr_output" | grep -qE 'REGISTER_REQUIRED:myproject:.*:COLLISION'; then
+        echo "  ASSERTION FAILED: stderr does not contain 'REGISTER_REQUIRED:myproject:<root>:COLLISION'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -321,6 +380,7 @@ main() {
     run_test test_quoted_with_inline_comment_stripped
     run_test test_hash_in_quoted_path
     run_test test_unquoted_hash_in_path_preserved
+    run_test test_collision_detection_emits_register_required_with_collision_marker
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
