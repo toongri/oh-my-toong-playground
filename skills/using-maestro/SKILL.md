@@ -62,8 +62,8 @@ maestro test --test-output-dir=./maestro-output "$flow_dir/auth/LoginSmoke.yaml"
 maestro test --test-output-dir=./maestro-output "$flow_dir"
 
 # CI (bypass interview via env var)
-MAESTRO_USING_FLOW_DIR=.maestro \
-  maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
+export MAESTRO_USING_FLOW_DIR=.maestro
+maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 ```
 
 For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first so any cwd-bound transient outputs (e.g., `takeScreenshot` without a path) land inside the flow directory rather than the repo root.
