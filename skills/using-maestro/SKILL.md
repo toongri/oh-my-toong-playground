@@ -78,6 +78,7 @@ For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first 
 - **`references/ai-agent-integration.md`** — Maestro MCP tools, MCP vs CLI decision matrix by stage and environment, open issues that affect kiosks and WiFi ADB.
 - **`references/test-isolation-and-reset.md`** — Why every scenario must reset (it is the industry standard), what `clearState` actually clears on Android vs iOS, legitimate exceptions (kiosk, hardware bring-up, large seed data), Keychain caveat.
 - **`references/pitfalls-and-cheat-sheet.md`** — Full pitfall table, CLI cheat sheet, flow YAML keyword cheat sheet, debug bundle layout, onboarding checklist.
+- **`references/test-environment.md`** — Category A(software SUT, emulator default) / Category B(hardware-integrated SUT, physical IS the SUT) 분기, capability-driven Limits 표, Maestro iOS=simulator-only 사실, decision rule.
 
 ## Common Mistakes
 
@@ -86,6 +87,7 @@ For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first 
 - Treating `clearState` as optional. Without it, the second run drifts from the first.
 - Running `maestro test` from the repo root. PNGs scatter into the repo — pin `--test-output-dir` or `cd "$flow_dir"` first.
 - Hardcoding `.maestro/` in scripts when the project may be registered to use an external `flow_dir`. Always resolve via `scripts/resolve-flow-dir.sh` (or the `MAESTRO_USING_FLOW_DIR` env var in CI).
+- Authoring against a physical device by default when the SUT is software. Default emulator/simulator (Category A); switch to physical only when a Limits-table capability is the test target. For hardware-integrated SUTs (kiosk/IoT), Category B applies — see `references/test-environment.md`.
 
 ## Red Flags — STOP and Re-Read
 
