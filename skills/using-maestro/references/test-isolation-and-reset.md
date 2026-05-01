@@ -38,7 +38,7 @@ The standard reset, the one every framework supports out of the box, is **app da
 
 Two practical consequences:
 
-- On iOS, if your auth flow stores tokens in Keychain, `clearState` alone does **not** log the user out. You either explicitly clear Keychain in the app's `isE2E` startup branch or accept that the post-`clearState` state is "uninstalled but keychain-retained".
+- On iOS, if your auth flow stores tokens in Keychain, `clearState` alone does **not** log the user out. Use `launchApp { clearState: true, clearKeychain: true }` — the Maestro-native primary path (see "Native module state" row below). The app-side `isE2E` Keychain wipe is a fallback for older Maestro CLI versions that lack `clearKeychain`, or for apps that need additional teardown beyond Keychain.
 - Maestro [issue #1601](https://github.com/mobile-dev-inc/maestro/issues/1601) reports cases where iOS UserDefaults is not reliably cleared. The workaround is to call `clearState` and then `launchApp clearState: true` again — redundant but practically reliable.
 
 ## Legitimate Exceptions
@@ -89,7 +89,7 @@ For kiosk / hardware-integrated builds where physical state is preserved across 
 ```
 Writing a new flow → Always start with launchApp: { clearState: true, arguments: { isE2E: "true" } }
 Flow flakes on second run → Check whether you actually have clearState; check whether app honors isE2E
-iOS auth state surviving uninstall → Keychain. Add a Keychain wipe path in your isE2E branch.
+iOS auth state surviving uninstall → Keychain. Use launchApp { clearState: true, clearKeychain: true } (Maestro-native, primary). Fall back to isE2E branch only if your CLI version doesn't support clearKeychain.
 Pairing takes 30s and destroys CI time → Move pairing to suite setup, app-data-only reset per scenario
 Need to validate a multi-step user journey end-to-end → Design as a single flow, not chained scenarios
 ```
