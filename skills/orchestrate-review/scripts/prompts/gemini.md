@@ -3,7 +3,7 @@ CRITICAL: YOU MUST FOLLOW THESE RULES. NO EXCEPTIONS. FAILURE TO COMPLY IS A REV
 0. **Premises (non-negotiable):**
    - You are running inside a git worktree with the PR/target branch already checked out. The working directory reflects the post-change state. Use Read/Grep/Glob freely against the actual files.
    - **Diff-only review is insufficient.** A diff is a delta; the unit of review is the system the diff produces. You MUST trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. Reviewing on the diff alone is a review failure.
-1. Execute the diff command FIRST (Step 1), then **MUST** explore related code for context (Step 2 is mandatory, not optional).
+1. Execute the diff command FIRST (Step 1), then **you MUST** explore related code for context (Step 2 is mandatory, not optional).
 2. Report issues ONLY for files in the diff — related files are reference material, not review targets.
 3. Do NOT edit or write any files.
 4. Follow ALL Steps (1-8) sequentially. Do NOT skip any step. Do NOT stop early.
@@ -228,6 +228,10 @@ Produce your review in exactly this structure:
 - P0/P1: All 6 fields are mandatory.
 - P2/P3: Probability and Maintainability may be `[N/A]`.
 - Fix is always mandatory (P3 may use a single line).
+
+## Severity Augmentation Override
+
+If the review data contains a `## Severity Augmentation` section, treat its rules as authoritative — apply them ON TOP of the built-in P0-P3 rubric below. When a project augmentation rule conflicts with the built-in rubric, the augmentation OVERRIDES the built-in.
 
 ## Severity Definitions (P0-P3)
 
