@@ -37,7 +37,7 @@ Maestro's built-in `assertScreenshot` (CLI v2.2.0+) is sufficient for most needs
 
 ## Where Maestro Writes Output
 
-`maestro test` writes its output (debug screenshots, recording, log) into the **current working directory** by default. Running from the repository root pollutes the repo with a fresh batch of PNGs every run, which then appear as untracked files in `git status`.
+`maestro test` writes its main test artifacts (screenshots, recording, log, command trace) to an **OS-specific default folder** (typically under `~/.maestro/tests/<timestamp>/` on macOS) unless overridden by `--test-output-dir` or `testOutputDir` in `config.yaml`. However, `takeScreenshot` calls without an explicit path land in the current working directory — running `maestro test` from the repo root with `takeScreenshot` scatters PNGs into the repo and leaves untracked files in `git status`.
 
 Two patterns prevent this:
 

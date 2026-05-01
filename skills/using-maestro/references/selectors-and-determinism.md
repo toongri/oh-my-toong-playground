@@ -42,7 +42,7 @@ Locale matters. `tapOn: "로그인"` works only when the app is rendered in Kore
 | **`clearState: true`** | `launchApp clearState: true` | Reset AsyncStorage, cookies, app data so every run starts identically. |
 | **`isE2E` argument** | `launchApp arguments: { isE2E: "true" }` | The app reads this on startup and disables animations, mocks unstable services, activates fixtures. **The app must implement the receiver** (a check in `index.js` or a native module) — Maestro just passes the value. |
 | **Selector text/id over coordinate** | See selector priority above. | Coordinates break across devices and OS versions. |
-| **`extendedWaitUntil`** | `extendedWaitUntil: { visible: "...", timeout: 30000 }` | `assertVisible` checks immediately. JS bundle load, network fetch, and animations need polling. |
+| **`extendedWaitUntil`** | `extendedWaitUntil: { visible: "...", timeout: 30000 }` | `assertVisible` already auto-retries within its default ~7s window. Use `extendedWaitUntil` for state that may exceed that — JS bundle load, network fetch, and animations occasionally need longer polling. |
 | **`retry` and `repeat` for known flakiness** | Built-in command. Use only after rooting out the cause. | Some races (lottery animations, third-party SDK init) are inherently non-deterministic. Retry once or twice; never more. |
 
 ### When determinism still breaks
@@ -72,7 +72,7 @@ The right fix is to start every flow from a known state, not to compensate for a
 | Mistake | Symptom | Fix |
 |---|---|---|
 | Coordinate-based tap | Works on developer's device, fails in CI | Add `testID` to the target component, switch to id selector |
-| `assertVisible` immediately after `launchApp` | "Element not found" on cold start | `extendedWaitUntil` with 30s timeout |
+| `assertVisible` immediately after `launchApp` exceeds 7s default retry | "Element not found" on slow cold start | `extendedWaitUntil` with 30s timeout |
 | Asserting on text rendered inside an `<Image>` | "Element not found" — text isn't in hierarchy | Use id or position selector |
 | Same text appears multiple times | Wrong element gets tapped | Add `index:` qualifier or use id |
 | Locale change causes failure | Text in different language | Pin app locale in CI, or use id selectors |
