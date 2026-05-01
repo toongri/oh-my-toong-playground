@@ -66,14 +66,14 @@ scan_file() {
     local filepath="$1"
     local findings=0
     local lineno=0
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         lineno=$((lineno + 1))
         if is_verification_line "$line" && has_unsubstituted_placeholder "$line"; then
             findings=$((findings + 1))
             printf 'WARN: %s:%d: %s\n' "$filepath" "$lineno" "$line" >&2
         fi
     done < "$filepath"
-    return "$findings"
+    echo "$findings"
 }
 
 # =============================================================================
@@ -174,6 +174,38 @@ test_does_not_flag_empty_braces() {
     return 0
 }
 
+# RED → GREEN: scan_file must detect violation in last line when file has no trailing newline
+test_scan_file_processes_last_line_without_trailing_newline() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    # Write two lines with NO trailing newline: last line has a violation
+    printf 'first line\n      **Verification**: bad {token}' > "$tmpfile"
+    local count
+    count=$(scan_file "$tmpfile" 2>/dev/null)
+    rm -f "$tmpfile"
+    if [[ "$count" != "1" ]]; then
+        echo "ASSERTION FAILED: expected 1 finding for trailing-newline-less file, got '$count'"
+        return 1
+    fi
+    return 0
+}
+
+# RED → GREEN: scan_file must return finding count via stdout (not exit-code, which wraps at 256)
+test_scan_file_returns_finding_count_via_stdout() {
+    local tmpfile
+    tmpfile=$(mktemp)
+    # Two violation lines
+    printf '      **Verification**: bad {token_one}\n      **Verification**: bad {token_two}\n' > "$tmpfile"
+    local count
+    count=$(scan_file "$tmpfile" 2>/dev/null)
+    rm -f "$tmpfile"
+    if [[ "$count" != "2" ]]; then
+        echo "ASSERTION FAILED: expected 2 findings via stdout, got '$count'"
+        return 1
+    fi
+    return 0
+}
+
 # =============================================================================
 # Live file scan
 # =============================================================================
@@ -192,9 +224,9 @@ run_live_scan() {
 
     while IFS= read -r filepath; do
         [[ -z "$filepath" ]] && continue
-        # scan_file returns the number of findings via exit code
-        local file_findings=0
-        scan_file "$filepath" || file_findings=$?
+        # scan_file returns the number of findings via stdout
+        local file_findings
+        file_findings=$(scan_file "$filepath")
         total_findings=$((total_findings + file_findings))
     done <<< "$skill_files"
 
@@ -223,6 +255,8 @@ main() {
     run_test test_does_not_flag_curl_percent_format
     run_test test_does_not_flag_non_verification_lines
     run_test test_does_not_flag_empty_braces
+    run_test test_scan_file_processes_last_line_without_trailing_newline
+    run_test test_scan_file_returns_finding_count_via_stdout
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
