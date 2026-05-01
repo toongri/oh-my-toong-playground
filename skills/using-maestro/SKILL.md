@@ -9,7 +9,7 @@ description: Use when writing, debugging, or organizing Maestro mobile E2E test 
 
 Maestro is a YAML-driven mobile E2E framework. The four non-negotiable principles:
 
-1. **Selectors: text or stable id first; coordinate only as last resort.**
+1. **Selectors: stable id first; user-visible text second; coordinate only as last resort.**
 2. **Every flow starts from a known state** via `clearState` plus an `isE2E` argument the app respects.
 3. **Every wait is condition-based, not timed** — `extendedWaitUntil` for any post-launch state.
 4. **Flow location is per-project, recorded once.** The skill resolves `~/.config/maestro/<id>/config.yaml` (or the `MAESTRO_USING_FLOW_DIR` env var) before every operation. If the entry is missing, interview the user — never assume `.maestro/`. See `references/flow-location-config.md`.
@@ -29,7 +29,7 @@ This skill is the entry point. Reach for the topic-specific reference under `ref
 
 ## Core Principles
 
-1. **Selectors: text first, id second, coordinate last.** See `references/selectors-and-determinism.md` for the priority table and trade-offs.
+1. **Selectors: stable id first, user-visible text second, coordinate last.** See `references/selectors-and-determinism.md` for the priority table and trade-offs.
 2. **Every flow starts from a known state** with `launchApp clearState: true` plus an `isE2E` argument the app respects. This is what makes the flow idempotent across N runs.
 3. **`extendedWaitUntil`** for any state that may exceed `assertVisible`'s default 7-second retry window — typical triggers are JS bundle load, network fetch, or animation. Within 7s, `assertVisible` already auto-retries; reach for `extendedWaitUntil` only when expected latency exceeds that.
 4. **Flow location is resolved, not assumed.** The first run reads `~/.config/maestro/<id>/config.yaml` (or `MAESTRO_USING_FLOW_DIR` env var). If absent, the skill interviews the user: project root `.maestro/` (committed, team-shared) vs `~/.maestro/projects/<id>/flows/` (per-user, worktree-shared) vs custom path. See `references/flow-location-config.md`. Inside the resolved `flow_dir`, organize as `<flow_dir>/<feature>/` with `<flow_dir>/common/` for subflows — see `references/flow-organization.md`.
@@ -52,11 +52,11 @@ flow_dir=$(bash <skill>/scripts/resolve-flow-dir.sh) || {
   exit 1
 }
 
-# Layout (idempotent — works for both internal and external modes)
-mkdir -p "$flow_dir/common" "$flow_dir/<feature>" "$flow_dir/screenshots"
+# Layout (replace `auth` with your feature name; idempotent across modes)
+mkdir -p "$flow_dir/common" "$flow_dir/auth" "$flow_dir/screenshots"
 
-# First flow
-maestro test --test-output-dir=./maestro-output "$flow_dir/<feature>/<Flow>.yaml"
+# First flow (rename LoginSmoke to your flow name)
+maestro test --test-output-dir=./maestro-output "$flow_dir/auth/LoginSmoke.yaml"
 
 # Whole suite
 maestro test --test-output-dir=./maestro-output "$flow_dir"
@@ -107,7 +107,7 @@ When you observe one of these, stop adding workarounds and re-read the relevant 
 |---|---|
 | "Just this one flow can use coordinates" | Once accepted, the next five flows copy the pattern. `testID` is a ten-second app change. |
 | "I will add `clearState` after the happy path works" | A flow without `clearState` works once. The second run does not. You cannot learn idempotency from a single passing run. |
-| "`assertVisible` is fine — the element is clearly there" | `assertVisible` is synchronous; cold start, bundle load, and animation gate visibility. Use `extendedWaitUntil` for any post-launch assertion. |
+| "`assertVisible` is fine — the element is clearly there" | `assertVisible` only auto-retries ~7s; cold start, bundle load, and animations can easily exceed that. Use `extendedWaitUntil` for any post-launch assertion. |
 | "I'll keep flows in a personal folder, commit later" | Uncommitted flows have no PR review, no CI execution, no reproducibility. The merge cost grows daily. |
 | "MCP can author and run — why bother with CLI in CI?" | LLM calls in CI = non-deterministic budget plus rate-limit risk. Author with MCP, execute with CLI. |
 | "`takeScreenshot` and `assertScreenshot` are the same — both produce PNGs" | Different lifetimes and storage policies. Mixing them either pollutes git or silently disables visual regression. |
