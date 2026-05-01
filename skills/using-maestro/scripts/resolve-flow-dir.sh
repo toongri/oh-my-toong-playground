@@ -99,6 +99,18 @@ get_yaml_value() {
   esac
 }
 
+# Helper: normalize a git remote URL for collision comparison.
+# Strips trailing .git suffix, then converts SSH (git@host:path) to HTTPS form.
+# bash 3.2 compatible — uses sed -E only.
+normalize_remote() {
+  local url="$1"
+  # Strip trailing .git suffix
+  url=$(printf '%s' "$url" | sed -E 's/\.git$//')
+  # Convert git@host:path → https://host/path
+  url=$(printf '%s' "$url" | sed -E 's|^git@([^:]+):(.+)$|https://\1/\2|')
+  printf '%s' "$url"
+}
+
 # 4. Look up config
 config_dir="$HOME/.config/maestro/$project_id"
 config_file="$config_dir/config.yaml"
@@ -121,12 +133,14 @@ if remote_url=$(git -C "$project_root" remote get-url origin 2>/dev/null); then
 fi
 
 # Mismatch rules:
-#   - If config has git_remote AND current has git_remote → both must match
+#   - If config has git_remote AND current has git_remote → both must match (after normalization)
 #   - If config has git_remote AND current has none → mismatch
 #   - If config has no git_remote → fall back to project_root comparison
 collision=0
 if [ -n "$config_git_remote" ]; then
-  if [ -z "$current_git_remote" ] || [ "$config_git_remote" != "$current_git_remote" ]; then
+  norm_config=$(normalize_remote "$config_git_remote")
+  norm_current=$(normalize_remote "$current_git_remote")
+  if [ -z "$current_git_remote" ] || [ "$norm_config" != "$norm_current" ]; then
     collision=1
   fi
 elif [ -n "$config_project_root" ] && [ "$config_project_root" != "$project_root" ]; then

@@ -591,6 +591,130 @@ test_unterminated_single_quote_exits_1() {
 }
 
 # =============================================================================
+# Test K: `test_https_to_ssh_no_collision`
+# Regression for normalize_remote: config has HTTPS URL, current remote uses SSH URL
+# for the same repo. Must NOT be treated as collision.
+# Expected: exit 0 (no collision, config is valid)
+#
+# Note: project_id is derived from the git remote basename → "myrepo".
+# The config directory must use the same derived project_id.
+# =============================================================================
+test_https_to_ssh_no_collision() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    # Use project_root dirname that matches the remote basename to keep project_id stable
+    local project_root="$tmp_dir/myrepo"
+    local fake_home="$tmp_dir/home"
+
+    # Real git repo with SSH remote — project_id will be derived as "myrepo"
+    mkdir -p "$project_root"
+    git -C "$project_root" init -q
+    git -C "$project_root" remote add origin "git@github.com:foo/myrepo.git"
+
+    # Config was registered with HTTPS URL (with .git suffix) — same repo, different URL scheme
+    # project_id = "myrepo" (derived from SSH remote basename, stripping .git)
+    local config_dir="$fake_home/.config/maestro/myrepo"
+    mkdir -p "$config_dir"
+    printf 'version: 1\nproject_id: myrepo\ngit_remote: https://github.com/foo/myrepo.git\nproject_root: %s\nflow_dir: /tmp/flows\ncreated_at: 2026-01-01T00:00:00+00:00\n' \
+        "$project_root" > "$config_dir/config.yaml"
+
+    local exit_code=0
+    local stderr_output
+
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit 0 (no collision — same repo, different URL format)
+    if [ "$exit_code" -ne 0 ]; then
+        echo "  ASSERTION FAILED: expected exit code 0 (no collision for HTTPS vs SSH same repo), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must NOT contain COLLISION marker
+    if printf '%s' "$stderr_output" | grep -q 'COLLISION'; then
+        echo "  ASSERTION FAILED: stderr contains 'COLLISION' (false positive collision for HTTPS vs SSH)"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
+# Test L: `test_dot_git_suffix_no_collision`
+# Regression for normalize_remote: config has URL without .git suffix,
+# current remote has the same URL with .git suffix.
+# Expected: exit 0 (no collision)
+#
+# Note: project_id is derived from the git remote basename → "myrepo".
+# The config directory must use the same derived project_id.
+# =============================================================================
+test_dot_git_suffix_no_collision() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myrepo"
+    local fake_home="$tmp_dir/home"
+
+    # Real git repo with HTTPS remote including .git suffix — project_id = "myrepo"
+    mkdir -p "$project_root"
+    git -C "$project_root" init -q
+    git -C "$project_root" remote add origin "https://github.com/foo/myrepo.git"
+
+    # Config was registered with HTTPS URL WITHOUT .git suffix
+    local config_dir="$fake_home/.config/maestro/myrepo"
+    mkdir -p "$config_dir"
+    printf 'version: 1\nproject_id: myrepo\ngit_remote: https://github.com/foo/myrepo\nproject_root: %s\nflow_dir: /tmp/flows\ncreated_at: 2026-01-01T00:00:00+00:00\n' \
+        "$project_root" > "$config_dir/config.yaml"
+
+    local exit_code=0
+    local stderr_output
+
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit 0 (no collision — .git suffix difference only)
+    if [ "$exit_code" -ne 0 ]; then
+        echo "  ASSERTION FAILED: expected exit code 0 (no collision for .git suffix difference), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must NOT contain COLLISION marker
+    if printf '%s' "$stderr_output" | grep -q 'COLLISION'; then
+        echo "  ASSERTION FAILED: stderr contains 'COLLISION' (false positive collision for .git suffix)"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -609,6 +733,8 @@ main() {
     run_test test_project_root_fallback_collision_emits_register_required
     run_test test_unterminated_double_quote_exits_1
     run_test test_unterminated_single_quote_exits_1
+    run_test test_https_to_ssh_no_collision
+    run_test test_dot_git_suffix_no_collision
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
