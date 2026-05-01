@@ -493,6 +493,104 @@ test_project_root_fallback_collision_emits_register_required() {
 }
 
 # =============================================================================
+# Test I: `test_unterminated_double_quote_exits_1`
+# Regression for P1: flow_dir: "broken  (no closing double-quote)
+# Expected: exit code 1 AND stderr contains 'ERROR' or 'unterminated'
+# =============================================================================
+test_unterminated_double_quote_exits_1() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myproject"
+    local fake_home="$tmp_dir/home"
+
+    setup_project "$project_root" "$fake_home" \
+        "$(printf 'version: 1\nflow_dir: "broken\n')"
+
+    local stderr_output
+    local exit_code=0
+
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit with code 1 (parse failure / hard error)
+    if [ "$exit_code" -ne 1 ]; then
+        echo "  ASSERTION FAILED: expected exit code 1 (parse failure), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain 'ERROR' or 'unterminated'
+    if ! printf '%s' "$stderr_output" | grep -qiE 'ERROR|unterminated'; then
+        echo "  ASSERTION FAILED: stderr does not contain 'ERROR' or 'unterminated'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
+# Test J: `test_unterminated_single_quote_exits_1`
+# Regression for P1: flow_dir: 'broken  (no closing single-quote)
+# Expected: exit code 1 AND stderr contains 'ERROR' or 'unterminated'
+# =============================================================================
+test_unterminated_single_quote_exits_1() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myproject"
+    local fake_home="$tmp_dir/home"
+
+    setup_project "$project_root" "$fake_home" \
+        "$(printf 'version: 1\nflow_dir: '"'"'broken\n')"
+
+    local stderr_output
+    local exit_code=0
+
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit with code 1 (parse failure / hard error)
+    if [ "$exit_code" -ne 1 ]; then
+        echo "  ASSERTION FAILED: expected exit code 1 (parse failure), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain 'ERROR' or 'unterminated'
+    if ! printf '%s' "$stderr_output" | grep -qiE 'ERROR|unterminated'; then
+        echo "  ASSERTION FAILED: stderr does not contain 'ERROR' or 'unterminated'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -509,6 +607,8 @@ main() {
     run_test test_collision_detection_emits_register_required_with_collision_marker
     run_test test_invalid_slug_exits_2_with_invalid_slug_marker
     run_test test_project_root_fallback_collision_emits_register_required
+    run_test test_unterminated_double_quote_exits_1
+    run_test test_unterminated_single_quote_exits_1
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
