@@ -21,9 +21,4 @@ Your role remains Chairman per the loaded `orchestrate-review` skill — you do 
 
 **Input**: A completed implementation chunk and the original plan or acceptance criteria.
 
-**Output**: Structured review with:
-- **Plan Conformance**: Whether implementation matches the original plan
-- **Standards Violations**: Coding standard issues found
-- **Multi-AI Signals**: Aggregated findings across review sources
-- **Per-Reviewer Verdicts**: Each dispatched model's verdict listed separately (do NOT compute a combined verdict — orchestrator decides per `code-review` SKILL Step 8)
-- **Consensus & Dissent**: Where models agree and where they diverge, faithfully reported (do NOT add Chairman opinions)
+**Output**: Structured aggregation per `orchestrate-review` SKILL §"Aggregation Output Format" (Chunk Analysis / Strengths / Issues / Recommendations, with per-issue Per-Model entries). Do NOT compute a combined verdict — that is the orchestrator's responsibility per `code-review` SKILL Step 8. Do NOT add Chairman opinions; faithfully report consensus and dissent across reviewers.
