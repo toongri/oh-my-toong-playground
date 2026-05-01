@@ -131,7 +131,12 @@ curl -s http://localhost:{port}/endpoint | jq .
 1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
 2. Boot the target simulator/emulator before the test:
    - **iOS**: `xcrun simctl boot "iPhone 16"` (returns immediately; boot proceeds in the Simulator service)
-   - **Android**: launch in background and wait for boot with timeouts (per `SKILL.md` § Command Execution Policy: Non-Blocking Only) — `emulator -avd <name> -no-window -no-boot-anim &` then `timeout 60 adb wait-for-device && timeout 90 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'`
+   - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
+     ```bash
+     emulator -avd <name> -no-window -no-boot-anim &
+     SECONDS=0; until adb get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
+     SECONDS=0; until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
+     ```
 3. Run the flow with explicit output path: `maestro test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`, where `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/task-<N>-maestro-<flow>.xml`).
 4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
 
