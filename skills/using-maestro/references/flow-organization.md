@@ -110,10 +110,10 @@ maestro test "$flow_dir"                              # whole suite
 maestro test --include-tags smokeTest "$flow_dir"
 ```
 
-For local debugging, `cd "$flow_dir"` first so cwd-bound transient outputs (`takeScreenshot` without a path) land inside the flow directory rather than the repo root:
+For local debugging, pin `--test-output-dir` so transient artifacts (failure screenshots, command trace) land in a known location. `takeScreenshot` baselines its output under the workspace's `.maestro/` folder by default; `--test-output-dir` overrides that destination for the entire run.
 
 ```bash
-cd "$flow_dir" && maestro test sleep/SleepClockChange.yaml
+maestro test --test-output-dir="$flow_dir/.local-output" "$flow_dir/sleep/SleepClockChange.yaml"
 ```
 
 For CI, set `MAESTRO_USING_FLOW_DIR` and pin `--test-output-dir`:
