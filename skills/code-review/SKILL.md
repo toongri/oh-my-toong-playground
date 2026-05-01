@@ -195,8 +195,8 @@ Determine range and setup for subsequent steps:
 | Input | Setup | Range |
 |-------|-------|-------|
 | `pr <number or URL>` | Fetch and check out PR ref into the worktree (see below) | `origin/<baseRefName>...pr-<number>` |
-| `<base> <target>` | Verify HEAD is `<target>` via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain`. Abort if mismatch or dirty. | `<base>...<target>` |
-| (none) | Detect default branch (`origin/main` or `origin/master`). Verify HEAD is the target branch via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain`. Abort if mismatch or dirty. | `<default>...HEAD` |
+| `<base> <target>` | Verify HEAD is `<target>` via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<base>...<target>` |
+| (none) | Detect default branch (`origin/main` or `origin/master`). Verify HEAD is the target branch via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<default>...HEAD` |
 
 ### PR Mode: Worktree Checkout (per Premise 1)
 
@@ -206,7 +206,8 @@ This skill assumes the orchestrator is already running inside a worktree dedicat
 
 ```bash
 # 0. Safety guards (Premise 1 enforcement) — abort BEFORE any state change
-if [ -n "$(git status --porcelain)" ]; then
+# -uno: untracked files are preserved by checkout; only check tracked modifications
+if [ -n "$(git status --porcelain -uno)" ]; then
   echo "Error: working directory has uncommitted changes — refusing to checkout over the user's work" >&2
   exit 1
 fi
@@ -215,7 +216,7 @@ fi
 # while --git-common-dir points to the shared .git directory; they differ.
 # In a primary clone they are equal — refuse so we never checkout over the user's main work tree.
 if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
-  echo "Error: refusing to run in primary repo — create a dedicated linked worktree first (Premise 1)" >&2
+  echo "Error: refusing to run in primary repo — create a dedicated linked worktree first (Premise 1). Hint: 'git worktree add ../review-pr-<N> -b review/pr-<N>'" >&2
   exit 1
 fi
 
@@ -224,7 +225,7 @@ BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
 
 # 2. Fetch base branch first, then PR ref last so FETCH_HEAD points to PR head
 #    (rerun-safe — force-push on the PR is picked up on re-review)
-git fetch origin ${BASE_REF}
+git fetch origin "${BASE_REF}"
 git fetch origin pull/<number>/head
 
 # 3. Reset local pr-<N> to the freshly fetched PR head (FETCH_HEAD) and check it out
@@ -469,9 +470,9 @@ If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
 
 ### Project-Rule Violations (also P1, even without masking)
 
-This project's `.claude/rules/coding-discipline.md` defines explicit written rules. Violations are P1 by definition because the rule itself declares the change unwanted.
+The five enumerated rules below are P1 by definition — each rule declares the named pattern unwanted. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here.
 
-The following violations are P1 (this list is the *source of truth at this commit*; if `coding-discipline.md` adds rules later, this section must be updated in the same PR — do not silently re-classify):
+The following violations are P1 (this list is the *source of truth* — closed enumeration; do not silently re-classify):
 
 1. **Speculative addition** — feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
 2. **Single-use abstraction** — wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
@@ -481,7 +482,7 @@ The following violations are P1 (this list is the *source of truth at this commi
 
 For each P1 issue under this section, the reviewer must cite the specific rule (1–5) and quote the violating code.
 
-**Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. If a new rule emerges, it goes into `coding-discipline.md` first, then this section in the same PR.
+**Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. New rules require explicit addition to this list.
 
 ### Phase 2: Critique Synthesis
 
