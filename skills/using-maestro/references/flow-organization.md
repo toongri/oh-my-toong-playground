@@ -110,7 +110,7 @@ maestro test "$flow_dir"                              # whole suite
 maestro test --include-tags smokeTest "$flow_dir"
 ```
 
-For local debugging, pin `--test-output-dir` so transient artifacts (failure screenshots, command trace) land in a known location. `takeScreenshot` writes to the current working directory by default; `--test-output-dir` overrides that destination for the entire run.
+For local debugging, pin `--test-output-dir` so transient artifacts (failure screenshots, command trace) land in a known location. `takeScreenshot` without a `path:` argument has version-dependent behavior — Maestro docs document workspace-relative output, but user reports include CWD-relative behavior in some releases. Pinning `--test-output-dir` (or passing an explicit `path:`) makes the destination deterministic regardless of version.
 
 ```bash
 maestro test --test-output-dir="$flow_dir/.local-output" "$flow_dir/sleep/SleepClockChange.yaml"

@@ -37,7 +37,7 @@ Maestro's built-in `assertScreenshot` (CLI v2.2.0+) is sufficient for most needs
 
 ## Where Maestro Writes Output
 
-`maestro test` writes its main test artifacts (failure screenshots, recording, log, command trace) to an **OS-specific default folder** (typically under `~/.maestro/tests/<timestamp>/` on macOS) unless overridden by `--test-output-dir` or `testOutputDir` in `config.yaml`. `takeScreenshot` calls without an explicit path write to **the current working directory (cwd)** — the directory from which `maestro test` was invoked. Running `maestro test` from the repo root scatters the PNGs across the repo; `cd "$flow_dir"` first or pin `--test-output-dir` to control the destination.
+`maestro test` writes its main test artifacts (failure screenshots, recording, log, command trace) to an **OS-specific default folder** (typically under `~/.maestro/tests/<timestamp>/` on macOS) unless overridden by `--test-output-dir` or `testOutputDir` in `config.yaml`. `takeScreenshot` calls without an explicit `path:` have **version-dependent default behavior** — Maestro docs document workspace-directory output ([reference](https://docs.maestro.dev/reference/commands-available/takescreenshot)), but field reports include CWD-relative behavior in some releases ([issue #2535](https://github.com/mobile-dev-inc/maestro/issues/2535)). To make the destination deterministic regardless of version, **always pin `--test-output-dir`** or pass an explicit `path:` argument.
 
 Pin `--test-output-dir` for predictable artifact location:
 
@@ -46,7 +46,7 @@ Pin `--test-output-dir` for predictable artifact location:
 maestro test --test-output-dir=./maestro-output .maestro/
 ```
 
-This puts everything in one place that `actions/upload-artifact` can grab, and you `gitignore` that path. For local runs without `--test-output-dir`, transient `takeScreenshot` outputs land in cwd — review them with `git status` and either pin `--test-output-dir`, `cd "$flow_dir"` first, or extend `.gitignore` (see below) before committing.
+This puts everything in one place that `actions/upload-artifact` can grab, and you `gitignore` that path. For local runs without `--test-output-dir`, transient `takeScreenshot` outputs land in a version-dependent default location (workspace root or cwd, see Line 40 above) — review them with `git status` and either pin `--test-output-dir`, pass an explicit `path:`, or extend `.gitignore` (see below) before committing.
 
 ## Recommended `.gitignore` Entries
 
@@ -59,7 +59,7 @@ maestro-output/                  # only effective when --test-output-dir=./maest
 !.maestro/screenshots/**/*.png   # explicitly include assertion baselines
 ```
 
-The negation pattern keeps the assertion baselines tracked while ignoring everything else. **Recommendation**: always pin `--test-output-dir=./maestro-output` so transient PNGs go to a single deterministic path, rather than relying on the cwd-bound default which scatters PNGs wherever you ran `maestro test` from.
+The negation pattern keeps the assertion baselines tracked while ignoring everything else. **Recommendation**: always pin `--test-output-dir=./maestro-output` so transient PNGs go to a single deterministic path, rather than relying on the version-dependent default (workspace root per docs, cwd per some user reports).
 
 **External mode** (project does not host flows):
 
