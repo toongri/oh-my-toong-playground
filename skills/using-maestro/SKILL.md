@@ -78,7 +78,7 @@ When wrapping `resolve-flow-dir.sh` in your own automation, branch on the exit c
 
 Markers on `exit 2`: bare = first-time registration; `:COLLISION` = same `project_id` mapped to a different repo; `:INVALID_SLUG` = derived ID needs a manual override.
 
-For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first so any cwd-bound transient outputs (e.g., `takeScreenshot` without a path) land inside the flow directory rather than the repo root.
+For local debugging, always pin `--test-output-dir` (or pass an explicit `path:` to `takeScreenshot`). Without those, output location varies — Maestro docs describe workspace-relative behavior while user reports show CWD-bound behavior in some versions. Pinning removes the ambiguity.
 
 ## References
 
