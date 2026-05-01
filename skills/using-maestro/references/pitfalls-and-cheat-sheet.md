@@ -20,7 +20,7 @@ This file collects the failure modes you will hit and the commands you will reac
 | Cross-device baseline diff | Every run "fails" with pixel diff | Pin one reference device for both baseline capture and regression runs |
 | Visual diff noise from dynamic UI | `assertScreenshot` flickers because of live clock or weather | Wrap with `cropOn: { id: "..." }` to compare only the stable region |
 | Assuming a fixed return format from Maestro MCP screen-inspection tool | LLM parsing fails | Verify return format against current Maestro MCP docs before parsing — do not hardcode an assumption (formats have changed across Maestro MCP versions) |
-| Unpinned `--test-output-dir` in CI | Transient artifacts land under the workspace's `.maestro/` folder by default and are easy to miss when collecting CI artifacts | Always pin `--test-output-dir=./maestro-output` in CI so the upload step has a single deterministic path |
+| Unpinned `--test-output-dir` in CI | `takeScreenshot` PNGs land in cwd, failure bundles land in `~/.maestro/tests/<timestamp>/` — both easy to miss when collecting CI artifacts | Always pin `--test-output-dir=./maestro-output` in CI so the upload step has a single deterministic path |
 | Confusing `takeScreenshot` with `assertScreenshot` baselines | Either committing transient PNGs to git or gitignoring real baselines | `takeScreenshot` outputs are transient (gitignore); `assertScreenshot` baselines are stored in `<flow_dir>/screenshots/` — committed to git in internal mode, backed up separately in external mode |
 
 ## CLI Cheat Sheet
