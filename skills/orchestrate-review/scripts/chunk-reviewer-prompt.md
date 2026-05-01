@@ -52,6 +52,8 @@ Execute the following command to obtain the diff for review. You MUST run this c
 
 This project applies two augmentations to the standard P0-P3 rubric. Apply these ON TOP of the built-in severity definitions in your system prompt — these augmentations OVERRIDE the built-in rubric where they conflict.
 
+> Canonical policy lives in `skills/code-review/SKILL.md §Severity Augmentation`. The text below is mirrored here for worker self-containment; edit the canonical file first.
+
 ### Masking Carve-out (NOT P1)
 
 A fallback or alternate path is NOT a masking pattern when ALL of the following hold:
@@ -66,23 +68,19 @@ If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
 
 ### Project-Rule Violations (also P1, even without masking)
 
-The five enumerated rules below are P1 by definition — each rule declares the named pattern unwanted. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here.
+**Simplicity First — minimum code that solves the problem, nothing speculative.** The five enumerated patterns below are P1 by definition; each one declares the named pattern unwanted, so the rule itself states the change should not have been made. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here and quote the violating code.
 
-The following violations are P1 (this list is the *source of truth* — closed enumeration; do not silently re-classify):
+The following violations are P1 (closed enumeration; do not silently re-classify — the canonical list is `code-review/SKILL.md §Project-Rule Violations`):
 
-1. **Speculative addition** — feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
-2. **Single-use abstraction** — wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
-3. **Unrequested flexibility** — config option, environment variable, or branching logic added to support hypothetical future scenarios.
-4. **Impossible-scenario error handling** — guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
-5. **Backwards-compatibility shim without removal date** — fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
+1. **Speculative addition** — *No features beyond what was asked.* Any feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
+2. **Single-use abstraction** — *No abstractions for single-use code.* Any wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
+3. **Unrequested flexibility** — *No "flexibility" or "configurability" that wasn't requested.* Any config option, environment variable, or branching logic added to support hypothetical future scenarios.
+4. **Impossible-scenario error handling** — *No error handling for impossible scenarios.* Any guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
+5. **Backwards-compatibility shim without removal date** — Any fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
 
-For each P1 issue under this section, the reviewer must cite the specific rule (1–5) and quote the violating code.
+**Self-check**: "Would a senior engineer say this is overcomplicated?" If yes, the change is in violation territory.
 
 **Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. New rules require explicit addition to this list.
-
-## Project Guidelines
-
-{CLAUDE_MD}
 
 ## Commit History
 
@@ -101,5 +99,4 @@ For each P1 issue under this section, the reviewer must cite the specific rule (
 | {EVIDENCE_RESULTS} | Optional | Step 3 Evidence Verification (may be 'unavailable' message) |
 | {FILE_LIST} | Required | Step 2 git diff --name-only |
 | {DIFF_COMMAND} | Required | Step 4 — constructed from range + chunk file list |
-| {CLAUDE_MD} | Optional | Step 2 CLAUDE.md collection |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |

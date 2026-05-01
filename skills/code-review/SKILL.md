@@ -359,7 +359,6 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {PROJECT_CONTEXT} ← Step 0 project context
    - {FILE_LIST} ← Step 2 file list
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
-   - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
    - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
@@ -470,17 +469,17 @@ If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
 
 ### Project-Rule Violations (also P1, even without masking)
 
-The five enumerated rules below are P1 by definition — each rule declares the named pattern unwanted. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here.
+**Simplicity First — minimum code that solves the problem, nothing speculative.** The five enumerated patterns below are P1 by definition; each one declares the named pattern unwanted, so the rule itself states the change should not have been made. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here and quote the violating code.
 
 The following violations are P1 (this list is the *source of truth* — closed enumeration; do not silently re-classify):
 
-1. **Speculative addition** — feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
-2. **Single-use abstraction** — wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
-3. **Unrequested flexibility** — config option, environment variable, or branching logic added to support hypothetical future scenarios.
-4. **Impossible-scenario error handling** — guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
-5. **Backwards-compatibility shim without removal date** — fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
+1. **Speculative addition** — *No features beyond what was asked.* Any feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
+2. **Single-use abstraction** — *No abstractions for single-use code.* Any wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
+3. **Unrequested flexibility** — *No "flexibility" or "configurability" that wasn't requested.* Any config option, environment variable, or branching logic added to support hypothetical future scenarios.
+4. **Impossible-scenario error handling** — *No error handling for impossible scenarios.* Any guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
+5. **Backwards-compatibility shim without removal date** — Any fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
 
-For each P1 issue under this section, the reviewer must cite the specific rule (1–5) and quote the violating code.
+**Self-check**: "Would a senior engineer say this is overcomplicated?" If yes, the change is in violation territory.
 
 **Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. New rules require explicit addition to this list.
 
