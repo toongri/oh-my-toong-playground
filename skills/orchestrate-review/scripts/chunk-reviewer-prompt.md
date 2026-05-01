@@ -48,6 +48,38 @@ Execute the following command to obtain the diff for review. You MUST run this c
 {DIFF_COMMAND}
 ```
 
+## Severity Augmentation
+
+This project applies two augmentations to the standard P0-P3 rubric. Apply these ON TOP of the built-in severity definitions in your system prompt — these augmentations OVERRIDE the built-in rubric where they conflict.
+
+### Masking Carve-out (NOT P1)
+
+A fallback or alternate path is NOT a masking pattern when ALL of the following hold:
+
+1. **Scoped** to a known external/version boundary (e.g., `bun` version difference, `gh` API change, OS-specific path, third-party library breaking change).
+2. **Documented** in a code comment that names the specific external defect, version constraint, or boundary it works around.
+3. **Tested** on both primary and fallback paths.
+4. **Preserves** failure evidence — the original error is still logged or reported, not swallowed or downgraded.
+5. **Does not replace** fixing a primary contract that the project itself controls.
+
+If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
+
+### Project-Rule Violations (also P1, even without masking)
+
+The five enumerated rules below are P1 by definition — each rule declares the named pattern unwanted. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here.
+
+The following violations are P1 (this list is the *source of truth* — closed enumeration; do not silently re-classify):
+
+1. **Speculative addition** — feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
+2. **Single-use abstraction** — wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
+3. **Unrequested flexibility** — config option, environment variable, or branching logic added to support hypothetical future scenarios.
+4. **Impossible-scenario error handling** — guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
+5. **Backwards-compatibility shim without removal date** — fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
+
+For each P1 issue under this section, the reviewer must cite the specific rule (1–5) and quote the violating code.
+
+**Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. New rules require explicit addition to this list.
+
 ## Project Guidelines
 
 {CLAUDE_MD}
