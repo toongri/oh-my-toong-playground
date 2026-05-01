@@ -14,6 +14,8 @@ These two premises are non-negotiable. They are forwarded to every chunk-reviewe
 
 1. **Worktree environment** — This review runs inside a git worktree dedicated to the PR/branch under review. Checkout has zero cost to the user's primary working directory. Therefore: **ensure the working directory reflects the post-change state of the target ref before any analysis** — by checking it out (PR mode) or by verifying the caller already arrived on it (other modes). Do not pretend the file system is read-only or stuck at base.
 
+   Note: 비-PR 모드(branch comparison, auto-detect)는 checkout이 발생하지 않으므로 PR 모드의 `--git-dir` 가드는 의도적으로 적용되지 않는다 — 비-PR 모드는 verify-only(HEAD 일치 + clean tree)로 위 "post-change state" 요건을 충족한다. 두 path의 비대칭은 결함이 아니라 설계.
+
 2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 
 These premises must be reflected in the chunk-reviewer dispatch prompt — see Step 5.
@@ -199,6 +201,8 @@ Determine range and setup for subsequent steps:
 ### PR Mode: Worktree Checkout (per Premise 1)
 
 This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 1a, Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
+
+**PR ID 추출 규칙**: 사용자가 URL(`https://github.com/<org>/<repo>/pull/<N>`) 형식으로 호출하면, 아래 bash로 진입하기 *전에* trailing path segment에서 numeric `<N>`을 추출해 `<number>` 자리에 substitute하라. URL을 그대로 substitute하면 `git fetch origin pull/<URL>/head`가 invalid refspec으로 실패하고 `git checkout -B pr-<URL>`이 invalid 브랜치명으로 실패한다.
 
 ```bash
 # 0. Safety guards (Premise 1 enforcement) — abort BEFORE any state change
