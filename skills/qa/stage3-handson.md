@@ -135,6 +135,16 @@ curl -s http://localhost:{port}/endpoint | jq .
 3. Run the flow with explicit output path: `maestro test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`, where `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/task-<N>-maestro-<flow>.xml`).
 4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
 
+### Parallel Workspace Isolation
+
+When multiple Argus runs may execute concurrently (parallel git worktrees, CI matrix), each MUST target a distinct device instance — sharing a single emulator across concurrent flows corrupts app state.
+
+- iOS: `xcrun simctl create "argus-$WORKSPACE" "iPhone 16"` then boot the created UDID
+- Android: name a per-workspace AVD or pass `-port` to differentiate
+- Pass the device id explicitly: `maestro test --device <udid> .maestro/<flow>.yaml`
+
+**Lighter alternative**: a single shared simulator with `clearState: true` at flow start (Maestro built-in) — avoids per-workspace boot overhead, but trades off cross-flow filesystem/keychain isolation. Use when flows self-reset state.
+
 ### Verification Criteria
 
 | Criterion | Pass Condition |
