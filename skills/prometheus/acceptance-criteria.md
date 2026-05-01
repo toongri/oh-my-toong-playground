@@ -168,9 +168,13 @@ The Verification line MUST be paste-runnable. Pick the form that matches the cha
 
 ### Mobile app E2E (maestro)
 
-- [ ] **Login flow on iOS Simulator and Android Emulator reaches Home**
-      **Verification**: `maestro test .maestro/auth/login_happy.yaml --format junit`
-      (Setup/Cleanup omitted — maestro flow begins with `clearState` + `launchApp`, so the runner provides isolation per the exemption above.)
+- [ ] **Login flow on iOS Simulator reaches Home**
+      **Verification**: `maestro test --device "$IOS_UDID" .maestro/auth/login_happy.yaml --format junit`
+      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup.)
+
+- [ ] **Login flow on Android Emulator reaches Home**
+      **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit`
+      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup.)
 
 ## Example
 
