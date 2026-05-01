@@ -133,7 +133,8 @@ curl -s http://localhost:{port}/endpoint | jq .
    - **iOS**: `xcrun simctl boot "iPhone 16"` (returns immediately; boot proceeds in the Simulator service)
    - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
      ```bash
-     emulator -avd <name> -no-window -no-boot-anim &
+     export ANDROID_SERIAL="emulator-${PORT:-5554}"
+     emulator -avd <name> -port "${PORT:-5554}" -no-window -no-boot-anim &
      SECONDS=0; until adb get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
      SECONDS=0; until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
