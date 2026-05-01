@@ -46,12 +46,13 @@ Run before every Maestro operation:
    - Slug = last `/`- or `:`-separated segment, with `.git` stripped.
    - No git remote → `basename "$root"`.
 4. **Read config.** Look up `~/.config/maestro/<id>/config.yaml`.
-5. **Found** → read `flow_dir` value:
+5. **Collision check.** If config exists, compare its `git_remote` (or `project_root` fallback) with the current repo. On mismatch, emit `REGISTER_REQUIRED:<id>:<root>:COLLISION` to stderr and exit 2 — caller dispatches a slug-override interview.
+6. **Found and matching** → read `flow_dir` value:
    - Absolute path (`/...`) → use as-is.
    - `~/`-prefixed → expand `$HOME`.
    - Relative → resolve against `project_root`.
-6. **Not found** → trigger interview (see below). Write config. Use chosen `flow_dir`.
-7. **`mkdir -p` the resolved `flow_dir`** if it does not exist.
+7. **Not found** → trigger interview (see below). Write config. Use chosen `flow_dir`.
+8. **`mkdir -p` the resolved `flow_dir`** if it does not exist.
 
 The env var is named `MAESTRO_USING_FLOW_DIR` rather than `MAESTRO_FLOW_DIR` because Maestro CLI auto-injects every `MAESTRO_*` env var into flows as a `${...}` placeholder. The shorter name would surface as `${FLOW_DIR}`, which is plausibly something a real flow would use; `${USING_FLOW_DIR}` is virtually never a flow placeholder.
 
@@ -188,7 +189,7 @@ rm ~/.config/maestro/<id>/config.yaml
 | 1 repo, 5 worktrees, all in external mode (Option 2) | All five worktrees share `~/.maestro/projects/<id>/flows/`. Single source of truth — author once, run anywhere. |
 | 1 repo, 5 worktrees, all in internal mode (Option 1) | Each worktree has its own `.maestro/` snapshot per branch. Branch-divergent flows possible via git. |
 | Mixed across worktrees | Not supported — config is keyed by project ID, which is identical across worktrees of the same repo. Pick one mode per project. |
-| Multiple repos with identical IDs | Interview detects collision (existing `~/.config/maestro/<id>/config.yaml` with different `git_remote`) and asks for slug override. |
+| Multiple repos with identical IDs | Resolver step 5 (collision check) detects mismatch via `git_remote`/`project_root` and signals `REGISTER_REQUIRED:<id>:<root>:COLLISION`; agent dispatches slug-override interview. |
 
 ## `output_dir` Across Worktrees
 
@@ -200,7 +201,7 @@ rm ~/.config/maestro/<id>/config.yaml
 |---|---|
 | `git rev-parse` fails (not in a git repo) | Use `$PWD` as project root, `basename` as ID. |
 | `git remote get-url origin` fails (no origin remote) | Skip `git_remote` field. ID = `basename "$project_root"`. |
-| Two repos with the same basename and no git remote | Both end up with same ID. Interview detects existing entry and asks for slug override. |
+| Two repos with the same basename and no git remote | Both end up with same ID. Resolver step 5 (collision check) detects mismatch via `git_remote`/`project_root` and signals `COLLISION`; agent dispatches slug-override interview. |
 | `~/.config/maestro/` does not exist | Created on first config write with `mkdir -p`. |
 | `version` field (currently v1) | Reserved for future schema evolution. Not currently validated by the resolver — only `flow_dir` is read. |
 | `flow_dir` directory does not exist | Skill creates with `mkdir -p` on first use. |
