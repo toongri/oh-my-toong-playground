@@ -31,7 +31,7 @@ This skill is the entry point. Reach for the topic-specific reference under `ref
 
 1. **Selectors: text first, id second, coordinate last.** See `references/selectors-and-determinism.md` for the priority table and trade-offs.
 2. **Every flow starts from a known state** with `launchApp clearState: true` plus an `isE2E` argument the app respects. This is what makes the flow idempotent across N runs.
-3. **`extendedWaitUntil`** for any state that depends on JS bundle load, network, or animation. `assertVisible` checks immediately and fails on cold start.
+3. **`extendedWaitUntil`** for any state that may exceed `assertVisible`'s default 7-second retry window — typical triggers are JS bundle load, network fetch, or animation. Within 7s, `assertVisible` already auto-retries; reach for `extendedWaitUntil` only when expected latency exceeds that.
 4. **Flow location is resolved, not assumed.** The first run reads `~/.config/maestro/<id>/config.yaml` (or `MAESTRO_USING_FLOW_DIR` env var). If absent, the skill interviews the user: project root `.maestro/` (committed, team-shared) vs `~/.maestro/projects/<id>/flows/` (per-user, worktree-shared) vs custom path. See `references/flow-location-config.md`. Inside the resolved `flow_dir`, organize as `<flow_dir>/<feature>/` with `<flow_dir>/common/` for subflows — see `references/flow-organization.md`.
 5. **`takeScreenshot` outputs are transient (gitignore in internal mode, ephemeral in external mode); `assertScreenshot` baselines are permanent.** Both modes store baselines in `<flow_dir>/screenshots/`. Internal mode commits them to git; external mode keeps `<flow_dir>/screenshots/` outside the repo and requires its own backup discipline. See `references/storage-and-screenshots.md`.
 6. **CLI is the baseline for execution; MCP is an authoring accelerator.** CI always runs the committed YAML via `maestro test`. See `references/ai-agent-integration.md`.
@@ -66,7 +66,7 @@ MAESTRO_USING_FLOW_DIR=.maestro \
   maestro test --test-output-dir=./maestro-output "$MAESTRO_USING_FLOW_DIR"
 ```
 
-For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first so transient outputs land inside the flow directory rather than the repo root.
+For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first so any cwd-bound transient outputs (e.g., `takeScreenshot` without a path) land inside the flow directory rather than the repo root.
 
 ## References
 

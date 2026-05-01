@@ -110,7 +110,7 @@ maestro test "$flow_dir"                              # whole suite
 maestro test --include-tags smokeTest "$flow_dir"
 ```
 
-For local debugging, `cd "$flow_dir"` first so transient screenshot outputs land inside the flow directory rather than the repo root:
+For local debugging, `cd "$flow_dir"` first so cwd-bound transient outputs (`takeScreenshot` without a path) land inside the flow directory rather than the repo root:
 
 ```bash
 cd "$flow_dir" && maestro test sleep/SleepClockChange.yaml

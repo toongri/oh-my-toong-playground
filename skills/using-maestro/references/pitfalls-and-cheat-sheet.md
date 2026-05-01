@@ -7,7 +7,7 @@ This file collects the failure modes you will hit and the commands you will reac
 | Pitfall | Symptom | Fix |
 |---|---|---|
 | Image-rendered text | `assertVisible "..."` fails on a label that the user can clearly see | The text is part of an image/SVG; use an id selector or coordinate as last resort |
-| `assertVisible` checks immediately | First assertion after `launchApp` fails on cold start | Use `extendedWaitUntil { visible: ..., timeout: 30000 }` |
+| `assertVisible` 7s retry exceeded | First assertion after `launchApp` fails on slow cold start | Use `extendedWaitUntil { visible: ..., timeout: 30000 }` for waits beyond 7s |
 | Carousel state leaks across runs | Same flow gives different results on second run | Add `launchApp clearState: true`; never depend on previous run's state |
 | Coordinate-based tap | Works on developer device, fails in CI or on different device | Add `testID` to the component; switch to id selector |
 | Locale-dependent text | Flow passes in Korean, fails in English | Pin app locale in CI or switch to id selectors |
@@ -19,8 +19,8 @@ This file collects the failure modes you will hit and the commands you will reac
 | Keyboard hides the next button | `tapOn` after `inputText` fails to find the target | Insert `- hideKeyboard` |
 | Cross-device baseline diff | Every run "fails" with pixel diff | Pin one reference device for both baseline capture and regression runs |
 | Visual diff noise from dynamic UI | `assertScreenshot` flickers because of live clock or weather | Wrap with `cropOn: { id: "..." }` to compare only the stable region |
-| Treating `inspect_screen` as JSON | LLM parsing fails | The Maestro MCP returns CSV — feed it as CSV |
-| Running `maestro test` from repo root | PNGs scatter across the repo, `git status` clutters | Use `--test-output-dir=./maestro-output` or `cd .maestro && maestro test` |
+| Assuming a fixed return format from Maestro MCP screen-inspection tool | LLM parsing fails | Verify return format against current Maestro MCP docs before parsing — do not hardcode an assumption (formats have changed across Maestro MCP versions) |
+| Running `maestro test` from repo root with `takeScreenshot` (no path) | PNGs scatter across the repo, `git status` clutters | Use `--test-output-dir=./maestro-output` or `cd .maestro && maestro test`; for main artifacts, default OS path or `--test-output-dir` |
 | Confusing `takeScreenshot` with `assertScreenshot` baselines | Either committing transient PNGs to git or gitignoring real baselines | `takeScreenshot` outputs are transient (gitignore); `assertScreenshot` baselines are stored in `<flow_dir>/screenshots/` — committed to git in internal mode, backed up separately in external mode |
 
 ## CLI Cheat Sheet
