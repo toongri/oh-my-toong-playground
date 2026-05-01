@@ -232,9 +232,9 @@ Items 1 (Decision Logic) and 2 (new Step section) are consolidated into a single
 
 | # | Location | What to update | Grep target |
 |---|----------|---------------|-------------|
-| 1 | `skills/qa/stage3-handson.md:14-22` (+ new Step section) | Add row to Decision Logic table; add a `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable | `grep -n "Decision Logic\|Step 3\." stage3-handson.md` |
-| 2 | `skills/qa/stage3-handson.md:176` | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
-| 3 | `skills/qa/SKILL.md:46-65` | Add a row to the Composable Verification Triggers table with the action label and tool name | `grep -n "Trigger\|maestro\|playwright\|curl" skills/qa/SKILL.md` |
-| 4 | `skills/qa/SKILL.md:280-290` | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "Applicability matrix\|Quick Reference" skills/qa/SKILL.md` |
-| 5 | `skills/prometheus/plan-template.md:96` | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -n "Tool.*curl\|Tool.*playwright\|Tool.*maestro" skills/prometheus/plan-template.md` |
-| 6 | `skills/prometheus/acceptance-criteria.md:141-170` | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
+| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; add a `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable | `grep -n "Decision Logic\|Step 3\." stage3-handson.md` |
+| 2 | `skills/qa/stage3-handson.md` § Stage 3 Output Format (Applicability enum) | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
+| 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -n "Trigger\|maestro\|playwright\|curl" skills/qa/SKILL.md` |
+| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "Applicability matrix\|Quick Reference" skills/qa/SKILL.md` |
+| 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -n "Tool.*curl\|Tool.*playwright\|Tool.*maestro" skills/prometheus/plan-template.md` |
+| 6 | `skills/prometheus/acceptance-criteria.md` § Verification Examples by Tool | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
