@@ -13,13 +13,19 @@ TESTS_FAILED=0
 
 run_test() {
     local test_name="$1"
+    local rc
 
-    if "$test_name"; then
+    set +e
+    ( set -e; "$test_name" )
+    rc=$?
+    set -e
+
+    if [ "$rc" -eq 0 ]; then
         echo "[PASS] $test_name"
-        ((TESTS_PASSED++)) || true
+        TESTS_PASSED=$((TESTS_PASSED + 1))
     else
         echo "[FAIL] $test_name"
-        ((TESTS_FAILED++)) || true
+        TESTS_FAILED=$((TESTS_FAILED + 1))
     fi
 }
 
@@ -254,6 +260,54 @@ test_hash_in_quoted_path() {
 }
 
 # =============================================================================
+# Test E: `test_unquoted_hash_in_path_preserved`
+# Regression for YAML 1.2 spec violation: flow_dir: /tmp/team#5 (unquoted, no space before #)
+# Expected: exit 0 AND output contains '/tmp/team#5' (# preserved per YAML spec)
+# =============================================================================
+test_unquoted_hash_in_path_preserved() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myproject"
+    local fake_home="$tmp_dir/home"
+
+    setup_project "$project_root" "$fake_home" \
+        "$(printf 'version: 1\nflow_dir: /tmp/team#5\n')"
+
+    local output
+    local exit_code=0
+    output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>/dev/null
+    ) || exit_code=$?
+
+    # Must exit 0
+    if [ "$exit_code" -ne 0 ]; then
+        echo "  ASSERTION FAILED: expected exit code 0, got $exit_code"
+        echo "  Got: '$output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Output must contain '/tmp/team#5' (hash preserved, no whitespace before #)
+    if ! printf '%s' "$output" | grep -q '/tmp/team#5'; then
+        echo "  ASSERTION FAILED: output does not contain '/tmp/team#5' (hash was incorrectly stripped per YAML 1.2 spec violation)"
+        echo "  Got: '$output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -266,6 +320,7 @@ main() {
     run_test test_missing_flow_dir_key_emits_error
     run_test test_quoted_with_inline_comment_stripped
     run_test test_hash_in_quoted_path
+    run_test test_unquoted_hash_in_path_preserved
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"

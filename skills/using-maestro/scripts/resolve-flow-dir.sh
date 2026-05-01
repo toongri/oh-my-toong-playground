@@ -5,7 +5,10 @@
 # using-maestro skill's flow-location-config protocol.
 #
 # Output:
-#   stdout: absolute flow_dir path (exit 0)
+#   stdout: resolved flow_dir path on success (exit 0)
+#           - When read from config.yaml: normalized to absolute, mkdir -p applied
+#           - When MAESTRO_USING_FLOW_DIR env is set: passed through verbatim (no
+#             normalization, no mkdir) — caller is responsible for path semantics
 #   stderr: "REGISTER_REQUIRED:<id>:<project_root>" if config missing (exit 2)
 #           error message on other failures (exit 1)
 #
@@ -77,7 +80,7 @@ get_yaml_value() {
       ;;
     *)
       printf '%s' "$raw" \
-        | sed -E 's/[[:space:]]*#.*$//' \
+        | sed -E 's/(^|[[:space:]]+)#.*$//' \
         | sed -E 's/[[:space:]]+$//'
       ;;
   esac
