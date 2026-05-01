@@ -4,7 +4,7 @@ Two pillars hold a Maestro flow together: **selectors** that find UI elements re
 
 ## Selector Priority
 
-Maestro can match elements by text, accessibility id, relational position, state, index, or coordinate. Maestro 공식 권장은 stability 기준 `id > text` (Resource IDs / Accessibility Identifiers most stable, Visible Text least stable). Always pick the highest-stability option that uniquely identifies the target.
+Maestro can match elements by text, accessibility id, relational position, state, index, or coordinate. By stability, Maestro's official guidance ranks `id > text` — Resource IDs / Accessibility Identifiers are most stable, visible text least stable. Always pick the highest-stability option that uniquely identifies the target.
 
 ```
 id (iOS accessibilityIdentifier / Android resource-id; React Native testID maps to both) > text (on-screen text or accessibilityLabel) > relational > state > index > point(coordinate)

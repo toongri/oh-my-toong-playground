@@ -78,7 +78,7 @@ For local debugging without setting `--test-output-dir`, `cd "$flow_dir"` first 
 - **`references/ai-agent-integration.md`** — Maestro MCP tools, MCP vs CLI decision matrix by stage and environment, open issues that affect kiosks and WiFi ADB.
 - **`references/test-isolation-and-reset.md`** — Why every scenario must reset (it is the industry standard), what `clearState` actually clears on Android vs iOS, legitimate exceptions (kiosk, hardware bring-up, large seed data), Keychain caveat.
 - **`references/pitfalls-and-cheat-sheet.md`** — Full pitfall table, CLI cheat sheet, flow YAML keyword cheat sheet, debug bundle layout, onboarding checklist.
-- **`references/test-environment.md`** — Category A(software SUT, emulator default) / Category B(hardware-integrated SUT, physical IS the SUT) 분기, capability-driven Limits 표, Maestro iOS=simulator-only 사실, decision rule.
+- **`references/test-environment.md`** — Category A (software SUT — emulator default) vs Category B (hardware-integrated SUT — physical IS the SUT). Capability-driven Limits table, Maestro iOS = simulator-centric, and the decision rule.
 
 ## Common Mistakes
 

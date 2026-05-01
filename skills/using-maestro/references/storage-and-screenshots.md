@@ -29,7 +29,7 @@ Generated once (typically by running the flow against a known-good build) and th
     thresholdPercentage: 98
 ```
 
-`path:`는 flow 파일이 있는 디렉터리를 기준으로 해석되므로, `<flow_dir>/<feature>/<flow>.yaml`에서는 정책 디렉터리(`<flow_dir>/screenshots/`)를 가리키려면 `../screenshots/<name>.png`을 사용한다.
+`path:` is resolved relative to the directory containing the flow file. So from `<flow_dir>/<feature>/<flow>.yaml`, use `../screenshots/<name>.png` to reference the policy directory at `<flow_dir>/screenshots/`. (For deeper nesting like `<flow_dir>/<feature>/<sub>/<flow>.yaml`, adjust the relative path accordingly — `../../screenshots/<name>.png`.)
 
 `cropOn` is essential. It restricts the comparison to a stable element, so dynamic content (clock, weather, status bar) does not produce false negatives. Tune `thresholdPercentage` per element if anti-aliasing differences cause flicker.
 
