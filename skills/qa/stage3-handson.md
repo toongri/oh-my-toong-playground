@@ -130,7 +130,13 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
 2. Boot the target simulator/emulator before the test:
-   - **iOS**: `xcrun simctl boot "iPhone 16"` (returns immediately; boot proceeds in the Simulator service)
+   - **iOS**: derive UDID first (idempotent — `bootstatus -b` boots if needed, waits until fully booted, exits 0 if already booted):
+     ```bash
+     IOS_UDID=$(xcrun simctl list devices available -j | jq -r '.devices | to_entries[] | .value[] | select(.name=="iPhone 16") | .udid' | head -1)
+     [ -n "$IOS_UDID" ] || { echo "iPhone 16 simulator not available" >&2; exit 1; }
+     xcrun simctl bootstatus "$IOS_UDID" -b
+     export IOS_UDID
+     ```
    - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
      ```bash
      export ANDROID_SERIAL="emulator-${PORT:-5554}"
@@ -145,7 +151,12 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 When multiple Argus runs may execute concurrently (parallel git worktrees, CI matrix), each MUST target a distinct device instance — sharing a single emulator across concurrent flows corrupts app state.
 
-- iOS: `xcrun simctl create "argus-$WORKSPACE" "iPhone 16"` then boot the created UDID
+- iOS: create a per-workspace device, then use the same UDID-derived boot pattern as Step 2 above:
+  ```bash
+  IOS_UDID=$(xcrun simctl create "argus-$WORKSPACE" "iPhone 16")
+  xcrun simctl bootstatus "$IOS_UDID" -b
+  export IOS_UDID
+  ```
 - Android: name a per-workspace AVD or pass `-port` to differentiate
 - Pass the device id explicitly: `maestro test --device <udid> .maestro/<flow>.yaml`
 
@@ -241,6 +252,6 @@ Items 1 (Decision Logic) and 2 (new Step section) are consolidated into a single
 | 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; add a `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable | `grep -n "Decision Logic\|Step 3\." stage3-handson.md` |
 | 2 | `skills/qa/stage3-handson.md` § Stage 3 Output Format (Applicability enum) | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
 | 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -n "Trigger\|maestro\|playwright\|curl" skills/qa/SKILL.md` |
-| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "Applicability matrix\|Quick Reference" skills/qa/SKILL.md` |
+| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "^### Applicability\|^## Quick Reference\|user-facing changes, no scenarios" skills/qa/SKILL.md` |
 | 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -n "Tool.*curl\|Tool.*playwright\|Tool.*maestro" skills/prometheus/plan-template.md` |
 | 6 | `skills/prometheus/acceptance-criteria.md` § Verification Examples by Tool | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
