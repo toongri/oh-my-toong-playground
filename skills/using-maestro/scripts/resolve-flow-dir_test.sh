@@ -367,6 +367,132 @@ test_collision_detection_emits_register_required_with_collision_marker() {
 }
 
 # =============================================================================
+# Test G: `test_invalid_slug_exits_2_with_invalid_slug_marker`
+# Fix A (P2-6): project_id with unsupported characters must route to REGISTER_REQUIRED
+# Expected: exit 2 AND stderr contains 'REGISTER_REQUIRED:' and ':INVALID_SLUG'
+# =============================================================================
+test_invalid_slug_exits_2_with_invalid_slug_marker() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    # Use a directory whose basename contains a space — this forces
+    # project_id derivation (no git remote) to produce an invalid slug.
+    local project_root="$tmp_dir/my project"
+    local fake_home="$tmp_dir/home"
+
+    mkdir -p "$project_root"
+    git -C "$project_root" init -q
+    # No git remote: basename = "my project" (space is invalid character)
+
+    local stderr_output
+    local exit_code=0
+
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit with code 2 (routes to REGISTER_REQUIRED, not hard error)
+    if [ "$exit_code" -ne 2 ]; then
+        echo "  ASSERTION FAILED: expected exit code 2 (REGISTER_REQUIRED for invalid slug), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain REGISTER_REQUIRED: marker
+    if ! printf '%s' "$stderr_output" | grep -q 'REGISTER_REQUIRED:'; then
+        echo "  ASSERTION FAILED: stderr does not contain 'REGISTER_REQUIRED:'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain :INVALID_SLUG marker
+    if ! printf '%s' "$stderr_output" | grep -q ':INVALID_SLUG'; then
+        echo "  ASSERTION FAILED: stderr does not contain ':INVALID_SLUG'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
+# Test H: `test_project_root_fallback_collision_emits_register_required`
+# Recommendation (Fix C): collision detection via project_root when config has no git_remote
+# Expected: exit 2 AND stderr contains 'REGISTER_REQUIRED:' and ':COLLISION'
+# =============================================================================
+test_project_root_fallback_collision_emits_register_required() {
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    trap "rm -rf '$tmp_dir'" EXIT
+
+    local project_root="$tmp_dir/myproject"
+    local fake_home="$tmp_dir/home"
+
+    # Real git repo, no remote — so project_id = "myproject" (basename)
+    mkdir -p "$project_root"
+    git -C "$project_root" init -q
+
+    # Config has project_root pointing to a DIFFERENT absolute path (no git_remote key)
+    local config_dir="$fake_home/.config/maestro/myproject"
+    mkdir -p "$config_dir"
+    printf 'version: 1\nproject_id: myproject\nproject_root: /some/completely/different/path\nflow_dir: /tmp/somewhere\ncreated_at: 2026-01-01T00:00:00+00:00\n' \
+        > "$config_dir/config.yaml"
+
+    local stderr_output
+    local exit_code=0
+
+    stderr_output=$(
+        cd "$project_root" && \
+        HOME="$fake_home" \
+        MAESTRO_USING_FLOW_DIR="" \
+        bash "$SCRIPT" 2>&1 1>/dev/null
+    ) || exit_code=$?
+
+    # Must exit with code 2 (REGISTER_REQUIRED on collision)
+    if [ "$exit_code" -ne 2 ]; then
+        echo "  ASSERTION FAILED: expected exit code 2 (REGISTER_REQUIRED on project_root collision), got $exit_code"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain REGISTER_REQUIRED: marker
+    if ! printf '%s' "$stderr_output" | grep -q 'REGISTER_REQUIRED:'; then
+        echo "  ASSERTION FAILED: stderr does not contain 'REGISTER_REQUIRED:'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Stderr must contain :COLLISION marker
+    if ! printf '%s' "$stderr_output" | grep -q ':COLLISION'; then
+        echo "  ASSERTION FAILED: stderr does not contain ':COLLISION'"
+        echo "  stderr was: '$stderr_output'"
+        trap - EXIT
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    trap - EXIT
+    rm -rf "$tmp_dir"
+    return 0
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -381,6 +507,8 @@ main() {
     run_test test_hash_in_quoted_path
     run_test test_unquoted_hash_in_path_preserved
     run_test test_collision_detection_emits_register_required_with_collision_marker
+    run_test test_invalid_slug_exits_2_with_invalid_slug_marker
+    run_test test_project_root_fallback_collision_emits_register_required
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
