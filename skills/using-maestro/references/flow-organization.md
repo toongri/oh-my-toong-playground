@@ -177,7 +177,7 @@ maestro test --exclude-tags slow .maestro/          # quick subset
 
 ### Data-driven repetition
 
-Maestro's built-in `repeat` runs the same env multiple times. To run the same flow with **different data** (e.g. 100 user accounts), drive from the outside:
+Maestro's built-in `repeat` runs the same `commands` block multiple times. To run the same flow with **different data** (e.g. 100 user accounts), drive from the outside:
 
 ```bash
 while IFS=, read -r email pass; do
