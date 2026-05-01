@@ -449,11 +449,39 @@ Workers **propose** P-levels with supporting evidence. The orchestrator **adjudi
 | P-Level | Impact Delta | Probability | Maintainability |
 |---------|-------------|-------------|-----------------|
 | **P0** (must-fix) | Outage, data loss, or security breach | Triggered during normal operation | System inoperable if unfixed |
-| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, or security weakness in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
-| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
+| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, security weakness, **suppression/masking of error diagnostics**, or **violation of an enumerated project-rule (see §Project-Rule Violations below)** in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
+| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves. *Note*: Masking patterns that suppress evidence of a present-day defect are P1, NOT P2(a)/P2(c), even when the masked defect's trigger looks rare or the fix is framed as maintainability. | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
 | **P3** (optional) | No correctness issue, no projected failure | N/A | Readability, consistency, or style improvement only |
 
-**P1 vs P2 Decision Gate:** "Is there a defect in the current code, AND does it manifest under conditions that exist today?" Both must be yes for P1. If the defect's trigger is unrealistic → P2(a). If no defect today but predictable future failure → P2(b). If no defect and no projected failure but significant maintainability gain → P2(c).
+**P1 vs P2 Decision Gate:** "Is there a defect in the current code, AND does it manifest under conditions that exist today?" Both must be yes for P1. If the defect's trigger is unrealistic → P2(a). If no defect today but predictable future failure → P2(b). If no defect and no projected failure but significant maintainability gain → P2(c). **For masking patterns, the relevant "trigger" is the moment the underlying primary-path defect would have surfaced; if the patch routes around that defect, the trigger condition is met today.**
+
+### Masking Carve-out (NOT P1)
+
+A fallback or alternate path is NOT a masking pattern when ALL of the following hold:
+
+1. **Scoped** to a known external/version boundary (e.g., `bun` version difference, `gh` API change, OS-specific path, third-party library breaking change).
+2. **Documented** in a code comment that names the specific external defect, version constraint, or boundary it works around.
+3. **Tested** on both primary and fallback paths.
+4. **Preserves** failure evidence — the original error is still logged or reported, not swallowed or downgraded.
+5. **Does not replace** fixing a primary contract that the project itself controls.
+
+If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
+
+### Project-Rule Violations (also P1, even without masking)
+
+This project's `.claude/rules/coding-discipline.md` defines explicit written rules. Violations are P1 by definition because the rule itself declares the change unwanted.
+
+The following violations are P1 (this list is the *source of truth at this commit*; if `coding-discipline.md` adds rules later, this section must be updated in the same PR — do not silently re-classify):
+
+1. **Speculative addition** — feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
+2. **Single-use abstraction** — wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
+3. **Unrequested flexibility** — config option, environment variable, or branching logic added to support hypothetical future scenarios.
+4. **Impossible-scenario error handling** — guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
+5. **Backwards-compatibility shim without removal date** — fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
+
+For each P1 issue under this section, the reviewer must cite the specific rule (1–5) and quote the violating code.
+
+**Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. If a new rule emerges, it goes into `coding-discipline.md` first, then this section in the same PR.
 
 ### Phase 2: Critique Synthesis
 
