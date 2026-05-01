@@ -12,9 +12,7 @@ Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context
 
 These two premises are non-negotiable. They are forwarded to every chunk-reviewer dispatch and they govern every decision in this skill.
 
-1. **Worktree environment** — This review runs inside a git worktree dedicated to the PR/branch under review. Checkout has zero cost to the user's primary working directory. Therefore: **ensure the working directory reflects the post-change state of the target ref before any analysis** — by checking it out (PR mode) or by verifying the caller already arrived on it (other modes). Do not pretend the file system is read-only or stuck at base.
-
-   Note: 비-PR 모드(branch comparison, auto-detect)는 checkout이 발생하지 않으므로 PR 모드의 `--git-dir` 가드는 의도적으로 적용되지 않는다 — 비-PR 모드는 verify-only(HEAD 일치 + clean tree)로 위 "post-change state" 요건을 충족한다. 두 path의 비대칭은 결함이 아니라 설계.
+1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 1). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 1). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
 
 2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 

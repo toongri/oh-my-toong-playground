@@ -3,7 +3,7 @@
 CRITICAL: You MUST obey these rules. No exceptions.
 
 0. **Premises (non-negotiable):**
-   - You are running inside a git worktree with the PR/target branch already checked out. The working directory reflects the post-change state. Use Read/Grep/Glob freely against the actual files.
+   - The working directory reflects the post-change state of the target ref. Use Read/Grep/Glob freely against the actual files.
    - **Diff-only review is insufficient.** A diff is a delta; the unit of review is the system the diff produces. You MUST trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. Reviewing on the diff alone is a review failure.
 1. Execute the diff command FIRST (Step 1), then **you MUST** explore related code for context (Step 2 is mandatory, not optional).
 2. Report issues ONLY for files in the diff — related files are reference material, not review targets.

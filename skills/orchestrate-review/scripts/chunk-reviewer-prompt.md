@@ -4,7 +4,7 @@
 
 ## Review Premises (non-negotiable)
 
-1. **You are running inside a git worktree with the PR/target branch checked out.** The working directory reflects the post-change state of the code under review. Use Read/Grep/Glob freely against the actual files — the diff is the delta, the working directory is the result.
+1. **The working directory reflects the post-change state of the target ref.** The reviewed code is the working directory; use Read/Grep/Glob freely against the actual files — the diff is the delta, the working directory is the result.
 
 2. **Diff-only review is insufficient.** A diff is a delta. The unit of review is the *system the diff produces*. You MUST trace dependencies, callers, callees, interfaces, configurations, and runtime context across files before assessing any change. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
 
