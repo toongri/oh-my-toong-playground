@@ -4,20 +4,16 @@ Maestro can be driven two ways from an LLM-backed environment: **CLI** (a human 
 
 ## What the Maestro MCP Server Provides
 
-The MCP server is bundled with Maestro CLI (a separate Python package was archived in mid-2025; the canonical implementation is now part of the CLI). When registered via a connector, it exposes eight tools:
+Maestro 팀은 Claude Desktop / Cursor / Windsurf 등 MCP 클라이언트가 모바일 자동화에 직접 접근할 수 있는 MCP 서버를 별도 레포로 배포한다(`mobile-dev-inc/maestro-mcp`). 등록하면 LLM이 외부 connector 없이 다음 같은 능력에 접근할 수 있다:
 
-| Tool | Role |
-|---|---|
-| `inspect_screen` | Returns the current screen's UI hierarchy as **CSV** (token-efficient). |
-| `take_screenshot` | Captures the current screen as JPEG for vision context. |
-| `run` | Executes a YAML inline or from a file/directory. |
-| `cheat_sheet` | Returns Maestro syntax reference. |
-| `list_devices` | Lists locally connected devices. |
-| `list_cloud_devices` | Lists Maestro Cloud device options. |
-| `run_on_cloud` | Submits a flow to Maestro Cloud, returns dashboard URL. |
-| `get_cloud_status` | Polls a cloud run for completion. |
+- 현재 화면의 UI 계층(view hierarchy) 조회 — 셀렉터 후보 추출용
+- 인라인 YAML 스니펫 또는 파일 단위 flow 실행 — 작성→검증 사이클 가속
+- Maestro YAML 문법 참조 / 문법 유효성 검사 — LLM 자기교정 지원
+- (해당되는 경우) 클라우드 실행 제출 및 상태 조회
 
-The agentic loop the MCP enables is: `inspect_screen` → reason about selectors → emit a YAML draft → `run` to verify → on failure, `inspect_screen` again → fix selector → repeat.
+> 정확한 도구 이름·인자·반환 포맷은 Maestro MCP 버전마다 변경된다. 등록·호출 직전에 [공식 docs](https://github.com/mobile-dev-inc/maestro-mcp)와 클라이언트의 도구 목록(예: Claude Desktop에서 등록 후 노출되는 mcp 도구)을 확인하라. 본 가이드는 도구 이름을 박지 않는다 — stale 위험을 회피하기 위함.
+
+이로 가능해지는 agentic 루프(개념): 현재 화면 조회 → 셀렉터 추론 + YAML 초안 작성 → 인라인 실행으로 검증 → 실패 시 화면 재조회 → 셀렉터 수정 → 반복. 도구 호출 단위는 클라이언트가 노출한 실제 이름으로 대체.
 
 ## Decision Matrix — Operations Cycle
 
@@ -27,7 +23,7 @@ The agentic loop the MCP enables is: `inspect_screen` → reason about selectors
 | Bulk authoring (30+ flows in a short window) | **MCP** for drafts, CLI for execution | MCP shortens selector discovery; humans still review the YAML before commit. |
 | CI / nightly / regression runs | **CLI** | Deterministic, no LLM cost, no rate limits. |
 | Debugging a flake | **CLI** with `~/.maestro/tests/<timestamp>/` artifacts | Human inspection of the failure bundle is faster than an MCP loop. |
-| New screen exploration / selector hunt | **MCP** `inspect_screen` | One LLM call beats `adb shell uiautomator dump | grep` for unfamiliar screens. |
+| New screen exploration / selector hunt | **MCP** (screen-hierarchy 조회 도구) | LLM이 한 번의 도구 호출로 화면 계층을 받아 셀렉터를 추론할 수 있다. `adb shell uiautomator dump | grep`보다 미지의 화면에서 우월. |
 | Maintenance — fixing broken selectors | **CLI** | Humans understand intent; LLMs can guess wrong selectors. |
 
 The bottom line: **CLI is the baseline. MCP is a discovery accelerator** for situations where the marginal cost of LLM calls is justified by faster authoring.
@@ -44,19 +40,21 @@ The bottom line: **CLI is the baseline. MCP is a discovery accelerator** for sit
 
 ## Open MCP Issues to Watch
 
-These three issues currently keep MCP off the table for kiosk and WiFi-ADB environments. Re-evaluate when they close:
+These issues currently keep MCP off the table for kiosk and WiFi-ADB environments. Re-evaluate when they close.
+
+> Status checked: 2026-05-01. Re-verify before relying on these decisions — issue states change.
 
 | Issue | Status | Effect |
 |---|---|---|
-| [#2921 port 7001 collision](https://github.com/mobile-dev-inc/Maestro/issues/2921) | Open | MCP server and CLI test runner cannot run simultaneously. Painful when CLI restarts are frequent (WiFi reconnect). |
-| [#2839 launchApp re-execution](https://github.com/mobile-dev-inc/Maestro/issues/2839) | Open | First `launchApp` succeeds, subsequent calls fail with `TcpForwarder TimeoutException`. Breaks regression batches. |
-| [#2517 remote ADB connection](https://github.com/mobile-dev-inc/maestro/issues/2517) | Open | `MAESTRO_ADB_HOST` / `MAESTRO_ADB_PORT` ignored in some setups. Affects WiFi ADB workflows. |
+| [#2921 port 7001 collision](https://github.com/mobile-dev-inc/maestro/issues/2921) | Open | MCP server and CLI test runner cannot run simultaneously. Painful when CLI restarts are frequent (WiFi reconnect). |
+| [#2839 launchApp re-execution](https://github.com/mobile-dev-inc/maestro/issues/2839) | Open | First `launchApp` succeeds, subsequent calls fail with `TcpForwarder TimeoutException`. Breaks regression batches. |
+| [#2517 remote ADB connection](https://github.com/mobile-dev-inc/maestro/issues/2517) | Closed (2025-07-01) | Was: `MAESTRO_ADB_HOST` / `MAESTRO_ADB_PORT` ignored in some setups. Re-evaluate WiFi ADB MCP viability with current Maestro CLI version. |
 
-When all three close, kiosk / WiFi-ADB environments become viable for MCP.
+When the remaining two close (#2921, #2839), kiosk / WiFi-ADB environments become more viable for MCP.
 
 ## Cost and Token Considerations
 
-A general MCP-over-CLI benchmark from independent measurement reports a ~32× token overhead per task. The Maestro MCP exposes only 8 tools (versus dozens for some other servers), so the absolute overhead is smaller, but the structural pattern remains: **MCP makes one LLM call per step, CLI makes zero**.
+A general MCP-over-CLI benchmark from independent measurement reports a ~32× token overhead per task. The Maestro MCP exposes a relatively small tool surface compared to dozens-of-tools servers, so the absolute overhead is smaller, but the structural pattern remains: **MCP makes one LLM call per step, CLI makes zero**.
 
 If your CI runs 1000 flow executions per week, MCP is not the right execution path. Use it for authoring; commit the YAML; let CI run the YAML directly with `maestro test`.
 
@@ -64,7 +62,7 @@ If your CI runs 1000 flow executions per week, MCP is not the right execution pa
 
 1. New screen lands in the app.
 2. Open Claude/Cursor with Maestro MCP attached.
-3. Use `inspect_screen` and `take_screenshot` to understand the screen.
+3. MCP 도구로 현재 화면 계층과 스크린샷을 받아 화면을 파악한다 (구체 도구 이름은 클라이언트의 도구 목록 확인).
 4. Have the LLM draft a `flow.yaml`.
 5. Review the draft as a human — does it cover the real user intent? Does it use stable selectors? Is it idempotent?
 6. Resolve the project's flow_dir first (`bash <skill>/scripts/resolve-flow-dir.sh`), then commit the YAML to `<flow_dir>/<feature>/`. See `flow-location-config.md`.
@@ -85,7 +83,7 @@ A team that already understands its app and writes new flows at human pace gains
 ## What MCP Cannot Do
 
 - It cannot judge business value. The LLM does not know which user journeys matter most. Humans must scope the test suite.
-- It cannot read hardware state. `inspect_screen` returns the UI tree; EEPROM, cartridge state, firmware version, and other off-screen state are invisible to it.
+- It cannot read hardware state. screen-hierarchy 조회는 UI 트리만 반환한다. EEPROM, cartridge state, firmware version 등 off-screen state는 보이지 않는다.
 - It cannot make a non-deterministic flow deterministic. Generated flows still need `clearState`, `extendedWaitUntil`, and the other guardrails.
 
 These boundaries do not move just because the tool is fancier. The human stays in the loop on intent, hardware, and determinism.
