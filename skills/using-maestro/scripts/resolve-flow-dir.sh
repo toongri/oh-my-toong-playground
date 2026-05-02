@@ -105,12 +105,10 @@ get_yaml_value() {
 # bash 3.2 compatible — uses sed -E only.
 normalize_remote() {
   local url="$1"
-  # Strip trailing .git suffix
-  url=$(printf '%s' "$url" | sed -E 's/\.git$//')
-  # Convert ssh://git@host/path → https://host/path (URL-style SSH)
-  url=$(printf '%s' "$url" | sed -E 's|^ssh://git@([^/]+)/(.+)$|https://\1/\2|')
-  # Convert git@host:path → https://host/path (SCP-style SSH)
-  url=$(printf '%s' "$url" | sed -E 's|^git@([^:]+):(.+)$|https://\1/\2|')
+  url=$(printf '%s' "$url" \
+    | sed -E -e 's/\.git$//' \
+             -e 's|^ssh://git@([^/]+)/(.+)$|https://\1/\2|' \
+             -e 's|^git@([^:]+):(.+)$|https://\1/\2|')
   printf '%s' "$url"
 }
 
