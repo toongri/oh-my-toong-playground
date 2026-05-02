@@ -94,7 +94,7 @@ Overall structure:
 | **Universal truths** | "All tests pass" | Always true, not plan-specific | Move to Verification Strategy |
 | **Absence-only** | "X not found in grep" | Deletion alone passes | Write presence checks first, then add absence checks |
 | **Compound AC** | "All tests pass", "46 findings resolved", "X and Y implemented" | Bundles multiple independent state changes — one failure hides others | Decompose: one AC per state change, each with its own Verification command |
-| **State-mutating without teardown** | "Insert user / Verification: `curl -X POST /users -d @fixture.json`" | Re-runs fail with 409 Conflict; CI flakes on cached runners | Add Setup/Cleanup lines, or use isolated schema (`--db-schema=test_$RANDOM`) |
+| **State-mutating without teardown** | "Insert user / Verification: `curl -X POST /users -d @fixture.json`" | Re-runs fail with 409 Conflict; opaque global resets hide preconditions | Prefer (a) runner-native isolation, (b) API-symmetric cleanup, or (c) unique-input scoping (uuidgen) — see Verification Transparency Rule |
 
 ## AC Granularity Principle
 
@@ -140,6 +140,38 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
       Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
 ```
 
+## Verification Transparency Rule
+
+A reviewer must be able to answer four questions from the AC text alone:
+
+1. What state must exist before Verification? (Setup)
+2. What command verifies the requirement? (Verification)
+3. What does success look like? (Expected outcome)
+4. How is state restored, if needed? (Cleanup)
+
+**Tool-native scenario files** are valid Setup/Verification primitives — the file content IS the contract, auditable in standard tool syntax. Examples: `.maestro/*.yaml`, `tests/*.spec.ts`, `*.test.ts`.
+
+**Always anti-pattern**:
+- Pre-seeded shared infrastructure state (rows that "just exist", magic IDs, shared dev accounts)
+- Opaque commands that hide what state they produce or assert
+
+**AC ≠ test spec.** AC names precondition, action, and asserted outcome. Click-by-click choreography belongs in the tool-native scenario file, not duplicated in the AC text.
+
+## Choosing the verification tool
+
+Before writing the AC, work through this sequence:
+
+1. **Choose the tool that can observe the target state most directly.** File content → grep. HTTP behavior → curl + jq. Function logic → unit runner. Browser flow → playwright. Native app E2E → maestro. Don't default to the first tool you know.
+
+2. **If the Command API doesn't echo final state, chain a Query API.** POST → 202 → GET /resource/$id → assert. Verification observes the state, not just the action's side effect.
+
+3. **If insufficient state exists for the test, seed it explicitly.** Setup may legitimately create the precondition. Prefer seeding via the same API the test exercises — loud failure if API breaks.
+
+4. **If Setup mutates persistent state, choose the lightest cleanup that works.** Order of preference:
+   - Runner-native isolation (in-memory DB, rolled-back transaction, ephemeral container) — no manual cleanup needed
+   - API-symmetric cleanup (POST then DELETE via same API)
+   - Unique-input scoping (uuidgen-prefixed data, no cleanup needed)
+
 ## Verification Examples by Tool
 
 When the Verification can be expressed as a runnable command, prefer one that is self-contained — do not invent ad-hoc shell. For outcome-based or descriptive ACs where a literal command does not fit, plain prose is acceptable.
@@ -152,9 +184,8 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### HTTP API (curl + jq)
 
 - [ ] **POST /api/users (201) returns the same record on subsequent GET**
-      **Setup**: `./scripts/db-reset.sh`
-      **Verification**: `id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d '{"email":"test@example.com"}' | jq -r '.id') && curl -fsS "http://localhost:8080/api/users/$id" | jq -e '.email == "test@example.com"'`
-      **Cleanup**: `./scripts/db-reset.sh`
+      **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "http://localhost:8080/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
+      **Cleanup**: `curl -fsS -X DELETE "http://localhost:8080/api/users/$id" > /dev/null || true`
 
 ### Unit / integration test runner
 
@@ -165,16 +196,17 @@ When the Verification can be expressed as a runnable command, prefer one that is
 
 - [ ] **Login with valid credentials lands on Home and shows username**
       **Verification**: `bunx playwright test tests/e2e/login.spec.ts --reporter=junit`
+      (If the test mutates backend persistence, chain Query API verification or add API-symmetric cleanup — browser context reset alone doesn't restore backend state.)
 
 ### Mobile app E2E (maestro)
 
 - [ ] **Login flow on iOS Simulator reaches Home**
       **Verification**: `maestro test --device "$IOS_UDID" .maestro/auth/login_happy.yaml --format junit`
-      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup.)
+      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 - [ ] **Login flow on Android Emulator reaches Home**
       **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit`
-      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup.)
+      (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 ## Example
 
