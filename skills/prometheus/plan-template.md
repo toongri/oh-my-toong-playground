@@ -129,8 +129,8 @@ Each scenario uses a structured block with 7 fields:
   - Blocks: TODO 5
   - Wave: 2
   - Acceptance Criteria:
-    - [ ] **UserService create rejects duplicate email**: Returns `{success: false, error: 'DUPLICATE_EMAIL'}`
-          **Verification**: Unit test asserts result when repository returns existing user
+    - [ ] **POST /api/users with a duplicate email responds 409 DUPLICATE_EMAIL on the second request**
+          **Verification**: `email="dup-$(uuidgen)@x.com" && curl -fsS -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" > /dev/null && code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && [ "$code" = "409" ]`
     - QA Scenarios:
 
     Scenario: Happy path — create user

@@ -140,6 +140,30 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
       Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
 ```
 
+## AC verification layer
+
+AC는 산출물이 *소비자에게 가치 있는가*를 측정한다. "소비자"는 task에 따라 달라진다:
+
+| 산출물 종류 | 소비자 | AC 검증 레이어 |
+|-------------|--------|----------------|
+| 모바일 기능 | 최종 사용자 | UI scenario (Maestro) |
+| 웹 기능 | 최종 사용자 | UI scenario (Playwright) |
+| HTTP API | API client | integration (curl + jq) |
+| CLI 명령 | shell 사용자 | command exec + stdout 검증 |
+| Library 함수 | 호출하는 개발자/에이전트 | unit test 가능 (정당화 필수) |
+
+원칙: **소비자가 관찰하는 가장 외곽 표면에서 검증한다.** 내부 구현 단위 검증(`*.test.ts`)은 implementation evidence이지 default AC가 아니다 — `## Verification Transparency Rule`의 "Implementation test files" caveat 참조.
+
+### AC self-check (mandatory before finalizing)
+
+Run this checklist on every AC before proposing to the user:
+
+- [ ] If this verification passes, does the consumer actually receive value?
+- [ ] Does an implementation exist that passes this verification vacuously? If yes, the verification layer is too deep — move outward.
+- [ ] If citing a unit test as AC, did you justify the unit as consumer-facing (per the three questions in Implementation test files caveat)?
+
+**Anti-tautology rule**: Prometheus (planner) must specify the assertion's input/output or behavioral constraint in the AC itself. Do not delegate "what counts as a passing test" to Sisyphus-junior (executor) — that creates meta-circular verification.
+
 ## Verification Transparency Rule
 
 A reviewer must be able to answer four questions from the AC text alone:
@@ -149,7 +173,13 @@ A reviewer must be able to answer four questions from the AC text alone:
 3. What does success look like? (Expected outcome)
 4. How is state restored, if needed? (Cleanup)
 
-**Tool-native scenario files** are valid Setup/Verification primitives — the file content IS the contract, auditable in standard tool syntax. Examples: `.maestro/*.yaml`, `tests/*.spec.ts`, `*.test.ts`.
+**Scenario files** (executable specifications) are valid Setup/Verification primitives — the file content IS the contract, auditable in standard tool syntax. These describe user/external-observable behavior directly. Examples: `.maestro/*.yaml`, Playwright `tests/e2e/*.spec.ts`.
+
+**Implementation test files** (Jest/Vitest `*.test.ts` or `*.spec.ts`) verify internal units. **They are NOT default AC primitives** — they are implementation evidence. A unit test can be cited as AC verification only when the unit IS the consumer-facing surface (CLI utility export, public library API, pure transformation function). When citing a unit test as AC, the AC must specify:
+
+1. Who is the consumer of this unit?
+2. Where is this unit invoked directly (file:line citation)?
+3. Why is this unit the outer ring (not internal helper)?
 
 **Always anti-pattern**:
 - Pre-seeded shared infrastructure state (rows that "just exist", magic IDs, shared dev accounts)
@@ -161,7 +191,7 @@ A reviewer must be able to answer four questions from the AC text alone:
 
 Before writing the AC, work through this sequence:
 
-1. **Choose the tool that can observe the target state most directly.** File content → grep. HTTP behavior → curl + jq. Function logic → unit runner. Browser flow → playwright. Native app E2E → maestro. Don't default to the first tool you know.
+1. **Choose the tool that observes the target state at the consumer boundary.** UI flow → maestro/playwright. HTTP API behavior → curl + jq. CLI behavior → command exec + stdout assertion. File content → grep. Internal function logic → implementation test runner (NOT AC by default — see Implementation test files caveat). Don't default to the first tool you know; default to the consumer's observation surface.
 
 2. **If the Command API doesn't echo final state, chain a Query API.** POST → 202 → GET /resource/$id → assert. Verification observes the state, not just the action's side effect.
 
@@ -176,28 +206,6 @@ Before writing the AC, work through this sequence:
 
 When the Verification can be expressed as a runnable command, prefer one that is self-contained — do not invent ad-hoc shell. For outcome-based or descriptive ACs where a literal command does not fit, plain prose is acceptable.
 
-### Text scan (grep) — for spec/log/output content
-
-- [ ] **Forbidden token absent from report**
-      **Verification**: `grep -q "forbidden-token" report.txt && echo FAIL || echo PASS`
-
-### HTTP API (curl + jq)
-
-- [ ] **POST /api/users (201) returns the same record on subsequent GET**
-      **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "http://localhost:8080/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
-      **Cleanup**: `curl -fsS -X DELETE "http://localhost:8080/api/users/$id" > /dev/null || true`
-
-### Unit / integration test runner
-
-- [ ] **`splitCommand` preserves quoted argument as a single token**
-      **Verification**: `bun test tests/splitCommand.test.ts -t "preserves quoted args"`
-
-### Web UI E2E (playwright)
-
-- [ ] **Login with valid credentials lands on Home and shows username**
-      **Verification**: `bunx playwright test tests/e2e/login.spec.ts --reporter=junit`
-      (If the test mutates backend persistence, chain Query API verification or add API-symmetric cleanup — browser context reset alone doesn't restore backend state.)
-
 ### Mobile app E2E (maestro)
 
 - [ ] **Login flow on iOS Simulator reaches Home**
@@ -207,6 +215,44 @@ When the Verification can be expressed as a runnable command, prefer one that is
 - [ ] **Login flow on Android Emulator reaches Home**
       **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit`
       (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
+
+### Web UI E2E (playwright)
+
+- [ ] **Login with valid credentials lands on Home and shows username**
+      **Verification**: `bunx playwright test tests/e2e/login.spec.ts --reporter=junit`
+      (If the test mutates backend persistence, chain Query API verification or add API-symmetric cleanup — browser context reset alone doesn't restore backend state.)
+
+### HTTP API (curl + jq)
+
+- [ ] **POST /api/users (201) returns the same record on subsequent GET**
+      **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "http://localhost:8080/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
+      **Cleanup**: `curl -fsS -X DELETE "http://localhost:8080/api/users/$id" > /dev/null || true`
+
+### Text scan (grep) — for spec/log/output content
+
+- [ ] **Forbidden token absent from report**
+      **Verification**: `grep -q "forbidden-token" report.txt && echo FAIL || echo PASS`
+
+### CLI exec + stdout
+
+- [ ] **`./bin/migrate --dry-run` reports planned migrations to stdout**
+      **Verification**: `./bin/migrate --dry-run | grep -qE '^[+-] migrations/[0-9]+_'`
+
+### Implementation test runner (caveat — NOT default AC)
+
+Unit/integration test runners (`bun test ...`, `vitest ...`) are **implementation evidence**, not default AC primitives. They can be cited as AC verification ONLY when the tested unit IS the consumer-facing surface — see "Implementation test files" caveat in `## Verification Transparency Rule`.
+
+Legitimate use (unit IS the consumer surface):
+
+- [ ] **`splitCommand` (public library export) preserves quoted arguments as a single token**
+      **Verification**: `bun test tests/splitCommand.test.ts -t "preserves quoted args"`
+      Consumer: library callers (other developers/agents) invoking via `import { splitCommand } from '...'`. Outer ring = exported function signature.
+
+Illegitimate use (unit is internal helper):
+
+- ~~[ ] **`UserService.create` rejects duplicate email**~~
+      ~~Verification: Unit test asserts result when repository returns existing user~~
+      → instead, verify at the HTTP boundary that `POST /api/users` with duplicate email returns 409. The internal method behavior is implementation evidence.
 
 ## Example
 
