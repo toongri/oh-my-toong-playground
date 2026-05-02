@@ -100,13 +100,16 @@ get_yaml_value() {
 }
 
 # Helper: normalize a git remote URL for collision comparison.
-# Strips trailing .git suffix, then converts SSH (git@host:path) to HTTPS form.
+# Strips trailing .git suffix, then converts SSH forms (both ssh://git@host/path
+# and SCP-style git@host:path) to HTTPS form.
 # bash 3.2 compatible — uses sed -E only.
 normalize_remote() {
   local url="$1"
   # Strip trailing .git suffix
   url=$(printf '%s' "$url" | sed -E 's/\.git$//')
-  # Convert git@host:path → https://host/path
+  # Convert ssh://git@host/path → https://host/path (URL-style SSH)
+  url=$(printf '%s' "$url" | sed -E 's|^ssh://git@([^/]+)/(.+)$|https://\1/\2|')
+  # Convert git@host:path → https://host/path (SCP-style SSH)
   url=$(printf '%s' "$url" | sed -E 's|^git@([^:]+):(.+)$|https://\1/\2|')
   printf '%s' "$url"
 }
