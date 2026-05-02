@@ -142,7 +142,7 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 
 ## Verification Examples by Tool
 
-The Verification line MUST be paste-runnable. Pick the form that matches the change type — do not invent ad-hoc shell.
+When the Verification can be expressed as a runnable command, prefer one that is self-contained — do not invent ad-hoc shell. For outcome-based or descriptive ACs where a literal command does not fit, plain prose is acceptable.
 
 ### Text scan (grep) — for spec/log/output content
 
