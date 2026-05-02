@@ -8,6 +8,16 @@ disable-model-invocation: true
 
 Orchestrates chunk-reviewer agents against diffs. Handles input parsing, context gathering, chunking, and result synthesis.
 
+## Premises (apply to orchestrator AND chunk-reviewer)
+
+These two premises are non-negotiable. They are forwarded to every chunk-reviewer dispatch and they govern every decision in this skill.
+
+1. **Post-change state** — The working directory reflects the post-change state of the target ref. PR mode achieves this by checking out the PR head into a dedicated linked worktree (see Step 1). Non-PR modes (branch comparison, auto-detect) achieve this by verifying HEAD-match + clean-tree on the current working directory (also Step 1). Either way: read code freely from the working directory — the diff is the delta, the working directory is the result. Do not pretend the file system is read-only or stuck at base.
+
+2. **No diff-only review** — A diff is a delta. The unit of review is the *system the diff produces*. Always trace dependencies, callers, callees, interfaces, configurations, and runtime context across files. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
+
+These premises must be reflected in the chunk-reviewer dispatch prompt — see Step 5.
+
 ## Input Modes
 
 ```bash
@@ -85,79 +95,96 @@ digraph role_separation {
 
 **RULE**: You CAN and SHOULD read code to verify findings and enrich the walkthrough. You CANNOT run the raw diff command or modify files.
 
-## Step 0: Requirements Context
+## Step 0: Intent and Context Acquisition
 
-Three-question gate — adapt by input mode:
+**Intent acquisition is non-negotiable.** Either intent is confirmed (from artifacts, interview, or both), or the user explicitly defers to a code-quality-only review. There is no third option — proceeding without intent and without explicit deferral is forbidden. Reviewing without intent produces wrong severities, missed scope creep, and false positives born from misunderstanding the author's goal.
 
-**PR mode:**
-1. Auto-extract PR metadata:
-   `gh pr view <number> --json title,body,labels,comments,reviews`
-2. Scan PR body and comments for references to related documents (previous PRs, issues, Jira tickets, design docs, external URLs, review threads, etc.):
-   - GitHub refs (`#123`) → fetch context via `gh pr view` or `gh issue view`
-   - Non-fetchable references (Jira, Notion, Confluence, etc.) → note for user inquiry
-3. If description is substantial (>1 sentence): proceed with auto-extracted context, confirm with user: "Extracted requirements from PR description: [summary]. Anything to add?"
-4. If description is thin AND no linked references found: ask user "Do you have core requirements or a spec for this PR?"
-5. If non-fetchable external references found, ask user: "The PR references these external documents: [links]. Please share relevant context if available. (If not, review will proceed with available information)"
+### Acquisition order
 
-**Branch comparison mode:**
-Ask user: "What was implemented on this branch? If there are original requirements/spec, please share."
+1. **PR/branch artifacts** — PR title, description, labels, commit history, code review comments and threads
+2. **Linked references (recursive)** — every link found in the artifacts above, followed transitively until the trail ends
+3. **Codebase signals** — CLAUDE.md, README, ADRs, related history in changed paths
+4. **User interview** — only for what the artifacts cannot reveal
 
-**Auto-detect mode:**
-1. Infer from commit messages (`git log --oneline`)
-2. Ask user: "Do you have requirements/spec for the recent work? (If not, review will focus on code quality)"
+### Acquire all reachable references
 
-**User deferral** ("없어", "그냥 리뷰해줘", "skip"):
-→ Set {REQUIREMENTS} = "N/A - code quality review only"
-→ Proceed without blocking
+PR descriptions, commits, and comments routinely link to richer context (issue trackers, design docs, chat threads). **Follow every link recursively** — a linked ticket may itself link to a doc which links to a discussion thread; keep following until the trail ends.
 
-**Vague Answer Handling:**
-- Explicit deferral ("없어", "skip", "그냥 해줘") → Treat as N/A and proceed
-- Vague answer → Refine with follow-up question:
+Do not name specific tools. Use whatever fetch capability the environment provides for each link type. If a link cannot be fetched directly (no credential, no MCP for that platform, network unreachable), do not skip it — mark it for the user interview step.
+
+Sources to consult per input mode:
+
+| Input mode | Sources |
+|------------|---------|
+| PR | `gh pr view --json title,body,labels,comments,reviews`, `gh pr view --comments`, linked issues, `gh issue view <n>`, every external link found in the chain, commit messages on the PR branch |
+| Branch comparison | Commit messages, branch name conventions, any linked tickets discovered in commits, related issues |
+| Auto-detect | Recent commit messages on HEAD, any linked tickets found there |
+
+### User interview — only for what artifacts cannot reveal
+
+After exhausting fetchable sources, ask the user about:
+- **Intent** — what problem is this PR solving and why was this approach chosen
+- **Alternatives** — what was considered and rejected, and why
+- **Constraints** — deadlines, dependencies, compatibility commitments, hidden requirements
+- **Concerns** — known risks, untested paths, areas the author is uncertain about
+
+DO NOT interview the user about codebase facts (file locations, patterns, architecture, who calls what). Use Read/Grep/Glob and the explore agent for those — they are reachable from the working directory.
+
+### Intent Block Gate (hard exit condition)
+
+Before exiting Step 0, the state must be one of:
+
+| State | Action |
+|-------|--------|
+| **Intent confirmed** — author's goal, approach, and constraints are understood from artifacts and/or interview | Proceed to Step 1 |
+| **User explicit deferral** — user says "skip", "그냥 리뷰해줘", "없어", "code quality only", or unambiguous equivalent | Set {REQUIREMENTS} = "N/A — code-quality-only review (user deferred)" and proceed |
+| **Neither** — artifacts thin and user not yet asked, OR user gave vague answers without explicit deferral | **BLOCK**. Do not proceed. Continue interview until one of the two states above is reached. |
+
+There is no "I tried hard enough, just review" path. The block IS the safety mechanism.
+
+### Vague answer refinement
+
+When the user gives a vague answer that is not an explicit deferral, refine ONCE with a specific follow-up:
+
+각 follow-up 메시지는 deferral 옵션을 함께 안내하여 사용자가 "skip / 그냥 리뷰해줘 / 없어" 어휘를 몰라도 escape 가능하도록 한다.
 
 | User says | Follow-up |
 |-----------|-----------|
-| "대충 있어" / "뭐 좀 있긴 한데" | "Where can I find them? (PR description, Notion, Jira, etc.)" |
-| "그냥 성능 개선이야" | "What specific metrics were you trying to improve? (latency, throughput, memory, etc.)" |
-| "여러 가지 고쳤어" | "What are the 1-2 most important changes? I'll identify the rest from code." |
+| "대충 있어" / "뭐 좀 있긴 한데" | "어디서 찾을 수 있나요? 링크나 문서 위치를 알려주세요. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+| "그냥 성능 개선이야" | "어떤 지표를 개선하려 했나요? (latency, throughput, memory 등 — 답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
+| "여러 가지 고쳤어" | "가장 중요한 1-2개만 알려주세요. 나머지는 코드에서 식별하겠습니다. (답하기 어려우면 'skip'으로 코드 품질만 리뷰 가능)" |
 
-Rule: 2 consecutive vague answers → Declare "I'll identify the context directly from the code" and proceed. No infinite questioning.
+If refinement still yields a vague answer, surface the block explicitly to the user:
 
-**Question Method:**
+> "의도를 명확히 잡기 어렵습니다. 둘 중 하나를 선택해주세요: (1) [구체적 질문]에 답하여 의도 확정, 또는 (2) 'skip / 코드 품질만 리뷰' 명시적 deferral. 둘 중 하나를 명시하기 전까지 리뷰는 시작하지 않습니다."
+
+This is not adversarial — it is refusing to silently produce a worse review.
+
+### Question discipline
 
 | Situation | Method |
 |-----------|--------|
 | 2-4 structured choices (review scope, severity threshold) | AskUserQuestion tool |
-| Free-form / subjective (intent, context, concerns) | Plain text question |
+| Free-form / subjective (intent, alternatives, constraints, concerns) | Plain text question |
 
-**Question Quality Standard:**
+**One question per message.** Never bundle. Wait for the answer before the next question.
+
+**Question quality** — every question must include either a specific anchor (a summary the user can correct) or a default action in parentheses (so progress is possible without an answer):
 
 | BAD | GOOD |
 |-----|------|
-| "요구사항이 있나요?" | "Do you have core requirements or a spec for this PR? (If not, review will focus on code quality)" |
-| "어떤 부분을 볼까요?" | "23 files changed. Any specific area to focus on? (If not, I'll review everything)" |
-| "테스트 있나요?" | "Do you have test coverage standards? (e.g., 80% line coverage, mandatory scenarios, etc.)" |
+| "요구사항이 있나요?" | "PR 본문과 연결된 이슈에서 [요약]을 추출했습니다. 보완할 부분이 있나요?" |
+| "어떤 부분을 볼까요?" | "23개 파일이 변경됐습니다. 집중할 영역이 있나요? (없으면 전체 리뷰)" |
 
-Rule: Every question must include a default action in parentheses. Ensure progress is possible even without user response.
+### Project Context
 
-**One Question Per Message:**
-One question at a time. Proceed to the next question only after receiving an answer. Never bundle multiple questions in a single message.
+Include project context when interpolating the chunk-reviewer prompt template in Step 5. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and the artifacts gathered above.
 
-**Project Context:**
+If available context is insufficient to characterize the project, ask the user once: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
 
-Include project context when interpolating the chunk-reviewer prompt template in Step 5. Describe what kind of software this is, who uses it, how it runs, and what depends on it — based on CLAUDE.md, README.md, and other available information.
+### Step 0 Exit Condition
 
-If the available context is insufficient to characterize the project, ask the user: "What kind of software is this? (e.g., personal CLI tool, internal team service, public-facing API, shared library, etc.)"
-
-**Step 0 Exit Condition:**
-Proceed to Step 1 when any of the following are met:
-- Requirements captured (PR description, user input, or spec reference)
-- User explicitly deferred ("skip", "없어", "그냥 리뷰해줘")
-- 2-strike vague limit reached → proceed with code-quality-only review
-
-**Context Brokering:**
-- DO NOT ask user about codebase facts (file locations, patterns, architecture)
-- USE explore/oracle in Step 6 Phase 1 for codebase context
-- ONLY ask user about: requirements, intent, specific concerns
+Proceed to Step 1 only when the Intent Block Gate state is **Intent confirmed** or **User explicit deferral**. Any other state → continue at Step 0.
 
 ## Step 1: Input Parsing
 
@@ -165,26 +192,56 @@ Determine range and setup for subsequent steps:
 
 | Input | Setup | Range |
 |-------|-------|-------|
-| `pr <number or URL>` | Fetch PR ref locally (see below) | `origin/<baseRefName>...pr-<number>` |
-| `<base> <target>` | (none — branches already local) | `<base>...<target>` |
-| (none) | Detect default branch (`origin/main` or `origin/master`) | `<default>...HEAD` |
+| `pr <number or URL>` | Fetch and check out PR ref into the worktree (see below) | `origin/<baseRefName>...pr-<number>` |
+| `<base> <target>` | Verify HEAD is `<target>` via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<base>...<target>` |
+| (none) | Detect default branch (`origin/main` or `origin/master`). Verify HEAD is the target branch via `git rev-parse --abbrev-ref HEAD`; verify clean tree via `git status --porcelain -uno`. Abort if mismatch or dirty. | `<default>...HEAD` |
 
-### PR Mode: Local Ref Setup (NO checkout)
+### PR Mode: Worktree Checkout (per Premise 1)
 
-Fetch the PR ref and base branch without switching the current branch:
+This skill assumes the orchestrator is already running inside a worktree dedicated to this review (the caller is responsible for creating the worktree). Therefore: **fetch the PR ref AND check it out**. The working directory must reflect the post-change state of the PR so that all subsequent code reading (Phase 1a, Phase 2 verification, chunk-reviewer Step 2) sees the actual code under review.
+
+**PR ID 추출 규칙**: 사용자가 URL(`https://github.com/<org>/<repo>/pull/<N>`) 형식으로 호출하면, 아래 bash로 진입하기 *전에* trailing path segment에서 numeric `<N>`을 추출해 `<number>` 자리에 substitute하라. URL을 그대로 substitute하면 `git fetch origin pull/<URL>/head`가 invalid refspec으로 실패하고 `git checkout -B pr-<URL>`이 invalid 브랜치명으로 실패한다.
 
 ```bash
-# 1. Get base branch name
-BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
+set -euo pipefail
 
-# 2. Fetch PR ref and base branch (no checkout — user's working directory untouched)
-git fetch origin pull/<number>/head:pr-<number>
-git fetch origin ${BASE_REF}
+# 0. Safety guards (Premise 1 enforcement) — abort BEFORE any state change
+# -uno: untracked files are preserved by checkout; only check tracked modifications
+if [ -n "$(git status --porcelain -uno)" ]; then
+  echo "Error: working directory has uncommitted changes — refusing to checkout over the user's work" >&2
+  exit 1
+fi
+# Distinguish primary repo from linked worktree.
+# In a linked worktree, --git-dir points inside .git/worktrees/<wt>,
+# while --git-common-dir points to the shared .git directory; they differ.
+# In a primary clone they are equal — refuse so we never checkout over the user's main work tree.
+if [ "$(git rev-parse --git-dir 2>/dev/null)" = "$(git rev-parse --git-common-dir 2>/dev/null)" ]; then
+  echo "Error: refusing to run in primary repo — create a dedicated linked worktree first (Premise 1). Hint: 'git worktree add ../review-pr-<N> -b review/pr-<N>'" >&2
+  exit 1
+fi
+
+# 1. Get base branch name (abort if gh fails or returns empty)
+BASE_REF=$(gh pr view <number> --json baseRefName --jq '.baseRefName')
+if [ -z "$BASE_REF" ]; then
+  echo "Error: gh pr view returned empty baseRefName — aborting before any fetch" >&2
+  exit 1
+fi
+
+# 2. Fetch base branch first, then PR ref last so FETCH_HEAD points to PR head
+#    (rerun-safe — force-push on the PR is picked up on re-review)
+git fetch origin "${BASE_REF}"
+git fetch origin pull/<number>/head
+
+# 3. Reset local pr-<N> to the freshly fetched PR head (FETCH_HEAD) and check it out
+#    so the working directory matches the PR state
+git checkout -B pr-<number> FETCH_HEAD
 ```
+
+If the working directory is dirty (uncommitted changes) or the caller is not in a worktree, abort and report — do not silently checkout over the user's work. The worktree premise is the safety net; without it, the safety net is gone.
 
 All range formats use **three-dot syntax** (`A...B`), which is equivalent to `git diff $(git merge-base A B)..B`. This shows only changes introduced by the target since the common ancestor — not changes on the base branch. This prevents false positives when `origin/main` has moved ahead after branching.
 
-All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output.
+All subsequent steps use `{range}` from this table. All diff commands use `git diff {range} -- <files>` for path-filtered output. After checkout, code reading via Read/Grep/Glob reflects the **post-change** state, which is the intended behavior — diff shows the delta, the working directory shows the result.
 
 ## Early Exit
 
@@ -306,7 +363,6 @@ The orchestrator constructs this command string but does NOT execute it. The com
    - {PROJECT_CONTEXT} ← Step 0 project context
    - {FILE_LIST} ← Step 2 file list
    - {DIFF_COMMAND} ← diff command string: `git diff {range}` (single chunk) or `git diff {range} -- <chunk-files>` (multi-chunk). Orchestrator constructs this string but does NOT execute it.
-   - {CLAUDE_MD} ← Step 2 CLAUDE.md content (or empty)
    - {COMMIT_HISTORY} ← Step 2 commit history
    - {EVIDENCE_RESULTS} ← Step 3 evidence summary (Source: Step 3. Fallback: "Evidence verification unavailable — no build/test/lint commands discovered")
 3. Dispatch `chunk-reviewer` agent(s) via Task tool (`subagent_type: "chunk-reviewer"`) with interpolated prompt
@@ -397,11 +453,39 @@ Workers **propose** P-levels with supporting evidence. The orchestrator **adjudi
 | P-Level | Impact Delta | Probability | Maintainability |
 |---------|-------------|-------------|-----------------|
 | **P0** (must-fix) | Outage, data loss, or security breach | Triggered during normal operation | System inoperable if unfixed |
-| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, or security weakness in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
-| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
+| **P1** (should-fix) | **Demonstrable defect**: partial failure, incorrect behavior, data corruption, security weakness, **suppression/masking of error diagnostics**, or **violation of an enumerated project-rule (see §Project-Rule Violations below)** in the current code | **Occurs under realistic conditions** that exist today -- not hypothetical future states | Fix corrects an actual bug or closes a real vulnerability |
+| **P2** (consider-fix) | **(a)** Bug exists but trigger probability is unrealistic today, OR **(b)** No bug today but code will predictably fail as the system grows/evolves, OR **(c)** No bug but maintainability significantly improves. *Note*: Masking patterns that suppress evidence of a present-day defect are P1, NOT P2(a)/P2(c), even when the masked defect's trigger looks rare or the fix is framed as maintainability. | Low probability today, or projected under realistic growth/change | Significant improvement to resilience, debuggability, or long-term health |
 | **P3** (optional) | No correctness issue, no projected failure | N/A | Readability, consistency, or style improvement only |
 
-**P1 vs P2 Decision Gate:** "Is there a defect in the current code, AND does it manifest under conditions that exist today?" Both must be yes for P1. If the defect's trigger is unrealistic → P2(a). If no defect today but predictable future failure → P2(b). If no defect and no projected failure but significant maintainability gain → P2(c).
+**P1 vs P2 Decision Gate:** "Is there a defect in the current code, AND does it manifest under conditions that exist today?" Both must be yes for P1. If the defect's trigger is unrealistic → P2(a). If no defect today but predictable future failure → P2(b). If no defect and no projected failure but significant maintainability gain → P2(c). **For masking patterns, the relevant "trigger" is the moment the underlying primary-path defect would have surfaced; if the patch routes around that defect, the trigger condition is met today.**
+
+### Masking Carve-out (NOT P1)
+
+A fallback or alternate path is NOT a masking pattern when ALL of the following hold:
+
+1. **Scoped** to a known external/version boundary (e.g., `bun` version difference, `gh` API change, OS-specific path, third-party library breaking change).
+2. **Documented** in a code comment that names the specific external defect, version constraint, or boundary it works around.
+3. **Tested** on both primary and fallback paths.
+4. **Preserves** failure evidence — the original error is still logged or reported, not swallowed or downgraded.
+5. **Does not replace** fixing a primary contract that the project itself controls.
+
+If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
+
+### Project-Rule Violations (also P1, even without masking)
+
+**Simplicity First — minimum code that solves the problem, nothing speculative.** The five enumerated patterns below are P1 by definition; each one declares the named pattern unwanted, so the rule itself states the change should not have been made. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here and quote the violating code.
+
+The following violations are P1 (this list is the *source of truth* — closed enumeration; do not silently re-classify):
+
+1. **Speculative addition** — *No features beyond what was asked.* Any feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
+2. **Single-use abstraction** — *No abstractions for single-use code.* Any wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
+3. **Unrequested flexibility** — *No "flexibility" or "configurability" that wasn't requested.* Any config option, environment variable, or branching logic added to support hypothetical future scenarios.
+4. **Impossible-scenario error handling** — *No error handling for impossible scenarios.* Any guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
+5. **Backwards-compatibility shim without removal date** — Any fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
+
+**Self-check**: "Would a senior engineer say this is overcomplicated?" If yes, the change is in violation territory.
+
+**Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. New rules require explicit addition to this list.
 
 ### Phase 2: Critique Synthesis
 

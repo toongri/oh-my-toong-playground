@@ -2,11 +2,19 @@
 
 > This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/reviewer.md.
 
+## Review Premises (non-negotiable)
+
+1. **The working directory reflects the post-change state of the target ref.** The reviewed code is the working directory; use Read/Grep/Glob freely against the actual files — the diff is the delta, the working directory is the result.
+
+2. **Diff-only review is insufficient.** A diff is a delta. The unit of review is the *system the diff produces*. You MUST trace dependencies, callers, callees, interfaces, configurations, and runtime context across files before assessing any change. If you cannot explain how the changed code behaves end-to-end against the surrounding system, you have not reviewed it.
+
+These premises override any reflex to "review just what is in the diff."
+
 ## Review Scope
 
-**Review ONLY these files:** {FILE_LIST}
+**Findings target ONLY these files:** {FILE_LIST}
 
-Do NOT review files outside this list. Cross-references to other files are acceptable for context, but findings must be limited to the files listed above.
+Findings must be limited to files in the list above. Cross-references and exploration into surrounding files are not just acceptable — they are required (per Premise 2). Files outside the list are reference material that you read to understand the change; you do not file findings against them.
 
 ## What Was Implemented
 
@@ -40,9 +48,39 @@ Execute the following command to obtain the diff for review. You MUST run this c
 {DIFF_COMMAND}
 ```
 
-## Project Guidelines
+## Severity Augmentation
 
-{CLAUDE_MD}
+This project applies two augmentations to the standard P0-P3 rubric. Apply these ON TOP of the built-in severity definitions in your system prompt — these augmentations OVERRIDE the built-in rubric where they conflict.
+
+> Canonical policy lives in `skills/code-review/SKILL.md §Severity Augmentation`. The text below is mirrored here for worker self-containment; edit the canonical file first.
+
+### Masking Carve-out (NOT P1)
+
+A fallback or alternate path is NOT a masking pattern when ALL of the following hold:
+
+1. **Scoped** to a known external/version boundary (e.g., `bun` version difference, `gh` API change, OS-specific path, third-party library breaking change).
+2. **Documented** in a code comment that names the specific external defect, version constraint, or boundary it works around.
+3. **Tested** on both primary and fallback paths.
+4. **Preserves** failure evidence — the original error is still logged or reported, not swallowed or downgraded.
+5. **Does not replace** fixing a primary contract that the project itself controls.
+
+If any of (1)–(5) is missing, the pattern is a masking pattern → P1.
+
+### Project-Rule Violations (also P1, even without masking)
+
+**Simplicity First — minimum code that solves the problem, nothing speculative.** The five enumerated patterns below are P1 by definition; each one declares the named pattern unwanted, so the rule itself states the change should not have been made. This section is self-contained: project-rule-based P1 entries must cite a specific rule (1–5) listed here and quote the violating code.
+
+The following violations are P1 (closed enumeration; do not silently re-classify — the canonical list is `code-review/SKILL.md §Project-Rule Violations`):
+
+1. **Speculative addition** — *No features beyond what was asked.* Any feature, abstraction, configuration, or option that was not requested by the user, spec, or issue.
+2. **Single-use abstraction** — *No abstractions for single-use code.* Any wrapper class, helper function, or interface introduced for a code path that has exactly one caller.
+3. **Unrequested flexibility** — *No "flexibility" or "configurability" that wasn't requested.* Any config option, environment variable, or branching logic added to support hypothetical future scenarios.
+4. **Impossible-scenario error handling** — *No error handling for impossible scenarios.* Any guard, validation, or fallback for a state that cannot occur given the surrounding contract (e.g., null-check on a value just constructed by `new`).
+5. **Backwards-compatibility shim without removal date** — Any fallback for an old format/API that has no documented removal target. Either set a removal date or remove the old path now.
+
+**Self-check**: "Would a senior engineer say this is overcomplicated?" If yes, the change is in violation territory.
+
+**Closed list discipline**: this enumeration is closed. Reviewers cannot create new P1-from-rule entries from un-enumerated reasoning. New rules require explicit addition to this list.
 
 ## Commit History
 
@@ -61,5 +99,4 @@ Execute the following command to obtain the diff for review. You MUST run this c
 | {EVIDENCE_RESULTS} | Optional | Step 3 Evidence Verification (may be 'unavailable' message) |
 | {FILE_LIST} | Required | Step 2 git diff --name-only |
 | {DIFF_COMMAND} | Required | Step 4 — constructed from range + chunk file list |
-| {CLAUDE_MD} | Optional | Step 2 CLAUDE.md collection |
 | {COMMIT_HISTORY} | Required | Step 2 git log output |
