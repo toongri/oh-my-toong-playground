@@ -181,10 +181,10 @@ See `stage3-handson.md` Step 3.2: "Run the server/application in background usin
 |---------|--------|---------|
 | Command exits on completion | Allowed | `bun test`, `curl http://localhost:8080/health` |
 | Command backgrounded via tool | Allowed | `run_in_background` with `emulator -avd Pixel_9` |
-| Command backgrounded in shell | Allowed | `emulator -avd Pixel_9 &` |
+| Command backgrounded in shell with output redirection | Allowed | `emulator -avd Pixel_9 >/tmp/emulator.log 2>&1 &` |
 | Bare blocking command | **FORBIDDEN** | `emulator -avd Pixel_9` (hangs the shell indefinitely) |
 
-**Rule**: if a command does not terminate on its own, it MUST be launched with `run_in_background` or with a trailing `&`. MUST NOT run bare blocking processes.
+**Rule**: if a command does not terminate on its own, it MUST be launched with `run_in_background`, OR with a trailing `&` AND output redirected to a file or `/dev/null`. A bare `cmd &` without redirection inherits stdout/stderr from the agent shell — the harness then waits on the inherited file descriptors until the backgrounded process exits, hanging the agent. Bare blocking processes (no `&`, no `run_in_background`) are forbidden.
 
 ---
 
