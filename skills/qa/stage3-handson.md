@@ -45,6 +45,7 @@ Stage 3 Result: SKIPPED (internal logic only / non-code change)
 2. Run the server/application in background using `run_in_background`
 3. Wait for readiness (health check endpoint, port listening, or startup log message)
 4. If startup fails after reasonable timeout, report as Stage 3 FAIL
+5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT}`) so AC verification commands referencing the [Executor-Provided Variables](../prometheus/acceptance-criteria.md#executor-provided-variables) contract resolve correctly.
 
 ### Stop
 
