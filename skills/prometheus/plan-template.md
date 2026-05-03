@@ -130,15 +130,15 @@ Each scenario uses a structured block with 7 fields:
   - Wave: 2
   - Acceptance Criteria:
     - [ ] **POST /api/users with a duplicate email responds 409 DUPLICATE_EMAIL on the second request**
-          **Verification**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && resp=$(curl -s -w '\n%{http_code}' -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && code=$(echo "$resp" | tail -n1) && body=$(echo "$resp" | sed '$d') && [ "$code" = "409" ] && echo "$body" | jq -e '.error == "DUPLICATE_EMAIL"'`
-          **Cleanup**: `[ -n "$id" ] && curl -fsS -X DELETE "http://localhost:3000/api/users/$id" > /dev/null || true`
+          **Verification**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && resp=$(curl -s -w '\n%{http_code}' -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && code=$(echo "$resp" | tail -n1) && body=$(echo "$resp" | sed '$d') && [ "$code" = "409" ] && echo "$body" | jq -e '.error == "DUPLICATE_EMAIL"'`
+          **Cleanup**: `[ -n "$id" ] && [ "$id" != "null" ] && curl -fsS -X DELETE "$API_BASE_URL/api/users/$id" > /dev/null 2>&1 || true`
     - QA Scenarios:
 
     Scenario: Happy path — create user
       Tool: curl
       Preconditions: Server running, DB migrated, users table empty
       Steps:
-        1. `curl -s -o response.json -w "%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
+        1. `curl -s -o response.json -w "%{http_code}" -X POST "$API_BASE_URL/api/users" -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
         2. Assert status is `201`
         3. Assert `response.json` contains `"id"` (UUID) and `"email":"test@example.com"`
       Expected: 201 with JSON body containing id, email, name
@@ -149,7 +149,7 @@ Each scenario uses a structured block with 7 fields:
       Tool: curl
       Preconditions: Server running
       Steps:
-        1. `curl -s -o response.json -w "%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email"}'`
+        1. `curl -s -o response.json -w "%{http_code}" -X POST "$API_BASE_URL/api/users" -H "Content-Type: application/json" -d '{"name":"No Email"}'`
         2. Assert status is `400`
         3. Assert `response.json` contains `"error"` referencing `"email"`
       Expected: 400 with error referencing missing email
