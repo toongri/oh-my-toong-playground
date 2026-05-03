@@ -130,8 +130,8 @@ Each scenario uses a structured block with 7 fields:
   - Wave: 2
   - Acceptance Criteria:
     - [ ] **POST /api/users with a duplicate email responds 409 DUPLICATE_EMAIL on the second request**
-          **Verification**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && [ "$code" = "409" ]`
-          **Cleanup**: `curl -fsS -X DELETE "http://localhost:3000/api/users/$id" > /dev/null || true`
+          **Verification**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && resp=$(curl -s -w '\n%{http_code}' -X POST http://localhost:3000/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && code=$(echo "$resp" | tail -n1) && body=$(echo "$resp" | sed '$d') && [ "$code" = "409" ] && echo "$body" | jq -e '.error == "DUPLICATE_EMAIL"'`
+          **Cleanup**: `[ -n "$id" ] && curl -fsS -X DELETE "http://localhost:3000/api/users/$id" > /dev/null || true`
     - QA Scenarios:
 
     Scenario: Happy path — create user
