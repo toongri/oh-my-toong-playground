@@ -129,6 +129,31 @@ This contract enables the canonical pattern:
 
 Even with this contract, defensive Cleanup guards against unset/empty IDs (in case Verification fails before assignment): `[ -n "$id" ] && curl -X DELETE ".../$id" || true`. The guard prevents a destructive collapse to a collection endpoint URL when the resource was never created.
 
+### Required chaining template
+
+The executor MUST chain Setup, Verification, and Cleanup so that (a) Cleanup runs unconditionally and (b) Verification's exit code is preserved as the AC outcome.
+
+```bash
+setup_cmd && { verify_cmd; VERIFY_EXIT=$?; } || VERIFY_EXIT=$?
+cleanup_cmd
+exit ${VERIFY_EXIT:-1}
+```
+
+For multi-line cases, use `trap`:
+
+```bash
+trap 'cleanup_cmd' EXIT
+setup_cmd
+verify_cmd
+```
+
+Forbidden patterns:
+
+| Pattern | Why forbidden |
+|---------|---------------|
+| `verify_cmd && cleanup_cmd` | Skips Cleanup on verification failure → resource leak |
+| `verify_cmd; cleanup_cmd` | Cleanup's exit code masks verification failure → false PASS |
+
 ## Counter-Example: Fixing a Batch AC
 
 ### Bad
@@ -146,10 +171,10 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 
 ```
 - [ ] Report contains no forbidden-token occurrence
-      Verification: ! grep -q "forbidden-token" report.txt && echo "PASS: forbidden-token absent"
+      Verification: [ -f report.txt ] && ! grep -q "forbidden-token" report.txt && echo "PASS: forbidden-token absent"
 
 - [ ] Report contains no missing-verdict occurrence
-      Verification: ! grep -q "missing-verdict" report.txt && echo "PASS: missing-verdict absent"
+      Verification: [ -f report.txt ] && ! grep -q "missing-verdict" report.txt && echo "PASS: missing-verdict absent"
 ```
 
 ## AC verification layer
