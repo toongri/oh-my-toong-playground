@@ -117,6 +117,18 @@ Either field may be omitted when:
 
 When mutations cross persistent boundaries (DB, filesystem outside `/tmp`, simulator state), Setup and Cleanup are STRONGLY recommended.
 
+## Execution Semantics
+
+Setup, Verification, and Cleanup blocks share a single shell session by contract. Variables set in earlier blocks (Setup, Verification) are visible to later blocks (Cleanup). The executor runs them as a chained expression or within the same shell process, NOT as separate `bash -c` invocations.
+
+This contract enables the canonical pattern:
+
+- Setup creates a resource and exports its ID
+- Verification reads the resource using the exported ID
+- Cleanup deletes the resource using the same ID
+
+Even with this contract, defensive Cleanup guards against unset/empty IDs (in case Verification fails before assignment): `[ -n "$id" ] && curl -X DELETE ".../$id" || true`. The guard prevents a destructive collapse to a collection endpoint URL when the resource was never created.
+
 ## Counter-Example: Fixing a Batch AC
 
 ### Bad
@@ -230,7 +242,7 @@ When the Verification can be expressed as a runnable command, prefer one that is
 
 - [ ] **POST /api/users (201) returns the same record on subsequent GET**
       **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "http://localhost:8080/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
-      **Cleanup**: `curl -fsS -X DELETE "http://localhost:8080/api/users/$id" > /dev/null || true`
+      **Cleanup**: `[ -n "$id" ] && curl -fsS -X DELETE "http://localhost:8080/api/users/$id" > /dev/null || true`
 
 ### Text scan (grep) — for spec/log/output content
 
