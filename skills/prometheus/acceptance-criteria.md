@@ -154,6 +154,18 @@ Forbidden patterns:
 | `verify_cmd && cleanup_cmd` | Skips Cleanup on verification failure → resource leak |
 | `verify_cmd; cleanup_cmd` | Cleanup's exit code masks verification failure → false PASS |
 
+## Executor-Provided Variables
+
+AC Verification commands may reference ambient variables listed below. The executor (Argus) guarantees these are exported before any Verification line runs. AC text must NOT inline the derivation of these variables — derivation lives with the executor as the single source of truth.
+
+| Variable | Scope | Provided by |
+|----------|-------|-------------|
+| `$API_BASE_URL` | HTTP API ACs | Argus Stage 3 (server boot) |
+| `$IOS_UDID` | iOS mobile ACs | Argus Stage 3.5 (simulator boot) |
+| `$ANDROID_SERIAL` | Android mobile ACs | Argus Stage 3.5 (emulator boot) |
+
+Adding a new contract variable requires (1) updating this table and (2) ensuring the executor exports it in the corresponding Stage. New variables should be introduced only when at least two AC kinds reference them; otherwise inline.
+
 ## Counter-Example: Fixing a Batch AC
 
 ### Bad
@@ -257,6 +269,8 @@ When the Verification can be expressed as a runnable command, prefer one that is
       **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit`
       (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
+> Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by Argus Stage 3.5 — see § Executor-Provided Variables above.
+
 ### Web UI E2E (playwright)
 
 - [ ] **Login with valid credentials lands on Home and shows username**
@@ -266,8 +280,8 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### HTTP API (curl + jq)
 
 - [ ] **POST /api/users (201) returns the same record on subsequent GET**
-      **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST http://localhost:8080/api/users -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "http://localhost:8080/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
-      **Cleanup**: `[ -n "$id" ] && curl -fsS -X DELETE "http://localhost:8080/api/users/$id" > /dev/null || true`
+      **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "$API_BASE_URL/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
+      **Cleanup**: `[ -n "$id" ] && curl -fsS -X DELETE "$API_BASE_URL/api/users/$id" > /dev/null || true`
 
 ### Text scan (grep) — for spec/log/output content
 
