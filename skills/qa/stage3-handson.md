@@ -64,6 +64,18 @@ After ALL verification completes (pass or fail):
 | Server crashes during test | REQUEST_CHANGES ("server crashed during verification") |
 | Server won't stop | Kill process forcefully, report as finding |
 
+### Modality-Specific Primitives
+
+The lifecycle steps above describe the general pattern. Each modality requires specific primitives:
+
+| Modality | Start | Wait for ready | Stop |
+|----------|-------|----------------|------|
+| HTTP server | `run_in_background` with start command | health check endpoint, port listening, or startup log | `kill <pid>` of background process |
+| iOS Simulator | `xcrun simctl bootstatus "$IOS_UDID" -b` (idempotent) | bootstatus returns 0 | `xcrun simctl shutdown "$IOS_UDID"` (delete only when created per-workspace) |
+| Android Emulator | `emulator -avd <name> ... >/tmp/emulator-<port>.log 2>&1 &` | `adb get-state` + `getprop sys.boot_completed` with bounded `SECONDS` deadline | `adb -s "$ANDROID_SERIAL" emu kill` |
+
+Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives.
+
 ---
 
 ## Step 3.3: API Verification (curl)
@@ -140,11 +152,14 @@ curl -s http://localhost:{port}/endpoint | jq .
    - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
      ```bash
      export ANDROID_SERIAL="emulator-${PORT:-5554}"
-     emulator -avd <name> -port "${PORT:-5554}" -no-window -no-boot-anim &
+     emulator -avd <name> -port "${PORT:-5554}" -no-window -no-boot-anim >/tmp/emulator-${PORT:-5554}.log 2>&1 &
      SECONDS=0; until adb get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
      SECONDS=0; until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
-3. Run the flow with explicit output path: `maestro test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`, where `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/task-<N>-maestro-<flow>.xml`).
+3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/task-<N>-maestro-<flow>.xml`):
+   - iOS: `maestro test --device "$IOS_UDID" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
+   - Android: `maestro test --device "$ANDROID_SERIAL" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
+   Device binding is mandatory even in single-device sessions to keep evidence deterministic across parallel runs.
 4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
 
 ### Parallel Workspace Isolation
@@ -173,6 +188,24 @@ When multiple Argus runs may execute concurrently (parallel git worktrees, CI ma
 ### Real-Device Escalation
 
 Items requiring physical hardware (push delivery, biometric enrollment, camera, sensors, performance/jank, OEM-specific behavior) are out of scope for this stage's simulator/emulator verification — escalate to a device farm in nightly/release pipelines.
+
+### Teardown
+
+After all maestro verification completes (pass or fail):
+
+- **iOS — parallel-workspace mode** (created via `xcrun simctl create "argus-$WORKSPACE" ...`):
+  ```bash
+  xcrun simctl shutdown "$IOS_UDID" 2>/dev/null
+  xcrun simctl delete "$IOS_UDID" 2>/dev/null
+  ```
+- **iOS — shared simulator mode** (reused existing `iPhone 16` device): no teardown — the device persists across runs by design.
+- **Android**:
+  ```bash
+  adb -s "$ANDROID_SERIAL" emu kill 2>/dev/null
+  ```
+  Fallback if the device was unreachable: `pkill -f "emulator.*-port ${PORT:-5554}"`.
+
+Skip teardown only when boot was idempotent and the device was reused, not created. Leaked simulators accumulate disk space; leaked emulator processes block port reuse on subsequent runs.
 
 ---
 
@@ -243,9 +276,9 @@ If ANY verification fails:
 
 ## Maintenance: Adding a New Tool Modality
 
-When introducing a new hands-on verification tool (e.g., `maestro` for Mobile), touch all 6 locations below. Missing any one location causes partial-update defects.
+When introducing a new hands-on verification tool (e.g., `maestro` for Mobile), touch all 7 rows below. Missing any one location causes partial-update defects.
 
-Items 1 (Decision Logic) and 2 (new Step section) are consolidated into a single row — both live in this file and are edited in the same pass.
+Row 1 bundles two related edits in this file — the Decision Logic table and the new `## Step 3.N` section — because both are touched in the same editing pass.
 
 | # | Location | What to update | Grep target |
 |---|----------|---------------|-------------|
@@ -255,3 +288,4 @@ Items 1 (Decision Logic) and 2 (new Step section) are consolidated into a single
 | 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "^### Applicability\|^## Quick Reference\|user-facing changes, no scenarios" skills/qa/SKILL.md` |
 | 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -n "Tool.*curl\|Tool.*playwright\|Tool.*maestro" skills/prometheus/plan-template.md` |
 | 6 | `skills/prometheus/acceptance-criteria.md` § Verification Examples by Tool | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
+| 7 | `skills/qa/stage3-handson.md` § Step 3.N Teardown | Document the teardown command for the new modality (process kill, resource delete, or "no teardown — runner-native cleanup") | `grep -n "Teardown\|simctl delete\|emu kill\|kill <pid>" stage3-handson.md` |
