@@ -134,25 +134,27 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 
 ```
 - [ ] Report contains no forbidden-token occurrence
-      Verification: grep -q "forbidden-token" report.txt && echo "FAIL: forbidden-token present" || echo "PASS: forbidden-token absent"
+      Verification: ! grep -q "forbidden-token" report.txt && echo "PASS: forbidden-token absent"
 
 - [ ] Report contains no missing-verdict occurrence
-      Verification: grep -q "missing-verdict" report.txt && echo "FAIL: missing-verdict present" || echo "PASS: missing-verdict absent"
+      Verification: ! grep -q "missing-verdict" report.txt && echo "PASS: missing-verdict absent"
 ```
 
 ## AC verification layer
 
-AC는 산출물이 *소비자에게 가치 있는가*를 측정한다. "소비자"는 task에 따라 달라진다:
+AC measures whether the deliverable is *valuable to its consumer*. "Consumer" varies per task:
 
-| 산출물 종류 | 소비자 | AC 검증 레이어 |
+| Deliverable type | Consumer | AC verification layer |
 |-------------|--------|----------------|
-| 모바일 기능 | 최종 사용자 | UI scenario (Maestro) |
-| 웹 기능 | 최종 사용자 | UI scenario (Playwright) |
+| Mobile feature | End user | UI scenario (Maestro) |
+| Web feature | End user | UI scenario (Playwright) |
 | HTTP API | API client | integration (curl + jq) |
-| CLI 명령 | shell 사용자 | command exec + stdout 검증 |
-| Library 함수 | 호출하는 개발자/에이전트 | unit test 가능 (정당화 필수) |
+| CLI command | shell user | command exec + stdout assertion |
+| Library function | calling developer or agent | unit test allowed (justification required) |
 
-원칙: **소비자가 관찰하는 가장 외곽 표면에서 검증한다.** 내부 구현 단위 검증(`*.test.ts`)은 implementation evidence이지 default AC가 아니다 — `## Verification Transparency Rule`의 "Implementation test files" caveat 참조.
+> Terminology: this spec uses **consumer boundary** consistently — equivalent to "consumer-facing surface" or hexagonal architecture's "outer ring".
+
+Principle: **verify at the consumer boundary the consumer observes.** Internal unit verification (`*.test.ts`) is implementation evidence, not default AC — see [Implementation test files caveat](#implementation-test-files-caveat).
 
 ### AC self-check (mandatory before finalizing)
 
@@ -160,7 +162,7 @@ Run this checklist on every AC before proposing to the user:
 
 - [ ] If this verification passes, does the consumer actually receive value?
 - [ ] Does an implementation exist that passes this verification vacuously? If yes, the verification layer is too deep — move outward.
-- [ ] If citing a unit test as AC, did you justify the unit as consumer-facing (per the three questions in Implementation test files caveat)?
+- [ ] If citing a unit test as AC, did you justify the unit as consumer-facing (per the three questions in [Implementation test files caveat](#implementation-test-files-caveat))?
 
 **Anti-tautology rule**: Prometheus (planner) must specify the assertion's input/output or behavioral constraint in the AC itself. Do not delegate "what counts as a passing test" to Sisyphus-junior (executor) — that creates meta-circular verification.
 
@@ -175,11 +177,13 @@ A reviewer must be able to answer four questions from the AC text alone:
 
 **Scenario files** (executable specifications) are valid Setup/Verification primitives — the file content IS the contract, auditable in standard tool syntax. These describe user/external-observable behavior directly. Examples: `.maestro/*.yaml`, Playwright `tests/e2e/*.spec.ts`.
 
-**Implementation test files** (Jest/Vitest `*.test.ts` or `*.spec.ts`) verify internal units. **They are NOT default AC primitives** — they are implementation evidence. A unit test can be cited as AC verification only when the unit IS the consumer-facing surface (CLI utility export, public library API, pure transformation function). When citing a unit test as AC, the AC must specify:
+### Implementation test files (caveat)
+
+(Jest/Vitest `*.test.ts` or `*.spec.ts`) verify internal units. **They are NOT default AC primitives** — they are implementation evidence. A unit test can be cited as AC verification only when the unit IS the consumer boundary (CLI utility export, public library API, pure transformation function). When citing a unit test as AC, the AC must specify:
 
 1. Who is the consumer of this unit?
 2. Where is this unit invoked directly (file:line citation)?
-3. Why is this unit the outer ring (not internal helper)?
+3. Why is this unit the consumer boundary (not internal helper)?
 
 **Always anti-pattern**:
 - Pre-seeded shared infrastructure state (rows that "just exist", magic IDs, shared dev accounts)
@@ -191,7 +195,7 @@ A reviewer must be able to answer four questions from the AC text alone:
 
 Before writing the AC, work through this sequence:
 
-1. **Choose the tool that observes the target state at the consumer boundary.** UI flow → maestro/playwright. HTTP API behavior → curl + jq. CLI behavior → command exec + stdout assertion. File content → grep. Internal function logic → implementation test runner (NOT AC by default — see Implementation test files caveat). Don't default to the first tool you know; default to the consumer's observation surface.
+1. **Choose the tool that observes the target state at the consumer boundary.** UI flow → maestro/playwright. HTTP API behavior → curl + jq. CLI behavior → command exec + stdout assertion. File content → grep. Internal function logic → implementation test runner (NOT AC by default — see [Implementation test files caveat](#implementation-test-files-caveat)). Don't default to the first tool you know; default to the consumer boundary.
 
 2. **If the Command API doesn't echo final state, chain a Query API.** POST → 202 → GET /resource/$id → assert. Verification observes the state, not just the action's side effect.
 
@@ -231,7 +235,7 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### Text scan (grep) — for spec/log/output content
 
 - [ ] **Forbidden token absent from report**
-      **Verification**: `grep -q "forbidden-token" report.txt && echo FAIL || echo PASS`
+      **Verification**: `! grep -q "forbidden-token" report.txt`
 
 ### CLI exec + stdout
 
@@ -240,19 +244,20 @@ When the Verification can be expressed as a runnable command, prefer one that is
 
 ### Implementation test runner (caveat — NOT default AC)
 
-Unit/integration test runners (`bun test ...`, `vitest ...`) are **implementation evidence**, not default AC primitives. They can be cited as AC verification ONLY when the tested unit IS the consumer-facing surface — see "Implementation test files" caveat in `## Verification Transparency Rule`.
+Unit/integration test runners (`bun test ...`, `vitest ...`) are **implementation evidence**, not default AC primitives. They can be cited as AC verification ONLY when the tested unit IS the consumer boundary — see [Implementation test files caveat](#implementation-test-files-caveat).
 
 Legitimate use (unit IS the consumer surface):
 
 - [ ] **`splitCommand` (public library export) preserves quoted arguments as a single token**
       **Verification**: `bun test tests/splitCommand.test.ts -t "preserves quoted args"`
-      Consumer: library callers (other developers/agents) invoking via `import { splitCommand } from '...'`. Outer ring = exported function signature.
+      Consumer: library callers (other developers/agents) invoking via `import { splitCommand } from '...'`. Consumer boundary = exported function signature.
 
 Illegitimate use (unit is internal helper):
 
-- ~~[ ] **`UserService.create` rejects duplicate email**~~
-      ~~Verification: Unit test asserts result when repository returns existing user~~
-      → instead, verify at the HTTP boundary that `POST /api/users` with duplicate email returns 409. The internal method behavior is implementation evidence.
+> ~~**`UserService.create` rejects duplicate email**~~
+> ~~Verification: Unit test asserts result when repository returns existing user~~
+
+→ instead, verify at the HTTP boundary that `POST /api/users` with duplicate email returns 409. The internal method behavior is implementation evidence.
 
 ## Example
 
