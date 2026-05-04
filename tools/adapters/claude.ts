@@ -9,6 +9,7 @@ import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
 import { deepMerge } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
+import { isGlobalSync } from "../lib/path-utils.ts";
 
 // =============================================================================
 // Plugin installer type (for DI in tests)
@@ -135,7 +136,7 @@ export class ClaudeAdapter implements PlatformAdapter {
         command:
           h.command && h.command !== ""
             ? h.command
-            : `$CLAUDE_PROJECT_DIR/.claude/hooks/${h.display_name ?? ""}`,
+            : `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/.claude/hooks/${h.display_name ?? ""}`,
         prompt: h.prompt,
         timeout: h.timeout ?? 10,
       }));
@@ -430,16 +431,17 @@ export class ClaudeAdapter implements PlatformAdapter {
                   hasIndexSh = true;
                 } catch { /* empty */ }
 
+                const hookPrefix = isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR";
                 if (hasIndexTs) {
-                  cmdPath = `bun run $CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}/index.ts`;
+                  cmdPath = `bun run ${hookPrefix}/.claude/hooks/${displayName}/index.ts`;
                 } else if (hasIndexSh) {
-                  cmdPath = `bash $CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}/index.sh`;
+                  cmdPath = `bash ${hookPrefix}/.claude/hooks/${displayName}/index.sh`;
                 } else {
                   logWarn(`Hook 디렉토리에 index.ts/index.sh 없음: ${resolvedSourcePath} (스킵)`);
                   continue;
                 }
               } else {
-                cmdPath = `$CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}`;
+                cmdPath = `${isGlobalSync(targetPath) ? "$HOME" : "$CLAUDE_PROJECT_DIR"}/.claude/hooks/${displayName}`;
               }
             } else {
               logWarn(`Hook command 미정의: event=${hookEvent} (스킵)`);
