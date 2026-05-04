@@ -52,7 +52,7 @@ To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>`
 | **code changes present** | Code changes present | Automated checks (build/test/lint) + Code quality (checklists.md) |
 | **spec or AC provided** | Request content includes specification or acceptance criteria | Verify implementation against provided criteria |
 | **QA scenarios provided** | Request content includes executable test scenarios | Execute scenarios as specified, collect evidence |
-| **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/bash (see stage3-handson.md) |
+| **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/maestro/bash (see stage3-handson.md) |
 
 ### Composition Examples
 
@@ -114,7 +114,7 @@ Evidence files are the audit trail. Downstream gates check for their existence b
 
 | Output Type | Disposition | Examples |
 |-------------|-------------|---------|
-| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright screenshots, CLI execution logs |
+| Objective command output | Save to file | build/test/lint logs, curl response body + status, Playwright/Maestro screenshots and test reports, CLI execution logs |
 | Subjective judgment | Response only (no file) | Code review analysis, MUST DO checklist verdicts, Scope Boundary calculations, feedback comments |
 
 ### Evidence File Content Requirements
@@ -137,10 +137,10 @@ Resolve the evidence file path in this order — use the first match:
 2. **Plan QA Scenario Evidence field** — the scenario definition includes an `Evidence:` field with a path (see [plan-template.md QA Scenarios](../prometheus/plan-template.md#qa-scenarios-mandatory-per-todo))
 3. **Auto-generated path (fallback)** — no explicit path provided; generate:
    ```
-   $OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}
+   $OMT_DIR/evidence/{work-slug}/{task-slug}/{check-slug}.{ext}
    ```
    - `{work-slug}`: URL-safe slug for the current work unit (provided by orchestrator, or derived from task/plan name)
-   - `{N}`: task number
+   - `{task-slug}`: short URL-safe slug derived from the caller's TaskCreate subject. When Tier 1 provides a full path, save to that path verbatim; never re-derive the slug.
    - `{check-slug}`: URL-safe slug derived from the verification description (e.g., `npm-test`, `build`, `curl-post-users`)
    - `{ext}`: file extension by domain (`.txt` for CLI/test output, `.json` for API responses, `.png` for screenshots)
 
@@ -152,9 +152,9 @@ After all verification is complete, include a `## Evidence Files` section in the
 
 ```
 ## Evidence Files
-- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-build.txt
-- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-npm-test.txt
-- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-curl-post-users.json
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/implement-user-service/build.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/implement-user-service/npm-test.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/implement-user-service/curl-post-users.json
 ```
 
 **IMPORTANT**: `$OMT_DIR` must be expanded to its absolute path in the response. Report fully resolved absolute paths only — downstream audit gates perform physical file existence checks on these paths.
@@ -168,6 +168,23 @@ The **spec or AC provided** trigger (when activated with no executable commands 
 ### Fast-Path Exception
 
 Fast-path reviews (single-line edits, obvious typos) skip automated checks and hands-on QA. No commands executed = no evidence files expected.
+
+---
+
+## Command Execution Policy: Non-Blocking Only
+
+Argus is a non-interactive headless verifier. Every command Argus runs MUST return control to the shell when finished or be explicitly backgrounded. Foreground processes that occupy the agent shell indefinitely are **forbidden**.
+
+See `stage3-handson.md` Step 3.2: "Run the server/application in background using `run_in_background`" — that same rule applies to all commands Argus executes.
+
+| Pattern | Status | Example |
+|---------|--------|---------|
+| Command exits on completion | Allowed | `bun test`, `curl http://localhost:8080/health` |
+| Command backgrounded via tool | Allowed | `run_in_background` with `emulator -avd Pixel_9` |
+| Command backgrounded in shell with output redirection | Allowed | `emulator -avd Pixel_9 >/tmp/emulator.log 2>&1 &` |
+| Bare blocking command | **FORBIDDEN** | `emulator -avd Pixel_9` (hangs the shell indefinitely) |
+
+**Rule**: if a command does not terminate on its own, it MUST be launched with `run_in_background`, OR with a trailing `&` AND output redirected to a file or `/dev/null`. A bare `cmd &` without redirection inherits stdout/stderr from the agent shell — the harness then waits on the inherited file descriptors until the backgrounded process exits, hanging the agent. Bare blocking processes (no `&`, no `run_in_background`) are forbidden.
 
 ---
 
@@ -282,6 +299,7 @@ This trigger activates when changes affect user-facing behavior AND the request 
 |-------------|---------------------|------|
 | API endpoint | HTTP request verification | `curl` |
 | Frontend / UI | Browser interaction verification | `playwright` |
+| Mobile / App | iOS Simulator / Android Emulator E2E | `maestro` |
 | CLI / TUI | Command execution verification | Interactive Bash |
 | Internal logic only | N/A (skip this trigger) | - |
 
@@ -378,7 +396,7 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 code changes present:              Automated checks (Build, Test, Lint) + Code Quality
 spec or AC provided:               Spec/AC compliance (vs QA REQUEST Spec)
 QA scenarios provided:             Execute provided scenarios + collect evidence
-user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, CLI→interactive_bash)
+user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, Mobile→maestro, CLI→interactive_bash)
 
 Automated checks: See stage1-commands.md
 Hands-On QA:      See stage3-handson.md

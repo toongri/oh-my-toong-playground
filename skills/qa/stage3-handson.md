@@ -16,6 +16,7 @@ Verify user-facing behavior by actually running the changed code. This is not op
 |------------------|-------------|--------|
 | API endpoint, route, handler, REST, HTTP | API | Verify with `curl` |
 | UI, page, component, frontend, render | Frontend | Verify with `playwright` |
+| Mobile, app, iOS, Android, simulator, emulator | Mobile | Verify with `maestro` |
 | CLI command, terminal output, TUI, interactive | CLI / TUI | Verify with interactive Bash |
 | Refactoring, internal logic, utility, helper, config | Internal only | **Skip Stage 3** |
 | Documentation, markdown, comments only | Non-code | **Skip Stage 3** |
@@ -44,6 +45,7 @@ Stage 3 Result: SKIPPED (internal logic only / non-code change)
 2. Run the server/application in background using `run_in_background`
 3. Wait for readiness (health check endpoint, port listening, or startup log message)
 4. If startup fails after reasonable timeout, report as Stage 3 FAIL
+5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands referencing the [Executor-Provided Variables](../prometheus/acceptance-criteria.md#executor-provided-variables) contract resolve correctly.
 
 ### Stop
 
@@ -62,6 +64,18 @@ After ALL verification completes (pass or fail):
 | Server won't start | REQUEST_CHANGES ("server fails to start") |
 | Server crashes during test | REQUEST_CHANGES ("server crashed during verification") |
 | Server won't stop | Kill process forcefully, report as finding |
+
+### Modality-Specific Primitives
+
+The lifecycle steps above describe the general pattern. Each modality requires specific primitives:
+
+| Modality | Start | Wait for ready | Stop |
+|----------|-------|----------------|------|
+| HTTP server | `run_in_background` with start command | health check endpoint, port listening, or startup log | `kill <pid>` of background process |
+| iOS Simulator | `xcrun simctl bootstatus "$IOS_UDID" -b` (idempotent) | bootstatus returns 0 | `xcrun simctl shutdown "$IOS_UDID"` (delete only when created per-workspace) |
+| Android Emulator | `emulator -avd <name> ... >/tmp/emulator-<port>.log 2>&1 &` | `adb -s "$ANDROID_SERIAL" get-state` + `adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed` with bounded `SECONDS` deadline | `adb -s "$ANDROID_SERIAL" emu kill` |
+
+Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives.
 
 ---
 
@@ -121,7 +135,82 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ---
 
-## Step 3.5: CLI / TUI Verification (Interactive Bash)
+## Step 3.5: Mobile App Verification (maestro)
+
+**Verify mobile app behavior with `maestro` on iOS Simulator / Android Emulator.**
+
+### Procedure
+
+1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
+2. Boot the target simulator/emulator before the test:
+   - **iOS**: derive UDID first (idempotent — `bootstatus -b` boots if needed, waits until fully booted, exits 0 if already booted):
+     ```bash
+     IOS_UDID=$(xcrun simctl list devices available -j | jq -r '.devices | to_entries[] | .value[] | select(.name=="iPhone 16") | .udid' | head -1)
+     [ -n "$IOS_UDID" ] || { echo "iPhone 16 simulator not available" >&2; exit 1; }
+     xcrun simctl bootstatus "$IOS_UDID" -b
+     export IOS_UDID
+     ```
+   - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
+     ```bash
+     export ANDROID_SERIAL="emulator-${EMULATOR_PORT:-5554}"
+     emulator -avd <name> -port "${EMULATOR_PORT:-5554}" -no-window -no-boot-anim >/tmp/emulator-${EMULATOR_PORT:-5554}.log 2>&1 &
+     SECONDS=0; until adb -s "$ANDROID_SERIAL" get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
+     SECONDS=0; until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
+     ```
+3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
+   - iOS: `maestro --device "$IOS_UDID" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
+   - Android: `maestro --device "$ANDROID_SERIAL" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
+   Device binding is mandatory even in single-device sessions to keep evidence deterministic across parallel runs.
+4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
+
+### Parallel Workspace Isolation
+
+When multiple Argus runs may execute concurrently (parallel git worktrees, CI matrix), each MUST target a distinct device instance — sharing a single emulator across concurrent flows corrupts app state.
+
+- iOS: create a per-workspace device, then use the same UDID-derived boot pattern as Step 2 above:
+  ```bash
+  IOS_UDID=$(xcrun simctl create "argus-$WORKSPACE" "iPhone 16")
+  xcrun simctl bootstatus "$IOS_UDID" -b
+  export IOS_UDID
+  ```
+- Android: name a per-workspace AVD or pass `-port` to differentiate
+- Pass the device id explicitly: `maestro --device <udid> test .maestro/<flow>.yaml`
+
+**Lighter alternative**: a single shared simulator with `clearState: true` at flow start (Maestro built-in) — avoids per-workspace boot overhead, but trades off cross-flow filesystem/keychain isolation. Use when flows self-reset state.
+
+### Verification Criteria
+
+| Criterion | Pass Condition |
+|-----------|----------------|
+| Flow completes | All maestro steps `✓`, no `✗` |
+| Element assertion | `assertVisible` / `assertNotVisible` matches expected screen state |
+| Navigation | Screen transitions reach expected destination |
+
+### Real-Device Escalation
+
+Items requiring physical hardware (push delivery, biometric enrollment, camera, sensors, performance/jank, OEM-specific behavior) are out of scope for this stage's simulator/emulator verification — escalate to a device farm in nightly/release pipelines.
+
+### Teardown
+
+After all maestro verification completes (pass or fail):
+
+- **iOS — parallel-workspace mode** (created via `xcrun simctl create "argus-$WORKSPACE" ...`):
+  ```bash
+  xcrun simctl shutdown "$IOS_UDID" 2>/dev/null
+  xcrun simctl delete "$IOS_UDID" 2>/dev/null
+  ```
+- **iOS — shared simulator mode** (reused existing `iPhone 16` device): no teardown — the device persists across runs by design.
+- **Android**:
+  ```bash
+  adb -s "$ANDROID_SERIAL" emu kill 2>/dev/null
+  ```
+  Fallback if the device was unreachable: `pkill -f "emulator.*-port ${EMULATOR_PORT:-5554}"`.
+
+Skip teardown only when boot was idempotent and the device was reused, not created. Leaked simulators accumulate disk space; leaked emulator processes block port reuse on subsequent runs.
+
+---
+
+## Step 3.6: CLI / TUI Verification (Interactive Bash)
 
 **Verify CLI output and behavior by executing commands directly.**
 
@@ -147,7 +236,7 @@ curl -s http://localhost:{port}/endpoint | jq .
 ```markdown
 ## Stage 3: Hands-On QA
 
-**Applicability:** [API / Frontend / CLI / SKIPPED (reason)]
+**Applicability:** [API / Frontend / Mobile / CLI / SKIPPED (reason)]
 
 | Verification | Status | Details |
 |--------------|--------|---------|
@@ -183,3 +272,21 @@ If ANY verification fails:
 | "It worked in the test suite" | Test suite mocks may hide real integration issues. |
 | "No test data available" | Create minimal test data. No excuses. |
 | "Skip for internal changes" | If truly internal, document skip. Don't use as escape hatch. |
+
+---
+
+## Maintenance: Adding a New Tool Modality
+
+When introducing a new hands-on verification tool (e.g., `maestro` for Mobile), touch all 7 rows below. Missing any one location causes partial-update defects.
+
+Row 1 bundles two related edits in this file — the Decision Logic table and the new `## Step 3.N` section — because both are touched in the same editing pass.
+
+| # | Location | What to update | Grep target |
+|---|----------|---------------|-------------|
+| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; insert a new `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable. Renumbering adjacent sections is allowed when grouped placement improves coherence — when renumbering, update all in-file cross-references in the same edit pass. | `grep -nE "Decision Logic|Step 3\." stage3-handson.md` |
+| 2 | `skills/qa/stage3-handson.md` § Stage 3 Output Format (Applicability enum) | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
+| 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -nE "Trigger|maestro|playwright|curl" skills/qa/SKILL.md` |
+| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -nE "^### Applicability|^## Quick Reference|user-facing changes, no scenarios" skills/qa/SKILL.md` |
+| 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -nE "Tool.*(curl|playwright|maestro)" skills/prometheus/plan-template.md` |
+| 6 | `skills/prometheus/acceptance-criteria.md` § Verification Examples by Tool | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
+| 7 | `skills/qa/stage3-handson.md` § Step 3.N Teardown | Document the teardown command for the new modality (process kill, resource delete, or "no teardown — runner-native cleanup") | `grep -nE "Teardown|simctl delete|emu kill|kill <pid>" stage3-handson.md` |

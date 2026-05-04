@@ -93,12 +93,12 @@ Any condition fails → decompose further.
 
 Each scenario uses a structured block with 7 fields:
 - **Scenario**: `{Name} — {Purpose}`
-- **Tool**: CLI command (`curl`, `bun test`, `playwright`, `grep` — NOT descriptions like "Header validation")
-- **Preconditions**: Setup state required
+- **Tool**: CLI command (`curl`, `bun test`, `playwright`, `maestro`, `grep` — NOT descriptions like "Header validation")
+- **Preconditions**: Setup state required (scenario-level; for per-AC state mutation that needs teardown, use the [Setup/Cleanup](./acceptance-criteria.md#state-mutation-setup--cleanup) fields instead)
 - **Steps**: Numbered list of exact commands
 - **Expected**: Observable outcome on success
 - **Failure**: Specific failure symptoms (NOT "Expected does not happen")
-- **Evidence**: `$OMT_DIR/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}`
+- **Evidence**: `$OMT_DIR/evidence/{plan-name}/{task-slug}/{scenario-slug}.{ext}`
 
 **Minimum 2 scenarios per TODO**: happy path + failure/edge case.
 
@@ -129,31 +129,33 @@ Each scenario uses a structured block with 7 fields:
   - Blocks: TODO 5
   - Wave: 2
   - Acceptance Criteria:
-    - [ ] **UserService create rejects duplicate email**: Returns `{success: false, error: 'DUPLICATE_EMAIL'}`
-          **Verification**: Unit test asserts result when repository returns existing user
+    - [ ] **POST /api/users with a duplicate email responds 409 DUPLICATE_EMAIL on the second request**
+          **Setup**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ]`
+          **Verification**: `resp=$(curl -s -w '\n%{http_code}' -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && code=$(echo "$resp" | tail -n1) && body=$(echo "$resp" | sed '$d') && [ "$code" = "409" ] && echo "$body" | jq -e '.error == "DUPLICATE_EMAIL"'`
+          **Cleanup**: `[ -n "$id" ] && [ "$id" != "null" ] && curl -fsS -X DELETE "$API_BASE_URL/api/users/$id" > /dev/null 2>&1 || true`
     - QA Scenarios:
 
     Scenario: Happy path — create user
       Tool: curl
       Preconditions: Server running, DB migrated, users table empty
       Steps:
-        1. `curl -s -o response.json -w "%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
+        1. `curl -s -o response.json -w "%{http_code}" -X POST "$API_BASE_URL/api/users" -H "Content-Type: application/json" -d '{"email":"test@example.com","name":"Test User"}'`
         2. Assert status is `201`
         3. Assert `response.json` contains `"id"` (UUID) and `"email":"test@example.com"`
       Expected: 201 with JSON body containing id, email, name
       Failure: Non-201 status, or response missing `id` field
-      Evidence: $OMT_DIR/evidence/{plan-name}/task-3-create-user-201.json
+      Evidence: $OMT_DIR/evidence/{plan-name}/implement-user-service/create-user-201.json
 
     Scenario: Validation failure — missing email
       Tool: curl
       Preconditions: Server running
       Steps:
-        1. `curl -s -o response.json -w "%{http_code}" -X POST http://localhost:3000/api/users -H "Content-Type: application/json" -d '{"name":"No Email"}'`
+        1. `curl -s -o response.json -w "%{http_code}" -X POST "$API_BASE_URL/api/users" -H "Content-Type: application/json" -d '{"name":"No Email"}'`
         2. Assert status is `400`
         3. Assert `response.json` contains `"error"` referencing `"email"`
       Expected: 400 with error referencing missing email
       Failure: Non-400 status, or error not mentioning email
-      Evidence: $OMT_DIR/evidence/{plan-name}/task-3-validation-failure.json
+      Evidence: $OMT_DIR/evidence/{plan-name}/implement-user-service/validation-failure.json
 ```
 
 ## Execution Strategy Example

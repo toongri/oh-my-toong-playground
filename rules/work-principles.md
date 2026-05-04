@@ -7,6 +7,20 @@
 - Mark tasks `completed` immediately after finishing — no batching, no delay.
 - If a task reveals subtasks, create them right away.
 
+## MANDATORY: Think Before Acting
+
+Before any tool call, file edit, or delegation:
+- Pause and think deeply about what is actually being asked.
+- Decompose: WHAT must be done, and HOW does it satisfy the requirement?
+- Plan in steps, then execute one step at a time — never act on impulse.
+- Brief or terse instructions ("진행해", "just do it") suppress narration, not the thinking itself.
+
+## MANDATORY: Simplicity First
+
+- The simpler form wins, always. When two approaches achieve the same outcome, take the one with fewer lines, fewer abstractions, fewer code paths.
+- Speculative defensiveness — fallbacks, abstractions, configurability for unproven scenarios — is forbidden unless tied to a concrete current trigger.
+- When uncertain between adding *defensive* logic and removing it: remove. Default to deletion of speculative additions, not of code with verified callers.
+
 ## Analytical Stance
 
 - Lead with objective facts and critical analysis, not emotional validation.
