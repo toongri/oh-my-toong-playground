@@ -130,7 +130,8 @@ Each scenario uses a structured block with 7 fields:
   - Wave: 2
   - Acceptance Criteria:
     - [ ] **POST /api/users with a duplicate email responds 409 DUPLICATE_EMAIL on the second request**
-          **Verification**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && resp=$(curl -s -w '\n%{http_code}' -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && code=$(echo "$resp" | tail -n1) && body=$(echo "$resp" | sed '$d') && [ "$code" = "409" ] && echo "$body" | jq -e '.error == "DUPLICATE_EMAIL"'`
+          **Setup**: `email="dup-$(uuidgen)@x.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ]`
+          **Verification**: `resp=$(curl -s -w '\n%{http_code}' -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}") && code=$(echo "$resp" | tail -n1) && body=$(echo "$resp" | sed '$d') && [ "$code" = "409" ] && echo "$body" | jq -e '.error == "DUPLICATE_EMAIL"'`
           **Cleanup**: `[ -n "$id" ] && [ "$id" != "null" ] && curl -fsS -X DELETE "$API_BASE_URL/api/users/$id" > /dev/null 2>&1 || true`
     - QA Scenarios:
 
