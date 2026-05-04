@@ -137,10 +137,10 @@ Resolve the evidence file path in this order — use the first match:
 2. **Plan QA Scenario Evidence field** — the scenario definition includes an `Evidence:` field with a path (see [plan-template.md QA Scenarios](../prometheus/plan-template.md#qa-scenarios-mandatory-per-todo))
 3. **Auto-generated path (fallback)** — no explicit path provided; generate:
    ```
-   $OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}
+   $OMT_DIR/evidence/{work-slug}/{task-slug}/{check-slug}.{ext}
    ```
    - `{work-slug}`: URL-safe slug for the current work unit (provided by orchestrator, or derived from task/plan name)
-   - `{N}`: task number
+   - `{task-slug}`: short URL-safe slug derived from the caller's TaskCreate subject. When Tier 1 provides a full path, save to that path verbatim; never re-derive the slug.
    - `{check-slug}`: URL-safe slug derived from the verification description (e.g., `npm-test`, `build`, `curl-post-users`)
    - `{ext}`: file extension by domain (`.txt` for CLI/test output, `.json` for API responses, `.png` for screenshots)
 
@@ -152,9 +152,9 @@ After all verification is complete, include a `## Evidence Files` section in the
 
 ```
 ## Evidence Files
-- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-build.txt
-- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-npm-test.txt
-- /Users/dev/.omt/my-project/evidence/add-user-endpoint/task-3-curl-post-users.json
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/implement-user-service/build.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/implement-user-service/npm-test.txt
+- /Users/dev/.omt/my-project/evidence/add-user-endpoint/implement-user-service/curl-post-users.json
 ```
 
 **IMPORTANT**: `$OMT_DIR` must be expanded to its absolute path in the response. Report fully resolved absolute paths only — downstream audit gates perform physical file existence checks on these paths.

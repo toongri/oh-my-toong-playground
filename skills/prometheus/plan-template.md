@@ -98,7 +98,7 @@ Each scenario uses a structured block with 7 fields:
 - **Steps**: Numbered list of exact commands
 - **Expected**: Observable outcome on success
 - **Failure**: Specific failure symptoms (NOT "Expected does not happen")
-- **Evidence**: `$OMT_DIR/evidence/{plan-name}/task-{N}-{scenario-slug}.{ext}`
+- **Evidence**: `$OMT_DIR/evidence/{plan-name}/{task-slug}/{scenario-slug}.{ext}`
 
 **Minimum 2 scenarios per TODO**: happy path + failure/edge case.
 
@@ -143,7 +143,7 @@ Each scenario uses a structured block with 7 fields:
         3. Assert `response.json` contains `"id"` (UUID) and `"email":"test@example.com"`
       Expected: 201 with JSON body containing id, email, name
       Failure: Non-201 status, or response missing `id` field
-      Evidence: $OMT_DIR/evidence/{plan-name}/task-3-create-user-201.json
+      Evidence: $OMT_DIR/evidence/{plan-name}/implement-user-service/create-user-201.json
 
     Scenario: Validation failure — missing email
       Tool: curl
@@ -154,7 +154,7 @@ Each scenario uses a structured block with 7 fields:
         3. Assert `response.json` contains `"error"` referencing `"email"`
       Expected: 400 with error referencing missing email
       Failure: Non-400 status, or error not mentioning email
-      Evidence: $OMT_DIR/evidence/{plan-name}/task-3-validation-failure.json
+      Evidence: $OMT_DIR/evidence/{plan-name}/implement-user-service/validation-failure.json
 ```
 
 ## Execution Strategy Example

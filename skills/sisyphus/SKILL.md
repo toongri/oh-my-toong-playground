@@ -109,7 +109,8 @@ When creating the task list, also generate a **work-unit slug** — a URL-safe s
 
 - Derive from the user's request: "Fix login validation bug" → `fix-login-validation-bug`
 - Plan-based work: use the plan name as the slug
-- Evidence paths use this slug: `$OMT_DIR/evidence/{work-slug}/task-{N}-{check-slug}.{ext}`
+- Evidence paths use this format: `$OMT_DIR/evidence/{work-slug}/{task-slug}/{check-slug}.{ext}`
+- `{task-slug}` is a short URL-safe slug derived from the TaskCreate subject (e.g., "Add chaining template" → `chaining-template`). Sisyphus declares it once per task at TaskCreate time and reuses it for the lifetime of the task — never renumbered or re-derived later.
 
 The work-unit slug is passed to argus via explicit Tier 1 evidence paths in the QA REQUEST (see verification.md).
 
