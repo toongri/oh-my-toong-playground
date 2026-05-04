@@ -139,14 +139,6 @@ cleanup_cmd
 exit ${VERIFY_EXIT:-1}
 ```
 
-For multi-line cases, use `trap`:
-
-```bash
-trap 'cleanup_cmd' EXIT
-setup_cmd
-verify_cmd
-```
-
 Forbidden patterns:
 
 | Pattern | Why forbidden |
@@ -156,7 +148,7 @@ Forbidden patterns:
 
 ## Executor-Provided Variables
 
-AC Verification commands may reference ambient variables listed below. The executor (Argus) guarantees these are exported before any Verification line runs. AC text must NOT inline the derivation of these variables — derivation lives with the executor as the single source of truth.
+AC Verification commands may reference ambient variables listed below. The executor (Argus) exports these during the Stage 3 substep listed in the "Provided by" column. AC text must NOT inline the derivation of these variables — derivation lives with the executor as the single source of truth.
 
 | Variable | Scope | Provided by |
 |----------|-------|-------------|
@@ -286,7 +278,7 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### Text scan (grep) — for spec/log/output content
 
 - [ ] **Forbidden token absent from report**
-      **Verification**: `! grep -q "forbidden-token" report.txt`
+      **Verification**: `[ -f report.txt ] && ! grep -q "forbidden-token" report.txt`
 
 ### CLI exec + stdout
 
