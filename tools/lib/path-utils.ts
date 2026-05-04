@@ -17,3 +17,12 @@ export function expandTilde(p: string): string {
   if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
   return p;
 }
+
+/**
+ * Returns true when targetPath resolves to the user's home directory.
+ * Adapters use this to choose between $HOME (global sync) and $CLAUDE_PROJECT_DIR (project sync).
+ * Symlinked homedir is not followed — uses path.resolve only. If needed later, switch to fs.realpathSync.
+ */
+export function isGlobalSync(targetPath: string): boolean {
+  return path.resolve(expandTilde(targetPath)) === path.resolve(os.homedir());
+}
