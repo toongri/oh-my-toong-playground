@@ -127,7 +127,7 @@ This contract enables the canonical pattern:
 - Verification reads the resource using the exported ID
 - Cleanup deletes the resource using the same ID
 
-Even with this contract, defensive Cleanup guards against unset/empty IDs (in case Verification fails before assignment): `[ -n "$id" ] && curl -X DELETE ".../$id" || true`. The guard prevents a destructive collapse to a collection endpoint URL when the resource was never created.
+Even with this contract, defensive Cleanup guards against unset/empty IDs (in case Setup or Verification fails before assignment): `[ -n "$id" ] && curl -X DELETE ".../$id" || true`. The guard prevents a destructive collapse to a collection endpoint URL when the resource was never created.
 
 ### Required chaining template
 
@@ -152,9 +152,10 @@ AC Verification commands may reference ambient variables listed below. The execu
 
 | Variable | Scope | Provided by |
 |----------|-------|-------------|
-| `$API_BASE_URL` | HTTP API ACs | Argus Stage 3 (server boot) |
-| `$IOS_UDID` | iOS mobile ACs | Argus Stage 3.5 (simulator boot) |
-| `$ANDROID_SERIAL` | Android mobile ACs | Argus Stage 3.5 (emulator boot) |
+| `$API_BASE_URL` | HTTP API ACs | Argus Stage 3, Step 3.2 (server boot) |
+| `$IOS_UDID` | iOS mobile ACs | Argus Stage 3, Step 3.5 (simulator boot) |
+| `$ANDROID_SERIAL` | Android mobile ACs | Argus Stage 3, Step 3.5 (emulator boot) |
+| `$evidence_xml` | Tool ACs that emit a report file (`maestro --output`, `playwright --reporter=junit ... --output`) | Argus Stage 3 (per-AC, resolved via Evidence Path Priority before each verification) |
 
 Adding a new contract variable requires (1) updating this table and (2) ensuring the executor exports it in the corresponding Stage. New variables should be introduced only when at least two AC kinds reference them; otherwise inline.
 
@@ -254,11 +255,11 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### Mobile app E2E (maestro)
 
 - [ ] **Login flow on iOS Simulator reaches Home**
-      **Verification**: `maestro test --device "$IOS_UDID" .maestro/auth/login_happy.yaml --format junit`
+      **Verification**: `maestro test --device "$IOS_UDID" .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
       (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 - [ ] **Login flow on Android Emulator reaches Home**
-      **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit`
+      **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
       (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 > Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by Argus Stage 3.5 — see § Executor-Provided Variables above.
@@ -272,7 +273,8 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### HTTP API (curl + jq)
 
 - [ ] **POST /api/users (201) returns the same record on subsequent GET**
-      **Verification**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ] && curl -fsS "$API_BASE_URL/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
+      **Setup**: `email="ac-$(uuidgen)@example.com" && id=$(curl -fsS -X POST "$API_BASE_URL/api/users" -H 'Content-Type: application/json' -d "{\"email\":\"$email\"}" | jq -r '.id') && [ -n "$id" ] && [ "$id" != "null" ]`
+      **Verification**: `curl -fsS "$API_BASE_URL/api/users/$id" | jq -e --arg id "$id" --arg e "$email" '.id == $id and .email == $e'`
       **Cleanup**: `[ -n "$id" ] && curl -fsS -X DELETE "$API_BASE_URL/api/users/$id" > /dev/null || true`
 
 ### Text scan (grep) — for spec/log/output content
