@@ -5,198 +5,230 @@ description: "Use when emitting a new pin, updating a stale pin, or superseding 
 
 # write-pin
 
-AI가 발견 이벤트(또는 갱신 이벤트)에서 `<pin>` XML을 emit하기 위해 invoke하는 형식 학습 스킬이다.
-Stop hook(`hooks/pin-up/`)이 응답 transcript를 후처리해 `$OMT_DIR/pins/{slug}.md` 마크다운으로 직렬화한다.
+The skill the AI invokes to learn the `<pin>` XML format and emit a pin on a discovery (or update) event.
+The Stop hook (`hooks/pin-up/`) post-processes the response transcript and serializes each emit to `$OMT_DIR/pins/{slug}.md`.
 
-## Identity proposition (SSOT vs wiki)
+## Identity propositions (SSOT vs wiki)
 
-pin은 indexing이지 wiki가 아니다. 아래 4개 명제는 이 시스템의 핵심 제약이다.
+A pin is indexing, not a wiki. The four axioms below are the system's core constraints.
 
-| 슬러그 | 명제 |
+| Slug | Proposition |
 |---|---|
-| `indexing-not-wiki` | pin은 SSOT를 가리키는 포인터이지 SSOT 자체가 아니다. 원본은 다른 시스템(코드/PR/Slack/Notion/사람)에 있다. |
-| `ssot-no-copy` | SSOT 본문을 pin 본문에 복사하지 않는다. URL과 한 줄 요지 + 전후 맥락으로 충분하다. |
-| `5-elements-only` | pin이 포함하는 것: ① 위치(source_url) ② 권위(authority) ③ 한 줄 요지 ④ 전후 컨텍스트 ⑤ cross-link. 이 5가지 외에는 쓰지 않는다. |
-| `long-body-wrong-ssot` | 본문이 길어진다면 SSOT를 다른 곳에 두지 않고 pin에 직접 쓰는 것이므로 잘못된 사용이다. 본문이 4섹션을 넘어가면 stop하고 재고한다. |
+| `indexing-not-wiki` | A pin is a pointer to the SSOT, not the SSOT itself. The original lives in another system (code / PR / Slack / Notion / a person). |
+| `ssot-no-copy` | Do not copy the SSOT body into the pin body. The URL plus a one-line summary plus surrounding context is sufficient. |
+| `5-elements-only` | A pin contains: ① location (`source_url`) ② authority ③ one-line summary ④ surrounding context ⑤ cross-link. Nothing else. |
+| `long-body-wrong-ssot` | A long body means you're storing the SSOT inside the pin instead of in its proper system — a misuse. If the body exceeds 4 sections, stop and reconsider. |
 
-## `<pin>` XML 형식 (v1 동결)
+## `<pin>` XML format (frozen at v1)
 
-AI 응답 중 발견 이벤트가 발생하면 응답 본문에 다음 형식으로 `<pin>` XML을 emit한다.
+When a discovery event occurs in the AI response, emit a `<pin>` XML block in the response body using the format below.
 
 ```xml
 <pin slug="EXAMPLE-kind-topic-slug"
      source_url="https://example.com/or/person:name"
-     authority="누가 또는 무엇이 ground truth인가"
+     authority="who or what is the ground truth"
      tier="1"
      tags="tag1,tag2"
      sensitivity="private"
      related="slug1,slug2"
      supersedes="old-slug"
-     discovery_context="어떤 작업 중 발견했는지 — 한 줄">
+     discovery_context="which task surfaced this — one line">
 ### ① 한 줄 요지
-X는 Y이다. (≤80자)
+X is Y. (≤80 characters)
 
 ### ② SSOT 위치 + 도달 경로
-source_url 설명 + 접근 방법 한 줄.
+Description of source_url + how to reach it, one line.
 
 ### ③ 전후 컨텍스트
-어떤 작업 흐름에서 이 정보가 필요했는지 (Memex associative trail).
+Which workflow surfaced the need for this information (Memex associative trail).
 
 ### ④ 관련 cross-link
-- → slug1: 연관 이유
+- → slug1: reason for relation
 </pin>
 ```
 
-### 필수 속성 (6개)
+> **Validator-coupled tokens — do not translate**: the four `### ` body section headers (`① 한 줄 요지` / `② SSOT 위치` / `③ 전후 컨텍스트` / `④ 관련 cross-link`) are validator tokens. `hooks/pin-up/validator.ts` greps for these literal substrings and escapes the pin if any are missing. Keep them exactly as shown — translate only the body content under each header.
 
-| 속성 | 설명 |
+### Required attributes (6)
+
+| Attribute | Description |
 |---|---|
-| `slug` | 유일 식별자. 아래 Slug 8 원칙 준수 필수. |
-| `source_url` | SSOT 위치. URL 또는 `person:이름` 자유 식별자. |
-| `authority` | ground truth 주체 (사람명, 시스템명, 팀명 등). |
-| `tier` | 중요도 티어 (1=핵심, 2=참고, 3=일시). |
-| `tags` | 쉼표 구분 토픽 태그. |
-| `sensitivity` | `private` 또는 `shared` (v1: 정의만, 분기 로직은 v2). |
+| `slug` | Unique identifier. Must obey the Slug 8 principles below. |
+| `source_url` | SSOT location. URL or `person:name` free-form identifier. |
+| `authority` | Ground-truth subject (person name, system name, team name, etc.). |
+| `tier` | Importance tier (1=core, 2=reference, 3=transient). |
+| `tags` | Comma-separated topic tags. |
+| `sensitivity` | `private` or `shared` (v1: defined only; routing logic is v2). |
 
-### 선택 속성 (3개)
+### Optional attributes (3)
 
-| 속성 | 설명 |
+| Attribute | Description |
 |---|---|
-| `related` | 관련 pin slug 쉼표 구분 목록. |
-| `supersedes` | 이 pin이 대체하는 기존 slug. 잘못된 indexing 수정 시 사용. |
-| `discovery_context` | 발견 경위 한 줄 메모 (Memex trail). |
+| `related` | Comma-separated list of related pin slugs. |
+| `supersedes` | The existing slug this pin replaces. Use when correcting bad indexing. |
+| `discovery_context` | One-line note about how this was discovered (Memex trail). |
 
-> **참고**: `created_at`은 XML 속성이 아니라 frontmatter에 기록된다 (Stop hook이 자동 설정).
-> `source_kind` enum은 폐기됨 — `source_url` 하나로 위치 정보를 충분히 전달한다.
+> **Note**: `created_at` is not an XML attribute — it is recorded in the frontmatter (set automatically by the Stop hook).
+> The `source_kind` enum is deprecated — `source_url` alone conveys location.
 
-## Frontmatter 스키마 (v1 동결)
+## Frontmatter schema (frozen at v1)
 
-Stop hook이 `<pin>` XML을 추출해 아래 frontmatter + 본문 마크다운으로 직렬화한다.
+The Stop hook extracts the `<pin>` XML and serializes it to the frontmatter + markdown body below.
 
-| 필드 | 필수? | 설명 |
+| Field | Required | Description |
 |---|---|---|
-| `slug` | Y | 유일 식별자 |
-| `source_url` | Y | URL 또는 `person:이름` |
-| `authority` | Y | ground truth 주체 |
-| `tier` | Y | 중요도 티어 (1/2/3) |
-| `tags` | Y | 쉼표로 구분된 토픽 태그 문자열 (quoted CSV string) |
+| `slug` | Y | Unique identifier |
+| `source_url` | Y | URL or `person:name` |
+| `authority` | Y | Ground-truth subject |
+| `tier` | Y | Importance tier (1/2/3) |
+| `tags` | Y | Comma-separated topic tag string (quoted CSV) |
 | `sensitivity` | Y | `private` / `shared` |
-| `created_at` | Y | ISO8601 (Stop hook이 자동 설정) |
-| `related` | N | cross-link slug 배열 |
-| `supersedes` | N | 대체하는 slug |
-| `discovery_context` | N | 발견 경위 한 줄 |
+| `created_at` | Y | ISO8601 (set by the Stop hook) |
+| `related` | N | Cross-link slug array |
+| `supersedes` | N | Slug being replaced |
+| `discovery_context` | N | One-line discovery note |
 
-validator(`hooks/pin-up/validator.ts`)가 6개 필수 필드(slug/source_url/authority/tier/tags/sensitivity) 미존재 시 `.escape.jsonl`로 이탈시킨다. created_at은 Stop hook이 자동 설정한다.
+The validator (`hooks/pin-up/validator.ts`) sends the pin to `.escape.jsonl` if any of the 6 required fields (slug / source_url / authority / tier / tags / sensitivity) are missing. `created_at` is auto-set by the Stop hook.
 
-## 본문 4섹션 형식 (AC-18)
+## Body 4-section format (AC-18)
 
-`<pin>` XML 본문은 반드시 아래 4개 `### ` 헤더 섹션을 순서대로 포함해야 한다.
-validator가 4섹션 헤더를 grep해 누락 시 escape 처리한다.
+The `<pin>` XML body must contain the following 4 `### ` header sections in order. The validator greps these literal headers; if any is missing the pin is escaped.
 
 ```
 ### ① 한 줄 요지
-[≤80자. 핵심 1문장. 이것만 읽어도 무엇인지 알아야 한다.]
+[≤80 chars. One core sentence. Reading just this should tell you what it is.]
 
 ### ② SSOT 위치 + 도달 경로
-[source_url이 가리키는 위치 설명 + 접근 방법.]
+[Description of where source_url points + how to reach it.]
 
 ### ③ 전후 컨텍스트
-[어떤 작업 흐름에서 이 정보가 필요했는지. Memex associative trail.]
+[Which workflow surfaced the need for this information. Memex associative trail.]
 
 ### ④ 관련 cross-link
-[- → slug: 연관 이유 (없으면 "없음" 한 줄)]
+[- → slug: reason for relation. Write "none" if there is no related pin.]
 ```
 
-4섹션을 넘어가는 내용은 SSOT 본문 복사(`ssot-no-copy` 위반) 징후다. 멈추고 축약하라.
+> **Important**: do not translate the section header strings. They are validator tokens. Translate the body content only.
 
-## Slug 8 원칙 (AC-7)
+If the body grows beyond 4 sections, that's a sign of SSOT body copying (`ssot-no-copy` violation). Stop and trim.
 
-### 원칙 ①
-형식: `{kind}-{topic}-{slug}` 단일 형식만 허용.
-`-HHMMSS` suffix는 `writePinAtomically`가 EEXIST 충돌 시 자동 부여하므로 author가 직접 쓰지 않는다.
+## Slug 8 principles (AC-7)
 
-### 원칙 ②
+### Principle ①
+Format: `{kind}-{topic}-{slug}` only.
+The `-HHMMSS` suffix is appended automatically by `writePinAtomically` on EEXIST collision; do not write it manually.
+
+### Principle ②
 `kind` ∈ `{jira, linear, slack, github, notion, code, person, decision, finding, gotcha, unknown}`.
-목록에 없는 kind는 `unknown`을 사용한다.
+Use `unknown` for kinds not in this list.
 
-### 원칙 ③
-`topic` = 도메인 명사 1단어 (영소문자). 예: `auth`, `billing`, `deploy`, `ratelimit`.
+### Principle ③
+`topic` = a single domain noun (lowercase ASCII). Examples: `auth`, `billing`, `deploy`, `ratelimit`.
 
-### 원칙 ④
-`slug` 부분 = 2~4 영숫자 단어, kebab-case. 예: `jwt-verify`, `token-refresh-flow`.
+### Principle ④
+`slug` part = 2–4 alphanumeric words in kebab-case. Examples: `jwt-verify`, `token-refresh-flow`.
 
-### 원칙 ⑤
-공백 금지. 슬러그 어디에도 공백 문자가 없어야 한다.
+### Principle ⑤
+No whitespace anywhere in the slug.
 
-### 원칙 ⑥
-동사/형용사 금지. 슬러그는 명사형 식별자여야 한다.
-나쁜 예: `how-to-fix-auth` (동사), `broken-token` (형용사).
+### Principle ⑥
+No verbs or adjectives. Slugs must be noun-form identifiers.
+Bad: `how-to-fix-auth` (verb), `broken-token` (adjective).
 
-### 원칙 ⑦
-시간제한사 금지. `today`, `current`, `latest`, `now`, `2024`, `jan`, `q1` 같은 시간·날짜 표현은 쓰지 않는다.
+### Principle ⑦
+No time qualifiers. Avoid `today`, `current`, `latest`, `now`, `2024`, `jan`, `q1`, etc.
 
-### 원칙 ⑧
-출처 의존 금지. 슬러그는 source_url이 바뀌어도 유효해야 한다.
-나쁜 예: `notion-page-12345` (notion URL이 바뀌면 slug가 무의미해짐).
+### Principle ⑧
+No source dependence. The slug must remain meaningful even if `source_url` changes.
+Bad: `notion-page-12345` (becomes meaningless when the Notion URL changes).
 
-**정규식** (validator 자동 검증 범위: 원칙 ①~⑤):
+**Regex** (validator auto-checks principles ①–⑤):
 ```
 ^[a-z0-9]+(-[a-z0-9]+){2,}(-\d{6})?$
 ```
 
-> 원칙 ⑥~⑧는 자동 검증 불가 — AI가 판단해야 한다.
+> Principles ⑥–⑧ cannot be auto-validated — the AI must judge them.
 
-## 좋은 슬러그 사고 절차
+## Slug-decision procedure
 
-슬러그를 결정하기 전에 아래 순서로 생각한다.
+Decide a slug in this order.
 
-1. **kind 결정**: 이 정보의 원천은 어떤 시스템인가? (`code`, `slack`, `decision`, `person`, …)
-2. **topic 결정**: 이 정보가 속하는 도메인 명사 1단어는? (`auth`, `billing`, `deploy`, …)
-3. **slug 파트 결정**: 이 pin을 다른 핀들과 구별하는 명사 2~4단어는?
-4. **원칙 ⑥~⑧ 자기 점검**: 동사/형용사 있나? 시간제한사 있나? 출처 URL에 의존하나?
-5. **정규식 통과 여부 확인**: `^[a-z0-9]+(-[a-z0-9]+){2,}(-\d{6})?$`
+1. **Pick `kind`**: which system originated this information? (`code`, `slack`, `decision`, `person`, …)
+2. **Pick `topic`**: what single domain noun fits? (`auth`, `billing`, `deploy`, …)
+3. **Pick the `slug` part**: 2–4 nouns that distinguish this pin from siblings.
+4. **Self-check ⑥–⑧**: any verbs/adjectives? any time qualifiers? any URL-dependent identifiers?
+5. **Verify regex**: `^[a-z0-9]+(-[a-z0-9]+){2,}(-\d{6})?$`
 
-## 슬러그 예시
+## Slug examples
 
-### 좋은 예 ①
-`code-auth-jwt-verify` — kind=code, topic=auth, slug=jwt-verify. 명사형, 출처 독립.
+### Good ①
+`code-auth-jwt-verify` — kind=code, topic=auth, slug=jwt-verify. Noun-form, source-independent.
 
-### 좋은 예 ②
-`decision-billing-plan-limit` — kind=decision, topic=billing, slug=plan-limit. 의사결정 기록.
+### Good ②
+`decision-billing-plan-limit` — kind=decision, topic=billing, slug=plan-limit. Records a decision.
 
-### 좋은 예 ③
-`person-deploy-owner` — kind=person, topic=deploy, slug=owner. 사람 권위 기록.
+### Good ③
+`person-deploy-owner` — kind=person, topic=deploy, slug=owner. Records human authority.
 
-### 좋은 예 ④
-`slack-ratelimit-threshold-config` — kind=slack, topic=ratelimit, slug=threshold-config. Slack 스레드에서 발견한 설정값.
+### Good ④
+`slack-ratelimit-threshold-config` — kind=slack, topic=ratelimit, slug=threshold-config. A config value found in a Slack thread.
 
-### 나쁜 예 ①
-`how-to-fix-auth-bug` — 동사(`fix`) + 형용사(`bug`). 원칙 ⑥ 위반.
+### Bad ①
+`how-to-fix-auth-bug` — verb (`fix`) + adjective (`bug`). Violates principle ⑥.
 
-### 나쁜 예 ②
-`current-deploy-setting` — 시간제한사(`current`). 원칙 ⑦ 위반.
+### Bad ②
+`current-deploy-setting` — time qualifier (`current`). Violates principle ⑦.
 
-### 나쁜 예 ③
-`notion-page-1a2b3c` — URL 식별자 포함. 원칙 ⑧ 위반.
+### Bad ③
+`notion-page-1a2b3c` — contains a URL identifier. Violates principle ⑧.
 
-### 나쁜 예 ④
-`auth` — 단어 2개 미만 (kind-topic-slug 구조 미준수). 정규식 실패.
+### Bad ④
+`auth` — fewer than 2 separators (kind-topic-slug structure missing). Fails the regex.
 
-## Cross-link 컨벤션
+## Cross-link convention
 
-`related` 속성에 나열한 slug들은 validator가 `$OMT_DIR/pins/{slug}.md` 존재 여부를 검증한다.
-존재하지 않는 slug를 참조하면 escape 처리된다.
+Slugs listed in the `related` attribute are checked by the validator against `$OMT_DIR/pins/{slug}.md` existence. Referencing a non-existent slug causes the pin to escape.
 
-reference 파일 링크 표기 컨벤션:
+Reference-file link convention:
 ```
 → Details: [reference/X.md]
 ```
 
-SSOT 종류별 풍부한 예시는 → Details: [reference/examples-by-ssot-kind.md]
-5가지 use case 시나리오는 → Details: [reference/use-cases.md]
+For SSOT-kind specific examples → Details: [reference/examples-by-ssot-kind.md]
+For the 6 use-case scenarios → Details: [reference/use-cases.md]
+
+## Common rationalizations — emit-deferral block table
+
+If any of the rationalizations on the left arises while deciding to emit, STOP and apply the right-hand reality.
+
+| Rationalization | Reality |
+|---|---|
+| "It's in progress, might change, so I'll wait" | URLs are immutable and `supersedes` absorbs change. The work-in-progress state is itself part of the SSOT — emit immediately. |
+| "It's just a local .md, I'll pin it as `file://`" | Other people can't dereference it. Apply scenario F (register externally first, then pin). |
+| "I'll just suggest moving it; my job is done" | Collaborative registration is part of the procedure. Plain suggestions get dropped — register directly when the AI has tooling. |
+| "Registering in an external system is the user's job, not mine" | If tooling (Notion MCP, GitHub MCP, etc.) is available, the AI should register directly. |
+| "Once this task is done, I'll pin it then" | Task completion is not the discovery event. Emit at the moment of discovery. |
+| "The pin body needs more content than the SSOT to be useful" | A pin is not a wiki (`indexing-not-wiki`). Pointing accurately at the location is enough. |
+| "The response is getting long; I'll emit one this turn and the rest next turn" | "Next turn" is just deferral. Emit every SSOT discovered in the same response. Response length is not the basis for emit count. |
+| "Scenario F's collaborative registration conflicts with the 'immediate' emit principle" | No conflict. F's ① and ② are SSOT location correction; ③ is the emit. See `pins/SKILL.md` "The meaning of 'immediately'." |
+
+## Red flags — STOP signals
+
+If any of the following thoughts arises, STOP immediately and revisit the emit-timing rule (`pins/SKILL.md`) or scenario F:
+
+- "It might change, so I'll wait"
+- "I'll just put `file://`"
+- "Suggesting it to the user is enough"
+- "I'll pin it after this task is done"
+- "External registration is too big a job; placeholder for now"
+- "Some other session will pin it"
+- "I'll pin one now, the rest next turn"
+- "Scenario F takes time and conflicts with 'immediate' — bypass it"
+
+If any of these appears, switch to the right-hand reality in the rationalization table.
 
 ## Validation
 
-write-pin 스키마는 `hooks/pin-up/validator.ts`가 강제한다. 위반 시 `.escape.jsonl`로 이탈되며 pin 파일은 생성되지 않는다.
+The write-pin schema is enforced by `hooks/pin-up/validator.ts`. Violations are routed to `.escape.jsonl` and the pin file is not created.
 
-v1 best-effort: validator는 tier/sensitivity 등 enum 값 자체를 강제하지 않는다 — 학습 픽스처(SKILL.md + reference/*)와 schema 정합성에 의존한다.
+v1 best-effort: the validator does not enforce enum values (such as `tier` / `sensitivity` ranges) — correctness depends on the training fixtures (SKILL.md + reference/*) and schema coherence.

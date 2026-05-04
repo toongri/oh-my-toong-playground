@@ -1,49 +1,51 @@
-# Use Cases: Write-Pin 컨텍스트 시나리오
+# Use Cases: write-pin context scenarios
 
-AI가 작업 중 컨텍스트가 필요할 때 어떻게 행동해야 하는지를 5가지 시나리오로 정리한다.
-각 시나리오는 AC-17.5a~e의 검증 기준이며, T24 writing-skills RED-GREEN-REFACTOR 시뮬레이션의 테스트 픽스처로도 사용된다.
+Six scenarios covering how the AI should behave when context is needed during a task.
+Each scenario is a verification fixture for AC-17.5a–f and a test fixture for the T24 writing-skills RED-GREEN-REFACTOR simulation.
+
+> **Note on body section headers**: the four `### ① 한 줄 요지` / `### ② SSOT 위치 + 도달 경로` / `### ③ 전후 컨텍스트` / `### ④ 관련 cross-link` strings inside the XML examples below are validator tokens — `hooks/pin-up/validator.ts` greps for them. Keep them exactly as shown; translate only the content under each header.
 
 ---
 
 ## Use cases
 
-### 시나리오 A
+### Scenario A
 
-**유형**: hit — pin 존재, 내용 정확
+**Type**: hit — pin exists, content accurate
 
-**상황**: AI가 "auth 도메인의 권위는 어디에 있는가?"를 확인해야 한다. 사용자가 이전 세션에서 이미 발견해 pin을 저장해뒀다.
+**Situation**: The AI needs to verify "where is the authority for the auth domain?". The user already discovered and saved a pin in a previous session.
 
-**결정 흐름**:
+**Decision flow**:
 
-- `select-pin` 스킬을 invoke해 `$OMT_DIR/pins/` 디렉토리를 조회한다.
-- slug `code-auth-verifytoken` 핀의 frontmatter를 읽는다.
-- `authority: auth/jwt.ts` + `source_url: https://github.com/...` 확인 → 현재 작업 컨텍스트와 일치.
-- 본문 4섹션을 읽어 한 줄 요지 + SSOT 위치를 파악한다.
-- 해당 정보를 그대로 사용해 작업을 계속한다.
+- Invoke the `select-pin` skill and scan `$OMT_DIR/pins/`.
+- Read the frontmatter of slug `code-auth-verifytoken`.
+- Confirm `authority: auth/jwt.ts` + `source_url: https://github.com/...` matches the current task context.
+- Read the 4-section body for the one-line summary + SSOT location.
+- Use the information directly to continue the task.
 
-**emit 결과**: emit 안 함 (emit: 없음)
+**Emit result**: no emit (emit: none)
 
-pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 중복 indexing은 오히려 혼란을 야기한다.
+The pin is already accurate and current; no new pin is needed. Duplicate indexing only causes confusion.
 
-**왜 이게 올바른 응답인가**: 이미 신뢰할 수 있는 인덱스가 존재한다. pin 시스템의 목적은 "발견 비용을 다시 치르지 않기"이지, 같은 정보를 반복해서 박는 것이 아니다.
+**Why this is correct**: a trustworthy index already exists. The point of the pin system is "do not pay the discovery cost twice" — not to repeatedly pin the same information.
 
 ---
 
-### 시나리오 B
+### Scenario B
 
-**유형**: stale — pin 존재, 내용 오래됨/틀림
+**Type**: stale — pin exists, content outdated/wrong
 
-**상황**: AI가 rate-limit 정책 권위를 확인하러 `select-pin`을 invoke했더니 `decision-ratelimit-ks`라는 핀이 있다. 그런데 핀 본문에는 "KS가 결정권자"라고 되어 있는데, 사용자가 "KS가 퇴사해서 이제 JH가 결정권자야"라고 알려준다.
+**Situation**: The AI invokes `select-pin` to verify the rate-limit policy authority. A pin `decision-ratelimit-ks` exists, but its body says "KS is the decision owner." The user clarifies: "KS left the company; JH is the new owner."
 
-**결정 흐름**:
+**Decision flow**:
 
-- 기존 pin의 `source_url: person:KS` + `authority: KS` 확인 → 잘못된 정보.
-- 사용자와 짧은 인터뷰: "JH가 새로운 결정권자, Slack #eng-billing 채널에 결정 기록 있음".
-- 관련 문서(Slack thread 링크)를 확인해 정확한 권위를 파악한다.
-- `write-pin` 스킬을 invoke해 형식을 학습하고 갱신 pin을 emit한다.
-- 새 pin에 `supersedes: decision-ratelimit-ks` 속성을 포함시켜 기존 핀을 덮어쓴다고 명시한다.
+- Confirm the existing pin's `source_url: person:KS` + `authority: KS` is wrong.
+- Brief user interview: "JH is the new decision owner; the decision is recorded in Slack #eng-billing."
+- Verify by checking the related document (Slack thread link) for the correct authority.
+- Invoke the `write-pin` skill to learn the format and emit an update.
+- Include `supersedes: decision-ratelimit-ks` to explicitly replace the existing pin.
 
-**emit 결과**:
+**Emit result**:
 
 ```xml
 <pin slug="decision-ratelimit-jh"
@@ -53,39 +55,39 @@ pin이 이미 정확하고 최신이므로 새 pin을 emit할 필요가 없다. 
      tags="ratelimit,billing,decision"
      sensitivity="private"
      supersedes="decision-ratelimit-ks"
-     discovery_context="사용자가 KS 퇴사 사실 알려줌 — billing 정책 검토 중">
+     discovery_context="user reported KS left — billing policy review">
 ### ① 한 줄 요지
-rate-limit 결정권자는 JH (KS 퇴사 후 이관).
+Rate-limit decision owner is JH (transferred from KS after departure).
 
 ### ② SSOT 위치 + 도달 경로
-Slack #eng-billing 2025-03-10 thread — JH가 직접 결정 공지.
+Slack #eng-billing 2025-03-10 thread — JH announced the decision directly.
 
 ### ③ 전후 컨텍스트
-billing 도메인 정책 리뷰 중 기존 pin이 stale임을 사용자가 확인. KS→JH 이관.
+While reviewing the billing domain policy, the user confirmed the existing pin was stale. KS → JH transfer.
 
 ### ④ 관련 cross-link
 related: [decision-billing-jh]
 </pin>
 ```
 
-**왜 이게 올바른 응답인가**: stale pin을 그냥 두면 다음 세션에서 AI가 틀린 정보를 다시 사용할 수 있다. `supersedes` 속성으로 이전 pin을 명시적으로 무효화해야 인덱스 정합성이 유지된다.
+**Why this is correct**: leaving a stale pin in place lets a future AI session reuse wrong information. The `supersedes` attribute explicitly invalidates the prior pin and keeps the index coherent.
 
 ---
 
-### 시나리오 C
+### Scenario C
 
-**유형**: miss + AI 직접 발견 — pin 없음, 사용자도 모름, AI가 문서에서 발굴
+**Type**: miss + direct AI discovery — no pin, user doesn't know, AI digs it out from docs/code
 
-**상황**: AI가 "JWT 검증 로직의 진짜 권위는 어디에 있는가?"를 알아야 한다. `select-pin` 조회 결과 관련 pin이 없다. 사용자에게 물었지만 "나도 잘 모르겠어, 코드베이스 어딘가에 있을 거야"라고 답한다.
+**Situation**: The AI needs to know "where is the actual authority for JWT validation logic?". `select-pin` returns no related pin. When asked, the user replies "I'm not sure either, somewhere in the codebase."
 
-**결정 흐름**:
+**Decision flow**:
 
-- `$OMT_DIR/pins/` 조회 결과 관련 pin 없음 확인.
-- 사용자도 정보 없음 → AI가 직접 코드베이스를 탐색한다.
-- `auth/jwt.ts:142` 의 `verifyToken` 함수 발견 — 실제 검증 로직 + 주석에 "single source of truth for token validation" 명시.
-- `write-pin` 스킬 invoke → 형식 학습 → **신규** pin emit.
+- Confirm `$OMT_DIR/pins/` has no related pin.
+- The user has no information → the AI searches the codebase directly.
+- Discovers the `verifyToken` function at `auth/jwt.ts:142`, with a comment that says "single source of truth for token validation."
+- Invoke `write-pin` → learn the format → emit a **new** pin.
 
-**emit 결과** (emit ✓):
+**Emit result** (emit ✓):
 
 ```xml
 <pin slug="code-auth-verifytoken"
@@ -94,40 +96,40 @@ related: [decision-billing-jh]
      tier="1"
      tags="auth,jwt,verification"
      sensitivity="private"
-     discovery_context="billing-claim 검증 중 JWT 권위 탐색 → 코드베이스 직접 grep">
+     discovery_context="JWT authority search during billing-claim verification → direct grep">
 ### ① 한 줄 요지
-JWT 토큰 검증의 SSOT는 auth/jwt.ts:142 verifyToken 함수.
+JWT token verification SSOT is `verifyToken` at `auth/jwt.ts:142`.
 
 ### ② SSOT 위치 + 도달 경로
-auth/jwt.ts line 142 — "single source of truth for token validation" 주석 명시.
+auth/jwt.ts line 142 — comment explicitly reads "single source of truth for token validation."
 
 ### ③ 전후 컨텍스트
-billing claim 검증 로직 구현 중 JWT 검증 권위를 알아야 했음. 사용자도 모름 → 직접 발굴.
+Implementing billing-claim verification logic required knowing the JWT verification authority. The user did not know → direct discovery.
 
 ### ④ 관련 cross-link
 related: []
 </pin>
 ```
 
-**왜 이게 올바른 응답인가**: 사용자도 모르는 상태에서 AI가 직접 발굴한 신규 지식은 반드시 pin으로 박아야 한다. 다음 세션에서 같은 탐색 비용을 다시 치르지 않기 위함이다. 신규 발견이므로 supersedes 없이 신규 pin을 emit한다.
+**Why this is correct**: knowledge that the AI directly discovered when even the user did not know must be pinned. This avoids repaying the same discovery cost in future sessions. Since this is a fresh discovery, no `supersedes` is needed.
 
 ---
 
-### 시나리오 D
+### Scenario D
 
-**유형**: miss + 사람 정보원 — pin 없음, 사용자가 특정인을 권위자로 지목
+**Type**: miss + person source — no pin, user names a specific person as the authority
 
-**상황**: AI가 billing 도메인의 비즈니스 규칙을 알아야 한다. `select-pin` 조회 결과 없음. 사용자가 "그건 A팀장에게 있다더라, 코드나 문서에 없고 머릿속에 있어"라고 알려준다.
+**Situation**: The AI needs to know the billing domain business rules. `select-pin` returns no result. The user says "Team Lead A holds them — not in code or docs, just in their head."
 
-**결정 흐름**:
+**Decision flow**:
 
-- `$OMT_DIR/pins/` 조회 결과 관련 pin 없음 확인.
-- 사용자가 권위자를 명시: "A팀장이 billing 규칙의 SSOT".
-- 문서나 코드에서 확인 불가 — 사람 머릿속이 SSOT.
-- `write-pin` 스킬 invoke → `source_url: person:A팀장` 패턴 학습 → pin emit.
-- `source_url`에 `person:A팀장` 형식으로 사람 권위자를 식별한다.
+- Confirm `$OMT_DIR/pins/` has no related pin.
+- The user names the authority: "Team Lead A is the SSOT for billing rules."
+- Cannot be verified in docs or code — the SSOT is in a person's head.
+- Invoke `write-pin` → learn the `source_url: person:A팀장` pattern → emit pin.
+- Use the `person:A팀장` form in `source_url` to identify the human authority.
 
-**emit 결과**:
+**Emit result**:
 
 ```xml
 <pin slug="person-billing-rules"
@@ -136,77 +138,129 @@ related: []
      tier="3"
      tags="billing,business-rule,person"
      sensitivity="private"
-     discovery_context="billing claim 처리 로직 구현 중 — 사용자가 A팀장이 권위자라고 알려줌">
+     discovery_context="implementing billing claim processing — user said A팀장 is the authority">
 ### ① 한 줄 요지
-billing 비즈니스 규칙의 SSOT는 A팀장 머릿속 — 문서/코드 미존재.
+Billing business rules SSOT is in A팀장's head — no docs/code exist.
 
 ### ② SSOT 위치 + 도달 경로
-person:A팀장 — 직접 인터뷰 필요. 현재 코드베이스나 문서에 명시된 위치 없음.
+person:A팀장 — direct interview required. No documented location in the current codebase or docs.
 
 ### ③ 전후 컨텍스트
-billing claim 처리 중 규칙 불명확. 사용자 왈: "A팀장에게 있다더라". 문서화 필요.
+While processing billing claims the rules were unclear. User said: "A팀장 has them." Documentation is needed.
 
 ### ④ 관련 cross-link
 related: []
 </pin>
 ```
 
-**왜 이게 올바른 응답인가**: `person:이름` 식별자는 사람이 SSOT인 경우를 명시적으로 표현하는 핀 시스템의 지원 패턴이다. "모른다"가 아니라 "A팀장에게 가야 한다"는 사실 자체가 가치 있는 메타지식이다.
+**Why this is correct**: the `person:name` identifier is the supported pattern for cases where a person is the SSOT. "I don't know" is not the truth — "ask A팀장" is itself valuable meta-knowledge.
 
 ---
 
-### 시나리오 E
+### Scenario E
 
-**유형**: miss + 미상 — pin 없음, 아무도 모름
+**Type**: miss + unknown — no pin, nobody knows
 
-**상황**: AI가 레거시 payment 모듈의 결제 수수료 계산 로직 권위를 파악해야 한다. `select-pin` 조회 결과 없음. 사용자에게 물었더니 "나도 몰라, 팀에 아는 사람이 없어, 코드 어딘가에 있겠지"라고 답한다. AI가 코드베이스를 탐색했지만 명확한 SSOT를 찾지 못했다.
+**Situation**: The AI must understand the legacy payment module's fee calculation authority. `select-pin` returns no result. The user says "I don't know either; nobody on the team does; it's somewhere in the code." The AI searches the codebase but finds no clear SSOT.
 
-**결정 흐름**:
+**Decision flow**:
 
-- `$OMT_DIR/pins/` 조회 결과 관련 pin 없음 확인.
-- 사용자도 모름, 팀도 모름.
-- 코드베이스 탐색: `payments/fee.ts`에 로직이 있긴 한데 권위 주석 없고, 히스토리도 불명확.
-- 완전히 미상 상태 — 그러나 이 "모른다"는 사실 자체를 기록해야 한다.
-- `write-pin` 스킬 invoke → placeholder pin emit. 나중에 발견 시 `supersedes`로 갱신.
+- Confirm `$OMT_DIR/pins/` has no related pin.
+- Neither the user nor the team knows.
+- Codebase search: `payments/fee.ts` contains the logic but lacks an authority comment, and the history is unclear.
+- Fully unknown — but record the "I don't know" as a fact.
+- Invoke `write-pin` → emit a placeholder pin. Update via `supersedes` upon future discovery.
 
-**emit 결과**:
+**Emit result**:
 
 ```xml
 <pin slug="finding-payment-fee-unknown"
      source_url="https://github.com/acme/backend/blob/main/payments/fee.ts"
-     authority="unknown — 조사 필요"
+     authority="unknown — investigation needed"
      tier="3"
      tags="payment,fee,placeholder,unknown"
      sensitivity="private"
-     discovery_context="payment 수수료 계산 PR 리뷰 중 권위 불명. 팀 전원 미인지.">
+     discovery_context="payment fee PR review — authority unclear, team unaware">
 ### ① 한 줄 요지
-payment 수수료 계산 로직 권위 미상 — placeholder, 향후 발견 시 supersedes로 갱신 필요.
+Payment fee calculation authority unknown — placeholder, update via supersedes when discovered.
 
 ### ② SSOT 위치 + 도달 경로
-payments/fee.ts에 로직 존재하나 권위 명시 없음. 원작자 불명, 히스토리 불명확.
+Logic exists at payments/fee.ts but no authority is recorded. Original author unknown, history unclear.
 
 ### ③ 전후 컨텍스트
-payment 수수료 로직 수정 PR 리뷰 중 발생. 사용자 및 팀 전원 권위 미인지. 조사 필요.
+Surfaced during PR review of payment fee logic. Neither user nor team aware of the authority. Investigation needed.
 
 ### ④ 관련 cross-link
 related: []
 </pin>
 ```
 
-**왜 이게 올바른 응답인가**: "모른다"는 사실을 placeholder pin으로 박아두면 다음 세션에서 AI가 "이미 조사했고 미상임"을 알 수 있다. 발견 시 `supersedes: finding-payment-fee-unknown`으로 갱신하면 된다. 아무것도 안 하는 것보다 placeholder가 훨씬 유용하다.
+**Why this is correct**: pinning the "I don't know" as a placeholder lets a future session see "this was already investigated and unresolved." When the answer is found, update with `supersedes: finding-payment-fee-unknown`. A placeholder is far more useful than nothing.
 
 ---
 
-## 설계 의도
+### Scenario F
 
-이 5가지 시나리오는 pin 시스템의 핵심 분기를 커버한다:
+**Type**: miss + external SSOT does not exist — information rich, but no formal record in a stable external system
 
-| 시나리오 | 상태 | emit 여부 | 핵심 패턴 |
+**Situation**: The AI needs to index a CodePush PRD deployment operations guide. `select-pin` returns no result. A 19KB local Desktop `.md` written by the user in this session contains unique information (AWS permanent access key issuance procedure, the Sentry `org:ci` permission trap, the `Ctrl+D` multi-line input quirk, 7 troubleshooting cases), but no corresponding Notion page exists — i.e., the content is not yet recorded in a stable external system.
+
+**Decision flow**:
+
+- Confirm `$OMT_DIR/pins/` has no related pin.
+- The information is rich — user-authored unique content. This is not scenario E (the authority is clear: the user).
+- However, no record exists in a stable external system (Notion, etc.) → `file:///` paths are non-dereferenceable for others and volatile.
+- Apply the `long-body-wrong-ssot` axiom: move the SSOT to the correct system, then have the pin act only as a pointer.
+- **Three-step collaborative procedure**:
+  1. **Propose SSOT registration**: "How about turning this into a Notion page?" — propose registration in an external system.
+  2. **Register together**: with user agreement, the AI uses the Notion MCP tool (`notion-create-pages`) to create the page directly, or the user registers and returns the URL.
+  3. **Pin that URL**: emit a pin using the registered Notion URL as `source_url`.
+
+**Emit result** (after the three-step collaborative registration):
+
+```xml
+<pin slug="notion-codepush-prd-handover"
+     source_url="https://www.notion.so/example/CodePush-PRD-Deploy-Handover-abc123"
+     authority="Notion CodePush PRD Deploy Handover page (author: user + collaborative registration)"
+     tier="1"
+     tags="codepush,prd,deploy,handover,operations"
+     sensitivity="private"
+     discovery_context="19KB Desktop local .md migrated to Notion via collaboration, then indexed">
+### ① 한 줄 요지
+CodePush PRD deploy operations guide — AWS key issuance, Sentry org:ci trap, Ctrl+D input quirk, etc.
+
+### ② SSOT 위치 + 도달 경로
+Notion page — the 19KB local Desktop .md was registered collaboratively in this session, fixing the dereferenceable location.
+
+### ③ 전후 컨텍스트
+User-authored CodePush operations content. No external stable SSOT existed → indexed after Notion collaborative registration.
+
+### ④ 관련 cross-link
+related: [notion-ota-handover]
+</pin>
+```
+
+**Why this is correct**: in the absence of a stable external system, pinning `file:///` denies SSOT status (other people can't dereference it, and it's volatile). A placeholder (scenario E) is wrong because this case is not "unknown." Skipping the emit loses information. **Pinning the URL of the collaborative registration is the correct application of `long-body-wrong-ssot`** — "move the SSOT to the right system and shrink the pin to a pointer." When the AI has tooling (Notion MCP), it should register directly to prevent the task from being dropped. The value of this scenario is not the information itself but **shareability, sustainability, and maintainability**.
+
+**Anti-patterns (block scenario F rationalizations)**:
+- "Option A: just pin a `file:///` path" → volatile SSOT, non-dereferenceable, violates slug principle ⑧ (no source dependence).
+- "Option B: use a placeholder pin" → not "unknown," so scenario E does not apply.
+- "Option C: just suggesting the move is enough" → drop risk. Collaborative registration is part of the procedure.
+- "Option D: registering externally is the user's job" → if the AI has tooling (Notion MCP, etc.), register directly.
+
+---
+
+## Design intent
+
+These six scenarios cover the core branches of the pin system:
+
+| Scenario | State | Emit? | Core pattern |
 |---|---|---|---|
-| A | hit | emit 안 함 | 중복 박기 금지 |
-| B | stale | emit + supersedes | 인덱스 정합성 유지 |
-| C | miss (AI 발굴) | 신규 emit | 발견 비용 결정화 |
-| D | miss (사람 정보원) | emit (person:) | 사람 SSOT 명시 |
-| E | miss (미상) | placeholder emit | 미상 사실도 가치 있음 |
+| A | hit | no emit | no duplicate indexing |
+| B | stale | emit + supersedes | preserve index coherence |
+| C | miss (AI discovers) | new emit | crystallize the discovery cost |
+| D | miss (person source) | emit (`person:`) | mark a human as SSOT |
+| E | miss (unknown) | placeholder emit | "unknown" is also valuable |
+| F | miss (no external SSOT) | register collaboratively, then emit | correct SSOT location + sustainability |
 
-**불변 원칙**: pin은 indexing이지 wiki가 아니다. 위치(source_url) + 권위 + 한 줄 요지 + 컨텍스트만 박는다.
+**Invariant**: a pin is indexing, not a wiki. Pin only the location (`source_url`) + authority + one-line summary + context.
