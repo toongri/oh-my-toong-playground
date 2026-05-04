@@ -152,8 +152,8 @@ curl -s http://localhost:{port}/endpoint | jq .
      ```
    - **Android**: launch in background and wait for boot with bounded polling (per `SKILL.md` § Command Execution Policy: Non-Blocking Only). `timeout` is not on default macOS userland; use bash `SECONDS` deadlines:
      ```bash
-     export ANDROID_SERIAL="emulator-${PORT:-5554}"
-     emulator -avd <name> -port "${PORT:-5554}" -no-window -no-boot-anim >/tmp/emulator-${PORT:-5554}.log 2>&1 &
+     export ANDROID_SERIAL="emulator-${EMULATOR_PORT:-5554}"
+     emulator -avd <name> -port "${EMULATOR_PORT:-5554}" -no-window -no-boot-anim >/tmp/emulator-${EMULATOR_PORT:-5554}.log 2>&1 &
      SECONDS=0; until adb -s "$ANDROID_SERIAL" get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
      SECONDS=0; until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
@@ -204,7 +204,7 @@ After all maestro verification completes (pass or fail):
   ```bash
   adb -s "$ANDROID_SERIAL" emu kill 2>/dev/null
   ```
-  Fallback if the device was unreachable: `pkill -f "emulator.*-port ${PORT:-5554}"`.
+  Fallback if the device was unreachable: `pkill -f "emulator.*-port ${EMULATOR_PORT:-5554}"`.
 
 Skip teardown only when boot was idempotent and the device was reused, not created. Leaked simulators accumulate disk space; leaked emulator processes block port reuse on subsequent runs.
 
@@ -283,10 +283,10 @@ Row 1 bundles two related edits in this file — the Decision Logic table and th
 
 | # | Location | What to update | Grep target |
 |---|----------|---------------|-------------|
-| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; append a new `## Step 3.N` section (do NOT renumber existing sections) with Procedure, Verification Criteria, and Real-Device/Edge note if applicable | `grep -n "Decision Logic\|Step 3\." stage3-handson.md` |
+| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; insert a new `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable. Renumbering adjacent sections is allowed when grouped placement improves coherence — when renumbering, update all in-file cross-references in the same edit pass. | `grep -nE "Decision Logic|Step 3\." stage3-handson.md` |
 | 2 | `skills/qa/stage3-handson.md` § Stage 3 Output Format (Applicability enum) | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
-| 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -n "Trigger\|maestro\|playwright\|curl" skills/qa/SKILL.md` |
-| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "^### Applicability\|^## Quick Reference\|user-facing changes, no scenarios" skills/qa/SKILL.md` |
-| 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -n "Tool.*curl\|Tool.*playwright\|Tool.*maestro" skills/prometheus/plan-template.md` |
+| 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -nE "Trigger|maestro|playwright|curl" skills/qa/SKILL.md` |
+| 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -nE "^### Applicability|^## Quick Reference|user-facing changes, no scenarios" skills/qa/SKILL.md` |
+| 5 | `skills/prometheus/plan-template.md` § QA Scenarios `Tool` field | Add the new tool name to the QA Scenarios `Tool` field whitelist | `grep -nE "Tool.*(curl|playwright|maestro)" skills/prometheus/plan-template.md` |
 | 6 | `skills/prometheus/acceptance-criteria.md` § Verification Examples by Tool | Add a subsection under `## Verification Examples by Tool` for the new tool | `grep -n "Verification Examples by Tool" skills/prometheus/acceptance-criteria.md` |
-| 7 | `skills/qa/stage3-handson.md` § Step 3.N Teardown | Document the teardown command for the new modality (process kill, resource delete, or "no teardown — runner-native cleanup") | `grep -n "Teardown\|simctl delete\|emu kill\|kill <pid>" stage3-handson.md` |
+| 7 | `skills/qa/stage3-handson.md` § Step 3.N Teardown | Document the teardown command for the new modality (process kill, resource delete, or "no teardown — runner-native cleanup") | `grep -nE "Teardown|simctl delete|emu kill|kill <pid>" stage3-handson.md` |
