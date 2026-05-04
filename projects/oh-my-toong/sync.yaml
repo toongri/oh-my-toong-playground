@@ -51,3 +51,4 @@ rules:
     - tool-usage-policy
     - work-principles
     - coding-discipline
+    - private-component-management
