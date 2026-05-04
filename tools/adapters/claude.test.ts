@@ -1,9 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+/**
+ * AC-1 evidence (recorded for durability per plan §4 AC-1):
+ *   $ grep -nE '\$(CLAUDE_PROJECT_DIR|HOME)/\.claude/hooks' tools/adapters/claude.ts
+ *   → 4 emission sites at L138 (syncAgentsDirect), L434/L436/L442 (syncPlatformYaml).
+ * Each site is now branched via isGlobalSync(targetPath) — see plan §5 T3.
+ */
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
 
 import { ClaudeAdapter } from "./claude.ts";
+import baseline from "./__fixtures__/claude-project-baseline.json";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -1138,5 +1145,258 @@ describe("syncPlatformYaml - mcps scope", () => {
     const config = await readJsonFile(claudeConfigFile);
     const mcpServers = config["mcpServers"] as Record<string, unknown>;
     expect(mcpServers["explicit-user-server"]).toEqual({ command: "npx explicit-user-server" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isGlobalSync 분기 — 글로벌 sync (path = homedir)
+// ---------------------------------------------------------------------------
+//
+// 격리 전략: spyOn(os, "homedir")으로 fakeHome tmpdir을 반환하도록 mock.
+// 어댑터 내부의 os.homedir() 호출이 모두 fakeHome을 반환하므로
+// isGlobalSync(globalTarget) === true 분기가 활성화되고
+// 실제 사용자 ~/.claude에는 전혀 write하지 않는다.
+
+describe("isGlobalSync 분기 — 글로벌 sync (path = homedir)", () => {
+  let fakeHome: string;
+  let homeSpy: ReturnType<typeof spyOn>;
+  let globalTarget: string;
+  let claudeDir: string;
+  let settingsFile: string;
+  let agentsDir: string;
+
+  beforeEach(async () => {
+    fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "claude-test-home-"));
+    homeSpy = spyOn(os, "homedir").mockReturnValue(fakeHome);
+    globalTarget = os.homedir(); // = fakeHome (mocked)
+    claudeDir = path.join(globalTarget, ".claude");
+    settingsFile = path.join(claudeDir, "settings.local.json");
+    agentsDir = path.join(claudeDir, "agents");
+  });
+
+  afterEach(async () => {
+    homeSpy.mockRestore();
+    await fs.rm(fakeHome, { recursive: true, force: true });
+  });
+
+  // AC-3: syncAgentsDirect — agent frontmatter hook command uses $HOME prefix
+  it("AC-3: `syncAgentsDirect`가 글로벌 path에서 frontmatter hook command를 $HOME 경로로 emit", async () => {
+    const sourceFile = path.join(tmpDir, "oracle-global.md");
+    await writeFile(sourceFile, "---\nname: oracle-global\n---\n\n# Oracle\n");
+
+    const addHooks = [
+      {
+        event: "SubagentStop",
+        matcher: "*",
+        type: "command",
+        command: "",
+        display_name: "my-hook.sh",
+        timeout: 10,
+      },
+    ];
+
+    await adapter.syncAgentsDirect(globalTarget, "oracle-global", sourceFile, [], addHooks);
+
+    const agentFile = path.join(agentsDir, "oracle-global.md");
+    const content = await fs.readFile(agentFile, "utf8");
+    expect(content).toContain("$HOME/.claude/hooks/my-hook.sh");
+    expect(content).not.toContain("$CLAUDE_PROJECT_DIR");
+  });
+
+  // AC-4: syncPlatformYaml — directory hook with index.ts uses $HOME prefix
+  it("AC-4: `syncPlatformYaml`이 글로벌 path에서 index.ts hook command를 bun run $HOME 경로로 emit", async () => {
+    // Create hook directory with index.ts (triggers AC-4 branch)
+    const hookDir = path.join(tmpDir, "pin-up");
+    await fs.mkdir(hookDir, { recursive: true });
+    await writeFile(path.join(hookDir, "index.ts"), "export {}");
+
+    await adapter.syncPlatformYaml(globalTarget, {
+      hooks: {
+        Stop: [
+          {
+            component: hookDir,
+            timeout: 60,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    const settings = await readJsonFile(settingsFile);
+    const stopHooks = (settings["hooks"] as Record<string, unknown>)["Stop"] as Array<Record<string, unknown>>;
+    const hookEntries = stopHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
+    const commands = hookEntries.map((e) => e["command"] as string);
+    expect(commands.some((c) => c.startsWith("bun run $HOME/.claude/hooks/"))).toBe(true);
+    expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
+  });
+
+  // AC-5: syncPlatformYaml — directory hook with index.sh uses $HOME prefix
+  it("AC-5: `syncPlatformYaml`이 글로벌 path에서 index.sh hook command를 bash $HOME 경로로 emit", async () => {
+    // Create hook directory with index.sh only (triggers AC-5 branch)
+    const hookDir = path.join(tmpDir, "keyword-detector");
+    await fs.mkdir(hookDir, { recursive: true });
+    await writeFile(path.join(hookDir, "index.sh"), "#!/bin/bash\necho hi\n", 0o755);
+
+    await adapter.syncPlatformYaml(globalTarget, {
+      hooks: {
+        UserPromptSubmit: [
+          {
+            component: hookDir,
+            timeout: 10,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    const settings = await readJsonFile(settingsFile);
+    const eventHooks = (settings["hooks"] as Record<string, unknown>)["UserPromptSubmit"] as Array<Record<string, unknown>>;
+    const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
+    const commands = hookEntries.map((e) => e["command"] as string);
+    expect(commands.some((c) => c.startsWith("bash $HOME/.claude/hooks/"))).toBe(true);
+    expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
+  });
+
+  // AC-6: syncPlatformYaml — direct file hook uses $HOME prefix
+  it("AC-6: `syncPlatformYaml`이 글로벌 path에서 직접 파일 hook command를 $HOME 경로로 emit", async () => {
+    // Create a plain hook file (triggers AC-6 direct path branch)
+    const hookFile = path.join(tmpDir, "session-start.sh");
+    await writeFile(hookFile, "#!/bin/bash\necho start\n", 0o755);
+
+    await adapter.syncPlatformYaml(globalTarget, {
+      hooks: {
+        PreToolUse: [
+          {
+            component: hookFile,
+            timeout: 10,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    const settings = await readJsonFile(settingsFile);
+    const eventHooks = (settings["hooks"] as Record<string, unknown>)["PreToolUse"] as Array<Record<string, unknown>>;
+    const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
+    const commands = hookEntries.map((e) => e["command"] as string);
+    expect(commands.some((c) => c.startsWith("$HOME/.claude/hooks/"))).toBe(true);
+    expect(commands.some((c) => c.includes("$CLAUDE_PROJECT_DIR"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AC-7: byte-equal regression — 프로젝트 분기 emit이 pre-fix baseline과 동일
+// ---------------------------------------------------------------------------
+
+describe("AC-7: 프로젝트 분기 hook command가 pre-fix baseline과 byte-equal", () => {
+  const hookDisplayName = "test-hook.sh";
+
+  // AC-7a: syncAgentsDirect (L138 site)
+  it("AC-7a: `syncAgentsDirect` 프로젝트 분기 hook command가 baseline.syncAgentsDirect_L138과 byte-equal", async () => {
+    const sourceFile = path.join(tmpDir, "agent.md");
+    await writeFile(sourceFile, "---\nname: agent\n---\n\n# Agent\n");
+
+    const addHooks = [
+      {
+        event: "SubagentStop",
+        matcher: "*",
+        type: "command",
+        command: "",
+        display_name: hookDisplayName,
+        timeout: 10,
+      },
+    ];
+
+    // targetPath = mkdtemp/target (not homedir) → isGlobalSync false → project branch
+    await adapter.syncAgentsDirect(targetPath, "agent", sourceFile, [], addHooks);
+
+    const agentFile = path.join(targetPath, ".claude", "agents", "agent.md");
+    const content = await fs.readFile(agentFile, "utf8");
+
+    const expected = (baseline.syncAgentsDirect_L138 as string).replace("${displayName}", hookDisplayName);
+    expect(content).toContain(expected);
+  });
+
+  // AC-7b: syncPlatformYaml direct file (L442 site)
+  it("AC-7b: `syncPlatformYaml` 직접 파일 hook command가 baseline.syncPlatformYaml_L442_direct와 byte-equal", async () => {
+    const hookFile = path.join(tmpDir, "test-hook.sh");
+    await writeFile(hookFile, "#!/bin/bash\necho hi\n", 0o755);
+
+    await adapter.syncPlatformYaml(targetPath, {
+      hooks: {
+        PreToolUse: [
+          {
+            component: hookFile,
+            timeout: 10,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settings = await readJsonFile(settingsFile);
+    const eventHooks = (settings["hooks"] as Record<string, unknown>)["PreToolUse"] as Array<Record<string, unknown>>;
+    const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
+    const command = hookEntries[0]?.["command"] as string;
+
+    const expected = (baseline.syncPlatformYaml_L442_direct as string).replace("${displayName}", hookDisplayName);
+    expect(command).toBe(expected);
+  });
+
+  // AC-7c: syncPlatformYaml index.ts (L434 site)
+  it("AC-7c: `syncPlatformYaml` index.ts hook command가 baseline.syncPlatformYaml_L434_indexTs와 byte-equal", async () => {
+    const hookDir = path.join(tmpDir, "test-hook.sh");
+    await fs.mkdir(hookDir, { recursive: true });
+    await writeFile(path.join(hookDir, "index.ts"), "export {}");
+
+    await adapter.syncPlatformYaml(targetPath, {
+      hooks: {
+        Stop: [
+          {
+            component: hookDir,
+            timeout: 60,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settings = await readJsonFile(settingsFile);
+    const stopHooks = (settings["hooks"] as Record<string, unknown>)["Stop"] as Array<Record<string, unknown>>;
+    const hookEntries = stopHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
+    const command = hookEntries[0]?.["command"] as string;
+
+    const expected = (baseline.syncPlatformYaml_L434_indexTs as string).replace("${displayName}", hookDisplayName);
+    expect(command).toBe(expected);
+  });
+
+  // AC-7d: syncPlatformYaml index.sh (L436 site)
+  it("AC-7d: `syncPlatformYaml` index.sh hook command가 baseline.syncPlatformYaml_L436_indexSh와 byte-equal", async () => {
+    const hookDir = path.join(tmpDir, "test-hook.sh");
+    await fs.mkdir(hookDir, { recursive: true });
+    await writeFile(path.join(hookDir, "index.sh"), "#!/bin/bash\necho hi\n", 0o755);
+
+    await adapter.syncPlatformYaml(targetPath, {
+      hooks: {
+        UserPromptSubmit: [
+          {
+            component: hookDir,
+            timeout: 10,
+            matcher: "*",
+          },
+        ],
+      },
+    }, false);
+
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settings = await readJsonFile(settingsFile);
+    const eventHooks = (settings["hooks"] as Record<string, unknown>)["UserPromptSubmit"] as Array<Record<string, unknown>>;
+    const hookEntries = eventHooks.flatMap((h) => h["hooks"] as Array<Record<string, unknown>>);
+    const command = hookEntries[0]?.["command"] as string;
+
+    const expected = (baseline.syncPlatformYaml_L436_indexSh as string).replace("${displayName}", hookDisplayName);
+    expect(command).toBe(expected);
   });
 });
