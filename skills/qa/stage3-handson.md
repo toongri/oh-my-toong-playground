@@ -45,7 +45,7 @@ Stage 3 Result: SKIPPED (internal logic only / non-code change)
 2. Run the server/application in background using `run_in_background`
 3. Wait for readiness (health check endpoint, port listening, or startup log message)
 4. If startup fails after reasonable timeout, report as Stage 3 FAIL
-5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT}`) so AC verification commands referencing the [Executor-Provided Variables](../prometheus/acceptance-criteria.md#executor-provided-variables) contract resolve correctly.
+5. After successful readiness, export `$API_BASE_URL` (e.g., `export API_BASE_URL=http://localhost:${PORT:?PORT must be set after server start}`) so AC verification commands referencing the [Executor-Provided Variables](../prometheus/acceptance-criteria.md#executor-provided-variables) contract resolve correctly.
 
 ### Stop
 
@@ -73,7 +73,7 @@ The lifecycle steps above describe the general pattern. Each modality requires s
 |----------|-------|----------------|------|
 | HTTP server | `run_in_background` with start command | health check endpoint, port listening, or startup log | `kill <pid>` of background process |
 | iOS Simulator | `xcrun simctl bootstatus "$IOS_UDID" -b` (idempotent) | bootstatus returns 0 | `xcrun simctl shutdown "$IOS_UDID"` (delete only when created per-workspace) |
-| Android Emulator | `emulator -avd <name> ... >/tmp/emulator-<port>.log 2>&1 &` | `adb get-state` + `getprop sys.boot_completed` with bounded `SECONDS` deadline | `adb -s "$ANDROID_SERIAL" emu kill` |
+| Android Emulator | `emulator -avd <name> ... >/tmp/emulator-<port>.log 2>&1 &` | `adb -s "$ANDROID_SERIAL" get-state` + `adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed` with bounded `SECONDS` deadline | `adb -s "$ANDROID_SERIAL" emu kill` |
 
 Apply the corresponding row's primitives based on the change type detected in Step 3.1. Mobile modalities use Step 3.5 procedures, which expand on these primitives.
 
@@ -154,8 +154,8 @@ curl -s http://localhost:{port}/endpoint | jq .
      ```bash
      export ANDROID_SERIAL="emulator-${PORT:-5554}"
      emulator -avd <name> -port "${PORT:-5554}" -no-window -no-boot-anim >/tmp/emulator-${PORT:-5554}.log 2>&1 &
-     SECONDS=0; until adb get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
-     SECONDS=0; until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
+     SECONDS=0; until adb -s "$ANDROID_SERIAL" get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
+     SECONDS=0; until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
 3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
    - iOS: `maestro test --device "$IOS_UDID" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
@@ -283,7 +283,7 @@ Row 1 bundles two related edits in this file — the Decision Logic table and th
 
 | # | Location | What to update | Grep target |
 |---|----------|---------------|-------------|
-| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; add a `## Step 3.N` section with Procedure, Verification Criteria, and Real-Device/Edge note if applicable | `grep -n "Decision Logic\|Step 3\." stage3-handson.md` |
+| 1 | `skills/qa/stage3-handson.md` § Step 3.1 Decision Logic (+ new `## Step 3.N` section) | Add row to Decision Logic table; append a new `## Step 3.N` section (do NOT renumber existing sections) with Procedure, Verification Criteria, and Real-Device/Edge note if applicable | `grep -n "Decision Logic\|Step 3\." stage3-handson.md` |
 | 2 | `skills/qa/stage3-handson.md` § Stage 3 Output Format (Applicability enum) | Add the new modality token to the Output Format Applicability enum (`[API / Frontend / Mobile / CLI / SKIPPED]`) | `grep -n "Applicability.*API" stage3-handson.md` |
 | 3 | `skills/qa/SKILL.md` § Composable Verification Triggers → Trigger Activation Table | Add a row to the Trigger Activation Table with the action label and tool name | `grep -n "Trigger\|maestro\|playwright\|curl" skills/qa/SKILL.md` |
 | 4 | `skills/qa/SKILL.md` § "When: user-facing changes, no scenarios" Applicability + § Quick Reference | Update the Applicability matrix and Quick Reference summary to include the new modality | `grep -n "^### Applicability\|^## Quick Reference\|user-facing changes, no scenarios" skills/qa/SKILL.md` |
