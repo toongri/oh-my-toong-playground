@@ -255,11 +255,11 @@ When the Verification can be expressed as a runnable command, prefer one that is
 ### Mobile app E2E (maestro)
 
 - [ ] **Login flow on iOS Simulator reaches Home**
-      **Verification**: `maestro test --device "$IOS_UDID" .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
+      **Verification**: `maestro --device "$IOS_UDID" test .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
       (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 - [ ] **Login flow on Android Emulator reaches Home**
-      **Verification**: `maestro test --device "$ANDROID_SERIAL" .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
+      **Verification**: `maestro --device "$ANDROID_SERIAL" test .maestro/auth/login_happy.yaml --format junit --output "$evidence_xml"`
       (Setup/Cleanup omitted — this flow's first step is `clearState` + `launchApp`, so the flow self-resets per the exemption above. If your flow does not, add explicit Cleanup. If the flow mutates backend persistence beyond app state, chain Query API verification or add API-symmetric cleanup.)
 
 > Mobile ACs assume `$IOS_UDID` / `$ANDROID_SERIAL` are exported by Argus Stage 3.5 — see § Executor-Provided Variables above.

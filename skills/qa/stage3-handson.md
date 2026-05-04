@@ -158,8 +158,8 @@ curl -s http://localhost:{port}/endpoint | jq .
      SECONDS=0; until [ "$(adb -s "$ANDROID_SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
 3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
-   - iOS: `maestro test --device "$IOS_UDID" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
-   - Android: `maestro test --device "$ANDROID_SERIAL" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
+   - iOS: `maestro --device "$IOS_UDID" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
+   - Android: `maestro --device "$ANDROID_SERIAL" test .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
    Device binding is mandatory even in single-device sessions to keep evidence deterministic across parallel runs.
 4. Capture evidence: copy the JUnit XML at `$evidence_xml` and any referenced screenshots from `~/.maestro/tests/<run-id>/` into the evidence directory. Record the `<run-id>` from maestro stdout for traceability.
 
@@ -174,7 +174,7 @@ When multiple Argus runs may execute concurrently (parallel git worktrees, CI ma
   export IOS_UDID
   ```
 - Android: name a per-workspace AVD or pass `-port` to differentiate
-- Pass the device id explicitly: `maestro test --device <udid> .maestro/<flow>.yaml`
+- Pass the device id explicitly: `maestro --device <udid> test .maestro/<flow>.yaml`
 
 **Lighter alternative**: a single shared simulator with `clearState: true` at flow start (Maestro built-in) — avoids per-workspace boot overhead, but trades off cross-flow filesystem/keychain isolation. Use when flows self-reset state.
 
