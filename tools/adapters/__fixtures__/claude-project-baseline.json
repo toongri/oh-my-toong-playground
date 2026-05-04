@@ -1,0 +1,9 @@
+{
+  "_about": "Pre-fix baseline. AC-7 byte-equal target. Captured from main HEAD before isGlobalSync branching. Project sync (path=/tmp/proj) emission only.",
+  "_capturedAt": "2026-05-04T00:00:00.000Z",
+  "_acRef": "plans/adapter-global-sync-hook-path.md AC-7",
+  "syncAgentsDirect_L138": "$CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}",
+  "syncPlatformYaml_L434_indexTs": "bun run $CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}/index.ts",
+  "syncPlatformYaml_L436_indexSh": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}/index.sh",
+  "syncPlatformYaml_L442_direct": "$CLAUDE_PROJECT_DIR/.claude/hooks/${displayName}"
+}
