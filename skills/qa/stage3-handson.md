@@ -157,7 +157,7 @@ curl -s http://localhost:{port}/endpoint | jq .
      SECONDS=0; until adb get-state >/dev/null 2>&1; do (( SECONDS > 60 )) && { echo "device wait timeout" >&2; exit 1; }; sleep 1; done
      SECONDS=0; until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do (( SECONDS > 90 )) && { echo "boot timeout" >&2; exit 1; }; sleep 1; done
      ```
-3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/task-<N>-maestro-<flow>.xml`):
+3. Run the flow with explicit device binding and output path. `$evidence_xml` is resolved via the 3-tier Evidence Path Priority (e.g., `$OMT_DIR/evidence/<work-slug>/<task-slug>/maestro-<flow>.xml`):
    - iOS: `maestro test --device "$IOS_UDID" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
    - Android: `maestro test --device "$ANDROID_SERIAL" .maestro/<flow>.yaml --format junit --output "$evidence_xml"`
    Device binding is mandatory even in single-device sessions to keep evidence deterministic across parallel runs.
