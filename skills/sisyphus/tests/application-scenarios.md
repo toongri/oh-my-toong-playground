@@ -988,12 +988,12 @@ Argus returns REQUEST_CHANGES: "Missing format validation — only checks non-em
 Turn 3:
 Fix task created, junior fixes email validation.
 Argus returns APPROVE.
-Evidence Audit Gate: $OMT_DIR/evidence/fix-email-validation/task-5-test.txt is MISSING.
+Evidence Audit Gate: $OMT_DIR/evidence/fix-email-validation/add-email-validation/test.txt is MISSING.
 
 Turn 4:
 Re-invoke argus with Evidence Gap Request listing the missing path.
 Argus returns APPROVE again.
-Evidence Audit Gate: task-5-test.txt now EXISTS and is non-empty.
+Evidence Audit Gate: add-email-validation/test.txt now EXISTS and is non-empty.
 
 Turn 5:
 Mnemosyne invoked, commit created.
