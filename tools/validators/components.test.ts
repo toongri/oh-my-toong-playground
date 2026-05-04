@@ -6,6 +6,7 @@ import { tmpdir } from "os";
 import {
   validateSyncYamlComponents,
   validatePlatformYamlHookComponents,
+  validateAll,
 } from "./components.ts";
 
 // ---------------------------------------------------------------------------
@@ -611,5 +612,63 @@ hooks:
 
     const result = await validatePlatformYamlHookComponents(root, root);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Suite: validateAll — enabled-projects 화이트리스트
+// ---------------------------------------------------------------------------
+
+describe("validateAll — enabled-projects 화이트리스트", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = makeRoot();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("`enabledProjects`에 포함되지 않은 projects/* 항목은 검증 대상에서 제외", async () => {
+    // proj-a는 활성, proj-b는 비활성. 둘 다 존재하지 않는 target path를 갖도록 만들어
+    // 검증되면 CLAUDE.md 누락 에러가 나게 함.
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: ${root}\n`);
+    writeYaml(join(root, "projects", "proj-b"), "sync.yaml", `path: /nonexistent/proj-b\n`);
+    writeYaml(root, "sync.yaml", `path: ${root}\n`);
+
+    const result = await validateAll(root, ["proj-a"]);
+
+    expect(result.errors.some((e) => e.includes("/nonexistent/proj-b"))).toBe(false);
+  });
+
+  it("`enabledProjects`로 활성화된 프로젝트는 정상 검증된다", async () => {
+    // proj-a 활성: target path가 존재하지 않으면 CLAUDE.md 에러가 나야 함
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: /nonexistent/proj-a\n`);
+    writeYaml(root, "sync.yaml", `path: ${root}\n`);
+
+    const result = await validateAll(root, ["proj-a"]);
+
+    expect(result.errors.some((e) => e.includes("/nonexistent/proj-a"))).toBe(true);
+  });
+
+  it("루트 sync.yaml은 `enabledProjects` 필터와 무관하게 항상 검증된다", async () => {
+    // 루트 sync.yaml만 있고 enabledProjects는 비어있는 sentinel — 루트는 그래도 처리되어야 함
+    writeYaml(root, "sync.yaml", `path: /nonexistent/root-target\n`);
+
+    const result = await validateAll(root, ["__none__"]);
+
+    expect(result.errors.some((e) => e.includes("/nonexistent/root-target"))).toBe(true);
+  });
+
+  it("`enabledProjects` 미지정 시 모든 프로젝트 검증 (기존 동작 회귀)", async () => {
+    writeYaml(join(root, "projects", "proj-a"), "sync.yaml", `path: /nonexistent/proj-a\n`);
+    writeYaml(join(root, "projects", "proj-b"), "sync.yaml", `path: /nonexistent/proj-b\n`);
+    writeYaml(root, "sync.yaml", `path: ${root}\n`);
+
+    const result = await validateAll(root, []);
+
+    expect(result.errors.some((e) => e.includes("/nonexistent/proj-a"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("/nonexistent/proj-b"))).toBe(true);
   });
 });

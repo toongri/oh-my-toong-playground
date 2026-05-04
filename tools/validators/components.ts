@@ -15,7 +15,7 @@
 
 import { existsSync, readdirSync } from "fs";
 import { join, dirname, basename } from "path";
-import { getRootDir } from "../lib/config.ts";
+import { getRootDir, getEnabledProjects } from "../lib/config.ts";
 import { expandTilde } from "../lib/path-utils.ts";
 import {
   type ValidationResult,
@@ -396,10 +396,23 @@ function discoverSyncYamls(rootDir: string): string[] {
   return results;
 }
 
-export async function validateAll(rootDir: string): Promise<ValidationResult> {
+export async function validateAll(
+  rootDir: string,
+  enabledProjects?: string[],
+): Promise<ValidationResult> {
   const result = makeResult();
 
+  const effective = enabledProjects ?? (await getEnabledProjects());
+  const enabledSet = effective && effective.length > 0 ? new Set(effective) : undefined;
+  const projectsDir = join(rootDir, "projects");
+
   for (const syncYamlPath of discoverSyncYamls(rootDir)) {
+    if (enabledSet) {
+      const parentDir = dirname(syncYamlPath);
+      if (dirname(parentDir) === projectsDir && !enabledSet.has(basename(parentDir))) {
+        continue;
+      }
+    }
     mergeResult(result, await validateSyncYamlComponents(syncYamlPath, rootDir));
     const yamlDir = dirname(syncYamlPath);
     mergeResult(result, await validatePlatformYamlHookComponents(yamlDir, rootDir));
