@@ -249,6 +249,8 @@ related: [notion-ota-handover]
 - "Option C: just suggesting the move is enough" → drop risk. Collaborative registration is part of the procedure.
 - "Option D: registering externally is the user's job" → if the AI has tooling (Notion MCP, etc.), register directly.
 
+> **Note**: `notion-ota-handover` in this fixture's `related` attribute is illustrative — replace with a real existing slug at emit time. The validator (`hooks/pin-up/validator.ts` AC-19) escapes pins whose `related` slugs do not exist in `$OMT_DIR/pins/`.
+
 ---
 
 ## Design intent
