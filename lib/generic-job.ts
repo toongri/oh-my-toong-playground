@@ -80,7 +80,7 @@ export function safeFileName(name: string, fallback: string = 'member'): string 
 // ---------------------------------------------------------------------------
 
 const PACKAGE_RUNNERS = ['npx', 'bunx', 'pnpm', 'yarn', 'deno'];
-const CLI_NAMES = ['claude', 'gemini', 'codex'];
+const CLI_NAMES = ['claude', 'gemini', 'codex', 'opencode'];
 
 export function detectCliType(command: unknown): string {
   if (!command) return 'unknown';
@@ -126,6 +126,8 @@ export function buildAugmentedCommand(
       env.CLAUDE_CODE_EFFORT_LEVEL = String(entity.effort_level);
     } else if (cliType === 'codex') {
       parts.push('-c', `model_reasoning_effort=${entity.effort_level}`);
+    } else if (cliType === 'opencode') {
+      parts.push('--variant', String(entity.effort_level));
     }
     // gemini/unknown: ignored
   }

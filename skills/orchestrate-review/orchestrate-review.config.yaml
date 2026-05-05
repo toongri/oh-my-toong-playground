@@ -1,41 +1,45 @@
 chunk-review:
   members:
-    # --- Security Model ---
-    # Reviewer CLIs operate on TRUSTED code only (local git working tree).
-    # Claude: --allowedTools restricts to read-only tools (Bash for git diff, Read/Glob/Grep for files).
-    # Gemini/Codex: No fine-grained permission control; --yolo / --dangerously-bypass flags
-    #   are required for headless execution. For untrusted PR review, additional sandboxing is recommended.
+    # Each reviewer = vanilla `opencode run` invoking a specific omo agent.
+    # The omo plugin registers core agents under display names with leading
+    # zero-width-space (U+200B) characters used as a sort key:
+    #   Sisyphus    → 1 ZWS + "Sisyphus - Ultraworker"
+    #   Hephaestus  → 2 ZWS + "Hephaestus - Deep Agent"
+    # opencode's agent registry is exact-match, so the --agent value MUST
+    # include the exact ZWS prefixes. We use literal U+200B characters inside
+    # the agent display name. The YAML value is unquoted at the OUTER level so
+    # parseYamlSimple preserves the inner double-quotes verbatim (they are
+    # interpreted by splitCommand as quote toggles for the agent arg).
     #
-    # --- Per-reviewer CLI configuration (all optional) ---
-    # model:         Model name passed to CLI (claude/gemini: --model, codex: -m)
-    # effort_level:  Thinking effort (low/medium/high)
-    #                claude: env CLAUDE_CODE_EFFORT_LEVEL, codex: -c flag, gemini: ignored
-    # output_format: Output format (text/json/stream-json)
-    #                claude/gemini: --output-format, codex: --json, unknown: ignored
-    - name: claude
-      command: "claude -p --allowedTools Bash,Read,Glob,Grep"
-      emoji: "\U0001F9E0"
-      color: "CYAN"
-      model: "claude-opus-4-7"
-      effort_level: "high"
-      output_format: "text"
-    - name: gemini
-      command: "gemini -p ' ' --yolo"
-      emoji: "\U0001F48E"
-      color: "GREEN"
-      model: "gemini-3-pro-preview"
-      # effort_level: "high"       # ignored for gemini
-      output_format: "text"
-    - name: codex
-      command: "codex exec --dangerously-bypass-approvals-and-sandbox"
+    # Provider routing (all already authenticated — see `opencode auth list`):
+    #   gpt      — openai/gpt-5.5             via native OpenAI OAuth
+    #   deepseek — opencode-go/deepseek-v4-pro  via OpenCode Go gateway
+    #   kimi     — opencode-go/kimi-k2.6        via OpenCode Go gateway
+    - name: gpt
+      command: opencode run --agent "​​Hephaestus - Deep Agent"
       emoji: "\U0001F916"
       color: "BLUE"
-      model: "gpt-5.3-codex"
+      model: "openai/gpt-5.5"
+      effort_level: "high"
+      output_format: "text"
+    - name: deepseek
+      command: opencode run --agent "​​Hephaestus - Deep Agent"
+      emoji: "\U0001F40B"
+      color: "MAGENTA"
+      model: "opencode-go/deepseek-v4-pro"
+      effort_level: "high"
+      output_format: "text"
+    - name: kimi
+      command: opencode run --agent "​Sisyphus - Ultraworker"
+      emoji: "\U0001F319"
+      color: "YELLOW"
+      model: "opencode-go/kimi-k2.6"
       effort_level: "high"
       output_format: "text"
   settings:
-    timeout: 480
-    # When true, the chairman model (claude) is excluded from the external reviewer list
-    # to avoid reviewing its own orchestration output. CLI flags --exclude-chairman /
-    # --include-chairman override this value. (Used in chunk-review-job.js)
+    timeout: 600
+    # Used by chunk-review-job.js to exclude the chairman model from the
+    # external reviewer list. With the omo-based members above (no `claude`
+    # member), this flag is currently a no-op; left as-is for future
+    # compatibility if a claude reviewer is added back.
     exclude_chairman_from_members: false

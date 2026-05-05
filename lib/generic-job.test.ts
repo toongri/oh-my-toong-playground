@@ -169,6 +169,14 @@ describe('detectCliType', () => {
   test('returns "unknown" when cli name appears after the 3rd token', () => {
     expect(detectCliType('echo hello claude')).toBe('unknown');
   });
+
+  test('detects opencode', () => {
+    expect(detectCliType('opencode run --agent foo')).toBe('opencode');
+  });
+
+  test('detects opencode via package runner', () => {
+    expect(detectCliType('bunx opencode run')).toBe('opencode');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -271,6 +279,23 @@ describe('buildAugmentedCommand', () => {
   test('non-claude: does not include CLAUDECODE in env', () => {
     const result = buildAugmentedCommand({ command: 'gemini' }, 'gemini');
     expect(result.env.CLAUDECODE).toBe(undefined);
+  });
+
+  test('opencode appends --variant for effort_level', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run', model: 'openai/gpt-5.5', effort_level: 'high' },
+      'opencode',
+    );
+    expect(result.command).toBe('opencode run --model openai/gpt-5.5 --variant high');
+    expect(result.env).toEqual({});
+  });
+
+  test('opencode without effort_level has no --variant', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run', model: 'openai/gpt-5.5' },
+      'opencode',
+    );
+    expect(result.command).toBe('opencode run --model openai/gpt-5.5');
   });
 });
 
