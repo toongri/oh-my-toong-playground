@@ -37,7 +37,7 @@ chunk-review:
       effort_level: "high"
       output_format: "text"
   settings:
-    timeout: 600
+    timeout: 900
     # Used by chunk-review-job.js to exclude the chairman model from the
     # external reviewer list. With the omo-based members above (no `claude`
     # member), this flag is currently a no-op; left as-is for future
