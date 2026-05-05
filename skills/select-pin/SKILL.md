@@ -27,12 +27,13 @@ Context needed?
     └─ Check pins first (Steps 1–5). Only on miss: proceed to alternative sources.
 ```
 
-**5 trigger scenarios** (see [Use cases](#use-cases)):
+**6 trigger scenarios** (see [Use cases](#use-cases)):
 - A. Slug known from the SessionStart index → fast path
 - B. Pin exists but may be stale → look up then verify
 - C. No pin, AI can find SSOT directly → miss + direct discovery
 - D. No pin, person is the SSOT → miss + person referral
 - E. No pin, nobody knows → miss + placeholder
+- F. No pin, no external SSOT exists (local .md, interview note, ephemeral) → miss + collaborative external registration before pin emit
 
 ## 5-step lookup procedure
 
@@ -202,3 +203,13 @@ No pin, no accessible SSOT, nobody knows. A placeholder is warranted.
 - Run the full 5-step procedure. No match at any step.
 - Synthesis: report "pins: no match; SSOT unknown." Note what was searched (which slug patterns, which tags).
 - Recommend invoking `write-pin` with `tier: 3` (placeholder) so the gap is indexed for future resolution. select-pin does NOT write the placeholder.
+
+### Scenario F — miss + external SSOT does not exist
+
+No pin matches the query. The information is rich (user-authored content, interview notes, ephemeral chat) but no formal record exists in a stable external system (Notion / Wiki / PR / code repo). `file:///` paths are non-dereferenceable for others and volatile.
+
+**Lookup behavior**:
+- Run the full 5-step procedure. Zero candidates survive Step 3.
+- Step 2/3: confirm the discovery is rich but external dereferenceable location is absent — distinguish from Scenario E ("nobody knows") because here the authority is clear (the user) but the SSOT location needs registration.
+- Synthesis: report "pins: no match; SSOT location requires external registration first."
+- Action: recommend invoking `write-pin` Scenario F (3-step collaborative registration → emit). select-pin does NOT register and does NOT write. After the user agrees and the external system entry is created, `write-pin` emits the pin pointing at the registered URL.
