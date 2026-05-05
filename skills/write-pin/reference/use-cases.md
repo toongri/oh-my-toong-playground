@@ -54,6 +54,7 @@ The pin is already accurate and current; no new pin is needed. Duplicate indexin
      tier="2"
      tags="ratelimit,billing,decision"
      sensitivity="private"
+     related="decision-billing-jh"
      supersedes="decision-ratelimit-ks"
      discovery_context="user reported KS left — billing policy review">
 ### ① 한 줄 요지
