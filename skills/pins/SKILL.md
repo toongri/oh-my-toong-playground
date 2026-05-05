@@ -72,7 +72,7 @@ Nobody knows the precise location. Invoke `write-pin` → emit a placeholder pin
 
 No relevant pin. Information is rich, but no formal record exists in a stable external system (Notion / Slack / Linear / GitHub repo) — it lives only in a local Desktop `.md`, an interview note, an ephemeral Slack message, or someone's head.
 
-In this case **do not emit a pin immediately**. Follow the three-step collaborative procedure:
+In this case the emit step (③) is preceded by a 2-step setup. Begin the handling procedure immediately and proceed through the three-step collaborative procedure:
 
 1. **Propose SSOT registration**: identify a suitable external system (Notion / Wiki / PR / code repo) and propose registration to the user ("How about turning this into a Notion page?").
 2. **Register together**: after the user agrees, register the content in the external system. If the AI has tooling (Notion MCP, etc.) to register directly, do so — this reduces dropped-task risk.
@@ -82,7 +82,7 @@ The value of this scenario is not the information itself but **shareability, sus
 
 **Anti-patterns**:
 - (a) `source_url: file:///Users/.../Desktop/...` — pinning a local path. Other people cannot dereference it; volatile SSOT.
-- (b) Using a scenario E placeholder — wrong fit, since this case is not "unknown."
+- (b) Using a scenario E placeholder *as the initial response* — wrong fit, since this case is not "unknown." (Conditional fallback applies only after the user explicitly declines external registration; see Fallback below.)
 - (c) "I'm done if I just suggest the move" — drop risk. Collaborative registration is part of the procedure.
 
 **Fallback when the user declines external registration**: if the user says "I'm not moving this to Notion right now," fall back to a scenario E placeholder pin. Use `authority: user-authored (external registration deferred)` instead of `unknown`, and set `tier: 3`. Re-propose registration in a future session and update via `supersedes` once registered.
