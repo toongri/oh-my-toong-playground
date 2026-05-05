@@ -44,7 +44,9 @@ The work-in-progress state is itself part of the SSOT. In-progress tickets / PRs
 
 **Anti-pattern**: "It might change, so it's safer to wait" — reject. The `supersedes` mechanism is designed exactly to absorb changes; there is no reason to delay. External SSOTs with immutable URLs (Linear tickets, GitHub PRs, Notion pages) can be indexed immediately regardless of content drift.
 
-**The meaning of "immediately" (resolving the apparent conflict with scenario F)**: "Emit immediately" means "begin the handling procedure immediately upon discovery." For scenario F (no external SSOT exists), the procedure is ① propose registration → ② register together → ③ emit pin, where step ③ is the "immediate" emit. Scenarios A–E skip ① and ② because the external SSOT already exists, and proceed directly to ③. The timing principle and scenario F **do not conflict** — F's ① and ② are SSOT location correction, not emit deferral.
+### The meaning of "immediately" (resolving the apparent conflict with scenario F)
+
+"Emit immediately" means "begin the handling procedure immediately upon discovery." For scenario F (no external SSOT exists), the procedure is ① propose registration → ② register together → ③ emit pin, where step ③ is the "immediate" emit. Scenarios A–E skip ① and ② because the external SSOT already exists, and proceed directly to ③. The timing principle and scenario F **do not conflict** — F's ① and ② are SSOT location correction, not emit deferral.
 
 ## Use cases
 
@@ -70,7 +72,9 @@ Nobody knows the precise location. Invoke `write-pin` → emit a placeholder pin
 
 ### Scenario F — miss + external SSOT does not exist (local / temp file / verbal interview)
 
-No relevant pin. Information is rich, but no formal record exists in a stable external system (Notion / Slack / Linear / GitHub repo) — it lives only in a local Desktop `.md`, an interview note, an ephemeral Slack message, or someone's head.
+No relevant pin. Information is rich and durable enough to warrant external registration, but no formal record exists in a stable external system (Notion / Slack / Linear / GitHub repo) — it lives only in a local Desktop `.md`, an interview note, or an ephemeral Slack message.
+
+**Precedence vs Scenario D**: if the user names a specific person as the SSOT authority ("ask A about it"), prefer Scenario D (immediate `person:A` pin). F applies only when the durable artifact (document, decision, procedure) needs an external home — not for ephemeral person-knowledge queries.
 
 In this case the emit step (③) is preceded by a 2-step setup. Begin the handling procedure immediately and proceed through the three-step collaborative procedure:
 
@@ -85,7 +89,7 @@ The value of this scenario is not the information itself but **shareability, sus
 - (b) Using a scenario E placeholder *as the initial response* — wrong fit, since this case is not "unknown." (Conditional fallback applies only after the user explicitly declines external registration; see Fallback below.)
 - (c) "I'm done if I just suggest the move" — drop risk. Collaborative registration is part of the procedure.
 
-**Fallback when the user declines external registration**: if the user says "I'm not moving this to Notion right now," fall back to a scenario E placeholder pin. Use `authority: user-authored (external registration deferred)` instead of `unknown`, and set `tier: 3`. Re-propose registration in a future session and update via `supersedes` once registered.
+**Fallback when the user declines external registration**: if the user says "I'm not moving this to Notion right now," fall back to a scenario E placeholder pin. Use `authority: user-authored (external registration deferred)` instead of `unknown`, and set `tier: 3`. For `source_url`, use `person:user` (the user is the de-facto SSOT until registration) — do **not** use `file:///` (anti-pattern (a) above). Re-propose registration in a future session and update via `supersedes` once registered.
 
 ## v1 best-effort caveat
 
