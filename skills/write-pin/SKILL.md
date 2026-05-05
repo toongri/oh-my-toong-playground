@@ -231,4 +231,4 @@ If any of these appears, switch to the right-hand reality in the rationalization
 
 The write-pin schema is enforced by `hooks/pin-up/validator.ts`. Violations are routed to `.escape.jsonl` and the pin file is not created.
 
-v1 best-effort: the validator does not enforce enum values (such as `tier` / `sensitivity` ranges) — correctness depends on the training fixtures (SKILL.md + reference/*) and schema coherence.
+v1 best-effort: the validator does not enforce `tier` enum values — correctness depends on the training fixtures (SKILL.md + reference/*) and schema coherence. (`sensitivity` is enforced as `private | shared` by validator.ts.)
