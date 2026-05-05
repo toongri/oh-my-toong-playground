@@ -75,7 +75,7 @@ Apply relevance filters:
 3. **Authority match**: does the `authority` field name a system, person, or URL relevant to the current question?
 4. **Supersedes chain**: if a pin has a `supersedes` field, the superseded slug is stale — prefer the newer pin.
 
-Rank survivors by relevance. Carry the top 1–3 slugs forward to Step 4. If zero candidates survive, move directly to the [Use cases](#use-cases) miss scenarios (C, D, or E).
+Rank survivors by relevance. Carry the top 1–3 slugs forward to Step 4. If zero candidates survive, move directly to the [Use cases](#use-cases) miss scenarios (C, D, E, or F). Distinguish E (authority unknown) from F (authority clear, external SSOT location absent — needs registration).
 
 ### Step 4: Read pin body for top candidates
 
