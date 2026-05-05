@@ -73,6 +73,8 @@ related: [decision-billing-jh]
 
 **Why this is correct**: leaving a stale pin in place lets a future AI session reuse wrong information. The `supersedes` attribute explicitly invalidates the prior pin and keeps the index coherent.
 
+> **Note**: `decision-billing-jh` in this fixture's `related` attribute is illustrative — replace with a real existing slug at emit time, or omit `related` entirely if the teaching point is `supersedes` rather than cross-link demonstration. The validator (`hooks/pin-up/validator.ts` AC-19) escapes pins whose `related` slugs do not exist in `$OMT_DIR/pins/`.
+
 ---
 
 ### Scenario C
@@ -108,7 +110,7 @@ auth/jwt.ts line 142 — comment explicitly reads "single source of truth for to
 Implementing billing-claim verification logic required knowing the JWT verification authority. The user did not know → direct discovery.
 
 ### ④ 관련 cross-link
-related: []
+none
 </pin>
 ```
 
@@ -150,7 +152,7 @@ person:A팀장 — direct interview required. No documented location in the curr
 While processing billing claims the rules were unclear. User said: "A팀장 has them." Documentation is needed.
 
 ### ④ 관련 cross-link
-related: []
+none
 </pin>
 ```
 
@@ -192,7 +194,7 @@ Logic exists at payments/fee.ts but no authority is recorded. Original author un
 Surfaced during PR review of payment fee logic. Neither user nor team aware of the authority. Investigation needed.
 
 ### ④ 관련 cross-link
-related: []
+none
 </pin>
 ```
 
@@ -246,7 +248,7 @@ related: [notion-ota-handover]
 
 **Anti-patterns (block scenario F rationalizations)**:
 - "Option A: just pin a `file:///` path" → volatile SSOT, non-dereferenceable, violates slug principle ⑧ (no source dependence).
-- "Option B: use a placeholder pin *as the initial response*" → not "unknown," so scenario E does not apply. After the user explicitly declines external registration, the conditional fallback in `pins/SKILL.md` applies (placeholder with `tier: 3` + `external registration deferred` authority).
+- "Option B: use a placeholder pin *as the initial response*" → not "unknown," so scenario E does not apply. After the user explicitly declines external registration, apply the conditional fallback defined in `pins/SKILL.md` § "Fallback when the user declines external registration" — emit a placeholder pin with `source_url: person:user` (NOT `file:///`), `authority: user-authored (external registration deferred)`, and `tier: 3`.
 - "Option C: just suggesting the move is enough" → drop risk. Collaborative registration is part of the procedure.
 - "Option D: registering externally is the user's job" → if the AI has tooling (Notion MCP, etc.), register directly.
 
