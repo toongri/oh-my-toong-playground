@@ -3,7 +3,7 @@
 ## 개요
 
 AC-22 요건: `skills/write-pin` 에 대해 writing-skills 방법론(RED-GREEN-REFACTOR + subagent pressure scenario) 시뮬레이션 검증.
-5 시나리오 × 3 phase = **15 entry**.
+6 시나리오 × 3 phase = **18 entry**.
 
 - **RED**: skill 없는 상태 baseline 응답 캡처 (prompt context에 사전 첨부하여 시뮬레이션)
 - **GREEN**: skill 적용 후 동일 task 응답 비교
@@ -263,6 +263,57 @@ verdict:     PASS
 
 ---
 
+## 시나리오 6: external SSOT 부재 — Desktop의 19KB CodePush PRD .md
+
+### 6-RED: skill 없는 상태 baseline
+
+사용자가 "Desktop의 19KB CodePush PRD 운영 가이드 .md를 어디에 박아둘까? AWS permanent access key 발급, Sentry org:ci 권한 함정, Ctrl+D 다중라인 입력 quirk, 7가지 troubleshooting 사례가 들어있어"라고 말했을 때.
+
+**Expected baseline failure**: Claude는 write-pin skill 없이 Scenario F (external SSOT 부재 시 3-step 협업 등록 절차)를 모른다. 흔한 실패 패턴은 (a) `source_url: file:///Users/.../Desktop/...` pin emit, (b) placeholder pin (scenario E)으로 잘못 분류, (c) 정보 풍부함에도 불구 emit 자체를 skip.
+
+**Observed behavior (simulated)**: Claude가 `<pin source_url="file:///Users/toong/Desktop/codepush-prd.md" ...>` 형식으로 file:// scheme pin emit 시도. 다른 사용자/세션이 dereference 불가, 휘발성 SSOT.
+
+```
+observed_at: 2026-05-05
+method:      analytical_simulation
+command:     N/A — skill 미적용 상태 시뮬레이션
+exit_code:   N/A — simulation
+key_output:  file:/// pin emit 시도. dereferenceability 없음. shareability/sustainability 미확보.
+verdict:     FAIL
+```
+
+### 6-GREEN: write-pin skill 적용 후
+
+write-pin skill 로드 후 동일 요청. Claude가 Scenario F 절차를 인식하고 3-step 협업 등록을 수행한다.
+
+**Expected green behavior**: Claude가 (1) "이 .md 내용을 Notion 페이지로 등록할까요?" 제안, (2) 사용자 동의 후 Notion MCP 도구로 페이지 생성 (또는 사용자 등록 후 URL 반환), (3) 등록된 Notion URL을 source_url로 하는 `<pin slug="notion-codepush-prd-handover" source_url="https://notion.so/..." ...>` emit. file:// 또는 placeholder fallback 안 함.
+
+```
+observed_at: 2026-05-05
+method:      analytical_simulation
+command:     N/A — write-pin skill 적용 시뮬레이션
+exit_code:   N/A — simulation
+key_output:  3-step 절차 수행 → notion- prefix slug pin emit. body 4섹션 + related="notion-ota-handover" attribute 포함.
+verdict:     GREEN_LIVE
+```
+
+### 6-REFACTOR: 합리화 차단 검증
+
+**Pressure**: "그냥 file://로 박아두면 안 돼? Notion 등록은 번거로워"
+
+**Expected refactoring behavior**: Claude가 write-pin/SKILL.md "Common rationalizations" 표를 인용하며 거부. "다른 사람이 dereference할 수 없고 휘발성 SSOT — Scenario F 3-step 절차 적용" 응답. 합리화 우회 없이 절차 유지.
+
+```
+observed_at: 2026-05-05
+method:      analytical_simulation
+command:     N/A — pressure scenario 시뮬레이션
+exit_code:   N/A — simulation
+key_output:  Claude가 rationalization table 인용하며 file:// 거부. 3-step 협업 등록 재제안.
+verdict:     PASS
+```
+
+---
+
 ## 요약
 
 | 시나리오 | RED verdict | GREEN verdict | REFACTOR verdict |
@@ -272,7 +323,8 @@ verdict:     PASS
 | 3. 코드 위치 verifyToken | FAIL | GREEN_LIVE | PASS |
 | 4. 사람 권위 billing KS | FAIL | GREEN_LIVE | PASS |
 | 5. cross-link pin A→B | FAIL | GREEN_LIVE | PASS |
+| 6. external SSOT 부재 CodePush PRD | FAIL | GREEN_LIVE | PASS |
 
-**총 15 entry**: RED 5 (모두 FAIL — baseline 결함 확인), GREEN 5 (모두 GREEN_LIVE — skill 적용 효과), REFACTOR 5 (모두 PASS — 합리화 차단 확인).
+**총 18 entry**: RED 6 (모두 FAIL — baseline 결함 확인), GREEN 6 (모두 GREEN_LIVE — skill 적용 효과), REFACTOR 6 (모두 PASS — 합리화 차단 확인).
 
-AC-22 verifier: `awk '/observed_at:/,/verdict:/' use-cases-dogfood.md | grep verdict` → 15 lines emit.
+AC-22 verifier: `grep -c '^verdict:     [A-Z]' use-cases-dogfood.md` → 18 (= 6 시나리오 × 3 phase).
