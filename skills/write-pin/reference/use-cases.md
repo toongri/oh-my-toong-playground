@@ -225,6 +225,7 @@ related: []
      tier="1"
      tags="codepush,prd,deploy,handover,operations"
      sensitivity="private"
+     related="notion-ota-handover"
      discovery_context="19KB Desktop local .md migrated to Notion via collaboration, then indexed">
 ### ① 한 줄 요지
 CodePush PRD deploy operations guide — AWS key issuance, Sentry org:ci trap, Ctrl+D input quirk, etc.
@@ -244,7 +245,7 @@ related: [notion-ota-handover]
 
 **Anti-patterns (block scenario F rationalizations)**:
 - "Option A: just pin a `file:///` path" → volatile SSOT, non-dereferenceable, violates slug principle ⑧ (no source dependence).
-- "Option B: use a placeholder pin" → not "unknown," so scenario E does not apply.
+- "Option B: use a placeholder pin *as the initial response*" → not "unknown," so scenario E does not apply. After the user explicitly declines external registration, the conditional fallback in `pins/SKILL.md` applies (placeholder with `tier: 3` + `external registration deferred` authority).
 - "Option C: just suggesting the move is enough" → drop risk. Collaborative registration is part of the procedure.
 - "Option D: registering externally is the user's job" → if the AI has tooling (Notion MCP, etc.), register directly.
 
