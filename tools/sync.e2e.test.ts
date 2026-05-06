@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
@@ -341,6 +341,50 @@ describe("Phase 1 destinations unchanged", () => {
   afterEach(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
     _resetConfigCache();
+  });
+
+  it("claude adapter는 global path에서 .claude/settings.json에 기록하며 .claude/settings.local.json에는 기록하지 않음", async () => {
+    const fakeHome = targetPath;
+    const homeSpy = spyOn(os, "homedir").mockReturnValue(fakeHome);
+
+    try {
+      const configYaml = [
+        "config:",
+        "  model: claude-opus-4",
+        "  theme: dark",
+      ].join("\n") + "\n";
+
+      await writeFile(path.join(yamlDir, "claude.yaml"), configYaml);
+
+      const { ClaudeAdapter } = await import("./adapters/claude.ts");
+
+      const claudeAdapter = new ClaudeAdapter(
+        async () => {},
+        async () => ({ exitCode: 0 }),
+      );
+
+      const adapters: AdapterMap = new Map<Platform, PlatformAdapter>();
+      adapters.set("claude", claudeAdapter);
+
+      const context = createContext(false);
+      const globalTarget = os.homedir(); // = fakeHome (mocked)
+
+      await syncPlatformConfigs(context, globalTarget, yamlDir, adapters, rootDir);
+
+      const settingsFile = path.join(globalTarget, ".claude", "settings.json");
+      const localSettingsFile = path.join(globalTarget, ".claude", "settings.local.json");
+
+      const settingsExists = await fs.stat(settingsFile).then(() => true).catch(() => false);
+      expect(settingsExists).toBe(true);
+
+      const content = JSON.parse(await fs.readFile(settingsFile, "utf8"));
+      expect(content["model"]).toBe("claude-opus-4");
+
+      const localExists = await fs.stat(localSettingsFile).then(() => true).catch(() => false);
+      expect(localExists).toBe(false);
+    } finally {
+      homeSpy.mockRestore();
+    }
   });
 
   it("claude adapter는 .claude/settings.local.json에 기록하며 .claude/settings.json에는 기록하지 않음", async () => {
