@@ -548,10 +548,11 @@ export class ClaudeAdapter implements PlatformAdapter {
     hooksEntries: Record<string, unknown>,
     dryRun = false,
   ): Promise<void> {
-    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
+    const settingsFile = path.join(targetPath, ".claude", settingsFilename);
 
     if (dryRun) {
-      logDry(`Update settings.local.json: ${settingsFile}`);
+      logDry(`Update ${settingsFilename}: ${settingsFile}`);
       return;
     }
 
@@ -568,16 +569,17 @@ export class ClaudeAdapter implements PlatformAdapter {
   // setStatusline
   // ---------------------------------------------------------------------------
 
-  /** Set the statusLine field in .claude/settings.local.json. */
+  /** Set the statusLine field in .claude/settings.json (global) or .claude/settings.local.json (project). */
   async setStatusline(
     targetPath: string,
     statusLine: string,
     dryRun = false,
   ): Promise<void> {
-    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
+    const settingsFile = path.join(targetPath, ".claude", settingsFilename);
 
     if (dryRun) {
-      logDry(`Set statusLine: ${statusLine} -> ${settingsFile}`);
+      logDry(`Set statusLine in ${settingsFilename}: ${statusLine} -> ${settingsFile}`);
       return;
     }
 
@@ -606,16 +608,17 @@ export class ClaudeAdapter implements PlatformAdapter {
   // syncConfig
   // ---------------------------------------------------------------------------
 
-  /** Deep merge config into .claude/settings.local.json. */
+  /** Deep merge config into .claude/settings.json (global) or .claude/settings.local.json (project). */
   async syncConfig(
     targetPath: string,
     configJson: Record<string, unknown>,
     dryRun = false,
   ): Promise<void> {
-    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
+    const settingsFile = path.join(targetPath, ".claude", settingsFilename);
 
     if (dryRun) {
-      logDry(`Config merge: ${JSON.stringify(configJson)} -> ${settingsFile}`);
+      logDry(`Config merge into ${settingsFilename}: ${JSON.stringify(configJson)} -> ${settingsFile}`);
       return;
     }
 
