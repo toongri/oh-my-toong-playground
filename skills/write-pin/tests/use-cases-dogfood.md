@@ -293,7 +293,7 @@ observed_at: 2026-05-05
 method:      analytical_simulation
 command:     N/A — write-pin skill 적용 시뮬레이션
 exit_code:   N/A — simulation
-key_output:  3-step 절차 수행 → notion- prefix slug pin emit. body 4섹션 + related="notion-ota-handover" attribute 포함.
+key_output:  3-step 절차 수행 → notion- prefix slug pin emit. body 4섹션 + related attribute 포함 (실제 emit 시 실존 슬러그로 치환 — 픽스처는 EXAMPLE- prefix로 protection).
 verdict:     GREEN_LIVE
 ```
 

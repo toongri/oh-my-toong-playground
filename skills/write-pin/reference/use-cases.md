@@ -54,7 +54,6 @@ The pin is already accurate and current; no new pin is needed. Duplicate indexin
      tier="2"
      tags="ratelimit,billing,decision"
      sensitivity="private"
-     related="decision-billing-jh"
      supersedes="decision-ratelimit-ks"
      discovery_context="user reported KS left — billing policy review">
 ### ① 한 줄 요지
@@ -67,13 +66,11 @@ Slack #eng-billing 2025-03-10 thread — JH announced the decision directly.
 While reviewing the billing domain policy, the user confirmed the existing pin was stale. KS → JH transfer.
 
 ### ④ 관련 cross-link
-related: [decision-billing-jh]
+none
 </pin>
 ```
 
-**Why this is correct**: leaving a stale pin in place lets a future AI session reuse wrong information. The `supersedes` attribute explicitly invalidates the prior pin and keeps the index coherent.
-
-> **Note**: `decision-billing-jh` in this fixture's `related` attribute is illustrative — replace with a real existing slug at emit time, or omit `related` entirely if the teaching point is `supersedes` rather than cross-link demonstration. The validator (`hooks/pin-up/validator.ts` AC-19) escapes pins whose `related` slugs do not exist in `$OMT_DIR/pins/`.
+**Why this is correct**: leaving a stale pin in place lets a future AI session reuse wrong information. The `supersedes` attribute explicitly invalidates the prior pin and keeps the index coherent. The teaching point of this fixture is `supersedes`, so `related` is omitted (it's an Optional attribute per `write-pin/SKILL.md` §"Optional attributes (3)") — write `none` in body section ④ when no cross-link applies.
 
 ---
 
@@ -228,7 +225,7 @@ none
      tier="1"
      tags="codepush,prd,deploy,handover,operations"
      sensitivity="private"
-     related="notion-ota-handover"
+     related="EXAMPLE-notion-ota-handover"
      discovery_context="19KB Desktop local .md migrated to Notion via collaboration, then indexed">
 ### ① 한 줄 요지
 CodePush PRD deploy operations guide — AWS key issuance, Sentry org:ci trap, Ctrl+D input quirk, etc.
@@ -240,7 +237,7 @@ Notion page — the 19KB local Desktop .md was registered collaboratively in thi
 User-authored CodePush operations content. No external stable SSOT existed → indexed after Notion collaborative registration.
 
 ### ④ 관련 cross-link
-related: [notion-ota-handover]
+- → EXAMPLE-notion-ota-handover: prior handover document for the same operations domain
 </pin>
 ```
 
@@ -252,7 +249,7 @@ related: [notion-ota-handover]
 - "Option C: just suggesting the move is enough" → drop risk. Collaborative registration is part of the procedure.
 - "Option D: registering externally is the user's job" → if the AI has tooling (Notion MCP, etc.), register directly.
 
-> **Note**: `notion-ota-handover` in this fixture's `related` attribute is illustrative — replace with a real existing slug at emit time. The validator (`hooks/pin-up/validator.ts` AC-19) escapes pins whose `related` slugs do not exist in `$OMT_DIR/pins/`.
+> **Note**: `EXAMPLE-notion-ota-handover` is a placeholder slug. The `EXAMPLE-` prefix is not in `validator.ts` `VALID_KINDS`, so any literal copy of this slug auto-fails `validateSlug` with a clear `slug_violation` reason — preventing accidental AC-19 escape via literal mimicry. Replace with a real existing slug (under `$OMT_DIR/pins/`) at emit time, or omit `related` entirely if no cross-link applies.
 
 ---
 
