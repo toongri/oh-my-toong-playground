@@ -2,8 +2,9 @@
  * Tests for pin-session-start scanner (AC-1.6, AC-2).
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 import { mkdir, rm, writeFile } from 'fs/promises';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { scanPins } from './scanner.ts';
@@ -24,30 +25,20 @@ describe('scanPins', () => {
   it('returns empty result when pins/ is empty', () => {
     const result = scanPins(omtDir);
     expect(result.count).toBe(0);
-    expect(result.recentSlugs).toHaveLength(0);
-    expect(result.truncated).toBe(false);
   });
 
   it('returns fail-open empty result for nonexistent omtDir', () => {
     const result = scanPins('/nonexistent/omt/path');
     expect(result.count).toBe(0);
-    expect(result.truncated).toBe(false);
   });
 
-  it('counts .md files and returns up to 3 recent slugs', async () => {
+  it('counts .md files only', async () => {
     await writeFile(join(pinsDir, 'code-auth-jwt.md'), 'body', 'utf-8');
     await writeFile(join(pinsDir, 'slack-deploy-ratelimit.md'), 'body', 'utf-8');
     await writeFile(join(pinsDir, 'notion-onboarding-guide.md'), 'body', 'utf-8');
 
     const result = scanPins(omtDir);
     expect(result.count).toBe(3);
-    expect(result.recentSlugs).toHaveLength(3);
-    expect(result.truncated).toBe(false);
-
-    // slugs should not have .md extension
-    for (const slug of result.recentSlugs) {
-      expect(slug.endsWith('.md')).toBe(false);
-    }
   });
 
   it('ignores hidden files (starting with .)', async () => {
@@ -59,15 +50,79 @@ describe('scanPins', () => {
     expect(result.count).toBe(3);
   });
 
-  it('returns truncated=true and count only when >30 pins', async () => {
-    // Create 28 more pins to exceed 30 threshold (already have 3)
-    for (let i = 0; i < 28; i++) {
-      await writeFile(join(pinsDir, `code-extra-pin${i.toString().padStart(3, '0')}.md`), 'body', 'utf-8');
-    }
+  // --- Typo guard: nonexistent omtDir must not be created on disk ---
 
-    const result = scanPins(omtDir);
-    expect(result.count).toBeGreaterThan(30);
-    expect(result.truncated).toBe(true);
-    expect(result.recentSlugs).toHaveLength(0);
+  describe('typo guard: nonexistent omtDir is not created', () => {
+    let tempBase: string;
+    let bogusOmtDir: string;
+
+    beforeEach(() => {
+      tempBase = mkdtempSync(join(tmpdir(), 'scanner-typo-'));
+      // Derive a child path that does NOT exist
+      bogusOmtDir = join(tempBase, 'nonexistent-omt');
+    });
+
+    afterEach(() => {
+      rmSync(tempBase, { recursive: true, force: true });
+    });
+
+    it('does not create bogusOmtDir when omtDir does not exist', () => {
+      const result = scanPins(bogusOmtDir);
+
+      expect(result.count).toBe(0);
+      expect(existsSync(bogusOmtDir)).toBe(false);
+    });
+  });
+
+  // --- Self-heal: omtDir exists but pins/ is absent ---
+
+  describe('self-heal: creates pins/ when omtDir exists but pins/ is absent', () => {
+    let tempBase: string;
+    let selfHealOmtDir: string;
+
+    beforeEach(() => {
+      tempBase = mkdtempSync(join(tmpdir(), 'scanner-selfheal-'));
+      selfHealOmtDir = join(tempBase, 'omt');
+      // Create omtDir but NOT pins/ — this is the self-heal scenario
+      mkdirSync(selfHealOmtDir, { recursive: true });
+    });
+
+    afterEach(() => {
+      rmSync(tempBase, { recursive: true, force: true });
+    });
+
+    it('creates pins/ directory and returns { count: 0 }', () => {
+      const result = scanPins(selfHealOmtDir);
+
+      expect(existsSync(join(selfHealOmtDir, 'pins'))).toBe(true);
+      expect(result.count).toBe(0);
+    });
+  });
+
+  // --- EEXIST fail-open: pins path occupied by a file, not a directory ---
+
+  describe('EEXIST fail-open: pins path is a file', () => {
+    let tempBase: string;
+    let eexistOmtDir: string;
+
+    beforeEach(() => {
+      tempBase = mkdtempSync(join(tmpdir(), 'scanner-eexist-'));
+      eexistOmtDir = join(tempBase, 'omt');
+      // Create omtDir so the self-heal branch runs, but put a file at pins path
+      mkdirSync(eexistOmtDir, { recursive: true });
+      // Pre-create a FILE at the location where pins/ directory would go
+      writeFileSync(join(eexistOmtDir, 'pins'), 'not-a-directory');
+    });
+
+    afterEach(() => {
+      rmSync(tempBase, { recursive: true, force: true });
+    });
+
+    it('returns { count: 0 } and does not throw when pins path is a file', () => {
+      expect(() => {
+        const result = scanPins(eexistOmtDir);
+        expect(result.count).toBe(0);
+      }).not.toThrow();
+    });
   });
 });
