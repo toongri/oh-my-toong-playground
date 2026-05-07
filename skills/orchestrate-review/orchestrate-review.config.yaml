@@ -1,28 +1,22 @@
 chunk-review:
   members:
     # Each reviewer = vanilla `opencode run` invoking a specific omo agent.
-    # The omo plugin registers core agents under display names with leading
-    # zero-width-space (U+200B) characters used as a sort key:
-    #   Sisyphus    → 1 ZWS + "Sisyphus - Ultraworker"
-    #   Hephaestus  → 2 ZWS + "Hephaestus - Deep Agent"
-    # opencode's agent registry is exact-match, so the --agent value MUST
-    # include the exact ZWS prefixes. We use literal U+200B characters inside
-    # the agent display name. The YAML value is unquoted at the OUTER level so
-    # parseYamlSimple preserves the inner double-quotes verbatim (they are
-    # interpreted by splitCommand as quote toggles for the agent arg).
+    # Agent names match the exact display name registered by the omo plugin
+    # (verified via `opencode agent list`). No prefix decoration — opencode's
+    # registry is exact-match.
     #
     # Provider routing (all already authenticated — see `opencode auth list`):
     #   gpt      — openai/gpt-5.5             via native OpenAI OAuth
     #   kimi     — opencode-go/kimi-k2.6        via OpenCode Go gateway
     - name: gpt
-      command: opencode run --agent "​​Hephaestus - Deep Agent"
+      command: opencode run --agent "Hephaestus - Deep Agent"
       emoji: "\U0001F916"
       color: "BLUE"
       model: "openai/gpt-5.5"
       effort_level: "high"
       output_format: "text"
     - name: kimi
-      command: opencode run --agent "​Sisyphus - Ultraworker"
+      command: opencode run --agent "Sisyphus - Ultraworker"
       emoji: "\U0001F319"
       color: "YELLOW"
       model: "opencode-go/kimi-k2.6"

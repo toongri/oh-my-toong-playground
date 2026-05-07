@@ -34,7 +34,7 @@ spec-review:
       output_format: "text"
 
     - name: gpt
-      command: opencode run --agent "​​Hephaestus - Deep Agent"
+      command: opencode run --agent "Hephaestus - Deep Agent"
       emoji: "🤖"
       color: "BLUE"
       model: "openai/gpt-5.5"
