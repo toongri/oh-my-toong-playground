@@ -562,7 +562,7 @@ export class ClaudeAdapter implements PlatformAdapter {
     const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
     const updated = { ...rest, hooks: hooksEntries };
     await writeJsonFile(settingsFile, updated);
-    logInfo(`Updated settings.local.json: ${settingsFile}`);
+    logInfo(`Updated ${settingsFilename}: ${settingsFile}`);
   }
 
   // ---------------------------------------------------------------------------
