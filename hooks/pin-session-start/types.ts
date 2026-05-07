@@ -6,8 +6,6 @@ export interface HookInput {
 
 export interface ScanResult {
   count: number;
-  recentSlugs: string[];
-  truncated: boolean;
 }
 
 export interface HookOutput {
