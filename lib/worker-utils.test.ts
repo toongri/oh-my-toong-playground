@@ -1219,4 +1219,16 @@ describe('incident-f99e10 regression', () => {
     const parsed = parseNdjsonOutput(fp);
     expect(classifyState(parsed).state).toBe('empty_output');
   });
+
+  test('incident-f99e10 regression: production schema no-step-finish → empty_output', () => {
+    const fp = join(FIXTURE_DIR, 'incident-f99e10-no-step-finish.ndjson');
+    const parsed = parseNdjsonOutput(fp);
+    expect(classifyState(parsed).state).toBe('empty_output');
+  });
+
+  test('incident-f99e10 regression: production schema tool_use → empty_output', () => {
+    const fp = join(FIXTURE_DIR, 'incident-f99e10-tool-use-reason.ndjson');
+    const parsed = parseNdjsonOutput(fp);
+    expect(classifyState(parsed).state).toBe('empty_output');
+  });
 });
