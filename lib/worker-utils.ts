@@ -20,6 +20,12 @@ export const HEARTBEAT_INTERVAL_MS = 10_000;
 
 export const NON_RETRYABLE_EXIT_CODES = new Set([41, 42, 52, 130]);
 
+export const TEXT_MODE_NON_RETRYABLE_KEYWORDS = [
+  'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
+  'upgrade to Plus', 'Selected model is at capacity', 'ran out of room',
+  'authentication_error', 'attempt 10/10',
+];
+
 /**
  * Maximum prompt size in bytes for chunk-review JSON-mode runs.
  * Prompts larger than this are rejected before spawn with state='permanent_error',
@@ -684,11 +690,6 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
       let isNonRetryable = exitCode != null && NON_RETRYABLE_EXIT_CODES.has(exitCode);
 
       if (!isNonRetryable) {
-        const nonRetryableKeywords = [
-          'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
-          'upgrade to Plus', 'Selected model is at capacity', 'ran out of room',
-          'authentication_error', 'attempt 10/10',
-        ];
         try {
           const fd = fs.openSync(errPath, 'r');
           try {
@@ -698,7 +699,7 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
               const buf = Buffer.alloc(newSize);
               fs.readSync(fd, buf, 0, newSize, errOffset);
               const errorContent = buf.toString('utf8');
-              isNonRetryable = nonRetryableKeywords.some(
+              isNonRetryable = TEXT_MODE_NON_RETRYABLE_KEYWORDS.some(
                 p => errorContent.toLowerCase().includes(p.toLowerCase())
               );
             }
