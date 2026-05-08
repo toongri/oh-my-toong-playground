@@ -1814,6 +1814,29 @@ describe('cmdResults', () => {
       expect(content.length).toBe(50000);
     }
   });
+
+  const GPT_S5_500K_NDJSON =
+    '{"type":"step_start","timestamp":1778226217098,"sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","part":{"id":"prt_e068ac087001t8WNcPEOZryJIV","messageID":"msg_e068ab2a50014dmNYIRCjqDHPI","sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","type":"step-start"}}\n' +
+    '{"type":"error","timestamp":1778226217218,"sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","error":{"name":"ContextOverflowError","data":{"message":"Input exceeds context window of this model","responseBody":"{\\"type\\":\\"error\\",\\"sequence_number\\":2,\\"error\\":{\\"type\\":\\"invalid_request_error\\",\\"code\\":\\"context_length_exceeded\\",\\"message\\":\\"Your input exceeds the context window of this model. Please adjust your input and try again.\\",\\"param\\":\\"input\\"}}"}}}\n' +
+    '{"type":"step_start","timestamp":1778226218388,"sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","part":{"id":"prt_e068ac592001uc6X0Qm6puG9uR","messageID":"msg_e068ac11a0016rmZAZiESQmXu9","sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","type":"step-start"}}\n' +
+    '{"type":"error","timestamp":1778226218594,"sessionID":"ses_1f9755009ffee8JrpYLKy1QwzO","error":{"name":"ContextOverflowError","data":{"message":"Input exceeds context window of this model","responseBody":"{\\"type\\":\\"error\\",\\"sequence_number\\":2,\\"error\\":{\\"type\\":\\"invalid_request_error\\",\\"code\\":\\"context_length_exceeded\\",\\"message\\":\\"Your input exceeds the context window of this model. Please adjust your input and try again.\\",\\"param\\":\\"input\\"}}"}}}\n';
+
+  test('replay smoke: gpt-S5-500k overflow → manifest outputFilePath null', () => {
+    const jobDir = path.join(tmpDir, 'job-overflow-replay');
+    setupJobFixture(jobDir, {
+      'gpt-0': { member: 'gpt', state: 'permanent_error', exitCode: 1, output: GPT_S5_500K_NDJSON, stderr: '' },
+    });
+    // Override status.json to include size_bytes so buildManifest activates json-mode gate
+    const statusPath = path.join(jobDir, 'members', 'gpt-0', 'status.json');
+    fs.writeFileSync(statusPath, JSON.stringify({ member: 'gpt', state: 'permanent_error', exitCode: 1, size_bytes: GPT_S5_500K_NDJSON.length, attempts: 2 }));
+
+    const result = execFileSync(process.execPath, [SCRIPT, 'results', '--manifest', jobDir], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.members).toHaveLength(1);
+    expect(parsed.members[0].member).toBe('gpt');
+    expect(parsed.members[0].outputFilePath).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2139,22 +2162,44 @@ describe('start + collect integration', () => {
       const storedPrompt = fs.readFileSync(path.join(jobDir, 'prompt.txt'), 'utf8');
       expect(storedPrompt).toBe('Review this code for bugs');
 
-      // Mock done status for each reviewer
+      // Wait for workers to reach a terminal state before mocking.
+      // Workers run `echo r1/r2` which produces non-NDJSON output, so they
+      // cycle through retries and end in `empty_output` with size_bytes written.
+      // Only once workers are terminal (not queued/running/retrying) can we
+      // safely overwrite status.json without a race.
       const membersDir = path.join(jobDir, 'members');
+      const ACTIVE_STATES = new Set(['queued', 'running', 'retrying']);
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        const allTerminal = fs.readdirSync(membersDir).every((entry) => {
+          try {
+            const s = JSON.parse(fs.readFileSync(path.join(membersDir, entry, 'status.json'), 'utf8'));
+            return !ACTIVE_STATES.has(String(s.state));
+          } catch { return false; }
+        });
+        if (allTerminal) break;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      }
+
+      // Mock done status for each reviewer.
+      // Include size_bytes > 0 so buildManifest's JSON-mode gate (isJsonMode=true,
+      // isReadable = state==='done' && size_bytes>0) keeps outputFilePath non-null.
       for (const entry of fs.readdirSync(membersDir)) {
         const statusPath = path.join(membersDir, entry, 'status.json');
         const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        const mockOutput = `Review output from ${status.member}`;
+        fs.writeFileSync(
+          path.join(membersDir, entry, 'output.txt'),
+          mockOutput,
+        );
         fs.writeFileSync(statusPath, JSON.stringify({
           member: status.member,
           state: 'done',
           exitCode: 0,
           startedAt: new Date().toISOString(),
           finishedAt: new Date().toISOString(),
+          size_bytes: Buffer.byteLength(mockOutput),
         }));
-        fs.writeFileSync(
-          path.join(membersDir, entry, 'output.txt'),
-          `Review output from ${status.member}`,
-        );
       }
 
       // collect: poll until done and return manifest
