@@ -25,6 +25,15 @@ export const NON_RETRYABLE_PATTERNS: string[] = [
 ];
 export const NON_RETRYABLE_EXIT_CODES = new Set([41, 42, 52, 130]);
 
+/**
+ * Maximum prompt size in bytes for chunk-review JSON-mode runs.
+ * Prompts larger than this are rejected before spawn with state='permanent_error',
+ * error.type='prompt_too_large'. Value finalized in docs/research/opencode-input-limits.md
+ * (200KB empirically passes, 500KB triggers ContextOverflowError; 80KB chosen as
+ * conservative anchor with margin for system prompt + tool definitions).
+ */
+export const PROMPT_MAX_BYTES = 80*1024;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
