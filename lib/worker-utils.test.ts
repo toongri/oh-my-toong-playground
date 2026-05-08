@@ -710,6 +710,36 @@ describe('NDJSON parser', () => {
     expect(result.textParts).toEqual(['data']);
     expect(result.parseError).toBe(false);
   });
+
+  test('parser: text via event.part.text', () => {
+    // Production schema: text is null, part.text carries the content
+    const fp = write('part-text.ndjson', '{"type":"text","part":{"text":"hello from part"},"text":null}\n');
+    const result = parseNdjsonOutput(fp);
+    expect(result.textParts).toEqual(['hello from part']);
+  });
+
+  test('parser: finishReason via event.part.reason', () => {
+    // Production schema: reason is null, part.reason carries the value
+    const fp = write('part-reason.ndjson', '{"type":"step_finish","part":{"reason":"stop"},"reason":null}\n');
+    const result = parseNdjsonOutput(fp);
+    expect(result.finishReason).toBe('stop');
+  });
+
+  test('parser: non-string part.text → skipped, no throw', () => {
+    // part.text is an array — should skip gracefully without throwing
+    const fp = write('part-text-array.ndjson', '{"type":"text","part":{"text":["chunk1","chunk2"]},"text":null}\n');
+    expect(() => {
+      const result = parseNdjsonOutput(fp);
+      expect(result.textParts).toEqual([]);
+    }).not.toThrow();
+  });
+
+  test('parser: empty text part → not pushed', () => {
+    // Empty string should not be pushed into textParts
+    const fp = write('part-text-empty.ndjson', '{"type":"text","part":{"text":""},"text":null}\n');
+    const result = parseNdjsonOutput(fp);
+    expect(result.textParts).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

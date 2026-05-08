@@ -157,10 +157,14 @@ export function parseNdjsonOutput(filePath: string): NDJSONResult {
     }
 
     const type = event.type;
-    if (type === 'text' && typeof event.text === 'string') {
-      result.textParts.push(event.text);
+    if (type === 'text') {
+      const part = event.part as Record<string, unknown> | undefined;
+      const t = part?.text ?? event.text;
+      if (typeof t === 'string' && t.length > 0) result.textParts.push(t);
     } else if (type === 'step_finish') {
-      result.finishReason = typeof event.reason === 'string' ? event.reason : undefined;
+      const part = event.part as Record<string, unknown> | undefined;
+      const r = part?.reason ?? event.reason;
+      result.finishReason = typeof r === 'string' ? r : undefined;
     } else if (type === 'error') {
       result.errorEvents.push(event as NDJSONErrorEvent);
     }
