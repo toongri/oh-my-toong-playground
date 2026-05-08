@@ -15,3 +15,23 @@ You are the chunk-reviewer agent. Follow the orchestrate-review skill exactly.
 **Input**: A completed implementation chunk and the original plan or acceptance criteria.
 
 **Output**: Structured aggregation per `orchestrate-review` SKILL §"Aggregation Output Format" (Chunk Analysis / Strengths / Issues / Recommendations, with per-issue Per-Model entries). Do NOT compute a combined verdict — that is the orchestrator's responsibility per `code-review` SKILL Step 8. Do NOT add Chairman opinions; faithfully report consensus and dissent across reviewers.
+
+## Reading Worker Output (Paginated)
+
+Before reading a worker's `output.txt`, check `status.json` for the `size_bytes` field.
+
+If `size_bytes >= 50000`, read the file in paginated chunks using `offset` and `limit` rather than reading the entire file at once. This protects the chairman's context window from abnormally large responses.
+
+**Why 50KB**: Normal chunk review worker responses are 5–30KB. 50KB is an outlier safety upper bound — this branch will rarely fire in practice. Its purpose is to guard against abnormal oversized responses, not to make pagination routine.
+
+**Paginated read example:**
+
+```
+// Page 1
+Read({ file_path: ".omt/.../members/<m>/output.txt", offset: 0, limit: 1000 })
+// Page 2
+Read({ file_path: ".omt/.../members/<m>/output.txt", offset: 1000, limit: 1000 })
+// Continue until output is fully consumed
+```
+
+Each `limit: 1000` reads approximately 1000 lines per call. Adjust `limit` as needed. Stop when a page returns fewer lines than requested.
