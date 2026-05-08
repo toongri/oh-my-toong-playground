@@ -2041,6 +2041,31 @@ describe('cmdCollect', () => {
       expect(err.stderr.toString()).toContain('collect: missing jobDir');
     }
   });
+
+  test('cmdCollect propagates size_bytes to chairman payload', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-size-bytes');
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(jobDir, 'job.json'),
+      JSON.stringify({ id: 'size-bytes-test', settings: { timeoutSec: 60 } }),
+    );
+    const memberDir = path.join(jobDir, 'members', 'test-member-0');
+    fs.mkdirSync(memberDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(memberDir, 'status.json'),
+      JSON.stringify({ member: 'test-member', state: 'done', size_bytes: 1234, attempts: 3 }),
+    );
+    fs.writeFileSync(path.join(memberDir, 'output.txt'), 'review output');
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+    ], { stdio: 'pipe' });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).toBe('done');
+    expect(parsed.members).toHaveLength(1);
+    expect(parsed.members[0].size_bytes).toBe(1234);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -580,6 +580,9 @@ export function buildManifest(
         member: status.member,
         outputFilePath: outputExists ? outputPath : null,
         errorMessage: outputExists ? null : (status.message || status.state),
+        size_bytes: status.size_bytes ?? null,
+        attempts: status.attempts ?? null,
+        error: status.error ?? null,
         _safeName: entry,
       });
     }
