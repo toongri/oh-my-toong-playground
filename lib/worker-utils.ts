@@ -74,6 +74,51 @@ interface StatusJson {
 }
 
 // ---------------------------------------------------------------------------
+// Error classification
+// ---------------------------------------------------------------------------
+
+/** Classify an error message (or typed error) into a category and canonical type. */
+function classifyError(input: { type?: string; message: string }): {
+  category: 'transient' | 'permanent';
+  type: string;
+  raw_message: string;
+} {
+  const PERMANENT_TYPES = new Set([
+    'auth', 'model_not_found', 'context_window', 'quota_exceeded',
+  ]);
+
+  // Priority-ordered patterns (1→9). First match wins.
+  const PATTERNS: [RegExp, string][] = [
+    [/\bauth\b|unauthorized|forbidden|invalid.api.key/i, 'auth'],
+    [/model.not.found|provider.*not.found/i, 'model_not_found'],
+    [/context.window|context.length|token.limit/i, 'context_window'],
+    [/\bquota\b|capacity|permission.denied/i, 'quota_exceeded'],
+    [/\brate.limit\b|\b429\b|too.many.requests/i, 'rate_limit'],
+    [/\btimeout\b|timed.out|deadline/i, 'timeout'],
+    [/\b5\d\d\b|server.error|internal.error/i, 'server_error'],
+    [/\bnetwork\b|econnreset|econnrefused/i, 'network'],
+  ];
+
+  // If caller provides an explicit type, bypass message matching.
+  if (input.type !== undefined && input.type !== '') {
+    const t = input.type;
+    const category: 'transient' | 'permanent' = PERMANENT_TYPES.has(t) ? 'permanent' : 'transient';
+    return { category, type: t, raw_message: input.message };
+  }
+
+  // Message-based priority match.
+  for (const [pattern, typeName] of PATTERNS) {
+    if (pattern.test(input.message)) {
+      const category: 'transient' | 'permanent' = PERMANENT_TYPES.has(typeName) ? 'permanent' : 'transient';
+      return { category, type: typeName, raw_message: input.message };
+    }
+  }
+
+  // No match → unknown (transient).
+  return { category: 'transient', type: 'unknown', raw_message: input.message };
+}
+
+// ---------------------------------------------------------------------------
 // Command parsing
 // ---------------------------------------------------------------------------
 
