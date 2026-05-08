@@ -14,7 +14,7 @@ import { spawn, type ChildProcess } from 'child_process';
 // Constants
 // ---------------------------------------------------------------------------
 
-export const MAX_RETRIES = 1;
+export const MAX_RETRIES = 2; // retries=2, attempts=1+retries=3
 export const BASE_DELAY_MS = 1000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 
@@ -54,7 +54,7 @@ interface NDJSONResult {
 }
 
 /** Structured error information extracted from a failed run. */
-interface ErrorInfo {
+export interface ErrorInfo {
   type: string;
   message?: string;
   raw_message?: string;
@@ -555,14 +555,114 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 const NON_RETRYABLE_STATES = new Set(['missing_cli', 'timed_out', 'canceled', 'non_retryable']);
 
 export interface RunWithRetryOpts extends Omit<RunOnceOpts, 'attempt'> {
-  sleepFn?: (ms: number) => Promise<void>;
+  promptPath?: string;                          // required for mode='json' prompt size guard
+  mode?: 'json' | 'text';                       // default 'text' (backward compat)
+  sleepFn?: (ms: number) => Promise<void>;      // existing param name preserved
+  jitter?: () => number;                        // default () => Math.random() * 250
+}
+
+/** Result shape for mode='json' runs. */
+export interface RunResult {
+  state: 'done' | 'empty_output' | 'transient_error' | 'permanent_error';
+  attempts: number;    // total spawn attempts made (1..MAX_RETRIES+1=3)
+  size_bytes?: number; // output file size on terminal state
+  error?: ErrorInfo;
 }
 
 /**
  * Run with retry logic. Retries up to MAX_RETRIES times on retryable failures.
+ *
+ * mode='text' (default): exitCode-based logic — 100% preserved for council/spec-review backward compat.
+ * mode='json': NDJSON classification + retry on transient states + PROMPT_MAX_BYTES guard.
+ * retries=2, attempts=1+retries=3
  */
 export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<string, unknown>> {
-  const { sleepFn = sleepMsAsync, ...runOpts } = opts;
+  const {
+    promptPath,
+    mode = 'text',
+    sleepFn = sleepMsAsync,
+    jitter = () => Math.random() * 250,
+    ...runOpts
+  } = opts;
+
+  // ---------------------------------------------------------------------------
+  // mode='json': NDJSON-based classification + retry policy
+  // ---------------------------------------------------------------------------
+  if (mode === 'json') {
+    const outputPath = path.join(runOpts.memberDir, 'output.txt');
+    const statusPath = path.join(runOpts.memberDir, 'status.json');
+
+    // Prompt size guard (checked once, outside the attempt loop — prompt size never changes).
+    if (promptPath !== undefined) {
+      let promptBytes = 0;
+      try { promptBytes = fs.statSync(promptPath).size; } catch { /* treat as 0 */ }
+      if (promptBytes > PROMPT_MAX_BYTES) {
+        const result: RunResult = {
+          state: 'permanent_error',
+          attempts: 0,
+          error: { type: 'prompt_too_large', bytes: promptBytes, limit: PROMPT_MAX_BYTES },
+        };
+        atomicWriteJson(statusPath, { member: runOpts.member, ...result });
+        return result as unknown as Record<string, unknown>;
+      }
+    }
+
+    let lastResult: RunResult = { state: 'empty_output', attempts: 0 };
+
+    for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+      // Run one attempt via child_process.spawn (delegated to runOnce).
+      const raw = await runOnce({ ...runOpts, attempt: attempt - 1 });
+
+      // Determine size_bytes from output file (captured after 'close' event flush).
+      let size_bytes: number | undefined;
+      try { size_bytes = fs.statSync(outputPath).size; } catch { /* output may not exist */ }
+
+      // Classify result via NDJSON parser + state classifier.
+      const rawState = raw.state as string;
+      let classified: ReturnType<typeof classifyState>;
+
+      if (rawState === 'missing_cli' || rawState === 'error') {
+        // spawn-level failure: use classifyError on stderr message
+        const errMsg = typeof raw.message === 'string' ? raw.message : '';
+        const ce = classifyError({ message: errMsg });
+        classified = {
+          state: ce.category === 'permanent' ? 'permanent_error' : 'transient_error',
+          error: { type: ce.type, message: ce.raw_message, raw_message: ce.raw_message },
+        };
+      } else {
+        const parsed = parseNdjsonOutput(outputPath);
+        classified = classifyState(parsed);
+      }
+
+      const isTerminal = classified.state === 'done' || classified.state === 'permanent_error';
+
+      if (isTerminal || attempt === MAX_RETRIES + 1) {
+        // Terminal state — write final status with attempts + size_bytes.
+        lastResult = { state: classified.state, attempts: attempt, size_bytes, error: classified.error };
+        atomicWriteJson(statusPath, { member: runOpts.member, ...lastResult });
+        return lastResult as unknown as Record<string, unknown>;
+      }
+
+      // Transient state and we have retries left — write 'retrying' status (no size_bytes).
+      lastResult = { state: classified.state, attempts: attempt, error: classified.error };
+      atomicWriteJson(statusPath, {
+        member: runOpts.member,
+        state: 'retrying',
+        attempt,
+        message: `Retrying after attempt ${attempt} (${classified.state})`,
+      });
+
+      // Backoff: 1s × 2^(attempt-1) + jitter(). attempt=1 → 1000+jitter, attempt=2 → 2000+jitter.
+      const delay = 1000 * Math.pow(2, attempt - 1) + jitter();
+      await sleepFn(delay);
+    }
+
+    return lastResult as unknown as Record<string, unknown>;
+  }
+
+  // ---------------------------------------------------------------------------
+  // mode='text' (default): exitCode-based logic — 100% preserved, zero changes.
+  // ---------------------------------------------------------------------------
   let result: Record<string, unknown> = {};
 
   const errPath = path.join(runOpts.memberDir, 'error.txt');

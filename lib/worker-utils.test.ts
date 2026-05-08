@@ -86,8 +86,8 @@ describe('non-retryable 에러 분류', () => {
 
     // After exhausting retries, final state should still be 'error' (not non_retryable)
     expect(result.state).toBe('error');
-    // Attempt should be MAX_RETRIES (1), indicating retry occurred
-    expect(result.attempt).toBe(1);
+    // Attempt should be MAX_RETRIES (2), indicating retry occurred
+    expect(result.attempt).toBe(2);
   });
 
   it('error.txt 없음/비어있음 → 재시도 진행', async () => {
@@ -102,7 +102,7 @@ describe('non-retryable 에러 분류', () => {
 
     // Should retry and end with 'error' (not non_retryable)
     expect(result.state).toBe('error');
-    expect(result.attempt).toBe(1);
+    expect(result.attempt).toBe(2);
   });
 
   it('attempt 0의 non-retryable stderr가 attempt 1 판정에 영향 없음', async () => {
@@ -368,8 +368,8 @@ describe('assemblePrompt', () => {
 // ---------------------------------------------------------------------------
 
 describe('constants', () => {
-  test('MAX_RETRIES is 1', () => {
-    expect(MAX_RETRIES).toBe(1);
+  test('MAX_RETRIES is 2', () => {
+    expect(MAX_RETRIES).toBe(2);
   });
 
   test('BASE_DELAY_MS is 1000', () => {
