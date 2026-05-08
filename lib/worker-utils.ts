@@ -194,15 +194,14 @@ export function classifyState(parsed: NDJSONResult): {
     return { state: 'empty_output' };
   }
 
-  // Branch 4: parse error (only reached when errorEvents is non-empty but parseError is set;
-  // however per spec: parseError triggers empty_output and is evaluated before error-present branches)
-  if (parseError === true) {
-    return { state: 'empty_output' };
-  }
-
-  // Branch 5: errors present but step_finish was 'stop' — step_finish wins
+  // Branch 5: errors present but step_finish was 'stop' — step_finish wins everything except prompt_too_large
   if (finishReason === 'stop') {
     return { state: 'done' };
+  }
+
+  // Branch 4: parse error (only reached when errorEvents is non-empty and finishReason !== 'stop')
+  if (parseError === true) {
+    return { state: 'empty_output' };
   }
 
   // Branch 6: errors present, no winning step_finish — classify first error

@@ -797,6 +797,36 @@ describe('classifyState', () => {
     expect(result.state).toBe('permanent_error');
     expect(result.error?.type).toBe('auth');
   });
+
+  test('classifyState: errorEvents+parseError+finishReason stop → done', () => {
+    const parsed: NDJSONResult = {
+      textParts: [],
+      finishReason: 'stop',
+      errorEvents: [{ type: 'error', error: { type: 'network', message: 'econnreset' } }],
+      parseError: true,
+    };
+    expect(classifyState(parsed).state).toBe('done');
+  });
+
+  test('classifyState: errorEvents+finishReason stop → done', () => {
+    const parsed: NDJSONResult = {
+      textParts: [],
+      finishReason: 'stop',
+      errorEvents: [{ type: 'error', error: { type: 'rate_limit', message: 'Too many requests' } }],
+    };
+    expect(classifyState(parsed).state).toBe('done');
+  });
+
+  test('classifyState: errorEvents+finishReason tool_use → classifyError result', () => {
+    const parsed: NDJSONResult = {
+      textParts: [],
+      finishReason: 'tool_use',
+      errorEvents: [{ type: 'error', error: { type: 'rate_limit', message: 'Too many requests' } }],
+    };
+    const result = classifyState(parsed);
+    expect(result.state).toBe('transient_error');
+    expect(result.error?.type).toBe('rate_limit');
+  });
 });
 
 // ---------------------------------------------------------------------------
