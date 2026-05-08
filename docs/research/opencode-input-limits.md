@@ -103,6 +103,9 @@ Real captured payload (ContextOverflowError):
    Schema inferred from OpenAI rate limit error documentation: https://platform.openai.com/docs/guides/rate-limits
 5. Network errors (connection refused) do NOT produce NDJSON error events —
    opencode retries indefinitely. The session never terminates.
+6. Conclusion: an opencode session.error event terminates with exit 0 — the error is silently propagated via NDJSON, not via process exit code.
+7. 60KB pass deterministic condition: exit 0 AND stdout NDJSON contains ≥ 1 line of `{"type":"text"}`.
+8. Cross-model note: the spike was run on gpt-5.4-mini. Production members (openai/gpt-5.5, opencode-go/kimi-k2.6) share the same OpenAI-compatible streaming protocol; the NDJSON error schema observed on gpt-5.4-mini is expected to apply identically. See https://platform.openai.com/docs/api-reference/chat/streaming.
 
 ## Fixtures
 
