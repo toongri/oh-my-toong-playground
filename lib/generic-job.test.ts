@@ -1009,6 +1009,56 @@ describe('buildManifest', () => {
     expect(result.members.length).toBe(1);
   });
 
+  test('buildManifest: json-mode empty_output → outputFilePath null', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-json-empty-output');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: { status: { member: 'alice', state: 'empty_output', size_bytes: 0 }, hasOutput: true },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('empty_output');
+  });
+
+  test('buildManifest: json-mode done with size_bytes=0 → outputFilePath null', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-json-done-zero');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: { status: { member: 'alice', state: 'done', size_bytes: 0 }, hasOutput: true },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('done');
+  });
+
+  test('buildManifest: text-mode done without size_bytes → outputFilePath preserved', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-text-done');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: { status: { member: 'alice', state: 'done' }, hasOutput: true },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).not.toBe(null);
+    expect(result.members[0].errorMessage).toBe(null);
+  });
+
+  test('buildManifest: text-mode error without size_bytes → outputFilePath preserved', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-text-error');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: { status: { member: 'alice', state: 'error', message: 'timeout' }, hasOutput: true },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).not.toBe(null);
+    expect(result.members[0].errorMessage).toBe(null);
+  });
+
+  test('buildManifest: json-mode permanent_error → outputFilePath null', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-json-perm-error');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: { status: { member: 'alice', state: 'permanent_error', size_bytes: 42 }, hasOutput: true },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('permanent_error');
+  });
+
   test('empty output.txt (0 bytes) classifies as outputFilePath !== null, errorMessage === null', () => {
     const jobDir = path.join(tmpDir, 'job-manifest-empty-output');
     fs.mkdirSync(jobDir, { recursive: true });
