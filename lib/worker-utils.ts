@@ -160,6 +160,51 @@ function parseNdjsonOutput(filePath: string): NDJSONResult {
 }
 
 // ---------------------------------------------------------------------------
+// NDJSON state classifier
+// ---------------------------------------------------------------------------
+
+/** Classify a parsed NDJSON result into a terminal state (pure function — no I/O). */
+function classifyState(parsed: NDJSONResult): {
+  state: 'done' | 'empty_output' | 'transient_error' | 'permanent_error';
+  error?: ErrorInfo;
+} {
+  const { finishReason, errorEvents, parseError } = parsed;
+
+  // Branch 1: no errors, clean stop
+  if (errorEvents.length === 0 && finishReason === 'stop') {
+    return { state: 'done' };
+  }
+
+  // Branch 2 & 3: no errors, not stop (or no step_finish)
+  if (errorEvents.length === 0 && finishReason !== 'stop') {
+    return { state: 'empty_output' };
+  }
+
+  // Branch 4: parse error (only reached when errorEvents is non-empty but parseError is set;
+  // however per spec: parseError triggers empty_output and is evaluated before error-present branches)
+  if (parseError === true) {
+    return { state: 'empty_output' };
+  }
+
+  // Branch 5: errors present but step_finish was 'stop' — step_finish wins
+  if (finishReason === 'stop') {
+    return { state: 'done' };
+  }
+
+  // Branch 6: errors present, no winning step_finish — classify first error
+  const firstEvent = errorEvents[0];
+  const errObj = firstEvent.error ?? {};
+  const result = classifyError({
+    type: (errObj as { type?: string; code?: string }).type ?? (errObj as { type?: string; code?: string }).code,
+    message: (errObj as { message?: string }).message ?? JSON.stringify(firstEvent.error ?? firstEvent),
+  });
+  return {
+    state: result.category === 'permanent' ? 'permanent_error' : 'transient_error',
+    error: { type: result.type, message: result.raw_message, raw_message: result.raw_message },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Command parsing
 // ---------------------------------------------------------------------------
 
