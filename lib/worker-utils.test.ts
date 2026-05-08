@@ -893,6 +893,46 @@ describe('classifyError', () => {
     expect(r.type).toBe('auth');
     expect(r.category).toBe('permanent');
   });
+
+  test('classifyError: kimi APIError responseBody → context_window permanent', () => {
+    // Kimi-S5 spike박제: responseBody는 escaped JSON string, token-limit 키워드 포함
+    const responseBody = JSON.stringify({
+      error: {
+        message: 'Error from provider: Provider returned error',
+        code: 400,
+        metadata: {
+          raw: JSON.stringify({
+            error: {
+              message: 'Invalid request: Your request exceeded model token limit: 262144 (requested: 370653)',
+              type: 'invalid_request_error',
+            },
+          }),
+        },
+      },
+    });
+    const r = classifyError({ message: 'Error from provider: Provider returned error', responseBody });
+    expect(r.type).toBe('context_window');
+    expect(r.category).toBe('permanent');
+  });
+
+  test('classifyError: APIError without responseBody → unknown transient', () => {
+    const r = classifyError({ message: 'Error from provider: Provider returned error' });
+    expect(r.type).toBe('unknown');
+    expect(r.category).toBe('transient');
+  });
+
+  test('classifyError: APIError malformed responseBody → unknown transient', () => {
+    const r = classifyError({ message: 'Error from provider: Provider returned error', responseBody: 'NOT_VALID_JSON' });
+    expect(r.type).toBe('unknown');
+    expect(r.category).toBe('transient');
+  });
+
+  test('classifyError: APIError unrelated responseBody → unknown transient', () => {
+    const responseBody = JSON.stringify({ error: { message: 'some other error', code: 400 } });
+    const r = classifyError({ message: 'Error from provider: Provider returned error', responseBody });
+    expect(r.type).toBe('unknown');
+    expect(r.category).toBe('transient');
+  });
 });
 
 // ---------------------------------------------------------------------------

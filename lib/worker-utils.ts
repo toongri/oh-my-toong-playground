@@ -88,7 +88,7 @@ interface StatusJson {
 // ---------------------------------------------------------------------------
 
 /** Classify an error message (or typed error) into a category and canonical type. */
-export function classifyError(input: { type?: string; message: string }): {
+export function classifyError(input: { type?: string; message: string; responseBody?: string }): {
   category: 'transient' | 'permanent';
   type: string;
   raw_message: string;
@@ -121,6 +121,22 @@ export function classifyError(input: { type?: string; message: string }): {
     if (pattern.test(input.message)) {
       const category: 'transient' | 'permanent' = PERMANENT_TYPES.has(typeName) ? 'permanent' : 'transient';
       return { category, type: typeName, raw_message: input.message };
+    }
+  }
+
+  // Supplementary path (priority 3 lineage): APIError + responseBody token-limit keyword match.
+  // Handles kimi APIError where token-limit info is buried in responseBody escaped JSON.
+  // responseBody absent/null, JSON parse failure, or keyword absence → graceful unknown transient.
+  if (input.responseBody != null) {
+    const TOKEN_LIMIT_KEYWORDS = ['exceeded model token limit', 'context_length_exceeded', 'token limit'];
+    try {
+      const bodyText = JSON.stringify(JSON.parse(input.responseBody));
+      const lower = bodyText.toLowerCase();
+      if (TOKEN_LIMIT_KEYWORDS.some(k => lower.includes(k))) {
+        return { category: 'permanent', type: 'context_window', raw_message: input.message };
+      }
+    } catch {
+      // JSON parse failure → fall through to unknown transient
     }
   }
 
@@ -207,9 +223,12 @@ export function classifyState(parsed: NDJSONResult): {
   // Branch 6: errors present, no winning step_finish — classify first error
   const firstEvent = errorEvents[0];
   const errObj = firstEvent.error ?? {};
+  const errData = (errObj as { data?: { responseBody?: string } }).data;
+  const responseBody = typeof errData?.responseBody === 'string' ? errData.responseBody : undefined;
   const result = classifyError({
     type: (errObj as { type?: string; code?: string }).type ?? (errObj as { type?: string; code?: string }).code,
     message: (errObj as { message?: string }).message ?? JSON.stringify(firstEvent.error ?? firstEvent),
+    responseBody,
   });
   return {
     state: result.category === 'permanent' ? 'permanent_error' : 'transient_error',
