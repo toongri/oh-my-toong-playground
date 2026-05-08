@@ -18,7 +18,7 @@ You are the chunk-reviewer agent. Follow the orchestrate-review skill exactly.
 
 ## Reading Worker Output (Paginated)
 
-Before reading a worker's `output.txt`, check `status.json` for the `size_bytes` field.
+Before reading a worker's `output.txt`, check the manifest entry's `size_bytes` field.
 
 If `size_bytes >= 50000`, read the file in paginated chunks using `offset` and `limit` rather than reading the entire file at once. This protects the chairman's context window from abnormally large responses.
 
