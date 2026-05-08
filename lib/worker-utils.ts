@@ -26,6 +26,54 @@ export const NON_RETRYABLE_PATTERNS: string[] = [
 export const NON_RETRYABLE_EXIT_CODES = new Set([41, 42, 52, 130]);
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+/** Error event object emitted in the NDJSON stream (schema-tolerant: accepts type or code). */
+interface NDJSONErrorEvent {
+  type: 'error';
+  error: { type?: string; code?: string; message?: string };
+  [k: string]: unknown;
+}
+
+/** Parsed result of a single NDJSON output file. */
+interface NDJSONResult {
+  textParts: string[];
+  finishReason?: string;
+  errorEvents: NDJSONErrorEvent[];
+  parseError?: boolean;
+}
+
+/** Structured error information extracted from a failed run. */
+interface ErrorInfo {
+  type: string;
+  message?: string;
+  raw_message?: string;
+  bytes?: number;
+  limit?: number;
+}
+
+/** Shape of the status.json file written to memberDir. */
+interface StatusJson {
+  member: string;
+  state: string;
+  command: string;
+  /** Current loop iteration index (0..MAX_RETRIES). Existing field — preserved for backward compat. */
+  attempt: number;
+  /** Final attempt count on terminal state (1..3). Written on terminal state only. */
+  attempts: number;
+  size_bytes?: number; // terminal state always writes size_bytes; intermediate state 'retrying' omits it
+  error?: ErrorInfo;
+  startedAt?: string;
+  finishedAt?: string;
+  message?: string | null;
+  pid?: number | null;
+  exitCode?: number | null;
+  signal?: string | null;
+  lastHeartbeat?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Command parsing
 // ---------------------------------------------------------------------------
 
