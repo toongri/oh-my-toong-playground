@@ -119,6 +119,47 @@ function classifyError(input: { type?: string; message: string }): {
 }
 
 // ---------------------------------------------------------------------------
+// NDJSON output parser
+// ---------------------------------------------------------------------------
+
+/** Parse a single NDJSON output file into structured result. Never throws. */
+function parseNdjsonOutput(filePath: string): NDJSONResult {
+  const result: NDJSONResult = { textParts: [], errorEvents: [], parseError: false };
+
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return result;
+  }
+
+  const lines = raw.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0 || trimmed.startsWith('//')) continue;
+
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(trimmed) as Record<string, unknown>;
+    } catch {
+      result.parseError = true;
+      continue;
+    }
+
+    const type = event.type;
+    if (type === 'text' && typeof event.text === 'string') {
+      result.textParts.push(event.text);
+    } else if (type === 'step_finish') {
+      result.finishReason = typeof event.reason === 'string' ? event.reason : undefined;
+    } else if (type === 'error') {
+      result.errorEvents.push(event as NDJSONErrorEvent);
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Command parsing
 // ---------------------------------------------------------------------------
 
