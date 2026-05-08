@@ -1,72 +1,152 @@
-# opencode Input Limits — Research Notes
+# opencode Input Limits — Research Notes (v2)
 
-Date: 2026-05-08
-opencode version: 1.14.41
-Test model: openai/gpt-5.4-mini (via opencode-go proxy)
+Date: 2026-05-08  
+opencode version: 1.14.41  
+Production models: `openai/gpt-5.5`, `opencode-go/kimi-k2.6`  
+Spike evidence: `evidence/orchestrate-review-output-reliability-v2/spike/` (14 files)
+
+---
 
 ## PROMPT_MAX_BYTES Decision
-
-**Decision: 80 KB (80*1024 = 81920 bytes) — plan's conservative anchor**
 
 ```
 PROMPT_MAX_BYTES = 80*1024  // 81920 bytes — plan's conservative anchor; 60KB/100KB/200KB all empirically pass, 80KB sits inside verified-pass band with margin for system prompt + tool defs. based on row 3 of evidence above (200KB pass, 500KB ContextOverflowError).
 ```
 
-The 500 KB prompt reliably triggers `ContextOverflowError`. The 60 KB, 100 KB,
+The 500 KB prompt reliably triggers `ContextOverflowError` on gpt-5.5. The 60 KB, 100 KB,
 and 200 KB prompts all succeed. 400 KB + ~80 KB system prompt overhead ≈ 480 KB,
 dangerously close to the observed 500 KB cliff. The conservative anchor 80*1024
 (= 81920 bytes) stays well inside the verified-pass band and leaves ample margin
 for system prompt overhead (~50–80 KB) and tool definitions.
 
-## Boundary Evidence
+---
 
-Sizes: 60KB, 100KB, 200KB (all pass); 500KB (ContextOverflowError).
+## Input Boundary Table
 
-| Prompt size | Exit code | NDJSON event type | Error name |
-|-------------|-----------|-------------------|------------|
-| 60 KB       | 0         | step_finish       | (none)     |
-| 100 KB      | 0         | step_finish       | (none)     |
-| 200 KB      | 0         | step_finish       | (none)     |
-| 500 KB      | 0         | error             | ContextOverflowError |
+### gpt-5.5 input boundary
 
-All boundary tests run with `opencode run --pure --format json`.
+| Prompt size | Exit code | NDJSON event type     | Error name           |
+|-------------|-----------|----------------------|----------------------|
+| 60 KB       | 0         | step_finish          | (none)               |
+| 100 KB      | 0         | step_finish          | (none)               |
+| 200 KB      | 0         | step_finish          | (none)               |
+| 500 KB      | 0         | error                | ContextOverflowError |
 
-The 500 KB payload is a base64-encoded string (no whitespace), so token count is
-approximately 125 000 tokens (1 token ≈ 4 bytes), which exceeds the gpt-5.4-mini
-context window.
+Source: gpt-S5-100k (100KB prompt → step_finish, input tokens: 88590), gpt-S5-500k (500KB → ContextOverflowError).  
+The 500 KB payload is base64-encoded (no whitespace), exceeding the gpt-5.5 context window.
 
-## Exit Code Evidence
+### kimi-k2.6 input boundary
 
-**KEY FINDING**: opencode always exits 0, even on session error.
+| Prompt size | Exit code | NDJSON event type | Error name | Detail                                    |
+|-------------|-----------|-------------------|------------|-------------------------------------------|
+| ~34 K tokens| 0         | step_finish       | (none)     | S1-happy: input=34248 tokens              |
+| 500 KB      | 0         | error             | APIError   | kimi-k2.6 overflow: 256k token limit (262144), requested: 370653 |
 
-Tested cases:
+kimi-k2.6 limit: 262144 tokens. Source: kimi-S5-500k, `responseBody` inner `raw` field:  
+`"Invalid request: Your request exceeded model token limit: 262144 (requested: 370653)"`.  
+kimi overflow → `APIError` (not `ContextOverflowError`).
+
+---
+
+## Exit Code Finding
+
+**opencode always exits 0, even on session error.**
+
+Tested cases (both models):
 - `ProviderModelNotFoundError` (invalid model): exit 0, NDJSON `{"type":"error",...}`
-- `ContextOverflowError` (500 KB prompt): exit 0, NDJSON `{"type":"error",...}`
-- Connection refused (network error): opencode retries indefinitely — no error
-  NDJSON emitted from network errors. Process must be killed externally.
+- `ContextOverflowError` (gpt-5.5, 500 KB): exit 0, NDJSON `{"type":"error",...}`
+- `APIError` (kimi-k2.6, 500 KB): exit 0, NDJSON `{"type":"error",...}`
 
-## Verification commands
+---
 
+## Per-Model Event Payload Schemas
+
+### gpt-5.5 step_start
+
+Source: `gpt-S1-happy.ndjson` line 1, `gpt-S5-100k.ndjson` line 1, `gpt-S5-500k.ndjson` line 1.
+
+```json
+{
+  "type": "step_start",
+  "timestamp": 1778226126949,
+  "sessionID": "ses_1f976af06ffeQ9OmQMTjLRSafG",
+  "part": {
+    "id": "prt_e06896064001xUyaY7Tea357Y6",
+    "messageID": "msg_e06895297001TTrl89pEo7ybnF",
+    "sessionID": "ses_1f976af06ffeQ9OmQMTjLRSafG",
+    "type": "step-start"
+  }
+}
 ```
-$ opencode run --pure --format json --model "openai/gpt-5.4-mini" "<500KB payload>" > out.ndjson
-$ echo $?
-0
-$ jq -r 'select(.type=="error").error.name' out.ndjson
-ContextOverflowError
+
+### gpt-5.5 text
+
+Source: `gpt-S1-happy.ndjson` line 2. Key field: `event.part.text`.
+
+```json
+{
+  "type": "text",
+  "timestamp": 1778226128459,
+  "sessionID": "ses_1f976af06ffeQ9OmQMTjLRSafG",
+  "part": {
+    "id": "prt_e06896604001Qix601z0esZXgR",
+    "messageID": "msg_e06895297001TTrl89pEo7ybnF",
+    "sessionID": "ses_1f976af06ffeQ9OmQMTjLRSafG",
+    "type": "text",
+    "text": "OK",
+    "time": { "start": 1778226128388, "end": 1778226128458 },
+    "metadata": {
+      "openai": {
+        "itemId": "msg_0ebc2f4dfac459670169fd93d077cc819195e58acd75a5f979",
+        "phase": "final_answer"
+      }
+    }
+  }
+}
 ```
 
-This confirms the motivating incident hypothesis: chunk-review workers (GPT-5.5
-and Kimi-K2.6) that exited 0 with empty output were likely hitting a session
-error that did not call `process.exit(1)`.
+**Note**: the text content is at `event.part.text`. `event.text` does not exist.
 
-## Error Event Schema
+### gpt-5.5 step_finish
 
-Real captured payload (ProviderModelNotFoundError):
+Source: `gpt-S1-happy.ndjson` line 3. Key field: `event.part.reason`.
+
+```json
+{
+  "type": "step_finish",
+  "timestamp": 1778226128476,
+  "sessionID": "ses_1f976af06ffeQ9OmQMTjLRSafG",
+  "part": {
+    "id": "prt_e0689665b001TNyC6CRSH6GudU",
+    "reason": "stop",
+    "messageID": "msg_e06895297001TTrl89pEo7ybnF",
+    "sessionID": "ses_1f976af06ffeQ9OmQMTjLRSafG",
+    "type": "step-finish",
+    "tokens": {
+      "total": 32183,
+      "input": 32162,
+      "output": 7,
+      "reasoning": 14,
+      "cache": { "write": 0, "read": 0 }
+    },
+    "cost": 0
+  }
+}
+```
+
+**Note**: finish reason is at `event.part.reason = "stop"`. `event.reason` is not present (always null/absent).
+
+### gpt-5.5 error
+
+Two distinct error shapes observed.
+
+**UnknownError (invalid model)** — source: `gpt-S4-invalid-model.ndjson`:
+
 ```json
 {
   "type": "error",
-  "timestamp": 1778207224588,
-  "sessionID": "ses_1fa970d35ffeROC86VpJNID52g",
+  "timestamp": 1778226175209,
+  "sessionID": "ses_1f975e3feffe8UyUInAJE49ypu",
   "error": {
     "name": "UnknownError",
     "data": {
@@ -76,12 +156,15 @@ Real captured payload (ProviderModelNotFoundError):
 }
 ```
 
-Real captured payload (ContextOverflowError):
+stderr shows `ProviderModelNotFoundError` with `providerID: "openai"`, `modelID: "invalid-model-name-xyz"`.
+
+**ContextOverflowError (500 KB prompt)** — source: `gpt-S5-500k.ndjson`:
+
 ```json
 {
   "type": "error",
-  "timestamp": 1778208534476,
-  "sessionID": "ses_1fa832167ffey5kT20U6nGpTxy",
+  "timestamp": 1778226217218,
+  "sessionID": "ses_1f9755009ffee8JrpYLKy1QwzO",
   "error": {
     "name": "ContextOverflowError",
     "data": {
@@ -92,24 +175,157 @@ Real captured payload (ContextOverflowError):
 }
 ```
 
-## Observations
+`error.data.responseBody` is an escaped JSON string. `ContextOverflowError` fires twice on 500 KB (two step_start + two error events in sequence).
 
-1. `error.name` distinguishes error types: `UnknownError`, `ContextOverflowError`,
-   `RateLimitError` (not yet observed naturally).
-2. `error.data.message` carries the human-readable description.
-3. `ContextOverflowError.data.responseBody` contains the raw provider response JSON.
-4. Rate limit errors were not triggered by 5 simultaneous calls to gpt-5.4-mini.
-   The mock fixture uses inferred schema from error name patterns.
-   Schema inferred from OpenAI rate limit error documentation: https://platform.openai.com/docs/guides/rate-limits
-5. Network errors (connection refused) do NOT produce NDJSON error events —
-   opencode retries indefinitely. The session never terminates.
-6. Conclusion: an opencode session.error event terminates with exit 0 — the error is silently propagated via NDJSON, not via process exit code.
-7. 60KB pass deterministic condition: exit 0 AND stdout NDJSON contains ≥ 1 line of `{"type":"text"}`.
-8. Cross-model note: the spike was run on gpt-5.4-mini. Production members (openai/gpt-5.5, opencode-go/kimi-k2.6) share the same OpenAI-compatible streaming protocol; the NDJSON error schema observed on gpt-5.4-mini is expected to apply identically. See https://platform.openai.com/docs/api-reference/chat/streaming.
+---
 
-## Fixtures
+### kimi-k2.6 step_start
 
-- `lib/__fixtures__/opencode-error-auth.ndjson` — real, ProviderModelNotFoundError
-- `lib/__fixtures__/opencode-error-context_window.ndjson` — real, ContextOverflowError
-- `lib/__fixtures__/opencode-error-rate_limit.ndjson` — mock-derived (RateLimitError schema inferred)
-- `lib/__fixtures__/opencode-error-network.ndjson` — mock-derived (ConnectionRefused, opencode retries indefinitely)
+Source: `kimi-S1-happy.ndjson` line 1.
+
+```json
+{
+  "type": "step_start",
+  "timestamp": 1778226143765,
+  "sessionID": "ses_1f9768db6ffe77Rgmlo5XTaAI6",
+  "part": {
+    "id": "prt_e0689a210001N6XPERNdTKQILn",
+    "messageID": "msg_e06897415001Mfyu7sdwUFEusS",
+    "sessionID": "ses_1f9768db6ffe77Rgmlo5XTaAI6",
+    "type": "step-start"
+  }
+}
+```
+
+### kimi-k2.6 text
+
+Source: `kimi-S1-happy.ndjson` line 2. Key field: `event.part.text`.
+
+```json
+{
+  "type": "text",
+  "timestamp": 1778226143940,
+  "sessionID": "ses_1f9768db6ffe77Rgmlo5XTaAI6",
+  "part": {
+    "id": "prt_e0689a269001I6uglGxY8Ihm7q",
+    "messageID": "msg_e06897415001Mfyu7sdwUFEusS",
+    "sessionID": "ses_1f9768db6ffe77Rgmlo5XTaAI6",
+    "type": "text",
+    "text": "OK",
+    "time": { "start": 1778226143849, "end": 1778226143938 }
+  }
+}
+```
+
+**Note**: kimi-k2.6 `text` event has no `metadata.openai` field (unlike gpt-5.5). Text at `event.part.text`.
+
+### kimi-k2.6 step_finish
+
+Source: `kimi-S1-happy.ndjson` line 3. Key field: `event.part.reason`.
+
+```json
+{
+  "type": "step_finish",
+  "timestamp": 1778226143943,
+  "sessionID": "ses_1f9768db6ffe77Rgmlo5XTaAI6",
+  "part": {
+    "id": "prt_e0689a2c4001njr8YEKHeck057",
+    "reason": "stop",
+    "messageID": "msg_e06897415001Mfyu7sdwUFEusS",
+    "sessionID": "ses_1f9768db6ffe77Rgmlo5XTaAI6",
+    "type": "step-finish",
+    "tokens": {
+      "total": 34265,
+      "input": 34248,
+      "output": 3,
+      "reasoning": 14,
+      "cache": { "write": 0, "read": 0 }
+    },
+    "cost": 0.0326036
+  }
+}
+```
+
+**Note**: finish reason at `event.part.reason = "stop"`. `event.reason` absent (always null).
+
+### kimi-k2.6 error
+
+Two distinct error shapes observed.
+
+**UnknownError (invalid model)** — source: `kimi-S4-invalid-model.ndjson`:
+
+```json
+{
+  "type": "error",
+  "timestamp": 1778226177458,
+  "sessionID": "ses_1f975db36ffeikKQvclR1RBjez",
+  "error": {
+    "name": "UnknownError",
+    "data": {
+      "message": "Model not found: opencode-go/invalid-model-name-xyz."
+    }
+  }
+}
+```
+
+stderr shows `ProviderModelNotFoundError` with `providerID: "opencode-go"`, `modelID: "invalid-model-name-xyz"`.
+
+**APIError (overflow — kimi overflow)** — source: `kimi-S5-500k.ndjson`:
+
+```json
+{
+  "type": "error",
+  "timestamp": 1778226233919,
+  "sessionID": "ses_1f9751399ffeqfsNfb9hDJEGA0",
+  "error": {
+    "name": "APIError",
+    "data": {
+      "message": "Error from provider: Provider returned error",
+      "statusCode": 400,
+      "isRetryable": false,
+      "responseHeaders": {
+        "cf-ray": "9f86d5fb1a90fef8-PDX",
+        "content-type": "application/json"
+      },
+      "responseBody": "{\"error\":{\"message\":\"Error from provider: Provider returned error\",\"code\":400,\"metadata\":{\"raw\":\"{\\\"error\\\":{\\\"message\\\":\\\"Invalid request: Your request exceeded model token limit: 262144 (requested: 370653)\\\",\\\"type\\\":\\\"invalid_request_error\\\"}}\",\"provider_name\":\"Moonshot AI\",\"is_byok\":true}},\"user_id\":\"user_2z4xm5LomaIHfsnVqMhFsWrVrGY\"}"
+    }
+  }
+}
+```
+
+**APIError responseBody nesting** (kimi overflow):
+
+- `error.data.responseBody` is an escaped JSON string.
+- Parsed `responseBody.error.metadata.raw` is itself an escape-encoded JSON string.
+- Final human-readable message buried inside `raw`: `"Invalid request: Your request exceeded model token limit: 262144 (requested: 370653)"`.
+- Detection path: `error.name === "APIError"` AND `error.data.statusCode === 400`.
+- **kimi overflow does NOT use `ContextOverflowError`** — it surfaces as `APIError` with the limit detail inside a double-nested escaped JSON.
+
+---
+
+## Cross-Model Schema Comparison
+
+| Field                     | gpt-5.5                           | kimi-k2.6                          |
+|---------------------------|-----------------------------------|------------------------------------|
+| `step_start` shape        | identical                         | identical                          |
+| `text.part.text`          | present                           | present                            |
+| `text` metadata           | `part.metadata.openai` present    | no `part.metadata` field           |
+| `step_finish.part.reason` | `"stop"`                          | `"stop"`                           |
+| `step_finish.part.cost`   | `0`                               | numeric (e.g. `0.0326036`)         |
+| invalid model error       | `UnknownError`                    | `UnknownError`                     |
+| overflow error name       | `ContextOverflowError`            | `APIError`                         |
+| overflow detection        | `error.name === "ContextOverflowError"` | `error.name === "APIError"` + `statusCode: 400` |
+| overflow limit            | context window exceeded (openai)  | 262144 tokens (kimi)               |
+
+---
+
+## Key Findings Summary
+
+1. `event.part.reason = "stop"` — both gpt-5.5 and kimi-k2.6 use `event.part.reason`. `event.reason` is always absent.
+2. `event.part.text` — both models surface text at `event.part.text`. `event.text` does not exist.
+3. Invalid model → exit 0 + `error.name = "UnknownError"` + message `"Model not found: <provider>/<model>."` for both models.
+4. Overflow error schema differs by model:
+   - gpt-5.5: `error.name = "ContextOverflowError"` with `error.data.responseBody` (escaped JSON, one level).
+   - kimi-k2.6: `error.name = "APIError"` + `statusCode: 400` + actual limit detail inside double-nested escaped JSON at `responseBody.error.metadata.raw`.
+5. opencode always exits 0 on session error — process exit code cannot be used for error detection.
+6. `--agent` wrapping has no effect on transport-level NDJSON schema.
