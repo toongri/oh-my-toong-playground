@@ -2,6 +2,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from 'events';
+import { Readable } from 'stream';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -325,7 +326,7 @@ describe('runWithRetry', () => {
     });
 
     expect(result.state).toBe('error');
-    expect(result.attempt).toBe(1); // 0, 1 = 2 attempts
+    expect(result.attempt).toBe(2); // 0, 1, 2 = 3 attempts (MAX_RETRIES=2)
   });
 
   test('does NOT retry on missing_cli (ENOENT)', async () => {
@@ -409,8 +410,8 @@ describe('runWithRetry', () => {
       },
     });
 
-    // Should have 1 delay (retry after attempt 0)
-    expect(delays.length).toBe(1);
+    // Should have 2 delays (retry after attempt 0, retry after attempt 1)
+    expect(delays.length).toBe(2);
 
     // First delay: BASE_DELAY_MS * 2^0 + jitter(0~BASE_DELAY_MS) = 1000..2000
     expect(delays[0] >= BASE_DELAY_MS).toBe(true);
@@ -846,5 +847,284 @@ describe('runOnce - stream close guarantee', () => {
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for JSON mode integration tests
+// ---------------------------------------------------------------------------
+
+const DONE_NDJSON = '{"type":"text","text":"full review"}\n{"type":"step_finish","reason":"stop"}\n';
+const EMPTY_NDJSON = '{"type":"text","text":"partial output"}\n';
+const ERROR_NDJSON = '{"type":"error","error":{"type":"auth","message":"unauthorized"}}\n';
+const TRANS_ERR_NDJSON = '{"type":"error","error":{"type":"rate_limit","message":"429 too many requests"}}\n';
+
+/**
+ * Creates a spawnFn that pipes NDJSON through child.stdout on each call,
+ * cycling through the provided outputs array.
+ * Data flows via pipe → WriteStream so no write-race against flags:'w' truncation.
+ */
+function makeNdjsonSpawnFn(memberDir, outputs) {
+  let callCount = 0;
+  function mockSpawn(_program, _args, _options) {
+    const outputNdjson = outputs[callCount] ?? outputs[outputs.length - 1];
+    callCount++;
+    const child = new EventEmitter();
+    const stdin = new EventEmitter();
+    stdin.write = () => true;
+    stdin.end = () => {};
+    child.stdin = stdin;
+    child.stderr = null;
+    child.pid = 12345 + callCount;
+
+    // Readable that pushes NDJSON then ends — piped by runOnce into outStream
+    const stdout = new Readable({ read() {} });
+    child.stdout = stdout;
+
+    process.nextTick(() => {
+      stdout.push(outputNdjson);
+      stdout.push(null); // EOF
+      child.emit('exit', 0, null);
+      process.nextTick(() => child.emit('close', 0, null));
+    });
+    return child;
+  }
+  return { mockSpawn, getCallCount: () => callCount };
+}
+
+/**
+ * Creates a spawnFn that emits an ENOENT error (missing CLI binary).
+ */
+function makeEnoentSpawnFn() {
+  function mockSpawn(_program, _args, _options) {
+    const child = new EventEmitter();
+    const stdin = new EventEmitter();
+    stdin.write = () => true;
+    stdin.end = () => {};
+    child.stdin = stdin;
+    child.stdout = null;
+    child.stderr = null;
+    child.pid = 99999;
+    process.nextTick(() => {
+      const err = new Error('spawn nonexistent-cli ENOENT');
+      (err as any).code = 'ENOENT';
+      child.emit('error', err);
+    });
+    return child;
+  }
+  return { mockSpawn };
+}
+
+function makeJsonRunOpts(memberDir, member, spawnFn) {
+  return {
+    program: 'mock-cli',
+    args: [],
+    prompt: 'test prompt',
+    member,
+    memberDir,
+    command: 'mock-cli',
+    timeoutSec: 0,
+    mode: 'json' as const,
+    sleepFn: () => Promise.resolve(),
+    jitter: () => 0,
+    spawnFn,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// JSON mode integration
+// ---------------------------------------------------------------------------
+
+describe('JSON mode integration', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('JSON mode integration: happy stop', async () => {
+    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [DONE_NDJSON]);
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    expect(result.state).toBe('done');
+    expect(result.attempts).toBe(1);
+  });
+
+  test('JSON mode integration: empty step_finish absent', async () => {
+    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [EMPTY_NDJSON, EMPTY_NDJSON, EMPTY_NDJSON]);
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    expect(result.state).toBe('empty_output');
+    expect(result.attempts).toBe(3);
+  });
+
+  test('JSON mode integration: error event', async () => {
+    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [ERROR_NDJSON]);
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    expect(result.state).toBe('permanent_error');
+    expect(result.attempts).toBe(1);
+  });
+
+  test('JSON mode integration: spawn ENOENT', async () => {
+    const { mockSpawn } = makeEnoentSpawnFn();
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    expect(result.state).toBe('permanent_error');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// status.json field guarantees
+// ---------------------------------------------------------------------------
+
+describe('status.json fields', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('status.json: size_bytes always present on terminal state', async () => {
+    for (const [label, ndjson, expectedState] of [
+      ['done', DONE_NDJSON, 'done'],
+      ['empty_output', EMPTY_NDJSON, 'empty_output'],
+      ['transient_error', TRANS_ERR_NDJSON, 'transient_error'],
+      ['permanent_error', ERROR_NDJSON, 'permanent_error'],
+    ]) {
+      const memberDir = path.join(tmpDir, `size-bytes-${label}`);
+      fs.mkdirSync(memberDir, { recursive: true });
+      const statusPath = path.join(memberDir, 'status.json');
+      // transient exhausted after 3 attempts
+      const outputs = expectedState === 'transient_error'
+        ? [ndjson as string, ndjson as string, ndjson as string]
+        : [ndjson as string];
+      const { mockSpawn } = makeNdjsonSpawnFn(memberDir, outputs);
+      await runWithRetry(makeJsonRunOpts(memberDir, paths.member, mockSpawn));
+      const status = readStatus(statusPath);
+      expect(typeof status.size_bytes).toBe('number');
+    }
+  });
+
+  test('status.json: size_bytes equals fs.statSync output', async () => {
+    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [DONE_NDJSON]);
+    await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    const status = readStatus(paths.statusPath);
+    const actualSize = fs.statSync(paths.outPath).size;
+    expect(status.size_bytes).toBe(actualSize);
+  });
+
+  test('size_bytes: stable after process exit (no further writes)', async () => {
+    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [DONE_NDJSON]);
+    await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    const sizeAfterRun = fs.statSync(paths.outPath).size;
+    // No async write should happen after runWithRetry resolves
+    const sizeAfterCheck = fs.statSync(paths.outPath).size;
+    expect(sizeAfterCheck).toBe(sizeAfterRun);
+    const status = readStatus(paths.statusPath);
+    expect(status.size_bytes).toBe(sizeAfterRun);
+  });
+
+  test('status.json: attempts field equals total attempts on terminal state', async () => {
+    // 2 transient then done = 3 attempts — use isolated subdir to avoid race with shared paths
+    const memberDir = path.join(tmpDir, 'attempts-test');
+    fs.mkdirSync(memberDir, { recursive: true });
+    const statusPath = path.join(memberDir, 'status.json');
+    const { mockSpawn } = makeNdjsonSpawnFn(memberDir, [EMPTY_NDJSON, EMPTY_NDJSON, DONE_NDJSON]);
+    await runWithRetry(makeJsonRunOpts(memberDir, paths.member, mockSpawn));
+    const status = readStatus(statusPath);
+    expect(status.attempts).toBe(3);
+    expect(status.state).toBe('done');
+  });
+
+  test('status.json backward compat: legacy fixture without size_bytes/error parses', async () => {
+    // Write a legacy-style status.json (no size_bytes, no error)
+    const legacy = { member: paths.member, state: 'done', attempts: 1 };
+    fs.writeFileSync(paths.statusPath, JSON.stringify(legacy), 'utf8');
+    const parsed = readStatus(paths.statusPath);
+    expect(parsed.state).toBe('done');
+    expect(parsed.attempts).toBe(1);
+    expect(parsed.size_bytes).toBeUndefined();
+    expect(parsed.error).toBeUndefined();
+  });
+
+  test('retry overwrite: only final attempt status persisted', async () => {
+    // 2 transient then done — use isolated subdir to avoid race with shared paths
+    const memberDir = path.join(tmpDir, 'retry-overwrite-test');
+    fs.mkdirSync(memberDir, { recursive: true });
+    const statusPath = path.join(memberDir, 'status.json');
+    const { mockSpawn } = makeNdjsonSpawnFn(memberDir, [EMPTY_NDJSON, EMPTY_NDJSON, DONE_NDJSON]);
+    await runWithRetry(makeJsonRunOpts(memberDir, paths.member, mockSpawn));
+    const status = readStatus(statusPath);
+    // Final status must reflect terminal state, not 'retrying'
+    expect(status.state).toBe('done');
+    expect(status.attempts).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stderr fallback
+// ---------------------------------------------------------------------------
+
+describe('stderr fallback', () => {
+  let tmpDir;
+  let paths;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    paths = setupJobDir(tmpDir);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('stderr fallback: spawn ENOENT → permanent_error', async () => {
+    const { mockSpawn } = makeEnoentSpawnFn();
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
+    expect(result.state).toBe('permanent_error');
+    expect(result.error?.type).toBe('missing_cli');
+  });
+
+  test('stderr fallback: stdout empty + stderr keyword → classified', async () => {
+    // Spawn succeeds but exits non-zero; stderr contains auth keyword
+    function mockSpawnWithStderr(_program, _args, _options) {
+      const child = new EventEmitter();
+      const stdin = new EventEmitter();
+      stdin.write = () => true;
+      stdin.end = () => {};
+      child.stdin = stdin;
+      child.pid = 55555;
+
+      // Simulate stderr output piped to errStream
+      const stderrEmitter = new EventEmitter();
+      stderrEmitter.pipe = (dest) => {
+        process.nextTick(() => {
+          dest.write('unauthorized: invalid api key');
+        });
+        return dest;
+      };
+      child.stdout = null;
+      child.stderr = stderrEmitter;
+
+      process.nextTick(() => {
+        child.emit('exit', 1, null);
+        process.nextTick(() => child.emit('close', 1, null));
+      });
+      return child;
+    }
+
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawnWithStderr));
+    // stderr 'unauthorized' keyword → auth → permanent
+    expect(result.state).toBe('permanent_error');
+    expect(result.error?.type).toBe('auth');
   });
 });

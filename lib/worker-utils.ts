@@ -18,11 +18,6 @@ export const MAX_RETRIES = 2; // retries=2, attempts=1+retries=3
 export const BASE_DELAY_MS = 1000;
 export const HEARTBEAT_INTERVAL_MS = 10_000;
 
-export const NON_RETRYABLE_PATTERNS: string[] = [
-  'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
-  'upgrade to Plus', 'Selected model is at capacity', 'ran out of room',
-  'authentication_error', 'attempt 10/10',
-];
 export const NON_RETRYABLE_EXIT_CODES = new Set([41, 42, 52, 130]);
 
 /**
@@ -46,7 +41,7 @@ interface NDJSONErrorEvent {
 }
 
 /** Parsed result of a single NDJSON output file. */
-interface NDJSONResult {
+export interface NDJSONResult {
   textParts: string[];
   finishReason?: string;
   errorEvents: NDJSONErrorEvent[];
@@ -87,7 +82,7 @@ interface StatusJson {
 // ---------------------------------------------------------------------------
 
 /** Classify an error message (or typed error) into a category and canonical type. */
-function classifyError(input: { type?: string; message: string }): {
+export function classifyError(input: { type?: string; message: string }): {
   category: 'transient' | 'permanent';
   type: string;
   raw_message: string;
@@ -132,7 +127,7 @@ function classifyError(input: { type?: string; message: string }): {
 // ---------------------------------------------------------------------------
 
 /** Parse a single NDJSON output file into structured result. Never throws. */
-function parseNdjsonOutput(filePath: string): NDJSONResult {
+export function parseNdjsonOutput(filePath: string): NDJSONResult {
   const result: NDJSONResult = { textParts: [], errorEvents: [], parseError: false };
 
   let raw: string;
@@ -173,7 +168,7 @@ function parseNdjsonOutput(filePath: string): NDJSONResult {
 // ---------------------------------------------------------------------------
 
 /** Classify a parsed NDJSON result into a terminal state (pure function — no I/O). */
-function classifyState(parsed: NDJSONResult): {
+export function classifyState(parsed: NDJSONResult): {
   state: 'done' | 'empty_output' | 'transient_error' | 'permanent_error';
   error?: ErrorInfo;
 } {
@@ -621,9 +616,18 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
       const rawState = raw.state as string;
       let classified: ReturnType<typeof classifyState>;
 
-      if (rawState === 'missing_cli' || rawState === 'error') {
-        // spawn-level failure: use classifyError on stderr message
-        const errMsg = typeof raw.message === 'string' ? raw.message : '';
+      if (rawState === 'missing_cli') {
+        // CLI binary not found — always permanent
+        const errMsg = typeof raw.message === 'string' ? raw.message : 'CLI binary not found';
+        classified = {
+          state: 'permanent_error',
+          error: { type: 'missing_cli', message: errMsg, raw_message: errMsg },
+        };
+      } else if (rawState === 'error') {
+        // Non-zero exit: prefer stderr file content for classification
+        let stderrText = '';
+        try { stderrText = fs.readFileSync(path.join(runOpts.memberDir, 'error.txt'), 'utf8'); } catch { /* file absent */ }
+        const errMsg = stderrText || (typeof raw.message === 'string' ? raw.message : '');
         const ce = classifyError({ message: errMsg });
         classified = {
           state: ce.category === 'permanent' ? 'permanent_error' : 'transient_error',
@@ -680,6 +684,11 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
       let isNonRetryable = exitCode != null && NON_RETRYABLE_EXIT_CODES.has(exitCode);
 
       if (!isNonRetryable) {
+        const nonRetryableKeywords = [
+          'TerminalQuotaError', 'QUOTA_EXHAUSTED', 'Quota exceeded',
+          'upgrade to Plus', 'Selected model is at capacity', 'ran out of room',
+          'authentication_error', 'attempt 10/10',
+        ];
         try {
           const fd = fs.openSync(errPath, 'r');
           try {
@@ -689,7 +698,7 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
               const buf = Buffer.alloc(newSize);
               fs.readSync(fd, buf, 0, newSize, errOffset);
               const errorContent = buf.toString('utf8');
-              isNonRetryable = NON_RETRYABLE_PATTERNS.some(
+              isNonRetryable = nonRetryableKeywords.some(
                 p => errorContent.toLowerCase().includes(p.toLowerCase())
               );
             }

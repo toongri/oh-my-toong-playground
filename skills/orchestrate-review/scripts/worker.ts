@@ -106,8 +106,11 @@ function main() {
   runWithRetry({
     program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member, memberDir, command, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
+    promptPath,
+    mode: 'json',
   }).then((result) => {
-    logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
+    const size_bytes = result.size_bytes;
+    logInfo(`worker done: member=${member} state=${result.state} attempts=${result.attempts} size_bytes=${size_bytes}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });
