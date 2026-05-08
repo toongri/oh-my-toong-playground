@@ -1,0 +1,1 @@
+{"_mock":"derived","type":"error","error":{"name":"RateLimitError","data":{"message":"Rate limit exceeded. Please slow down your requests."}}}
