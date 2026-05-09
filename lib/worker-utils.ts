@@ -26,6 +26,10 @@ export const TEXT_MODE_NON_RETRYABLE_KEYWORDS = [
   'authentication_error', 'attempt 10/10',
 ];
 
+const TOKEN_LIMIT_RESPONSE_BODY_KEYWORDS = [
+  'exceeded model token limit', 'context_length_exceeded', 'token limit',
+];
+
 /**
  * Maximum prompt size in bytes for chunk-review JSON-mode runs.
  * Prompts larger than this are rejected before spawn with state='permanent_error',
@@ -126,17 +130,11 @@ export function classifyError(input: { type?: string; message: string; responseB
 
   // Supplementary path (priority 3 lineage): APIError + responseBody token-limit keyword match.
   // Handles kimi APIError where token-limit info is buried in responseBody escaped JSON.
-  // responseBody absent/null, JSON parse failure, or keyword absence → graceful unknown transient.
+  // responseBody absent/null or keyword absence → graceful unknown transient.
   if (input.responseBody != null) {
-    const TOKEN_LIMIT_KEYWORDS = ['exceeded model token limit', 'context_length_exceeded', 'token limit'];
-    try {
-      const bodyText = JSON.stringify(JSON.parse(input.responseBody));
-      const lower = bodyText.toLowerCase();
-      if (TOKEN_LIMIT_KEYWORDS.some(k => lower.includes(k))) {
-        return { category: 'permanent', type: 'context_window', raw_message: input.message };
-      }
-    } catch {
-      // JSON parse failure → fall through to unknown transient
+    const lower = input.responseBody.toLowerCase();
+    if (TOKEN_LIMIT_RESPONSE_BODY_KEYWORDS.some(k => lower.includes(k))) {
+      return { category: 'permanent', type: 'context_window', raw_message: input.message };
     }
   }
 

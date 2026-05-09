@@ -2130,7 +2130,7 @@ describe('start + collect integration', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir], { stdio: 'pipe' }); } catch {}
   }
 
-  test('전체 파이프라인: start --prompt-file → mock done → collect → manifest JSON', () => {
+  test('전체 파이프라인: start --prompt-file → mock done → collect → manifest JSON', async () => {
     const configPath = writeTestConfig(tmpDir);
     const jobsDir = path.join(tmpDir, 'jobs');
     fs.mkdirSync(jobsDir, { recursive: true });
@@ -2178,7 +2178,7 @@ describe('start + collect integration', () => {
           } catch { return false; }
         });
         if (allTerminal) break;
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
       }
 
       // Mock done status for each reviewer.
