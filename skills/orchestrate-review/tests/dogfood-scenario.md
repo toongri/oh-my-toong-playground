@@ -10,8 +10,6 @@
 
 **검증 대상**: `classifyError` + `classifyState` 체인이 opencode 실 호출 에러 응답을 받았을 때 manifest entry의 `errorMessage` 필드에 분류 결과를 올바르게 기록하는지 확인한다.
 
-**자동화 금지**: 이 절차는 bash script나 Makefile target으로 자동화하지 않는다. 사람이 직접 terminal에서 명령어를 입력하고 결과를 눈으로 확인한다.
-
 ---
 
 ## Prerequisites
@@ -21,7 +19,6 @@
 - **opencode version**: `opencode --version` 또는 `opencode version` 명령으로 현재 설치된 버전을 기록한다. 예: `opencode 0.1.x`
 - **Model registry**: 사용할 모델을 식별한다. 예: `openai/gpt-4o`, `moonshot/kimi-k2-thinking`. opencode version에 따라 model registry가 다를 수 있으므로, 실제 사용 가능한 모델명을 확인한다.
 - **Working dir**: `/Users/toong/repos/oh-my-toong-playground/main` (또는 skill이 배포된 target 프로젝트 루트)
-- **Evidence dir 준비**: `evidence/orchestrate-review-followup-v3/dogfood/` 디렉토리를 미리 생성한다 (mkdir -p로 수동 생성).
 
 ---
 
@@ -34,8 +31,6 @@
 | `evidence/orchestrate-review-output-reliability-v2/spike/gpt-S5-500k.ndjson` | GPT oversized prompt (500k tokens) | `prompt_too_large` |
 | `evidence/orchestrate-review-output-reliability-v2/spike/kimi-S5-500k.ndjson` | Kimi oversized prompt (500k tokens) | `context_window` |
 | `evidence/orchestrate-review-output-reliability-v2/spike/gpt-S4-invalid-model.ndjson` | GPT invalid model name | `model_not_found` |
-
-이 fixture들은 P1-1 fix 이전에 `errorMessage` 필드가 올바르게 surface되지 않았던 케이스들이다. Dogfood 실행 후 manifest output이 아래 Expected Manifest Output 섹션과 일치하면 fix 검증이 완료된다.
 
 ---
 
@@ -81,38 +76,6 @@
 ```
 
 Option A (oversized prompt) 시나리오에서는 GPT 계열은 `"errorMessage": "prompt_too_large"`, Kimi 계열은 `"errorMessage": "context_window"` 가 나와야 한다. v2 spike fixtures와 일치하는지 대조한다.
-
-분류 가능한 `errorMessage` 값 전체 목록:
-
-```json
-{
-  "errorMessage": "context_window"
-}
-```
-
-```json
-{
-  "errorMessage": "prompt_too_large"
-}
-```
-
-```json
-{
-  "errorMessage": "auth"
-}
-```
-
-```json
-{
-  "errorMessage": "quota_exceeded"
-}
-```
-
-```json
-{
-  "errorMessage": "model_not_found"
-}
-```
 
 ---
 
