@@ -336,9 +336,7 @@ This trigger activates when changes affect user-facing behavior AND the request 
 
 ## Feedback Requirements
 
-Every issue MUST include confidence scoring and use the rich feedback format.
-
-**See** [feedback-protocol.md] **for details** on confidence scoring, rich feedback protocol, validation, and conventional comments.
+Every issue MUST include confidence scoring. See [feedback-protocol.md] for Confidence Scoring, Validation, and Conventional Comments.
 
 ---
 
@@ -363,7 +361,6 @@ Every issue MUST include confidence scoring and use the rich feedback format.
 - **[CRITICAL/HIGH/MEDIUM/LOW]**: [Brief description]
   - Location: [file:line]
   - What: [problem]
-  - Fix: [how to resolve]
 
 ## Evidence Files
 - [absolute path to each evidence file saved during this verification]
@@ -402,7 +399,7 @@ Automated checks: See stage1-commands.md
 Hands-On QA:      See stage3-handson.md
 Code Quality:     See checklists.md
 CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
-FEEDBACK: What + Why + How (2+ options) + Benefit
+FEEDBACK: What + Location (verdict only — diagnosis is oracle's job)
 SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)
 YAGNI: New code with 0 callers = flag
 TRIGGER TRACE: Always output Active Triggers table (4 triggers × Status + Reason)
