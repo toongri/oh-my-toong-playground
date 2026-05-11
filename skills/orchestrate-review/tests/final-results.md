@@ -684,6 +684,8 @@ Input Modes → Step 0 → Step 1 → Early Exit → Step 2 → Step 3 → Step 
 
 ---
 
+> **Note**: `prompts/gemini.md` was removed in commit `3ce9b48` (chore: 미사용 gemini.md 프롬프트 제거). Historical results below are preserved for archival reference.
+
 ## Worker Prompt GREEN Phase — CLI Output Format Tests
 
 **테스트 일시**: 2026-02-27

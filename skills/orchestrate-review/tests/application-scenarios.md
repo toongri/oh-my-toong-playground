@@ -23,7 +23,7 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 
 **Given:**
 - Chairman receives an interpolated prompt containing `{DIFF_COMMAND}`, a list of 8 changed files, and review requirements
-- All three reviewer CLIs (claude, gemini, codex) are available and respond successfully
+- Both reviewer CLIs (claude, codex) are available and respond successfully
 - Reviewers identify 2 overlapping issues and 1 unique finding each
 
 **When:**
@@ -38,7 +38,7 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 | V3 | Collect loop | `collect` is called until `"overallState": "done"` is returned |
 | V4 | Read reviewer outputs | Each reviewer's `outputFilePath` from the manifest is read via the Read tool; null entries are skipped |
 | V5 | Deduplication applied | The 2 overlapping issues (same file:line range +/-5 lines, same problem type) are merged into one entry using the richest description; "나머지 N개 모델 동일 평가." is appended |
-| V6 | Unique finding listed | Each unique finding is listed with the identifying model's P-level and "Did not identify this issue." for non-reporting models |
+| V6 | Unique finding listed | Each unique finding is listed with the identifying model's P-level and "Did not identify this issue." for the non-reporting model |
 | V7 | Termination | No additional tools (Read, Bash, etc.) run after the aggregation report is output |
 
 ---
@@ -48,15 +48,14 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 **Primary Technique:** Degradation Policy — partial aggregation when a reviewer infrastructure fails
 
 **Given:**
-- Chairman receives a chunk review request with 3 dispatched reviewers (N=3)
+- Chairman receives a chunk review request with 2 dispatched reviewers (N=2)
 - `collect` returns `"overallState": "done"` with the following manifest:
   ```json
   {
     "overallState": "done",
     "members": [
       { "member": "claude", "outputFilePath": "/tmp/job/claude/output.txt", "errorMessage": null },
-      { "member": "gemini", "outputFilePath": null, "errorMessage": "missing_cli" },
-      { "member": "codex", "outputFilePath": "/tmp/job/codex/output.txt", "errorMessage": null }
+      { "member": "codex", "outputFilePath": null, "errorMessage": "missing_cli" }
     ]
   }
   ```
@@ -68,13 +67,13 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | No job restart | Chairman does NOT call `start` again due to the gemini failure |
-| V2 | Read only non-null paths | Only claude and codex `outputFilePath` values are read; the null gemini entry is skipped |
-| V3 | Partial aggregation prefix | Report begins with "Partial review (2/N respondents). gemini unavailable: missing_cli." |
-| V4 | Denominator stays N=3 | Per-model lines use N=3 as denominator — e.g., "Models: 2/3" for shared findings |
-| V5 | Unavailable vs did-not-identify distinct | gemini entries show "gemini: Unavailable (missing_cli)." — NOT "gemini: Did not identify this issue." |
-| V6 | Missing perspective noted | Report notes that gemini's perspective (broad factual grounding, alternative solutions) is absent |
-| V7 | No extrapolation | Chairman does NOT speculate what gemini "would have found" |
+| V1 | No job restart | Chairman does NOT call `start` again due to the codex failure |
+| V2 | Read only non-null paths | Only claude `outputFilePath` is read; the null codex entry is skipped |
+| V3 | Partial aggregation prefix | Report begins with "Partial review (1/N respondents). codex unavailable: missing_cli." |
+| V4 | Denominator stays N=2 | Per-model lines use N=2 as denominator — e.g., "Models: 1/2" for shared findings |
+| V5 | Unavailable vs did-not-identify distinct | codex entries show "codex: Unavailable (missing_cli)." — NOT "codex: Did not identify this issue." |
+| V6 | Missing perspective noted | Report notes that codex's perspective is absent |
+| V7 | No extrapolation | Chairman does NOT speculate what codex "would have found" |
 
 ---
 
@@ -84,7 +83,7 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 
 **Given:**
 - Chairman receives an interpolated prompt containing a `{DIFF_COMMAND}` for a chunk
-- All three reviewers have responded, but all three report that the diff command failed with an error (e.g., "fatal: bad revision 'origin/feature...pr-99'" or empty output)
+- Both reviewers have responded, but both report that the diff command failed with an error (e.g., "fatal: bad revision 'origin/feature...pr-99'" or empty output)
 
 **When:**
 - The Chairman reads the reviewer output files and observes the diff command failure
@@ -107,9 +106,9 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 
 **Given:**
 - Chairman receives a chunk review request
-- First `collect` call returns `"overallState": "running"` (1 of 3 reviewers done, 2 still running):
+- First `collect` call returns `"overallState": "running"` (1 of 2 reviewers done, 1 still running):
   ```json
-  { "overallState": "running", "counts": { "total": 3, "done": 1, "running": 2, "queued": 0 } }
+  { "overallState": "running", "counts": { "total": 2, "done": 1, "running": 1, "queued": 0 } }
   ```
 
 **When:**
@@ -132,11 +131,10 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 **Primary Technique:** Chairman Boundaries — MUST NOT assign, reassign, or interpret any model's P-level
 
 **Given:**
-- `collect` returns `"overallState": "done"` with all three reviewers responding
+- `collect` returns `"overallState": "done"` with both reviewers responding
 - Reviewer outputs contain the following P-level disagreement on the same issue (`PaymentService.kt:42`):
   - claude: P1 — "null 체크 누락으로 프로덕션 NPE 위험"
-  - gemini: P2 — "잠재적 NPE이나 기존 테스트가 커버"
-  - codex: P1 — "null safety 위반, 즉시 수정 필요"
+  - codex: P2 — "잠재적 NPE이나 기존 테스트가 커버"
 
 **When:**
 - The Chairman aggregates the findings
@@ -145,9 +143,9 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | P-levels passed through as-is | Each model's P-level appears exactly as reported (claude: P1, gemini: P2, codex: P1) |
+| V1 | P-levels passed through as-is | Each model's P-level appears exactly as reported (claude: P1, codex: P2) |
 | V2 | Severity range reported | Issue entry shows "Severity Range: P1 ~ P2" |
-| V3 | No P-level override | Chairman does NOT change gemini's P2 to P1 because the majority said P1 |
+| V3 | No P-level override | Chairman does NOT change codex's P2 to P1 because the other model said P1 |
 | V4 | Per-model entries listed separately | Because P-levels differ (P1 vs P2), each model is listed separately with its own reasoning |
 | V5 | No verdict computed | Chairman does NOT assign a combined verdict or severity for this issue |
 
@@ -158,10 +156,9 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 **Primary Technique:** Verdict Handling — list each model's verdict separately; Chairman does NOT compute a combined verdict
 
 **Given:**
-- All three reviewers have responded with the following verdicts:
+- Both reviewers have responded with the following verdicts:
   - claude: LGTM ("변경 사항이 스펙 요구사항을 충족합니다")
-  - gemini: REQUEST_CHANGES ("인증 미들웨어 누락 — 보안 필수 사항")
-  - codex: LGTM ("코드 품질 양호, 특이 사항 없음")
+  - codex: REQUEST_CHANGES ("인증 미들웨어 누락 — 보안 필수 사항")
 
 **When:**
 - The Chairman produces the aggregation report
@@ -171,8 +168,8 @@ These scenarios test whether the **orchestrate-review skill's** Chairman orchest
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
 | V1 | Per-Model Verdicts section present | Report includes a `### Per-Model Verdicts` section |
-| V2 | Each model listed separately | All three models appear: claude: LGTM, gemini: REQUEST_CHANGES, codex: LGTM |
-| V3 | No combined verdict | Chairman does NOT compute "2/3 LGTM therefore overall LGTM" or apply majority rule |
+| V2 | Each model listed separately | Both models appear: claude: LGTM, codex: REQUEST_CHANGES |
+| V3 | No combined verdict | Chairman does NOT compute a combined verdict or apply majority rule |
 | V4 | Basis included | Each model's verdict entry includes its stated basis |
 | V5 | Orchestrator note | Report defers final verdict decision to the orchestrator (implicitly or explicitly — no override) |
 
