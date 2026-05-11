@@ -16,7 +16,7 @@
 
 실행 전 아래 항목을 확인한다.
 
-- **opencode version**: `opencode --version` 또는 `opencode version` 명령으로 현재 설치된 버전을 기록한다. 예: `opencode 0.1.x`
+- **opencode version**: `opencode --version` 또는 `opencode -v` 명령으로 현재 설치된 버전을 기록한다. 예: `opencode 1.14.41`
 - **Model registry**: 사용할 모델을 식별한다. 예: `openai/gpt-4o`, `moonshot/kimi-k2-thinking`. opencode version에 따라 model registry가 다를 수 있으므로, 실제 사용 가능한 모델명을 확인한다.
 - **Working dir**: `/Users/toong/repos/oh-my-toong-playground/main` (또는 skill이 배포된 target 프로젝트 루트)
 
