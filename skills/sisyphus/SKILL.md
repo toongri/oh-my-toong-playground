@@ -22,6 +22,7 @@ RULE 3: implement task (produces file changes) → sisyphus-junior (NEVER direct
 RULE 4: verify task (AC explicitly provided + PASS/FAIL verdict required for task closure) → argus directly (skip junior)
 RULE 5: diagnose / investigate task (analysis or current-state report, verdict NOT required) → oracle (root cause/architecture) or explore (search/comparison) — NEVER junior
 RULE 6: NEVER complete a junior-implemented task without argus verification
+RULE 7: **CRITICAL** — anomaly detected (test failure / build break / bug surfacing / unexpected behavior / plan deviation / same approach failed twice) → escalate to oracle immediately. Over-escalation > under-escalation; oracle dispatch is cheap, missed diagnosis is expensive.
 ```
 
 **Routing is by task type, not by session cadence.** Even if the prior task used junior → argus, a new verify/diagnose task does NOT inherit that path.
@@ -36,6 +37,7 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 |--------|-------|-------|
 | Read files, create/update todos, quick non-code tasks (<10s) | **YOU** directly | — |
 | Any file modification (code, tests, docs, config) | **DELEGATE** | sisyphus-junior |
+| 🚨 **CRITICAL: anomaly detected** — test failure / build break / bug surfacing / unexpected behavior / plan deviation / same approach failed twice. Do NOT rationalize past it. | **DELEGATE** | **oracle (immediately, per RULE 7)** |
 | **Verify task** — AC explicitly provided, PASS/FAIL verdict required to close the task (lint/test/typecheck/build/AC exit-code judgments). Deliverable: verdict + evidence files. | **DELEGATE** | **argus (direct, skip junior)** |
 | **Diagnose task** — current-state analysis, root cause, debugging, architecture. Deliverable: diagnostic narrative + recommendations, NO verdict. | **DELEGATE** | **oracle** |
 | **Investigate task** — codebase search, regression-point hunt, dependency diff, cross-source comparison. Deliverable: findings report, NO verdict. | **DELEGATE** | **explore** (oracle for causal synthesis if needed) |
