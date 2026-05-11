@@ -121,12 +121,5 @@ Allowed Dependencies (outer -> inner only):
 ### Example Feedback
 
 ```markdown
-suggestion [Confidence: 80]: YAGNI - Remove unused bulkDelete method
-
-**What:** `UserService.bulkDelete()` at line 89-105 has no call sites in codebase.
-**Why:** Dead code increases maintenance burden. Risk of bit rot (untested, may break silently).
-**How:**
-  - Option A: Remove entirely -> Clean codebase, less to maintain
-  - Option B: Add caller if needed -> But then add tests too
-**Benefit:** Smaller codebase, no unused code paths to maintain.
+Flag: YAGNI - UserService.bulkDelete() at line 89-105 has no call sites. Confidence: 80.
 ```
