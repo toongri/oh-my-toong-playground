@@ -1773,11 +1773,15 @@ describe('cmdResults', () => {
     // Must NOT have jobDir (unlike --json mode)
     expect(parsed).not.toHaveProperty('jobDir');
 
-    // Each reviewer must have exactly 3 fields (member, outputFilePath, errorMessage)
+    // Each reviewer must have at least: member, outputFilePath, errorMessage.
+    // Extended fields (json-mode): size_bytes, attempts, error.
     for (const r of parsed.members) {
       expect(r).toHaveProperty('member');
       expect(r).toHaveProperty('outputFilePath');
       expect(r).toHaveProperty('errorMessage');
+      expect(r).toHaveProperty('size_bytes');
+      expect(r).toHaveProperty('attempts');
+      expect(r).toHaveProperty('error');
       // Must NOT have legacy fields
       expect(r).not.toHaveProperty('state');
       expect(r).not.toHaveProperty('exitCode');
