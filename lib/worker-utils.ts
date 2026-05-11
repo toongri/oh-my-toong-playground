@@ -659,6 +659,12 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
           state: ce.category === 'permanent' ? 'permanent_error' : 'transient_error',
           error: { type: ce.type, message: ce.raw_message, raw_message: ce.raw_message },
         };
+      } else if (rawState === 'timed_out' || rawState === 'canceled') {
+        const errMsg = typeof raw.message === 'string' ? raw.message : rawState;
+        classified = {
+          state: 'permanent_error',
+          error: { type: rawState, message: errMsg, raw_message: errMsg },
+        };
       } else {
         const parsed = parseNdjsonOutput(outputPath);
         classified = classifyState(parsed);

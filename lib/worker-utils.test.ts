@@ -1202,6 +1202,98 @@ describe('prompt size guard', () => {
 });
 
 // ---------------------------------------------------------------------------
+// json-mode timed_out / canceled classification (P1-1)
+// ---------------------------------------------------------------------------
+
+describe('json-mode timed_out/canceled classification', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'timeout-cancel-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  /**
+   * Spawn mock that emits exit+close with SIGTERM after `delayMs`.
+   * Used to simulate both canceled (delayMs=0) and timed_out (requires timeoutTriggered).
+   */
+  function makeSigtermSpawnFn(memberDir: string, delayMs: number) {
+    const mockSpawn = (_program: string, _args: string[], _options: any) => {
+      const child = new (require('events').EventEmitter)();
+      const stdin = { write: () => true, end: () => {}, on: () => stdin } as any;
+      (child as any).stdin = stdin;
+      (child as any).stdout = null;
+      (child as any).stderr = null;
+      (child as any).pid = 99999;
+      if (delayMs === 0) {
+        process.nextTick(() => {
+          child.emit('exit', null, 'SIGTERM');
+          process.nextTick(() => child.emit('close', null, 'SIGTERM'));
+        });
+      } else {
+        setTimeout(() => {
+          child.emit('exit', null, 'SIGTERM');
+          process.nextTick(() => child.emit('close', null, 'SIGTERM'));
+        }, delayMs);
+      }
+      return child as any;
+    };
+    return mockSpawn;
+  }
+
+  test('timed_out → permanent_error with type=timed_out, raw_message preserved, attempts=1', async () => {
+    const memberDir = join(tmpDir, 'timed-out');
+    mkdirSync(memberDir, { recursive: true });
+    // timeoutSec=0.001 → timer fires in ~1ms; mock emits SIGTERM after 20ms (after timeout fires)
+    const mockSpawn = makeSigtermSpawnFn(memberDir, 20);
+    const result = await runWithRetry({
+      program: 'mock',
+      args: [],
+      prompt: 'test',
+      member: 'test-member',
+      memberDir,
+      command: 'mock',
+      timeoutSec: 0.001,
+      mode: 'json',
+      sleepFn: noopSleep,
+      jitter: () => 0,
+      spawnFn: mockSpawn,
+    });
+    expect(result.state).toBe('permanent_error');
+    expect((result as any).error?.type).toBe('timed_out');
+    expect((result as any).error?.raw_message).toBe('Timed out after 0.001s');
+    expect(result.attempts).toBe(1);
+  });
+
+  test('canceled → permanent_error with type=canceled, raw_message preserved, attempts=1', async () => {
+    const memberDir = join(tmpDir, 'canceled');
+    mkdirSync(memberDir, { recursive: true });
+    // delayMs=0 → SIGTERM emitted immediately, timeout (5s) hasn't fired → canceled
+    const mockSpawn = makeSigtermSpawnFn(memberDir, 0);
+    const result = await runWithRetry({
+      program: 'mock',
+      args: [],
+      prompt: 'test',
+      member: 'test-member',
+      memberDir,
+      command: 'mock',
+      timeoutSec: 5,
+      mode: 'json',
+      sleepFn: noopSleep,
+      jitter: () => 0,
+      spawnFn: mockSpawn,
+    });
+    expect(result.state).toBe('permanent_error');
+    expect((result as any).error?.type).toBe('canceled');
+    expect((result as any).error?.raw_message).toBe('Canceled');
+    expect(result.attempts).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // incident-f99e10 regression
 // ---------------------------------------------------------------------------
 
