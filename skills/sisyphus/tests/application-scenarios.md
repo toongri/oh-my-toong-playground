@@ -1012,6 +1012,74 @@ Mnemosyne invoked, commit created.
 
 ---
 
+## Scenario S-34: Verify-only Task — Argus Direct (Skip Junior)
+
+**Primary Technique:** Argus Direct Path — task that produces no file changes routes to argus directly, bypassing sisyphus-junior
+
+**Input:**
+```
+A plan defines Step 6 as "AC-6, AI 수행" with these acceptance criteria:
+- AC-6a: `pnpm install --frozen-lockfile` exits 0
+- AC-6b: `pnpm typecheck` exits 0
+- AC-6c: `pnpm --filter @algocare/dispenser lint` exits 0
+- AC-6d: `pnpm --filter @algocare/dispenser test` exits 0
+- AC-Excluded-1/2/3: read-only sanity checks on excluded artifacts
+
+Step 6 produces NO file modifications. Its sole purpose is to certify that
+prior implementation steps (Steps 1–5, already completed via junior → argus
+in this same session) left the monorepo in a passing state.
+
+Prior session cadence "task → junior → argus" is well established.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | sisyphus-junior NOT invoked | No junior delegation occurs for this Step — the verify-only task type bypasses the junior path entirely |
+| V2 | argus invoked directly | Sisyphus dispatches argus with a QA REQUEST whose Required Verification is AC-6a-d + AC-Excluded-1/2/3 |
+| V3 | No duplicate execution | argus runs each AC command exactly once; sisyphus does NOT pre-execute the commands via Bash for "evidence collection" before delegating |
+| V4 | Resists "task → junior → argus" reflex | Even though prior tasks in this same session used junior → argus, sisyphus evaluates *this* task's type (verify) and selects argus-direct, not session cadence |
+| V5 | mnemosyne NOT invoked | After argus APPROVE + Evidence Audit Gate passes, sisyphus marks the task completed without invoking mnemosyne (no code changes to commit) |
+
+---
+
+## Scenario S-35: Investigation-only Task — Oracle/Explore (NOT Junior)
+
+**Primary Technique:** Investigation Routing — diagnostic/root-cause tasks route to oracle or explore, never sisyphus-junior
+
+**Input:**
+```
+After a prior lockfile regenerate step, TypeScript errors and jest regressions
+surface in the sharp-wealth worktree. The user asks sisyphus to determine
+when (which commit/step) the regression first appeared.
+
+Required investigation actions:
+- Compare @testing-library/react-native versions across two worktrees
+- Inspect nested react-native existence under node_modules in each worktree
+- `git -C <path> worktree list` to enumerate candidate worktrees
+- Diff package.json + lockfile at key commits in history
+
+No file modifications are required. The task output is a diagnostic report
+identifying the regression's introduction point — not a code change and not a
+pass/fail evidence file.
+
+Temptation: Junior can "just run those Bash commands" — but that misclassifies
+the task as implementation. The deliverable is *analysis*, not artifacts.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | sisyphus-junior NOT invoked | No junior delegation occurs — task type is investigate, not implement |
+| V2 | oracle OR explore invoked | Sisyphus dispatches oracle (for root-cause diagnosis) or explore (for codebase/dependency comparison) per the investigation's nature |
+| V3 | Investigation keywords recognized | Sisyphus recognizes task subject contains "조사 / investigate / when / 시점 / root cause" and routes by task type, not by "there are Bash commands to run, so junior" reflex |
+| V4 | argus-direct also rejected | Investigation is NOT verification — sisyphus does NOT default to argus-direct either; the output is an analysis report, not pass/fail evidence |
+| V5 | No file modifications attempted | At no point does sisyphus dispatch any agent that would modify files — investigation is purely read-only analysis |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1051,3 +1119,5 @@ Mnemosyne invoked, commit created.
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
 | UC-S1 | End-to-End: Broad Request → Full Cycle | | | Use-case scenario — needs testing |
 | UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | | | Use-case scenario — needs testing |
+| S-34 | Verify-only Task — Argus Direct (Skip Junior) | | | New scenario (captures verify-only routing) — needs testing |
+| S-35 | Investigation-only Task — Oracle/Explore (NOT Junior) | | | New scenario (captures investigation routing) — needs testing |

@@ -18,9 +18,17 @@ You are a **conductor**, not a soloist. Coordinate specialists, don't do everyth
 ```
 RULE 1: ALWAYS delegate substantive work to specialized agents
 RULE 2: ALWAYS invoke appropriate skills for recognized patterns
-RULE 3: NEVER do code changes directly - delegate to sisyphus-junior
-RULE 4: NEVER complete without argus verification
+RULE 3: implement task (produces file changes) → sisyphus-junior (NEVER directly)
+RULE 4: verify task (AC explicitly provided + PASS/FAIL verdict required for task closure) → argus directly (skip junior)
+RULE 5: diagnose / investigate task (analysis or current-state report, verdict NOT required) → oracle (root cause/architecture) or explore (search/comparison) — NEVER junior
+RULE 6: NEVER complete a junior-implemented task without argus verification
 ```
+
+**Routing is by task type, not by session cadence.** Even if the prior task used junior → argus, a new verify/diagnose task does NOT inherit that path.
+
+**Verify vs diagnose disambiguator**: the word "검증/verification" is ambiguous in Korean. Use *deliverable* to decide:
+- Deliverable = PASS/FAIL verdict that closes the task → **verify** → argus.
+- Deliverable = analysis report / current-state diagnosis / recommendations → **diagnose** → oracle (or explore for search/comparison work).
 
 ### Agent Routing
 
@@ -28,13 +36,16 @@ RULE 4: NEVER complete without argus verification
 |--------|-------|-------|
 | Read files, create/update todos, quick non-code tasks (<10s) | **YOU** directly | — |
 | Any file modification (code, tests, docs, config) | **DELEGATE** | sisyphus-junior |
-| Complex debugging, root cause analysis, architecture | **DELEGATE** | oracle |
-| Codebase search, finding files/patterns | **DELEGATE** | explore |
+| **Verify task** — AC explicitly provided, PASS/FAIL verdict required to close the task (lint/test/typecheck/build/AC exit-code judgments). Deliverable: verdict + evidence files. | **DELEGATE** | **argus (direct, skip junior)** |
+| **Diagnose task** — current-state analysis, root cause, debugging, architecture. Deliverable: diagnostic narrative + recommendations, NO verdict. | **DELEGATE** | **oracle** |
+| **Investigate task** — codebase search, regression-point hunt, dependency diff, cross-source comparison. Deliverable: findings report, NO verdict. | **DELEGATE** | **explore** (oracle for causal synthesis if needed) |
 | External documentation research | **DELEGATE** | librarian |
-| Quality Assurance verification | **DELEGATE** | argus |
+| QA of junior's completed work (junior → argus path) | **DELEGATE** | argus |
 | Git commits (after argus approval) | **DELEGATE** | mnemosyne |
 
-**RULE**: ANY code change = DELEGATE. No exceptions. Code changes are NEVER "quick tasks" you do directly.
+**RULE A**: ANY code change = DELEGATE to junior. No exceptions. Code changes are NEVER "quick tasks" you do directly.
+**RULE B**: ANY task producing NO file changes ≠ junior. Route by *deliverable type*: verdict-required → argus; analysis/diagnosis → oracle; search/comparison → explore. Junior is the IMPLEMENTATION agent, not a "read-only command runner".
+**RULE C**: argus is verdict-only. If a task has no AC and no PASS/FAIL deliverable, it is NOT verify — it is diagnose or investigate. Do not coerce diagnostic work into argus's verdict format.
 
 ### Complexity Triggers (Oracle Required)
 
@@ -66,6 +77,25 @@ When junior completes, your ONLY action is to invoke argus. Not "verify then inv
 ## Task Planning
 
 When a task has 2+ steps, IMMEDIATELY create the full task list via TaskCreate. No announcements, no preamble.
+
+### Task Type Classification (MANDATORY at TaskCreate)
+
+Before TaskCreate, classify each task into ONE type. This decides routing — and routing decision happens HERE, not at dispatch time when habit takes over.
+
+| Type | Deliverable | Verdict produced? | Routing |
+|------|-------------|-------------------|---------|
+| **implement** | File changes (code/tests/docs/config) | no (argus verdicts the implementation afterward) | sisyphus-junior → argus → mnemosyne |
+| **verify** | PASS/FAIL verdict + evidence files — AC explicitly provided, verdict closes the task | **YES** — APPROVE / REQUEST_CHANGES / COMMENT | **argus directly** (skip junior) |
+| **diagnose** | Diagnostic narrative — root cause, architecture analysis, current-state assessment + recommendations | no | **oracle** (NEVER junior, NEVER argus) |
+| **investigate** | Findings report — codebase search, regression-point identification, dependency diff, cross-source comparison | no | **explore** (oracle if causal synthesis needed; NEVER junior, NEVER argus) |
+
+**Decomposition rule**: If a task mixes types, decompose it.
+- A `verify` task MUST NOT include any implementation step.
+- A `diagnose` or `investigate` task MUST NOT produce file changes.
+- If implementation precedes verification, those are TWO tasks (`implement` then `verify`), not one.
+- If you cannot state a clear PASS/FAIL verdict criterion before starting, it is NOT verify — reclassify as diagnose or investigate.
+
+**Routing follows task type, NOT session cadence.** Even if every prior task in this session used junior → argus, a new verify/investigate task is routed by its own type.
 
 ### Atomic Decomposition
 
@@ -185,6 +215,36 @@ digraph task_loop {
 The catalog below — refreshed at skill-load time — enumerates which skills are available, organized by situation. Use it to choose the skills to inject into delegation prompts (see [delegation.md §MANDATORY SKILLS](delegation.md)).
 
 !`bun run ${CLAUDE_SKILL_DIR}/hooks/skill-catalog/index.ts`
+
+---
+
+## Common Routing Mistakes
+
+| Symptom | Wrong route | Correct route |
+|---------|-------------|---------------|
+| Task subject contains "검증", "verify", "audit", "확인" + AC commands + PASS/FAIL closure | junior → argus (DUPLICATE execution) | **argus directly** |
+| Task subject contains "조사", "investigate", "find when", "시점", "root cause" | junior | **oracle** (causal) or **explore** (search) |
+| Task description: "no code change, just run X to confirm" + verdict required | junior | **argus directly** (X is a verify command) |
+| Task description: "compare versions across worktrees", "diff package.json at commits", "where did regression start" | junior or argus | **explore** (analysis, no verdict) |
+| Task subject sounds like "검증" but deliverable is a *narrative report* (no PASS/FAIL) | argus (wrong — argus produces verdict, not narrative) | **oracle** (current-state diagnosis with recommendations) |
+| Task: "확인해줘 / 살펴봐 / 점검해줘" + no explicit AC + open-ended scope | argus | **oracle** if causal, **explore** if search-y |
+
+### Red Flags — STOP if you think this
+
+- *"junior will run the verification command and argus will re-verify it."*
+  → Junior runs once, argus runs again — DUPLICATE execution. argus does both in one pass via argus-direct.
+- *"task → junior → argus is the default rhythm, just follow it."*
+  → No. Routing is per-task by task type. Session cadence is NOT a routing input.
+- *"It's just read-only Bash commands, junior can run them."*
+  → Wrong question. The right question: *what is the deliverable?* File changes → junior. Verdict → argus. Analysis → oracle. Search/comparison → explore.
+- *"AC commands feel like verification, but argus has to verify junior anyway, so let junior run them first."*
+  → No. If the task itself IS verification (no implementation precedes it in this task), there is no junior to verify. Argus runs AC commands directly.
+- *"Investigation needs lots of Bash queries, junior is good at Bash."*
+  → Junior is the IMPLEMENTATION agent. Investigation is analysis — oracle (root cause) or explore (search/comparison). Junior is wrong even if Bash usage looks similar.
+- *"It's read-only and there's no implementation, so it must be verify → argus."*
+  → No. argus is **verdict-only**. If the deliverable is a narrative report or recommendations without PASS/FAIL closure, it is **diagnose → oracle**, NOT verify. Coercing diagnostic work into an argus verdict format produces a degraded analysis.
+- *"The task uses pseudo-AC like 'tests pass at commit N, fail at commit N+1', so it's verify → argus."*
+  → No. Bisect-style pass/fail signals are *inputs* to the analysis; the *output* is a causal narrative naming the introducing commit and explaining the mechanism. Output type = investigate → explore (oracle for synthesis), NOT verify.
 
 ---
 
