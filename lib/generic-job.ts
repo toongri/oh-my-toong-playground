@@ -396,6 +396,7 @@ export async function computeStatus(
   const totals: Record<string, number> = {
     queued: 0, running: 0, retrying: 0, done: 0, error: 0,
     missing_cli: 0, timed_out: 0, canceled: 0, non_retryable: 0,
+    empty_output: 0, transient_error: 0, permanent_error: 0,
   };
   for (const r of members) {
     const state = String(r.state || 'unknown');
@@ -470,7 +471,7 @@ export function buildUiPayload(
     .filter((r) => r.entity)
     .sort((a, b) => a.entity.localeCompare(b.entity));
 
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable']);
+  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable', 'empty_output', 'transient_error', 'permanent_error']);
   const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
   let hasInProgress = dispatchStatus === 'in_progress';
 

@@ -710,6 +710,19 @@ describe('computeStatus', () => {
     expect(result.counts.error).toBe(1);
     expect(result.counts.running).toBe(0);
   });
+
+  test('counts json-mode terminal states: permanent_error, transient_error, empty_output', async () => {
+    const jobDir = path.join(tmpDir, 'job-json-mode-states');
+    setupJob(jobDir, { id: 'test-json-mode' }, {
+      alice: { member: 'alice', state: 'permanent_error' },
+      bob: { member: 'bob', state: 'transient_error' },
+      carol: { member: 'carol', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.counts.permanent_error).toBe(1);
+    expect(result.counts.transient_error).toBe(1);
+    expect(result.counts.empty_output).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
