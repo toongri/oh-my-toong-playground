@@ -255,141 +255,87 @@ Assess probability and impact based on the actual project context, not generic a
 
 ### Boundary Cases
 
-Use the three axes to resolve ambiguous classifications. The core question for P1 vs P2: **"Is there a defect in the current code, and does it manifest under conditions that exist today?"** Both must be yes for P1.
+Use the three axes to resolve ambiguous classifications. Decision gate for P1 vs P2: **"Is there a defect in the current code, AND does it manifest under conditions that exist today?"** Both yes → P1.
 
-- Both yes --> **P1**: defect exists and manifests under today's conditions.
-- Defect exists but trigger conditions are unrealistic today --> **P2(a)**: bug with unrealistic trigger.
-- No defect today but predictable failure under growth/change --> **P2(b)**: future risk.
-- No defect and no projected failure, but significant maintainability gain --> **P2(c)**: maintainability.
+- Both yes → **P1**.
+- Defect exists, trigger unrealistic today → **P2(a)**.
+- No defect today, predictable failure under growth/change → **P2(b)**.
+- No defect, significant maintainability gain → **P2(c)**.
 
-1. **SQL injection via admin-only internal endpoint** -- Impact is security breach (P0-level), but probability requires compromised internal network. The Impact axis dominates: **P0**, because a single exploitation causes irreversible damage regardless of probability.
+Three reference disambiguations:
 
-2. **Missing null check on a field that is always non-null by DB constraint** -- The defect exists (null dereference path is reachable in code), but the trigger is unrealistic because the DB enforces non-null. **P2(a)**: bug exists but trigger probability is unrealistic under current schema.
+1. **Impact axis dominates probability** — SQL injection via admin-only internal endpoint: probability requires a compromised internal network, but a single exploitation causes irreversible damage. → **P0** regardless of probability.
 
-3. **No connection pool timeout configured, default is infinite** -- The defect is demonstrable: infinite timeout means any slow query or network hiccup holds a connection indefinitely. If the service handles external traffic: **P0** (normal operation triggers connection pool starvation). If it is an internal batch job with controlled concurrency: **P1** (the defect -- infinite hold on connections -- exists in current code, and slow-query conditions are realistic even for batch jobs, causing partial failure when the pool eventually exhausts).
+2. **Same code pattern, context-dependent severity** — No connection pool timeout (infinite default). External-traffic service: **P0** (normal load exhausts pool). Internal batch job with controlled concurrency: **P1** (defect exists, slow-query conditions realistic, eventual partial failure).
 
-4. **Catching generic `Exception` instead of specific types** -- No defect today; all current exceptions are retryable. But the broad catch will mask future non-retryable exceptions. **P2(c)**: no bug, but significant maintainability gain by narrowing catch scope.
-
-5. **Method named `process()` instead of `validateAndPersistOrder()`** -- No bug, no maintainability risk beyond readability. **P3** (style/readability only).
-
-6. **Race condition in cache invalidation that causes stale reads for ~100ms** -- The defect is demonstrable: concurrent writes produce stale reads in the current code. The condition (concurrent writes) exists in today's production traffic. If stale data causes incorrect business decisions: **P1** (current defect, realistic trigger, meaningful impact). If the data is display-only and eventual consistency is acceptable: **P2(c)** (defect exists but impact is negligible; improvement is maintainability/correctness hygiene).
-
-7. **Missing index on a frequently queried column** -- If current production queries on this column already show measurable latency (e.g., p99 > SLA) with the existing dataset: **P1** (demonstrable performance defect under today's conditions). If the current dataset is small enough that full scans complete within SLA but the table grows predictably: **P2(b)** (no defect today, but predictable failure as data grows).
+3. **P1 vs P2(b) by today's conditions** — Missing index on a frequently queried column. If p99 already exceeds SLA on the current dataset: **P1** (defect manifests today). If current volume completes within SLA but the table grows predictably: **P2(b)** (no defect today, predictable future failure).
 
 #### Decision Gate Walkthrough
 
-The following examples explicitly trace the 3-axis evaluation and the P1/P2 decision gate to show how each axis contributes to the final classification. Use this reasoning chain when classifying ambiguous issues.
-
-**[P1] Missing index on frequently queried column — current p99 exceeds SLA**
-- Scenario: `orders` table has 50K rows. `order_date` column has no index. Dashboard queries filter by date range.
-- **Impact Delta**: p99 latency (480ms) exceeds SLA (200ms) → partial failure. Users experience dashboard timeouts.
-- **Probability**: Occurs on every date-range query with the current 50K-row dataset → today's realistic conditions, not hypothetical.
-- **Maintainability**: Adding the index is a single migration; delaying requires SLA exception process.
-- **Decision Gate**: (1) Defect in current code? → **Yes** — missing index causes full table scans. (2) Manifests under today's conditions? → **Yes** — 50K rows already produce SLA violations in production.
-- **Decisive axis**: Probability — the trigger condition (dataset size causing SLA breach) exists today.
-- **Verdict: P1**
+Trace the 3-axis evaluation and the P1/P2 decision gate explicitly when classifying ambiguous issues. Apply the same reasoning chain to your own findings.
 
 **[P1] Race condition in payment deduction — concurrent requests cause double-charge**
-- Scenario: `deductBalance()` reads balance, checks sufficiency, then writes new balance. No optimistic locking or atomic operation.
-- **Impact Delta**: Two concurrent requests for the same user both pass the balance check and both deduct → user is double-charged. Data corruption with financial impact.
-- **Probability**: The payment API handles concurrent requests from mobile and web clients for the same user account. Concurrent access is a normal traffic pattern, not an edge case.
-- **Maintainability**: Fix requires adding optimistic locking (`version` column) or atomic DB operation. Establishes concurrency-safe pattern for other financial operations.
-- **Decision Gate**: (1) Defect in current code? → **Yes** — no concurrency control on a concurrent-access path. (2) Manifests under today's conditions? → **Yes** — multi-device users making near-simultaneous requests is confirmed in access logs.
-- **Decisive axis**: Probability — concurrent access is a normal traffic pattern, confirmed in production.
+- Scenario: `deductBalance()` reads → checks → writes balance without optimistic locking or atomic operation.
+- **Impact Delta**: Two concurrent requests pass the balance check and both deduct → double-charge. Data corruption with financial impact.
+- **Probability**: Multi-device users making near-simultaneous requests is confirmed in access logs — normal traffic pattern, not an edge case.
+- **Maintainability**: Adding optimistic locking (`version` column) establishes a concurrency-safe pattern for other financial operations.
+- **Decision Gate**: (1) Defect in current code? **Yes** — no concurrency control on a concurrent-access path. (2) Manifests under today's conditions? **Yes** — confirmed in logs.
+- **Decisive axis**: Probability — concurrent access is normal traffic.
 - **Verdict: P1**
 
 ### Project Context Examples
 
-The following examples show how project context shifts severity — in both directions. Context can lower severity (threat doesn't apply) or raise it (domain amplifies impact).
+The same code pattern shifts severity based on who runs it, who depends on it, and what data it touches. Context can lower severity (threat model doesn't apply) or raise it (domain amplifies impact). Apply this to the **Project Context** in the review data.
 
-8. **Missing input validation on user-supplied parameter** -- If the project is a public API accepting untrusted external input: **P0-P1** (the defect is demonstrable -- invalid input passes through unchecked -- and any internet user triggers it during normal operation; impact ranges from data corruption to injection). If the project is a team-internal service where inputs come from other trusted services via well-defined contracts: **P1-P2** (the defect exists in the current code, and malformed input from upstream bugs is a realistic condition; but blast radius is contained within the internal network). If the project is a personal CLI tool where all inputs are self-generated: **P2(a)-P3** (the defect exists but the trigger requires self-sabotage -- unrealistic).
+1. **No rate limiting on an API endpoint** — Public-facing API with external users: **P0** (bots/abuse are normal operation; a single client can exhaust backend resources). Internal admin tool behind VPN with 5 users: **P3** (those users cannot produce meaningful load; the threat model does not apply).
 
-9. **No rate limiting on API endpoint** -- If the project is a public-facing API with external users: **P0** (bots, scrapers, and abuse are normal operation; a single client can exhaust backend resources and cause outage for all users). If the project is an internal admin tool behind VPN used by 5 people: **P3** (those 5 users cannot produce meaningful load even if they tried; the threat model that rate limiting addresses does not apply).
+2. **No circuit breaker on an external API call** — Real-time payment service: **P0** (gateway flaps cascade into full outage). Nightly batch ETL: **P1** (timeout stalls the run with no fallback; realistic but bounded blast radius). Local dev tool calling an optional analytics endpoint: **P3** (fire-and-forget; failure invisible).
 
-10. **No circuit breaker on external API call** -- If the project is a real-time payment service calling a payment gateway: **P0** (the gateway's intermittent failures are guaranteed during normal operation; without a circuit breaker, all request threads block on the failing dependency, cascading into full service outage for unrelated endpoints). If the project is a nightly batch ETL pipeline: **P1** (the defect is demonstrable -- a gateway timeout stalls the entire batch with no fallback -- and gateway timeouts are a realistic condition even for batch workloads; impact is data delay and partial failure of the current run). If the project is a local dev tool calling an optional analytics endpoint: **P3** (the call is fire-and-forget; failure is invisible to the user and affects nothing downstream).
+3. **Silent truncation of a numeric field** — Financial/medical records: **P0** (regulatory, legal, or patient-safety consequences; rarity does not save it). Content management dashboard reviewed visually before downstream use: **P2(a)** (defect reachable, trigger unrealistic because editors catch it before propagation).
 
-11. **Behavioral change in public API response format without versioning** -- If the project is a shared library or API consumed by 10+ services: **P0** (every consumer silently receives data in an unexpected format; parsing failures or incorrect behavior propagate across all dependent services, and the maintainer cannot coordinate all consumers simultaneously). If the project is an internal service with one consumer that you also own: **P2** (you control both sides and can coordinate the migration; the risk is a forgotten update, not an uncontrollable cascade). If the project is a standalone application with no external consumers: **P3** (no one else consumes this output; the format change is an internal detail).
+### Negative Examples (Resist Over-Classification)
 
-12. **Data integrity issue -- silent truncation of numeric field** -- If the project processes financial transactions or medical records: **P0** (truncated values produce incorrect calculations with regulatory, legal, or patient-safety consequences; even rare occurrences are unacceptable). If the project is a content management dashboard: **P2(a)** (the defect exists -- truncation can occur -- but the trigger is unrealistic because content editors review values visually and correct errors before they propagate; no downstream system depends on precision).
+One reference per boundary to avoid inflating severity:
 
-13. **Flaky test that intermittently fails** -- If the project is CI-gated with merge protection and multiple contributors: **P1** (the defect is demonstrable -- the test produces false failures -- and the trigger is realistic -- it fires on every PR run; impact is blocked merges and eroded trust in the test suite). If the project is a personal project with no CI and no other contributors: **P3** (the sole developer reruns manually when needed; no process depends on green builds).
-
-### Negative Examples
-
-**P0/P1 boundary (what is NOT P0):**
-- "Token has no expiry" is NOT P0 because the impact is security degradation (not immediate breach) and exploitation requires a leaked token -- a realistic but not normal-operation condition. This is **P1**.
-- "Error message leaks stack trace to client" is NOT P0 because it exposes internal structure but does not directly enable data loss or unauthorized access. This is **P1**.
-
-**P1/P2 boundary (what is NOT P1):**
-- "Deprecated API usage that still functions correctly" is NOT P1 because there is no demonstrable defect in the current code -- the API works correctly today. The risk is future removal, not current failure. This is **P2(b)** (no bug today, predictable failure when the dependency drops support).
-- "Missing index on a column queried only by nightly batch job processing <1000 rows" is NOT P1 because there is no demonstrable performance defect under today's conditions -- the query completes well within SLA at current data volume. The risk is future growth. This is **P2(b)** (no defect today, predictable failure as data scales).
-- "Generic exception catch in code that currently only throws IOException" is NOT P1 because no incorrect behavior occurs under today's conditions -- all caught exceptions are in fact retryable. The risk is future code changes introducing non-retryable exceptions. This is **P2(c)** (no bug, significant maintainability improvement).
-
-**P2/P3 boundary (what is NOT P2):**
-- "Variable named `x` instead of `count`" is NOT P2 because renaming improves readability but does not significantly affect maintainability -- the scope is limited and the logic is clear from context. This is **P3**.
-- "Missing blank line between method groups" is NOT P2 because formatting has no effect on maintainability or correctness. This is **P3**.
+- **NOT P0** (→ P1): "Token has no expiry." Impact is security degradation, not immediate breach; exploitation requires a leaked token — realistic but not normal-operation.
+- **NOT P1** (→ P2(b)): "Deprecated API usage that still functions correctly." No demonstrable defect today; risk is future removal of the dependency.
+- **NOT P2** (→ P3): "Variable named `x` instead of `count`." Readability only; scope is limited and logic is clear from context — no maintainability gain.
 
 ### Per-Level Examples
 
-**P0 examples:**
+One canonical example per level demonstrates the 6-field format. When you file an issue, P0/P1 require all 6 fields; P2/P3 may use `[N/A]` for Probability/Maintainability but Fix is always required.
 
 **[P0] Unsanitized user input in SQL query string concatenation**
 - **File**: ReportDao.kt:112
-- **Problem**: `query = "SELECT * FROM reports WHERE name = '" + userName + "'"` -- direct string concatenation with user-supplied input.
+- **Problem**: `query = "SELECT * FROM reports WHERE name = '" + userName + "'"` — direct string concatenation with user-supplied input.
 - **Impact**: Full SQL injection: data exfiltration, modification, or deletion. If fixed, parameterized queries prevent injection entirely.
 - **Probability**: Any user with access to the search form can trigger this.
 - **Maintainability**: Parameterized queries are the standard pattern; fixing aligns with existing DAO conventions.
 - **Fix**: Use parameterized query: `jdbcTemplate.query("SELECT * FROM reports WHERE name = ?", userName)`.
 
-**P1 examples:**
-
-**[P1] No expiry on verification tokens**
-- **File**: UserService.kt:38
-- **Problem**: Verification tokens persist indefinitely in `verification_tokens` table. Token expiry is not implemented -- this is a defect in the current security model, not a future concern.
-- **Impact**: A leaked token (via email forwarding, log exposure, browser history) grants permanent account verification capability. If fixed, tokens expire after 24h, limiting the attack window to hours instead of forever.
-- **Probability**: Token leakage vectors (email forwarding, shared browser, log aggregation) are realistic conditions that exist today -- not hypothetical.
-- **Maintainability**: Adding expiry requires schema change (`expires_at` column) and a cleanup job, but establishes a reusable pattern for all future token types.
-- **Fix**: Add `expires_at` column, validate on verification, add scheduled cleanup job.
-
-**[P1] No dead-letter queue for Kafka consumer -- failed messages lost permanently**
+**[P1] No dead-letter queue for Kafka consumer — failed messages lost permanently**
 - **File**: OrderEventConsumer.kt:42
 - **Problem**: When message deserialization fails, the consumer logs the error and commits the offset. The failed message is permanently lost with no recovery path.
-- **Impact**: Deserialization errors (schema evolution mismatches, corrupted payloads) silently drop order events. If fixed, failed messages route to a DLQ for inspection and replay.
-- **Probability**: Schema evolution mismatches between producer and consumer are a realistic condition -- the order schema changed twice in the last quarter. Deserialization failures are confirmed in current logs.
-- **Maintainability**: DLQ pattern is already established for other consumers in the codebase; this consumer is the exception.
+- **Impact**: Schema-evolution mismatches silently drop order events. If fixed, failed messages route to a DLQ for inspection and replay.
+- **Probability**: Schema evolution between producer and consumer is realistic — the order schema changed twice in the last quarter; failures are confirmed in current logs.
+- **Maintainability**: DLQ pattern is already established for other consumers; this one is the exception.
 - **Fix**: Configure a dead-letter topic and route deserialization failures to it instead of swallowing them.
-
-**P2 examples:**
-
-**[P2(a)] Missing null check on DB-constrained non-null field**
-- **File**: AppConfig.kt:23
-- **Problem**: `config.getProperty("cache.ttl")` returns null if property is missing. Currently always set via environment, but no code-level guard.
-- **Impact**: NPE if property is ever removed from environment config. Currently unrealistic because deployment scripts enforce it.
-- **Probability**: [N/A] -- deployment pipeline guarantees the property exists. The bug exists but the trigger is unrealistic today.
-- **Maintainability**: Adding a default value or explicit null check makes the code self-documenting and resilient to deployment changes.
-- **Fix**: Use `config.getProperty("cache.ttl") ?: "3600"` with a default value.
 
 **[P2(b)] Deprecated Elasticsearch RestHighLevelClient still functions correctly**
 - **File**: SearchRepository.kt:12
 - **Problem**: Uses `RestHighLevelClient` deprecated since ES 7.15, scheduled for removal in ES 9.0. Current cluster runs ES 8.x.
-- **Impact**: No failure today -- the client works correctly with ES 8.x. When the cluster upgrades to ES 9.0, the client will stop compiling.
-- **Probability**: No defect under today's conditions. Predictable failure when ES 9.0 upgrade occurs (planned for next quarter per infra roadmap).
-- **Maintainability**: Migration to `ElasticsearchClient` aligns with the official migration path and unblocks the ES 9.0 upgrade.
+- **Impact**: No failure today; when the cluster upgrades to ES 9.0, the client will stop compiling.
+- **Probability**: Predictable failure on the ES 9.0 upgrade (planned next quarter per infra roadmap).
+- **Maintainability**: Migration to `ElasticsearchClient` unblocks the upgrade.
 - **Fix**: Migrate to `co.elastic.clients:elasticsearch-java` `ElasticsearchClient`.
 
-**[P2(c)] Catching generic Exception in retry logic**
-- **File**: RetryHandler.kt:45
-- **Problem**: `catch (e: Exception)` catches all exceptions including `OutOfMemoryError` (via its superclass). No bug today -- all current exceptions in this path are retryable `IOException`.
-- **Impact**: No current failure. If a non-retryable exception is introduced in the future, it will be silently retried instead of failing fast.
-- **Probability**: [N/A] -- no incorrect behavior under today's conditions.
-- **Maintainability**: Narrowing to specific exception types makes retry behavior explicit and prevents future debugging confusion.
-- **Fix**: Catch only `IOException` and `TimeoutException` (the retryable cases).
-
-**P3 examples:**
+Sub-category one-liners (still file with full 6-field format when reporting):
+- **[P2(a)]** Defect reachable in code, but trigger is unrealistic under current invariants — e.g., null-check missing on a DB-`NOT NULL` field. Fix: add explicit default/guard for self-documentation.
+- **[P2(c)]** No bug today, significant maintainability gain — e.g., `catch (Exception)` when all current exceptions are retryable `IOException`; broad catch will mask future non-retryable types. Fix: narrow to specific exception types.
 
 **[P3] Magic number for token byte length**
 - **File**: UserService.kt:36
-- **Problem**: `SecureRandom().nextBytes(32)` -- 32 is an unexplained literal.
+- **Problem**: `SecureRandom().nextBytes(32)` — 32 is an unexplained literal.
 - **Impact**: [N/A]
 - **Probability**: [N/A]
 - **Maintainability**: [N/A]
@@ -427,23 +373,18 @@ Per Premise 1, you are inside the worktree. Before producing findings, read any 
 - Be vague ("improve error handling" without specifics)
 - Avoid giving a clear verdict
 
-## Example Output
+## Example Output (Abridged Structure)
+
+This is a structural skeleton — every section header below MUST appear in your output in this exact order, with `[None]` when empty. Per-issue formatting follows the 6-field rubric in `Per-Level Examples` above; do not invent additional sections.
 
 ```
 ### Chunk Analysis
 
 #### UserService.kt:registerUser (modified)
-- **What Changed**: Added email verification flow -- generates token on registration, persists user as UNVERIFIED, sends verification email synchronously inside `@Transactional`
-
-#### UserService.kt:verifyEmail (added)
-- **What Changed**: New method that looks up verification token, marks user as VERIFIED, and deletes the consumed token
-
-#### UserController.kt:verifyEmail (added)
-- **What Changed**: New `POST /verify-email` endpoint accepting token as query parameter, delegates to `UserService.verifyEmail()`
+- **What Changed**: Added email verification flow — generates token on registration, persists user as UNVERIFIED, sends verification email synchronously inside `@Transactional`
 
 ### Strengths
-- Clean token lifecycle: generated, used once, deleted -- no stale token accumulation (UserService.kt:45-62)
-- Verification status enforced at domain level via `UserStatus` enum, not boolean flag (User.kt:12)
+- Clean token lifecycle: generated, used once, deleted (UserService.kt:45-62)
 
 ### Issues
 
@@ -453,41 +394,26 @@ Per Premise 1, you are inside the worktree. Before producing findings, read any 
 - **File**: UserService.kt:34
 - **Problem**: `registerUser()` is `@Transactional` and calls `emailService.sendVerification()` synchronously. SMTP calls take 1-5s, holding the DB connection open.
 - **Impact**: Under registration load, DB connection pool exhausts within minutes, causing full service outage. If fixed, connections are released immediately after DB writes.
-- **Probability**: Every user registration triggers this path -- normal operation.
+- **Probability**: Every user registration triggers this path — normal operation.
 - **Maintainability**: Current coupling forces all future email changes to consider transaction scope.
 - **Fix**: Move email sending after transaction commit using `@TransactionalEventListener(phase = AFTER_COMMIT)`.
 
 #### P1 (Should Fix)
-
-**[P1] No expiry on verification tokens**
-- **File**: UserService.kt:38
-- **Problem**: Verification tokens persist indefinitely in `verification_tokens` table. A leaked or intercepted token remains valid forever.
-- **Impact**: Attacker with a leaked token can verify arbitrary accounts at any future time. If fixed, tokens expire after 24h, limiting the attack window.
-- **Probability**: Requires token leakage (email forwarding, log exposure, URL in browser history) -- realistic but not normal-path.
-- **Maintainability**: Adding expiry requires schema change (`expires_at` column) and a cleanup job, but establishes a reusable pattern for all future token types.
-- **Fix**: Add `expires_at` column, validate on verification, add scheduled cleanup job.
+[None]
 
 #### P2 (Consider Fix)
 [None]
 
 #### P3 (Optional)
-
-**[P3] Magic number for token byte length**
-- **File**: UserService.kt:36
-- **Problem**: `SecureRandom().nextBytes(32)` -- 32 is an unexplained literal.
-- **Impact**: [N/A]
-- **Probability**: [N/A]
-- **Maintainability**: [N/A]
-- **Fix**: Extract to named constant `VERIFICATION_TOKEN_BYTES = 32`.
+[None]
 
 #### Cross-File Concerns
-1. **No rate limiting on verification endpoint**: UserController.kt exposes `/verify-email` without throttling. An attacker could brute-force short tokens. If other endpoints use rate limiting middleware, this one should too.
+[None]
 
 ### Recommendations
-- Introduce async event-driven email sending to decouple transaction boundaries from external I/O
-- Add token expiry (24h recommended) with a scheduled cleanup job for expired tokens
+- Decouple SMTP from `@Transactional` scope to prevent connection pool starvation under load.
 
 ### Assessment
 **Ready to merge?** No
-**Reasoning:** The `@Transactional` wrapping synchronous SMTP is a P0 issue that will cause DB connection pool starvation under registration load. Must decouple email sending from the transaction.
+**Reasoning:** P0 transactional SMTP coupling will cause connection pool starvation under registration load. Decouple before merge.
 ```
