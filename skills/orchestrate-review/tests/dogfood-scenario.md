@@ -28,7 +28,7 @@
 
 | Fixture path | 시나리오 | Expected `errorMessage` |
 |---|---|---|
-| `evidence/orchestrate-review-output-reliability-v2/spike/gpt-S5-500k.ndjson` | GPT oversized prompt (500k tokens) | `prompt_too_large` |
+| `evidence/orchestrate-review-output-reliability-v2/spike/gpt-S5-500k.ndjson` | GPT oversized prompt (500k tokens) — Path: raw API error → classifyError → context_window | `context_window` |
 | `evidence/orchestrate-review-output-reliability-v2/spike/kimi-S5-500k.ndjson` | Kimi oversized prompt (500k tokens) | `context_window` |
 | `evidence/orchestrate-review-output-reliability-v2/spike/gpt-S4-invalid-model.ndjson` | GPT invalid model name | `model_not_found` |
 
@@ -75,7 +75,7 @@
 }
 ```
 
-Option A (oversized prompt) 시나리오에서는 GPT 계열은 `"errorMessage": "prompt_too_large"`, Kimi 계열은 `"errorMessage": "context_window"` 가 나와야 한다. v2 spike fixtures와 일치하는지 대조한다.
+Option A (oversized prompt) 시나리오에서는 GPT 계열은 `"errorMessage": "context_window"` (raw API error → classifyError 경로), Kimi 계열은 `"errorMessage": "context_window"` 가 나와야 한다. v2 spike fixtures와 일치하는지 대조한다.
 
 ---
 
