@@ -1,5 +1,3 @@
-<!-- TWIN FILE — sibling: prompts/gemini.md. Sections marked common to both must be edited in lockstep. Consider extracting if drift becomes a maintenance problem. -->
-
 CRITICAL: You MUST obey these rules. No exceptions.
 
 0. **Premises (non-negotiable):**

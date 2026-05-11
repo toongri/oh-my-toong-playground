@@ -246,12 +246,12 @@ describe('parseChunkReviewConfig', () => {
     expect(result['chunk-review'].chairman.role).toBe('auto');
   });
 
-  test('fallback contains default members (claude, codex, gemini)', async () => {
+  test('fallback contains default members (claude, codex)', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
     const names = result['chunk-review'].members.map(r => r.name);
     expect(names.includes('claude')).toBeTruthy();
     expect(names.includes('codex')).toBeTruthy();
-    expect(names.includes('gemini')).toBeTruthy();
+    expect(names.includes('gemini')).toBeFalsy();
   });
 
   test('fallback contains default settings', async () => {

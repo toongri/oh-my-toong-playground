@@ -213,7 +213,6 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
       members: [
         { name: 'claude', command: 'claude -p', emoji: '\u{1F9E0}', color: 'CYAN' },
         { name: 'codex', command: 'codex exec', emoji: '\u{1F916}', color: 'BLUE' },
-        { name: 'gemini', command: 'gemini', emoji: '\u{1F48E}', color: 'GREEN' },
       ],
       settings: { exclude_chairman_from_members: true, timeout: 300 },
     },
