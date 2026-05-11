@@ -1074,6 +1074,96 @@ describe('buildManifest', () => {
     expect(result.members[0].outputFilePath).not.toBe(null);
     expect(result.members[0].errorMessage).toBe(null);
   });
+
+  test('buildManifest: json-mode permanent_error with error.type=context_window → errorMessage === "context_window"', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-json-perm-context-window');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'permanent_error',
+          attempts: 3,
+          size_bytes: 0,
+          error: { type: 'context_window', message: 'AI_APICallError', raw_message: 'AI_APICallError' },
+        },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('context_window');
+  });
+
+  test('buildManifest: json-mode empty_output without error → errorMessage === "empty_output"', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-json-empty-no-error');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'empty_output',
+          attempts: 3,
+          size_bytes: 0,
+        },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('empty_output');
+  });
+
+  test('buildManifest: text-mode timed_out with status.message → errorMessage === "Timed out after 480s"', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-text-timed-out');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'timed_out',
+          attempts: 3,
+          message: 'Timed out after 480s',
+        },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('Timed out after 480s');
+  });
+
+  test('buildManifest: text-mode without message and error → errorMessage === "non_retryable"', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-text-non-retryable-synthetic');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'non_retryable',
+          attempts: 3,
+        },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('non_retryable');
+  });
+
+  test('buildManifest: prompt_too_large (text-mode-style) → errorMessage === "prompt_too_large"', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-prompt-too-large');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'permanent_error',
+          attempts: 0,
+          error: { type: 'prompt_too_large', bytes: 100000, limit: 81920 },
+        },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('prompt_too_large');
+  });
 });
 
 // ---------------------------------------------------------------------------

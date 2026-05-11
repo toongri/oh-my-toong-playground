@@ -583,7 +583,7 @@ export function buildManifest(
       entities.push({
         member: status.member,
         outputFilePath: outputExists && isReadable ? outputPath : null,
-        errorMessage: outputExists && isReadable ? null : (status.message || status.state),
+        errorMessage: outputExists && isReadable ? null : (status.message || status.error?.type || status.error?.message || status.state),
         size_bytes: status.size_bytes ?? null,
         attempts: status.attempts ?? null,
         error: status.error ?? null,
