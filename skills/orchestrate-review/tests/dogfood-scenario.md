@@ -87,3 +87,9 @@ Option A (oversized prompt) 시나리오에서는 GPT 계열은 `"errorMessage":
 - date: YYYY-MM-DD
 - outcome: TBD (pending manual execution)
 - evidence: evidence/orchestrate-review-followup-v3/dogfood/<run-id>/
+
+### 2026-05-11: Option B (invalid model) — automated dogfood run
+- date: 2026-05-11
+- outcome: PASS — errorMessage="model_not_found" (link-2: status.error?.type hit)
+- evidence: ~/.omt/oh-my-toong-playground/evidence/resolve-review-recommendations/dogfood-run/
+- method: production lib 함수 직접 호출 — classifyError (lib/worker-utils.ts) + buildManifest (lib/generic-job.ts)
