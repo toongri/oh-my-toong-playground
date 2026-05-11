@@ -1164,6 +1164,24 @@ describe('buildManifest', () => {
     expect(result.members[0].outputFilePath).toBe(null);
     expect(result.members[0].errorMessage).toBe('prompt_too_large');
   });
+
+  test('buildManifest: error.message without error.type → errorMessage === error.message (link 3)', () => {
+    const jobDir = path.join(tmpDir, 'job-manifest-link3-error-message');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'permanent_error',
+          attempts: 3,
+          error: { message: 'Unknown API failure' },
+        },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('Unknown API failure');
+  });
 });
 
 // ---------------------------------------------------------------------------
