@@ -18,18 +18,20 @@ digraph verification_flow {
     "still gap?" [shape=diamond];
     "retries < 3?" [shape=diamond];
     "interview user" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
+    "oracle 진단" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
 
     "junior done" -> "IGNORE" -> "argus" -> "verdict?";
-    "verdict?" -> "fix + retry" [label="REQUEST_CHANGES"];
+    "verdict?" -> "oracle 진단" [label="REQUEST_CHANGES"];
+    "oracle 진단" -> "fix + retry";
     "verdict?" -> "evidence audit" [label="APPROVE/COMMENT"];
     "evidence audit" -> "evidence OK?";
     "evidence OK?" -> "mnemosyne" [label="yes"];
     "evidence OK?" -> "re-invoke argus" [label="no (gap)"];
     "re-invoke argus" -> "new verdict?";
-    "new verdict?" -> "fix + retry" [label="REQUEST_CHANGES"];
+    "new verdict?" -> "oracle 진단" [label="REQUEST_CHANGES"];
     "new verdict?" -> "still gap?" [label="APPROVE/COMMENT"];
     "still gap?" -> "mnemosyne" [label="no"];
     "still gap?" -> "retries < 3?" [label="yes"];
@@ -50,7 +52,7 @@ digraph verification_flow {
 3. If APPROVE/COMMENT → **Run Evidence Audit Gate** before proceeding
 4. If evidence gap → re-invoke argus (up to 3x; interview user if exhausted)
 5. If evidence OK → **Invoke mnemosyne** to commit
-6. If REQUEST_CHANGES → Create fix task, re-delegate to sisyphus-junior
+6. If REQUEST_CHANGES → oracle 진단 → fix task에 oracle findings 포함 → re-delegate to sisyphus-junior
 7. **No retry limit on fix cycle** — Continue until argus passes
 
 ---
@@ -96,7 +98,7 @@ A path passes if the file **exists and is non-empty** (`test -f "$path" && test 
 
 | Retry | Condition | Action |
 |-------|-----------|--------|
-| Every retry | New verdict = REQUEST_CHANGES | Create fix task immediately (no evidence check needed) |
+| Every retry | New verdict = REQUEST_CHANGES | oracle 진단 → fix task (no evidence check needed) |
 | 0 (initial) | APPROVE/COMMENT + evidence MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
 | 1-2 | APPROVE/COMMENT + evidence STILL MISSING | Re-invoke argus again |
 | 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | Interview user: explain situation + AskUserQuestion for strategy selection |
@@ -124,7 +126,7 @@ Save outputs to the exact paths listed above.
 2. If ANY manifest paths are MISSING → Evidence Gap detected:
    - Re-invoke argus with an Evidence Gap Request (format above) listing the missing paths
    - After re-invocation, evaluate the **new verdict first**:
-     - If REQUEST_CHANGES → treat as REQUEST_CHANGES (create fix task). Evidence gap is moot.
+     - If REQUEST_CHANGES → treat as REQUEST_CHANGES (oracle 진단 → fix task). Evidence gap is moot.
      - If APPROVE/COMMENT → check manifest again
    - If evidence STILL missing → retry (up to 3 total re-invocations)
    - After 3 retries with persistent gap → **Interview user**: summarize the situation and ask via AskUserQuestion what strategy to take
@@ -244,6 +246,12 @@ After composing any recipe, the evidence paths included in `## Required Verifica
 
 ### Fix Task from REQUEST_CHANGES
 
+When argus returns REQUEST_CHANGES, sisyphus MUST route through oracle before creating a fix task:
+
+1. **Invoke oracle** — forward argus's REQUEST_CHANGES verdict + changed files as a diagnosis request.
+2. **Receive oracle findings** — root cause, recommended fix direction, file:line citations.
+3. **Create fix task** — include oracle findings verbatim in the delegation prompt.
+
 ```markdown
 Subject: Fix [issue type]: [brief description]
 Description:
@@ -252,4 +260,6 @@ Description:
 - Required fix: [specific action]
 - Argus findings (verbatim):
   > [argus의 원문 피드백 전체 — 요약하지 말 것]
+- Oracle 진단 (verbatim):
+  > [oracle의 진단 및 권고 전체 — 요약하지 말 것]
 ```
