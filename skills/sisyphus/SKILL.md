@@ -26,9 +26,11 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 
 **Routing is by task type, not by session cadence.** Even if the prior task used junior → argus, a new verify/diagnose task does NOT inherit that path.
 
-**Verify vs diagnose disambiguator**: the word "검증/verification" is ambiguous in Korean. Use *deliverable* to decide:
+**Verify vs diagnose disambiguator**: the word `검증` (Korean for "verification") is ambiguous and can mean either verify or diagnose. Use *deliverable* to decide:
 - Deliverable = PASS/FAIL verdict that closes the task → **verify** → argus.
 - Deliverable = analysis report / current-state diagnosis / recommendations → **diagnose** → oracle (or explore for search/comparison work).
+
+> **Note on Korean keywords below**: the routing tables and Red Flags reference Korean phrases (`검증`, `확인`, `조사`, `시점`, `확인해줘`, `살펴봐`, `점검해줘`) as *user input triggers*. These are intentional — they let sisyphus route Korean-language requests. Do not translate them.
 
 ### Agent Routing
 
@@ -162,7 +164,7 @@ digraph task_loop {
     "code changes?" [shape=diamond];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "Mark completed" [shape=box, style=filled, fillcolor=green];
-    "oracle 진단" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
+    "Oracle diagnosis" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "Create fix task" [shape=box];
     "More tasks?" [shape=diamond];
     "Done" [shape=ellipse, style=filled, fillcolor=lightgreen];
@@ -175,13 +177,13 @@ digraph task_loop {
     "sisyphus-junior" -> "argus QA";
     "argus QA" -> "Pass?";
     "Pass?" -> "evidence audit\n(see verification.md)" [label="APPROVE/COMMENT"];
-    "Pass?" -> "oracle 진단" [label="REQUEST_CHANGES"];
+    "Pass?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
     "evidence audit\n(see verification.md)" -> "code changes?";
     "code changes?" -> "mnemosyne" [label="yes"];
     "code changes?" -> "Mark completed" [label="no"];
     "mnemosyne" -> "Mark completed";
     "argus directly" -> "Pass?";
-    "oracle 진단" -> "Create fix task";
+    "Oracle diagnosis" -> "Create fix task";
     "Mark completed" -> "More tasks?";
     "Create fix task" -> "More tasks?";
     "More tasks?" -> "Get unblocked tasks" [label="yes"];
@@ -192,8 +194,9 @@ digraph task_loop {
 **Execution Rules:**
 - Tasks with `blockedBy` → wait until blockers complete
 - Multiple unblocked independent tasks → dispatch in parallel
-- sisyphus-junior path: junior done → argus QA → Evidence Audit Gate (see verification.md) → mnemosyne (if code changes) → mark completed. REQUEST_CHANGES 시 → oracle 진단 → fix task → junior 재위임.
-- argus direct path: argus approval → Evidence Audit Gate (see verification.md) → mark completed. REQUEST_CHANGES 시 → oracle 진단 → fix task → junior 재위임.
+- sisyphus-junior path: junior done → argus QA → Evidence Audit Gate (see verification.md) → mnemosyne (if code changes) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
+- argus direct path: argus approval → Evidence Audit Gate (see verification.md) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
+- 🚨 **CRITICAL** — When a problem arises, resolve it without exception. Act on oracle's diagnosis; if it does not resolve, summarize the current state and consult oracle again. Keep iterating until the matter is concluded.
 - Evidence gap handling, retry logic, and user interview flow: see [verification.md](verification.md)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan to mark `- [x]` on corresponding TODO
 
@@ -202,7 +205,7 @@ digraph task_loop {
 | Verdict | Sisyphus Action |
 |---------|-----------------|
 | **APPROVE** | Evidence Audit Gate → mnemosyne (if code changes) → mark completed |
-| **REQUEST_CHANGES** (Critical/High) | oracle 진단 → fix task에 oracle findings 포함 → re-delegate to sisyphus-junior |
+| **REQUEST_CHANGES** (Critical/High) | oracle diagnosis → fix task including oracle findings → re-delegate to sisyphus-junior |
 | **COMMENT** (Medium only) | Evidence Audit Gate → mnemosyne (if code changes) → mark completed. Create follow-up task if warranted |
 
 **Note**: If a previous finding was intentionally not addressed due to a deliberate trade-off, the rationale can optionally be noted in delegation prompt's `## 6. CONTEXT` or QA REQUEST's `## Scope`.
