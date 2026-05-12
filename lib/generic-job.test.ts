@@ -1042,7 +1042,7 @@ describe('buildManifest', () => {
     expect(result.members[0].errorMessage).toBe('done');
   });
 
-  test('buildManifest: text-mode done without size_bytes → outputFilePath preserved', () => {
+  test('buildManifest: text-mode state=done → outputFilePath non-null, errorMessage null', () => {
     const jobDir = path.join(tmpDir, 'job-manifest-text-done');
     setupManifestJob(jobDir, chunkReviewConfig, {
       alice: { status: { member: 'alice', state: 'done' }, hasOutput: true },
@@ -1052,14 +1052,34 @@ describe('buildManifest', () => {
     expect(result.members[0].errorMessage).toBe(null);
   });
 
-  test('buildManifest: text-mode error without size_bytes → outputFilePath preserved', () => {
+  test('buildManifest: text-mode state=error → outputFilePath null, errorMessage=state', () => {
+    // state='error' is not 'done' → new predicate treats it as unreadable
     const jobDir = path.join(tmpDir, 'job-manifest-text-error');
     setupManifestJob(jobDir, chunkReviewConfig, {
       alice: { status: { member: 'alice', state: 'error', message: 'timeout' }, hasOutput: true },
     });
     const result = buildManifest(jobDir, chunkReviewConfig);
-    expect(result.members[0].outputFilePath).not.toBe(null);
-    expect(result.members[0].errorMessage).toBe(null);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('timeout');
+  });
+
+  test('buildManifest: text-mode state=non_retryable + output.txt exists → outputFilePath null, errorMessage from error.type', () => {
+    // Sentinel fires and writes state='non_retryable'; even though output.txt exists (possibly empty),
+    // buildManifest must return null outputFilePath and surface the error.type.
+    const jobDir = path.join(tmpDir, 'job-manifest-text-non-retryable-with-output');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: {
+          member: 'alice',
+          state: 'non_retryable',
+          error: { type: 'model_not_found', message: 'Model not found: gpt-5' },
+        },
+        hasOutput: true,  // output.txt exists but should be ignored
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    expect(result.members[0].errorMessage).toBe('model_not_found');
   });
 
   test('buildManifest: json-mode permanent_error → outputFilePath null', () => {

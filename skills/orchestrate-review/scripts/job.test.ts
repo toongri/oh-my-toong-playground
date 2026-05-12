@@ -2186,8 +2186,8 @@ describe('start + collect integration', () => {
       }
 
       // Mock done status for each reviewer.
-      // Include size_bytes > 0 so buildManifest's JSON-mode gate (isJsonMode=true,
-      // isReadable = state==='done' && size_bytes>0) keeps outputFilePath non-null.
+      // Include size_bytes > 0 so buildManifest's state-aware predicate
+      // (isReadable = state==='done' && (size_bytes ?? Infinity) > 0) keeps outputFilePath non-null.
       for (const entry of fs.readdirSync(membersDir)) {
         const statusPath = path.join(membersDir, entry, 'status.json');
         const status = JSON.parse(fs.readFileSync(statusPath, 'utf8'));

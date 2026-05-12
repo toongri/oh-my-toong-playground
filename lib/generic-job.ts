@@ -577,10 +577,7 @@ export function buildManifest(
       if (!status) continue;
       const outputPath = path.join(entitiesRoot, entry, 'output.txt');
       const outputExists = fs.existsSync(outputPath);
-      const isJsonMode = typeof status.size_bytes === 'number';
-      const isReadable = isJsonMode
-        ? (status.state === 'done' && status.size_bytes > 0)
-        : true;
+      const isReadable = status.state === 'done' && (status.size_bytes ?? Infinity) > 0;
       entities.push({
         member: status.member,
         outputFilePath: outputExists && isReadable ? outputPath : null,

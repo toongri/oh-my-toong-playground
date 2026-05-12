@@ -1324,3 +1324,169 @@ describe('incident-f99e10 regression', () => {
     expect(classifyState(parsed).state).toBe('empty_output');
   });
 });
+
+// ---------------------------------------------------------------------------
+// opencode silent-failure sentinel (AC-1, AC-1.5, AC-2)
+// ---------------------------------------------------------------------------
+
+// Helper: create a real executable named 'opencode' in a temp bin dir.
+// Sentinel checks path.basename(program) === 'opencode' so absolute wrapper paths work.
+function makeOpencodeWrapper(dir: string, stderrOutput: string): string {
+  const wrapperDir = join(dir, 'bin');
+  mkdirSync(wrapperDir, { recursive: true });
+  const wrapper = join(wrapperDir, 'opencode');
+  writeFileSync(wrapper, `#!/bin/sh\n${stderrOutput}\nexit 0\n`);
+  const { chmodSync } = require('fs');
+  chmodSync(wrapper, 0o755);
+  return join(wrapperDir, 'opencode');
+}
+
+describe('opencode sentinel: happy path + false-positive guards', () => {
+  const testDir = join(tmpdir(), 'sentinel-guard-' + Date.now());
+
+  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
+  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
+
+  it('opencode normal response: exit 0 + stdout non-empty + stderr empty → state=done', async () => {
+    const subDir = join(testDir, 'happy-path');
+    const program = makeOpencodeWrapper(subDir, 'echo "rendered review text"');
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('done');
+  });
+
+  it('false-positive guard (a): stdout non-empty + Error: on stderr → sentinel does not fire → state=done', async () => {
+    const subDir = join(testDir, 'fp-stdout');
+    // stdout non-empty wins: even with Error: in stderr, sentinel must not fire
+    const program = makeOpencodeWrapper(subDir,
+      'echo "some output"\nprintf "Error: Model not found\\n" >&2');
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('done');
+  });
+
+  it('false-positive guard (b): stderr empty → sentinel does not fire → state=done', async () => {
+    const subDir = join(testDir, 'fp-stderr-empty');
+    // opencode-named binary, exit 0, no stderr — pure happy path
+    const program = makeOpencodeWrapper(subDir, '');
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('done');
+  });
+
+  it('false-positive guard (c): stderr non-empty but no line starts with Error: → state=done', async () => {
+    const subDir = join(testDir, 'fp-no-error-prefix');
+    const program = makeOpencodeWrapper(subDir, 'printf "informational log line\\n" >&2');
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('done');
+  });
+
+  it('false-positive guard (d): program !== opencode, stderr has Error: → sentinel does not fire → state=done', async () => {
+    const subDir = join(testDir, 'fp-not-opencode');
+    // Use /bin/sh (not opencode) — sentinel must not fire even with Error: in stderr
+    const result = await runWithRetry(makeOpts(subDir, {
+      program: '/bin/sh',
+      args: ['-c', 'printf "Error: Model not found\\n" >&2; exit 0'],
+      command: '/bin/sh -c ...',
+    }));
+    expect(result.state).toBe('done');
+  });
+});
+
+describe('opencode sentinel: keyword classification (AC-1.5)', () => {
+  const testDir = join(tmpdir(), 'sentinel-classify-' + Date.now());
+
+  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
+  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
+
+  it('Model not found in stderr → state=non_retryable, error.type=model_not_found', async () => {
+    const subDir = join(testDir, 'kw-model-not-found');
+    const program = makeOpencodeWrapper(subDir, "printf 'Error: Model not found: gpt-5\\n' >&2");
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('non_retryable');
+    expect((result.error as any)?.type).toBe('model_not_found');
+  });
+
+  it('ContextOverflowError in stderr → error.type=context_window', async () => {
+    const subDir = join(testDir, 'kw-context-overflow');
+    const program = makeOpencodeWrapper(subDir, "printf 'Error: ContextOverflowError: context too large\\n' >&2");
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('non_retryable');
+    expect((result.error as any)?.type).toBe('context_window');
+  });
+
+  it('APIError in stderr → error.type=api_error', async () => {
+    const subDir = join(testDir, 'kw-api-error');
+    const program = makeOpencodeWrapper(subDir, "printf 'Error: APIError: 500 internal\\n' >&2");
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('non_retryable');
+    expect((result.error as any)?.type).toBe('api_error');
+  });
+
+  it('Unknown session error → error.type=opencode_session_error (fallback)', async () => {
+    const subDir = join(testDir, 'kw-fallback');
+    const program = makeOpencodeWrapper(subDir, "printf 'Error: SomethingUnknown happened\\n' >&2");
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('non_retryable');
+    expect((result.error as any)?.type).toBe('opencode_session_error');
+  });
+
+  it('sentinel writes error.message = first stderr line with Error: prefix stripped', async () => {
+    const subDir = join(testDir, 'kw-message-strip');
+    const program = makeOpencodeWrapper(subDir, "printf 'Error: Model not found: my-model\\nSecond line\\n' >&2");
+    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
+    expect(result.state).toBe('non_retryable');
+    expect((result.error as any)?.message).toBe('Model not found: my-model');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PROMPT_MAX_BYTES guard at mode='text' path (AC-4)
+// ---------------------------------------------------------------------------
+
+describe('mode=text prompt size guard', () => {
+  const testDir = join(tmpdir(), 'prompt-size-text-' + Date.now());
+
+  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
+  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
+
+  it('prompt 79KB → spawn proceeds normally (exit 0 → state=done)', async () => {
+    const subDir = join(testDir, 'prompt-79kb');
+    const memberDir = join(subDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+    const promptPath = join(subDir, 'prompt.txt');
+    writeFileSync(promptPath, 'x'.repeat(79 * 1024));
+    const result = await runWithRetry({
+      program: '/bin/sh',
+      args: ['-c', 'exit 0'],
+      prompt: 'test',
+      promptPath,
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh -c "exit 0"',
+      timeoutSec: 10,
+      sleepFn: noopSleep,
+    });
+    expect(result.state).toBe('done');
+  });
+
+  it('prompt 81KB → no spawn, state=non_retryable, error.type=prompt_too_large', async () => {
+    const subDir = join(testDir, 'prompt-81kb');
+    const memberDir = join(subDir, 'member');
+    mkdirSync(memberDir, { recursive: true });
+    const promptPath = join(subDir, 'prompt.txt');
+    writeFileSync(promptPath, 'x'.repeat(81 * 1024));
+    const result = await runWithRetry({
+      program: '/bin/sh',
+      args: ['-c', 'exit 0'],
+      prompt: 'test',
+      promptPath,
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh -c "exit 0"',
+      timeoutSec: 10,
+      sleepFn: noopSleep,
+    });
+    expect(result.state).toBe('non_retryable');
+    expect((result.error as any)?.type).toBe('prompt_too_large');
+    expect((result.error as any)?.bytes).toBeGreaterThan(80 * 1024);
+    expect((result.error as any)?.limit).toBe(PROMPT_MAX_BYTES);
+  });
+});
