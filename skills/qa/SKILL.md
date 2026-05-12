@@ -442,5 +442,5 @@ CONFIDENCE: 0-49 discard, 50-79 nitpick, 80+ report
 FEEDBACK: What + Location (verdict only — diagnosis is oracle's job)
 SEVERITY: CRITICAL (security) > HIGH (arch) > MEDIUM (perf) > LOW (style)
 YAGNI: New code with 0 callers = flag
-TRIGGER TRACE: Always output Active Triggers table (4 triggers × Status + Reason)
+TRIGGER TRACE: Always output Active Triggers table (Status + Reason per trigger)
 ```
