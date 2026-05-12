@@ -795,9 +795,8 @@ Execute full loop for both tasks.
 
 **Input:**
 ```
-Three argus verdicts received for different tasks:
+Two argus verdicts received for different tasks:
 - Task A: APPROVE — all checks passed
-- Task B: REQUEST_CHANGES (Critical) — missing input sanitization, potential XSS
 - Task C: COMMENT (Medium) — variable naming could be more descriptive
 ```
 
@@ -806,10 +805,9 @@ Three argus verdicts received for different tasks:
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
-| V2 | REQUEST_CHANGES (Task B) → create fix task, re-delegate (no mnemosyne) | A new fix task is created for the XSS issue and dispatched to sisyphus-junior — mnemosyne is NOT invoked since task is not approved |
-| V3 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
-| V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
-| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V2 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
+| V3 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
+| V4 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
 
 ---
 
@@ -1116,7 +1114,7 @@ the task as implementation. The deliverable is *analysis*, not artifacts.
 | S-26 | Mnemosyne Trust Model — No Re-verification | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
 | S-28 | Full Task Loop with Commit Step | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
-| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PASS | 2026-02-16 | 4/4 VPs — GREEN verified (COMMENT row fixed in SKILL.md) |
+| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | **RETEST** | | VPs updated in this branch (Task B + V2 removed; REQUEST_CHANGES coverage moved to S-8). 갱신 2026-05-12. Needs re-testing |
 | S-30 | Skill Selection Protocol — Relevant Skill Included | PASS | 2026-02-26 | 5/5 VPs — GREEN verified |
 | S-31 | Skill Selection Protocol — No Relevant Skills | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | PASS | 2026-02-26 | 5/5 VPs — GREEN verified (re-test after scenario Input fix: removed oracle pre-diagnosis) |
