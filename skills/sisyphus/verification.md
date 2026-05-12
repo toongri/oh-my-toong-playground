@@ -197,6 +197,38 @@ Results from oracle, explore, and librarian are:
 - Summary: [what the implementer claimed]
 ```
 
+### When to Request Completeness Verification
+
+Include a "Completeness check" directive in the QA REQUEST's `## Required Verification` section when:
+
+| Condition | Reason |
+|-----------|--------|
+| Spec contains 3 or more prose requirements (items not encapsulated as ACs) | Prose-only spec items are not automatically verified by AC checks — explicit completeness verification is required |
+| Task originated from a broad request (decision-gates.md §Broad Requests) | Broad requests carry higher risk of missing deliverables |
+| User explicitly requests *coverage* (e.g., "everything covered" or "전체 반영") | User intent is completeness assurance |
+
+> **Note on Korean keyword above**: `"전체 반영"` is a user-input trigger phrase preserved intentionally — sisyphus matches this exact Korean string when users request full coverage in Korean. Do not translate it.
+
+#### QA REQUEST Example (with Completeness)
+
+```
+# QA REQUEST
+
+## Spec
+- 1. Add input validation to /api/login endpoint
+- 2. Write unit tests for the validation logic
+- 3. Document the new validation rules in API.md
+- 4. Write migration notes if validation changes an existing data shape
+
+## Required Verification
+- AC-1: `npm test` exits 0
+- AC-2: `eslint .` exits 0
+- Completeness check: Verify all 4 Spec items are reflected in the deliverable
+
+## Scope
+- Changed files: ...
+```
+
 ### Evidence Path Fallback (Common Rule)
 
 Applies to all Recipes. When composing a QA REQUEST, sisyphus generates evidence paths using the work-unit slug:
