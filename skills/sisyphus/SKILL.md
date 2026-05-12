@@ -199,6 +199,7 @@ digraph task_loop {
 - 🚨 **CRITICAL** — When a problem arises, resolve it without exception. Act on oracle's diagnosis; if it does not resolve, summarize the current state and consult oracle again. Keep iterating until the matter is concluded.
 - Evidence gap handling, retry logic, and user interview flow: see [verification.md](verification.md)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan to mark `- [x]` on corresponding TODO
+- If oracle returns a circuit-breaker reframe (3 consecutive failed hypotheses), halt the verify→diagnose→fix loop, surface the reframe to the user, and await direction. Do not auto-create fix tasks from circuit-breaker output.
 
 ### Verdict Response Protocol
 
