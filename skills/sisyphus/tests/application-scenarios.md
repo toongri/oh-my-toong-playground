@@ -151,7 +151,7 @@ Everything is working correctly."
 
 ## Scenario S-5: Argus Prompt Fidelity — Verbatim 7-Section
 
-**Primary Technique:** Argus Invocation (Prompt Fidelity) — copy-paste VERBATIM, no summarization
+**Primary Technique:** Argus Invocation (Prompt Fidelity) — verbatim content (no summarization or paraphrasing); heading levels normalized per QA REQUEST recipe
 
 **Input:**
 ```
@@ -185,9 +185,9 @@ Temptation: Summarize to "Junior was asked to add JWT auth to users endpoint."
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | 7-Section prompt copied VERBATIM to argus | The entire 7-Section prompt appears in the argus invocation without any edits |
+| V1 | 7-Section prompt content preserved in QA REQUEST | The entire 7-Section prompt content appears in the QA REQUEST without paraphrasing or summarization |
 | V2 | No section omitted | All 7 sections (TASK, EXPECTED OUTCOME, REQUIRED TOOLS, MUST DO, MUST NOT DO, CONTEXT, MANDATORY SKILLS) are present in the argus call |
-| V3 | No paraphrasing or restructuring | Text is not summarized, rephrased, or reorganized — exact copy-paste |
+| V3 | No paraphrasing or restructuring | Section content is preserved verbatim; only heading levels may be normalized per the QA REQUEST recipe (delegation prompt sections become `###` under `## Spec`) |
 | V4 | MUST NOT DO section included | The MUST NOT DO section is explicitly included, not dropped as "less important" |
 
 ---
@@ -262,7 +262,7 @@ Three argus verdicts received for different tasks:
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
 | V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed |
-| V2 | REQUEST_CHANGES (Task B) → oracle 진단 → fix task with oracle findings → re-delegate | Sisyphus dispatches oracle with argus's verdict; oracle returns diagnosis; a new fix task is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then dispatched to sisyphus-junior |
+| V2 | REQUEST_CHANGES (Task B) → oracle diagnosis → fix task with oracle findings → re-delegate | Sisyphus dispatches oracle with argus's verdict; oracle returns diagnosis; a new fix task is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then dispatched to sisyphus-junior |
 | V3 | COMMENT (Task C) → Evidence Audit Gate → mark complete, does NOT block progression | Task C: Evidence Audit Gate runs, then Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
 | V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone (oracle → fix task → junior loop runs instead) |
 | V5 | Evidence Audit Gate runs before mnemosyne on APPROVE/COMMENT | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
@@ -1125,15 +1125,15 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-2 | Complexity Triggers — Oracle Regardless of File Count | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-3 | Subagent Selection — Correct Agent Per Situation | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-4 | Verification Flow — Junior Done → IGNORE → Argus | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | **RETEST** | | VPs updated in this branch (6-Section → 7-Section). Needs re-testing |
+| S-5 | Argus Prompt Fidelity — Verbatim 7-Section | PASS | 2026-05-12 | 4/4 VPs — spec-walk verified (verification.md:251-278 + delegation.md:5-41) |
 | S-6 | Per-Task Argus — One Call Per Task | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-7 | File Path Specificity + No Pre-built Checklist | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-8 | Verdict Response Protocol — Action Per Verdict | **RETEST** | | VPs updated in this branch (Evidence Audit Gate added). Needs re-testing. 갱신 2026-05-12, oracle 단계 반영 |
+| S-8 | Verdict Response Protocol — Action Per Verdict | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:203-211 + verification.md:60-145, 279-297) |
 | S-9 | Multi-Agent Conflict — Halt + Oracle | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-10 | Partial Completion — New Tasks, Never Solo | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-11 | Parallelization — Independent = Concurrent | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-12 | Task Execution Loop — Full Cycle | **RETEST** | | VPs updated in this branch (Evidence Audit Gate in full cycle). Needs re-testing |
-| S-13 | 7-Section Delegation Prompt — Generation Quality | **RETEST** | | VPs updated in this branch (6-Section → 7-Section). Needs re-testing |
+| S-12 | Task Execution Loop — Full Cycle | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:154-211 + verification.md:60-145) |
+| S-13 | 7-Section Delegation Prompt — Generation Quality | PASS | 2026-05-12 | 7/7 VPs — spec-walk verified (delegation.md:5-95) |
 | S-14 | Request Classification — Routing Per Type | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-15 | Context Brokering — Facts vs Preferences | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-16 | Interview Mode — Sequential + Quality | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
@@ -1141,7 +1141,7 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-18 | Broad Request Detection — Explore First | PASS | 2026-02-11 | 5/5 VPs — GREEN verified |
 | S-19 | Vague Answer Clarification | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-20 | Subagent Requests User Interview | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
-| S-21 | Verification Retry Loop | **RETEST** | | 갱신 2026-05-12, oracle 단계 반영. VPs updated (oracle dispatch per REQUEST_CHANGES). Needs re-testing |
+| S-21 | Verification Retry Loop | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:199, 207-211 + verification.md:55-56, 279-297) |
 | S-22 | Rich Context Pattern | PASS | 2026-02-11 | 6/6 VPs — GREEN verified |
 | S-23 | Interview Exit Condition | PASS | 2026-02-11 | 4/4 VPs — GREEN verified |
 | S-24 | Subagent Selection — Mnemosyne for Git Commit | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
@@ -1149,13 +1149,13 @@ Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus d
 | S-26 | Mnemosyne Trust Model — No Re-verification | PASS | 2026-02-16 | 4/4 VPs — GREEN verified |
 | S-27 | Mnemosyne Delegation Prompt — 5-Section Fidelity | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
 | S-28 | Full Task Loop with Commit Step | PASS | 2026-02-16 | 5/5 VPs — GREEN verified |
-| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | **RETEST** | | VPs updated in this branch (Task B + V2 removed; REQUEST_CHANGES coverage moved to S-8). 갱신 2026-05-12. Needs re-testing |
+| S-29 | Verdict APPROVE — Mnemosyne Before Mark Complete | PASS | 2026-05-12 | 4/4 VPs — spec-walk verified (sisyphus/SKILL.md:205-211 + verification.md:50-64) |
 | S-30 | Skill Selection Protocol — Relevant Skill Included | PASS | 2026-02-26 | 5/5 VPs — GREEN verified |
 | S-31 | Skill Selection Protocol — No Relevant Skills | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
 | S-32 | Skill Selection Protocol — Multiple Relevant Skills | PASS | 2026-02-26 | 5/5 VPs — GREEN verified (re-test after scenario Input fix: removed oracle pre-diagnosis) |
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | PASS | 2026-02-26 | 4/4 VPs — GREEN verified |
-| UC-S1 | End-to-End: Broad Request → Full Cycle | | | Use-case scenario — needs testing |
-| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | | | Use-case scenario — needs testing. 갱신 2026-05-12, oracle 단계 반영 |
-| S-34 | Verify-only Task — Argus Direct (Skip Junior) | | | New scenario (captures verify-only routing) — needs testing |
-| S-35 | Investigation-only Task — Oracle/Explore (NOT Junior) | | | New scenario (captures investigation routing) — needs testing |
-| S-36 | Completeness Verification — Missing Spec Item Detection | | | New scenario (captures completeness verification flow) — needs testing |
+| UC-S1 | End-to-End: Broad Request → Full Cycle | PASS | 2026-05-12 | 8/8 VPs — spec-walk verified (decision-gates.md:122-156, 162-178 + sisyphus/SKILL.md:73, 131-211 + verification.md:50-145) |
+| UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | PASS | 2026-05-12 | 6/6 VPs — spec-walk verified (sisyphus/SKILL.md:48, 73, 207-211 + verification.md:50-145, 279-297) |
+| S-34 | Verify-only Task — Argus Direct (Skip Junior) | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:22, 27, 41, 88-100, 207, 227-243) |
+| S-35 | Investigation-only Task — Oracle/Explore (NOT Junior) | PASS | 2026-05-12 | 5/5 VPs — spec-walk verified (sisyphus/SKILL.md:24, 33, 42-43, 50, 88-100, 228, 246-249 + oracle/SKILL.md:8-15) |
+| S-36 | Completeness Verification — Missing Spec Item Detection | PASS | 2026-05-12 | 6/6 VPs — spec-walk verified (sisyphus/verification.md:202-230, 279-297 + qa/SKILL.md:60, 332-347, 391-422) |
