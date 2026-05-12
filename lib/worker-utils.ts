@@ -282,6 +282,112 @@ export function splitCommand(command: string): string[] | null {
 }
 
 // ---------------------------------------------------------------------------
+// CLI-aware final-answer extraction
+//
+// Each reviewer CLI emits a different shape on stdout:
+//   - claude  : single-result JSON  (.result field)
+//   - gemini  : single-result JSON  (.response field)
+//   - codex   : JSONL event stream  (use --output-last-message file if present)
+//   - opencode: JSONL event stream  (last `type:"text"` part, prefer phase=final_answer)
+//
+// The chairman (chunk-reviewer agent) consumes `output.txt` assuming it
+// contains only the final answer text. The script layer enforces that
+// contract here. See orchestrate-review/SKILL.md §"Worker Output Contract"
+// and skills/orchestrate-review/references/cli-output-spec.md for the full
+// per-CLI spec.
+// ---------------------------------------------------------------------------
+
+export type CliKind = 'opencode' | 'codex' | 'claude' | 'gemini' | 'raw';
+
+export interface ExtractFinalInput {
+  stdout: string;
+  lastMessagePath?: string;
+}
+
+export function extractFinal(cli: CliKind, input: ExtractFinalInput): string {
+  switch (cli) {
+    case 'opencode': return extractFromOpencode(input.stdout);
+    case 'codex':    return extractFromCodex(input);
+    case 'claude':   return extractFromClaude(input.stdout);
+    case 'gemini':   return extractFromGemini(input.stdout);
+    case 'raw':
+    default:         return input.stdout;
+  }
+}
+
+/**
+ * Command: `opencode run --format json`
+ * Extraction: raw NDJSON event stream — return last `{type:"text"}` event's
+ * `part.text`; if any event has `part.metadata.openai.phase === "final_answer"`,
+ * that event takes priority over the last-text heuristic.
+ * Verified: production smoke 2026-05-12 (chunk-review-2026-05-12-0459-abbc5d/gpt: 834602 bytes raw → 6191 bytes extracted).
+ */
+function extractFromOpencode(stdout: string): string {
+  if (!stdout) return '';
+  const textParts: { text: string; isFinalAnswer: boolean }[] = [];
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let evt: unknown;
+    try { evt = JSON.parse(trimmed); } catch { continue; }
+    const e = evt as { type?: string; part?: { text?: unknown; metadata?: { openai?: { phase?: string } } } };
+    if (e?.type !== 'text') continue;
+    const text = e?.part?.text;
+    if (typeof text !== 'string') continue;
+    const phase = e?.part?.metadata?.openai?.phase;
+    textParts.push({ text, isFinalAnswer: phase === 'final_answer' });
+  }
+  if (textParts.length === 0) return '';
+  const final = textParts.find((p) => p.isFinalAnswer);
+  return final ? final.text : textParts[textParts.length - 1].text;
+}
+
+/**
+ * Command: `codex exec --json --output-last-message <FILE>`
+ * Extraction: read `<FILE>` contents directly (lastMessagePath input); if the
+ * file is absent, fall back to the NDJSON event-stream heuristic from stdout.
+ * Verified: spec only — no production smoke yet.
+ */
+function extractFromCodex(input: ExtractFinalInput): string {
+  if (input.lastMessagePath && fs.existsSync(input.lastMessagePath)) {
+    return fs.readFileSync(input.lastMessagePath, 'utf8');
+  }
+  return extractFromOpencode(input.stdout);
+}
+
+/**
+ * Command: `claude --print --output-format json`
+ * Extraction: single-result JSON object — final answer is `JSON.parse(stdout).result`.
+ * Verified: manual jq smoke 2026-05-12 (echo "say hello" | claude --print --output-format json | jq -r .result).
+ */
+function extractFromClaude(stdout: string): string {
+  if (!stdout) return '';
+  try {
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    const val = parsed?.['result'];
+    return typeof val === 'string' ? val : stdout;
+  } catch {
+    return stdout;
+  }
+}
+
+/**
+ * Command: `gemini --output-format json`
+ * Extraction: single-result JSON object — final answer is `JSON.parse(stdout).response`.
+ * Verified: manual jq smoke 2026-05-12 (echo "say hello" | gemini --output-format json | jq -r .response).
+ */
+function extractFromGemini(stdout: string): string {
+  if (!stdout) return '';
+  try {
+    const parsed = JSON.parse(stdout) as Record<string, unknown>;
+    const val = parsed?.['response'];
+    return typeof val === 'string' ? val : stdout;
+  } catch {
+    return stdout;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Filesystem helpers
 // ---------------------------------------------------------------------------
 

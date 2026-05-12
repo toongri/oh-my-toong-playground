@@ -13,9 +13,46 @@ import {
   assemblePrompt as sharedAssemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
+  extractFinal,
   MAX_RETRIES,
   BASE_DELAY_MS,
 } from '@lib/worker-utils';
+
+const KNOWN_CLIS = new Set(['opencode', 'codex', 'claude', 'gemini']);
+
+function inferCliKind(program) {
+  const base = path.basename(program).toLowerCase();
+  return KNOWN_CLIS.has(base) ? base : 'raw';
+}
+
+/**
+ * Finalize worker output: rewrite output.txt with the CLI-specific final
+ * answer text only. See orchestrate-review/SKILL.md §"Worker Output Contract".
+ *
+ * Race note: status.json is written as `done` before this runs (~tens of ms
+ * window). Chairman polls every 5s — practical collision probability is low.
+ * For tighter guarantees, push finalize into lib/worker-utils runOnce.
+ */
+function finalizeWorkerOutput(memberDir, cliKind) {
+  if (cliKind === 'raw') return;
+  const outPath = path.join(memberDir, 'output.txt');
+  if (!fs.existsSync(outPath)) return;
+  try {
+    const raw = fs.readFileSync(outPath, 'utf8');
+    const extracted = extractFinal(cliKind, { stdout: raw });
+    if (!extracted || extracted.length >= raw.length) return;
+    const tmpPath = `${outPath}.${process.pid}.finalize.tmp`;
+    fs.writeFileSync(tmpPath, extracted, 'utf8');
+    fs.renameSync(tmpPath, outPath);
+    const statusPath = path.join(memberDir, 'status.json');
+    if (fs.existsSync(statusPath)) {
+      try {
+        const current = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+        atomicWriteJson(statusPath, { ...current, size_bytes: extracted.length });
+      } catch { /* status.json update is best-effort */ }
+    }
+  } catch { /* finalization is best-effort */ }
+}
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 const FALLBACK_FILE = 'reviewer.md';
@@ -103,14 +140,22 @@ function main() {
   const program = tokens[0];
   const args = tokens.slice(1);
 
+  const cliKind = inferCliKind(program);
+
   runWithRetry({
     program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member, memberDir, command, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
     promptPath,
     mode: 'json',
   }).then((result) => {
-    const size_bytes = result.size_bytes;
-    logInfo(`worker done: member=${member} state=${result.state} attempts=${result.attempts} size_bytes=${size_bytes}`);
+    if (result.state === 'done') finalizeWorkerOutput(memberDir, cliKind);
+    const finalSize = (() => {
+      try {
+        const statusPath = path.join(memberDir, 'status.json');
+        return JSON.parse(fs.readFileSync(statusPath, 'utf8')).size_bytes;
+      } catch { return result.size_bytes; }
+    })();
+    logInfo(`worker done: member=${member} state=${result.state} attempts=${result.attempts} size_bytes=${finalSize} cliKind=${cliKind}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });
