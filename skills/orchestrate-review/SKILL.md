@@ -86,13 +86,7 @@ Aggregate all reviewer outputs, produce the final report, then STOP.
 
 ## Worker Output Contract
 
-Each reviewer's `output.txt` MUST contain the final answer text only — the rendered reviewer response, ready to read. Raw CLI event streams, tool-use logs, step delimiters, and token metadata MUST NOT appear in `output.txt`. Target size: 5–30KB per reviewer.
-
-**Enforcement layer:** The script layer enforces this contract — specifically `skills/orchestrate-review/scripts/worker.ts` finalizes `output.txt` via `lib/worker-utils.extractFinal` after each reviewer run. The chairman (chunk-reviewer agent) reads the path and stops — no post-processing.
-
-**Why this matters:** Reviewer CLIs differ in their stdout shape. `claude --output-format json` and `gemini --output-format json` emit single-result JSON. `codex exec --json` and `opencode run --format json` emit event streams that bloat the actual answer by 30–130×. Pushing post-processing into the script layer keeps the contract uniform across CLIs.
-
-**Registered CLIs:** `opencode`, `codex`, `claude`, `gemini`. Anything else falls back to `raw` (stdout passed through unchanged). To register a new CLI, add an extraction path in `lib/worker-utils.extractFinal` and a contract assertion in `skills/orchestrate-review/tests/output-shape-contract.test.ts`.
+Each reviewer CLI is configured to emit final-answer text directly on stdout (default render mode — no event stream, no JSON metadata). The worker streams stdout to `output.txt` unchanged, so `output.txt` always contains the rendered reviewer response ready to read. No post-processing in the script or the chairman.
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
