@@ -40,7 +40,7 @@ The caller composes a QA REQUEST using this structure:
 
 - `#` QA REQUEST → `##` Spec / Required Verification / Scope → `###` internal subsections
 - The content of Spec determines which verification triggers activate.
-- `Required Verification`은 sisyphus가 verification commands와 evidence paths를 명시적으로 전달할 때 사용 — argus는 해당 섹션의 명령을 그대로 실행하고 evidence를 declared path에 저장
+- `Required Verification` is used when sisyphus explicitly passes verification commands and evidence paths — argus executes the section's commands verbatim and stores evidence at the declared paths.
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
 To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>` for context. If `main` does not exist, substitute `master`. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
