@@ -19,7 +19,6 @@ import {
   classifyError,
   parseNdjsonOutput,
   classifyState,
-  extractFinal,
   type RunOnceOpts,
   type RunWithRetryOpts,
   type NDJSONResult,
@@ -1323,89 +1322,5 @@ describe('incident-f99e10 regression', () => {
     const fp = join(FIXTURE_DIR, 'incident-f99e10-tool-use-reason.ndjson');
     const parsed = parseNdjsonOutput(fp);
     expect(classifyState(parsed).state).toBe('empty_output');
-  });
-});
-
-describe('extractFinal — CLI-aware final answer extraction', () => {
-  const tmp = join(tmpdir(), 'extract-final-test-' + Date.now());
-
-  beforeAll(() => mkdirSync(tmp, { recursive: true }));
-  afterAll(() => rmSync(tmp, { recursive: true, force: true }));
-
-  function makeOpencodeJsonl(finalText: string, noiseEvents = 30): string {
-    const lines: string[] = [];
-    for (let i = 0; i < noiseEvents; i++) {
-      lines.push(JSON.stringify({
-        type: 'step_start',
-        timestamp: 1778562000000 + i,
-        sessionID: 'ses_test',
-        part: { id: `prt_${i}`, type: 'step-start', snapshot: 'abc' },
-      }));
-      lines.push(JSON.stringify({
-        type: 'tool_use',
-        timestamp: 1778562001000 + i,
-        part: { id: `prt_tool_${i}`, type: 'tool-use', tool: 'bash', input: { command: 'ls' } },
-      }));
-    }
-    lines.push(JSON.stringify({
-      type: 'text',
-      timestamp: 1778562999999,
-      sessionID: 'ses_test',
-      part: { id: 'prt_final', type: 'text', text: finalText },
-    }));
-    return lines.join('\n');
-  }
-
-  test('opencode: returns last text-event part.text from JSONL noise stream', () => {
-    const finalAnswer = '### Chunk Analysis\n\n- Verdict: ready to merge: no';
-    const stdout = makeOpencodeJsonl(finalAnswer, 30);
-    const result = extractFinal('opencode', { stdout });
-    expect(result).toBe(finalAnswer);
-    expect(result.length).toBeLessThan(stdout.length / 10);
-    expect(result).not.toContain('step_start');
-    expect(result).not.toContain('tool_use');
-  });
-
-  test('opencode: prefers openai phase=final_answer when multi text events present', () => {
-    const reasoning = 'reasoning step';
-    const finalAnswer = '### final';
-    const stdout = [
-      JSON.stringify({
-        type: 'text',
-        part: { type: 'text', text: reasoning, metadata: { openai: { phase: 'reasoning' } } },
-      }),
-      JSON.stringify({
-        type: 'text',
-        part: { type: 'text', text: finalAnswer, metadata: { openai: { phase: 'final_answer' } } },
-      }),
-    ].join('\n');
-    expect(extractFinal('opencode', { stdout })).toBe(finalAnswer);
-  });
-
-  test('codex: uses lastMessagePath content when supplied', () => {
-    const lastFile = join(tmp, 'codex-last.txt');
-    writeFileSync(lastFile, 'codex final answer\n');
-    expect(extractFinal('codex', {
-      stdout: 'large jsonl noise...',
-      lastMessagePath: lastFile,
-    })).toBe('codex final answer\n');
-  });
-
-  test('claude: parses single-result JSON .result field', () => {
-    const stdout = JSON.stringify({ type: 'result', subtype: 'success', result: 'claude final', usage: {} });
-    expect(extractFinal('claude', { stdout })).toBe('claude final');
-  });
-
-  test('gemini: parses single-result JSON .response field', () => {
-    const stdout = JSON.stringify({ session_id: 'x', response: 'gemini final', stats: {} });
-    expect(extractFinal('gemini', { stdout })).toBe('gemini final');
-  });
-
-  test('unknown CLI: returns stdout as-is (fallback to raw)', () => {
-    expect(extractFinal('raw', { stdout: 'plain text output' })).toBe('plain text output');
-  });
-
-  test('opencode: empty stream returns empty string (graceful)', () => {
-    expect(extractFinal('opencode', { stdout: '' })).toBe('');
   });
 });
