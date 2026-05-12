@@ -27,7 +27,10 @@ The caller composes a QA REQUEST using this structure:
 # QA REQUEST
 
 ## Spec
-[Verification criteria — composed by caller]
+[WHAT to verify — requirements, criteria, constraints]
+
+## Required Verification
+[HOW to verify — verification commands, QA scenarios, evidence paths to collect. Optional but standard for sisyphus-orchestrated QA requests; see `skills/sisyphus/verification.md` §QA REQUEST Composition for the canonical recipe.]
 
 ## Scope
 - Changed files:
@@ -35,8 +38,9 @@ The caller composes a QA REQUEST using this structure:
 - Summary: [what the implementer claimed]
 ```
 
-- `#` QA REQUEST → `##` Spec/Scope → `###` internal subsections
+- `#` QA REQUEST → `##` Spec / Required Verification / Scope → `###` internal subsections
 - The content of Spec determines which verification triggers activate.
+- `Required Verification`은 sisyphus가 verification commands와 evidence paths를 명시적으로 전달할 때 사용 — argus는 해당 섹션의 명령을 그대로 실행하고 evidence를 declared path에 저장
 - When a delegation prompt is included, its sections become `###` headings under `## Spec`
 
 To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>` for context. If `main` does not exist, substitute `master`. To verify correctness, read the actual files directly (Read tool). Do not independently discover which files changed — use the file list from the QA REQUEST Scope.
