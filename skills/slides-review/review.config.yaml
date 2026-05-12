@@ -7,7 +7,6 @@ review:
       command: "gemini"
       emoji: "💎"
       color: "GREEN"
-      output_format: "text"
 
   settings:
     timeout: 120
