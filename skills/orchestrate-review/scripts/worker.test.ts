@@ -924,81 +924,10 @@ function makeJsonRunOpts(memberDir, member, spawnFn) {
     memberDir,
     command: 'mock-cli',
     timeoutSec: 0,
-    mode: 'json' as const,
     sleepFn: () => Promise.resolve(),
-    jitter: () => 0,
     spawnFn,
   };
 }
-
-// ---------------------------------------------------------------------------
-// JSON mode integration
-// ---------------------------------------------------------------------------
-
-describe('JSON mode integration', () => {
-  let tmpDir;
-  let paths;
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-    paths = setupJobDir(tmpDir);
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('JSON mode integration: happy stop', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [DONE_NDJSON]);
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('done');
-    expect(result.attempts).toBe(1);
-  });
-
-  test('JSON mode integration: empty step_finish absent', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [EMPTY_NDJSON, EMPTY_NDJSON, EMPTY_NDJSON]);
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('empty_output');
-    expect(result.attempts).toBe(3);
-  });
-
-  test('JSON mode integration: error event', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [ERROR_NDJSON]);
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('permanent_error');
-    expect(result.attempts).toBe(1);
-  });
-
-  test('JSON mode integration: spawn ENOENT', async () => {
-    const { mockSpawn } = makeEnoentSpawnFn();
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('permanent_error');
-  });
-
-  const GPT_S1_HAPPY_NDJSON =
-    '{"type":"step_start","timestamp":1778226126949,"sessionID":"ses_1f976af06ffeQ9OmQMTjLRSafG","part":{"id":"prt_e06896064001xUyaY7Tea357Y6","messageID":"msg_e06895297001TTrl89pEo7ybnF","sessionID":"ses_1f976af06ffeQ9OmQMTjLRSafG","type":"step-start"}}\n' +
-    '{"type":"text","timestamp":1778226128459,"sessionID":"ses_1f976af06ffeQ9OmQMTjLRSafG","part":{"id":"prt_e06896604001Qix601z0esZXgR","messageID":"msg_e06895297001TTrl89pEo7ybnF","sessionID":"ses_1f976af06ffeQ9OmQMTjLRSafG","type":"text","text":"OK","time":{"start":1778226128388,"end":1778226128458},"metadata":{"openai":{"itemId":"msg_0ebc2f4dfac459670169fd93d077cc819195e58acd75a5f979","phase":"final_answer"}}}}\n' +
-    '{"type":"step_finish","timestamp":1778226128476,"sessionID":"ses_1f976af06ffeQ9OmQMTjLRSafG","part":{"id":"prt_e0689665b001TNyC6CRSH6GudU","reason":"stop","messageID":"msg_e06895297001TTrl89pEo7ybnF","sessionID":"ses_1f976af06ffeQ9OmQMTjLRSafG","type":"step-finish","tokens":{"total":32183,"input":32162,"output":7,"reasoning":14,"cache":{"write":0,"read":0}},"cost":0}}\n';
-
-  test('replay smoke: gpt-S1-happy → state done with size_bytes>0', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [GPT_S1_HAPPY_NDJSON]);
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('done');
-    expect(result.size_bytes).toBeGreaterThan(0);
-  });
-
-  const KIMI_S1_HAPPY_NDJSON =
-    '{"type":"step_start","timestamp":1778226143765,"sessionID":"ses_1f9768db6ffe77Rgmlo5XTaAI6","part":{"id":"prt_e0689a210001N6XPERNdTKQILn","messageID":"msg_e06897415001Mfyu7sdwUFEusS","sessionID":"ses_1f9768db6ffe77Rgmlo5XTaAI6","type":"step-start"}}\n' +
-    '{"type":"text","timestamp":1778226143940,"sessionID":"ses_1f9768db6ffe77Rgmlo5XTaAI6","part":{"id":"prt_e0689a269001I6uglGxY8Ihm7q","messageID":"msg_e06897415001Mfyu7sdwUFEusS","sessionID":"ses_1f9768db6ffe77Rgmlo5XTaAI6","type":"text","text":"OK","time":{"start":1778226143849,"end":1778226143938}}}\n' +
-    '{"type":"step_finish","timestamp":1778226143943,"sessionID":"ses_1f9768db6ffe77Rgmlo5XTaAI6","part":{"id":"prt_e0689a2c4001njr8YEKHeck057","reason":"stop","messageID":"msg_e06897415001Mfyu7sdwUFEusS","sessionID":"ses_1f9768db6ffe77Rgmlo5XTaAI6","type":"step-finish","tokens":{"total":34265,"input":34248,"output":3,"reasoning":14,"cache":{"write":0,"read":0}},"cost":0.0326036}}\n';
-
-  test('replay smoke: kimi-S1-happy → state done with size_bytes>0', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [KIMI_S1_HAPPY_NDJSON]);
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('done');
-    expect(result.size_bytes).toBeGreaterThan(0);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // status.json field guarantees
