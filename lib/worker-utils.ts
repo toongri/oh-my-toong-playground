@@ -31,9 +31,9 @@ const TOKEN_LIMIT_RESPONSE_BODY_KEYWORDS = [
 ];
 
 /**
- * Maximum prompt size in bytes for chunk-review JSON-mode runs.
- * Prompts larger than this are rejected before spawn with state='permanent_error',
- * error.type='prompt_too_large'. Value finalized in docs/research/opencode-input-limits.md
+ * 80KB unified conservative cap, derived from opencode 500KB ContextOverflowError measurement
+ * in docs/research/opencode-input-limits.md; applies as a shared guard across all 4 skills
+ * calling runWithRetry. Revisit per-CLI if a non-opencode caller hits the boundary.
  * (200KB empirically passes, 500KB triggers ContextOverflowError; 80KB chosen as
  * conservative anchor with margin for system prompt + tool definitions).
  */
@@ -699,6 +699,25 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
   // ---------------------------------------------------------------------------
   // mode='text' (default): exitCode-based logic — 100% preserved, zero changes.
   // ---------------------------------------------------------------------------
+
+  // 80KB unified conservative cap, derived from opencode 500KB ContextOverflowError measurement
+  // in docs/research/opencode-input-limits.md; applies as a shared guard across all 4 skills
+  // calling runWithRetry. Revisit per-CLI if a non-opencode caller hits the boundary.
+  if (promptPath !== undefined) {
+    let promptBytes = 0;
+    try { promptBytes = fs.statSync(promptPath).size; } catch { /* treat as 0 */ }
+    if (promptBytes > PROMPT_MAX_BYTES) {
+      const statusPath = path.join(runOpts.memberDir, 'status.json');
+      const errResult: Record<string, unknown> = {
+        member: runOpts.member,
+        state: 'non_retryable',
+        error: { type: 'prompt_too_large', bytes: promptBytes, limit: PROMPT_MAX_BYTES },
+      };
+      atomicWriteJson(statusPath, errResult);
+      return errResult;
+    }
+  }
+
   let result: Record<string, unknown> = {};
 
   const errPath = path.join(runOpts.memberDir, 'error.txt');
@@ -739,6 +758,63 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
           ...result, state: 'non_retryable',
         });
         return result;
+      }
+    }
+
+    // opencode-only sentinel (program === 'opencode' guard). Claude/Gemini/Codex error modes
+    // out of scope by design — no documented exit-0-on-session-error problem in those CLIs.
+    // Remove this sentinel once opencode session.error sets a non-zero exit code
+    // (track sst/opencode PR #26955 / #26588; pinned v1.14.48 still exits 0).
+    if (
+      result.state === 'done' &&
+      result.exitCode === 0 &&
+      path.basename(runOpts.program) === 'opencode'
+    ) {
+      // Read NEW stderr (post-errOffset window) to detect silent session errors.
+      let newStderr = '';
+      try {
+        const fd = fs.openSync(errPath, 'r');
+        try {
+          const totalSize = fs.fstatSync(fd).size;
+          const newSize = totalSize - errOffset;
+          if (newSize > 0) {
+            const buf = Buffer.alloc(newSize);
+            fs.readSync(fd, buf, 0, newSize, errOffset);
+            newStderr = buf.toString('utf8');
+          }
+        } finally { fs.closeSync(fd); }
+      } catch { /* missing/unreadable → no sentinel */ }
+
+      // Check stdout: if output.txt has content, this is a real success — sentinel must not fire.
+      const outputPath = path.join(runOpts.memberDir, 'output.txt');
+      let stdoutNonEmpty = false;
+      try { stdoutNonEmpty = fs.statSync(outputPath).size > 0; } catch { /* absent → empty */ }
+
+      // Sentinel fires only when: stdout empty + stderr non-empty + stderr has a line starting with "Error:"
+      if (!stdoutNonEmpty && newStderr.length > 0 && /^Error:/m.test(newStderr)) {
+        // Classify error.type by case-sensitive substring scan of new stderr (first match wins).
+        let errorType: string;
+        if (newStderr.includes('Model not found')) {
+          errorType = 'model_not_found';
+        } else if (newStderr.includes('ContextOverflowError')) {
+          errorType = 'context_window';
+        } else if (newStderr.includes('APIError')) {
+          errorType = 'api_error';
+        } else {
+          errorType = 'opencode_session_error';
+        }
+
+        // error.message = first line of new stderr with leading "Error: " stripped.
+        const firstLine = newStderr.split('\n')[0] ?? '';
+        const errorMessage = firstLine.startsWith('Error: ') ? firstLine.slice('Error: '.length) : firstLine;
+
+        const sentinelResult: Record<string, unknown> = {
+          ...result,
+          state: 'non_retryable',
+          error: { type: errorType, message: errorMessage },
+        };
+        atomicWriteJson(path.join(runOpts.memberDir, 'status.json'), sentinelResult);
+        return sentinelResult;
       }
     }
 
