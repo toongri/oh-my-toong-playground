@@ -18,20 +18,20 @@ digraph verification_flow {
     "still gap?" [shape=diamond];
     "retries < 3?" [shape=diamond];
     "interview user" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
-    "oracle 진단" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
+    "Oracle diagnosis" [shape=box, style=filled, fillcolor=purple, fontcolor=white];
     "mnemosyne" [shape=box, style=filled, fillcolor=blue, fontcolor=white];
     "complete" [shape=box, style=filled, fillcolor=green];
     "fix + retry" [shape=box];
 
     "junior done" -> "IGNORE" -> "argus" -> "verdict?";
-    "verdict?" -> "oracle 진단" [label="REQUEST_CHANGES"];
-    "oracle 진단" -> "fix + retry";
+    "verdict?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
+    "Oracle diagnosis" -> "fix + retry";
     "verdict?" -> "evidence audit" [label="APPROVE/COMMENT"];
     "evidence audit" -> "evidence OK?";
     "evidence OK?" -> "mnemosyne" [label="yes"];
     "evidence OK?" -> "re-invoke argus" [label="no (gap)"];
     "re-invoke argus" -> "new verdict?";
-    "new verdict?" -> "oracle 진단" [label="REQUEST_CHANGES"];
+    "new verdict?" -> "Oracle diagnosis" [label="REQUEST_CHANGES"];
     "new verdict?" -> "still gap?" [label="APPROVE/COMMENT"];
     "still gap?" -> "mnemosyne" [label="no"];
     "still gap?" -> "retries < 3?" [label="yes"];
@@ -52,7 +52,7 @@ digraph verification_flow {
 3. If APPROVE/COMMENT → **Run Evidence Audit Gate** before proceeding
 4. If evidence gap → re-invoke argus (up to 3x; interview user if exhausted)
 5. If evidence OK → **Invoke mnemosyne** to commit
-6. If REQUEST_CHANGES → oracle 진단 → fix task에 oracle findings 포함 → re-delegate to sisyphus-junior
+6. If REQUEST_CHANGES → oracle diagnosis → fix task including oracle findings → re-delegate to sisyphus-junior
 7. **No retry limit on fix cycle** — Continue until argus passes
 
 ---
@@ -98,7 +98,7 @@ A path passes if the file **exists and is non-empty** (`test -f "$path" && test 
 
 | Retry | Condition | Action |
 |-------|-----------|--------|
-| Every retry | New verdict = REQUEST_CHANGES | oracle 진단 → fix task (no evidence check needed) |
+| Every retry | New verdict = REQUEST_CHANGES | oracle diagnosis → fix task (no evidence check needed) |
 | 0 (initial) | APPROVE/COMMENT + evidence MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
 | 1-2 | APPROVE/COMMENT + evidence STILL MISSING | Re-invoke argus again |
 | 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | Interview user: explain situation + AskUserQuestion for strategy selection |
@@ -126,7 +126,7 @@ Save outputs to the exact paths listed above.
 2. If ANY manifest paths are MISSING → Evidence Gap detected:
    - Re-invoke argus with an Evidence Gap Request (format above) listing the missing paths
    - After re-invocation, evaluate the **new verdict first**:
-     - If REQUEST_CHANGES → treat as REQUEST_CHANGES (oracle 진단 → fix task). Evidence gap is moot.
+     - If REQUEST_CHANGES → treat as REQUEST_CHANGES (oracle diagnosis → fix task). Evidence gap is moot.
      - If APPROVE/COMMENT → check manifest again
    - If evidence STILL missing → retry (up to 3 total re-invocations)
    - After 3 retries with persistent gap → **Interview user**: summarize the situation and ask via AskUserQuestion what strategy to take
@@ -223,8 +223,8 @@ Ensure the target directory exists (`mkdir -p`) before saving evidence files.
 - Evidence paths: Include `$OMT_DIR/evidence/{work-slug}/{task-slug}/{check-slug}.{ext}` paths in `## Required Verification` (Tier 1)
 
 **Recipe 2: After task completion (plan-based)**
-- `## Spec` ← plan TODO의 spec content (What to do, Must NOT do, AC, QA Scenarios)
-- `## Required Verification` ← TODO의 QA Scenarios + Acceptance Criteria
+- `## Spec` ← plan TODO's spec content (What to do, Must NOT do, AC, QA Scenarios)
+- `## Required Verification` ← TODO's QA Scenarios + Acceptance Criteria
 - `## Scope` ← changed files + implementer's summary
 - Evidence paths: Plan TODO's Evidence field. If absent, use `$OMT_DIR/evidence/{work-slug}/{task-slug}/{check-slug}.{ext}` (Tier 1)
 
@@ -259,7 +259,7 @@ Description:
 - Location: [file:lines]
 - Required fix: [specific action]
 - Argus findings (verbatim):
-  > [argus의 원문 피드백 전체 — 요약하지 말 것]
-- Oracle 진단 (verbatim):
-  > [oracle의 진단 및 권고 전체 — 요약하지 말 것]
+  > [Full argus feedback verbatim — do not summarize]
+- Oracle diagnosis (verbatim):
+  > [Full oracle diagnosis and recommendations — do not summarize]
 ```
