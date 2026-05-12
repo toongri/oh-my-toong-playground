@@ -51,6 +51,7 @@ These scenarios test whether the sisyphus skill's **core techniques** are correc
 | S-33 | REQUIRED TOOLS Whitelist Enforcement | Delegation Prompt (REQUIRED TOOLS) | Tool scope violation language |
 | UC-S1 | End-to-End: Broad Request → Full Cycle | Full workflow integration | Decision Gate + Interview + Task + Delegation + Verification + Commit |
 | UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | Verification retry + Evidence Audit | REQUEST_CHANGES + fix + re-verify + evidence gap + mnemosyne |
+| S-36 | Completeness Verification — Missing Spec Item Detection | Completeness verification | argus Completeness output + REQUEST_CHANGES + oracle dispatch |
 
 ---
 
@@ -1082,6 +1083,40 @@ the task as implementation. The deliverable is *analysis*, not artifacts.
 
 ---
 
+## Scenario S-36: Completeness Verification — Missing Spec Item Detection
+
+**Primary Technique:** Completeness verification — argus identifies Spec prose requirements not reflected in the deliverable and uses them as REQUEST_CHANGES grounds
+
+**Input:**
+```
+Plan/Spec (4 prose items):
+1. Add input validation to /api/login endpoint
+2. Write unit tests for the validation logic
+3. Document the new validation rules in API.md
+4. Write migration notes if validation changes an existing data shape
+
+Junior work result:
+- /api/login input validation implemented ✓ (auth/validation.ts)
+- Unit tests written ✓ (auth/validation.test.ts)
+- (API.md not updated)
+- (migration notes not written)
+
+Spec contains 4 prose requirements (not encapsulated as ACs only) → sisyphus dispatches a QA REQUEST to argus including the Completeness check directive.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | sisyphus includes "Completeness check" directive in the QA REQUEST's `## Required Verification` | When the Spec has 3+ prose requirements, sisyphus follows the verification.md §When to Request Completeness Verification guide and adds the directive |
+| V2 | argus includes a Completeness section in its output | argus output contains a `## Completeness` table with 4 spec items × Status(Addressed/Partial/Missing) × Evidence columns filled in |
+| V3 | Missing items (items 3-4) are identified | item 3 (API.md not updated), item 4 (migration notes not written) are marked as Missing |
+| V4 | argus verdict is REQUEST_CHANGES | When Missing items exist, verdict is REQUEST_CHANGES (severity per individual finding). Addressed-only → APPROVE |
+| V5 | REQUEST_CHANGES → oracle diagnosis → fix task | sisyphus receives the verdict and dispatches oracle (new contract in this PR). Fix task includes argus Completeness table + oracle diagnosis verbatim |
+| V6 | Completeness section absent when check was not requested | When Spec is simple (1-2 items) or AC-only, sisyphus does not include the directive → argus output has no Completeness section (conditional output preserved) |
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -1123,3 +1158,4 @@ the task as implementation. The deliverable is *analysis*, not artifacts.
 | UC-S2 | End-to-End: Fix Cycle with Evidence Audit Gap | | | Use-case scenario — needs testing. 갱신 2026-05-12, oracle 단계 반영 |
 | S-34 | Verify-only Task — Argus Direct (Skip Junior) | | | New scenario (captures verify-only routing) — needs testing |
 | S-35 | Investigation-only Task — Oracle/Explore (NOT Junior) | | | New scenario (captures investigation routing) — needs testing |
+| S-36 | Completeness Verification — Missing Spec Item Detection | | | New scenario (captures completeness verification flow) — needs testing |

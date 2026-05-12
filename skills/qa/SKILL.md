@@ -57,6 +57,7 @@ To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>`
 | **spec or AC provided** | Request content includes specification or acceptance criteria | Verify implementation against provided criteria |
 | **QA scenarios provided** | Request content includes executable test scenarios | Execute scenarios as specified, collect evidence |
 | **user-facing changes, no scenarios** | User-facing changes AND no executable test scenarios present in request content | Self-determined curl/playwright/maestro/bash (see stage3-handson.md) |
+| **completeness verification requested** | QA REQUEST `## Required Verification` section contains a "Completeness check" directive | argus verifies that all prose-stated requirements in the Spec are reflected in the deliverable |
 
 ### Composition Examples
 
@@ -65,6 +66,7 @@ To understand what changed, use `git diff $(git merge-base HEAD main) -- <path>`
 | Task spec + changed files | code changes present + spec or AC provided + user-facing changes, no scenarios |
 | Plan TODO with AC + QA Scenarios + changed files | code changes present + spec or AC provided + QA scenarios provided |
 | AC only, no QA methods + changed files | code changes present + spec or AC provided + user-facing changes, no scenarios |
+| Spec with 3+ prose requirements + "Completeness check" directive | (any above combination) + completeness verification requested |
 
 ### Fast-Path Exception
 
@@ -327,6 +329,25 @@ This trigger activates when changes affect user-facing behavior AND the request 
 
 ---
 
+## When: completeness verification requested
+
+**Verify that every prose-stated requirement in the Spec is reflected in the deliverable.**
+
+This trigger activates when the QA REQUEST's `## Required Verification` section contains a "Completeness check" directive.
+
+Produce a Completeness table mapping each Spec item to its delivery status:
+
+| Spec Item | Status | Evidence |
+|-----------|--------|----------|
+| [summarized spec item] | Addressed / Partial / Missing | file:line OR "not in deliverable" |
+
+After the table, add a summary line: "N/M spec items fully addressed."
+
+- **Missing** or **Partial** items with CRITICAL/HIGH severity are REQUEST_CHANGES grounds
+- When all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the **spec or AC provided** trigger covers the same ground → omit the Completeness section
+
+---
+
 ## Severity Classification
 
 | Level | Nature | Response |
@@ -357,6 +378,7 @@ Every issue MUST include confidence scoring. See [feedback-protocol.md] for Conf
 | spec or AC provided | [ACTIVE/INACTIVE] | [reason] |
 | QA scenarios provided | [ACTIVE/INACTIVE] | [reason] |
 | user-facing changes, no scenarios | [ACTIVE/INACTIVE] | [reason] |
+| completeness verification requested | [ACTIVE/INACTIVE] | [reason] |
 
 ## Verdict: [APPROVE / REQUEST_CHANGES / COMMENT]
 
@@ -365,6 +387,18 @@ Every issue MUST include confidence scoring. See [feedback-protocol.md] for Conf
 - **[CRITICAL/HIGH/MEDIUM/LOW]**: [Brief description]
   - Location: [file:line]
   - What: [problem]
+
+## Completeness (when completeness verification requested)
+
+List each Spec item's delivery status using the following table:
+
+| Spec Item | Status | Evidence |
+|-----------|--------|----------|
+| [summarized spec item] | Addressed / Partial / Missing | file:line OR "not in deliverable" |
+
+N/M spec items fully addressed.
+- If 1 or more items are **Missing** or **Partial**, they affect the verdict (CRITICAL/HIGH severity → REQUEST_CHANGES grounds)
+- If all Spec requirements are already encapsulated as explicit ACs (i.e., no prose-only requirements exist), the Spec/AC Compliance section covers the same ground → omit the Completeness section
 
 ## Evidence Files
 - [absolute path to each evidence file saved during this verification]
@@ -385,6 +419,7 @@ Every issue MUST include confidence scoring. See [feedback-protocol.md] for Conf
 | Spec/AC compliance FAIL | **REQUEST_CHANGES** (spec not met) |
 | QA scenario FAIL | **REQUEST_CHANGES** (QA scenario failed) |
 | Hands-on verification FAIL | **REQUEST_CHANGES** (hands-on verification failed) |
+| Completeness: Missing/Partial (CRITICAL/HIGH) | **REQUEST_CHANGES** (spec items unaddressed) |
 | Code quality CRITICAL/HIGH | **REQUEST_CHANGES** (quality issues) |
 | MEDIUM only | **COMMENT** (conditional approval) |
 | LOW only or no issues | **APPROVE** |
@@ -398,6 +433,7 @@ code changes present:              Automated checks (Build, Test, Lint) + Code Q
 spec or AC provided:               Spec/AC compliance (vs QA REQUEST Spec)
 QA scenarios provided:             Execute provided scenarios + collect evidence
 user-facing changes, no scenarios: Hands-On QA (API→curl, Frontend→playwright, Mobile→maestro, CLI→interactive_bash)
+completeness verification requested: Spec item × Status table (Addressed/Partial/Missing) + N/M summary
 
 Automated checks: See stage1-commands.md
 Hands-On QA:      See stage3-handson.md
