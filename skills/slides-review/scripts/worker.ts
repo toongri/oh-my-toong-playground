@@ -13,6 +13,7 @@ import {
   assemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
+  type RunWithRetryOpts,
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
@@ -21,7 +22,10 @@ const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
 // Wrappers
 // ---------------------------------------------------------------------------
 
-async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec, attempt }) {
+async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec, attempt }: {
+  command: string; prompt: string; member: string; safeMember: string;
+  jobDir: string; timeoutSec: number; attempt: number;
+}) {
   const memberDir = path.join(jobDir, 'reviewers', safeMember);
 
   const tokens = splitCommand(command);
@@ -44,7 +48,12 @@ async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec
   });
 }
 
-async function runWithRetry(opts) {
+interface SlidesRunWithRetryOpts extends Omit<RunWithRetryOpts, 'program' | 'args' | 'memberDir'> {
+  safeMember: string;
+  jobDir: string;
+}
+
+async function runWithRetry(opts: SlidesRunWithRetryOpts) {
   const { command, member, safeMember, jobDir, timeoutSec, sleepFn, ...rest } = opts;
   const memberDir = path.join(jobDir, 'reviewers', safeMember);
 
