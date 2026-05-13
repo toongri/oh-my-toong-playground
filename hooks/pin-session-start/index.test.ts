@@ -2,7 +2,7 @@
  * Integration tests for pin-session-start entrypoint (AC-1.6).
  *
  * 3 cases:
- *   C1. OMT_DIR 미설정 → fail-open (stdout `{}`, exit 0)
+ *   C1. OMT_DIR env 미설정 → cwd 기반 self-compute로 정상 SessionStart 출력
  *   C2. 빈 pins/ 디렉토리 → bootstrap block 생성 (pins:0 + 3 guidance lines)
  *   C3. pins/ 1개 .md → hookSpecificOutput 생성 (SessionStart, token budget)
  */
@@ -15,16 +15,23 @@ import { tmpdir } from 'os';
 
 const HOOK_PATH = join(import.meta.dir, 'index.ts');
 
-function runHook(omtDir: string | undefined): ReturnType<typeof spawnSync> {
+function runHook(
+  omtDir: string | undefined,
+  options?: { inputOverride?: Record<string, unknown>; homeOverride?: string },
+): ReturnType<typeof spawnSync> {
   const env: NodeJS.ProcessEnv = { ...process.env };
   // OMT_DIR を完全に unset するには削除する
   delete env.OMT_DIR;
   if (omtDir !== undefined) {
     env.OMT_DIR = omtDir;
   }
+  if (options?.homeOverride) {
+    env.HOME = options.homeOverride;
+  }
 
+  const input = { sessionId: 'test-session', ...(options?.inputOverride ?? {}) };
   return spawnSync('bun', ['run', HOOK_PATH], {
-    input: JSON.stringify({ sessionId: 'test-session' }),
+    input: JSON.stringify(input),
     encoding: 'utf-8',
     env,
   });
@@ -46,11 +53,23 @@ afterEach(() => {
 });
 
 describe('pin-session-start entrypoint', () => {
-  it('C1: OMT_DIR 미설정 → fail-open (stdout `{}`, exit 0)', () => {
-    const result = runHook(undefined);
+  it('C1: OMT_DIR env 미설정 → cwd 기반 self-compute로 정상 SessionStart 출력', () => {
+    // HOME 을 tmp 로 가둬 $HOME/.omt 자가 계산이 호스트 OMT 디렉토리를 건드리지 않게 함
+    const fakeHome = makeTmpDir();
+    const cwd = makeTmpDir();
+    spawnSync('git', ['init'], { cwd });
+
+    const result = runHook(undefined, {
+      inputOverride: { cwd },
+      homeOverride: fakeHome,
+    });
 
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe('{}');
+    const output = JSON.parse(result.stdout.trim());
+    // env가 없어도 self-compute로 OMT_DIR을 결정해 정상 출력해야 함
+    expect(output.hookSpecificOutput).toBeDefined();
+    expect(output.hookSpecificOutput.hookEventName).toBe('SessionStart');
+    expect(output.hookSpecificOutput.additionalContext).toContain('pins:');
   });
 
   it('C2: 빈 pins/ 디렉토리 → bootstrap block 생성 (pins:0 + 3 guidance lines)', () => {

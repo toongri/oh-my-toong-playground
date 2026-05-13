@@ -57,3 +57,36 @@ compute_omt_dir() {
   OMT_DIR="$HOME/.omt/${_omt_name// /-}"
   mkdir -p "$OMT_DIR"
 }
+
+# resolve_omt_dir <cwd>
+#
+# Resolves OMT_DIR from a cwd by locating the project root, then delegating
+# to compute_omt_dir. Echoes the resolved OMT_DIR to stdout (empty on failure).
+# Intended as a single-shot entry point for non-shell callers via child_process.
+#
+# Project root rules (mirrors session-start.sh / keyword-detector.sh):
+#   - Strip trailing /.omt and /.claude
+#   - Walk upward looking for .git, CLAUDE.md, or package.json
+#   - Fallback to the (stripped) cwd
+resolve_omt_dir() {
+  local _r_cwd="${1:-$PWD}"
+  local _r_dir="$_r_cwd"
+  _r_dir="${_r_dir%/.omt}"
+  _r_dir="${_r_dir%/.claude}"
+
+  local _r_root=""
+  while [ "$_r_dir" != "/" ] && [ "$_r_dir" != "." ] && [ -n "$_r_dir" ]; do
+    if [ -d "$_r_dir/.git" ] || [ -f "$_r_dir/CLAUDE.md" ] || [ -f "$_r_dir/package.json" ]; then
+      _r_root="$_r_dir"
+      break
+    fi
+    _r_dir=$(dirname "$_r_dir")
+  done
+  if [ -z "$_r_root" ]; then
+    _r_root="${_r_cwd%/.omt}"
+    _r_root="${_r_root%/.claude}"
+  fi
+
+  compute_omt_dir "$_r_root"
+  printf '%s' "${OMT_DIR:-}"
+}
