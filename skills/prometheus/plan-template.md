@@ -6,7 +6,7 @@
 
 **Language:** Plans MUST be written in English.
 
-**What to EXCLUDE:** No pseudocode or code snippets. No vague criteria ("verify it works").
+**What to EXCLUDE:** No vague criteria ("verify it works").
 
 ## Plan Template Structure
 
