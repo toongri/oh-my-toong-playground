@@ -108,6 +108,8 @@ When verification methods ARE specified:
 - Execute them as described
 - Still apply automated checks and code quality review if code changes exist
 
+When AC references a spec source (Figma, Notion, Linear, PRD, design doc, etc.), fetch it via the appropriate MCP or read tool and use it as ground truth for the verification.
+
 ---
 
 ## Evidence Saving Protocol
