@@ -3,6 +3,7 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from 'events';
 import { Readable } from 'stream';
+import { type spawn as SpawnType } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -22,7 +23,7 @@ function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'chunk-worker-test-'));
 }
 
-function setupJobDir(tmpDir) {
+function setupJobDir(tmpDir: string) {
   const member = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
   const memberDir = path.join(jobDir, 'members', member);
@@ -33,7 +34,7 @@ function setupJobDir(tmpDir) {
   return { jobDir, member, memberDir, statusPath, outPath, errPath };
 }
 
-function readStatus(statusPath) {
+function readStatus(statusPath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(statusPath, 'utf8'));
 }
 
@@ -42,7 +43,7 @@ function readStatus(statusPath) {
  * Handles the stream-flush race where output.txt may not be fully written
  * when runOnce resolves (large prompts piped through cat).
  */
-async function waitForFileContent(filePath, substring, timeoutMs = 2000) {
+async function waitForFileContent(filePath: string, substring: string, timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -60,8 +61,8 @@ async function waitForFileContent(filePath, substring, timeoutMs = 2000) {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - stdin pipe', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -112,8 +113,8 @@ describe('runOnce - stdin pipe', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - exit states', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -207,7 +208,7 @@ describe('runOnce - exit states', () => {
       } catch { /* status.json not written yet */ }
     }
     expect(pid).toBeTruthy();
-    try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+    try { process.kill(pid as number, 'SIGTERM'); } catch { /* ignore */ }
 
     const result = await resultPromise;
     expect(result.state).toBe('canceled');
@@ -269,8 +270,8 @@ describe('runOnce - exit states', () => {
 // ---------------------------------------------------------------------------
 
 describe('runWithRetry', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -386,7 +387,7 @@ describe('runWithRetry', () => {
       } catch { /* status.json not written yet */ }
     }
     expect(pid).toBeTruthy();
-    try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+    try { process.kill(pid as number, 'SIGTERM'); } catch { /* ignore */ }
 
     const result = await resultPromise;
     expect(result.state).toBe('canceled');
@@ -394,7 +395,7 @@ describe('runWithRetry', () => {
   });
 
   test('applies exponential backoff with jitter between retries', async () => {
-    const delays = [];
+    const delays: number[] = [];
 
     await runWithRetry({
       program: 'false',
@@ -404,7 +405,7 @@ describe('runWithRetry', () => {
       memberDir: paths.memberDir,
       command: 'false',
       timeoutSec: 5,
-      sleepFn: (ms) => {
+      sleepFn: (ms: number) => {
         delays.push(ms);
         return Promise.resolve();
       },
@@ -420,7 +421,7 @@ describe('runWithRetry', () => {
 
   test('retry 시 output.txt가 truncate되어 최종 attempt만 남음', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
-    const result = await runWithRetry({
+    await runWithRetry({
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi`],
       prompt: '',
@@ -475,8 +476,8 @@ describe('runWithRetry', () => {
     });
 
     expect(capturedStatus).toBeTruthy();
-    expect(capturedStatus.state).toBe('retrying');
-    expect(capturedStatus.attempt).toBe(1);
+    expect((capturedStatus as unknown as Record<string, unknown>).state).toBe('retrying');
+    expect((capturedStatus as unknown as Record<string, unknown>).attempt).toBe(1);
   });
 });
 
@@ -485,8 +486,8 @@ describe('runWithRetry', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - synchronous spawnFn throw', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -513,11 +514,11 @@ describe('runOnce - synchronous spawnFn throw', () => {
     });
 
     expect(result.state).toBe('error');
-    expect(result.message.includes('spawn failed')).toBe(true);
+    expect((result.message as string).includes('spawn failed')).toBe(true);
 
     const status = readStatus(paths.statusPath);
     expect(status.state).toBe('error');
-    expect(status.message.includes('spawn failed')).toBeTruthy();
+    expect((status.message as string).includes('spawn failed')).toBeTruthy();
   });
 });
 
@@ -526,8 +527,8 @@ describe('runOnce - synchronous spawnFn throw', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -563,7 +564,7 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
       } catch { /* status.json not written yet */ }
     }
     expect(pid).toBeTruthy();
-    try { process.kill(pid, 'SIGKILL'); } catch { /* ignore */ }
+    try { process.kill(pid as number, 'SIGKILL'); } catch { /* ignore */ }
 
     const result = await resultPromise;
     expect(result.state).toBe('error');
@@ -577,8 +578,8 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - SIGKILL fallback after SIGTERM timeout', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -589,7 +590,7 @@ describe('runOnce - SIGKILL fallback after SIGTERM timeout', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('sends SIGKILL when child ignores SIGTERM after timeout grace period', { timeout: 15000 }, async () => {
+  test('sends SIGKILL when child ignores SIGTERM after timeout grace period', async () => {
     // Spawn a node process that traps SIGTERM and ignores it
     const result = await runOnce({
       program: 'node',
@@ -604,8 +605,8 @@ describe('runOnce - SIGKILL fallback after SIGTERM timeout', () => {
 
     // Child should still be marked as timed_out even though SIGKILL was the actual kill signal
     expect(result.state).toBe('timed_out');
-    expect(result.message.includes('Timed out')).toBe(true);
-  });
+    expect((result.message as string).includes('Timed out')).toBe(true);
+  }, { timeout: 15000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -613,8 +614,8 @@ describe('runOnce - SIGKILL fallback after SIGTERM timeout', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - SIGTERM trap with graceful exit', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -625,7 +626,7 @@ describe('runOnce - SIGTERM trap with graceful exit', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('returns timed_out when child traps SIGTERM and exits 0', { timeout: 15000 }, async () => {
+  test('returns timed_out when child traps SIGTERM and exits 0', async () => {
     // Child traps SIGTERM, does cleanup, then exits with code 0.
     // This means signal=null in the exit handler, but timeoutTriggered=true.
     const result = await runOnce({
@@ -641,8 +642,8 @@ describe('runOnce - SIGTERM trap with graceful exit', () => {
 
     // Must be timed_out, not done — timeoutTriggered is the authoritative signal
     expect(result.state).toBe('timed_out');
-    expect(result.message.includes('Timed out')).toBe(true);
-  });
+    expect((result.message as string).includes('Timed out')).toBe(true);
+  }, { timeout: 15000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -654,21 +655,21 @@ describe('runOnce - SIGTERM trap with graceful exit', () => {
  * a successful child process (exit code 0).
  */
 function createCapturingSpawnFn() {
-  const captured = {};
+  const captured: { program?: string; args?: string[]; options?: { env: Record<string, unknown> } } = {};
 
-  function mockSpawn(_program, _args, options) {
+  function mockSpawn(_program: any, _args: any, options: any) {
     captured.program = _program;
     captured.args = _args;
     captured.options = options;
 
-    const child = new EventEmitter();
-    const stdin = new EventEmitter();
+    const child = new EventEmitter() as any;
+    const stdin = new EventEmitter() as any;
     stdin.write = () => true;
     stdin.end = () => {};
     child.stdin = stdin;
-    child.stdout = new EventEmitter();
+    child.stdout = new EventEmitter() as any;
     child.stdout.pipe = () => {};
-    child.stderr = new EventEmitter();
+    child.stderr = new EventEmitter() as any;
     child.stderr.pipe = () => {};
     child.pid = 99999;
 
@@ -680,12 +681,12 @@ function createCapturingSpawnFn() {
     return child;
   }
 
-  return { mockSpawn, captured };
+  return { mockSpawn: mockSpawn as any as typeof SpawnType, captured };
 }
 
 describe('runOnce - workerEnv injection', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -712,9 +713,9 @@ describe('runOnce - workerEnv injection', () => {
       workerEnv: { CLAUDE_CODE_EFFORT_LEVEL: 'high' },
     });
 
-    expect(captured.options.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high');
+    expect(captured.options!.env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high');
     // Existing env vars should still be present
-    expect(captured.options.env.PATH).toBe(process.env.PATH);
+    expect(captured.options!.env.PATH).toBe(process.env.PATH);
   });
 
   test('uses process.env only when workerEnv is not provided', async () => {
@@ -733,12 +734,12 @@ describe('runOnce - workerEnv injection', () => {
     });
 
     // Existing env vars should be present
-    expect(captured.options.env.PATH).toBe(process.env.PATH);
-    expect(captured.options.env.HOME).toBe(process.env.HOME);
+    expect(captured.options!.env.PATH).toBe(process.env.PATH);
+    expect(captured.options!.env.HOME).toBe(process.env.HOME);
     // Framework injects NO_COLOR, TERM, FORCE_COLOR for clean output
-    expect(captured.options.env.NO_COLOR).toBe('1');
-    expect(captured.options.env.TERM).toBe('dumb');
-    expect(captured.options.env.FORCE_COLOR).toBe('0');
+    expect(captured.options!.env.NO_COLOR).toBe('1');
+    expect(captured.options!.env.TERM).toBe('dumb');
+    expect(captured.options!.env.FORCE_COLOR).toBe('0');
   });
 
   test('merges multiple workerEnv vars into spawn env', async () => {
@@ -757,10 +758,10 @@ describe('runOnce - workerEnv injection', () => {
       workerEnv: { VAR_A: '1', VAR_B: '2' },
     });
 
-    expect(captured.options.env.VAR_A).toBe('1');
-    expect(captured.options.env.VAR_B).toBe('2');
+    expect(captured.options!.env.VAR_A).toBe('1');
+    expect(captured.options!.env.VAR_B).toBe('2');
     // Existing env vars should still be present
-    expect(captured.options.env.PATH).toBe(process.env.PATH);
+    expect(captured.options!.env.PATH).toBe(process.env.PATH);
   });
 
   test('workerEnv values override existing process.env values', async () => {
@@ -780,9 +781,9 @@ describe('runOnce - workerEnv injection', () => {
     });
 
     // workerEnv should take precedence (spread order: { ...process.env, ...workerEnv })
-    expect(captured.options.env.HOME).toBe('/override/home');
+    expect(captured.options!.env.HOME).toBe('/override/home');
     // Other process.env vars should still be present
-    expect(captured.options.env.PATH).toBe(process.env.PATH);
+    expect(captured.options!.env.PATH).toBe(process.env.PATH);
   });
 });
 
@@ -791,8 +792,8 @@ describe('runOnce - workerEnv injection', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - stream close guarantee', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -803,7 +804,7 @@ describe('runOnce - stream close guarantee', () => {
     // Track close events on the real file write streams by monkey-patching
     // fs.createWriteStream for this test.
     const originalCreateWriteStream = fs.createWriteStream;
-    const streamCloseTimestamps = [];
+    const streamCloseTimestamps: number[] = [];
     let resolveTimestamp = 0;
 
     fs.createWriteStream = function (...args) {
@@ -864,13 +865,13 @@ const TRANS_ERR_NDJSON = '{"type":"error","error":{"type":"rate_limit","message"
  * cycling through the provided outputs array.
  * Data flows via pipe → WriteStream so no write-race against flags:'w' truncation.
  */
-function makeNdjsonSpawnFn(memberDir, outputs) {
+function makeNdjsonSpawnFn(_memberDir: string, outputs: string[]) {
   let callCount = 0;
-  function mockSpawn(_program, _args, _options) {
+  function mockSpawn(_program: any, _args: any, _options: any) {
     const outputNdjson = outputs[callCount] ?? outputs[outputs.length - 1];
     callCount++;
-    const child = new EventEmitter();
-    const stdin = new EventEmitter();
+    const child = new EventEmitter() as any;
+    const stdin = new EventEmitter() as any;
     stdin.write = () => true;
     stdin.end = () => {};
     child.stdin = stdin;
@@ -889,16 +890,16 @@ function makeNdjsonSpawnFn(memberDir, outputs) {
     });
     return child;
   }
-  return { mockSpawn, getCallCount: () => callCount };
+  return { mockSpawn: mockSpawn as any as typeof SpawnType, getCallCount: () => callCount };
 }
 
 /**
  * Creates a spawnFn that emits an ENOENT error (missing CLI binary).
  */
 function makeEnoentSpawnFn() {
-  function mockSpawn(_program, _args, _options) {
-    const child = new EventEmitter();
-    const stdin = new EventEmitter();
+  function mockSpawn(_program: any, _args: any, _options: any) {
+    const child = new EventEmitter() as any;
+    const stdin = new EventEmitter() as any;
     stdin.write = () => true;
     stdin.end = () => {};
     child.stdin = stdin;
@@ -912,10 +913,10 @@ function makeEnoentSpawnFn() {
     });
     return child;
   }
-  return { mockSpawn };
+  return { mockSpawn: mockSpawn as any as typeof SpawnType };
 }
 
-function makeJsonRunOpts(memberDir, member, spawnFn) {
+function makeJsonRunOpts(memberDir: string, member: string, spawnFn: typeof SpawnType) {
   return {
     program: 'mock-cli',
     args: [],
@@ -934,8 +935,8 @@ function makeJsonRunOpts(memberDir, member, spawnFn) {
 // ---------------------------------------------------------------------------
 
 describe('status.json fields', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -1028,8 +1029,8 @@ describe('status.json fields', () => {
 // ---------------------------------------------------------------------------
 
 describe('stderr fallback', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -1044,22 +1045,22 @@ describe('stderr fallback', () => {
     const { mockSpawn } = makeEnoentSpawnFn();
     const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
     expect(result.state).toBe('permanent_error');
-    expect(result.error?.type).toBe('missing_cli');
+    expect((result.error as Record<string, unknown> | undefined)?.type).toBe('missing_cli');
   });
 
   test('stderr fallback: stdout empty + stderr keyword → classified', async () => {
     // Spawn succeeds but exits non-zero; stderr contains auth keyword
-    function mockSpawnWithStderr(_program, _args, _options) {
-      const child = new EventEmitter();
-      const stdin = new EventEmitter();
+    function mockSpawnWithStderr(_program: any, _args: any, _options: any) {
+      const child = new EventEmitter() as any;
+      const stdin = new EventEmitter() as any;
       stdin.write = () => true;
       stdin.end = () => {};
       child.stdin = stdin;
       child.pid = 55555;
 
       // Simulate stderr output piped to errStream
-      const stderrEmitter = new EventEmitter();
-      stderrEmitter.pipe = (dest) => {
+      const stderrEmitter = new EventEmitter() as any;
+      stderrEmitter.pipe = (dest: any) => {
         process.nextTick(() => {
           dest.write('unauthorized: invalid api key');
         });
@@ -1075,9 +1076,9 @@ describe('stderr fallback', () => {
       return child;
     }
 
-    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawnWithStderr));
+    const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawnWithStderr as any as typeof SpawnType));
     // stderr 'unauthorized' keyword → auth → permanent
     expect(result.state).toBe('permanent_error');
-    expect(result.error?.type).toBe('auth');
+    expect((result.error as Record<string, unknown> | undefined)?.type).toBe('auth');
   });
 });
