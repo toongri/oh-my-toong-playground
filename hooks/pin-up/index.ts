@@ -15,12 +15,34 @@
  */
 
 import { mkdirSync, writeFileSync } from 'fs';
+import { execFileSync } from 'child_process';
 import { join, resolve } from 'path';
 import type { HookInput, HookOutput, PinExtracted } from './types.ts';
 import { loadCursor, saveCursor, getCursorEntry } from './cursor.ts';
 import { scanTranscript } from './extractor.ts';
 import { validatePin } from './validator.ts';
 import { appendEscapeEntry } from './escape-log.ts';
+
+// ─── OMT_DIR resolver ─────────────────────────────────────────────────────────
+// Stop hook runs in a fresh process and CLAUDE_ENV_FILE may not be loaded yet,
+// so resolve OMT_DIR independently — same convention as session-start.sh /
+// keyword-detector.sh / resume-forge-start.sh.
+const OMT_DIR_LIB_SH = join(import.meta.dir, '..', 'lib', 'omt-dir.sh');
+
+function resolveOmtDir(cwd: string): string {
+  const envValue = process.env.OMT_DIR;
+  if (envValue) return envValue;
+  try {
+    const stdout = execFileSync(
+      'bash',
+      ['-c', `source "${OMT_DIR_LIB_SH}" && resolve_omt_dir "$1"`, '--', cwd],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env: process.env as NodeJS.ProcessEnv },
+    );
+    return stdout.trim();
+  } catch {
+    return '';
+  }
+}
 
 // ─── stdin helpers ────────────────────────────────────────────────────────────
 
@@ -137,10 +159,11 @@ export async function main(): Promise<void> {
       ? resolve(input.transcript_path)
       : '';
 
-    // Step 2: resolve OMT_DIR (AC-4: fail-open if missing)
-    const omtDir = process.env.OMT_DIR || '';
+    // Step 2: resolve OMT_DIR (self-compute when env unset — Stop hook runs in
+    // a fresh process and CLAUDE_ENV_FILE may not be loaded by the harness)
+    const omtDir = resolveOmtDir(input.cwd ?? process.cwd());
     if (!omtDir) {
-      process.stderr.write('[pin-up] WARN: OMT_DIR not set — skipping pin extraction\n');
+      process.stderr.write('[pin-up] WARN: OMT_DIR resolution failed — skipping pin extraction\n');
       console.log('{"continue": true}');
       return;
     }
