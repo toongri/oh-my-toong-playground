@@ -3,7 +3,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import type { RalphState } from './types.ts';
 import { readTasksFromDirectory, countIncompleteTasks, getInProgressTask } from '@lib/task-reader';
-import { getOmtDir } from '../../lib/omt-dir';
+import { getOmtDir } from '@lib/omt-dir';
 
 /**
  * Maximum age for state files to be considered "active".

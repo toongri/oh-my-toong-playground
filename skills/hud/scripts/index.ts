@@ -4,7 +4,7 @@ import { parseTranscript } from './transcript.ts';
 import { fetchRateLimits } from './usage-api.ts';
 import { formatStatusLineV2, formatMinimalStatus } from './formatter.ts';
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
-import { getOmtDir } from '../../lib/omt-dir';
+import { getOmtDir } from '@lib/omt-dir';
 import type { HudDataV2 } from './types.ts';
 
 /**
@@ -58,8 +58,8 @@ export async function main(): Promise<void> {
 
     // Log rejected results with function names
     results.forEach((result, index) => {
-      if (!isFulfilled(result)) {
-        logError(`HUD data source failed: ${functionNames[index]} - ${result.reason}`);
+      if (!isFulfilled(result as PromiseSettledResult<unknown>)) {
+        logError(`HUD data source failed: ${functionNames[index]} - ${(result as PromiseRejectedResult).reason}`);
       }
     });
 
