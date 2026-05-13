@@ -9,4 +9,4 @@ review:
       color: "GREEN"
 
   settings:
-    timeout: 120
+    timeout: 240
