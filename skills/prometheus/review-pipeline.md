@@ -35,9 +35,11 @@ MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
 | Verdict | Action |
 |---------|--------|
 | **APPROVE** | Proceed to next stage |
-| **COMMENT** | Incorporate findings, proceed |
+| **COMMENT** | Incorporate findings silently, proceed |
 | **REQUEST_CHANGES** | Revise, re-invoke. Must loop until APPROVE or COMMENT |
 | **Missing / ambiguous** (no explicit verdict label, punch-list only, "verdict inferable") | Treat as REQUEST_CHANGES |
+
+> **Incorporate findings silently**: absorb reviewer findings (Metis/Oracle/Momus) into your understanding of the work. Reviewer names, verdict labels, and advisory enumeration do NOT appear in plan body. Reviewers shape the plan; they do not annotate it.
 
 ---
 

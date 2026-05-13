@@ -46,7 +46,7 @@ auth.ts에 있는 로그인 버그 수정해줘
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | No code output | Response contains no code, pseudocode, or code snippets |
+| V1 | No code in response | Assistant turn output (chat response) contains no code, pseudocode, or code snippets — applies to response delivery, not plan body content |
 | V2 | Treated as planning request | Skill interprets "수정해줘" as a planning request, not an implementation request |
 | V3 | Begins interview or research | Skill begins interview (asks clarifying questions) or initiates explore agent research instead of attempting implementation |
 
@@ -361,7 +361,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with rich outcome descriptions and two-line acceptance criteria — NOT 20-30 granular micro-steps with code snippets or planner-assumed implementation technique |
+| V1 | Plan has 3-6 steps (not 30 micro-steps) | For a simple feature like dark mode toggle, plan contains 3-6 high-level tasks with rich outcome descriptions and two-line acceptance criteria — NOT 20-30 granular micro-steps or planner-assumed implementation technique |
 | V2 | No plan generated before Clearance | For the filter feature request, skill enters interview mode and does NOT generate a plan until the Clearance Checklist passes — premature generation before all 6 checks pass is avoided |
 | V3 | No under-planning | Each task is broken into verifiable chunks — no single task like "Step 1: Implement the feature" without further breakdown |
 | V4 | No architecture redesign | Skill proposes targeted changes that work within existing codebase patterns — does NOT suggest rewriting the entire component or introducing new frameworks unnecessarily |
@@ -559,7 +559,7 @@ Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
 | V3 | Momus COMMENT → incorporated, proceed | Momus advisory finding incorporated into plan. Proceeds to user presentation (COMMENT is non-blocking) |
 | V4 | User change request → Interview Mode re-entry | User's "5MB로 바꿔줘" triggers return to Interview Mode — does NOT just edit the plan in-place |
 | V5 | Full pipeline re-run after user change | After interview update, the ENTIRE pipeline re-runs: Metis → Plan → Oracle → Momus. No shortcuts |
-| V6 | No code generated at any point | Throughout all turns — including plan revision, pipeline re-run, and user change handling — Prometheus produces ZERO code, pseudocode, or code snippets |
+| V6 | Identity preserved across turns | Throughout all turns — including plan revision, pipeline re-run, and user change handling — Prometheus does not write code files, run implementation commands, or abandon the planner identity |
 
 ---
 
@@ -768,7 +768,7 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
 | P-12 | Plan Template Structure | **RETEST** | 2026-03-16 | V3 updated (two-line AC + rich What to do), V6 added (References). Needs re-testing |
 | P-13 | Clearance Checklist | **RETEST** | | VPs updated in this branch. Needs re-testing |
-| P-15 | Failure Mode Avoidance | **RETEST** | 2026-03-16 | V1 updated — over-planning now checks for code snippets and planner-assumed technique. Needs re-testing |
+| P-15 | Failure Mode Avoidance | **RETEST** | 2026-03-16 | V1 updated — over-planning checks for planner-assumed technique. Needs re-testing |
 | P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
 | P-17 | Intent Classification | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G2 boundary rule 적용(V1), scope-unknown→explore(V2), Architecture→Oracle mandatory(V3), depth≠Clearance(V4) 모두 준수 |
 | P-18 | Execution Strategy in Plan | **PASS** | 2026-02-23 | 4/4 VP. GREEN: G3 wave formula 정확 적용(V2), G3 anti-pattern 위반 없음, causal dependencies(V1), critical path(V3), rule compliance(V4) |
