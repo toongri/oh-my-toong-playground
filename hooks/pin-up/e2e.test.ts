@@ -18,7 +18,6 @@ import { mkdir, rm, writeFile, readFile, readdir } from 'fs/promises';
 import { existsSync, chmodSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { main } from './index.ts';
 import { loadCursor, getCursorEntry } from './cursor.ts';
 import { spawnSync, spawn } from 'child_process';
 
@@ -49,14 +48,6 @@ OAuth 리팩토링 중 발견
 const INVALID_PIN_TEXT = `<pin slug="code-bad-pin" source_url="x" authority="code" tier="L1" tags="t" sensitivity="private">
 This body has NO required Korean section headers at all.
 </pin>`;
-
-// ─── Setup ────────────────────────────────────────────────────────────────────
-
-async function runHook(input: Record<string, string>): Promise<void> {
-  // Temporarily override process.stdin by stubbing stdin reading
-  // Instead, we directly call the main flow via stdin injection using a subprocess
-  // For unit/e2e here we test via the orchestration modules directly
-}
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -431,7 +422,7 @@ Write will fail due to read-only dir
 
     // Hook must still exit cleanly (fail-open)
     expect(result!.status).toBe(0);
-    const output = JSON.parse(result!.stdout.trim().split('\n').pop() || '{}');
+    const output = JSON.parse(String(result!.stdout).trim().split('\n').pop() || '{}');
     expect(output.continue).toBe(true);
 
     // Stderr must contain WARN about the skipped pin
@@ -498,7 +489,7 @@ Write will fail due to read-only pinsDir (EACCES)
 
     // Hook은 fail-open으로 정상 종료
     expect(result!.status).toBe(0);
-    const output = JSON.parse(result!.stdout.trim().split('\n').pop() || '{}');
+    const output = JSON.parse(String(result!.stdout).trim().split('\n').pop() || '{}');
     expect(output.continue).toBe(true);
 
     // stderr에 WARN + slug 포함

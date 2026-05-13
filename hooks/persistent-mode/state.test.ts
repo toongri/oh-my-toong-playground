@@ -104,14 +104,14 @@ describe('Ralph state management', () => {
 
   describe('updateRalphState', () => {
     it('should write state to session-specific file', async () => {
-      const state: RalphState = {
+      const state = {
         active: true,
         iteration: 3,
         max_iterations: 10,
         completion_promise: 'DONE',
         prompt: 'Updated task',
         oracle_feedback: ['Feedback 1'],
-      };
+      } as RalphState;
 
       updateRalphState(sessionId, state);
 

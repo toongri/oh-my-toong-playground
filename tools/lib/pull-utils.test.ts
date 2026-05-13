@@ -4,6 +4,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 import { parseFrontmatter } from "./frontmatter.ts";
+import type { SyncItem } from "./types.ts";
 import {
   resolveDeployedPath,
   resolveSourcePath,
@@ -232,7 +233,7 @@ hooks:
   it("returns content unchanged for object items without `add-skills`/`add-hooks`", () => {
     const deployed = makeDeployedWithSkills(["testing"]);
     const source = makeSource();
-    const syncItem = { component: "oracle", platforms: ["claude"] as const };
+    const syncItem: SyncItem = { component: "oracle", platforms: ["claude"] };
 
     const result = stripInjectedFrontmatter(deployed, source, syncItem);
 

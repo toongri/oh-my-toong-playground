@@ -11,6 +11,7 @@ import os from "os";
 
 import { ClaudeAdapter } from "./claude.ts";
 import baseline from "./__fixtures__/claude-project-baseline.json";
+import type { PlatformYaml } from "../lib/types.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -186,7 +187,7 @@ describe("readJsonFile 동작", () => {
     await writeFile(settingsFile, "{invalid");
 
     // syncConfig internally calls readJsonFile; corrupt JSON should propagate as throw
-    await expect(adapter.syncConfig(targetPath, { foo: "bar" })).rejects.toThrow();
+    expect(adapter.syncConfig(targetPath, { foo: "bar" })).rejects.toThrow();
   });
 
   it("creates a new file when settings.local.json is absent via `syncConfig`", async () => {
@@ -746,7 +747,7 @@ describe("Plugin install (DI 패턴)", () => {
 
     const adapterWithMock = new ClaudeAdapter(failingInstaller);
     // Should not throw — _installPluginSafe catches and warns
-    await expect(
+    expect(
       adapterWithMock.syncPlatformYaml(targetPath, {
         plugins: { items: ["bad-plugin"] },
       }, false),
@@ -888,7 +889,7 @@ describe("plugin scope 및 object format", () => {
     const adapterWithMock = new ClaudeAdapter(mockInstaller);
     // Should not throw
     await adapterWithMock.syncPlatformYaml(targetPath, {
-      plugins: { items: [{ check: "true" }] },
+      plugins: { items: [{ check: "true" } as any] },
     }, false);
 
     expect(installedNames).toHaveLength(0);
@@ -901,7 +902,7 @@ describe("plugin scope 및 object format", () => {
 
     const adapterWithMock = new ClaudeAdapter(throwingInstaller);
     // Should not throw
-    await expect(
+    expect(
       adapterWithMock.syncPlatformYaml(targetPath, {
         plugins: { items: [{ name: "failing-plugin" }] },
       }, false),
@@ -1009,7 +1010,7 @@ describe("syncPlatformYaml - processedSections", () => {
           },
         ],
       },
-    }, false);
+    } as unknown as PlatformYaml, false);
 
     expect(result.processedSections).toContain("hooks");
   });
@@ -1713,11 +1714,6 @@ describe("dryRun destination — 3 사이트 파일명 분기 단언", () => {
 
 import { createHash } from "crypto";
 import settingsBaseline from "./__fixtures__/claude-project-settings-baseline.json";
-
-async function sha256File(filePath: string): Promise<string> {
-  const content = await fs.readFile(filePath);
-  return createHash("sha256").update(content).digest("hex");
-}
 
 describe("AC-6: project path settings.local.json SHA256 = baseline fixture", () => {
   it("AC-6: syncConfig + setStatusline + updateSettings 순서 실행 후 settings.local.json이 baseline과 byte-equal", async () => {
