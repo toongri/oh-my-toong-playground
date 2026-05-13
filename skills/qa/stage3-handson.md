@@ -141,6 +141,8 @@ curl -s http://localhost:{port}/endpoint | jq .
 
 ### Procedure
 
+Before proceeding, load the `using-maestro` skill (via the Skill tool) — it encodes the authoring principles (stable selectors, state isolation, condition-based waits) used in subsequent steps.
+
 1. Ensure `maestro` is installed (`maestro --version`); for iOS, Xcode + iOS Simulator; for Android, Android SDK + emulator
 2. Boot the target simulator/emulator before the test:
    - **iOS**: derive UDID first (idempotent — `bootstatus -b` boots if needed, waits until fully booted, exits 0 if already booted):
