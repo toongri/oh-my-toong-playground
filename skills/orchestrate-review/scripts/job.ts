@@ -9,14 +9,8 @@ import {
   ensureDir,
   safeFileName as _safeFileName,
   atomicWriteJson,
-  readJsonIfExists,
-  sleepMs,
   computeTerminalDoneCount,
-  asCodexStepStatus,
   parseArgs,
-  parseWaitCursor,
-  formatWaitCursor,
-  resolveBucketSize,
   generateJobId,
   findProjectRoot,
   resolveChairmanExclusion,
@@ -33,7 +27,6 @@ import {
   computeStatus as _computeStatus,
   buildUiPayload as _buildUiPayload,
   spawnWorkers as _spawnWorkers,
-  cmdWait as _cmdWait,
   cmdResults as _cmdResults,
   cmdStop as _cmdStop,
   cmdClean as _cmdClean,
@@ -163,12 +156,6 @@ async function cmdStatus(options: Record<string, unknown>, jobDir: string): Prom
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-async function cmdWait(options: Record<string, unknown>, jobDir: string): Promise<void> {
-  initLoggerFromJobDir(jobDir);
-  logInfo(`wait: ${path.resolve(jobDir)}`);
-  await _cmdWait(options, jobDir, CHUNK_REVIEW_JOB_CONFIG);
-}
-
 function cmdResults(options: Record<string, unknown>, jobDir: string): void {
   initLoggerFromJobDir(jobDir);
   logInfo(`results: ${path.resolve(jobDir)}`);
@@ -290,7 +277,6 @@ Usage:
   job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
   job.ts start --stdin
   job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
-  job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json|--manifest] <jobDir>
   job.ts stop <jobDir>
@@ -299,7 +285,6 @@ Usage:
 Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
-  - wait prints JSON by default and blocks until meaningful progress occurs, so you don't spam tool cells
 `);
 }
 
@@ -324,7 +309,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 
   const timeoutSetting = Number(config['chunk-review'].settings.timeout || 0);
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
-  const timeoutSec = Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : timeoutSetting > 0 ? timeoutSetting : 0;
+  const timeoutSec = Number.isFinite(timeoutOverride!) && timeoutOverride! > 0 ? timeoutOverride! : timeoutSetting > 0 ? timeoutSetting : 0;
 
   const requestedMembers = config['chunk-review'].members || [];
   const members = requestedMembers.filter(filterMember);
@@ -418,12 +403,6 @@ async function main(): Promise<void> {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('status: missing jobDir');
     await cmdStatus(options, jobDir);
-    return;
-  }
-  if (command === 'wait') {
-    const jobDir = rest[0];
-    if (!jobDir) exitWithError('wait: missing jobDir');
-    await cmdWait(options, jobDir);
     return;
   }
   if (command === 'collect') {

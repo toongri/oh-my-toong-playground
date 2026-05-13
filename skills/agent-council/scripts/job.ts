@@ -9,7 +9,6 @@ import {
   resolveChairmanExclusion,
   ensureDir,
   atomicWriteJson,
-  readJsonIfExists,
   parseArgs,
   generateJobId,
   computeTerminalDoneCount,
@@ -21,17 +20,12 @@ import {
   computeStatus as frameworkComputeStatus,
   buildUiPayload as frameworkBuildUiPayload,
   spawnWorkers as frameworkSpawnWorkers,
-  cmdWait as frameworkCmdWait,
   cmdResults as frameworkCmdResults,
   cmdStop as frameworkCmdStop,
   cmdClean as frameworkCmdClean,
   cmdCollect as frameworkCmdCollect,
   gcStaleJobs,
-  buildAugmentedCommand,
-  detectCliType,
   parseYamlSimple as frameworkParseYamlSimple,
-  buildManifest,
-  safeFileName,
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
@@ -67,7 +61,7 @@ function resolveDefaultConfigFile() {
   return SKILL_CONFIG_FILE;
 }
 
-async function parseCouncilConfig(configPath) {
+async function parseCouncilConfig(configPath: string) {
   const fallback = {
     council: {
       chairman: { role: 'auto' },
@@ -108,7 +102,7 @@ async function parseCouncilConfig(configPath) {
   try {
     parsed = YAML.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error) {
-    const message = error && error.message ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     exitWithError(`Invalid YAML in ${configPath}: ${message}`);
   }
 
@@ -256,7 +250,6 @@ Usage:
   job.ts start [--config path] [--chairman auto|claude|codex|...] [--jobs-dir path] [--json] "question"
   job.ts start --stdin
   job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
-  job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json] <jobDir>
   job.ts stop <jobDir>
@@ -265,11 +258,10 @@ Usage:
 Notes:
   - start returns immediately and runs members in parallel via detached Node workers
   - poll status with repeated short calls to update TODO/plan UIs in host agents
-  - wait prints JSON by default and blocks until meaningful progress occurs, so you don't spam tool cells
 `);
 }
 
-async function cmdStatus(options, jobDir) {
+async function cmdStatus(options: Record<string, unknown>, jobDir: string) {
   const payload = await computeStatus(jobDir);
 
   const wantChecklist = Boolean(options.checklist) && !options.json;
@@ -311,17 +303,17 @@ async function cmdStatus(options, jobDir) {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 }
 
-async function cmdStart(options, prompt) {
-  const configPath = options.config || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
+async function cmdStart(options: Record<string, unknown>, prompt: string) {
+  const configPath = (options.config as string | undefined) || process.env.COUNCIL_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    options['jobs-dir'] || process.env.COUNCIL_JOBS_DIR || path.join(getOmtDir(), 'jobs');
+    (options['jobs-dir'] as string | undefined) || process.env.COUNCIL_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, COUNCIL_CONFIG);
 
   const hostRole = detectHostRole(SKILL_DIR);
   const config = await parseCouncilConfig(configPath);
-  const chairmanRoleRaw = options.chairman || process.env.COUNCIL_CHAIRMAN || config.council.chairman.role || 'auto';
+  const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.COUNCIL_CHAIRMAN || config.council.chairman.role || 'auto';
 
   const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
     options,
@@ -332,7 +324,7 @@ async function cmdStart(options, prompt) {
 
   const timeoutSetting = Number(config.council.settings.timeout || 0);
   const timeoutOverride = options.timeout != null ? Number(options.timeout) : null;
-  const timeoutSec = Number.isFinite(timeoutOverride) && timeoutOverride > 0 ? timeoutOverride : timeoutSetting > 0 ? timeoutSetting : 0;
+  const timeoutSec = Number.isFinite(timeoutOverride!) && timeoutOverride! > 0 ? timeoutOverride! : timeoutSetting > 0 ? timeoutSetting : 0;
 
   const requestedMembers = config.council.members || [];
   const members = requestedMembers.filter(filterMember);
@@ -354,7 +346,7 @@ async function cmdStart(options, prompt) {
       excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
     },
-    members: members.map((m) => ({
+    members: members.map((m: any) => ({
       name: String(m.name),
       command: String(m.command),
       emoji: m.emoji ? String(m.emoji) : null,
@@ -411,12 +403,6 @@ async function main() {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('status: missing jobDir');
     await cmdStatus(options, jobDir);
-    return;
-  }
-  if (command === 'wait') {
-    const jobDir = rest[0];
-    if (!jobDir) exitWithError('wait: missing jobDir');
-    await frameworkCmdWait(options, jobDir, COUNCIL_CONFIG);
     return;
   }
   if (command === 'collect') {
