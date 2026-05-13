@@ -91,6 +91,8 @@ Any condition fails → decompose further.
 
 ## QA Scenarios (MANDATORY per TODO)
 
+A code change is verified at the layer the user observes. Internal tests prove the code runs; scenarios prove the product works for the user. Verification at the consumer boundary yields the highest accuracy — that is why QA Scenarios are mandatory per TODO regardless of modality.
+
 Each scenario uses a structured block with 7 fields:
 - **Scenario**: `{Name} — {Purpose}`
 - **Tool**: CLI command (`curl`, `bun test`, `playwright`, `maestro`, `grep` — NOT descriptions like "Header validation")

@@ -27,6 +27,7 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-17 | Intent Classification | Intent Classification | Interview Mode |
 | P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
+| P-23 | Scenario Verification Principle | Scenario Verification Principle Declaration | - |
 | UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Plan + Oracle + Momus + Execution |
 | UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Oracle reject + revision + Momus + User rejection + pipeline re-run |
 
@@ -728,6 +729,25 @@ Prometheus MUST apply "Plan more wins" tie-breaking:
 | V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
 | V7 | Plan markdown container is parser-resilient | The rendered HTML embeds plan markdown in a `script type="application/json" id="plan-md"` element; content is JSON-encoded with literal close-tag sequence escaped as backslash-escaped form |
 | V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
+
+---
+
+## Scenario P-23: Scenario Verification Principle
+
+**Primary Technique:** Scenario Verification Principle Declaration — plan-template의 QA Scenarios 헤더 아래 천명 원칙이 mandatory QA 작성 및 consumer-boundary 반영에 실제로 작동하는지 검증
+
+**Prompt:**
+```
+Add a new POST /api/orders endpoint that creates an order and returns the created order with its ID. Integrate with the existing payment service for charge processing.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | QA Scenarios written as mandatory | When Prometheus drafts the plan, the `## QA Scenarios` section in plan-template contains the Scenario Verification Principle declaration, and Prometheus writes QA Scenarios for every TODO in the plan — not skipping or marking them optional |
+| V2 | QA Scenarios reflect consumer-boundary | The QA Scenarios written for the endpoint TODO verify at the consumer boundary (e.g., `curl -X POST /api/orders` with JSON body and HTTP status assertion, or equivalent consumer-perspective tool) — not at the implementation level (e.g., unit test of internal order factory function only) |
+| V3 | Principle is modality-agnostic | The declaration does not mandate a specific tool. Verification tool choice (curl, playwright, maestro, grep, bun test, etc.) is driven by what the consumer observes — not by a hardcoded modality rule. Examples appear only as illustrations, not as mandatory commands |
 
 ---
 
