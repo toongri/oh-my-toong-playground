@@ -21,7 +21,7 @@ chunk-review:
       model: "opencode-go/kimi-k2.6"
       effort_level: "high"
   settings:
-    timeout: 900
+    timeout: 1800
     # Used by chunk-review-job.js to exclude the chairman model from the
     # external reviewer list. With the omo-based members above (no `claude`
     # member), this flag is currently a no-op; left as-is for future
