@@ -88,7 +88,7 @@ describe('parsePinXml', () => {
     );
     expect(result).not.toBeNull();
     expect(result.slug).toBe('test-pin');
-    expect(result.sensitivity).toBe('');
+    expect(result.sensitivity as unknown as string).toBe('');
     expect(result.body).toBe('body');
   });
 

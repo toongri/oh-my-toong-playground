@@ -1,11 +1,9 @@
 #!/usr/bin/env bun
 
-import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { EventEmitter } from 'events';
-import { Writable, Readable } from 'stream';
 
 import {
   runOnce,
@@ -13,7 +11,16 @@ import {
   assemblePrompt,
 } from './worker.ts';
 
-const WORKER_PATH = path.join(import.meta.dirname, 'worker.ts');
+// Local result type for test assertions (the shared worker returns Record<string, unknown>)
+type WorkerResult = {
+  state: string;
+  member?: string;
+  command?: string;
+  attempt?: number;
+  exitCode?: number | null;
+  signal?: string | null;
+  message?: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -23,7 +30,7 @@ function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'cjw-test-'));
 }
 
-function setupJobDir(tmpDir, { prompt = 'test prompt' } = {}) {
+function setupJobDir(tmpDir: string, { prompt = 'test prompt' }: { prompt?: string | null } = {}) {
   const jobDir = path.join(tmpDir, 'job');
   const memberDir = path.join(jobDir, 'members', 'test-member');
   fs.mkdirSync(memberDir, { recursive: true });
@@ -39,24 +46,8 @@ function setupJobDir(tmpDir, { prompt = 'test prompt' } = {}) {
   };
 }
 
-function readStatus(statusPath) {
-  return JSON.parse(fs.readFileSync(statusPath, 'utf8'));
-}
-
-/** Create a fake child process (EventEmitter + stdin/stdout/stderr). */
-function fakeChild({ pid = 1234 } = {}) {
-  const child = new EventEmitter();
-  child.pid = pid;
-  child.stdin = new Writable({
-    write(chunk, _enc, cb) {
-      child.stdin._written = (child.stdin._written || '') + chunk.toString();
-      cb();
-    },
-  });
-  child.stdin._written = '';
-  child.stdout = new Readable({ read() {} });
-  child.stderr = new Readable({ read() {} });
-  return child;
+function readStatus(statusPath: string): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,8 +55,8 @@ function fakeChild({ pid = 1234 } = {}) {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - stdin delivery', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -86,7 +77,7 @@ describe('runOnce - stdin delivery', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       attempt: 0,
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
     // cat echoes stdin to stdout -> output.txt should contain the prompt
@@ -105,7 +96,7 @@ describe('runOnce - stdin delivery', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       attempt: 0,
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
     const output = fs.readFileSync(paths.outPath, 'utf8');
@@ -118,8 +109,8 @@ describe('runOnce - stdin delivery', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - terminal states', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -139,7 +130,7 @@ describe('runOnce - terminal states', () => {
       jobDir: paths.jobDir,
       timeoutSec: 0,
       attempt: 0,
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('done');
     expect(result.exitCode).toBe(0);
   });
@@ -153,7 +144,7 @@ describe('runOnce - terminal states', () => {
       jobDir: paths.jobDir,
       timeoutSec: 0,
       attempt: 0,
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('error');
     expect(result.exitCode).toBe(1);
   });
@@ -167,7 +158,7 @@ describe('runOnce - terminal states', () => {
       jobDir: paths.jobDir,
       timeoutSec: 0,
       attempt: 0,
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('missing_cli');
   });
 
@@ -180,7 +171,7 @@ describe('runOnce - terminal states', () => {
       jobDir: paths.jobDir,
       timeoutSec: 0.2,
       attempt: 0,
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('timed_out');
   });
 
@@ -207,7 +198,7 @@ describe('runOnce - terminal states', () => {
       jobDir: paths.jobDir,
       timeoutSec: 0,
       attempt: 0,
-    });
+    }) as WorkerResult;
     expect(result.member).toBe('gpt-4');
     expect(result.command).toBe('true');
   });
@@ -218,14 +209,12 @@ describe('runOnce - terminal states', () => {
 // ---------------------------------------------------------------------------
 
 describe('runWithRetry', () => {
-  let tmpDir;
-  let paths;
-  let callCount;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
     paths = setupJobDir(tmpDir);
-    callCount = 0;
   });
 
   afterEach(() => {
@@ -240,7 +229,7 @@ describe('runWithRetry', () => {
       safeMember: 'test-member',
       jobDir: paths.jobDir,
       timeoutSec: 5,
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('done');
     expect(result.attempt).toBe(0);
   });
@@ -259,7 +248,7 @@ describe('runWithRetry', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(), // skip delay in tests
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('done');
     expect(result.attempt).toBe(1);
   });
@@ -273,7 +262,7 @@ describe('runWithRetry', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('error');
     expect(result.attempt).toBe(1); // 0, 1 = 2 attempts
   });
@@ -287,7 +276,7 @@ describe('runWithRetry', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       sleepFn: () => Promise.resolve(),
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('missing_cli');
     expect(result.attempt).toBe(0);
   });
@@ -301,7 +290,7 @@ describe('runWithRetry', () => {
       jobDir: paths.jobDir,
       timeoutSec: 0.2,
       sleepFn: () => Promise.resolve(),
-    });
+    }) as WorkerResult;
     expect(result.state).toBe('timed_out');
     expect(result.attempt).toBe(0);
   });
@@ -326,14 +315,14 @@ describe('runWithRetry', () => {
     });
 
     // Wait for status.json to have a pid
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
         try {
           const status = readStatus(paths.statusPath);
           if (status.pid) {
             clearInterval(interval);
             // Kill the process with SIGTERM (canceled, not timed out)
-            try { process.kill(status.pid, 'SIGTERM'); } catch {}
+            try { process.kill(status.pid as number, 'SIGTERM'); } catch {}
             resolve();
           }
         } catch {
@@ -342,7 +331,7 @@ describe('runWithRetry', () => {
       }, 20);
     });
 
-    const result = await resultPromise;
+    const result = await resultPromise as WorkerResult;
     expect(result.state).toBe('canceled');
     expect(result.attempt).toBe(0);
   });
@@ -384,8 +373,8 @@ describe('runWithRetry', () => {
   });
 
   test('applies exponential backoff with jitter', async () => {
-    const delays = [];
-    const sleepFn = (ms) => {
+    const delays: number[] = [];
+    const sleepFn = (ms: number) => {
       delays.push(ms);
       return Promise.resolve();
     };
@@ -411,8 +400,8 @@ describe('runWithRetry', () => {
     const markerFile = path.join(tmpDir, 'attempt-marker-retrying');
     const script = `sh -c 'if [ -f "${markerFile}" ]; then exit 0; else touch "${markerFile}" && exit 1; fi'`;
 
-    const capturedStatuses = [];
-    const sleepFn = async (ms) => {
+    const capturedStatuses: Record<string, unknown>[] = [];
+    const sleepFn = async (_ms: number) => {
       // Read status.json during sleep to verify retrying state
       const status = readStatus(paths.statusPath);
       capturedStatuses.push(status);
@@ -426,7 +415,7 @@ describe('runWithRetry', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       sleepFn,
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
     expect(capturedStatuses.length).toBe(1);
@@ -441,8 +430,8 @@ describe('runWithRetry', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - invalid command', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -462,10 +451,10 @@ describe('runOnce - invalid command', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       attempt: 0,
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('error');
-    expect(result.message.includes('Invalid command')).toBe(true);
+    expect((result.message ?? '').includes('Invalid command')).toBe(true);
     // Also verify status.json was written
     const status = readStatus(paths.statusPath);
     expect(status.state).toBe('error');
@@ -477,8 +466,8 @@ describe('runOnce - invalid command', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - SIGKILL signal', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -501,13 +490,13 @@ describe('runOnce - SIGKILL signal', () => {
     });
 
     // Poll for pid in status.json
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
       const interval = setInterval(() => {
         try {
           const status = readStatus(paths.statusPath);
           if (status.pid) {
             clearInterval(interval);
-            process.kill(status.pid, 'SIGKILL');
+            process.kill(status.pid as number, 'SIGKILL');
             resolve();
           }
         } catch {
@@ -516,7 +505,7 @@ describe('runOnce - SIGKILL signal', () => {
       }, 20);
     });
 
-    const result = await resultPromise;
+    const result = await resultPromise as WorkerResult;
     expect(result.state).toBe('error');
     expect(result.state).not.toBe('canceled');
     expect(result.exitCode).toBe(null);
@@ -529,8 +518,8 @@ describe('runOnce - SIGKILL signal', () => {
 // ---------------------------------------------------------------------------
 
 describe('runWithRetry - workerEnv injection', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -552,7 +541,7 @@ describe('runWithRetry - workerEnv injection', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       workerEnv: { MY_COUNCIL_VAR: 'council-env-value' },
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
     const output = fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8') : '';
@@ -569,7 +558,7 @@ describe('runWithRetry - workerEnv injection', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       workerEnv: { VAR_A: 'alpha', VAR_B: 'beta' },
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
     const output = fs.existsSync(outFile) ? fs.readFileSync(outFile, 'utf8') : '';
@@ -653,8 +642,8 @@ describe('main - --env passthrough', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - assembled-prompt.txt', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -673,7 +662,7 @@ describe('runOnce - assembled-prompt.txt', () => {
     const promptsDir = path.resolve(import.meta.dirname, '../prompts');
 
     // Find any existing role file in the prompts dir
-    let entityName = null;
+    let entityName: string | null = null;
     try {
       const files = fs.readdirSync(promptsDir);
       for (const f of files) {
@@ -702,7 +691,7 @@ describe('runOnce - assembled-prompt.txt', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       attempt: 0,
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
 
@@ -735,7 +724,7 @@ describe('runOnce - assembled-prompt.txt', () => {
       jobDir: paths.jobDir,
       timeoutSec: 5,
       attempt: 0,
-    });
+    }) as WorkerResult;
 
     expect(result.state).toBe('done');
 

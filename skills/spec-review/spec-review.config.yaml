@@ -29,7 +29,7 @@ spec-review:
       model: "gemini-3.1-pro-preview"
 
     - name: gpt
-      command: opencode run --agent "Hephaestus - Deep Agent"
+      command: opencode run --format default --agent "Hephaestus - Deep Agent"
       emoji: "🤖"
       color: "BLUE"
       model: "openai/gpt-5.5"
@@ -38,7 +38,7 @@ spec-review:
   # Execution settings
   settings:
     exclude_chairman_from_members: false  # Chairman also participates as a review member
-    timeout: 1800                         # Timeout seconds per reviewer (spec reviews take longer)
+    timeout: 3600                         # Timeout seconds per reviewer (spec reviews take longer)
 
   # Spec context configuration
   context:

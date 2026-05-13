@@ -232,7 +232,7 @@ describe('fetchRateLimits', () => {
       const fetchMock = jest.fn<typeof fetch>().mockResolvedValue({
         ok: true,
         json: async () => ({}),
-      } as Response);
+      } as Response) as unknown as typeof fetch;
       global.fetch = fetchMock;
 
       const result = await fetchRateLimits();
@@ -248,7 +248,7 @@ describe('fetchRateLimits', () => {
         ok: false,
         status: 500,
         headers: { get: (_: string) => null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -262,7 +262,7 @@ describe('fetchRateLimits', () => {
     it('caches failure with 15s TTL on network error', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new Error('Network error'));
+      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new Error('Network error')) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -276,7 +276,7 @@ describe('fetchRateLimits', () => {
     it('caches failure with 15s TTL on timeout', async () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
-      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new DOMException('Aborted', 'AbortError')) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -296,7 +296,7 @@ describe('fetchRateLimits', () => {
         ok: false,
         status: 429,
         headers: { get: (name: string) => name === 'retry-after' ? '60' : null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -315,7 +315,7 @@ describe('fetchRateLimits', () => {
         ok: false,
         status: 429,
         headers: { get: (_: string) => null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -333,7 +333,7 @@ describe('fetchRateLimits', () => {
         ok: false,
         status: 429,
         headers: { get: (name: string) => name === 'retry-after' ? '0' : null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -351,7 +351,7 @@ describe('fetchRateLimits', () => {
       mockGetCached.mockReturnValue(null);
       mockGetOAuthToken.mockResolvedValue('test-token');
       let capturedHeaders: Record<string, string> = {};
-      global.fetch = jest.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+      global.fetch = jest.fn<typeof fetch>().mockImplementation((async (_url: unknown, init: RequestInit | undefined) => {
         capturedHeaders = init?.headers as Record<string, string> ?? {};
         return {
           ok: true,
@@ -363,7 +363,7 @@ describe('fetchRateLimits', () => {
           }),
           headers: { get: (_: string) => null },
         } as unknown as Response;
-      });
+      }) as any) as unknown as typeof fetch;
 
       await fetchRateLimits();
 
@@ -379,7 +379,7 @@ describe('fetchRateLimits', () => {
         ok: true,
         json: async () => ({ five_hour: null, seven_day: null }),
         headers: { get: (_: string) => null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
       global.fetch = fetchMock;
 
       // Use initCache to ensure fetchRateLimits uses our tempDir for lock path
@@ -447,7 +447,7 @@ describe('fetchRateLimits', () => {
           seven_day_opus: null,
         }),
         headers: { get: (_: string) => null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
 
       const result = await fetchRateLimits();
 
@@ -471,7 +471,7 @@ describe('fetchRateLimits', () => {
         ok: false,
         status: 500,
         headers: { get: (_: string) => null },
-      } as unknown as Response);
+      } as unknown as Response) as unknown as typeof fetch;
 
       const result = await fetchRateLimits();
 
@@ -479,7 +479,7 @@ describe('fetchRateLimits', () => {
     });
 
     it('returns null on network error', async () => {
-      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new Error('Network error'));
+      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new Error('Network error')) as unknown as typeof fetch;
 
       const result = await fetchRateLimits();
 
@@ -487,7 +487,7 @@ describe('fetchRateLimits', () => {
     });
 
     it('returns null on timeout', async () => {
-      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new DOMException('Aborted', 'AbortError'));
+      global.fetch = jest.fn<typeof fetch>().mockRejectedValue(new DOMException('Aborted', 'AbortError')) as unknown as typeof fetch;
 
       const result = await fetchRateLimits();
 

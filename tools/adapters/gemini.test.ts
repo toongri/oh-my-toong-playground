@@ -5,6 +5,7 @@ import os from "os";
 
 import { GeminiAdapter } from "./gemini.ts";
 import type { ExtensionInstaller, CommandRunner } from "./gemini.ts";
+import type { PlatformYaml } from "../lib/types.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -675,7 +676,7 @@ describe("syncPlatformYaml", () => {
       },
     };
 
-    const result = await adapter.syncPlatformYaml(targetPath, yaml, false);
+    const result = await adapter.syncPlatformYaml(targetPath, yaml as unknown as PlatformYaml, false);
 
     expect(result.processedSections).toContain("hooks");
   });
@@ -709,7 +710,7 @@ describe("syncPlatformYaml", () => {
       },
     };
 
-    await adapter.syncPlatformYaml(targetPath, yaml, false);
+    await adapter.syncPlatformYaml(targetPath, yaml as unknown as PlatformYaml, false);
 
     const settings = await readJsonFile(
       path.join(targetPath, ".gemini", "settings.json"),
@@ -744,7 +745,7 @@ describe("syncPlatformYaml", () => {
       },
     };
 
-    const result = await adapter.syncPlatformYaml(targetPath, yaml, false);
+    const result = await adapter.syncPlatformYaml(targetPath, yaml as unknown as PlatformYaml, false);
 
     expect(result.processedSections).toContain("config");
     expect(result.processedSections).toContain("mcps");
@@ -778,7 +779,7 @@ describe("syncPlatformYaml", () => {
       },
     };
 
-    await adapter.syncPlatformYaml(targetPath, yaml, false);
+    await adapter.syncPlatformYaml(targetPath, yaml as unknown as PlatformYaml, false);
 
     const settings = await readJsonFile(settingsFile);
     expect(settings["Stop"]).toBeUndefined();
@@ -881,7 +882,7 @@ describe("syncPlatformYaml", () => {
     const adapterWithDI = new GeminiAdapter(installer);
 
     const yaml = { plugins: { items: [{ check: "some-check" }] } };
-    const result = await adapterWithDI.syncPlatformYaml(targetPath, yaml, false);
+    const result = await adapterWithDI.syncPlatformYaml(targetPath, yaml as unknown as PlatformYaml, false);
 
     expect(result.processedSections).toContain("plugins");
     expect(installed).toHaveLength(0);

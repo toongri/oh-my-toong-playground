@@ -28,7 +28,7 @@ function makeTmpDir() {
 // ---------------------------------------------------------------------------
 
 describe('parseYamlSimple', () => {
-  let tmpDir;
+  let tmpDir: string;
   const fallback = {
     'spec-review': {
       chairman: { role: 'auto' },
@@ -214,7 +214,7 @@ describe('parseYamlSimple', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseSpecReviewConfig', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -234,7 +234,7 @@ describe('parseSpecReviewConfig', () => {
 
   test('fallback contains default reviewers (claude, codex, gemini)', async () => {
     const result = await parseSpecReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    const names = result['spec-review'].members.map(r => r.name);
+    const names = result['spec-review'].members.map((r: { name: string }) => r.name);
     expect(names.includes('claude')).toBeTruthy();
     expect(names.includes('codex')).toBeTruthy();
     expect(names.includes('gemini')).toBeTruthy();
@@ -545,9 +545,9 @@ describe('buildUiPayload', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeStatus', () => {
-  let tmpDir;
+  let tmpDir: string;
 
-  function setupJob(jobDir, jobJson, members) {
+  function setupJob(jobDir: string, jobJson: Record<string, unknown>, members: Record<string, unknown>) {
     fs.mkdirSync(jobDir, { recursive: true });
     fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(jobJson));
     const membersDir = path.join(jobDir, 'members');
@@ -726,7 +726,7 @@ describe('computeStatus', () => {
 // ---------------------------------------------------------------------------
 
 describe('resolveContextDir', () => {
-  const savedEnv = {};
+  const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
     savedEnv.OMT_PROJECT = process.env.OMT_PROJECT;
@@ -749,7 +749,7 @@ describe('resolveContextDir', () => {
   test('expands ${OMT_PROJECT} to env var value', () => {
     process.env.OMT_PROJECT = 'test-proj';
     const result = resolveContextDir('~/.omt/${OMT_PROJECT}/context', '/some/root');
-    expect(result.includes('test-proj')).toBeTruthy();
+    expect(result!.includes('test-proj')).toBeTruthy();
   });
 
   test('returns null when OMT_PROJECT env var is not set and path contains ${OMT_PROJECT}', () => {
@@ -830,7 +830,7 @@ describe('findProjectRoot', () => {
 
 describe('cmdStart: --exclude-chairman 플래그 boolean 파싱', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -840,7 +840,7 @@ describe('cmdStart: --exclude-chairman 플래그 boolean 파싱', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function makeConfig(chairmanRole: string, jobsDir: string): string {
+  function makeConfig(chairmanRole: string, _jobsDir: string): string {
     const configPath = path.join(tmpDir, 'spec-review.config.yaml');
     fs.writeFileSync(configPath, [
       'spec-review:',
@@ -917,7 +917,7 @@ describe('cmdStart: --exclude-chairman 플래그 boolean 파싱', () => {
 
 describe('cmdResults', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
-  let tmpDir;
+  let tmpDir: string;
 
   function setupResultsFixture(
     jobDir: string,

@@ -7,10 +7,8 @@ import {
   exitWithError,
   ensureDir,
   atomicWriteJson,
-  readJsonIfExists,
   parseArgs,
   generateJobId,
-  computeTerminalDoneCount,
   findProjectRoot,
 } from '@lib/job-utils';
 
@@ -18,7 +16,6 @@ import {
   type JobConfig,
   computeStatus as frameworkComputeStatus,
   spawnWorkers as frameworkSpawnWorkers,
-  cmdWait as frameworkCmdWait,
   cmdResults as frameworkCmdResults,
   cmdStop as frameworkCmdStop,
   cmdClean as frameworkCmdClean,
@@ -82,10 +79,10 @@ Usage:
 // Commands
 // ---------------------------------------------------------------------------
 
-async function cmdStart(options, prompt) {
-  const configPath = options.config || process.env.REVIEW_CONFIG || resolveDefaultConfigFile();
+async function cmdStart(options: Record<string, unknown>, prompt: string) {
+  const configPath = (options.config as string | undefined) || process.env.REVIEW_CONFIG || resolveDefaultConfigFile();
   const jobsDir =
-    options['jobs-dir'] || process.env.REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
+    (options['jobs-dir'] as string | undefined) || process.env.REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, REVIEW_CONFIG);
@@ -100,7 +97,7 @@ async function cmdStart(options, prompt) {
   }, REVIEW_CONFIG);
 
   const reviewConfig = config[REVIEW_CONFIG.configTopLevelKey] as any;
-  const members = (reviewConfig.members || []).filter((m) => m && m.name && m.command);
+  const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
   const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
 
   const jobId = generateJobId();
@@ -117,7 +114,7 @@ async function cmdStart(options, prompt) {
     settings: {
       timeoutSec: timeoutSec || null,
     },
-    members: members.map((m) => ({
+    members: members.map((m: any) => ({
       name: String(m.name),
       command: String(m.command),
       emoji: m.emoji ? String(m.emoji) : null,

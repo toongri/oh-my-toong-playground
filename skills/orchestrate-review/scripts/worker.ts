@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
-import { findProjectRoot, exitWithError, parseArgs } from '@lib/job-utils';
+import { exitWithError, parseArgs } from '@lib/job-utils';
 import { getOmtDir } from '@lib/omt-dir';
 import {
   splitCommand,
@@ -15,6 +15,8 @@ import {
   runWithRetry as sharedRunWithRetry,
   MAX_RETRIES,
   BASE_DELAY_MS,
+  type RunOnceOpts,
+  type RunWithRetryOpts,
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
@@ -24,21 +26,21 @@ const FALLBACK_FILE = 'reviewer.md';
 // Chunk-review wrappers (reviewer.md fallback default)
 // ---------------------------------------------------------------------------
 
-function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent, fallbackFile }) {
+function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent, fallbackFile }: Parameters<typeof sharedAssemblePrompt>[0]) {
   return sharedAssemblePrompt({
     promptsDir, entityName, rawPrompt, reviewContent,
     fallbackFile: fallbackFile || FALLBACK_FILE,
   });
 }
 
-function runOnce(opts) {
+function runOnce(opts: RunOnceOpts) {
   return sharedRunOnce({
     ...opts,
     fallbackFile: opts.fallbackFile || FALLBACK_FILE,
   });
 }
 
-function runWithRetry(opts) {
+function runWithRetry(opts: RunWithRetryOpts) {
   return sharedRunWithRetry({
     ...opts,
     fallbackFile: opts.fallbackFile || FALLBACK_FILE,
@@ -57,12 +59,12 @@ function main() {
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
   // Initialize persistent logging
-  const jobId = jobDir ? path.basename(jobDir).replace(/^chunk-review-/, '') : 'unknown';
+  const jobId = jobDir ? path.basename(String(jobDir)).replace(/^chunk-review-/, '') : 'unknown';
   initLogger('chunk-review-worker', getOmtDir(), jobId);
   logStart();
 
   // Parse --env args: collect KEY=VALUE pairs
-  const workerEnv = {};
+  const workerEnv: Record<string, string> = {};
   const rawArgs = process.argv.slice(2);
   for (let i = 0; i < rawArgs.length; i++) {
     if (rawArgs[i] === '--env' && i + 1 < rawArgs.length) {
@@ -80,15 +82,15 @@ function main() {
 
   logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
 
-  const membersRoot = path.join(jobDir, 'members');
-  const memberDir = path.join(membersRoot, member);
+  const membersRoot = path.join(jobDir as string, 'members');
+  const memberDir = path.join(membersRoot, member as string);
 
-  const promptPath = path.join(jobDir, 'prompt.txt');
+  const promptPath = path.join(jobDir as string, 'prompt.txt');
   const promptContent = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
   const EXECUTION_INSTRUCTION = 'Execute the diff command from REVIEW CONTENT. Review ONLY the files listed in Review Scope. Produce your full analysis following system instructions.';
 
-  const tokens = splitCommand(command);
+  const tokens = splitCommand(command as string);
   if (!tokens || tokens.length === 0) {
     logError(`invalid command string: ${command}`);
     const statusPath = path.join(memberDir, 'status.json');
@@ -104,7 +106,7 @@ function main() {
   const args = tokens.slice(1);
 
   runWithRetry({
-    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member, memberDir, command, timeoutSec, workerEnv,
+    program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
     promptPath,
   }).then((result) => {
