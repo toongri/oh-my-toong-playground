@@ -108,16 +108,8 @@ describe("dispatch template placeholder consistency", () => {
     const templatePlaceholders = extractTemplateFieldReferences(templateContent);
 
     // Guard: parsers must not silently return empty sets (format regression detection)
-    expect(skillPlaceholders.size).toBeGreaterThan(
-      0,
-      `SKILL.md Step 5 placeholder parser returned 0 results — ` +
-        `the source format likely changed. Review the parser in template-consistency.test.ts.`
-    );
-    expect(templatePlaceholders.size).toBeGreaterThan(
-      0,
-      `chunk-reviewer-prompt.md Field Reference parser returned 0 results — ` +
-        `the source format likely changed. Review the parser in template-consistency.test.ts.`
-    );
+    expect(skillPlaceholders.size).toBeGreaterThan(0);
+    expect(templatePlaceholders.size).toBeGreaterThan(0);
 
     // Act: compute symmetric difference
     const onlyInSkill = [...skillPlaceholders].filter(
@@ -140,11 +132,6 @@ describe("dispatch template placeholder consistency", () => {
       );
     }
 
-    expect(mismatchLines.length).toBe(
-      0,
-      `Placeholder sets are out of sync:\n${mismatchLines.join("\n")}\n\n` +
-        `SKILL.md Step 5 declares: ${[...skillPlaceholders].sort().join(", ")}\n` +
-        `Field Reference declares: ${[...templatePlaceholders].sort().join(", ")}`
-    );
+    expect(mismatchLines.length).toBe(0);
   });
 });

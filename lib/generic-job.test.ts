@@ -20,8 +20,6 @@ import {
   cmdStop,
   cmdClean,
   cmdCollect,
-  HEARTBEAT_STALE_THRESHOLD_MS,
-  HEARTBEAT_GRACE_PERIOD_MS,
 } from './generic-job.ts';
 
 // ---------------------------------------------------------------------------
@@ -278,7 +276,7 @@ describe('buildAugmentedCommand', () => {
 
   test('non-claude: does not include CLAUDECODE in env', () => {
     const result = buildAugmentedCommand({ command: 'gemini' }, 'gemini');
-    expect(result.env.CLAUDECODE).toBe(undefined);
+    expect(result.env.CLAUDECODE as string | undefined).toBe(undefined);
   });
 
   test('opencode appends --variant for effort_level', () => {
@@ -1234,16 +1232,6 @@ describe('parseYamlSimple', () => {
     },
   };
 
-  const councilFallback = {
-    'council': {
-      chairman: { role: 'auto' },
-      members: [
-        { name: 'claude', command: 'claude -p' },
-      ],
-      settings: { timeout: 300 },
-    },
-  };
-
   beforeEach(() => {
     tmpDir = makeTmpDir();
   });
@@ -1434,11 +1422,8 @@ describe('parseYamlSimple', () => {
 describe('spawnWorkers 이름 유효성 검사', () => {
   let tmpDir: string;
   let originalExit: typeof process.exit;
-  let exitError: string | null;
-
   beforeEach(() => {
     tmpDir = makeTmpDir();
-    exitError = null;
     // exitWithError calls process.exit(1) — intercept it
     originalExit = process.exit;
     (process as any).exit = (code?: number) => {
@@ -1548,9 +1533,9 @@ describe('cmdCollect', () => {
 
     const output: string[] = [];
     const origWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = (chunk: string | Uint8Array, ...args: unknown[]) => {
+    process.stdout.write = (chunk: string | Uint8Array, ..._args: unknown[]) => {
       if (typeof chunk === 'string') output.push(chunk);
-      return origWrite(chunk, ...(args as Parameters<typeof origWrite>));
+      return origWrite(chunk as any);
     };
 
     try {

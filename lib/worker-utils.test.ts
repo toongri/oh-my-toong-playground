@@ -196,8 +196,8 @@ describe('splitCommand', () => {
   });
 
   test('returns empty array for null/undefined', () => {
-    expect(splitCommand(null)).toEqual([]);
-    expect(splitCommand(undefined)).toEqual([]);
+    expect(splitCommand(null as any)).toEqual([]);
+    expect(splitCommand(undefined as any)).toEqual([]);
   });
 
   test('handles multiple spaces between tokens', () => {
@@ -210,7 +210,7 @@ describe('splitCommand', () => {
 // ---------------------------------------------------------------------------
 
 describe('atomicWriteJson', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -268,7 +268,7 @@ describe('sleepMsAsync', () => {
 // ---------------------------------------------------------------------------
 
 describe('assemblePrompt', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -469,7 +469,7 @@ describe('runOnce heartbeat', () => {
 
 function createCapturingSpawnFn() {
   const captured: { env?: Record<string, string> } = {};
-  const mockSpawn = (program: string, args: string[], options: any) => {
+  const mockSpawn = (_program: string, _args: string[], options: any) => {
     captured.env = options?.env;
     const child = new (require('events').EventEmitter)();
     const stdin = { write: () => true, end: () => {}, on: () => stdin } as any;
@@ -515,28 +515,28 @@ describe('runOnce 환경 변수 전파', () => {
 
   it('NO_COLOR=1 전파 확인', async () => {
     const { mockSpawn, captured } = createCapturingSpawnFn();
-    const opts = makeEnvTestOpts({ spawnFn: mockSpawn });
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn as any });
     await runOnce(opts);
     expect(captured.env?.NO_COLOR).toBe('1');
   });
 
   it('TERM=dumb 전파 확인', async () => {
     const { mockSpawn, captured } = createCapturingSpawnFn();
-    const opts = makeEnvTestOpts({ spawnFn: mockSpawn });
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn as any });
     await runOnce(opts);
     expect(captured.env?.TERM).toBe('dumb');
   });
 
   it('FORCE_COLOR=0 전파 확인', async () => {
     const { mockSpawn, captured } = createCapturingSpawnFn();
-    const opts = makeEnvTestOpts({ spawnFn: mockSpawn });
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn as any });
     await runOnce(opts);
     expect(captured.env?.FORCE_COLOR).toBe('0');
   });
 
   it('workerEnv가 NO_COLOR override 가능', async () => {
     const { mockSpawn, captured } = createCapturingSpawnFn();
-    const opts = makeEnvTestOpts({ spawnFn: mockSpawn, workerEnv: { NO_COLOR: '' } });
+    const opts = makeEnvTestOpts({ spawnFn: mockSpawn as any, workerEnv: { NO_COLOR: '' } });
     await runOnce(opts);
     expect(captured.env?.NO_COLOR).toBe('');
   });

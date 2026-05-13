@@ -65,7 +65,7 @@ describe('pin-session-start entrypoint', () => {
     });
 
     expect(result.status).toBe(0);
-    const output = JSON.parse(result.stdout.trim());
+    const output = JSON.parse(String(result.stdout).trim());
     // env가 없어도 self-compute로 OMT_DIR을 결정해 정상 출력해야 함
     expect(output.hookSpecificOutput).toBeDefined();
     expect(output.hookSpecificOutput.hookEventName).toBe('SessionStart');
@@ -80,7 +80,7 @@ describe('pin-session-start entrypoint', () => {
 
     expect(result.status).toBe(0);
 
-    const output = JSON.parse(result.stdout.trim());
+    const output = JSON.parse(String(result.stdout).trim());
     expect(output.hookSpecificOutput.hookEventName).toBe('SessionStart');
 
     const ctx: string = output.hookSpecificOutput.additionalContext;
@@ -101,7 +101,7 @@ describe('pin-session-start entrypoint', () => {
 
     expect(result.status).toBe(0);
 
-    const output = JSON.parse(result.stdout.trim());
+    const output = JSON.parse(String(result.stdout).trim());
     expect(output.hookSpecificOutput).toBeDefined();
     expect(output.hookSpecificOutput.hookEventName).toBe('SessionStart');
 

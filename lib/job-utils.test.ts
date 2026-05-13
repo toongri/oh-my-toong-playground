@@ -24,6 +24,7 @@ import {
   findProjectRoot,
   stripAnsi,
   resolveChairmanExclusion,
+  type WaitCursor,
 } from './job-utils.ts';
 
 // ---------------------------------------------------------------------------
@@ -160,13 +161,13 @@ describe('safeFileName', () => {
 
   test('returns fallback for empty/null input', () => {
     expect(safeFileName('', 'default')).toBe('default');
-    expect(safeFileName(null, 'default')).toBe('default');
-    expect(safeFileName(undefined, 'default')).toBe('default');
+    expect(safeFileName(null as any, 'default')).toBe('default');
+    expect(safeFileName(undefined as any, 'default')).toBe('default');
   });
 
   test('returns member when no fallback given and input is empty', () => {
     expect(safeFileName('')).toBe('member');
-    expect(safeFileName(null)).toBe('member');
+    expect(safeFileName(null as any)).toBe('member');
   });
 
   test('collapses consecutive unsafe characters into single dash', () => {
@@ -189,8 +190,8 @@ describe('computeTerminalDoneCount', () => {
   });
 
   test('handles null/undefined input', () => {
-    expect(computeTerminalDoneCount(null)).toBe(0);
-    expect(computeTerminalDoneCount(undefined)).toBe(0);
+    expect(computeTerminalDoneCount(null as any)).toBe(0);
+    expect(computeTerminalDoneCount(undefined as any)).toBe(0);
   });
 
   test('treats missing fields as 0', () => {
@@ -198,7 +199,7 @@ describe('computeTerminalDoneCount', () => {
   });
 
   test('handles string number values via Number()', () => {
-    expect(computeTerminalDoneCount({ done: '3', error: '2' })).toBe(5);
+    expect(computeTerminalDoneCount({ done: '3', error: '2' } as any)).toBe(5);
   });
 });
 
@@ -226,8 +227,8 @@ describe('asCodexStepStatus', () => {
   });
 
   test('returns pending for null/undefined', () => {
-    expect(asCodexStepStatus(null)).toBe('pending');
-    expect(asCodexStepStatus(undefined)).toBe('pending');
+    expect(asCodexStepStatus(null as any)).toBe('pending');
+    expect(asCodexStepStatus(undefined as any)).toBe('pending');
   });
 
   test('returns pending for empty string', () => {
@@ -240,7 +241,7 @@ describe('asCodexStepStatus', () => {
 // ---------------------------------------------------------------------------
 
 describe('ensureDir', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -275,7 +276,7 @@ describe('ensureDir', () => {
 // ---------------------------------------------------------------------------
 
 describe('atomicWriteJson', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -322,7 +323,7 @@ describe('atomicWriteJson', () => {
 // ---------------------------------------------------------------------------
 
 describe('readJsonIfExists', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -432,7 +433,7 @@ describe('generateJobId', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseArgs', () => {
-  function parse(...args) {
+  function parse(...args: string[]) {
     return parseArgs(['node', 'script.js', ...args]);
   }
 
@@ -523,9 +524,9 @@ describe('parseWaitCursor', () => {
 
   test('parses v1 format with isDone=0', () => {
     const result = parseWaitCursor('v1:5:1:0');
-    expect(result.isDone).toBe(false);
-    expect(result.bucketSize).toBe(5);
-    expect(result.doneBucket).toBe(1);
+    expect(result!.isDone).toBe(false);
+    expect(result!.bucketSize).toBe(5);
+    expect(result!.doneBucket).toBe(1);
   });
 
   test('parses v2 format correctly', () => {
@@ -541,8 +542,8 @@ describe('parseWaitCursor', () => {
 
   test('parses v2 format with isDone=0', () => {
     const result = parseWaitCursor('v2:4:0:1:0');
-    expect(result.isDone).toBe(false);
-    expect(result.dispatchBucket).toBe(0);
+    expect(result!.isDone).toBe(false);
+    expect(result!.dispatchBucket).toBe(0);
   });
 
   test('returns null for empty string', () => {
@@ -590,7 +591,7 @@ describe('parseWaitCursor', () => {
   test('trims whitespace', () => {
     const result = parseWaitCursor('  v2:3:1:2:0  ');
     expect(result).not.toBe(null);
-    expect(result.version).toBe('v2');
+    expect(result!.version).toBe('v2');
   });
 });
 
@@ -642,11 +643,11 @@ describe('resolveBucketSize', () => {
   });
 
   test('falls back to prevCursor.bucketSize when option is null', () => {
-    expect(resolveBucketSize({}, 10, { bucketSize: 5 })).toBe(5);
+    expect(resolveBucketSize({}, 10, { bucketSize: 5 } as WaitCursor)).toBe(5);
   });
 
   test('falls back to prevCursor.bucketSize when option is true (bare flag)', () => {
-    expect(resolveBucketSize({ bucket: true }, 10, { bucketSize: 7 })).toBe(7);
+    expect(resolveBucketSize({ bucket: true }, 10, { bucketSize: 7 } as WaitCursor)).toBe(7);
   });
 
   test('computes auto bucket size as ceil(total/5)', () => {
@@ -665,8 +666,8 @@ describe('resolveBucketSize', () => {
   });
 
   test('returns 1 for null/undefined total in auto mode', () => {
-    expect(resolveBucketSize({}, null, null)).toBe(1);
-    expect(resolveBucketSize({}, undefined, null)).toBe(1);
+    expect(resolveBucketSize({}, null as any, null)).toBe(1);
+    expect(resolveBucketSize({}, undefined as any, null)).toBe(1);
   });
 
   test('returns at least 1 for very small totals', () => {
@@ -680,7 +681,7 @@ describe('resolveBucketSize', () => {
 // ---------------------------------------------------------------------------
 
 describe('findProjectRoot', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
