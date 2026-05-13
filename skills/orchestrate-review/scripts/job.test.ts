@@ -30,7 +30,7 @@ function makeTmpDir() {
 // ---------------------------------------------------------------------------
 
 describe('parseYamlSimple', () => {
-  let tmpDir;
+  let tmpDir: string;
   const fallback = {
     'chunk-review': {
       chairman: { role: 'auto' },
@@ -228,7 +228,7 @@ describe('parseYamlSimple', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseChunkReviewConfig', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -248,7 +248,7 @@ describe('parseChunkReviewConfig', () => {
 
   test('fallback contains default members (claude, codex)', async () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
-    const names = result['chunk-review'].members.map(r => r.name);
+    const names = result['chunk-review'].members.map((r: { name: string }) => r.name);
     expect(names.includes('claude')).toBeTruthy();
     expect(names.includes('codex')).toBeTruthy();
     expect(names.includes('gemini')).toBeFalsy();
@@ -551,9 +551,9 @@ describe('buildUiPayload', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeStatus', () => {
-  let tmpDir;
+  let tmpDir: string;
 
-  function setupJob(jobDir, jobJson, members) {
+  function setupJob(jobDir: string, jobJson: Record<string, unknown>, members: Record<string, unknown>) {
     fs.mkdirSync(jobDir, { recursive: true });
     fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(jobJson));
     const membersDir = path.join(jobDir, 'members');
@@ -984,7 +984,7 @@ describe('buildAugmentedCommand', () => {
 
   test('non-claude: does not include CLAUDECODE in env', () => {
     const result = buildAugmentedCommand({ command: 'gemini' }, 'gemini');
-    expect(result.env.CLAUDECODE).toBe(undefined);
+    expect(result.env.CLAUDECODE).toBeUndefined();
   });
 });
 
@@ -1108,7 +1108,7 @@ describe('gcStaleJobs', () => {
 
 describe('cmdClean path traversal guard', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -1131,8 +1131,8 @@ describe('cmdClean path traversal guard', () => {
       ], { stdio: 'pipe' });
       throw new Error('Expected execFileSync to throw');
     } catch (err) {
-      expect(err.status).toBe(1);
-      expect(err.stderr.toString().includes('refusing to delete path outside jobs directory')).toBe(true);
+      expect((err as any).status).toBe(1);
+      expect((err as any).stderr.toString().includes('refusing to delete path outside jobs directory')).toBe(true);
     }
 
     // The outside directory must still exist (not deleted)
@@ -1183,8 +1183,8 @@ describe('cmdClean path traversal guard', () => {
       ], { stdio: 'pipe' });
       throw new Error('Expected execFileSync to throw');
     } catch (err) {
-      expect(err.status).toBe(1);
-      expect(err.stderr.toString().includes('refusing to delete path outside jobs directory')).toBe(true);
+      expect((err as any).status).toBe(1);
+      expect((err as any).stderr.toString().includes('refusing to delete path outside jobs directory')).toBe(true);
     }
 
     // The directory must still exist
@@ -1198,7 +1198,7 @@ describe('cmdClean path traversal guard', () => {
 
 describe('spawnWorkers safe name collision detection', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -1239,8 +1239,8 @@ describe('spawnWorkers safe name collision detection', () => {
       ], { stdio: 'pipe' });
       throw new Error('Expected execFileSync to throw');
     } catch (err) {
-      expect(err.status).toBe(1);
-      expect(err.stderr.toString().includes('member name collision')).toBe(true);
+      expect((err as any).status).toBe(1);
+      expect((err as any).stderr.toString().includes('member name collision')).toBe(true);
     }
   });
 });
@@ -1251,7 +1251,7 @@ describe('spawnWorkers safe name collision detection', () => {
 
 describe('--exclude-chairman=false keeps chairman in reviewers', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -1291,7 +1291,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     expect(memberNames.includes('claude')).toBe(true);
     expect(output.settings.excludeChairmanFromMembers).toBe(false);
 
@@ -1330,7 +1330,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     expect(!memberNames.includes('claude')).toBe(true);
     expect(output.settings.excludeChairmanFromMembers).toBe(true);
 
@@ -1371,7 +1371,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     // --exclude-chairman=false overrides config to false (don't exclude)
     // --include-chairman=false means no force-include
     // So excludeChairmanFromMembers=false, includeChairman=false → chairman included
@@ -1413,7 +1413,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     expect(!memberNames.includes('claude')).toBe(true);
     expect(output.settings.excludeChairmanFromMembers).toBe(true);
 
@@ -1429,7 +1429,7 @@ describe('--exclude-chairman=false keeps chairman in reviewers', () => {
 
 describe('--include-chairman=false normalizeBool parsing', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -1471,7 +1471,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     // --include-chairman=false → includeChairman should be false
     // excludeChairmanOverride should be null (fallback to config default: true)
     // So chairman should be excluded
@@ -1512,7 +1512,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     // --include-chairman=true → includeChairman=true, force-include chairman
     expect(memberNames.includes('claude')).toBe(true);
 
@@ -1551,7 +1551,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     // --include-chairman (boolean flag) → true → force-include
     expect(memberNames.includes('claude')).toBe(true);
 
@@ -1589,7 +1589,7 @@ describe('--include-chairman=false normalizeBool parsing', () => {
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
-    const memberNames = output.members.map(r => r.name);
+    const memberNames = output.members.map((r: { name: string }) => r.name);
     // No flag → config default (exclude=true), no force-include → chairman excluded
     expect(!memberNames.includes('claude')).toBe(true);
 

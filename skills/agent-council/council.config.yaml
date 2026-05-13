@@ -23,7 +23,7 @@ council:
       effort_level: "xhigh"
 
     - name: gpt
-      command: opencode run --agent "Hephaestus - Deep Agent"
+      command: opencode run --format default --agent "Hephaestus - Deep Agent"
       emoji: "🤖"
       color: "BLUE"
       model: "openai/gpt-5.5"
@@ -38,4 +38,4 @@ council:
   # Execution settings
   settings:
     exclude_chairman_from_members: false  # Chairman also participates as a council member
-    timeout: 600                          # Timeout seconds per agent (0 to disable)
+    timeout: 1200                         # Timeout seconds per agent (0 to disable)

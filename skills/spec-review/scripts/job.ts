@@ -20,12 +20,10 @@ import {
 import {
   type JobConfig,
   type CmdResultsHooks,
-  type CmdWaitHooks,
   computeStatus as _computeStatus,
   buildUiPayload as _buildUiPayload,
   spawnWorkers as _spawnWorkers,
   cmdResults as _cmdResults,
-  cmdWait as _cmdWait,
   cmdStop as _cmdStop,
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
@@ -295,7 +293,6 @@ Usage:
   job.ts start [--config path] [--chairman auto|claude|codex|...] [--spec <spec-name>] [--jobs-dir path] [--json] "question"
   job.ts start --stdin
   job.ts status [--json|--text|--checklist] [--verbose] <jobDir>
-  job.ts wait [--cursor CURSOR] [--bucket auto|N] [--interval-ms N] [--timeout-ms N] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json] <jobDir>
   job.ts stop <jobDir>
@@ -305,12 +302,11 @@ Notes:
   - start returns immediately and runs reviewers in parallel via detached Node workers
   - --spec auto-loads context from $OMT_DIR/specs/<spec-name>/ (spec.md, records/*.md) + shared context
   - poll status with repeated short calls to update TODO/plan UIs in host agents
-  - wait prints JSON by default and blocks until meaningful progress occurs, so you don't spam tool cells
 `);
 }
 
 // ---------------------------------------------------------------------------
-// Hook definitions for framework cmdResults / cmdWait
+// Hook definitions for framework cmdResults
 // ---------------------------------------------------------------------------
 
 const RESULTS_HOOKS: CmdResultsHooks = {
@@ -323,14 +319,6 @@ const RESULTS_HOOKS: CmdResultsHooks = {
   extraMemberFields: (member) => ({
     stderr: member.stderr || '',
   }),
-};
-
-const WAIT_HOOKS: CmdWaitHooks = {
-  defaultTimeoutMs: 0,
-  transformPayload: (payload) => {
-    const jobMeta = readJsonIfExists(path.join(path.resolve(payload.jobDir), 'job.json')) as any;
-    return { ...payload, specName: jobMeta?.specName || null };
-  },
 };
 
 async function cmdStart(options: Record<string, unknown>, prompt: string): Promise<void> {
@@ -507,12 +495,6 @@ async function main(): Promise<void> {
     const jobDir = rest[0] as string;
     if (!jobDir) exitWithError('status: missing jobDir');
     await cmdStatus(options, jobDir);
-    return;
-  }
-  if (command === 'wait') {
-    const jobDir = rest[0] as string;
-    if (!jobDir) exitWithError('wait: missing jobDir');
-    await _cmdWait(options, jobDir, JOB_CONFIG, WAIT_HOOKS);
     return;
   }
   if (command === 'collect') {

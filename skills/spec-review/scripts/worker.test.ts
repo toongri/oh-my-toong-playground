@@ -21,7 +21,7 @@ function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'worker-test-'));
 }
 
-function setupJobDir(tmpDir) {
+function setupJobDir(tmpDir: string): { jobDir: string; member: string; memberDir: string; statusPath: string; outPath: string; errPath: string } {
   const member = 'test-reviewer';
   const jobDir = path.join(tmpDir, 'job');
   const memberDir = path.join(jobDir, 'members', member);
@@ -32,7 +32,7 @@ function setupJobDir(tmpDir) {
   return { jobDir, member, memberDir, statusPath, outPath, errPath };
 }
 
-function readStatus(statusPath) {
+function readStatus(statusPath: string): Record<string, unknown> {
   return JSON.parse(fs.readFileSync(statusPath, 'utf8'));
 }
 
@@ -41,8 +41,8 @@ function readStatus(statusPath) {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - stdin pipe', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -93,8 +93,8 @@ describe('runOnce - stdin pipe', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - exit states', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -188,7 +188,7 @@ describe('runOnce - exit states', () => {
       } catch { /* status.json not written yet */ }
     }
     expect(pid).toBeTruthy();
-    try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+    try { process.kill(pid as number, 'SIGTERM'); } catch { /* ignore */ }
 
     const result = await resultPromise;
     expect(result.state).toBe('canceled');
@@ -250,8 +250,8 @@ describe('runOnce - exit states', () => {
 // ---------------------------------------------------------------------------
 
 describe('runWithRetry', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -367,7 +367,7 @@ describe('runWithRetry', () => {
       } catch { /* status.json not written yet */ }
     }
     expect(pid).toBeTruthy();
-    try { process.kill(pid, 'SIGTERM'); } catch { /* ignore */ }
+    try { process.kill(pid as number, 'SIGTERM'); } catch { /* ignore */ }
 
     const result = await resultPromise;
     expect(result.state).toBe('canceled');
@@ -375,7 +375,7 @@ describe('runWithRetry', () => {
   });
 
   test('applies exponential backoff with jitter between retries', async () => {
-    const delays = [];
+    const delays: number[] = [];
 
     await runWithRetry({
       program: 'false',
@@ -401,7 +401,7 @@ describe('runWithRetry', () => {
 
   test('retry 시 output.txt가 truncate되어 최종 attempt만 남음', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker2');
-    const result = await runWithRetry({
+    await runWithRetry({
       program: 'sh',
       args: ['-c', `if [ -f "${markerFile}" ]; then echo attempt2 && exit 0; else touch "${markerFile}" && echo attempt1 && exit 1; fi`],
       prompt: '',
@@ -438,7 +438,7 @@ describe('runWithRetry', () => {
 
   test('writes retrying status before backoff sleep', async () => {
     const markerFile = path.join(tmpDir, 'attempt-marker-retrying');
-    let capturedStatus = null;
+    let capturedStatus: Record<string, unknown> | null = null;
 
     const sleepFn = async () => {
       capturedStatus = readStatus(paths.statusPath);
@@ -456,8 +456,8 @@ describe('runWithRetry', () => {
     });
 
     expect(capturedStatus).toBeTruthy();
-    expect(capturedStatus.state).toBe('retrying');
-    expect(capturedStatus.attempt).toBe(1);
+    expect(capturedStatus!.state).toBe('retrying');
+    expect(capturedStatus!.attempt).toBe(1);
   });
 });
 
@@ -466,8 +466,8 @@ describe('runWithRetry', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - synchronous spawnFn throw', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -481,7 +481,7 @@ describe('runOnce - synchronous spawnFn throw', () => {
   });
 
   test('returns error state when spawnFn throws synchronously', async () => {
-    const throwingSpawn = () => { throw new Error('spawn failed'); };
+    const throwingSpawn = (() => { throw new Error('spawn failed'); }) as any;
 
     const result = await runOnce({
       program: 'anything',
@@ -496,11 +496,11 @@ describe('runOnce - synchronous spawnFn throw', () => {
     });
 
     expect(result.state).toBe('error');
-    expect(result.message.includes('spawn failed')).toBe(true);
+    expect((result.message as string).includes('spawn failed')).toBe(true);
 
     const status = readStatus(paths.statusPath);
     expect(status.state).toBe('error');
-    expect(status.message.includes('spawn failed')).toBeTruthy();
+    expect((status.message as string).includes('spawn failed')).toBeTruthy();
   });
 });
 
@@ -509,8 +509,8 @@ describe('runOnce - synchronous spawnFn throw', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -546,7 +546,7 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
       } catch { /* status.json not written yet */ }
     }
     expect(pid).toBeTruthy();
-    try { process.kill(pid, 'SIGKILL'); } catch { /* ignore */ }
+    try { process.kill(pid as number, 'SIGKILL'); } catch { /* ignore */ }
 
     const result = await resultPromise;
     expect(result.state).toBe('error');
@@ -566,7 +566,7 @@ describe('runOnce - non-SIGTERM signal (SIGKILL)', () => {
 function createCapturingSpawnFn() {
   const captured: Record<string, unknown> = {};
 
-  function mockSpawn(_program, _args, options) {
+  function mockSpawn(_program: string, _args: string[], options: Record<string, unknown>) {
     captured.program = _program;
     captured.args = _args;
     captured.options = options;
@@ -591,12 +591,12 @@ function createCapturingSpawnFn() {
     return child;
   }
 
-  return { mockSpawn, captured };
+  return { mockSpawn: mockSpawn as any, captured };
 }
 
 describe('runOnce - workerEnv injection', () => {
-  let tmpDir;
-  let paths;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -624,7 +624,7 @@ describe('runOnce - workerEnv injection', () => {
     });
 
     expect((captured.options as Record<string, unknown> & { env: Record<string, string> }).env.CLAUDE_CODE_EFFORT_LEVEL).toBe('high');
-    expect((captured.options as Record<string, unknown> & { env: Record<string, string> }).env.PATH).toBe(process.env.PATH);
+    expect((captured.options as Record<string, unknown> & { env: Record<string, string> }).env.PATH).toBe(process.env.PATH!);
   });
 
   test('merges multiple workerEnv vars into spawn env', async () => {
@@ -646,7 +646,7 @@ describe('runOnce - workerEnv injection', () => {
     const env = (captured.options as Record<string, unknown> & { env: Record<string, string> }).env;
     expect(env.VAR_A).toBe('1');
     expect(env.VAR_B).toBe('2');
-    expect(env.PATH).toBe(process.env.PATH);
+    expect(env.PATH).toBe(process.env.PATH!);
   });
 
   test('workerEnv values override existing process.env values', async () => {
@@ -667,7 +667,7 @@ describe('runOnce - workerEnv injection', () => {
 
     const env = (captured.options as Record<string, unknown> & { env: Record<string, string> }).env;
     expect(env.HOME).toBe('/override/home');
-    expect(env.PATH).toBe(process.env.PATH);
+    expect(env.PATH).toBe(process.env.PATH!);
   });
 
   test('subprocess receives workerEnv variables in its environment', async () => {
@@ -764,8 +764,8 @@ describe('main - logging lifecycle', () => {
 import { assemblePrompt } from './worker.ts';
 
 describe('assemblePrompt - reviewer.md fallback', () => {
-  let tmpDir;
-  let promptsDir;
+  let tmpDir: string;
+  let promptsDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -813,9 +813,9 @@ describe('assemblePrompt - reviewer.md fallback', () => {
 // ---------------------------------------------------------------------------
 
 describe('runOnce - assembled-prompt.txt creation', () => {
-  let tmpDir;
-  let paths;
-  let promptsDir;
+  let tmpDir: string;
+  let paths: ReturnType<typeof setupJobDir>;
+  let promptsDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();

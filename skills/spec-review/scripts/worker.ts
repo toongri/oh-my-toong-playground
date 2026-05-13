@@ -15,6 +15,8 @@ import {
   runWithRetry as sharedRunWithRetry,
   MAX_RETRIES,
   BASE_DELAY_MS,
+  type RunOnceOpts,
+  type RunWithRetryOpts,
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
@@ -24,14 +26,14 @@ const FALLBACK_FILE = 'reviewer.md';
 // Spec-review wrappers (reviewer.md fallback default)
 // ---------------------------------------------------------------------------
 
-function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent, fallbackFile }) {
+function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent, fallbackFile }: Parameters<typeof sharedAssemblePrompt>[0]) {
   return sharedAssemblePrompt({
     promptsDir, entityName, rawPrompt, reviewContent,
     fallbackFile: fallbackFile || FALLBACK_FILE,
   });
 }
 
-function runOnce(opts) {
+function runOnce(opts: RunOnceOpts) {
   return sharedRunOnce({
     ...opts,
     fallbackFile: opts.fallbackFile || FALLBACK_FILE,
@@ -39,7 +41,7 @@ function runOnce(opts) {
   });
 }
 
-function runWithRetry(opts) {
+function runWithRetry(opts: RunWithRetryOpts) {
   return sharedRunWithRetry({
     ...opts,
     fallbackFile: opts.fallbackFile || FALLBACK_FILE,

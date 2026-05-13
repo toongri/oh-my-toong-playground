@@ -9,9 +9,10 @@ oh-my-toong is a multi-AI skills and configuration management system. It defines
 ## Development Commands
 
 ```bash
-make validate           # Schema + component validation (all sync.yaml files)
+make validate           # Schema + components + TypeScript typecheck
 make validate-schema    # YAML schema validation only
 make validate-components # Referenced file/directory existence check
+make typecheck          # TypeScript strict type-check (tsc --noEmit)
 make test               # Run all tests (Shell + TypeScript)
 make sync-dry           # Preview sync changes (no writes)
 make sync               # Deploy to target projects (runs validate + tests first)

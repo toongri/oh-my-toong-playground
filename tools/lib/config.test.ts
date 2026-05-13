@@ -1,6 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test";
-import { join } from "path";
-import { parse } from "yaml";
+import { describe, it, expect, beforeEach, spyOn } from "bun:test";
 
 import {
   loadConfig,
@@ -103,7 +101,7 @@ describe("config 모듈", () => {
         size: 10,
         text: async () => { throw new Error("read error"); },
       };
-      const spy = spyOn(Bun, "file").mockReturnValue(badFile as ReturnType<typeof Bun.file>);
+      const spy = spyOn(Bun, "file").mockReturnValue(badFile as unknown as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
         const config = await loadConfig();
@@ -122,7 +120,7 @@ describe("config 모듈", () => {
       const spy = spyOn(Bun, "file").mockReturnValue(badYamlFile as ReturnType<typeof Bun.file>);
       try {
         _resetConfigCache();
-        await expect(loadConfig()).rejects.toThrow();
+        expect(loadConfig()).rejects.toThrow();
       } finally {
         spy.mockRestore();
         _resetConfigCache();

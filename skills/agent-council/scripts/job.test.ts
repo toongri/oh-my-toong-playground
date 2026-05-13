@@ -230,7 +230,7 @@ describe('buildUiPayload', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseYamlSimple', () => {
-  let tmpDir;
+  let tmpDir: string;
   const fallback = {
     council: {
       chairman: { role: 'auto' },
@@ -426,7 +426,7 @@ describe('parseYamlSimple', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseCouncilConfig', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -512,13 +512,11 @@ describe('parseCouncilConfig', () => {
     `;
 
     let exitCode;
-    let stderr = '';
     try {
       execFileSync(process.execPath, ['-e', scriptContent], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
     } catch (err) {
-      exitCode = err.status;
-      stderr = err.stderr || '';
+      exitCode = (err as any).status;
     }
 
     // Should exit with code 1 because 'council:' key is missing
@@ -534,7 +532,7 @@ describe('parseCouncilConfig', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeStatus', () => {
-  let tmpDir;
+  let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -544,7 +542,7 @@ describe('computeStatus', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  function setupJobDir(members) {
+  function setupJobDir(members: Array<{ safeName: string; status: Record<string, unknown> }>) {
     const jobDir = path.join(tmpDir, 'job');
     const membersDir = path.join(jobDir, 'members');
     fs.mkdirSync(membersDir, { recursive: true });
@@ -701,7 +699,7 @@ describe('computeStatus', () => {
       execFileSync(process.execPath, ['-e', scriptContent], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
     } catch (err) {
-      exitCode = err.status;
+      exitCode = (err as any).status;
     }
 
     expect(exitCode).toBe(1);
@@ -722,7 +720,7 @@ describe('computeStatus', () => {
       execFileSync(process.execPath, ['-e', scriptContent], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
     } catch (err) {
-      exitCode = err.status;
+      exitCode = (err as any).status;
     }
 
     expect(exitCode).toBe(1);
@@ -744,7 +742,7 @@ describe('computeStatus', () => {
       execFileSync(process.execPath, ['-e', scriptContent], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
       exitCode = 0;
     } catch (err) {
-      exitCode = err.status;
+      exitCode = (err as any).status;
     }
 
     expect(exitCode).toBe(1);
