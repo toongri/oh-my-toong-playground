@@ -172,6 +172,10 @@ Dispatch when the plan requires external documentation the codebase cannot provi
 
 **Trigger conditions:** New library introduction, major version upgrade, security-related technology choices.
 
+### Spec Source Retrieval — User-Facing Plans
+
+For Scoped+ intent involving user-facing changes, ask the user once whether project specifications exist (Linear / Notion / Figma / PRD / design doc / user research / etc). When the user provides a reference, fetch it via the appropriate MCP or read tool, and use it as ground truth for AC and QA scenario authoring. When no source exists, proceed with interview-derived context — do not record the absence as plan ceremony.
+
 ### Explore/Librarian Prompt Guide
 
 **Prompt structure**: [CONTEXT] + [GOAL] + [DOWNSTREAM] + [REQUEST]
