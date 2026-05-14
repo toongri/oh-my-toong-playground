@@ -193,8 +193,10 @@ After loading context, classify the user's request. Classification determines in
 | **Greenfield** | Goal, Constraint, Success Criteria | 0.4, 0.3, 0.3 |
 | **Brownfield** | Goal, Constraint, Success Criteria, Context | 0.35, 0.25, 0.25, 0.15 |
 
-**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting (see [acceptance-criteria.md](acceptance-criteria.md)).
-After AC is confirmed → Metis consultation automatically (see [review-pipeline.md](review-pipeline.md)).
+Before conducting interviews → **MUST read [interview.md](interview.md)** — question types, vague answer handling, sequential interview rules.
+**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting (**MUST read [acceptance-criteria.md](acceptance-criteria.md)** — two-line AC format, Zero Human Intervention, verification thinking).
+After AC is confirmed → Metis consultation automatically (**MUST read [review-pipeline.md](review-pipeline.md)** — three-agent pipeline, verdict handling, Stage A/B/C presentation).
+After Metis APPROVE/COMMENT → **MUST read [plan-template.md](plan-template.md)** before writing the plan — structure, TODO 7-field format, AC 2-line format, QA scenarios, Final Verification Wave defined ONLY there.
 
 This checklist is internal — do not present it to the user.
 
@@ -275,7 +277,7 @@ The Planning-time Task Discipline is complementary (상보적) to the Pipeline S
 
 | When | Read |
 |------|------|
-| Conducting interviews, asking questions, handling user responses | [interview.md](interview.md) |
-| Drafting acceptance criteria, format, verification thinking | [acceptance-criteria.md](acceptance-criteria.md) |
-| Writing plan files, TODO format, QA scenarios, decomposition | [plan-template.md](plan-template.md) |
-| Running Metis/Oracle/Momus review pipeline, plan presentation | [review-pipeline.md](review-pipeline.md) |
+| **Before conducting interviews (MANDATORY)** | **[interview.md](interview.md)** |
+| **Before AC drafting (MANDATORY — two-line format, Zero Human Intervention)** | **[acceptance-criteria.md](acceptance-criteria.md)** |
+| **Before writing the plan (MANDATORY — structure/TODO format/AC/QA/Final Verification Wave defined ONLY here)** | **[plan-template.md](plan-template.md)** |
+| **Before invoking Metis/Oracle/Momus (MANDATORY — verdict handling, Stage A/B/C)** | **[review-pipeline.md](review-pipeline.md)** |
