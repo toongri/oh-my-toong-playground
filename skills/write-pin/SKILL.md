@@ -1,6 +1,6 @@
 ---
 name: write-pin
-description: "Use when emitting a new pin, updating a stale pin, or superseding existing indexing — triggers include 박기, 발견, write pin, supersedes, pin 갱신, 새 pin, 잘못된 indexing 수정. Also use when learning the pin XML emission format before emitting. Do NOT trigger on pin retrieval tasks (use select-pin instead)."
+description: "Use when you've acquired info worth finding again later — external SSOT cited (URL/Notion/Linear/GitHub/Slack), ground truth located in code, person named as authority, or stale indexing needs supersedes. Also use when learning the <pin> XML emission format. Korean trigger keywords: 박기, 발견, write pin, supersedes, pin 갱신, 새 pin, 잘못된 indexing 수정. Do NOT trigger on pin retrieval tasks (use select-pin instead)."
 ---
 
 # write-pin
