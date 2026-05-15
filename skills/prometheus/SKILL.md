@@ -193,7 +193,7 @@ After loading context, classify the user's request. Classification determines in
 | **Greenfield** | Goal, Constraint, Success Criteria | 0.4, 0.3, 0.3 |
 | **Brownfield** | Goal, Constraint, Success Criteria, Context | 0.35, 0.25, 0.25, 0.15 |
 
-Before conducting interviews → **MUST read [interview.md](interview.md)** — question types, vague answer handling, sequential interview rules.
+Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below (tool use vs user questions, sequential rule, vague answer handling, deferral handling, persistence, anti-patterns — all inline). [interview.md](interview.md) is lookup-only (examples + subagent prompt templates).
 **All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below (two-line AC format, Zero Human Intervention, verification at consumer boundary, transparency, chaining template — all inline). [acceptance-criteria.md](acceptance-criteria.md) is lookup-only (per-tool examples).
 After AC is confirmed → Metis consultation automatically (**MUST read [review-pipeline.md](review-pipeline.md)** — three-agent pipeline, verdict handling, Stage A/B/C presentation).
 After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below (defines structure, TODO 7-field format, AC 2-line format, QA scenarios, MECE/Atomicity, Final Verification Wave — all inline). [plan-template.md](plan-template.md) is lookup-only (worked examples).
@@ -270,6 +270,106 @@ The Planning-time Task Discipline is complementary (상보적) to the Pipeline S
 ### Reconciliation with Work-Principles Mandate
 
 `work-principles.md` mandates task creation before non-trivial work. This mandate applies equally during planning sessions. The platform's native task tool is the implementation vehicle, but discipline is the invariant, not the tool. Whether using the platform's native task-tracking tool, a checklist, or another tracking mechanism, the obligation — create tasks, track completion, never batch-complete — is non-negotiable.
+
+---
+
+## Interview Mode (Mandatory Contract)
+
+Interview rules are inline (not deferred to `interview.md`) so they cannot be partial-read away. The reference file is lookup-only (question categories, quality examples, subagent dispatch prompt templates).
+
+### Tool Use vs User Questions
+
+**The ONLY questions for users are about PREFERENCES, not FACTS.**
+
+| Question Type | Ask User? | Action |
+|---|---|---|
+| "Which project contains X?" | NO | Use explore first |
+| "What patterns exist in the codebase?" | NO | Use explore first |
+| "Where is X implemented?" | NO | Use explore first |
+| "What's the current architecture?" | NO | Use oracle |
+| "What's the tech stack?" | NO | Use explore first |
+| "What's your timeline?" | YES | AskUserQuestion |
+| "Should we prioritize speed or quality?" | YES | AskUserQuestion |
+| "What's the scope boundary?" | YES | AskUserQuestion |
+
+NEVER burden user with questions the codebase can answer. When user has no preference, select best practice autonomously.
+
+### Question Type Selection
+
+| Situation | Method |
+|---|---|
+| Decision with 2-4 clear options | AskUserQuestion (structured choices) |
+| Open-ended / subjective question | Plain text question |
+| Yes/No confirmation | Plain text question |
+| Complex trade-off | Markdown analysis + AskUserQuestion |
+
+**Do NOT force AskUserQuestion for open-ended questions.**
+
+### Sequential Interview Rule
+
+- **One question per message.** Wait for answer before next.
+- **Never bundle** multiple questions into a list, document, or compound prompt.
+- After each answer, evaluate Clearance Checklist (internal). If any item NO, continue interviewing.
+
+### Vague Answer Handling
+
+When users respond vaguely ("~is enough", "just do ~", "decide later"):
+1. **Do NOT accept as-is**
+2. **Ask specific clarifying questions**
+3. **Repeat until clear answer obtained**
+
+### User Deferral Handling (explicit defer is different from vague)
+
+When user explicitly defers ("skip", "I don't know", "your call"):
+1. Research autonomously via explore/librarian
+2. Select industry best practice or codebase-consistent approach
+3. Document: "Autonomous decision: [X] — user deferred, based on [rationale]"
+4. Continue without blocking
+
+### Persistence Rule
+
+**Continue until YOU have no questions left.** Not after 2-3 questions. The Clearance Checklist (items 1-6) is the gate — keep interviewing until all items YES + Ambiguity ≤ 0.2.
+
+### Progress Reporting (after each answer)
+
+```
+Round {n} | Ambiguity: {score}%
+
+| Dimension             | Score | Gap                 |
+|-----------------------|-------|---------------------|
+| Goal                  | {s}   | {gap or "Clear"}    |
+| Constraints           | {s}   | {gap or "Clear"}    |
+| Success Criteria      | {s}   | {gap or "Clear"}    |
+| Context (brownfield)  | {s}   | {gap or "Clear"}    |
+
+→ Next question targets: {weakest dimension}
+```
+
+The Clearance Checklist itself remains internal — only ambiguity scores are surfaced.
+
+### Subagent Use During Interview
+
+| Subagent | When to dispatch |
+|---|---|
+| **explore** | ANY codebase fact-finding (file paths, patterns, current implementation) |
+| **oracle** | Feasibility check, risk assessment, alternative evaluation, dependency mapping spanning 3+ modules, design decisions affecting performance/security/scalability |
+| **librarian** | New library introduction, major version upgrade, security-related technology choice — external authoritative documentation |
+
+Briefly announce "Consulting Oracle for [reason]" before invocation.
+
+**Spec Source Retrieval** (Scoped+ + user-facing changes): Ask user ONCE whether project specifications exist (Linear / Notion / Figma / PRD / design doc / user research). On reference provided, fetch via appropriate MCP or read tool — use as ground truth for AC and QA scenarios. Absence is NOT plan ceremony — proceed with interview-derived context.
+
+### Question Anti-Patterns
+
+| Anti-Pattern | Why |
+|---|---|
+| Multiple questions in one message | Confuses user, dilutes structured choice |
+| Bundling open questions into a list | Equivalent to compound AC — one weak answer hides issues |
+| Using AskUserQuestion for open-ended | Forces false structure; use plain text |
+| Asking codebase facts | Use explore — never burden user |
+| Stopping at 2-3 questions | Premature; clearance, not count, is the gate |
+
+> Examples (question categories, quality standard BAD/GOOD), Rich Context Pattern structure, detailed subagent prompt templates → [interview.md](interview.md). Lookup-only.
 
 ---
 
@@ -634,7 +734,7 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 
 | When | Read | Role |
 |------|------|------|
-| **Before conducting interviews (MANDATORY)** | **[interview.md](interview.md)** | Procedural + lookup |
+| **Looking up question category examples, BAD/GOOD quality patterns, or subagent prompt templates** | [interview.md](interview.md) | **Lookup-only** (contract is inline in `## Interview Mode` above) |
 | **Looking up per-tool AC Verification examples (maestro/playwright/curl/grep/CLI/unit)** | [acceptance-criteria.md](acceptance-criteria.md) | **Lookup-only** (contract is inline in `## Acceptance Criteria` above) |
 | **Looking up plan TODO/Execution/Success Criteria examples** | [plan-template.md](plan-template.md) | **Lookup-only** (contract is inline in `## Plan Structure` above) |
 | **Executing a specific reviewer invocation OR Stage A/B/C** | [review-pipeline.md](review-pipeline.md) | **Lookup-only** (contract is inline in `## Review Pipeline` above) |
