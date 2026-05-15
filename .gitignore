@@ -9,6 +9,7 @@
 
 # local overlay files (device-specific, must not be committed)
 **/*.local.yaml
+.mcp.json
 
 *.log
 .DS_Store
