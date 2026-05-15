@@ -32,7 +32,7 @@ skills:
     - clarify
     - git-master
     - momus
-    - oracle
+    - diagnose
     - qa
     - component: code-review
       platforms: [claude]

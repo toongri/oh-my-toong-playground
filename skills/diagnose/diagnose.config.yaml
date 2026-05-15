@@ -1,0 +1,12 @@
+# Diagnose Configuration
+# Single-reviewer configuration for opencode Hephaestus agent.
+
+review:
+  members:
+    - name: hephaestus
+      command: 'opencode run --format default --agent "Hephaestus - Deep Agent"'
+      emoji: "🔨"
+      color: "BLUE"
+
+  settings:
+    timeout: 600

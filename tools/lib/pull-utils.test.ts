@@ -33,8 +33,8 @@ describe("resolveDeployedPath", () => {
   });
 
   it("returns directory path without suffix for skills", () => {
-    const result = resolveDeployedPath("/proj", "claude", "skills", "oracle");
-    expect(result).toBe("/proj/.claude/skills/oracle");
+    const result = resolveDeployedPath("/proj", "claude", "skills", "diagnose");
+    expect(result).toBe("/proj/.claude/skills/diagnose");
   });
 
   it("returns directory path without suffix for scripts", () => {
@@ -43,8 +43,8 @@ describe("resolveDeployedPath", () => {
   });
 
   it("uses `.gemini/` directory for gemini platform", () => {
-    const result = resolveDeployedPath("/proj", "gemini", "skills", "oracle");
-    expect(result).toBe("/proj/.gemini/skills/oracle");
+    const result = resolveDeployedPath("/proj", "gemini", "skills", "diagnose");
+    expect(result).toBe("/proj/.gemini/skills/diagnose");
   });
 });
 
@@ -56,8 +56,8 @@ describe("resolveSourcePath", () => {
   const ROOT = "/root/oh-my-toong";
 
   it("resolves global ref for skills to `{rootDir}/skills/{name}`", () => {
-    const result = resolveSourcePath("oracle", "skills", ROOT);
-    expect(result).toBe(`${ROOT}/skills/oracle`);
+    const result = resolveSourcePath("diagnose", "skills", ROOT);
+    expect(result).toBe(`${ROOT}/skills/diagnose`);
   });
 
   it("resolves global ref for commands to `{rootDir}/commands/{name}.md`", () => {
@@ -71,8 +71,8 @@ describe("resolveSourcePath", () => {
   });
 
   it("falls back to global path for unscoped ref when `projectDirName` is provided and project-local doesn't exist", () => {
-    const result = resolveSourcePath("oracle", "skills", ROOT, "my-project");
-    expect(result).toBe(`${ROOT}/skills/oracle`);
+    const result = resolveSourcePath("diagnose", "skills", ROOT, "my-project");
+    expect(result).toBe(`${ROOT}/skills/diagnose`);
   });
 
   it("returns error object on cross-project scoped ref when `projectDirName` differs", () => {
@@ -85,13 +85,13 @@ describe("resolveSourcePath", () => {
   it("prefers project-local path when exists for unscoped ref with projectDirName", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
     try {
-      mkdirSync(join(tmpDir, "projects", "my-proj", "skills", "oracle"), { recursive: true });
-      writeFileSync(join(tmpDir, "projects", "my-proj", "skills", "oracle", "SKILL.md"), "# test");
-      mkdirSync(join(tmpDir, "skills", "oracle"), { recursive: true });
-      writeFileSync(join(tmpDir, "skills", "oracle", "SKILL.md"), "# global");
+      mkdirSync(join(tmpDir, "projects", "my-proj", "skills", "diagnose"), { recursive: true });
+      writeFileSync(join(tmpDir, "projects", "my-proj", "skills", "diagnose", "SKILL.md"), "# test");
+      mkdirSync(join(tmpDir, "skills", "diagnose"), { recursive: true });
+      writeFileSync(join(tmpDir, "skills", "diagnose", "SKILL.md"), "# global");
 
-      const result = resolveSourcePath("oracle", "skills", tmpDir, "my-proj");
-      expect(result).toBe(join(tmpDir, "projects", "my-proj", "skills", "oracle"));
+      const result = resolveSourcePath("diagnose", "skills", tmpDir, "my-proj");
+      expect(result).toBe(join(tmpDir, "projects", "my-proj", "skills", "diagnose"));
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -100,11 +100,11 @@ describe("resolveSourcePath", () => {
   it("falls back to global when project-local doesn't exist on filesystem", () => {
     const tmpDir = mkdtempSync(join(tmpdir(), "pull-utils-test-"));
     try {
-      mkdirSync(join(tmpDir, "skills", "oracle"), { recursive: true });
-      writeFileSync(join(tmpDir, "skills", "oracle", "SKILL.md"), "# global");
+      mkdirSync(join(tmpDir, "skills", "diagnose"), { recursive: true });
+      writeFileSync(join(tmpDir, "skills", "diagnose", "SKILL.md"), "# global");
 
-      const result = resolveSourcePath("oracle", "skills", tmpDir, "my-proj");
-      expect(result).toBe(join(tmpDir, "skills", "oracle"));
+      const result = resolveSourcePath("diagnose", "skills", tmpDir, "my-proj");
+      expect(result).toBe(join(tmpDir, "skills", "diagnose"));
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -127,19 +127,19 @@ describe("resolveSourcePath", () => {
 
 describe("reversePlatformPaths", () => {
   it("replaces `.gemini/` with `.claude/`", () => {
-    const content = "See .gemini/skills/oracle/ for details";
+    const content = "See .gemini/skills/diagnose/ for details";
     const result = reversePlatformPaths(content, "gemini");
-    expect(result).toBe("See .claude/skills/oracle/ for details");
+    expect(result).toBe("See .claude/skills/diagnose/ for details");
   });
 
   it("replaces `.codex/` with `.claude/`", () => {
-    const content = "See .codex/skills/oracle/ for details";
+    const content = "See .codex/skills/diagnose/ for details";
     const result = reversePlatformPaths(content, "codex");
-    expect(result).toBe("See .claude/skills/oracle/ for details");
+    expect(result).toBe("See .claude/skills/diagnose/ for details");
   });
 
   it("returns content unchanged for claude platform", () => {
-    const content = "See .claude/skills/oracle/ for details";
+    const content = "See .claude/skills/diagnose/ for details";
     const result = reversePlatformPaths(content, "claude");
     expect(result).toBe(content);
   });
