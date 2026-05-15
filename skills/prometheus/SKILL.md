@@ -495,7 +495,7 @@ Run on every AC before proposing to user:
 
 ## Plan Structure (Mandatory Contract)
 
-This contract applies to EVERY plan regardless of intent (Trivial exempts only the Final Verification Wave). The contract lives here — not in a referenced file — so it cannot be missed via partial-read of a split reference.
+This contract applies to EVERY plan. The contract lives here — not in a referenced file — so it cannot be missed via partial-read of a split reference. (Trivial intent is exempt ONLY from the Final Verification Wave — see that section.)
 
 ### Plan Output Rules
 
@@ -527,7 +527,8 @@ Each TODO is a checkbox line `- [ ] N. Title` with body containing:
    - **API/Type**: types, interfaces, APIs + WHY
    - **Test**: existing test patterns + WHY
    - **External**: official docs, RFCs + WHY
-   - Every TODO needs ≥1 Pattern or API/Type reference. Greenfield → "Greenfield — no existing pattern" explicitly.
+   - Every implementation TODO needs ≥1 Pattern or API/Type reference. Greenfield → "Greenfield — no existing pattern" explicitly.
+   - **FINAL wave exemption**: F1-F4 audit tasks (Wave: FINAL) do NOT require Pattern/API/Type/Test/External references — their target IS the plan itself + the executed work. References field is optional for FINAL wave.
 5. **Parallelization** — `Blocked By: [list]`, `Blocks: [list]`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4)
 6. **Acceptance Criteria** — Two-line format (Observable outcome + Verification). Detailed format in `acceptance-criteria.md`.
 7. **QA Scenarios** — Minimum 2 per TODO (happy path + failure/edge case), 7-field structured block (see below)
