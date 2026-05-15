@@ -367,6 +367,10 @@ GOOD:
 2. Decide based on industry best practices or codebase patterns
 3. Reflect the decision in the PR description
 
+**Bare-text reference (e.g., issue key, channel name):**
+1. Ask once for the full URL/permalink so References can be rendered as a markdown link
+2. If the user has no URL, bare-text is acceptable as fallback
+
 ---
 
 ## Step 4: Clearance Checklist (Interview Exit Condition)
@@ -590,6 +594,7 @@ Return the PR URL to the user after successful creation.
 | Reading git diff file contents during scope assessment | Violates Non-Negotiable Rule | Use only git diff --stat and git log |
 | Deleting original branch after split | User cannot recover | Always preserve the original branch |
 | Skipping freshness check before PR creation | `gh pr create` fails or wrong diff when target branch moved | CAS pattern target SHA re-verification in Step 8 |
+| References를 클릭 불가능한 bare-text로 작성 | GitHub-renderable 아님; reviewer가 navigate 불가 | `[Title](URL)` markdown link 사용. URL 없으면 user에게 한 번 묻고, 없으면 bare-text 허용 (Slack 채널 단독 예외) |
 
 ---
 
