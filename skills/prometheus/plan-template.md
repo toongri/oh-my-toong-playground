@@ -1,115 +1,12 @@
-# Plan Template Reference
+# Plan Template Examples
 
-## Plan Output
+**This file is lookup-only.** All mandatory plan-structure rules (sections, TODO 7-field format, MECE, Atomicity, Maximum Parallelism, Wave Assignment, Final Verification Wave) are defined inline in `SKILL.md > ## Plan Structure (Mandatory Contract)`. The contract is authoritative; the examples below are for reference when drafting concrete TODO bodies, Wave visualizations, or Success Criteria.
 
-**Location:** `$OMT_DIR/plans/{name}.md`
+Read this file when you want to consult a worked example. You do NOT need to read it to know what the plan structure requires — that knowledge is already in SKILL.md.
 
-**Language:** Plans MUST be written in English.
+---
 
-**What to EXCLUDE:** No vague criteria ("verify it works").
-
-## Plan Template Structure
-
-| Section | Contents |
-|---------|----------|
-| **TL;DR** | Quick summary, deliverables (bullet list), estimated effort (Quick/Short/Medium/Large/XL), Parallel Execution (YES/NO — wave description), Critical Path |
-| **Context** | Original Request (verbatim), Interview summary (key decisions — the WHY behind each TODO) |
-| **Work Objectives** | Core objective, Definition of Done, Must Have, Must NOT Have / Guardrails |
-| **TODOs** | Numbered tasks in checkbox format — each with: what to do, must NOT do, files, References, acceptance criteria, parallelization fields, QA scenarios |
-| **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks per wave. Circular dependencies forbidden. Final Verification Wave mandatory for Scoped+ intent |
-| **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. **Zero Human Intervention** — all verification agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
-| **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
-
-## TODO Task Format
-
-Each TODO is a checkbox line: `- [ ] N. Title` with body content indented.
-
-- Each task = implementation + test combined (never separate)
-- **What to do** — faithfully transfer interview conclusions. The executor has NO interview context. Capture:
-  - Content — what the result contains or how it behaves
-  - Scope — which areas, entities, or modules are covered
-  - Approach — what direction or pattern to follow
-  - Inputs — what specs, requirements, or prior decisions inform this
-  - Decisions — choices confirmed during interview
-- **Files**: What this TODO creates or modifies — the deliverables
-- **References (CRITICAL)** — executor has NO interview context. Provide:
-  - **Pattern References**: `file:line-range` — existing code patterns. WHY explains what to adopt.
-  - **API/Type References**: types, interfaces, APIs. WHY explains why this matters.
-  - **Test References**: existing test patterns. WHY explains what style to follow.
-  - **External References**: official docs, RFCs. WHY explains what decision this informs.
-  - Every TODO must include at least one Pattern or API/Type reference. For greenfield: state "Greenfield — no existing pattern" explicitly.
-- **Parallelization** — every TODO must include:
-  - `Blocked By`: list of TODO numbers (empty if none)
-  - `Blocks`: list of TODO numbers (empty if none)
-  - `Wave`: execution wave number (1-based)
-- **Wave Assignment Rule**: `Wave = max(wave of each blocker) + 1`. Empty Blocked By = Wave 1. MANDATORY — no manual override.
-- **Anti-pattern**: Assigning Wave 2 to independent task because "it makes sense." If no dependency, Wave 1.
-
-## MECE Decomposition
-
-Tasks must be Mutually Exclusive (no overlap) and Collectively Exhaustive (full coverage).
-
-Self-check after drafting TODOs:
-1. **Overlap**: Do any two TODOs modify the same file for the same purpose? → Merge or redraw
-2. **Coverage**: If every TODO is completed, is the requirement fulfilled? → Add missing TODO
-3. **Hidden coupling**: Implicit state, ordering, undeclared dependencies? → Make explicit or merge
-
-| Anti-Pattern | Example | Fix |
-|-------------|---------|-----|
-| **Overlap** | Both TODO 1 and 2 validate user input | Merge or split by layer with boundary |
-| **Gap** | CRUD TODOs cover create/read/update but not delete | Add delete TODO |
-| **False MECE** | "frontend" and "backend" but API contract owned by neither | Add contract TODO or assign ownership |
-
-## Maximum Parallelism
-
-| Rule | Threshold |
-|------|-----------|
-| **Granularity** | 1 task = 1 concern = 1-3 files. 4+ files or 2+ concerns → SPLIT |
-| **Parallelism Target** | 5-8 tasks per wave. <3 in non-bottleneck wave = under-split |
-| **Dependency Minimization** | Shared deps (types, interfaces) as Wave-1 tasks |
-
-## Atomicity Heuristic
-
-Each TODO must be atomic — completable in one delegation pass.
-
-| # | Condition | Threshold |
-|---|-----------|-----------|
-| 1 | Concern scope | 1 concern per task |
-| 2 | File scope | 1-3 files per task (hard backstop) |
-| 3 | Single-delegation | Finish without mid-task coordination |
-
-Any condition fails → decompose further.
-
-| Smell | Action |
-|-------|--------|
-| "and" in description | Split into separate TODOs |
-| Spans unrelated concerns | One TODO per responsibility |
-| Requires sequential phases | Each phase = own TODO with Blocked By |
-| Task touches 4+ files | Decompose by responsibility |
-
-**Vertical Slice Rule**: Prefer vertical slices (one feature end-to-end) over horizontal (all models, then all services). Exception: shared foundation tasks in Wave 1.
-
-## QA Scenarios (MANDATORY per TODO)
-
-A code change is verified at the layer the user observes. Internal tests prove the code runs; scenarios prove the product works for the user. Verification at the consumer boundary yields the highest accuracy — that is why QA Scenarios are mandatory per TODO regardless of modality.
-
-Each scenario uses a structured block with 7 fields:
-- **Scenario**: `{Name} — {Purpose}`
-- **Tool**: CLI command (`curl`, `bun test`, `playwright`, `maestro`, `grep` — NOT descriptions like "Header validation")
-- **Preconditions**: Setup state required (scenario-level; for per-AC state mutation that needs teardown, use the [Setup/Cleanup](./acceptance-criteria.md#state-mutation-setup--cleanup) fields instead)
-- **Steps**: Numbered list of exact commands
-- **Expected**: Observable outcome on success
-- **Failure**: Specific failure symptoms (NOT "Expected does not happen")
-- **Evidence**: `$OMT_DIR/evidence/{plan-name}/{task-slug}/{scenario-slug}.{ext}`
-
-**Minimum 2 scenarios per TODO**: happy path + failure/edge case.
-
-**Specificity requirements:**
-- API: Specific paths/methods, exact HTTP codes, JSON field paths
-- UI: CSS selectors, exact DOM state assertions
-- All: Concrete test data, wait conditions, at least ONE failure scenario per task
-
-## TODO Example
+## TODO Example (worked example)
 
 ```
 - [ ] 3. Implement UserService
@@ -160,7 +57,9 @@ Each scenario uses a structured block with 7 fields:
       Evidence: $OMT_DIR/evidence/{plan-name}/implement-user-service/validation-failure.json
 ```
 
-## Execution Strategy Example
+---
+
+## Execution Strategy Example (worked example)
 
 ```
 Wave Visualization:
@@ -187,45 +86,9 @@ Wave Visualization:
 Critical Path: Task 1 -> Task 2 -> Task 4 -> Task 7 -> F1-F4
 ```
 
-## Final Verification Wave
+---
 
-Every plan with Scoped or higher intent MUST include Final Verification Wave. Trivial exempt.
-
-> ALL F1-F4 must APPROVE. Rejection → fix task → re-enter implementation → full F1-F4 re-run.
-
-- [ ] F1. Plan Compliance Audit
-  What to verify:
-    - Read plan end-to-end
-    - For each "Must Have": verify implementation exists
-    - For each "Must NOT Have": search for forbidden patterns
-    - Check evidence files exist in $OMT_DIR/evidence/
-  Expected Output: Must Have [N/N] | Must NOT Have [N/N] | VERDICT
-
-- [ ] F2. Code Quality Review
-  What to verify:
-    - Run build + linter + tests
-    - Review changed files for: as any, empty catches, console.log, unused imports
-    - Check AI slop: excessive comments, over-abstraction, generic names
-  Expected Output: Build [PASS/FAIL] | Tests [N/N] | VERDICT
-
-- [ ] F3. QA Scenario Execution
-  What to verify:
-    - Execute EVERY QA scenario from EVERY task
-    - Test cross-task integration
-    - Save evidence to $OMT_DIR/evidence/{plan-name}/final-qa/
-  Expected Output: Scenarios [N/N pass] | Integration [N/N] | VERDICT
-
-- [ ] F4. Scope Fidelity Check
-  What to verify:
-    - For each task: read spec, read actual diff
-    - Verify 1:1 correspondence (no missing, no creep)
-    - Check "Must NOT do" compliance
-    - Detect cross-task contamination
-  Expected Output: Tasks [N/N compliant] | VERDICT
-
-Wave field: `Wave: FINAL` (literal string). Numeric rule applies to implementation tasks only.
-
-## Success Criteria Template
+## Success Criteria Template (worked example)
 
 ```
 ## Success Criteria
