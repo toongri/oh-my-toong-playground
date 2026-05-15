@@ -194,7 +194,7 @@ After loading context, classify the user's request. Classification determines in
 | **Brownfield** | Goal, Constraint, Success Criteria, Context | 0.35, 0.25, 0.25, 0.15 |
 
 Before conducting interviews → **MUST read [interview.md](interview.md)** — question types, vague answer handling, sequential interview rules.
-**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting (**MUST read [acceptance-criteria.md](acceptance-criteria.md)** — two-line AC format, Zero Human Intervention, verification thinking).
+**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below (two-line AC format, Zero Human Intervention, verification at consumer boundary, transparency, chaining template — all inline). [acceptance-criteria.md](acceptance-criteria.md) is lookup-only (per-tool examples).
 After AC is confirmed → Metis consultation automatically (**MUST read [review-pipeline.md](review-pipeline.md)** — three-agent pipeline, verdict handling, Stage A/B/C presentation).
 After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below (defines structure, TODO 7-field format, AC 2-line format, QA scenarios, MECE/Atomicity, Final Verification Wave — all inline). [plan-template.md](plan-template.md) is lookup-only (worked examples).
 
@@ -270,6 +270,126 @@ The Planning-time Task Discipline is complementary (상보적) to the Pipeline S
 ### Reconciliation with Work-Principles Mandate
 
 `work-principles.md` mandates task creation before non-trivial work. This mandate applies equally during planning sessions. The platform's native task tool is the implementation vehicle, but discipline is the invariant, not the tool. Whether using the platform's native task-tracking tool, a checklist, or another tracking mechanism, the obligation — create tasks, track completion, never batch-complete — is non-negotiable.
+
+---
+
+## Acceptance Criteria (Mandatory Contract)
+
+AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file is now lookup-only (per-tool Verification examples + worked example).
+
+### When to Draft
+
+If user does not provide AC, you MUST draft them. Propose → user confirms → finalize. NEVER proceed to Metis without confirmed AC.
+
+### AC Format (two-line, mandatory)
+
+```
+- [ ] **[Observable outcome]**: WHAT state change is visible after completion
+      **Verification**: HOW to confirm — executable command, observable behavior, or state assertion
+```
+
+Optional `Setup` / `Cleanup` lines when Verification mutates state. The criterion is the contract between planner and executor; executor has NO interview context.
+
+### AC Granularity (1 AC = 1 observable state change)
+
+Each AC describes a single atomic outcome confirmed by a single Verification command. Compound ACs bundle independent changes — one failure hides others. Decompose: one AC per state change.
+
+### Verification at Consumer Boundary (MANDATORY)
+
+Verify at the layer the consumer observes:
+
+| Deliverable | Consumer | AC Layer |
+|---|---|---|
+| Mobile feature | End user | Maestro UI scenario |
+| Web feature | End user | Playwright UI scenario |
+| HTTP API | API client | curl + jq integration |
+| CLI command | Shell user | exec + stdout assertion |
+| Library function | Calling dev/agent | unit test (with consumer-boundary justification) |
+
+**Anti-tautology rule**: Prometheus specifies the input/output or behavioral constraint in the AC text. Do NOT delegate "what counts as passing" to executor — meta-circular verification.
+
+Implementation test files (`*.test.ts`, `*.spec.ts`) are implementation evidence, NOT default AC primitives. Citing a unit test as AC requires: (1) who's the consumer of this unit? (2) where invoked directly (file:line)? (3) why is this unit the consumer boundary?
+
+### Verification Transparency (4-question rule)
+
+Reviewer must answer 4 questions from AC text alone:
+1. What state must exist before Verification? (Setup)
+2. What command verifies the requirement? (Verification)
+3. What does success look like? (Expected outcome)
+4. How is state restored, if needed? (Cleanup)
+
+### State Mutation: Setup / Cleanup
+
+If Verification mutates state (DB rows, files, registered users, keychain entries), AC must declare Setup/Cleanup OR rely on isolation (ephemeral schema, randomized IDs, container-per-run).
+
+| Field | Purpose |
+|---|---|
+| **Setup** | Commands establishing required state (run before Verification) |
+| **Cleanup** | Commands reverting mutations (run after Verification, even on failure) |
+
+Omit when: read-only Verification, runner provides isolation. Strongly recommended when mutations cross persistent boundaries (DB, FS outside `/tmp`, simulator state).
+
+### Required Chaining Template (executable safety contract)
+
+Setup/Verification/Cleanup share a single shell session. Executor MUST chain so that (a) Cleanup runs unconditionally and (b) Verification's exit code is preserved:
+
+```bash
+setup_cmd && { verify_cmd; VERIFY_EXIT=$?; } || VERIFY_EXIT=$?
+cleanup_cmd
+exit ${VERIFY_EXIT:-1}
+```
+
+Forbidden patterns:
+
+| Pattern | Why forbidden |
+|---|---|
+| `verify_cmd && cleanup_cmd` | Skips Cleanup on verification failure → resource leak |
+| `verify_cmd; cleanup_cmd` | Cleanup exit code masks verification failure → false PASS |
+
+Defensive Cleanup guard for unset IDs: `[ -n "$id" ] && curl -X DELETE ".../$id" || true`.
+
+### Executor-Provided Variables
+
+AC may reference ambient variables exported by Argus Stage 3:
+
+| Variable | Scope | Source |
+|---|---|---|
+| `$API_BASE_URL` | HTTP API ACs | Stage 3, Step 3.2 (server boot) |
+| `$IOS_UDID` | iOS mobile ACs | Stage 3, Step 3.5 (simulator boot) |
+| `$ANDROID_SERIAL` | Android mobile ACs | Stage 3, Step 3.5 (emulator boot) |
+| `$evidence_xml` | Tool ACs emitting a report file | Stage 3, per-AC (resolved before each verification) |
+
+Adding a new variable requires (1) updating this table and (2) ensuring executor exports it. Introduce only when ≥2 AC kinds reference.
+
+### Reference Integration (when user provides references)
+
+When user specifies references ("reference X", "based on Y pattern"):
+1. Each reference MUST produce ≥1 AC item with a specific behavioral constraint derived from that reference
+2. Constraint must be verifiable without reading the reference itself — self-contained
+
+If a reference cannot produce a specific behavioral constraint, ask: "What specific aspect of [reference] should the implementation follow?"
+
+### AC Anti-Patterns (cheat-sheet)
+
+| Anti-Pattern | Why It Fails | Fix |
+|---|---|---|
+| File listing ("shared/lib/x.js created") | Implementation detail | Outcome at consumer boundary + grep verification |
+| Section adding ("Add ## Model section") | Action, not result | Behavioral outcome ("protocol contains X instruction") |
+| Vague verification ("Verify it works") | Not executable | Name command, state, or assertion |
+| Task restatement ("Auth implemented") | Restates task | Observable consumer behavior ("Unauthenticated /api/* returns 401") |
+| Universal truths ("All tests pass") | Always-true, not plan-specific | Move to Verification Strategy |
+| Absence-only ("X not in grep") | Deletion alone passes | Presence checks first, then absence |
+| Compound AC | Bundles independent changes — one failure hides others | Decompose per state change |
+| State-mutating without teardown | Re-runs fail (409 Conflict) | Setup + Cleanup or unique-input scoping |
+
+### AC Self-Check (mandatory before finalizing)
+
+Run on every AC before proposing to user:
+- [ ] If Verification passes, does the consumer actually receive value?
+- [ ] Does an implementation exist that passes Verification vacuously? If yes, layer is too deep — move outward.
+- [ ] If citing a unit test, did you justify the unit as consumer-facing (per the three questions above)?
+
+> Per-tool Verification examples (maestro, playwright, curl, grep, CLI, unit) + worked example + Handling User Response → [acceptance-criteria.md](acceptance-criteria.md). Lookup-only.
 
 ---
 
@@ -381,6 +501,6 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 | When | Read | Role |
 |------|------|------|
 | **Before conducting interviews (MANDATORY)** | **[interview.md](interview.md)** | Procedural + lookup |
-| **Before AC drafting (MANDATORY — two-line format, Zero Human Intervention)** | **[acceptance-criteria.md](acceptance-criteria.md)** | Procedural + lookup |
+| **Looking up per-tool AC Verification examples (maestro/playwright/curl/grep/CLI/unit)** | [acceptance-criteria.md](acceptance-criteria.md) | **Lookup-only** (contract is inline in `## Acceptance Criteria` above) |
 | **Looking up plan TODO/Execution/Success Criteria examples** | [plan-template.md](plan-template.md) | **Lookup-only** (contract is inline in `## Plan Structure` above) |
 | **Before invoking Metis/Oracle/Momus (MANDATORY — verdict handling, Stage A/B/C)** | **[review-pipeline.md](review-pipeline.md)** | Procedural + lookup |
