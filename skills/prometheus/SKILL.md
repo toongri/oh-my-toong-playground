@@ -496,6 +496,140 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 
 ---
 
+## Review Pipeline (Mandatory Contract)
+
+Three-agent pipeline + Plan Presentation. Workflow-wide rules inline here; per-stage invocation templates + Stage A HTML rendering procedure → `review-pipeline.md` (lookup).
+
+### Three-Agent Pipeline
+
+| | Metis | Oracle | Momus |
+|---|---|---|---|
+| **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Oracle |
+| **Input** | User Goal + Scope + AC | Plan + Codebase | Plan |
+| **Validates** | Requirements completeness | Codebase feasibility | Document quality |
+| **Reads code** | No | Yes (file:line) | No |
+
+### Common Gate Pattern (ALL reviewers)
+
+```
+MANDATORY: Reviewer MUST pass (APPROVE or COMMENT) before proceeding.
+- Do NOT proceed until APPROVE or COMMENT
+- On REQUEST_CHANGES: revise and re-invoke
+- On missing or ambiguous verdict: treat as REQUEST_CHANGES
+- Loop repeats indefinitely until pass
+- Skipping is NEVER permitted
+```
+
+A REQUEST_CHANGES verdict blocks ALL downstream progression — no stage advances until the blocking reviewer re-issues APPROVE or COMMENT after a proper Revise cycle.
+
+### Common Verdict Handling
+
+| Verdict | Action |
+|---------|--------|
+| **APPROVE** | Proceed to next stage |
+| **COMMENT** | Incorporate findings silently, proceed |
+| **REQUEST_CHANGES** | Revise, re-invoke. Loop until APPROVE or COMMENT |
+| **Missing / ambiguous** (no explicit verdict label, punch-list only, "verdict inferable") | Treat as REQUEST_CHANGES |
+
+> "Incorporate findings silently": absorb reviewer findings into your understanding. Reviewer names, verdict labels, advisory enumeration do NOT appear in plan body. Reviewers shape the plan; they do not annotate it.
+
+### Operational Definition of "Revise"
+
+Revise = exactly these three steps, in order:
+
+1. **Modify source material** to address every directive in the REQUEST_CHANGES verdict
+2. **Re-invoke the same reviewer type on a fresh agent instance** (Reviewer Freshness Rule)
+3. **Wait for a new APPROVE or COMMENT** on the revised material
+
+A sequence missing any step is not Revise. Self-assessment, paraphrasing the directive, partial fixes, deferring to a later TODO, executor-side fixes, asking the user to bypass — all fail step 2 or step 3.
+
+### Verdict Freshness Rule
+
+A verdict is valid only when issued by a reviewer agent on the **current version** of the artifact. Prior verdicts on earlier versions are expired.
+
+Self-assessment cannot substitute for a reviewer verdict. Even if prometheus believes the revision is correct, that belief is irrelevant — only the reviewer's re-issuance advances the pipeline.
+
+### Reviewer Freshness Rule
+
+Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an agent thread that has already issued a verdict on a prior version.
+
+**Rationale**: Reusing introduces commitment/consistency bias (Cialdini) — the agent rubber-stamps revisions because of prior commitment. Fresh instance evaluates without anchoring.
+
+**Enforcement**: Dispatch a new subagent via the platform's native subagent/dispatch primitive for every reviewer invocation. Do not pass prior verdict context into the new prompt.
+
+### Pipeline State Machine
+
+| State | Description | Transitions |
+|-------|-------------|-------------|
+| **S0: Interview Mode** | Gathering requirements | → S1 on Metis-ready clearance |
+| **S1: Metis Invocation** | 3-Section prompt to Metis | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
+| **S2: Plan Generation** | Writing plan to `$OMT_DIR/plans/{name}.md` | → S3 on self-review pass |
+| **S3: Oracle Invocation** | Plan path to Oracle | → S4 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
+| **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
+| **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
+| **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
+| **S7: Execution Bridge** | Stage C options + user selection | → S8 on selection; → S0 on "Revise plan" |
+| **S8: Execution Dispatch** | Invoke skill per selection | (terminal) |
+
+S7 → S0 edge: "Revise plan" returns to Interview Mode — full pipeline re-runs.
+
+### Loop Termination Rule
+
+Reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the current artifact version. REQUEST_CHANGES → Revise. Missing/ambiguous → treat as REQUEST_CHANGES.
+
+Time pressure, user override ("just proceed"), self-assessment of fix correctness, parallel dispatch on a blocked artifact — none terminate the loop.
+
+### Self-Review Checklist (after plan generation, before Oracle)
+
+| # | Item | Check |
+|---|------|-------|
+| 1 | All TODOs have acceptance criteria | Every TODO specifies verifiable completion criteria |
+| 2 | File references exist | All file paths and line references resolve |
+| 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
+| 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
+
+Failure action: loop back and fix before submitting to Oracle.
+
+### Gap Classification (post-plan self-review)
+
+| Level | Definition | Handling |
+|---|---|---|
+| **CRITICAL** | Requires user input | Return to Interview Mode |
+| **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
+| **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
+
+### Plan Presentation (S5/S6/S7 — MANDATORY after Momus APPROVE)
+
+This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execute Stages A → B → C before any user-facing handoff. Skipping = treating the plan as user-ready when it is unrendered. **Past sessions have skipped Stage A entirely; do NOT.**
+
+| Stage | Mandate | Detail location |
+|---|---|---|
+| **Stage A** | Render plan → `$OMT_DIR/plans/plan.html` (single-file, browser-openable). Verbatim plan content + session-derived boxes (Stage B recommendation, Pipeline State). Graceful fallback: if conversion fails, present raw markdown and continue to Stage B. | Rendering procedure (6 invariants, 3 translation invariants, template reference) in `review-pipeline.md` |
+| **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Oracle COMMENT signals). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
+| **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
+
+On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to Interview Mode.
+
+**IMPORTANT**: On execution selection, MUST invoke via `Skill()` or delegate. Do NOT tell user to run a command manually.
+
+### Reviewer Invocation Anti-Patterns
+
+| Reviewer | Anti-Pattern | Problem |
+|---|---|---|
+| Metis | Summarized AC | Verifiability uncheckable |
+| Metis | Abstract scope | Completeness uncheckable |
+| Metis | Missing user goal | Intent unclassifiable |
+| Oracle | Restating plan content in prompt | Oracle reads file — token waste |
+| Oracle | Asking for code review | Oracle reviews feasibility, not code quality |
+| Oracle | Skipping after Metis APPROVE | Gate violation — Oracle mandatory |
+| Momus | Repeating plan content | Momus reads file — token waste |
+| Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
+| Momus | Adding review instructions | Momus has own criteria |
+
+> Detailed invocation templates (3-Section Metis, Oracle Verification Focus, Momus path-only) + Stage A HTML rendering procedure (6 rendering invariants, 3 translation invariants, template reference, substitution semantics) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
+
+---
+
 ## Reference Guides
 
 | When | Read | Role |
@@ -503,4 +637,4 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 | **Before conducting interviews (MANDATORY)** | **[interview.md](interview.md)** | Procedural + lookup |
 | **Looking up per-tool AC Verification examples (maestro/playwright/curl/grep/CLI/unit)** | [acceptance-criteria.md](acceptance-criteria.md) | **Lookup-only** (contract is inline in `## Acceptance Criteria` above) |
 | **Looking up plan TODO/Execution/Success Criteria examples** | [plan-template.md](plan-template.md) | **Lookup-only** (contract is inline in `## Plan Structure` above) |
-| **Before invoking Metis/Oracle/Momus (MANDATORY — verdict handling, Stage A/B/C)** | **[review-pipeline.md](review-pipeline.md)** | Procedural + lookup |
+| **Executing a specific reviewer invocation OR Stage A/B/C** | [review-pipeline.md](review-pipeline.md) | **Lookup-only** (contract is inline in `## Review Pipeline` above) |
