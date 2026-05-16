@@ -530,7 +530,7 @@ Each TODO is a checkbox line `- [ ] N. Title` with body containing:
    - Every implementation TODO needs ≥1 Pattern or API/Type reference. Greenfield → "Greenfield — no existing pattern" explicitly.
    - **FINAL wave exemption**: F1-F4 audit tasks (Wave: FINAL) do NOT require Pattern/API/Type/Test/External references — their target IS the plan itself + the executed work. References field is optional for FINAL wave.
 5. **Parallelization** — `Blocked By: [list]`, `Blocks: [list]`, `Wave: N` (1-based, OR `Wave: FINAL` for F1-F4)
-6. **Acceptance Criteria** — Two-line format (Observable outcome + Verification). Full contract (Granularity, Consumer Boundary, Setup/Cleanup, Required Chaining Template, Anti-Patterns, Self-Check) is in `## Acceptance Criteria (Mandatory Contract)` above. Per-tool Verification examples → `acceptance-criteria.md` (lookup-only).
+6. **Acceptance Criteria** — Follow `## Acceptance Criteria (Mandatory Contract)` above.
 7. **QA Scenarios** — Minimum 2 per TODO (happy path + failure/edge case), 7-field structured block (see below)
 
 **Wave Assignment Rule**: `Wave = max(wave of each blocker) + 1`. Empty Blocked By = Wave 1. MANDATORY — no manual override. Anti-pattern: assigning Wave 2 to independent task because "it makes sense." If no dependency, Wave 1.
@@ -599,7 +599,7 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 
 ## Review Pipeline (Mandatory Contract)
 
-Three-agent pipeline + Plan Presentation. All mandatory contracts (gate pattern, verdict handling, Revise definition, freshness rules, state machine, Plan Presentation mandate, **post-selection dispatch actions**) are inline below. Lookup material in `review-pipeline.md`: Metis/Oracle/Momus invocation templates, Stage A HTML rendering procedure (6 rendering + 3 translation invariants + template reference), Stage B Decision Matrix details, Stage C option *formatting* (not dispatch — dispatch is inline).
+Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. Lookup material (invocation templates, Stage A rendering procedure, Stage B/C details) → `review-pipeline.md`.
 
 ### Three-Agent Pipeline
 
