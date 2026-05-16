@@ -194,9 +194,9 @@ After loading context, classify the user's request. Classification determines in
 | **Brownfield** | Goal, Constraint, Success Criteria, Context | 0.35, 0.25, 0.25, 0.15 |
 
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below (tool use vs user questions, sequential rule, vague answer handling, deferral handling, persistence, anti-patterns — all inline). [interview.md](interview.md) is lookup-only (examples + subagent prompt templates).
-**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below (two-line AC format, Zero Human Intervention, verification at consumer boundary, transparency, chaining template — all inline). [acceptance-criteria.md](acceptance-criteria.md) is lookup-only (per-tool examples).
-After AC is confirmed → Metis consultation automatically (**MUST read [review-pipeline.md](review-pipeline.md)** — three-agent pipeline, verdict handling, Stage A/B/C presentation).
-After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below (defines structure, TODO 7-field format, AC 2-line format, QA scenarios, MECE/Atomicity, Final Verification Wave — all inline). [plan-template.md](plan-template.md) is lookup-only (worked examples).
+**All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
+After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
+After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below.
 
 This checklist is internal — do not present it to the user.
 
