@@ -184,6 +184,8 @@ Before asking the user to choose execution mode, compute a recommendation:
 
 ## Stage C: Execution Bridge — Option Formatting
 
+> This section is **option-formatting only**. Post-selection dispatch actions (which skill to invoke when the user selects Option 1/2/3) are defined inline in `SKILL.md > ## Review Pipeline > Plan Presentation` — do NOT look here for that.
+
 After the user reads Stage B's recommendation, present execution options via the platform's user-prompt primitive (structured choice):
 
 **(1) Full orchestration**
