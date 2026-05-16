@@ -1,117 +1,14 @@
-# Review Pipeline Reference
+# Review Pipeline — Lookup
 
-Plan generation trigger, three-agent review pipeline, and execution bridge.
+**This file is lookup-only.** All workflow-wide rules (Common Gate Pattern, Verdict Handling, Revise definition, Verdict/Reviewer Freshness Rules, Pipeline State Machine, Loop Termination, Self-Review Checklist, Gap Classification, Plan Presentation mandate, Anti-Patterns) are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
 
-## Plan Generation Trigger
-
-**Trigger**: Metis consultation passes (APPROVE or COMMENT). Proceed directly — do NOT ask user for confirmation at this stage. User reviews after Momus approval.
-
-## Three-Agent Pipeline
-
-| | Metis | Oracle | Momus |
-|---|---|---|---|
-| **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Oracle |
-| **Input** | User Goal + Scope + AC | Plan + Codebase | Plan |
-| **Validates** | Requirements completeness | Codebase feasibility | Document quality |
-| **Reads code** | No | Yes (file:line) | No |
-
-## Common Gate Pattern
-
-All three agents follow the same mandatory gate:
-
-```
-MANDATORY: Agent MUST pass (APPROVE or COMMENT) before proceeding.
-- Do NOT proceed until APPROVE or COMMENT
-- On REQUEST_CHANGES: revise and re-invoke
-- On missing or ambiguous verdict: treat as REQUEST_CHANGES
-- Loop repeats indefinitely until pass
-- Skipping is NEVER permitted
-```
-
-**A REQUEST_CHANGES verdict blocks ALL downstream progression** — no stage may advance until the blocking reviewer re-issues APPROVE or COMMENT after a proper Revise cycle.
-
-**Common Verdict Handling:**
-
-| Verdict | Action |
-|---------|--------|
-| **APPROVE** | Proceed to next stage |
-| **COMMENT** | Incorporate findings silently, proceed |
-| **REQUEST_CHANGES** | Revise, re-invoke. Must loop until APPROVE or COMMENT |
-| **Missing / ambiguous** (no explicit verdict label, punch-list only, "verdict inferable") | Treat as REQUEST_CHANGES |
-
-> **Incorporate findings silently**: absorb reviewer findings (Metis/Oracle/Momus) into your understanding of the work. Reviewer names, verdict labels, and advisory enumeration do NOT appear in plan body. Reviewers shape the plan; they do not annotate it.
+Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A HTML render, Stage B Decision Matrix computation, or Stage C option presentation. Read the corresponding section in full at that moment.
 
 ---
 
-## Operational Definition of "Revise"
-
-**Revise** = exactly these three steps, in order:
-
-1. **Modify source material** to address every directive in the REQUEST_CHANGES verdict.
-2. **Re-invoke the same reviewer type on a fresh agent instance** (Reviewer Freshness Rule).
-3. **Wait for a new APPROVE or COMMENT** on the revised material.
-
-A sequence missing any of the three steps is not Revise. Self-assessment, paraphrasing the directive, partial fixes, deferring to a later TODO, executor-side fixes, and asking the user to bypass — all fail step 2 or step 3.
-
----
-
-## Verdict Freshness Rule
-
-A verdict is valid only when issued by a reviewer agent on the **current version** of the artifact. Prior verdicts on earlier versions are expired and carry no authority.
-
-**Self-assessment cannot substitute for a reviewer verdict.** If prometheus believes the revision is correct, that belief is irrelevant — only the reviewer's re-issuance of APPROVE or COMMENT advances the pipeline.
-
-Consequence: even if the planner is certain the directive has been addressed, it MUST re-invoke the reviewer and wait.
-
----
-
-## Reviewer Freshness Rule
-
-Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an agent thread that has already issued a verdict on a prior version of the artifact.
-
-**Rationale**: Reusing the same agent thread introduces **commitment/consistency bias** (Cialdini) — the agent is more likely to rubber-stamp a revision because it already issued a prior approval or rejection. A fresh instance evaluates the current artifact without anchoring to its own prior verdict.
-
-**Enforcement**: Dispatch a new subagent via the platform's native subagent/dispatch primitive for every reviewer invocation. Do not pass prior verdict context into the new invocation prompt.
-
----
-
-## Pipeline State Machine
-
-The pipeline progresses through discrete states. Transitions are triggered by reviewer verdicts or user selections.
-
-| State | Description | Transitions |
-|-------|-------------|-------------|
-| **S0: Interview Mode** | Gathering requirements from user | → S1 on Metis-ready clearance |
-| **S1: Metis Invocation** | Sending 3-Section prompt to Metis | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
-| **S2: Plan Generation** | Writing plan to `$OMT_DIR/plans/{name}.md` | → S3 on self-review pass |
-| **S3: Oracle Invocation** | Sending plan path to Oracle for feasibility review | → S4 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
-| **S4: Momus Invocation** | Sending plan path to Momus for document quality review | → S5 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
-| **S5: Plan Presentation** | Rendering plan (Stage A) and presenting to user | → S6 on user views plan |
-| **S6: Execution Recommendation** | Computing and presenting Stage B recommendation | → S7 on user receives recommendation |
-| **S7: Execution Bridge** | Presenting Stage C options, awaiting user selection | → S8 on selection; → S0 on "Revise plan" |
-| **S8: Execution Dispatch** | Invoking skill per user selection | (terminal — execution handed off to dispatched skill; "Revise plan" is routed from S7, not S8) |
-
-**S7 → S0 edge**: When the user selects "Revise plan" at Stage C (S7), the pipeline returns to S0 (Interview Mode) — Metis → Plan → Oracle → Momus pipeline re-runs from the beginning after requirements are updated.
-
----
-
-## Loop Termination Rule
-
-The reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the current artifact version.
-
-- REQUEST_CHANGES → Revise (per Operational Definition above).
-- Missing or ambiguous verdict → treat as REQUEST_CHANGES. Re-invoke.
-- Time pressure, user override ("just proceed"), self-assessment of fix correctness, and parallel dispatch on a blocked artifact do **not** terminate the loop.
-
-Only a fresh reviewer-issued APPROVE or COMMENT on the current artifact moves pipeline state forward.
-
----
-
-## Metis Feedback Loop
+## Metis Invocation Template (3-Section)
 
 **When**: Clearance all YES + AC confirmed by user. Auto-invoke — do NOT wait for user to say "generate plan."
-
-**Invocation Template (3-Section):**
 
 ```markdown
 ## 1. USER GOAL
@@ -126,48 +23,13 @@ Only a fresh reviewer-issued APPROVE or COMMENT on the current artifact moves pi
 [Confirmed AC in full — paste verbatim. No summarizing.]
 ```
 
-**On Metis REQUEST_CHANGES: Return to Interview Mode.** Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Ask the user to clarify the gaps Metis identified. After resolving gaps via interview, re-invoke Metis with the same 3-Section structure containing updated content.
-
-**Anti-Patterns:**
-
-| Anti-Pattern | Problem |
-|-------------|---------|
-| Summarized AC | Metis cannot evaluate verifiability |
-| Abstract scope | Completeness uncheckable |
-| Missing user goal | Intent unclassifiable |
-
-### Gap Classification
-
-Post-plan self-review classifies each identified gap as CRITICAL (requires user input), MINOR (self-resolve), or AMBIGUOUS (apply default) — each type handled per its protocol.
-
-| Level | Definition | Handling Protocol | Example |
-|-------|-----------|-------------------|---------|
-| **CRITICAL** | Requires user input — cannot proceed without clarification | Return to Interview Mode, ask user to resolve before continuing | Acceptance criteria missing for a core TODO |
-| **MINOR** | Self-resolvable — planner can infer correct resolution from existing context | Resolve inline during plan revision, document rationale in plan | Naming convention for a new file consistent with codebase pattern |
-| **AMBIGUOUS** | Apply default — standard convention or safe default exists | Apply the documented default, note in plan | Unclear whether to use existing utility or inline logic — apply DRY default |
-
-### Self-Review Checklist
-
-After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, zero human-intervention criteria.
-
-This checklist is planner-side (prometheus), distinct from F1-F4 executor-side verification (sisyphus/argus). Execute after plan generation and before Oracle submission.
-
-| # | Item | Check |
-|---|------|-------|
-| 1 | All TODOs have acceptance criteria | Every TODO in the plan specifies verifiable completion criteria |
-| 2 | File references exist | All file paths and line references cited in the plan resolve to actual files |
-| 3 | Guardrails from Metis incorporated | Every constraint or guardrail flagged by Metis is reflected in the plan's TODOs or notes |
-| 4 | Zero human-intervention criteria | No TODO requires manual human action mid-execution to proceed |
-
-**Failure action**: If any item fails, loop back and fix before submitting to Oracle. Do NOT submit a plan that fails this checklist.
+**On Metis REQUEST_CHANGES**: Return to Interview Mode. Metis rejection means requirements are incomplete — do NOT guess or hallucinate missing requirements to pass the gate. Ask the user to clarify the gaps Metis identified. After resolving gaps via interview, re-invoke Metis with the same 3-Section structure containing updated content.
 
 ---
 
-## Oracle Feedback Loop
+## Oracle Invocation Template
 
 **When**: After plan generated to `$OMT_DIR/plans/{name}.md`. MANDATORY before Momus.
-
-**Invocation Template:**
 
 ```
 ## Plan File
@@ -187,21 +49,13 @@ $OMT_DIR/plans/{name}.md
 
 On REQUEST_CHANGES: update plan file first, then re-invoke with same template.
 
-**Anti-Patterns:**
-
-| Anti-Pattern | Problem |
-|-------------|---------|
-| Restating plan content in prompt | Oracle reads file directly — token waste |
-| Asking for code review | Oracle reviews feasibility, not code quality |
-| Skipping after Metis APPROVE | Gate violation — Oracle mandatory regardless |
-
 ---
 
-## Momus Feedback Loop
+## Momus Invocation Template
 
 **When**: After Oracle APPROVE/COMMENT. MANDATORY before user presentation.
 
-**Invocation**: Send the plan file path only.
+Send the plan file path only:
 
 ```
 $OMT_DIR/plans/{name}.md
@@ -209,33 +63,19 @@ $OMT_DIR/plans/{name}.md
 
 All context (interview summary) is already in the plan's Context section. No supplementary prompt needed.
 
-**Anti-Patterns:**
-
-| Anti-Pattern | Problem |
-|-------------|---------|
-| Repeating plan content | Momus reads file — token waste |
-| Separate metis results | Already in Plan Context + anchoring risk |
-| Adding review instructions | Momus has its own criteria |
-
 ---
 
-## Plan Presentation (After Momus Approval)
+## Stage A: HTML Render — Procedure
 
-Plan Presentation runs in three sequential stages. This is the ONLY point where the user sees the plan. All internal gates run automatically.
-
-### Stage A: HTML Render
-
-Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in the browser so the user can read the plan in a rendered view.
+Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in the browser so the user can read the plan rendered.
 
 **Requirements:**
 - **Output artifact**: `$OMT_DIR/plans/plan.html` (single-file, self-contained, browser-openable)
-- **Content**: verbatim — no summarization, no paraphrasing, no omission (요약·각색 금지; summarization forbidden)
-- **Tool choice**: The conversion tool is an execution-time choice — use whatever tool is available at runtime (Pandoc, a script, inline generation). The tool is an implementation detail (수단은 실행 시점 선택); the output must meet the single-file + browser requirement regardless of method.
-- **Graceful fallback**: If HTML conversion fails, present the raw Markdown content directly to the user and continue to Stage B.
+- **Content**: verbatim — no summarization, no paraphrasing, no omission (요약·각색 금지)
+- **Tool choice**: execution-time choice — use whatever is available at runtime (Pandoc, a script, inline generation). Tool is an implementation detail; output must meet the single-file + browser requirement regardless.
+- **Graceful fallback**: If HTML conversion fails, present raw Markdown directly and continue to Stage B.
 
-> Stage A is intentionally tool-agnostic to allow future sub-sections to be appended here without disturbing the conversion contract above.
-
-#### HTML Components
+### HTML Components
 
 The Stage A HTML output is composed of 4 distinct components:
 
@@ -244,9 +84,7 @@ The Stage A HTML output is composed of 4 distinct components:
 - **Pipeline State** — pipeline state journal box injected from session state (S0 → S_current transitions)
 - **plan-content** — the full plan markdown rendered into `article#plan-content`; sourced verbatim from plan.md
 
-#### Source Classification
-
-Each component's data origin determines how it is populated at render time:
+### Source Classification
 
 | Component | Source |
 |---|---|
@@ -255,67 +93,57 @@ Each component's data origin determines how it is populated at render time:
 | Pipeline State | session-derived |
 | article#plan-content | plan-derived |
 
-`plan-derived` components are populated from `$OMT_DIR/plans/{name}.md` (the plan file). `session-derived` components are composed from session state (reviewer verdicts, pipeline state transitions) and injected at render time via the `<!-- SESSION-DERIVED-BOXES-HERE -->` marker.
+`plan-derived` components populated from `$OMT_DIR/plans/{name}.md`. `session-derived` composed from session state (reviewer verdicts, pipeline state transitions) and injected via `<!-- SESSION-DERIVED-BOXES-HERE -->` marker.
 
-#### Template Reference
+### Template Reference
 
-The canonical HTML shell is defined at:
+Canonical HTML shell at: `skills/prometheus/templates/plan-presentation.html`
 
-`skills/prometheus/templates/plan-presentation.html`
+Contains the static HTML structure with `{{placeholder}}` substitution variables, the `<!-- SESSION-DERIVED-BOXES-HERE -->` injection marker, and an embedded top-comment documenting all placeholders.
 
-This file contains the static HTML structure with `{{placeholder}}` substitution variables, the `<!-- SESSION-DERIVED-BOXES-HERE -->` injection marker, and an embedded top-comment documenting all placeholders and the component-to-source classification contract.
+### Translation Rule
 
-#### Translation Rule
+Three invariants govern language translation applied during Stage A rendering.
 
-Three invariants govern all language translation applied during Stage A rendering.
+**Invariant 1 — Session auto-detect of conversational language**: The session detects the conversational language in use (the language the user is writing in during the current session). All prose content in HTML output is rendered in that detected language. No language is hard-coded; detection is render-time.
 
-##### Invariant 1 — Session auto-detect of conversational language
-
-The rendering session detects the conversational language in use (the language the user is writing in during the current session). All prose content in the HTML output is rendered in that detected language. No language is hard-coded; detection is a render-time operation.
-
-##### Invariant 2 — Prose-only scope with preservation list
-
-Translation applies to **prose-only** content. The following elements are **never** translated, regardless of detected language:
+**Invariant 2 — Prose-only scope with preservation list**: Translation applies to prose-only content. The following are **never** translated:
 
 - `code block` — all fenced and inline code
-- `file path` — absolute and relative paths (e.g. `skills/prometheus/review-pipeline.md`)
+- `file path` — absolute and relative paths
 - `CLI` — command-line tool names and commands
 - `WI-N` — work-item identifiers (e.g. `WI-1`, `WI-2`)
 - `AC#M` — acceptance criteria labels (e.g. `AC#1`)
 - `S0-S8` — pipeline state identifiers
 - `grep` — tool names used as identifiers in verification commands
 
-Translating any item from this preservation list is a rule violation.
+Translating any item is a rule violation.
 
-##### Invariant 3 — plan.md as single source-of-truth, render-time-only translation
+**Invariant 3 — plan.md as single source-of-truth, render-time-only translation**: `plan.md` is the single SoT for plan content. No translated copy (`plan.{lang}.md`) is written to disk; translation is render-time only. HTML is ephemeral — re-rendering always draws from unmodified `plan.md`.
 
-`plan.md` is the single source-of-truth for plan content. No translated copy (`plan.{lang}.md`) is written to disk; translation is a render-time operation only. The HTML output is ephemeral — re-rendering always draws from the unmodified `plan.md`.
+**Fallback**: If language detection fails or yields an ambiguous result, render in original language. Do not block Stage A on detection failure.
 
-##### Fallback
+### Rendering Methodology
 
-If language detection fails or yields an ambiguous result, render in original language (the language as written in `plan.md`). Do not block Stage A on a detection failure.
-
-#### Rendering Methodology
-
-Six invariants govern substitution and injection applied during Stage A rendering.
+Six invariants govern substitution and injection during Stage A rendering.
 
 **Rule 1 — Active-element-only substitution**: `{{…}}` placeholders are substituted only at their active template elements. For `{{PLAN_MARKDOWN_JSON}}`, the active container is the `script type="application/json" id="plan-md"` element; substitution occurs only at that active element line. Literal occurrences inside the top-comment documentation block are NOT substituted. Replacement patterns must be anchored to the specific enclosing element by its opening-tag signature, not to the raw placeholder token alone.
 
-**Rule 2 — Multi-occurrence guard**: When a placeholder token appears in both documentation and an active element, the substitution engine MUST skip the documentation occurrence. Preferred implementation: element-line regex anchored on active element. **Alternatives:** first-match-only with active-element anchor; pre-pass element extraction.
+**Rule 2 — Multi-occurrence guard**: When a placeholder token appears in both documentation and an active element, the substitution engine MUST skip the documentation occurrence. Preferred: element-line regex anchored on active element. **Alternatives**: first-match-only with active-element anchor; pre-pass element extraction.
 
-**Multi-active-occurrence semantics**: If a placeholder legitimately appears across multiple active elements (e.g., `{{TOC_TITLE}}` in both navigation header and footer), substitution applies to ALL active occurrences — only documentation / top-comment literals are excluded. This prevents a future-analogous bug where first-match-only logic silently drops a second occurrence of a legitimate active placeholder.
+**Multi-active-occurrence semantics**: If a placeholder legitimately appears across multiple active elements (e.g., `{{TOC_TITLE}}` in both navigation header and footer), substitution applies to ALL active occurrences — only documentation/top-comment literals are excluded. This prevents a future-analogous bug where first-match-only logic silently drops a second occurrence of a legitimate active placeholder.
 
-**Rule 3 — Session-derived box injection sequence**: The `<!-- SESSION-DERIVED-BOXES-HERE … -->` comment block is replaced with exactly two `.section-box` elements in this exact order: (a) Stage B · Execution Recommendation, (b) Pipeline State. The entire comment block (from `<!-- SESSION-DERIVED-BOXES-HERE` to the terminating `-->`) is removed; the 2 boxes replace it verbatim in order.
+**Rule 3 — Session-derived box injection sequence**: The `<!-- SESSION-DERIVED-BOXES-HERE … -->` comment block is replaced with exactly two `.section-box` elements in this exact order: (a) Stage B · Execution Recommendation, (b) Pipeline State. The entire comment block (from `<!-- SESSION-DERIVED-BOXES-HERE` to terminating `-->`) is removed; the 2 boxes replace it verbatim in order.
 
-**Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per the Translation Rule, fallback to original language as declared in the Translation Rule.
+**Rule 4 — Error recovery / fallback**: If any placeholder is not found in the template, the rendering engine retains the original element untouched — no silent HTML destruction. If translation detection fails per the Translation Rule, fallback to original language.
 
-**Rule 5 — Tool-agnostic**: The substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool that satisfies the six rules is acceptable.
+**Rule 5 — Tool-agnostic**: Substitution engine is the implementer's choice (awk, sed, Node, Python, Bun script, etc.). Rendering Methodology declares invariants, not implementation. Any tool satisfying the six rules is acceptable.
 
-**Rule 6 — Parser-resilient container embedding**: The HTML element holding the plan markdown content (`{{PLAN_MARKDOWN_JSON}}` container) MUST satisfy two sub-requirements:
+**Rule 6 — Parser-resilient container embedding**: The HTML element holding plan markdown content (`{{PLAN_MARKDOWN_JSON}}` container) MUST satisfy:
 
 - **(6a) Inert container**: Element whose content the HTML parser treats as text — non-executable, inert. Canonical: `script type="application/json"` (HTML5 non-executable-type). Alternative inert container: `textarea hidden`.
 
-- **(6b) Content-side close-tag escape**: The injection pipeline MUST escape the container's close-tag sequence so plan prose cannot terminate the container prematurely at parse time. Canonical pattern:
+- **(6b) Content-side close-tag escape**: The injection pipeline MUST escape the container's close-tag sequence so plan prose cannot terminate the container prematurely. Canonical pattern:
   ```js
   const payload = JSON.stringify(planMarkdown).replace(/<\/script>/g, '<\\/script>');
   // consumer: JSON.parse(container.textContent)
@@ -325,11 +153,11 @@ Six invariants govern substitution and injection applied during Stage A renderin
 
 Both (6a) and (6b) MUST be present regardless of container choice; alternative inert containers MUST supply their own paired close-tag escape.
 
-### Stage B: Execution Recommendation
+---
 
-Before asking the user to choose an execution mode, compute a recommendation using the Decision Matrix below.
+## Stage B: Decision Matrix
 
-**Decision Matrix:**
+Before asking the user to choose execution mode, compute a recommendation:
 
 | Signal | Weight toward Complex/Architecture | Weight toward Trivial/Scoped |
 |--------|------------------------------------|------------------------------|
@@ -339,13 +167,11 @@ Before asking the user to choose an execution mode, compute a recommendation usi
 | AC gap (unverified acceptance criteria) | Moderate | — |
 | Ambiguity Score > 2 | Moderate | — |
 | Oracle COMMENT with codebase concern | Moderate | — |
-| scope question unresolved | Moderate | — |
+| Scope question unresolved | Moderate | — |
 
 **Conflict resolution**: When signals split evenly, "Plan more wins" — default to Full Orchestration.
 
-**Recommendation Output Template:**
-
-Present the recommendation to the user before Stage C:
+**Recommendation Output Template** (present before Stage C):
 
 ```
 **Recommendation**: [Full orchestration | Focused execution]
@@ -354,9 +180,11 @@ Present the recommendation to the user before Stage C:
 **What tips the balance**: [The single strongest signal that drove the recommendation]
 ```
 
-### Stage C: Execution Bridge
+---
 
-After the user reads Stage B's recommendation, present the execution options via the platform's user-prompt primitive (structured choice):
+## Stage C: Execution Bridge — Option Formatting
+
+After the user reads Stage B's recommendation, present execution options via the platform's user-prompt primitive (structured choice):
 
 **(1) Full orchestration**
 Multi-agent task orchestration with QA verification. 3+ TODOs or cross-module changes.
@@ -369,13 +197,6 @@ Return to Interview Mode for modifications.
 
 The `(Recommended)` label is **computed from the Decision Matrix, NOT hardcoded** — attach it to whichever option Stage B selected.
 
-**On selection:**
-- Option 1: invoke `Skill(skill: "sisyphus")` with plan file path
-- Option 2: delegate directly to sisyphus-junior
-- Option 3: return to Interview Mode → re-run Metis → Plan → Oracle → Momus pipeline
-
 | User Response | Action |
 |---------------|--------|
 | Requests changes before selecting | Return to Interview Mode, re-run pipeline |
-
-**IMPORTANT:** On execution selection, MUST invoke via Skill() or delegate. Do NOT tell user to run a command manually.
