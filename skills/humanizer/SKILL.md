@@ -34,6 +34,22 @@ Scan this list FIRST during pattern detection. See full catalog below for detail
 | E13 | Great question!, I hope this helps, Let's dive in, Here's the thing |
 | E16 | curly quotes ("\u201c...\u201d") → straight quotes ("...") |
 
+### Markup & Structure Traces (P1–P3)
+
+These are not single-word matches — scan for whole-document layout signals.
+
+| Code | Detection signal | Severity |
+|------|------------------|----------|
+| K17 | **any** em-dash (—) in Korean text | **P1** |
+| K18 | **any** middle-dot (·) occurrence — including "남·녀", "동·서양" | **P1** |
+| K19 | "이것이 X의 핵심이다" definition-closing translated from "This is the X" | P2 |
+| K20 | mid-paragraph `>` blockquote inserted only to define a term | P2 |
+| K21 | 100% consistent Korean(English) bilingual notation across the document | P2 |
+| E18 | `*italic*` asterisk emphasis used in Korean text (Korean uses **bold**) | P3 |
+| C7 | tables used where prose would fit (qualitative misuse) | **P1** |
+| C8 | "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" lecture-slide closure | P2 |
+| C9 | uniform tone/tension/sentence-length throughout — no fatigue toward the end | P2 |
+
 ---
 
 ## Execution Process
@@ -384,6 +400,112 @@ Removing AI patterns is half the job. Clean but lifeless writing still reads as 
 
 ---
 
+### K17. Em-dash (—) in Korean — any occurrence [P1]
+
+**Detection signal:** Any em-dash (—) appearing in a Korean text, especially when used as English-style appositive ("~다 — 이것이 ~의 핵심이다") rather than as a range marker.
+
+**Problem:** Korean writers natively use colon(:), parentheses, or line breaks for parenthetical exposition. Em-dash use in running Korean prose is a residue from English-trained models copying English typographic habits. Like K18 (middle-dot), em-dash belongs to narrow registers (newspaper headlines, range notation) — its appearance in blog/study-note prose is the signal, not the count.
+
+**Severity rule:** Em-dash (—) appears anywhere in Korean prose → **P1**. No threshold counting, no grading.
+
+**Replacements:**
+- `~다 — 이것이 X의 핵심이다.` → `~다. 이것이 X의 핵심이다.` (period + new sentence) or simply delete the second clause if redundant
+- `A — B` (appositive) → `A(B)` or `A. B는 ~`
+- `A — 그래서 B` → `A. 그래서 B` or `A이고, 그래서 B`
+
+**Before:**
+> 메시지 전달이지만 영속성·보장 수준·소비자 모델이 다르다. — 이런 식의 부연이 한국어 글에 어울리지 않는다.
+
+**After:**
+> 메시지 전달이지만 영속성, 보장 수준, 소비자 모델이 다르다. 이런 식의 부연은 한국어 글에 잘 안 어울린다.
+
+---
+
+### K18. Middle-dot (·) — any occurrence [P1]
+
+**Detection signal:** Any middle-dot (·) character used as a separator in the text — enumeration, compound nouns, or paired terms. "A·B·C", "영속성·보장 수준·소비자 모델", "큐·스트림·이벤트 버스", "남·녀", "동·서양", "국·공립".
+
+**Why this matters:** Korean writers in any normal register — blog, study notes, technical writing, essay, SNS — **do not use middle-dot in running prose**. Even traditionally hyphenated pairs ("남녀", "동서양", "국공립") are written without the middle dot in everyday text. Middle dot is corpus-specific punctuation belonging to newspaper headlines, government documents, Wikipedia, and academic publication metadata — exactly the kind of text overrepresented in LLM training data. **Any middle-dot occurrence is a definitive AI signature.**
+
+**Severity rule:**
+- Middle-dot (·) appears anywhere in the text → **P1**. No exceptions. No grading by context.
+
+**Rule for rewrite:**
+- `A·B·C` → `A, B, C` or `A와 B, 그리고 C`
+- `영속성·보장 수준·소비자 모델` → `영속성과 보장 수준, 소비자 모델` (split into a clause)
+- `남·녀`, `동·서양`, `국·공립` → `남녀`, `동서양`, `국공립` (drop the dot, fuse)
+- If the middle-dot list is also followed by em-dash, additionally apply K17
+
+**Before:**
+> 메시지 전달이지만 영속성·보장 수준·소비자 모델이 다르다 — 그래서 큐는 1:1, 스트림은 n:n에 어울린다.
+
+**After:**
+> 메시지를 전달하는 도구지만 영속성, 보장 수준, 소비자 모델이 각각 다르다. 그래서 큐는 1:1 작업 분배에, 스트림은 n:n 분배에 어울린다.
+
+**Before:**
+> 이번 글에서는 큐·스트림·이벤트 버스를 비교한다.
+
+**After:**
+> 이번 글에서는 큐, 스트림, 이벤트 버스를 비교한다.
+
+**Note on edge cases:** If you are intentionally humanizing newspaper-style copy, government documents, or academic abstracts where middle dot is a register convention, this rule may produce false positives. In that case, the humanization itself is likely inappropriate for the source register — middle dot is not the only signal that will fire.
+
+---
+
+### K19. "이것이 ~다" definition closing (translated from "This is the X") [P2]
+
+**Detection expressions:** "~ — 이것이 X의 핵심이다", "~. 이것이 ~의 핵심 역할이다", "이것이 X다", "이것이 X의 본질이다"
+
+**Problem:** Direct translation of English "This is the core of X" / "This is X" closing patterns. Native Korean writers rarely close a paragraph by referring back with "이것이" — they tend to drop the demonstrative ("X의 핵심이다") or use a different rhythm ("바로 그 점이 ~", "그래서 ~", or no closing at all).
+
+**Distinction from K3:** K3 covers hedging endings ("~라고 할 수 있습니다"). K19 covers *definitional* endings where a preceding clause is referred back to and labeled — a translated rhetorical move, not a hedge.
+
+**Before:**
+> 메시지를 일단 받아두고 나중에 처리할 수 있게 한다 — 이것이 메시지 브로커의 핵심 역할이다.
+
+**After:**
+> 메시지를 일단 받아두고 나중에 처리하게 해주는 것이 메시지 브로커가 하는 일이다.
+
+또는: `메시지 브로커는 들어온 메시지를 받아뒀다가 나중에 처리하게 해준다.`
+
+---
+
+### K20. Mid-paragraph blockquote term definition [P2]
+
+**Detection signal:** A `>` blockquote inserted in the middle of running prose for the sole purpose of defining a term, with the format `> term: definition.` or `> **term**: definition.`
+
+**Problem:** LLMs love to break the flow of explanation to drop in a textbook-style term definition as a quote block. Native writers either (a) define inline in parentheses, (b) handle definitions in a separate glossary section, or (c) embed the definition in the surrounding sentence.
+
+**Note:** Genuine *quotations* in blockquotes are fine. K20 only applies when the blockquote is the *writer's own* term definition wedged into prose.
+
+**Before:**
+> 큐는 작업을 보내고 응답을 기다리지 않는다.
+>
+> > fire-and-forget: 작업을 던지고 결과를 기다리지 않는 비동기 패턴.
+>
+> 그래서 큐는 fire-and-forget에 어울린다.
+
+**After:**
+> 큐는 작업을 보내고 응답을 기다리지 않는다(fire-and-forget). 그래서 ~ 패턴이 큐와 잘 맞는다.
+
+---
+
+### K21. Bilingual notation uniformity [P2]
+
+**Detection signal:** Every technical term in the document is given consistently in `한국어(English)` form — e.g., "멱등(idempotent)", "소비자 그룹(consumer group)" — with no omissions and the same bracketing format throughout.
+
+**Problem:** Native writers are inconsistent about bilingual notation. They give the English the first time a term appears, then drop it. Or they give the English only when the Korean translation is ambiguous. 100% consistency from start to finish — every technical term, every time, same format — is an LLM-uniformity tell.
+
+**Rule:** Keep bilingual notation only on **first mention** of each term, or only where the Korean alone is ambiguous. Drop it on subsequent uses.
+
+**Before:**
+> 멱등(idempotent)한 처리가 필요하다. 멱등(idempotent)성을 보장하지 않으면 ~ . 멱등(idempotent) 키를 활용해 ~.
+
+**After:**
+> 멱등(idempotent)한 처리가 필요하다. 멱등성을 보장하지 않으면 ~. 멱등 키를 써서 ~.
+
+---
+
 ## English AI Pattern Catalog
 
 ### E1. Importance inflation [P1]
@@ -584,6 +706,22 @@ Removing AI patterns is half the job. Clean but lifeless writing still reads as 
 
 ---
 
+### E18. Italic asterisk emphasis in Korean text [P3]
+
+**Detection signal:** `*phrase*` single-asterisk italic emphasis appearing in Korean prose for emphasis (not for genuine titles or foreign-word styling).
+
+**Problem:** Korean writers using markdown overwhelmingly reach for `**bold**` for emphasis. `*italic*` emphasis is an English-language markdown habit — italic doesn't render as visually emphatic on Hangul as it does on Latin script, so native Korean markdown convention favors bold. LLMs trained heavily on English markdown leak `*italic*` into Korean output.
+
+**Rule:** Convert `*phrase*` to `**phrase**` in Korean prose unless the italic is genuinely for a foreign-word/title convention (e.g., titles of works).
+
+**Before:**
+> 여러 클라이언트가 동시에 메시지를 기다리고 있을 때 *먼저 요청한 클라이언트*가 메시지를 가져간다.
+
+**After:**
+> 여러 클라이언트가 동시에 메시지를 기다리고 있을 때 **먼저 요청한 클라이언트**가 메시지를 가져간다.
+
+---
+
 ## Common Patterns
 
 ### C1. Synonym cycling (Elegant Variation) [P2]
@@ -637,6 +775,72 @@ Removing AI patterns is half the job. Clean but lifeless writing still reads as 
 **Problem:** AI forces "Introduction → Body → Conclusion" regardless of text type. Even short texts get introductions and conclusions.
 
 **Rule:** Remove introduction/conclusion if they don't fit the text's length and purpose. "결론적으로" in text under 500 characters is almost always unnecessary.
+
+---
+
+### C7. Table overuse [P1]
+
+**Detection signal:** A document where tables are used to encode information that could naturally be prose — "term: description" pairs, "list of three concepts," ordered preferences, "A is for X, B is for Y" pairings. The signal is *qualitative misuse*, not a count threshold.
+
+**Problem:** LLMs compulsively tabulate. Anything remotely comparable — pros vs cons, terms vs descriptions, before vs after, "three reasons" — gets converted to a table. Native human writing reserves tables for genuinely tabular data (multi-attribute comparison, lookup tables with ≥3 heterogeneous columns) and lets the rest flow as prose.
+
+**Severity rule:** A document containing tables that should be prose → **P1**. Judgment is qualitative — apply when the writer was tabulating from compulsion rather than fit.
+
+**Rule for rewrite:**
+- Keep tables that have ≥3 columns of genuinely heterogeneous attributes
+- Convert tables that are just "term: description" (2 columns) to a definition list or inline prose
+- Convert tables that exist only to encode "A is for X, B is for Y" pairs to a single sentence
+
+**Before:**
+```
+| 패턴 | 설명 |
+|------|------|
+| 큐 | 1:1 작업 분배 |
+| 스트림 | n:n 데이터 분배 |
+```
+
+**After:**
+> 큐는 1:1 작업 분배에, 스트림은 n:n 데이터 분배에 어울린다.
+
+---
+
+### C8. Lecture-slide meta-structure [P2]
+
+**Detection signal:** The document follows a complete "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" or "TL;DR → Body → Pitfalls → References" structure where every section is present, evenly weighted, and rhetorically self-contained.
+
+**Problem:** Real human study notes are uneven. People scribble heavy notes on one section and skip the framing entirely on another. They forget the "한 줄 요약" or write it as an afterthought. The "헷갈렸던 지점" section, if present, is messy — half-formed sentences, asides, "왜인지 모르겠는데", maybe an unrelated tangent. When all four sections are present, polished, and each ends with a clean conclusion, the structure itself is the AI tell, regardless of content quality.
+
+**Particularly suspicious:**
+- "헷갈렸던 지점" / "Things I got confused about" written in clean, organized sentences — humans usually write these messily
+- Every section has its own intro-body-outro micro-arc
+- "참고자료" section listed without any personal commentary on what was useful
+
+**Rule for rewrite:**
+- Pick which structural section actually carries the writer's energy, expand it
+- Compress or delete the sections that exist only for completeness
+- Rewrite "헷갈렸던 지점" with one specific stuck moment rather than a polished list
+- If "한 줄 요약" wasn't earned (the body doesn't actually deliver a 한 줄's worth of insight), delete it
+
+---
+
+### C9. Uniform tone and tension throughout [P2]
+
+**Detection signal:** The document maintains identical register, sentence-length distribution, and rhetorical posture from the first paragraph to the last. No fatigue, no acceleration, no sections where the writer obviously cared more or less.
+
+**Problem:** Humans get tired. Early sections of a long note are often careful, well-structured, with longer sentences. Later sections tend to compress: shorter sentences, more telegraphic phrasing, occasionally rougher punctuation, the occasional aside or even a frustrated tone. LLM output, by contrast, holds the *same* rhythm and register from the opening line to the closing line of an 8-section document.
+
+**Distinct from C5 (uniform paragraph length):** C5 is about paragraph word counts. C9 is about *whole-document tension* — the writer's energy curve. A document can have varied paragraph lengths and still register as C9 if every paragraph has the same "voice temperature."
+
+**How to spot:**
+- Compare paragraph 1 and the second-to-last paragraph aloud — do they sound like the same person at the same energy level?
+- Check if any section has noticeably shorter sentences than others (fatigue marker)
+- Check if any section has tangents, asides, or partial sentences (humanity markers)
+- If none of these vary across the document, flag C9
+
+**Rule for rewrite (Blog/Essay only):**
+- Introduce rhythm variation in the latter half: shorten sentences, drop the occasional connective, allow one fragment
+- Add a single human aside or self-correction somewhere past the midpoint
+- For technical docs, C9 is acceptable — do not flag
 
 ---
 
