@@ -193,7 +193,7 @@ After loading context, classify the user's request. Classification determines in
 | **Greenfield** | Goal, Constraint, Success Criteria | 0.4, 0.3, 0.3 |
 | **Brownfield** | Goal, Constraint, Success Criteria, Context | 0.35, 0.25, 0.25, 0.15 |
 
-Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below (tool use vs user questions, sequential rule, vague answer handling, deferral handling, persistence, anti-patterns — all inline). [interview.md](interview.md) is lookup-only (examples + subagent prompt templates).
+Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
 **All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
 After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
 After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below.
