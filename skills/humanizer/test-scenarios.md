@@ -340,14 +340,14 @@ at most once와 at least once의 차이가 처음에는 헷갈렸다. at most on
 
 | Pattern | Severity | Instance |
 |---------|----------|----------|
-| K17 | P2 | em-dash(—) appears 4 times across document (3+ → P2 per K17 rule) |
+| K17 | P1 | em-dash(—) present in Korean prose (any occurrence → P1) |
 | K18 | P1 | "영속성·보장 수준·소비자 모델" middle-dot enumeration (any middle-dot = P1) |
 | K18 | P1 | "로그·이벤트", "캐시·세션", "알림·브로드캐스트" middle-dot in table cells (any middle-dot = P1) |
 | K19 | P2 | "~할 수 있게 한다 — 이것이 메시지 브로커의 핵심 역할이다" |
 | K20 | P2 | `> fire-and-forget: ~` mid-paragraph blockquote term definition |
 | K21 | P2 | "멱등(idempotent)" repeated 4 times with identical bracketing |
 | E18 | P3 | `*먼저 요청한 클라이언트*` italic asterisk in Korean prose |
-| C7 | P2 | 5 tables in a single chapter note (5–6 → P2 per C7 rule) |
+| C7 | P1 | Tables used for "term: description" and "A is for X" pairings that could be prose |
 | C8 | P2 | Complete "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" structure |
 | C9 | P2 | Uniform tension/sentence rhythm across all sections |
 
@@ -358,14 +358,14 @@ at most once와 at least once의 차이가 처음에는 헷갈렸다. at most on
 
 **PASS criteria:**
 1. Agent flags all 9 new pattern codes (K17, K18, K19, K20, K21, E18, C7, C8, C9)
-2. Agent does NOT mechanically flag every middle-dot or every em-dash — counts occurrences first
+2. Agent flags em-dash (K17) and middle-dot (K18) on first occurrence — no threshold counting required
 3. Agent correctly identifies C8 even though each individual section looks reasonable — the *combination* is the tell
 4. Agent does NOT flag this as K2/K10 false positive (content is concrete, not modifier-inflated)
 5. Audit report distinguishes whole-document signals (C7, C8, C9) from local signals (K19, K20)
 
 **Notes for the rewriter (if mode=rewrite):**
-- Reduce em-dashes to ≤2 in the whole document
-- Convert at least 2 of the 5 tables to prose (likely C7 candidates: 1:1 vs n:n in the queue-vs-stream table, the selection-criteria table, the fan-out vs consumer-group table)
+- Remove all em-dashes (replace with periods, parentheses, or commas)
+- Convert tables whose content is just "term: description" or "A is for X" pairings into prose (likely candidates: queue-vs-stream, selection-criteria, fan-out vs consumer-group). Leave any genuinely multi-attribute lookup tables intact.
 - Convert `> fire-and-forget` blockquote to inline parenthetical
 - Drop "멱등(idempotent)" bilingual on 2nd, 3rd, 4th mentions
 - Rewrite "헷갈렸던 지점" with one specific stuck moment, messier, in first person

@@ -40,13 +40,13 @@ These are not single-word matches — scan for whole-document layout signals.
 
 | Code | Detection signal | Severity |
 |------|------------------|----------|
-| K17 | em-dash(—) in Korean text: 3+ → P2, 10+ → P1 | P2/P1 |
+| K17 | **any** em-dash (—) in Korean text | **P1** |
 | K18 | **any** middle-dot (·) occurrence — including "남·녀", "동·서양" | **P1** |
 | K19 | "이것이 X의 핵심이다" definition-closing translated from "This is the X" | P2 |
 | K20 | mid-paragraph `>` blockquote inserted only to define a term | P2 |
 | K21 | 100% consistent Korean(English) bilingual notation across the document | P2 |
 | E18 | `*italic*` asterisk emphasis used in Korean text (Korean uses **bold**) | P3 |
-| C7 | tables in a single document: 5–6 → P2, 7+ → P1 | P2/P1 |
+| C7 | tables used where prose would fit (qualitative misuse) | **P1** |
 | C8 | "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" lecture-slide closure | P2 |
 | C9 | uniform tone/tension/sentence-length throughout — no fatigue toward the end | P2 |
 
@@ -400,13 +400,13 @@ Removing AI patterns is half the job. Clean but lifeless writing still reads as 
 
 ---
 
-### K17. Em-dash overuse in Korean [P2]
+### K17. Em-dash (—) in Korean — any occurrence [P1]
 
-**Detection signal:** Three or more em-dashes (—) in a single Korean document, especially when used as English-style appositive ("~다 — 이것이 ~의 핵심이다") rather than ranges or interruptions.
+**Detection signal:** Any em-dash (—) appearing in a Korean text, especially when used as English-style appositive ("~다 — 이것이 ~의 핵심이다") rather than as a range marker.
 
-**Problem:** Korean writers natively use colon(:), parentheses, or line breaks for parenthetical exposition. Frequent em-dash use is a residue from English-trained models copying English typographic habits into Korean. One em-dash per long document can be natural; a chapter-length note with em-dash on nearly every page is a strong AI signature.
+**Problem:** Korean writers natively use colon(:), parentheses, or line breaks for parenthetical exposition. Em-dash use in running Korean prose is a residue from English-trained models copying English typographic habits. Like K18 (middle-dot), em-dash belongs to narrow registers (newspaper headlines, range notation) — its appearance in blog/study-note prose is the signal, not the count.
 
-**Counting rule:** Count em-dashes across the whole document, not per paragraph. 3+ in a single Korean piece is P2. 10+ is P1.
+**Severity rule:** Em-dash (—) appears anywhere in Korean prose → **P1**. No threshold counting, no grading.
 
 **Replacements:**
 - `~다 — 이것이 X의 핵심이다.` → `~다. 이것이 X의 핵심이다.` (period + new sentence) or simply delete the second clause if redundant
@@ -778,16 +778,13 @@ Removing AI patterns is half the job. Clean but lifeless writing still reads as 
 
 ---
 
-### C7. Table overuse [P2]
+### C7. Table overuse [P1]
 
-**Detection signal:** A document with 5+ tables, especially when tables are used to encode information that has no natural rows/columns (e.g., a "list of three concepts" rendered as a table).
+**Detection signal:** A document where tables are used to encode information that could naturally be prose — "term: description" pairs, "list of three concepts," ordered preferences, "A is for X, B is for Y" pairings. The signal is *qualitative misuse*, not a count threshold.
 
-**Problem:** LLMs compulsively tabulate. Anything remotely comparable — pros vs cons, terms vs descriptions, before vs after, "three reasons" — gets a table. Native human writing usually has at most 1–2 tables per chapter-length piece, and reserves them for genuinely tabular data (multi-attribute comparison, lookup tables).
+**Problem:** LLMs compulsively tabulate. Anything remotely comparable — pros vs cons, terms vs descriptions, before vs after, "three reasons" — gets converted to a table. Native human writing reserves tables for genuinely tabular data (multi-attribute comparison, lookup tables with ≥3 heterogeneous columns) and lets the rest flow as prose.
 
-**Counting rule:**
-- ≤4 tables in a chapter-length document: usually fine
-- 5–6 tables: P2, review whether at least two could be prose
-- 7+ tables: P1, almost certainly LLM-generated
+**Severity rule:** A document containing tables that should be prose → **P1**. Judgment is qualitative — apply when the writer was tabulating from compulsion rather than fit.
 
 **Rule for rewrite:**
 - Keep tables that have ≥3 columns of genuinely heterogeneous attributes
