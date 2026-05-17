@@ -120,6 +120,37 @@ describe('diagnose job lifecycle', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
   });
 
+  test('start fails fast when no valid reviewers are configured', () => {
+    const configPath = path.join(tmpDir, 'diagnose.config.yaml');
+    fs.writeFileSync(configPath, [
+      'review:',
+      '  members:',
+      '    - name: typo-member',
+      '      commmand: echo done',
+      '  settings:',
+      '    timeout: 10',
+    ].join('\n'), 'utf8');
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    let exitCode = 0;
+    let stderr = '';
+    try {
+      execFileSync(process.execPath, [
+        SCRIPT, 'start',
+        '--config', configPath,
+        '--jobs-dir', jobsDir,
+        'guard test prompt',
+      ], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      stderr = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+
+    expect(exitCode).not.toBe(0);
+    expect(stderr).toContain('no valid reviewers');
+  });
+
   test('status returns JSON with members after start', () => {
     const configPath = path.join(tmpDir, 'diagnose.config.yaml');
     writeConfig(configPath);
