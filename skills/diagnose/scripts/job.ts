@@ -99,6 +99,14 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   const reviewConfig = config[DIAGNOSE_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
   const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
+  const multiTurnRaw = reviewConfig.multi_turn;
+  const multiTurn = (multiTurnRaw && typeof multiTurnRaw.max_turns === 'number' && typeof multiTurnRaw.deliverable_sentinel === 'string')
+    ? {
+        maxTurns: multiTurnRaw.max_turns as number,
+        deliverableSentinel: multiTurnRaw.deliverable_sentinel as string,
+        ...(multiTurnRaw.continuation_prompt ? { continuationPrompt: multiTurnRaw.continuation_prompt as string } : {}),
+      }
+    : undefined;
 
   const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `diagnose-${jobId}`);
@@ -113,6 +121,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
     configPath,
     settings: {
       timeoutSec: timeoutSec || null,
+      ...(multiTurn ? { multiTurn } : {}),
     },
     members: members.map((m: any) => ({
       name: String(m.name),
