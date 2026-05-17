@@ -253,8 +253,6 @@ The catalog below — refreshed at skill-load time — enumerates which skills a
 
 ### Rationalization Table — STOP if you think this
 
-These are post-hoc thoughts the orchestrator forms to justify a wrong route. Each row pairs the thought with the violated rule.
-
 | Thought | Reality / Violated Rule |
 |---|---|
 | "junior will run the verification command and argus will re-verify it." | DUPLICATE execution. argus-direct path (Agent Routing row 3) runs AC commands once, no junior pre-execution. |
@@ -264,7 +262,6 @@ These are post-hoc thoughts the orchestrator forms to justify a wrong route. Eac
 | "Investigation needs lots of Bash queries, junior is good at Bash." | Junior is the IMPLEMENTATION agent (RULE B). Investigation deliverable = narrative/findings, not file changes. oracle (causal) or explore (search). |
 | "It's read-only and there's no implementation, so it must be verify -> argus." | argus is verdict-only (RULE C). Narrative report without PASS/FAIL = diagnose -> oracle, NOT verify. Coercing diagnostic work into argus verdict format produces degraded analysis. |
 | "The task uses pseudo-AC like 'tests pass at commit N, fail at commit N+1', so it's verify -> argus." | Bisect-style pass/fail signals are *inputs* to analysis; *output* is a causal narrative naming the introducing commit. Output type = investigate -> explore (oracle for synthesis), NOT verify. |
-| "I know the routing without looking at delegation.md / verification.md." | Reference Full-Read Mandate: full-read at first dispatch trigger. No partial recall from prior sessions. |
 
 **All of these mean: orchestrator habit is overriding routing rules. Stop. Re-classify by deliverable.**
 
@@ -277,7 +274,7 @@ Pre-action signals — catch the routing error before the dispatch lands. If you
 - STOP - About to dispatch sisyphus-junior on a task whose deliverable is a narrative or PASS/FAIL verdict, not file changes
 - STOP - About to dispatch argus on a task with no explicit AC and no PASS/FAIL closure criterion
 - STOP - Routing a task because "every prior task in this session went junior -> argus" (session cadence is not a routing input)
-- STOP - Partial-read of `delegation.md` / `verification.md` / `decision-gates.md` (offset+limit, head) at first dispatch trigger - these are mandatory full-read
+- STOP - Partial-read of any reference at its first dispatch trigger (see Reference Full-Read Mandate)
 
 **Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
 

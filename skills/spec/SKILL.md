@@ -50,7 +50,7 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-review would jus
 
 ## Rationalization Table — STOP if you think this
 
-The Emergent Concern Protocol has its own local Rationalization Guards (see § Emergent Concern Protocol). This table covers the orchestration-level bypass points where the agent under pressure most often rationalizes away the Iron Law.
+(Emergent Concern Protocol has its own local Rationalization Guards — see § Emergent Concern Protocol.)
 
 | Thought | Reality / Violated Rule |
 |---|---|
@@ -73,8 +73,7 @@ Pre-action signals — catch the bypass before the gate is missed. If you observ
 - STOP - Composing a message with 2+ questions (numbered list, bullet list, or sequential question marks)
 - STOP - About to announce "Spec complete" while `records/` folders contain files but Wrapup has not run
 - STOP - About to apply design.md edits after a spec-review REQUEST_CHANGES without explicit user consensus on the resolution
-- STOP - About to dispatch `core-protocols.md` / `persistence.md` / `area-entry-criteria.md` / `wrapup.md` triggering action without the corresponding read evidence line in this session
-- STOP - About to read those references with `offset` + `limit` parameters (partial-read forbidden)
+- STOP - About to perform a Class A reference triggering action without the corresponding read evidence line in this session (or with partial-read; see Reference Full-Read Mandate)
 
 **Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
 
