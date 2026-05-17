@@ -1708,3 +1708,145 @@ describe('cmdResults', () => {
     expect(result.members[0].stderr).toBe('green');
   });
 });
+
+// ---------------------------------------------------------------------------
+// TODO 7: opencode output_format branch, computeStatus max_turns_exceeded,
+//          buildManifest multi_turn_degraded / max_turns_exceeded
+// ---------------------------------------------------------------------------
+
+describe('buildAugmentedCommand opencode output_format', () => {
+  test('opencode json: appends --format json', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run', output_format: 'json' },
+      'opencode',
+    );
+    expect(result.command).toContain('--format');
+    expect(result.command).toContain('json');
+  });
+
+  test('opencode without output_format: does not append --format json', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run' },
+      'opencode',
+    );
+    expect(result.command).not.toContain('--format');
+  });
+
+  test('기존 claude 브랜치 회귀: `--output-format json` 유지', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', output_format: 'json' },
+      'claude',
+    );
+    expect(result.command).toContain('--output-format');
+    expect(result.command).toContain('json');
+  });
+
+  test('기존 codex 브랜치 회귀: `--json` 유지', () => {
+    const result = buildAugmentedCommand(
+      { command: 'codex exec', output_format: 'json' },
+      'codex',
+    );
+    expect(result.command).toContain('--json');
+  });
+});
+
+describe('computeStatus max_turns_exceeded', () => {
+  let tmpDir: string;
+
+  function setupJob(
+    jobDir: string,
+    meta: Record<string, unknown>,
+    entities: Record<string, unknown>,
+    config: JobConfig,
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify(meta));
+    const entitiesDir = path.join(jobDir, config.entityDirName);
+    fs.mkdirSync(entitiesDir, { recursive: true });
+    for (const [name, status] of Object.entries(entities)) {
+      const dir = path.join(entitiesDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
+    }
+  }
+
+  beforeEach(() => { tmpDir = makeTmpDir(); });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  test('totals dict has all 13 keys including max_turns_exceeded', async () => {
+    const jobDir = path.join(tmpDir, 'job-13keys');
+    setupJob(jobDir, { id: 'test-13keys' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const expectedKeys = [
+      'queued', 'running', 'retrying', 'done', 'error',
+      'missing_cli', 'timed_out', 'canceled', 'non_retryable',
+      'empty_output', 'transient_error', 'permanent_error',
+      'max_turns_exceeded',
+    ];
+    for (const key of expectedKeys) {
+      expect(key in result.counts).toBe(true);
+    }
+  });
+
+  test('max_turns_exceeded 상태 카운트 집계', async () => {
+    const jobDir = path.join(tmpDir, 'job-mte-count');
+    setupJob(jobDir, { id: 'test-mte' }, {
+      alice: { member: 'alice', state: 'max_turns_exceeded' },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.counts.max_turns_exceeded).toBe(1);
+    expect(result.counts.done).toBe(1);
+  });
+});
+
+describe('buildManifest multi_turn_degraded / max_turns_exceeded', () => {
+  let tmpDir: string;
+
+  function setupManifestJob(jobDir: string, config: JobConfig, entities: Record<string, { status: unknown; hasOutput: boolean }>) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-manifest-job' }));
+    const entitiesDir = path.join(jobDir, config.entityDirName);
+    fs.mkdirSync(entitiesDir, { recursive: true });
+    for (const [name, { status, hasOutput }] of Object.entries(entities)) {
+      const dir = path.join(entitiesDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
+      if (hasOutput) {
+        fs.writeFileSync(path.join(dir, 'output.txt'), `output from ${name}`);
+      }
+    }
+  }
+
+  beforeEach(() => { tmpDir = makeTmpDir(); });
+  afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  test('multi_turn_degraded=true와 state=done이면 readable (outputFilePath non-null)', () => {
+    const jobDir = path.join(tmpDir, 'job-mte-degraded');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: { member: 'alice', state: 'done', size_bytes: 42, multi_turn_degraded: true },
+        hasOutput: true,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).not.toBe(null);
+    expect(result.members[0].errorMessage).toBe(null);
+  });
+
+  test('max_turns_exceeded → errorMessage에 "max" 또는 "Pump exhausted" 포함', () => {
+    const jobDir = path.join(tmpDir, 'job-mte-error-msg');
+    setupManifestJob(jobDir, chunkReviewConfig, {
+      alice: {
+        status: { member: 'alice', state: 'max_turns_exceeded', size_bytes: 0 },
+        hasOutput: false,
+      },
+    });
+    const result = buildManifest(jobDir, chunkReviewConfig);
+    expect(result.members[0].outputFilePath).toBe(null);
+    const msg: string = result.members[0].errorMessage ?? '';
+    expect(msg.toLowerCase().includes('max') || msg.includes('Pump exhausted')).toBe(true);
+  });
+});

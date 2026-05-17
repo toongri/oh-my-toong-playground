@@ -138,6 +138,8 @@ export function buildAugmentedCommand(
       parts.push('--output-format', String(entity.output_format));
     } else if (cliType === 'codex') {
       parts.push('--json');
+    } else if (cliType === 'opencode') {
+      parts.push('--format', String(entity.output_format));
     }
     // unknown: ignored
   }
@@ -397,6 +399,7 @@ export async function computeStatus(
     queued: 0, running: 0, retrying: 0, done: 0, error: 0,
     missing_cli: 0, timed_out: 0, canceled: 0, non_retryable: 0,
     empty_output: 0, transient_error: 0, permanent_error: 0,
+    max_turns_exceeded: 0,
   };
   for (const r of members) {
     const state = String(r.state || 'unknown');
