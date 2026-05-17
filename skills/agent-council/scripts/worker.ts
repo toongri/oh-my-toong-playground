@@ -2,10 +2,13 @@
 
 import fs from 'fs';
 import path from 'path';
+import { parse as parseYaml } from 'yaml';
 
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { parseArgs, exitWithError } from '@lib/job-utils';
 import { getOmtDir } from '@lib/omt-dir';
+import { detectCliType } from '@lib/generic-job';
+import type { MultiTurnConfig } from '@lib/worker-utils';
 import {
   splitCommand,
   atomicWriteJson,
@@ -13,7 +16,9 @@ import {
   assemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
+  runMultiTurn as sharedRunMultiTurn,
   type RunWithRetryOpts,
+  type RunMultiTurnOpts,
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
@@ -79,6 +84,37 @@ async function runWithRetry(opts: CouncilRunWithRetryOpts) {
   });
 }
 
+interface CouncilRunMultiTurnOpts extends Omit<RunMultiTurnOpts, 'program' | 'args' | 'memberDir'> {
+  safeMember: string;
+  jobDir: string;
+}
+
+async function councilRunMultiTurn(opts: CouncilRunMultiTurnOpts) {
+  const { command, member, safeMember, jobDir, timeoutSec, sleepFn, ...rest } = opts;
+  const memberDir = path.join(jobDir, 'members', safeMember);
+
+  const tokens = splitCommand(command);
+  if (!tokens || tokens.length === 0) {
+    const statusPath = path.join(memberDir, 'status.json');
+    const payload = {
+      member, state: 'error', message: 'Invalid command string',
+      finishedAt: new Date().toISOString(), command,
+    };
+    atomicWriteJson(statusPath, payload);
+    return payload;
+  }
+
+  const program = tokens[0];
+  const args = tokens.slice(1);
+
+  return sharedRunMultiTurn({
+    program, args, member, memberDir,
+    command, timeoutSec, promptsDir: PROMPTS_DIR,
+    sleepFn: sleepFn ?? sleepMsAsync,
+    ...rest,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -117,7 +153,28 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  runWithRetry({ command: command as string, prompt, member: member as string, safeMember: member as string, jobDir: jobDir as string, timeoutSec, workerEnv }).then((result) => {
+  // Load multi_turn config from council.config.yaml (skill-local, then project root)
+  const skillConfigPath = path.resolve(import.meta.dirname, '../council.config.yaml');
+  let multiTurn: MultiTurnConfig | undefined;
+  try {
+    const raw = fs.readFileSync(skillConfigPath, 'utf8');
+    const config = parseYaml(raw) as Record<string, unknown>;
+    const councilSection = config['council'] as Record<string, unknown> | undefined;
+    const mt = councilSection?.['multi_turn'] as Record<string, unknown> | undefined;
+    if (mt && typeof mt['max_turns'] === 'number' && typeof mt['deliverable_sentinel'] === 'string') {
+      multiTurn = {
+        maxTurns: mt['max_turns'] as number,
+        deliverableSentinel: mt['deliverable_sentinel'] as string,
+      };
+    }
+  } catch { /* yaml absent or malformed — proceed without multi_turn (falls back to runWithRetry) */ }
+
+  const cliType = detectCliType(command as string) as 'opencode' | 'claude' | 'codex' | 'gemini' | 'unknown';
+
+  councilRunMultiTurn({
+    command: command as string, prompt, member: member as string, safeMember: member as string,
+    jobDir: jobDir as string, timeoutSec, workerEnv, cliType, multiTurn,
+  }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
