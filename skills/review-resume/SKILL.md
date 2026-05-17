@@ -30,11 +30,9 @@ Always communicate with the user and generate all output (interviews, feedback, 
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
 6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a note candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
 
-**Violating the letter of these rules IS violating the spirit.** Fact-grounded shortcuts — "the JD looks short so research is unnecessary", "this resume is obviously weak/strong so detailed criteria are redundant", "the interview-mining stages have been going long, the user probably has nothing more", "I scanned the text and found no AI tone, so humanizer invocation is redundant" — do NOT constitute exceptions. They are exactly the rationalizations Absolute Rules exist to block.
+**Violating the letter of these rules IS violating the spirit.** Fact-grounded shortcuts do NOT constitute exceptions — see the Rationalization Table below for the specific thought patterns Absolute Rules exist to block.
 
 ## Rationalization Table — STOP if you think this
-
-The Phase 9 Red Flags table covers only the Quality Gate loop. This table covers the orchestration-level bypass points where the agent under pressure most often rationalizes away the Absolute Rules.
 
 | Thought | Reality / Violated Rule |
 |---|---|
@@ -42,10 +40,8 @@ The Phase 9 Red Flags table covers only the Quality Gate loop. This table covers
 | "This resume is obviously weak (or strong) — detailed 6-criteria evaluation is unnecessary." | Absolute Rule 3 (evaluate content, not just expression) + Phase 5 6-criteria mandate. Self-judging skips the very rubric that catches blind spots. |
 | "The experience-mining interview has been going long — the user probably has nothing more." | 4-Stage Bypass Protocol must be exhausted in order. Early exit = premature data closure. |
 | "I scanned the text and found no AI tone — Skill(humanizer) call is redundant." | Phase 8 critical block explicitly forbids this exact rationalization. Manual scan != audit. |
-| "The note appears current — auto-seeding can be skipped." | Phase 2 mandate. Verify the directory state; "appears" is not verification. |
 | "The user said 'next' — section is done." | Recognized Opt-Out Keywords ARE valid exits, but exit applies only to the *current loop*, not to the phase's mandatory outputs. |
 | "I already know `experience-mining.md` and `content-quality-gate.md` from a prior session." | Reference Full-Read Mandate (see below). No carryover across sessions. |
-| "Phase 8 humanizer invocation requires no observable evidence." | Phase 8 critical + the new evidence line mandate (see Phase 8 below). Missing evidence = mandate violation. |
 
 **All of these mean: review habit is overriding Absolute Rules. Stop. Honor the gate.**
 
@@ -58,7 +54,7 @@ Pre-action signals. If you observe any of these in yourself, halt and reset.
 - STOP - About to enter Phase 10 while any Verdict Tracker item remains in REQUEST_CHANGES (not APPROVE, not opt-out)
 - STOP - About to present 2+ questions in a single message (one question per message; ban applies even inside a single phase)
 - STOP - About to dispatch tech-claim-examiner without having full-read `references/content-quality-gate.md` in this session
-- STOP - About to call Read on `references/experience-mining.md` or `references/content-quality-gate.md` with `offset` + `limit` parameters (partial-read forbidden)
+- STOP - About to partial-read a Class A reference (see Reference Full-Read Mandate)
 - STOP - About to generate the HTML report while the Completion Checklist has unchecked items
 
 **Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
