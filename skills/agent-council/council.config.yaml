@@ -23,7 +23,7 @@ council:
       effort_level: "xhigh"
 
     - name: gpt
-      command: opencode run --format default --agent "Hephaestus - Deep Agent"
+      command: opencode run --agent "Hephaestus - Deep Agent"
       emoji: "🤖"
       color: "BLUE"
       model: "openai/gpt-5.5"
