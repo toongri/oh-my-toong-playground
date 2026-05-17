@@ -14,9 +14,13 @@ import {
   PROMPT_MAX_BYTES,
   runOnce,
   runWithRetry,
+  runMultiTurn,
+  CONTINUATION_PROMPT_DEFAULT,
   type RunOnceOpts,
   type RunWithRetryOpts,
+  type RunMultiTurnOpts,
 } from './worker-utils.ts';
+import type { AgentDriver, ParseResult, CliType } from './agent-drivers/types.ts';
 
 const noopSleep = async () => {};
 
@@ -801,4 +805,389 @@ describe('mode=text prompt size guard', () => {
     expect((result.error as any)?.bytes).toBeGreaterThan(80 * 1024);
     expect((result.error as any)?.limit).toBe(PROMPT_MAX_BYTES);
   });
+});
+
+// ---------------------------------------------------------------------------
+// runMultiTurn — state machine tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Make a mock AgentDriver that sequences through parseResults per call.
+ * initialCommand returns baseCommand+baseArgs unchanged.
+ * resumeCommand appends --resume <sessionID> to baseArgs.
+ */
+function makeMockDriver(impls: {
+  parseResults: (ParseResult | null)[];
+  cli?: 'opencode' | 'claude' | 'codex';
+}): AgentDriver {
+  let callIdx = 0;
+  return {
+    cli: impls.cli ?? 'opencode',
+    parseStdout: (_stdout: string) => {
+      const r = impls.parseResults[callIdx];
+      callIdx += 1;
+      return r;
+    },
+    initialCommand: (opts) => ({
+      program: opts.baseCommand,
+      args: opts.baseArgs,
+      env: opts.workerEnv,
+    }),
+    resumeCommand: (opts) => ({
+      program: opts.baseCommand,
+      args: [...opts.baseArgs, '--resume', opts.sessionID],
+      env: opts.workerEnv,
+    }),
+  };
+}
+
+/**
+ * Make a mock runOnce that:
+ * - writes opts.memberDir/output.txt with the provided stdout
+ * - writes opts.memberDir/error.txt as empty
+ * - writes opts.memberDir/status.json as { state: 'done', exitCode: 0 }
+ * - returns { state: 'done', exitCode: 0, attempt: opts.attempt }
+ */
+function makeMockRunOnce(stdouts: string[]) {
+  let callIdx = 0;
+  const callArgs: RunOnceOpts[] = [];
+  const fn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+    const stdout = stdouts[callIdx];
+    callIdx += 1;
+    callArgs.push(opts);
+    writeFileSync(join(opts.memberDir, 'output.txt'), stdout);
+    writeFileSync(join(opts.memberDir, 'error.txt'), '');
+    writeFileSync(join(opts.memberDir, 'status.json'), JSON.stringify({ state: 'done', exitCode: 0 }));
+    return { state: 'done', exitCode: 0, attempt: opts.attempt };
+  };
+  fn.callArgs = callArgs;
+  fn.getCallCount = () => callIdx;
+  return fn;
+}
+
+/** Base opts for runMultiTurn tests. memberDir must be created by caller. */
+function makeMultiTurnOpts(memberDir: string, overrides: Partial<RunMultiTurnOpts> = {}): RunMultiTurnOpts {
+  return {
+    program: 'opencode',
+    args: ['--format', 'json'],
+    prompt: 'initial prompt',
+    member: 'test-member',
+    memberDir,
+    command: 'opencode --format json',
+    timeoutSec: 10,
+    cliType: 'opencode' as CliType,
+    multiTurn: {
+      maxTurns: 3,
+      deliverableSentinel: '## Verdict',
+    },
+    ...overrides,
+  };
+}
+
+describe('runMultiTurn — 상태 머신 테스트', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'run-multi-turn-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // AC-A2: happy continuation — narrative turn 0, sentinel turn 1
+  test('runMultiTurn — 내러티브 후 sentinel 발견 시 done', async () => {
+    const memberDir = join(tmpDir, 'ac-a2');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeMockRunOnce(['raw-ndjson-turn-0', 'raw-ndjson-turn-1']);
+    const mockDriver = makeMockDriver({
+      parseResults: [
+        // turn 0: narrative only, no sentinel
+        { sessionID: 'ses_1', terminal: 'unknown_pause', text: 'narrative without sentinel', rawEvents: [{ turn: 0 }] },
+        // turn 1: sentinel bearing
+        { sessionID: 'ses_1', terminal: 'stop', text: 'final\n## Verdict\nAPPROVE', rawEvents: [{ turn: 1 }] },
+      ],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    const result = await runMultiTurn(opts);
+
+    // Exactly 2 runOnce calls
+    expect(mockRunOnce.getCallCount()).toBe(2);
+
+    // Turn 1 used resumeCommand: args contain '--resume ses_1'
+    const turn1Args = mockRunOnce.callArgs[1].args;
+    expect(turn1Args).toContain('--resume');
+    expect(turn1Args).toContain('ses_1');
+
+    // Final state
+    expect(result.state).toBe('done');
+    expect(result.turn_count).toBe(2);
+    expect(result.force_finished).toBe(true);
+
+    // output.txt at memberDir level contains sentinel
+    const outputTxt = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputTxt).toContain('## Verdict');
+  }, { timeout: 30000 });
+
+  // AC-A3: max_turns_exceeded — all 3 turns narrative only
+  test('runMultiTurn — maxTurns 소진 시 max_turns_exceeded', async () => {
+    const memberDir = join(tmpDir, 'ac-a3');
+    mkdirSync(memberDir, { recursive: true });
+
+    const narrativeResult: ParseResult = {
+      sessionID: 'ses_2', terminal: 'unknown_pause', text: 'still no sentinel', rawEvents: [{}],
+    };
+    const mockRunOnce = makeMockRunOnce(['raw0', 'raw1', 'raw2']);
+    const mockDriver = makeMockDriver({
+      parseResults: [narrativeResult, narrativeResult, narrativeResult],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    const result = await runMultiTurn(opts);
+
+    expect(mockRunOnce.getCallCount()).toBe(3);
+    expect(result.state).toBe('max_turns_exceeded');
+    expect(result.turn_count).toBe(3);
+    expect(result.force_finished).toBe(true);
+  }, { timeout: 30000 });
+
+  // AC-C1: parse failure → degraded done, output.txt = raw stdout
+  test('runMultiTurn — parseStdout null 시 ndjson_parse_failure degraded', async () => {
+    const memberDir = join(tmpDir, 'ac-c1');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeMockRunOnce(['unparseable raw stdout']);
+    const mockDriver = makeMockDriver({
+      parseResults: [null],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    const result = await runMultiTurn(opts);
+
+    expect(mockRunOnce.getCallCount()).toBe(1);
+    expect(result.state).toBe('done');
+    expect(result.multi_turn_degraded).toBe(true);
+    expect(result.degraded_reason).toBe('ndjson_parse_failure');
+    expect(result.turn_count).toBe(1);
+
+    // output.txt should be raw stdout (not parsed text, since parse failed)
+    const outputTxt = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputTxt).toBe('unparseable raw stdout');
+  }, { timeout: 30000 });
+
+  // AC-C2: backward compat — no multiTurn → falls back to runWithRetry
+  test('runMultiTurn — multiTurn 없으면 _turn-0 디렉터리 없이 runWithRetry 경로로 폴백', async () => {
+    const memberDir = join(tmpDir, 'ac-c2');
+    mkdirSync(memberDir, { recursive: true });
+
+    // driverFactory: () => null forces the fallback path even with a driver
+    const opts = makeMultiTurnOpts(memberDir, {
+      multiTurn: undefined,
+      driverFactory: () => null,
+      // Use real /bin/sh so runWithRetry works
+      program: '/bin/sh',
+      args: ['-c', 'exit 0'],
+      command: '/bin/sh -c "exit 0"',
+      cliType: 'unknown' as CliType,
+    });
+
+    const result = await runMultiTurn(opts);
+
+    // No _turn-0 subdirectory (runWithRetry path, not pump path)
+    expect(existsSync(join(memberDir, '_turn-0'))).toBe(false);
+    expect(result.state).toBe('done');
+  }, { timeout: 30000 });
+
+  // AC-C4: no infinite loop — call count exactly equals maxTurns
+  test('runMultiTurn — 루프가 maxTurns 초과하지 않음', async () => {
+    const memberDir = join(tmpDir, 'ac-c4');
+    mkdirSync(memberDir, { recursive: true });
+
+    const narrativeResult: ParseResult = {
+      sessionID: 'ses_4', terminal: 'unknown_pause', text: 'no sentinel', rawEvents: [{}],
+    };
+    const mockRunOnce = makeMockRunOnce(['r0', 'r1', 'r2', 'r3', 'r4']); // extra stdouts — should not be used
+    const mockDriver = makeMockDriver({
+      parseResults: [narrativeResult, narrativeResult, narrativeResult, narrativeResult, narrativeResult],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+      multiTurn: { maxTurns: 3, deliverableSentinel: '## Verdict' },
+    });
+
+    await runMultiTurn(opts);
+
+    // Must be exactly 3, not 4 or more
+    expect(mockRunOnce.getCallCount()).toBe(3);
+  }, { timeout: 30000 });
+
+  // AC-C5: timeout budget — total time fits within timeoutSec * maxTurns + grace
+  test('runMultiTurn — 총 경과시간이 timeoutSec × maxTurns 이내', async () => {
+    const memberDir = join(tmpDir, 'ac-c5');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Each mock turn takes ~20ms
+    let callIdx = 0;
+    const delayedRunOnce = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+      await sleepMsAsync(20);
+      callIdx += 1;
+      writeFileSync(join(opts.memberDir, 'output.txt'), 'no sentinel here');
+      writeFileSync(join(opts.memberDir, 'error.txt'), '');
+      writeFileSync(join(opts.memberDir, 'status.json'), JSON.stringify({ state: 'done', exitCode: 0 }));
+      return { state: 'done', exitCode: 0, attempt: 0 };
+    };
+
+    const narrativeResult: ParseResult = {
+      sessionID: 'ses_5', terminal: 'unknown_pause', text: 'no sentinel here', rawEvents: [{}],
+    };
+    const mockDriver = makeMockDriver({
+      parseResults: [narrativeResult, narrativeResult, narrativeResult],
+    });
+
+    const maxTurns = 3;
+    const timeoutSec = 5;
+    const start = Date.now();
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: delayedRunOnce as any,
+      multiTurn: { maxTurns, deliverableSentinel: '## Verdict' },
+      timeoutSec,
+    });
+
+    await runMultiTurn(opts);
+
+    const elapsed = Date.now() - start;
+    const budget = timeoutSec * maxTurns * 1000 + 5000; // 5s grace
+    expect(elapsed).toBeLessThan(budget);
+    expect(callIdx).toBe(maxTurns);
+  }, { timeout: 30000 });
+
+  // AC-C6: sessionID missing on first turn → session_id_unrecoverable
+  test('runMultiTurn — turn 0에서 sessionID 없으면 session_id_unrecoverable degraded', async () => {
+    const memberDir = join(tmpDir, 'ac-c6');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeMockRunOnce(['raw ndjson stdout']);
+    const mockDriver = makeMockDriver({
+      parseResults: [
+        { sessionID: null, terminal: 'unknown_pause', text: 'hello', rawEvents: [{}] },
+      ],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    const result = await runMultiTurn(opts);
+
+    expect(mockRunOnce.getCallCount()).toBe(1);
+    expect(result.state).toBe('done');
+    expect(result.multi_turn_degraded).toBe(true);
+    expect(result.degraded_reason).toBe('session_id_unrecoverable');
+    expect(result.turn_count).toBe(1);
+    expect(result.force_finished).toBe(false);
+
+    // output.txt = text from parsed (not raw stdout)
+    const outputTxt = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputTxt).toBe('hello');
+  }, { timeout: 30000 });
+
+  // resumeCommand uses extracted sessionID
+  test('runMultiTurn — turn 1의 resumeCommand에 turn 0 sessionID 사용', async () => {
+    const memberDir = join(tmpDir, 'resume-sid');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeMockRunOnce(['raw0', 'raw1']);
+    const mockDriver = makeMockDriver({
+      parseResults: [
+        { sessionID: 'ses_abc', terminal: 'unknown_pause', text: 'no sentinel', rawEvents: [{}] },
+        { sessionID: 'ses_abc', terminal: 'stop', text: '## Verdict APPROVE', rawEvents: [{}] },
+      ],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    await runMultiTurn(opts);
+
+    // Turn 1 args must contain 'ses_abc' (from resumeCommand)
+    const turn1Args = mockRunOnce.callArgs[1].args;
+    expect(turn1Args).toContain('ses_abc');
+  }, { timeout: 30000 });
+
+  // events.jsonl audit log written per turn
+  test('runMultiTurn — 성공 파싱 후 _turn-0/events.jsonl 생성', async () => {
+    const memberDir = join(tmpDir, 'events-jsonl');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeMockRunOnce(['raw-ndjson']);
+    const mockDriver = makeMockDriver({
+      parseResults: [
+        { sessionID: 'ses_ev', terminal: 'stop', text: '## Verdict', rawEvents: [{ type: 'text' }, { type: 'step_finish' }] },
+      ],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    await runMultiTurn(opts);
+
+    const eventsPath = join(memberDir, '_turn-0', 'events.jsonl');
+    expect(existsSync(eventsPath)).toBe(true);
+    const lines = readFileSync(eventsPath, 'utf8').split('\n').filter(l => l.trim());
+    expect(lines.length).toBe(2);
+    // Each line is valid JSON
+    for (const line of lines) {
+      expect(() => JSON.parse(line)).not.toThrow();
+    }
+  }, { timeout: 30000 });
+
+  // terminal turn output.txt copied to memberDir/
+  test('runMultiTurn — 마지막 턴의 output.txt가 memberDir에 복사됨', async () => {
+    const memberDir = join(tmpDir, 'output-copy');
+    mkdirSync(memberDir, { recursive: true });
+
+    const sentinelText = 'final output with ## Verdict here';
+    const mockRunOnce = makeMockRunOnce(['raw-ndjson-sentinel']);
+    const mockDriver = makeMockDriver({
+      parseResults: [
+        { sessionID: 'ses_cp', terminal: 'stop', text: sentinelText, rawEvents: [{}] },
+      ],
+    });
+
+    const opts = makeMultiTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce as any,
+    });
+
+    await runMultiTurn(opts);
+
+    // memberDir/output.txt == _turn-0/output.txt (text-only after parseStdout)
+    const memberOutput = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    const turn0Output = readFileSync(join(memberDir, '_turn-0', 'output.txt'), 'utf8');
+    expect(memberOutput).toBe(turn0Output);
+    expect(memberOutput).toBe(sentinelText);
+  }, { timeout: 30000 });
 });
