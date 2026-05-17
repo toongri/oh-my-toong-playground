@@ -1,0 +1,12 @@
+{"type":"step_start","sessionID":"ses_malformed_001","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 1 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 2 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 3 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 4 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 5 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 6 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 7 of output."}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"Line 8 of output."}}
+{"type":"step_finish","sessionID":"ses_malformed_001","part":{"reason":"tool-calls"}}
+{"type":"step_start","sessionID":"ses_malformed_001","part":{"type":"step-start"}}
+{"type":"text","sessionID":"ses_malformed_001","part":{"type":"text","text":"This line is truncated mid-wa

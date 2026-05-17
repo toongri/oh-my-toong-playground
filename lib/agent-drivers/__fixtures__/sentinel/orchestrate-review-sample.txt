@@ -1,0 +1,15 @@
+## Chairman Report
+
+Three advisors reviewed the proposed change to `lib/generic-job.ts`.
+
+**Consensus findings:**
+- The `buildAugmentedCommand` extension is correctly scoped to opencode CLI type.
+- No breaking changes to existing claude or codex paths.
+- Single-quoted YAML values in default config will bypass the double-quote unquoter — confirmed blocker.
+
+**Minority note:** One advisor flagged that the fallback branch lacks a test for the missing-CLI error path.
+
+## Verdict
+APPROVE
+
+The change is safe to merge with the noted test gap tracked separately.

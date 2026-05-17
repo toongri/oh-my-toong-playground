@@ -1,0 +1,11 @@
+Reviewed 12 slides for the multi-turn pump design presentation.
+
+Overall structure is clear. Narrative arc flows from problem statement through spike findings to proposed implementation.
+
+**Slide-level notes:**
+- Slide 3: Diagram labels are too small for projected viewing — increase font to 16pt minimum.
+- Slide 7: The codex resume command example is cut off; show full CLI invocation.
+- Slide 10: Missing speaker notes for the Q&A buffer slide.
+
+## Slide Review Summary
+Presentation is ready for internal review with minor adjustments. The core technical content is accurate and well-sequenced. Address font size and truncated CLI example before the external audience showing.
