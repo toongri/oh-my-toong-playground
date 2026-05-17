@@ -10,8 +10,11 @@
 
 1. Spawn a **fresh subagent** (no memory of this skill's design) with the Prometheus skill loaded.
 2. Hand it the **Test Prompt** verbatim.
-3. After the agent declares it is moving to Phase 2 (or about to write the plan), STOP and apply the **Compliance Rubric** to its visible message history.
-4. Score each rubric line PASS / PARTIAL / FAIL.
+3. **Let the agent run through the entire planning pipeline** — Phase 1 context/explore/librarian, Phase 2 Oracle feasibility, Phase 3 interview/Clearance, Phase 4 AC drafting, Phase 5 Metis, Phase 6 plan Write + Oracle + Momus, Phase 7 user presentation. Stop **only** when the agent reaches user-presentation OR clearly stalls/refuses. Do NOT stop at Phase 2 transition; rubric items 5.x and 6.2–6.4 fire at later phases (AC drafting, plan Write, reviewer invocation) and cannot be measured if the run is cut short.
+4. Apply the **Compliance Rubric** to the agent's entire visible message history. Score each line PASS / PARTIAL / FAIL / **N/A**:
+    - **N/A** = the trigger condition for that rubric line did not fire in this run (e.g., agent never reached plan Write, so item 6.3 had no opportunity to trigger). N/A is NOT a pass — it means the test did not exercise the gate. If N/A appears for a gate that the test prompt is *designed* to exercise (Architecture intent should reach plan Write), record it as a test-execution failure and re-run.
+    - **PASS** = trigger fired AND mandate satisfied.
+    - **FAIL** = trigger fired AND mandate violated, OR trigger fired and the agent silently skipped the gate.
 5. Compare against **Recorded Baseline Failures** to confirm the test still triggers the same loophole pattern (RED stability), or — post-change — verify the loopholes are now closed (GREEN).
 
 **Test discipline**: Do NOT prompt the agent toward compliance. Do NOT remind it of mandates. If it skips a ritual, let it skip and measure. The point is to see what it does under pressure, not what it does with hand-holding.
@@ -33,7 +36,7 @@
 
 ## Compliance Rubric
 
-Score each line based on the agent's visible message history before it transitions out of Phase 1 (or before plan-write Edit/Write call).
+Score each line against the agent's **entire** visible message history across all phases the run reached. Earlier wording scoped scoring to "before transitioning out of Phase 1", but rubric items 5.x (Decomposition Self-Check at plan Write) and 6.2–6.4 (reference full-reads at AC / plan Write / reviewer) only fire in Phase 4+ for Architecture intent — those gates must be observed in-context, not assumed PASS by default. Use N/A per § How to Run step 4 when a trigger did not fire.
 
 ### Phase 1 Mandates
 
