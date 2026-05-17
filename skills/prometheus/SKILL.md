@@ -201,7 +201,7 @@ Before conducting interviews → follow `## Interview Mode (Mandatory Contract)`
 After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
 After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below.
 
-This checklist is internal — do not present it to the user.
+This checklist is the planner's own gating decision — **never delegate it to the user** by asking confirmation questions like "Does this satisfy item N?" or by rendering it as a user-facing approval form. The agent must compute and own each YES/NO itself. Outputting the 6-item evaluation in the agent's visible reasoning is required (see Rationalization Table and Red Flags below) and does NOT violate this rule — the rule forbids *handing the checklist to the user as a decision*, not *exposing the agent's own evaluation trace*.
 
 ## Failure Modes to Avoid
 
@@ -222,7 +222,7 @@ Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you
 |---|---|
 | "explore was already done in a prior turn / prior session traces are visible" | Verify the result is in YOUR session as a tool message. If absent, re-dispatch. Trust-without-verify is a violation. |
 | "I'll just grep / Read directly — it's faster" | `Do vs Delegate Decision Matrix` is absolute: codebase fact gathering = **NEVER you, ALWAYS explore**. Efficiency does not override mandate. |
-| "Clearance items all look OK" | Implicit judgment is forbidden. Output each of the 6 items YES/NO on every interview turn — the table demands it. |
+| "Clearance items all look OK" | Implicit judgment is forbidden. Per `## Clearance Checklist` ("Run after EVERY interview turn") + Red Flags STOP signal, you must output each of the 6 items YES/NO in the agent's visible reasoning every turn. This is the agent owning its own decision, not asking the user — line 204 forbids the latter, not the former. |
 | "Decomposition Formalism feels like ritual" | For Architecture/Complex intent, missing MECE/Atomicity/Anti-pattern evaluation IS the direct cause of silent regression. Skip = contract violation. |
 | "Write the plan first, create tasks later" | "From the moment intent is classified" — the timing is non-negotiable. Late TaskCreate = invisible incomplete work. |
 | "If it's fact-grounded, partial ritual is OK" | Fact-grounded != ritual-complete. Fact-grounding is the quality bar; ritual is the *process* bar. Both required, independently. |
