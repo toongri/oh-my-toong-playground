@@ -465,9 +465,9 @@ These 4 files contain protocol logic that orchestrates multiple Steps. Partial-r
 | Area Selection (initial assessment) | [references/area-entry-criteria.md](references/area-entry-criteria.md) |
 | Wrapup entry (records exist) | [references/wrapup.md](references/wrapup.md) |
 
-**Read evidence line** (emit once per file in your visible message after the read completes):
+**Read evidence line** (emit once per file in your visible message after the read completes, including line count to prove full-file read):
 ```
-Reference full-read: <filename> at trigger <trigger name> - done
+Reference full-read: <filename> (lines 1-N, full file) at trigger <trigger name> - done
 ```
 
 Missing evidence at the triggering action = mandate violation.
@@ -478,5 +478,5 @@ These files are consulted only when the corresponding domain enters scope. Selec
 
 - `references/diagram-selection.md` — when a diagram is needed
 - `references/custom-design-concern.md` — when promoting an Emergent Concern to a new Area
-- All 11 Design Area reference files (`requirements-analysis.md`, `solution-design.md`, `domain-model.md`, `data-schema.md`, `interface-contract.md`, `integration-pattern.md`, `ai-responsibility-contract.md`, `operations-plan.md`, `frontend-ux-surface.md`, `data-ml-pipeline.md`, `security-privacy.md`) — when entering that specific Area
+- All 11 Design Area reference files (`requirements.md`, `solution-design.md`, `domain-model.md`, `data-schema.md`, `interface-contract.md`, `integration-pattern.md`, `ai-responsibility-contract.md`, `operations-plan.md`, `frontend-ux-surface.md`, `data-ml-pipeline.md`, `security-privacy.md`) — when entering that specific Area
 - `templates/record.md` — when creating a record file

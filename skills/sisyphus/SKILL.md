@@ -101,23 +101,6 @@ Before TaskCreate, classify each task into ONE type. This decides routing — an
 
 **Routing follows task type, NOT session cadence.** Even if every prior task in this session used junior → argus, a new verify/investigate task is routed by its own type.
 
-### Classification Block (mandatory output before first dispatch)
-
-Before invoking the first delegation of the batch, emit the following classification block in your visible message. This locks in the routing decision at planning time, NOT at dispatch time when session cadence and habit take over.
-
-```
-## Task Classification
-- <task-slug-1> | type: implement   | routing: sisyphus-junior -> argus -> mnemosyne
-- <task-slug-2> | type: verify      | routing: argus directly
-- <task-slug-3> | type: diagnose    | routing: oracle
-- <task-slug-4> | type: investigate | routing: explore
-```
-
-Rules:
-- Every task created via TaskCreate in this batch appears as one line.
-- Missing block = mandate violation. Decoding routing "at dispatch time" is forbidden.
-- Atomicity Quick-Check (3 conditions) and Parallelization groupings can be appended as additional lines under each task. Not mandatory, but recommended for non-trivial batches.
-
 ### Atomic Decomposition
 
 Each task must be completable in a single sisyphus-junior delegation. Apply **MECE decomposition**: tasks are Mutually Exclusive (no overlap) and Collectively Exhaustive (full coverage).
@@ -136,7 +119,28 @@ Each task must be completable in a single sisyphus-junior delegation. Apply **ME
 
 **Vertical Slice Rule**: Split by responsibility/behavior, NOT by architectural layer. Exception: shared foundation tasks (types, interfaces, configs) may be extracted as early tasks.
 
-### Atomicity Quick-Check
+### Post-TaskCreate Ritual (mandatory before first dispatch)
+
+Execute this Post-TaskCreate Ritual *after* `TaskCreate` returns and *before* invoking the first delegation/dispatch. All steps below must complete in order; emitting the first delegation without completing every step is a mandate violation.
+
+#### Classification Block (mandatory output before first dispatch)
+
+Before invoking the first delegation of the batch, emit the following classification block in your visible message. This locks in the routing decision at planning time, NOT at dispatch time when session cadence and habit take over.
+
+```
+## Task Classification
+- <task-slug-1> | type: implement   | routing: sisyphus-junior -> argus -> mnemosyne
+- <task-slug-2> | type: verify      | routing: argus directly
+- <task-slug-3> | type: diagnose    | routing: oracle
+- <task-slug-4> | type: investigate | routing: explore
+```
+
+Rules:
+- Every task created via TaskCreate in this batch appears as one line.
+- Missing block = mandate violation. Decoding routing "at dispatch time" is forbidden.
+- Atomicity Quick-Check (3 conditions) and Parallelization groupings can be appended as additional lines under each task. Not mandatory, but recommended for non-trivial batches.
+
+#### Atomicity Quick-Check
 
 Before delegating, verify each task passes:
 1. **Single concern?** — One task = one module/concern
@@ -145,7 +149,7 @@ Before delegating, verify each task passes:
 
 All YES → delegate. Any NO → decompose further.
 
-### Parallelization Analysis
+#### Parallelization Analysis
 
 Before entering the Task Execution Loop:
 1. **Map dependencies** — set `addBlockedBy` links
@@ -269,7 +273,7 @@ The catalog below — refreshed at skill-load time — enumerates which skills a
 
 Pre-action signals — catch the routing error before the dispatch lands. If you observe any of these in yourself, halt and re-classify.
 
-- STOP - About to invoke TaskCreate without first emitting the Classification Block in this session
+- STOP - About to invoke the first delegation of this batch without first emitting the Classification Block
 - STOP - About to type `npm test` / `npm run build` / `grep` / `git commit` yourself (verification = argus, search = explore, commits = mnemosyne)
 - STOP - About to dispatch sisyphus-junior on a task whose deliverable is a narrative or PASS/FAIL verdict, not file changes
 - STOP - About to dispatch argus on a task with no explicit AC and no PASS/FAIL closure criterion
@@ -292,7 +296,7 @@ Reference files below are **trigger-conditional MANDATORY full-read**. The trigg
 
 **Read evidence line** (emit once per file in your visible message after the read completes):
 ```
-Reference full-read: <filename> at trigger <trigger name> - done
+Reference full-read: <filename> (lines 1-N, full file) at trigger <trigger name> - done
 ```
 
 Missing evidence at the triggering action = mandate violation.

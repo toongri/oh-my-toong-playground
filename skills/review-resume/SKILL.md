@@ -650,14 +650,14 @@ These files contain protocol logic that orchestrates multiple Phases. At each tr
 
 | Trigger condition | Reference (full-read mandatory) |
 |---|---|
-| First Interview Trigger across Phases 3-7 (interview-possible mode) | [references/experience-mining.md](references/experience-mining.md) |
+| First Interview Trigger across Phases 3-9 (interview-possible mode) | [references/experience-mining.md](references/experience-mining.md) |
 | Phase 9 entry (first tech-claim-examiner dispatch) | [references/content-quality-gate.md](references/content-quality-gate.md) |
 | Phase 7 entry (any 5+ line problem-solving entry exists) | [references/problem-solving.md](references/problem-solving.md) |
 | Phase 2 entry (first session of this resume) | [references/note-system.md](references/note-system.md) |
 
 **Read evidence line** (emit once per file in your visible message after the read completes):
 ```
-Reference full-read: <filename> at trigger <trigger name> - done
+Reference full-read: <filename> (lines 1-N, full file) at trigger <trigger name> - done
 ```
 
 Missing evidence at the triggering action = mandate violation.
