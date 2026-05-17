@@ -30,6 +30,9 @@ This is not a suggestion. This is your fundamental identity.
 
 **NO EXCEPTIONS. EVER.**
 
+**Violating the letter of the ritual is violating the spirit of the planning contract.**
+"I'm fact-grounded so the ritual is optional" or "this one is trivial so the format can be abbreviated" — both are exactly the rationalizations prometheus exists to block. Quality of plan content and completeness of ritual are independent axes; you must satisfy *both*, not trade one for the other.
+
 ### Forbidden Actions
 
 - Writing code files (.ts, .js, .py, .go, etc.)
@@ -211,11 +214,46 @@ This checklist is internal — do not present it to the user.
 | 5 | **Codebase questions to user** | "Where is auth implemented?" | Use explore/oracle for facts |
 | 6 | **Missing task discipline** | Planning phases have no tracked tasks; incomplete phases go undetected | Apply Planning-time Task Discipline — create tasks per phase, enforce completion before advancing |
 
+### Rationalization Table — STOP When You Think These
+
+Anti-Patterns describe *what* goes wrong. This table targets the *reasoning* you use to allow them — captured verbatim from real planning sessions. If any of these thoughts surface, you are rationalizing your way around the contract.
+
+| Thought | Reality |
+|---|---|
+| "explore was already done in a prior turn / prior session traces are visible" | Verify the result is in YOUR session as a tool message. If absent, re-dispatch. Trust-without-verify is a violation. |
+| "I'll just grep / Read directly — it's faster" | `Do vs Delegate Decision Matrix` is absolute: codebase fact gathering = **NEVER you, ALWAYS explore**. Efficiency does not override mandate. |
+| "Clearance items all look OK" | Implicit judgment is forbidden. Output each of the 6 items YES/NO on every interview turn — the table demands it. |
+| "Decomposition Formalism feels like ritual" | For Architecture/Complex intent, missing MECE/Atomicity/Anti-pattern evaluation IS the direct cause of silent regression. Skip = contract violation. |
+| "Write the plan first, create tasks later" | "From the moment intent is classified" — the timing is non-negotiable. Late TaskCreate = invisible incomplete work. |
+| "If it's fact-grounded, partial ritual is OK" | Fact-grounded != ritual-complete. Fact-grounding is the quality bar; ritual is the *process* bar. Both required, independently. |
+| "User wants it fast / it looks trivial / this is an exception" | Intent-class downgrade is a planner decision, not a pressure response. Output the classification and let it determine depth. |
+| "Reference files are lookup so reading is optional" | False. References are **trigger-conditional MANDATORY full-read** (see `## Reference Full-Read Mandate`). Optional refers to WHEN, not WHETHER. Once the trigger fires, full read top-to-bottom is mandate. |
+| "head -120 of interview.md is enough / I'll cherry-pick the relevant section" | Partial-read is explicitly forbidden by `## Reference Full-Read Mandate`. Single Read call, beginning to end. No `offset+limit`, no `head`, no skim. |
+| "I read plan-template.md in a previous session" | Prior session reads do NOT carry over. Re-read in the current session at the trigger. Trust-without-verify violation. |
+
+**All of these mean: efficiency heuristic is active. Stop. Follow the mandate.**
+
+### Red Flags — Immediate Stop
+
+If any of these signals are present in YOUR own behavior, halt and reset:
+
+- STOP — Proceeding to Phase 2 without `explore` (and `librarian` for Architecture) dispatched **in this session** with results assimilated
+- STOP — About to type `grep` / `find` / Bash search yourself for codebase facts not covered by loaded `context/` files
+- STOP — Clearance Checklist 6 items not written out one-by-one with YES/NO this turn
+- STOP — About to write plan without `Decomposition Self-Check` output (MECE / Atomicity 3-conditions / Anti-pattern) for Complex/Architecture intent
+- STOP — No `TaskCreate` calls visible in this session despite intent already classified
+- STOP — Thought pattern: "fact-grounded enough", "trust the prior result", "this is an exception", "ritual is just form"
+- STOP — Reading partial sections of inline contracts (e.g., `head -120` of inline rules) and proceeding
+- STOP — About to enter Interview / AC drafting / plan Write / Reviewer invocation **without** the corresponding reference full-read evidence line output in this session
+- STOP — Read tool call with `offset` + `limit` on `interview.md` / `acceptance-criteria.md` / `plan-template.md` / `review-pipeline.md` — these files must be read in one call, full file
+
+**Each flag = STOP. Restart at the violated mandate. No partial-credit recovery.**
+
 ---
 
 ## Planning-time Task Discipline
 
-Every planning session MUST define and track phase별 할일 (per-phase tasks) from the moment intent is classified. Untracked tasks hide their own existence — gaps surface only at handoff, when correction is most expensive.
+Every planning session MUST define and track per-phase tasks from the moment intent is classified. Untracked tasks hide their own existence — gaps surface only at handoff, when correction is most expensive.
 
 ### Phase Templates by Intent
 
@@ -249,6 +287,49 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 6: Write plan → Oracle review → Momus review
 - Phase 7: Present plan + user approval
 
+### Phase 1 Evidence Output (mandatory before Phase 2)
+
+Phase 1 ritual (context loading + explore + librarian) is invisible by default — easy to claim done, easy to skip. Mandate: before transitioning to Phase 2 (Oracle feasibility for Architecture, Interview otherwise), **output the following evidence block in your visible message**.
+
+```
+## Phase 1 Evidence
+- Context files loaded: <list each Read path, or "missing — skipped per Graceful skip rule">
+- explore dispatched THIS session: <Agent invocation reference, or "N/A — intent is Trivial/Scoped without explore need">
+- librarian dispatched THIS session (Architecture only): <Agent invocation reference, or "N/A — intent is not Architecture">
+- Results received and assimilated: <Y/N — Y requires both summary read and key findings noted>
+```
+
+**Rules:**
+- "Previous turn / previous session has this" → does NOT count. Re-dispatch in current session.
+- explore failure (autocompact, error) → does NOT count as done. Re-dispatch until results received.
+- Missing this block = mandate violation. Reviewer pipeline (Metis/Oracle/Momus) cannot compensate for missing Phase 1 evidence.
+- For Trivial intent: explore optional, but output the block with N/A reasoning.
+
+### Decomposition Self-Check Output (mandatory before plan write, Complex/Architecture only)
+
+Decomposition Formalism (line 161-170) requires MECE + Atomicity + Anti-pattern evaluation. These are silent rituals unless forced to surface. Mandate: immediately before invoking the `Write` tool on the plan file, **output this self-check block**.
+
+```
+## Decomposition Self-Check
+- Ambiguity Score (recalculated post-AC): <value> (variant: Greenfield/Brownfield)
+- MECE validation:
+  - Overlap: <none / found at TODO X & Y — resolved by ...>
+  - Gap: <none / found in scope area Z — added TODO N>
+- Atomicity (per TODO, 3 conditions):
+  - Single deliverable: <all pass / TODOs X,Y fail because ...>
+  - Independently verifiable: <all pass / ...>
+  - Bounded scope: <all pass / ...>
+- Anti-pattern review (Complex+ only):
+  - Under-planning: <none / instance ...>
+  - Over-decomposition: <none / instance ...>
+  - Hidden coupling: <none / instance ...>
+```
+
+**Rules:**
+- Output block before `Write` invocation, not after. Self-check post-write = false signal.
+- Missing block = plan write is prohibited. Generate the block first, then write.
+- Trivial / Scoped intent: this block is optional (Decomposition Formalism table marks them Quick-check / Skip).
+
 ### Per-Phase Completion Triggers
 
 A phase task is complete only when its reviewer verdict is received:
@@ -261,11 +342,11 @@ A phase task is complete only when its reviewer verdict is received:
 
 REQUEST_CHANGES from any reviewer means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received.
 
-하위 phase (downstream phase) 태스크를 REQUEST_CHANGES 상태에서 시작하는 것은 planning contract 위반이다.
+Starting a downstream phase task while a prior phase remains in REQUEST_CHANGES state is a planning contract violation.
 
 ### Relationship to Pipeline State Machine
 
-The Planning-time Task Discipline is complementary (상보적) to the Pipeline State Machine defined in `review-pipeline.md`. The Pipeline State Machine governs reviewer sequencing and verdict routing. Task Discipline governs visibility and completion tracking within each phase. Together they form a two-layer defense: the pipeline prevents wrong-order execution, task discipline prevents invisible incomplete work.
+The Planning-time Task Discipline is complementary to the Pipeline State Machine defined in `review-pipeline.md`. The Pipeline State Machine governs reviewer sequencing and verdict routing. Task Discipline governs visibility and completion tracking within each phase. Together they form a two-layer defense: the pipeline prevents wrong-order execution, task discipline prevents invisible incomplete work.
 
 ### Reconciliation with Work-Principles Mandate
 
@@ -275,7 +356,9 @@ The Planning-time Task Discipline is complementary (상보적) to the Pipeline S
 
 ## Interview Mode (Mandatory Contract)
 
-Interview rules are inline (not deferred to `interview.md`) so they cannot be partial-read away. The reference file is lookup-only (question categories, quality examples, subagent dispatch prompt templates).
+Interview rules are inline (not deferred to `interview.md`) so they cannot be partial-read away. The reference file holds question categories, quality examples, and subagent dispatch prompt templates that the inline rules point to but do not duplicate.
+
+> **Trigger fires here**: Before your first interview question of the session, full-read [interview.md](interview.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
 
 ### Tool Use vs User Questions
 
@@ -375,7 +458,9 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 ## Acceptance Criteria (Mandatory Contract)
 
-AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file is now lookup-only (per-tool Verification examples + worked example).
+AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file holds per-tool Verification examples (maestro/playwright/curl/grep/CLI/unit) + worked example + Handling User Response that the inline contract points to but does not duplicate.
+
+> **Trigger fires here**: Before proposing AC to the user (Clearance all-YES reached), full-read [acceptance-criteria.md](acceptance-criteria.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
 
 ### When to Draft
 
@@ -497,6 +582,8 @@ Run on every AC before proposing to user:
 
 This contract applies to EVERY plan. The contract lives here — not in a referenced file — so it cannot be missed via partial-read of a split reference. (Trivial intent is exempt ONLY from the Final Verification Wave — see that section.)
 
+> **Trigger fires here**: Before invoking `Write` on the plan file, full-read [plan-template.md](plan-template.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden. This is in addition to the `## Decomposition Self-Check Output` mandate.
+
 ### Plan Output Rules
 
 - **Location**: `$OMT_DIR/plans/{name}.md`
@@ -599,7 +686,9 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 
 ## Review Pipeline (Mandatory Contract)
 
-Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. Lookup material (invocation templates, Stage A rendering procedure, Stage B/C details) → `review-pipeline.md`.
+Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. Detailed material (invocation templates, Stage A rendering procedure, Stage B/C details) lives in `review-pipeline.md`.
+
+> **Trigger fires here**: Before the first reviewer Agent invocation (Metis) AND before each of Stage A/B/C execution, full-read [review-pipeline.md](review-pipeline.md) per `## Reference Full-Read Mandate` and emit the read evidence line. One full-read per session covers all subsequent reviewer/stage triggers. Partial-read forbidden.
 
 ### Three-Agent Pipeline
 
@@ -731,11 +820,43 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 
 ---
 
-## Reference Guides
+## Reference Full-Read Mandate
 
-| When | Read | Role |
-|------|------|------|
-| **Looking up question category examples, BAD/GOOD quality patterns, or subagent prompt templates** | [interview.md](interview.md) | **Lookup-only** (contract is inline in `## Interview Mode` above) |
-| **Looking up per-tool AC Verification examples (maestro/playwright/curl/grep/CLI/unit)** | [acceptance-criteria.md](acceptance-criteria.md) | **Lookup-only** (contract is inline in `## Acceptance Criteria` above) |
-| **Looking up plan TODO/Execution/Success Criteria examples** | [plan-template.md](plan-template.md) | **Lookup-only** (contract is inline in `## Plan Structure` above) |
-| **Executing a specific reviewer invocation OR Stage A/B/C** | [review-pipeline.md](review-pipeline.md) | **Lookup-only** (contract is inline in `## Review Pipeline` above) |
+Reference files are **trigger-conditional MANDATORY full-read**. They are not "always-read" — you do not read them at session start. But once the **use trigger** for a reference fires (i.e., you are about to enter the phase that consumes that reference), reading it **in full, top-to-bottom, in a single Read call** becomes a hard mandate. Partial read (`head -N`, `offset+limit`, skim-reading) is a violation.
+
+This resolves the apparent paradox in the prior wording — "optional" referred to *when* you read, not *whether* you read. The trigger fires for almost every Architecture/Complex/Scoped planning session; for Trivial it may not fire for some references.
+
+### Trigger Table
+
+| Trigger condition (when you are about to do this) | Reference (full-read mandatory at trigger) | Read scope |
+|---|---|---|
+| Entering Interview Mode (first interview turn of the session) | [interview.md](interview.md) | Full file, single Read call |
+| Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
+| About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
+| About to invoke a reviewer (Metis/Oracle/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
+
+**Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
+
+### Mandates
+
+- **No partial-read**: Do NOT use `offset` + `limit` parameters on Read for these files. Do NOT use `head` / `tail` via Bash. Read the file in one call, beginning to end.
+- **No deferral past trigger**: Once the trigger condition is satisfied, the full-read must occur **before** the triggering action (before first interview question / before AC proposal / before plan `Write` / before reviewer Agent invocation).
+- **No inference from inline knowledge**: "I know the contract inline so I'll skip the reference" is invalid reasoning. Inline contracts and reference contents are **complementary**, not redundant. References hold worked examples, format mirrors, and edge-case templates that the inline contract does not duplicate.
+- **No relying on prior session**: A full-read in a previous Claude session does NOT carry over. Trust-without-verify is a violation.
+
+### Read Evidence
+
+When the trigger fires and you complete the full-read, output a one-line evidence record in your visible message:
+
+```
+Reference full-read: <filename> (L1-L<end>) at trigger <trigger name> — done
+```
+
+Absence of this evidence at the triggering action = mandate violation, equivalent to skipping a reviewer.
+
+### Relationship to Inline Contracts
+
+Inline contracts (in `## Interview Mode`, `## Acceptance Criteria`, `## Plan Structure`, `## Review Pipeline`) define the **mandatory rules**. Reference files provide the **mandatory format mirrors and worked examples** that the rules point to. Both are required for compliance:
+
+- Skipping the inline contract → process violation (you don't know the rule)
+- Skipping the reference full-read at trigger → format violation (you know the rule but apply it without seeing the worked example, leading to partial format compliance — exactly the failure observed in the 2026-05-17 audit)
