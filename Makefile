@@ -1,4 +1,4 @@
-.PHONY: sync sync-dry validate validate-schema validate-components validate-tests typecheck test pull pull-dry help
+.PHONY: sync sync-dry validate validate-schema validate-components validate-mandates validate-tests typecheck test pull pull-dry help
 
 help:
 	@echo "사용 가능한 명령어:"
@@ -7,6 +7,7 @@ help:
 	@echo "  make validate           - 전체 검증 (스키마 + 컴포넌트)"
 	@echo "  make validate-schema    - 스키마 검증 (필드, 값 유효성)"
 	@echo "  make validate-components - 컴포넌트 검증 (파일 존재 여부)"
+	@echo "  make validate-mandates  - Mandate 레퍼런스 정합성 검증 (Type A: 파일 존재)"
 	@echo "  make typecheck          - TypeScript strict 타입 검사 (tsc --noEmit)"
 	@echo "  make test               - 전체 테스트 실행 (Shell + TypeScript)"
 	@echo "  make pull PROJ=<name>   - 프로젝트 배포 파일을 소스로 풀백"
@@ -18,13 +19,16 @@ sync: validate validate-tests
 sync-dry: validate
 	@bun run tools/sync.ts --dry-run
 
-validate: validate-schema validate-components typecheck
+validate: validate-schema validate-components validate-mandates typecheck
 
 validate-schema:
 	@bun run tools/validators/schema.ts
 
 validate-components:
 	@bun run tools/validators/components.ts
+
+validate-mandates:
+	@bun run tools/validate-mandates.ts
 
 validate-tests:
 	@./tools/run-tests.sh
