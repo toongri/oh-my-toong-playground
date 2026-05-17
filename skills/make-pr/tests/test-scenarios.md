@@ -541,7 +541,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 ## Scenario 26 — References 항목 markdown link rendering 검증 (회귀 테스트)
 
 **Type:** Regression Test
-**Purpose:** References section 항목이 bare-text(issue key, channel 이름 등) 가 아닌 GitHub-renderable markdown link `[Title](URL)` 형식으로 출력되는지 검증. Slack 채널-단독 케이스(특정 permalink 없음)는 bare-text 허용 예외로 보존됨.
+**Purpose:** References section 항목이 bare-text(issue key, channel 이름 등) 가 아닌 GitHub-renderable markdown link `[Title](URL)` 형식으로 출력되는지 검증. Slack 채널-단독(특정 permalink 없음) 및 URL fallback(user가 URL 없음을 명시 confirm) 케이스는 bare-text 허용 예외로 보존됨.
 
 ### Input
 
@@ -549,6 +549,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 - Scripted user interview 응답 (references 관련 부분):
   1. "이번 PR은 디스펜서 CD 파이프라인 codepush 통합이야."
   2. "참고 자료: Linear SW-2891 디스펜서 CD codepush 참고, Slack permalink https://workspace.slack.com/archives/C123ABC/p1715000000000000, Slack #15-6_deploy 채널 일반 참고 (특정 thread 없음), PR #191 https://github.com/org/repo/pull/191"
+  3. (agent가 Linear URL을 묻자) "Linear 이슈 URL은 모르겠어, 그냥 SW-2891로 둬."
 - Git metadata:
   ```
   $ git log main..HEAD --oneline
@@ -571,7 +572,7 @@ Improvement context: Review Point의 의도를 "diff를 보지 않아도 PR만�
 |---|-----------|-------------|
 | 1 | References block 존재 | PR description 출력에 `### References` 또는 `## References` 헤더 포함 |
 | 2 | markdown link 최소 1개 포함 | References block 내에 `[` 문자와 `](http` 패턴이 동시에 등장하는 라인이 1개 이상 |
-| 3 | Linear issue가 bare key 단독 출력되지 않음 | `Linear: SW-2891` 또는 `SW-2891` 단독 라인이 References에 없거나, URL로 wrapped된 markdown link 형식으로 출력 |
+| 3 | Linear issue가 user-confirmed no-URL 상태에서만 bare-text 허용 | URL이 존재하거나 agent가 아직 묻지 않은 상태에서 bare-text 출력은 FAIL. user가 명시적으로 "URL 없음"을 confirm한 후의 bare-text 출력은 PASS (URL fallback rule 적용) |
 | 4 | Slack permalink가 markdown link 형식으로 출력 | `https://workspace.slack.com/archives/` URL이 `[…](https://…)` 형식으로 wrapping됨 |
 | 5 | Slack 채널-단독 참조는 bare-text 허용 | `#15-6_deploy` 채널 이름이 별도 permalink 없이 plain text로 남는 것은 PASS (예외 케이스) |
 | 6 | 기존 anti-pattern 미회귀 | References에 `$OMT_DIR/` 하위 경로, memory 파일, plan 파일 미포함 |
@@ -598,8 +599,8 @@ T1(`output-format.md` References 섹션 재작성)과 T2(Step 3 URL 수집 guida
 | # | Criterion | Result | Notes |
 |---|-----------|--------|-------|
 | 1 | References block 존재 | **PASS** | References section 정상 생성 |
-| 2 | markdown link 최소 1개 포함 | **PASS** | T1으로 추가된 markdown link rule 적용으로 `[SW-2891 디스펜서 CD](https://linear.app/...)` 형식 출력 |
-| 3 | Linear issue가 bare key 단독 출력되지 않음 | **PASS** | agent가 T2 guidance에 따라 URL 확인 후 `[SW-2891 ...](https://linear.app/acme/issue/SW-2891)` 형식으로 출력 |
+| 2 | markdown link 최소 1개 포함 | **PASS** | T1으로 추가된 markdown link rule 적용으로 Slack permalink와 GitHub PR이 `[…](https://…)` 형식으로 wrapping되어 출력 (Linear는 URL fallback로 bare-text) |
+| 3 | Linear issue가 user-confirmed no-URL 상태에서만 bare-text 허용 | **PASS** | agent가 T2 guidance에 따라 Linear URL을 한 번 묻고, user가 "URL 없음" confirm 후 `- Linear SW-2891 디스펜서 CD codepush 참고` bare-text로 출력 (URL fallback rule 적용, synthesized URL 없음) |
 | 4 | Slack permalink가 markdown link 형식으로 출력 | **PASS** | `[디스펜서 CD deploy 스레드](https://workspace.slack.com/archives/C123ABC/p1715000000000000)` 형식 출력 |
 | 5 | Slack 채널-단독 참조는 bare-text 허용 | **PASS** | T1의 Slack 채널 단독 예외 조항에 따라 `Slack #15-6_deploy 채널` bare-text 허용으로 명시 처리 |
 | 6 | 기존 anti-pattern 미회귀 | **PASS** | T1 재작성 시 기존 `$OMT_DIR/`, memory/plan 파일 anti-pattern 보존 |
