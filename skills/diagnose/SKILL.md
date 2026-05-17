@@ -22,10 +22,12 @@ Identify what the caller needs analyzed. Synthesize the relevant context — arc
 Write the analysis request to a temporary file and redirect to stdin:
 
 ```bash
-cat > /tmp/diagnose-prompt.txt <<'EOF'
+PROMPT_FILE=$(mktemp)
+cat > "$PROMPT_FILE" <<'EOF'
 <your analysis request here>
 EOF
-JOB_DIR=$(bun .claude/skills/diagnose/scripts/job.ts start --stdin < /tmp/diagnose-prompt.txt)
+JOB_DIR=$(bun .claude/skills/diagnose/scripts/job.ts start --stdin < "$PROMPT_FILE")
+rm -f "$PROMPT_FILE"
 ```
 
 The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
@@ -54,6 +56,7 @@ bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 | `timed_out` | Fallback: become Hephaestus in-session (see below) |
 | `error` | Fallback: become Hephaestus in-session (see below) |
 | `canceled` | Fallback: become Hephaestus in-session (see below) |
+| `non_retryable` | Fallback: become Hephaestus in-session (see below) |
 | `done` | Read the manifest from Step 3 and forward `reviewers[0].outputFilePath` content to the caller |
 
 **Fallback procedure**: READ `prompts/hephaestus.md` and apply the analysis framework defined there IN-SESSION. You become Hephaestus for the remainder of this skill invocation.
