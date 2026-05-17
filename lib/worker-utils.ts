@@ -9,6 +9,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { spawn, type ChildProcess } from 'child_process';
+import type { AgentDriver, CliType } from './agent-drivers/types';
+import { pickDriver } from './agent-drivers/types';
+// Driver registration side effects:
+import './agent-drivers/opencode';
+import './agent-drivers/claudecode';
+import './agent-drivers/codex';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -398,7 +404,7 @@ export function runOnce(opts: RunOnceOpts): Promise<Record<string, unknown>> {
 // runWithRetry
 // ---------------------------------------------------------------------------
 
-const NON_RETRYABLE_STATES = new Set(['missing_cli', 'timed_out', 'canceled', 'non_retryable']);
+const NON_RETRYABLE_STATES = new Set(['missing_cli', 'timed_out', 'canceled', 'non_retryable', 'max_turns_exceeded']);
 
 export interface RunWithRetryOpts extends Omit<RunOnceOpts, 'attempt'> {
   promptPath?: string;
@@ -555,4 +561,201 @@ export async function runWithRetry(opts: RunWithRetryOpts): Promise<Record<strin
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// runMultiTurn
+// ---------------------------------------------------------------------------
+
+export const CONTINUATION_PROMPT_DEFAULT =
+  'Continue and produce the deliverable. Output the verdict block now.';
+
+export interface MultiTurnConfig {
+  maxTurns: number;
+  deliverableSentinel: string;
+  continuationPrompt?: string;
+}
+
+export interface RunMultiTurnOpts extends RunWithRetryOpts {
+  cliType: CliType;
+  multiTurn?: MultiTurnConfig;
+  /** Test-only override; production must not pass this. */
+  driverFactory?: (cliType: CliType) => AgentDriver | null;
+  /** Test-only override for runOnce. */
+  runOnceFn?: typeof runOnce;
+}
+
+/**
+ * Copy terminal turn's output.txt and events.jsonl up to memberDir/,
+ * concat all turns' error.txt, then atomically write status.json.
+ */
+function finalizeFromTurn(
+  memberDir: string,
+  turnDir: string,
+  finalStatus: Record<string, unknown>,
+): void {
+  const turnOutput = path.join(turnDir, 'output.txt');
+  const turnEvents = path.join(turnDir, 'events.jsonl');
+  if (fs.existsSync(turnOutput)) {
+    fs.copyFileSync(turnOutput, path.join(memberDir, 'output.txt'));
+  }
+  if (fs.existsSync(turnEvents)) {
+    fs.copyFileSync(turnEvents, path.join(memberDir, 'events.jsonl'));
+  }
+
+  // Concat all turns' error.txt → memberDir/error.txt
+  const errors: string[] = [];
+  const entries = fs.readdirSync(memberDir).filter((e) => e.startsWith('_turn-')).sort();
+  for (const e of entries) {
+    const errPath = path.join(memberDir, e, 'error.txt');
+    if (fs.existsSync(errPath)) {
+      errors.push(fs.readFileSync(errPath, 'utf8'));
+    }
+  }
+  fs.writeFileSync(path.join(memberDir, 'error.txt'), errors.join(''));
+
+  // Atomic-write status.json
+  const statusPath = path.join(memberDir, 'status.json');
+  const tmpPath = `${statusPath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(finalStatus, null, 2));
+  fs.renameSync(tmpPath, statusPath);
+}
+
+function readStatus(memberDir: string): Record<string, unknown> {
+  return JSON.parse(fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8')) as Record<string, unknown>;
+}
+
+/**
+ * Multi-turn pump wrapping runOnce. Detects sentinel-missing deliverables and
+ * re-prompts on the same session until a sentinel is found or maxTurns exhausted.
+ *
+ * Falls back to runWithRetry when multiTurn is absent or no driver is available.
+ */
+export async function runMultiTurn(opts: RunMultiTurnOpts): Promise<Record<string, unknown>> {
+  const driverFactory = opts.driverFactory ?? pickDriver;
+  const driver = driverFactory(opts.cliType);
+  if (!opts.multiTurn || !driver) {
+    return runWithRetry(opts);
+  }
+
+  const maxTurns = opts.multiTurn.maxTurns;
+  const sentinelRe = new RegExp(opts.multiTurn.deliverableSentinel);
+  const continuationPrompt = opts.multiTurn.continuationPrompt ?? CONTINUATION_PROMPT_DEFAULT;
+  const runOnceFn = opts.runOnceFn ?? runOnce;
+
+  let sessionID: string | null = null;
+  let currentPrompt = opts.prompt;
+  let forceFinished = false;
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    const turnDir = path.join(opts.memberDir, `_turn-${turn}`);
+    fs.mkdirSync(turnDir, { recursive: true });
+
+    const cmd = sessionID
+      ? driver.resumeCommand({
+          sessionID,
+          prompt: currentPrompt,
+          baseCommand: opts.program,
+          baseArgs: opts.args,
+          workerEnv: opts.workerEnv ?? {},
+        })
+      : driver.initialCommand({
+          prompt: currentPrompt,
+          baseCommand: opts.program,
+          baseArgs: opts.args,
+          workerEnv: opts.workerEnv ?? {},
+        });
+
+    const runResult = await runOnceFn({
+      ...opts,
+      memberDir: turnDir,
+      attempt: 0,
+      program: cmd.program,
+      args: cmd.args,
+      workerEnv: cmd.env,
+      prompt: currentPrompt,
+    });
+
+    // Rule 1: exitCode != 0 → error
+    const exitCode = (runResult as { exitCode?: number | null }).exitCode;
+    if (exitCode !== 0 && exitCode != null) {
+      finalizeFromTurn(opts.memberDir, turnDir, {
+        ...runResult,
+        state: 'error',
+        turn_count: turn + 1,
+        force_finished: forceFinished,
+      });
+      return readStatus(opts.memberDir);
+    }
+
+    const stdout = fs.readFileSync(path.join(turnDir, 'output.txt'), 'utf8');
+    const parsed = driver.parseStdout(stdout);
+
+    // Rule 2: parse failure → degraded done (output.txt stays as raw stdout)
+    if (!parsed) {
+      finalizeFromTurn(opts.memberDir, turnDir, {
+        ...runResult,
+        state: 'done',
+        multi_turn_degraded: true,
+        degraded_reason: 'ndjson_parse_failure',
+        turn_count: 1,
+        force_finished: false,
+      });
+      return readStatus(opts.memberDir);
+    }
+
+    // Rule 4a: sessionID missing on first turn → degraded
+    if (turn === 0 && !parsed.sessionID) {
+      // Replace turn's output.txt with text-only
+      fs.writeFileSync(path.join(turnDir, 'output.txt'), parsed.text);
+      finalizeFromTurn(opts.memberDir, turnDir, {
+        ...runResult,
+        state: 'done',
+        multi_turn_degraded: true,
+        degraded_reason: 'session_id_unrecoverable',
+        turn_count: 1,
+        force_finished: false,
+      });
+      return readStatus(opts.memberDir);
+    }
+
+    sessionID = sessionID ?? parsed.sessionID;
+
+    // Replace turn's output.txt with text-only + write events.jsonl audit
+    fs.writeFileSync(path.join(turnDir, 'output.txt'), parsed.text);
+    fs.writeFileSync(
+      path.join(turnDir, 'events.jsonl'),
+      parsed.rawEvents.map((e) => JSON.stringify(e)).join('\n'),
+    );
+
+    // Rule 3: sentinel match → done
+    if (sentinelRe.test(parsed.text)) {
+      finalizeFromTurn(opts.memberDir, turnDir, {
+        ...runResult,
+        state: 'done',
+        turn_count: turn + 1,
+        force_finished: forceFinished,
+      });
+      return readStatus(opts.memberDir);
+    }
+
+    // Rule 4: sentinel missing + more turns available → continuation
+    if (turn < maxTurns - 1) {
+      currentPrompt = continuationPrompt;
+      forceFinished = true;
+      continue;
+    }
+
+    // Rule 5: sentinel missing + last turn → max_turns_exceeded
+    finalizeFromTurn(opts.memberDir, turnDir, {
+      ...runResult,
+      state: 'max_turns_exceeded',
+      turn_count: turn + 1,
+      force_finished: true,
+    });
+    return readStatus(opts.memberDir);
+  }
+
+  // Unreachable
+  return { state: 'error', message: 'pump loop exited unexpectedly' };
 }
