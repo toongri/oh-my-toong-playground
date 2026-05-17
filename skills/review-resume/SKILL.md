@@ -30,36 +30,69 @@ Always communicate with the user and generate all output (interviews, feedback, 
 5. **Never claim industry standards as achievements.** Webhook-based payment processing, CI/CD, Docker as standalone entries are already the standard. Only what is built ON TOP of the standard counts.
 6. **When a JD is provided, evaluate all sections against JD fit.** Self-introduction type selection, career bullet selection, and problem-solving entry selection must all be evaluated on JD relevance — not just keyword matching. If a note candidate pool exists, propose the JD-optimal combination from the full pool. Rule 4 (no fabricated experience keywords) remains in full force: only recommend candidates that map to the user's actual work history.
 
+**Violating the letter of these rules IS violating the spirit.** Fact-grounded shortcuts — "the JD looks short so research is unnecessary", "this resume is obviously weak/strong so detailed criteria are redundant", "the interview-mining stages have been going long, the user probably has nothing more", "I scanned the text and found no AI tone, so humanizer invocation is redundant" — do NOT constitute exceptions. They are exactly the rationalizations Absolute Rules exist to block.
+
+## Rationalization Table — STOP if you think this
+
+The Phase 9 Red Flags table covers only the Quality Gate loop. This table covers the orchestration-level bypass points where the agent under pressure most often rationalizes away the Absolute Rules.
+
+| Thought | Reality / Violated Rule |
+|---|---|
+| "The JD is short — keywords are enough, no need for full Pre-Evaluation Research." | Phase 2 mandate. Research feeds ALL paragraph type selections. Skipping = downstream evaluations operate on partial context. |
+| "This resume is obviously weak (or strong) — detailed 6-criteria evaluation is unnecessary." | Absolute Rule 3 (evaluate content, not just expression) + Phase 5 6-criteria mandate. Self-judging skips the very rubric that catches blind spots. |
+| "The experience-mining interview has been going long — the user probably has nothing more." | 4-Stage Bypass Protocol must be exhausted in order. Early exit = premature data closure. |
+| "I scanned the text and found no AI tone — Skill(humanizer) call is redundant." | Phase 8 critical block explicitly forbids this exact rationalization. Manual scan != audit. |
+| "The note appears current — auto-seeding can be skipped." | Phase 2 mandate. Verify the directory state; "appears" is not verification. |
+| "The user said 'next' — section is done." | Recognized Opt-Out Keywords ARE valid exits, but exit applies only to the *current loop*, not to the phase's mandatory outputs. |
+| "I already know `experience-mining.md` and `content-quality-gate.md` from a prior session." | Reference Full-Read Mandate (see below). No carryover across sessions. |
+| "Phase 8 humanizer invocation requires no observable evidence." | Phase 8 critical + the new evidence line mandate (see Phase 8 below). Missing evidence = mandate violation. |
+
+**All of these mean: review habit is overriding Absolute Rules. Stop. Honor the gate.**
+
+## Red Flags — Observable Behaviors (Immediate STOP)
+
+Pre-action signals. If you observe any of these in yourself, halt and reset.
+
+- STOP - About to transition Phase 2 -> Phase 3 without emitting the `[Note Loaded]` block AND a research-status line in this session
+- STOP - About to emit `[Phase 8/10: AI 톤 감사 complete]` without an immediately preceding `[Humanizer invoked: N patterns]` evidence line
+- STOP - About to enter Phase 10 while any Verdict Tracker item remains in REQUEST_CHANGES (not APPROVE, not opt-out)
+- STOP - About to present 2+ questions in a single message (one question per message; ban applies even inside a single phase)
+- STOP - About to dispatch tech-claim-examiner without having full-read `references/content-quality-gate.md` in this session
+- STOP - About to call Read on `references/experience-mining.md` or `references/content-quality-gate.md` with `offset` + `limit` parameters (partial-read forbidden)
+- STOP - About to generate the HTML report while the Completion Checklist has unchecked items
+
+**Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
+
 ## Engineering Reasoning Graph Visibility
 
-이력서의 모든 기술 서술은 면접에서 대화를 **시작**시켜야 한다. 대화를 **종료**시키면 실패다.
+Every technical statement in a resume must **start** a conversation in the interview. If it **ends** one, it has failed.
 
-CTO가 이력서를 읽고 "그래서?" 하는 순간, 그 불렛은 죽는다. CTO가 "어떻게?", "왜?", "만약에?"를 물으면 — 그때 불렛이 산다.
+The moment a CTO reads a bullet and thinks "so what?", the bullet dies. The moment a CTO asks "how?", "why?", "what if?", the bullet lives.
 
-이 차이를 만드는 것은 **엔지니어링 사고 그래프가 보이는가**이다:
+What makes the difference is **whether the engineering reasoning graph is visible**:
 
-| Pillar | 보여주는 것 | 없으면 면접에서 |
-|--------|-----------|-------------|
-| Problem Chain (문제 연쇄 구조) | 사고의 **입력** — 문제들이 어떻게 서로를 유발하는가 | "아, 그 문제 해결했군요" (대화 종료) |
-| Decision Tradeoff (대안 비교) | 사고의 **과정** — 왜 A가 아니라 B를 선택했는가 | "네, 좋은 선택이네요" (대화 종료) |
-| Impact Breadth (다차원 성과) | 사고의 **출력** — 성과가 기술·비즈니스·운영 등 복수 차원인가 | "성능 개선했군요" (대화 종료) |
+| Pillar | What it shows | Without it, the interview ends with |
+|--------|---------------|-------------------------------------|
+| Problem Chain | The **input** of reasoning — how problems trigger each other | "Right, you solved that problem" (conversation closed) |
+| Decision Tradeoff | The **process** of reasoning — why B was chosen over A | "Sure, good choice" (conversation closed) |
+| Impact Breadth | The **output** of reasoning — outcomes spanning technical / business / operational dimensions | "OK, performance improved" (conversation closed) |
 
-세 가지가 모두 보이면 CTO는 사고 과정을 **재구성**할 수 있고, 재구성할 수 있으면 더 깊은 질문을 하고, 더 깊은 질문이 이어지면 채용으로 간다.
+When all three are visible, the CTO can **reconstruct** the reasoning. Reconstruction enables deeper questions; deeper questions lead to a hire.
 
 ### Problem Chain
 
-"A를 해결하니 B가 드러났고, B를 해결하면서 C도 함께 풀었다" — 이 연쇄 구조가 보이는 서술이 강력하다.
+"Solving A revealed B, and solving B required C as well" — this chain structure makes a bullet powerful.
 
-| 수준 | 패턴 | 면접 효과 |
-|------|------|---------|
-| Isolated | "문제 A가 있어서 X로 해결했다" | 면접관의 할 말이 없음 |
-| Chained | "문제 A를 해결하려니 B가 드러났고, B의 제약 때문에 C를 함께 풀어야 했다" | 연쇄 구조 자체가 면접 소재 |
+| Level | Pattern | Interview effect |
+|-------|---------|------------------|
+| Isolated | "Problem A existed, so I solved it with X" | Interviewer has nothing to ask |
+| Chained | "Solving A surfaced B, and the constraints of B forced C to be solved together" | The chain itself is interview material |
 
-구체적 평가 기준은 `references/experience-mining.md` § Problem Chain Extraction에 정의되어 있다.
+Concrete evaluation criteria are defined in `references/experience-mining.md` § Problem Chain Extraction.
 
 ### Impact Breadth
 
-단일 차원 성과는 한 문장으로 끝난다. 다차원 성과(기술+비즈니스+운영)는 각 차원이 별도 면접 질문을 유발한다.
+Single-dimension outcomes end in one sentence. Multi-dimension outcomes (technical + business + operational) each provoke a separate interview question.
 
 ## P.A.R. Terminology Glossary
 
@@ -180,7 +213,7 @@ Before delivering Phase 10 output, you MUST verify the Completion Checklist at t
 </critical>
 
 0. **Execute ALL 10 phases sequentially without skipping.** No exceptions.
-1. After completing each phase, internally record phase completion. Phase completion markers (`[Phase N/10: OOO ✓]`) are shown to the user as minimal progress indicators. Detailed analysis (criteria evaluation, pushback simulation, alternative generation, examiner exchange) is processed internally and not output to the terminal.
+1. After completing each phase, internally record phase completion. Phase completion markers (`[Phase N/10: OOO complete]`) are shown to the user as minimal progress indicators. Detailed analysis (criteria evaluation, pushback simulation, alternative generation, examiner exchange) is processed internally and not output to the terminal.
 2. Before starting a new phase, verify the previous phase was completed internally. If a phase was skipped, complete it first.
 3. When user interaction interrupts the flow (e.g., extended discussion during Phase 3), resume from the next incomplete phase after the interaction concludes. Re-read this Phase Map to locate your position.
 4. Phase 9 (Per-Section-Unit Content Quality Gate) loops per section unit until tech-claim-examiner APPROVE or user opt-out.
@@ -192,7 +225,7 @@ Before delivering Phase 10 output, you MUST verify the Completion Checklist at t
 Not all processing output belongs in the terminal. The following categories define what is shown to the user and what is handled internally.
 
 **Shown to user:**
-- Phase completion markers (`[Phase N/10: OOO ✓]`)
+- Phase completion markers (`[Phase N/10: OOO complete]`)
 - Interview questions (AskUserQuestion interactions)
 - User-choice prompts (strategic options, alternative selection, approval gates)
 - Feedback summaries that require a user response
@@ -204,7 +237,7 @@ Not all processing output belongs in the terminal. The following categories defi
 - Examiner dispatch via stable contract: consumes only `final_verdict` (APPROVE/REQUEST_CHANGES) and `interview_hints`. Internal examiner schema (per-axis verdicts, critical rule flags, reasoning) is NOT accessed. See `skills/tech-claim-rubric/output-schema.md` for contract details.
 - Competency assessment reasoning (C1-C5 axis rating evidence)
 
-review-resume는 examiner의 blackbox consumer — examiner axis labels는 user-facing output (HTML report)에 노출하지 않음. `interview_hints` 본문 (이미 source bullet 언어로 작성됨)만 user에게 전달. review-resume 자체 axis (P.A.R., T1-T3, Problem Chain)는 자체 vocabulary로 user 언어 번역.
+review-resume is a blackbox consumer of the examiner — examiner axis labels are NOT exposed in user-facing output (HTML report). Only `interview_hints` body (already written in source bullet language) is delivered to the user. review-resume's own axes (P.A.R., T1-T3, Problem Chain) are translated into user-language via its own vocabulary.
 
 ---
 
@@ -237,7 +270,7 @@ Read ONLY the `owner` field from `$OMT_DIR/review-resume/preferences.md`. Do NOT
   이력서 소유자가 아닌 것으로 확인되었습니다. 인터뷰 루프는 생략되며, 평가 및 대안 생성은 이력서 내용만으로 진행됩니다.
   ```
 
-`[Phase 1/10: Identity Confirmation ✓]`
+`[Phase 1/10: Identity Confirmation complete]`
 
 ## Phase 2: 사전 준비
 
@@ -248,7 +281,7 @@ Load persistent note, then perform pre-evaluation research before any evaluation
 2. If empty or missing → execute Auto-Seeding (parse current resume into initial candidate files)
 3. If exists → scan file lists from all candidate directories, load `preferences.md`, check `sources/` cache
 
-Report note status to user:
+Report note status to user (mandatory output before Phase 3):
 ```
 [Note Loaded]
 - Self-introduction candidates: N
@@ -256,6 +289,7 @@ Report note status to user:
 - Problem-solving candidates: N
 - User preferences: loaded / not found
 - Research cache: {company} found / none
+- Research conducted this session: {company} - {N} sources / SKIPPED (no JD or cache fresh)
 ```
 
 **Pre-Evaluation Research:**
@@ -263,11 +297,11 @@ Report note status to user:
 - JD Analysis: extract team, keywords, implicit problems, and what is NOT in the JD
 - Company Research: core values, tech blog, product/service, career page, recent news
 
-Research results feed into ALL paragraph type selections (A, B, C, D). Check `sources/` cache before doing fresh research.
+Research results feed into ALL paragraph type selections (A, B, C, D). Check `sources/` cache before doing fresh research. The `Research conducted this session` line in the `[Note Loaded]` block is the mandatory evidence — missing line = mandate violation.
 
 **References:** Read `references/note-system.md` for auto-seeding procedure and file format. Read `references/pre-evaluation-research.md` for full research protocol.
 
-`[Phase 2/10: 사전 준비 ✓]`
+`[Phase 2/10: 사전 준비 complete]`
 
 ## Phase 3: 자기소개 평가
 
@@ -288,7 +322,7 @@ Evaluate each paragraph against type-specific criteria, then perform global eval
 
 **Reference:** Read `references/self-introduction.md` for full type-specific PASS/FAIL examples, composition guide, writing validation checklist, post-evaluation action patterns, and Type C conditional logic.
 
-`[Phase 3/10: 자기소개 평가 ✓]`
+`[Phase 3/10: 자기소개 평가 complete]`
 
 ## Phase 4: 개발자 역량 평가 (C1-C5)
 
@@ -308,7 +342,7 @@ Rate each axis as STRONG / PRESENT / WEAK / ABSENT with evidence citations. All 
 
 **Reference:** Read `references/competency-assessment.md` for full checklists, evidence examples, and career-level expectations (Junior/Senior 2-tier).
 
-`[Phase 4/10: 개발자 역량 평가 ✓]`
+`[Phase 4/10: 개발자 역량 평가 complete]`
 
 ## Phase 5: 섹션별 평가
 
@@ -352,7 +386,7 @@ If the user cannot answer all 3 levels, that line will hurt more than help.
 
 **Reference:** Read `references/section-evaluation.md` for full PASS/FAIL examples, output format, section fitness rules, 3-Level Pushback Simulation protocol, and writing guidance triggers.
 
-`[Phase 5/10: 섹션별 평가 ✓]`
+`[Phase 5/10: 섹션별 평가 complete]`
 
 ## Phase 6: First-Page Primacy + JD 매칭
 
@@ -362,7 +396,7 @@ Check that the strongest content is on page 1 (the 7.4-second scan zone). If a J
 
 **Reference:** Read `references/section-evaluation.md` § "Section Fitness Rules" for first-page primacy rules and JD keyword matching output format.
 
-`[Phase 6/10: First-Page Primacy + JD 매칭 ✓]`
+`[Phase 6/10: First-Page Primacy + JD 매칭 complete]`
 
 ## Phase 7: 문제해결 심화평가
 
@@ -376,16 +410,16 @@ All problem-solving entries (5+ lines) are evaluated under a unified framework c
 
 **Experience Mining Interview:** P.A.R. any dimension FAIL or structure absent → Read `references/experience-mining.md` § Problem-Solving and conduct the interview.
 
-**Reference:** Read `references/problem-solving.md` — **먼저 Mandatory Evaluation Checklist를 실행**, 그 다음 P.A.R. dimensions, T1-T3 verification, Before/After examples 순서로 평가.
+**Reference:** Read `references/problem-solving.md` — **execute the Mandatory Evaluation Checklist FIRST**, then evaluate P.A.R. dimensions, T1-T3 verification, and Before/After examples in that order.
 
-`[Phase 7/10: 문제해결 심화평가 ✓]`
+`[Phase 7/10: 문제해결 심화평가 complete]`
 
 ## Phase 8: AI 톤 감사
 
 **MUST invoke the humanizer skill via the Skill tool.** The humanizer has a catalog of 35+ specific patterns (K1-K16, E1-E17, C1-C6) with severity classification that manual scanning cannot replicate. Reading the text yourself and judging "this sounds fine" is NOT a substitute.
 
 <critical>
-"AI 톤 미검출"이라고 직접 판단한 후 Skill(humanizer) 호출을 생략하는 것은 이 규칙의 위반이다. 수동 스캔 결과와 무관하게 반드시 호출해야 한다.
+Self-judging "no AI tone detected" and then skipping the `Skill(humanizer)` invocation is a rule violation. The invocation is mandatory regardless of your manual scan result.
 </critical>
 
 Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text element:
@@ -398,7 +432,18 @@ Invoke exactly: `Skill(humanizer)` — request **audit mode** on every text elem
 **If AI tone patterns are detected:** Include affected lines and suggested revision direction in the evaluation results.
 **If no AI tone patterns are detected:** Skip this section in the output.
 
-`[Phase 8/10: AI 톤 감사 ✓]`
+**Evidence line (mandatory before the Phase 8 completion marker):**
+```
+[Humanizer invoked: N patterns found across {sections}]
+```
+or, if no patterns:
+```
+[Humanizer invoked: 0 patterns found across {sections}]
+```
+
+Missing evidence line = mandate violation. Emitting the Phase 8 completion marker without first emitting this evidence line is forbidden — see § Red Flags.
+
+`[Phase 8/10: AI 톤 감사 complete]`
 
 ## Phase 9: Per-Section-Unit Content Quality Gate
 
@@ -438,6 +483,15 @@ When tech-claim-examiner returns REQUEST_CHANGES, follow the branch that matches
 
 NEVER enter Phase 10 while ANY item remains in REQUEST_CHANGES status.
 Phase 10 entry is permitted ONLY when ALL Verdict Tracker items are APPROVE or opt-out.
+
+**Verdict Tracker emission (mandatory before Phase 10 transition):** Emit the full Verdict Tracker verbatim in your visible message immediately before announcing `[Phase 9/10: ... complete]`. Format:
+```
+[Verdict Tracker]
+- {item-slug-1}: APPROVE | REQUEST_CHANGES | opt-out
+- {item-slug-2}: APPROVE | REQUEST_CHANGES | opt-out
+...
+```
+Missing emission = mandate violation. Phase 10 transition is forbidden without it.
 </critical>
 
 ### Examiner Eligibility
@@ -498,7 +552,7 @@ When sending to tech-claim-examiner, use exactly:
 | "Wait for user to choose a per-item alternative, then apply" | Start interview immediately after presenting alternatives. Don't wait for selection. |
 | "Can proceed without Verdict Tracker" | Entering Phase 10 without confirming all Tracker items are APPROVE/opt-out = protocol violation. |
 
-`[Phase 9/10: Per-Section-Unit Content Quality Gate ✓]`
+`[Phase 9/10: Per-Section-Unit Content Quality Gate complete]`
 
 ### Strategic Options
 
@@ -562,7 +616,7 @@ Accumulate: new candidates from interviews, updated expressions, tone/judgment p
 
 **Reference:** Read `references/note-system.md` § "Note Accumulate" for full accumulation rules.
 
-`[Phase 10/10: 결과 전달 ✓]`
+`[Phase 10/10: 결과 전달 complete]`
 
 ## Completion Checklist (Internal)
 
@@ -589,3 +643,37 @@ Before delivering Phase 10 output, verify every phase was completed or has a val
 ```
 
 A phase is SKIPPED only when its precondition is not met. Phases 1, 2, 8, 9, 10 have NO precondition — always required. Note Accumulate has a strict precondition: User Approval in Phase 10 HTML gate. Note Accumulate counts as DONE even if the user declines to save.
+
+## Reference Full-Read Mandate
+
+Reference files in this skill divide into two classes.
+
+### Class A: Mandatory full-read (trigger-conditional)
+
+These files contain protocol logic that orchestrates multiple Phases. At each trigger, read the full file in a single Read call with NO `offset` and NO `limit` parameters. Per-session cache applies — one full-read covers subsequent triggers of the same file.
+
+| Trigger condition | Reference (full-read mandatory) |
+|---|---|
+| First Interview Trigger across Phases 3-7 (interview-possible mode) | [references/experience-mining.md](references/experience-mining.md) |
+| Phase 9 entry (first tech-claim-examiner dispatch) | [references/content-quality-gate.md](references/content-quality-gate.md) |
+| Phase 7 entry (any 5+ line problem-solving entry exists) | [references/problem-solving.md](references/problem-solving.md) |
+| Phase 2 entry (first session of this resume) | [references/note-system.md](references/note-system.md) |
+
+**Read evidence line** (emit once per file in your visible message after the read completes):
+```
+Reference full-read: <filename> at trigger <trigger name> - done
+```
+
+Missing evidence at the triggering action = mandate violation.
+
+### Class B: Lookup-only (on-demand, partial-read acceptable)
+
+These files are consulted only when the specific phase or sub-flow they describe is entered:
+
+- `references/self-introduction.md` — when Phase 3 needs type-specific examples or composition guide
+- `references/competency-assessment.md` — when Phase 4 needs axis evidence examples
+- `references/section-evaluation.md` — when Phase 5 or Phase 6 needs PASS/FAIL examples or first-page rules
+- `references/pre-evaluation-research.md` — when Phase 2 needs the full research protocol
+- `references/html-template.html` — when Phase 10 generates the HTML report
+
+Selective reads are acceptable for Class B files.
