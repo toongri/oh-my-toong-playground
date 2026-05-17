@@ -31,6 +31,8 @@ NO AREA COMPLETION WITHOUT:
 
 **Violating the letter of these rules IS violating the spirit.** No exceptions.
 
+Fact-grounded shortcuts — "this Area is straightforward, spec-review would just APPROVE", "the user already confirmed it implicitly", "I know the protocol so the reference read is unnecessary", "no records means Wrapup can be skipped" — do NOT constitute exceptions. They are exactly the rationalizations the Iron Law exists to block. Apply the spirit: would an independent senior reviewer accept this Area as complete?
+
 **Wrapup is MANDATORY when ANY records exist across ANY area. NO EXCEPTIONS. NEVER SKIP.**
 
 ## Non-Negotiable Rules
@@ -45,6 +47,36 @@ NO AREA COMPLETION WITHOUT:
 | No Step/Area skipping ever | "Simple" hides complexity |
 | Design proposals include potential risks | Hidden risks = surprise in production |
 | spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
+
+## Rationalization Table — STOP if you think this
+
+The Emergent Concern Protocol has its own local Rationalization Guards (see § Emergent Concern Protocol). This table covers the orchestration-level bypass points where the agent under pressure most often rationalizes away the Iron Law.
+
+| Thought | Reality / Violated Rule |
+|---|---|
+| "This Area is obvious — spec-review would just APPROVE anyway." | Area Completion requires spec-review verdict received (Iron Law row 2). "Would have APPROVE'd" is not the verdict. Delegate the review. |
+| "The user said 'Area complete' so both gates are satisfied." | Two gates are independent: spec-review pass AND user declaration. User declaration alone does not pass the quality gate. |
+| "I know this decision is clear-cut — no Rich Context Pattern needed, just record it." | IRON RULE: No record without prior user interview. Rich Context Pattern is mandatory for design decisions. Bypass = invalid record. |
+| "We're resuming from a prior session; the Checkpoint Protocol was already satisfied." | No carryover. Checkpoint Protocol runs at EVERY Step in the current session. Prior-session state is data, not a satisfied gate. |
+| "No records appear to exist, so Wrapup can be skipped." | Skip only when `records/` folders contain ZERO files across ALL areas. Verify before skipping. "Appears to be" is not verification. |
+| "I'll batch multiple questions for efficiency." | Questioning Protocol: exactly ONE question per message. Bundling is prohibited. |
+| "I know what's in `core-protocols.md`, full-read is unnecessary." | Reference Full-Read Mandate (see below). Inline contracts and references are complementary, not redundant. |
+
+**All of these mean: orchestration habit is overriding the Iron Law. Stop. Honor the gate.**
+
+## Red Flags — Observable Behaviors (Immediate STOP)
+
+Pre-action signals — catch the bypass before the gate is missed. If you observe any of these, halt and reset to the violated mandate.
+
+- STOP - About to announce "Area complete" without a spec-review verdict line in this session's visible message
+- STOP - About to create a record file before presenting the Rich Context Pattern + AskUserQuestion to the user
+- STOP - Composing a message with 2+ questions (numbered list, bullet list, or sequential question marks)
+- STOP - About to announce "Spec complete" while `records/` folders contain files but Wrapup has not run
+- STOP - About to apply design.md edits after a spec-review REQUEST_CHANGES without explicit user consensus on the resolution
+- STOP - About to dispatch `core-protocols.md` / `persistence.md` / `area-entry-criteria.md` / `wrapup.md` triggering action without the corresponding read evidence line in this session
+- STOP - About to read those references with `offset` + `limit` parameters (partial-read forbidden)
+
+**Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
 
 ## Tone & Style
 
@@ -418,3 +450,34 @@ If Design Area was recommended but user deselected:
 ## Persistence & State Management
 
 **Reference:** Read `references/persistence.md` for State File schema, Resume workflow, Output Location, and spec.md generation rules. Apply for state management and session resumption.
+
+## Reference Full-Read Mandate
+
+Reference files in this skill divide into two classes. Honor each class strictly.
+
+### Class A: Mandatory full-read (trigger-conditional)
+
+These 4 files contain protocol logic that orchestrates multiple Steps. Partial-read produces corrupted protocol execution. At each trigger, read the full file in a single Read call with NO `offset` and NO `limit` parameters. Per-session cache applies — one full-read covers subsequent triggers of the same file.
+
+| Trigger condition | Reference (full-read mandatory) |
+|---|---|
+| First Step completion (Checkpoint Protocol entry) OR first subagent dispatch OR first Question Quality Standard consultation OR Area Completion entry OR Multi-AI Review OR Record creation | [core-protocols.md](references/core-protocols.md) |
+| Session start (Resume workflow) OR first state.json write | [references/persistence.md](references/persistence.md) |
+| Area Selection (initial assessment) | [references/area-entry-criteria.md](references/area-entry-criteria.md) |
+| Wrapup entry (records exist) | [references/wrapup.md](references/wrapup.md) |
+
+**Read evidence line** (emit once per file in your visible message after the read completes):
+```
+Reference full-read: <filename> at trigger <trigger name> - done
+```
+
+Missing evidence at the triggering action = mandate violation.
+
+### Class B: Lookup-only (on-demand, partial-read acceptable)
+
+These files are consulted only when the corresponding domain enters scope. Selective reads are acceptable.
+
+- `references/diagram-selection.md` — when a diagram is needed
+- `references/custom-design-concern.md` — when promoting an Emergent Concern to a new Area
+- All 11 Design Area reference files (`requirements-analysis.md`, `solution-design.md`, `domain-model.md`, `data-schema.md`, `interface-contract.md`, `integration-pattern.md`, `ai-responsibility-contract.md`, `operations-plan.md`, `frontend-ux-surface.md`, `data-ml-pipeline.md`, `security-privacy.md`) — when entering that specific Area
+- `templates/record.md` — when creating a record file
