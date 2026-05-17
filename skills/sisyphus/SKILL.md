@@ -49,6 +49,8 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 **RULE B**: ANY task producing NO file changes ≠ junior. Route by *deliverable type*: verdict-required → argus; analysis/diagnosis → oracle; search/comparison → explore. Junior is the IMPLEMENTATION agent, not a "read-only command runner".
 **RULE C**: argus is verdict-only. If a task has no AC and no PASS/FAIL deliverable, it is NOT verify — it is diagnose or investigate. Do not coerce diagnostic work into argus's verdict format.
 
+**Letter vs Spirit (general clause)**: Violating the letter of a routing rule violates the spirit of orchestration. Fact-grounded shortcuts ("this is just a tiny edit", "it's read-only", "this case is different", "I know what to do already") do NOT constitute exceptions — exceptions are not yours to grant. If a task touches files, it is implement. If a task produces a verdict, it is verify. If a task produces a narrative, it is diagnose or investigate. No subjective intermediate categories.
+
 ### Complexity Triggers (Oracle Required)
 
 **Single file does NOT mean simple.** Delegate to oracle for:
@@ -98,6 +100,23 @@ Before TaskCreate, classify each task into ONE type. This decides routing — an
 - If you cannot state a clear PASS/FAIL verdict criterion before starting, it is NOT verify — reclassify as diagnose or investigate.
 
 **Routing follows task type, NOT session cadence.** Even if every prior task in this session used junior → argus, a new verify/investigate task is routed by its own type.
+
+### Classification Block (mandatory output before first dispatch)
+
+Before invoking the first delegation of the batch, emit the following classification block in your visible message. This locks in the routing decision at planning time, NOT at dispatch time when session cadence and habit take over.
+
+```
+## Task Classification
+- <task-slug-1> | type: implement   | routing: sisyphus-junior -> argus -> mnemosyne
+- <task-slug-2> | type: verify      | routing: argus directly
+- <task-slug-3> | type: diagnose    | routing: oracle
+- <task-slug-4> | type: investigate | routing: explore
+```
+
+Rules:
+- Every task created via TaskCreate in this batch appears as one line.
+- Missing block = mandate violation. Decoding routing "at dispatch time" is forbidden.
+- Atomicity Quick-Check (3 conditions) and Parallelization groupings can be appended as additional lines under each task. Not mandatory, but recommended for non-trivial batches.
 
 ### Atomic Decomposition
 
@@ -196,7 +215,7 @@ digraph task_loop {
 - Multiple unblocked independent tasks → dispatch in parallel
 - sisyphus-junior path: junior done → argus QA → Evidence Audit Gate (see verification.md) → mnemosyne (if code changes) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
 - argus direct path: argus approval → Evidence Audit Gate (see verification.md) → mark completed. On REQUEST_CHANGES → oracle diagnosis → fix task → re-delegate to junior.
-- 🚨 **CRITICAL** — When a problem arises, resolve it without exception. Act on oracle's diagnosis; if it does not resolve, summarize the current state and consult oracle again. Keep iterating until the matter is concluded.
+- **[CRITICAL]** When a problem arises, resolve it without exception. Act on oracle's diagnosis; if it does not resolve, summarize the current state and consult oracle again. Keep iterating until the matter is concluded.
 - Evidence gap handling, retry logic, and user interview flow: see [verification.md](verification.md)
 - After marking task completed, if a plan file exists in `$OMT_DIR/plans/`, edit the plan to mark `- [x]` on corresponding TODO
 - If oracle returns a circuit-breaker reframe (3 consecutive failed hypotheses), halt the verify→diagnose→fix loop, surface the reframe to the user, and await direction. Do not auto-create fix tasks from circuit-breaker output.
@@ -232,29 +251,51 @@ The catalog below — refreshed at skill-load time — enumerates which skills a
 | Task subject sounds like "검증" but deliverable is a *narrative report* (no PASS/FAIL) | argus (wrong — argus produces verdict, not narrative) | **oracle** (current-state diagnosis with recommendations) |
 | Task: "확인해줘 / 살펴봐 / 점검해줘" + no explicit AC + open-ended scope | argus | **oracle** if causal, **explore** if search-y |
 
-### Red Flags — STOP if you think this
+### Rationalization Table — STOP if you think this
 
-- *"junior will run the verification command and argus will re-verify it."*
-  → Junior runs once, argus runs again — DUPLICATE execution. argus does both in one pass via argus-direct.
-- *"task → junior → argus is the default rhythm, just follow it."*
-  → No. Routing is per-task by task type. Session cadence is NOT a routing input.
-- *"It's just read-only Bash commands, junior can run them."*
-  → Wrong question. The right question: *what is the deliverable?* File changes → junior. Verdict → argus. Analysis → oracle. Search/comparison → explore.
-- *"AC commands feel like verification, but argus has to verify junior anyway, so let junior run them first."*
-  → No. If the task itself IS verification (no implementation precedes it in this task), there is no junior to verify. Argus runs AC commands directly.
-- *"Investigation needs lots of Bash queries, junior is good at Bash."*
-  → Junior is the IMPLEMENTATION agent. Investigation is analysis — oracle (root cause) or explore (search/comparison). Junior is wrong even if Bash usage looks similar.
-- *"It's read-only and there's no implementation, so it must be verify → argus."*
-  → No. argus is **verdict-only**. If the deliverable is a narrative report or recommendations without PASS/FAIL closure, it is **diagnose → oracle**, NOT verify. Coercing diagnostic work into an argus verdict format produces a degraded analysis.
-- *"The task uses pseudo-AC like 'tests pass at commit N, fail at commit N+1', so it's verify → argus."*
-  → No. Bisect-style pass/fail signals are *inputs* to the analysis; the *output* is a causal narrative naming the introducing commit and explaining the mechanism. Output type = investigate → explore (oracle for synthesis), NOT verify.
+These are post-hoc thoughts the orchestrator forms to justify a wrong route. Each row pairs the thought with the violated rule.
+
+| Thought | Reality / Violated Rule |
+|---|---|
+| "junior will run the verification command and argus will re-verify it." | DUPLICATE execution. argus-direct path (Agent Routing row 3) runs AC commands once, no junior pre-execution. |
+| "task -> junior -> argus is the default rhythm, just follow it." | Routing is per-task by type. RULE 1 + "Routing follows task type, NOT session cadence." Session cadence is NOT a routing input. |
+| "It's just read-only Bash commands, junior can run them." | Wrong question. RULE B: route by deliverable. File changes -> junior. Verdict -> argus. Analysis -> oracle. Search/comparison -> explore. |
+| "AC commands feel like verification, but argus has to verify junior anyway, so let junior run them first." | If the task itself IS verification, no junior precedes it. argus runs AC commands directly (Agent Routing row 3 + RULE C). |
+| "Investigation needs lots of Bash queries, junior is good at Bash." | Junior is the IMPLEMENTATION agent (RULE B). Investigation deliverable = narrative/findings, not file changes. oracle (causal) or explore (search). |
+| "It's read-only and there's no implementation, so it must be verify -> argus." | argus is verdict-only (RULE C). Narrative report without PASS/FAIL = diagnose -> oracle, NOT verify. Coercing diagnostic work into argus verdict format produces degraded analysis. |
+| "The task uses pseudo-AC like 'tests pass at commit N, fail at commit N+1', so it's verify -> argus." | Bisect-style pass/fail signals are *inputs* to analysis; *output* is a causal narrative naming the introducing commit. Output type = investigate -> explore (oracle for synthesis), NOT verify. |
+| "I know the routing without looking at delegation.md / verification.md." | Reference Full-Read Mandate: full-read at first dispatch trigger. No partial recall from prior sessions. |
+
+**All of these mean: orchestrator habit is overriding routing rules. Stop. Re-classify by deliverable.**
+
+### Red Flags — Observable Behaviors (Immediate STOP)
+
+Pre-action signals — catch the routing error before the dispatch lands. If you observe any of these in yourself, halt and re-classify.
+
+- STOP - About to invoke TaskCreate without first emitting the Classification Block in this session
+- STOP - About to type `npm test` / `npm run build` / `grep` / `git commit` yourself (verification = argus, search = explore, commits = mnemosyne)
+- STOP - About to dispatch sisyphus-junior on a task whose deliverable is a narrative or PASS/FAIL verdict, not file changes
+- STOP - About to dispatch argus on a task with no explicit AC and no PASS/FAIL closure criterion
+- STOP - Routing a task because "every prior task in this session went junior -> argus" (session cadence is not a routing input)
+- STOP - Partial-read of `delegation.md` / `verification.md` / `decision-gates.md` (offset+limit, head) at first dispatch trigger - these are mandatory full-read
+
+**Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
 
 ---
 
-## Reference Guides
+## Reference Full-Read Mandate
 
-| When | Read |
-|------|------|
-| Composing delegation prompts for junior, mnemosyne, explore, librarian, or oracle | [delegation.md](delegation.md) |
-| Verification flow details, Evidence Audit Gate, QA REQUEST composition, argus invocation rules | [verification.md](verification.md) |
-| Classifying user requests, Interview Mode, broad requests, context brokering | [decision-gates.md](decision-gates.md) |
+Reference files below are **trigger-conditional MANDATORY full-read**. The trigger fires at the moment you are about to perform the action the reference governs. Partial-read (`offset+limit`, `head`, skim) is forbidden. One single Read call, beginning to end. Per-session cache applies — one full-read covers subsequent triggers of the same reference within the same session.
+
+| Trigger condition (when you are about to do this) | Reference (full-read at trigger) |
+|---|---|
+| About to compose your first delegation prompt for any agent in this session (junior, mnemosyne, explore, librarian, oracle) | [delegation.md](delegation.md) |
+| About to dispatch argus OR receive the first verdict in this session OR audit evidence | [verification.md](verification.md) |
+| About to classify a user request, enter Interview Mode, or handle a broad/ambiguous request | [decision-gates.md](decision-gates.md) |
+
+**Read evidence line** (emit once per file in your visible message after the read completes):
+```
+Reference full-read: <filename> at trigger <trigger name> - done
+```
+
+Missing evidence at the triggering action = mandate violation.
