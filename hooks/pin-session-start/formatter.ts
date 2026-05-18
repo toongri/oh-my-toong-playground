@@ -6,7 +6,6 @@
  *   pins:N
  *   Need context: invoke select-pin first
  *   Acquired info worth finding again later? You MUST emit a <pin> immediately via write-pin
- *   Stale entry: write-pin with supersedes
  *   </pins>
  *
  * All counts (0, 1..N) produce the same block. Total output ≤80 tokens (AC-2).
@@ -17,7 +16,6 @@ import type { ScanResult } from './types.ts';
 const MODEL2_LINES = [
   'Need context: invoke select-pin first',
   'Acquired info worth finding again later? You MUST emit a <pin> immediately via write-pin',
-  'Stale entry: write-pin with supersedes',
 ];
 
 /**

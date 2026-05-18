@@ -25,7 +25,7 @@ The **pin-session-start hook** auto-surfaces the `$OMT_DIR/pins/` index at Sessi
 
 ## Emit timing
 
-Emit immediately on discovery. Do not defer based on "might change later" — `supersedes` absorbs change. For Scenario F (no external SSOT exists), the "immediate" emit is step ③ of: ① propose external registration → ② register together → ③ emit pin. See `write-pin/reference/use-cases.md`.
+Emit immediately on discovery. Do not defer based on "might change later" — emit now and let a future discovery overwrite if needed. For Scenario F (no external SSOT exists), the "immediate" emit is step ③ of: ① propose external registration → ② register together → ③ emit pin. See `write-pin/reference/use-cases.md`.
 
 ## Scope
 

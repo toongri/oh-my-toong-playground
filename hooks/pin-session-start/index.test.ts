@@ -3,7 +3,7 @@
  *
  * 3 cases:
  *   C1. OMT_DIR env 미설정 → cwd 기반 self-compute로 정상 SessionStart 출력
- *   C2. 빈 pins/ 디렉토리 → bootstrap block 생성 (pins:0 + 3 guidance lines)
+ *   C2. 빈 pins/ 디렉토리 → bootstrap block 생성 (pins:0 + guidance lines)
  *   C3. pins/ 1개 .md → hookSpecificOutput 생성 (SessionStart, token budget)
  */
 
@@ -72,7 +72,7 @@ describe('pin-session-start entrypoint', () => {
     expect(output.hookSpecificOutput.additionalContext).toContain('pins:');
   });
 
-  it('C2: 빈 pins/ 디렉토리 → bootstrap block 생성 (pins:0 + 3 guidance lines)', () => {
+  it('C2: 빈 pins/ 디렉토리 → bootstrap block 생성 (pins:0 + guidance lines)', () => {
     const omtDir = makeTmpDir();
     mkdirSync(join(omtDir, 'pins'), { recursive: true });
 
@@ -88,7 +88,6 @@ describe('pin-session-start entrypoint', () => {
     expect(ctx).toContain('pins:0');
     expect(ctx).toContain('select-pin');
     expect(ctx).toContain('write-pin');
-    expect(ctx).toContain('supersedes');
   });
 
   it('C3: pins/ 1개 .md → hookSpecificOutput SessionStart 생성 + token budget ≤80', () => {

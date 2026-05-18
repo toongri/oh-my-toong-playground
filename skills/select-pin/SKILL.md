@@ -10,7 +10,7 @@ Look up SSOT pointers in `$OMT_DIR/pins/`. Read-only.
 ## Procedure
 
 1. `ls $OMT_DIR/pins/` to enumerate slugs. If `$OMT_DIR` is unset, log WARN and skip (fail-open).
-2. Read **frontmatter only** for candidates to filter by `source_url`, `authority`, `tier`, `tags`, and `supersedes`.
+2. Read **frontmatter only** for candidates to filter by `source_url`, `authority`, `tier`, and `tags`.
 3. For matches, read the body to dereference `source_url`.
 4. Follow `related` slugs to traverse the cross-link graph. Default depth 1; use a visited set to guard cycles.
 
