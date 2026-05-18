@@ -13,15 +13,11 @@ import {
   assemblePrompt as sharedAssemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
-  runMultiTurn as sharedRunMultiTurn,
   MAX_RETRIES,
   BASE_DELAY_MS,
   type RunOnceOpts,
   type RunWithRetryOpts,
-  type MultiTurnConfig,
 } from '@lib/worker-utils';
-import { detectCliType } from '@lib/generic-job';
-import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 const FALLBACK_FILE = 'reviewer.md';
@@ -44,17 +40,10 @@ function runOnce(opts: RunOnceOpts) {
   });
 }
 
-interface ChunkRunWithRetryOpts extends RunWithRetryOpts {
-  cliType?: CliType;
-  multiTurn?: MultiTurnConfig;
-}
-
-function runWithRetry(opts: ChunkRunWithRetryOpts) {
-  return sharedRunMultiTurn({
+function runWithRetry(opts: RunWithRetryOpts) {
+  return sharedRunWithRetry({
     ...opts,
     fallbackFile: opts.fallbackFile || FALLBACK_FILE,
-    cliType: opts.cliType ?? 'unknown',
-    multiTurn: opts.multiTurn,
   });
 }
 
@@ -116,28 +105,10 @@ function main() {
   const program = tokens[0];
   const args = tokens.slice(1);
 
-  const cliType = detectCliType(command as string) as CliType;
-
-  // Read multi_turn config from job.json (written by job.ts at start time).
-  let multiTurn: MultiTurnConfig | undefined;
-  try {
-    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir as string, 'job.json'), 'utf8'));
-    const mt = jobMeta?.settings?.multiTurn;
-    if (mt && typeof mt.maxTurns === 'number' && typeof mt.deliverableSentinel === 'string') {
-      multiTurn = {
-        maxTurns: mt.maxTurns,
-        deliverableSentinel: mt.deliverableSentinel,
-        continuationPrompt: mt.continuationPrompt,
-      };
-    }
-  } catch { /* job.json absent or malformed → fall back to runWithRetry via runMultiTurn */ }
-
   runWithRetry({
     program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
     promptsDir: PROMPTS_DIR,
     promptPath,
-    cliType,
-    multiTurn,
   }).then((result) => {
     const size_bytes = result.size_bytes;
     logInfo(`worker done: member=${member} state=${result.state} attempts=${result.attempts} size_bytes=${size_bytes}`);
