@@ -1,169 +1,26 @@
-import { describe, it, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, readFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync } from 'fs';
+import { describe, it, test, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdirSync, rmSync, readFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
   splitCommand,
   atomicWriteJson,
-  sleepMsAsync,
   assemblePrompt,
-  MAX_RETRIES,
-  BASE_DELAY_MS,
-  NON_RETRYABLE_EXIT_CODES,
-  HEARTBEAT_INTERVAL_MS,
-  PROMPT_MAX_BYTES,
   runOnce,
-  runWithRetry,
+  runOneTurn,
+  resumeOneTurn,
   type RunOnceOpts,
-  type RunWithRetryOpts,
+  type RunOneTurnOpts,
 } from './worker-utils.ts';
+import type { AgentDriver, ParseResult, CliType } from './agent-drivers/types.ts';
 
-const noopSleep = async () => {};
-
-function makeOpts(testDir: string, overrides: Partial<RunWithRetryOpts> = {}): RunWithRetryOpts {
-  const memberDir = join(testDir, 'member');
-  mkdirSync(memberDir, { recursive: true });
-  return {
-    program: '/bin/sh',
-    args: ['-c', 'exit 1'],
-    prompt: 'test prompt',
-    member: 'test-member',
-    memberDir,
-    command: '/bin/sh -c "exit 1"',
-    timeoutSec: 10,
-    sleepFn: noopSleep,
-    ...overrides,
-  };
+function makeTmpDir(): string {
+  return mkdtempSync(join(tmpdir(), 'worker-utils-test-'));
 }
 
-describe('non-retryable 에러 분류', () => {
-  const testDir = join(tmpdir(), 'worker-utils-test-' + Date.now());
-
-  beforeAll(() => {
-    mkdirSync(testDir, { recursive: true });
-  });
-
-  afterAll(() => {
-    rmSync(testDir, { recursive: true, force: true });
-  });
-
-  it('TerminalQuotaError in error.txt → state=non_retryable, 재시도 없음', async () => {
-    const subDir = join(testDir, 'quota-error');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "TerminalQuotaError: quota limit reached" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    expect(result.state).toBe('non_retryable');
-    // attempt stays at 0 — no retry occurred
-    expect(result.attempt).toBe(0);
-  });
-
-  it('exitCode=42 → state=non_retryable', async () => {
-    const subDir = join(testDir, 'exit42');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "some error" >&2; exit 42'],
-      command: '/bin/sh -c "exit 42"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    expect(result.state).toBe('non_retryable');
-    expect(result.exitCode).toBe(42);
-  });
-
-  it('retryable error (Connection refused) → 재시도 진행', async () => {
-    const subDir = join(testDir, 'retryable');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "Connection refused" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    // After exhausting retries, final state should still be 'error' (not non_retryable)
-    expect(result.state).toBe('error');
-    // Attempt should be MAX_RETRIES (2), indicating retry occurred
-    expect(result.attempt).toBe(2);
-  });
-
-  it('error.txt 없음/비어있음 → 재시도 진행', async () => {
-    const subDir = join(testDir, 'no-errortxt');
-    // Exit with code 1 but no stderr output → empty error.txt
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    // Should retry and end with 'error' (not non_retryable)
-    expect(result.state).toBe('error');
-    expect(result.attempt).toBe(2);
-  });
-
-  it('attempt 0의 non-retryable stderr가 attempt 1 판정에 영향 없음', async () => {
-    const subDir = join(testDir, 'cross-attempt-isolation');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "Connection refused" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    // Pre-seed error.txt with a non-retryable pattern (simulating previous attempt residue)
-    writeFileSync(join(opts.memberDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
-
-    const result = await runWithRetry(opts);
-
-    // With offset tracking: pre-seeded content is ignored → retryable → state='error'
-    // Without offset tracking: pre-seeded content included → non_retryable (BUG)
-    expect(result.state).toBe('error');
-  });
-
-  it('status.json이 non_retryable로 업데이트됨', async () => {
-    const subDir = join(testDir, 'status-update');
-    const memberDir = join(subDir, 'member');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "QUOTA_EXHAUSTED" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    await runWithRetry(opts);
-
-    const statusPath = join(memberDir, 'status.json');
-    expect(existsSync(statusPath)).toBe(true);
-    const status = JSON.parse(readFileSync(statusPath, 'utf8'));
-    expect(status.state).toBe('non_retryable');
-  });
-});
-
-describe('NON_RETRYABLE_EXIT_CODES 검증', () => {
-  it('예상 exit code들을 포함해야 함', () => {
-    expect(NON_RETRYABLE_EXIT_CODES.has(41)).toBe(true);
-    expect(NON_RETRYABLE_EXIT_CODES.has(42)).toBe(true);
-    expect(NON_RETRYABLE_EXIT_CODES.has(52)).toBe(true);
-    expect(NON_RETRYABLE_EXIT_CODES.has(130)).toBe(true);
-  });
-
-  it('일반 exit code는 포함하지 않아야 함', () => {
-    expect(NON_RETRYABLE_EXIT_CODES.has(0)).toBe(false);
-    expect(NON_RETRYABLE_EXIT_CODES.has(1)).toBe(false);
-    expect(NON_RETRYABLE_EXIT_CODES.has(2)).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// helpers (shared blocks)
-// ---------------------------------------------------------------------------
-
-function makeTmpDir() {
-  return mkdtempSync(join(tmpdir(), 'worker-utils-shared-'));
+function sleepMsAsync(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-// ---------------------------------------------------------------------------
-// splitCommand
-// ---------------------------------------------------------------------------
 
 describe('splitCommand', () => {
 
@@ -248,25 +105,6 @@ describe('atomicWriteJson', () => {
 // sleepMsAsync
 // ---------------------------------------------------------------------------
 
-describe('sleepMsAsync', () => {
-
-  test('resolves after the specified delay', async () => {
-    const start = Date.now();
-    await sleepMsAsync(50);
-    const elapsed = Date.now() - start;
-    expect(elapsed >= 40).toBe(true);
-  });
-
-  test('resolves with undefined', async () => {
-    const result = await sleepMsAsync(1);
-    expect(result).toBe(undefined);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assemblePrompt
-// ---------------------------------------------------------------------------
-
 describe('assemblePrompt', () => {
   let tmpDir: string;
 
@@ -345,24 +183,6 @@ describe('assemblePrompt', () => {
 
 // ---------------------------------------------------------------------------
 // constants
-// ---------------------------------------------------------------------------
-
-describe('constants', () => {
-  test('MAX_RETRIES is 2', () => {
-    expect(MAX_RETRIES).toBe(2);
-  });
-
-  test('BASE_DELAY_MS is 1000', () => {
-    expect(BASE_DELAY_MS).toBe(1000);
-  });
-
-  test('HEARTBEAT_INTERVAL_MS is 10000', () => {
-    expect(HEARTBEAT_INTERVAL_MS).toBe(10_000);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// heartbeat
 // ---------------------------------------------------------------------------
 
 describe('runOnce heartbeat', () => {
@@ -546,259 +366,686 @@ describe('runOnce 환경 변수 전파', () => {
 // retry 시 output 정제
 // ---------------------------------------------------------------------------
 
-describe('retry 시 output 정제', () => {
+import type { ResumeCommandOpts } from './agent-drivers/types.ts';
+
+// ---------------------------------------------------------------------------
+// runOneTurn / resumeOneTurn helpers
+// ---------------------------------------------------------------------------
+
+function makeOneTurnMockRunOnce(rawStdout: string, exitCode: number = 0) {
+  const fn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+    writeFileSync(join(opts.memberDir, 'output.txt'), rawStdout);
+    writeFileSync(join(opts.memberDir, 'error.txt'), '');
+    const state = exitCode === 0 ? 'done' : 'error';
+    return { state, exitCode, member: opts.member, command: opts.command, attempt: 0 };
+  };
+  return fn;
+}
+
+function makeOneTurnMockDriver(parseResult: ParseResult | null): AgentDriver & {
+  spy: { calls: import('./agent-drivers/types.ts').ResumeCommandOpts[][] };
+} {
+  const spy = { calls: [] as import('./agent-drivers/types.ts').ResumeCommandOpts[][] };
+  return {
+    cli: 'opencode',
+    parseStdout: (_stdout: string) => parseResult,
+    initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    resumeCommand: (opts) => {
+      spy.calls.push([opts]);
+      return { program: opts.baseCommand, args: [...opts.baseArgs, '--resume', opts.sessionID], env: opts.workerEnv };
+    },
+    spy,
+  };
+}
+
+function makeOneTurnOpts(memberDir: string, overrides: Partial<RunOneTurnOpts> = {}): RunOneTurnOpts {
+  return {
+    program: 'opencode',
+    args: ['--format', 'json'],
+    prompt: 'test prompt',
+    member: 'test-member',
+    memberDir,
+    command: 'opencode --format json',
+    timeoutSec: 10,
+    cliType: 'opencode' as CliType,
+    workerEnv: {},
+    ...overrides,
+  };
+}
+
+describe('runOneTurn / resumeOneTurn — caller-judgment single-turn pump', () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'worker-retry-output-'));
+    tmpDir = mkdtempSync(join(tmpdir(), 'one-turn-'));
   });
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('attempt 1에서 output.txt에 attempt 마커 없음', async () => {
-    const subDir = join(tmpDir, 'no-marker');
-    const memberDir = join(subDir, 'member');
+  // AC-A1: state='done' on exit 0
+  test('runOneTurn state done', async () => {
+    const memberDir = join(tmpDir, 'a1');
     mkdirSync(memberDir, { recursive: true });
 
-    await runOnce({
-      program: '/bin/sh',
-      args: ['-c', 'echo "retry output"'],
-      prompt: 'test prompt',
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c \'echo "retry output"\'',
-      timeoutSec: 10,
-      attempt: 1,
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a1', terminal: 'stop', text: 'parsed body', rawEvents: [],
     });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw stdout', 0);
 
-    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
-    expect(outputContent).not.toContain('--- attempt');
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('done');
   });
 
-  it('attempt 1에서 output.txt가 truncate됨 (이전 데이터 없음)', async () => {
-    const subDir = join(tmpDir, 'truncate-check');
-    const memberDir = join(subDir, 'member');
+  // AC-A2: state='error' on exit non-zero (driver did not report error terminal)
+  test('runOneTurn state error', async () => {
+    const memberDir = join(tmpDir, 'a2');
     mkdirSync(memberDir, { recursive: true });
 
-    // Pre-write old data
-    writeFileSync(join(memberDir, 'output.txt'), 'old data\n');
-
-    await runOnce({
-      program: '/bin/sh',
-      args: ['-c', 'echo "new output"'],
-      prompt: 'test prompt',
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c \'echo "new output"\'',
-      timeoutSec: 10,
-      attempt: 1,
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a2', terminal: 'unknown_pause', text: '', rawEvents: [],
     });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 1);
 
-    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
-    expect(outputContent).toContain('new output');
-    expect(outputContent).not.toContain('old data');
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('error');
   });
 
-  it('errOffset=0 for retry: non-retryable 패턴 감지 정상', async () => {
-    const subDir = join(tmpDir, 'eroffset-retry');
-    const memberDir = join(subDir, 'member');
+  // P1-5: driver-reported terminal='error' elevates state to non_retryable regardless of exitCode
+  test('runOneTurn state non_retryable when driver terminal=error', async () => {
+    const memberDir = join(tmpDir, 'a2b');
     mkdirSync(memberDir, { recursive: true });
 
-    // Write a counter file to make the script behave differently on each invocation
-    const counterFile = join(subDir, 'counter');
-    writeFileSync(counterFile, '0');
-
-    const script = `
-  COUNT=$(cat ${counterFile})
-  echo $((COUNT + 1)) > ${counterFile}
-  if [ "$COUNT" = "0" ]; then
-    echo "Connection refused: retryable error" >&2
-    exit 1
-  else
-    echo "TerminalQuotaError: quota exceeded" >&2
-    exit 1
-  fi
-`;
-
-    const result = await runWithRetry({
-      program: '/bin/sh',
-      args: ['-c', script],
-      prompt: 'test prompt',
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh script',
-      timeoutSec: 10,
-      sleepFn: noopSleep,
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a2b', terminal: 'error', text: '', rawEvents: [],
     });
+    // exitCode 0 — driver detected error in stdout (opencode exit-0 pattern)
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
 
     expect(result.state).toBe('non_retryable');
+  });
+
+  // AC-A3: sessionID extracted from driver.parseStdout
+  test('runOneTurn sessionID', async () => {
+    const memberDir = join(tmpDir, 'a3');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_xyz', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.sessionID).toBe('ses_xyz');
+  });
+
+  // AC-A4: forwards parsed text
+  test('runOneTurn text', async () => {
+    const memberDir = join(tmpDir, 'a4');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a4', terminal: 'stop', text: 'parsed body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw stdout', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.text).toBe('parsed body');
+  });
+
+  // AC-A5: forwards CLI exitCode
+  test('runOneTurn exitCode', async () => {
+    const memberDir = join(tmpDir, 'a5');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a5', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.exitCode).toBe(0);
+  });
+
+  // AC-A6a+A6b: output.txt overwrite (not append), no _turn-N/ subdir
+  test('runOneTurn output overwrite no _turn-N subdir', async () => {
+    const memberDir = join(tmpDir, 'a6');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Pre-populate output.txt with 'OLD'
+    writeFileSync(join(memberDir, 'output.txt'), 'OLD');
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a6', terminal: 'stop', text: 'NEW', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    // AC-A6a: output.txt contains exactly 'NEW'
+    const content = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(content).toBe('NEW');
+
+    // AC-A6b: no _turn-0 or _turn-1 subdirs created
+    expect(existsSync(join(memberDir, '_turn-0'))).toBe(false);
+    expect(existsSync(join(memberDir, '_turn-1'))).toBe(false);
+  });
+
+  // AC-B1: driver.resumeCommand called with sessionID
+  test('resumeOneTurn spy', async () => {
+    const memberDir = join(tmpDir, 'b1');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_resume', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    await resumeOneTurn('ses_target', makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(mockDriver.spy.calls.length).toBeGreaterThan(0);
+    expect(mockDriver.spy.calls[0][0].sessionID).toBe('ses_target');
+  });
+
+  // AC-B2: resumeOneTurn returns non-empty sessionID
+  test('resumeOneTurn sessionID non-empty', async () => {
+    const memberDir = join(tmpDir, 'b2');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_b2_result', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    const result = await resumeOneTurn('ses_input', makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.sessionID).toBeTruthy();
+  });
+
+  // AC-C1: status.json contains sessionID
+  test('runOneTurn sessionID atomicWriteJson', async () => {
+    const memberDir = join(tmpDir, 'c1');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_xyz', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.sessionID).toBe('ses_xyz');
+  });
+
+  // AC-C2: initial resume_count === 0
+  test('runOneTurn resume_count zero init', async () => {
+    const memberDir = join(tmpDir, 'c2');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_c2', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.resume_count).toBe(0);
+  });
+
+  // AC-C6: atomicWriteJson uses pid+crypto tmpfile+rename (not partial write)
+  test('atomicWriteJson tmpfile rename atomicity', async () => {
+    const memberDir = join(tmpDir, 'c6');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Verify atomicWriteJson uses a crypto-suffixed tmpfile that is renamed.
+    // We spy by checking that no .tmp files remain after the call.
+    const statusPath = join(memberDir, 'status.json');
+    atomicWriteJson(statusPath, { state: 'done', sessionID: 'ses_c6' });
+
+    // No tmp files remain — atomicity via rename
+    const files = readdirSync(memberDir);
+    const tmpFiles = files.filter((f) => f.includes('.tmp'));
+    expect(tmpFiles).toHaveLength(0);
+
+    // The written file parses as valid JSON with the expected content
+    const parsed = JSON.parse(readFileSync(statusPath, 'utf8'));
+    expect(parsed.state).toBe('done');
+    expect(parsed.sessionID).toBe('ses_c6');
+  });
+
+  // AC-C7: legacy status.json (no resume_count field) auto-initializes to 0
+  test('runOneTurn legacy status.json resume_count auto-init', async () => {
+    const memberDir = join(tmpDir, 'c7');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Pre-populate legacy status.json with no resume_count field
+    writeFileSync(join(memberDir, 'status.json'), JSON.stringify({
+      member: 'x', state: 'done', command: 'opencode run ...',
+    }));
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_c7', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    // Must not throw despite missing resume_count
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.resume_count).toBe(0);
+  });
+
+  // QA Scenario: happy path end-to-end
+  test('runOneTurn end-to-end opencode', async () => {
+    const memberDir = join(tmpDir, 'qa-happy');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_xyz', terminal: 'stop', text: 'parsed body', rawEvents: [],
+    });
+    const mockRunOnce = makeOneTurnMockRunOnce('raw ndjson stdout', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('done');
+    expect(result.sessionID).toBe('ses_xyz');
+    expect(result.text).toBe('parsed body');
+    expect(result.exitCode).toBe(0);
+
+    // output.txt overwritten with parsed text
+    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputContent).toBe('parsed body');
+
+    // No _turn-0 subdir
+    expect(existsSync(join(memberDir, '_turn-0'))).toBe(false);
+  });
+
+  // QA Scenario: parse failure → state='error', output.txt = raw stdout
+  test('runOneTurn parse failure', async () => {
+    const memberDir = join(tmpDir, 'qa-parse-fail');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Driver parseStdout returns null = parse failure
+    const mockDriver = makeOneTurnMockDriver(null);
+    const mockRunOnce = makeOneTurnMockRunOnce('raw unparseable stdout', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    // Parse failure → state='error'
+    expect(result.state).toBe('error');
+
+    // output.txt = raw stdout (no transformation)
+    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
+    expect(outputContent).toBe('raw unparseable stdout');
+
+    // No _turn-N subdir
+    expect(existsSync(join(memberDir, '_turn-0'))).toBe(false);
+  });
+
+  // P1-1 regression: stale output.txt content must NOT be seen by driver
+  // The bug: executeOneTurn passed attempt:0 → runOnce opened output.txt with 'a' flag
+  // → on resume turns, stale content remained → driver saw stale+new merged content.
+  test('runOneTurn does not pass stale output.txt content to driver on resume', async () => {
+    const memberDir = join(tmpDir, 'p1-1-stale');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Pre-populate output.txt with stale content from a previous turn
+    writeFileSync(join(memberDir, 'output.txt'), 'stale-content\n', 'utf8');
+
+    // Track what parseStdout receives
+    let receivedStdout = '';
+    const spyDriver: AgentDriver = {
+      cli: 'opencode',
+      parseStdout: (stdout: string) => {
+        receivedStdout = stdout;
+        return { sessionID: 'ses-new', terminal: 'stop', text: 'new body', rawEvents: [] };
+      },
+      initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+      resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    };
+
+    // Mock runOnceFn that APPENDS (mirrors production behavior: attempt=0 → flags='a')
+    const appendingRunOnceFn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+      appendFileSync(join(opts.memberDir, 'output.txt'), 'new-content\n', 'utf8');
+      return { state: 'done', exitCode: 0, member: opts.member, command: opts.command, attempt: 0 };
+    };
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => spyDriver,
+      runOnceFn: appendingRunOnceFn,
+    }));
+
+    // Driver must receive ONLY the new content — no stale prefix
+    expect(receivedStdout).toBe('new-content\n');
+    expect(receivedStdout.includes('stale-content')).toBe(false);
   });
 });
 
 // ---------------------------------------------------------------------------
-// opencode silent-failure sentinel (AC-1, AC-1.5, AC-2)
+// executeOneTurn state/message/workerEnv regression tests
 // ---------------------------------------------------------------------------
 
-// Helper: create a real executable named 'opencode' in a temp bin dir.
-// Sentinel checks path.basename(program) === 'opencode' so absolute wrapper paths work.
-function makeOpencodeWrapper(dir: string, stderrOutput: string): string {
-  const wrapperDir = join(dir, 'bin');
-  mkdirSync(wrapperDir, { recursive: true });
-  const wrapper = join(wrapperDir, 'opencode');
-  writeFileSync(wrapper, `#!/bin/sh\n${stderrOutput}\nexit 0\n`);
-  const { chmodSync } = require('fs');
-  chmodSync(wrapper, 0o755);
-  return join(wrapperDir, 'opencode');
+function makeFlexibleMockRunOnce(rawStdout: string, runResult: Record<string, unknown>) {
+  return async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+    writeFileSync(join(opts.memberDir, 'output.txt'), rawStdout);
+    writeFileSync(join(opts.memberDir, 'error.txt'), '');
+    return { member: opts.member, command: opts.command, attempt: 0, ...runResult };
+  };
 }
 
-describe('opencode sentinel: happy path + false-positive guards', () => {
-  const testDir = join(tmpdir(), 'sentinel-guard-' + Date.now());
+describe('executeOneTurn state/message/workerEnv regression', () => {
+  let tmpDir: string;
 
-  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
-  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
-
-  it('opencode normal response: exit 0 + stdout non-empty + stderr empty → state=done', async () => {
-    const subDir = join(testDir, 'happy-path');
-    const program = makeOpencodeWrapper(subDir, 'echo "rendered review text"');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'execute-one-turn-reg-'));
   });
 
-  it('false-positive guard (a): stdout non-empty + Error: on stderr → sentinel does not fire → state=done', async () => {
-    const subDir = join(testDir, 'fp-stdout');
-    // stdout non-empty wins: even with Error: in stderr, sentinel must not fire
-    const program = makeOpencodeWrapper(subDir,
-      'echo "some output"\nprintf "Error: Model not found\\n" >&2');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('false-positive guard (b): stderr empty → sentinel does not fire → state=done', async () => {
-    const subDir = join(testDir, 'fp-stderr-empty');
-    // opencode-named binary, exit 0, no stderr — pure happy path
-    const program = makeOpencodeWrapper(subDir, '');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
-  });
+  // T1-1: timed_out state preserved when driver returns non-error terminal and exitCode===null
+  test('timed_out state preserved in status.json when exitCode is null', async () => {
+    const memberDir = join(tmpDir, 'timed-out');
+    mkdirSync(memberDir, { recursive: true });
 
-  it('false-positive guard (c): stderr non-empty but no line starts with Error: → state=done', async () => {
-    const subDir = join(testDir, 'fp-no-error-prefix');
-    const program = makeOpencodeWrapper(subDir, 'printf "informational log line\\n" >&2');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
-  });
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'sX', terminal: 'stop', text: 'partial', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', {
+      state: 'timed_out',
+      message: 'Timed out after 600s',
+      finishedAt: '2026-01-01T00:00:00.000Z',
+      exitCode: null,
+    });
 
-  it('false-positive guard (d): program !== opencode, stderr has Error: → sentinel does not fire → state=done', async () => {
-    const subDir = join(testDir, 'fp-not-opencode');
-    // Use /bin/sh (not opencode) — sentinel must not fire even with Error: in stderr
-    const result = await runWithRetry(makeOpts(subDir, {
-      program: '/bin/sh',
-      args: ['-c', 'printf "Error: Model not found\\n" >&2; exit 0'],
-      command: '/bin/sh -c ...',
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
     }));
-    expect(result.state).toBe('done');
-  });
-});
 
-describe('opencode sentinel: keyword classification (AC-1.5)', () => {
-  const testDir = join(tmpdir(), 'sentinel-classify-' + Date.now());
-
-  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
-  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
-
-  it('Model not found in stderr → state=non_retryable, error.type=model_not_found', async () => {
-    const subDir = join(testDir, 'kw-model-not-found');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: Model not found: gpt-5\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('model_not_found');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('timed_out');
+    expect(status.message).toBe('Timed out after 600s');
+    expect(status.exitCode).toBe(null);
   });
 
-  it('ContextOverflowError in stderr → error.type=context_window', async () => {
-    const subDir = join(testDir, 'kw-context-overflow');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: ContextOverflowError: context too large\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('context_window');
+  // T1-2: missing_cli state preserved when driver returns non-null parsed result and exitCode===null
+  test('missing_cli state preserved in status.json when exitCode is null', async () => {
+    const memberDir = join(tmpDir, 'missing-cli');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: null, terminal: 'stop', text: '', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'missing_cli',
+      message: 'spawn claude ENOENT',
+      exitCode: null,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('missing_cli');
+    expect(status.message).toBe('spawn claude ENOENT');
   });
 
-  it('APIError in stderr → error.type=api_error', async () => {
-    const subDir = join(testDir, 'kw-api-error');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: APIError: 500 internal\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('api_error');
+  // T1-3: canceled state preserved when driver returns non-null parsed result and exitCode===null
+  test('canceled state preserved in status.json when exitCode is null', async () => {
+    const memberDir = join(tmpDir, 'canceled');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: null, terminal: 'stop', text: '', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'canceled',
+      message: 'Canceled',
+      exitCode: null,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('canceled');
+    expect(status.message).toBe('Canceled');
   });
 
-  it('Unknown session error → error.type=opencode_session_error (fallback)', async () => {
-    const subDir = join(testDir, 'kw-fallback');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: SomethingUnknown happened\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('opencode_session_error');
+  // T1-4: builtCmd.env saved as workerEnv in status.json
+  test('workerEnv from initialCommand env is saved in status.json', async () => {
+    const memberDir = join(tmpDir, 'worker-env');
+    mkdirSync(memberDir, { recursive: true });
+
+    const expectedEnv = { CLAUDECODE: '', CLAUDE_CODE_EFFORT_LEVEL: 'low', FOO: 'bar' };
+    // Driver.initialCommand returns the expectedEnv — this becomes builtCmd.env
+    const mockDriver: AgentDriver & { spy: { calls: any[][] } } = {
+      cli: 'claude',
+      parseStdout: (_stdout: string) => ({ sessionID: 'ses_env', terminal: 'stop', text: 'body', rawEvents: [] }),
+      initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: expectedEnv }),
+      resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+      spy: { calls: [] },
+    };
+    const mockRunOnce = makeFlexibleMockRunOnce('body', {
+      state: 'done',
+      exitCode: 0,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      cliType: 'claude',
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.workerEnv).toEqual(expectedEnv);
   });
 
-  it('sentinel writes error.message = first stderr line with Error: prefix stripped', async () => {
-    const subDir = join(testDir, 'kw-message-strip');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: Model not found: my-model\\nSecond line\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.message).toBe('Model not found: my-model');
+  // T1-5: message is explicitly null (not undefined) when runOnce returns no message
+  test('message field is null (not undefined) when runOnce provides no message', async () => {
+    const memberDir = join(tmpDir, 'null-message');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_nm', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', {
+      state: 'done',
+      exitCode: 0,
+      // no message field
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    // JSON.parse of null gives null, undefined key gives undefined — must be null
+    expect(status.message).toBe(null);
   });
 });
 
 // ---------------------------------------------------------------------------
-// PROMPT_MAX_BYTES guard at mode='text' path (AC-4)
+// P1-1 regression: parsed===null AND driverInstance!==null → state must be preserved
+// makeOneTurnMockDriver always returns non-null, bypassing the else branch.
+// These tests use a null-parse driver to exercise the actual buggy path.
 // ---------------------------------------------------------------------------
 
-describe('mode=text prompt size guard', () => {
-  const testDir = join(tmpdir(), 'prompt-size-text-' + Date.now());
+function makeNullParseDriver(): AgentDriver {
+  return {
+    cli: 'opencode',
+    parseStdout: (_stdout: string) => null,
+    initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+  };
+}
 
-  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
-  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
+describe('executeOneTurn parsed===null with driver — process state preservation (P1-1)', () => {
+  let tmpDir: string;
 
-  it('prompt 79KB → spawn proceeds normally (exit 0 → state=done)', async () => {
-    const subDir = join(testDir, 'prompt-79kb');
-    const memberDir = join(subDir, 'member');
-    mkdirSync(memberDir, { recursive: true });
-    const promptPath = join(subDir, 'prompt.txt');
-    writeFileSync(promptPath, 'x'.repeat(79 * 1024));
-    const result = await runWithRetry({
-      program: '/bin/sh',
-      args: ['-c', 'exit 0'],
-      prompt: 'test',
-      promptPath,
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c "exit 0"',
-      timeoutSec: 10,
-      sleepFn: noopSleep,
-    });
-    expect(result.state).toBe('done');
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'p1-1-null-parse-'));
   });
 
-  it('prompt 81KB → no spawn, state=non_retryable, error.type=prompt_too_large', async () => {
-    const subDir = join(testDir, 'prompt-81kb');
-    const memberDir = join(subDir, 'member');
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Regression: missing_cli must not be flattened to 'error' when parseStdout returns null
+  test('missing_cli state preserved when driver parseStdout returns null', async () => {
+    const memberDir = join(tmpDir, 'missing-cli');
     mkdirSync(memberDir, { recursive: true });
-    const promptPath = join(subDir, 'prompt.txt');
-    writeFileSync(promptPath, 'x'.repeat(81 * 1024));
-    const result = await runWithRetry({
+
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'missing_cli',
+      message: 'spawn opencode ENOENT',
+      exitCode: null,
+    });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNullParseDriver(),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('missing_cli');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('missing_cli');
+  });
+
+  // Regression: timed_out must not be flattened to 'error' when parseStdout returns null
+  test('timed_out state preserved when driver parseStdout returns null', async () => {
+    const memberDir = join(tmpDir, 'timed-out');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'timed_out',
+      message: 'Timed out after 600s',
+      exitCode: null,
+    });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNullParseDriver(),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('timed_out');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('timed_out');
+  });
+
+  // Regression: canceled must not be flattened to 'error' when parseStdout returns null
+  test('canceled state preserved when driver parseStdout returns null', async () => {
+    const memberDir = join(tmpDir, 'canceled');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'canceled',
+      message: 'Canceled',
+      exitCode: null,
+    });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNullParseDriver(),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('canceled');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('canceled');
+  });
+});
+
+describe('runOneTurn real-spawn integration', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'one-turn-real-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // P2-4: call runOneTurn with REAL runOnce (no runOnceFn override).
+  // This gap was exactly why the append bug escaped the test suite.
+  test('runOneTurn with real runOnce and claude driver parses JSON stdout', async () => {
+    const memberDir = join(tmpDir, 'real-spawn');
+    mkdirSync(memberDir, { recursive: true });
+
+    const payload = JSON.stringify({ result: 'hi', session_id: 's1', stop_reason: 'end_turn' });
+
+    const result = await runOneTurn({
       program: '/bin/sh',
-      args: ['-c', 'exit 0'],
-      prompt: 'test',
-      promptPath,
+      args: ['-c', `echo '${payload}'`],
+      prompt: 'ignored',
       member: 'test-member',
       memberDir,
-      command: '/bin/sh -c "exit 0"',
+      command: '/bin/sh echo',
       timeoutSec: 10,
-      sleepFn: noopSleep,
+      cliType: 'claude',
     });
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('prompt_too_large');
-    expect((result.error as any)?.bytes).toBeGreaterThan(80 * 1024);
-    expect((result.error as any)?.limit).toBe(PROMPT_MAX_BYTES);
+
+    expect(result.state).toBe('done');
+    expect(result.sessionID).toBe('s1');
+    expect(result.text).toBe('hi');
   });
 });

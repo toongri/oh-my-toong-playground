@@ -1,0 +1,13 @@
+Investigated the production pause on chunk-review-2026-05-15-0913-88f32f member gpt.
+
+**Symptoms:** Worker exited after emitting 7 lines of narrative text. No step_finish event in stdout. Orchestrator treated output as terminal and did not resume.
+
+**Evidence examined:**
+- `output.txt`: 1500-byte narrative, no NDJSON structure.
+- `opencode-initial.txt` PoC: confirmed step_finish is emitted on tool-call turns, not on trivial text replies.
+- Plan §Driver-per-CLI parse rules: trivial-text replies omit step_finish → terminal = unknown_pause.
+
+## Diagnosis
+ROOT_CAUSE: foo
+
+The orchestrator lacked a resume path for unknown_pause terminal state. The multi-turn pump addresses this by adding driver-level sessionID tracking and resumeCommand construction.

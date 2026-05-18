@@ -1,0 +1,4 @@
+{"type":"thread.started","thread_id":"019e3152-c43b-7e03-8ada-4620be171fa7"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"We discussed that my previous response should be summarized as a single sentence."}}
+{"type":"turn.completed","usage":{"input_tokens":46369,"cached_input_tokens":30336,"output_tokens":42,"reasoning_output_tokens":9}}

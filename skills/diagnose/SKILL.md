@@ -51,7 +51,7 @@ bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 `status` returns `{ members: [{member, state, ...}] }`. Branch on `members[0].state`:
 
 | `members[0].state` | Action |
-|--------------------|--------|
+|----------------------|--------|
 | `missing_cli` | Fallback: become Hephaestus in-session (see below) |
 | `timed_out` | Fallback: become Hephaestus in-session (see below) |
 | `error` | Fallback: become Hephaestus in-session (see below) |

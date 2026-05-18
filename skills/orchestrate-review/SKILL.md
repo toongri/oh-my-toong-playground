@@ -86,7 +86,7 @@ Aggregate all reviewer outputs, produce the final report, then STOP.
 
 ## Worker Output Contract
 
-Each reviewer CLI is configured to emit final-answer text directly on stdout (default render mode — no event stream, no JSON metadata). The worker streams stdout to `output.txt` unchanged, so `output.txt` always contains the rendered reviewer response ready to read. No post-processing in the script or the chairman.
+Each reviewer CLI emits its native structured output (opencode: NDJSON via `--format json`; claude: single-line JSON via `--output-format json`). The worker spawns the CLI through an `AgentDriver`, whose `parseStdout` extracts the final answer text and session metadata, then overwrites `output.txt` with the parsed text. By the time the chairman reads `output.txt`, the file contains rendered reviewer text only — no JSON envelope, no event stream metadata. The transformation is invisible to chairman logic: read `output.txt` as plain text per reviewer.
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
@@ -112,6 +112,26 @@ Each reviewer CLI is configured to emit final-answer text directly on stdout (de
 6. **No augmentation.** If reviewers missed something, it stays missed. That observation is NOT part of the aggregation.
 7. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`collect`) may repeat. No job re-creation under any circumstances.
 8. **CRITICAL: One chunk per invocation.** Each chunk-reviewer instance receives and processes exactly ONE chunk. The orchestrator MUST dispatch a separate chunk-reviewer for each chunk. NEVER combine multiple chunks into a single chunk-reviewer request.
+
+**Member Resume Policy (`resume-member`):**
+
+응답이 진짜 deliverable이면 resume 없이 그대로 수용한다. 단순 출력이 짧다는 이유로 무조건 retry 금지 — 짧아도 완결된 응답은 그대로 수용한다.
+
+다음 패턴 중 하나에 해당할 때만 `resume-member`를 호출한다:
+
+- 응답이 narrative-only (분석 서술만 있고 실제 deliverable 없음)
+- 응답이 미완성 상태 (문장/구조가 중단됨)
+- 응답이 waiting 패턴 (추가 입력을 기다리거나 확인 질문만 남김)
+
+호출 형식:
+
+```
+bun job.ts resume-member --job <jobDir> --member <name> --prompt "마무리되었나요? 답변 주세요"
+```
+
+프롬프트는 chairman LLM이 상황에 맞게 작성한다. 위 예시는 참고용이다.
+
+Cap: max 3회. 3회 exhaust 후 cap 도달 시 — partial 수용(지금까지 받은 응답을 그대로 집계에 포함) OR job 전체를 escalate한다. 두 옵션 중 chairman LLM이 상황을 판단하여 선택한다.
 
 ## Classification Rules
 

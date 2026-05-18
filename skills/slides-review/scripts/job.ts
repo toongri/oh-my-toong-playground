@@ -20,6 +20,7 @@ import {
   cmdStop as frameworkCmdStop,
   cmdClean as frameworkCmdClean,
   cmdCollect as frameworkCmdCollect,
+  cmdResumeMember,
   gcStaleJobs,
   parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
@@ -70,6 +71,7 @@ Usage:
   job.ts status [--json|--text] <jobDir>
   job.ts collect [--timeout-ms N] <jobDir>
   job.ts results [--json] <jobDir>
+  job.ts resume-member <jobDir> <member> "<prompt>"
   job.ts stop <jobDir>
   job.ts clean <jobDir>
 `);
@@ -183,6 +185,16 @@ async function main() {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('results: missing jobDir');
     frameworkCmdResults(options, jobDir, REVIEW_CONFIG);
+    return;
+  }
+  if (command === 'resume-member') {
+    const jobDirArg = rest[0];
+    const nameArg = rest[1];
+    const promptArg = rest.slice(2).join(' ');
+    if (!jobDirArg) exitWithError('resume-member: missing jobDir');
+    if (!nameArg) exitWithError('resume-member: missing member name');
+    if (!promptArg) exitWithError('resume-member: missing prompt');
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, REVIEW_CONFIG);
     return;
   }
   if (command === 'stop') {

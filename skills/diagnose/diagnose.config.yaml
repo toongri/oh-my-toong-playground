@@ -4,9 +4,10 @@
 review:
   members:
     - name: hephaestus
-      command: opencode run --format default --agent "Hephaestus - Deep Agent"
+      command: opencode run --agent "Hephaestus - Deep Agent"
       emoji: "🔨"
       color: "BLUE"
+      output_format: json
 
   settings:
     timeout: 600
