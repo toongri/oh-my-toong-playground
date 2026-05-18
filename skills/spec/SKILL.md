@@ -12,13 +12,13 @@ They are NOT an exhaustive list. Any design concern discovered during the spec p
 — whether it maps to a predefined Area or not — must be explicitly addressed through
 the Emergent Concern Protocol.
 
-## Co-Design Philosophy
+## Co-Design Philosophy (Human-in-the-Loop Mandate)
 
-Spec is a **co-design** process, not an AI-design process. The user is the architect of the design; spec (this skill) is the dialogue partner — AI surfaces concerns, proposes options, and facilitates decisions; the user chooses direction, validates fit, and owns outcomes.
+Spec is a **human-in-the-loop co-design** process, not an AI-design process. The user (human) is the architect of the design; spec (this skill, AI) is the dialogue partner kept in the loop at every step — AI surfaces concerns, proposes options, and facilitates decisions; the user chooses direction, validates fit, and owns outcomes. The "loop" is the iterative AI-proposes → user-decides → record cycle; the human must be IN the loop, not consulted at the end.
 
-Every design content — Area entry choice, Step result, recorded decision, acceptance criterion — originates from or is validated by user dialogue. **AI MUST NOT generate spec content unilaterally and submit it for rubber-stamp approval; that flow inverts authorship.** The only legitimate authorship pattern is: AI proposes → user decides → record captures the user as the decision owner.
+Every design content — Area entry choice, Step result, recorded decision, acceptance criterion — originates from or is validated by user dialogue. **AI MUST NOT generate spec content unilaterally and submit it for rubber-stamp approval; that flow inverts authorship and breaks the human-in-the-loop contract.** The only legitimate authorship pattern is: AI proposes → user decides → record captures the user as the decision owner.
 
-Every downstream rule in this skill (Iron Law gates, Checkpoint Protocol, Decision Interview Gate, Multi-AI Review, Rich Context Pattern) is a mechanical expression of this philosophy. If any rule appears to permit AI-unilateral content generation, the rule is being mis-applied — re-read this section first, then re-read the rule.
+Every downstream rule in this skill (Iron Law gates, Checkpoint Protocol, Decision Interview Gate, Multi-AI Review, Rich Context Pattern) is a mechanical expression of this human-in-the-loop philosophy. If any rule appears to permit AI-unilateral content generation, the rule is being mis-applied — re-read this section first, then re-read the rule.
 
 ## The Iron Law
 
