@@ -19,40 +19,52 @@ Identify what the caller needs analyzed. Synthesize the relevant context — arc
 
 ### Step 2: Start the job
 
-Pass the request as JSON on stdin:
+Write the analysis request to a temporary file and redirect to stdin:
 
 ```bash
-echo '{"request": "<your request here>"}' | bun .claude/skills/diagnose/scripts/job.ts start --stdin
+PROMPT_FILE=$(mktemp)
+cat > "$PROMPT_FILE" <<'EOF'
+<your analysis request here>
+EOF
+JOB_DIR=$(bun .claude/skills/diagnose/scripts/job.ts start --stdin < "$PROMPT_FILE")
+rm -f "$PROMPT_FILE"
 ```
 
-The command prints a `jobDir` path to stdout. Capture it.
+The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 
 ### Step 3: Collect results
 
 ```bash
-bun .claude/skills/diagnose/scripts/job.ts collect <jobDir>
+bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
 ```
 
 `collect` polls until the job reaches a terminal state and returns a JSON manifest. Repeat if the overall state is `running` or `queued`.
 
 ### Step 4: Fallback branch
 
-Examine `members[0].state` in the collect output.
+Determine the terminal worker state by running:
 
-| `members[0].state` | Action |
-|--------------------|--------|
+```bash
+bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
+```
+
+`status` returns `{ reviewers: [{reviewer, state, ...}] }`. Branch on `reviewers[0].state`:
+
+| `reviewers[0].state` | Action |
+|----------------------|--------|
 | `missing_cli` | Fallback: become Hephaestus in-session (see below) |
 | `timed_out` | Fallback: become Hephaestus in-session (see below) |
 | `error` | Fallback: become Hephaestus in-session (see below) |
 | `canceled` | Fallback: become Hephaestus in-session (see below) |
-| `done` | Read `outputFilePath` returned in the manifest and forward its content to the caller |
+| `non_retryable` | Fallback: become Hephaestus in-session (see below) |
+| `done` | Read the manifest from Step 3 and forward `reviewers[0].outputFilePath` content to the caller |
 
 **Fallback procedure**: READ `prompts/hephaestus.md` and apply the analysis framework defined there IN-SESSION. You become Hephaestus for the remainder of this skill invocation.
 
 ### Step 5: Cleanup
 
 ```bash
-bun .claude/skills/diagnose/scripts/job.ts clean <jobDir>
+bun .claude/skills/diagnose/scripts/job.ts clean $JOB_DIR
 ```
 
 Run cleanup unconditionally after forwarding results or completing in-session fallback analysis.

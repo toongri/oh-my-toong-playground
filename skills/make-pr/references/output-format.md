@@ -119,5 +119,13 @@ PR description follows the structure below. Write entirely in Korean.
 ### References
 
 - **Purpose**: Provide links to related documents, issues, PRs
-- **Include**: Related GitHub issues/PRs, external documentation URLs, git-tracked design documents
-- **Anti-patterns**: Agent-internal files (memory, plans, session notes, council records, files under `$OMT_DIR/`) — never include content that reviewers cannot access
+- **Standard format**: References items use GitHub markdown link syntax `- [Title](URL)`. This applies universally regardless of category — GitHub renders this as a clickable link in the PR description. Example forms:
+  - GitHub issue/PR: `- [#191 의도 명세 PR](https://github.com/org/repo/pull/191)`
+  - Issue tracker issue: `- [SW-2923 디스펜서 CD codepush](https://linear.app/workspace/issue/SW-2923/dispenser-cd-codepush)`
+  - Slack permalink: `- [#15-6_deploy 박시현 deps 요청 thread](https://workspace.slack.com/archives/C.../p...)`
+  - External documentation: `- [설계 문서 제목](https://docs.example.com/...)`
+- **Slack channel-only exception**: When no specific thread or message permalink exists, a Slack channel-name-only entry is acceptable — e.g., `- Slack #15-6_deploy 채널`. This is the single named exception to the markdown-link-required rule.
+- **URL fallback (user-driven)**: When a URL is unknown, ask the user once for the URL. If the user confirms no URL exists, bare-text is acceptable. The skill does not detect permalink existence; the decision is user-driven.
+- **Anti-patterns**:
+  - Agent-internal files (memory, plans, session notes, council records, files under `$OMT_DIR/`) — never include content that reviewers cannot access
+  - Bare-text references when a URL exists or the user has not yet been asked — e.g., outputting `Linear: SW-2891` without first asking the user for the issue URL, or pasting a category label like `Slack #15-6_deploy` standalone without confirming whether a specific thread permalink exists. The URL fallback above governs the case where the user has explicitly confirmed no URL exists.

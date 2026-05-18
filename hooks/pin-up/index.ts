@@ -85,7 +85,6 @@ export function serializePin(
   lines.push(`sensitivity: ${JSON.stringify(pin.sensitivity)}`);
   lines.push(`created_at: ${JSON.stringify(createdAt)}`);
   if (pin.related) lines.push(`related: ${JSON.stringify(pin.related)}`);
-  if (pin.supersedes) lines.push(`supersedes: ${JSON.stringify(pin.supersedes)}`);
   if (pin.discovery_context) lines.push(`discovery_context: ${JSON.stringify(pin.discovery_context)}`);
   lines.push('---');
   lines.push('');
