@@ -132,7 +132,7 @@ Tracks spec progress across sessions. Provides richer data than directory-scan (
 | `areas[name].steps_completed` | number | Steps finished in this area |
 | `areas[name].steps_total` | number \| null | Populated at area start; null until then |
 | `areas[name].records` | string[] | Filenames saved to `{area}/records/` |
-| `areas[name].review_verdict` | `"APPROVE"` \| `"REQUEST_CHANGES"` \| `"COMMENT"` \| null | Last spec-review verdict; null until review runs |
+| `areas[name].review_verdict` | `"APPROVE"` \| `"REQUEST_CHANGES"` \| `"COMMENT"` \| null | Last spec-reviewer verdict; null until review runs |
 | `phase_transition_passed` | boolean | Whether Requirements → Solution Design gate has passed |
 
 ## Resume from Existing Spec

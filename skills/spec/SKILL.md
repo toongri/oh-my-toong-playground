@@ -22,7 +22,7 @@ NO STEP SKIPPING:
 
 NO AREA COMPLETION WITHOUT:
 1. All Steps in the Area completed with user confirmation
-2. spec-review pass (APPROVE or COMMENT) verdict received (review loop resolved)
+2. spec-reviewer pass (APPROVE or COMMENT) verdict received (review loop resolved)
 3. User explicitly declares "Area complete"
 4. All acceptance criteria testable
 5. No "TBD" or vague placeholders remaining
@@ -31,7 +31,7 @@ NO AREA COMPLETION WITHOUT:
 
 **Violating the letter of these rules IS violating the spirit.** No exceptions.
 
-Fact-grounded shortcuts — "this Area is straightforward, spec-review would just APPROVE", "the user already confirmed it implicitly", "I know the protocol so the reference read is unnecessary", "no records means Wrapup can be skipped" — do NOT constitute exceptions. They are exactly the rationalizations the Iron Law exists to block. Apply the spirit: would an independent senior reviewer accept this Area as complete?
+Fact-grounded shortcuts — "this Area is straightforward, spec-reviewer would just APPROVE", "the user already confirmed it implicitly", "I know the protocol so the reference read is unnecessary", "no records means Wrapup can be skipped" — do NOT constitute exceptions. They are exactly the rationalizations the Iron Law exists to block. Apply the spirit: would an independent senior reviewer accept this Area as complete?
 
 **Wrapup is MANDATORY when ANY records exist across ANY area. NO EXCEPTIONS. NEVER SKIP.**
 
@@ -43,7 +43,7 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-review would jus
 | Error cases defined | Happy path only = production incidents |
 | Every Step presents to user | Skipped steps = missed requirements |
 | User confirmation at every Step | Agent decisions = user blamed |
-| Area completion = spec-review pass + user gate | Unchecked areas = compounding errors |
+| Area completion = spec-reviewer pass + user gate | Unchecked areas = compounding errors |
 | No Step/Area skipping ever | "Simple" hides complexity |
 | Design proposals include potential risks | Hidden risks = surprise in production |
 | spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
@@ -54,13 +54,17 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-review would jus
 
 | Thought | Reality / Violated Rule |
 |---|---|
-| "This Area is obvious — spec-review would just APPROVE anyway." | Area Completion requires spec-review verdict received (Iron Law row 2). "Would have APPROVE'd" is not the verdict. Delegate the review. |
-| "The user said 'Area complete' so both gates are satisfied." | Two gates are independent: spec-review pass AND user declaration. User declaration alone does not pass the quality gate. |
+| "This Area is obvious — spec-reviewer would just APPROVE anyway." | Area Completion requires spec-reviewer verdict received (Iron Law row 2). "Would have APPROVE'd" is not the verdict. Delegate the review. |
+| "The user said 'Area complete' so both gates are satisfied." | Two gates are independent: spec-reviewer pass AND user declaration. User declaration alone does not pass the quality gate. |
 | "I know this decision is clear-cut — no Rich Context Pattern needed, just record it." | IRON RULE: No record without prior user interview. Rich Context Pattern is mandatory for design decisions. Bypass = invalid record. |
 | "We're resuming from a prior session; the Checkpoint Protocol was already satisfied." | No carryover. Checkpoint Protocol runs at EVERY Step in the current session. Prior-session state is data, not a satisfied gate. |
 | "No records appear to exist, so Wrapup can be skipped." | Skip only when `records/` folders contain ZERO files across ALL areas. Verify before skipping. "Appears to be" is not verification. |
 | "I'll batch multiple questions for efficiency." | Questioning Protocol: exactly ONE question per message. Bundling is prohibited. |
 | "I know what's in `core-protocols.md`, full-read is unnecessary." | Reference Full-Read Mandate (see below). Inline contracts and references are complementary, not redundant. |
+| "Reference files are lookup so reading is optional." | False. Class A references (`core-protocols.md`, `persistence.md`, `area-entry-criteria.md`, `wrapup.md`) are **trigger-conditional MANDATORY full-read**. Optional refers to WHEN, not WHETHER. Once the trigger fires, full read top-to-bottom is mandate. Class B (Design Area refs, `diagram-selection.md`, `custom-design-concern.md`, `templates/record.md`) is lookup-only; do not conflate the two classes. |
+| "`head -120` of `core-protocols.md` is enough / I'll cherry-pick the relevant section." | Partial-read of Class A is explicitly forbidden by `## Reference Full-Read Mandate`. Single Read call, beginning to end. No `offset+limit`, no `head`, no skim. |
+| "I read `persistence.md` in a previous session, so the cache covers me." | Prior session reads do NOT carry over. Per-session cache applies only within the current session. Re-read in the current session at the trigger. Trust-without-verify violation. |
+| "I'll call `Skill(skill: 'spec-review')` — that's the review entity, right?" | Wrong layer. `spec-review` is a skill **auto-injected** into the `spec-reviewer` subagent's isolated context (per `agents/spec-reviewer.md` frontmatter `skills: spec-review`). Dispatch is ALWAYS `Agent(subagent_type="spec-reviewer", ...)` from main; calling `Skill(spec-review)` directly pulls Chairman orchestration logic into main and bypasses subagent isolation. Prose mentions of "spec-reviewer pass / verdict / feedback" refer to the verdict produced by that Agent call, never to a Skill invocation. |
 
 **All of these mean: orchestration habit is overriding the Iron Law. Stop. Honor the gate.**
 
@@ -68,12 +72,15 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-review would jus
 
 Pre-action signals — catch the bypass before the gate is missed. If you observe any of these, halt and reset to the violated mandate.
 
-- STOP - About to announce "Area complete" without a spec-review verdict line in this session's visible message
+- STOP - About to announce "Area complete" without a spec-reviewer verdict line in this session's visible message
 - STOP - About to create a record file before presenting the Rich Context Pattern + AskUserQuestion to the user
 - STOP - Composing a message with 2+ questions (numbered list, bullet list, or sequential question marks)
 - STOP - About to announce "Spec complete" while `records/` folders contain files but Wrapup has not run
-- STOP - About to apply design.md edits after a spec-review REQUEST_CHANGES without explicit user consensus on the resolution
+- STOP - About to apply design.md edits after a spec-reviewer REQUEST_CHANGES without explicit user consensus on the resolution
 - STOP - About to perform a Class A reference triggering action without the corresponding read evidence line in this session (or with partial-read; see Reference Full-Read Mandate)
+- STOP - Read tool call with `offset` + `limit` on Class A files (`core-protocols.md`, `persistence.md`, `area-entry-criteria.md`, `wrapup.md`) — these MUST be read in a single call, beginning to end, full file
+- STOP - Reading partial sections of inline contracts (Iron Law / Rationalization Table / Red Flags / Reference Full-Read Mandate) and proceeding — inline contracts must be fully internalized, never cherry-picked
+- STOP - About to consume Class A reference content citing "I read it in a previous session" — prior session reads do NOT carry; trigger demands re-read in the current session NOW
 
 **Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
 
@@ -103,7 +110,7 @@ Before starting spec work, load context files from `~/.omt/$OMT_PROJECT/context/
 
 ## Area Entry Criteria
 
-**Reference:** Read `references/area-entry-criteria.md` for detailed entry/skip criteria for each Design Area. Apply during Area Selection.
+> **Trigger fires here**: Before Area Selection (initial assessment — evaluating which Design Areas to enter), full-read [area-entry-criteria.md](references/area-entry-criteria.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
 
 **Interpretation rule:** Enter when **ANY** condition is met. Skip when **ALL** conditions are met.
 
@@ -131,7 +138,7 @@ Before starting spec work, load context files from `~/.omt/$OMT_PROJECT/context/
 **Skip when:**
 - No records exist in any `records/` folder across all areas
 
-**Reference:** Read `references/wrapup.md` for Recurring Tradeoff Filter, context file proposals (Step 2a-2d), and save procedure. Apply when entering Wrapup.
+> **Trigger fires here**: Before Wrapup entry (when records exist across any area's `records/` folder), full-read [wrapup.md](references/wrapup.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
 
 ---
 
@@ -173,6 +180,7 @@ digraph spec_workflow {
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Multi-AI design feedback | spec-reviewer | **MANDATORY** at Area completion |
 
+
 ### Do vs Delegate Decision Matrix
 
 | Action | YOU Do | DELEGATE |
@@ -185,7 +193,7 @@ digraph spec_workflow {
 | Codebase pattern discovery | NEVER | explore |
 | Design alternative analysis | NEVER | oracle |
 | External library research | NEVER | librarian |
-| Area completion review | NEVER | spec-review |
+| Area completion review | NEVER | spec-reviewer |
 
 **RULE**: Workflow control, design drafting, user gates, records = Do directly. Pattern search, analysis, external docs, review = DELEGATE.
 
@@ -317,15 +325,15 @@ When multiple questions are pending within a step, ask in order: **Blocking → 
 
 **EVERY Step MUST complete this protocol. No exceptions. No skipping.**
 
-**Reference:** Read `references/core-protocols.md` for the full Step Completion Sequence, Decision Interview Gate, Clarity Scoring, and Final Step Checkpoint. Apply at every Step completion.
+> **Trigger fires here**: Before the first Step Checkpoint Protocol entry of the session (OR first subagent dispatch, first Question Quality Standard consultation, first Area Completion entry, first Multi-AI Review delegation, or first Record creation — whichever comes first), full-read [core-protocols.md](references/core-protocols.md) per `## Reference Full-Read Mandate` and emit the read evidence line. One full-read per session covers ALL 6 trigger conditions of this file. Partial-read forbidden.
 
 **Key steps** (see reference for details): Present results → User confirmation → Save → Update state → **Decision Interview Gate (BLOCKING)** → Record decisions → Emergent Concern Check → Regenerate spec.md → Announce completion → Wait for user confirmation
 
 ## Multi-AI Review Integration
 
-**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-review.
+**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-reviewer.
 
-**Reference:** Read `references/core-protocols.md` for feedback loop workflow, spec-review delegation template, feedback consensus protocol, and verdict handling. Apply at Area completion review.
+**Reference:** Read `references/core-protocols.md` for feedback loop workflow, spec-reviewer delegation template, feedback consensus protocol, and verdict handling. Apply at Area completion review.
 
 ## Record Workflow
 
@@ -394,10 +402,10 @@ For all review/confirm patterns:
 
 ## Area Completion Protocol (MANDATORY - No Area Skipping)
 
-**Reference:** Read `references/core-protocols.md` for Area Completion Sequence, Progress Dashboard, and Phase Transition Gate. Apply when completing an Area.
+> **Trigger note**: This protocol consumes [core-protocols.md](references/core-protocols.md). If this is the first fire of any core-protocols.md trigger condition this session, full-read NOW per `## Reference Full-Read Mandate` and emit the read evidence line. Otherwise, per-session cache applies (one full-read covers all 6 trigger conditions). Partial-read forbidden regardless of cache state.
 
 **Two gates must BOTH be passed:**
-1. **spec-review pass** — APPROVE or COMMENT (quality gate)
+1. **spec-reviewer pass** — APPROVE or COMMENT (quality gate)
 2. **User "Area complete" declaration** (authority gate)
 
 ## Spec Completion Gate
@@ -448,7 +456,7 @@ If Design Area was recommended but user deselected:
 
 ## Persistence & State Management
 
-**Reference:** Read `references/persistence.md` for State File schema, Resume workflow, Output Location, and spec.md generation rules. Apply for state management and session resumption.
+> **Trigger fires here**: At session start (Resume workflow) AND before the first state.json write of the session, full-read [persistence.md](references/persistence.md) per `## Reference Full-Read Mandate` and emit the read evidence line. One full-read per session covers all subsequent persistence operations. Partial-read forbidden.
 
 ## Reference Full-Read Mandate
 

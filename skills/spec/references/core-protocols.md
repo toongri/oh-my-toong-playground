@@ -13,11 +13,11 @@
   for verification, and deferred concern record format.
 
 - **Area Completion** — The mandatory full-sequence protocol when finishing any Design Area.
-  Covers the Area Completion Sequence (verify steps, save, present summary, delegate to spec-review,
+  Covers the Area Completion Sequence (verify steps, save, present summary, delegate to spec-reviewer,
   handle verdict, user gate), Progress Dashboard display, and the Phase Transition Gate
   that enforces readiness between Requirements and Solution Design.
 
-- **Multi-AI Review Integration** — The spec-review delegation and feedback handling protocol.
+- **Multi-AI Review Integration** — The spec-reviewer delegation and feedback handling protocol.
   Details the feedback loop workflow, delegation prompt structure with Deliberate Divergence
   handling for re-submissions, the Feedback Consensus Protocol (iron rule: zero edits before
   user consensus), presenting feedback to users, and verdict-based flow control.
@@ -159,7 +159,7 @@ For Greenfield projects, omit the Context row entirely.
 
 The Phase Transition Gate enforces Ambiguity ≤ 0.2 (Ambiguity Threshold) at the Requirements → Solution Design boundary. For Solution Design → Design Areas, this warning is advisory only.
 
-**Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-review gate.
+**Non-scoring Areas:** For all other Design Areas, Clarity Scoring is skipped. Area quality is ensured by the spec-reviewer gate.
 
 ### Final Step Checkpoint (After Last Design Area)
 
@@ -293,7 +293,7 @@ digraph area_completion {
     present_feedback [label="Present blocking concerns\nto user with recommendation"];
     user_consensus [label="User agrees on\nchanges to make", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Apply changes\nUpdate design.md\nRecord decisions in records/"];
-    re_review [label="Re-delegate to spec-review"];
+    re_review [label="Re-delegate to spec-reviewer"];
 
     comment [label="COMMENT"];
     share_comment [label="Share non-blocking\nconcerns with user"];
@@ -329,19 +329,19 @@ digraph area_completion {
 1. **Verify all Steps completed**: Every Step in the Area must have passed its Checkpoint Protocol
 2. **Save complete Area content**: Write to `{area-directory}/design.md`
 3. **Present Area summary**: Show all decisions made in this Area to user
-4. **MANDATORY spec-review**: Delegate Area results to spec-review
+4. **MANDATORY spec-reviewer**: Delegate Area results to spec-reviewer
 
-   > See the **Multi-AI Review Integration** section below for the full spec-review delegation and feedback handling protocol.
+   > See the **Multi-AI Review Integration** section below for the full spec-reviewer delegation and feedback handling protocol.
 
 5. **Verdict handling**:
    - **APPROVE** → Proceed to step 5.5
-   - **REQUEST_CHANGES** → Present blocking concerns to user with recommendation → User agrees on changes → Apply changes, update design.md, record decisions in `records/` → Re-delegate to spec-review → Return to step 5
+   - **REQUEST_CHANGES** → Present blocking concerns to user with recommendation → User agrees on changes → Apply changes, update design.md, record decisions in `records/` → Re-delegate to spec-reviewer → Return to step 5
    - **COMMENT** → Share non-blocking concerns with user, create follow-up if needed → Proceed to step 5.5
 5.5. **Update state.json**: Record `review_verdict`, update `updated_at`
 6. **User final gate**: User MUST explicitly declare "Area complete"
    - Silence is NOT agreement
    - AI CANNOT self-declare Area completion
-   - **Area completion cannot be declared without spec-review pass (APPROVE or COMMENT)** — Area cannot be completed while REQUEST_CHANGES is in effect
+   - **Area completion cannot be declared without spec-reviewer pass (APPROVE or COMMENT)** — Area cannot be completed while REQUEST_CHANGES is in effect
 6.5. **Update state.json**: Set area `status` to `completed`, update `current_area` to next area (or null if last), update `updated_at`
 7. **Announce next Area**: "[Area Name] complete. Entry criteria for [Next Area]: [list]"
 8. **Progress Dashboard**: Display the overall spec progress to the user (see below)
@@ -363,16 +363,16 @@ This dashboard provides transparency into the overall spec progress, helping the
 > **Template Flexibility**: Output templates in each reference file are recommended structures. Adapt sections, ordering, and detail level to your project's needs. The structural intent (what information to capture) matters more than exact formatting.
 
 **Two gates must BOTH be passed for Area completion:**
-1. **spec-review pass** — APPROVE or COMMENT (quality gate). REQUEST_CHANGES is a blocker.
+1. **spec-reviewer pass** — APPROVE or COMMENT (quality gate). REQUEST_CHANGES is a blocker.
 2. **User "Area complete" declaration** (authority gate)
 
 **Without BOTH gates passed, the Area is NOT complete and next Area CANNOT begin.**
 
 ### Phase Transition Gate (Requirements → Solution Design)
 
-**Precondition:** This gate runs only when both Requirements Analysis and Solution Design are selected. If Solution Design is not selected, skip this gate — Area transition proceeds via the standard spec-review + user gate.
+**Precondition:** This gate runs only when both Requirements Analysis and Solution Design are selected. If Solution Design is not selected, skip this gate — Area transition proceeds via the standard spec-reviewer + user gate.
 
-After Requirements Analysis completes (spec-review pass + user "Area complete"), automatically run this readiness check before entering Solution Design.
+After Requirements Analysis completes (spec-reviewer pass + user "Area complete"), automatically run this readiness check before entering Solution Design.
 
 | # | Check | Source |
 |---|-------|--------|
@@ -385,7 +385,7 @@ After Requirements Analysis completes (spec-review pass + user "Area complete"),
 
 **All YES** → Proceed to Solution Design.
 **Any NO** → Return to Requirements Analysis via Prior Area Amendment, then:
-1. Re-run spec-review on the amended Requirements (pass required)
+1. Re-run spec-reviewer on the amended Requirements (pass required)
 2. User re-declares "Area complete" for Requirements
 3. Re-run this Phase Transition Gate
 
@@ -406,15 +406,15 @@ Phase Transition Gate: Requirements → Solution Design
 Result: {PASS — proceed to Solution Design | FAIL — return to Requirements}
 ```
 
-**Scope:** This gate applies ONLY to the Requirements → Solution Design transition. Other Area transitions rely on the spec-review gate and user "Area complete" declaration.
+**Scope:** This gate applies ONLY to the Requirements → Solution Design transition. Other Area transitions rely on the spec-reviewer gate and user "Area complete" declaration.
 
 ---
 
 ## Multi-AI Review Integration
 
-**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-review. This is part of the Area Completion Protocol and cannot be skipped.
+**MANDATORY at Area completion.** After completing all Steps in an Area, ALWAYS delegate to spec-reviewer. This is part of the Area Completion Protocol and cannot be skipped.
 
-The spec-review decides whether a full review is needed or returns "No review needed" (with APPROVE verdict) for simple cases. Either way, the verdict MUST be handled according to the Verdict-Based Flow Control.
+The spec-reviewer decides whether a full review is needed or returns "No review needed" (with APPROVE verdict) for simple cases. Either way, the verdict MUST be handled according to the Verdict-Based Flow Control.
 
 ### Feedback Loop Workflow
 
@@ -435,7 +435,7 @@ digraph feedback_loop {
     present_feedback [label="Present feedback to user\n(context + recommendation)"];
     user_consensus [label="User reviews & agrees\non changes", shape=diamond, style="rounded,filled", fillcolor="#ccffcc"];
     incorporate [label="Apply changes\nUpdate design.md\nRecord decisions in records/"];
-    re_delegate [label="Re-delegate to spec-review"];
+    re_delegate [label="Re-delegate to spec-reviewer"];
 
     comment [label="COMMENT"];
     share_comment [label="Share COMMENT with user\n(create follow-up if needed)"];
@@ -463,18 +463,18 @@ digraph feedback_loop {
 
 ### Human-in-the-Loop
 
-The final decision on feedback is always made by the **user**, but spec-review pass (APPROVE or COMMENT) is a prerequisite for Area completion.
+The final decision on feedback is always made by the **user**, but spec-reviewer pass (APPROVE or COMMENT) is a prerequisite for Area completion.
 
 | Item | Description |
 |------|-------------|
-| spec-review Role | Quality gate — pass (APPROVE or COMMENT) required before Area can complete |
+| spec-reviewer Role | Quality gate — pass (APPROVE or COMMENT) required before Area can complete |
 | AI (spec) Role | Present feedback, form recommendation, facilitate consensus |
 | User Role | Review feedback, agree on changes, declare "Area complete" after pass |
-| Gate Order | spec-review pass first → then user "Area complete" declaration |
+| Gate Order | spec-reviewer pass first → then user "Area complete" declaration |
 
-### Delegating to spec-review
+### Delegating to spec-reviewer
 
-After completing all Steps in an Area, always delegate to the spec-review agent via Task tool. The spec-review will assess whether a full review is needed and return a verdict.
+After completing all Steps in an Area, always delegate to the `spec-reviewer` subagent via the Agent tool: `Agent(subagent_type="spec-reviewer", prompt=<delegation prompt below>)`. Do NOT invoke `Skill(skill: "spec-review")` directly from the main context — the `spec-review` skill is auto-injected into the subagent's isolated context via `agents/spec-reviewer.md` frontmatter (`skills: spec-review`). Calling the skill from main pollutes main with Chairman orchestration logic and bypasses isolation. The subagent assesses whether a full review is needed and returns a verdict.
 
 **Delegation prompt structure:**
 
@@ -529,34 +529,34 @@ Purpose: stateless reviewers have no memory of prior rounds. Without this sectio
 - **Verdict**: APPROVE
 - **Reason**: Brief explanation (e.g., "Simple CRUD with clear requirements")
 
-The spec-review operates in a separate context and returns advisory feedback with a verdict. You must then handle the verdict accordingly and present it to the user.
+The spec-reviewer operates in a separate context and returns advisory feedback with a verdict. You must then handle the verdict accordingly and present it to the user.
 
 ### Presenting Feedback to User
 
-After receiving spec-review feedback, YOU must:
+After receiving spec-reviewer feedback, YOU must:
 
 1. **State the verdict** - APPROVE, REQUEST_CHANGES, or COMMENT — make it explicit
 2. **Analyze the feedback** - What do you agree with? What seems overblown?
 3. **Add context** - How does this relate to earlier decisions? What trade-offs exist?
 4. **Form your recommendation** - What do YOU think the user should do? Frame recommendations as options with trade-offs, not as the single right answer.
 5. **Present holistically** - Do not just dump reviewer output. Synthesize it.
-6. **All sections mandatory** - Present every section spec-review returns (Consensus, Divergence, Concerns, Recommendation, Verdict). No section omission.
+6. **All sections mandatory** - Present every section spec-reviewer returns (Consensus, Divergence, Concerns, Recommendation, Verdict). No section omission.
 
 **Verdict-specific presentation:**
 
 | Verdict | Presentation |
 |---------|-------------|
-| **APPROVE** | "spec-review APPROVE. [Brief summary]. Proceed to next Area?" |
-| **REQUEST_CHANGES** | "spec-review REQUEST_CHANGES. [Summary of blocking concerns + recommendations]. How about making the following changes? [Specific change proposals]" |
-| **COMMENT** | "spec-review COMMENT. [Summary of non-blocking improvement recommendations]. I'll proceed with these in mind. [Follow-up created if needed]" |
+| **APPROVE** | "spec-reviewer APPROVE. [Brief summary]. Proceed to next Area?" |
+| **REQUEST_CHANGES** | "spec-reviewer REQUEST_CHANGES. [Summary of blocking concerns + recommendations]. How about making the following changes? [Specific change proposals]" |
+| **COMMENT** | "spec-reviewer COMMENT. [Summary of non-blocking improvement recommendations]. I'll proceed with these in mind. [Follow-up created if needed]" |
 
 **Example (REQUEST_CHANGES):**
 
-> "spec-review **REQUEST_CHANGES**. Reviewers raised a blocking concern about the event-sourcing approach for order state management. The main points were the team's limited ES experience and concerns about complexity. However, since the need for a full audit trail was confirmed in Solution Design, I propose keeping event-sourcing while adding a detailed implementation guide to the spec. Do you agree with this direction?"
+> "spec-reviewer **REQUEST_CHANGES**. Reviewers raised a blocking concern about the event-sourcing approach for order state management. The main points were the team's limited ES experience and concerns about complexity. However, since the need for a full audit trail was confirmed in Solution Design, I propose keeping event-sourcing while adding a detailed implementation guide to the spec. Do you agree with this direction?"
 
 ### Feedback Consensus Protocol
 
-**IRON RULE: When spec-review returns REQUEST_CHANGES: ZERO EDITS to any design document before user consensus. Present → Discuss → Agree → THEN edit. Violating this rule — editing design.md, requirements, or any spec artifact based on reviewer feedback without user agreement — is forbidden.**
+**IRON RULE: When spec-reviewer returns REQUEST_CHANGES: ZERO EDITS to any design document before user consensus. Present → Discuss → Agree → THEN edit. Violating this rule — editing design.md, requirements, or any spec artifact based on reviewer feedback without user agreement — is forbidden.**
 
 For each blocking concern, present it using this per-concern format:
 
@@ -577,19 +577,19 @@ After all concerns have been discussed with the user:
 | Verdict | User Interaction | Next Action |
 |---------|-----------------|-------------|
 | **APPROVE** | Ask "Proceed to next Area?" | User declares "Area complete" → Next Area |
-| **REQUEST_CHANGES** | Present blocking concerns + change proposals | User agrees → Apply changes → Re-call spec-review |
+| **REQUEST_CHANGES** | Present blocking concerns + change proposals | User agrees → Apply changes → Re-call spec-reviewer |
 | **COMMENT** | Share non-blocking improvement recommendations | User confirms → Follow-up may be created → Ask "Proceed to next Area?" |
 
 **REQUEST_CHANGES Loop:**
 1. Present blocking concerns and recommended changes to user
 2. User reviews and agrees on specific changes (user may modify recommendations)
 3. Apply agreed changes to design.md, record decisions in `records/`
-4. Re-delegate to spec-review
+4. Re-delegate to spec-reviewer
 5. Repeat until pass received
 
 > **Note:** Deliberate trade-offs against previous review findings are now documented in the `## 3. Deliberate Divergence` section of the re-delegation prompt (see above). This mechanism is mandatory on re-submission — not optional.
 
-**CRITICAL: Area completion cannot be declared unless spec-review passes (APPROVE or COMMENT).** Even if the user declares "Area complete" while a REQUEST_CHANGES verdict is in effect, the Area cannot be completed until a pass is received.
+**CRITICAL: Area completion cannot be declared unless spec-reviewer passes (APPROVE or COMMENT).** Even if the user declares "Area complete" while a REQUEST_CHANGES verdict is in effect, the Area cannot be completed until a pass is received.
 
 ---
 

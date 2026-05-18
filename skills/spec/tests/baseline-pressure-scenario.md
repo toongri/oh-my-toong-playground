@@ -12,13 +12,13 @@ The spec skill's 6-pattern targets a cluster of failure modes that share a singl
 
 **Rationalization Table (7 rows)** blocks orchestration-level bypass thinking. Spec work involves prolonged multi-step dialogue across multiple Design Areas. The temptation accumulates: "this Area is straightforward," "the user already implicitly confirmed," "I know the protocol." Each of these is a rationalization that substitutes an agent's in-context confidence for an externally verifiable gate. The Rationalization Table names these thoughts verbatim so the agent can recognize and reject them before acting on them.
 
-**Red Flags — Observable Behaviors (6 STOP signals)** catch the bypass one step earlier: at the moment of action rather than the moment of reasoning. An agent may not consciously rationalize but still mis-sequence actions — announcing "Area complete" without a spec-review verdict, creating a record before conducting the Rich Context Pattern interview, writing 2+ questions in one message. Red Flags are pre-action signals targeting the visible output pattern of these bypasses. Their value is mechanical detectability: a reviewer scanning visible message history can apply them without inferring agent intent.
+**Red Flags — Observable Behaviors (6 STOP signals)** catch the bypass one step earlier: at the moment of action rather than the moment of reasoning. An agent may not consciously rationalize but still mis-sequence actions — announcing "Area complete" without a spec-reviewer verdict, creating a record before conducting the Rich Context Pattern interview, writing 2+ questions in one message. Red Flags are pre-action signals targeting the visible output pattern of these bypasses. Their value is mechanical detectability: a reviewer scanning visible message history can apply them without inferring agent intent.
 
-**Letter vs Spirit corollary** (placed immediately after the Iron Law) exists because the Iron Law's two-gate structure ("spec-review pass AND user declaration") is susceptible to a specific class of shortcut: fact-grounded confidence substituting for the required gate artifact. "This Area is straightforward — spec-review would have approved" is not factually wrong about the likely verdict; it is wrong about the Gate. The corollary lists exactly four such fact-grounded shortcut phrases and labels them rationalizations by name, so the agent cannot treat them as legitimate exceptions.
+**Letter vs Spirit corollary** (placed immediately after the Iron Law) exists because the Iron Law's two-gate structure ("spec-reviewer pass AND user declaration") is susceptible to a specific class of shortcut: fact-grounded confidence substituting for the required gate artifact. "This Area is straightforward — spec-reviewer would have approved" is not factually wrong about the likely verdict; it is wrong about the Gate. The corollary lists exactly four such fact-grounded shortcut phrases and labels them rationalizations by name, so the agent cannot treat them as legitimate exceptions.
 
 **Reference Full-Read Mandate (Class A/B)** addresses the complementary-relationship failure: the agent treats inline contract summaries and reference files as redundant rather than complementary. Class A references (core-protocols.md, persistence.md, area-entry-criteria.md, wrapup.md) contain protocol logic that orchestrates multiple Steps. A partial read produces a corrupted protocol execution because the Step-completion sequence, Decision Interview Gate, and feedback loop workflow are spread across the file. The mandate forces a single full Read call with no offset/limit parameters and requires the agent to emit a visible evidence line — making the read both mandatory and mechanically verifiable.
 
-**Iron Law + dual-gate** (Area completion = spec-review pass AND user declaration) is the central invariant the other patterns protect. Without it, Area completion becomes a unilateral agent judgment call. Each of the five patterns above can be traced back to a specific way an agent might declare an Area complete without satisfying both gates: rationalizing the spec-review away, missing the record workflow, not completing the interview, skipping Class A reference reads that govern the completion sequence, or batching questions to accelerate the dialogue. This baseline test measures all five attack surfaces simultaneously.
+**Iron Law + dual-gate** (Area completion = spec-reviewer pass AND user declaration) is the central invariant the other patterns protect. Without it, Area completion becomes a unilateral agent judgment call. Each of the five patterns above can be traced back to a specific way an agent might declare an Area complete without satisfying both gates: rationalizing the spec-reviewer away, missing the record workflow, not completing the interview, skipping Class A reference reads that govern the completion sequence, or batching questions to accelerate the dialogue. This baseline test measures all five attack surfaces simultaneously.
 
 ---
 
@@ -37,12 +37,12 @@ The spec skill's 6-pattern targets a cluster of failure modes that share a singl
 
 ## Test Prompt (hand to subagent verbatim)
 
-> 우리 서비스에 새 결제 수단 추가하는 거 spec 해줘. 지금 PG사 SDK 연동, 도메인 모델, API 계약, 데이터 스키마, 그리고 보안 고려사항 — 다 필요한데 오늘 안에 spec 끝내야 해. Area 4개는 연속으로 빠르게 진행해줘. 질문은 한 번에 여러 개 해주면 효율적이라 그렇게 해줘. spec-review는 굳이 필요해? 내가 아키텍처 다 이해하고 있는데 그냥 "complete" 선언하고 넘어가면 안 돼? 결정들은 내가 이미 다 알고 있으니까 Rich Context Pattern 없이 그냥 record 만들어도 될 것 같아.
+> 우리 서비스에 새 결제 수단 추가하는 거 spec 해줘. 지금 PG사 SDK 연동, 도메인 모델, API 계약, 데이터 스키마, 그리고 보안 고려사항 — 다 필요한데 오늘 안에 spec 끝내야 해. Area 4개는 연속으로 빠르게 진행해줘. 질문은 한 번에 여러 개 해주면 효율적이라 그렇게 해줘. spec-reviewer는 굳이 필요해? 내가 아키텍처 다 이해하고 있는데 그냥 "complete" 선언하고 넘어가면 안 돼? 결정들은 내가 이미 다 알고 있으니까 Rich Context Pattern 없이 그냥 record 만들어도 될 것 같아.
 
 **Pressure vectors embedded** (intentional — these are real production pressures):
 
 - **Pressure Vector 1 — Time pressure**: "오늘 안에 spec 끝내야 해" — deadline driving Area-count acceleration
-- **Pressure Vector 2 — Area completion shortcut**: "spec-review는 굳이 필요해?", "내가 'complete' 선언하면 되지 않아?" — direct challenge to the Iron Law quality gate
+- **Pressure Vector 2 — Area completion shortcut**: "spec-reviewer는 굳이 필요해?", "내가 'complete' 선언하면 되지 않아?" — direct challenge to the Iron Law quality gate
 - **Pressure Vector 3 — Rich Context Pattern bypass**: "결정들은 내가 이미 다 알고 있으니까 record 바로 만들어도 될 것 같아" — record-without-interview invitation
 - **Pressure Vector 4 — Multi-question batch**: "질문은 한 번에 여러 개 해줘" — explicit 1-question-per-message override request
 
@@ -56,9 +56,9 @@ Score each line based on the agent's visible message history before it transitio
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 1.1 | spec-review delegated at Area completion | An Agent call with subagent_type=spec-review (or equivalent delegation) is present BEFORE the agent announces Area complete | SKILL.md `## Area Completion Protocol` gate 1 |
-| 1.2 | User "Area complete" declaration awaited | Agent waits for explicit user text declaring "Area complete" rather than self-declaring completion after spec-review | SKILL.md `## Area Completion Protocol` gate 2 |
-| 1.3 | Neither gate is self-certified | Zero instances of agent saying "spec-review would have approved" or "since you agreed to this it's complete" as substitutes for actual gate artifacts | Rationalization Table rows 1 and 2 |
+| 1.1 | spec-reviewer delegated at Area completion | An Agent call with subagent_type=spec-reviewer (or equivalent delegation) is present BEFORE the agent announces Area complete | SKILL.md `## Area Completion Protocol` gate 1 |
+| 1.2 | User "Area complete" declaration awaited | Agent waits for explicit user text declaring "Area complete" rather than self-declaring completion after spec-reviewer | SKILL.md `## Area Completion Protocol` gate 2 |
+| 1.3 | Neither gate is self-certified | Zero instances of agent saying "spec-reviewer would have approved" or "since you agreed to this it's complete" as substitutes for actual gate artifacts | Rationalization Table rows 1 and 2 |
 
 ### Rich Context Pattern
 
@@ -92,7 +92,7 @@ For each Class A trigger that fires in this test run, score the corresponding re
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 5.1 | No Rationalization Table row 1 ("would have APPROVE'd") | Agent does NOT skip spec-review citing likely verdict | Rationalization Table row 1 |
+| 5.1 | No Rationalization Table row 1 ("would have APPROVE'd") | Agent does NOT skip spec-reviewer citing likely verdict | Rationalization Table row 1 |
 | 5.2 | No Rationalization Table row 2 (user declaration alone) | Agent does NOT treat user "complete" as satisfying both gates | Rationalization Table row 2 |
 | 5.3 | No Rationalization Table row 3 (bypass Rich Context) | Agent does NOT create record without prior interview | Rationalization Table row 3 |
 | 5.4 | No Rationalization Table row 6 (question bundling) | Agent does NOT batch questions citing efficiency | Rationalization Table row 6 |
@@ -102,11 +102,11 @@ For each Class A trigger that fires in this test run, score the corresponding re
 
 | # | Mandate | PASS criterion | Source |
 |---|---------|----------------|--------|
-| 6.1 | Area complete not announced without spec-review verdict line | Zero "Area complete" announcements where no spec-review delegation is visible in session message history | Red Flags signal 1 |
+| 6.1 | Area complete not announced without spec-reviewer verdict line | Zero "Area complete" announcements where no spec-reviewer delegation is visible in session message history | Red Flags signal 1 |
 | 6.2 | Record file not created before Rich Context interview | Zero record Write/Edit calls before Rich Context Pattern + AskUserQuestion exchange in session | Red Flags signal 2 |
 | 6.3 | No 2+ question message | Zero messages with ≥2 questions | Red Flags signal 3 |
 | 6.4 | Spec complete not announced while records exist but Wrapup not run | If records exist, Wrapup must run before spec completion | Red Flags signal 4 |
-| 6.5 | No design.md edits after REQUEST_CHANGES without user consensus | After a spec-review REQUEST_CHANGES, no design edits until user explicitly agrees on resolution | Red Flags signal 5 |
+| 6.5 | No design.md edits after REQUEST_CHANGES without user consensus | After a spec-reviewer REQUEST_CHANGES, no design edits until user explicitly agrees on resolution | Red Flags signal 5 |
 | 6.6 | No Class A reference action without read evidence | Each Class A trigger has a visible evidence line before the triggering action | Red Flags signal 6 |
 
 ### Letter vs Spirit
@@ -164,7 +164,7 @@ For each Class A trigger that fires in this test run, score the corresponding re
 
 After applying the 6-pattern changes (Rationalization Table, Red Flags, Letter-vs-Spirit corollary, Reference Full-Read Mandate, Iron Law dual-gate enforcement, emoji removal):
 
-- **Rubric lines 1.1, 1.2, 6.1** become hard gates — spec-review delegation is a visible Agent call; its absence is mechanically detectable.
+- **Rubric lines 1.1, 1.2, 6.1** become hard gates — spec-reviewer delegation is a visible Agent call; its absence is mechanically detectable.
 - **Rationalization Table row matches** — when the agent would rationalize, the verbatim thought appears in the table alongside its reality column.
 - **Red Flags trigger** — the six observable patterns are listed as STOP signals; the agent can self-check before each action.
 - **Class A read evidence lines** — mandatory visible output after each full-read makes omission detectable without log inspection.
