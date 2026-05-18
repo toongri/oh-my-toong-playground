@@ -35,6 +35,9 @@ import {
   parseYamlSimple as _parseYamlSimple,
 } from '@lib/generic-job';
 
+import { pickDriver, type CliType } from '@lib/agent-drivers/types';
+import { resumeOneTurn, type RunOneTurnOpts, type OneTurnResult } from '@lib/worker-utils';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -381,6 +384,76 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 }
 
 // ---------------------------------------------------------------------------
+// resume-member
+// ---------------------------------------------------------------------------
+
+type ResumeMemberOpts = {
+  driverFactory?: (cliType: string) => ReturnType<typeof pickDriver>;
+  resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
+};
+
+export async function cmdResumeMember(
+  jobDir: string,
+  name: string,
+  prompt: string,
+  opts: ResumeMemberOpts = {},
+): Promise<void> {
+  const memberDir = path.join(jobDir, 'members', name);
+  const statusPath = path.join(memberDir, 'status.json');
+
+  // Read status.json
+  let status: Record<string, unknown>;
+  try {
+    status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    throw new Error('no resumable session');
+  }
+
+  // Check sessionID
+  const sessionID = status.sessionID;
+  if (!sessionID) throw new Error('no resumable session');
+
+  // State check
+  const state = String(status.state ?? '');
+  if (state === 'error' || state === 'non_retryable') {
+    throw new Error(`member in non-resumable state: ${state}`);
+  }
+
+  // Cap check
+  const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
+  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
+
+  // Derive cliType
+  const command = status.command;
+  const cliType = detectCliType(command);
+  if (cliType === 'unknown') throw new Error('unknown cli type');
+
+  // Driver lookup
+  const driverFactory = opts.driverFactory ?? pickDriver;
+  const driver = driverFactory(cliType as CliType);
+  if (!driver) throw new Error(`no driver for ${cliType}`);
+
+  // Invoke resumeOneTurn
+  const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
+  await resumeFn(String(sessionID), {
+    program: cliType,
+    args: [],
+    prompt,
+    member: name,
+    memberDir,
+    command: String(command ?? ''),
+    timeoutSec: 300,
+    cliType: cliType as RunOneTurnOpts['cliType'],
+    driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
+  });
+
+  // Atomic status.json update: resume_count += 1
+  const current = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+  const existingCount = typeof current.resume_count === 'number' ? current.resume_count : 0;
+  atomicWriteJson(statusPath, { ...current, resume_count: existingCount + 1 });
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -439,6 +512,20 @@ async function main(): Promise<void> {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('clean: missing jobDir');
     cmdClean(options, jobDir);
+    return;
+  }
+  if (command === 'resume-member') {
+    const jobDirArg = options.job as string | undefined;
+    if (!jobDirArg) exitWithError('--job required');
+    const nameArg = options.member as string | undefined;
+    if (!nameArg) exitWithError('--member required');
+    const promptArg = options.prompt as string | undefined;
+    if (!promptArg) exitWithError('--prompt required');
+    try {
+      await cmdResumeMember(jobDirArg, nameArg, promptArg);
+    } catch (e: unknown) {
+      exitWithError(e instanceof Error ? e.message : String(e));
+    }
     return;
   }
 
