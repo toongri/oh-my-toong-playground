@@ -773,6 +773,157 @@ describe('runOneTurn / resumeOneTurn — caller-judgment single-turn pump', () =
   });
 });
 
+// ---------------------------------------------------------------------------
+// executeOneTurn state/message/workerEnv regression tests
+// ---------------------------------------------------------------------------
+
+function makeFlexibleMockRunOnce(rawStdout: string, runResult: Record<string, unknown>) {
+  return async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+    writeFileSync(join(opts.memberDir, 'output.txt'), rawStdout);
+    writeFileSync(join(opts.memberDir, 'error.txt'), '');
+    return { member: opts.member, command: opts.command, attempt: 0, ...runResult };
+  };
+}
+
+describe('executeOneTurn state/message/workerEnv regression', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'execute-one-turn-reg-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // T1-1: timed_out state preserved when driver returns non-error terminal and exitCode===null
+  test('timed_out state preserved in status.json when exitCode is null', async () => {
+    const memberDir = join(tmpDir, 'timed-out');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'sX', terminal: 'stop', text: 'partial', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', {
+      state: 'timed_out',
+      message: 'Timed out after 600s',
+      finishedAt: '2026-01-01T00:00:00.000Z',
+      exitCode: null,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('timed_out');
+    expect(status.message).toBe('Timed out after 600s');
+    expect(status.exitCode).toBe(null);
+  });
+
+  // T1-2: missing_cli state preserved when driver returns non-null parsed result and exitCode===null
+  test('missing_cli state preserved in status.json when exitCode is null', async () => {
+    const memberDir = join(tmpDir, 'missing-cli');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: null, terminal: 'stop', text: '', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'missing_cli',
+      message: 'spawn claude ENOENT',
+      exitCode: null,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('missing_cli');
+    expect(status.message).toBe('spawn claude ENOENT');
+  });
+
+  // T1-3: canceled state preserved when driver returns non-null parsed result and exitCode===null
+  test('canceled state preserved in status.json when exitCode is null', async () => {
+    const memberDir = join(tmpDir, 'canceled');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: null, terminal: 'stop', text: '', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'canceled',
+      message: 'Canceled',
+      exitCode: null,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('canceled');
+    expect(status.message).toBe('Canceled');
+  });
+
+  // T1-4: builtCmd.env saved as workerEnv in status.json
+  test('workerEnv from initialCommand env is saved in status.json', async () => {
+    const memberDir = join(tmpDir, 'worker-env');
+    mkdirSync(memberDir, { recursive: true });
+
+    const expectedEnv = { CLAUDECODE: '', CLAUDE_CODE_EFFORT_LEVEL: 'low', FOO: 'bar' };
+    // Driver.initialCommand returns the expectedEnv — this becomes builtCmd.env
+    const mockDriver: AgentDriver & { spy: { calls: any[][] } } = {
+      cli: 'claude',
+      parseStdout: (_stdout: string) => ({ sessionID: 'ses_env', terminal: 'stop', text: 'body', rawEvents: [] }),
+      initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: expectedEnv }),
+      resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+      spy: { calls: [] },
+    };
+    const mockRunOnce = makeFlexibleMockRunOnce('body', {
+      state: 'done',
+      exitCode: 0,
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      cliType: 'claude',
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.workerEnv).toEqual(expectedEnv);
+  });
+
+  // T1-5: message is explicitly null (not undefined) when runOnce returns no message
+  test('message field is null (not undefined) when runOnce provides no message', async () => {
+    const memberDir = join(tmpDir, 'null-message');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_nm', terminal: 'stop', text: 'body', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('body', {
+      state: 'done',
+      exitCode: 0,
+      // no message field
+    });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    // JSON.parse of null gives null, undefined key gives undefined — must be null
+    expect(status.message).toBe(null);
+  });
+});
+
 describe('runOneTurn real-spawn integration', () => {
   let tmpDir: string;
 

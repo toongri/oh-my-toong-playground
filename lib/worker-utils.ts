@@ -425,7 +425,9 @@ async function executeOneTurn(
     if (parsed.terminal === 'error') {
       state = 'non_retryable';
     } else {
-      state = exitCode === 0 ? runResult.state as string ?? 'done' : 'error';
+      // Preserve concrete process-level state from runOnce (missing_cli/timed_out/canceled);
+      // only fall to 'error' if runOnce reported a generic non-zero exit without a specific state.
+      state = (runResult.state as string) ?? (exitCode === 0 ? 'done' : 'error');
     }
     sessionID = parsed.sessionID;
     text = parsed.text;
@@ -442,6 +444,7 @@ async function executeOneTurn(
     text = rawStdout;
   }
 
+  const runResultRecord = runResult as Record<string, unknown>;
   atomicWriteJson(path.join(memberDir, 'status.json'), {
     member,
     state,
@@ -449,6 +452,9 @@ async function executeOneTurn(
     resume_count: existingResumeCount,
     exitCode,
     command,
+    message: runResultRecord.message ?? null,
+    finishedAt: runResultRecord.finishedAt ?? new Date().toISOString(),
+    workerEnv: builtCmd.env,
   });
 
   return { state, sessionID, text, exitCode };

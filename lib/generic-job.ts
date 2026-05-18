@@ -896,8 +896,18 @@ export async function cmdResumeMember(
     throw new Error(`member in non-resumable state: ${state}`);
   }
 
-  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn to prevent
-  // concurrent cap bypass. executeOneTurn preserves resume_count via read-then-write.
+  // Restore workerEnv saved by executeOneTurn (P1-4: preserve cross-CLI env contract across resume).
+  const storedWorkerEnv =
+    status.workerEnv && typeof status.workerEnv === 'object' && status.workerEnv !== null
+      ? (status.workerEnv as Record<string, string>)
+      : {};
+
+  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
+  // sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
+  // single-write atomicity, NOT read-check-write atomicity — true concurrent invocations
+  // can still race past the cap. The single-developer / chairman-driven flow is
+  // effectively sequential, so the cap holds in practice. executeOneTurn preserves
+  // resume_count via read-then-write (line 449 of worker-utils.ts).
   const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
   if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
   atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
@@ -939,6 +949,7 @@ export async function cmdResumeMember(
     command: cmdStr,
     timeoutSec,
     cliType: cliType as RunOneTurnOpts['cliType'],
+    workerEnv: storedWorkerEnv,
     driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
     runOnceFn: opts.runOnceFn,
   });
