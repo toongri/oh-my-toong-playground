@@ -20,6 +20,7 @@ import {
   cmdStop as frameworkCmdStop,
   cmdClean as frameworkCmdClean,
   cmdCollect as frameworkCmdCollect,
+  cmdResumeMember,
   gcStaleJobs,
   parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
@@ -72,6 +73,7 @@ Usage:
   job.ts results [--json] <jobDir>
   job.ts stop <jobDir>
   job.ts clean <jobDir>
+  job.ts resume-member <jobDir> <memberName> "follow-up prompt"
 `);
 }
 
@@ -90,7 +92,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   const config = frameworkParseYamlSimple(configPath, {
     review: {
       members: [
-        { name: 'hephaestus', command: 'opencode run --format default --agent "Hephaestus - Deep Agent"', emoji: '🔨', color: 'BLUE' },
+        { name: 'hephaestus', command: 'opencode run --agent "Hephaestus - Deep Agent"', emoji: '🔨', color: 'BLUE', output_format: 'json' },
       ],
       settings: { timeout: 600 },
     },
@@ -201,6 +203,16 @@ async function main() {
       || process.env.DIAGNOSE_JOBS_DIR
       || path.join(getOmtDir(), 'jobs');
     frameworkCmdClean(options, jobDir, DIAGNOSE_CONFIG, defaultJobsDir);
+    return;
+  }
+  if (command === 'resume-member') {
+    const jobDirArg = rest[0];
+    const nameArg = rest[1];
+    const promptArg = rest.slice(2).join(' ');
+    if (!jobDirArg) exitWithError('resume-member: missing jobDir');
+    if (!nameArg) exitWithError('resume-member: missing member name');
+    if (!promptArg) exitWithError('resume-member: missing prompt');
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, DIAGNOSE_CONFIG);
     return;
   }
 

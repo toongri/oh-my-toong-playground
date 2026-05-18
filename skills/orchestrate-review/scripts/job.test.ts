@@ -1672,6 +1672,7 @@ describe('resume-member', () => {
       jobDir: string,
       name: string,
       prompt: string,
+      config: { entityDirName: string; [key: string]: unknown },
       opts?: {
         driverFactory?: (cliType: string) => unknown;
         resumeOneTurnFn?: typeof makeResumeStub extends () => infer R ? R : never;
@@ -1679,11 +1680,20 @@ describe('resume-member', () => {
     ) => Promise<void>;
   }
 
+  const ORCHESTRATE_REVIEW_CONFIG = {
+    entitySingular: 'member',
+    entityPlural: 'members',
+    entityDirName: 'members',
+    jobPrefix: 'chunk-review-',
+    uiLabel: '[Chunk Review]',
+    configTopLevelKey: 'chunk-review',
+  };
+
   test('resume-member D1a sub-command exits 0 sessionID present', async () => {
     const cmdResumeMember = await getCmdResumeMember();
     // Should not throw — sessionID present, state not error/non_retryable, count < 3
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry this', {
+      cmdResumeMember(jobDir, 'opencode', 'retry this', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })
@@ -1692,7 +1702,7 @@ describe('resume-member', () => {
 
   test('resume-member D1b persists resume_count 1 after D1a', async () => {
     const cmdResumeMember = await getCmdResumeMember();
-    await cmdResumeMember(jobDir, 'opencode', 'retry this', {
+    await cmdResumeMember(jobDir, 'opencode', 'retry this', ORCHESTRATE_REVIEW_CONFIG, {
       driverFactory: mockDriverFactory as any,
       resumeOneTurnFn: makeResumeStub() as any,
     });
@@ -1711,7 +1721,7 @@ describe('resume-member', () => {
     });
     const cmdResumeMember = await getCmdResumeMember();
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry', {
+      cmdResumeMember(jobDir, 'opencode', 'retry', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })
@@ -1728,7 +1738,7 @@ describe('resume-member', () => {
     });
     const cmdResumeMember = await getCmdResumeMember();
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry', {
+      cmdResumeMember(jobDir, 'opencode', 'retry', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })
@@ -1738,7 +1748,7 @@ describe('resume-member', () => {
   test('resume-member D4 sequential 3 calls final resume_count 3', async () => {
     const cmdResumeMember = await getCmdResumeMember();
     for (let i = 0; i < 3; i++) {
-      await cmdResumeMember(jobDir, 'opencode', `retry ${i}`, {
+      await cmdResumeMember(jobDir, 'opencode', `retry ${i}`, ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       });
@@ -1747,7 +1757,7 @@ describe('resume-member', () => {
     expect(status.resume_count).toBe(3);
     // 4th call must fail
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry 4', {
+      cmdResumeMember(jobDir, 'opencode', 'retry 4', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })
@@ -1761,7 +1771,7 @@ describe('resume-member', () => {
       calls.push(cliType);
       return mockDriverFactory(cliType);
     };
-    await cmdResumeMember(jobDir, 'opencode', 'retry', {
+    await cmdResumeMember(jobDir, 'opencode', 'retry', ORCHESTRATE_REVIEW_CONFIG, {
       driverFactory: trackingFactory as any,
       resumeOneTurnFn: makeResumeStub() as any,
     });
@@ -1826,7 +1836,7 @@ describe('resume-member', () => {
     });
     const cmdResumeMember = await getCmdResumeMember();
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry', {
+      cmdResumeMember(jobDir, 'opencode', 'retry', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })
@@ -1843,7 +1853,7 @@ describe('resume-member', () => {
     });
     const cmdResumeMember = await getCmdResumeMember();
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry', {
+      cmdResumeMember(jobDir, 'opencode', 'retry', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })
@@ -1854,11 +1864,11 @@ describe('resume-member', () => {
     // Simulate concurrent writes: two calls run sequentially (sequential assumption).
     // After both, status.json must remain valid JSON.
     const cmdResumeMember = await getCmdResumeMember();
-    await cmdResumeMember(jobDir, 'opencode', 'first', {
+    await cmdResumeMember(jobDir, 'opencode', 'first', ORCHESTRATE_REVIEW_CONFIG, {
       driverFactory: mockDriverFactory as any,
       resumeOneTurnFn: makeResumeStub() as any,
     });
-    await cmdResumeMember(jobDir, 'opencode', 'second', {
+    await cmdResumeMember(jobDir, 'opencode', 'second', ORCHESTRATE_REVIEW_CONFIG, {
       driverFactory: mockDriverFactory as any,
       resumeOneTurnFn: makeResumeStub() as any,
     });
@@ -1879,7 +1889,7 @@ describe('resume-member', () => {
     });
     const cmdResumeMember = await getCmdResumeMember();
     await expect(
-      cmdResumeMember(jobDir, 'opencode', 'retry', {
+      cmdResumeMember(jobDir, 'opencode', 'retry', ORCHESTRATE_REVIEW_CONFIG, {
         driverFactory: mockDriverFactory as any,
         resumeOneTurnFn: makeResumeStub() as any,
       })

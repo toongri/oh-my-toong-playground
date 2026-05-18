@@ -180,3 +180,44 @@ describe('diagnose job lifecycle', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
   });
 });
+
+describe('resume-member subcommand', () => {
+  test('resume-member without jobDir exits with error', () => {
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing jobDir');
+  });
+
+  test('resume-member without member name exits with error', () => {
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/fake-job'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing member name');
+  });
+
+  test('resume-member without prompt exits with error', () => {
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/fake-job', 'hephaestus'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing prompt');
+  });
+});
