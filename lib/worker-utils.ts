@@ -759,3 +759,151 @@ export async function runMultiTurn(opts: RunMultiTurnOpts): Promise<Record<strin
   // Unreachable
   return { state: 'error', message: 'pump loop exited unexpectedly' };
 }
+
+// ---------------------------------------------------------------------------
+// runOneTurn / resumeOneTurn — caller-judgment single-turn pump (TODO 1)
+// ---------------------------------------------------------------------------
+
+export interface RunOneTurnOpts {
+  program: string;
+  args: string[];
+  prompt: string;
+  member: string;
+  memberDir: string;
+  command: string;
+  timeoutSec: number;
+  cliType: CliType;
+  workerEnv?: Record<string, string>;
+  /** Test-only: override driver factory. */
+  driverFactory?: (cliType: CliType) => AgentDriver | null;
+  /** Test-only: override runOnce. */
+  runOnceFn?: typeof runOnce;
+}
+
+export interface OneTurnResult {
+  state: string;
+  sessionID: string | null;
+  text: string;
+  exitCode: number | null;
+}
+
+/**
+ * Internal: run one CLI turn and finalize output.txt + status.json.
+ * @param builtCmd - pre-built {program, args, env} from the driver (or raw opts for runOneTurn)
+ * @param opts - RunOneTurnOpts (memberDir, member, command, etc.)
+ * @param runOnceFn - injectable for tests
+ */
+async function executeOneTurn(
+  builtCmd: { program: string; args: string[]; env: Record<string, string> },
+  opts: RunOneTurnOpts,
+  driverInstance: AgentDriver | null,
+  runOnceFn: typeof runOnce,
+): Promise<OneTurnResult> {
+  const { memberDir, member, command } = opts;
+
+  // Read existing status.json to preserve resume_count (legacy files may not have it)
+  let existingResumeCount = 0;
+  try {
+    const existing = JSON.parse(fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8')) as Record<string, unknown>;
+    existingResumeCount = typeof existing.resume_count === 'number' ? existing.resume_count : 0;
+  } catch { /* absent or invalid → default 0 */ }
+
+  const runResult = await runOnceFn({
+    program: builtCmd.program,
+    args: builtCmd.args,
+    prompt: opts.prompt,
+    member,
+    memberDir,
+    command,
+    timeoutSec: opts.timeoutSec,
+    attempt: 0,
+    workerEnv: { ...builtCmd.env },
+  });
+
+  const exitCode = typeof runResult.exitCode === 'number' ? runResult.exitCode : null;
+
+  // Read raw stdout that runOnce wrote to output.txt
+  const outputPath = path.join(memberDir, 'output.txt');
+  let rawStdout = '';
+  try { rawStdout = fs.readFileSync(outputPath, 'utf8'); } catch { /* absent → empty */ }
+
+  // Parse stdout via driver
+  const parsed = driverInstance ? driverInstance.parseStdout(rawStdout) : null;
+
+  let state: string;
+  let sessionID: string | null;
+  let text: string;
+
+  if (parsed) {
+    // Successful parse: state from exit code, text from parsed
+    state = exitCode === 0 ? runResult.state as string ?? 'done' : 'error';
+    sessionID = parsed.sessionID;
+    text = parsed.text;
+    // Overwrite output.txt with parsed text (single overwrite, never append)
+    fs.writeFileSync(outputPath, parsed.text, 'utf8');
+  } else {
+    // Parse failure: state='error', output.txt stays as raw stdout
+    state = 'error';
+    sessionID = null;
+    text = rawStdout;
+    // output.txt already contains rawStdout (written by runOnceFn) — no overwrite needed
+  }
+
+  // Atomic status.json write with sessionID + resume_count
+  atomicWriteJson(path.join(memberDir, 'status.json'), {
+    member,
+    state,
+    sessionID,
+    resume_count: existingResumeCount,
+    exitCode,
+    command,
+  });
+
+  return { state, sessionID, text, exitCode };
+}
+
+/**
+ * Run a single CLI turn (initial invocation).
+ * Resolves driver via pickDriver(cliType), calls runOnce, parses stdout,
+ * overwrites output.txt with parsed text, atomically writes status.json.
+ */
+export async function runOneTurn(opts: RunOneTurnOpts): Promise<OneTurnResult> {
+  const driverFactory = opts.driverFactory ?? pickDriver;
+  const driver = driverFactory(opts.cliType);
+  const runOnceFn = opts.runOnceFn ?? runOnce;
+
+  const builtCmd = driver
+    ? driver.initialCommand({
+        prompt: opts.prompt,
+        baseCommand: opts.program,
+        baseArgs: opts.args,
+        workerEnv: opts.workerEnv ?? {},
+      })
+    : { program: opts.program, args: opts.args, env: opts.workerEnv ?? {} };
+
+  return executeOneTurn(builtCmd, opts, driver, runOnceFn);
+}
+
+/**
+ * Resume an existing CLI session (subsequent invocation).
+ * Uses driver.resumeCommand to rebuild args, then identical to runOneTurn.
+ */
+export async function resumeOneTurn(sessionID: string, opts: RunOneTurnOpts): Promise<OneTurnResult> {
+  const driverFactory = opts.driverFactory ?? pickDriver;
+  const driver = driverFactory(opts.cliType);
+  const runOnceFn = opts.runOnceFn ?? runOnce;
+
+  if (!driver) {
+    throw new Error(`resumeOneTurn: no driver for cliType '${opts.cliType}'`);
+  }
+
+  const builtCmd = driver.resumeCommand({
+    sessionID,
+    prompt: opts.prompt,
+    baseCommand: opts.program,
+    baseArgs: opts.args,
+    workerEnv: opts.workerEnv ?? {},
+  });
+
+  return executeOneTurn(builtCmd, opts, driver, runOnceFn);
+}
