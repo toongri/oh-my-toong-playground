@@ -6,53 +6,12 @@ import path from 'path';
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { exitWithError, parseArgs } from '@lib/job-utils';
 import { getOmtDir } from '@lib/omt-dir';
-import {
-  splitCommand,
-  atomicWriteJson,
-  sleepMsAsync,
-  assemblePrompt as sharedAssemblePrompt,
-  runOnce as sharedRunOnce,
-  runWithRetry as sharedRunWithRetry,
-  runOneTurn,
-  MAX_RETRIES,
-  BASE_DELAY_MS,
-  type RunOnceOpts,
-  type RunWithRetryOpts,
-} from '@lib/worker-utils';
+import { splitCommand, atomicWriteJson, runOneTurn } from '@lib/worker-utils';
 import { detectCliType } from '@lib/generic-job';
 import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 const FALLBACK_FILE = 'reviewer.md';
-
-// ---------------------------------------------------------------------------
-// Chunk-review wrappers (reviewer.md fallback default)
-// ---------------------------------------------------------------------------
-
-function assemblePrompt({ promptsDir, entityName, rawPrompt, reviewContent, fallbackFile }: Parameters<typeof sharedAssemblePrompt>[0]) {
-  return sharedAssemblePrompt({
-    promptsDir, entityName, rawPrompt, reviewContent,
-    fallbackFile: fallbackFile || FALLBACK_FILE,
-  });
-}
-
-function runOnce(opts: RunOnceOpts) {
-  return sharedRunOnce({
-    ...opts,
-    fallbackFile: opts.fallbackFile || FALLBACK_FILE,
-  });
-}
-
-function runWithRetry(opts: RunWithRetryOpts) {
-  return sharedRunWithRetry({
-    ...opts,
-    fallbackFile: opts.fallbackFile || FALLBACK_FILE,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
 
 function main() {
   const options = parseArgs(process.argv);
@@ -61,12 +20,10 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-  // Initialize persistent logging
   const jobId = jobDir ? path.basename(String(jobDir)).replace(/^chunk-review-/, '') : 'unknown';
   initLogger('chunk-review-worker', getOmtDir(), jobId);
   logStart();
 
-  // Parse --env args: collect KEY=VALUE pairs
   const workerEnv: Record<string, string> = {};
   const rawArgs = process.argv.slice(2);
   for (let i = 0; i < rawArgs.length; i++) {
@@ -123,14 +80,3 @@ function main() {
 if (import.meta.main) {
   main();
 }
-
-export {
-  splitCommand,
-  atomicWriteJson,
-  assemblePrompt,
-  runOnce,
-  runWithRetry,
-  sleepMsAsync as sleepMs,
-  MAX_RETRIES,
-  BASE_DELAY_MS,
-};

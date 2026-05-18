@@ -6,85 +6,11 @@ import path from 'path';
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { parseArgs, exitWithError } from '@lib/job-utils';
 import { getOmtDir } from '@lib/omt-dir';
-import {
-  splitCommand,
-  atomicWriteJson,
-  sleepMsAsync,
-  assemblePrompt,
-  runOnce as sharedRunOnce,
-  runWithRetry as sharedRunWithRetry,
-  runOneTurn,
-  type RunWithRetryOpts,
-} from '@lib/worker-utils';
+import { splitCommand, atomicWriteJson, runOneTurn } from '@lib/worker-utils';
 import { detectCliType } from '@lib/generic-job';
 import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
-
-// ---------------------------------------------------------------------------
-// Wrappers
-// ---------------------------------------------------------------------------
-
-async function runOnce({ command, prompt, member, safeMember, jobDir, timeoutSec, attempt }: {
-  command: string; prompt: string; member: string; safeMember: string;
-  jobDir: string; timeoutSec: number; attempt: number;
-}) {
-  const memberDir = path.join(jobDir, 'reviewers', safeMember);
-
-  const tokens = splitCommand(command);
-  if (!tokens || tokens.length === 0) {
-    const statusPath = path.join(memberDir, 'status.json');
-    const payload = {
-      member, state: 'error', message: 'Invalid command string',
-      finishedAt: new Date().toISOString(), command, attempt,
-    };
-    atomicWriteJson(statusPath, payload);
-    return payload;
-  }
-
-  const program = tokens[0];
-  const args = tokens.slice(1);
-
-  return sharedRunOnce({
-    program, args, prompt, member, memberDir,
-    command, timeoutSec, attempt, promptsDir: PROMPTS_DIR,
-  });
-}
-
-interface SlidesRunWithRetryOpts extends Omit<RunWithRetryOpts, 'program' | 'args' | 'memberDir'> {
-  safeMember: string;
-  jobDir: string;
-}
-
-async function runWithRetry(opts: SlidesRunWithRetryOpts) {
-  const { command, member, safeMember, jobDir, timeoutSec, sleepFn, ...rest } = opts;
-  const memberDir = path.join(jobDir, 'reviewers', safeMember);
-
-  const tokens = splitCommand(command);
-  if (!tokens || tokens.length === 0) {
-    const statusPath = path.join(memberDir, 'status.json');
-    const payload = {
-      member, state: 'error', message: 'Invalid command string',
-      finishedAt: new Date().toISOString(), command,
-    };
-    atomicWriteJson(statusPath, payload);
-    return payload;
-  }
-
-  const program = tokens[0];
-  const args = tokens.slice(1);
-
-  return sharedRunWithRetry({
-    program, args, member, memberDir,
-    command, timeoutSec, promptsDir: PROMPTS_DIR,
-    sleepFn: sleepFn ?? sleepMsAsync,
-    ...rest,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
 
 function main() {
   const options = parseArgs(process.argv);
@@ -93,12 +19,10 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-  // Initialize persistent logging
   const jobId = jobDir ? path.basename(String(jobDir)).replace(/^slides-review-/, '') : 'unknown';
   initLogger('slides-review-worker', getOmtDir(), jobId);
   logStart();
 
-  // Parse --env args: collect KEY=VALUE pairs
   const workerEnv: Record<string, string> = {};
   const rawArgs = process.argv.slice(2);
   for (let i = 0; i < rawArgs.length; i++) {
@@ -148,5 +72,3 @@ function main() {
 if (import.meta.main) {
   main();
 }
-
-export { splitCommand, atomicWriteJson, sleepMsAsync as sleepMs, assemblePrompt, runOnce, runWithRetry };
