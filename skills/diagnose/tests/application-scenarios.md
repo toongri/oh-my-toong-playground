@@ -1,4 +1,4 @@
-# Oracle Skill — Application Test Scenarios
+# Diagnose Skill — Application Test Scenarios
 
 ## Purpose
 

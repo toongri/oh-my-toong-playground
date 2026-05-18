@@ -42,7 +42,7 @@ Claude Code's Skill tool only recognizes files inside a project's `.claude/` dir
 **Step 2 - Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in a Kotlin/Spring project means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
 
 **Step 3 - Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms:
-- **Global skills** (`skills/`): Skills that are common across projects (prometheus, sisyphus, oracle, etc.) are version-controlled in one place
+- **Global skills** (`skills/`): Skills that are common across projects (prometheus, sisyphus, diagnose, etc.) are version-controlled in one place
 - **Project overrides** (`projects/<name>/skills/`): Skills that must differ per project (testing, implementation) are differentiated by project
 
 During sync, an **Upward Search** logic is applied: when a project's sync.yaml references `testing`, it first looks in the project's `projects/<name>/skills/testing/`, falling back to the global `skills/testing/` if not found.
@@ -206,7 +206,7 @@ oh-my-toong/
 ├── skills/                    # Task-specific methodologies (SKILL.md files)
 │   ├── prometheus/            # Strategic planning consultant
 │   ├── sisyphus/              # Task orchestrator with subagent delegation
-│   ├── oracle/                # Architecture and debugging advisor
+│   ├── diagnose/              # Architecture and debugging advisor
 │   ├── explore/               # Codebase search and navigation
 │   ├── librarian/             # External documentation researcher
 │   ├── clarify/               # Requirements clarification gate
@@ -251,7 +251,7 @@ oh-my-toong/
 |-------|---------|----------------|
 | **prometheus** | Strategic planning consultant | Planner only - NEVER implements |
 | **sisyphus** | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
-| **oracle** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
+| **diagnose** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
 | **clarify** | Requirements clarification | MANDATORY gate before implementation |
 | **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | **git-master** | Git conventions (commits + branch naming) | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
@@ -384,7 +384,7 @@ When a skill is referenced in sync.yaml, the sync process searches the project f
 skills:
   items:
     - testing          # → projects/loopers-.../skills/testing/ (project first)
-    - oracle           # → skills/oracle/ (global fallback)
+    - diagnose           # → skills/diagnose/ (global fallback)
 
 agents:
   items:

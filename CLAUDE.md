@@ -103,7 +103,7 @@ skills:
 | sisyphus | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
 | sisyphus-junior | Focused executor | Works ALONE - no delegation, strict todo discipline |
 | momus | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
-| oracle | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
+| diagnose | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
 | clarify | Requirements clarification | MANDATORY gate before implementation |
 | git-master | Git conventions (commits + branch naming) | Korean messages, 50-char limit, atomic commits |
 | agent-council | Multi-AI advisory body | For trade-offs and subjective decisions |
