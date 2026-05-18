@@ -916,13 +916,13 @@ describe('runOneTurn / resumeOneTurn — caller-judgment single-turn pump', () =
     expect(result.state).toBe('done');
   });
 
-  // AC-A2: state='error' on exit non-zero
+  // AC-A2: state='error' on exit non-zero (driver did not report error terminal)
   test('runOneTurn state error', async () => {
     const memberDir = join(tmpDir, 'a2');
     mkdirSync(memberDir, { recursive: true });
 
     const mockDriver = makeOneTurnMockDriver({
-      sessionID: 'ses_a2', terminal: 'error', text: '', rawEvents: [],
+      sessionID: 'ses_a2', terminal: 'unknown_pause', text: '', rawEvents: [],
     });
     const mockRunOnce = makeOneTurnMockRunOnce('raw', 1);
 
@@ -932,6 +932,25 @@ describe('runOneTurn / resumeOneTurn — caller-judgment single-turn pump', () =
     }));
 
     expect(result.state).toBe('error');
+  });
+
+  // P1-5: driver-reported terminal='error' elevates state to non_retryable regardless of exitCode
+  test('runOneTurn state non_retryable when driver terminal=error', async () => {
+    const memberDir = join(tmpDir, 'a2b');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_a2b', terminal: 'error', text: '', rawEvents: [],
+    });
+    // exitCode 0 — driver detected error in stdout (opencode exit-0 pattern)
+    const mockRunOnce = makeOneTurnMockRunOnce('raw', 0);
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('non_retryable');
   });
 
   // AC-A3: sessionID extracted from driver.parseStdout
