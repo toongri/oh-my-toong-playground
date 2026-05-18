@@ -13,11 +13,8 @@ import {
   assemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
-  runMultiTurn as sharedRunMultiTurn,
   type RunWithRetryOpts,
-  type MultiTurnConfig,
 } from '@lib/worker-utils';
-import { detectCliType } from '@lib/generic-job';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
 
@@ -82,41 +79,6 @@ async function runWithRetry(opts: DiagnoseRunWithRetryOpts) {
   });
 }
 
-interface DiagnoseRunMultiTurnOpts extends Omit<RunWithRetryOpts, 'program' | 'args' | 'memberDir'> {
-  safeMember: string;
-  jobDir: string;
-  cliType: string;
-  multiTurn?: MultiTurnConfig;
-}
-
-async function runMultiTurn(opts: DiagnoseRunMultiTurnOpts) {
-  const { command, member, safeMember, jobDir, timeoutSec, sleepFn, cliType, multiTurn, ...rest } = opts;
-  const memberDir = path.join(jobDir, 'reviewers', safeMember);
-
-  const tokens = splitCommand(command);
-  if (!tokens || tokens.length === 0) {
-    const statusPath = path.join(memberDir, 'status.json');
-    const payload = {
-      member, state: 'error', message: 'Invalid command string',
-      finishedAt: new Date().toISOString(), command,
-    };
-    atomicWriteJson(statusPath, payload);
-    return payload;
-  }
-
-  const program = tokens[0];
-  const args = tokens.slice(1);
-
-  return sharedRunMultiTurn({
-    program, args, member, memberDir,
-    command, timeoutSec, promptsDir: PROMPTS_DIR,
-    sleepFn: sleepFn ?? sleepMsAsync,
-    cliType: cliType as import('@lib/worker-utils').RunMultiTurnOpts['cliType'],
-    multiTurn,
-    ...rest,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -155,23 +117,10 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  const cliType = detectCliType(command as string);
-
-  // Read multi_turn config from job.json (written by job.ts at start time).
-  let multiTurn: MultiTurnConfig | undefined;
-  try {
-    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir as string, 'job.json'), 'utf8'));
-    const mt = jobMeta?.settings?.multiTurn;
-    if (mt && typeof mt.maxTurns === 'number' && typeof mt.deliverableSentinel === 'string') {
-      multiTurn = {
-        maxTurns: mt.maxTurns,
-        deliverableSentinel: mt.deliverableSentinel,
-        continuationPrompt: mt.continuationPrompt,
-      };
-    }
-  } catch { /* job.json absent or malformed → fall back to runMultiTurn without config */ }
-
-  runMultiTurn({ command: command as string, prompt, member: member as string, safeMember: member as string, jobDir: jobDir as string, timeoutSec, workerEnv, cliType, multiTurn }).then((result) => {
+  runWithRetry({
+    command: command as string, prompt, member: member as string, safeMember: member as string,
+    jobDir: jobDir as string, timeoutSec, workerEnv,
+  }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
@@ -182,4 +131,4 @@ if (import.meta.main) {
   main();
 }
 
-export { splitCommand, atomicWriteJson, sleepMsAsync as sleepMs, assemblePrompt, runOnce, runWithRetry, runMultiTurn };
+export { splitCommand, atomicWriteJson, sleepMsAsync as sleepMs, assemblePrompt, runOnce, runWithRetry };

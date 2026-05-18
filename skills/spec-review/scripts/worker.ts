@@ -2,12 +2,10 @@
 
 import fs from 'fs';
 import path from 'path';
-import { parse as parseYaml } from 'yaml';
 
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { parseArgs, exitWithError } from '@lib/job-utils';
 import { getOmtDir } from '@lib/omt-dir';
-import { detectCliType } from '@lib/generic-job';
 import {
   splitCommand,
   atomicWriteJson,
@@ -15,12 +13,10 @@ import {
   assemblePrompt as sharedAssemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
-  runMultiTurn as sharedRunMultiTurn,
   MAX_RETRIES,
   BASE_DELAY_MS,
   type RunOnceOpts,
   type RunWithRetryOpts,
-  type MultiTurnConfig,
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
@@ -47,14 +43,6 @@ function runOnce(opts: RunOnceOpts) {
 
 function runWithRetry(opts: RunWithRetryOpts) {
   return sharedRunWithRetry({
-    ...opts,
-    fallbackFile: opts.fallbackFile || FALLBACK_FILE,
-    promptsDir: PROMPTS_DIR,
-  });
-}
-
-function runMultiTurn(opts: Parameters<typeof sharedRunMultiTurn>[0]) {
-  return sharedRunMultiTurn({
     ...opts,
     fallbackFile: opts.fallbackFile || FALLBACK_FILE,
     promptsDir: PROMPTS_DIR,
@@ -117,26 +105,9 @@ function main() {
   const program = tokens[0];
   const args = tokens.slice(1);
 
-  // Load multi_turn config from spec-review.config.yaml
-  const skillConfigPath = path.resolve(import.meta.dirname, '../spec-review.config.yaml');
-  let multiTurn: MultiTurnConfig | undefined;
-  try {
-    const raw = fs.readFileSync(skillConfigPath, 'utf8');
-    const config = parseYaml(raw) as Record<string, unknown>;
-    const specReview = config['spec-review'] as Record<string, unknown> | undefined;
-    const mt = specReview?.['multi_turn'] as Record<string, unknown> | undefined;
-    if (mt && typeof mt['max_turns'] === 'number' && typeof mt['deliverable_sentinel'] === 'string') {
-      multiTurn = {
-        maxTurns: mt['max_turns'] as number,
-        deliverableSentinel: mt['deliverable_sentinel'] as string,
-      };
-    }
-  } catch { /* yaml absent or malformed — proceed without multi_turn */ }
-
-  const cliType = detectCliType(command as string) as 'opencode' | 'claude' | 'codex' | 'gemini' | 'unknown';
-
-  runMultiTurn({
-    program, args, prompt, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv, cliType, multiTurn,
+  runWithRetry({
+    program, args, prompt, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
+    promptsDir: PROMPTS_DIR,
   }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
     logEnd();

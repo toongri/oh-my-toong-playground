@@ -6,8 +6,6 @@ import path from 'path';
 import { initLogger, logInfo, logError, logStart, logEnd } from '@lib/logging';
 import { parseArgs, exitWithError } from '@lib/job-utils';
 import { getOmtDir } from '@lib/omt-dir';
-import { detectCliType } from '@lib/generic-job';
-import type { CliType } from '@lib/agent-drivers/types';
 import {
   splitCommand,
   atomicWriteJson,
@@ -15,9 +13,7 @@ import {
   assemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
-  runMultiTurn as sharedRunMultiTurn,
   type RunWithRetryOpts,
-  type RunMultiTurnOpts,
 } from '@lib/worker-utils';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
@@ -83,37 +79,6 @@ async function runWithRetry(opts: SlidesRunWithRetryOpts) {
   });
 }
 
-interface ReviewRunMultiTurnOpts extends Omit<RunMultiTurnOpts, 'program' | 'args' | 'memberDir'> {
-  safeMember: string;
-  jobDir: string;
-}
-
-async function reviewRunMultiTurn(opts: ReviewRunMultiTurnOpts) {
-  const { command, member, safeMember, jobDir, timeoutSec, sleepFn, ...rest } = opts;
-  const memberDir = path.join(jobDir, 'reviewers', safeMember);
-
-  const tokens = splitCommand(command);
-  if (!tokens || tokens.length === 0) {
-    const statusPath = path.join(memberDir, 'status.json');
-    const payload = {
-      member, state: 'error', message: 'Invalid command string',
-      finishedAt: new Date().toISOString(), command,
-    };
-    atomicWriteJson(statusPath, payload);
-    return payload;
-  }
-
-  const program = tokens[0];
-  const args = tokens.slice(1);
-
-  return sharedRunMultiTurn({
-    program, args, member, memberDir,
-    command, timeoutSec, promptsDir: PROMPTS_DIR,
-    sleepFn: sleepFn ?? sleepMsAsync,
-    ...rest,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -152,23 +117,7 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  const cliType = detectCliType(command as string) as CliType;
-
-  // Read multi_turn config from job.json (written by job.ts at start time).
-  let multiTurn: { maxTurns: number; deliverableSentinel: string; continuationPrompt?: string } | undefined;
-  try {
-    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir as string, 'job.json'), 'utf8'));
-    const mt = jobMeta?.settings?.multiTurn;
-    if (mt && typeof mt.maxTurns === 'number' && typeof mt.deliverableSentinel === 'string') {
-      multiTurn = {
-        maxTurns: mt.maxTurns,
-        deliverableSentinel: mt.deliverableSentinel,
-        continuationPrompt: mt.continuationPrompt,
-      };
-    }
-  } catch { /* job.json absent or malformed → fall back to runWithRetry via runMultiTurn */ }
-
-  reviewRunMultiTurn({ command: command as string, prompt, member: member as string, safeMember: member as string, jobDir: jobDir as string, timeoutSec, workerEnv, cliType, multiTurn }).then((result) => {
+  runWithRetry({ command: command as string, prompt, member: member as string, safeMember: member as string, jobDir: jobDir as string, timeoutSec, workerEnv }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
