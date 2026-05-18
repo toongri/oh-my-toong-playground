@@ -78,37 +78,6 @@ async function runWithRetry(opts: CouncilRunWithRetryOpts) {
   });
 }
 
-interface CouncilRunWithRetryOpts extends Omit<RunWithRetryOpts, 'program' | 'args' | 'memberDir'> {
-  safeMember: string;
-  jobDir: string;
-}
-
-async function councilRunWithRetry(opts: CouncilRunWithRetryOpts) {
-  const { command, member, safeMember, jobDir, timeoutSec, sleepFn, ...rest } = opts;
-  const memberDir = path.join(jobDir, 'members', safeMember);
-
-  const tokens = splitCommand(command);
-  if (!tokens || tokens.length === 0) {
-    const statusPath = path.join(memberDir, 'status.json');
-    const payload = {
-      member, state: 'error', message: 'Invalid command string',
-      finishedAt: new Date().toISOString(), command,
-    };
-    atomicWriteJson(statusPath, payload);
-    return payload;
-  }
-
-  const program = tokens[0];
-  const args = tokens.slice(1);
-
-  return sharedRunWithRetry({
-    program, args, member, memberDir,
-    command, timeoutSec, promptsDir: PROMPTS_DIR,
-    sleepFn: sleepFn ?? sleepMsAsync,
-    ...rest,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -147,7 +116,7 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  councilRunWithRetry({
+  runWithRetry({
     command: command as string, prompt, member: member as string, safeMember: member as string,
     jobDir: jobDir as string, timeoutSec, workerEnv,
   }).then((result) => {
