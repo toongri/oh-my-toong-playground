@@ -1,5 +1,5 @@
 import { describe, it, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, readFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync } from 'fs';
+import { mkdirSync, rmSync, readFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
@@ -732,5 +732,79 @@ describe('runOneTurn / resumeOneTurn — caller-judgment single-turn pump', () =
 
     // No _turn-N subdir
     expect(existsSync(join(memberDir, '_turn-0'))).toBe(false);
+  });
+
+  // P1-1 regression: stale output.txt content must NOT be seen by driver
+  // The bug: executeOneTurn passed attempt:0 → runOnce opened output.txt with 'a' flag
+  // → on resume turns, stale content remained → driver saw stale+new merged content.
+  test('runOneTurn does not pass stale output.txt content to driver on resume', async () => {
+    const memberDir = join(tmpDir, 'p1-1-stale');
+    mkdirSync(memberDir, { recursive: true });
+
+    // Pre-populate output.txt with stale content from a previous turn
+    writeFileSync(join(memberDir, 'output.txt'), 'stale-content\n', 'utf8');
+
+    // Track what parseStdout receives
+    let receivedStdout = '';
+    const spyDriver: AgentDriver = {
+      cli: 'opencode',
+      parseStdout: (stdout: string) => {
+        receivedStdout = stdout;
+        return { sessionID: 'ses-new', terminal: 'stop', text: 'new body', rawEvents: [] };
+      },
+      initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+      resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    };
+
+    // Mock runOnceFn that APPENDS (mirrors production behavior: attempt=0 → flags='a')
+    const appendingRunOnceFn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+      appendFileSync(join(opts.memberDir, 'output.txt'), 'new-content\n', 'utf8');
+      return { state: 'done', exitCode: 0, member: opts.member, command: opts.command, attempt: 0 };
+    };
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => spyDriver,
+      runOnceFn: appendingRunOnceFn,
+    }));
+
+    // Driver must receive ONLY the new content — no stale prefix
+    expect(receivedStdout).toBe('new-content\n');
+    expect(receivedStdout.includes('stale-content')).toBe(false);
+  });
+});
+
+describe('runOneTurn real-spawn integration', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'one-turn-real-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // P2-4: call runOneTurn with REAL runOnce (no runOnceFn override).
+  // This gap was exactly why the append bug escaped the test suite.
+  test('runOneTurn with real runOnce and claude driver parses JSON stdout', async () => {
+    const memberDir = join(tmpDir, 'real-spawn');
+    mkdirSync(memberDir, { recursive: true });
+
+    const payload = JSON.stringify({ result: 'hi', session_id: 's1', stop_reason: 'end_turn' });
+
+    const result = await runOneTurn({
+      program: '/bin/sh',
+      args: ['-c', `echo '${payload}'`],
+      prompt: 'ignored',
+      member: 'test-member',
+      memberDir,
+      command: '/bin/sh echo',
+      timeoutSec: 10,
+      cliType: 'claude',
+    });
+
+    expect(result.state).toBe('done');
+    expect(result.sessionID).toBe('s1');
+    expect(result.text).toBe('hi');
   });
 });

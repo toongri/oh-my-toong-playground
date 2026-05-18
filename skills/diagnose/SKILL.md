@@ -48,9 +48,9 @@ Determine the terminal worker state by running:
 bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 ```
 
-`status` returns `{ reviewers: [{reviewer, state, ...}] }`. Branch on `reviewers[0].state`:
+`status` returns `{ members: [{member, state, ...}] }`. Branch on `members[0].state`:
 
-| `reviewers[0].state` | Action |
+| `members[0].state` | Action |
 |----------------------|--------|
 | `missing_cli` | Fallback: become Hephaestus in-session (see below) |
 | `timed_out` | Fallback: become Hephaestus in-session (see below) |

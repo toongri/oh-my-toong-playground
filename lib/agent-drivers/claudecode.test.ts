@@ -141,6 +141,54 @@ describe('`initialCommand` — 기본 커맨드 빌드', () => {
 });
 
 // ---------------------------------------------------------------------------
+// initialCommand — contract tests (driver invariant: always produces JSON-parseable output)
+// ---------------------------------------------------------------------------
+
+describe('`initialCommand` — output-format json 불변식 계약', () => {
+  test('baseArgs에 --output-format 없으면 json 플래그 추가', () => {
+    const result = claudeDriver.initialCommand({
+      prompt: 'hello',
+      baseCommand: 'claude',
+      baseArgs: ['-p'],
+      workerEnv: {},
+    });
+    const ofIdx = result.args.indexOf('--output-format');
+    expect(ofIdx).toBeGreaterThanOrEqual(0);
+    expect(result.args[ofIdx + 1]).toBe('json');
+  });
+
+  test('baseArgs에 --output-format text 있으면 json으로 대체 (text 잔재 없음)', () => {
+    const result = claudeDriver.initialCommand({
+      prompt: 'hello',
+      baseCommand: 'claude',
+      baseArgs: ['-p', '--output-format', 'text'],
+      workerEnv: {},
+    });
+    // exactly one --output-format flag
+    const count = result.args.filter(a => a === '--output-format').length;
+    expect(count).toBe(1);
+    const ofIdx = result.args.indexOf('--output-format');
+    expect(result.args[ofIdx + 1]).toBe('json');
+    expect(result.args).not.toContain('text');
+  });
+
+  test('다른 플래그(--model) 보존하면서 --output-format json 추가', () => {
+    const result = claudeDriver.initialCommand({
+      prompt: 'hello',
+      baseCommand: 'claude',
+      baseArgs: ['-p', '--model', 'claude-opus-4-7'],
+      workerEnv: {},
+    });
+    expect(result.args).toContain('--model');
+    const modelIdx = result.args.indexOf('--model');
+    expect(result.args[modelIdx + 1]).toBe('claude-opus-4-7');
+    const ofIdx = result.args.indexOf('--output-format');
+    expect(ofIdx).toBeGreaterThanOrEqual(0);
+    expect(result.args[ofIdx + 1]).toBe('json');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // resumeCommand
 // ---------------------------------------------------------------------------
 
