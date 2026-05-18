@@ -13,11 +13,14 @@ import {
   assemblePrompt as sharedAssemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
+  runOneTurn,
   MAX_RETRIES,
   BASE_DELAY_MS,
   type RunOnceOpts,
   type RunWithRetryOpts,
 } from '@lib/worker-utils';
+import { detectCliType } from '@lib/generic-job';
+import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
 const FALLBACK_FILE = 'reviewer.md';
@@ -105,13 +108,13 @@ function main() {
   const program = tokens[0];
   const args = tokens.slice(1);
 
-  runWithRetry({
+  runOneTurn({
     program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
+    cliType: detectCliType(command) as CliType,
     promptsDir: PROMPTS_DIR,
-    promptPath,
+    fallbackFile: FALLBACK_FILE,
   }).then((result) => {
-    const size_bytes = result.size_bytes;
-    logInfo(`worker done: member=${member} state=${result.state} attempts=${result.attempts} size_bytes=${size_bytes}`);
+    logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });

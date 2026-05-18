@@ -12,8 +12,11 @@ import {
   assemblePrompt,
   runOnce as sharedRunOnce,
   runWithRetry as sharedRunWithRetry,
+  runOneTurn,
   type RunWithRetryOpts,
 } from '@lib/worker-utils';
+import { detectCliType } from '@lib/generic-job';
+import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
 
@@ -116,9 +119,24 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  runWithRetry({
-    command: command as string, prompt, member: member as string, safeMember: member as string,
-    jobDir: jobDir as string, timeoutSec, workerEnv,
+  const memberDir = path.join(jobDir as string, 'members', member as string);
+  const tokens = splitCommand(command as string);
+  if (!tokens || tokens.length === 0) {
+    logError(`invalid command string: ${command}`);
+    atomicWriteJson(path.join(memberDir, 'status.json'), {
+      member, state: 'error', message: 'Invalid command string',
+      finishedAt: new Date().toISOString(), command,
+    });
+    logEnd();
+    process.exit(1);
+  }
+  const program = tokens[0];
+  const args = tokens.slice(1);
+
+  runOneTurn({
+    program, args, prompt, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
+    cliType: detectCliType(command) as CliType,
+    promptsDir: PROMPTS_DIR,
   }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
