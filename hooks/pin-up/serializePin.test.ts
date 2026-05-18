@@ -115,20 +115,17 @@ describe('serializePin', () => {
     const result = serializePin('test-slug', pin, '2026-04-30T00:00:00.000Z');
 
     expect(result).not.toContain('related:');
-    expect(result).not.toContain('supersedes:');
     expect(result).not.toContain('discovery_context:');
   });
 
   it('optional 필드 있으면 해당 키가 출력에 있음', () => {
     const pin = makePin({
       related: 'other-slug',
-      supersedes: 'old-slug',
       discovery_context: 'some context',
     });
     const result = serializePin('test-slug', pin, '2026-04-30T00:00:00.000Z');
 
     expect(result).toContain('related: "other-slug"');
-    expect(result).toContain('supersedes: "old-slug"');
     expect(result).toContain('discovery_context: "some context"');
   });
 });

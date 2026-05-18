@@ -1,6 +1,6 @@
 ---
 name: write-pin
-description: "Use when you've acquired info worth finding again later — external SSOT cited (URL/Notion/Linear/GitHub/Slack), ground truth located in code, person named as authority, or stale indexing needs supersedes. Also use when learning the <pin> XML emission format. Do NOT trigger on pin retrieval tasks (use select-pin instead)."
+description: "Use when you've acquired info worth finding again later — external SSOT cited (URL/Notion/Linear/GitHub/Slack), ground truth located in code, or person named as authority. Also use when learning the <pin> XML emission format. Do NOT trigger on pin retrieval tasks (use select-pin instead)."
 ---
 
 # write-pin
@@ -17,7 +17,6 @@ Emit a `<pin>` XML block on discovery. The Stop hook (`hooks/pin-up/`) serialize
      tags="tag1,tag2"
      sensitivity="private"
      related="slug1,slug2"
-     supersedes="old-slug"
      discovery_context="which task surfaced this — one line">
 ### ① 한 줄 요지
 X is Y. (≤80 characters)
@@ -46,7 +45,7 @@ Which workflow surfaced this (Memex trail).
 | `tags` | Comma-separated topic tags. |
 | `sensitivity` | `private` or `shared`. |
 
-Optional: `related` (cross-link slugs), `supersedes` (slug being replaced), `discovery_context` (one-line Memex note).
+Optional: `related` (cross-link slugs), `discovery_context` (one-line Memex note).
 
 ## Slug rules
 
@@ -72,7 +71,7 @@ Examples:
 
 | Rationalization | Reality |
 |---|---|
-| "It might change, so I'll wait" | URLs are immutable; `supersedes` absorbs change. Emit now. |
+| "It might change, so I'll wait" | URLs are immutable; emit now. If content changes later, emit a new pin to overwrite. |
 | "It's just a local .md, I'll pin `file://`" | Non-dereferenceable. Apply Scenario F: register externally first. |
 | "I'll pin it after this task is done" | Task completion ≠ discovery event. Emit now. |
 | "The pin body needs more than the SSOT" | A pin is not a wiki (`indexing-not-wiki`). |

@@ -58,7 +58,6 @@ export function parsePinXml(attrsStr: string, body: string): PinExtracted {
     tags: attrs['tags'] ?? '',
     sensitivity: (attrs['sensitivity'] ?? '') as 'private' | 'shared',
     related: attrs['related'] || undefined,
-    supersedes: attrs['supersedes'] || undefined,
     discovery_context: attrs['discovery_context'] || undefined,
     body: body.trim(),
   };
