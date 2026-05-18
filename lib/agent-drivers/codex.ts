@@ -98,17 +98,21 @@ export const codexDriver: AgentDriver = {
   },
 
   resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
-    // Extract -c key=value overrides from baseArgs
-    const cOverrides: string[] = [];
+    // P2-3: preserve all baseArgs by injecting 'resume <id>' right after 'exec'.
+    // codex resume form: `codex exec resume <id> [args...]`.
     const baseArgs = opts.baseArgs;
-    for (let i = 0; i < baseArgs.length; i++) {
-      if (baseArgs[i] === '-c' && i + 1 < baseArgs.length) {
-        cOverrides.push('-c', baseArgs[i + 1]);
-        i++;
-      }
-    }
+    const execIdx = baseArgs.indexOf('exec');
+    const args = execIdx >= 0
+      ? [
+          ...baseArgs.slice(0, execIdx + 1),
+          'resume', opts.sessionID,
+          ...baseArgs.slice(execIdx + 1),
+        ]
+      : ['exec', 'resume', opts.sessionID, ...baseArgs];
 
-    const args = ['exec', 'resume', opts.sessionID, '--json', '--skip-git-repo-check', ...cOverrides];
+    if (!args.includes('--skip-git-repo-check')) {
+      args.push('--skip-git-repo-check');
+    }
 
     return {
       program: opts.baseCommand,

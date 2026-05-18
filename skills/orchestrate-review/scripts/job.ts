@@ -36,7 +36,7 @@ import {
 } from '@lib/generic-job';
 
 import { pickDriver, type CliType } from '@lib/agent-drivers/types';
-import { resumeOneTurn, splitCommand, type RunOneTurnOpts, type OneTurnResult } from '@lib/worker-utils';
+import { resumeOneTurn, runOnce, splitCommand, type RunOneTurnOpts, type OneTurnResult } from '@lib/worker-utils';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -378,6 +378,8 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 type ResumeMemberOpts = {
   driverFactory?: (cliType: string) => ReturnType<typeof pickDriver>;
   resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
+  /** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
+  runOnceFn?: typeof runOnce;
 };
 
 export async function cmdResumeMember(
@@ -407,9 +409,11 @@ export async function cmdResumeMember(
     throw new Error(`member in non-resumable state: ${state}`);
   }
 
-  // Cap check
+  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn to prevent
+  // concurrent cap bypass. executeOneTurn preserves resume_count via read-then-write.
   const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
   if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
+  atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
 
   // Derive cliType
   const command = status.command;
@@ -449,12 +453,8 @@ export async function cmdResumeMember(
     timeoutSec,
     cliType: cliType as RunOneTurnOpts['cliType'],
     driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
+    runOnceFn: opts.runOnceFn,
   });
-
-  // Atomic status.json update: resume_count += 1
-  const current = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
-  const existingCount = typeof current.resume_count === 'number' ? current.resume_count : 0;
-  atomicWriteJson(statusPath, { ...current, resume_count: existingCount + 1 });
 }
 
 // ---------------------------------------------------------------------------
