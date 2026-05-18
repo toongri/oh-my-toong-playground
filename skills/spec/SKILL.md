@@ -12,6 +12,14 @@ They are NOT an exhaustive list. Any design concern discovered during the spec p
 — whether it maps to a predefined Area or not — must be explicitly addressed through
 the Emergent Concern Protocol.
 
+## Co-Design Philosophy
+
+Spec is a **co-design** process, not an AI-design process. The user is the architect of the design; spec (this skill) is the dialogue partner — AI surfaces concerns, proposes options, and facilitates decisions; the user chooses direction, validates fit, and owns outcomes.
+
+Every design content — Area entry choice, Step result, recorded decision, acceptance criterion — originates from or is validated by user dialogue. **AI MUST NOT generate spec content unilaterally and submit it for rubber-stamp approval; that flow inverts authorship.** The only legitimate authorship pattern is: AI proposes → user decides → record captures the user as the decision owner.
+
+Every downstream rule in this skill (Iron Law gates, Checkpoint Protocol, Decision Interview Gate, Multi-AI Review, Rich Context Pattern) is a mechanical expression of this philosophy. If any rule appears to permit AI-unilateral content generation, the rule is being mis-applied — re-read this section first, then re-read the rule.
+
 ## The Iron Law
 
 ```
