@@ -42,8 +42,8 @@ The pin is already accurate and current; no new pin is needed. Duplicate indexin
 - Confirm the existing pin's `source_url: person:KS` + `authority: KS` is wrong.
 - Brief user interview: "JH is the new decision owner; the decision is recorded in Slack #eng-billing."
 - Verify by checking the related document (Slack thread link) for the correct authority.
-- Invoke the `write-pin` skill to learn the format and emit an update.
-- Include `supersedes: decision-ratelimit-ks` to explicitly replace the existing pin.
+- Delete the stale pin file: `rm $OMT_DIR/pins/decision-ratelimit-ks.md`.
+- Invoke the `write-pin` skill to learn the format and emit a new pin. Reuse the same slug if the `kind` is still valid; otherwise use a new slug and update any `related` cross-links in other pins that pointed to the old slug.
 
 **Emit result**:
 
@@ -54,7 +54,6 @@ The pin is already accurate and current; no new pin is needed. Duplicate indexin
      tier="2"
      tags="ratelimit,billing,decision"
      sensitivity="private"
-     supersedes="decision-ratelimit-ks"
      discovery_context="user reported KS left — billing policy review">
 ### ① 한 줄 요지
 Rate-limit decision owner is JH (transferred from KS after departure).
@@ -70,7 +69,7 @@ none
 </pin>
 ```
 
-**Why this is correct**: leaving a stale pin in place lets a future AI session reuse wrong information. The `supersedes` attribute explicitly invalidates the prior pin and keeps the index coherent. The teaching point of this fixture is `supersedes`, so `related` is omitted (it's an Optional attribute per `write-pin/SKILL.md` §"Optional attributes (3)") — write `none` in body section ④ when no cross-link applies.
+**Why this is correct**: leaving a stale pin in place lets a future AI session reuse wrong information. Deleting the old file and emitting a fresh pin keeps the index coherent without needing a special mechanism. The `related` field is omitted (it's an Optional attribute per `write-pin/SKILL.md` §"Optional attributes") — write `none` in body section ④ when no cross-link applies.
 
 ---
 
@@ -111,7 +110,7 @@ none
 </pin>
 ```
 
-**Why this is correct**: knowledge that the AI directly discovered when even the user did not know must be pinned. This avoids repaying the same discovery cost in future sessions. Since this is a fresh discovery, no `supersedes` is needed.
+**Why this is correct**: knowledge that the AI directly discovered when even the user did not know must be pinned. This avoids repaying the same discovery cost in future sessions.
 
 ---
 
@@ -169,7 +168,7 @@ none
 - Neither the user nor the team knows.
 - Codebase search: `payments/fee.ts` contains the logic but lacks an authority comment, and the history is unclear.
 - Fully unknown — but record the "I don't know" as a fact.
-- Invoke `write-pin` → emit a placeholder pin. Update via `supersedes` upon future discovery.
+- Invoke `write-pin` → emit a placeholder pin. When the answer is discovered, delete the placeholder file and emit a proper pin (with the correct kind/topic/slug).
 
 **Emit result**:
 
@@ -182,7 +181,7 @@ none
      sensitivity="private"
      discovery_context="payment fee PR review — authority unclear, team unaware">
 ### ① 한 줄 요지
-Payment fee calculation authority unknown — placeholder, update via supersedes when discovered.
+Payment fee calculation authority unknown — placeholder, delete and emit a proper pin when discovered.
 
 ### ② SSOT 위치 + 도달 경로
 Logic exists at payments/fee.ts but no authority is recorded. Original author unknown, history unclear.
@@ -195,7 +194,7 @@ none
 </pin>
 ```
 
-**Why this is correct**: pinning the "I don't know" as a placeholder lets a future session see "this was already investigated and unresolved." When the answer is found, update with `supersedes: finding-payment-fee-unknown`. A placeholder is far more useful than nothing.
+**Why this is correct**: pinning the "I don't know" as a placeholder lets a future session see "this was already investigated and unresolved." When the answer is found, delete the placeholder file and emit a proper pin. A placeholder is far more useful than nothing.
 
 ---
 
@@ -260,7 +259,7 @@ These six scenarios cover the core branches of the pin system:
 | Scenario | State | Emit? | Core pattern |
 |---|---|---|---|
 | A | hit | no emit | no duplicate indexing |
-| B | stale | emit + supersedes | preserve index coherence |
+| B | stale | delete + emit new | preserve index coherence |
 | C | miss (AI discovers) | new emit | crystallize the discovery cost |
 | D | miss (person source) | emit (`person:`) | mark a human as SSOT |
 | E | miss (unknown) | placeholder emit | "unknown" is also valuable |
