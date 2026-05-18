@@ -658,12 +658,17 @@ async function executeOneTurn(
     text = parsed.text;
     // Overwrite output.txt with parsed text (single overwrite, never append)
     fs.writeFileSync(outputPath, parsed.text, 'utf8');
+  } else if (driverInstance === null) {
+    // No driver registered for cliType: trust runOnce state directly.
+    // No stdout parsing, no sessionID extraction — driver-aware behavior is N/A.
+    state = runResult.state as string ?? 'done';
+    sessionID = null;
+    text = rawStdout;
   } else {
-    // Parse failure: state='error', output.txt stays as raw stdout
+    // Driver present but parseStdout returned null → real parse failure
     state = 'error';
     sessionID = null;
     text = rawStdout;
-    // output.txt already contains rawStdout (written by runOnceFn) — no overwrite needed
   }
 
   // Atomic status.json write with sessionID + resume_count
