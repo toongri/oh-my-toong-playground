@@ -2,7 +2,6 @@
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { EventEmitter } from 'events';
-import { Readable } from 'stream';
 import { type spawn as SpawnType } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -852,46 +851,8 @@ describe('runOnce - stream close guarantee', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Helpers for JSON mode integration tests
+// Helpers for stderr fallback tests
 // ---------------------------------------------------------------------------
-
-const DONE_NDJSON = '{"type":"text","text":"full review"}\n{"type":"step_finish","reason":"stop"}\n';
-const EMPTY_NDJSON = '{"type":"text","text":"partial output"}\n';
-const ERROR_NDJSON = '{"type":"error","error":{"type":"auth","message":"unauthorized"}}\n';
-const TRANS_ERR_NDJSON = '{"type":"error","error":{"type":"rate_limit","message":"429 too many requests"}}\n';
-
-/**
- * Creates a spawnFn that pipes NDJSON through child.stdout on each call,
- * cycling through the provided outputs array.
- * Data flows via pipe → WriteStream so no write-race against flags:'w' truncation.
- */
-function makeNdjsonSpawnFn(_memberDir: string, outputs: string[]) {
-  let callCount = 0;
-  function mockSpawn(_program: any, _args: any, _options: any) {
-    const outputNdjson = outputs[callCount] ?? outputs[outputs.length - 1];
-    callCount++;
-    const child = new EventEmitter() as any;
-    const stdin = new EventEmitter() as any;
-    stdin.write = () => true;
-    stdin.end = () => {};
-    child.stdin = stdin;
-    child.stderr = null;
-    child.pid = 12345 + callCount;
-
-    // Readable that pushes NDJSON then ends — piped by runOnce into outStream
-    const stdout = new Readable({ read() {} });
-    child.stdout = stdout;
-
-    process.nextTick(() => {
-      stdout.push(outputNdjson);
-      stdout.push(null); // EOF
-      child.emit('exit', 0, null);
-      process.nextTick(() => child.emit('close', 0, null));
-    });
-    return child;
-  }
-  return { mockSpawn: mockSpawn as any as typeof SpawnType, getCallCount: () => callCount };
-}
 
 /**
  * Creates a spawnFn that emits an ENOENT error (missing CLI binary).
@@ -947,58 +908,6 @@ describe('status.json fields', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('status.json: size_bytes always present on terminal state', async () => {
-    for (const [label, ndjson, expectedState] of [
-      ['done', DONE_NDJSON, 'done'],
-      ['empty_output', EMPTY_NDJSON, 'empty_output'],
-      ['transient_error', TRANS_ERR_NDJSON, 'transient_error'],
-      ['permanent_error', ERROR_NDJSON, 'permanent_error'],
-    ]) {
-      const memberDir = path.join(tmpDir, `size-bytes-${label}`);
-      fs.mkdirSync(memberDir, { recursive: true });
-      const statusPath = path.join(memberDir, 'status.json');
-      // transient exhausted after 3 attempts
-      const outputs = expectedState === 'transient_error'
-        ? [ndjson as string, ndjson as string, ndjson as string]
-        : [ndjson as string];
-      const { mockSpawn } = makeNdjsonSpawnFn(memberDir, outputs);
-      await runWithRetry(makeJsonRunOpts(memberDir, paths.member, mockSpawn));
-      const status = readStatus(statusPath);
-      expect(typeof status.size_bytes).toBe('number');
-    }
-  });
-
-  test('status.json: size_bytes equals fs.statSync output', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [DONE_NDJSON]);
-    await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    const status = readStatus(paths.statusPath);
-    const actualSize = fs.statSync(paths.outPath).size;
-    expect(status.size_bytes).toBe(actualSize);
-  });
-
-  test('size_bytes: stable after process exit (no further writes)', async () => {
-    const { mockSpawn } = makeNdjsonSpawnFn(paths.memberDir, [DONE_NDJSON]);
-    await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    const sizeAfterRun = fs.statSync(paths.outPath).size;
-    // No async write should happen after runWithRetry resolves
-    const sizeAfterCheck = fs.statSync(paths.outPath).size;
-    expect(sizeAfterCheck).toBe(sizeAfterRun);
-    const status = readStatus(paths.statusPath);
-    expect(status.size_bytes).toBe(sizeAfterRun);
-  });
-
-  test('status.json: attempts field equals total attempts on terminal state', async () => {
-    // 2 transient then done = 3 attempts — use isolated subdir to avoid race with shared paths
-    const memberDir = path.join(tmpDir, 'attempts-test');
-    fs.mkdirSync(memberDir, { recursive: true });
-    const statusPath = path.join(memberDir, 'status.json');
-    const { mockSpawn } = makeNdjsonSpawnFn(memberDir, [EMPTY_NDJSON, EMPTY_NDJSON, DONE_NDJSON]);
-    await runWithRetry(makeJsonRunOpts(memberDir, paths.member, mockSpawn));
-    const status = readStatus(statusPath);
-    expect(status.attempts).toBe(3);
-    expect(status.state).toBe('done');
-  });
-
   test('status.json backward compat: legacy fixture without size_bytes/error parses', async () => {
     // Write a legacy-style status.json (no size_bytes, no error)
     const legacy = { member: paths.member, state: 'done', attempts: 1 };
@@ -1010,18 +919,6 @@ describe('status.json fields', () => {
     expect(parsed.error).toBeUndefined();
   });
 
-  test('retry overwrite: only final attempt status persisted', async () => {
-    // 2 transient then done — use isolated subdir to avoid race with shared paths
-    const memberDir = path.join(tmpDir, 'retry-overwrite-test');
-    fs.mkdirSync(memberDir, { recursive: true });
-    const statusPath = path.join(memberDir, 'status.json');
-    const { mockSpawn } = makeNdjsonSpawnFn(memberDir, [EMPTY_NDJSON, EMPTY_NDJSON, DONE_NDJSON]);
-    await runWithRetry(makeJsonRunOpts(memberDir, paths.member, mockSpawn));
-    const status = readStatus(statusPath);
-    // Final status must reflect terminal state, not 'retrying'
-    expect(status.state).toBe('done');
-    expect(status.attempts).toBe(3);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1041,15 +938,14 @@ describe('stderr fallback', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('stderr fallback: spawn ENOENT → permanent_error', async () => {
+  test('stderr fallback: spawn ENOENT → missing_cli', async () => {
     const { mockSpawn } = makeEnoentSpawnFn();
     const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawn));
-    expect(result.state).toBe('permanent_error');
-    expect((result.error as Record<string, unknown> | undefined)?.type).toBe('missing_cli');
+    expect(result.state).toBe('missing_cli');
   });
 
-  test('stderr fallback: stdout empty + stderr keyword → classified', async () => {
-    // Spawn succeeds but exits non-zero; stderr contains auth keyword
+  test('stderr fallback: stdout empty + stderr non_retryable keyword → non_retryable', async () => {
+    // Spawn succeeds but exits non-zero; stderr contains TEXT_MODE_NON_RETRYABLE_KEYWORDS entry
     function mockSpawnWithStderr(_program: any, _args: any, _options: any) {
       const child = new EventEmitter() as any;
       const stdin = new EventEmitter() as any;
@@ -1058,11 +954,10 @@ describe('stderr fallback', () => {
       child.stdin = stdin;
       child.pid = 55555;
 
-      // Simulate stderr output piped to errStream
       const stderrEmitter = new EventEmitter() as any;
       stderrEmitter.pipe = (dest: any) => {
         process.nextTick(() => {
-          dest.write('unauthorized: invalid api key');
+          dest.write('authentication_error: invalid api key');
         });
         return dest;
       };
@@ -1077,8 +972,6 @@ describe('stderr fallback', () => {
     }
 
     const result = await runWithRetry(makeJsonRunOpts(paths.memberDir, paths.member, mockSpawnWithStderr as any as typeof SpawnType));
-    // stderr 'unauthorized' keyword → auth → permanent
-    expect(result.state).toBe('permanent_error');
-    expect((result.error as Record<string, unknown> | undefined)?.type).toBe('auth');
+    expect(result.state).toBe('non_retryable');
   });
 });

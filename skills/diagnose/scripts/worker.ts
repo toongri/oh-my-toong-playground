@@ -117,10 +117,7 @@ function main() {
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
-  runWithRetry({
-    command: command as string, prompt, member: member as string, safeMember: member as string,
-    jobDir: jobDir as string, timeoutSec, workerEnv,
-  }).then((result) => {
+  runWithRetry({ command: command as string, prompt, member: member as string, safeMember: member as string, jobDir: jobDir as string, timeoutSec, workerEnv }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);

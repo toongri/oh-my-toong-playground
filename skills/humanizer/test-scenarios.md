@@ -256,3 +256,118 @@ Additionally, the intricate interplay between edge computing and serviceless pat
 3. 60% statistic preserved
 4. "serviceless" concept preserved accurately
 5. Mixed-language flow maintained naturally
+
+---
+
+## Scenario 7: Korean Study Notes — Markup & Structure AI Traces
+
+**Type:** Application + variation (newly added markup/structure patterns)
+**Content type:** Blog/Essay (personal study notes)
+**Mode:** audit
+
+**Purpose:** Verify the skill detects K17–K21, E18, C7–C9 — the markup, translation, and document-structure traces that single-word keyword scanning misses.
+
+**Input text:**
+```
+## 한 줄 요약
+
+메시지 큐와 스트림은 둘 다 메시지 전달이지만 영속성·보장 수준·소비자 모델이 다르다 — 그래서 용도가 갈린다.
+
+## 본문
+
+### 1. 메시지 브로커란
+
+들어온 메시지를 일단 받아두고 나중에 처리할 수 있게 한다 — 이것이 메시지 브로커의 핵심 역할이다.
+
+> fire-and-forget: 작업을 던지고 결과를 기다리지 않는 비동기 패턴.
+
+그래서 큐는 fire-and-forget에 어울린다.
+
+### 2. 큐 vs 스트림
+
+| 항목 | 큐 | 스트림 |
+|------|-----|--------|
+| 모델 | 1:1 | n:n |
+| 영속성 | 짧음 | 김 |
+| 재처리 | 어려움 | 쉬움 |
+
+여러 클라이언트가 동시에 메시지를 기다릴 때 *먼저 요청한 클라이언트*가 가져간다.
+
+### 3. 전달 보장 수준
+
+| 수준 | 의미 |
+|------|------|
+| at most once | 중복 없음, 유실 가능 |
+| at least once | 유실 없음, 중복 가능 |
+| exactly once | 둘 다 없음 |
+
+at least once는 멱등(idempotent)한 처리를 전제로 한다. 멱등(idempotent)성을 보장하지 않으면 중복 처리 사고가 난다. 멱등(idempotent) 키를 활용해 중복을 거른다.
+
+### 4. Kafka vs Redis
+
+| 항목 | Kafka | Redis |
+|------|-------|-------|
+| 영속성 | 디스크 | 메모리 |
+| 처리량 | 높음 | 매우 높음 |
+| 사용 사례 | 로그·이벤트 | 캐시·세션 |
+
+### 5. fan-out vs 소비자 그룹
+
+| 항목 | fan-out | 소비자 그룹 |
+|------|---------|------------|
+| 의미 | 모두에게 전달 | 그룹 내 1명 |
+| 용도 | 알림·브로드캐스트 | 작업 분배 |
+
+### 6. 선택 기준
+
+| 상황 | 선택 |
+|------|------|
+| 작업 분배 | 큐 |
+| 이벤트 스트림 | 스트림 |
+| 실시간 알림 | fan-out |
+
+## 헷갈렸던 지점
+
+at most once와 at least once의 차이가 처음에는 헷갈렸다. at most once는 "한 번 이하 — 즉 유실 가능"이고, at least once는 "한 번 이상 — 즉 중복 가능"이다. 결국 멱등(idempotent)성으로 해결한다.
+
+## 참고자료
+
+- Kafka 공식 문서
+- Designing Data-Intensive Applications
+```
+
+**Expected detections (focus on new patterns):**
+
+| Pattern | Severity | Instance |
+|---------|----------|----------|
+| K17 | P1 | em-dash(—) present in Korean prose (any occurrence → P1) |
+| K18 | P1 | "영속성·보장 수준·소비자 모델" middle-dot enumeration (any middle-dot = P1) |
+| K18 | P1 | "로그·이벤트", "캐시·세션", "알림·브로드캐스트" middle-dot in table cells (any middle-dot = P1) |
+| K19 | P2 | "~할 수 있게 한다 — 이것이 메시지 브로커의 핵심 역할이다" |
+| K20 | P2 | `> fire-and-forget: ~` mid-paragraph blockquote term definition |
+| K21 | P2 | "멱등(idempotent)" repeated 4 times with identical bracketing |
+| E18 | P3 | `*먼저 요청한 클라이언트*` italic asterisk in Korean prose |
+| C7 | P1 | Tables used for "term: description" and "A is for X" pairings that could be prose |
+| C8 | P2 | Complete "한 줄 요약 → 본문 → 헷갈렸던 지점 → 참고자료" structure |
+| C9 | P2 | Uniform tension/sentence rhythm across all sections |
+
+**Also expected (pre-existing patterns):**
+- K2: none (no "혁신적", "체계적" — content is reasonably specific)
+- K1: none (no opening cliché)
+- K10: none (no closing cliché — "참고자료" is structural, not "결론적으로")
+
+**PASS criteria:**
+1. Agent flags all 9 new pattern codes (K17, K18, K19, K20, K21, E18, C7, C8, C9)
+2. Agent flags em-dash (K17) and middle-dot (K18) on first occurrence — no threshold counting required
+3. Agent correctly identifies C8 even though each individual section looks reasonable — the *combination* is the tell
+4. Agent does NOT flag this as K2/K10 false positive (content is concrete, not modifier-inflated)
+5. Audit report distinguishes whole-document signals (C7, C8, C9) from local signals (K19, K20)
+
+**Notes for the rewriter (if mode=rewrite):**
+- Remove all em-dashes (replace with periods, parentheses, or commas)
+- Convert tables whose content is just "term: description" or "A is for X" pairings into prose (likely candidates: queue-vs-stream, selection-criteria, fan-out vs consumer-group). Leave any genuinely multi-attribute lookup tables intact.
+- Convert `> fire-and-forget` blockquote to inline parenthetical
+- Drop "멱등(idempotent)" bilingual on 2nd, 3rd, 4th mentions
+- Rewrite "헷갈렸던 지점" with one specific stuck moment, messier, in first person
+- Convert `*italic*` to `**bold**`
+- Break tone uniformity in the later sections — shorter sentences, one aside

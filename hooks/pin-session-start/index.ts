@@ -6,7 +6,7 @@
  * 2. Resolve $OMT_DIR
  * 3. Scan $OMT_DIR/pins/ for .md files
  * 4. Count + extract recent slugs (up to 3 if ≤30 total)
- * 5. Assemble instructions text (index + Model 2 guidance + supersedes note)
+ * 5. Assemble instructions text (index + Model 2 guidance)
  * 6. Build hookSpecificOutput JSON
  * 7. JSON stdout
  * (8. Fail-open: any error → {} + stderr WARN)
