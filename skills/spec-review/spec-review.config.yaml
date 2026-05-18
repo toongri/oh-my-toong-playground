@@ -36,11 +36,6 @@ spec-review:
       effort_level: "high"
       output_format: json
 
-  # Multi-turn pump settings
-  multi_turn:
-    max_turns: 3
-    deliverable_sentinel: '## Recommendation\s*\n\s*(APPROVE|REVISE|REJECT)'
-
   # Execution settings
   settings:
     exclude_chairman_from_members: false  # Chairman also participates as a review member

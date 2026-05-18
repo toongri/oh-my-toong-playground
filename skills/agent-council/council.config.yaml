@@ -36,11 +36,6 @@ council:
       color: "GREEN"
       model: "gemini-3.1-pro-preview"
 
-  # Multi-turn pump settings
-  multi_turn:
-    max_turns: 3
-    deliverable_sentinel: '## Position\s*\n\s*(APPROVE|REJECT|ABSTAIN)'
-
   # Execution settings
   settings:
     exclude_chairman_from_members: false  # Chairman also participates as a council member

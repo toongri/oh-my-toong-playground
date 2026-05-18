@@ -9,9 +9,5 @@ review:
       color: "BLUE"
       output_format: json
 
-  multi_turn:
-    max_turns: 3
-    deliverable_sentinel: '## Diagnosis\s*\n'
-
   settings:
     timeout: 600
