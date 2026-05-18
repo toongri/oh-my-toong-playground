@@ -1600,6 +1600,294 @@ describe('--include-chairman=false normalizeBool parsing', () => {
 });
 
 // ---------------------------------------------------------------------------
+// resume-member
+// ---------------------------------------------------------------------------
+
+describe('resume-member', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir: string;
+  let jobDir: string;
+  let memberDir: string;
+
+  // Minimal mock driver factory — only opencode is registered
+  function makeMockDriver() {
+    return {
+      cli: 'opencode' as const,
+      initialCommand: () => ({ program: 'opencode', args: [], env: {} }),
+      resumeCommand: () => ({ program: 'opencode', args: ['--resume', 'sess-123'], env: {} }),
+      parseStdout: (_s: string) => ({
+        sessionID: 'sess-123',
+        terminal: 'stop' as const,
+        text: 'result',
+        rawEvents: [],
+      }),
+    };
+  }
+
+  function mockDriverFactory(cliType: string) {
+    if (cliType === 'opencode') return makeMockDriver();
+    return null;
+  }
+
+  // Stub resumeOneTurn that succeeds without spawning a real process
+  function makeResumeStub(sessionID = 'sess-123') {
+    return async (_sid: string, _opts: unknown) => ({
+      state: 'done',
+      sessionID,
+      text: 'resumed output',
+      exitCode: 0,
+    });
+  }
+
+  function writeStatus(dir: string, payload: Record<string, unknown>) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(payload, null, 2), 'utf8');
+  }
+
+  function readStatus(dir: string): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(path.join(dir, 'status.json'), 'utf8'));
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-member-test-'));
+    jobDir = path.join(tmpDir, 'job1');
+    memberDir = path.join(jobDir, 'members', 'opencode');
+    writeStatus(memberDir, {
+      member: 'opencode',
+      state: 'done',
+      sessionID: 'sess-123',
+      resume_count: 0,
+      command: 'opencode',
+    });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Import target lazily so we don't need dynamic import dance
+  async function getCmdResumeMember() {
+    const mod = await import('./job.ts');
+    return (mod as any).cmdResumeMember as (
+      jobDir: string,
+      name: string,
+      prompt: string,
+      opts?: {
+        driverFactory?: (cliType: string) => unknown;
+        resumeOneTurnFn?: typeof makeResumeStub extends () => infer R ? R : never;
+      }
+    ) => Promise<void>;
+  }
+
+  test('resume-member D1a sub-command exits 0 sessionID present', async () => {
+    const cmdResumeMember = await getCmdResumeMember();
+    // Should not throw — sessionID present, state not error/non_retryable, count < 3
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry this', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  test('resume-member D1b persists resume_count 1 after D1a', async () => {
+    const cmdResumeMember = await getCmdResumeMember();
+    await cmdResumeMember(jobDir, 'opencode', 'retry this', {
+      driverFactory: mockDriverFactory as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+    });
+    const status = readStatus(memberDir);
+    expect(status.resume_count).toBe(1);
+  });
+
+  test('resume-member D2 rejects with resume cap exceeded', async () => {
+    // Set resume_count to 3 (at cap)
+    writeStatus(memberDir, {
+      member: 'opencode',
+      state: 'done',
+      sessionID: 'sess-123',
+      resume_count: 3,
+      command: 'opencode',
+    });
+    const cmdResumeMember = await getCmdResumeMember();
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+  });
+
+  test('resume-member D3 rejects with no resumable session', async () => {
+    // sessionID absent
+    writeStatus(memberDir, {
+      member: 'opencode',
+      state: 'done',
+      sessionID: null,
+      command: 'opencode',
+    });
+    const cmdResumeMember = await getCmdResumeMember();
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).rejects.toThrow('no resumable session');
+  });
+
+  test('resume-member D4 sequential 3 calls final resume_count 3', async () => {
+    const cmdResumeMember = await getCmdResumeMember();
+    for (let i = 0; i < 3; i++) {
+      await cmdResumeMember(jobDir, 'opencode', `retry ${i}`, {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      });
+    }
+    const status = readStatus(memberDir);
+    expect(status.resume_count).toBe(3);
+    // 4th call must fail
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry 4', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+  });
+
+  test('resume-member detectCliType opencode', async () => {
+    const cmdResumeMember = await getCmdResumeMember();
+    const calls: string[] = [];
+    const trackingFactory = (cliType: string) => {
+      calls.push(cliType);
+      return mockDriverFactory(cliType);
+    };
+    await cmdResumeMember(jobDir, 'opencode', 'retry', {
+      driverFactory: trackingFactory as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+    });
+    expect(calls).toContain('opencode');
+  });
+
+  test('resume-member D6 registered before Unknown command', () => {
+    const source = fs.readFileSync(SCRIPT, 'utf8');
+    const lines = source.split('\n');
+    const resumeIdx = lines.findIndex(l => l.includes("command === 'resume-member'"));
+    const unknownIdx = lines.findIndex(l => l.includes('Unknown command'));
+    expect(resumeIdx).toBeGreaterThan(-1);
+    expect(unknownIdx).toBeGreaterThan(-1);
+    expect(resumeIdx).toBeLessThan(unknownIdx);
+  });
+
+  test('resume-member D7a rejects when --job missing', async () => {
+    // Test via CLI spawn — missing --job arg
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--member', 'alice', '--prompt', 'hi'], {
+        stdio: 'pipe',
+      });
+      throw new Error('expected non-zero exit');
+    } catch (err: any) {
+      expect(err.status).toBeGreaterThan(0);
+      expect(err.stderr.toString()).toContain('--job required');
+    }
+  });
+
+  test('resume-member D7b rejects when --member missing', async () => {
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--job', jobDir, '--prompt', 'hi'], {
+        stdio: 'pipe',
+      });
+      throw new Error('expected non-zero exit');
+    } catch (err: any) {
+      expect(err.status).toBeGreaterThan(0);
+      expect(err.stderr.toString()).toContain('--member required');
+    }
+  });
+
+  test('resume-member D7c rejects when --prompt missing', async () => {
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--job', jobDir, '--member', 'opencode'], {
+        stdio: 'pipe',
+      });
+      throw new Error('expected non-zero exit');
+    } catch (err: any) {
+      expect(err.status).toBeGreaterThan(0);
+      expect(err.stderr.toString()).toContain('--prompt required');
+    }
+  });
+
+  test('resume-member D8 rejects when no driver for gemini', async () => {
+    // gemini is intentionally absent from driver registry
+    writeStatus(memberDir, {
+      member: 'opencode',
+      state: 'done',
+      sessionID: 'sess-123',
+      resume_count: 0,
+      command: 'gemini',
+    });
+    const cmdResumeMember = await getCmdResumeMember();
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).rejects.toThrow('no driver for gemini');
+  });
+
+  test('resume-member D9 rejects when state error', async () => {
+    writeStatus(memberDir, {
+      member: 'opencode',
+      state: 'error',
+      sessionID: 'sess-123',
+      resume_count: 0,
+      command: 'opencode',
+    });
+    const cmdResumeMember = await getCmdResumeMember();
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).rejects.toThrow('member in non-resumable state: error');
+  });
+
+  test('resume-member D10 concurrent guardrail valid JSON', async () => {
+    // Simulate concurrent writes: two calls run sequentially (sequential assumption).
+    // After both, status.json must remain valid JSON.
+    const cmdResumeMember = await getCmdResumeMember();
+    await cmdResumeMember(jobDir, 'opencode', 'first', {
+      driverFactory: mockDriverFactory as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+    });
+    await cmdResumeMember(jobDir, 'opencode', 'second', {
+      driverFactory: mockDriverFactory as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+    });
+    const raw = fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8');
+    expect(() => JSON.parse(raw)).not.toThrow();
+    const status = JSON.parse(raw);
+    expect(typeof status.resume_count).toBe('number');
+    expect(status.resume_count).toBe(2);
+  });
+
+  test('resume-member D11 rejects when status.command missing — unknown cli type', async () => {
+    writeStatus(memberDir, {
+      member: 'opencode',
+      state: 'done',
+      sessionID: 'sess-123',
+      resume_count: 0,
+      // command: absent
+    });
+    const cmdResumeMember = await getCmdResumeMember();
+    await expect(
+      cmdResumeMember(jobDir, 'opencode', 'retry', {
+        driverFactory: mockDriverFactory as any,
+        resumeOneTurnFn: makeResumeStub() as any,
+      })
+    ).rejects.toThrow('unknown cli type');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // cmdResults
 // ---------------------------------------------------------------------------
 
