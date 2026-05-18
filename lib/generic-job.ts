@@ -28,6 +28,9 @@ import {
   stripAnsi,
 } from './job-utils';
 
+import { pickDriver, type CliType } from './agent-drivers/types';
+import { resumeOneTurn, runOnce, splitCommand, type RunOneTurnOpts, type OneTurnResult } from './worker-utils';
+
 // ---------------------------------------------------------------------------
 // JobConfig type
 // ---------------------------------------------------------------------------
@@ -852,6 +855,93 @@ export async function cmdCollect(
     }
     await sleepMs(COLLECT_POLL_INTERVAL_MS);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Command: resume-member
+// ---------------------------------------------------------------------------
+
+export type ResumeMemberOpts = {
+  driverFactory?: (cliType: string) => ReturnType<typeof pickDriver>;
+  resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
+  /** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
+  runOnceFn?: typeof runOnce;
+};
+
+export async function cmdResumeMember(
+  jobDir: string,
+  name: string,
+  prompt: string,
+  config: JobConfig,
+  opts: ResumeMemberOpts = {},
+): Promise<void> {
+  const memberDir = path.join(jobDir, config.entityDirName, name);
+  const statusPath = path.join(memberDir, 'status.json');
+
+  // Read status.json
+  let status: Record<string, unknown>;
+  try {
+    status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+  } catch {
+    throw new Error('no resumable session');
+  }
+
+  // Check sessionID
+  const sessionID = status.sessionID;
+  if (!sessionID) throw new Error('no resumable session');
+
+  // State check
+  const state = String(status.state ?? '');
+  if (state === 'error' || state === 'non_retryable') {
+    throw new Error(`member in non-resumable state: ${state}`);
+  }
+
+  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn to prevent
+  // concurrent cap bypass. executeOneTurn preserves resume_count via read-then-write.
+  const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
+  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
+  atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
+
+  // Derive cliType
+  const command = status.command;
+  const cliType = detectCliType(command);
+  if (cliType === 'unknown') throw new Error('unknown cli type');
+
+  // Driver lookup
+  const driverFactory = opts.driverFactory ?? pickDriver;
+  const driver = driverFactory(cliType as CliType);
+  if (!driver) throw new Error(`no driver for ${cliType}`);
+
+  // P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
+  const cmdStr = String(command ?? '');
+  const tokens = splitCommand(cmdStr);
+  if (!tokens || tokens.length === 0) throw new Error('invalid stored command');
+  const [origProgram, ...origArgs] = tokens;
+
+  // P2-1: read timeoutSec from job.json instead of hardcoding
+  let timeoutSec = 300;
+  try {
+    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8')) as Record<string, unknown>;
+    const settings = jobMeta.settings as Record<string, unknown> | undefined;
+    if (settings && typeof settings.timeoutSec === 'number' && settings.timeoutSec > 0) {
+      timeoutSec = settings.timeoutSec;
+    }
+  } catch { /* keep default 300 */ }
+
+  // Invoke resumeOneTurn with original command preserved
+  const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
+  await resumeFn(String(sessionID), {
+    program: origProgram,
+    args: origArgs,
+    prompt,
+    member: name,
+    memberDir,
+    command: cmdStr,
+    timeoutSec,
+    cliType: cliType as RunOneTurnOpts['cliType'],
+    driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
+    runOnceFn: opts.runOnceFn,
+  });
 }
 
 // ---------------------------------------------------------------------------

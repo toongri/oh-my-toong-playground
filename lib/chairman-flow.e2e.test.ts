@@ -66,6 +66,13 @@ describe('chairman retry wire (AC-H6) — real resumeOneTurn path', () => {
   it('cmdResumeMember completes via real resumeOneTurn', async () => {
     await expect(
       cmdResumeMember(jobDir, 'gpt', 'follow up?', {
+        entitySingular: 'member',
+        entityPlural: 'members',
+        entityDirName: 'members',
+        jobPrefix: 'chunk-review-',
+        uiLabel: '[Chunk Review]',
+        configTopLevelKey: 'chunk-review',
+      }, {
         driverFactory: mockDriverFactory,
         runOnceFn: mockRunOnceFn,
       }),
@@ -74,6 +81,13 @@ describe('chairman retry wire (AC-H6) — real resumeOneTurn path', () => {
 
   it('resume_count == 1 after sub-command (reserve-before-await pattern)', async () => {
     await cmdResumeMember(jobDir, 'gpt', 'follow up?', {
+      entitySingular: 'member',
+      entityPlural: 'members',
+      entityDirName: 'members',
+      jobPrefix: 'chunk-review-',
+      uiLabel: '[Chunk Review]',
+      configTopLevelKey: 'chunk-review',
+    }, {
       driverFactory: mockDriverFactory,
       runOnceFn: mockRunOnceFn,
     });
@@ -84,6 +98,13 @@ describe('chairman retry wire (AC-H6) — real resumeOneTurn path', () => {
 
   it('output.txt overwritten with driver.parseStdout text', async () => {
     await cmdResumeMember(jobDir, 'gpt', 'follow up?', {
+      entitySingular: 'member',
+      entityPlural: 'members',
+      entityDirName: 'members',
+      jobPrefix: 'chunk-review-',
+      uiLabel: '[Chunk Review]',
+      configTopLevelKey: 'chunk-review',
+    }, {
       driverFactory: mockDriverFactory,
       runOnceFn: mockRunOnceFn,
     });
@@ -96,6 +117,13 @@ describe('chairman retry wire (AC-H6) — real resumeOneTurn path', () => {
 
   it('status.json carries sessionID from driver.parseStdout', async () => {
     await cmdResumeMember(jobDir, 'gpt', 'follow up?', {
+      entitySingular: 'member',
+      entityPlural: 'members',
+      entityDirName: 'members',
+      jobPrefix: 'chunk-review-',
+      uiLabel: '[Chunk Review]',
+      configTopLevelKey: 'chunk-review',
+    }, {
       driverFactory: mockDriverFactory,
       runOnceFn: mockRunOnceFn,
     });
