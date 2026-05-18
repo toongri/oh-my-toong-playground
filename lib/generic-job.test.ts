@@ -6,6 +6,7 @@ import path from 'path';
 import os from 'os';
 
 import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from './generic-job.ts';
+import type { RunOneTurnOpts } from './worker-utils.ts';
 import {
   detectCliType,
   buildAugmentedCommand,
@@ -1984,5 +1985,36 @@ describe('cmdResumeMember', () => {
     await expect(
       cmdResumeMember(jobDir, 'alice', 'follow up', reviewersConfig, opts),
     ).rejects.toThrow('no resumable session');
+  });
+
+  test('passes workerEnv from status.json through to resumeFn', async () => {
+    const entityDir = path.join(jobDir, 'members', 'gpt');
+    writeMemberStatus(entityDir, {
+      member: 'gpt',
+      state: 'done',
+      sessionID: 'ses_x',
+      resume_count: 0,
+      command: 'opencode',
+      workerEnv: { CLAUDECODE: '', CLAUDE_CODE_EFFORT_LEVEL: 'xhigh', CUSTOM: 'val' },
+    });
+
+    let capturedOpts: RunOneTurnOpts | null = null;
+    const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+      capturedOpts = opts;
+      return { state: 'done' as const, sessionID: 'ses_x', text: '', exitCode: 0 };
+    };
+
+    await cmdResumeMember(jobDir, 'gpt', 'follow up', membersConfig, {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn,
+    });
+
+    expect(capturedOpts).not.toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(capturedOpts!.workerEnv).toEqual({
+      CLAUDECODE: '',
+      CLAUDE_CODE_EFFORT_LEVEL: 'xhigh',
+      CUSTOM: 'val',
+    });
   });
 });

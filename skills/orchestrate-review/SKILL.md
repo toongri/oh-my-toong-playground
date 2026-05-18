@@ -86,7 +86,7 @@ Aggregate all reviewer outputs, produce the final report, then STOP.
 
 ## Worker Output Contract
 
-Each reviewer CLI is configured to emit final-answer text directly on stdout (default render mode — no event stream, no JSON metadata). The worker streams stdout to `output.txt` unchanged, so `output.txt` always contains the rendered reviewer response ready to read. No post-processing in the script or the chairman.
+Each reviewer CLI emits its native structured output (opencode: NDJSON via `--format json`; claude: single-line JSON via `--output-format json`). The worker spawns the CLI through an `AgentDriver`, whose `parseStdout` extracts the final answer text and session metadata, then overwrites `output.txt` with the parsed text. By the time the chairman reads `output.txt`, the file contains rendered reviewer text only — no JSON envelope, no event stream metadata. The transformation is invisible to chairman logic: read `output.txt` as plain text per reviewer.
 
 ## Chairman Boundaries (NON-NEGOTIABLE)
 
