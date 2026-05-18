@@ -36,7 +36,7 @@ import {
 } from '@lib/generic-job';
 
 import { pickDriver, type CliType } from '@lib/agent-drivers/types';
-import { resumeOneTurn, type RunOneTurnOpts, type OneTurnResult } from '@lib/worker-utils';
+import { resumeOneTurn, splitCommand, type RunOneTurnOpts, type OneTurnResult } from '@lib/worker-utils';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -421,16 +421,32 @@ export async function cmdResumeMember(
   const driver = driverFactory(cliType as CliType);
   if (!driver) throw new Error(`no driver for ${cliType}`);
 
-  // Invoke resumeOneTurn
+  // P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
+  const cmdStr = String(command ?? '');
+  const tokens = splitCommand(cmdStr);
+  if (!tokens || tokens.length === 0) throw new Error('invalid stored command');
+  const [origProgram, ...origArgs] = tokens;
+
+  // P2-1: read timeoutSec from job.json instead of hardcoding
+  let timeoutSec = 300;
+  try {
+    const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8')) as Record<string, unknown>;
+    const settings = jobMeta.settings as Record<string, unknown> | undefined;
+    if (settings && typeof settings.timeoutSec === 'number' && settings.timeoutSec > 0) {
+      timeoutSec = settings.timeoutSec;
+    }
+  } catch { /* keep default 300 */ }
+
+  // Invoke resumeOneTurn with original command preserved
   const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
   await resumeFn(String(sessionID), {
-    program: cliType,
-    args: [],
+    program: origProgram,
+    args: origArgs,
     prompt,
     member: name,
     memberDir,
-    command: String(command ?? ''),
-    timeoutSec: 300,
+    command: cmdStr,
+    timeoutSec,
     cliType: cliType as RunOneTurnOpts['cliType'],
     driverFactory: opts.driverFactory as RunOneTurnOpts['driverFactory'],
   });
