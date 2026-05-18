@@ -1,15 +1,17 @@
 /**
  * E2E test: caller-controlled retry mechanism (cmdResumeMember).
  *
- * Validates that the wire works end-to-end:
+ * Validates the FULL wire end-to-end (P2-4 fix):
  *   status.json (sessionID, command, state) → cmdResumeMember
- *     → resumeOneTurnFn injection → output.txt overwrite + resume_count increment.
+ *     → default resumeOneTurn → driver.resumeCommand → runOnceFn injection
+ *     → executeOneTurn → driver.parseStdout → status.json/output.txt write.
  *
- * LLM-free: no real CLI processes are spawned. All external calls are mocked.
+ * LLM-free: no real CLI processes are spawned. runOnceFn is mocked at the
+ * primitive layer so the real resumeOneTurn → executeOneTurn path executes.
  *
  * Production failure context: chunk-review-2026-05-15-0913-88f32f — chairman
  * received narrative-only output without verdict; new design lets chairman LLM
- * decide to retry via resume-member sub-command. These tests validate the wire.
+ * decide to retry via resume-member sub-command.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
@@ -18,37 +20,25 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { cmdResumeMember } from '../skills/orchestrate-review/scripts/job.ts';
 import { atomicWriteJson } from '@lib/job-utils';
-import type { RunOneTurnOpts, OneTurnResult } from './worker-utils.ts';
+import type { RunOnceOpts } from './worker-utils.ts';
 import type { AgentDriver } from './agent-drivers/types.ts';
-
-// ---------------------------------------------------------------------------
-// Test fixtures
-// ---------------------------------------------------------------------------
 
 let jobDir: string;
 let memberDir: string;
 
-/** Minimal stub AgentDriver — only needed to pass the driver-null guard in cmdResumeMember. */
-const stubDriver: AgentDriver = {
+/** Driver mock — parseStdout returns the parsed payload that executeOneTurn writes to output.txt. */
+const mockDriverFactory = (_cliType: string): AgentDriver | null => ({
   cli: 'opencode',
-  initialCommand: () => ({ program: 'opencode', args: [], env: {} }),
-  resumeCommand: () => ({ program: 'opencode', args: [], env: {} }),
-  parseStdout: () => null,
-};
+  initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+  resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+  parseStdout: () => ({ sessionID: 'ses_x', terminal: 'stop', text: 'follow-up complete', rawEvents: [] }),
+});
 
-const mockDriverFactory = (_cliType: string): AgentDriver | null => stubDriver;
-
-/**
- * Mock resumeOneTurnFn:
- * - Writes 'follow-up complete' to memberDir/output.txt (mirrors real resumeOneTurn behavior)
- * - Returns OneTurnResult indicating success
- */
-const mockResumeFn = async (
-  _sessionID: string,
-  opts: RunOneTurnOpts,
-): Promise<OneTurnResult> => {
-  writeFileSync(join(opts.memberDir, 'output.txt'), 'follow-up complete', 'utf8');
-  return { state: 'done', sessionID: 'ses_x', text: 'follow-up complete', exitCode: 0 };
+/** runOnce mock — writes raw stdout to output.txt and returns success. Mirrors real runOnce contract. */
+const mockRunOnceFn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
+  writeFileSync(join(opts.memberDir, 'output.txt'), 'raw-ndjson-stub', 'utf8');
+  writeFileSync(join(opts.memberDir, 'error.txt'), '', 'utf8');
+  return { state: 'done', exitCode: 0, member: opts.member, command: opts.command, attempt: 0 };
 };
 
 beforeEach(() => {
@@ -56,17 +46,15 @@ beforeEach(() => {
   memberDir = join(jobDir, 'members', 'gpt');
   mkdirSync(memberDir, { recursive: true });
 
-  // Seed status.json — mirrors the production failure case shape
   atomicWriteJson(join(memberDir, 'status.json'), {
     member: 'gpt',
     state: 'done',
     sessionID: 'ses_x',
     resume_count: 0,
-    command: 'opencode run --format json --session ses_x',
+    command: 'opencode run --format json',
     exitCode: 0,
   });
 
-  // Seed output.txt with narrative-only content (no verdict)
   writeFileSync(join(memberDir, 'output.txt'), 'narrative without verdict', 'utf8');
 });
 
@@ -74,40 +62,45 @@ afterEach(() => {
   rmSync(jobDir, { recursive: true, force: true });
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('chairman retry wire (AC-H6)', () => {
-  it('resume-member sub-command exit 0', async () => {
-    // AC-H6a: cmdResumeMember completes without throwing (= exit 0 semantically)
+describe('chairman retry wire (AC-H6) — real resumeOneTurn path', () => {
+  it('cmdResumeMember completes via real resumeOneTurn', async () => {
     await expect(
       cmdResumeMember(jobDir, 'gpt', 'follow up?', {
         driverFactory: mockDriverFactory,
-        resumeOneTurnFn: mockResumeFn,
+        runOnceFn: mockRunOnceFn,
       }),
     ).resolves.toBeUndefined();
   });
 
-  it('resume_count == 1 after sub-command', async () => {
-    // AC-H6b: resume_count in status.json is incremented to 1
+  it('resume_count == 1 after sub-command (reserve-before-await pattern)', async () => {
     await cmdResumeMember(jobDir, 'gpt', 'follow up?', {
       driverFactory: mockDriverFactory,
-      resumeOneTurnFn: mockResumeFn,
+      runOnceFn: mockRunOnceFn,
     });
 
     const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8')) as Record<string, unknown>;
     expect(status.resume_count).toBe(1);
   });
 
-  it('output.txt contains follow-up complete', async () => {
-    // AC-H6c: output.txt is overwritten by mock (mirroring real resumeOneTurn)
+  it('output.txt overwritten with driver.parseStdout text', async () => {
     await cmdResumeMember(jobDir, 'gpt', 'follow up?', {
       driverFactory: mockDriverFactory,
-      resumeOneTurnFn: mockResumeFn,
+      runOnceFn: mockRunOnceFn,
     });
 
+    // executeOneTurn overwrites output.txt with parsed.text ('follow-up complete'),
+    // not the raw stdout that mockRunOnceFn wrote.
     const content = readFileSync(join(memberDir, 'output.txt'), 'utf8');
-    expect(content.includes('follow-up complete')).toBe(true);
+    expect(content).toBe('follow-up complete');
+  });
+
+  it('status.json carries sessionID from driver.parseStdout', async () => {
+    await cmdResumeMember(jobDir, 'gpt', 'follow up?', {
+      driverFactory: mockDriverFactory,
+      runOnceFn: mockRunOnceFn,
+    });
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8')) as Record<string, unknown>;
+    expect(status.sessionID).toBe('ses_x');
   });
 });
