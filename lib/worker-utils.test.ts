@@ -924,6 +924,96 @@ describe('executeOneTurn state/message/workerEnv regression', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// P1-1 regression: parsed===null AND driverInstance!==null → state must be preserved
+// makeOneTurnMockDriver always returns non-null, bypassing the else branch.
+// These tests use a null-parse driver to exercise the actual buggy path.
+// ---------------------------------------------------------------------------
+
+function makeNullParseDriver(): AgentDriver {
+  return {
+    cli: 'opencode',
+    parseStdout: (_stdout: string) => null,
+    initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+  };
+}
+
+describe('executeOneTurn parsed===null with driver — process state preservation (P1-1)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'p1-1-null-parse-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // Regression: missing_cli must not be flattened to 'error' when parseStdout returns null
+  test('missing_cli state preserved when driver parseStdout returns null', async () => {
+    const memberDir = join(tmpDir, 'missing-cli');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'missing_cli',
+      message: 'spawn opencode ENOENT',
+      exitCode: null,
+    });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNullParseDriver(),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('missing_cli');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('missing_cli');
+  });
+
+  // Regression: timed_out must not be flattened to 'error' when parseStdout returns null
+  test('timed_out state preserved when driver parseStdout returns null', async () => {
+    const memberDir = join(tmpDir, 'timed-out');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'timed_out',
+      message: 'Timed out after 600s',
+      exitCode: null,
+    });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNullParseDriver(),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('timed_out');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('timed_out');
+  });
+
+  // Regression: canceled must not be flattened to 'error' when parseStdout returns null
+  test('canceled state preserved when driver parseStdout returns null', async () => {
+    const memberDir = join(tmpDir, 'canceled');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('', {
+      state: 'canceled',
+      message: 'Canceled',
+      exitCode: null,
+    });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNullParseDriver(),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('canceled');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('canceled');
+  });
+});
+
 describe('runOneTurn real-spawn integration', () => {
   let tmpDir: string;
 
