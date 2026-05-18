@@ -5,7 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-import type { JobConfig, CmdResultsHooks } from './generic-job.ts';
+import type { JobConfig, CmdResultsHooks, ResumeMemberOpts } from './generic-job.ts';
+import type { RunOneTurnOpts } from './worker-utils.ts';
 import {
   detectCliType,
   buildAugmentedCommand,
@@ -20,6 +21,7 @@ import {
   cmdStop,
   cmdClean,
   cmdCollect,
+  cmdResumeMember,
 } from './generic-job.ts';
 
 // ---------------------------------------------------------------------------
@@ -112,6 +114,10 @@ describe('module exports', () => {
 
   test('exports cmdCollect', () => {
     expect(typeof cmdCollect).toBe('function');
+  });
+
+  test('exports cmdResumeMember', () => {
+    expect(typeof cmdResumeMember).toBe('function');
   });
 });
 
@@ -720,6 +726,26 @@ describe('computeStatus', () => {
     expect(result.counts.permanent_error).toBe(1);
     expect(result.counts.transient_error).toBe(1);
     expect(result.counts.empty_output).toBe(1);
+  });
+
+  test('computeStatus totals 12 keys', async () => {
+    const jobDir = path.join(tmpDir, 'job-12keys');
+    setupJob(jobDir, { id: 'test-12keys' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    const expectedKeys = [
+      'queued', 'running', 'retrying', 'done', 'error',
+      'missing_cli', 'timed_out', 'canceled', 'non_retryable',
+      'empty_output', 'transient_error', 'permanent_error',
+    ];
+    for (const key of expectedKeys) {
+      expect(key in result.counts).toBe(true);
+    }
+    // Exactly 12 keys (excluding 'total' which is added separately)
+    const countKeys = Object.keys(result.counts).filter(k => k !== 'total');
+    expect(countKeys.length).toBe(12);
+    expect('max_turns_exceeded' in result.counts).toBe(false);
   });
 });
 
@@ -1706,5 +1732,289 @@ describe('cmdResults', () => {
 
     const result = JSON.parse(raw);
     expect(result.members[0].stderr).toBe('green');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// opencode output_format branch
+// ---------------------------------------------------------------------------
+
+describe('buildAugmentedCommand opencode output_format', () => {
+  test('opencode json: appends --format json', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run', output_format: 'json' },
+      'opencode',
+    );
+    expect(result.command).toContain('--format');
+    expect(result.command).toContain('json');
+  });
+
+  test('opencode without output_format: does not append --format json', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run' },
+      'opencode',
+    );
+    expect(result.command).not.toContain('--format');
+  });
+
+  test('기존 claude 브랜치 회귀: `--output-format json` 유지', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', output_format: 'json' },
+      'claude',
+    );
+    expect(result.command).toContain('--output-format');
+    expect(result.command).toContain('json');
+  });
+
+  test('기존 codex 브랜치 회귀: `--json` 유지', () => {
+    const result = buildAugmentedCommand(
+      { command: 'codex exec', output_format: 'json' },
+      'codex',
+    );
+    expect(result.command).toContain('--json');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cmdResumeMember
+// ---------------------------------------------------------------------------
+
+describe('cmdResumeMember', () => {
+  let tmpDir: string;
+  let jobDir: string;
+
+  const membersConfig: JobConfig = {
+    entitySingular: 'member',
+    entityPlural: 'members',
+    entityDirName: 'members',
+    jobPrefix: 'council-',
+    uiLabel: '[Council]',
+    configTopLevelKey: 'council',
+  };
+
+  const reviewersConfig: JobConfig = {
+    entitySingular: 'reviewer',
+    entityPlural: 'reviewers',
+    entityDirName: 'reviewers',
+    jobPrefix: 'spec-review-',
+    uiLabel: '[Spec Review]',
+    configTopLevelKey: 'spec-review',
+  };
+
+  function writeMemberStatus(entityDir: string, payload: Record<string, unknown>) {
+    fs.mkdirSync(entityDir, { recursive: true });
+    fs.writeFileSync(path.join(entityDir, 'status.json'), JSON.stringify(payload, null, 2), 'utf8');
+  }
+
+  function readMemberStatus(entityDir: string): Record<string, unknown> {
+    return JSON.parse(fs.readFileSync(path.join(entityDir, 'status.json'), 'utf8'));
+  }
+
+  function makeMockDriver() {
+    return {
+      cli: 'opencode' as const,
+      initialCommand: () => ({ program: 'opencode', args: [], env: {} }),
+      resumeCommand: () => ({ program: 'opencode', args: ['--resume', 'sess-abc'], env: {} }),
+      parseStdout: (_s: string) => ({
+        sessionID: 'sess-abc',
+        terminal: 'stop' as const,
+        text: 'resumed result',
+        rawEvents: [],
+      }),
+    };
+  }
+
+  function makeResumeStub(sessionID = 'sess-abc') {
+    return async (_sid: string, _opts: unknown) => ({
+      state: 'done',
+      sessionID,
+      text: 'resumed output',
+      exitCode: 0,
+    });
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'generic-job-resume-test-'));
+    jobDir = path.join(tmpDir, 'job1');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('uses entityDirName=members to locate status.json', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).resolves.toBeUndefined();
+  });
+
+  test('uses entityDirName=reviewers to locate status.json', async () => {
+    const entityDir = path.join(jobDir, 'reviewers', 'bob');
+    writeMemberStatus(entityDir, {
+      member: 'bob',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'bob', 'follow up', reviewersConfig, opts),
+    ).resolves.toBeUndefined();
+  });
+
+  test('rejects when status.json absent (no resumable session)', async () => {
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'ghost', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('no resumable session');
+  });
+
+  test('rejects when sessionID missing in status.json', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: null,
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('no resumable session');
+  });
+
+  test('increments resume_count to 1 after one call', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts);
+    const status = readMemberStatus(entityDir);
+    expect(status.resume_count).toBe(1);
+  });
+
+  test('rejects with cap exceeded when resume_count is 3', async () => {
+    const entityDir = path.join(jobDir, 'reviewers', 'bob');
+    writeMemberStatus(entityDir, {
+      member: 'bob',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'bob', 'follow up', reviewersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+  });
+
+  test('rejects when state is error', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'error',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('member in non-resumable state: error');
+  });
+
+  test('wrong entityDirName does not find status.json in sibling directory', async () => {
+    // Status is in 'members/' but we pass reviewersConfig (entityDirName='reviewers')
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    // reviewersConfig uses 'reviewers' dir — should not find 'members/alice'
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', reviewersConfig, opts),
+    ).rejects.toThrow('no resumable session');
+  });
+
+  test('passes workerEnv from status.json through to resumeFn', async () => {
+    const entityDir = path.join(jobDir, 'members', 'gpt');
+    writeMemberStatus(entityDir, {
+      member: 'gpt',
+      state: 'done',
+      sessionID: 'ses_x',
+      resume_count: 0,
+      command: 'opencode',
+      workerEnv: { CLAUDECODE: '', CLAUDE_CODE_EFFORT_LEVEL: 'xhigh', CUSTOM: 'val' },
+    });
+
+    let capturedOpts: RunOneTurnOpts | null = null;
+    const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+      capturedOpts = opts;
+      return { state: 'done' as const, sessionID: 'ses_x', text: '', exitCode: 0 };
+    };
+
+    await cmdResumeMember(jobDir, 'gpt', 'follow up', membersConfig, {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn,
+    });
+
+    expect(capturedOpts).not.toBeNull();
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    expect(capturedOpts!.workerEnv).toEqual({
+      CLAUDECODE: '',
+      CLAUDE_CODE_EFFORT_LEVEL: 'xhigh',
+      CUSTOM: 'val',
+    });
   });
 });

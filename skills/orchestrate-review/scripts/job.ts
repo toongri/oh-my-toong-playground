@@ -21,6 +21,7 @@ import { getOmtDir } from '@lib/omt-dir';
 
 import {
   type JobConfig,
+  type ResumeMemberOpts,
   detectCliType,
   buildAugmentedCommand,
   gcStaleJobs as _gcStaleJobs,
@@ -33,7 +34,11 @@ import {
   cmdCollect as _cmdCollect,
   buildManifest as _buildManifest,
   parseYamlSimple as _parseYamlSimple,
+  cmdResumeMember as _cmdResumeMember,
 } from '@lib/generic-job';
+
+export { cmdResumeMember } from '@lib/generic-job';
+
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -232,7 +237,7 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
     exitWithError(`Invalid config in ${configPath}: 'chunk-review' must be a mapping/object`);
   }
 
-  const merged = {
+  const merged: Record<string, any> = {
     'chunk-review': {
       chairman: { ...fallback['chunk-review'].chairman },
       members: Array.isArray(fallback['chunk-review'].members) ? [...fallback['chunk-review'].members] : [],
@@ -369,6 +374,11 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 }
 
 // ---------------------------------------------------------------------------
+// resume-member: implemented in @lib/generic-job (cmdResumeMember)
+// re-exported for backward compat via `export { cmdResumeMember } from '@lib/generic-job'`
+// (see import block above)
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -427,6 +437,20 @@ async function main(): Promise<void> {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('clean: missing jobDir');
     cmdClean(options, jobDir);
+    return;
+  }
+  if (command === 'resume-member') {
+    const jobDirArg = options.job as string | undefined;
+    if (!jobDirArg) exitWithError('--job required');
+    const nameArg = options.member as string | undefined;
+    if (!nameArg) exitWithError('--member required');
+    const promptArg = options.prompt as string | undefined;
+    if (!promptArg) exitWithError('--prompt required');
+    try {
+      await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG);
+    } catch (e: unknown) {
+      exitWithError(e instanceof Error ? e.message : String(e));
+    }
     return;
   }
 

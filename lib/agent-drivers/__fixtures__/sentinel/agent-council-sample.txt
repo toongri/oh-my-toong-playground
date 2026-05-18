@@ -1,0 +1,13 @@
+## Council Member: Gemini
+
+**Topic:** Should the multi-turn pump use a polling interval or event-driven stdout streaming?
+
+**Analysis:**
+Event-driven stdout streaming avoids the latency floor imposed by polling. The PoC confirmed opencode emits step_finish synchronously at turn boundary. Polling would add 200–500 ms median delay with no benefit.
+
+**Risk:** Buffered stdout in some shell environments may coalesce events. Mitigated by line-buffered reads already in runOnce.
+
+## Position
+APPROVE
+
+Proceed with event-driven stdout streaming as specified. No further design changes needed before Wave 2 implementation.

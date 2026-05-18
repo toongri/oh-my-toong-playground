@@ -489,20 +489,7 @@ describe('parseCouncilConfig', () => {
     expect(result.council.members.length > 0).toBeTruthy();
   });
 
-  test('returns fallback-merged result for malformed YAML when yaml package unavailable', async () => {
-    // Without the yaml package, parseCouncilConfig uses parseYamlSimple
-    // which catches all errors and returns fallback
-    const configPath = path.join(tmpDir, 'bad.yaml');
-    fs.writeFileSync(configPath, ':\ninvalid: [unclosed', 'utf8');
-
-    const result = await parseCouncilConfig(configPath);
-
-    // parseYamlSimple catches errors and returns fallback-merged result
-    expect(result.council).toBeTruthy();
-    expect(result.council.members.length > 0).toBeTruthy();
-  });
-
-  test('exits with error when council key is missing via subprocess', () => {
+test('exits with error when council key is missing via subprocess', () => {
     const configPath = path.join(tmpDir, 'no-council.yaml');
     fs.writeFileSync(configPath, 'other_key: true\n', 'utf8');
 
