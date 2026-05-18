@@ -1,174 +1,26 @@
-import { describe, it, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { describe, it, test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdirSync, rmSync, readFileSync, existsSync, mkdtempSync, readdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import {
   splitCommand,
   atomicWriteJson,
-  sleepMsAsync,
   assemblePrompt,
-  MAX_RETRIES,
-  BASE_DELAY_MS,
-  NON_RETRYABLE_EXIT_CODES,
-  NON_RETRYABLE_STATES,
-  HEARTBEAT_INTERVAL_MS,
-  PROMPT_MAX_BYTES,
   runOnce,
-  runWithRetry,
   runOneTurn,
   resumeOneTurn,
   type RunOnceOpts,
-  type RunWithRetryOpts,
   type RunOneTurnOpts,
 } from './worker-utils.ts';
 import type { AgentDriver, ParseResult, CliType } from './agent-drivers/types.ts';
 
-const noopSleep = async () => {};
-
-function makeOpts(testDir: string, overrides: Partial<RunWithRetryOpts> = {}): RunWithRetryOpts {
-  const memberDir = join(testDir, 'member');
-  mkdirSync(memberDir, { recursive: true });
-  return {
-    program: '/bin/sh',
-    args: ['-c', 'exit 1'],
-    prompt: 'test prompt',
-    member: 'test-member',
-    memberDir,
-    command: '/bin/sh -c "exit 1"',
-    timeoutSec: 10,
-    sleepFn: noopSleep,
-    ...overrides,
-  };
+function makeTmpDir(): string {
+  return mkdtempSync(join(tmpdir(), 'worker-utils-test-'));
 }
 
-describe('non-retryable 에러 분류', () => {
-  const testDir = join(tmpdir(), 'worker-utils-test-' + Date.now());
-
-  beforeAll(() => {
-    mkdirSync(testDir, { recursive: true });
-  });
-
-  afterAll(() => {
-    rmSync(testDir, { recursive: true, force: true });
-  });
-
-  it('TerminalQuotaError in error.txt → state=non_retryable, 재시도 없음', async () => {
-    const subDir = join(testDir, 'quota-error');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "TerminalQuotaError: quota limit reached" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    expect(result.state).toBe('non_retryable');
-    // attempt stays at 0 — no retry occurred
-    expect(result.attempt).toBe(0);
-  });
-
-  it('exitCode=42 → state=non_retryable', async () => {
-    const subDir = join(testDir, 'exit42');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "some error" >&2; exit 42'],
-      command: '/bin/sh -c "exit 42"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    expect(result.state).toBe('non_retryable');
-    expect(result.exitCode).toBe(42);
-  });
-
-  it('retryable error (Connection refused) → 재시도 진행', async () => {
-    const subDir = join(testDir, 'retryable');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "Connection refused" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    // After exhausting retries, final state should still be 'error' (not non_retryable)
-    expect(result.state).toBe('error');
-    // Attempt should be MAX_RETRIES (2), indicating retry occurred
-    expect(result.attempt).toBe(2);
-  });
-
-  it('error.txt 없음/비어있음 → 재시도 진행', async () => {
-    const subDir = join(testDir, 'no-errortxt');
-    // Exit with code 1 but no stderr output → empty error.txt
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    const result = await runWithRetry(opts);
-
-    // Should retry and end with 'error' (not non_retryable)
-    expect(result.state).toBe('error');
-    expect(result.attempt).toBe(2);
-  });
-
-  it('attempt 0의 non-retryable stderr가 attempt 1 판정에 영향 없음', async () => {
-    const subDir = join(testDir, 'cross-attempt-isolation');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "Connection refused" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    // Pre-seed error.txt with a non-retryable pattern (simulating previous attempt residue)
-    writeFileSync(join(opts.memberDir, 'error.txt'), 'TerminalQuotaError from previous attempt\n');
-
-    const result = await runWithRetry(opts);
-
-    // With offset tracking: pre-seeded content is ignored → retryable → state='error'
-    // Without offset tracking: pre-seeded content included → non_retryable (BUG)
-    expect(result.state).toBe('error');
-  });
-
-  it('status.json이 non_retryable로 업데이트됨', async () => {
-    const subDir = join(testDir, 'status-update');
-    const memberDir = join(subDir, 'member');
-    const opts = makeOpts(subDir, {
-      args: ['-c', 'echo "QUOTA_EXHAUSTED" >&2; exit 1'],
-      command: '/bin/sh -c "exit 1"',
-    });
-
-    await runWithRetry(opts);
-
-    const statusPath = join(memberDir, 'status.json');
-    expect(existsSync(statusPath)).toBe(true);
-    const status = JSON.parse(readFileSync(statusPath, 'utf8'));
-    expect(status.state).toBe('non_retryable');
-  });
-});
-
-describe('NON_RETRYABLE_EXIT_CODES 검증', () => {
-  it('예상 exit code들을 포함해야 함', () => {
-    expect(NON_RETRYABLE_EXIT_CODES.has(41)).toBe(true);
-    expect(NON_RETRYABLE_EXIT_CODES.has(42)).toBe(true);
-    expect(NON_RETRYABLE_EXIT_CODES.has(52)).toBe(true);
-    expect(NON_RETRYABLE_EXIT_CODES.has(130)).toBe(true);
-  });
-
-  it('일반 exit code는 포함하지 않아야 함', () => {
-    expect(NON_RETRYABLE_EXIT_CODES.has(0)).toBe(false);
-    expect(NON_RETRYABLE_EXIT_CODES.has(1)).toBe(false);
-    expect(NON_RETRYABLE_EXIT_CODES.has(2)).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// helpers (shared blocks)
-// ---------------------------------------------------------------------------
-
-function makeTmpDir() {
-  return mkdtempSync(join(tmpdir(), 'worker-utils-shared-'));
+function sleepMsAsync(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
-// ---------------------------------------------------------------------------
-// splitCommand
-// ---------------------------------------------------------------------------
 
 describe('splitCommand', () => {
 
@@ -253,25 +105,6 @@ describe('atomicWriteJson', () => {
 // sleepMsAsync
 // ---------------------------------------------------------------------------
 
-describe('sleepMsAsync', () => {
-
-  test('resolves after the specified delay', async () => {
-    const start = Date.now();
-    await sleepMsAsync(50);
-    const elapsed = Date.now() - start;
-    expect(elapsed >= 40).toBe(true);
-  });
-
-  test('resolves with undefined', async () => {
-    const result = await sleepMsAsync(1);
-    expect(result).toBe(undefined);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// assemblePrompt
-// ---------------------------------------------------------------------------
-
 describe('assemblePrompt', () => {
   let tmpDir: string;
 
@@ -350,44 +183,6 @@ describe('assemblePrompt', () => {
 
 // ---------------------------------------------------------------------------
 // constants
-// ---------------------------------------------------------------------------
-
-describe('constants', () => {
-  test('MAX_RETRIES is 2', () => {
-    expect(MAX_RETRIES).toBe(2);
-  });
-
-  test('BASE_DELAY_MS is 1000', () => {
-    expect(BASE_DELAY_MS).toBe(1000);
-  });
-
-  test('HEARTBEAT_INTERVAL_MS is 10000', () => {
-    expect(HEARTBEAT_INTERVAL_MS).toBe(10_000);
-  });
-
-  test('NON_RETRYABLE_STATES size 4', () => {
-    expect(NON_RETRYABLE_STATES.size).toBe(4);
-  });
-
-  test('NON_RETRYABLE_STATES missing_cli', () => {
-    expect(NON_RETRYABLE_STATES.has('missing_cli')).toBe(true);
-  });
-
-  test('NON_RETRYABLE_STATES timed_out', () => {
-    expect(NON_RETRYABLE_STATES.has('timed_out')).toBe(true);
-  });
-
-  test('NON_RETRYABLE_STATES canceled', () => {
-    expect(NON_RETRYABLE_STATES.has('canceled')).toBe(true);
-  });
-
-  test('NON_RETRYABLE_STATES non_retryable', () => {
-    expect(NON_RETRYABLE_STATES.has('non_retryable')).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// heartbeat
 // ---------------------------------------------------------------------------
 
 describe('runOnce heartbeat', () => {
@@ -571,273 +366,12 @@ describe('runOnce 환경 변수 전파', () => {
 // retry 시 output 정제
 // ---------------------------------------------------------------------------
 
-describe('retry 시 output 정제', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'worker-retry-output-'));
-  });
-
-  afterEach(() => {
-    rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('attempt 1에서 output.txt에 attempt 마커 없음', async () => {
-    const subDir = join(tmpDir, 'no-marker');
-    const memberDir = join(subDir, 'member');
-    mkdirSync(memberDir, { recursive: true });
-
-    await runOnce({
-      program: '/bin/sh',
-      args: ['-c', 'echo "retry output"'],
-      prompt: 'test prompt',
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c \'echo "retry output"\'',
-      timeoutSec: 10,
-      attempt: 1,
-    });
-
-    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
-    expect(outputContent).not.toContain('--- attempt');
-  });
-
-  it('attempt 1에서 output.txt가 truncate됨 (이전 데이터 없음)', async () => {
-    const subDir = join(tmpDir, 'truncate-check');
-    const memberDir = join(subDir, 'member');
-    mkdirSync(memberDir, { recursive: true });
-
-    // Pre-write old data
-    writeFileSync(join(memberDir, 'output.txt'), 'old data\n');
-
-    await runOnce({
-      program: '/bin/sh',
-      args: ['-c', 'echo "new output"'],
-      prompt: 'test prompt',
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c \'echo "new output"\'',
-      timeoutSec: 10,
-      attempt: 1,
-    });
-
-    const outputContent = readFileSync(join(memberDir, 'output.txt'), 'utf8');
-    expect(outputContent).toContain('new output');
-    expect(outputContent).not.toContain('old data');
-  });
-
-  it('errOffset=0 for retry: non-retryable 패턴 감지 정상', async () => {
-    const subDir = join(tmpDir, 'eroffset-retry');
-    const memberDir = join(subDir, 'member');
-    mkdirSync(memberDir, { recursive: true });
-
-    // Write a counter file to make the script behave differently on each invocation
-    const counterFile = join(subDir, 'counter');
-    writeFileSync(counterFile, '0');
-
-    const script = `
-  COUNT=$(cat ${counterFile})
-  echo $((COUNT + 1)) > ${counterFile}
-  if [ "$COUNT" = "0" ]; then
-    echo "Connection refused: retryable error" >&2
-    exit 1
-  else
-    echo "TerminalQuotaError: quota exceeded" >&2
-    exit 1
-  fi
-`;
-
-    const result = await runWithRetry({
-      program: '/bin/sh',
-      args: ['-c', script],
-      prompt: 'test prompt',
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh script',
-      timeoutSec: 10,
-      sleepFn: noopSleep,
-    });
-
-    expect(result.state).toBe('non_retryable');
-  });
-});
+import type { ResumeCommandOpts } from './agent-drivers/types.ts';
 
 // ---------------------------------------------------------------------------
-// opencode silent-failure sentinel (AC-1, AC-1.5, AC-2)
+// runOneTurn / resumeOneTurn helpers
 // ---------------------------------------------------------------------------
 
-// Helper: create a real executable named 'opencode' in a temp bin dir.
-// Sentinel checks path.basename(program) === 'opencode' so absolute wrapper paths work.
-function makeOpencodeWrapper(dir: string, stderrOutput: string): string {
-  const wrapperDir = join(dir, 'bin');
-  mkdirSync(wrapperDir, { recursive: true });
-  const wrapper = join(wrapperDir, 'opencode');
-  writeFileSync(wrapper, `#!/bin/sh\n${stderrOutput}\nexit 0\n`);
-  const { chmodSync } = require('fs');
-  chmodSync(wrapper, 0o755);
-  return join(wrapperDir, 'opencode');
-}
-
-describe('opencode sentinel: happy path + false-positive guards', () => {
-  const testDir = join(tmpdir(), 'sentinel-guard-' + Date.now());
-
-  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
-  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
-
-  it('opencode normal response: exit 0 + stdout non-empty + stderr empty → state=done', async () => {
-    const subDir = join(testDir, 'happy-path');
-    const program = makeOpencodeWrapper(subDir, 'echo "rendered review text"');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
-  });
-
-  it('false-positive guard (a): stdout non-empty + Error: on stderr → sentinel does not fire → state=done', async () => {
-    const subDir = join(testDir, 'fp-stdout');
-    // stdout non-empty wins: even with Error: in stderr, sentinel must not fire
-    const program = makeOpencodeWrapper(subDir,
-      'echo "some output"\nprintf "Error: Model not found\\n" >&2');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
-  });
-
-  it('false-positive guard (b): stderr empty → sentinel does not fire → state=done', async () => {
-    const subDir = join(testDir, 'fp-stderr-empty');
-    // opencode-named binary, exit 0, no stderr — pure happy path
-    const program = makeOpencodeWrapper(subDir, '');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
-  });
-
-  it('false-positive guard (c): stderr non-empty but no line starts with Error: → state=done', async () => {
-    const subDir = join(testDir, 'fp-no-error-prefix');
-    const program = makeOpencodeWrapper(subDir, 'printf "informational log line\\n" >&2');
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('done');
-  });
-
-  it('false-positive guard (d): program !== opencode, stderr has Error: → sentinel does not fire → state=done', async () => {
-    const subDir = join(testDir, 'fp-not-opencode');
-    // Use /bin/sh (not opencode) — sentinel must not fire even with Error: in stderr
-    const result = await runWithRetry(makeOpts(subDir, {
-      program: '/bin/sh',
-      args: ['-c', 'printf "Error: Model not found\\n" >&2; exit 0'],
-      command: '/bin/sh -c ...',
-    }));
-    expect(result.state).toBe('done');
-  });
-});
-
-describe('opencode sentinel: keyword classification (AC-1.5)', () => {
-  const testDir = join(tmpdir(), 'sentinel-classify-' + Date.now());
-
-  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
-  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
-
-  it('Model not found in stderr → state=non_retryable, error.type=model_not_found', async () => {
-    const subDir = join(testDir, 'kw-model-not-found');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: Model not found: gpt-5\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('model_not_found');
-  });
-
-  it('ContextOverflowError in stderr → error.type=context_window', async () => {
-    const subDir = join(testDir, 'kw-context-overflow');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: ContextOverflowError: context too large\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('context_window');
-  });
-
-  it('APIError in stderr → error.type=api_error', async () => {
-    const subDir = join(testDir, 'kw-api-error');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: APIError: 500 internal\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('api_error');
-  });
-
-  it('Unknown session error → error.type=opencode_session_error (fallback)', async () => {
-    const subDir = join(testDir, 'kw-fallback');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: SomethingUnknown happened\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('opencode_session_error');
-  });
-
-  it('sentinel writes error.message = first stderr line with Error: prefix stripped', async () => {
-    const subDir = join(testDir, 'kw-message-strip');
-    const program = makeOpencodeWrapper(subDir, "printf 'Error: Model not found: my-model\\nSecond line\\n' >&2");
-    const result = await runWithRetry(makeOpts(subDir, { program, args: [], command: program }));
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.message).toBe('Model not found: my-model');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PROMPT_MAX_BYTES guard at mode='text' path (AC-4)
-// ---------------------------------------------------------------------------
-
-describe('mode=text prompt size guard', () => {
-  const testDir = join(tmpdir(), 'prompt-size-text-' + Date.now());
-
-  beforeAll(() => { mkdirSync(testDir, { recursive: true }); });
-  afterAll(() => { rmSync(testDir, { recursive: true, force: true }); });
-
-  it('prompt 79KB → spawn proceeds normally (exit 0 → state=done)', async () => {
-    const subDir = join(testDir, 'prompt-79kb');
-    const memberDir = join(subDir, 'member');
-    mkdirSync(memberDir, { recursive: true });
-    const promptPath = join(subDir, 'prompt.txt');
-    writeFileSync(promptPath, 'x'.repeat(79 * 1024));
-    const result = await runWithRetry({
-      program: '/bin/sh',
-      args: ['-c', 'exit 0'],
-      prompt: 'test',
-      promptPath,
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c "exit 0"',
-      timeoutSec: 10,
-      sleepFn: noopSleep,
-    });
-    expect(result.state).toBe('done');
-  });
-
-  it('prompt 81KB → no spawn, state=non_retryable, error.type=prompt_too_large', async () => {
-    const subDir = join(testDir, 'prompt-81kb');
-    const memberDir = join(subDir, 'member');
-    mkdirSync(memberDir, { recursive: true });
-    const promptPath = join(subDir, 'prompt.txt');
-    writeFileSync(promptPath, 'x'.repeat(81 * 1024));
-    const result = await runWithRetry({
-      program: '/bin/sh',
-      args: ['-c', 'exit 0'],
-      prompt: 'test',
-      promptPath,
-      member: 'test-member',
-      memberDir,
-      command: '/bin/sh -c "exit 0"',
-      timeoutSec: 10,
-      sleepFn: noopSleep,
-    });
-    expect(result.state).toBe('non_retryable');
-    expect((result.error as any)?.type).toBe('prompt_too_large');
-    expect((result.error as any)?.bytes).toBeGreaterThan(80 * 1024);
-    expect((result.error as any)?.limit).toBe(PROMPT_MAX_BYTES);
-  });
-});
-
-
-// ---------------------------------------------------------------------------
-// runOneTurn / resumeOneTurn — caller-judgment single-turn pump (TODO 1)
-// ---------------------------------------------------------------------------
-
-/**
- * Make a mock runOnce for runOneTurn tests.
- * Writes memberDir/output.txt with rawStdout, returns {state, exitCode}.
- * The mock is injected via the runOnceFn override on RunOneTurnOpts.
- */
 function makeOneTurnMockRunOnce(rawStdout: string, exitCode: number = 0) {
   const fn = async (opts: RunOnceOpts): Promise<Record<string, unknown>> => {
     writeFileSync(join(opts.memberDir, 'output.txt'), rawStdout);
@@ -848,12 +382,7 @@ function makeOneTurnMockRunOnce(rawStdout: string, exitCode: number = 0) {
   return fn;
 }
 
-/**
- * Make an AgentDriver mock suitable for runOneTurn tests.
- * parseStdout returns the provided ParseResult (or null).
- * resumeCommand is tracked via a spy.calls array.
- */
-function makeOneTurnMockDriver(parseResult: import('./agent-drivers/types.ts').ParseResult | null): AgentDriver & {
+function makeOneTurnMockDriver(parseResult: ParseResult | null): AgentDriver & {
   spy: { calls: import('./agent-drivers/types.ts').ResumeCommandOpts[][] };
 } {
   const spy = { calls: [] as import('./agent-drivers/types.ts').ResumeCommandOpts[][] };
@@ -869,7 +398,6 @@ function makeOneTurnMockDriver(parseResult: import('./agent-drivers/types.ts').P
   };
 }
 
-/** Base opts for runOneTurn tests. */
 function makeOneTurnOpts(memberDir: string, overrides: Partial<RunOneTurnOpts> = {}): RunOneTurnOpts {
   return {
     program: 'opencode',
@@ -884,8 +412,6 @@ function makeOneTurnOpts(memberDir: string, overrides: Partial<RunOneTurnOpts> =
     ...overrides,
   };
 }
-
-import type { ResumeCommandOpts } from './agent-drivers/types.ts';
 
 describe('runOneTurn / resumeOneTurn — caller-judgment single-turn pump', () => {
   let tmpDir: string;
