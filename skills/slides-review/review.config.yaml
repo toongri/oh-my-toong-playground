@@ -8,9 +8,5 @@ review:
       emoji: "💎"
       color: "GREEN"
 
-  multi_turn:
-    max_turns: 3
-    deliverable_sentinel: '## Slide Review Summary'
-
   settings:
     timeout: 240

@@ -240,7 +240,6 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
       chairman: { ...fallback['chunk-review'].chairman },
       members: Array.isArray(fallback['chunk-review'].members) ? [...fallback['chunk-review'].members] : [],
       settings: { ...fallback['chunk-review'].settings },
-      multi_turn: undefined as any,
     },
   };
 
@@ -265,10 +264,6 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
       exitWithError(`Invalid config in ${configPath}: 'chunk-review.settings' must be a mapping/object`);
     }
     merged['chunk-review'].settings = { ...merged['chunk-review'].settings, ...chunkReview.settings };
-  }
-
-  if (chunkReview.multi_turn != null) {
-    merged['chunk-review'].multi_turn = chunkReview.multi_turn;
   }
 
   return merged;
@@ -345,13 +340,6 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
     settings: {
       excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
-      multiTurn: config['chunk-review'].multi_turn
-        ? {
-            maxTurns: config['chunk-review'].multi_turn.max_turns,
-            deliverableSentinel: config['chunk-review'].multi_turn.deliverable_sentinel,
-            continuationPrompt: config['chunk-review'].multi_turn.continuation_prompt,
-          }
-        : null,
     },
     members: members.map((r: any) => ({
       name: String(r.name),

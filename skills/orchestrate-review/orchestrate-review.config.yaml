@@ -1,7 +1,4 @@
 chunk-review:
-  multi_turn:
-    max_turns: 3
-    deliverable_sentinel: '## Verdict\s*\n\s*(APPROVE|REQUEST_CHANGES|COMMENT)'
   members:
     # Each reviewer = vanilla `opencode run` invoking a specific omo agent.
     # Agent names match the exact display name registered by the omo plugin
