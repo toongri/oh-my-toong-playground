@@ -577,6 +577,12 @@ export interface RunOneTurnOpts {
   timeoutSec: number;
   cliType: CliType;
   workerEnv?: Record<string, string>;
+  /** Prompts directory for assemblePrompt role-file lookup. */
+  promptsDir?: string;
+  /** Fallback role-file name when entity-specific file missing. */
+  fallbackFile?: string;
+  /** Optional content for REVIEW CONTENT section. */
+  reviewContent?: string;
   /** Test-only: override driver factory. */
   driverFactory?: (cliType: CliType) => AgentDriver | null;
   /** Test-only: override runOnce. */
@@ -621,6 +627,9 @@ async function executeOneTurn(
     timeoutSec: opts.timeoutSec,
     attempt: 0,
     workerEnv: { ...builtCmd.env },
+    promptsDir: opts.promptsDir,
+    fallbackFile: opts.fallbackFile,
+    reviewContent: opts.reviewContent,
   });
 
   const exitCode = typeof runResult.exitCode === 'number' ? runResult.exitCode : null;
@@ -638,8 +647,13 @@ async function executeOneTurn(
   let text: string;
 
   if (parsed) {
-    // Successful parse: state from exit code, text from parsed
-    state = exitCode === 0 ? runResult.state as string ?? 'done' : 'error';
+    // P1-5: Honor driver-reported terminal signal. Driver may detect error
+    // in stdout even when CLI exits 0 (opencode exit-0 on session error pattern).
+    if (parsed.terminal === 'error') {
+      state = 'non_retryable';
+    } else {
+      state = exitCode === 0 ? runResult.state as string ?? 'done' : 'error';
+    }
     sessionID = parsed.sessionID;
     text = parsed.text;
     // Overwrite output.txt with parsed text (single overwrite, never append)
