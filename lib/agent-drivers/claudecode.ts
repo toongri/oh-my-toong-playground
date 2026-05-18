@@ -96,7 +96,9 @@ export const claudeDriver: AgentDriver = {
   },
 
   initialCommand(opts: InitialCommandOpts): BuiltCommand {
-    return { program: opts.baseCommand, args: [...opts.baseArgs], env: opts.workerEnv };
+    const stripped = stripOutputFormatPair([...opts.baseArgs]);
+    const args = [...stripped, '--output-format', 'json'];
+    return { program: opts.baseCommand, args, env: opts.workerEnv };
   },
 
   resumeCommand(opts: ResumeCommandOpts): BuiltCommand {

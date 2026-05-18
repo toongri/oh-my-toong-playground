@@ -376,6 +376,13 @@ async function executeOneTurn(
 ): Promise<OneTurnResult> {
   const { memberDir, member, command } = opts;
 
+  // Truncate output.txt and error.txt before each turn so each turn is semantically
+  // independent. runOnce always passes attempt:0 → flags:'a', meaning without this
+  // truncation a resume turn would append to the previous turn's output and the driver
+  // would receive the merged (stale + new) content.
+  try { fs.writeFileSync(path.join(memberDir, 'output.txt'), '', 'utf8'); } catch { /* ignore absent */ }
+  try { fs.writeFileSync(path.join(memberDir, 'error.txt'), '', 'utf8'); } catch { /* ignore absent */ }
+
   // Read existing status.json to preserve resume_count (legacy files may not have it)
   let existingResumeCount = 0;
   try {
