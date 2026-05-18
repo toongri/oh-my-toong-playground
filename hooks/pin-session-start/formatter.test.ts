@@ -4,7 +4,7 @@
  * AC-2 key requirements:
  * - Output contains <pins>...</pins> wrapper
  * - Index line: "pins:N" for all counts (uniform format)
- * - Model 2 guidance 3 lines with keywords: select-pin, write-pin, supersedes
+ * - Model 2 guidance lines with keywords: select-pin, write-pin
  * - Always non-empty (even count=0)
  * - Total output ≤80 words (token proxy)
  */
@@ -20,7 +20,6 @@ describe('formatPinsContext', () => {
     expect(result).toContain('pins:0');
     expect(result).toContain('select-pin');
     expect(result).toContain('write-pin');
-    expect(result).toContain('supersedes');
   });
 
   it('contains <pins> wrapper tags', () => {
@@ -41,11 +40,10 @@ describe('formatPinsContext', () => {
     expect(result).not.toContain('recent:');
   });
 
-  it('includes all 3 Model 2 guidance keywords (AC-2)', () => {
+  it('includes Model 2 guidance keywords (AC-2)', () => {
     const result = formatPinsContext({ count: 1 });
     expect(result).toContain('select-pin');
     expect(result).toContain('write-pin');
-    expect(result).toContain('supersedes');
   });
 
   it('output is ≤80 words (AC-2 token budget)', () => {

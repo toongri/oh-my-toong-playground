@@ -29,7 +29,6 @@ export interface PinExtracted {
   sensitivity: Sensitivity;
   // Optional attrs
   related?: string;
-  supersedes?: string;
   discovery_context?: string;
   // Pin body text
   body: string;
@@ -65,7 +64,6 @@ export interface FrontmatterSchema {
   created_at: string; // ISO8601
   // 3 optional fields
   related?: string; // CSV scalar — matches serializePin output
-  supersedes?: string;
   discovery_context?: string;
 }
 
