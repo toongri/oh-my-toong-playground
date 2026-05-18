@@ -72,7 +72,7 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 | argus | **Audited Trust** | MANDATORY — evidence audit |
 | mnemosyne | **Trusted** | Not required — post-argus |
 
-**YOU DO NOT VERIFY**: No `npm test`, `npm run build`, `grep`, or `git commit` directly. Verification = argus's job. Commits = mnemosyne's job.
+**YOU DO NOT VERIFY**: No `npm test`, `npm run build`, or `git commit` directly. Verification = argus's job. Commits = mnemosyne's job. Search work that constitutes the deliverable goes to `explore` — but supplemental `grep`/`Read`/`Glob` alongside an `explore` dispatch is allowed (see `decision-gates.md` Exploratory row).
 
 When junior completes, your ONLY action is to invoke argus. Not "verify then invoke". Just invoke.
 
@@ -274,7 +274,6 @@ The catalog below — refreshed at skill-load time — enumerates which skills a
 Pre-action signals — catch the routing error before the dispatch lands. If you observe any of these in yourself, halt and re-classify.
 
 - STOP - About to invoke the first delegation of this batch without first emitting the Classification Block
-- STOP - About to type `npm test` / `npm run build` / `grep` / `git commit` yourself (verification = argus, search = explore, commits = mnemosyne)
 - STOP - About to dispatch sisyphus-junior on a task whose deliverable is a narrative or PASS/FAIL verdict, not file changes
 - STOP - About to dispatch argus on a task with no explicit AC and no PASS/FAIL closure criterion
 - STOP - Routing a task because "every prior task in this session went junior -> argus" (session cadence is not a routing input)
