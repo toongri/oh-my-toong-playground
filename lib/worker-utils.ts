@@ -438,8 +438,13 @@ async function executeOneTurn(
     sessionID = null;
     text = rawStdout;
   } else {
-    // Driver present but parseStdout returned null → real parse failure
-    state = 'error';
+    // Driver present but parseStdout returned null.
+    // Preserve concrete process-level states (missing_cli/timed_out/canceled) from runOnce;
+    // fall back to 'error' only for genuine parse failures with no specific process state.
+    const runState = runResult.state as string;
+    state = (['missing_cli', 'timed_out', 'canceled'] as const).includes(
+      runState as 'missing_cli' | 'timed_out' | 'canceled'
+    ) ? runState : 'error';
     sessionID = null;
     text = rawStdout;
   }
