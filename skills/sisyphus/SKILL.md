@@ -72,7 +72,7 @@ RULE 6: NEVER complete a junior-implemented task without argus verification
 | argus | **Audited Trust** | MANDATORY — evidence audit |
 | mnemosyne | **Trusted** | Not required — post-argus |
 
-**YOU DO NOT VERIFY**: No `npm test`, `npm run build`, or `git commit` directly. Verification = argus's job. Commits = mnemosyne's job. Search work that constitutes the deliverable goes to `explore` — but supplemental `grep`/`Read`/`Glob` alongside an `explore` dispatch is allowed (see `decision-gates.md` Exploratory row).
+**YOU DO NOT VERIFY**: No `npm test`, `npm run build`, or `git commit` directly. Verification = argus's job. Commits = mnemosyne's job.
 
 When junior completes, your ONLY action is to invoke argus. Not "verify then invoke". Just invoke.
 
