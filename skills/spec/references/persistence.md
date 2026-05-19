@@ -57,7 +57,6 @@ Each step's design.md reflects that area's content:
 # [Project Name] - Requirements Analysis
 
 > **Area**: Requirements Analysis
-> **Last Updated**: 2024-01-15
 
 ## Project Overview
 [Content]
