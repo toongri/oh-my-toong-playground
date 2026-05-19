@@ -44,9 +44,8 @@ Even if AI already has sufficient information for a Step, it MUST:
 
 1. **Present results**: Show the Step's output/proposal to user (even if based on prior knowledge). Include potential risks of the proposed design (e.g., transaction scope expansion, coupling increase, blast radius of policy changes). Present risks as trade-offs with alternatives, not as blocking problems.
 2. **User confirmation**: Wait for explicit user approval of the Step content
-3. Save content to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md`
-4. Update progress status at document top
-4.5. **Update state.json**: Increment `steps_completed` for current area, update `updated_at`
+3. Save content to `$OMT_DIR/specs/{spec-name}/{area-directory}/design.md`. **design.md is final-state only** — per the `## Silent Incorporation Discipline` section in SKILL.md, do NOT add `## Progress Status`, `Last Updated`, `Status: Step N 진행 중` headers, or any process-meta blocks. Step/area status lives exclusively in state.json (next step).
+4. **Update state.json**: Increment `steps_completed` for current area, update `updated_at`. This is the sole home for progress state — never duplicate to design.md.
 
 ### Decision Interview Gate (BLOCKING)
 
@@ -234,6 +233,7 @@ A statement is a **recordable decision** if ANY of these apply:
 2. **Save location**: `$OMT_DIR/specs/{spec-name}/{area-directory}/records/{naming-pattern}.md`
 3. **Naming**: Area and Step based - automatically determined by current progress
 4. **Template**: Use `templates/record.md` format
+5. **Evolution = update in place**: When subsequent review or further deliberation changes a previously recorded decision, **update that topic's existing record file** rather than creating a parallel `record-N-revised.md`. Per the Silent Incorporation Discipline in SKILL.md, records are final-state SSOT — each record reflects its topic's *current* decided state, and git tracks how it got there. Create a *new* record only when a genuinely *new topic* (not a revised take on an existing one) enters scope.
 
 ### Record Naming Examples
 
@@ -568,9 +568,9 @@ For each blocking concern, present it using this per-concern format:
 
 After all concerns have been discussed with the user:
 
-1. Apply ONLY the changes the user explicitly agreed to
-2. Record decisions (including rationale for rejections) in `records/`
-3. Record rejected concerns as Deliberate Divergence entries for the re-submission delegation prompt (`## 3. Deliberate Divergence`)
+1. Apply ONLY the changes the user explicitly agreed to — **silently**, per the Silent Incorporation Discipline in SKILL.md. Rewrite the affected design.md sections so the result reads as the original intent. The accepted reviewer concerns reshape the design; they do not annotate it. No "Round N verdict closure" blockquote, no "phantom columns removed" delta, no `(record N D1)` provenance marker, no narration of how the section evolved — design.md inherits only the resulting facts.
+2. Record decisions (including rationale for rejections) in `records/` — this is where decision rationale lives. When review evolves an *existing* decision, **update that topic's existing record file in place** rather than creating a new `record-N-revised.md`. The record file holds the topic's current decision, the alternatives evaluated, and the user's rationale. git tracks how the file got there; the record itself is today.
+3. Record rejected concerns as Deliberate Divergence entries for the re-submission delegation prompt (`## 3. Deliberate Divergence`). Deliberate Divergence flows from records/ → re-submission prompt → spec-reviewer's read context. It NEVER flows into design.md.
 
 ### Verdict-Based Flow Control
 
