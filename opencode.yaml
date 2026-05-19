@@ -1,4 +1,5 @@
-# MCP definitions shared with codex.yaml and gemini.yaml — keep in sync
+# MCP definitions for OpenCode.
+# Note: Figma uses OpenCode remote MCP config; codex/gemini still use mcp-remote.
 mcps:
   context7:
     command: npx
@@ -32,10 +33,8 @@ mcps:
       - "-y"
       - "mcp-remote"
       - "https://mcp.linear.app/mcp"
-  # Figma hosted MCP via mcp-remote stdio proxy. OAuth on first run.
+  # Figma hosted MCP. OpenCode must see this as a remote MCP to run OAuth.
+  # Note: Figma currently allowlists remote MCP clients; OpenCode may receive HTTP 403 until approved.
   figma:
-    command: npx
-    args:
-      - "-y"
-      - "mcp-remote"
-      - "https://mcp.figma.com/mcp"
+    type: remote
+    url: "https://mcp.figma.com/mcp"

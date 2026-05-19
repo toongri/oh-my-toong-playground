@@ -1,4 +1,5 @@
-# MCP definitions shared with gemini.yaml — keep in sync
+# MCP definitions for Codex.
+# Note: Figma uses Codex remote MCP config; gemini still uses mcp-remote.
 mcps:
   context7:
     command: npx
@@ -32,10 +33,6 @@ mcps:
       - "-y"
       - "mcp-remote"
       - "https://mcp.linear.app/mcp"
-  # Figma hosted MCP via mcp-remote stdio proxy. OAuth on first run.
+  # Figma hosted MCP. Codex handles this as a streamable HTTP server with OAuth login.
   figma:
-    command: npx
-    args:
-      - "-y"
-      - "mcp-remote"
-      - "https://mcp.figma.com/mcp"
+    url: "https://mcp.figma.com/mcp"
