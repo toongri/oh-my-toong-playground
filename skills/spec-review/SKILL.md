@@ -163,6 +163,8 @@ bun .claude/skills/spec-review/scripts/job.ts collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Phase 3.
+- If `"overallState": "awaiting_resume"` → identify members with `state: "awaiting_resume"` in `members[]` and call `bun .claude/skills/spec-review/scripts/job.ts resume-member "$JOB_DIR" <member> "<resume prompt>"` for each, then call `collect` again.
+- If `"overallState": "empty_output"` → identify members with `state: "empty_output"` in `members[]` and call `resume-member` once to retry. If `resume_count` reaches cap (3) the command throws — skip that member and proceed with the remaining members in synthesis.
 - Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
 
 Response JSON (done):
