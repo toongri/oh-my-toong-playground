@@ -1676,7 +1676,7 @@ describe('cmdCollect', () => {
     expect(result.overallState).toBe('done');
   }, 15000);
 
-  test('awaiting_resume 상태에서는 done manifest를 반환하지 않고 timeout fallback', async () => {
+  test('awaiting_resume 상태에서는 done manifest를 반환하지 않고 즉시 members 포함 반환', async () => {
     const jobDir = path.join(tmpDir, 'job-collect-awaiting-resume');
     setupCollectJob(jobDir, {
       alice: { member: 'alice', state: 'awaiting_resume' },
@@ -1690,9 +1690,7 @@ describe('cmdCollect', () => {
     };
 
     try {
-      // timeout-ms must exceed COLLECT_POLL_INTERVAL_MS (5000ms) to allow one poll cycle.
-      // The loop sleeps 5s then re-checks timeout, so total wall time is ~10s; set to 11s.
-      await cmdCollect({ 'timeout-ms': 5100 }, jobDir, chunkReviewConfig);
+      await cmdCollect({ 'timeout-ms': 5000 }, jobDir, chunkReviewConfig);
     } finally {
       process.stdout.write = origWrite;
     }
@@ -1700,9 +1698,10 @@ describe('cmdCollect', () => {
     expect(output.length).toBeGreaterThan(0);
     const result = JSON.parse(output[0]);
     // Must NOT return done manifest when awaiting_resume
-    expect(result.overallState).not.toBe('done');
-    // Must not contain manifest 'members' array (done manifest only)
-    expect(result.members).toBeUndefined();
+    expect(result.overallState).toBe('awaiting_resume');
+    // Must contain members array for chairman to identify which member needs resume-member
+    expect(Array.isArray(result.members)).toBe(true);
+    expect(result.members[0].state).toBe('awaiting_resume');
   }, 15000);
 });
 

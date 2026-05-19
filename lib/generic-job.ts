@@ -852,6 +852,12 @@ export async function cmdCollect(
       );
       return;
     }
+    if (status.overallState === 'awaiting_resume' || status.overallState === 'empty_output') {
+      process.stdout.write(
+        `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts, members: status.members }, null, 2)}\n`,
+      );
+      return;
+    }
     if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
       process.stdout.write(
         `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,

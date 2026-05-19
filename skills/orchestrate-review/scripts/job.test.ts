@@ -2370,6 +2370,48 @@ describe('cmdCollect', () => {
     }
   });
 
+  test('empty_output 즉시 반환: overallState와 members 포함', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-empty-output');
+    setupCollectFixture(jobDir, {
+      'claude-0': { member: 'claude', state: 'empty_output', exitCode: 0, output: '' },
+      'codex-0': { member: 'codex', state: 'empty_output', exitCode: 0, output: '' },
+    });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+    ], { stdio: 'pipe', timeout: 10000 });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).toBe('empty_output');
+    expect(parsed.id).toBe('collect-test');
+    expect(parsed).toHaveProperty('counts');
+    expect(parsed).toHaveProperty('members');
+    expect(parsed.members).toHaveLength(2);
+    expect(parsed.members[0].state).toBe('empty_output');
+    expect(parsed.members[1].state).toBe('empty_output');
+  });
+
+  test('awaiting_resume 즉시 반환: overallState와 members 포함', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-awaiting-resume');
+    setupCollectFixture(jobDir, {
+      'claude-0': { member: 'claude', state: 'awaiting_resume', exitCode: 0, output: '' },
+      'codex-0': { member: 'codex', state: 'awaiting_resume', exitCode: 0, output: '' },
+    });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+    ], { stdio: 'pipe', timeout: 10000 });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).toBe('awaiting_resume');
+    expect(parsed.id).toBe('collect-test');
+    expect(parsed).toHaveProperty('counts');
+    expect(parsed).toHaveProperty('members');
+    expect(parsed.members).toHaveLength(2);
+    expect(parsed.members[0].state).toBe('awaiting_resume');
+    expect(parsed.members[1].state).toBe('awaiting_resume');
+  });
+
   test('cmdCollect propagates size_bytes to chairman payload', () => {
     const jobDir = path.join(tmpDir, 'job-collect-size-bytes');
     fs.mkdirSync(jobDir, { recursive: true });
