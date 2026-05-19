@@ -191,7 +191,6 @@ Apply **Area Completion Protocol** (see SKILL.md)
 # [Project Name] - Security / Privacy
 
 > **Area**: Security / Privacy
-> **Last Updated**: [Date]
 
 ## Authentication & Identity
 

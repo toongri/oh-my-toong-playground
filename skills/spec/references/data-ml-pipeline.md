@@ -197,7 +197,6 @@ Apply **Area Completion Protocol** (see SKILL.md)
 # [Project Name] - Data / ML Pipeline
 
 > **Area**: Data / ML Pipeline
-> **Last Updated**: [Date]
 
 ## Data Source & Ingestion
 
