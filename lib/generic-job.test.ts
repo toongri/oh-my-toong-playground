@@ -728,7 +728,7 @@ describe('computeStatus', () => {
     expect(result.counts.empty_output).toBe(1);
   });
 
-  test('computeStatus totals 12 keys', async () => {
+  test('computeStatus totals 13 keys', async () => {
     const jobDir = path.join(tmpDir, 'job-12keys');
     setupJob(jobDir, { id: 'test-12keys' }, {
       alice: { member: 'alice', state: 'done', exitCode: 0 },
@@ -738,13 +738,14 @@ describe('computeStatus', () => {
       'queued', 'running', 'retrying', 'done', 'error',
       'missing_cli', 'timed_out', 'canceled', 'non_retryable',
       'empty_output', 'transient_error', 'permanent_error',
+      'awaiting_resume',
     ];
     for (const key of expectedKeys) {
       expect(key in result.counts).toBe(true);
     }
-    // Exactly 12 keys (excluding 'total' which is added separately)
+    // Exactly 13 keys (excluding 'total' which is added separately)
     const countKeys = Object.keys(result.counts).filter(k => k !== 'total');
-    expect(countKeys.length).toBe(12);
+    expect(countKeys.length).toBe(13);
     expect('max_turns_exceeded' in result.counts).toBe(false);
   });
 });

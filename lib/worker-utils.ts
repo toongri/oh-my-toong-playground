@@ -424,6 +424,13 @@ async function executeOneTurn(
     // in stdout even when CLI exits 0 (opencode exit-0 on session error pattern).
     if (parsed.terminal === 'error') {
       state = 'non_retryable';
+    } else if (
+      ['tool-calls', 'pause_turn', 'unknown_pause'].includes(parsed.terminal) &&
+      (runResult.state as string) === 'done'
+    ) {
+      // Non-final pause signal with clean exit: process exited 0 but the turn is not complete.
+      // Must NOT report 'done' — the caller needs to resume.
+      state = 'awaiting_resume';
     } else {
       // Preserve concrete process-level state from runOnce (missing_cli/timed_out/canceled);
       // only fall to 'error' if runOnce reported a generic non-zero exit without a specific state.
