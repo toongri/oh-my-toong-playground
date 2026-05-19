@@ -2174,4 +2174,103 @@ describe('cmdResumeMember', () => {
     const fnBody = src.slice(fnStart, fnEnd);
     expect(fnBody).toMatch(/session.*preserv|--resume.*persona|intentionally.*omit|not forwarded|session-preserving/i);
   });
+
+  // ---------------------------------------------------------------------------
+  // skillName-aware error messages
+  // ---------------------------------------------------------------------------
+
+  test('skillName absent + no driver emits generic message', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => null as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('no driver for opencode');
+    // Must NOT include skill prefix
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow(/^no driver for/);
+  });
+
+  test('skillName + no driver emits prefixed message with guidance', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => null as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'slides-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('slides-review: no driver for opencode, implement driver or change default member');
+  });
+
+  test('skillName + unknown cli type emits prefixed message', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'unknowncli run',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'orchestrate-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('orchestrate-review: unknown cli type');
+  });
+
+  test('skillName + no resumable session emits prefixed message', async () => {
+    // No status.json written → 'no resumable session'
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'slides-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'ghost', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('slides-review: no resumable session');
+  });
+
+  test('skillName + resume cap exceeded emits prefixed message', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'orchestrate-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('orchestrate-review: resume cap exceeded (3/3)');
+  });
 });

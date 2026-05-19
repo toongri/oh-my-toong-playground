@@ -870,6 +870,8 @@ export type ResumeMemberOpts = {
   resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
   /** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
   runOnceFn?: typeof runOnce;
+  /** Optional skill name for skill-aware error messages (e.g., 'slides-review', 'orchestrate-review'). */
+  skillName?: string;
 };
 
 export async function cmdResumeMember(
@@ -881,23 +883,24 @@ export async function cmdResumeMember(
 ): Promise<void> {
   const memberDir = path.join(jobDir, config.entityDirName, name);
   const statusPath = path.join(memberDir, 'status.json');
+  const prefix = opts.skillName ? `${opts.skillName}: ` : '';
 
   // Read status.json
   let status: Record<string, unknown>;
   try {
     status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
   } catch {
-    throw new Error('no resumable session');
+    throw new Error(`${prefix}no resumable session`);
   }
 
   // Check sessionID
   const sessionID = status.sessionID;
-  if (!sessionID) throw new Error('no resumable session');
+  if (!sessionID) throw new Error(`${prefix}no resumable session`);
 
   // State check
   const state = String(status.state ?? '');
   if (state === 'error' || state === 'non_retryable') {
-    throw new Error(`member in non-resumable state: ${state}`);
+    throw new Error(`${prefix}member in non-resumable state: ${state}`);
   }
 
   // Restore workerEnv saved by executeOneTurn (P1-4: preserve cross-CLI env contract across resume).
@@ -910,17 +913,17 @@ export async function cmdResumeMember(
   // misconfigured commands do not burn a resume_count increment (item 4).
   const command = status.command;
   const cliType = detectCliType(command);
-  if (cliType === 'unknown') throw new Error('unknown cli type');
+  if (cliType === 'unknown') throw new Error(`${prefix}unknown cli type`);
 
   // Driver lookup
   const driverFactory = opts.driverFactory ?? pickDriver;
   const driver = driverFactory(cliType as CliType);
-  if (!driver) throw new Error(`no driver for ${cliType}`);
+  if (!driver) throw new Error(`${prefix}no driver for ${cliType}, implement driver or change default member`);
 
   // P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
   const cmdStr = String(command ?? '');
   const tokens = splitCommand(cmdStr);
-  if (!tokens || tokens.length === 0) throw new Error('invalid stored command');
+  if (!tokens || tokens.length === 0) throw new Error(`${prefix}invalid stored command`);
 
   // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
   // sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
@@ -929,7 +932,7 @@ export async function cmdResumeMember(
   // effectively sequential, so the cap holds in practice. executeOneTurn preserves
   // resume_count via read-then-write (line 449 of worker-utils.ts).
   const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
-  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
+  if (resumeCount >= 3) throw new Error(`${prefix}resume cap exceeded (3/3)`);
   atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
   const [origProgram, ...origArgs] = tokens;
 
