@@ -148,6 +148,52 @@ describe('codex AgentDriver', () => {
     expect(result.args).toContain('--skip-git-repo-check');
   });
 
+  // -------------------------------------------------------------------------
+  // --json self-enforcement (idempotent guard)
+  // -------------------------------------------------------------------------
+
+  test('`initialCommand` - --json 없으면 주입', () => {
+    const result = codexDriver.initialCommand({
+      prompt: 'prompt-content',
+      baseCommand: 'codex',
+      baseArgs: ['exec', 'prompt-content'],
+      workerEnv: {},
+    });
+    expect(result.args).toContain('--json');
+  });
+
+  test('`initialCommand` - --json 이미 있으면 중복 없음', () => {
+    const result = codexDriver.initialCommand({
+      prompt: 'prompt-content',
+      baseCommand: 'codex',
+      baseArgs: ['exec', '--json', 'prompt-content'],
+      workerEnv: {},
+    });
+    expect(result.args.filter((a) => a === '--json').length).toBe(1);
+  });
+
+  test('`resumeCommand` - --json 없으면 주입', () => {
+    const result = codexDriver.resumeCommand({
+      sessionID: '019e3152-c43b-7e03-8ada-4620be171fa7',
+      prompt: 'continue',
+      baseCommand: 'codex',
+      baseArgs: ['exec', 'prompt-content'],
+      workerEnv: {},
+    });
+    expect(result.args).toContain('--json');
+  });
+
+  test('`resumeCommand` - --json 이미 있으면 중복 없음', () => {
+    const result = codexDriver.resumeCommand({
+      sessionID: '019e3152-c43b-7e03-8ada-4620be171fa7',
+      prompt: 'continue',
+      baseCommand: 'codex',
+      baseArgs: ['exec', '--json', 'prompt-content'],
+      workerEnv: {},
+    });
+    expect(result.args.filter((a) => a === '--json').length).toBe(1);
+  });
+
   test('`resumeCommand` - baseArgs의 -c 오버라이드 보존', () => {
     const result = codexDriver.resumeCommand({
       sessionID: '019e3152-c43b-7e03-8ada-4620be171fa7',
