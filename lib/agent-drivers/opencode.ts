@@ -139,9 +139,10 @@ function parseStdout(stdout: string): ParseResult | null {
 // ---------------------------------------------------------------------------
 
 function initialCommand(opts: InitialCommandOpts): BuiltCommand {
+  const stripped = stripFormatPair(opts.baseArgs, '--format');
   return {
     program: opts.baseCommand,
-    args: [...opts.baseArgs],
+    args: [...stripped, '--format', 'json'],
     env: opts.workerEnv,
   };
 }
