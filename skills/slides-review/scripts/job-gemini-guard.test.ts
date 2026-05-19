@@ -43,12 +43,39 @@ function makeJobDir(command: string): string {
   return dir;
 }
 
+function makeJobDirForMember(memberName: string, command: string): string {
+  const dir = fs.mkdtempSync(path.join(tmpdir(), 'slides-review-test-'));
+  const memberDir = path.join(dir, 'reviewers', memberName);
+  fs.mkdirSync(memberDir, { recursive: true });
+
+  const status = {
+    state: 'stop',
+    sessionID: 'fake-session-id',
+    command,
+    resume_count: 0,
+    workerEnv: {},
+  };
+  fs.writeFileSync(path.join(memberDir, 'status.json'), JSON.stringify(status), 'utf8');
+
+  const jobMeta = {
+    id: 'slides-review-test',
+    createdAt: new Date().toISOString(),
+    settings: { timeoutSec: 60 },
+    members: [{ name: memberName, command }],
+  };
+  fs.writeFileSync(path.join(dir, 'job.json'), JSON.stringify(jobMeta), 'utf8');
+
+  return dir;
+}
+
 const geminiDir = makeJobDir('gemini');
 const claudeDir = makeJobDir('claude');
+const opencodeDir = makeJobDirForMember('opencode', 'opencode');
 
 afterAll(() => {
   try { fs.rmSync(geminiDir, { recursive: true, force: true }); } catch {}
   try { fs.rmSync(claudeDir, { recursive: true, force: true }); } catch {}
+  try { fs.rmSync(opencodeDir, { recursive: true, force: true }); } catch {}
 });
 
 describe('resume-member gemini pre-check', () => {
@@ -70,6 +97,24 @@ describe('resume-member gemini pre-check', () => {
     expect(stderr).toContain('gemini');
     expect(stderr).toContain('no driver');
     expect(stderr).toContain('implement driver or change default member');
+  });
+
+  test('happy path: registered cliType reaches cmdResumeMember beyond driver gate', async () => {
+    // GIVEN: job dir with opencode member status.json (opencode is a registered driver)
+    // WHEN: resume-member invoked for that member
+    // THEN: stderr does NOT contain 'no driver for' — driver gate is passed
+    //       (downstream failure e.g. spawning real opencode is acceptable)
+    let stderr = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', opencodeDir, 'opencode', 'test prompt'], {
+        stdio: 'pipe',
+      });
+    } catch (e: any) {
+      stderr = e.stderr?.toString() || '';
+    }
+
+    expect(stderr).not.toContain('no driver for');
+    expect(stderr).not.toContain('slides-review: no driver');
   });
 
   test('claude fixture: does NOT trigger the gemini guard (exits with a different error)', () => {
