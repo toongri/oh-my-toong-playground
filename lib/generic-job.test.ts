@@ -2017,4 +2017,74 @@ describe('cmdResumeMember', () => {
       CUSTOM: 'val',
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Regression tests: triple fix (item 2 comment, item 4 preflight, item 5 timeoutSec=0)
+  // ---------------------------------------------------------------------------
+
+  test('unknown command throws before resume_count is incremented (preflight before cap)', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    fs.mkdirSync(entityDir, { recursive: true });
+    const statusPayload = {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'unknowncli run',
+    };
+    fs.writeFileSync(path.join(entityDir, 'status.json'), JSON.stringify(statusPayload, null, 2), 'utf8');
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('unknown cli type');
+
+    const status = JSON.parse(fs.readFileSync(path.join(entityDir, 'status.json'), 'utf8'));
+    expect(status.resume_count).toBe(0);
+  });
+
+  test('timeoutSec=0 in job.json forwarded as 0 to resumeFn (not coerced to 300)', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    fs.mkdirSync(entityDir, { recursive: true });
+    fs.writeFileSync(path.join(entityDir, 'status.json'), JSON.stringify({
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    }, null, 2), 'utf8');
+
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({
+      settings: { timeoutSec: 0 },
+    }, null, 2), 'utf8');
+
+    let capturedTimeoutSec: number | undefined;
+    const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+      capturedTimeoutSec = opts.timeoutSec;
+      return { state: 'done' as const, sessionID: 'sess-abc', text: '', exitCode: 0 };
+    };
+
+    await cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn,
+    });
+
+    expect(capturedTimeoutSec).toBe(0);
+  });
+
+  test('intent comment exists in cmdResumeMember explaining non-forwarding of promptsDir', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, 'generic-job.ts'),
+      'utf8',
+    );
+    // Verify comment is present between cmdResumeMember start and end
+    const fnStart = src.indexOf('export async function cmdResumeMember(');
+    const fnEnd = src.indexOf('\nexport ', fnStart + 1);
+    const fnBody = src.slice(fnStart, fnEnd);
+    expect(fnBody).toMatch(/session.*preserv|--resume.*persona|intentionally.*omit|not forwarded|session-preserving/i);
+  });
 });
