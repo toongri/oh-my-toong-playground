@@ -1788,41 +1788,44 @@ describe('resume-member', () => {
     expect(resumeIdx).toBeLessThan(unknownIdx);
   });
 
-  test('resume-member D7a rejects when --job missing', async () => {
-    // Test via CLI spawn — missing --job arg
+  test('resume-member D7a rejects when jobDir missing', () => {
+    // Test via CLI spawn — no positional args
+    let exitCode = 0;
+    let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--member', 'alice', '--prompt', 'hi'], {
-        stdio: 'pipe',
-      });
-      throw new Error('expected non-zero exit');
+      execFileSync(process.execPath, [SCRIPT, 'resume-member'], { stdio: 'pipe' });
     } catch (err: any) {
-      expect(err.status).toBeGreaterThan(0);
-      expect(err.stderr.toString()).toContain('--job required');
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
     }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing jobDir');
   });
 
-  test('resume-member D7b rejects when --member missing', async () => {
+  test('resume-member D7b rejects when member name missing', () => {
+    let exitCode = 0;
+    let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--job', jobDir, '--prompt', 'hi'], {
-        stdio: 'pipe',
-      });
-      throw new Error('expected non-zero exit');
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', jobDir], { stdio: 'pipe' });
     } catch (err: any) {
-      expect(err.status).toBeGreaterThan(0);
-      expect(err.stderr.toString()).toContain('--member required');
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
     }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing member name');
   });
 
-  test('resume-member D7c rejects when --prompt missing', async () => {
+  test('resume-member D7c rejects when prompt missing', () => {
+    let exitCode = 0;
+    let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--job', jobDir, '--member', 'opencode'], {
-        stdio: 'pipe',
-      });
-      throw new Error('expected non-zero exit');
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', jobDir, 'opencode'], { stdio: 'pipe' });
     } catch (err: any) {
-      expect(err.status).toBeGreaterThan(0);
-      expect(err.stderr.toString()).toContain('--prompt required');
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
     }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing prompt');
   });
 
   test('resume-member D8 rejects when no driver for gemini', async () => {

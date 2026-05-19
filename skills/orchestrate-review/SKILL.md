@@ -126,7 +126,7 @@ Each reviewer CLI emits its native structured output (opencode: NDJSON via `--fo
 호출 형식:
 
 ```
-bun job.ts resume-member --job <jobDir> --member <name> --prompt "마무리되었나요? 답변 주세요"
+bun job.ts resume-member <jobDir> <name> "마무리되었나요? 답변 주세요"
 ```
 
 프롬프트는 chairman LLM이 상황에 맞게 작성한다. 위 예시는 참고용이다.

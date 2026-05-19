@@ -440,12 +440,12 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'resume-member') {
-    const jobDirArg = options.job as string | undefined;
-    if (!jobDirArg) exitWithError('--job required');
-    const nameArg = options.member as string | undefined;
-    if (!nameArg) exitWithError('--member required');
-    const promptArg = options.prompt as string | undefined;
-    if (!promptArg) exitWithError('--prompt required');
+    const jobDirArg = rest[0];
+    if (!jobDirArg) exitWithError('resume-member: missing jobDir');
+    const nameArg = rest[1];
+    if (!nameArg) exitWithError('resume-member: missing member name');
+    const promptArg = rest.slice(2).join(' ');
+    if (!promptArg) exitWithError('resume-member: missing prompt');
     try {
       await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG);
     } catch (e: unknown) {
