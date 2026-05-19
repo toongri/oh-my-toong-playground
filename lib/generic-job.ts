@@ -409,8 +409,11 @@ export async function computeStatus(
     if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
   }
 
-  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0;
-  const overallState = allDone ? 'done' : (totals.running > 0 || totals.retrying > 0) ? 'running' : 'queued';
+  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0 && totals.awaiting_resume === 0;
+  const overallState = allDone ? 'done'
+    : (totals.running > 0 || totals.retrying > 0) ? 'running'
+    : totals.awaiting_resume > 0 ? 'awaiting_resume'
+    : 'queued';
 
   return {
     jobDir: resolvedJobDir,

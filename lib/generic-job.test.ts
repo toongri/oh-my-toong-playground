@@ -748,6 +748,48 @@ describe('computeStatus', () => {
     expect(countKeys.length).toBe(13);
     expect('max_turns_exceeded' in result.counts).toBe(false);
   });
+
+  // awaiting_resume overallState integration tests
+  test('모든 멤버가 awaiting_resume이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-all-awaiting-resume');
+    setupJob(jobDir, { id: 'test-all-ar' }, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('awaiting_resume');
+  });
+
+  test('일부 done, 일부 awaiting_resume이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-partial-awaiting-resume');
+    setupJob(jobDir, { id: 'test-partial-ar' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+  });
+
+  test('일부 running, 일부 awaiting_resume이면 overallState는 running (running 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-running-awaiting-resume');
+    setupJob(jobDir, { id: 'test-run-ar' }, {
+      alice: { member: 'alice', state: 'running' },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('running');
+  });
+
+  test('모든 멤버 done이면 overallState는 done (regression)', async () => {
+    const jobDir = path.join(tmpDir, 'job-all-done-regression');
+    setupJob(jobDir, { id: 'test-all-done' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('done');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -960,6 +1002,21 @@ describe('buildUiPayload', () => {
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
     expect(result.progress.overallState).toBe('running');
+  });
+
+  test('awaiting_resume 멤버는 completed가 아닌 in_progress로 분류됨 (non-terminal)', () => {
+    const payload = {
+      overallState: 'awaiting_resume',
+      counts: { total: 1, done: 0, queued: 0, running: 0, awaiting_resume: 1 },
+      members: [{ member: 'alice', state: 'awaiting_resume' }],
+    };
+    const result = buildUiPayload(payload, chunkReviewConfig);
+    // The reviewer step (index 1) must NOT be 'completed' — awaiting_resume is non-terminal
+    const reviewerStep = result.codex.update_plan.plan[1];
+    expect(reviewerStep.status).not.toBe('completed');
+    // Synthesize step must NOT be in_progress yet (job not done)
+    const synthStep = result.codex.update_plan.plan[result.codex.update_plan.plan.length - 1];
+    expect(synthStep.status).not.toBe('completed');
   });
 });
 
@@ -1574,6 +1631,35 @@ describe('cmdCollect', () => {
     expect(output.length).toBeGreaterThan(0);
     const result = JSON.parse(output[0]);
     expect(result.overallState).toBe('done');
+  }, 15000);
+
+  test('awaiting_resume 상태에서는 done manifest를 반환하지 않고 timeout fallback', async () => {
+    const jobDir = path.join(tmpDir, 'job-collect-awaiting-resume');
+    setupCollectJob(jobDir, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+    });
+
+    const output: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ..._args: unknown[]) => {
+      if (typeof chunk === 'string') output.push(chunk);
+      return origWrite(chunk as any);
+    };
+
+    try {
+      // timeout-ms must exceed COLLECT_POLL_INTERVAL_MS (5000ms) to allow one poll cycle.
+      // The loop sleeps 5s then re-checks timeout, so total wall time is ~10s; set to 11s.
+      await cmdCollect({ 'timeout-ms': 5100 }, jobDir, chunkReviewConfig);
+    } finally {
+      process.stdout.write = origWrite;
+    }
+
+    expect(output.length).toBeGreaterThan(0);
+    const result = JSON.parse(output[0]);
+    // Must NOT return done manifest when awaiting_resume
+    expect(result.overallState).not.toBe('done');
+    // Must not contain manifest 'members' array (done manifest only)
+    expect(result.members).toBeUndefined();
   }, 15000);
 });
 
