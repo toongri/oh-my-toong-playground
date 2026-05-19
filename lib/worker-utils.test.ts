@@ -1144,3 +1144,133 @@ describe('executeOneTurn parsed truthy non-final terminal — state preservation
     expect(status.state).toBe('done');
   });
 });
+
+// ---------------------------------------------------------------------------
+// P2-N: terminal==='error' → errorEvent preserved in status.json
+// ---------------------------------------------------------------------------
+
+function makeErrorTerminalDriver(rawEvents: unknown[]): AgentDriver {
+  return {
+    cli: 'opencode',
+    parseStdout: (_stdout: string) => ({
+      sessionID: 'ses_err',
+      terminal: 'error' as const,
+      text: '',
+      rawEvents,
+    }),
+    initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+  };
+}
+
+describe('executeOneTurn terminal===error → errorEvent in status.json', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'p2-n-error-event-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // RED: errorEvent must be present in status.json when terminal==='error'
+  test('errorEvent preserved in status.json when driver terminal=error', async () => {
+    const memberDir = join(tmpDir, 'error-event');
+    mkdirSync(memberDir, { recursive: true });
+
+    const errorRawEvents = [
+      { type: 'error', sessionID: 'ses_err', error: { message: 'provider 400', isRetryable: false } },
+    ];
+    const mockRunOnce = makeFlexibleMockRunOnce('', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeErrorTerminalDriver(errorRawEvents),
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('non_retryable');
+    expect(status.errorEvent).toBeDefined();
+    expect(status.errorEvent).toEqual(errorRawEvents);
+  });
+
+  // REGRESSION GUARD: errorEvent must NOT appear in status.json for non-error terminals
+  test('errorEvent absent in status.json when driver terminal=stop (regression guard)', async () => {
+    const memberDir = join(tmpDir, 'stop-no-error');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockDriver = makeOneTurnMockDriver({
+      sessionID: 'ses_stop', terminal: 'stop', text: 'result', rawEvents: [],
+    });
+    const mockRunOnce = makeFlexibleMockRunOnce('result', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => mockDriver,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.errorEvent).toBeUndefined();
+  });
+
+  test('errorEvent absent in status.json when driver terminal=tool-calls (regression guard)', async () => {
+    const memberDir = join(tmpDir, 'tool-calls-no-error');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('tool-calls'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.errorEvent).toBeUndefined();
+  });
+
+  test('errorEvent absent in status.json when driver terminal=pause_turn (regression guard)', async () => {
+    const memberDir = join(tmpDir, 'pause-turn-no-error');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('pause_turn'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.errorEvent).toBeUndefined();
+  });
+
+  test('errorEvent absent in status.json when driver terminal=unknown_pause (regression guard)', async () => {
+    const memberDir = join(tmpDir, 'unknown-pause-no-error');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('unknown_pause'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.errorEvent).toBeUndefined();
+  });
+
+  test('errorEvent absent in status.json when driver is null (no driver, regression guard)', async () => {
+    const memberDir = join(tmpDir, 'no-driver-no-error');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('raw output', { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => null,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.errorEvent).toBeUndefined();
+  });
+});
