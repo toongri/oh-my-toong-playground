@@ -447,7 +447,7 @@ async function main(): Promise<void> {
     const promptArg = rest.slice(2).join(' ');
     if (!promptArg) exitWithError('resume-member: missing prompt');
     try {
-      await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG);
+      await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG, { skillName: 'orchestrate-review' });
     } catch (e: unknown) {
       exitWithError(e instanceof Error ? e.message : String(e));
     }

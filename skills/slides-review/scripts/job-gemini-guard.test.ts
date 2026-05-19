@@ -65,13 +65,11 @@ describe('resume-member gemini pre-check', () => {
     }
 
     expect(exitCode).not.toBe(0);
-    // Must be the skill-aware message from the pre-check in job.ts, not the generic
-    // 'no driver for gemini' from cmdResumeMember.
+    // Skill-aware error from cmdResumeMember (generic-job) with skillName='slides-review'.
     expect(stderr).toContain('slides-review');
     expect(stderr).toContain('gemini');
     expect(stderr).toContain('no driver');
-    // The skill-aware message must reference review.config.yaml so the user knows where to act.
-    expect(stderr).toContain('review.config.yaml');
+    expect(stderr).toContain('implement driver or change default member');
   });
 
   test('claude fixture: does NOT trigger the gemini guard (exits with a different error)', () => {

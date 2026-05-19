@@ -518,7 +518,7 @@ async function main(): Promise<void> {
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     if (!nameArg) exitWithError('resume-member: missing member name');
     if (!promptArg) exitWithError('resume-member: missing prompt');
-    await cmdResumeMember(jobDirArg, nameArg, promptArg, JOB_CONFIG);
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, JOB_CONFIG, { skillName: 'spec-review' });
     return;
   }
   if (command === 'stop') {

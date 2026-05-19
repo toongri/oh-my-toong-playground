@@ -23,10 +23,7 @@ import {
   cmdResumeMember,
   gcStaleJobs,
   parseYamlSimple as frameworkParseYamlSimple,
-  detectCliType,
 } from '@lib/generic-job';
-
-import { pickDriver, type CliType } from '@lib/agent-drivers/types';
 
 import { getOmtDir } from '@lib/omt-dir';
 
@@ -197,21 +194,7 @@ async function main() {
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     if (!nameArg) exitWithError('resume-member: missing member name');
     if (!promptArg) exitWithError('resume-member: missing prompt');
-    // Pre-check: detect CLI type from status.json and fail fast with a skill-aware error
-    // before cmdResumeMember can burn the resume cap.
-    const memberDir = path.join(jobDirArg, REVIEW_CONFIG.entityDirName, nameArg);
-    const statusRaw = (() => { try { return fs.readFileSync(path.join(memberDir, 'status.json'), 'utf8'); } catch { return null; } })();
-    if (statusRaw) {
-      const status = JSON.parse(statusRaw) as Record<string, unknown>;
-      const cliType = detectCliType(status.command);
-      if (!pickDriver(cliType as CliType)) {
-        exitWithError(
-          `slides-review default member is ${cliType}, which has no driver registered. ` +
-          `Implement ${cliType} driver or change default member in review.config.yaml`
-        );
-      }
-    }
-    await cmdResumeMember(jobDirArg, nameArg, promptArg, REVIEW_CONFIG);
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, REVIEW_CONFIG, { skillName: 'slides-review' });
     return;
   }
   if (command === 'stop') {

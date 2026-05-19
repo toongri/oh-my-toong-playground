@@ -212,7 +212,7 @@ async function main() {
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     if (!nameArg) exitWithError('resume-member: missing member name');
     if (!promptArg) exitWithError('resume-member: missing prompt');
-    await cmdResumeMember(jobDirArg, nameArg, promptArg, DIAGNOSE_CONFIG);
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, DIAGNOSE_CONFIG, { skillName: 'diagnose' });
     return;
   }
 

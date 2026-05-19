@@ -426,7 +426,7 @@ async function main() {
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     if (!nameArg) exitWithError('resume-member: missing member name');
     if (!promptArg) exitWithError('resume-member: missing prompt');
-    await cmdResumeMember(jobDirArg, nameArg, promptArg, COUNCIL_CONFIG);
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, COUNCIL_CONFIG, { skillName: 'agent-council' });
     return;
   }
   if (command === 'stop') {
