@@ -126,6 +126,53 @@ describe('opencode AgentDriver', () => {
   });
 
   // -------------------------------------------------------------------------
+  // resumeCommand — --format value check (regression)
+  // -------------------------------------------------------------------------
+
+  test('`resumeCommand` - baseArgs에 --format text가 있으면 --format json으로 교체', () => {
+    const result = opencodeDriver.resumeCommand({
+      sessionID: 'ses_abc',
+      prompt: 'continue',
+      baseCommand: 'opencode',
+      baseArgs: ['run', '--format', 'text'],
+      workerEnv: {},
+    });
+    // exactly one --format
+    expect(result.args.filter((a) => a === '--format').length).toBe(1);
+    // value is json, not text
+    const fmtIdx = result.args.indexOf('--format');
+    expect(result.args[fmtIdx + 1]).toBe('json');
+    expect(result.args).not.toContain('text');
+  });
+
+  test('`resumeCommand` - baseArgs에 --format json이 이미 있으면 중복 없이 1개만 유지', () => {
+    const result = opencodeDriver.resumeCommand({
+      sessionID: 'ses_abc',
+      prompt: 'continue',
+      baseCommand: 'opencode',
+      baseArgs: ['run', '--format', 'json'],
+      workerEnv: {},
+    });
+    // idempotent: exactly one --format json, no duplicates
+    expect(result.args.filter((a) => a === '--format').length).toBe(1);
+    const fmtIdx = result.args.indexOf('--format');
+    expect(result.args[fmtIdx + 1]).toBe('json');
+  });
+
+  test('`resumeCommand` - baseArgs에 --format 없으면 --format json 추가', () => {
+    const result = opencodeDriver.resumeCommand({
+      sessionID: 'ses_abc',
+      prompt: 'continue',
+      baseCommand: 'opencode',
+      baseArgs: ['run', '--prompt', 'hi'],
+      workerEnv: {},
+    });
+    expect(result.args).toContain('--format');
+    const fmtIdx = result.args.indexOf('--format');
+    expect(result.args[fmtIdx + 1]).toBe('json');
+  });
+
+  // -------------------------------------------------------------------------
   // initialCommand
   // -------------------------------------------------------------------------
 

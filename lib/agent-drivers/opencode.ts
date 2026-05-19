@@ -150,9 +150,24 @@ function initialCommand(opts: InitialCommandOpts): BuiltCommand {
 // resumeCommand
 // ---------------------------------------------------------------------------
 
+/** Strip any existing --flagName <value> pair from args (returns new array). */
+function stripFormatPair(args: string[], flagName: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < args.length) {
+    if (args[i] === flagName) {
+      i += 2; // skip flag + value
+    } else {
+      out.push(args[i]);
+      i++;
+    }
+  }
+  return out;
+}
+
 function resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
   // Strip existing --session pair from baseArgs (replace, not duplicate).
-  const stripped: string[] = [];
+  let stripped: string[] = [];
   const baseArgs = opts.baseArgs;
   for (let i = 0; i < baseArgs.length; i++) {
     if (baseArgs[i] === '--session') {
@@ -162,13 +177,10 @@ function resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
     stripped.push(baseArgs[i]);
   }
 
-  // Inject --session and ensure --format json is present.
-  // --format json may already be in stripped (from yaml buildAugmentedCommand); keep it.
-  // Only add --format json if not already present.
-  const args = [...stripped, '--session', opts.sessionID];
-  if (!args.includes('--format')) {
-    args.push('--format', 'json');
-  }
+  // Ensure --format json is present with exactly the right value.
+  // Strip any existing --format <value> pair, then unconditionally append --format json.
+  stripped = stripFormatPair(stripped, '--format');
+  const args = [...stripped, '--session', opts.sessionID, '--format', 'json'];
 
   return {
     program: opts.baseCommand,
