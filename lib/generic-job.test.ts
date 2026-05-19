@@ -781,6 +781,49 @@ describe('computeStatus', () => {
     expect(result.overallState).toBe('running');
   });
 
+  // empty_output overallState integration tests
+  test('모든 멤버 empty_output이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-all-empty-output');
+    setupJob(jobDir, { id: 'test-all-eo' }, {
+      alice: { member: 'alice', state: 'empty_output' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('empty_output');
+  });
+
+  test('일부 done, 일부 empty_output이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-partial-empty-output');
+    setupJob(jobDir, { id: 'test-partial-eo' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('empty_output');
+  });
+
+  test('일부 running, 일부 empty_output이면 overallState는 running (running 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-running-empty-output');
+    setupJob(jobDir, { id: 'test-run-eo' }, {
+      alice: { member: 'alice', state: 'running' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('running');
+  });
+
+  test('awaiting_resume과 empty_output 동시 존재 시 awaiting_resume 우선', async () => {
+    const jobDir = path.join(tmpDir, 'job-ar-and-eo');
+    setupJob(jobDir, { id: 'test-ar-eo' }, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('awaiting_resume');
+  });
+
   test('모든 멤버 done이면 overallState는 done (regression)', async () => {
     const jobDir = path.join(tmpDir, 'job-all-done-regression');
     setupJob(jobDir, { id: 'test-all-done' }, {
