@@ -67,7 +67,7 @@ bun .claude/skills/slides-review/scripts/job.ts collect "$JOB_DIR"
 
 - `"overallState": "done"` → Step 4로 진행
 - `"overallState": "awaiting_resume"` → `members[]` 에서 `state: "awaiting_resume"` 인 member를 식별 후 `bun .claude/skills/slides-review/scripts/job.ts resume-member "$JOB_DIR" <member> "<resume prompt>"` 호출, 다시 `collect` 재호출
-- `"overallState": "empty_output"` → `members[]` 에서 `state: "empty_output"` 인 member 를 식별 후 `resume-member` 로 1회 retry. `resume_count` cap (3) 도달 시 명령이 throw → `collect` 를 다시 호출; cap 소진 member 는 실패한 member (`outputFilePath` null) 로 manifest 에 나타나므로 Degradation Policy 적용
+- `"overallState": "empty_output"` → `members[]` 에서 `state: "empty_output"` 인 member 를 식별 후 `resume-member` 로 1회 retry. `resume_count` cap (3) 도달 시 명령이 throw → `collect` 를 다시 호출; cap 소진 member 는 `non_retryable` 로 manifest 에 나타나므로 **quiet pass** (기존 HTML 유지)
 - `"running"` / `"queued"` → `collect` 재호출 (동일 명령)
 - 멤버 상태가 `missing_cli` → **quiet pass** (Step 5로 직행, 지침 적용 없음)
 - 멤버 상태가 `error` / `timed_out` → **quiet pass** (기존 HTML 유지)
