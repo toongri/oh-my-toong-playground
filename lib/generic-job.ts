@@ -409,11 +409,14 @@ export async function computeStatus(
     if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
   }
 
-  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0 && totals.awaiting_resume === 0;
+  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0 && totals.awaiting_resume === 0 && totals.empty_output === 0;
   const overallState = allDone ? 'done'
     : (totals.running > 0 || totals.retrying > 0) ? 'running'
+    // queued outranks the intervention states: a member still awaiting dispatch must not let
+    // cmdCollect early-return on a sibling's awaiting_resume/empty_output before that member runs.
     : totals.queued > 0 ? 'queued'
     : totals.awaiting_resume > 0 ? 'awaiting_resume'
+    : totals.empty_output > 0 ? 'empty_output'
     : 'queued';
 
   return {
@@ -481,7 +484,7 @@ export function buildUiPayload(
     .filter((r) => r.entity)
     .sort((a, b) => a.entity.localeCompare(b.entity));
 
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable', 'empty_output', 'transient_error', 'permanent_error']);
+  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable', 'transient_error', 'permanent_error']);
   const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
   let hasInProgress = dispatchStatus === 'in_progress';
 
@@ -852,6 +855,12 @@ export async function cmdCollect(
       );
       return;
     }
+    if (status.overallState === 'awaiting_resume' || status.overallState === 'empty_output') {
+      process.stdout.write(
+        `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts, members: status.members }, null, 2)}\n`,
+      );
+      return;
+    }
     if (timeoutMs > 0 && Date.now() - start >= timeoutMs) {
       process.stdout.write(
         `${JSON.stringify({ overallState: status.overallState, id: status.id, counts: status.counts }, null, 2)}\n`,
@@ -871,6 +880,8 @@ export type ResumeMemberOpts = {
   resumeOneTurnFn?: (sessionID: string, opts: RunOneTurnOpts) => Promise<OneTurnResult>;
   /** Test-only: forwarded to resumeOneTurn for spawn-less e2e wire validation. */
   runOnceFn?: typeof runOnce;
+  /** Optional skill name for skill-aware error messages (e.g., 'slides-review', 'orchestrate-review'). */
+  skillName?: string;
 };
 
 export async function cmdResumeMember(
@@ -882,23 +893,24 @@ export async function cmdResumeMember(
 ): Promise<void> {
   const memberDir = path.join(jobDir, config.entityDirName, name);
   const statusPath = path.join(memberDir, 'status.json');
+  const prefix = opts.skillName ? `${opts.skillName}: ` : '';
 
   // Read status.json
   let status: Record<string, unknown>;
   try {
     status = JSON.parse(fs.readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
   } catch {
-    throw new Error('no resumable session');
+    throw new Error(`${prefix}no resumable session`);
   }
 
   // Check sessionID
   const sessionID = status.sessionID;
-  if (!sessionID) throw new Error('no resumable session');
+  if (!sessionID) throw new Error(`${prefix}no resumable session`);
 
   // State check
   const state = String(status.state ?? '');
   if (state === 'error' || state === 'non_retryable') {
-    throw new Error(`member in non-resumable state: ${state}`);
+    throw new Error(`${prefix}member in non-resumable state: ${state}`);
   }
 
   // Restore workerEnv saved by executeOneTurn (P1-4: preserve cross-CLI env contract across resume).
@@ -911,17 +923,17 @@ export async function cmdResumeMember(
   // misconfigured commands do not burn a resume_count increment (item 4).
   const command = status.command;
   const cliType = detectCliType(command);
-  if (cliType === 'unknown') throw new Error('unknown cli type');
+  if (cliType === 'unknown') throw new Error(`${prefix}unknown cli type`);
 
   // Driver lookup
   const driverFactory = opts.driverFactory ?? pickDriver;
   const driver = driverFactory(cliType as CliType);
-  if (!driver) throw new Error(`no driver for ${cliType}`);
+  if (!driver) throw new Error(`${prefix}no driver for ${cliType}, implement driver or change default member`);
 
   // P1-3: parse status.command to restore original program+args (preserve --agent/--model/-p/run/etc.)
   const cmdStr = String(command ?? '');
   const tokens = splitCommand(cmdStr);
-  if (!tokens || tokens.length === 0) throw new Error('invalid stored command');
+  if (!tokens || tokens.length === 0) throw new Error(`${prefix}invalid stored command`);
 
   // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
   // sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
@@ -930,7 +942,10 @@ export async function cmdResumeMember(
   // effectively sequential, so the cap holds in practice. executeOneTurn preserves
   // resume_count via read-then-write (line 449 of worker-utils.ts).
   const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
-  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
+  if (resumeCount >= 3) {
+    atomicWriteJson(statusPath, { ...status, state: 'non_retryable', message: 'resume cap exceeded (3/3)' });
+    throw new Error(`${prefix}resume cap exceeded (3/3)`);
+  }
   atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
   const [origProgram, ...origArgs] = tokens;
 

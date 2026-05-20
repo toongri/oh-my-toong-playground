@@ -30,6 +30,7 @@ Your job is to orchestrate external AI reviewers, collect their independent resu
 You may ONLY execute these commands via Bash:
 - `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
 - `bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
+- `bun .claude/skills/orchestrate-review/scripts/job.ts resume-member "$JOB_DIR" <member> "<prompt>"` — recover a stalled member
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -67,6 +68,8 @@ bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
+- If `"overallState": "awaiting_resume"` → identify members with `state: "awaiting_resume"` in `members[]` and call `bun .claude/skills/orchestrate-review/scripts/job.ts resume-member "$JOB_DIR" <member> "<resume prompt>"` for each, then call `collect` again.
+- If `"overallState": "empty_output"` → identify members with `state: "empty_output"` in `members[]` and call `resume-member` once to retry. If `resume_count` reaches cap (3) the command throws — call `collect` again; the capped reviewer now appears as a failed reviewer (`outputFilePath` null) in the manifest, so apply the Degradation Policy.
 - Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
 
 Response JSON (done):
@@ -126,7 +129,7 @@ Each reviewer CLI emits its native structured output (opencode: NDJSON via `--fo
 호출 형식:
 
 ```
-bun job.ts resume-member --job <jobDir> --member <name> --prompt "마무리되었나요? 답변 주세요"
+bun job.ts resume-member <jobDir> <name> "마무리되었나요? 답변 주세요"
 ```
 
 프롬프트는 chairman LLM이 상황에 맞게 작성한다. 위 예시는 참고용이다.

@@ -38,7 +38,12 @@ The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
 ```
 
-`collect` polls until the job reaches a terminal state and returns a JSON manifest. Repeat if the overall state is `running` or `queued`.
+`collect` polls until the job reaches a terminal state and returns a JSON manifest. Branch on `overallState`:
+
+- If `"overallState": "done"` → proceed to Step 4.
+- If `"overallState": "awaiting_resume"` → identify members with `state: "awaiting_resume"` in `members[]` and call `bun .claude/skills/diagnose/scripts/job.ts resume-member $JOB_DIR <member> "<resume prompt>"` for each, then call `collect` again.
+- If `"overallState": "empty_output"` → identify members with `state: "empty_output"` in `members[]` and call `resume-member` once to retry. If `resume_count` reaches cap (3) the command throws — call `collect` again; the capped member is now `non_retryable`, so proceed to Step 4 and apply its `non_retryable` fallback (become Hephaestus in-session).
+- Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again.
 
 ### Step 4: Fallback branch
 

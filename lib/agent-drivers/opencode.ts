@@ -139,9 +139,10 @@ function parseStdout(stdout: string): ParseResult | null {
 // ---------------------------------------------------------------------------
 
 function initialCommand(opts: InitialCommandOpts): BuiltCommand {
+  const stripped = stripFlagPair(opts.baseArgs, '--format');
   return {
     program: opts.baseCommand,
-    args: [...opts.baseArgs],
+    args: [...stripped, '--format', 'json'],
     env: opts.workerEnv,
   };
 }
@@ -150,25 +151,26 @@ function initialCommand(opts: InitialCommandOpts): BuiltCommand {
 // resumeCommand
 // ---------------------------------------------------------------------------
 
-function resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
-  // Strip existing --session pair from baseArgs (replace, not duplicate).
-  const stripped: string[] = [];
-  const baseArgs = opts.baseArgs;
-  for (let i = 0; i < baseArgs.length; i++) {
-    if (baseArgs[i] === '--session') {
-      i++; // skip the value too
-      continue;
+/** Strip any existing --flagName <value> pair from args (returns new array). */
+function stripFlagPair(args: string[], flagName: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < args.length) {
+    if (args[i] === flagName) {
+      i += 2; // skip flag + value
+    } else {
+      out.push(args[i]);
+      i++;
     }
-    stripped.push(baseArgs[i]);
   }
+  return out;
+}
 
-  // Inject --session and ensure --format json is present.
-  // --format json may already be in stripped (from yaml buildAugmentedCommand); keep it.
-  // Only add --format json if not already present.
-  const args = [...stripped, '--session', opts.sessionID];
-  if (!args.includes('--format')) {
-    args.push('--format', 'json');
-  }
+function resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
+  // Strip existing --session and --format pairs (replace, not duplicate), then append the
+  // canonical values. parseStdout requires --format json, so its value is enforced unconditionally.
+  const stripped = stripFlagPair(stripFlagPair(opts.baseArgs, '--session'), '--format');
+  const args = [...stripped, '--session', opts.sessionID, '--format', 'json'];
 
   return {
     program: opts.baseCommand,

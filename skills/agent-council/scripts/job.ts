@@ -422,11 +422,13 @@ async function main() {
   if (command === 'resume-member') {
     const jobDirArg = rest[0];
     const nameArg = rest[1];
-    const promptArg = rest.slice(2).join(' ');
+    // Capture prompt from raw argv to avoid parseArgs consuming --flag tokens inside the prompt.
+    // argv layout: [node, script, 'resume-member', jobDir, memberName, ...promptTokens]
+    const promptArg = process.argv.slice(5).join(' ');
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     if (!nameArg) exitWithError('resume-member: missing member name');
     if (!promptArg) exitWithError('resume-member: missing prompt');
-    await cmdResumeMember(jobDirArg, nameArg, promptArg, COUNCIL_CONFIG);
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, COUNCIL_CONFIG, { skillName: 'agent-council' });
     return;
   }
   if (command === 'stop') {

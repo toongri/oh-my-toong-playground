@@ -440,14 +440,16 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'resume-member') {
-    const jobDirArg = options.job as string | undefined;
-    if (!jobDirArg) exitWithError('--job required');
-    const nameArg = options.member as string | undefined;
-    if (!nameArg) exitWithError('--member required');
-    const promptArg = options.prompt as string | undefined;
-    if (!promptArg) exitWithError('--prompt required');
+    const jobDirArg = rest[0];
+    if (!jobDirArg) exitWithError('resume-member: missing jobDir');
+    const nameArg = rest[1];
+    if (!nameArg) exitWithError('resume-member: missing member name');
+    // Capture prompt from raw argv to avoid parseArgs consuming --flag tokens inside the prompt.
+    // argv layout: [node, script, 'resume-member', jobDir, memberName, ...promptTokens]
+    const promptArg = process.argv.slice(5).join(' ');
+    if (!promptArg) exitWithError('resume-member: missing prompt');
     try {
-      await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG);
+      await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG, { skillName: 'orchestrate-review' });
     } catch (e: unknown) {
       exitWithError(e instanceof Error ? e.message : String(e));
     }

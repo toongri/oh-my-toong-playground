@@ -758,6 +758,113 @@ describe('computeStatus', () => {
     expect(countKeys.length).toBe(13);
     expect('max_turns_exceeded' in result.counts).toBe(false);
   });
+
+  // awaiting_resume overallState integration tests
+  test('모든 멤버가 awaiting_resume이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-all-awaiting-resume');
+    setupJob(jobDir, { id: 'test-all-ar' }, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('awaiting_resume');
+  });
+
+  test('일부 done, 일부 awaiting_resume이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-partial-awaiting-resume');
+    setupJob(jobDir, { id: 'test-partial-ar' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+  });
+
+  test('일부 running, 일부 awaiting_resume이면 overallState는 running (running 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-running-awaiting-resume');
+    setupJob(jobDir, { id: 'test-run-ar' }, {
+      alice: { member: 'alice', state: 'running' },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('running');
+  });
+
+  // empty_output overallState integration tests
+  test('모든 멤버 empty_output이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-all-empty-output');
+    setupJob(jobDir, { id: 'test-all-eo' }, {
+      alice: { member: 'alice', state: 'empty_output' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('empty_output');
+  });
+
+  test('일부 done, 일부 empty_output이면 overallState는 done이 아님', async () => {
+    const jobDir = path.join(tmpDir, 'job-partial-empty-output');
+    setupJob(jobDir, { id: 'test-partial-eo' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('empty_output');
+  });
+
+  // queued precedence over intervention states: a member still awaiting dispatch must keep
+  // overallState at 'queued' so cmdCollect does not early-return on a sibling's intervention state.
+  test('일부 queued, 일부 awaiting_resume이면 overallState는 queued (queued 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-queued-awaiting-resume');
+    setupJob(jobDir, { id: 'test-queued-ar' }, {
+      alice: { member: 'alice', state: 'queued' },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('queued');
+  });
+
+  test('일부 queued, 일부 empty_output이면 overallState는 queued (queued 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-queued-empty-output');
+    setupJob(jobDir, { id: 'test-queued-eo' }, {
+      alice: { member: 'alice', state: 'queued' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('queued');
+  });
+
+  test('일부 running, 일부 empty_output이면 overallState는 running (running 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-running-empty-output');
+    setupJob(jobDir, { id: 'test-run-eo' }, {
+      alice: { member: 'alice', state: 'running' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('running');
+  });
+
+  test('awaiting_resume과 empty_output 동시 존재 시 awaiting_resume 우선', async () => {
+    const jobDir = path.join(tmpDir, 'job-ar-and-eo');
+    setupJob(jobDir, { id: 'test-ar-eo' }, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('awaiting_resume');
+  });
+
+  test('모든 멤버 done이면 overallState는 done (regression)', async () => {
+    const jobDir = path.join(tmpDir, 'job-all-done-regression');
+    setupJob(jobDir, { id: 'test-all-done' }, {
+      alice: { member: 'alice', state: 'done', exitCode: 0 },
+      bob: { member: 'bob', state: 'done', exitCode: 0 },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('done');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -970,6 +1077,36 @@ describe('buildUiPayload', () => {
     };
     const result = buildUiPayload(payload, chunkReviewConfig);
     expect(result.progress.overallState).toBe('running');
+  });
+
+  test('awaiting_resume 멤버는 completed가 아닌 in_progress로 분류됨 (non-terminal)', () => {
+    const payload = {
+      overallState: 'awaiting_resume',
+      counts: { total: 1, done: 0, queued: 0, running: 0, awaiting_resume: 1 },
+      members: [{ member: 'alice', state: 'awaiting_resume' }],
+    };
+    const result = buildUiPayload(payload, chunkReviewConfig);
+    // The reviewer step (index 1) must NOT be 'completed' — awaiting_resume is non-terminal
+    const reviewerStep = result.codex.update_plan.plan[1];
+    expect(reviewerStep.status).not.toBe('completed');
+    // Synthesize step must NOT be in_progress yet (job not done)
+    const synthStep = result.codex.update_plan.plan[result.codex.update_plan.plan.length - 1];
+    expect(synthStep.status).not.toBe('completed');
+  });
+
+  test('empty_output 멤버는 completed가 아닌 pending으로 분류됨 (non-terminal)', () => {
+    const payload = {
+      overallState: 'empty_output',
+      counts: { total: 1, done: 0, queued: 0, running: 0, empty_output: 1 },
+      members: [{ member: 'alice', state: 'empty_output' }],
+    };
+    const result = buildUiPayload(payload, chunkReviewConfig);
+    // The reviewer step (index 1) must NOT be 'completed' — empty_output is non-terminal
+    const reviewerStep = result.codex.update_plan.plan[1];
+    expect(reviewerStep.status).not.toBe('completed');
+    // Synthesize step must NOT be completed yet (job not done)
+    const synthStep = result.codex.update_plan.plan[result.codex.update_plan.plan.length - 1];
+    expect(synthStep.status).not.toBe('completed');
   });
 });
 
@@ -1585,6 +1722,34 @@ describe('cmdCollect', () => {
     const result = JSON.parse(output[0]);
     expect(result.overallState).toBe('done');
   }, 15000);
+
+  test('awaiting_resume 상태에서는 done manifest를 반환하지 않고 즉시 members 포함 반환', async () => {
+    const jobDir = path.join(tmpDir, 'job-collect-awaiting-resume');
+    setupCollectJob(jobDir, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+    });
+
+    const output: string[] = [];
+    const origWrite = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array, ..._args: unknown[]) => {
+      if (typeof chunk === 'string') output.push(chunk);
+      return origWrite(chunk as any);
+    };
+
+    try {
+      await cmdCollect({ 'timeout-ms': 5000 }, jobDir, chunkReviewConfig);
+    } finally {
+      process.stdout.write = origWrite;
+    }
+
+    expect(output.length).toBeGreaterThan(0);
+    const result = JSON.parse(output[0]);
+    // Must NOT return done manifest when awaiting_resume
+    expect(result.overallState).toBe('awaiting_resume');
+    // Must contain members array for chairman to identify which member needs resume-member
+    expect(Array.isArray(result.members)).toBe(true);
+    expect(result.members[0].state).toBe('awaiting_resume');
+  }, 15000);
 });
 
 // ---------------------------------------------------------------------------
@@ -2097,5 +2262,186 @@ describe('cmdResumeMember', () => {
     const fnEnd = src.indexOf('\nexport ', fnStart + 1);
     const fnBody = src.slice(fnStart, fnEnd);
     expect(fnBody).toMatch(/session.*preserv|--resume.*persona|intentionally.*omit|not forwarded|session-preserving/i);
+  });
+
+  // ---------------------------------------------------------------------------
+  // skillName-aware error messages
+  // ---------------------------------------------------------------------------
+
+  test('skillName absent + no driver emits generic message', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => null as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('no driver for opencode');
+    // Must NOT include skill prefix
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow(/^no driver for/);
+  });
+
+  test('skillName + no driver emits prefixed message with guidance', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => null as any,
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'slides-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('slides-review: no driver for opencode, implement driver or change default member');
+  });
+
+  test('skillName + unknown cli type emits prefixed message', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'unknowncli run',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'orchestrate-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('orchestrate-review: unknown cli type');
+  });
+
+  test('skillName + no resumable session emits prefixed message', async () => {
+    // No status.json written → 'no resumable session'
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'slides-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'ghost', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('slides-review: no resumable session');
+  });
+
+  test('skillName + resume cap exceeded emits prefixed message', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+      skillName: 'orchestrate-review',
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('orchestrate-review: resume cap exceeded (3/3)');
+  });
+
+  test('cap exceeded writes non_retryable state to status.json before throwing', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'empty_output',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+
+    const status = readMemberStatus(entityDir);
+    expect(status.state).toBe('non_retryable');
+    expect(status.resume_count).toBe(3);
+  });
+
+  test('cap exceeded member does not block computeStatus overallState done when other member is done', async () => {
+    // Set up job with two members: alice (capped) and bob (done)
+    const aliceDir = path.join(jobDir, 'members', 'alice');
+    const bobDir = path.join(jobDir, 'members', 'bob');
+    writeMemberStatus(aliceDir, {
+      member: 'alice',
+      state: 'empty_output',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+    writeMemberStatus(bobDir, {
+      member: 'bob',
+      state: 'done',
+      sessionID: 'sess-bob',
+      resume_count: 0,
+      command: 'opencode',
+    });
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-cap-job' }));
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+
+    const result = await computeStatus(jobDir, membersConfig);
+    expect(result.overallState).toBe('done');
+  });
+
+  test('cap exceeded member appears in buildManifest with outputFilePath null', async () => {
+    const aliceDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(aliceDir, {
+      member: 'alice',
+      state: 'empty_output',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-cap-manifest' }));
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+
+    const manifest = buildManifest(jobDir, membersConfig);
+    const aliceEntry = manifest.members.find((m: any) => m.member === 'alice');
+    expect(aliceEntry).toBeDefined();
+    expect(aliceEntry.outputFilePath).toBe(null);
   });
 });

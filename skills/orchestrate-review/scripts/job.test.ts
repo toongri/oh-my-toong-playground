@@ -1788,41 +1788,44 @@ describe('resume-member', () => {
     expect(resumeIdx).toBeLessThan(unknownIdx);
   });
 
-  test('resume-member D7a rejects when --job missing', async () => {
-    // Test via CLI spawn — missing --job arg
+  test('resume-member D7a rejects when jobDir missing', () => {
+    // Test via CLI spawn — no positional args
+    let exitCode = 0;
+    let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--member', 'alice', '--prompt', 'hi'], {
-        stdio: 'pipe',
-      });
-      throw new Error('expected non-zero exit');
+      execFileSync(process.execPath, [SCRIPT, 'resume-member'], { stdio: 'pipe' });
     } catch (err: any) {
-      expect(err.status).toBeGreaterThan(0);
-      expect(err.stderr.toString()).toContain('--job required');
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
     }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing jobDir');
   });
 
-  test('resume-member D7b rejects when --member missing', async () => {
+  test('resume-member D7b rejects when member name missing', () => {
+    let exitCode = 0;
+    let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--job', jobDir, '--prompt', 'hi'], {
-        stdio: 'pipe',
-      });
-      throw new Error('expected non-zero exit');
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', jobDir], { stdio: 'pipe' });
     } catch (err: any) {
-      expect(err.status).toBeGreaterThan(0);
-      expect(err.stderr.toString()).toContain('--member required');
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
     }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing member name');
   });
 
-  test('resume-member D7c rejects when --prompt missing', async () => {
+  test('resume-member D7c rejects when prompt missing', () => {
+    let exitCode = 0;
+    let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '--job', jobDir, '--member', 'opencode'], {
-        stdio: 'pipe',
-      });
-      throw new Error('expected non-zero exit');
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', jobDir, 'opencode'], { stdio: 'pipe' });
     } catch (err: any) {
-      expect(err.status).toBeGreaterThan(0);
-      expect(err.stderr.toString()).toContain('--prompt required');
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
     }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('resume-member: missing prompt');
   });
 
   test('resume-member D8 rejects when no driver for gemini', async () => {
@@ -1894,6 +1897,23 @@ describe('resume-member', () => {
         resumeOneTurnFn: makeResumeStub() as any,
       })
     ).rejects.toThrow('unknown cli type');
+  });
+
+  test('resume-member D12 flag-like 토큰을 prompt로 전달하면 missing prompt로 거부되지 않는다', () => {
+    // 회귀 테스트: parseArgs가 --json을 소비하여 prompt가 빈 문자열이 되는 버그 방지.
+    // process.argv.slice(5)로 raw argv에서 prompt를 캡처하므로 --json이 그대로 전달된다.
+    // /tmp/no-such-dir 을 사용 — session 없는 jobDir이므로 non-zero exit을 보장한다.
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/no-such-dir', 'opencode', '--json'], { stdio: 'pipe' });
+    } catch (err: any) {
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
+    }
+    // Should fail (no resumable session), but NOT with "missing prompt"
+    expect(exitCode).not.toBe(0);
+    expect(output).not.toContain('missing prompt');
   });
 });
 
@@ -2365,6 +2385,48 @@ describe('cmdCollect', () => {
       expect(err.status).toBe(1);
       expect(err.stderr.toString()).toContain('collect: missing jobDir');
     }
+  });
+
+  test('empty_output 즉시 반환: overallState와 members 포함', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-empty-output');
+    setupCollectFixture(jobDir, {
+      'claude-0': { member: 'claude', state: 'empty_output', exitCode: 0, output: '' },
+      'codex-0': { member: 'codex', state: 'empty_output', exitCode: 0, output: '' },
+    });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+    ], { stdio: 'pipe', timeout: 10000 });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).toBe('empty_output');
+    expect(parsed.id).toBe('collect-test');
+    expect(parsed).toHaveProperty('counts');
+    expect(parsed).toHaveProperty('members');
+    expect(parsed.members).toHaveLength(2);
+    expect(parsed.members[0].state).toBe('empty_output');
+    expect(parsed.members[1].state).toBe('empty_output');
+  });
+
+  test('awaiting_resume 즉시 반환: overallState와 members 포함', () => {
+    const jobDir = path.join(tmpDir, 'job-collect-awaiting-resume');
+    setupCollectFixture(jobDir, {
+      'claude-0': { member: 'claude', state: 'awaiting_resume', exitCode: 0, output: '' },
+      'codex-0': { member: 'codex', state: 'awaiting_resume', exitCode: 0, output: '' },
+    });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'collect', '--timeout-ms', '5000', jobDir,
+    ], { stdio: 'pipe', timeout: 10000 });
+    const parsed = JSON.parse(result.toString());
+
+    expect(parsed.overallState).toBe('awaiting_resume');
+    expect(parsed.id).toBe('collect-test');
+    expect(parsed).toHaveProperty('counts');
+    expect(parsed).toHaveProperty('members');
+    expect(parsed.members).toHaveLength(2);
+    expect(parsed.members[0].state).toBe('awaiting_resume');
+    expect(parsed.members[1].state).toBe('awaiting_resume');
   });
 
   test('cmdCollect propagates size_bytes to chairman payload', () => {

@@ -412,6 +412,9 @@ async function executeOneTurn(
   let rawStdout = '';
   try { rawStdout = fs.readFileSync(outputPath, 'utf8'); } catch { /* absent → empty */ }
 
+  // P0.2: Preserve raw NDJSON before any driver transformation
+  try { fs.writeFileSync(path.join(memberDir, 'raw-output.ndjson'), rawStdout, 'utf8'); } catch { /* ignore */ }
+
   // Parse stdout via driver
   const parsed = driverInstance ? driverInstance.parseStdout(rawStdout) : null;
 
@@ -431,6 +434,15 @@ async function executeOneTurn(
       // Non-final pause signal with clean exit: process exited 0 but the turn is not complete.
       // Must NOT report 'done' — the caller needs to resume.
       state = 'awaiting_resume';
+    } else if (
+      parsed.terminal === 'stop' &&
+      (parsed.text ?? '').trim().length === 0 &&
+      (runResult.state as string) === 'done'
+    ) {
+      // P0.1: Model returned stop but produced no text — silent empty output.
+      // Only when process exited cleanly (done); process-level failures (missing_cli/canceled/timed_out)
+      // fall through to preserve their concrete state.
+      state = 'empty_output';
     } else {
       // Preserve concrete process-level state from runOnce (missing_cli/timed_out/canceled);
       // only fall to 'error' if runOnce reported a generic non-zero exit without a specific state.
@@ -457,6 +469,7 @@ async function executeOneTurn(
   }
 
   const runResultRecord = runResult as Record<string, unknown>;
+
   atomicWriteJson(path.join(memberDir, 'status.json'), {
     member,
     state,
@@ -467,6 +480,11 @@ async function executeOneTurn(
     message: runResultRecord.message ?? null,
     finishedAt: runResultRecord.finishedAt ?? new Date().toISOString(),
     workerEnv: builtCmd.env,
+    // P0.3: byte length of parsed text for manifest size_bytes guard
+    size_bytes: Buffer.byteLength(text, 'utf8'),
+    // driver terminal classification (pairs with state for diagnosis)
+    terminal: parsed?.terminal ?? null,
+    ...(parsed?.terminal === 'error' ? { errorEvent: parsed.rawEvents } : {}),
   });
 
   return { state, sessionID, text, exitCode };

@@ -73,6 +73,7 @@ Proceed with implementation.
 You may ONLY execute these commands via Bash:
 - `bun .claude/skills/spec-review/scripts/job.ts start --prompt-file "$PROMPT_FILE" [--spec <spec-name>]` — start a review job
 - `bun .claude/skills/spec-review/scripts/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
+- `bun .claude/skills/spec-review/scripts/job.ts resume-member "$JOB_DIR" <member> "<prompt>"` — recover a stalled member
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -163,6 +164,8 @@ bun .claude/skills/spec-review/scripts/job.ts collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Phase 3.
+- If `"overallState": "awaiting_resume"` → identify members with `state: "awaiting_resume"` in `members[]` and call `bun .claude/skills/spec-review/scripts/job.ts resume-member "$JOB_DIR" <member> "<resume prompt>"` for each, then call `collect` again.
+- If `"overallState": "empty_output"` → identify members with `state: "empty_output"` in `members[]` and call `resume-member` once to retry. If `resume_count` reaches cap (3) the command throws — call `collect` again; the capped reviewer now appears as a failed reviewer (`outputFilePath` null) in the manifest, so apply the Degradation Policy.
 - Otherwise (`"running"`, `"queued"`, etc.) → call `collect` again (same command, foreground, timeout: 180000).
 
 Response JSON (done):

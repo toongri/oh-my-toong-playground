@@ -90,6 +90,9 @@ export const codexDriver: AgentDriver = {
     if (!args.includes('--skip-git-repo-check')) {
       args.push('--skip-git-repo-check');
     }
+    if (!args.includes('--json')) {
+      args.push('--json');
+    }
     return {
       program: opts.baseCommand,
       args,
@@ -112,6 +115,9 @@ export const codexDriver: AgentDriver = {
 
     if (!args.includes('--skip-git-repo-check')) {
       args.push('--skip-git-repo-check');
+    }
+    if (!args.includes('--json')) {
+      args.push('--json');
     }
 
     return {
