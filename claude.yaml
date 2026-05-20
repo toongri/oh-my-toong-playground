@@ -20,6 +20,14 @@ config:
       - "Bash(rm -r -f *)"
       - "Bash(rm -f -r *)"
 
+mcps:
+  # Requires shell env: OPENSEARCH_URL, OPENSEARCH_USERNAME, OPENSEARCH_PASSWORD
+  # (AWS: AWS_REGION, AWS_IAM_ARN or AWS_PROFILE). See opensearch-project/opensearch-mcp-server-py.
+  opensearch:
+    command: uvx
+    args:
+      - "opensearch-mcp-server-py"
+
 plugins:
   items:
     - context7
