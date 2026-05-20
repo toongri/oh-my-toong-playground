@@ -505,6 +505,16 @@ describe('computeStatus', () => {
     expect(result.counts.queued).toBe(1);
   });
 
+  test('awaiting_resume 멤버는 done이 아니라 awaiting_resume으로 보고됨', async () => {
+    const jobDir = path.join(tmpDir, 'job-awaiting-resume');
+    setupJob(jobDir, { id: 'test-ar' }, {
+      alice: { member: 'alice', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).not.toBe('done');
+    expect(result.overallState).toBe('awaiting_resume');
+  });
+
   test('counts error states correctly', async () => {
     const jobDir = path.join(tmpDir, 'job4');
     setupJob(jobDir, { id: 'test-4' }, {
