@@ -243,3 +243,81 @@ describe("collectRequiredLibModules", () => {
     expect(result.size).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Relative import tracking (regression for side-effect + relative imports)
+// ---------------------------------------------------------------------------
+
+describe("relative import tracking inside lib modules", () => {
+  it("lib 모듈이 상대경로 side-effect import로 참조하는 모듈도 수집한다 (worker-utils → agent-drivers 패턴)", async () => {
+    // Fixture: entry.ts imports @lib/worker-utils via @lib alias
+    //          worker-utils imports ./agent-drivers/opencode as side-effect
+    //          opencode is never referenced via @lib/ anywhere else
+    const agentDriversDir = path.join(libDir, "agent-drivers");
+    await fs.mkdir(agentDriversDir, { recursive: true });
+
+    const opencodeLib = path.join(agentDriversDir, "opencode.ts");
+    await writeFile(opencodeLib, "// opencode driver registration\nexport const name = 'opencode';\n");
+
+    const workerUtilsLib = path.join(libDir, "worker-utils.ts");
+    await writeFile(
+      workerUtilsLib,
+      "// worker utils\nimport './agent-drivers/opencode';\nexport const foo = 1;\n",
+    );
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, 'import { foo } from "@lib/worker-utils";\n');
+
+    const result = await collectRequiredLibModules(platformDir, libDir);
+
+    expect(result.has(workerUtilsLib)).toBe(true);
+    expect(result.has(opencodeLib)).toBe(true);
+    expect(result.size).toBe(2);
+  });
+
+  it("lib 모듈의 상대 import가 libSourceDir 밖을 가리키면 수집하지 않는다", async () => {
+    // Fixture: worker-utils imports '../outside/helper' which resolves outside libDir
+    const workerUtilsLib = path.join(libDir, "worker-utils.ts");
+    await writeFile(
+      workerUtilsLib,
+      "// worker utils\nimport '../outside/helper';\nexport const foo = 1;\n",
+    );
+
+    // Create the outside file so it would be picked up if the guard were missing
+    const outsideHelper = path.join(tmpDir, "outside", "helper.ts");
+    await writeFile(outsideHelper, "// outside helper\n");
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, 'import { foo } from "@lib/worker-utils";\n');
+
+    const result = await collectRequiredLibModules(platformDir, libDir);
+
+    expect(result.has(workerUtilsLib)).toBe(true);
+    // outsideHelper must NOT be collected
+    expect(result.has(outsideHelper)).toBe(false);
+    expect(result.size).toBe(1);
+  });
+
+  it("lib 모듈의 transitive 상대 import도 재귀 추적한다", async () => {
+    // Fixture: entry → @lib/a → ./b (relative) → ./c (relative)
+    //          none of b or c are referenced via @lib/
+    const cLib = path.join(libDir, "c.ts");
+    await writeFile(cLib, "// c\n");
+
+    const bLib = path.join(libDir, "b.ts");
+    await writeFile(bLib, "import './c';\n");
+
+    const aLib = path.join(libDir, "a.ts");
+    await writeFile(aLib, "import './b';\n");
+
+    const entryFile = path.join(platformDir, "entry.ts");
+    await writeFile(entryFile, 'import { a } from "@lib/a";\n');
+
+    const result = await collectRequiredLibModules(platformDir, libDir);
+
+    expect(result.has(aLib)).toBe(true);
+    expect(result.has(bLib)).toBe(true);
+    expect(result.has(cLib)).toBe(true);
+    expect(result.size).toBe(3);
+  });
+});

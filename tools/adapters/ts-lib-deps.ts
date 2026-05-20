@@ -44,6 +44,10 @@ export async function resolveTsLibDependencies(
   // The xxx may contain letters, digits, underscores, hyphens, dots, slashes
   const LIB_IMPORT_RE = /(?:from|import)\s*[\s(]["']@lib\/([^"']+)["']/g;
 
+  // Match relative imports: from './x', from '../x', import './x', import '../x'
+  // Also side-effect: import './x';  import '../x';
+  const REL_IMPORT_RE = /(?:from|import)\s*[\s(]["'](\.\.?\/[^"']+)["']/g;
+
   const deps: string[] = [];
 
   for (const line of content.split("\n")) {
@@ -51,6 +55,7 @@ export async function resolveTsLibDependencies(
     const trimmed = line.trimStart();
     if (trimmed.startsWith("//")) continue;
 
+    // --- @lib/ imports ---
     let match: RegExpExecArray | null;
     LIB_IMPORT_RE.lastIndex = 0;
     while ((match = LIB_IMPORT_RE.exec(line)) !== null) {
@@ -74,6 +79,49 @@ export async function resolveTsLibDependencies(
       if (!visited.has(absPath)) {
         deps.push(absPath);
         // Recurse to pick up transitive dependencies
+        const transitive = await resolveTsLibDependencies(
+          absPath,
+          libSourceDir,
+          visited,
+        );
+        deps.push(...transitive);
+      }
+    }
+
+    // --- relative imports (only meaningful when inside a lib module) ---
+    // Only track relative imports when the current file is itself under libSourceDir.
+    if (!filePath.startsWith(libSourceDir + path.sep) && filePath !== libSourceDir) {
+      continue;
+    }
+
+    REL_IMPORT_RE.lastIndex = 0;
+    while ((match = REL_IMPORT_RE.exec(line)) !== null) {
+      let specifier = match[1];
+
+      // Strip .ts extension if present
+      if (specifier.endsWith(".ts")) {
+        specifier = specifier.slice(0, -3);
+      }
+
+      // Resolve relative to the importing file's directory
+      const absPath = path.normalize(
+        path.join(path.dirname(filePath), `${specifier}.ts`),
+      );
+
+      // Confine to libSourceDir — skip paths that escape it
+      if (!absPath.startsWith(libSourceDir + path.sep) && absPath !== libSourceDir) {
+        continue;
+      }
+
+      // Check existence
+      try {
+        await fs.stat(absPath);
+      } catch {
+        continue;
+      }
+
+      if (!visited.has(absPath)) {
+        deps.push(absPath);
         const transitive = await resolveTsLibDependencies(
           absPath,
           libSourceDir,
