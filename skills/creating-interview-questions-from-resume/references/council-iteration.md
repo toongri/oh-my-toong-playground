@@ -6,7 +6,7 @@
 
 ## When to Apply This Reference
 
-**For `creating-interview-questions-from-resume` (the default path)**: ALWAYS apply, after the interviewer-agreed draft. Council to unanimous APPROVE is the default — there is no "should I run council?" decision. The ONLY fast-mode exception is the interviewer's explicit `빠르게 / 그냥 한 번에 / 알아서 다 만들어줘` signal (bare "그냥" alone does NOT count). Even then, do NOT skip council: run **exactly one council round silently** — auto-apply verified factual-error fixes and consensus fixes, no user arbitration — then ship. Opt-out reduces ping-pong and iteration depth; it never skips the first factual round.
+**For `creating-interview-questions-from-resume` (the default path)**: ALWAYS apply, after the interviewer-agreed draft. Council to unanimous APPROVE is the default — there is no "should I run council?" decision. The ONLY fast-mode exception is the interviewer's explicit `빠르게 / 그냥 한 번에 / 알아서 다 만들어줘` signal (bare "그냥" alone does NOT count). Even then, do NOT skip council: run **exactly one silent council round** — auto-apply verified factual-error fixes and consensus fixes, no user arbitration — then ship. Opt-out reduces ping-pong and iteration depth; it never skips the first factual round.
 
 **For other artifacts (only when this loop pattern is reused outside this skill)**: apply under these optional triggers —
 - The user explicitly asked to **iterate**: "반복", "다시 리뷰", "받아내야지 승인까지", "iterate", "run council again"
@@ -112,7 +112,7 @@ After each round, classify every feedback item into one of these buckets:
 | **Consensus** | 2+ reviewers agree | Auto-apply |
 | **Single-reviewer, fact-verifiable** | One reviewer cites docs/sources; the orchestrator can check | Verify → if true, auto-apply; if false, reject with a note |
 | **Single-reviewer, opinion** | One reviewer's preference, not fact-checkable | Apply only if low-cost AND aligned with skill best practice |
-| **Conflict** | 2+ reviewers prescribe different actions for the same issue | **Interview the user for arbitration — never decide silently.** (Opt-out fast mode only: drop the unresolved conflict and ship the agreed draft — no arbitration.) |
+| **Conflict** | 2+ reviewers prescribe different actions for the same issue | **Interview the user for arbitration — never decide silently.** (Opt-out fast mode only: drop the unresolved *opinion* conflict and ship the interviewer-agreed baseline draft plus the round's auto-applied consensus/factual-error fixes — no arbitration. If the conflict is rooted in a verifiable factual error, the fact-check override still applies — verify and fix before shipping.) |
 | **Subjective ceiling** | All reviewers note a higher-ceiling possibility (e.g., "staff-level answer") | Optional; mention to the user but do not apply without consent |
 
 **Fact-check override**: a single reviewer's NEEDS_REVISION based on a verifiable fact (e.g., "MySQL `GET_LOCK()` is connection-scoped") is **not rejected just because the other two said APPROVE**. Verify the fact. If true, apply. Other reviewers being wrong does not make the fact wrong.
@@ -186,7 +186,7 @@ If any of these appear, re-examine the round you just completed:
 
 ## Cost / Benefit Reality
 
-- One council round: ~3–5 minutes, 3-model token cost. 5–7 rounds is in the normal range.
+- One council round: ~3–5 minutes, 3-model token cost. 3–7 rounds is in the normal range.
 - One wrong self-decided ship: user's follow-up correction time + trust loss. **Much more expensive.**
 
 This pattern optimizes for quality assurance, not for time or cost. To accelerate, get explicit user consent.
