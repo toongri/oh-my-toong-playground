@@ -1049,3 +1049,98 @@ describe('runOneTurn real-spawn integration', () => {
     expect(result.text).toBe('hi');
   });
 });
+
+// ---------------------------------------------------------------------------
+// P1-2 regression: parsed truthy + non-final terminal signal → state must NOT be 'done'
+// When parsed.terminal ∈ {'tool-calls', 'pause_turn', 'unknown_pause'} and
+// runResult.state === 'done' (exit 0), the final state must be 'awaiting_resume'.
+// ---------------------------------------------------------------------------
+
+function makeNonFinalTerminalDriver(terminal: ParseResult['terminal']): AgentDriver {
+  return {
+    cli: 'opencode',
+    parseStdout: (_stdout: string) => ({ sessionID: 'ses_nf', terminal, text: 'partial', rawEvents: [] }),
+    initialCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+    resumeCommand: (opts) => ({ program: opts.baseCommand, args: opts.baseArgs, env: opts.workerEnv }),
+  };
+}
+
+describe('executeOneTurn parsed truthy non-final terminal — state preservation (P1-2)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'p1-2-nonfinal-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  // tool-calls: mid-step signal from codex/opencode must not report done
+  test('tool-calls terminal with exit 0 yields state !== done', async () => {
+    const memberDir = join(tmpDir, 'tool-calls');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', { state: 'done', exitCode: 0 });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('tool-calls'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).not.toBe('done');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).not.toBe('done');
+  });
+
+  // pause_turn: claude server-tool loop cap must not report done
+  test('pause_turn terminal with exit 0 yields state !== done', async () => {
+    const memberDir = join(tmpDir, 'pause-turn');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', { state: 'done', exitCode: 0 });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('pause_turn'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).not.toBe('done');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).not.toBe('done');
+  });
+
+  // unknown_pause: heuristic fallback must not report done
+  test('unknown_pause terminal with exit 0 yields state !== done', async () => {
+    const memberDir = join(tmpDir, 'unknown-pause');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('partial', { state: 'done', exitCode: 0 });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('unknown_pause'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).not.toBe('done');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).not.toBe('done');
+  });
+
+  // Regression guard: stop terminal with exit 0 must remain 'done'
+  test('stop terminal with exit 0 yields state === done (regression guard)', async () => {
+    const memberDir = join(tmpDir, 'stop');
+    mkdirSync(memberDir, { recursive: true });
+
+    const mockRunOnce = makeFlexibleMockRunOnce('result text', { state: 'done', exitCode: 0 });
+
+    const result = await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => makeNonFinalTerminalDriver('stop'),
+      runOnceFn: mockRunOnce,
+    }));
+
+    expect(result.state).toBe('done');
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.state).toBe('done');
+  });
+});

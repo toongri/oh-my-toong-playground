@@ -868,3 +868,49 @@ describe('agent-council 의장 플래그 시맨틱스', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir], { stdio: 'pipe' }); } catch {}
   });
 });
+
+describe('resume-member subcommand', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+
+  test('resume-member without jobDir exits with error', () => {
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('missing');
+    expect(output).toContain('jobDir');
+  });
+
+  test('resume-member without member name exits with error', () => {
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/x'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('missing');
+    expect(output).toContain('member');
+  });
+
+  test('resume-member without prompt exits with error', () => {
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/x', 'mymember'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    expect(exitCode).not.toBe(0);
+    expect(output).toContain('missing');
+    expect(output).toContain('prompt');
+  });
+});
