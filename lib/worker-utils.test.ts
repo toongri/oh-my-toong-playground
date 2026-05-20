@@ -1391,4 +1391,22 @@ describe('`executeOneTurn` empty_output 분류 및 raw NDJSON 보존', () => {
     expect(status.lastEventType).toBe('step_finish');
     expect(status.tokens).toEqual({ input: 50, output: 20 });
   });
+
+  // P1 회귀: no-driver 경로에서 size_bytes가 rawStdout byte length와 일치해야 함 (0이면 안 됨)
+  test('driver가 null일 때 size_bytes가 rawStdout의 byte length와 일치하고 0이 아님', async () => {
+    const memberDir = join(tmpDir, 'no-driver-size-bytes');
+    mkdirSync(memberDir, { recursive: true });
+
+    const rawOutput = 'some raw output';
+    const mockRunOnce = makeFlexibleMockRunOnce(rawOutput, { state: 'done', exitCode: 0 });
+
+    await runOneTurn(makeOneTurnOpts(memberDir, {
+      driverFactory: () => null,
+      runOnceFn: mockRunOnce,
+    }));
+
+    const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
+    expect(status.size_bytes).toBe(Buffer.byteLength(rawOutput, 'utf8'));
+    expect(status.size_bytes).toBeGreaterThan(0);
+  });
 });

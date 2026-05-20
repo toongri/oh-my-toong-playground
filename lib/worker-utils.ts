@@ -489,7 +489,7 @@ async function executeOneTurn(
     finishedAt: runResultRecord.finishedAt ?? new Date().toISOString(),
     workerEnv: builtCmd.env,
     // P0.3: byte length of parsed text for manifest size_bytes guard
-    size_bytes: parsed ? Buffer.byteLength(parsed.text, 'utf8') : 0,
+    size_bytes: Buffer.byteLength(text, 'utf8'),
     // P1.1: telemetry fields
     terminal: parsed?.terminal ?? null,
     eventCount: rawEvents.length,
