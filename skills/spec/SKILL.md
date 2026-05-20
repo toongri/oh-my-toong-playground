@@ -105,7 +105,7 @@ Without this discipline, design.md grows a parallel timeline of how the design w
 | No Step/Area skipping ever | "Simple" hides complexity |
 | Design proposals include potential risks | Hidden risks = surprise in production |
 | spec.md structure immutable (Area sections only — progress state lives in state.json, never in design.md/spec.md body) | Area sections enable resume traceability; progress is state.json's job (Silent Incorporation Discipline §row 1) |
-| design.md and records/ are both final-state; review history / process-step labels live in records/ only (update in place — git tracks evolution) | A negotiation log inside design.md poisons the artifact and duplicates state.json; change-history narration inside records/ duplicates git |
+| design.md and records/ are both final-state; *decision rationale* (concerns and their resolutions) lives in records/, *chronology* of how the artifact evolved lives in git — never inline in either artifact | A negotiation log inside design.md poisons the artifact and duplicates state.json; chronology narration inside records/ duplicates git |
 
 ## Rationalization Table — STOP if you think this
 
