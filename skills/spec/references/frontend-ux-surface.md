@@ -196,7 +196,6 @@ Apply **Area Completion Protocol** (see SKILL.md)
 # [Project Name] - Frontend / UX Surface
 
 > **Area**: Frontend / UX Surface
-> **Last Updated**: [Date]
 
 ## Component Architecture
 

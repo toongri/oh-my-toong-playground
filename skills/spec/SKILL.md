@@ -43,6 +43,56 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-reviewer would j
 
 **Wrapup is MANDATORY when ANY records exist across ANY area. NO EXCEPTIONS. NEVER SKIP.**
 
+## Silent Incorporation Discipline (design.md = Final-State Document)
+
+A design document is the design *as it stands today* — written as if every decision had been correct from the first stroke. The audit trail of how it got there (rationale, alternatives evaluated, concerns raised and resolved) belongs in `records/`, not in `design.md`. The git log of both `design.md` and `records/` is the chronology — neither artifact narrates its own change history.
+
+**Reviewers and prior iterations shape the design; they do not annotate it.** Absorb every finding (spec-reviewer verdict, user amendment, fact-check correction, decision revision) into the design itself, then erase the seam. The reader of `design.md` should not be able to reconstruct the order in which decisions were made, nor which were once different.
+
+### Banned patterns in design.md body (Full Silence)
+
+| # | Pattern | Where it belongs instead |
+|---|---|---|
+| 1 | `## Progress Status` table / `Last Updated` line / `Status: Step N 진행 중` header at top of design.md, AND inline work-in-progress markers like `(재작성 예정)`, `(TBD)`, `(작성 중)` next to references | state.json (already persisted there — never duplicate to design.md) |
+| 2 | Closure markers in any form — `Round 1+2 verdict closure`, `Round N REQUEST_CHANGES`, `Round N mechanical fixes 4개 closure`, verdict cycle tables, AND external-input closures (`Notion 댓글 ② closure`, `Q5 closure`, `Amendment closure`, `**Closed** — ...`) — anything that says "this issue is now resolved" inside design.md | Recast the underlying concern and its resolution into the topic's existing record as current-state decision rationale — do NOT copy the closure marker label/framing verbatim. The fact stands on its own in design.md; the record holds *what was decided*, not *that closure happened*. |
+| 3 | **Any narration of how the document changed** — prose deltas ("이전 design §2.1.1의 phantom columns 제거", "record 1/2의 framing은 record 3에 의해 대체됨", "record cascade 1 → 2 → 3"), strikethrough (`~~old framing~~ → new framing (Round 7)`), AMENDMENT callouts (`⚠️ AMENDMENT (2026-05-19, Area review fact-check): ...`), amendment notes inside Mermaid diagrams (`Note over W,DB: ⚠️ AMENDMENT 2026-05-19 ...`). **Exception**: live architectural divergence from a *coexisting sibling design* (e.g., "this 5-responsibility decomposition is structurally different from program-report-message's 3-layer shape") is a current design fact, not a how-it-changed narration — it stays in design.md. The discipline targets *self-history* (this design's earlier versions), not *peer-difference* (a sibling design that exists today). | Nowhere. The current design.md describes what *is*. What *was* is git. Rewrite the affected section; do not annotate the change. |
+| 4 | Inline provenance markers `(record 3 D1)`, `(record 2 Round 1 M1)`, `(SD record 3)`, `(Gemini Round 7 지적 반영)`, `(Notion 댓글 ④ closure)` next to design facts — any parenthetical pointing to *where the decision came from* rather than *what the decision is* | Drop them. The fact stands on its own; the record/external source exists in `records/` (or Notion) for readers who want the why. |
+| 5 | Process-step headings copied from the workflow into design.md body — "Step 1: Context Review", "Step 5: Document Generation + Area Completion", "Step N 결과", "Step N 종합 — 모든 alternative closure" | Drop the workflow scaffolding entirely. design.md is structured by the Area's Output Template (e.g., Tables / Repository / Index / Migration), NOT by the N-step process you used to author it. |
+| 6 | **Dedicated review-process sections** — entire sections devoted to the review event itself: `## 5.1 Area Review (1차) — verdict REQUEST_CHANGES`, `## 5.2 Blocking Concerns 처리`, `## 5.3 Round 2 mechanical fixes — 완전 closure`, `## 5.4 record N commitment 통합`, `## Risks 통합 (record N + PAA 종합)` | The most severe form of leak — an entire heading dedicated to the negotiation. Recast the underlying concerns and resolutions into the existing topic record as current-state decision rationale — do NOT copy process headings, verdict labels, closure framing, or chronology verbatim. design.md inherits only the *resulting* facts, never a heading announcing "here is what review changed". |
+
+### What the reader of design.md must see
+
+- Final schema, final interfaces, final decisions — phrased as positive statements, not as deltas
+- Cross-references to other design.md files (Solution Design, Requirements) where genuinely needed for design comprehension — never to record files for traceability ceremony
+- Risks and trade-offs that remain *live* in the final design (not risks that were resolved during review)
+
+### Record citation — filename reference vs inline provenance marker
+
+A `records/{n}-{topic}.md` filename reference is permitted in prose where it adds genuine comprehension value (e.g., pointing readers to the alternatives evaluated). An inline parenthetical provenance marker is not. The distinction is mechanical:
+
+| Form | Verdict | Example |
+|---|---|---|
+| Filename citation in prose | OK | "See `records/3-event-reference-dedup-and-layer-refactor.md` for the alternatives evaluated for `dedup_key` shape." |
+| Inline provenance parenthetical next to a design fact | BANNED (row 4) | "...dedup_key = event-reference format **(record 3 D1)**" / "...5 책임 단위 **(record 3 D2)**" |
+
+If the citation could be removed without changing the *design content*, it is provenance ornament and must go. If removing the filename reference would leave a reader unable to locate the alternative-evaluation context they need, it earns its keep.
+
+### What records/ keeps that design.md must NOT
+
+- Why a decision was made over alternatives, who was in the loop, what was rejected
+- Concerns raised (by reviewers, the user, fact-checks) and how each was resolved — incorporated, rejected with rationale (Deliberate Divergence), or deferred
+- Fact-check trails: what the codebase / Notion / external source revealed mid-design
+
+If a reader needs that context, they open `records/`. They never need it to *read* `design.md`.
+
+**Records are also final-state.** Each `records/{n}-{topic}.md` reflects the topic's *current* decided state — not a snapshot of a moment in time. When review or further deliberation changes the decision, update the existing record file in place rather than creating a parallel `record-N-revised.md`. The git log is the chronology; the record file is today. The Silent Incorporation Discipline applies symmetrically across artifacts: design.md and records/ each describe the design as it now stands, differing only in granularity (design.md = the artifact, records/ = the decision rationale).
+
+### Rationale
+
+Without this discipline, design.md grows a parallel timeline of how the design was negotiated, and that timeline starts to compete with the design itself. Future readers (implementers, next-spec authors, auditors) waste budget filtering history from facts. Implementers misread provenance markers as design constraints. The records/ folder, which was the right home for that history, becomes secondary. Silent incorporation keeps each artifact load-bearing in exactly one role.
+
+**Violating the letter of this discipline IS violating the spirit.** "Just one verdict-closure note for traceability", "just a (record 3) marker so implementers find the rationale" — both are exactly the rationalizations this discipline exists to block. Traceability lives in records/; design.md is the artifact, not the negotiation log.
+
 ## Non-Negotiable Rules
 
 | Rule | Why |
@@ -54,7 +104,8 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-reviewer would j
 | Area completion = spec-reviewer pass + user gate | Unchecked areas = compounding errors |
 | No Step/Area skipping ever | "Simple" hides complexity |
 | Design proposals include potential risks | Hidden risks = surprise in production |
-| spec.md structure immutable (Progress Status, Area sections) | Removing sections breaks resume and traceability |
+| spec.md structure immutable (Area sections only — progress state lives in state.json, never in design.md/spec.md body) | Area sections enable resume traceability; progress is state.json's job (Silent Incorporation Discipline §row 1) |
+| design.md and records/ are both final-state; *decision rationale* (concerns and their resolutions) lives in records/, *chronology* of how the artifact evolved lives in git — never inline in either artifact | A negotiation log inside design.md poisons the artifact and duplicates state.json; chronology narration inside records/ duplicates git |
 
 ## Rationalization Table — STOP if you think this
 
@@ -73,6 +124,12 @@ Fact-grounded shortcuts — "this Area is straightforward, spec-reviewer would j
 | "`head -120` of `core-protocols.md` is enough / I'll cherry-pick the relevant section." | Partial-read of Class A is explicitly forbidden by `## Reference Full-Read Mandate`. Single Read call, beginning to end. No `offset+limit`, no `head`, no skim. |
 | "I read `persistence.md` in a previous session, so the cache covers me." | Prior session reads do NOT carry over. Per-session cache applies only within the current session. Re-read in the current session at the trigger. Trust-without-verify violation. |
 | "I'll call `Skill(skill: 'spec-review')` — that's the review entity, right?" | Wrong layer. `spec-review` is a skill **auto-injected** into the `spec-reviewer` subagent's isolated context (per `agents/spec-reviewer.md` frontmatter `skills: spec-review`). Dispatch is ALWAYS `Agent(subagent_type="spec-reviewer", ...)` from main; calling `Skill(spec-review)` directly pulls Chairman orchestration logic into main and bypasses subagent isolation. Prose mentions of "spec-reviewer pass / verdict / feedback" refer to the verdict produced by that Agent call, never to a Skill invocation. |
+| "I need a `(record 3 D1)` marker next to this design fact so implementers can find the rationale." | Silent Incorporation Discipline forbids it. Traceability is the records/ folder's job — `records/3-...md` already names the decision; design.md must stand without provenance crutches. Inline markers train readers to chase records mid-read instead of trusting the artifact. |
+| "I'll keep a short 'Round 2 verdict closure' note in design.md — it's traceability." | Same discipline. Reviewer history (verdicts received, mechanical fixes applied, phantom columns once present) lives in `records/`. design.md is what *is*, not what *was changed*. "Just a short note" is the leak path that grew the entire §5 negotiation log in the prior audit. |
+| "Future reviewers will re-raise the same concerns if I don't mark how the design evolved inside design.md." | Deliberate Divergence handles that — it goes into the *re-submission delegation prompt to spec-reviewer*, not into design.md body. The reviewer reads the prompt, the design reader reads the design; they have different contexts. |
+| "The `## Progress Status` table at the top of design.md helps the user see where we are." | state.json already persists this. design.md duplicating it means two sources of truth and two places to forget to update. Step status belongs to state.json; design.md is final-state only. |
+| "Using `## Step 1: Context Review` / `## Step 5: Document Generation` as design.md section headings makes the structure obvious." | Wrong structure. The Area's Output Template (e.g., Tables / Repository / Index / Migration) is the design.md skeleton; the 5-step process is *your workflow*, not the reader's. Process-as-structure leaks authoring scaffolding into the artifact. |
+| "`(Notion 댓글 ② closure 2026-05-18)`, `(Q5 closure)` markers aren't reviewer history — they're external-input traces, so the discipline doesn't apply." | Same discipline. design.md is the design as it stands today; *how the decision was harvested* (reviewer verdict, Notion comment, user Q&A, fact-check call) is uniformly history. The fact in the body is sufficient; the source — internal record or external Notion link — lives in `records/`. Categorizing the source does not exempt the closure marker. |
 
 **All of these mean: orchestration habit is overriding the Iron Law. Stop. Honor the gate.**
 
@@ -89,6 +146,11 @@ Pre-action signals — catch the bypass before the gate is missed. If you observ
 - STOP - Read tool call with `offset` + `limit` on Class A files (`core-protocols.md`, `persistence.md`, `area-entry-criteria.md`, `wrapup.md`) — these MUST be read in a single call, beginning to end, full file
 - STOP - Reading partial sections of inline contracts (Iron Law / Rationalization Table / Red Flags / Reference Full-Read Mandate) and proceeding — inline contracts must be fully internalized, never cherry-picked
 - STOP - About to consume Class A reference content citing "I read it in a previous session" — prior session reads do NOT carry; trigger demands re-read in the current session NOW
+- STOP - About to write `## Progress Status` table, `Last Updated:` line, or `Status: Step N` blockquote anywhere inside `design.md` (state.json is the only home for that)
+- STOP - About to embed a "Round N verdict closure" / "phantom columns 제거" / "record 3가 record 1+2를 대체" / "record cascade" — or any narration of how the document evolved — inside `design.md` body (change history lives in git, decision rationale in records/)
+- STOP - About to add an inline provenance marker like `(record 3 D1)`, `(record 2 Round 1 M1)`, `(SD record 3)` next to a design fact in `design.md`
+- STOP - About to use the 5-step process labels ("Step 1: Context Review", "Step 5: Document Generation + Area Completion", "Step N 결과") as section headings inside `design.md` — the Area's Output Template structure (e.g., Tables / Repository / Index / Migration) is the skeleton, not your workflow
+- STOP - About to write a dedicated review-process section anywhere inside `design.md` (`## N.M Area Review (1차) — verdict REQUEST_CHANGES`, `## N.M Blocking Concerns 처리`, `## N.M Round N mechanical fixes — 완전 closure`, `## N.M record N commitment 통합`, `## Risks 통합 (record N + PAA 종합)`, `## N.M Step N 종합 — 모든 alternative closure`) — entire-heading-level leak of the negotiation log; move to `records/`
 
 **Each flag = halt. Restart at the violated mandate. No partial-credit recovery.**
 
