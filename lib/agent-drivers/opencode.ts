@@ -139,7 +139,7 @@ function parseStdout(stdout: string): ParseResult | null {
 // ---------------------------------------------------------------------------
 
 function initialCommand(opts: InitialCommandOpts): BuiltCommand {
-  const stripped = stripFormatPair(opts.baseArgs, '--format');
+  const stripped = stripFlagPair(opts.baseArgs, '--format');
   return {
     program: opts.baseCommand,
     args: [...stripped, '--format', 'json'],
@@ -152,7 +152,7 @@ function initialCommand(opts: InitialCommandOpts): BuiltCommand {
 // ---------------------------------------------------------------------------
 
 /** Strip any existing --flagName <value> pair from args (returns new array). */
-function stripFormatPair(args: string[], flagName: string): string[] {
+function stripFlagPair(args: string[], flagName: string): string[] {
   const out: string[] = [];
   let i = 0;
   while (i < args.length) {
@@ -167,20 +167,9 @@ function stripFormatPair(args: string[], flagName: string): string[] {
 }
 
 function resumeCommand(opts: ResumeCommandOpts): BuiltCommand {
-  // Strip existing --session pair from baseArgs (replace, not duplicate).
-  let stripped: string[] = [];
-  const baseArgs = opts.baseArgs;
-  for (let i = 0; i < baseArgs.length; i++) {
-    if (baseArgs[i] === '--session') {
-      i++; // skip the value too
-      continue;
-    }
-    stripped.push(baseArgs[i]);
-  }
-
-  // Ensure --format json is present with exactly the right value.
-  // Strip any existing --format <value> pair, then unconditionally append --format json.
-  stripped = stripFormatPair(stripped, '--format');
+  // Strip existing --session and --format pairs (replace, not duplicate), then append the
+  // canonical values. parseStdout requires --format json, so its value is enforced unconditionally.
+  const stripped = stripFlagPair(stripFlagPair(opts.baseArgs, '--session'), '--format');
   const args = [...stripped, '--session', opts.sessionID, '--format', 'json'];
 
   return {
