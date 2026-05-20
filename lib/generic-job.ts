@@ -481,7 +481,7 @@ export function buildUiPayload(
     .filter((r) => r.entity)
     .sort((a, b) => a.entity.localeCompare(b.entity));
 
-  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable', 'empty_output', 'transient_error', 'permanent_error']);
+  const terminalStates = new Set(['done', 'missing_cli', 'error', 'timed_out', 'canceled', 'non_retryable', 'transient_error', 'permanent_error']);
   const dispatchStatus = asCodexStepStatus(isDone ? 'completed' : queued > 0 ? 'in_progress' : 'completed');
   let hasInProgress = dispatchStatus === 'in_progress';
 

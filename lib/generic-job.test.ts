@@ -1061,6 +1061,21 @@ describe('buildUiPayload', () => {
     const synthStep = result.codex.update_plan.plan[result.codex.update_plan.plan.length - 1];
     expect(synthStep.status).not.toBe('completed');
   });
+
+  test('empty_output 멤버는 completed가 아닌 pending으로 분류됨 (non-terminal)', () => {
+    const payload = {
+      overallState: 'empty_output',
+      counts: { total: 1, done: 0, queued: 0, running: 0, empty_output: 1 },
+      members: [{ member: 'alice', state: 'empty_output' }],
+    };
+    const result = buildUiPayload(payload, chunkReviewConfig);
+    // The reviewer step (index 1) must NOT be 'completed' — empty_output is non-terminal
+    const reviewerStep = result.codex.update_plan.plan[1];
+    expect(reviewerStep.status).not.toBe('completed');
+    // Synthesize step must NOT be completed yet (job not done)
+    const synthStep = result.codex.update_plan.plan[result.codex.update_plan.plan.length - 1];
+    expect(synthStep.status).not.toBe('completed');
+  });
 });
 
 // ---------------------------------------------------------------------------
