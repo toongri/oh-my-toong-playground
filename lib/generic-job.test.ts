@@ -804,6 +804,28 @@ describe('computeStatus', () => {
     expect(result.overallState).toBe('empty_output');
   });
 
+  // queued precedence over intervention states: a member still awaiting dispatch must keep
+  // overallState at 'queued' so cmdCollect does not early-return on a sibling's intervention state.
+  test('일부 queued, 일부 awaiting_resume이면 overallState는 queued (queued 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-queued-awaiting-resume');
+    setupJob(jobDir, { id: 'test-queued-ar' }, {
+      alice: { member: 'alice', state: 'queued' },
+      bob: { member: 'bob', state: 'awaiting_resume' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('queued');
+  });
+
+  test('일부 queued, 일부 empty_output이면 overallState는 queued (queued 우선)', async () => {
+    const jobDir = path.join(tmpDir, 'job-queued-empty-output');
+    setupJob(jobDir, { id: 'test-queued-eo' }, {
+      alice: { member: 'alice', state: 'queued' },
+      bob: { member: 'bob', state: 'empty_output' },
+    }, chunkReviewConfig);
+    const result = await computeStatus(jobDir, chunkReviewConfig);
+    expect(result.overallState).toBe('queued');
+  });
+
   test('일부 running, 일부 empty_output이면 overallState는 running (running 우선)', async () => {
     const jobDir = path.join(tmpDir, 'job-running-empty-output');
     setupJob(jobDir, { id: 'test-run-eo' }, {

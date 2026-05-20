@@ -412,6 +412,9 @@ export async function computeStatus(
   const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0 && totals.awaiting_resume === 0 && totals.empty_output === 0;
   const overallState = allDone ? 'done'
     : (totals.running > 0 || totals.retrying > 0) ? 'running'
+    // queued outranks the intervention states: a member still awaiting dispatch must not let
+    // cmdCollect early-return on a sibling's awaiting_resume/empty_output before that member runs.
+    : totals.queued > 0 ? 'queued'
     : totals.awaiting_resume > 0 ? 'awaiting_resume'
     : totals.empty_output > 0 ? 'empty_output'
     : 'queued';
