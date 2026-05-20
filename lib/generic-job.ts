@@ -939,7 +939,10 @@ export async function cmdResumeMember(
   // effectively sequential, so the cap holds in practice. executeOneTurn preserves
   // resume_count via read-then-write (line 449 of worker-utils.ts).
   const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
-  if (resumeCount >= 3) throw new Error(`${prefix}resume cap exceeded (3/3)`);
+  if (resumeCount >= 3) {
+    atomicWriteJson(statusPath, { ...status, state: 'non_retryable', message: 'resume cap exceeded (3/3)' });
+    throw new Error(`${prefix}resume cap exceeded (3/3)`);
+  }
   atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
   const [origProgram, ...origArgs] = tokens;
 

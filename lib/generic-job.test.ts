@@ -2330,4 +2330,86 @@ describe('cmdResumeMember', () => {
       cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
     ).rejects.toThrow('orchestrate-review: resume cap exceeded (3/3)');
   });
+
+  test('cap exceeded writes non_retryable state to status.json before throwing', async () => {
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'empty_output',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+
+    const status = readMemberStatus(entityDir);
+    expect(status.state).toBe('non_retryable');
+    expect(status.resume_count).toBe(3);
+  });
+
+  test('cap exceeded member does not block computeStatus overallState done when other member is done', async () => {
+    // Set up job with two members: alice (capped) and bob (done)
+    const aliceDir = path.join(jobDir, 'members', 'alice');
+    const bobDir = path.join(jobDir, 'members', 'bob');
+    writeMemberStatus(aliceDir, {
+      member: 'alice',
+      state: 'empty_output',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+    writeMemberStatus(bobDir, {
+      member: 'bob',
+      state: 'done',
+      sessionID: 'sess-bob',
+      resume_count: 0,
+      command: 'opencode',
+    });
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-cap-job' }));
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+
+    const result = await computeStatus(jobDir, membersConfig);
+    expect(result.overallState).toBe('done');
+  });
+
+  test('cap exceeded member appears in buildManifest with outputFilePath null', async () => {
+    const aliceDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(aliceDir, {
+      member: 'alice',
+      state: 'empty_output',
+      sessionID: 'sess-abc',
+      resume_count: 3,
+      command: 'opencode',
+    });
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'test-cap-manifest' }));
+
+    const opts: ResumeMemberOpts = {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn: makeResumeStub() as any,
+    };
+    await expect(
+      cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, opts),
+    ).rejects.toThrow('resume cap exceeded (3/3)');
+
+    const manifest = buildManifest(jobDir, membersConfig);
+    const aliceEntry = manifest.members.find((m: any) => m.member === 'alice');
+    expect(aliceEntry).toBeDefined();
+    expect(aliceEntry.outputFilePath).toBe(null);
+  });
 });
