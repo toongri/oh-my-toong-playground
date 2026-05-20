@@ -470,14 +470,6 @@ async function executeOneTurn(
 
   const runResultRecord = runResult as Record<string, unknown>;
 
-  // P1.1: extract telemetry from raw events
-  const rawEvents = parsed?.rawEvents ?? [];
-  const lastEvent = rawEvents.length > 0 ? (rawEvents[rawEvents.length - 1] as Record<string, unknown>) : null;
-  const lastStepFinish = [...rawEvents].reverse().find(
-    (e) => (e as Record<string, unknown>).type === 'step_finish'
-  ) as Record<string, unknown> | undefined;
-  const tokens = lastStepFinish ? ((lastStepFinish.part as Record<string, unknown> | undefined)?.tokens ?? null) : null;
-
   atomicWriteJson(path.join(memberDir, 'status.json'), {
     member,
     state,
@@ -490,11 +482,8 @@ async function executeOneTurn(
     workerEnv: builtCmd.env,
     // P0.3: byte length of parsed text for manifest size_bytes guard
     size_bytes: Buffer.byteLength(text, 'utf8'),
-    // P1.1: telemetry fields
+    // driver terminal classification (pairs with state for diagnosis)
     terminal: parsed?.terminal ?? null,
-    eventCount: rawEvents.length,
-    lastEventType: lastEvent ? (lastEvent.type as string | null) : null,
-    tokens,
     ...(parsed?.terminal === 'error' ? { errorEvent: parsed.rawEvents } : {}),
   });
 

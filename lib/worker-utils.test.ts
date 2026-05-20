@@ -1340,16 +1340,12 @@ describe('`executeOneTurn` empty_output 분류 및 raw NDJSON 보존', () => {
     expect(outputTxt).toBe('hi');
   });
 
-  // P1.1: telemetry 필드가 status.json에 포함됨
-  test('status.json에 terminal/eventCount/lastEventType/tokens 텔레메트리 필드가 포함됨', async () => {
+  // status.json에 driver terminal classification이 기록됨
+  test('status.json에 terminal 필드가 기록됨', async () => {
     const memberDir = join(tmpDir, 'telemetry');
     mkdirSync(memberDir, { recursive: true });
 
-    const rawEvents = [
-      { type: 'step_start', part: {} },
-      { type: 'step_finish', part: { tokens: { input: 100, output: 50, cache_read: 0, cache_write: 0 } } },
-    ];
-    const mockDriver = makeStopWithEventsDriver('some content', rawEvents);
+    const mockDriver = makeStopWithEventsDriver('some content', []);
     const mockRunOnce = makeFlexibleMockRunOnce('raw', { state: 'done', exitCode: 0 });
 
     await runOneTurn(makeOneTurnOpts(memberDir, {
@@ -1359,22 +1355,15 @@ describe('`executeOneTurn` empty_output 분류 및 raw NDJSON 보존', () => {
 
     const status = JSON.parse(readFileSync(join(memberDir, 'status.json'), 'utf8'));
     expect(status.terminal).toBe('stop');
-    expect(status.eventCount).toBe(2);
-    expect(status.lastEventType).toBe('step_finish');
-    expect(status.tokens).toEqual({ input: 100, output: 50, cache_read: 0, cache_write: 0 });
   });
 
-  // P0.3 + P1.1 happy path: stop + non-empty text → state='done', size_bytes>0, telemetry 정상
-  test('stop terminal에 text가 있으면 state=done이고 size_bytes>0이며 telemetry가 포함됨', async () => {
+  // P0.3 happy path: stop + non-empty text → state='done', size_bytes>0, terminal 기록
+  test('stop terminal에 text가 있으면 state=done이고 size_bytes>0이며 terminal이 기록됨', async () => {
     const memberDir = join(tmpDir, 'happy-path');
     mkdirSync(memberDir, { recursive: true });
 
     const content = 'real content here';
-    const rawEvents = [
-      { type: 'agent_message', content },
-      { type: 'step_finish', part: { tokens: { input: 50, output: 20 } } },
-    ];
-    const mockDriver = makeStopWithEventsDriver(content, rawEvents);
+    const mockDriver = makeStopWithEventsDriver(content, []);
     const mockRunOnce = makeFlexibleMockRunOnce('raw ndjson', { state: 'done', exitCode: 0 });
 
     const result = await runOneTurn(makeOneTurnOpts(memberDir, {
@@ -1387,9 +1376,6 @@ describe('`executeOneTurn` empty_output 분류 및 raw NDJSON 보존', () => {
     expect(status.state).toBe('done');
     expect(status.size_bytes).toBe(Buffer.byteLength(content, 'utf8'));
     expect(status.terminal).toBe('stop');
-    expect(status.eventCount).toBe(2);
-    expect(status.lastEventType).toBe('step_finish');
-    expect(status.tokens).toEqual({ input: 50, output: 20 });
   });
 
   // P1 회귀: no-driver 경로에서 size_bytes가 rawStdout byte length와 일치해야 함 (0이면 안 됨)
