@@ -5,6 +5,11 @@
  * RED test: with a gemini fixture status.json, resume-member should exit non-zero
  * and print a skill-aware error containing 'slides-review', 'gemini', 'no driver'.
  *
+ * Hermetic: registered-driver fixtures (opencode/claude) would otherwise have resume-member
+ * spawn the real authenticated CLI. A fake bin dir is prepended to PATH so the downstream
+ * spawn resolves to a no-op exit-0 stub instead of the real binary — keeping `bun test`
+ * deterministic and offline.
+ *
  * Must NOT modify job.test.ts (T5 territory).
  */
 
@@ -68,28 +73,44 @@ function makeJobDirForMember(memberName: string, command: string): string {
   return dir;
 }
 
-const geminiDir = makeJobDir('gemini');
-const claudeDir = makeJobDir('claude');
-const opencodeDir = makeJobDirForMember('opencode', 'opencode');
+let geminiDir: string;
+let claudeDir: string;
+let opencodeDir: string;
+let fakeBinDir: string;
+
+beforeAll(() => {
+  // Fake CLI stubs prepended to PATH: resume-member's downstream spawn resolves these no-op
+  // exit-0 binaries instead of the real authenticated opencode/claude CLIs.
+  fakeBinDir = fs.mkdtempSync(path.join(tmpdir(), 'slides-review-fakebin-'));
+  for (const bin of ['opencode', 'claude']) {
+    fs.writeFileSync(path.join(fakeBinDir, bin), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  }
+  geminiDir = makeJobDir('gemini');
+  claudeDir = makeJobDir('claude');
+  opencodeDir = makeJobDirForMember('opencode', 'opencode');
+});
 
 afterAll(() => {
-  try { fs.rmSync(geminiDir, { recursive: true, force: true }); } catch {}
-  try { fs.rmSync(claudeDir, { recursive: true, force: true }); } catch {}
-  try { fs.rmSync(opencodeDir, { recursive: true, force: true }); } catch {}
+  for (const d of [geminiDir, claudeDir, opencodeDir, fakeBinDir]) {
+    try { fs.rmSync(d, { recursive: true, force: true }); } catch {}
+  }
 });
+
+function runResumeMember(jobDir: string, member: string, prompt: string): { exitCode: number; stderr: string } {
+  try {
+    execFileSync(process.execPath, [SCRIPT, 'resume-member', jobDir, member, prompt], {
+      stdio: 'pipe',
+      env: { ...process.env, PATH: `${fakeBinDir}${path.delimiter}${process.env.PATH ?? ''}` },
+    });
+    return { exitCode: 0, stderr: '' };
+  } catch (e: any) {
+    return { exitCode: e.status ?? 1, stderr: e.stderr?.toString() ?? '' };
+  }
+}
 
 describe('resume-member gemini pre-check', () => {
   test('gemini fixture: exits non-zero with skill-aware error containing all 3 keywords', () => {
-    let exitCode = 0;
-    let stderr = '';
-    try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', geminiDir, 'gemini', 'follow-up'], {
-        stdio: 'pipe',
-      });
-    } catch (e: any) {
-      exitCode = e.status;
-      stderr = e.stderr?.toString() || '';
-    }
+    const { exitCode, stderr } = runResumeMember(geminiDir, 'gemini', 'follow-up');
 
     expect(exitCode).not.toBe(0);
     // Skill-aware error from cmdResumeMember (generic-job) with skillName='slides-review'.
@@ -99,40 +120,20 @@ describe('resume-member gemini pre-check', () => {
     expect(stderr).toContain('implement driver or change default member');
   });
 
-  test('happy path: registered cliType reaches cmdResumeMember beyond driver gate', async () => {
-    // GIVEN: job dir with opencode member status.json (opencode is a registered driver)
-    // WHEN: resume-member invoked for that member
-    // THEN: stderr does NOT contain 'no driver for' — driver gate is passed
-    //       (downstream failure e.g. spawning real opencode is acceptable)
-    let stderr = '';
-    try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', opencodeDir, 'opencode', 'test prompt'], {
-        stdio: 'pipe',
-      });
-    } catch (e: any) {
-      stderr = e.stderr?.toString() || '';
-    }
+  test('happy path: registered cliType reaches cmdResumeMember beyond driver gate', () => {
+    // opencode is a registered driver: the driver gate is passed and the faked CLI is spawned.
+    // The assertion only checks the gate is cleared — no 'no driver' error is emitted.
+    const { stderr } = runResumeMember(opencodeDir, 'opencode', 'test prompt');
 
     expect(stderr).not.toContain('no driver for');
     expect(stderr).not.toContain('slides-review: no driver');
   });
 
-  test('claude fixture: does NOT trigger the gemini guard (exits with a different error)', () => {
-    let exitCode = 0;
-    let stderr = '';
-    try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', claudeDir, 'gemini', 'follow-up'], {
-        stdio: 'pipe',
-      });
-    } catch (e: any) {
-      exitCode = e.status;
-      stderr = e.stderr?.toString() || '';
-    }
+  test('claude fixture: does NOT trigger the gemini guard (passes the driver gate)', () => {
+    const { stderr } = runResumeMember(claudeDir, 'gemini', 'follow-up');
 
-    // The claude path should NOT produce the gemini guard message.
-    // It will fail for a different reason (no actual claude CLI), but not with the guard.
+    // The claude path is a registered driver, so the gemini guard must not fire.
     expect(stderr).not.toContain('no driver for gemini');
-    // Must NOT contain the skill-aware guard message
     expect(stderr).not.toContain('slides-review default member is gemini');
   });
 });
