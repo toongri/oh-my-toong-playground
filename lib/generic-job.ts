@@ -402,14 +402,19 @@ export async function computeStatus(
     queued: 0, running: 0, retrying: 0, done: 0, error: 0,
     missing_cli: 0, timed_out: 0, canceled: 0, non_retryable: 0,
     empty_output: 0, transient_error: 0, permanent_error: 0,
+    awaiting_resume: 0,
   };
   for (const r of members) {
     const state = String(r.state || 'unknown');
     if (Object.prototype.hasOwnProperty.call(totals, state)) totals[state]++;
   }
 
-  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0;
-  const overallState = allDone ? 'done' : (totals.running > 0 || totals.retrying > 0) ? 'running' : 'queued';
+  const allDone = totals.running === 0 && totals.queued === 0 && totals.retrying === 0 && totals.awaiting_resume === 0;
+  const overallState = allDone ? 'done'
+    : (totals.running > 0 || totals.retrying > 0) ? 'running'
+    : totals.queued > 0 ? 'queued'
+    : totals.awaiting_resume > 0 ? 'awaiting_resume'
+    : 'queued';
 
   return {
     jobDir: resolvedJobDir,
@@ -902,17 +907,8 @@ export async function cmdResumeMember(
       ? (status.workerEnv as Record<string, string>)
       : {};
 
-  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
-  // sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
-  // single-write atomicity, NOT read-check-write atomicity — true concurrent invocations
-  // can still race past the cap. The single-developer / chairman-driven flow is
-  // effectively sequential, so the cap holds in practice. executeOneTurn preserves
-  // resume_count via read-then-write (line 449 of worker-utils.ts).
-  const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
-  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
-  atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
-
-  // Derive cliType
+  // Preflight: validate CLI type, driver, and command BEFORE reserving the cap slot so that
+  // misconfigured commands do not burn a resume_count increment (item 4).
   const command = status.command;
   const cliType = detectCliType(command);
   if (cliType === 'unknown') throw new Error('unknown cli type');
@@ -926,6 +922,16 @@ export async function cmdResumeMember(
   const cmdStr = String(command ?? '');
   const tokens = splitCommand(cmdStr);
   if (!tokens || tokens.length === 0) throw new Error('invalid stored command');
+
+  // Cap check + reserve (P2-2): increment BEFORE awaiting resumeFn so a subsequent
+  // sequential call observes the incremented count. NOTE: atomicWriteJson guarantees
+  // single-write atomicity, NOT read-check-write atomicity — true concurrent invocations
+  // can still race past the cap. The single-developer / chairman-driven flow is
+  // effectively sequential, so the cap holds in practice. executeOneTurn preserves
+  // resume_count via read-then-write (line 449 of worker-utils.ts).
+  const resumeCount = typeof status.resume_count === 'number' ? status.resume_count : 0;
+  if (resumeCount >= 3) throw new Error('resume cap exceeded (3/3)');
+  atomicWriteJson(statusPath, { ...status, resume_count: resumeCount + 1 });
   const [origProgram, ...origArgs] = tokens;
 
   // P2-1: read timeoutSec from job.json instead of hardcoding
@@ -933,12 +939,14 @@ export async function cmdResumeMember(
   try {
     const jobMeta = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8')) as Record<string, unknown>;
     const settings = jobMeta.settings as Record<string, unknown> | undefined;
-    if (settings && typeof settings.timeoutSec === 'number' && settings.timeoutSec > 0) {
+    if (settings && typeof settings.timeoutSec === 'number' && settings.timeoutSec >= 0) {
       timeoutSec = settings.timeoutSec;
     }
   } catch { /* keep default 300 */ }
 
-  // Invoke resumeOneTurn with original command preserved
+  // Note: promptsDir and fallbackFile are intentionally not forwarded here.
+  // session-preserving CLIs (claude --resume, opencode session resume, codex exec resume)
+  // retain persona + reviewContent server-side, making assemblePrompt re-injection redundant on resume.
   const resumeFn = opts.resumeOneTurnFn ?? resumeOneTurn;
   await resumeFn(String(sessionID), {
     program: origProgram,
