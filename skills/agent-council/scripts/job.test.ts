@@ -913,4 +913,20 @@ describe('resume-member subcommand', () => {
     expect(output).toContain('missing');
     expect(output).toContain('prompt');
   });
+
+  test('resume-member에서 --json 등 flag-like 토큰을 prompt로 전달하면 missing prompt로 거부되지 않는다', () => {
+    // 회귀 테스트: parseArgs가 --json을 소비하여 prompt가 빈 문자열이 되는 버그 방지.
+    // process.argv.slice(5)로 raw argv에서 prompt를 캡처하므로 --json이 그대로 전달된다.
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/no-such-dir', 'mymember', '--json'], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+    // Should fail (nonexistent jobDir -> no resumable session), but NOT with "missing prompt"
+    expect(exitCode).not.toBe(0);
+    expect(output).not.toContain('missing prompt');
+  });
 });

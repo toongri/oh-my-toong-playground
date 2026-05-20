@@ -444,7 +444,9 @@ async function main(): Promise<void> {
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     const nameArg = rest[1];
     if (!nameArg) exitWithError('resume-member: missing member name');
-    const promptArg = rest.slice(2).join(' ');
+    // Capture prompt from raw argv to avoid parseArgs consuming --flag tokens inside the prompt.
+    // argv layout: [node, script, 'resume-member', jobDir, memberName, ...promptTokens]
+    const promptArg = process.argv.slice(5).join(' ');
     if (!promptArg) exitWithError('resume-member: missing prompt');
     try {
       await _cmdResumeMember(jobDirArg, nameArg, promptArg, CHUNK_REVIEW_JOB_CONFIG, { skillName: 'orchestrate-review' });

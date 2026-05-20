@@ -1898,6 +1898,23 @@ describe('resume-member', () => {
       })
     ).rejects.toThrow('unknown cli type');
   });
+
+  test('resume-member D12 flag-like 토큰을 prompt로 전달하면 missing prompt로 거부되지 않는다', () => {
+    // 회귀 테스트: parseArgs가 --json을 소비하여 prompt가 빈 문자열이 되는 버그 방지.
+    // process.argv.slice(5)로 raw argv에서 prompt를 캡처하므로 --json이 그대로 전달된다.
+    // /tmp/no-such-dir 을 사용 — session 없는 jobDir이므로 non-zero exit을 보장한다.
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/no-such-dir', 'opencode', '--json'], { stdio: 'pipe' });
+    } catch (err: any) {
+      exitCode = err.status;
+      output = (err.stderr?.toString() || '') + (err.stdout?.toString() || '');
+    }
+    // Should fail (no resumable session), but NOT with "missing prompt"
+    expect(exitCode).not.toBe(0);
+    expect(output).not.toContain('missing prompt');
+  });
 });
 
 // ---------------------------------------------------------------------------
