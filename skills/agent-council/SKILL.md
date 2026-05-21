@@ -62,6 +62,7 @@ digraph council_decision {
 3. Council members provide independent opinions (raw outputs)
 4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — polls internally; re-call if not `"done"`
 5. **Read each member's output file** via the Read tool
+5a. **Completeness gate** (Chairman judgment): `done` does NOT mean semantically complete. A member can exit cleanly yet return a non-answer — a plan, framing, or "I'll answer once X arrives" response. Read each member's content and judge: did it actually answer the asked question? Also check: is any member in `awaiting_resume` state? For any member that is `awaiting_resume` OR whose content is a non-answer (narrative-only / incomplete / waiting pattern), call `resume-member` BEFORE proceeding. `clean` is destructive (it deletes the jobDir, and `resume-member <jobDir>` requires that jobDir) — so `clean` is ALWAYS the last step, only after completeness is confirmed.
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
 8. **Cleanup**: `bun .claude/skills/agent-council/scripts/job.ts clean JOB_DIR`
@@ -132,11 +133,25 @@ bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR"
 Use the Read tool to read each member's `outputFilePath` from the manifest.
 Only read entries where `outputFilePath` is non-null (null = infrastructure failure; see Degradation Policy).
 
-**4. Synthesize (caller responsibility)**
+**4. Completeness gate — resume-member if needed (Chairman judgment)**
+
+`done` does NOT mean semantically complete. Read each member's content. If any member is in `awaiting_resume` state OR returned a non-answer (narrative-only / incomplete / waiting pattern / "I'll answer once X arrives"), call `resume-member` before proceeding:
+
+```bash
+bun .claude/skills/agent-council/scripts/job.ts resume-member --job "$JOB_DIR" --member <name> --prompt "Please answer the question directly."
+```
+
+The prompt is written by the Chairman LLM for the specific situation. The example above is illustrative only.
+
+Cap: max 3 resumes per member. After cap exhaustion — partial-accept (include what was received) OR escalate the entire job. The Chairman judges which applies based on the situation.
+
+**WARNING: `clean` is destructive** — it deletes the jobDir permanently, and `resume-member --job <jobDir>` requires that jobDir to exist. `clean` is ALWAYS the last step, called only after completeness is confirmed for all members.
+
+**5. Synthesize (caller responsibility)**
 
 You as the Chairman must synthesize raw outputs into the Advisory Format (see below). The council does NOT produce a synthesized advisory automatically.
 
-**5. Cleanup (Bash, timeout: 180000)**
+**6. Cleanup (Bash, timeout: 180000)**
 ```bash
 bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
 ```
@@ -248,12 +263,14 @@ Council members may fail due to CLI unavailability, timeout, or errors. This is 
 
 **Decision tree:**
 1. `overallState === 'done'` AND all members have terminal states?
-2. Check failed members' states:
-   - `missing_cli` → CLI not installed. Degradation applies.
-   - `timed_out` → CLI exceeded timeout. Degradation applies.
-   - `error` (non-zero exit) → CLI failed. Degradation applies.
-   - `canceled` → Manually stopped. Degradation applies.
-3. Synthesize from successful members only.
+2. Check each member's state and output content:
+   - `missing_cli` → CLI not installed. Degradation applies (infra failure — unrecoverable).
+   - `timed_out` → CLI exceeded timeout. Degradation applies (infra failure — unrecoverable).
+   - `error` (non-zero exit) → CLI failed. Degradation applies (infra failure — unrecoverable).
+   - `canceled` → Manually stopped. Degradation applies (infra failure — unrecoverable).
+   - `awaiting_resume` → Member paused mid-turn waiting for continuation. **Recoverable** — call `resume-member` (see completeness gate above). This is distinct from infra failure; the member is alive and can continue.
+   - `done` but content is a non-answer → Member exited cleanly but returned framing / a plan / a waiting pattern instead of actually answering the question. **Recoverable** — call `resume-member`. The runner marks it `done` based on exit reason, not semantic completeness; the Chairman judges semantic completeness by reading the content.
+3. After all recoverable states are resolved (or resume cap exhausted), synthesize from members with substantive answers.
 
 **Synthesis by response count:**
 
