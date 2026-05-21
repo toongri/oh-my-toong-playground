@@ -27,6 +27,11 @@ mcps:
     command: uvx
     args:
       - "opensearch-mcp-server-py"
+  playwright:
+    command: npx
+    args:
+      - "-y"
+      - "@playwright/mcp@latest"
 
 plugins:
   items:
