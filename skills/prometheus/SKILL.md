@@ -495,6 +495,10 @@ Verify at the layer the consumer observes:
 
 Implementation test files (`*.test.ts`, `*.spec.ts`) are implementation evidence, NOT default AC primitives. Citing a unit test as AC requires: (1) who's the consumer of this unit? (2) where invoked directly (file:line)? (3) why is this unit the consumer boundary?
 
+**Verification method — prefer real, avoid mocks.** Verify a requirement's AC by reproducing conditions as close to real as possible and running E2E at the consumer boundary — not by asserting against mocks. A mock swaps a real collaborating module for a canned answer, so it cannot catch the integration failures (wrong call shape, unregistered dependency, contract drift) that are the actual risk; that is what makes a mock-based test low-trust. The trustworthy check exercises the real modules together at the boundary, confirming AC completion under real-as-possible conditions.
+
+**Non-deterministic logic is still verifiable.** When an outcome is mediated by something non-deterministic (an LLM deciding to call a tool, a model, a ranker), you cannot assert its exact output — but you can assert the flow holds with it in place: the input reaches it, it produces a valid action, the result flows through. Assert at the flow level, not the exact output. See `acceptance-criteria.md > Non-deterministic logic`.
+
 ### Verification Transparency (4-question rule)
 
 Reviewer must answer 4 questions from AC text alone:
