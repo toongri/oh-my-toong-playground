@@ -138,14 +138,14 @@ Only read entries where `outputFilePath` is non-null (null = infrastructure fail
 `done` does NOT mean semantically complete. Read each member's content. If any member is in `awaiting_resume` state OR returned a non-answer (narrative-only / incomplete / waiting pattern / "I'll answer once X arrives"), call `resume-member` before proceeding:
 
 ```bash
-bun .claude/skills/agent-council/scripts/job.ts resume-member --job "$JOB_DIR" --member <name> --prompt "Please answer the question directly."
+bun .claude/skills/agent-council/scripts/job.ts resume-member "$JOB_DIR" <name> "Please answer the question directly."
 ```
 
 The prompt is written by the Chairman LLM for the specific situation. The example above is illustrative only.
 
 Cap: max 3 resumes per member. After cap exhaustion — partial-accept (include what was received) OR escalate the entire job. The Chairman judges which applies based on the situation.
 
-**WARNING: `clean` is destructive** — it deletes the jobDir permanently, and `resume-member --job <jobDir>` requires that jobDir to exist. `clean` is ALWAYS the last step, called only after completeness is confirmed for all members.
+**WARNING: `clean` is destructive** — it deletes the jobDir permanently, and `resume-member <jobDir> ...` requires that jobDir to exist. `clean` is ALWAYS the last step, called only after completeness is confirmed for all members.
 
 **5. Synthesize (caller responsibility)**
 
