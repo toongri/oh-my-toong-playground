@@ -36,3 +36,8 @@ mcps:
   # Figma hosted MCP. Codex handles this as a streamable HTTP server with OAuth login.
   figma:
     url: "https://mcp.figma.com/mcp"
+  playwright:
+    command: npx
+    args:
+      - "-y"
+      - "@playwright/mcp@latest"

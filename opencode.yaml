@@ -38,3 +38,8 @@ mcps:
   figma:
     type: remote
     url: "https://mcp.figma.com/mcp"
+  playwright:
+    command: npx
+    args:
+      - "-y"
+      - "@playwright/mcp@latest"
