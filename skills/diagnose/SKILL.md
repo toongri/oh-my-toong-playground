@@ -57,9 +57,12 @@ bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 | `error` | Fallback: become Hephaestus in-session (see below) |
 | `canceled` | Fallback: become Hephaestus in-session (see below) |
 | `non_retryable` | Fallback: become Hephaestus in-session (see below) |
-| `done` | Read the manifest from Step 3 and forward `reviewers[0].outputFilePath` content to the caller |
+| `awaiting_resume` | Call `resume-member` (pass `$JOB_DIR`, member name `hephaestus`, and a prompt asking it to continue); re-run `status` to confirm the new state; repeat up to 3 total resume attempts (`resume_count` cap). If still `awaiting_resume` after 3 attempts, fall back to in-session analysis. |
+| `done` | Read the manifest from Step 3 and forward `reviewers[0].outputFilePath` content to the caller. If the forwarded content is planning, framing, or waiting (i.e., the agent paused before delivering analysis), call `resume-member` to drive it to completion before treating the job as finished. |
 
 **Fallback procedure**: READ `prompts/hephaestus.md` and apply the analysis framework defined there IN-SESSION. You become Hephaestus for the remainder of this skill invocation.
+
+> **WARNING — destructive ordering**: `clean` deletes `$JOB_DIR`, which is required by `resume-member`. Do NOT run Step 5 until any `awaiting_resume` state is fully resolved (member reaches `done` or the resume cap is exhausted and you have fallen back in-session). Step 5 must always be the last action.
 
 ### Step 5: Cleanup
 
@@ -67,7 +70,7 @@ bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 bun .claude/skills/diagnose/scripts/job.ts clean $JOB_DIR
 ```
 
-Run cleanup unconditionally after forwarding results or completing in-session fallback analysis.
+Run cleanup only after all resumable states are closed (member is `done`, in-session fallback is complete, or resume cap is exhausted).
 
 ---
 
