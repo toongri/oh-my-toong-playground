@@ -2099,3 +2099,84 @@ describe('cmdResumeMember', () => {
     expect(fnBody).toMatch(/session.*preserv|--resume.*persona|intentionally.*omit|not forwarded|session-preserving/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// cmdClean — active-member guard
+// ---------------------------------------------------------------------------
+
+describe('cmdClean 활성 멤버 삭제 거부', () => {
+  let tmpDir: string;
+  let originalExit: typeof process.exit;
+
+  function setupCleanJob(
+    jobDir: string,
+    entities: Record<string, { state: string }>,
+    config: JobConfig,
+  ) {
+    fs.mkdirSync(jobDir, { recursive: true });
+    fs.writeFileSync(path.join(jobDir, 'job.json'), JSON.stringify({ id: 'clean-test' }));
+    const entitiesDir = path.join(jobDir, config.entityDirName);
+    fs.mkdirSync(entitiesDir, { recursive: true });
+    for (const [name, status] of Object.entries(entities)) {
+      const dir = path.join(entitiesDir, name);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'status.json'), JSON.stringify(status));
+    }
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalExit = process.exit;
+    (process as any).exit = (code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    };
+  });
+
+  afterEach(() => {
+    process.exit = originalExit;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('awaiting_resume 멤버가 있으면 clean을 거부한다', () => {
+    const jobDir = path.join(tmpDir, 'job-active');
+    setupCleanJob(jobDir, { alice: { state: 'awaiting_resume' } }, chunkReviewConfig);
+    expect(() =>
+      cmdClean({}, jobDir, chunkReviewConfig, tmpDir),
+    ).toThrow('process.exit(1)');
+    // jobDir must still exist — was not deleted
+    expect(fs.existsSync(jobDir)).toBe(true);
+  });
+
+  test('awaiting_resume 멤버가 있어도 force 옵션으로 clean이 가능하다', () => {
+    const jobDir = path.join(tmpDir, 'job-force');
+    setupCleanJob(jobDir, { alice: { state: 'awaiting_resume' } }, chunkReviewConfig);
+    expect(() =>
+      cmdClean({ force: true }, jobDir, chunkReviewConfig, tmpDir),
+    ).not.toThrow();
+    expect(fs.existsSync(jobDir)).toBe(false);
+  });
+
+  test('모든 멤버가 terminal 상태이면 정상적으로 clean된다', () => {
+    const jobDir = path.join(tmpDir, 'job-terminal');
+    setupCleanJob(jobDir, {
+      alice: { state: 'done' },
+      bob: { state: 'error' },
+    }, chunkReviewConfig);
+    expect(() =>
+      cmdClean({}, jobDir, chunkReviewConfig, tmpDir),
+    ).not.toThrow();
+    expect(fs.existsSync(jobDir)).toBe(false);
+  });
+
+  test.each(['running', 'queued', 'retrying'] as const)(
+    '%s 상태의 멤버가 있으면 clean을 거부한다',
+    (state) => {
+      const jobDir = path.join(tmpDir, `job-${state}`);
+      setupCleanJob(jobDir, { alice: { state } }, chunkReviewConfig);
+      expect(() =>
+        cmdClean({}, jobDir, chunkReviewConfig, tmpDir),
+      ).toThrow('process.exit(1)');
+      expect(fs.existsSync(jobDir)).toBe(true);
+    },
+  );
+});
