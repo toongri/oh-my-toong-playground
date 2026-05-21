@@ -62,6 +62,13 @@ Illegitimate use (unit is internal helper):
 
 → instead, verify at the HTTP boundary that `POST /api/users` with duplicate email returns 409. The internal method behavior is implementation evidence.
 
+### Non-deterministic logic (LLM tool-calling, models, agents)
+
+You cannot assert the exact output of a non-deterministic component — but you can assert the flow holds with it in place. Don't let "it's non-deterministic" turn into "it's untestable."
+
+- [ ] **Utterance "매일 아침 8시 알림 추가해줘" creates the reminder**
+      **Verification**: live/scenario run via whatever harness exists — type the real utterance, confirm the create-reminder tool actually fired and the reminder is reflected back (persisted state / UI / observed network call), NOT a mocked return. Assert the flow, not exact text/order.
+
 ---
 
 ## Counter-Example: Fixing a Batch AC
