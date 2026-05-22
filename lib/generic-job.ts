@@ -820,6 +820,30 @@ export function cmdClean(
     }
   }
 
+  // Active-member guard: refuse to delete if any member is in a non-terminal/resumable state.
+  // Override with force: true (e.g. options.force = true) to skip this check.
+  if (!options['force']) {
+    const activeMemberStates = new Set(['awaiting_resume', 'running', 'queued', 'retrying']);
+    const entitiesDir = path.join(resolvedJobDir, config.entityDirName);
+    if (fs.existsSync(entitiesDir)) {
+      let activeEntries: string[] = [];
+      try {
+        activeEntries = fs.readdirSync(entitiesDir).filter((e) => {
+          const statusPath = path.join(entitiesDir, e, 'status.json');
+          const status = readJsonIfExists(statusPath) as { state?: string } | null;
+          return status != null && activeMemberStates.has(status.state ?? '');
+        });
+      } catch {
+        // If we can't read the entities dir, proceed; the path-traversal guard already validated.
+      }
+      if (activeEntries.length > 0) {
+        exitWithError(
+          `clean: refusing to delete job dir with active ${config.entityPlural}: ${activeEntries.join(', ')} — use force option to override`,
+        );
+      }
+    }
+  }
+
   fs.rmSync(resolvedJobDir, { recursive: true, force: true });
   process.stdout.write(`cleaned: ${resolvedJobDir}\n`);
 }
