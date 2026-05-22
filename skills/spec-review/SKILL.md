@@ -188,6 +188,30 @@ Response JSON (not done — re-run this step):
 Use the Read tool to read each reviewer's `outputFilePath` from the manifest.
 Only read entries where `outputFilePath` is non-null (null = infrastructure failure; see Degradation Policy).
 
+### Phase 3.5 — Completeness Gate (MANDATORY before synthesis)
+
+`done` does NOT mean semantically complete. After reading each reviewer's output, judge whether the content is an actual review.
+
+**Triggers for `resume-member`** — call it if ANY of the following apply:
+
+- Output is narrative-only (framing, planning, or analytical prose with no actual review deliverable)
+- Output is incomplete (sentences or structure cut off mid-way)
+- Output is a waiting pattern (asks for confirmation, requests more input, or defers the actual review)
+- Member state in the collect manifest is `awaiting_resume`
+
+**Call format:**
+
+```bash
+bun .claude/skills/spec-review/scripts/job.ts resume-member "$JOB_DIR" <member> "Please complete your spec review."
+```
+
+The prompt is written by the Chairman to fit the situation. The above is a reference example only.
+
+**Cap: max 3 resumes per member.** Track the count yourself.
+
+- If the cap is exhausted and the member still has not delivered a real review: route through the existing **Degradation Policy** table below (treat the member as failed — use partial synthesis at 2/3 or 1/3 rows as appropriate), OR escalate the entire job to the caller. Chairman judges which based on context.
+- Do NOT synthesize a non-answer into the advisory — a waiting-pattern or narrative-only output must not flow into the Review Verdict.
+
 ### Phase 4 — Synthesize Advisory
 
 Synthesize all reviewer outputs into the Advisory Output Format below. Apply soft judgment where appropriate. Then STOP.

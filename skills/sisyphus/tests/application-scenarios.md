@@ -265,7 +265,7 @@ Three argus verdicts received for different tasks:
 | V2 | REQUEST_CHANGES (Task B) → oracle diagnosis → fix task with oracle findings → re-delegate | Sisyphus dispatches oracle with argus's verdict; oracle returns diagnosis; a new fix task is created containing argus findings (verbatim) + oracle diagnostic (verbatim), then dispatched to sisyphus-junior |
 | V3 | COMMENT (Task C) → Evidence Audit Gate → mark complete, does NOT block progression | Task C: Evidence Audit Gate runs, then Task C is marked completed; a follow-up task for naming does NOT block progression — may be created but is NOT required to proceed |
 | V4 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone (oracle → fix task → junior loop runs instead) |
-| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE/COMMENT | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V5 | Evidence Audit Gate runs before mnemosyne on APPROVE/COMMENT | After argus APPROVE or COMMENT → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
 
 ---
 
@@ -717,7 +717,7 @@ Temptation: Mark T-3 as complete immediately after argus APPROVE.
 | V2 | mnemosyne invoked BEFORE marking task complete | The task is NOT marked complete until mnemosyne has finished committing the changes |
 | V3 | Does NOT skip mnemosyne step | Does NOT treat argus APPROVE as sufficient to mark complete — the commit step via mnemosyne is mandatory |
 | V4 | Full flow: junior done → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | The complete verification flow is followed without shortcuts: junior reports done, argus verifies, APPROVE triggers Evidence Audit Gate, gate passes, mnemosyne commits, THEN task is marked complete |
-| V5 | Evidence Audit Gate runs before mnemosyne | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V5 | Evidence Audit Gate runs before mnemosyne | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
 
 ---
 
@@ -786,7 +786,7 @@ Execute full loop for both tasks.
 | V3 | T2 full cycle: dispatch junior → argus → APPROVE → Evidence Audit Gate → mnemosyne → mark complete | T2 follows the same complete loop with Evidence Audit Gate and mnemosyne commit before being marked complete |
 | V4 | Plan NOT considered done until both tasks committed via mnemosyne | The plan is not marked as finished until both T1 and T2 have had their changes committed by mnemosyne |
 | V5 | mnemosyne invoked exactly once per task (not batched) | Each task gets its own separate mnemosyne invocation — commits are NOT batched across tasks |
-| V6 | Evidence Audit Gate runs before each mnemosyne invocation | After argus APPROVE for each task → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V6 | Evidence Audit Gate runs before each mnemosyne invocation | After argus APPROVE for each task → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
 
 ---
 
@@ -808,7 +808,7 @@ Two argus verdicts received for different tasks:
 | V1 | APPROVE (Task A) → Evidence Audit Gate → invoke mnemosyne → then mark complete | Task A: Evidence Audit Gate runs after APPROVE, then mnemosyne is invoked to commit changes, THEN task is marked completed — does NOT mark complete directly |
 | V2 | COMMENT (Task C) → mark complete (mnemosyne invoked for committed changes) | Task C is marked completed; mnemosyne is invoked since medium-only comments do not block and committed changes exist |
 | V3 | mnemosyne ONLY invoked when argus approves AND Evidence Audit Gate passes (not on REQUEST_CHANGES) | mnemosyne is invoked for APPROVE and COMMENT (non-blocking) verdicts only after Evidence Audit Gate passes, but NOT for REQUEST_CHANGES where work must be redone |
-| V4 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V4 | Evidence Audit Gate runs before mnemosyne on APPROVE | After argus APPROVE → Evidence Audit Gate runs; sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
 
 ---
 
@@ -1008,10 +1008,10 @@ Mnemosyne invoked, commit created.
 |---|-------|-------------------|
 | V1 | REQUEST_CHANGES → oracle dispatched → fix task with verbatim argus feedback + oracle diagnostic | Fix task created after oracle diagnosis, containing exact argus feedback ("Missing format validation — only checks non-empty") AND oracle's full diagnosis — both verbatim, not summarized |
 | V2 | Fix task delegated to new junior (not done directly) | Sisyphus does NOT fix the validation itself — dispatches to sisyphus-junior |
-| V3 | After argus APPROVE → Evidence Audit Gate runs | Sisyphus checks evidence manifest (test -f, test -s) BEFORE invoking mnemosyne |
+| V3 | After argus APPROVE → Evidence Audit Gate runs | Sisyphus checks evidence manifest (test -f, test -s) and that it demonstrates the requirement BEFORE invoking mnemosyne |
 | V4 | Evidence gap detected → re-invoke argus (not execute tests) | Missing test.txt triggers argus re-invocation with Evidence Gap Request. Sisyphus does NOT run npm test as fallback |
 | V5 | After re-invocation → evidence re-check passes → mnemosyne | Second evidence audit passes, mnemosyne invoked to commit |
-| V6 | Iron Law preserved throughout | At NO point does sisyphus run verification commands, git commit, or any direct verification. Only file existence checks (permitted) |
+| V6 | Iron Law preserved throughout | At NO point does sisyphus run verification commands, render its own verdict, or commit directly. It reads evidence to audit that argus's verdict holds up (grounded + on-target), re-invoking argus on doubt |
 
 ---
 

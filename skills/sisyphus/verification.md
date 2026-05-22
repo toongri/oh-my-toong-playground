@@ -83,25 +83,27 @@ Manifest source depends on the mode in the table below. When manifest is empty (
 
 ### Audit Procedure
 
-A path passes if the file **exists and is non-empty** (`test -f "$path" && test -s "$path"`).
+A path passes when the file **exists and is non-empty** AND the evidence **actually demonstrates the requirement was satisfied** — not merely that a file is present. Beyond the existence check (`test -f "$path" && test -s "$path"`), read the evidence and confirm it proves what THIS task required (the right target/behavior, a real result), not something adjacent.
 
-| Check Type | Command | Purpose |
+| Check Type | Command / Action | Purpose |
 |------------|---------|---------|
 | PERMITTED | `test -f "$path"` | File exists |
 | PERMITTED | `test -s "$path"` | File non-empty |
 | PERMITTED | `ls` on evidence directory | Directory listing (metadata only) |
-| FORBIDDEN | `npm test`, `curl`, `grep` for code verification | Any verification command execution |
+| PERMITTED | **Read the evidence file to judge whether it proves the requirement** | Auditing whether argus's verdict holds up — reading, not verifying |
+| FORBIDDEN | `npm test`, `curl`, `grep` for code verification | Re-executing / independently running a verification |
+| FORBIDDEN | Rendering your own pass/fail, or failing the task yourself | The verdict is argus's; on doubt → re-invoke argus |
 
-**RULE**: Evidence Audit is NOT verification — it's orchestration metadata inspection. The Iron Law is preserved. Sisyphus inspects whether argus produced artifacts; it does not re-run the verification commands argus ran.
+**RULE**: Evidence Audit confirms argus's verdict **holds up** — that the evidence is real and demonstrates the requirement, not just that a file exists. Reading the evidence to make that judgment is **auditing, NOT verifying**: you never re-run a command, and you never render your own verdict. The Iron Law is preserved — argus owns "does it pass?", you own "does argus's verdict hold up?". If the evidence is missing, or does not demonstrate the requirement, it is an Evidence Gap → re-invoke argus.
 
 ### Evidence Gap Handling
 
 | Retry | Condition | Action |
 |-------|-----------|--------|
 | Every retry | New verdict = REQUEST_CHANGES | oracle diagnosis → fix task (no evidence check needed) |
-| 0 (initial) | APPROVE/COMMENT + evidence MISSING | Re-invoke argus with Evidence Gap Request listing missing paths |
-| 1-2 | APPROVE/COMMENT + evidence STILL MISSING | Re-invoke argus again |
-| 3 (exhausted) | APPROVE/COMMENT + evidence STILL MISSING | Interview user: explain situation + AskUserQuestion for strategy selection |
+| 0 (initial) | APPROVE/COMMENT + evidence MISSING or does not demonstrate the requirement | Re-invoke argus with Evidence Gap Request describing the gap |
+| 1-2 | APPROVE/COMMENT + gap STILL present | Re-invoke argus again |
+| 3 (exhausted) | APPROVE/COMMENT + gap STILL present | Interview user: explain situation + AskUserQuestion for strategy selection |
 
 **Evidence Gap Request format:**
 
@@ -122,9 +124,9 @@ Save outputs to the exact paths listed above.
 
 **Full protocol**:
 
-1. If ALL manifest paths are PRESENT → proceed to Verdict Response Protocol
-2. If ANY manifest paths are MISSING → Evidence Gap detected:
-   - Re-invoke argus with an Evidence Gap Request (format above) listing the missing paths
+1. If ALL manifest paths are PRESENT and the evidence demonstrates the requirement → proceed to Verdict Response Protocol
+2. If ANY manifest path is MISSING or fails to demonstrate the requirement → Evidence Gap detected:
+   - Re-invoke argus with an Evidence Gap Request (format above) describing the gap
    - After re-invocation, evaluate the **new verdict first**:
      - If REQUEST_CHANGES → treat as REQUEST_CHANGES (oracle diagnosis → fix task). Evidence gap is moot.
      - If APPROVE/COMMENT → check manifest again
