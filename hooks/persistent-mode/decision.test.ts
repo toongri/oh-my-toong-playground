@@ -760,4 +760,63 @@ describe('makeDecision', () => {
       expect(result.reason).toContain('<todo-continuation>');
     });
   });
+
+  describe('Priority 1.5: Deep Interview Protection', () => {
+    it('makeDecision blocks with deep-interview-continuation when state active and no token', async () => {
+      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'deep-interview-active-state-test-session.json'),
+        JSON.stringify(deepInterviewState)
+      );
+
+      const context = createContext({ lastAssistantMessage: 'some message without done token' });
+
+      const result = makeDecision(context);
+
+      expect(result.decision).toBe('block');
+      expect(result.reason).toContain('<deep-interview-continuation>');
+    });
+
+    it('makeDecision prioritizes ralph over deep-interview when both active', async () => {
+      const ralphState = {
+        active: true,
+        iteration: 1,
+        max_iterations: 10,
+        completion_promise: 'DONE',
+        prompt: 'Ralph task',
+      };
+      await writeFile(
+        join(omtDir, 'ralph-state-test-session.json'),
+        JSON.stringify(ralphState)
+      );
+      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'deep-interview-active-state-test-session.json'),
+        JSON.stringify(deepInterviewState)
+      );
+
+      const context = createContext();
+
+      const result = makeDecision(context);
+
+      expect(result.reason).toContain('<ralph-loop-continuation>');
+      expect(result.reason).not.toContain('<deep-interview-continuation>');
+    });
+
+    it('makeDecision cleans up deep-interview state when token present in lastAssistantMessage', async () => {
+      const deepInterviewState = { active: true, sessionId: 'test-session' };
+      await writeFile(
+        join(omtDir, 'deep-interview-active-state-test-session.json'),
+        JSON.stringify(deepInterviewState)
+      );
+
+      const context = createContext({ lastAssistantMessage: 'Interview complete. <deep-interview-done/>' });
+
+      const result = makeDecision(context);
+
+      const { existsSync } = await import('fs');
+      expect(existsSync(join(omtDir, 'deep-interview-active-state-test-session.json'))).toBe(false);
+      expect(result.reason ?? '').not.toContain('<deep-interview-continuation>');
+    });
+  });
 });
