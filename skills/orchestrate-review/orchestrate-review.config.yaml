@@ -16,10 +16,12 @@ chunk-review:
       effort_level: "high"
       output_format: json
     - name: kimi
-      # OPENSEARCH_DISABLED_TOOLS: opensearch MCP의 typeless `Body` 스키마 tool 4종을 서버 단에서 제외.
+      # env.OPENSEARCH_DISABLED_TOOLS: opensearch MCP의 typeless `Body` 스키마 tool 4종을 서버 단에서 제외.
       # kimi(Moonshot/SGLang)는 type 없는 JSON Schema 노드를 400(invalid_request_error)으로 거부 →
       # 이 4종만 빼면 통과. opensearch MCP는 그대로 유지돼 다른 도구·Claude Code에 무영향. gpt는 불필요해 미적용.
-      command: env OPENSEARCH_DISABLED_TOOLS=CountTool,MsearchTool,ExplainTool,SearchIndexTool opencode run --agent "Sisyphus - Ultraworker"
+      command: opencode run --agent "Sisyphus - Ultraworker"
+      env:
+        OPENSEARCH_DISABLED_TOOLS: CountTool,MsearchTool,ExplainTool,SearchIndexTool
       emoji: "\U0001F319"
       color: "YELLOW"
       model: "opencode-go/kimi-k2.6"
