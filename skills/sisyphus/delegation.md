@@ -98,6 +98,10 @@ Rate limit: 100 requests per minute per IP. Return 429 Too Many Requests when ex
 
 When delegating to sisyphus-junior, refer to the Load Skills table in the `<skill-catalog>` block and include situation-matching skills in Section 7.
 
+### Model Override (opus escalation)
+
+For complex implementation, request sisyphus-junior with opus: `Agent(subagent_type="sisyphus-junior", model="opus", prompt=...)`. The inline `model` argument overrides the agent's sonnet default.
+
 ---
 
 ## Mnemosyne Delegation Template
@@ -153,6 +157,10 @@ Agent(subagent_type="explore", prompt="I'm implementing JWT auth for the REST AP
 // External docs
 Agent(subagent_type="librarian", prompt="I'm implementing JWT auth and need current security best practices for token storage and expiration. Find: OWASP auth guidelines, recommended token lifetimes, refresh rotation. Skip tutorials — production security guidance only.")
 ```
+
+### Research Depth (opus escalation)
+
+For complex research beyond simple library lookups, delegate to librarian with opus: `Agent(subagent_type="librarian", model="opus", prompt=...)`. The inline `model` argument overrides the agent's sonnet default.
 
 ---
 

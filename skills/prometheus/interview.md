@@ -76,6 +76,8 @@ Agent(subagent_type="explore", prompt="I'm planning auth feature and need existi
 Agent(subagent_type="librarian", prompt="I'm planning OAuth 2.0 implementation and need authoritative guidance. Find: setup, flow types (PKCE), security considerations. Skip tutorials — production patterns only.")
 ```
 
+**Research depth (opus escalation)**: For complex research beyond simple library lookups, dispatch librarian with opus — `Agent(subagent_type="librarian", model="opus", prompt=...)`.
+
 ### Oracle dispatch — feasibility / risk / alternative / dependency
 
 | Type | Question to Oracle |
