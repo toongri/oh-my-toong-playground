@@ -671,6 +671,66 @@ Fields (all required per ADR entry):
 
 > Worked example → [plan-template.md](plan-template.md). Lookup-only.
 
+### Deliberate Mode Triggers
+
+T1 risk-domain triggers are a second classification axis, orthogonal to Intent class (Trivial/Scoped/Complex/Architecture). Intent class governs interview depth and review rigor based on size; T1 triggers govern activation of risk-specific artifacts based on domain. Regardless of intent class, a T1 hit activates Deliberate Mode — Risk override Size.
+
+Example: A 5-line auth fix is Trivial by size but Security by risk — the T1 trigger fires regardless of intent class. When size and risk conflict, risk overrides size.
+
+T1 categories and keyword patterns:
+
+- **Security** — auth, secrets, crypto, permission, JWT, token, authorization, authentication, role, privilege escalation
+- **Data destruction** — migration, drop, delete, truncate, purge, wipe, irreversible, destructive
+- **External contract** — public API, webhook, breaking change, contract, interface versioning, schema change, client-facing
+- **Concurrency** — race, lock, transaction, mutex, deadlock, atomic, concurrent, parallel write
+- **Money** — payment, billing, refund, charge, invoice, subscription, pricing, payout
+
+When a T1 trigger fires (any one category matched), activate `### Risk-Domain Pre-Mortem` and `### Expanded Test Plan` in addition to standard plan output. T1 triggers do NOT exempt a plan from Intent Classification — both axes apply simultaneously.
+
+### Risk-Domain Assessment
+
+During the Interview Mode phase, the planner self-reports Y/N for each T1 category before drafting the plan:
+
+- Security? (Y/N)
+- Data destruction? (Y/N)
+- External contract? (Y/N)
+- Concurrency? (Y/N)
+- Money? (Y/N)
+
+Any yes/no response of Y activates Deliberate Mode for that category. This Y/N self-assessment is the primary signal of the γ-hybrid detection mechanism. If any category is Y, include `### Risk-Domain Pre-Mortem` and `### Expanded Test Plan` sections in the plan output.
+
+### Risk-Domain Pre-Mortem
+
+Activated when a T1 trigger fires. Include this section in the plan output. Conduct a pre-mortem: imagine the change has shipped and caused an incident. Enumerate at least 3 failure scenarios (3 scenario minimum), each with the following structure:
+
+- **Scenario name** — Brief label
+- **Trigger condition** — What user action or system event causes this failure
+- **Blast radius** — Which users, data, services, or downstream systems are affected
+- **Detection signal** — How would this failure be discovered (alert, user report, log pattern, metric spike)
+
+This section is T1-gated: emit only when a T1 trigger fires (either via Risk-Domain Assessment Y or Risk-Domain Backstop keyword scan hit). Do not emit for plans where no T1 category applies.
+
+### Expanded Test Plan
+
+Activated when a T1 trigger fires. Include this section in the plan output. Classify the planned test coverage into 4 layers:
+
+- **unit** — Isolated logic, pure functions, single component behavior
+- **integration** — Cross-module, cross-service, or database interaction tests
+- **e2e** — End-to-end user flows (also called end-to-end tests)
+- **observability** — Metrics, alerts, logs, tracing coverage that would surface failures in production
+
+These 4 layers are a classification lens over the existing QA scenarios — each layer maps to one or more entries in the `QA Scenario 7-Field Structure`. The 7-field scenarios remain authoritative and are what `F3. QA Scenario Execution` runs; this layering does not create a parallel test taxonomy. Do not duplicate QA scenario content here; instead, categorize existing QA scenarios by layer and identify any coverage gaps.
+
+This section is T1-gated: emit only when a T1 trigger fires. Do not emit for plans where no T1 category applies.
+
+### Risk-Domain Backstop
+
+F1 Plan Compliance Audit includes a plan-body T1 keyword scan as a γ-hybrid backstop. After verifying Must Have / Must NOT Have compliance, F1 scans the plan body for T1 keywords from all five categories (Security, Data destruction, External contract, Concurrency, Money).
+
+If the Risk-Domain Assessment marked a category N but the scan hits that category's keywords in the plan body, F1 returns REQUEST_CHANGES and routes back to re-confirm the risk assessment with the user. This re-verify step exists because the planner may have overlooked a T1 signal during interview.
+
+If the scan finds no T1 keywords and all categories were marked N, F1 proceeds normally. The backstop does not fire when T1 was already acknowledged (Y) and Deliberate Mode artifacts are present.
+
 ### TODO Task Format (7 fields, all required)
 
 Each TODO is a checkbox line `- [ ] N. Title` with body containing:
