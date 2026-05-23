@@ -23,6 +23,7 @@ skills:
   items:
     - component: spec
       platforms: [claude]
+    - component: deep-interview
     - component: prometheus
       platforms: [claude]
     - component: sisyphus
