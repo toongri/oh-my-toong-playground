@@ -22,7 +22,6 @@ import {
   cmdCollect as frameworkCmdCollect,
   cmdResumeMember,
   gcStaleJobs,
-  parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
@@ -89,14 +88,16 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, REVIEW_CONFIG);
 
-  const config = frameworkParseYamlSimple(configPath, {
+  const defaultConfig: Record<string, unknown> = {
     review: {
       members: [
         { name: 'gemini', command: 'gemini', emoji: '💎', color: 'GREEN', output_format: 'text' },
       ],
       settings: { timeout: 120 },
     },
-  }, REVIEW_CONFIG);
+  };
+  const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+  const config = fileText ? (Bun.YAML.parse(fileText) as Record<string, unknown>) : defaultConfig;
 
   const reviewConfig = config[REVIEW_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
@@ -124,6 +125,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
       model: m.model || null,
       effort_level: m.effort_level || null,
       output_format: m.output_format || null,
+      env: m.env ?? {},
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
