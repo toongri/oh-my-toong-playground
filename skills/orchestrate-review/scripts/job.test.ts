@@ -10,7 +10,6 @@ import {
   buildUiPayload,
   buildManifest,
   parseChunkReviewConfig,
-  parseYamlSimple,
   computeStatus,
   detectCliType,
   buildAugmentedCommand,
@@ -24,204 +23,6 @@ import {
 function makeTmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'chunk-job-test-'));
 }
-
-// ---------------------------------------------------------------------------
-// parseYamlSimple
-// ---------------------------------------------------------------------------
-
-describe('parseYamlSimple', () => {
-  let tmpDir: string;
-  const fallback = {
-    'chunk-review': {
-      chairman: { role: 'auto' },
-      members: [
-        { name: 'claude', command: 'claude -p', emoji: '\u{1F9E0}', color: 'CYAN' },
-      ],
-      settings: { exclude_chairman_from_members: true, timeout: 300 },
-    },
-  };
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('parses basic key-value in chairman section', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    role: gemini',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].chairman.role).toBe('gemini');
-  });
-
-  test('parses members array with multiple entries', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  members:',
-      '    - name: alice',
-      '      command: alice-cli',
-      '    - name: bob',
-      '      command: bob-cli',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].members.length).toBe(2);
-    expect(result['chunk-review'].members[0].name).toBe('alice');
-    expect(result['chunk-review'].members[0].command).toBe('alice-cli');
-    expect(result['chunk-review'].members[1].name).toBe('bob');
-  });
-
-  test('parses settings section with type coercion', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  settings:',
-      '    timeout: 300',
-      '    exclude_chairman_from_members: false',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].settings.timeout).toBe(300);
-    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(false);
-  });
-
-  test('skips comment lines', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      '# This is a comment',
-      'chunk-review:',
-      '  chairman:',
-      '    # Another comment',
-      '    role: codex',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].chairman.role).toBe('codex');
-  });
-
-  test('falls back to default members when none defined', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    role: auto',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].members).toEqual(fallback['chunk-review'].members);
-  });
-
-  test('returns fallback on read error (non-existent file)', () => {
-    const result = parseYamlSimple(path.join(tmpDir, 'missing.yaml'), fallback);
-    expect(result).toEqual(fallback);
-  });
-
-  test('merges chairman with fallback defaults', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    name: custom',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].chairman.name).toBe('custom');
-    expect(result['chunk-review'].chairman.role).toBe('auto');
-  });
-
-  test('parses members: section correctly', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  members:',
-      '    - name: alice',
-      '      command: alice-cli',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].members.length).toBe(1);
-    expect(result['chunk-review'].members[0].name).toBe('alice');
-  });
-
-  test('strips quotes from member name values', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  members:',
-      '    - name: "quoted-name"',
-      '      command: some-cmd',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].members[0].name).toBe('quoted-name');
-  });
-
-  test('skips empty lines', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '',
-      '  chairman:',
-      '',
-      '    role: codex',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].chairman.role).toBe('codex');
-  });
-
-  test('coerces "true" string to boolean true in settings', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  settings:',
-      '    verbose: true',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].settings.verbose).toBe(true);
-  });
-
-  test('parses hyphen keys in settings section', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  settings:',
-      '    bucket-size: 50',
-      '    exclude-chairman: true',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].settings['bucket-size']).toBe(50);
-    expect(result['chunk-review'].settings['exclude-chairman']).toBe(true);
-  });
-
-  test('parses hyphen keys in member properties', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  members:',
-      '    - name: alice',
-      '      effort-level: high',
-      '      output-format: json',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].members[0]['effort-level']).toBe('high');
-    expect(result['chunk-review'].members[0]['output-format']).toBe('json');
-  });
-
-  test('parses values containing colons', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    command: gemini --flag=value:123',
-      '  members:',
-      '    - name: alice',
-      '      command: claude --endpoint=http://localhost:8080',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, fallback);
-    expect(result['chunk-review'].chairman.command).toBe('gemini --flag=value:123');
-    expect(result['chunk-review'].members[0].command).toBe('claude --endpoint=http://localhost:8080');
-  });
-});
 
 // ---------------------------------------------------------------------------
 // parseChunkReviewConfig
@@ -295,6 +96,21 @@ describe('parseChunkReviewConfig', () => {
     const result = await parseChunkReviewConfig(path.join(tmpDir, 'nope.yaml'));
     const keys = Object.keys(result);
     expect(keys).toEqual(['chunk-review']);
+  });
+
+  test('parses member env map from config', async () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  members:',
+      '    - name: kimi',
+      '      command: kimi-cli',
+      '      env:',
+      '        KIMI_API_KEY: test-key',
+      '        KIMI_MODEL: kimi-k2',
+    ].join('\n'));
+    const result = await parseChunkReviewConfig(configPath);
+    expect(result['chunk-review'].members[0].env).toEqual({ KIMI_API_KEY: 'test-key', KIMI_MODEL: 'kimi-k2' });
   });
 });
 
