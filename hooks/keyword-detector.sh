@@ -82,6 +82,7 @@ strip_mode_tags() {
   perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' |
   perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' |
   perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' |
+  perl -0pe 's/<deep-interview-mode>.*?<\/deep-interview-mode>//gs' |
   perl -0pe 's/<deep-interview-continuation>.*?<\/deep-interview-continuation>//gs' |
   perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs'
 }
