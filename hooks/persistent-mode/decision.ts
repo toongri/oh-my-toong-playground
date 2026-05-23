@@ -1,6 +1,7 @@
 import { HookOutput, RalphState } from './types.ts';
 import {
   readRalphState, updateRalphState, cleanupRalphState,
+  readDeepInterviewState, cleanupDeepInterviewState,
   getBlockCount, incrementBlockCount, cleanupBlockCountFiles,
   MAX_BLOCK_COUNT
 } from './state.ts';
@@ -115,6 +116,25 @@ Original task: ${truncatedPrompt}
 `;
 }
 
+function buildDeepInterviewContinuationMessage(): string {
+  return `<deep-interview-continuation>
+
+[DEEP INTERVIEW IN PROGRESS]
+
+A deep interview session is currently active. You must continue the interview until it is complete.
+
+INSTRUCTIONS:
+1. Review the interview context and any answers collected so far
+2. Ask the next unanswered question or follow up on incomplete answers
+3. When all questions have been fully answered, output: <deep-interview-done/>
+4. Do NOT stop until the interview is complete
+
+</deep-interview-continuation>
+
+---
+`;
+}
+
 function buildTodoContinuationMessage(incompleteCount: number): string {
   return `<todo-continuation>
 
@@ -198,6 +218,16 @@ export function makeDecision(context: DecisionContext): HookOutput {
     updateRalphState(sessionId, updatedState);
     const message = buildNoDoneMessage(newIteration, ralphState.max_iterations, ralphState.prompt, ralphState.completion_promise || 'DONE');
     return formatBlockOutput(message);
+  }
+
+  // Priority 1.5: Deep Interview Protection
+  const deepInterviewState = readDeepInterviewState(sessionId);
+  if (deepInterviewState && deepInterviewState.active) {
+    if (lastAssistantMessage && lastAssistantMessage.includes('<deep-interview-done/>')) {
+      cleanupDeepInterviewState(sessionId);
+    } else {
+      return formatBlockOutput(buildDeepInterviewContinuationMessage());
+    }
   }
 
   // Priority 2: Baseline todo-continuation (incomplete tasks from file-based counting)
