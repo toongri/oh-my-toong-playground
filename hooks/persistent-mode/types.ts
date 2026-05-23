@@ -24,6 +24,12 @@ export interface RalphState {
   started_at?: string;
 }
 
+// Deep interview state file structure
+export interface DeepInterviewState {
+  active: boolean;
+  sessionId: string;
+}
+
 // Hook output format
 export interface HookOutput {
   decision?: 'block' | 'continue';
