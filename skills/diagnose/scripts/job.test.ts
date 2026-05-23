@@ -183,6 +183,48 @@ describe('diagnose job lifecycle', () => {
   });
 });
 
+describe('settings fallback 병합', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('`settings`를 생략한 config에서 default timeout(600)이 job.json에 유지된다', () => {
+    const configPath = path.join(tmpDir, 'diagnose.config.yaml');
+    // settings 블록 없이 members만 정의
+    fs.writeFileSync(configPath, [
+      'review:',
+      '  members:',
+      '    - name: tester',
+      '      command: echo done',
+    ].join('\n'), 'utf8');
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--json',
+      'fallback timeout test',
+    ], { stdio: 'pipe' });
+
+    const { jobDir } = JSON.parse(result.toString());
+    const jobJson = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8'));
+
+    expect(jobJson.settings.timeoutSec).toBe(600);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
+  });
+});
+
 describe('resume-member subcommand', () => {
   test('resume-member without jobDir exits with error', () => {
     let exitCode = 0;
