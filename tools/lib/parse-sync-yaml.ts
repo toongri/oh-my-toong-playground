@@ -1,6 +1,5 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { parse as parseYaml } from "yaml";
 import { expandTilde } from "./path-utils.ts";
 import { deepMergeOverlay } from "./deep-merge-overlay.ts";
 import type { SyncYaml } from "./types.ts";
@@ -17,7 +16,7 @@ async function readYamlResult(filePath: string): Promise<YamlReadResult> {
   } catch {
     return { kind: "missing" };
   }
-  const parsed = parseYaml(text);
+  const parsed = Bun.YAML.parse(text);
   if (parsed == null || typeof parsed !== "object") return { kind: "empty" };
   return { kind: "object", value: parsed as Record<string, unknown> };
 }
