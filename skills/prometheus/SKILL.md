@@ -642,30 +642,19 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 | **Execution Strategy** | Wave visualization, Dependency Matrix, Critical Path. Target 5-8 tasks/wave. Circular dependencies forbidden. **Final Verification Wave mandatory for Scoped+ intent.** |
 | **Verification Strategy** | Test decision (TDD/tests-after/none), framework, verification commands. Zero Human Intervention — agent-executed with evidence to `$OMT_DIR/evidence/{plan-name}/` |
 | **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
-| **RALPLAN-DR + ADR** | Design-decision traceability (Principles / Decision Drivers / Viable Options + ADR 6-field). Scoped+ default; Trivial exempt. |
-
-### RALPLAN-DR
-
-Design-decision traceability section. **Required for all plans with Scoped or higher intent. Trivial intent is exempt from RALPLAN-DR and ADR output.**
-
-Fields:
-
-- **Principles** — The design principles this plan adheres to (e.g., additive-only, zero-downtime, backward-compatible). Taken from the requirements or interview.
-- **Decision Drivers** — Factors that constrained or guided the key decisions (e.g., performance budget, team conventions, existing contract, timeline).
-- **Viable Options** — The options actually considered, each with pros and cons. Minimum 2 options required. If only one path is viable, write `N/A — single viable path, justified` and state the justification (e.g., forced by an existing contract or API constraint). Do NOT fabricate a strawman alternative to satisfy this field.
-
-> Worked example → [plan-template.md](plan-template.md). Lookup-only.
+| **ADR** | Architecture Decision Record — MADR 7-field (Context / Decision Drivers / Considered Options / Decision / Rationale / Consequences / Follow-ups). Scoped+ default; Trivial exempt. |
 
 ### ADR
 
-Architectural Decision Record — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from RALPLAN-DR and ADR output.** Inline in the plan; no separate file needed.
+Architecture Decision Record (Nygard 2011 / MADR) — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from ADR output.** Inline in the plan; no separate file needed.
 
 Fields (all required per ADR entry):
 
+- **Context** — Background and design principles governing this decision (e.g., additive-only, zero-downtime, backward-compatible). State the principles from the requirements or interview here; they shape everything below.
+- **Decision Drivers** — Factors that constrained or guided the choice (e.g., performance budget, team conventions, existing contract, timeline).
+- **Considered Options** — The options actually evaluated, each with pros and cons. Minimum 2 options required. If only one path is viable, write `N/A — single viable path, justified` and state the justification (e.g., forced by an existing contract or API constraint). Do NOT fabricate a strawman alternative to satisfy this field.
 - **Decision** — The choice made, stated as a single declarative sentence.
-- **Drivers** — Which Decision Drivers (from RALPLAN-DR) triggered this choice.
-- **Alternatives** — The options that were not chosen (cross-reference Viable Options above).
-- **Why** — Reasoning for the chosen option over the alternatives.
+- **Rationale** — Reasoning for the chosen option over the alternatives.
 - **Consequences** — Positive outcomes expected AND trade-offs accepted.
 - **Follow-ups** — Open questions or tasks this decision defers (write "none" if empty).
 

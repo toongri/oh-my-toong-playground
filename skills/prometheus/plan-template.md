@@ -88,12 +88,12 @@ Critical Path: Task 1 -> Task 2 -> Task 4 -> Task 7 -> F1-F4
 
 ---
 
-## RALPLAN-DR + ADR Example (worked example)
+## ADR Example (worked example)
 
 ```
-## RALPLAN-DR
+## ADR
 
-Principles:
+Context:
 - Additive-only — no existing behaviour is altered; new code is inserted alongside existing paths.
 - Backward-compatible — callers not opting in must see zero change.
 
@@ -102,7 +102,7 @@ Decision Drivers:
 - CI pipeline enforces zero regression on current test suite.
 - Team convention: no new external dependencies without architecture review.
 
-Viable Options:
+Considered Options:
 
 Option A — Extend existing UserService with optional parameter
   Pros: minimal surface area; no new abstraction; single delegation pass.
@@ -112,19 +112,9 @@ Option B — Introduce a separate UserEnrichmentService
   Pros: clean separation; independently testable; UserService stays unchanged.
   Cons: extra file; extra wiring; overkill for current scope.
 
-Decision: Option A chosen (see ADR below).
-
----
-
-## ADR
-
 Decision: Extend UserService with an optional `enrich` flag rather than creating a separate service.
 
-Drivers: Minimal surface area, backward-compatible contract, single-delegation pass.
-
-Alternatives: Option B (UserEnrichmentService) — rejected because scope is too narrow to justify new abstraction.
-
-Why: The enrichment logic is three lines. A separate service would add indirection cost exceeding the value of isolation at this scope.
+Rationale: The enrichment logic is three lines. A separate service would add indirection cost exceeding the value of isolation at this scope.
 
 Consequences:
   + UserService remains the single delegation target for callers.
