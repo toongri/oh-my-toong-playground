@@ -24,7 +24,14 @@ export interface RalphState {
   started_at?: string;
 }
 
-// Deep interview state file structure
+/**
+ * Minimal contract the persistent-mode hook reads from the deep-interview
+ * state file. The on-disk file may carry additional fields at runtime
+ * (e.g. current phase, interview rounds, ambiguity scores, ontology
+ * snapshots) written by the interview skill itself; only `active` is
+ * consulted here. Writers must merge rather than overwrite — replacing
+ * the file with this minimal shape discards in-flight interview data.
+ */
 export interface DeepInterviewState {
   active: boolean;
   sessionId: string;
