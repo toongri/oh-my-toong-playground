@@ -29,7 +29,6 @@ import {
   cmdCollect as _cmdCollect,
   cmdResumeMember,
   gcStaleJobs,
-  parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
@@ -77,10 +76,6 @@ const computeStatus = async (jobDir: string): Promise<any> => {
 // buildUiPayload: wraps framework version with JOB_CONFIG
 const buildUiPayload = (statusPayload: any): any => _buildUiPayload(statusPayload, JOB_CONFIG);
 
-// parseYamlSimple: wraps framework version with JOB_CONFIG and context extraSection
-function parseYamlSimple(configPath: string, fallback: Record<string, any>): Record<string, any> {
-  return frameworkParseYamlSimple(configPath, fallback, JOB_CONFIG, ['context']);
-}
 
 // ---------------------------------------------------------------------------
 // Spec-review-specific config parsing
@@ -108,16 +103,10 @@ async function parseSpecReviewConfig(configPath: string): Promise<Record<string,
 
   if (!fs.existsSync(configPath)) return fallback;
 
-  let YAML: any;
-  try {
-    YAML = await import('yaml').then((m: any) => m.default);
-  } catch {
-    return parseYamlSimple(configPath, fallback);
-  }
-
+  const fileText = fs.readFileSync(configPath, 'utf8');
   let parsed: any;
   try {
-    parsed = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+    parsed = Bun.YAML.parse(fileText);
   } catch (error: any) {
     const message = error && error.message ? error.message : String(error);
     exitWithError(`Invalid YAML in ${configPath}: ${message}`);
@@ -387,14 +376,15 @@ ${prompt}`;
       excludeChairmanFromMembers,
       timeoutSec: timeoutSec || null,
     },
-    members: members.map((r: any) => ({
-      name: String(r.name),
-      command: String(r.command),
-      emoji: r.emoji ? String(r.emoji) : null,
-      color: r.color ? String(r.color) : null,
-      model: r.model || null,
-      effort_level: r.effort_level || null,
-      output_format: r.output_format || null,
+    members: members.map((m: any) => ({
+      name: String(m.name),
+      command: String(m.command),
+      emoji: m.emoji ? String(m.emoji) : null,
+      color: m.color ? String(m.color) : null,
+      model: m.model || null,
+      effort_level: m.effort_level || null,
+      output_format: m.output_format || null,
+      env: m.env ?? {},
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
@@ -556,4 +546,4 @@ export {
   generateJobId,
 } from '@lib/job-utils';
 
-export { buildUiPayload, parseSpecReviewConfig, parseYamlSimple, computeStatus, resolveContextDir, findProjectRoot };
+export { buildUiPayload, parseSpecReviewConfig, computeStatus, resolveContextDir, findProjectRoot };
