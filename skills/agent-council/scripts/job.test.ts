@@ -9,7 +9,6 @@ import { execFileSync } from 'child_process';
 import {
   buildUiPayload,
   parseCouncilConfig,
-  parseYamlSimple,
   computeStatus,
 } from './job.ts';
 
@@ -226,20 +225,11 @@ describe('buildUiPayload', () => {
 });
 
 // ---------------------------------------------------------------------------
-// parseYamlSimple
+// parseCouncilConfig native parse council-shape regression
 // ---------------------------------------------------------------------------
 
-describe('parseYamlSimple', () => {
+describe('parseCouncilConfig native parse council-shape regression', () => {
   let tmpDir: string;
-  const fallback = {
-    council: {
-      chairman: { role: 'auto' },
-      members: [
-        { name: 'claude', command: 'claude -p', emoji: '🧠', color: 'CYAN' },
-      ],
-      settings: { exclude_chairman_from_members: true, timeout: 120 },
-    },
-  };
 
   beforeEach(() => {
     tmpDir = makeTmpDir();
@@ -249,7 +239,7 @@ describe('parseYamlSimple', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  test('parses basic council config with members', () => {
+  test('parses basic council config and yields correct chairman/members/settings shape', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -264,7 +254,7 @@ describe('parseYamlSimple', () => {
       '    timeout: 60',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.chairman.role).toBe('codex');
     expect(result.council.members.length).toBe(1);
@@ -273,7 +263,7 @@ describe('parseYamlSimple', () => {
     expect(result.council.settings.timeout).toBe(60);
   });
 
-  test('uses fallback members when no members parsed', () => {
+  test('uses fallback members when no members key in config', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -283,13 +273,14 @@ describe('parseYamlSimple', () => {
       '    timeout: 30',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
-    // No members parsed -> falls back to fallback.council.members
-    expect(result.council.members).toEqual(fallback.council.members);
+    // No members in config -> falls back to default 3 members
+    expect(result.council.members.length).toBe(3);
+    expect(result.council.members[0].name).toBe('claude');
   });
 
-  test('merges chairman with fallback defaults', () => {
+  test('merges chairman with fallback defaults', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -297,12 +288,12 @@ describe('parseYamlSimple', () => {
       '    role: gemini',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.chairman.role).toBe('gemini');
   });
 
-  test('merges settings with fallback defaults', () => {
+  test('merges settings with fallback defaults', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -310,53 +301,39 @@ describe('parseYamlSimple', () => {
       '    timeout: 300',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.settings.timeout).toBe(300);
     // exclude_chairman_from_members comes from fallback
     expect(result.council.settings.exclude_chairman_from_members).toBe(true);
   });
 
-  test('skips comment lines', () => {
+  test('handles comment and empty lines in YAML', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       '# This is a comment',
       'council:',
       '  # chairman comment',
       '  chairman:',
+      '',
       '    role: codex',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.chairman.role).toBe('codex');
   });
 
-  test('skips empty lines', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      '',
-      'council:',
-      '',
-      '  chairman:',
-      '',
-      '    role: claude',
-      '',
-    ].join('\n'), 'utf8');
-
-    const result = parseYamlSimple(configPath, fallback);
-
-    expect(result.council.chairman.role).toBe('claude');
-  });
-
-  test('returns fallback when file cannot be read', () => {
+  test('returns fallback when file does not exist', async () => {
     const configPath = path.join(tmpDir, 'nonexistent.yaml');
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
-    expect(result).toEqual(fallback);
+    expect(result.council.chairman.role).toBe('auto');
+    expect(result.council.members.length).toBe(3);
+    expect(result.council.settings.exclude_chairman_from_members).toBe(true);
   });
 
-  test('converts boolean string values in settings', () => {
+  test('parses boolean settings values as native boolean', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -364,12 +341,12 @@ describe('parseYamlSimple', () => {
       '    exclude_chairman_from_members: false',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.settings.exclude_chairman_from_members).toBe(false);
   });
 
-  test('converts integer string values in settings', () => {
+  test('parses integer settings values as native number', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -377,13 +354,13 @@ describe('parseYamlSimple', () => {
       '    timeout: 240',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.settings.timeout).toBe(240);
     expect(typeof result.council.settings.timeout).toBe('number');
   });
 
-  test('parses multiple members', () => {
+  test('parses multiple members into correct shape', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
@@ -396,7 +373,7 @@ describe('parseYamlSimple', () => {
       '      command: gemini',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.members.length).toBe(3);
     expect(result.council.members[0].name).toBe('claude');
@@ -405,19 +382,48 @@ describe('parseYamlSimple', () => {
     expect(result.council.members[2].name).toBe('gemini');
   });
 
-  test('handles quoted values in member fields', () => {
+  test('parses members with env field', async () => {
     const configPath = path.join(tmpDir, 'config.yaml');
     fs.writeFileSync(configPath, [
       'council:',
       '  members:',
-      '    - name: "claude"',
-      '      command: "claude -p"',
+      '    - name: claude',
+      '      command: claude -p',
+      '      env:',
+      '        ANTHROPIC_MODEL: claude-opus-4-5',
     ].join('\n'), 'utf8');
 
-    const result = parseYamlSimple(configPath, fallback);
+    const result = await parseCouncilConfig(configPath);
 
     expect(result.council.members[0].name).toBe('claude');
-    expect(result.council.members[0].command).toBe('claude -p');
+    expect(result.council.members[0].env).toEqual({ ANTHROPIC_MODEL: 'claude-opus-4-5' });
+  });
+
+  test('Bun.YAML.parse of a council config yields the correct shape', () => {
+    const yaml = [
+      'council:',
+      '  chairman:',
+      '    role: claude',
+      '  members:',
+      '    - name: alpha',
+      '      command: alpha-cmd',
+      '    - name: beta',
+      '      command: beta-cmd',
+      '  settings:',
+      '    exclude_chairman_from_members: true',
+      '    timeout: 90',
+    ].join('\n');
+
+    const parsed = Bun.YAML.parse(yaml) as Record<string, any>;
+
+    expect(parsed.council).toBeTruthy();
+    expect(parsed.council.chairman.role).toBe('claude');
+    expect(Array.isArray(parsed.council.members)).toBe(true);
+    expect(parsed.council.members.length).toBe(2);
+    expect(parsed.council.members[0].name).toBe('alpha');
+    expect(parsed.council.members[1].name).toBe('beta');
+    expect(parsed.council.settings.exclude_chairman_from_members).toBe(true);
+    expect(parsed.council.settings.timeout).toBe(90);
   });
 });
 
