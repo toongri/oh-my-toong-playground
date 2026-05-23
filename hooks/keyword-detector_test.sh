@@ -929,6 +929,69 @@ test_ralph_state_prompt_is_truncated_when_too_long() {
     return 0
 }
 
+# =============================================================================
+# Tests: Deep Interview Keyword Detection
+# =============================================================================
+
+test_deep_interview_english_keyword_creates_state_file() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local session_id="di-test-english"
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "deep interview about auth"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode" || return 1
+    assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
+    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created" || return 1
+}
+
+test_deep_interview_ouroboros_keyword() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local session_id="di-test-ouroboros"
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "ouroboros this conversation"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for ouroboros keyword" || return 1
+    assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
+    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created for ouroboros" || return 1
+}
+
+test_deep_interview_korean_keyword() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    local session_id="di-test-korean"
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "딥인터뷰 시작해줘"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    assert_output_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Should activate deep interview mode for Korean keyword 딥인터뷰" || return 1
+    assert_output_contains "$output" "deep-interview-mode" "Output should contain deep-interview-mode tag" || return 1
+    assert_file_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should be created for Korean keyword" || return 1
+}
+
+test_deep_interview_nested_loop_prevention() {
+    mkdir -p "$TEST_TMP_DIR/.git"
+
+    # Simulate a prompt that contains only a prior assistant deep-interview-mode block (no new keyword)
+    local nested_prompt="<deep-interview-mode>
+**DEEP INTERVIEW MODE ACTIVATED** (deep-interview)
+
+You are now in deep interview mode. Conduct a thorough, structured interview:
+1. Ask one focused question at a time
+
+</deep-interview-mode>"
+
+    local session_id="di-test-nested"
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$session_id"'", "prompt": "'"$(printf '%s' "$nested_prompt" | sed 's/"/\\"/g' | tr '\n' ' ')"'"}' | "$SCRIPT_DIR/keyword-detector.sh" 2>&1) || true
+
+    # Should NOT re-trigger deep-interview activation
+    assert_output_not_contains "$output" "DEEP INTERVIEW MODE ACTIVATED" "Nested deep-interview-mode tag should NOT re-trigger activation" || return 1
+
+    # State file should NOT be created
+    assert_file_not_exists "$TEST_TMP_DIR/.omt/deep-interview-active-state-${session_id}.json" "Deep interview state file should NOT be created for nested loop" || return 1
+}
+
 test_ralph_nested_loop_prevention() {
     mkdir -p "$TEST_TMP_DIR/.git"
 
@@ -1048,6 +1111,12 @@ main() {
     run_test test_ralph_special_characters_produce_valid_json
     run_test test_ralph_state_prompt_is_truncated_when_too_long
     run_test test_ralph_nested_loop_prevention
+
+    # Deep Interview Keyword Detection
+    run_test test_deep_interview_english_keyword_creates_state_file
+    run_test test_deep_interview_ouroboros_keyword
+    run_test test_deep_interview_korean_keyword
+    run_test test_deep_interview_nested_loop_prevention
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
