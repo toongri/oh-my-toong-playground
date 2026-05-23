@@ -7,7 +7,7 @@ description: Use when asked to analyze architecture, debug issues, identify root
 
 ## Overview
 
-Delegates architecture analysis and debugging to the Hephaestus opencode agent via a background job. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the Hephaestus framework.
+Delegates architecture analysis and debugging to the Hephaestus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the Hephaestus framework.
 
 ---
 
@@ -38,7 +38,7 @@ The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
 ```
 
-`collect` polls until the job reaches a terminal state and returns a JSON manifest. Repeat if the overall state is `running` or `queued`.
+`collect` polls internally, but it returns after a fixed internal timeout that is deliberately shorter than the worker's full run budget. A non-`done` return (`running`, `queued`, or `awaiting_resume`) is therefore expected — it does NOT mean the job will finish on its own, and nothing will notify you when it does. Re-run `collect` in the foreground until it returns `done`, or go to Step 4 when the state is `awaiting_resume`. Do not end the turn while the overall state is non-terminal.
 
 ### Step 4: Fallback branch
 
@@ -71,6 +71,23 @@ bun .claude/skills/diagnose/scripts/job.ts clean $JOB_DIR
 ```
 
 Run cleanup only after all resumable states are closed (member is `done`, in-session fallback is complete, or resume cap is exhausted).
+
+---
+
+## Completion Contract
+
+The skill produces an answer only by reading it out of the job, and the job is poll-only: a detached worker writes to the jobDir, and nothing notifies you when it finishes. "Let it run and come back" has no mechanism behind it. Get a definitive answer out of the job, then finish — not before.
+
+You are done only when BOTH hold:
+1. The member reached a terminal, answered state — `done` with substantive analysis, in-session fallback completed, or the resume cap (3) exhausted.
+2. You hold that content and have forwarded it to the caller.
+
+| Red flag (about to fail) | Reality |
+|--------------------------|---------|
+| "`collect` returned `running`, it's working in the background" | Non-`done` means poll again now. There is no background monitor. |
+| "I'll report once it finishes" | Nothing will wake you. Loop `collect` to terminal in this turn. |
+| "It's `awaiting_resume`, close enough to done" | Recoverable — `resume-member` it (Step 4). Do not stop. |
+| "I forwarded the plan it produced" | A plan or framing is not analysis. Drive it to a real answer or fall back in-session. |
 
 ---
 
