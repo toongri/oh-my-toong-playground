@@ -82,6 +82,7 @@ strip_mode_tags() {
   perl -0pe 's/<analyze-mode>.*?<\/analyze-mode>//gs' |
   perl -0pe 's/<think-mode>.*?<\/think-mode>//gs' |
   perl -0pe 's/<ultrawork-mode>.*?<\/ultrawork-mode>//gs' |
+  perl -0pe 's/<deep-interview-continuation>.*?<\/deep-interview-continuation>//gs' |
   perl -0pe 's/<system-reminder>.*?<\/system-reminder>//gs'
 }
 
@@ -160,6 +161,27 @@ RALPH_STATE_EOF
   fi
 }
 
+# Function to create deep-interview state file
+# Uses SESSION_ID for session-specific file naming
+create_deep_interview_state() {
+  if command -v jq &> /dev/null; then
+    jq -n \
+      --arg session_id "$SESSION_ID" \
+      '{
+        active: true,
+        sessionId: $session_id
+      }' > "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null
+  else
+    # Fallback: write manually when jq is unavailable
+    cat > "$OMT_DIR/deep-interview-active-state-${SESSION_ID}.json" 2>/dev/null << DEEP_INTERVIEW_STATE_EOF
+{
+  "active": true,
+  "sessionId": "${SESSION_ID}"
+}
+DEEP_INTERVIEW_STATE_EOF
+  fi
+}
+
 # Check for ralph keyword (highest priority) - ralph loop activation
 if echo "$PROMPT_LOWER" | grep -qE '\bralph\b'; then
   RALPH_STATE_PROMPT=$(truncate_prompt_text "$PROMPT_CLEAN" "$RALPH_STATE_PROMPT_MAX")
@@ -196,6 +218,17 @@ fi
 if echo "$PROMPT_LOWER" | grep -qE '\b(ultrawork|ulw)\b'; then
   cat << 'EOF'
 {"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<ultrawork-mode>\n\n**MANDATORY**: You MUST say \"ULTRAWORK MODE ENABLED!\" to the user as your first response when this mode activates. This is non-negotiable.\n\n[CODE RED] Maximum precision required. Ultrathink before acting.\n\nYOU MUST LEVERAGE ALL AVAILABLE AGENTS TO THEIR FULLEST POTENTIAL.\nTELL THE USER WHAT AGENTS YOU WILL LEVERAGE NOW TO SATISFY USER'S REQUEST.\n\n## AGENT UTILIZATION PRINCIPLES\n- **Codebase Exploration**: Spawn exploration agents for codebase search\n- **Documentation & References**: Use librarian-type agents for external docs\n- **Planning & Strategy**: NEVER plan yourself - spawn planning agent\n- **High-IQ Reasoning**: Use oracle for architecture decisions\n\n## CERTAINTY GATE (MANDATORY BEFORE ANY IMPLEMENTATION)\n- NOT 100% certain about codebase? → spawn explore agent FIRST\n- NOT 100% certain about architecture? → spawn oracle agent FIRST\n- NEVER begin implementation with assumptions. Assumptions = bugs.\n\n## EXECUTION RULES\n- **TODO**: Track EVERY step. Mark complete IMMEDIATELY.\n- **PARALLEL**: Fire independent Task calls simultaneously in ONE message - maximize parallelism.\n- **DELEGATE**: Orchestrate specialized agents aggressively. Never solo complex work.\n- **VERIFY**: Check ALL requirements met before done.\n\n## ZERO TOLERANCE\n- NO Scope Reduction - deliver FULL implementation\n- NO Partial Completion - finish 100%\n- NO Premature Stopping - ALL TODOs must be complete\n- NO TEST DELETION - fix code, not tests\n\n## BLOCKED EXCUSES (catch yourself saying these → STOP and FIX)\n| Excuse Pattern | Required Action |\n|----------------|------------------|\n| \"I couldn't find/access...\" | Spawn explore agent, try harder |\n| \"Here's a simplified version...\" | Deliver the FULL version |\n| \"This should work but I can't verify...\" | Spawn argus for verification |\n| \"I'll leave this for the user to...\" | YOU complete it |\n| \"Due to complexity, I only...\" | Continue until 100% done |\n\nTHE USER ASKED FOR X. DELIVER EXACTLY X.\n\n</ultrawork-mode>\n\n---\n"}}
+EOF
+  exit 0
+fi
+
+# Check for deep-interview keywords (third priority)
+if echo "$PROMPT_LOWER" | grep -qiE '\b(deep[- ]?interview|ouroboros)\b|딥인터뷰'; then
+  # Create deep-interview state file
+  create_deep_interview_state
+
+  cat << 'EOF'
+{"continue": true, "hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": "<deep-interview-mode>\n\n**DEEP INTERVIEW MODE ACTIVATED** (deep-interview)\n\nYou are now in deep interview mode. Conduct a thorough, structured interview:\n1. Ask one focused question at a time\n2. Listen carefully and probe deeper based on responses\n3. Synthesize insights across the conversation\n4. Surface assumptions and validate them explicitly\n\nRemain in deep interview mode until the session is explicitly concluded.\n\n</deep-interview-mode>\n\n---\n"}}
 EOF
   exit 0
 fi
