@@ -181,6 +181,10 @@ describe('detectCliType', () => {
   test('detects opencode via package runner', () => {
     expect(detectCliType('bunx opencode run')).toBe('opencode');
   });
+
+  test('detectCliType env-prefix returns unknown', () => {
+    expect(detectCliType('env FOO=bar opencode run --agent foo')).toBe('unknown');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -300,6 +304,30 @@ describe('buildAugmentedCommand', () => {
       'opencode',
     );
     expect(result.command).toBe('opencode run --model openai/gpt-5.5');
+  });
+
+  test('buildAugmentedCommand entity.env merge', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run', env: { OPENSEARCH_DISABLED_TOOLS: 'CountTool' } },
+      'opencode',
+    );
+    expect(result.env.OPENSEARCH_DISABLED_TOOLS).toBe('CountTool');
+  });
+
+  test('buildAugmentedCommand framework env precedence', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', env: { CLAUDECODE: 'evil' } },
+      'claude',
+    );
+    expect(result.env.CLAUDECODE).toBe('');
+  });
+
+  test('buildAugmentedCommand env optional', () => {
+    const resultUndefined = buildAugmentedCommand({ command: 'claude -p' }, 'claude');
+    expect(resultUndefined.env.CLAUDECODE).toBe('');
+
+    const resultEmpty = buildAugmentedCommand({ command: 'claude -p', env: {} }, 'claude');
+    expect(resultEmpty.env.CLAUDECODE).toBe('');
   });
 });
 
@@ -2027,6 +2055,37 @@ describe('cmdResumeMember', () => {
       CLAUDE_CODE_EFFORT_LEVEL: 'xhigh',
       CUSTOM: 'val',
     });
+  });
+
+  test('cmdResumeMember restores workerEnv', async () => {
+    // Asserts the existing status.json → workerEnv → resumeFn chain.
+    // worker-utils.ts:402 snapshots builtCmd.env as workerEnv into status.json;
+    // cmdResumeMember reads it back and forwards it to resumeFn as workerEnv.
+    // No new resume code: this test only verifies the existing round-trip works.
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+      workerEnv: { OPENSEARCH_DISABLED_TOOLS: 'CountTool', CLAUDECODE: '' },
+    });
+
+    let capturedWorkerEnv: Record<string, string> | undefined;
+    const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+      capturedWorkerEnv = opts.workerEnv as Record<string, string>;
+      return { state: 'done' as const, sessionID: 'sess-abc', text: '', exitCode: 0 };
+    };
+
+    await cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn,
+    });
+
+    expect(capturedWorkerEnv).toBeDefined();
+    expect(capturedWorkerEnv!.OPENSEARCH_DISABLED_TOOLS).toBe('CountTool');
+    expect(capturedWorkerEnv!.CLAUDECODE).toBe('');
   });
 
   // ---------------------------------------------------------------------------

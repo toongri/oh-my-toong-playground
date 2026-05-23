@@ -103,11 +103,19 @@ export function buildAugmentedCommand(
     model?: unknown;
     effort_level?: unknown;
     output_format?: unknown;
+    env?: Record<string, string>;
   },
   cliType: string,
 ): { command: string; env: Record<string, string> } {
   const parts = [String(entity.command)];
+
+  // Seed with member's env (YAML scalars may be non-string, so String()-cast each value).
   const env: Record<string, string> = {};
+  if (entity.env) {
+    for (const [k, v] of Object.entries(entity.env)) {
+      env[k] = String(v);
+    }
+  }
 
   // model
   if (entity.model) {
