@@ -4,6 +4,7 @@ import { logDebug } from '@lib/logging';
 // Pattern matchers
 const PROMISE_PATTERN = /<promise>\s*DONE\s*<\/promise>/i;
 const ORACLE_APPROVED_PATTERN = /<oracle-approved>.*VERIFIED_COMPLETE.*<\/oracle-approved>/i;
+const DEEP_INTERVIEW_DONE_PATTERN = /<deep-interview-done\s*\/>/i;
 
 export function detectCompletionPromise(lastAssistantMessage: string | null): boolean {
   if (!lastAssistantMessage) return false;
@@ -21,6 +22,16 @@ export function detectOracleApproval(lastAssistantMessage: string | null): boole
   const detected = ORACLE_APPROVED_PATTERN.test(lastAssistantMessage);
   if (detected) {
     logDebug('detected oracle approval <oracle-approved>VERIFIED_COMPLETE</oracle-approved>');
+  }
+  return detected;
+}
+
+export function detectDeepInterviewDone(lastAssistantMessage: string | null): boolean {
+  if (!lastAssistantMessage) return false;
+
+  const detected = DEEP_INTERVIEW_DONE_PATTERN.test(lastAssistantMessage);
+  if (detected) {
+    logDebug('detected deep-interview done <deep-interview-done/>');
   }
   return detected;
 }

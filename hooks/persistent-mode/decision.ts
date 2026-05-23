@@ -5,7 +5,7 @@ import {
   getBlockCount, incrementBlockCount, cleanupBlockCountFiles,
   MAX_BLOCK_COUNT
 } from './state.ts';
-import { analyzeTranscript } from './transcript-detector.ts';
+import { analyzeTranscript, detectDeepInterviewDone } from './transcript-detector.ts';
 import { generateAttemptId, ensureDir } from './utils.ts';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
@@ -223,7 +223,7 @@ export function makeDecision(context: DecisionContext): HookOutput {
   // Priority 1.5: Deep Interview Protection
   const deepInterviewState = readDeepInterviewState(sessionId);
   if (deepInterviewState && deepInterviewState.active) {
-    if (lastAssistantMessage && lastAssistantMessage.includes('<deep-interview-done/>')) {
+    if (detectDeepInterviewDone(lastAssistantMessage)) {
       cleanupDeepInterviewState(sessionId);
     } else {
       return formatBlockOutput(buildDeepInterviewContinuationMessage());
