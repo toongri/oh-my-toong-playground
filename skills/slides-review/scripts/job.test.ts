@@ -65,6 +65,102 @@ describe('slides-review job lifecycle', () => {
   });
 });
 
+describe('config fallback-settings merge', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('partial config with members-only (no settings) uses default timeout 120', () => {
+    const configPath = path.join(tmpDir, 'review.config.yaml');
+    // Only members, no settings key at all
+    fs.writeFileSync(configPath, [
+      'review:',
+      '  members:',
+      '    - name: tester',
+      '      command: echo done',
+    ].join('\n'), 'utf8');
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--json',
+      'regression test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const jobJson = JSON.parse(fs.readFileSync(path.join(output.jobDir, 'job.json'), 'utf8'));
+
+    // Default timeout must be preserved even when settings is omitted from config
+    expect(jobJson.settings.timeoutSec).toBe(120);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  test('partial config with members and settings.timeout overrides default', () => {
+    const configPath = path.join(tmpDir, 'review.config.yaml');
+    fs.writeFileSync(configPath, [
+      'review:',
+      '  members:',
+      '    - name: tester',
+      '      command: echo done',
+      '  settings:',
+      '    timeout: 60',
+    ].join('\n'), 'utf8');
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--json',
+      'override test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const jobJson = JSON.parse(fs.readFileSync(path.join(output.jobDir, 'job.json'), 'utf8'));
+
+    expect(jobJson.settings.timeoutSec).toBe(60);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
+  });
+
+  test('no config file at all uses default timeout 120', () => {
+    const configPath = path.join(tmpDir, 'nonexistent.config.yaml');
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--json',
+      'no config test prompt',
+    ], { stdio: 'pipe' });
+
+    const output = JSON.parse(result.toString());
+    const jobJson = JSON.parse(fs.readFileSync(path.join(output.jobDir, 'job.json'), 'utf8'));
+
+    expect(jobJson.settings.timeoutSec).toBe(120);
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', output.jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
+  });
+});
+
 describe('resume-member subcommand', () => {
   test('resume-member without jobDir exits with error containing missing jobDir', () => {
     let exitCode = 0;

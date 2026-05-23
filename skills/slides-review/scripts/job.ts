@@ -88,20 +88,33 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, REVIEW_CONFIG);
 
-  const defaultConfig: Record<string, unknown> = {
-    review: {
-      members: [
-        { name: 'gemini', command: 'gemini', emoji: '💎', color: 'GREEN', output_format: 'text' },
-      ],
-      settings: { timeout: 120 },
-    },
+  interface RawReviewConfig {
+    members?: Array<Record<string, unknown>>;
+    settings?: Record<string, unknown>;
+  }
+  const defaultReview: RawReviewConfig = {
+    members: [
+      { name: 'gemini', command: 'gemini', emoji: '💎', color: 'GREEN', output_format: 'text' },
+    ],
+    settings: { timeout: 120 },
   };
-  const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
-  const config = fileText ? (Bun.YAML.parse(fileText) as Record<string, unknown>) : defaultConfig;
 
-  const reviewConfig = config[REVIEW_CONFIG.configTopLevelKey] as any;
-  const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
-  const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
+  const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+  let parsed: Record<string, RawReviewConfig>;
+  try {
+    parsed = (fileText ? Bun.YAML.parse(fileText) : { [REVIEW_CONFIG.configTopLevelKey]: defaultReview }) as Record<string, RawReviewConfig>;
+  } catch (e) {
+    exitWithError(`Invalid YAML in ${configPath}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  const pr = parsed![REVIEW_CONFIG.configTopLevelKey] ?? {};
+  const reviewConfig: RawReviewConfig = {
+    members: pr.members ?? defaultReview.members,
+    settings: { ...defaultReview.settings, ...pr.settings },
+  };
+
+  const members = (reviewConfig.members ?? []).filter((m) => m && m.name && m.command);
+  const timeoutSec = Number(reviewConfig.settings?.timeout ?? 0);
 
   const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `slides-review-${jobId}`);
@@ -117,7 +130,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
     settings: {
       timeoutSec: timeoutSec || null,
     },
-    members: members.map((m: any) => ({
+    members: members.map((m) => ({
       name: String(m.name),
       command: String(m.command),
       emoji: m.emoji ? String(m.emoji) : null,
