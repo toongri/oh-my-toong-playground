@@ -22,7 +22,6 @@ import {
   cmdCollect as frameworkCmdCollect,
   cmdResumeMember,
   gcStaleJobs,
-  parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
@@ -89,14 +88,16 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   ensureDir(jobsDir);
   gcStaleJobs(jobsDir, DIAGNOSE_CONFIG);
 
-  const config = frameworkParseYamlSimple(configPath, {
+  const defaultConfig = {
     review: {
       members: [
         { name: 'hephaestus', command: 'opencode run --agent "Hephaestus - Deep Agent"', emoji: '🔨', color: 'BLUE', output_format: 'json' },
       ],
       settings: { timeout: 600 },
     },
-  }, DIAGNOSE_CONFIG);
+  };
+  const fileText = fs.existsSync(configPath) ? fs.readFileSync(configPath, 'utf8') : null;
+  const config = (fileText ? Bun.YAML.parse(fileText) : defaultConfig) as Record<string, unknown>;
 
   const reviewConfig = config[DIAGNOSE_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
@@ -127,6 +128,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
       model: m.model || null,
       effort_level: m.effort_level || null,
       output_format: m.output_format || null,
+      env: m.env ?? {},
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
