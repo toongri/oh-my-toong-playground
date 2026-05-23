@@ -1,4 +1,4 @@
-import { RalphState } from './types.ts';
+import { RalphState, DeepInterviewState } from './types.ts';
 import { readFileOrNull, writeFileSafe, deleteFile, ensureDir } from './utils.ts';
 import { join } from 'path';
 import { getOmtDir } from '@lib/omt-dir';
@@ -25,6 +25,23 @@ export function updateRalphState(sessionId: string, state: RalphState): void {
 
 export function cleanupRalphState(sessionId: string): void {
   deleteFile(join(getOmtDir(), `ralph-state-${sessionId}.json`));
+}
+
+export function readDeepInterviewState(sessionId: string): DeepInterviewState | null {
+  const path = join(getOmtDir(), `deep-interview-active-state-${sessionId}.json`);
+  const content = readFileOrNull(path);
+  if (!content) return null;
+
+  try {
+    const state = JSON.parse(content) as DeepInterviewState;
+    return state.active ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+export function cleanupDeepInterviewState(sessionId: string): void {
+  deleteFile(join(getOmtDir(), `deep-interview-active-state-${sessionId}.json`));
 }
 
 // Block counting for stuck agent escape hatch
