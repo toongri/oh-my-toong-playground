@@ -61,6 +61,8 @@ describe('diagnose job lifecycle', () => {
     expect(jobJson.id.startsWith('diagnose-')).toBe(true);
     expect(Array.isArray(jobJson.members)).toBe(true);
     expect(jobJson.members[0].name).toBe('tester');
+    // env field must be present on each member (defaults to empty object)
+    expect(jobJson.members[0].env).toEqual({});
 
     // prompt.txt written
     const prompt = fs.readFileSync(path.join(output.jobDir, 'prompt.txt'), 'utf8');
