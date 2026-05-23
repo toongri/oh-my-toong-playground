@@ -26,7 +26,6 @@ import {
   cmdCollect as frameworkCmdCollect,
   cmdResumeMember,
   gcStaleJobs,
-  parseYamlSimple as frameworkParseYamlSimple,
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
@@ -77,31 +76,10 @@ async function parseCouncilConfig(configPath: string) {
 
   if (!fs.existsSync(configPath)) return fallback;
 
-  let YAML;
+  const fileText = fs.readFileSync(configPath, 'utf8');
+  let parsed: Record<string, any>;
   try {
-    YAML = await import('yaml').then(m => m.default);
-  } catch {
-    // Fallback: use framework parseYamlSimple (returns members key)
-    const raw = frameworkParseYamlSimple(configPath, {
-      council: {
-        chairman: fallback.council.chairman,
-        members: fallback.council.members,
-        settings: fallback.council.settings,
-      },
-    }, COUNCIL_CONFIG);
-    const rawCouncil = raw.council as any;
-    return {
-      council: {
-        chairman: rawCouncil.chairman || fallback.council.chairman,
-        members: rawCouncil.members || fallback.council.members,
-        settings: rawCouncil.settings || fallback.council.settings,
-      },
-    };
-  }
-
-  let parsed;
-  try {
-    parsed = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+    parsed = Bun.YAML.parse(fileText) as Record<string, any>;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     exitWithError(`Invalid YAML in ${configPath}: ${message}`);
@@ -117,7 +95,7 @@ async function parseCouncilConfig(configPath: string) {
     exitWithError(`Invalid config in ${configPath}: 'council' must be a mapping/object`);
   }
 
-  const merged = {
+  const merged: { council: { chairman: Record<string, any>; members: any[]; settings: Record<string, any> } } = {
     council: {
       chairman: { ...fallback.council.chairman },
       members: Array.isArray(fallback.council.members) ? [...fallback.council.members] : [],
@@ -149,20 +127,6 @@ async function parseCouncilConfig(configPath: string) {
   }
 
   return merged;
-}
-
-// Council-specific parseYamlSimple wrapper: passes through members terminology
-function parseYamlSimple(configPath: string, fallback: Record<string, any>): Record<string, any> {
-  // Framework now uses 'members' internally — pass fallback directly
-  const councilFallback = fallback[COUNCIL_CONFIG.configTopLevelKey] || {};
-  const adaptedFallback = {
-    [COUNCIL_CONFIG.configTopLevelKey]: {
-      chairman: councilFallback.chairman || {},
-      members: councilFallback.members || [],
-      settings: councilFallback.settings || {},
-    },
-  };
-  return frameworkParseYamlSimple(configPath, adaptedFallback, COUNCIL_CONFIG);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +320,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
       model: m.model || null,
       effort_level: m.effort_level || null,
       output_format: m.output_format || null,
+      env: m.env ?? {},
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
@@ -465,7 +430,6 @@ export {
 export {
   buildUiPayload,
   parseCouncilConfig,
-  parseYamlSimple,
   computeStatus,
   COUNCIL_CONFIG,
 };
