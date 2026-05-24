@@ -9,6 +9,7 @@ agents:
     - mnemosyne
     - momus
     - oracle
+    - daedalus
     - argus
     - chunk-reviewer
     - tech-claim-examiner
@@ -34,6 +35,7 @@ skills:
     - git-master
     - momus
     - diagnose
+    - design-review
     - qa
     - component: code-review
       platforms: [claude]
