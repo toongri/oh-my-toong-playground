@@ -1,5 +1,3 @@
-import { parse, stringify } from 'yaml';
-
 export interface FrontmatterResult {
   frontmatter: Record<string, unknown>;
   body: string;
@@ -39,7 +37,7 @@ export function parseFrontmatter(content: string): FrontmatterResult {
   // Preserve leading newline separator between --- and body
   const body = bodyLines.join('\n');
 
-  const parsed = parse(yamlContent) as Record<string, unknown> | null;
+  const parsed = Bun.YAML.parse(yamlContent) as Record<string, unknown> | null;
   const frontmatter = parsed ?? {};
 
   return { frontmatter, body, hasFrontmatter: true };
@@ -54,6 +52,7 @@ export function serializeFrontmatter(
   frontmatter: Record<string, unknown>,
   body: string,
 ): string {
-  const yaml = stringify(frontmatter);
-  return `---\n${yaml}---\n${body}`;
+  const y = Bun.YAML.stringify(frontmatter, null, 2);
+  const yNl = y.endsWith('\n') ? y : y + '\n';
+  return `---\n${yNl}---\n${body}`;
 }

@@ -3,7 +3,6 @@
  * Used by tools/validators/schema.ts and tools/validators/components.ts.
  */
 
-import { parse } from "yaml";
 import { readFileSync } from "fs";
 import { basename } from "path";
 
@@ -47,7 +46,7 @@ export function parseYaml(
 ): { data: unknown; error?: undefined } | { data?: undefined; error: string } {
   try {
     const text = readFileSync(filePath, "utf-8");
-    const data = parse(text);
+    const data = Bun.YAML.parse(text);
     return { data };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

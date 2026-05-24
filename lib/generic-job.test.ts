@@ -14,7 +14,6 @@ import {
   computeStatus,
   buildUiPayload,
   buildManifest,
-  parseYamlSimple,
   spawnWorkers,
   cmdWait,
   cmdResults,
@@ -86,10 +85,6 @@ describe('module exports', () => {
 
   test('exports buildManifest', () => {
     expect(typeof buildManifest).toBe('function');
-  });
-
-  test('exports parseYamlSimple', () => {
-    expect(typeof parseYamlSimple).toBe('function');
   });
 
   test('exports spawnWorkers', () => {
@@ -180,6 +175,10 @@ describe('detectCliType', () => {
 
   test('detects opencode via package runner', () => {
     expect(detectCliType('bunx opencode run')).toBe('opencode');
+  });
+
+  test('detectCliType env-prefix returns unknown', () => {
+    expect(detectCliType('env FOO=bar opencode run --agent foo')).toBe('unknown');
   });
 });
 
@@ -300,6 +299,30 @@ describe('buildAugmentedCommand', () => {
       'opencode',
     );
     expect(result.command).toBe('opencode run --model openai/gpt-5.5');
+  });
+
+  test('buildAugmentedCommand entity.env merge', () => {
+    const result = buildAugmentedCommand(
+      { command: 'opencode run', env: { OPENSEARCH_DISABLED_TOOLS: 'CountTool' } },
+      'opencode',
+    );
+    expect(result.env.OPENSEARCH_DISABLED_TOOLS).toBe('CountTool');
+  });
+
+  test('buildAugmentedCommand framework env precedence', () => {
+    const result = buildAugmentedCommand(
+      { command: 'claude -p', env: { CLAUDECODE: 'evil' } },
+      'claude',
+    );
+    expect(result.env.CLAUDECODE).toBe('');
+  });
+
+  test('buildAugmentedCommand env optional', () => {
+    const resultUndefined = buildAugmentedCommand({ command: 'claude -p' }, 'claude');
+    expect(resultUndefined.env.CLAUDECODE).toBe('');
+
+    const resultEmpty = buildAugmentedCommand({ command: 'claude -p', env: {} }, 'claude');
+    expect(resultEmpty.env.CLAUDECODE).toBe('');
   });
 });
 
@@ -1253,206 +1276,6 @@ describe('buildManifest', () => {
 });
 
 // ---------------------------------------------------------------------------
-// parseYamlSimple — parameterized by configTopLevelKey
-// ---------------------------------------------------------------------------
-
-describe('parseYamlSimple', () => {
-  let tmpDir: string;
-
-  const chunkFallback = {
-    'chunk-review': {
-      chairman: { role: 'auto' },
-      members: [
-        { name: 'claude', command: 'claude -p' },
-      ],
-      settings: { exclude_chairman_from_members: true, timeout: 300 },
-    },
-  };
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('parses chunk-review top-level key (chunk-review config)', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    role: gemini',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].chairman.role).toBe('gemini');
-  });
-
-  test('parses members array with multiple entries', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  members:',
-      '    - name: alice',
-      '      command: alice-cli',
-      '    - name: bob',
-      '      command: bob-cli',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].members.length).toBe(2);
-    expect(result['chunk-review'].members[0].name).toBe('alice');
-    expect(result['chunk-review'].members[1].name).toBe('bob');
-  });
-
-  test('parses settings section with type coercion', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  settings:',
-      '    timeout: 300',
-      '    exclude_chairman_from_members: false',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].settings.timeout).toBe(300);
-    expect(result['chunk-review'].settings.exclude_chairman_from_members).toBe(false);
-  });
-
-  test('returns fallback on read error (non-existent file)', () => {
-    const result = parseYamlSimple(path.join(tmpDir, 'missing.yaml'), chunkFallback, chunkReviewConfig);
-    expect(result).toEqual(chunkFallback);
-  });
-
-  test('falls back to default members when none defined', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    role: auto',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].members).toEqual(chunkFallback['chunk-review'].members);
-  });
-
-  test('strips quotes from member name values', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  members:',
-      '    - name: "quoted-name"',
-      '      command: some-cmd',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].members[0].name).toBe('quoted-name');
-  });
-
-  test('merges chairman with fallback defaults', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    name: custom',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].chairman.name).toBe('custom');
-    expect(result['chunk-review'].chairman.role).toBe('auto');
-  });
-
-  test('coerces "true" string to boolean true in settings', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  settings:',
-      '    verbose: true',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].settings.verbose).toBe(true);
-  });
-
-  test('skips comment lines', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      '# This is a comment',
-      'chunk-review:',
-      '  chairman:',
-      '    # Another comment',
-      '    role: codex',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].chairman.role).toBe('codex');
-  });
-
-  test('skips empty lines', () => {
-    const configPath = path.join(tmpDir, 'config.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '',
-      '  chairman:',
-      '',
-      '    role: codex',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].chairman.role).toBe('codex');
-  });
-
-  test('strips inline comments from settings values (e.g. timeout: 300 # seconds)', () => {
-    const configPath = path.join(tmpDir, 'config-inline-comment.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  settings:',
-      '    timeout: 300 # seconds',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].settings.timeout).toBe(300);
-  });
-
-  test('extraSections: context 섹션을 key-value 매핑으로 파싱', () => {
-    const configPath = path.join(tmpDir, 'config-extra.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  context:',
-      '    shared_context_dir: ~/my/context',
-      '    specs_dir: specs',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig, ['context']);
-    expect(result['chunk-review'].context).toBeDefined();
-    expect(result['chunk-review'].context.shared_context_dir).toBe('~/my/context');
-    expect(result['chunk-review'].context.specs_dir).toBe('specs');
-  });
-
-  test('extraSections: fallback context 값과 merge됨', () => {
-    const configPath = path.join(tmpDir, 'config-extra-fallback.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  context:',
-      '    specs_dir: custom/specs',
-    ].join('\n'));
-    const fallbackWithContext = {
-      'chunk-review': {
-        ...chunkFallback['chunk-review'],
-        context: { shared_context_dir: '~/.omt/default', specs_dir: 'specs' },
-      },
-    };
-    const result = parseYamlSimple(configPath, fallbackWithContext, chunkReviewConfig, ['context']);
-    expect(result['chunk-review'].context.shared_context_dir).toBe('~/.omt/default');
-    expect(result['chunk-review'].context.specs_dir).toBe('custom/specs');
-  });
-
-  test('extraSections 미제공 시 기존 동작 유지 (context 섹션 무시됨)', () => {
-    const configPath = path.join(tmpDir, 'config-no-extra.yaml');
-    fs.writeFileSync(configPath, [
-      'chunk-review:',
-      '  chairman:',
-      '    role: gemini',
-      '  context:',
-      '    specs_dir: specs',
-    ].join('\n'));
-    const result = parseYamlSimple(configPath, chunkFallback, chunkReviewConfig);
-    expect(result['chunk-review'].chairman.role).toBe('gemini');
-    expect(result['chunk-review'].context).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // spawnWorkers — name validation (whitelist regex)
 // ---------------------------------------------------------------------------
 
@@ -2027,6 +1850,37 @@ describe('cmdResumeMember', () => {
       CLAUDE_CODE_EFFORT_LEVEL: 'xhigh',
       CUSTOM: 'val',
     });
+  });
+
+  test('cmdResumeMember restores workerEnv', async () => {
+    // Asserts the existing status.json → workerEnv → resumeFn chain.
+    // worker-utils.ts:402 snapshots builtCmd.env as workerEnv into status.json;
+    // cmdResumeMember reads it back and forwards it to resumeFn as workerEnv.
+    // No new resume code: this test only verifies the existing round-trip works.
+    const entityDir = path.join(jobDir, 'members', 'alice');
+    writeMemberStatus(entityDir, {
+      member: 'alice',
+      state: 'done',
+      sessionID: 'sess-abc',
+      resume_count: 0,
+      command: 'opencode',
+      workerEnv: { OPENSEARCH_DISABLED_TOOLS: 'CountTool', CLAUDECODE: '' },
+    });
+
+    let capturedWorkerEnv: Record<string, string> | undefined;
+    const resumeOneTurnFn = async (_sid: string, opts: RunOneTurnOpts) => {
+      capturedWorkerEnv = opts.workerEnv as Record<string, string>;
+      return { state: 'done' as const, sessionID: 'sess-abc', text: '', exitCode: 0 };
+    };
+
+    await cmdResumeMember(jobDir, 'alice', 'follow up', membersConfig, {
+      driverFactory: () => makeMockDriver(),
+      resumeOneTurnFn,
+    });
+
+    expect(capturedWorkerEnv).toBeDefined();
+    expect(capturedWorkerEnv!.OPENSEARCH_DISABLED_TOOLS).toBe('CountTool');
+    expect(capturedWorkerEnv!.CLAUDECODE).toBe('');
   });
 
   // ---------------------------------------------------------------------------

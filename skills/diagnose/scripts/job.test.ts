@@ -61,6 +61,8 @@ describe('diagnose job lifecycle', () => {
     expect(jobJson.id.startsWith('diagnose-')).toBe(true);
     expect(Array.isArray(jobJson.members)).toBe(true);
     expect(jobJson.members[0].name).toBe('tester');
+    // env field must be present on each member (defaults to empty object)
+    expect(jobJson.members[0].env).toEqual({});
 
     // prompt.txt written
     const prompt = fs.readFileSync(path.join(output.jobDir, 'prompt.txt'), 'utf8');
@@ -175,6 +177,48 @@ describe('diagnose job lifecycle', () => {
     expect(Array.isArray(status.members)).toBe(true);
     expect(typeof status.overallState).toBe('string');
     expect(typeof status.counts).toBe('object');
+
+    try { execFileSync(process.execPath, [SCRIPT, 'stop', jobDir], { stdio: 'pipe' }); } catch {}
+    try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
+  });
+});
+
+describe('settings fallback 병합', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('`settings`를 생략한 config에서 default timeout(600)이 job.json에 유지된다', () => {
+    const configPath = path.join(tmpDir, 'diagnose.config.yaml');
+    // settings 블록 없이 members만 정의
+    fs.writeFileSync(configPath, [
+      'review:',
+      '  members:',
+      '    - name: tester',
+      '      command: echo done',
+    ].join('\n'), 'utf8');
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    const result = execFileSync(process.execPath, [
+      SCRIPT, 'start',
+      '--config', configPath,
+      '--jobs-dir', jobsDir,
+      '--json',
+      'fallback timeout test',
+    ], { stdio: 'pipe' });
+
+    const { jobDir } = JSON.parse(result.toString());
+    const jobJson = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8'));
+
+    expect(jobJson.settings.timeoutSec).toBe(600);
 
     try { execFileSync(process.execPath, [SCRIPT, 'stop', jobDir], { stdio: 'pipe' }); } catch {}
     try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
