@@ -8,6 +8,7 @@ agents:
     - librarian
     - mnemosyne
     - oracle
+    - daedalus
     - argus
     - tech-claim-examiner
     - sisyphus-junior
@@ -18,6 +19,7 @@ skills:
     - git-master
     - humanizer
     - diagnose
+    - design-review
     - qa
     - resume-apply
     - review-resume

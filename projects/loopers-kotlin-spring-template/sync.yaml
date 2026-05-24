@@ -9,6 +9,7 @@ agents:
     - mnemosyne
     - momus
     - oracle
+    - daedalus
     - argus
     - chunk-reviewer
     - spec-reviewer
@@ -33,6 +34,7 @@ skills:
     - git-master
     - momus
     - diagnose
+    - design-review
     - testing
     - qa
     - component: code-review
