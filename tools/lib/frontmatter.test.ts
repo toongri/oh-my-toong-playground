@@ -107,6 +107,25 @@ describe('serializeFrontmatter', () => {
     expect(result).toContain('\n---\n');
     expect(result).toContain('# Oracle');
   });
+
+  it('emits block-style YAML with trailing newline before closing fence (AC7.1)', () => {
+    // Regression guard: Bun.YAML.stringify defaults to flow style and omits trailing
+    // newline. Both breaks serializeFrontmatter's template `---\n${yaml}---\n${body}`.
+    const result = serializeFrontmatter(
+      { name: 'oracle', tools: ['Read', 'Bash'] },
+      '\nbody',
+    );
+
+    // Closing fence must be on its own line (trailing newline before it)
+    expect(result).toContain('\n---\n');
+    // Block style: `name: oracle` NOT flow style `{name: oracle, ...}`
+    expect(result).toContain('name: oracle\n');
+    // Array must be in block style (each item on its own line with `- `)
+    expect(result).toContain('- Read\n');
+    // No flow-style brace in the YAML section (before the closing ---)
+    const yamlSection = result.split('\n---\n')[0];
+    expect(yamlSection).not.toContain('{');
+  });
 });
 
 describe('왕복 변환 (parseFrontmatter → serializeFrontmatter)', () => {

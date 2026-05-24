@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import fs from "fs/promises";
 import path from "path";
 import os from "os";
-import { stringify as stringifyYaml } from "yaml";
+const stringifyYaml = (v: unknown) => Bun.YAML.stringify(v, null, 2);
 
 import { pullProject, parseCliArgs, type PullOptions } from "./pull.ts";
 import type { SyncYaml } from "./lib/types.ts";

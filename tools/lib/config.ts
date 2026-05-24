@@ -5,7 +5,6 @@
  * in tools/lib/common.sh.
  */
 
-import { parse } from "yaml";
 import { join, dirname } from "path";
 import type { Platform } from "./types.ts";
 import { deepMergeOverlay } from "./deep-merge-overlay.ts";
@@ -74,7 +73,7 @@ export async function loadConfig(): Promise<ConfigYaml | null> {
     return cachedConfig;
   }
 
-  const base = parse(text) as ConfigYaml;
+  const base = Bun.YAML.parse(text) as ConfigYaml;
 
   const localPath = join(rootDir, "config.local.yaml");
   const localFile = Bun.file(localPath);
@@ -86,7 +85,7 @@ export async function loadConfig(): Promise<ConfigYaml | null> {
       localText = "";
     }
     if (localText) {
-      const local = parse(localText) as ConfigYaml;
+      const local = Bun.YAML.parse(localText) as ConfigYaml;
       cachedConfig = deepMergeOverlay(
         base as Record<string, unknown>,
         local as Record<string, unknown>,
