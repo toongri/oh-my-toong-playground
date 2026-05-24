@@ -56,7 +56,7 @@ Inspired by the [Ouroboros project](https://github.com/Q00/ouroboros) which demo
 
 1. **Parse the user's idea** from `{{ARGUMENTS}}`
 2. **Detect brownfield vs greenfield**:
-   - Run `explore` agent (haiku): check if cwd has existing source code, package files, or git history
+   - Run `explore` agent: check if cwd has existing source code, package files, or git history
    - If source files exist AND the user's idea references modifying/extending something: **brownfield**
    - Otherwise: **greenfield**
 3. **For brownfield**: Run `explore` agent to map relevant codebase areas, store as `codebase_context`
@@ -145,7 +145,7 @@ Options should include contextually relevant choices plus free-text.
 
 After receiving the user's answer, score clarity across all dimensions.
 
-**Scoring prompt** (use opus model, temperature 0.1 for consistency):
+**Scoring prompt** (temperature 0.1 for consistency):
 
 ```
 Given the following interview transcript for a {greenfield|brownfield} project, score clarity on each dimension from 0.0 to 1.0. If the initial context or transcript was summarized for prompt safety, score from that summary plus the preserved round decisions/gaps; do not re-expand raw oversized context.
@@ -259,7 +259,7 @@ Challenge modes are used ONCE each, then return to normal Socratic questioning. 
 
 When ambiguity ≤ threshold (or hard cap / early exit):
 
-1. **Generate the specification** using opus model with the prompt-safe transcript. If the full interview transcript or initial context is too large, include the summary plus all concrete decisions, acceptance criteria, unresolved gaps, and ontology snapshots; never overflow the prompt with raw oversized context.
+1. **Generate the specification** with the prompt-safe transcript. If the full interview transcript or initial context is too large, include the summary plus all concrete decisions, acceptance criteria, unresolved gaps, and ontology snapshots; never overflow the prompt with raw oversized context.
 2. **Write to file**: `$OMT_DIR/deep-interview/{slug}.md`
 
 Spec structure:
@@ -368,8 +368,8 @@ After the spec is written, present execution options via `AskUserQuestion`:
 
 <Tool_Usage>
 - Use `AskUserQuestion` for each interview question — provides clickable UI with contextual options
-- Use `Task(subagent_type="explore", model="haiku")` for brownfield codebase exploration (run BEFORE asking user about codebase)
-- Use opus model (temperature 0.1) for ambiguity scoring — consistency is critical
+- Use `Agent(subagent_type="explore")` for brownfield codebase exploration (run BEFORE asking user about codebase)
+- Use temperature 0.1 for ambiguity scoring — consistency is critical
 - Use `Write` tool to write and update interview state at `$OMT_DIR/deep-interview-active-state-{sessionId}.json`
 - Use `Read` tool to read back state when resuming an interrupted session
 - Use `Write` tool to save the final spec to `$OMT_DIR/deep-interview/{slug}.md`
@@ -521,8 +521,7 @@ Optional settings in `.claude/settings.json`:
       "minRoundsBeforeExit": 3,
       "enableChallengeAgents": true,
       "autoExecuteOnComplete": false,
-      "defaultExecutionMode": "prometheus",
-      "scoringModel": "opus"
+      "defaultExecutionMode": "prometheus"
     }
   }
 }

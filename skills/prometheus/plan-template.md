@@ -88,6 +88,44 @@ Critical Path: Task 1 -> Task 2 -> Task 4 -> Task 7 -> F1-F4
 
 ---
 
+## ADR Example (worked example)
+
+```
+## ADR
+
+Context:
+- Additive-only — no existing behaviour is altered; new code is inserted alongside existing paths.
+- Backward-compatible — callers not opting in must see zero change.
+
+Decision Drivers:
+- Existing contract requires all endpoints to return the same response envelope.
+- CI pipeline enforces zero regression on current test suite.
+- Team convention: no new external dependencies without architecture review.
+
+Considered Options:
+
+Option A — Extend existing UserService with optional parameter
+  Pros: minimal surface area; no new abstraction; single delegation pass.
+  Cons: UserService grows; violates single-responsibility if logic diverges.
+
+Option B — Introduce a separate UserEnrichmentService
+  Pros: clean separation; independently testable; UserService stays unchanged.
+  Cons: extra file; extra wiring; overkill for current scope.
+
+Decision: Extend UserService with an optional `enrich` flag rather than creating a separate service.
+
+Rationale: The enrichment logic is three lines. A separate service would add indirection cost exceeding the value of isolation at this scope.
+
+Consequences:
+  + UserService remains the single delegation target for callers.
+  + Zero new files; CI stays green with no wiring changes.
+  - If enrichment logic grows significantly, a future refactor to Option B becomes necessary.
+
+Follow-ups: Revisit if enrichment adds >2 additional fields (create UserEnrichmentService at that point).
+```
+
+---
+
 ## Success Criteria Template (worked example)
 
 ```
