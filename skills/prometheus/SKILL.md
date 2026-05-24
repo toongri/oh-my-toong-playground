@@ -78,8 +78,8 @@ digraph prometheus_flow {
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
     "Write plan to $OMT_DIR/plans/*.md" [shape=box];
-    "Oracle review" [shape=box];
-    "Oracle verdict?" [shape=diamond];
+    "Daedalus review" [shape=box];
+    "Daedalus verdict?" [shape=diamond];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
     "Stage A: HTML Render" [shape=box];
@@ -101,10 +101,10 @@ digraph prometheus_flow {
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
     "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE/COMMENT"];
-    "Write plan to $OMT_DIR/plans/*.md" -> "Oracle review";
-    "Oracle review" -> "Oracle verdict?";
-    "Oracle verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Oracle verdict?" -> "Momus review" [label="APPROVE/COMMENT"];
+    "Write plan to $OMT_DIR/plans/*.md" -> "Daedalus review";
+    "Daedalus review" -> "Daedalus verdict?";
+    "Daedalus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
+    "Daedalus verdict?" -> "Momus review" [label="APPROVE/COMMENT"];
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
     "Momus verdict?" -> "Stage A: HTML Render" [label="APPROVE/COMMENT"];
@@ -117,7 +117,7 @@ digraph prometheus_flow {
 }
 ```
 
-**Flowchart Enforcement Rule**: The review loops (Metis → Oracle → Momus REQUEST_CHANGES back to plan writing) are MANDATORY loops, not advisory paths. Skipping any review stage or proceeding past REQUEST_CHANGES without resolution violates the planning contract.
+**Flowchart Enforcement Rule**: The review loops (Metis → Daedalus → Momus REQUEST_CHANGES back to plan writing) are MANDATORY loops, not advisory paths. Skipping any review stage or proceeding past REQUEST_CHANGES without resolution violates the planning contract.
 
 ## Subagent Selection Guide
 
@@ -125,10 +125,11 @@ digraph prometheus_flow {
 |------|-------|------|
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation |
-| Codebase verification (pipeline) | oracle | **MANDATORY** — auto-invoked after plan generation |
+| Codebase verification (pipeline) | daedalus | **MANDATORY** — auto-invoked after plan generation |
+| Plan review with antithesis | daedalus | Steelman + tradeoff tension on design decisions |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete |
-| Plan review | momus | **MANDATORY** — after Oracle approval |
+| Plan review | momus | **MANDATORY** — after Daedalus approval |
 
 ### Do vs Delegate Decision Matrix
 
@@ -142,7 +143,7 @@ digraph prometheus_flow {
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
 | Pre-plan gap analysis | NEVER | metis |
-| Post-plan codebase verification | NEVER | oracle (MANDATORY) |
+| Post-plan codebase verification | NEVER | daedalus (MANDATORY) |
 | Plan quality review | NEVER | momus (MANDATORY) |
 
 **RULE**: Planning, interviewing, checklist evaluation = Do directly. Research, analysis, gap detection = DELEGATE.
@@ -295,7 +296,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 1: Interview + Clearance
 - Phase 2: AC drafting + user confirmation
 - Phase 3: Metis consultation
-- Phase 4: Write plan → Oracle review → Momus review
+- Phase 4: Write plan → Daedalus review → Momus review
 - Phase 5: Present plan + user approval
 
 **Complex**
@@ -303,7 +304,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 2: Deep interview + Clearance
 - Phase 3: AC drafting + user confirmation
 - Phase 4: Metis consultation
-- Phase 5: Write plan → Oracle review → Momus review
+- Phase 5: Write plan → Daedalus review → Momus review
 - Phase 6: Present plan + user approval
 
 **Architecture**
@@ -312,7 +313,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 3: Deep interview + Clearance
 - Phase 4: AC drafting + user confirmation
 - Phase 5: Metis consultation
-- Phase 6: Write plan → Oracle review → Momus review
+- Phase 6: Write plan → Daedalus review → Momus review
 - Phase 7: Present plan + user approval
 
 ### Phase 1 Evidence Output (mandatory before Phase 2)
@@ -330,7 +331,7 @@ Phase 1 ritual (context loading + explore + librarian) is invisible by default �
 **Rules:**
 - "Previous turn / previous session has this" → does NOT count. Re-dispatch in current session.
 - explore failure (autocompact, error) → does NOT count as done. Re-dispatch until results received.
-- Missing this block = mandate violation. Reviewer pipeline (Metis/Oracle/Momus) cannot compensate for missing Phase 1 evidence.
+- Missing this block = mandate violation. Reviewer pipeline (Metis/Daedalus/Momus) cannot compensate for missing Phase 1 evidence.
 - For Trivial intent: explore optional, but output the block with N/A reasoning.
 
 ### Decomposition Self-Check Output (mandatory before plan write, Complex/Architecture only)
@@ -365,7 +366,7 @@ A phase task is complete only when its reviewer verdict is received:
 | Reviewer | Completion Condition |
 |----------|---------------------|
 | Metis | Verdict = APPROVE or COMMENT (proceed to plan write) |
-| Oracle | Verdict = APPROVE or COMMENT (proceed to Momus) |
+| Daedalus | Verdict = APPROVE or COMMENT (proceed to Momus) |
 | Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
 
 REQUEST_CHANGES from any reviewer means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received.
@@ -811,12 +812,12 @@ Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. 
 
 ### Three-Agent Pipeline
 
-| | Metis | Oracle | Momus |
+| | Metis | Daedalus | Momus |
 |---|---|---|---|
-| **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Oracle |
-| **Input** | User Goal + Scope + AC | Plan + Codebase | Plan |
-| **Validates** | Requirements completeness | Codebase feasibility | Document quality |
-| **Reads code** | No | Yes (file:line) | No |
+| **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Daedalus |
+| **Input** | User Goal + Scope + AC | Plan + Codebase (Daedalus reads plan file) | Plan |
+| **Validates** | Requirements completeness | Codebase feasibility (Daedalus checks against codebase) | Document quality |
+| **Reads code** | No | Yes — Daedalus reads file:line | No |
 
 ### Common Gate Pattern (ALL reviewers)
 
@@ -873,7 +874,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S0: Interview Mode** | Gathering requirements | → S1 on Metis-ready clearance |
 | **S1: Metis Invocation** | 3-Section prompt to Metis | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
 | **S2: Plan Generation** | Writing plan to `$OMT_DIR/plans/{name}.md` | → S3 on self-review pass |
-| **S3: Oracle Invocation** | Plan path to Oracle | → S4 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
+| **S3: Daedalus Invocation** | Plan path to Daedalus | → S4 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
@@ -888,7 +889,7 @@ Reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the c
 
 Time pressure, user override ("just proceed"), self-assessment of fix correctness, parallel dispatch on a blocked artifact — none terminate the loop.
 
-### Self-Review Checklist (after plan generation, before Oracle)
+### Self-Review Checklist (after plan generation, before Daedalus)
 
 | # | Item | Check |
 |---|------|-------|
@@ -897,7 +898,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
 
-Failure action: loop back and fix before submitting to Oracle.
+Failure action: loop back and fix before submitting to Daedalus.
 
 ### Gap Classification (post-plan self-review)
 
@@ -914,7 +915,7 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 | Stage | Mandate | Detail location |
 |---|---|---|
 | **Stage A** | Render plan → `$OMT_DIR/plans/plan.html` (single-file, browser-openable). Verbatim plan content + session-derived boxes (Stage B recommendation, Pipeline State). Graceful fallback: if conversion fails, present raw markdown and continue to Stage B. | Rendering procedure (6 invariants, 3 translation invariants, template reference) in `review-pipeline.md` |
-| **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Oracle COMMENT signals). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
+| **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Daedalus COMMENT signals). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
 
 On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to Interview Mode.
@@ -928,14 +929,14 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 | Metis | Summarized AC | Verifiability uncheckable |
 | Metis | Abstract scope | Completeness uncheckable |
 | Metis | Missing user goal | Intent unclassifiable |
-| Oracle | Restating plan content in prompt | Oracle reads file — token waste |
-| Oracle | Asking for code review | Oracle reviews feasibility, not code quality |
-| Oracle | Skipping after Metis APPROVE | Gate violation — Oracle mandatory |
+| Daedalus | Restating plan content in prompt | Daedalus reads file — token waste |
+| Daedalus | Asking for code review | Daedalus reviews feasibility, not code quality |
+| Daedalus | Skipping after Metis APPROVE | Gate violation — Daedalus mandatory |
 | Momus | Repeating plan content | Momus reads file — token waste |
 | Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
 | Momus | Adding review instructions | Momus has own criteria |
 
-> Detailed invocation templates (3-Section Metis, Oracle Verification Focus, Momus path-only) + Stage A HTML rendering procedure (6 rendering invariants, 3 translation invariants, template reference, substitution semantics) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
+> Detailed invocation templates (3-Section Metis, Daedalus Verification Focus, Momus path-only) + Stage A HTML rendering procedure (6 rendering invariants, 3 translation invariants, template reference, substitution semantics) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
 
 ---
 
@@ -952,7 +953,7 @@ This resolves the apparent paradox in the prior wording — "optional" referred 
 | Entering Interview Mode (first interview turn of the session) | [interview.md](interview.md) | Full file, single Read call |
 | Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
 | About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
-| About to invoke a reviewer (Metis/Oracle/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
+| About to invoke a reviewer (Metis/Daedalus/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
 
 **Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
 
