@@ -272,6 +272,8 @@ Council members may fail due to CLI unavailability, timeout, or errors. This is 
    - `done` but content is a non-answer → Member exited cleanly but returned framing / a plan / a waiting pattern instead of actually answering the question. **Recoverable** — call `resume-member`. The runner marks it `done` based on exit reason, not semantic completeness; the Chairman judges semantic completeness by reading the content.
 3. After all recoverable states are resolved (or resume cap exhausted), synthesize from members with substantive answers.
 
+If `start` exits non-zero (members filtered to empty before any job is created), emit the `0/3` "Council advisory unavailable" report directly — no manifest exists to read.
+
 **Synthesis by response count:**
 
 | Responses | Action | Output Modification |
