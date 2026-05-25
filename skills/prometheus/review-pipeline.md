@@ -81,8 +81,7 @@ Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in
 **Requirements:**
 - **Output artifact**: `$OMT_DIR/plans/presentation/{name}.html` — `{name}` is the same stem as the plan markdown (`{name}.md`), so each plan owns its own HTML file and concurrent or successive plans never overwrite a shared file. Create the `presentation/` directory if it does not yet exist. Single-file, self-contained, browser-openable.
 - **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered HTML is a presentation for the human reader, not a second source of truth.
-- **Tool choice**: execution-time choice — use whatever is available at runtime (Pandoc, a script, inline generation). Tool is an implementation detail; output must meet the single-file + browser requirement regardless.
-- **Graceful fallback**: If HTML conversion fails, present raw Markdown directly and continue to Stage B.
+- **Production**: render the plan into the canonical template — string substitution, no markdown-to-HTML converter needed (marked.js renders client-side at browser-open), so any tool works (awk, sed, bun, the Write tool). When the plan is approved, the HTML always gets made; output must meet the single-file + browser requirement.
 
 ### HTML Components
 
