@@ -349,6 +349,7 @@ Reviewers may fail due to CLI unavailability, timeout, or errors. This is NOT qu
 | 2/3 | Partial synthesis | Prepend: "Partial advisory (2/3 respondents). [failed_member] unavailable: [state]. Synthesis lacks [failed_member]'s perspective." |
 | 1/3 | Single response report | Prepend: "Limited advisory (1/3 respondents). [failed_members] unavailable. Presenting single response from [available_member] without synthesis. Treat as individual opinion, not council advisory." |
 | 0/3 | Failure report | "Council advisory unavailable. All members failed: [list states]. No synthesis possible." |
+| `start` exits non-zero / `$JOB_DIR` empty (no members) | Emit 0/3 report directly — do NOT read or expect a manifest | "Council advisory unavailable. No members to dispatch. No synthesis possible." |
 
 **Partial synthesis rules:**
 - Use "partial consensus (N/3 respondents)" when reporting agreement
