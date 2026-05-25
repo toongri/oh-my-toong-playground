@@ -7,7 +7,7 @@ description: Use when asked to analyze architecture, debug issues, identify root
 
 ## Overview
 
-Delegates architecture analysis and debugging to the Hephaestus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the Hephaestus framework.
+Delegates architecture analysis and debugging to the Hephaestus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the in-session fallback framework.
 
 ---
 
@@ -42,7 +42,7 @@ bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
 
 ### Step 4: Decide based on job outcome
 
-> **Note on empty config**: If `start` exits non-zero (config has no valid members), the default member ships with the skill so this is unreachable under normal config. Fall back to in-session Hephaestus immediately.
+> **Note on empty config**: If `start` exits non-zero (config has no valid members), the default member ships with the skill so this is unreachable under normal config. Fall back to the in-session advisor immediately.
 
 Determine the state by running:
 
@@ -54,7 +54,7 @@ Act on each concern independently, in order:
 
 **RESUME (separate concern):** If any member's state is `awaiting_resume`, OR its output reads as planning / framing / waiting / incomplete rather than a finished answer, call `resume-member` (pass `$JOB_DIR`, the member name, and a prompt asking it to continue). Re-run `status` to confirm the new state. Repeat up to a cap of 3 total resume attempts (`resume_count`). If the cap is exhausted and the output is still not a finished answer, treat the member as failed and fall through to the failure path below.
 
-**All members failed → in-session fallback:** When the member produced no usable output (state is `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or `done` with a null `outputFilePath`), READ `prompts/hephaestus.md` and apply the analysis framework defined there IN-SESSION. You become Hephaestus for the remainder of this skill invocation.
+**All members failed → in-session fallback:** When the member produced no usable output (state is `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or `done` with a null `outputFilePath`), READ `prompts/default.md` and apply the analysis framework defined there IN-SESSION. You become the in-session advisor for the remainder of this skill invocation.
 
 **Output present → forward:** When a finished answer exists, forward the content at the member's output path recorded in the manifest to the caller.
 
@@ -91,4 +91,4 @@ You are done only when BOTH hold:
 
 - `diagnose.config.yaml`: reviewer dispatch config — `members` list + `settings.timeout`
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
-- `prompts/hephaestus.md`: Hephaestus analysis framework — loaded only during fallback
+- `prompts/default.md`: in-session analysis framework — loaded only during fallback

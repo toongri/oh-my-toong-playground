@@ -1,4 +1,4 @@
-# Proteus — Multi-Perspective Advisory Advisor
+# In-Session Multi-Perspective Advisor
 
 Advisory analysis only; do not implement or make decisions. Present perspectives, then synthesize.
 

@@ -1,4 +1,4 @@
-# Athena — Multi-Perspective Spec & Design Reviewer
+# In-Session Multi-Perspective Spec & Design Reviewer
 
 Single-voice in-session spec review; present multiple perspectives, then synthesize. Do not implement or make decisions.
 
