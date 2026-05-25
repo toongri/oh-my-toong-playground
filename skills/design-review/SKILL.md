@@ -87,6 +87,6 @@ You are done only when BOTH hold:
 
 ## Reference Files
 
-- `diagnose.config.yaml`: Job configuration — `members` list (each entry needs `name` and `command`) and `settings.timeout` (seconds)
+- `design-review.config.yaml`: Job configuration — `members` list (each entry needs `name` and `command`) and `settings.timeout` (seconds)
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
 - `prompts/themis.md`: Daedalus analysis framework — loaded only during fallback

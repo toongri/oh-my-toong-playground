@@ -32,7 +32,7 @@ import { getOmtDir } from '@lib/omt-dir';
 // DesignReview JobConfig
 // ---------------------------------------------------------------------------
 
-const DIAGNOSE_CONFIG: JobConfig = {
+const DESIGN_REVIEW_CONFIG: JobConfig = {
   entitySingular: 'reviewer',
   entityPlural: 'reviewers',
   entityDirName: 'reviewers',
@@ -46,8 +46,8 @@ const PROJECT_ROOT = findProjectRoot(SCRIPT_DIR);
 const SKILL_DIR = path.resolve(SCRIPT_DIR, '..');
 const WORKER_PATH = path.join(SCRIPT_DIR, 'worker.ts');
 
-const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'diagnose.config.yaml');
-const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'diagnose.config.yaml');
+const SKILL_CONFIG_FILE = path.join(SKILL_DIR, 'design-review.config.yaml');
+const REPO_CONFIG_FILE = path.join(PROJECT_ROOT, 'design-review.config.yaml');
 
 // ---------------------------------------------------------------------------
 // Config resolution
@@ -88,18 +88,18 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
     (options['jobs-dir'] as string | undefined) || process.env.DESIGN_REVIEW_JOBS_DIR || path.join(getOmtDir(), 'jobs');
 
   ensureDir(jobsDir);
-  gcStaleJobs(jobsDir, DIAGNOSE_CONFIG);
+  gcStaleJobs(jobsDir, DESIGN_REVIEW_CONFIG);
 
   const config = frameworkParseYamlSimple(configPath, {
     review: {
       members: [],
       settings: { timeout: 600 },
     },
-  }, DIAGNOSE_CONFIG);
+  }, DESIGN_REVIEW_CONFIG);
 
-  const reviewConfig = config[DIAGNOSE_CONFIG.configTopLevelKey] as any;
+  const reviewConfig = config[DESIGN_REVIEW_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
-  assertMembersOrExit(members, DIAGNOSE_CONFIG, configPath);
+  assertMembersOrExit(members, DESIGN_REVIEW_CONFIG, configPath);
   const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
 
   const jobId = generateJobId();
@@ -134,7 +134,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
     jobDir,
     entitiesDir: reviewersDir,
     timeoutSec,
-    config: DIAGNOSE_CONFIG,
+    config: DESIGN_REVIEW_CONFIG,
   });
 
   if (options.json) {
@@ -171,26 +171,26 @@ async function main() {
   if (command === 'status') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('status: missing jobDir');
-    const payload = await frameworkComputeStatus(jobDir, DIAGNOSE_CONFIG);
+    const payload = await frameworkComputeStatus(jobDir, DESIGN_REVIEW_CONFIG);
     process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
     return;
   }
   if (command === 'collect') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('collect: missing jobDir');
-    await frameworkCmdCollect(options, jobDir, DIAGNOSE_CONFIG);
+    await frameworkCmdCollect(options, jobDir, DESIGN_REVIEW_CONFIG);
     return;
   }
   if (command === 'results') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('results: missing jobDir');
-    frameworkCmdResults(options, jobDir, DIAGNOSE_CONFIG);
+    frameworkCmdResults(options, jobDir, DESIGN_REVIEW_CONFIG);
     return;
   }
   if (command === 'stop') {
     const jobDir = rest[0];
     if (!jobDir) exitWithError('stop: missing jobDir');
-    frameworkCmdStop(options, jobDir, DIAGNOSE_CONFIG);
+    frameworkCmdStop(options, jobDir, DESIGN_REVIEW_CONFIG);
     return;
   }
   if (command === 'clean') {
@@ -199,7 +199,7 @@ async function main() {
     const defaultJobsDir = options['jobs-dir'] as string | undefined
       || process.env.DESIGN_REVIEW_JOBS_DIR
       || path.join(getOmtDir(), 'jobs');
-    frameworkCmdClean(options, jobDir, DIAGNOSE_CONFIG, defaultJobsDir);
+    frameworkCmdClean(options, jobDir, DESIGN_REVIEW_CONFIG, defaultJobsDir);
     return;
   }
   if (command === 'resume-member') {
@@ -209,7 +209,7 @@ async function main() {
     if (!jobDirArg) exitWithError('resume-member: missing jobDir');
     if (!nameArg) exitWithError('resume-member: missing member name');
     if (!promptArg) exitWithError('resume-member: missing prompt');
-    await cmdResumeMember(jobDirArg, nameArg, promptArg, DIAGNOSE_CONFIG);
+    await cmdResumeMember(jobDirArg, nameArg, promptArg, DESIGN_REVIEW_CONFIG);
     return;
   }
 
