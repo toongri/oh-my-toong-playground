@@ -869,6 +869,68 @@ describe('agent-council 의장 플래그 시맨틱스', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// cmdStart: empty members guard
+// ---------------------------------------------------------------------------
+
+describe('cmdStart: empty members guard', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('start exits non-zero and writes no job.json when all members are filtered out', () => {
+    // Config: only one member, chairman=same, exclude_chairman_from_members=true
+    // => filter removes the only member => empty member list
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'council:',
+      '  chairman:',
+      '    role: claude',
+      '  members:',
+      '    - name: claude',
+      '      command: echo claude',
+      '  settings:',
+      '    exclude_chairman_from_members: true',
+      '    timeout: 10',
+    ].join('\n'), 'utf8');
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    let exitCode = 0;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [
+        SCRIPT, 'start',
+        '--config', configPath,
+        '--jobs-dir', jobsDir,
+        '--chairman', 'claude',
+        '--exclude-chairman=true',
+        'test prompt',
+      ], { stdio: 'pipe' });
+    } catch (e: any) {
+      exitCode = e.status;
+      output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
+    }
+
+    // Must exit non-zero
+    expect(exitCode).not.toBe(0);
+    // Must mention that there are no members to dispatch
+    expect(output).toContain('to dispatch');
+    // No job.json must be written anywhere under jobsDir
+    const jobDirs = fs.existsSync(jobsDir) ? fs.readdirSync(jobsDir) : [];
+    const hasJobJson = jobDirs.some((d) => fs.existsSync(path.join(jobsDir, d, 'job.json')));
+    expect(hasJobJson).toBe(false);
+  });
+});
+
 describe('resume-member subcommand', () => {
   const SCRIPT = path.join(import.meta.dirname, 'job.ts');
 
