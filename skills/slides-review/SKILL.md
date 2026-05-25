@@ -11,7 +11,7 @@ HTML 파일의 시각 디자인 품질을 Gemini CLI로 검토하고, 반환된 
 다른 스킬(예: `create-slides`)의 후처리 단계로 호출되거나, 사용자가 직접 호출할 수 있다.
 에이전트(Gemini CLI)가 불가하거나 전원 실패하면 in-session fallback으로 직접 리뷰한다.
 
-**핵심 원칙**: gemini CLI가 없으면 아무 일도 하지 않는다 (quiet pass) — 단, `start`가 멤버 0개로 실패하거나 전원 실패 시에는 in-session fallback을 수행한다.
+**핵심 원칙**: gemini CLI가 불가하면(`missing_cli` 등) 아무 일도 하지 않는 대신 in-session fallback으로 직접 리뷰한다. 진짜 quiet pass는 리뷰 대상 HTML 파일 경로가 유효하지 않은 경우뿐이다.
 
 ---
 
