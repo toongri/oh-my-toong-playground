@@ -14,6 +14,7 @@ import {
 
 import {
   type JobConfig,
+  assertMembersOrExit,
   computeStatus as frameworkComputeStatus,
   spawnWorkers as frameworkSpawnWorkers,
   cmdResults as frameworkCmdResults,
@@ -98,8 +99,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
   const reviewConfig = config[DIAGNOSE_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
-  // Zero members is a valid graceful state: create the job dir with no workers
-  // so that SKILL.md's in-session fallback can take over without a crash.
+  assertMembersOrExit(members, DIAGNOSE_CONFIG, configPath);
   const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
 
   const jobId = generateJobId();
@@ -128,16 +128,14 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
 
-  if (members.length > 0) {
-    frameworkSpawnWorkers({
-      entities: members,
-      workerPath: WORKER_PATH,
-      jobDir,
-      entitiesDir: reviewersDir,
-      timeoutSec,
-      config: DIAGNOSE_CONFIG,
-    });
-  }
+  frameworkSpawnWorkers({
+    entities: members,
+    workerPath: WORKER_PATH,
+    jobDir,
+    entitiesDir: reviewersDir,
+    timeoutSec,
+    config: DIAGNOSE_CONFIG,
+  });
 
   if (options.json) {
     process.stdout.write(`${JSON.stringify({ jobDir, ...jobMeta }, null, 2)}\n`);
