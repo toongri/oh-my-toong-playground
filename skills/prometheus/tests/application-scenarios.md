@@ -290,7 +290,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V4 | Context section with Interview Summary | Plan includes Context section containing Interview Summary (key decisions from extended interview) |
 | V5 | Verification Strategy section present | Plan includes Verification Strategy with Test Decision, and Agent-Executed QA Scenarios for each TODO |
 | V6 | TODOs have populated References | Every TODO includes at least one Pattern or API/Type reference with WHY explanation; OR for greenfield tasks where no existing code patterns or types exist, states "Greenfield — no existing pattern" explicitly |
-| V7 | Agent anonymity in plan body | The plan body (Context / Interview Summary / WHY / any TODO field) records established facts without naming the agents or tool-passes that produced them — no "explore / librarian / oracle / Metis / Momus", "N oracle passes", "per the reviewer". The WHY stands on its own evidence; agent results are applied, agent identities are absent |
+| V7 | Agent anonymity in plan body | The plan body (Context / Interview Summary / WHY / any TODO field) records established facts without attributing them to a producing agent — no "oracle confirmed" / "explore found" / "per the reviewer" / "N oracle passes" style source-attribution to explore / librarian / oracle / Metis / Momus. Bare domain use of such words (e.g. "Oracle DB") is allowed; what is absent is agent-as-source attribution, not the tokens themselves |
 
 ---
 

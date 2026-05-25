@@ -630,7 +630,7 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 - **Location**: `$OMT_DIR/plans/{name}.md`
 - **Language**: English
 - **Exclude**: Vague criteria ("verify it works")
-- **Agent anonymity**: The plan file records established facts, not the agents or tool-passes that produced them. Do not name explore / librarian / oracle / Metis / Momus — or write phrases like "3 oracle passes confirmed", "per the reviewer", "explore found" — anywhere in the plan body. State the conclusion as fact and let the WHY stand on its own evidence; the agents' results are fully applied to the planning and the plan, but the agents themselves do not appear in it. (Scope: the durable plan file only. The ephemeral Stage A HTML presentation MAY surface pipeline/reviewer state as an intentional process-transparency overlay — see `## Review Pipeline`.)
+- **Agent anonymity**: The plan file records established facts, not the agents or passes that produced them. The ban is on agent-as-source attribution, not token presence: do not write "oracle confirmed", "explore found", "per the reviewer", "3 oracle passes established", or any phrasing that credits explore / librarian / oracle / Metis / Momus as the source of a fact. Bare domain use of those words is fine (e.g. "migrate to Oracle DB", "explore the cache policy"). State the conclusion as fact and let the WHY stand on its own evidence; the agents' results are fully applied to the planning and the plan, but the agents do not appear as the plan's source. (Scope: the durable plan file only. The ephemeral Stage A HTML presentation MAY surface pipeline/reviewer state as an intentional process-transparency overlay — see `## Review Pipeline`.)
 
 ### Plan Sections (all required)
 
