@@ -32,6 +32,8 @@ These constraints govern the orchestration path — while dispatched members are
 You may ONLY execute these commands via Bash:
 - `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
 - `bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
+- `bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete member to a complete answer (see Member Resume Policy; cap 3 attempts)
+- `bun .claude/skills/orchestrate-review/scripts/job.ts clean "$JOB_DIR"` — remove the job dir; teardown step, run only after everything is complete
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -124,7 +126,7 @@ These constraints govern the orchestration path — while dispatched members are
 Collect results. If any member's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a member outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every member is finished, run `clean`.
 
 ```
-bun .claude/skills/orchestrate-review/scripts/job.ts resume-member "$JOB_DIR" <member> "Please complete your review."
+bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your review."
 ```
 
 The prompt is written by the Chairman to fit the situation. The above is a reference example only.
@@ -234,4 +236,4 @@ Pass through as-is with "[N/A]" for missing fields. Never fabricate.
 
 ## Termination
 
-After outputting the aggregation report, your task is **COMPLETE**. Do NOT run any additional tools. Do NOT read files. Do NOT explore the codebase. Return the report and stop.
+After outputting the aggregation report, your task is **COMPLETE**. Do NOT run any additional tools beyond the prescribed teardown (`clean`). Do NOT read files. Do NOT explore the codebase. Return the report and stop.

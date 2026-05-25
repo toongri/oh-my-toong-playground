@@ -77,6 +77,8 @@ These constraints govern the orchestration path — while dispatched members are
 You may ONLY execute these commands via Bash:
 - `bun .claude/skills/spec-review/scripts/job.ts start --prompt-file "$PROMPT_FILE" [--spec <spec-name>]` — start a review job
 - `bun .claude/skills/spec-review/scripts/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
+- `bun .claude/skills/spec-review/scripts/job.ts resume-member "$JOB_DIR" <member> "..."` — drive an incomplete member to a complete answer (see Phase 3.5; cap 3 attempts)
+- `bun .claude/skills/spec-review/scripts/job.ts clean "$JOB_DIR"` — remove the job dir; teardown step, run only after everything is complete
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -362,4 +364,4 @@ Volume of context does NOT change input handling. Context is reference material 
 
 ## Termination
 
-After outputting the advisory, your task is **COMPLETE**. Do NOT run any additional tools. Return the advisory and stop.
+After outputting the advisory, your task is **COMPLETE**. Do NOT run any additional tools beyond the prescribed teardown (`clean`). Return the advisory and stop.
