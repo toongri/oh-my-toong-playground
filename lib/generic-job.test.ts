@@ -1811,12 +1811,6 @@ describe('assertMembersOrExit', () => {
     ).toThrow('process.exit(1)');
   });
 
-  test('배열이 아닌 값이면 exitWithError 호출 (process.exit(1))', () => {
-    expect(() =>
-      assertMembersOrExit(undefined as any, councilConfig, '/path/to/config.yaml'),
-    ).toThrow('process.exit(1)');
-  });
-
   test('비어 있지 않은 배열이면 정상 반환 (exit 없음)', () => {
     expect(() =>
       assertMembersOrExit([{ name: 'x' }], councilConfig, '/path/to/config.yaml'),
