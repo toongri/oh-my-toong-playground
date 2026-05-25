@@ -79,6 +79,18 @@ export function safeFileName(name: string, fallback: string = 'member'): string 
 }
 
 // ---------------------------------------------------------------------------
+// assertMembersOrExit — shared guard for "no members at job start"
+// ---------------------------------------------------------------------------
+
+export function assertMembersOrExit(members: unknown[], config: JobConfig, configPath: string): void {
+  if (!Array.isArray(members) || members.length === 0) {
+    exitWithError(
+      `start: no ${config.entityPlural} to dispatch — config has zero valid ${config.entityPlural}. config=${configPath}`,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // CLI detection & augmented command construction
 // ---------------------------------------------------------------------------
 
