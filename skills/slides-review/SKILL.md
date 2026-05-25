@@ -1,6 +1,6 @@
 ---
 name: slides-review
-description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTML 파일을 Gemini에게 전달하여 시각 디자인 개선 지침을 받고, 메인 세션에서 CSS/HTML을 수정한다. gemini CLI 미설치 시 quiet pass. 트리거: "디자인 리뷰", "gemini review", "design review", "디자인 검토", "디자인 보완", "slides review", "슬라이드 리뷰".
+description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTML 파일을 Gemini에게 전달하여 시각 디자인 개선 지침을 받고, 메인 세션에서 CSS/HTML을 수정한다. Gemini 불가 시 in-session Phosphoros 페르소나 fallback. 트리거: "디자인 리뷰", "gemini review", "design review", "디자인 검토", "디자인 보완", "slides review", "슬라이드 리뷰".
 ---
 
 # Slides Review
@@ -9,8 +9,9 @@ description: Gemini CLI를 활용한 HTML 디자인 리뷰 스킬. 생성된 HTM
 
 HTML 파일의 시각 디자인 품질을 Gemini CLI로 검토하고, 반환된 개선 지침을 메인 세션(Claude)이 직접 적용하는 스킬이다.
 다른 스킬(예: `create-slides`)의 후처리 단계로 호출되거나, 사용자가 직접 호출할 수 있다.
+에이전트(Gemini CLI)가 불가하거나 전원 실패하면 in-session fallback으로 Phosphoros 페르소나가 되어 직접 리뷰한다.
 
-**핵심 원칙**: gemini CLI가 없으면 아무 일도 하지 않는다 (quiet pass).
+**핵심 원칙**: gemini CLI가 없으면 아무 일도 하지 않는다 (quiet pass) — 단, `start`가 멤버 0개로 실패하거나 전원 실패 시에는 in-session fallback을 수행한다.
 
 ---
 
@@ -59,6 +60,8 @@ JOB_DIR=$(bun .claude/skills/slides-review/scripts/job.ts start --stdin < "$PROM
 - 디자인 경로가 없으면 `Design path used:` 행 생략
 - JOB_DIR이 stdout에 출력됨
 
+**`start` 실패 시 in-session fallback**: `start`가 non-zero로 종료되거나 `$JOB_DIR`이 비어 있으면 Steps 3–5(collect/clean 없음)를 건너뛰고, `prompts/phosphoros.md`를 READ한 뒤 그 페르소나가 되어 in-session으로 HTML 디자인 리뷰를 수행한다.
+
 ### Step 3: 결과 수집
 
 ```bash
@@ -67,9 +70,11 @@ bun .claude/skills/slides-review/scripts/job.ts collect "$JOB_DIR"
 
 - `"overallState": "done"` → Step 4로 진행
 - `"running"` / `"queued"` → `collect` 재호출 (동일 명령)
-- 멤버 상태가 `missing_cli` → **quiet pass** (Step 5로 직행, 지침 적용 없음)
-- 멤버 상태가 `error` / `timed_out` → **quiet pass** (기존 HTML 유지)
-- 멤버 상태가 `awaiting_resume` → `bun .claude/skills/slides-review/scripts/job.ts resume-member "$JOB_DIR" gemini "리뷰를 완료해주세요."` 를 한 번 호출한 뒤 `collect` 재호출; 재호출 후에도 `awaiting_resume`이면 **quiet pass** (기존 HTML 유지)
+- 멤버 상태가 `missing_cli` → **in-session fallback** (아래 참조)
+- 멤버 상태가 `error` / `timed_out` → **in-session fallback** (아래 참조)
+- 멤버 상태가 `awaiting_resume` → `bun .claude/skills/slides-review/scripts/job.ts resume-member "$JOB_DIR" gemini "리뷰를 완료해주세요."` 를 한 번 호출한 뒤 `collect` 재호출; 재호출 후에도 `awaiting_resume`이면 **in-session fallback** (아래 참조)
+
+**전원 실패 → in-session fallback**: 멤버 상태가 `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable` 중 하나이거나, resume 1회 후에도 `awaiting_resume`이 지속되면 — `clean`으로 임시 파일을 정리한 뒤 `prompts/phosphoros.md`를 READ하고 그 페르소나가 되어 in-session으로 HTML 디자인 리뷰를 수행한다. "unavailable"로 끝내지 않는다.
 
 ### Step 4: 지침 적용
 
@@ -107,16 +112,23 @@ quiet pass인 경우 아무것도 출력하지 않는다.
 
 ## Quiet Pass 조건
 
-아래 **모든 경우**에서 에러 없이 조용히 건너뛴다:
+아래 경우에서 에러 없이 조용히 건너뛴다:
 
 | 조건 | 동작 |
 |------|------|
-| `start` 비정상 종료 / `$JOB_DIR` 빔 (멤버 없음) | 즉시 종료, 메시지 없음 |
-| `gemini` CLI 미설치 (`missing_cli` 상태) | 즉시 종료, 메시지 없음 |
-| Gemini 호출 타임아웃 (`timed_out` 상태) | 기존 HTML 유지, 메시지 없음 |
-| Gemini 호출 에러 (`error` 상태) | 기존 HTML 유지, 메시지 없음 |
-| `awaiting_resume` — resume 1회 후 여전히 대기 중 | 기존 HTML 유지, 메시지 없음 |
 | HTML 파일 경로가 유효하지 않음 | 즉시 종료, 메시지 없음 |
+
+## In-Session Fallback 조건
+
+아래 경우에서 `prompts/phosphoros.md`를 읽고 Phosphoros 페르소나로 in-session 리뷰를 수행한다:
+
+| 조건 | 동작 |
+|------|------|
+| `start` 비정상 종료 / `$JOB_DIR` 빔 (멤버 없음) | Steps 3–5 생략, in-session fallback 즉시 진입 |
+| `gemini` CLI 미설치 (`missing_cli` 상태) | `clean` 후 in-session fallback |
+| Gemini 호출 타임아웃 (`timed_out` 상태) | `clean` 후 in-session fallback |
+| Gemini 호출 에러 (`error` 상태) | `clean` 후 in-session fallback |
+| `awaiting_resume` — resume 1회 후 여전히 대기 중 | `clean` 후 in-session fallback |
 
 ---
 
@@ -135,3 +147,4 @@ quiet pass인 경우 아무것도 출력하지 않는다.
 - `scripts/job.ts`: Job 매니저 (start/collect/clean). generic-job.ts 프레임워크 기반 thin wrapper.
 - `scripts/worker.ts`: Gemini CLI 워커. worker-utils.ts 기반.
 - `prompts/gemini.md`: Gemini에 전달하는 디자인 리뷰 시스템 프롬프트. 리뷰 기준 6가지, 출력 포맷(Target/Issue/Fix), 제약 조건 정의.
+- `prompts/phosphoros.md`: Phosphoros 페르소나 프롬프트 — 에이전트 불가 시 in-session fallback에서 로드. 동일한 리뷰 기준 6가지 + 직접 Edit 적용 지침.
