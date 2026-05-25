@@ -21,7 +21,6 @@ import { getOmtDir } from '@lib/omt-dir';
 
 import {
   type JobConfig,
-  type ResumeMemberOpts,
   assertMembersOrExit,
   detectCliType,
   buildAugmentedCommand,
