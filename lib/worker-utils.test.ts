@@ -179,6 +179,21 @@ describe('assemblePrompt', () => {
     expect(result.isStructured).toBe(false);
     expect(result.assembled).toBe('Analyze it');
   });
+
+  test('uses prompts/default.md as framework default when fallbackFile is not specified', () => {
+    // default.md exists, no per-member file, no explicit fallbackFile → framework default applies
+    const defaultContent = '# Default Role\nYou are a default assistant.';
+    writeFileSync(join(tmpDir, 'default.md'), defaultContent, 'utf8');
+
+    const result = assemblePrompt({
+      promptsDir: tmpDir,
+      entityName: 'nonexistent-member',
+      rawPrompt: 'Do something',
+    });
+
+    expect(result.isStructured).toBe(true);
+    expect(result.assembled.includes(defaultContent)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

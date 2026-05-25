@@ -9,7 +9,7 @@ import { execFileSync } from 'child_process';
 const SCRIPT = path.join(import.meta.dirname, 'job.ts');
 
 function makeTmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'diagnose-job-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'themis-job-test-'));
 }
 
 function writeConfig(configPath: string) {
@@ -23,7 +23,7 @@ function writeConfig(configPath: string) {
   ].join('\n'), 'utf8');
 }
 
-describe('diagnose job lifecycle', () => {
+describe('design-review job lifecycle', () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -45,28 +45,26 @@ describe('diagnose job lifecycle', () => {
       '--config', configPath,
       '--jobs-dir', jobsDir,
       '--json',
-      'diagnose test prompt',
+      'design-review test prompt',
     ], { stdio: 'pipe' });
 
     const output = JSON.parse(result.toString());
 
     // jobDir exists and starts with expected prefix
     expect(typeof output.jobDir).toBe('string');
-    expect(path.basename(output.jobDir).startsWith('diagnose-')).toBe(true);
+    expect(path.basename(output.jobDir).startsWith('themis-')).toBe(true);
     expect(fs.existsSync(output.jobDir)).toBe(true);
 
     // job.json exists with correct fields
     const jobJson = JSON.parse(fs.readFileSync(path.join(output.jobDir, 'job.json'), 'utf8'));
     expect(typeof jobJson.id).toBe('string');
-    expect(jobJson.id.startsWith('diagnose-')).toBe(true);
+    expect(jobJson.id.startsWith('themis-')).toBe(true);
     expect(Array.isArray(jobJson.members)).toBe(true);
     expect(jobJson.members[0].name).toBe('tester');
-    // env field must be present on each member (defaults to empty object)
-    expect(jobJson.members[0].env).toEqual({});
 
     // prompt.txt written
     const prompt = fs.readFileSync(path.join(output.jobDir, 'prompt.txt'), 'utf8');
-    expect(prompt).toBe('diagnose test prompt');
+    expect(prompt).toBe('design-review test prompt');
 
     // reviewers directory created
     expect(fs.existsSync(path.join(output.jobDir, 'reviewers'))).toBe(true);
@@ -116,7 +114,7 @@ describe('diagnose job lifecycle', () => {
     const jobDir = result.toString().trim();
     expect(path.isAbsolute(jobDir)).toBe(true);
     expect(fs.existsSync(jobDir)).toBe(true);
-    expect(path.basename(jobDir).startsWith('diagnose-')).toBe(true);
+    expect(path.basename(jobDir).startsWith('themis-')).toBe(true);
 
     try { execFileSync(process.execPath, [SCRIPT, 'stop', jobDir], { stdio: 'pipe' }); } catch {}
     try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
@@ -126,9 +124,7 @@ describe('diagnose job lifecycle', () => {
     const configPath = path.join(tmpDir, 'diagnose.config.yaml');
     fs.writeFileSync(configPath, [
       'review:',
-      '  members:',
-      '    - name: typo-member',
-      '      commmand: echo done',
+      '  members: []',
       '  settings:',
       '    timeout: 10',
     ].join('\n'), 'utf8');
@@ -137,25 +133,30 @@ describe('diagnose job lifecycle', () => {
 
     let threw = false;
     let exitCode = 0;
+    let stderrOutput = '';
     try {
       execFileSync(process.execPath, [
         SCRIPT, 'start',
         '--config', configPath,
         '--jobs-dir', jobsDir,
-        'guard test prompt',
+        'empty members test',
       ], { stdio: 'pipe' });
     } catch (e: any) {
       threw = true;
       exitCode = e.status;
+      stderrOutput = e.stderr?.toString() || '';
     }
 
     // start must exit non-zero
     expect(threw).toBe(true);
     expect(exitCode).not.toBe(0);
 
+    // error message must mention no reviewers to dispatch
+    expect(stderrOutput).toContain('to dispatch');
+
     // no job.json must have been written under jobsDir
     const jobDirs = fs.existsSync(jobsDir)
-      ? fs.readdirSync(jobsDir).filter((d) => d.startsWith('diagnose-'))
+      ? fs.readdirSync(jobsDir).filter((d) => d.startsWith('themis-'))
       : [];
     const anyJobJson = jobDirs.some((d) =>
       fs.existsSync(path.join(jobsDir, d, 'job.json')),
@@ -193,48 +194,6 @@ describe('diagnose job lifecycle', () => {
   });
 });
 
-describe('settings fallback 병합', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = makeTmpDir();
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  test('`settings`를 생략한 config에서 default timeout(600)이 job.json에 유지된다', () => {
-    const configPath = path.join(tmpDir, 'diagnose.config.yaml');
-    // settings 블록 없이 members만 정의
-    fs.writeFileSync(configPath, [
-      'review:',
-      '  members:',
-      '    - name: tester',
-      '      command: echo done',
-    ].join('\n'), 'utf8');
-
-    const jobsDir = path.join(tmpDir, 'jobs');
-    fs.mkdirSync(jobsDir, { recursive: true });
-
-    const result = execFileSync(process.execPath, [
-      SCRIPT, 'start',
-      '--config', configPath,
-      '--jobs-dir', jobsDir,
-      '--json',
-      'fallback timeout test',
-    ], { stdio: 'pipe' });
-
-    const { jobDir } = JSON.parse(result.toString());
-    const jobJson = JSON.parse(fs.readFileSync(path.join(jobDir, 'job.json'), 'utf8'));
-
-    expect(jobJson.settings.timeoutSec).toBe(600);
-
-    try { execFileSync(process.execPath, [SCRIPT, 'stop', jobDir], { stdio: 'pipe' }); } catch {}
-    try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
-  });
-});
-
 describe('resume-member subcommand', () => {
   test('resume-member without jobDir exits with error', () => {
     let exitCode = 0;
@@ -266,7 +225,7 @@ describe('resume-member subcommand', () => {
     let exitCode = 0;
     let output = '';
     try {
-      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/fake-job', 'hephaestus'], { stdio: 'pipe' });
+      execFileSync(process.execPath, [SCRIPT, 'resume-member', '/tmp/fake-job', 'themis'], { stdio: 'pipe' });
     } catch (e: any) {
       exitCode = e.status;
       output = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');

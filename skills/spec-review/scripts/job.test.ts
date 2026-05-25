@@ -725,6 +725,66 @@ describe('cmdStart: --exclude-chairman 플래그 boolean 파싱', () => {
 });
 
 // ---------------------------------------------------------------------------
+// cmdStart: empty/all-filtered config → non-zero exit, no job.json
+// ---------------------------------------------------------------------------
+
+describe('cmdStart: empty member config', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('all members filtered out → throws non-zero, outputs no-members message, writes no job.json', () => {
+    // Config: only member is "claude", chairman is "claude" with exclude_chairman_from_members: true
+    // → after filtering, members array is empty
+    const configPath = path.join(tmpDir, 'spec-review.config.yaml');
+    fs.writeFileSync(configPath, [
+      'spec-review:',
+      '  chairman:',
+      '    role: claude',
+      '  members:',
+      '    - name: claude',
+      '      command: claude -p',
+      '  settings:',
+      '    exclude_chairman_from_members: true',
+      '    timeout: 0',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+
+    let threw = false;
+    let output = '';
+    try {
+      execFileSync(process.execPath, [
+        SCRIPT, 'start',
+        '--config', configPath,
+        '--jobs-dir', jobsDir,
+        '--chairman', 'claude',
+        'test prompt',
+      ], { stdio: 'pipe' });
+    } catch (err: any) {
+      threw = true;
+      output = (err.stderr ? err.stderr.toString() : '') + (err.stdout ? err.stdout.toString() : '');
+    }
+
+    expect(threw).toBe(true);
+    expect(output.includes('to dispatch')).toBe(true);
+    // No job.json should have been written
+    const jobsDirExists = fs.existsSync(jobsDir);
+    const hasJobJson = jobsDirExists && fs.readdirSync(jobsDir).some(
+      d => fs.existsSync(path.join(jobsDir, d, 'job.json'))
+    );
+    expect(hasJobJson).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // cmdResults
 // ---------------------------------------------------------------------------
 

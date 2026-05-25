@@ -63,7 +63,7 @@ describe('main - logging lifecycle', () => {
     }
   });
 
-  test('uses fallbackFile reviewer.md when no per-member persona file exists', async () => {
+  test('uses framework default prompts/default.md when no per-member persona file exists', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-review-fallback-test-'));
     try {
       const jobDir = path.join(tmpDir, 'job');
