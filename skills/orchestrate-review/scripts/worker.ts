@@ -11,7 +11,6 @@ import { detectCliType } from '@lib/generic-job';
 import type { CliType } from '@lib/agent-drivers/types';
 
 const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
-const FALLBACK_FILE = 'reviewer.md';
 
 function main() {
   const options = parseArgs(process.argv);
@@ -69,7 +68,6 @@ function main() {
     program, args, prompt: EXECUTION_INSTRUCTION, reviewContent: promptContent, member: member as string, memberDir, command: command as string, timeoutSec, workerEnv,
     cliType: detectCliType(command) as CliType,
     promptsDir: PROMPTS_DIR,
-    fallbackFile: FALLBACK_FILE,
   }).then((result) => {
     logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
     logEnd();
