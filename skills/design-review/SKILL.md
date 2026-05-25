@@ -32,7 +32,7 @@ rm -f "$PROMPT_FILE"
 
 The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 
-**Empty-members / start-error guard**: If `start` produces a zero-worker terminal state or an empty jobDir, skip the workers loop and proceed directly to the fallback section. This occurs when `members: []` in the config (no external agent configured) or when the CLI is unavailable at job-start time.
+If `start` exits non-zero or `$JOB_DIR` is empty, skip Steps 3–5 (no collect/clean) and become the design-review persona in-session by reading `prompts/themis.md`.
 
 ### Step 3: Collect results
 
@@ -42,27 +42,19 @@ bun .claude/skills/design-review/scripts/job.ts collect $JOB_DIR
 
 `collect` polls internally, but it returns after a fixed internal timeout that is deliberately shorter than the worker's full run budget. A non-`done` return (`running`, `queued`, or `awaiting_resume`) is therefore expected — it does NOT mean the job will finish on its own, and nothing will notify you when it does. Re-run `collect` in the foreground until it returns `done`, or go to Step 4 when the state is `awaiting_resume`. Do not end the turn while the overall state is non-terminal.
 
-### Step 4: Fallback branch
+### Step 4: Resume and output
 
-Determine the terminal worker state by running:
+After `collect` returns, check the member's terminal state via:
 
 ```bash
 bun .claude/skills/design-review/scripts/job.ts status $JOB_DIR
 ```
 
-`status` returns `{ members: [{member, state, ...}] }`. Branch on `members[0].state`:
+**RESUME** (trigger: member state is `awaiting_resume`, OR the member's output reads as planning, framing, or incomplete analysis): call `resume-member` with `$JOB_DIR`, the member name, and a prompt asking it to continue. Re-run `status` to confirm the new state. Repeat up to 3 total resume attempts. If the member is still `awaiting_resume` after 3 attempts without a complete answer, treat the cap as exhausted and fall back to in-session analysis.
 
-| `members[0].state` | Action |
-|----------------------|--------|
-| `missing_cli` | Fallback: become Daedalus in-session (see below) |
-| `timed_out` | Fallback: become Daedalus in-session (see below) |
-| `error` | Fallback: become Daedalus in-session (see below) |
-| `canceled` | Fallback: become Daedalus in-session (see below) |
-| `non_retryable` | Fallback: become Daedalus in-session (see below) |
-| `awaiting_resume` | Call `resume-member` (pass `$JOB_DIR`, member name `daedalus`, and a prompt asking it to continue); re-run `status` to confirm the new state; repeat up to 3 total resume attempts (`resume_count` cap). If still `awaiting_resume` after 3 attempts, fall back to in-session analysis. |
-| `done` | Read the manifest from Step 3 and forward `reviewers[0].outputFilePath` content to the caller. If the forwarded content is planning, framing, or waiting (i.e., the agent paused before delivering analysis), call `resume-member` to drive it to completion before treating the job as finished. |
+**All members failed** (any of `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or resume cap exhausted without a complete answer): READ `prompts/themis.md` and apply the analysis framework defined there IN-SESSION. You become Daedalus for the remainder of this skill invocation.
 
-**Fallback procedure**: READ `prompts/themis.md` and apply the analysis framework defined there IN-SESSION. You become Daedalus for the remainder of this skill invocation.
+**Output present** (member state is `done` with substantive analysis): read the member's output path from the manifest and forward that content to the caller.
 
 > **WARNING — destructive ordering**: `clean` deletes `$JOB_DIR`, which is required by `resume-member`. Do NOT run Step 5 until any `awaiting_resume` state is fully resolved (member reaches `done` or the resume cap is exhausted and you have fallen back in-session). Step 5 must always be the last action.
 
@@ -95,6 +87,6 @@ You are done only when BOTH hold:
 
 ## Reference Files
 
-- `diagnose.config.yaml`: Single-member config (daedalus, opencode, 600s timeout)
+- `diagnose.config.yaml`: Job configuration — `members` list (each entry needs `name` and `command`) and `settings.timeout` (seconds)
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
 - `prompts/themis.md`: Daedalus analysis framework — loaded only during fallback

@@ -120,7 +120,7 @@ describe('design-review job lifecycle', () => {
     try { execFileSync(process.execPath, [SCRIPT, 'clean', jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
   });
 
-  test('start succeeds with zero members (graceful zero-worker state)', () => {
+  test('start fails fast when no valid reviewers are configured', () => {
     const configPath = path.join(tmpDir, 'diagnose.config.yaml');
     fs.writeFileSync(configPath, [
       'review:',
@@ -131,20 +131,37 @@ describe('design-review job lifecycle', () => {
     const jobsDir = path.join(tmpDir, 'jobs');
     fs.mkdirSync(jobsDir, { recursive: true });
 
-    const result = execFileSync(process.execPath, [
-      SCRIPT, 'start',
-      '--config', configPath,
-      '--jobs-dir', jobsDir,
-      '--json',
-      'empty members test',
-    ], { stdio: 'pipe' });
+    let threw = false;
+    let exitCode = 0;
+    let stderrOutput = '';
+    try {
+      execFileSync(process.execPath, [
+        SCRIPT, 'start',
+        '--config', configPath,
+        '--jobs-dir', jobsDir,
+        'empty members test',
+      ], { stdio: 'pipe' });
+    } catch (e: any) {
+      threw = true;
+      exitCode = e.status;
+      stderrOutput = e.stderr?.toString() || '';
+    }
 
-    const output = JSON.parse(result.toString());
-    expect(fs.existsSync(output.jobDir)).toBe(true);
-    expect(Array.isArray(output.members)).toBe(true);
-    expect(output.members.length).toBe(0);
+    // start must exit non-zero
+    expect(threw).toBe(true);
+    expect(exitCode).not.toBe(0);
 
-    try { execFileSync(process.execPath, [SCRIPT, 'clean', output.jobDir, '--jobs-dir', jobsDir], { stdio: 'pipe' }); } catch {}
+    // error message must mention no reviewers to dispatch
+    expect(stderrOutput).toContain('to dispatch');
+
+    // no job.json must have been written under jobsDir
+    const jobDirs = fs.existsSync(jobsDir)
+      ? fs.readdirSync(jobsDir).filter((d) => d.startsWith('themis-'))
+      : [];
+    const anyJobJson = jobDirs.some((d) =>
+      fs.existsSync(path.join(jobsDir, d, 'job.json')),
+    );
+    expect(anyJobJson).toBe(false);
   });
 
   test('status returns JSON with members after start', () => {
