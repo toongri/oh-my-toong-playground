@@ -97,7 +97,7 @@ export function assemblePrompt({
   entityName,
   rawPrompt,
   reviewContent,
-  fallbackFile,
+  fallbackFile = 'default.md',
 }: {
   promptsDir: string;
   entityName: string;

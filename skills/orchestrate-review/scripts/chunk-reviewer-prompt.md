@@ -1,6 +1,6 @@
 # Chunk Review Data
 
-> This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/reviewer.md.
+> This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/default.md.
 
 ## Review Premises (non-negotiable)
 
