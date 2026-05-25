@@ -115,11 +115,19 @@ export function buildAugmentedCommand(
     model?: unknown;
     effort_level?: unknown;
     output_format?: unknown;
+    env?: Record<string, string>;
   },
   cliType: string,
 ): { command: string; env: Record<string, string> } {
   const parts = [String(entity.command)];
+
+  // Seed with member's env (YAML scalars may be non-string, so String()-cast each value).
   const env: Record<string, string> = {};
+  if (entity.env) {
+    for (const [k, v] of Object.entries(entity.env)) {
+      env[k] = String(v);
+    }
+  }
 
   // model
   if (entity.model) {
@@ -999,86 +1007,3 @@ export async function cmdResumeMember(
   });
 }
 
-// ---------------------------------------------------------------------------
-// parseYamlSimple — parameterized by configTopLevelKey
-// Limitations: Flat key-value pairs only. Does not support nested objects,
-// multi-line strings, YAML arrays, anchors, flow mappings, or block scalars.
-// Install the 'yaml' package for full YAML support.
-// ---------------------------------------------------------------------------
-
-export function parseYamlSimple(
-  configPath: string,
-  fallback: Record<string, any>,
-  config: JobConfig,
-  extraSections?: string[],
-): Record<string, any> {
-  const topKey = config.configTopLevelKey;
-  const extras = extraSections || [];
-  try {
-    const content = fs.readFileSync(configPath, 'utf8');
-    const lines = content.split('\n');
-
-    const result: Record<string, any> = {
-      [topKey]: { chairman: {}, members: [], settings: {} },
-    };
-    for (const section of extras) {
-      result[topKey][section] = {};
-    }
-    let currentSection: string | null = null;
-    let currentMember: Record<string, unknown> | null = null;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      if (trimmed === `${topKey}:`) continue;
-      if (trimmed === 'chairman:') { currentSection = 'chairman'; continue; }
-      if (trimmed === 'members:') { currentSection = 'members'; continue; }
-      if (trimmed === 'settings:') { currentSection = 'settings'; continue; }
-
-      const extraMatch = extras.find((s) => trimmed === `${s}:`);
-      if (extraMatch !== undefined) { currentSection = extraMatch; continue; }
-
-      if (currentSection === 'members' && trimmed.startsWith('- name:')) {
-        if (currentMember) result[topKey].members.push(currentMember);
-        currentMember = { name: trimmed.replace('- name:', '').trim().replace(/"/g, '') };
-        continue;
-      }
-
-      if (currentMember && currentSection === 'members') {
-        const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
-        if (match) {
-          currentMember[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim().replace(/\s+#.*$/, '');
-        }
-        continue;
-      }
-
-      if (currentSection === 'chairman' || currentSection === 'settings' || extras.includes(currentSection!)) {
-        const match = trimmed.match(/^([\w-]+):\s*(.*)$/);
-        if (match) {
-          let value: unknown = match[2].replace(/^"(.*)"$/, '$1').trim().replace(/\s+#.*$/, '');
-          if (value === 'true') value = true;
-          else if (value === 'false') value = false;
-          else if (/^\d+$/.test(value as string)) value = parseInt(value as string, 10);
-          result[topKey][currentSection!][match[1]] = value;
-        }
-      }
-    }
-
-    if (currentMember) result[topKey].members.push(currentMember);
-
-    const fallbackSection = fallback[topKey] || {};
-    if (result[topKey].members.length === 0) {
-      result[topKey].members = fallbackSection.members || [];
-    }
-    result[topKey].chairman = { ...(fallbackSection.chairman || {}), ...result[topKey].chairman };
-    result[topKey].settings = { ...(fallbackSection.settings || {}), ...result[topKey].settings };
-    for (const section of extras) {
-      result[topKey][section] = { ...(fallbackSection[section] || {}), ...result[topKey][section] };
-    }
-
-    return result;
-  } catch (e) {
-    return fallback;
-  }
-}
