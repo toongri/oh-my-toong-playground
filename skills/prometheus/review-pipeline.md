@@ -79,8 +79,8 @@ All context (interview summary) is already in the plan's Context section. No sup
 Convert `$OMT_DIR/plans/{name}.md` to a single-file HTML document and open it in the browser so the user can read the plan rendered.
 
 **Requirements:**
-- **Output artifact**: `$OMT_DIR/plans/plan.html` (single-file, self-contained, browser-openable)
-- **Content**: verbatim — no summarization, no paraphrasing, no omission (요약·각색 금지)
+- **Output artifact**: `$OMT_DIR/plans/presentation/{name}.html` — `{name}` is the same stem as the plan markdown (`{name}.md`), so each plan owns its own HTML file and concurrent or successive plans never overwrite a shared file. Create the `presentation/` directory if it does not yet exist. Single-file, self-contained, browser-openable.
+- **Content fidelity (faithful, not verbatim)**: Render the plan faithfully — no plan content may be omitted, weakened, or contradicted. Within that bound, prose MAY be rewritten for readability (see Translation Rule) and MAY carry readability callouts (see Readability Enrichment). The rendered HTML is a presentation for the human reader, not a second source of truth.
 - **Tool choice**: execution-time choice — use whatever is available at runtime (Pandoc, a script, inline generation). Tool is an implementation detail; output must meet the single-file + browser requirement regardless.
 - **Graceful fallback**: If HTML conversion fails, present raw Markdown directly and continue to Stage B.
 
@@ -91,7 +91,7 @@ The Stage A HTML output is composed of 4 distinct components:
 - **hero header** — plan title, meta pills (TODO count, AC count, wave label, plan file path), and stage kicker
 - **Stage B** — execution recommendation box injected from session state (reviewer verdicts, recommendation output)
 - **Pipeline State** — pipeline state journal box injected from session state (S0 → S_current transitions)
-- **plan-content** — the full plan markdown rendered into `article#plan-content`; sourced verbatim from plan.md
+- **plan-content** — the full plan markdown rendered into `article#plan-content`; sourced faithfully from plan.md (readability rewrite + enrichment callouts allowed per Readability Enrichment — no omission, no contradiction, no invented facts)
 
 ### Source Classification
 
@@ -114,7 +114,7 @@ Contains the static HTML structure with `{{placeholder}}` substitution variables
 
 Three invariants govern language translation applied during Stage A rendering.
 
-**Invariant 1 — Session auto-detect of conversational language**: The session detects the conversational language in use (the language the user is writing in during the current session). All prose content in HTML output is rendered in that detected language. No language is hard-coded; detection is render-time.
+**Invariant 1 — Session auto-detect of conversational language**: The session detects the conversational language in use (the language the user is writing in during the current session). All prose content in HTML output is **rewritten in that detected communication language** so the reader can follow it naturally — a readability-oriented rewrite, not a word-for-word translation of the plan's source prose. No language is hard-coded; detection is render-time.
 
 **Invariant 2 — Prose-only scope with preservation list**: Translation applies to prose-only content. The following are **never** translated:
 
@@ -131,6 +131,21 @@ Translating any item is a rule violation.
 **Invariant 3 — plan.md as single source-of-truth, render-time-only translation**: `plan.md` is the single SoT for plan content. No translated copy (`plan.{lang}.md`) is written to disk; translation is render-time only. HTML is ephemeral — re-rendering always draws from unmodified `plan.md`.
 
 **Fallback**: If language detection fails or yields an ambiguous result, render in original language. Do not block Stage A on detection failure.
+
+### Readability Enrichment
+
+`plan.md` is written in terse, executor-facing spec language. The HTML presentation MAY add readability aids so the human reader can follow it — but only within the content-fidelity bound declared in Requirements.
+
+**Allowed:**
+- Rephrasing plan prose for natural reading flow in the communication language (per Translation Rule).
+- Markdown blockquote callouts (`>`) that surface context the reader needs — drawn from the plan's own Context / interview-rationale / ADR sections. Use them to make an already-stated WHY easy to find, not to assert anything new.
+
+**Forbidden:**
+- Introducing any fact, decision, scope, or rationale not already present in `plan.md`. Enrichment re-surfaces existing context; it does not author new context. If the plan genuinely lacks context the reader needs, that is a plan defect — fix the plan and re-run the pipeline, do not paper over it at render time.
+- Omitting, weakening, or contradicting any plan content.
+- Writing enrichment back to disk. Per Invariant 3 the callouts live only in the ephemeral HTML; `plan.md` stays the single source of truth and every re-render redraws from it.
+
+Rationale: `plan.md` is the artifact Oracle and Momus reviewed and the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
 
 ### Rendering Methodology
 

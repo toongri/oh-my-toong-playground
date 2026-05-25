@@ -3,7 +3,8 @@ import fs from "fs/promises";
 import path from "path";
 import os from "os";
 import { existsSync } from "fs";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+const parseYaml = Bun.YAML.parse;
+const stringifyYaml = (v: unknown) => Bun.YAML.stringify(v, null, 2);
 
 import {
   syncCategory,

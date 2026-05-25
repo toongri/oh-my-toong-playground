@@ -33,7 +33,6 @@ import {
   cmdClean as _cmdClean,
   cmdCollect as _cmdCollect,
   buildManifest as _buildManifest,
-  parseYamlSimple as _parseYamlSimple,
   cmdResumeMember as _cmdResumeMember,
 } from '@lib/generic-job';
 
@@ -98,10 +97,6 @@ function buildUiPayload(statusPayload: Parameters<typeof _buildUiPayload>[0]) {
 
 function buildManifest(jobDir: string) {
   return _buildManifest(jobDir, CHUNK_REVIEW_JOB_CONFIG);
-}
-
-function parseYamlSimple(configPath: string, fallback: Record<string, any>) {
-  return _parseYamlSimple(configPath, fallback, CHUNK_REVIEW_JOB_CONFIG);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +193,7 @@ function resolveDefaultConfigFile(): string {
   return SKILL_CONFIG_FILE;
 }
 
-async function parseChunkReviewConfig(configPath: string): Promise<Record<string, any>> {
+function parseChunkReviewConfig(configPath: string): Record<string, any> {
   const fallback = {
     'chunk-review': {
       chairman: { role: 'auto' },
@@ -212,16 +207,9 @@ async function parseChunkReviewConfig(configPath: string): Promise<Record<string
 
   if (!fs.existsSync(configPath)) return fallback;
 
-  let YAML: any;
-  try {
-    YAML = await import('yaml').then((m: any) => m.default);
-  } catch {
-    return parseYamlSimple(configPath, fallback);
-  }
-
   let parsed: any;
   try {
-    parsed = YAML.parse(fs.readFileSync(configPath, 'utf8'));
+    parsed = Bun.YAML.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error: any) {
     const message = error && error.message ? error.message : String(error);
     exitWithError(`Invalid YAML in ${configPath}: ${message}`);
@@ -302,7 +290,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   gcStaleJobs(jobsDir);
 
   const hostRole = detectHostRole(SKILL_DIR);
-  const config = await parseChunkReviewConfig(configPath);
+  const config = parseChunkReviewConfig(configPath);
   const chairmanRoleRaw = (options.chairman as string | undefined) || process.env.CHUNK_REVIEW_CHAIRMAN || config['chunk-review'].chairman.role || 'auto';
 
   const { chairmanRole, excludeChairmanFromMembers, filterMember } = resolveChairmanExclusion({
@@ -351,6 +339,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
       model: r.model || null,
       effort_level: r.effort_level || null,
       output_format: r.output_format || null,
+      env: r.env ?? {},
     })),
   };
   atomicWriteJson(path.join(jobDir, 'job.json'), jobMeta);
@@ -484,7 +473,6 @@ export {
   buildUiPayload,
   buildManifest,
   parseChunkReviewConfig,
-  parseYamlSimple,
   computeStatus,
   detectCliType,
   buildAugmentedCommand,
