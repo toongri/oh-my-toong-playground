@@ -30,6 +30,7 @@ import {
   cmdResumeMember,
   gcStaleJobs,
   parseYamlSimple as frameworkParseYamlSimple,
+  assertMembersOrExit,
 } from '@lib/generic-job';
 
 import { getOmtDir } from '@lib/omt-dir';
@@ -348,6 +349,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
 
   const requestedMembers = config['spec-review'].members || [];
   const members = requestedMembers.filter(filterMember);
+  assertMembersOrExit(members, JOB_CONFIG, configPath);
 
   const specName = (options.spec || null) as string | null;
   let specContext: { context: string; files: string[] } = { context: '', files: [] };
