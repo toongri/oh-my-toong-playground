@@ -14,6 +14,7 @@ import {
 
 import {
   type JobConfig,
+  assertMembersOrExit,
   computeStatus as frameworkComputeStatus,
   spawnWorkers as frameworkSpawnWorkers,
   cmdResults as frameworkCmdResults,
@@ -100,6 +101,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
   const reviewConfig = config[REVIEW_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
+  assertMembersOrExit(members, REVIEW_CONFIG, configPath);
   const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
 
   const jobId = generateJobId();

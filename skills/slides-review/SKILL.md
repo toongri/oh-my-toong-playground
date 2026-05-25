@@ -111,6 +111,7 @@ quiet pass인 경우 아무것도 출력하지 않는다.
 
 | 조건 | 동작 |
 |------|------|
+| `start` 비정상 종료 / `$JOB_DIR` 빔 (멤버 없음) | 즉시 종료, 메시지 없음 |
 | `gemini` CLI 미설치 (`missing_cli` 상태) | 즉시 종료, 메시지 없음 |
 | Gemini 호출 타임아웃 (`timed_out` 상태) | 기존 HTML 유지, 메시지 없음 |
 | Gemini 호출 에러 (`error` 상태) | 기존 HTML 유지, 메시지 없음 |
