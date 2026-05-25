@@ -133,8 +133,8 @@ describe('diagnose job lifecycle', () => {
     const jobsDir = path.join(tmpDir, 'jobs');
     fs.mkdirSync(jobsDir, { recursive: true });
 
+    let threw = false;
     let exitCode = 0;
-    let stderr = '';
     try {
       execFileSync(process.execPath, [
         SCRIPT, 'start',
@@ -143,12 +143,22 @@ describe('diagnose job lifecycle', () => {
         'guard test prompt',
       ], { stdio: 'pipe' });
     } catch (e: any) {
+      threw = true;
       exitCode = e.status;
-      stderr = (e.stderr?.toString() || '') + (e.stdout?.toString() || '');
     }
 
+    // start must exit non-zero
+    expect(threw).toBe(true);
     expect(exitCode).not.toBe(0);
-    expect(stderr).toContain('no valid reviewers');
+
+    // no job.json must have been written under jobsDir
+    const jobDirs = fs.existsSync(jobsDir)
+      ? fs.readdirSync(jobsDir).filter((d) => d.startsWith('diagnose-'))
+      : [];
+    const anyJobJson = jobDirs.some((d) =>
+      fs.existsSync(path.join(jobsDir, d, 'job.json')),
+    );
+    expect(anyJobJson).toBe(false);
   });
 
   test('status returns JSON with members after start', () => {
