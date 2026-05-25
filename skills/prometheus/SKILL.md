@@ -630,6 +630,7 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 - **Location**: `$OMT_DIR/plans/{name}.md`
 - **Language**: English
 - **Exclude**: Vague criteria ("verify it works")
+- **Agent anonymity**: The plan file records established facts, not the agents or tool-passes that produced them. Do not name explore / librarian / oracle / Metis / Momus — or write phrases like "3 oracle passes confirmed", "per the reviewer", "explore found" — anywhere in the plan body. State the conclusion as fact and let the WHY stand on its own evidence; the agents' results are fully applied to the planning and the plan, but the agents themselves do not appear in it. (Scope: the durable plan file only. The ephemeral Stage A HTML presentation MAY surface pipeline/reviewer state as an intentional process-transparency overlay — see `## Review Pipeline`.)
 
 ### Plan Sections (all required)
 
@@ -913,7 +914,7 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 
 | Stage | Mandate | Detail location |
 |---|---|---|
-| **Stage A** | Render plan → `$OMT_DIR/plans/plan.html` (single-file, browser-openable). Verbatim plan content + session-derived boxes (Stage B recommendation, Pipeline State). Graceful fallback: if conversion fails, present raw markdown and continue to Stage B. | Rendering procedure (6 invariants, 3 translation invariants, template reference) in `review-pipeline.md` |
+| **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + session-derived boxes (Stage B recommendation, Pipeline State). Graceful fallback: if conversion fails, present raw markdown and continue to Stage B. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md` |
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Oracle COMMENT signals). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
 
@@ -935,7 +936,7 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 | Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
 | Momus | Adding review instructions | Momus has own criteria |
 
-> Detailed invocation templates (3-Section Metis, Oracle Verification Focus, Momus path-only) + Stage A HTML rendering procedure (6 rendering invariants, 3 translation invariants, template reference, substitution semantics) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
+> Detailed invocation templates (3-Section Metis, Oracle Verification Focus, Momus path-only) + Stage A HTML rendering procedure (6 rendering invariants, 3 translation invariants, readability enrichment, template reference, substitution semantics) + Stage B Decision Matrix details + Stage C option formatting → [review-pipeline.md](review-pipeline.md). Lookup-only — read the relevant section when executing that specific stage.
 
 ---
 
