@@ -22,6 +22,7 @@ import {
   cmdClean,
   cmdCollect,
   cmdResumeMember,
+  assertMembersOrExit,
 } from './generic-job.ts';
 
 // ---------------------------------------------------------------------------
@@ -1783,6 +1784,43 @@ describe('buildAugmentedCommand opencode output_format', () => {
       'codex',
     );
     expect(result.command).toContain('--json');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assertMembersOrExit
+// ---------------------------------------------------------------------------
+
+describe('assertMembersOrExit', () => {
+  let originalExit: typeof process.exit;
+
+  beforeEach(() => {
+    originalExit = process.exit;
+    (process as any).exit = (code?: number) => {
+      throw new Error(`process.exit(${code})`);
+    };
+  });
+
+  afterEach(() => {
+    process.exit = originalExit;
+  });
+
+  test('빈 배열이면 exitWithError 호출 (process.exit(1))', () => {
+    expect(() =>
+      assertMembersOrExit([], councilConfig, '/path/to/config.yaml'),
+    ).toThrow('process.exit(1)');
+  });
+
+  test('배열이 아닌 값이면 exitWithError 호출 (process.exit(1))', () => {
+    expect(() =>
+      assertMembersOrExit(undefined as any, councilConfig, '/path/to/config.yaml'),
+    ).toThrow('process.exit(1)');
+  });
+
+  test('비어 있지 않은 배열이면 정상 반환 (exit 없음)', () => {
+    expect(() =>
+      assertMembersOrExit([{ name: 'x' }], councilConfig, '/path/to/config.yaml'),
+    ).not.toThrow();
   });
 });
 
