@@ -14,6 +14,7 @@ import {
 
 import {
   type JobConfig,
+  assertMembersOrExit,
   computeStatus as frameworkComputeStatus,
   spawnWorkers as frameworkSpawnWorkers,
   cmdResults as frameworkCmdResults,
@@ -100,9 +101,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
   const reviewConfig = config[DIAGNOSE_CONFIG.configTopLevelKey] as any;
   const members = (reviewConfig.members || []).filter((m: any) => m && m.name && m.command);
-  if (members.length === 0) {
-    exitWithError(`start: no valid reviewers in config (each member needs both 'name' and 'command') — config=${configPath}`);
-  }
+  assertMembersOrExit(members, DIAGNOSE_CONFIG, configPath);
   const timeoutSec = Number(reviewConfig.settings?.timeout || 0);
 
   const jobId = generateJobId();

@@ -40,27 +40,23 @@ bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
 
 `collect` polls internally, but it returns after a fixed internal timeout that is deliberately shorter than the worker's full run budget. A non-`done` return (`running`, `queued`, or `awaiting_resume`) is therefore expected — it does NOT mean the job will finish on its own, and nothing will notify you when it does. Re-run `collect` in the foreground until it returns `done`, or go to Step 4 when the state is `awaiting_resume`. Do not end the turn while the overall state is non-terminal.
 
-### Step 4: Fallback branch
+### Step 4: Decide based on job outcome
 
-Determine the terminal worker state by running:
+> **Note on empty config**: If `start` exits non-zero (config has no valid members), the default member ships with the skill so this is unreachable under normal config. Fall back to in-session Hephaestus immediately.
+
+Determine the state by running:
 
 ```bash
 bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 ```
 
-`status` returns `{ members: [{member, state, ...}] }`. Branch on `members[0].state`:
+Act on each concern independently, in order:
 
-| `members[0].state` | Action |
-|----------------------|--------|
-| `missing_cli` | Fallback: become Hephaestus in-session (see below) |
-| `timed_out` | Fallback: become Hephaestus in-session (see below) |
-| `error` | Fallback: become Hephaestus in-session (see below) |
-| `canceled` | Fallback: become Hephaestus in-session (see below) |
-| `non_retryable` | Fallback: become Hephaestus in-session (see below) |
-| `awaiting_resume` | Call `resume-member` (pass `$JOB_DIR`, member name `hephaestus`, and a prompt asking it to continue); re-run `status` to confirm the new state; repeat up to 3 total resume attempts (`resume_count` cap). If still `awaiting_resume` after 3 attempts, fall back to in-session analysis. |
-| `done` | Read the manifest from Step 3 and forward `reviewers[0].outputFilePath` content to the caller. If the forwarded content is planning, framing, or waiting (i.e., the agent paused before delivering analysis), call `resume-member` to drive it to completion before treating the job as finished. |
+**RESUME (separate concern):** If any member's state is `awaiting_resume`, OR its output reads as planning / framing / waiting / incomplete rather than a finished answer, call `resume-member` (pass `$JOB_DIR`, the member name, and a prompt asking it to continue). Re-run `status` to confirm the new state. Repeat up to a cap of 3 total resume attempts (`resume_count`). If the cap is exhausted and the output is still not a finished answer, treat the member as failed and fall through to the failure path below.
 
-**Fallback procedure**: READ `prompts/hephaestus.md` and apply the analysis framework defined there IN-SESSION. You become Hephaestus for the remainder of this skill invocation.
+**All members failed → in-session fallback:** When the member produced no usable output (state is `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or `done` with a null `outputFilePath`), READ `prompts/hephaestus.md` and apply the analysis framework defined there IN-SESSION. You become Hephaestus for the remainder of this skill invocation.
+
+**Output present → forward:** When a finished answer exists, forward the content at the member's output path recorded in the manifest to the caller.
 
 > **WARNING — destructive ordering**: `clean` deletes `$JOB_DIR`, which is required by `resume-member`. Do NOT run Step 5 until any `awaiting_resume` state is fully resolved (member reaches `done` or the resume cap is exhausted and you have fallen back in-session). Step 5 must always be the last action.
 
@@ -93,6 +89,6 @@ You are done only when BOTH hold:
 
 ## Reference Files
 
-- `diagnose.config.yaml`: Single-member config (hephaestus, opencode, 600s timeout)
+- `diagnose.config.yaml`: reviewer dispatch config — `members` list + `settings.timeout`
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
 - `prompts/hephaestus.md`: Hephaestus analysis framework — loaded only during fallback
