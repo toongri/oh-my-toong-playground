@@ -42,7 +42,7 @@ bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
 
 ### Step 4: Decide based on job outcome
 
-> **Note on empty config**: If `start` exits non-zero (config has no valid members), the default member ships with the skill so this is unreachable under normal config. Fall back to the in-session advisor immediately.
+If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session analysis (READ `prompts/default.md`). Distinguish by cause: if stderr contains `to dispatch`, the no-members guard fired (e.g. a config typo or missing `command` field leaves zero valid members) — enter the fallback silently (expected path). For any other non-zero exit (disk/permission error, spawn failure, a bug), surface the failure reason (include the stderr line) in your output first, then proceed with the in-session fallback.
 
 Determine the state by running:
 
@@ -52,13 +52,9 @@ bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
 
 Act on each concern independently, in order:
 
-**RESUME (separate concern):** If any member's state is `awaiting_resume`, OR its output reads as planning / framing / waiting / incomplete rather than a finished answer, call `resume-member` (pass `$JOB_DIR`, the member name, and a prompt asking it to continue). Re-run `status` to confirm the new state. Repeat up to a cap of 3 total resume attempts (`resume_count`). If the cap is exhausted and the output is still not a finished answer, treat the member as failed and fall through to the failure path below.
-
-**All members failed → in-session fallback:** When the member produced no usable output (state is `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or `done` with a null `outputFilePath`), READ `prompts/default.md` and apply the analysis framework defined there IN-SESSION. You become the in-session advisor for the remainder of this skill invocation.
+Collect results. If the member's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If the member outright fails (`missing_cli`, `error`, `timed_out`, `canceled`, `non_retryable`) or the resume cap is exhausted without a complete answer, fall back to in-session analysis per the trigger logic above. Once everything is finished, run `clean`.
 
 **Output present → forward:** When a finished answer exists, forward the content at the member's output path recorded in the manifest to the caller.
-
-> **WARNING — destructive ordering**: `clean` deletes `$JOB_DIR`, which is required by `resume-member`. Do NOT run Step 5 until any `awaiting_resume` state is fully resolved (member reaches `done` or the resume cap is exhausted and you have fallen back in-session). Step 5 must always be the last action.
 
 ### Step 5: Cleanup
 
@@ -66,7 +62,7 @@ Act on each concern independently, in order:
 bun .claude/skills/diagnose/scripts/job.ts clean $JOB_DIR
 ```
 
-Run cleanup only after all resumable states are closed (member is `done`, in-session fallback is complete, or resume cap is exhausted).
+`clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after everything is complete.
 
 ---
 

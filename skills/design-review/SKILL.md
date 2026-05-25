@@ -32,7 +32,7 @@ rm -f "$PROMPT_FILE"
 
 The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 
-If `start` exits non-zero or `$JOB_DIR` is empty, skip Steps 3–5 (no collect/clean) and become the design-review persona in-session by reading `prompts/default.md`.
+If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session analysis (READ `prompts/default.md`). Distinguish by cause: if stderr contains `to dispatch`, the no-members guard fired — enter the fallback silently (expected path when members config is empty or all filtered). For any other non-zero exit (disk/permission error, spawn failure, a bug), surface the failure reason (include the stderr line) in your output first, then proceed with the in-session fallback.
 
 ### Step 3: Collect results
 
@@ -50,13 +50,9 @@ After `collect` returns, check the member's terminal state via:
 bun .claude/skills/design-review/scripts/job.ts status $JOB_DIR
 ```
 
-**RESUME** (trigger: member state is `awaiting_resume`, OR the member's output reads as planning, framing, or incomplete analysis): call `resume-member` with `$JOB_DIR`, the member name, and a prompt asking it to continue. Re-run `status` to confirm the new state. Repeat up to 3 total resume attempts. If the member is still `awaiting_resume` after 3 attempts without a complete answer, treat the cap as exhausted and fall back to in-session analysis.
-
-**All members failed** (any of `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or resume cap exhausted without a complete answer): READ `prompts/default.md` and apply the analysis framework defined there IN-SESSION. You become the in-session reviewer for the remainder of this skill invocation.
+Collect results. If the member's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If the member outright fails (`missing_cli`, `error`, `timed_out`, `canceled`, `non_retryable`) or the resume cap is exhausted without a complete answer, fall back to in-session analysis per the trigger logic above. Once everything is finished, run `clean`.
 
 **Output present** (member state is `done` with substantive analysis): read the member's output path from the manifest and forward that content to the caller.
-
-> **WARNING — destructive ordering**: `clean` deletes `$JOB_DIR`, which is required by `resume-member`. Do NOT run Step 5 until any `awaiting_resume` state is fully resolved (member reaches `done` or the resume cap is exhausted and you have fallen back in-session). Step 5 must always be the last action.
 
 ### Step 5: Cleanup
 
@@ -64,7 +60,7 @@ bun .claude/skills/design-review/scripts/job.ts status $JOB_DIR
 bun .claude/skills/design-review/scripts/job.ts clean $JOB_DIR
 ```
 
-Run cleanup only after all resumable states are closed (member is `done`, in-session fallback is complete, or resume cap is exhausted).
+`clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after everything is complete.
 
 ---
 

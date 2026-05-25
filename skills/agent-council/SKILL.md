@@ -272,7 +272,7 @@ Council members may fail due to CLI unavailability, timeout, or errors. This is 
    - `done` but content is a non-answer → Member exited cleanly but returned framing / a plan / a waiting pattern instead of actually answering the question. **Recoverable** — call `resume-member`. The runner marks it `done` based on exit reason, not semantic completeness; the Chairman judges semantic completeness by reading the content.
 3. After all recoverable states are resolved (or resume cap exhausted), synthesize from members with substantive answers.
 
-If `start` exits non-zero or returns an empty `$JOB_DIR` (members filtered to empty before any job is created), skip Steps 2–4 (no collect/clean) and fall back to in-session advisory: READ `prompts/default.md` and apply the framework defined there IN-SESSION. You become the in-session advisor for the remainder of this skill invocation — no manifest exists to read.
+If `start` exits non-zero or returns an empty `$JOB_DIR`, skip Steps 2–4 (no collect/clean) and fall back to in-session advisory: READ `prompts/default.md` and apply the framework defined there IN-SESSION. You become the in-session advisor for the remainder of this skill invocation — no manifest exists to read. When the cause is the no-members guard — stderr contains `to dispatch` — enter the fallback silently (expected path: empty/all-filtered members config). For any other non-zero exit (an unexpected failure — disk/permission, spawn error, a bug), first surface the failure reason (include the stderr line) in your output, then proceed with the in-session fallback.
 
 **Synthesis by response count:**
 
@@ -281,7 +281,7 @@ If `start` exits non-zero or returns an empty `$JOB_DIR` (members filtered to em
 | 3/3 | Full synthesis | Standard advisory format |
 | 2/3 | Partial synthesis | Prepend: "⚠️ Partial advisory (2/3 respondents). [failed_member] unavailable: [state]. The following synthesis lacks [failed_member]'s perspective ([see Model Characteristics for what this model typically contributes])." |
 | 1/3 | Single response report | Prepend: "⚠️ Limited advisory (1/3 respondents). [failed_members] unavailable. Presenting single response from [available_member] without synthesis. Treat as individual opinion, not council advisory." |
-| 0/3 | In-session fallback | READ `prompts/default.md` and deliver in-session advisory. |
+| 0/3 | In-session fallback | READ `prompts/default.md` and deliver in-session advisory. When all members failed due to infrastructure errors (not the no-members guard), surface a one-line failure summary before proceeding. |
 
 **Partial synthesis rules:**
 - Use "partial consensus (N/3 respondents)" when reporting agreement
