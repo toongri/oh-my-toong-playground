@@ -10,7 +10,7 @@ import { splitCommand, atomicWriteJson, runOneTurn } from '@lib/worker-utils';
 import { detectCliType } from '@lib/generic-job';
 import type { CliType } from '@lib/agent-drivers/types';
 
-const PROMPTS_DIR = path.resolve(import.meta.dirname, 'prompts');
+const PROMPTS_DIR = path.resolve(import.meta.dirname, '../prompts');
 
 function main() {
   const options = parseArgs(process.argv);
@@ -19,8 +19,8 @@ function main() {
   const command = options.command;
   const timeoutSec = options.timeout ? Number(options.timeout) : 0;
 
-  const jobId = jobDir ? path.basename(String(jobDir)).replace(/^spec-review-/, '') : 'unknown';
-  initLogger('spec-review-worker', getOmtDir(), jobId);
+  const jobId = jobDir ? path.basename(String(jobDir)).replace(/^themis-/, '') : 'unknown';
+  initLogger('themis-worker', getOmtDir(), jobId);
   logStart();
 
   const workerEnv: Record<string, string> = {};
@@ -41,24 +41,20 @@ function main() {
 
   logInfo(`worker start: member=${member} command=${command} timeout=${timeoutSec}`);
 
-  const membersRoot = path.join(jobDir as string, 'members');
-  const memberDir = path.join(membersRoot, member as string);
-
   const promptPath = path.join(jobDir as string, 'prompt.txt');
   const prompt = fs.existsSync(promptPath) ? fs.readFileSync(promptPath, 'utf8') : '';
 
+  const memberDir = path.join(jobDir as string, 'reviewers', member as string);
   const tokens = splitCommand(command as string);
   if (!tokens || tokens.length === 0) {
     logError(`invalid command string: ${command}`);
-    const statusPath = path.join(memberDir, 'status.json');
-    atomicWriteJson(statusPath, {
+    atomicWriteJson(path.join(memberDir, 'status.json'), {
       member, state: 'error', message: 'Invalid command string',
       finishedAt: new Date().toISOString(), command,
     });
     logEnd();
     process.exit(1);
   }
-
   const program = tokens[0];
   const args = tokens.slice(1);
 
@@ -67,7 +63,7 @@ function main() {
     cliType: detectCliType(command) as CliType,
     promptsDir: PROMPTS_DIR,
   }).then((result) => {
-    logInfo(`worker done: member=${member} state=${result.state} exitCode=${result.exitCode}`);
+    logInfo(`worker done: member=${member} state=${result.state}`);
     logEnd();
     process.exit(result.state === 'done' ? 0 : 1);
   });

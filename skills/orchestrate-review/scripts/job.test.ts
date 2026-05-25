@@ -1062,6 +1062,65 @@ describe('spawnWorkers safe name collision detection', () => {
 });
 
 // ---------------------------------------------------------------------------
+// start: empty/all-filtered config → non-zero exit, no job.json (assertMembersOrExit)
+// ---------------------------------------------------------------------------
+
+describe('start: empty members config exits non-zero', () => {
+  const SCRIPT = path.join(import.meta.dirname, 'job.ts');
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('exits non-zero with no-members message when config has empty members list', () => {
+    const configPath = path.join(tmpDir, 'config.yaml');
+    fs.writeFileSync(configPath, [
+      'chunk-review:',
+      '  chairman:',
+      '    role: none',
+      '  members: []',
+      '  settings:',
+      '    exclude_chairman_from_members: false',
+      '    timeout: 10',
+    ].join('\n'));
+
+    const jobsDir = path.join(tmpDir, 'jobs');
+    fs.mkdirSync(jobsDir, { recursive: true });
+
+    let threw = false;
+    let err: any;
+    try {
+      execFileSync(process.execPath, [
+        SCRIPT, 'start',
+        '--config', configPath,
+        '--jobs-dir', jobsDir,
+        '--chairman', 'none',
+        'test prompt',
+      ], { stdio: 'pipe' });
+    } catch (e) {
+      threw = true;
+      err = e;
+    }
+
+    expect(threw).toBe(true);
+    expect(err.status).toBe(1);
+    expect(err.stderr.toString()).toContain('to dispatch');
+
+    // No job.json should have been written
+    const jobDirs = fs.existsSync(jobsDir) ? fs.readdirSync(jobsDir) : [];
+    const jobJsonFound = jobDirs.some((d) =>
+      fs.existsSync(path.join(jobsDir, d, 'job.json'))
+    );
+    expect(jobJsonFound).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // --exclude-chairman=false boolean parsing (Bug fix)
 // ---------------------------------------------------------------------------
 

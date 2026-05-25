@@ -1,0 +1,8 @@
+# Design Review Configuration
+# External dispatch disabled: members is empty, in-session fallback only.
+
+review:
+  members: []
+
+  settings:
+    timeout: 600

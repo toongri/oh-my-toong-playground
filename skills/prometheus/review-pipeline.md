@@ -27,7 +27,7 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 ---
 
-## Oracle Invocation Template
+## Daedalus Invocation Template
 
 **When**: After plan generated to `$OMT_DIR/plans/{name}.md`. MANDATORY before Momus.
 
@@ -47,13 +47,22 @@ $OMT_DIR/plans/{name}.md
 - **Rationale**: Brief justification
 ```
 
+### Decision Quality Focus
+
+This plan review phase must also evaluate decision quality, not just factual correctness. In addition to the Verification Focus above, assess:
+
+- **steelman antithesis**: What is the strongest case against this plan? Surface it explicitly, even if you ultimately endorse the approach.
+- **Tradeoff tension**: Identify the key tradeoff tensions present (e.g., speed vs. safety, complexity vs. flexibility). Are they acknowledged and resolved in the plan?
+- **Synthesis**: Where competing forces exist, does the plan synthesize a defensible resolution, or does it silently pick one side?
+- **Evaluative trigger**: If the plan contains a major architectural or strategic decision, an explicit evaluative statement of the chosen approach's merits and risks is required — not just a description of what was chosen.
+
 On REQUEST_CHANGES: update plan file first, then re-invoke with same template.
 
 ---
 
 ## Momus Invocation Template
 
-**When**: After Oracle APPROVE/COMMENT. MANDATORY before user presentation.
+**When**: After Daedalus APPROVE/COMMENT. MANDATORY before user presentation.
 
 Send the plan file path only:
 
@@ -181,7 +190,7 @@ Before asking the user to choose execution mode, compute a recommendation:
 | Trivial/Scoped flag in plan | — | Strong |
 | AC gap (unverified acceptance criteria) | Moderate | — |
 | Ambiguity Score > 2 | Moderate | — |
-| Oracle COMMENT with codebase concern | Moderate | — |
+| Daedalus COMMENT with codebase concern | Moderate | — |
 | Scope question unresolved | Moderate | — |
 
 **Conflict resolution**: When signals split evenly, "Plan more wins" — default to Full Orchestration.

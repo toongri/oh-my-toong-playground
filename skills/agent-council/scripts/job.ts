@@ -17,6 +17,7 @@ import {
 
 import {
   type JobConfig,
+  assertMembersOrExit,
   computeStatus as frameworkComputeStatus,
   buildUiPayload as frameworkBuildUiPayload,
   spawnWorkers as frameworkSpawnWorkers,
@@ -294,6 +295,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string) {
 
   const requestedMembers = config.council.members || [];
   const members = requestedMembers.filter(filterMember);
+  assertMembersOrExit(members, COUNCIL_CONFIG, configPath);
 
   const jobId = generateJobId();
   const jobDir = path.join(jobsDir, `council-${jobId}`);
