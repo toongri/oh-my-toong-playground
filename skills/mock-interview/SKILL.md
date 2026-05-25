@@ -1,9 +1,9 @@
 ---
-name: creating-interview-questions-from-resume
+name: mock-interview
 description: Use when generating interviewer-side mock-interview questions from a candidate's resume — triggers include "모의면접 질문", "면접 예상질문", "이력서로 면접 질문", "꼬리질문", "drill-down 질문", "2단계 3단계 깊이", "mock interview questions", "interview questions from resume", "follow-up depth". Use whenever a user provides a resume (PDF/markdown) and asks for interview questions or follow-ups.
 ---
 
-# Creating Interview Questions from Resume
+# Mock Interview Questions
 
 ## Overview
 
@@ -71,7 +71,7 @@ digraph skill_selection {
     "Improve / fix / rewrite\nthe resume itself?" -> "Find / match jobs\nfor the candidate?" [label="no"];
     "Find / match jobs\nfor the candidate?" -> "Use resume-apply" [label="yes"];
     "Find / match jobs\nfor the candidate?" -> "Prepare interviewer-side\nquestions about the candidate?" [label="no"];
-    "Prepare interviewer-side\nquestions about the candidate?" -> "Use THIS skill\n(creating-interview-questions-from-resume)" [label="yes"];
+    "Prepare interviewer-side\nquestions about the candidate?" -> "Use THIS skill\n(mock-interview)" [label="yes"];
     "Prepare interviewer-side\nquestions about the candidate?" -> "None of the above —\nask user for clarification" [label="no"];
 }
 ```
@@ -90,7 +90,7 @@ Triggers that map to THIS skill:
    → PING-PONG: present the area list, ask "이 영역들 어때? 더 팔 곳 / 뺄 곳?" Incorporate before continuing.
 4. For each agreed area, present the chain as ONE checkpoint (Rule 1a batching): show the Main question and each stage — direction / happy-case keywords / evidence / ✅⚠️ marker individually visible — and wait for the interviewer's per-stage feedback before moving to the next area. Apply the Chain Depth Decision flowchart per stage; stop the chain when it says stop (depth 2 with ⚠️ is normal). Never rubber-stamp a whole chain; never batch multiple areas into one checkpoint.
 5. Assemble the agreed draft per Required Deliverable Structure (incl. [Interviewer Guide] blocks, 1-page summary).
-6. COUNCIL VALIDATION (default): load references/council-iteration.md via Read tool, run council on the 10 review axes, iterate to unanimous APPROVE, bring each round's conflicts back to the interviewer. (If the interviewer opted out: run exactly 1 round silently — auto-apply verifiable-fact and consensus fixes, no user arbitration — then ship.)
+6. COUNCIL VALIDATION (default): load references/council-iteration.md via Read tool, run council on the 10 review axes, iterate to unanimous APPROVE, bring each round's conflicts back to the interviewer. (If the interviewer opted out: run exactly one silent council round — auto-apply verified factual-error fixes and consensus fixes, no user arbitration — then ship.)
 7. Ship after unanimous APPROVE (or the interviewer explicitly stops).
 ```
 

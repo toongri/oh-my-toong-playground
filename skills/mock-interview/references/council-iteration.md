@@ -1,12 +1,12 @@
 # Council Iteration — Process Rules
 
-> **Reference for**: the `creating-interview-questions-from-resume` skill's DEFAULT council-validation step (Rule 1b). Council to unanimous APPROVE is the default final step, **NOT a conditional gate**. The multi-round *loop pattern* below is reusable for other quality-critical artifacts (designs, specs, PRs), but the review axes are interview-question-specific — other skills must substitute their own axes.
+> **Reference for**: the `mock-interview` skill's DEFAULT council-validation step (Rule 1b). Council to unanimous APPROVE is the default final step, **NOT a conditional gate**. The multi-round *loop pattern* below is reusable for other quality-critical artifacts (designs, specs, PRs), but the review axes are interview-question-specific — other skills must substitute their own axes.
 >
 > **Underlying mechanism**: the `agent-council` skill (single-round `start` / `collect` / `clean` infrastructure). This reference is the multi-round policy layer on top of it.
 
 ## When to Apply This Reference
 
-**For `creating-interview-questions-from-resume` (the default path)**: ALWAYS apply, after the interviewer-agreed draft. Council to unanimous APPROVE is the default — there is no "should I run council?" decision. The ONLY fast-mode exception is the interviewer's explicit `빠르게 / 그냥 한 번에 / 알아서 다 만들어줘` signal (bare "그냥" alone does NOT count). Even then, do NOT skip council: run **exactly one silent council round** — auto-apply verified factual-error fixes and consensus fixes, no user arbitration — then ship. Opt-out reduces ping-pong and iteration depth; it never skips the first factual round.
+**For `mock-interview` (the default path)**: ALWAYS apply, after the interviewer-agreed draft. Council to unanimous APPROVE is the default — there is no "should I run council?" decision. The ONLY fast-mode exception is the interviewer's explicit `빠르게 / 그냥 한 번에 / 알아서 다 만들어줘` signal (bare "그냥" alone does NOT count). Even then, do NOT skip council: run **exactly one silent council round** — auto-apply verified factual-error fixes and consensus fixes, no user arbitration — then ship. Opt-out reduces ping-pong and iteration depth; it never skips the first factual round.
 
 **For other artifacts (only when this loop pattern is reused outside this skill)**: apply under these optional triggers —
 - The user explicitly asked to **iterate**: "반복", "다시 리뷰", "받아내야지 승인까지", "iterate", "run council again"
