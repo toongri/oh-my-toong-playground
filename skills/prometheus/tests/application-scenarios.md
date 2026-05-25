@@ -732,6 +732,7 @@ Prometheus MUST apply "Plan more wins" tie-breaking:
 | V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
 | V9 | Per-plan output path, no overwrite | The Stage A HTML artifact is written to `$OMT_DIR/plans/presentation/{name}.html` where `{name}` matches the plan markdown stem (`{name}.md`) — NOT a fixed `plan.html`. Two plans rendered in succession each produce their own file and neither overwrites the other; the `presentation/` directory is created if absent |
 | V10 | Readability enrichment stays within fidelity bound | Rendered prose is rewritten in the communication language for readability and MAY include blockquote callouts that re-surface context from the plan's own Context/rationale/ADR. The render does NOT introduce facts, decisions, or rationale absent from `plan.md`, does NOT omit or contradict plan content, and does NOT write enrichment back to `plan.md` (which stays unchanged on disk) |
+| V11 | Stage A always produces the HTML | A missing tool (e.g. `pandoc: command not found`) or time pressure is never a reason to present raw markdown instead — Prometheus uses any substitution tool (awk/sed/bun/Write; no converter needed) and produces the artifact |
 
 ---
 
@@ -778,6 +779,6 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
 | P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-20.md |
 | P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-21.md |
-| P-22 | HTML Presentation | **RETEST** | 2026-05-25 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
+| P-22 | HTML Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 HTML 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 markdown 도망 없이 HTML 생성). 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | |
