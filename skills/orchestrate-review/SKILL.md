@@ -179,6 +179,8 @@ Models may fail due to CLI unavailability, timeout, or errors. This is NOT quoru
 
 **Diff command failure:** If all reviewers report that the diff command failed (error or empty output), do NOT attempt aggregation. Report "Diff command failed for this chunk: [error details]" and return immediately.
 
+**Start non-zero (no members):** If `start` exits non-zero because no members remain after filtering (empty config or all filtered), emit the `0/N` "Review unavailable" report immediately — do NOT attempt to read a manifest (none was written).
+
 ## Aggregation Output Format
 
 ```
