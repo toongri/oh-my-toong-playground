@@ -22,6 +22,7 @@ import { getOmtDir } from '@lib/omt-dir';
 import {
   type JobConfig,
   type ResumeMemberOpts,
+  assertMembersOrExit,
   detectCliType,
   buildAugmentedCommand,
   gcStaleJobs as _gcStaleJobs,
@@ -319,7 +320,7 @@ async function cmdStart(options: Record<string, unknown>, prompt: string): Promi
   const requestedMembers = config['chunk-review'].members || [];
   const members = requestedMembers.filter(filterMember);
 
-  if (members.length === 0) exitWithError('start: no members remaining after filtering');
+  assertMembersOrExit(members, CHUNK_REVIEW_JOB_CONFIG, configPath);
 
   const jobId = generateJobId();
   initLogger('chunk-review-job', getOmtDir(), jobId);
