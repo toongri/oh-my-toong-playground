@@ -7,7 +7,7 @@ description: Use when delegating plan/design review with steelman antithesis and
 
 ## Overview
 
-Delegates plan and design review to the Daedalus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the Daedalus framework.
+Delegates plan and design review to the Daedalus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the in-session fallback framework.
 
 ---
 
@@ -32,7 +32,7 @@ rm -f "$PROMPT_FILE"
 
 The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 
-If `start` exits non-zero or `$JOB_DIR` is empty, skip Steps 3–5 (no collect/clean) and become the design-review persona in-session by reading `prompts/themis.md`.
+If `start` exits non-zero or `$JOB_DIR` is empty, skip Steps 3–5 (no collect/clean) and become the design-review persona in-session by reading `prompts/default.md`.
 
 ### Step 3: Collect results
 
@@ -52,7 +52,7 @@ bun .claude/skills/design-review/scripts/job.ts status $JOB_DIR
 
 **RESUME** (trigger: member state is `awaiting_resume`, OR the member's output reads as planning, framing, or incomplete analysis): call `resume-member` with `$JOB_DIR`, the member name, and a prompt asking it to continue. Re-run `status` to confirm the new state. Repeat up to 3 total resume attempts. If the member is still `awaiting_resume` after 3 attempts without a complete answer, treat the cap as exhausted and fall back to in-session analysis.
 
-**All members failed** (any of `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or resume cap exhausted without a complete answer): READ `prompts/themis.md` and apply the analysis framework defined there IN-SESSION. You become Daedalus for the remainder of this skill invocation.
+**All members failed** (any of `missing_cli`, `timed_out`, `error`, `canceled`, `non_retryable`, or resume cap exhausted without a complete answer): READ `prompts/default.md` and apply the analysis framework defined there IN-SESSION. You become the in-session reviewer for the remainder of this skill invocation.
 
 **Output present** (member state is `done` with substantive analysis): read the member's output path from the manifest and forward that content to the caller.
 
@@ -89,4 +89,4 @@ You are done only when BOTH hold:
 
 - `design-review.config.yaml`: Job configuration — `members` list (each entry needs `name` and `command`) and `settings.timeout` (seconds)
 - `scripts/job.ts`: Job manager (start/collect/clean/status/results/stop)
-- `prompts/themis.md`: Daedalus analysis framework — loaded only during fallback
+- `prompts/default.md`: in-session analysis framework — loaded only during fallback
