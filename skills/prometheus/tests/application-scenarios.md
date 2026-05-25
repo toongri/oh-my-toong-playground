@@ -290,6 +290,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 | V4 | Context section with Interview Summary | Plan includes Context section containing Interview Summary (key decisions from extended interview) |
 | V5 | Verification Strategy section present | Plan includes Verification Strategy with Test Decision, and Agent-Executed QA Scenarios for each TODO |
 | V6 | TODOs have populated References | Every TODO includes at least one Pattern or API/Type reference with WHY explanation; OR for greenfield tasks where no existing code patterns or types exist, states "Greenfield — no existing pattern" explicitly |
+| V7 | Agent anonymity in plan body | The plan body (Context / Interview Summary / WHY / any TODO field) records established facts without attributing them to a producing agent — no "oracle confirmed" / "explore found" / "per the reviewer" / "N oracle passes" style source-attribution to explore / librarian / oracle / Metis / Momus. Bare domain use of such words (e.g. "Oracle DB") is allowed; what is absent is agent-as-source attribution, not the tokens themselves |
 
 ---
 
@@ -729,6 +730,8 @@ Prometheus MUST apply "Plan more wins" tie-breaking:
 | V6 | SESSION-DERIVED-BOXES-HERE injection order | The `<!-- SESSION-DERIVED-BOXES-HERE ... -->` block is replaced by exactly 2 `.section-box` elements in order: (a) Stage B · Execution Recommendation, (b) Pipeline State |
 | V7 | Plan markdown container is parser-resilient | The rendered HTML embeds plan markdown in a `script type="application/json" id="plan-md"` element; content is JSON-encoded with literal close-tag sequence escaped as backslash-escaped form |
 | V8 | Language detection fallback | When session language detection fails or yields an ambiguous result, rendering falls back to the original language in `plan.md` (does NOT attempt partial translation) |
+| V9 | Per-plan output path, no overwrite | The Stage A HTML artifact is written to `$OMT_DIR/plans/presentation/{name}.html` where `{name}` matches the plan markdown stem (`{name}.md`) — NOT a fixed `plan.html`. Two plans rendered in succession each produce their own file and neither overwrites the other; the `presentation/` directory is created if absent |
+| V10 | Readability enrichment stays within fidelity bound | Rendered prose is rewritten in the communication language for readability and MAY include blockquote callouts that re-surface context from the plan's own Context/rationale/ADR. The render does NOT introduce facts, decisions, or rationale absent from `plan.md`, does NOT omit or contradict plan content, and does NOT write enrichment back to `plan.md` (which stays unchanged on disk) |
 
 ---
 
@@ -766,7 +769,7 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 | P-9 | Acceptance Criteria Drafting | | | AC section rewritten -- verification points updated, needs re-testing |
 | P-10 | Plan Generation + Metis Consultation | **PASS** | 2026-02-11 | 4/4 VP. GREEN: Plan Generation + Subagent Guide + Workflow 모두 건재. 회귀 없음 |
 | P-11 | Subagent Selection | **PASS** | 2026-02-11 | 3/3 VP. GREEN: Subagent Selection Guide + Role Clarity 건재. 회귀 없음 |
-| P-12 | Plan Template Structure | **RETEST** | 2026-03-16 | V3 updated (two-line AC + rich What to do), V6 added (References). Needs re-testing |
+| P-12 | Plan Template Structure | **RETEST** | 2026-05-25 | V3 updated (two-line AC + rich What to do), V6 added (References), V7 added (agent anonymity in plan body). Needs re-testing |
 | P-13 | Clearance Checklist | **RETEST** | | VPs updated in this branch. Needs re-testing |
 | P-15 | Failure Mode Avoidance | **RETEST** | 2026-03-16 | V1 updated — over-planning checks for planner-assumed technique. Needs re-testing |
 | P-16 | Context Loading | **PASS** | 2026-02-23 | 4/4 VP. GREEN: trust boundary(V1), partial context silent skip(V2), explore for specifics(V3), graceful degradation(V4) 모두 준수 |
@@ -775,6 +778,6 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 | P-19 | QA Scenarios in TODO | **RETEST** | 2026-03-16 | V3 updated — non-code TODO now requires full QA format with grep/diff Tool and concrete Steps. Needs re-testing |
 | P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-20.md |
 | P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-21.md |
-| P-22 | HTML Presentation | **PASS** | 2026-04-24 | 4/4 VP. GREEN: Variant A=Full(Strong×2+Mod×1), B=Focused(Strong×1), Plan more wins 규칙 명시·미발동 조건 분석. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-22.md |
+| P-22 | HTML Presentation | **RETEST** | 2026-05-25 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
 | UC-P1 | End-to-End — Full Planning Pipeline | | | |
 | UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | |
