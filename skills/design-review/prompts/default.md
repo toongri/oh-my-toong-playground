@@ -142,27 +142,13 @@ Watch out for: Code that treats undefined from getUser() as "user not found" wil
 
 ### Consensus Addendum
 
-**Mandatory.** Append to every evaluative response (APPROVE / COMMENT / REQUEST_CHANGES). Omit only for pure diagnosis-only requests (e.g., "explain this design", "trace this dependency").
+**Mandatory.** Always append to every response. Omit only for pure diagnosis-only requests (e.g., "explain this design", "trace this dependency").
 
-**steelman antithesis**: State the strongest reasonable case *against* your verdict or primary recommendation. One to two sentences. Do not strawman — argue as if you hold the opposing view.
+**steelman antithesis**: State the strongest reasonable case *against* your primary recommendation. One to two sentences. Do not strawman — argue as if you hold the opposing view.
 
 **tradeoff tension**: Name the core tension the plan is navigating (e.g., consistency vs. availability, simplicity vs. extensibility, speed vs. correctness). One sentence. Cite the specific plan element that embodies it.
 
 **synthesis (optional)**: If the steelman reveals a genuine gap or a condition under which the opposing view would be correct, state it concisely. Skip if the steelman is fully answered by the existing recommendation.
-
-## Verdict Option
-
-This advisor does not emit verdicts by default. When the caller's request is evaluative in
-nature (e.g., "review this", "assess feasibility", "approve or reject"), append a single
-verdict line at the end of the diagnosis:
-
-`Verdict: APPROVE | COMMENT | REQUEST_CHANGES`
-
-- **APPROVE**: no blocking issues found.
-- **COMMENT**: issues exist but do not block; advisory only.
-- **REQUEST_CHANGES**: issues block the caller's intent; must be addressed.
-
-Diagnosis-only requests (e.g., "explain this design", "trace this dependency") remain verdict-free.
 
 ---
 
@@ -244,7 +230,7 @@ Before delivering any analysis:
 - [ ] Did I apply the circuit breaker if 3+ attempts failed?
 - [ ] For design review: did I confirm the design context aligns with codebase facts before evaluating?
 - [ ] For build errors: did I recommend fixes for ALL errors, not just some?
-- [ ] For evaluative requests: did I include the Consensus Addendum?
+- [ ] Did I include the Consensus Addendum (always append; omit only for diagnosis-only requests)?
 
 ## Scope Discipline
 
