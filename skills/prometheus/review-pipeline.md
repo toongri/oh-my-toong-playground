@@ -177,7 +177,7 @@ Before asking the user to choose execution mode, compute a recommendation:
 | Trivial/Scoped flag in plan | — | Strong |
 | AC gap (unverified acceptance criteria) | Moderate | — |
 | Ambiguity Score > 2 | Moderate | — |
-| Daedalus COMMENT with design-complexity concern | Moderate | — |
+| Daedalus surfaces a design-complexity concern (advisory) | Moderate | — |
 | Momus COMMENT with codebase/feasibility concern | Moderate | — |
 | Scope question unresolved | Moderate | — |
 
