@@ -35,34 +35,20 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 ## Plan File
 $OMT_DIR/plans/{name}.md
 
-## Verification Focus
-- Do referenced files/modules exist?
-- Are pattern references (file:line-range) current?
-- Do dependency assumptions hold architecturally?
-- Any codebase constraints conflicting with the plan?
-
-## Output Format
-- **Verdict**: APPROVE / REQUEST_CHANGES / COMMENT
-- **Evidence**: file:line citations
-- **Rationale**: Brief justification
-```
-
-### Decision Quality Focus
-
-This plan review phase must also evaluate decision quality, not just factual correctness. In addition to the Verification Focus above, assess:
-
-- **steelman antithesis**: What is the strongest case against this plan? Surface it explicitly, even if you ultimately endorse the approach.
+## Design Opinion Focus
+- **Steelman antithesis**: What is the strongest case against this plan? Surface it explicitly, even if you ultimately endorse the approach.
 - **Tradeoff tension**: Identify the key tradeoff tensions present (e.g., speed vs. safety, complexity vs. flexibility). Are they acknowledged and resolved in the plan?
 - **Synthesis**: Where competing forces exist, does the plan synthesize a defensible resolution, or does it silently pick one side?
 - **Evaluative trigger**: If the plan contains a major architectural or strategic decision, an explicit evaluative statement of the chosen approach's merits and risks is required — not just a description of what was chosen.
+```
 
-On REQUEST_CHANGES: update plan file first, then re-invoke with same template.
+Design-advisory opinion only — no verdict, no file-existence checks. Feasibility verification is Momus's responsibility.
 
 ---
 
 ## Momus Invocation Template
 
-**When**: After Daedalus APPROVE/COMMENT. MANDATORY before user presentation.
+**When**: After Daedalus advisory review. MANDATORY before user presentation.
 
 Send the plan file path only:
 
@@ -71,6 +57,8 @@ $OMT_DIR/plans/{name}.md
 ```
 
 All context (interview summary) is already in the plan's Context section. No supplementary prompt needed.
+
+Momus verifies both document quality and codebase feasibility: it reads the referenced files cited in the plan to confirm existence, current file:line accuracy, and that dependency assumptions hold.
 
 ---
 
@@ -144,7 +132,7 @@ Translating any item is a rule violation.
 - Omitting, weakening, or contradicting any plan content.
 - Writing enrichment back to disk. Per Invariant 3 the callouts live only in the ephemeral HTML; `plan.md` stays the single source of truth and every re-render redraws from it.
 
-Rationale: `plan.md` is the artifact Oracle and Momus reviewed and the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
+Rationale: `plan.md` is the artifact Daedalus and Momus reviewed and the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
 
 ### Rendering Methodology
 
@@ -189,7 +177,8 @@ Before asking the user to choose execution mode, compute a recommendation:
 | Trivial/Scoped flag in plan | — | Strong |
 | AC gap (unverified acceptance criteria) | Moderate | — |
 | Ambiguity Score > 2 | Moderate | — |
-| Daedalus COMMENT with codebase concern | Moderate | — |
+| Daedalus COMMENT with design-complexity concern | Moderate | — |
+| Momus COMMENT with codebase/feasibility concern | Moderate | — |
 | Scope question unresolved | Moderate | — |
 
 **Conflict resolution**: When signals split evenly, "Plan more wins" — default to Full Orchestration.
