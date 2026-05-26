@@ -2,8 +2,6 @@
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before autonomous execution
 argument-hint: "<idea or vague description>"
-next-skill: prometheus
-next-skill-args: --consensus --direct
 handoff: $OMT_DIR/deep-interview/{slug}.md
 level: 3
 ---
