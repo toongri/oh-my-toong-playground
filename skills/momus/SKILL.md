@@ -112,11 +112,13 @@ Unresolved ambiguities → list as blocking gaps in verdict.
 
 ### Reference Verification Strategy
 
+**MANDATORY**: Read every file the plan references. Verify (a) it exists, (b) it contains what the plan claims, (c) the plan's stated assumptions hold against the actual code. A reference that does not exist or points to wrong content is a [CERTAIN] finding → REQUEST_CHANGES.
+
 **When you CAN access the codebase:**
 - READ every referenced file to verify it exists and contains what the plan claims
 - If references don't exist or are wrong: REQUEST_CHANGES with specific findings
 
-**When you CANNOT access the codebase** (reviewing plan in isolation):
+**When you CANNOT access the codebase** (degraded fallback — use only when codebase is inaccessible):
 - Evaluate whether references are SPECIFIC enough (file path, line numbers, function names)
 - Vague references like "follow existing patterns" → REQUEST_CHANGES (which patterns? where?)
 - Specific references like `src/services/AuthService.ts:45-60` → acceptable IF plausible
