@@ -1,7 +1,7 @@
 /**
  * Shared utility functions for job orchestrator scripts.
  *
- * Extracted from council-job.ts, chunk-review-job.ts, spec-review-job.ts.
+ * Extracted from council-job.ts, chunk-review-job.ts.
  * All functions are byte-identical across consumers except where parameterized
  * (safeFileName fallback, parseArgs booleanFlags).
  */

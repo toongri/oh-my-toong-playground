@@ -12,7 +12,6 @@ agents:
     - daedalus
     - argus
     - chunk-reviewer
-    - spec-reviewer
     - sisyphus-junior
 
 commands:
@@ -22,8 +21,6 @@ commands:
 
 skills:
   items:
-    - component: spec
-      platforms: [claude]
     - component: deep-interview
     - component: prometheus
       platforms: [claude]
@@ -42,7 +39,6 @@ skills:
     - technical-writing
     - technical-copywriting
     - humanizer
-    - spec-review
     - orchestrate-review
     - create-slides
     - slides-review

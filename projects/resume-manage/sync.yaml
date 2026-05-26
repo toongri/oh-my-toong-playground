@@ -13,7 +13,6 @@ agents:
     - argus
     - chunk-reviewer
     - tech-claim-examiner
-    - spec-reviewer
     - sisyphus-junior
 
 commands:
@@ -23,8 +22,6 @@ commands:
 
 skills:
   items:
-    - component: spec
-      platforms: [claude]
     - component: deep-interview
     - component: prometheus
       platforms: [claude]
@@ -47,7 +44,6 @@ skills:
     - tech-claim-rubric
     - resume-forge
     - collect-jd
-    - spec-review
     - orchestrate-review
     - hud
 

@@ -98,16 +98,16 @@ Decompose by concern. Each finding type becomes its own AC with its own Verifica
 
 ## Worked Example — AC Proposal
 
-**User request:** "council과 spec-review에서 공통 로직을 추출하고, oh-my-claude-sisyphus의 프롬프트 조립 패턴을 참고해서 구조화된 프롬프트 파이프라인을 만들어줘"
+**User request:** "council과 orchestrate-review에서 공통 로직을 추출하고, oh-my-claude-sisyphus의 프롬프트 조립 패턴을 참고해서 구조화된 프롬프트 파이프라인을 만들어줘"
 
 ## Proposed Acceptance Criteria
 
 ### 1. Shared Worker Infrastructure
 
-**Responsibility:** council과 spec-review 워커의 공통 로직을 단일 소스로 통합하여, 이후 변경이 한 곳에서만 이루어지게 한다.
+**Responsibility:** council과 orchestrate-review 워커의 공통 로직을 단일 소스로 통합하여, 이후 변경이 한 곳에서만 이루어지게 한다.
 
 - [ ] 공통 로직(명령어 파싱, 프로세스 스폰, 재시도, 상태 기록)이 하나의 모듈에서 관리된다
-      **Verification**: council-worker와 spec-worker 양쪽에서 공통 모듈을 import하며, 중복 함수가 0개
+      **Verification**: council-worker와 orchestrate-review-worker 양쪽에서 공통 모듈을 import하며, 중복 함수가 0개
 - [ ] 각 워커는 공통 모듈에 스킬별 설정(용어, 디렉토리 구조)만 주입한다
       **Verification**: 워커 파일이 config 객체를 생성하여 공통 모듈에 전달하는 패턴만 포함
 

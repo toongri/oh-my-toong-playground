@@ -42,7 +42,7 @@ oh-my-toong/
 ├── hooks/           # Session lifecycle scripts (sh/js/py)
 ├── rules/           # Behavioral rules synced as .claude/rules/
 ├── lib/             # Shared TypeScript helpers (ESM, bun:test)
-├── scripts/         # Deployed script packages (hud, chunk-review, spec-reviewer)
+├── scripts/         # Deployed script packages (hud, chunk-review)
 ├── tools/           # Internal sync/validation tooling (not deployed)
 │   ├── adapters/    # Platform adapters (claude.ts, gemini.ts, codex.ts, opencode.ts)
 │   └── lib/         # Shared TypeScript modules for sync tools
