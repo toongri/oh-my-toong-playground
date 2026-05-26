@@ -114,8 +114,8 @@ describe("review skill family — resume-member arg form (doc ↔ impl)", () => 
     docForms: docResumeForms(s.skillMd),
   })).filter((s) => s.docForms.length > 0);
 
-  it("at least two skills document a full resume-member invocation (parser guard)", () => {
-    expect(documented.length).toBeGreaterThanOrEqual(2);
+  it("at least one skill documents a full resume-member invocation (parser guard)", () => {
+    expect(documented.length).toBeGreaterThanOrEqual(1);
   });
 
   for (const s of documented) {
@@ -134,8 +134,8 @@ describe("review skill family — Allowed Bash whitelist completeness", () => {
     body: bodySubcommands(s.skillMd),
   })).filter((s): s is { name: string; whitelist: Set<string>; body: Set<string> } => s.whitelist !== null);
 
-  it("at least two Chairman skills expose an Allowed Bash Usage section (parser guard)", () => {
-    expect(chairman.length).toBeGreaterThanOrEqual(2);
+  it("at least one Chairman skill exposes an Allowed Bash Usage section (parser guard)", () => {
+    expect(chairman.length).toBeGreaterThanOrEqual(1);
   });
 
   for (const s of chairman) {

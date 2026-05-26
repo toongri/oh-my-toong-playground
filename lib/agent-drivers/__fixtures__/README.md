@@ -23,5 +23,4 @@ Provenance for each fixture file. All content traces to PoC captures in `/tmp/po
 - `sentinel/orchestrate-review-sample.txt` — synthetic chunk-review deliverable (2026-05-17); contains `## Verdict\nAPPROVE` sentinel (regex: `/## Verdict\s*\n\s*(APPROVE|REQUEST_CHANGES|COMMENT)/`)
 - `sentinel/agent-council-sample.txt` — synthetic council member output (2026-05-17); contains `## Position\nAPPROVE` sentinel (regex: `/## Position\s*\n\s*(APPROVE|REJECT|ABSTAIN)/`)
 - `sentinel/slides-review-sample.txt` — synthetic slides review deliverable (2026-05-17); contains `## Slide Review Summary` sentinel (regex: `/## Slide Review Summary/`)
-- `sentinel/spec-review-sample.txt` — synthetic spec review deliverable (2026-05-17); contains `## Recommendation\nAPPROVE` sentinel (regex: `/## Recommendation\s*\n\s*(APPROVE|REVISE|REJECT)/`)
 - `sentinel/diagnose-sample.txt` — synthetic diagnose deliverable (2026-05-17); contains `## Diagnosis\nROOT_CAUSE:` sentinel (regex: `/## Diagnosis\s*\n/`)

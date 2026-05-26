@@ -9,7 +9,6 @@
 | Complexity | Approach | When to Use |
 |------------|----------|-------------|
 | **Simple** | Just prompt | Quick fixes, single-file changes |
-| **Medium** | `/spec` | Need clear requirements before coding |
 | **Complex** | `/prometheus` -> `/sisyphus` | Multi-step work requiring planning and orchestration |
 
 **Decision Flow:**
@@ -17,11 +16,9 @@
 ```
 Is it a quick fix or simple task?
   |-- YES -> Just prompt normally
-  |-- NO  -> Are requirements unclear or complex?
-              |-- YES -> Use /spec to create specification first
-              |-- NO  -> Do you need multi-step execution?
-                          |-- YES -> /prometheus for planning -> /sisyphus for execution
-                          |-- NO  -> Just prompt with context
+  |-- NO  -> Do you need multi-step execution?
+              |-- YES -> /prometheus for planning -> /sisyphus for execution
+              |-- NO  -> Just prompt with context
 ```
 
 ---
@@ -37,7 +34,6 @@ Oh-My-Toong solves this by clearly separating roles:
 
 | Role | Agent | Responsibility |
 |------|-------|----------------|
-| **Specification** | spec | Creates testable requirements before planning |
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
 | **Implementation** | sisyphus-junior | Writes code (delegated by sisyphus) |
@@ -52,21 +48,13 @@ flowchart TD
     User[User Request] --> Decision{Complexity?}
 
     Decision -->|Simple| Direct[Direct Prompting]
-    Decision -->|Requirements unclear| Spec
     Decision -->|Complex multi-step| Prometheus
-
-    subgraph Design Phase
-        Spec["/spec"] --> SpecReviewer[spec-reviewer]
-        SpecReviewer --> SpecFile["~/.omt/{OMT_PROJECT}/specs/*.md"]
-    end
 
     subgraph Planning Phase
         Prometheus["/prometheus"] --> Metis[metis<br/>Gap Analysis]
         Metis --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
-
-    SpecFile -.->|informs| Prometheus
 
     subgraph Execution Phase
         PlanFile --> Sisyphus["/sisyphus"]
@@ -80,13 +68,6 @@ flowchart TD
 ---
 
 ## 3. Key Components
-
-### spec (The Specification Expert)
-
-- **Role**: Creates comprehensive, testable specifications
-- **Constraint**: No phase completion without user confirmation
-- **Output**: `~/.omt/{OMT_PROJECT}/specs/{name}/spec.md` (via `$OMT_DIR`)
-- **Key Feature**: Multi-AI feedback via spec-reviewer
 
 ### prometheus (The Planner)
 
@@ -118,16 +99,7 @@ flowchart TD
 
 ## 4. Workflow
 
-### Phase 1: Specification (Optional but Recommended)
-
-For complex features, start with `/spec`:
-
-1. **Phase Selection**: Which phases are needed (Requirements, Architecture, Domain, etc.)
-2. **Step Execution**: Design work for each step
-3. **Multi-AI Review**: spec-reviewer provides feedback after each step
-4. **User Confirmation**: Proceed only with explicit approval
-
-### Phase 2: Planning
+### Phase 1: Planning
 
 When requirements are clear, use `/prometheus`:
 
@@ -136,7 +108,7 @@ When requirements are clear, use `/prometheus`:
 3. **Metis Consultation**: MANDATORY gap analysis before plan creation
 4. **Plan Generation**: Writes structured plan to `~/.omt/{OMT_PROJECT}/plans/*.md`
 
-### Phase 3: Execution
+### Phase 2: Execution
 
 With a plan ready, use `/sisyphus`:
 
@@ -151,7 +123,6 @@ With a plan ready, use `/sisyphus`:
 
 | Command | Purpose | Output |
 |---------|---------|--------|
-| `/spec <description>` | Create software specification | `~/.omt/{OMT_PROJECT}/specs/*.md` |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/sisyphus` | Execute plan via orchestration | Verified code changes |
 | `/ralph <task>` | Iterative completion with oracle verification | Task completion |
@@ -170,9 +141,9 @@ Even "simple" tasks benefit from brief planning. The time invested in planning s
 
 When argus requests changes, fix them. Don't argue or skip. The protocol exists to catch real issues.
 
-### 3. Use Specs for Unclear Requirements
+### 3. Use Interview Mode for Unclear Requirements
 
-If you find yourself repeatedly clarifying requirements during prometheus, step back and use `/spec` first.
+If you find yourself repeatedly clarifying requirements during prometheus, answer more thoroughly or let the interview mode collect sufficient context first.
 
 ### 4. Let Agents Do Their Jobs
 
@@ -193,7 +164,6 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 | Prometheus keeps interviewing | It needs more context. Answer thoroughly or say "generate plan now". |
 | Sisyphus won't stop | This is by design. It persists until verification passes. |
 | argus keeps failing | Review the feedback carefully. The issues are real. |
-| Spec is taking too long | Skip phases that aren't relevant (simple CRUD doesn't need Architecture phase). |
 
 ---
 

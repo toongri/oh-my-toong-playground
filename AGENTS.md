@@ -7,7 +7,7 @@
 - `commands/`: Slash-command docs (e.g., `commands/hud.md`).
 - `hooks/`: Claude Code lifecycle hooks (`*.sh`) with colocated shell tests (`*_test.sh`).
 - `lib/`: Shared TypeScript helpers used by scripts/hooks.
-- `scripts/`: Deployed script packages (hud, chunk-review, spec-reviewer).
+- `scripts/`: Deployed script packages (hud, chunk-review).
 - `tools/`: Internal sync/validation tooling (not deployed).
 - `projects/`: Project-specific overrides (e.g., `projects/<project>/skills/<skill>/SKILL.md`).
 - Local/runtime artifacts: `~/.omt/{OMT_PROJECT}/` (state, in home directory) and `.claude/` are ignored by git.
@@ -37,7 +37,7 @@ Prereqs commonly needed: `bash` (macOS bash 3.2 compatible), `yq`, `jq`, `bun`, 
 
 ## Commit & Pull Request Guidelines
 
-- Match existing history: imperative subject with an optional prefix like `add:`, `fix:`, `refactor:`, `update:` (sometimes scoped like `spec-review:`).
+- Match existing history: imperative subject with an optional prefix like `add:`, `fix:`, `refactor:`, `update:` (sometimes scoped like `orchestrate-review:`).
 - Keep the subject short (≈50 chars) and commits atomic (one logical change).
 - PRs: explain intent, list affected components (skills/agents/hooks/scripts), and include screenshots or sample output for HUD/statusLine changes.
 
