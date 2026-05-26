@@ -15,6 +15,7 @@ agents:
 
 skills:
   items:
+    - deep-interview
     - sisyphus
     - git-master
     - humanizer
@@ -26,6 +27,8 @@ skills:
     - tech-claim-rubric
     - resume-forge
     - collect-jd
+    - mock-interview
+    - scan-pdf-to-notes
 
 rules:
   items:

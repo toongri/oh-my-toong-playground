@@ -46,6 +46,8 @@ skills:
     - collect-jd
     - orchestrate-review
     - hud
+    - mock-interview
+    - scan-pdf-to-notes
 
 rules:
   items:
