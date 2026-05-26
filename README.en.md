@@ -53,6 +53,7 @@ oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collab
 
 | Role | Agent | Responsibility |
 |------|-------|----------------|
+| Definition | deep-interview | Converges vague requirements into a clear spec by resolving ambiguity |
 | Planning | prometheus | Transforms requirements into executable work plans |
 | Execution | sisyphus | Orchestrates implementation via specialized agents |
 | Implementation | sisyphus-junior | Writes code (delegated by sisyphus) |
@@ -62,10 +63,13 @@ oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collab
 
 ## Core Skills Architecture
 
-The two foundational skills form a **Planning -> Execution** pipeline:
+The three foundational skills form a **Definition -> Planning -> Execution** pipeline:
 
 ```mermaid
 flowchart LR
+    subgraph Definition
+        deep["/deep-interview"]
+    end
     subgraph Planning
         prometheus["/prometheus"]
     end
@@ -73,8 +77,25 @@ flowchart LR
         sisyphus["/sisyphus"]
     end
 
+    deep -->|".omt/deep-interview/{slug}.md"| prometheus
     prometheus -->|".omt/plans/*.md"| sisyphus
     sisyphus -->|"verified code"| Done((Done))
+```
+
+### deep-interview - Socratic Deep Interview
+
+**Purpose**: Converge a vague idea into a clear specification before autonomous execution. Asks one targeted question at a time — aimed at the weakest clarity dimension — until the weighted ambiguity score drops below the threshold.
+
+**Core Constraint**: Does NOT proceed to execution while ambiguity exceeds the threshold. Never implements directly — crystallizes a spec and hands off to prometheus.
+
+```mermaid
+flowchart TB
+    Start([Vague idea]) --> Ask[One question<br/>target weakest dimension]
+    Ask --> Score[Score ambiguity]
+    Score --> Gate{Ambiguity <= threshold?}
+    Gate -->|No| Ask
+    Gate -->|Yes| Spec[Crystallize spec]
+    Spec --> Handoff([Hand off to prometheus])
 ```
 
 ### prometheus - Strategic Planning Consultant
@@ -212,6 +233,7 @@ oh-my-toong/
 
 | Skill | Purpose | Key Constraint |
 |-------|---------|----------------|
+| **deep-interview** | Socratic deep interview | Won't execute until ambiguity is below threshold — specs, then prometheus |
 | **prometheus** | Strategic planning consultant | Planner only - NEVER implements |
 | **sisyphus** | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
 | **diagnose** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
@@ -245,7 +267,6 @@ Domain and utility skills. Loaded on demand via their triggers.
 | **collect-jd** | Hiring/Resume | JD collection/curation |
 | **mock-interview** | Hiring/Resume | Resume-based interviewer-side mock questions |
 | **tech-claim-rubric** | Hiring/Resume | Technical-claim 5-axis evaluation framework |
-| **deep-interview** | Planning/Util | Socratic deep interview before autonomous execution (ambiguity gating) |
 | **using-maestro** | Planning/Util | Maestro mobile E2E test authoring/debugging |
 | **hud** | Planning/Util | Status-line HUD setup |
 | **pins** (select-pin/write-pin) | Planning/Util | On-discovery knowledge pin system |
