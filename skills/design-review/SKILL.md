@@ -1,13 +1,13 @@
 ---
 name: design-review
-description: Use when delegating plan/design review with steelman antithesis and tradeoff tension analysis. Triggers include "design review", "plan review", "review the plan", "architectural soundness", "설계 검토", "플랜 리뷰", "아키텍처 건전성", "트레이드오프 분석".
+description: Use for advisory design review — steelman antithesis and tradeoff tension analysis. Triggers include "design review", "plan review", "review the plan", "architectural soundness", "설계 검토", "플랜 리뷰", "아키텍처 건전성", "트레이드오프 분석".
 ---
 
 # Design-Review
 
 ## Overview
 
-Delegates plan and design review to the Daedalus opencode agent, which runs as a detached worker you observe by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If the agent is unavailable (CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the in-session fallback framework.
+Provides advisory design counsel — surfaces tradeoff tensions, steelman antitheses, and architectural considerations (analysis, not a verdict gate). Dispatches the review to a detached worker (configured members) and observes it by polling. This skill is finished only once you have pulled a definitive answer out of the job — nothing notifies you when the worker is done. If no worker is available (members empty, CLI not installed, timeout, error, or canceled), falls back to in-session analysis using the in-session fallback framework.
 
 ---
 

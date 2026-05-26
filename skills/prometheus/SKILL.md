@@ -78,8 +78,7 @@ digraph prometheus_flow {
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
     "Write plan to $OMT_DIR/plans/*.md" [shape=box];
-    "Daedalus review" [shape=box];
-    "Daedalus verdict?" [shape=diamond];
+    "Daedalus review (advisory)" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
     "Stage A: HTML Render" [shape=box];
@@ -101,10 +100,8 @@ digraph prometheus_flow {
     "Metis consultation" -> "Metis verdict?";
     "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
     "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE/COMMENT"];
-    "Write plan to $OMT_DIR/plans/*.md" -> "Daedalus review";
-    "Daedalus review" -> "Daedalus verdict?";
-    "Daedalus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
-    "Daedalus verdict?" -> "Momus review" [label="APPROVE/COMMENT"];
+    "Write plan to $OMT_DIR/plans/*.md" -> "Daedalus review (advisory)";
+    "Daedalus review (advisory)" -> "Momus review" [label="advisory input folded into plan\n(no gate — see Design Consensus)"];
     "Momus review" -> "Momus verdict?";
     "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
     "Momus verdict?" -> "Stage A: HTML Render" [label="APPROVE/COMMENT"];
@@ -117,7 +114,11 @@ digraph prometheus_flow {
 }
 ```
 
-**Flowchart Enforcement Rule**: The review loops (Metis → Daedalus → Momus REQUEST_CHANGES back to plan writing) are MANDATORY loops, not advisory paths. Skipping any review stage or proceeding past REQUEST_CHANGES without resolution violates the planning contract.
+**Flowchart Enforcement Rule**: The verdict review loops (Metis and Momus bounce back to plan writing on REQUEST_CHANGES) are MANDATORY loops, not advisory paths.
+Proceeding past a Metis/Momus REQUEST_CHANGES without resolution violates the planning contract.
+Skipping any review stage — including the mandatory Daedalus advisory pass — is likewise a violation.
+
+The Daedalus stage is on the mandatory path but is purely advisory: it emits no gating signal and never bounces the plan back. Its design input is folded into the plan per `## Design Consensus` before Momus runs.
 
 ## Subagent Selection Guide
 
@@ -125,11 +126,11 @@ digraph prometheus_flow {
 |------|-------|------|
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation |
-| Codebase verification (pipeline) | daedalus | **MANDATORY** — auto-invoked after plan generation |
-| Plan review with antithesis | daedalus | Steelman + tradeoff tension on design decisions |
+| Codebase verification (pipeline) | momus | **MANDATORY** — auto-invoked after the advisory design pass; verifies codebase feasibility + document quality |
+| Design review with antithesis | daedalus | **MANDATORY (advisory)** — steelman + tradeoff tension on design soundness; advisory only, never gates |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete |
-| Plan review | momus | **MANDATORY** — after Daedalus approval |
+| Plan review | momus | **MANDATORY** — after Daedalus advisory input |
 
 ### Do vs Delegate Decision Matrix
 
@@ -143,7 +144,8 @@ digraph prometheus_flow {
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
 | Pre-plan gap analysis | NEVER | metis |
-| Post-plan codebase verification | NEVER | daedalus (MANDATORY) |
+| Post-plan design review (advisory) | NEVER | daedalus (MANDATORY — advisory only, never gates) |
+| Post-plan codebase verification | NEVER | momus (MANDATORY) |
 | Plan quality review | NEVER | momus (MANDATORY) |
 
 **RULE**: Planning, interviewing, checklist evaluation = Do directly. Research, analysis, gap detection = DELEGATE.
@@ -361,17 +363,19 @@ Decomposition Formalism (line 161-170) requires MECE + Atomicity + Anti-pattern 
 
 ### Per-Phase Completion Triggers
 
-A phase task is complete only when its reviewer verdict is received:
+A phase task is complete only when its reviewer signal is received:
 
 | Reviewer | Completion Condition |
 |----------|---------------------|
 | Metis | Verdict = APPROVE or COMMENT (proceed to plan write) |
-| Daedalus | Verdict = APPROVE or COMMENT (proceed to Momus) |
+| Daedalus | Advisory design input received and folded into the plan per `## Design Consensus` (advisory only — proceed to Momus) |
 | Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
 
-REQUEST_CHANGES from any reviewer means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received.
+REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received.
 
-Starting a downstream phase task while a prior phase remains in REQUEST_CHANGES state is a planning contract violation.
+Starting a downstream phase task while a prior verdict phase remains in REQUEST_CHANGES state is a planning contract violation.
+
+The Daedalus phase is advisory rather than gated: it completes once its design input is received and reconciled into the plan (genuine conflicts escalate per `## Design Consensus`), then Momus proceeds.
 
 ### Relationship to Pipeline State Machine
 
@@ -816,11 +820,16 @@ Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. 
 | | Metis | Daedalus | Momus |
 |---|---|---|---|
 | **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Daedalus |
-| **Input** | User Goal + Scope + AC | Plan + Codebase (Daedalus reads plan file) | Plan |
-| **Validates** | Requirements completeness | Codebase feasibility (Daedalus checks against codebase) | Document quality |
-| **Reads code** | No | Yes — Daedalus reads file:line | No |
+| **Input** | User Goal + Scope + AC | Plan file + design context | Plan + Codebase |
+| **Validates** | Requirements completeness | Design soundness | Document quality + Codebase feasibility |
+| **Reads code** | No | Yes (design context) | Yes |
+| **Role** | Gap gate (verdict) | Design advisor (advisory — no verdict, no gate) | Feasibility + quality gate (verdict) |
 
-### Common Gate Pattern (ALL reviewers)
+### Common Gate Pattern (verdict-emitting reviewers: Metis + Momus)
+
+Only Metis and Momus emit verdicts and gate the pipeline.
+
+Daedalus is an advisory design reviewer that does NOT gate — it surfaces design tradeoffs only (see `## Design Consensus` for how its advisory input is folded in).
 
 ```
 MANDATORY: Reviewer MUST pass (APPROVE or COMMENT) before proceeding.
@@ -833,7 +842,9 @@ MANDATORY: Reviewer MUST pass (APPROVE or COMMENT) before proceeding.
 
 A REQUEST_CHANGES verdict blocks ALL downstream progression — no stage advances until the blocking reviewer re-issues APPROVE or COMMENT after a proper Revise cycle.
 
-### Common Verdict Handling
+### Common Verdict Handling (Metis + Momus only)
+
+Daedalus does NOT appear in this table — it is advisory and emits no gating signal. Its design output is handled per `## Design Consensus`.
 
 | Verdict | Action |
 |---------|--------|
@@ -875,7 +886,7 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S0: Interview Mode** | Gathering requirements | → S1 on Metis-ready clearance |
 | **S1: Metis Invocation** | 3-Section prompt to Metis | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
 | **S2: Plan Generation** | Writing plan to `$OMT_DIR/plans/{name}.md` | → S3 on self-review pass |
-| **S3: Daedalus Invocation** | Plan path to Daedalus | → S4 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
+| **S3: Daedalus Invocation** | Plan path to Daedalus (advisory design review) | → S4 always (advisory only — no gating signal; design input folded in per `## Design Consensus` before S4) |
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
@@ -899,6 +910,8 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
 
+Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
+
 Failure action: loop back and fix before submitting to Daedalus.
 
 ### Gap Classification (post-plan self-review)
@@ -909,6 +922,21 @@ Failure action: loop back and fix before submitting to Daedalus.
 | **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
 | **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
 
+### Design Consensus (reconciling Daedalus advisory input)
+
+Daedalus is advisory: it emits no gating signal and never bounces the plan back. Instead it returns design opinions (steelman antithesis, tradeoff tensions, alternative options). Prometheus reconciles each opinion into the plan through this procedure, between the S3 Daedalus pass and the S4 Momus invocation. The Daedalus advisory pass is MANDATORY across ALL intents (Trivial / Scoped / Complex / Architecture) — no intent class skips it.
+
+Per design opinion:
+
+1. **Collect + dedup** — gather every Daedalus opinion, deduplicate against opinions already reflected in the plan.
+2. **Decide accept or reject** — prometheus judges each opinion on its merits (it is advice, not a directive).
+   - **Accepted** → fold the opinion into the plan body (revise the affected TODOs / approach), AND record it in the relevant ADR entry's **Considered Options** (as an evaluated option), **Decision** (if it changed the chosen path), and **Consequences** (the tradeoff now accepted). No new ADR sub-field — the existing MADR 7-field ADR (`## Plan Structure > ADR`) is where consensus outcomes land.
+   - **Rejected** → record the rejected opinion and the reason it was not adopted in that ADR entry's **Rationale** field (the Rationale already explains the chosen option over alternatives — a rejected Daedalus opinion is one such alternative).
+3. **Escalate genuine conflicts to the USER** — when an opinion exposes a genuine conflict or a material tradeoff that prometheus cannot resolve on the plan's own evidence (e.g. it pits two user-stated goals against each other, or it would change scope the user fixed), surface it to the user as a preference question. This is prometheus's own judgment of what counts as a genuine conflict — there is NO severity taxonomy; do not label opinions Critical/High/Medium. Routine advice prometheus can absorb is folded silently per step 2; only genuine conflicts / material tradeoffs reach the user.
+4. **1-revision-round backstop** — reconcile in a single revision round. If, after that one round, a genuine conflict still remains unresolved, escalate the remaining conflict to the user rather than looping further. The backstop bounds reconciliation to one round; it is not a gate, since this advisory pass never blocks the pipeline.
+
+After reconciliation, proceed to S4 (Momus). Momus then verifies the reconciled plan for codebase feasibility + document quality and emits the gating verdict.
+
 ### Plan Presentation (S5/S6/S7 — MANDATORY after Momus APPROVE)
 
 This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execute Stages A → B → C before any user-facing handoff. Skipping = treating the plan as user-ready when it is unrendered. **Past sessions have skipped Stage A entirely; do NOT.**
@@ -916,7 +944,7 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 | Stage | Mandate | Detail location |
 |---|---|---|
 | **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md` |
-| **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Daedalus COMMENT signals). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
+| **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
 
 On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to Interview Mode.
@@ -931,8 +959,8 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 | Metis | Abstract scope | Completeness uncheckable |
 | Metis | Missing user goal | Intent unclassifiable |
 | Daedalus | Restating plan content in prompt | Daedalus reads file — token waste |
-| Daedalus | Asking for code review | Daedalus reviews feasibility, not code quality |
-| Daedalus | Skipping after Metis APPROVE | Gate violation — Daedalus mandatory |
+| Daedalus | Asking it to approve, gate, or block | Daedalus is advisory — it surfaces design tradeoffs only, it does not approve or block |
+| Daedalus | Skipping after Metis APPROVE | Daedalus advisory pass is mandatory across all intents — its design input must be sought and folded in before Momus |
 | Momus | Repeating plan content | Momus reads file — token waste |
 | Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
 | Momus | Adding review instructions | Momus has own criteria |
