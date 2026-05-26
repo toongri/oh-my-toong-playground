@@ -53,7 +53,6 @@ oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collab
 
 | Role | Agent | Responsibility |
 |------|-------|----------------|
-| Design | spec | Creates comprehensive specifications before code |
 | Planning | prometheus | Transforms requirements into executable work plans |
 | Execution | sisyphus | Orchestrates implementation via specialized agents |
 | Implementation | sisyphus-junior | Writes code (delegated by sisyphus) |
@@ -63,13 +62,10 @@ oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collab
 
 ## Core Skills Architecture
 
-The three foundational skills form a **Design -> Plan -> Execute** pipeline:
+The two foundational skills form a **Planning -> Execution** pipeline:
 
 ```mermaid
 flowchart LR
-    subgraph Design
-        spec["/spec"]
-    end
     subgraph Planning
         prometheus["/prometheus"]
     end
@@ -77,40 +73,9 @@ flowchart LR
         sisyphus["/sisyphus"]
     end
 
-    spec -->|".omt/specs/{name}/"| prometheus
     prometheus -->|".omt/plans/*.md"| sisyphus
     sisyphus -->|"verified code"| Done((Done))
 ```
-
-### spec - Software Specification Expert
-
-**Purpose**: Prevent implementation of poorly-defined requirements by creating comprehensive, testable specifications.
-
-**Core Constraint**: No phase completion without user confirmation. All acceptance criteria must be testable.
-
-```mermaid
-flowchart TB
-    Start([User Request]) --> Phase[Phase Selection]
-    Phase --> Step[Execute Step]
-    Step --> Save[Save to .omt/specs/]
-    Save --> Review{spec-reviewer<br/>feedback needed?}
-    Review -->|No| Next{More steps?}
-    Review -->|Yes| Feedback[Receive Multi-AI Feedback]
-    Feedback --> Present[Present to User]
-    Present --> Decision{User Decision}
-    Decision -->|Incorporate| Step
-    Decision -->|Skip| Next
-    Decision -->|Another round| Feedback
-    Next -->|Yes| Step
-    Next -->|No| Complete([Spec Complete])
-```
-
-**Key Phases**:
-1. Requirements - Clarify ambiguous requirements
-2. Architecture - System structure changes
-3. Domain - State machines, business rules
-4. Detailed - Performance, concurrency
-5. API - External API exposure
 
 ### prometheus - Strategic Planning Consultant
 
@@ -213,7 +178,6 @@ oh-my-toong/
 │   ├── momus/                 # Work plan reviewer
 │   ├── git-master/            # Git conventions (commits + branch naming)
 │   ├── agent-council/         # Multi-AI advisory body
-│   ├── spec/                  # Specification writing
 │   ├── qa/                    # Quality Assurance guardian
 │   └── performance-optimizer/ # Performance analysis and optimization
 ├── agents/                    # Subagent definitions for Task tool delegation
@@ -223,8 +187,7 @@ oh-my-toong/
 │   ├── librarian.md           # External documentation
 │   ├── momus.md               # Plan reviewer
 │   ├── metis.md               # Pre-planning analysis
-│   ├── argus.md              # The hundred-eyed guardian
-│   └── spec-reviewer.md       # Spec review agent
+│   └── argus.md               # The hundred-eyed guardian
 ├── commands/                  # Slash command definitions
 │   ├── hud.md                 # Status bar HUD setup
 │   ├── ralph.md               # Ralph Loop orchestration
@@ -256,9 +219,36 @@ oh-my-toong/
 | **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
 | **git-master** | Git conventions (commits + branch naming) | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
 | **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
-| **spec** | Specification writing | Structured spec creation workflow |
 | **argus** | Quality Assurance guardian | Validates implementation quality, plan compliance, and instruction fulfillment |
 | **performance-optimizer** | Performance optimization | Systematic analysis with Before/After verification |
+
+## Other Skills
+
+Domain and utility skills. Loaded on demand via their triggers.
+
+| Skill | Category | Purpose |
+|-------|----------|---------|
+| **code-review** | Review/Quality | PR/diff correctness bug review |
+| **design-review** | Review/Quality | Plan/design review (steelman + tradeoff) |
+| **orchestrate-review** | Review/Quality | Code review orchestration (multi-AI synthesis) |
+| **slides-review** | Review/Quality | HTML slide design review (Gemini) |
+| **qa** | Review/Quality | Quality assurance guardian (implementation verification) |
+| **create-slides** | Docs/Content | HTML-based presentation generation |
+| **technical-writing** | Docs/Content | Korean technical documentation review/writing |
+| **technical-copywriting** | Docs/Content | Tech blog teaser/promo copy review |
+| **humanizer** | Docs/Content | Remove AI writing traces (KO/EN) |
+| **make-pr** | Docs/Content | PR description authoring |
+| **scan-pdf-to-notes** | Docs/Content | Scanned-PDF chapter extraction to notes |
+| **resume-apply** | Hiring/Resume | JD-based resume application workflow |
+| **resume-forge** | Hiring/Resume | Resume problem-solving material crafting |
+| **review-resume** | Hiring/Resume | Resume review/feedback |
+| **collect-jd** | Hiring/Resume | JD collection/curation |
+| **mock-interview** | Hiring/Resume | Resume-based interviewer-side mock questions |
+| **tech-claim-rubric** | Hiring/Resume | Technical-claim 5-axis evaluation framework |
+| **deep-interview** | Planning/Util | Socratic deep interview before autonomous execution (ambiguity gating) |
+| **using-maestro** | Planning/Util | Maestro mobile E2E test authoring/debugging |
+| **hud** | Planning/Util | Status-line HUD setup |
+| **pins** (select-pin/write-pin) | Planning/Util | On-discovery knowledge pin system |
 
 ## Agents
 
@@ -273,13 +263,15 @@ Agents are specialized subagent definitions used with Claude Code's Task tool fo
 | **momus** | Plan critic | Reviewing work plans before execution |
 | **metis** | Pre-planning analyst | Catching gaps before plan generation |
 | **argus** | Quality Assurance guardian | Quality assurance verification |
-| **spec-reviewer** | Spec reviewer | Getting multi-AI feedback on designs |
+| **daedalus** | Plan/design reviewer | Delegating design review (steelman + tradeoff) |
+| **chunk-reviewer** | Code chunk reviewer | Code review orchestration |
+| **tech-claim-examiner** | Technical-claim evaluator | Verifying technical claims in resume/content |
+| **mnemosyne** | Git commit specialist | Atomic commits in isolated context |
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/spec <description>` | Create software specification |
 | `/prometheus <task>` | Create work plan |
 | `/sisyphus` | Execute plan via orchestration |
 | `/hud setup` | Configure the Oh-My-Toong HUD in Claude Code's status bar |
