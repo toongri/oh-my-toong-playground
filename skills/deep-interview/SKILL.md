@@ -1,9 +1,7 @@
 ---
 name: deep-interview
 description: Socratic deep interview with mathematical ambiguity gating before autonomous execution
-argument-hint: "[--quick|--standard|--deep] <idea or vague description>"
-next-skill: prometheus
-next-skill-args: --consensus --direct
+argument-hint: "<idea or vague description>"
 handoff: $OMT_DIR/deep-interview/{slug}.md
 level: 3
 ---
@@ -515,13 +513,7 @@ Optional settings in `.claude/settings.json`:
 {
   "omt": {
     "deepInterview": {
-      "ambiguityThreshold": <resolvedThreshold>,
-      "maxRounds": 20,
-      "softWarningRounds": 10,
-      "minRoundsBeforeExit": 3,
-      "enableChallengeAgents": true,
-      "autoExecuteOnComplete": false,
-      "defaultExecutionMode": "prometheus"
+      "ambiguityThreshold": <resolvedThreshold>
     }
   }
 }
