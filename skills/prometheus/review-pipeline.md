@@ -126,11 +126,13 @@ Translating any item is a rule violation.
 **Allowed:**
 - Rephrasing plan prose for natural reading flow in the communication language (per Translation Rule).
 - Markdown blockquote callouts (`>`) that surface context the reader needs — drawn from the plan's own Context / interview-rationale / ADR sections. Use them to make an already-stated WHY easy to find, not to assert anything new.
+- Mermaid diagrams that re-visualize flow or structure **already decided in `plan.md`** (e.g. a runtime control flow the plan describes only in prose across several TODOs). Gated by the Necessity Test and bound by the Stage A Fidelity Bounds. Type selection (Sequence / Class / State / Flowchart), guardrails, and the Why -> Diagram -> Interpretation presentation protocol live in `diagram-guide.md`. The template loads the Mermaid runtime, so a ` ```mermaid ` fence injected into the render-time markdown renders as a diagram. Before drawing, full-read `diagram-guide.md` first — the Reference Full-Read Mandate triggers on diagram insertion (Necessity Test = YES).
 
 **Forbidden:**
 - Introducing any fact, decision, scope, or rationale not already present in `plan.md`. Enrichment re-surfaces existing context; it does not author new context. If the plan genuinely lacks context the reader needs, that is a plan defect — fix the plan and re-run the pipeline, do not paper over it at render time.
 - Omitting, weakening, or contradicting any plan content.
 - Writing enrichment back to disk. Per Invariant 3 the callouts live only in the ephemeral HTML; `plan.md` stays the single source of truth and every re-render redraws from it.
+- Drawing a diagram edge, arrow, or relationship that `plan.md` did not already decide. A diagram cannot be vaguer than the plan it visualizes — if you cannot draw it without inventing a who-calls-whom or ownership decision the plan never made, that is a plan defect: fix the plan and re-run the pipeline, do not invent the edge at render time.
 
 Rationale: `plan.md` is the artifact Daedalus and Momus reviewed and the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
 
