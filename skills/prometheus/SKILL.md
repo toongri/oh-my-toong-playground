@@ -947,6 +947,8 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
 | **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
 
+**Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the HTML in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`); `plan.md` on disk is never rewritten. This is Stage A's silent-failure point — skip the active naming and the prose defaults to `plan.md`'s authoring language even when the session ran in another language. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
+
 On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to Interview Mode.
 
 **IMPORTANT**: On execution selection, MUST invoke via `Skill()` or delegate. Do NOT tell user to run a command manually.
