@@ -3,7 +3,7 @@ config:
   outputStyle: "Explanatory"
   includeCoAuthoredBy: false
   env:
-    CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "40"
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW: "400000"
   attribution:
     commit: ""
     pr: ""
