@@ -18,7 +18,9 @@
                            tokens are safely embedded without premature script-tag closure.
                            Prose translated; code blocks / paths / CLI commands / identifiers
                            (WI-N, AC#M, S0-S8, regex, grep patterns, file paths, function
-                           names) preserved as-is
+                           names) preserved as-is. A ```mermaid fence in this markdown
+                           renders as a diagram (Mermaid runtime is loaded) — see
+                           diagram-guide.md for when/how to add one (enrichment only).
     {{TOC_TITLE}}          localized TOC label (e.g. "Table of Contents")
     {{FOOTER_NOTE}}        localized short footer
 
@@ -45,6 +47,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{{HTML_TITLE}}</title>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js" integrity="sha384-rbtjAdnIQE/aQJGEgXrVUlMibdfTSa4PQju4HDhN3sR2PmaKFzhEafuePsl9H/9I" crossorigin="anonymous"></script>
 <style>
 :root {
   --bg: #fafafa;
@@ -138,6 +141,8 @@ article ul, article ol { padding-left: 22px; }
 article li { margin: 3px 0; }
 article li input[type="checkbox"] { margin-right: 6px; }
 article a { color: var(--accent); }
+article .mermaid { display: block; margin: 22px 0; text-align: center; }
+article .mermaid svg { max-width: 100%; height: auto; }
 .footer-note { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
@@ -182,6 +187,19 @@ article a { color: var(--accent); }
   marked.setOptions({ gfm: true, breaks: false });
   const container = document.getElementById('plan-content');
   container.innerHTML = marked.parse(md);
+  // Diagram enrichment: marked renders a ```mermaid fence as <pre><code class="language-mermaid">.
+  // Convert each into a <div class="mermaid"> that the Mermaid runtime renders into SVG.
+  container.querySelectorAll('pre > code.language-mermaid').forEach(code => {
+    const div = document.createElement('div');
+    div.className = 'mermaid';
+    div.textContent = code.textContent;
+    code.parentElement.replaceWith(div);
+  });
+  if (window.mermaid) {
+    const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'default', securityLevel: 'strict' });
+    mermaid.run({ querySelector: '.mermaid' });
+  }
   const toc = document.getElementById('toc');
   const headings = container.querySelectorAll('h2, h3, h4');
   const slugify = (t) => t.toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-') || 'sec';
