@@ -276,7 +276,7 @@ If any of these signals are present in YOUR own behavior, halt and reset:
 - STOP — Thought pattern: "fact-grounded enough", "trust the prior result", "this is an exception", "ritual is just form"
 - STOP — Reading partial sections of inline contracts (e.g., `head -120` of inline rules) and proceeding
 - STOP — About to enter Interview / AC drafting / plan Write / Reviewer invocation **without** the corresponding reference full-read evidence line output in this session
-- STOP — Read tool call with `offset` + `limit` on `interview.md` / `acceptance-criteria.md` / `plan-template.md` / `review-pipeline.md` — these files must be read in one call, full file
+- STOP — Read tool call with `offset` + `limit` on `interview.md` / `acceptance-criteria.md` / `plan-template.md` / `review-pipeline.md` / `diagram-guide.md` — these files must be read in one call, full file
 
 **Each flag = STOP. Restart at the violated mandate. No partial-credit recovery.**
 
@@ -985,6 +985,7 @@ This resolves the apparent paradox in the prior wording — "optional" referred 
 | Entering Acceptance Criteria drafting (Clearance all-YES, about to propose AC) | [acceptance-criteria.md](acceptance-criteria.md) | Full file, single Read call |
 | About to invoke `Write` on the plan file (`$OMT_DIR/plans/*.md`) | [plan-template.md](plan-template.md) | Full file, single Read call |
 | About to invoke a reviewer (Metis/Daedalus/Momus) OR execute Stage A/B/C | [review-pipeline.md](review-pipeline.md) | Full file, single Read call |
+| About to insert a Mermaid diagram into the Stage A HTML (Necessity Test = YES) | [diagram-guide.md](diagram-guide.md) | Full file, single Read call |
 
 **Per-reference cache**: One full-read per session per reference is sufficient. If you have already full-read `interview.md` earlier in this session, you do not need to re-read on every subsequent interview turn — but if you did partial-read or have not read it at all, the trigger still demands full-read NOW.
 
