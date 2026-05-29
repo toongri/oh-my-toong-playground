@@ -175,6 +175,57 @@ describe("updateSettings", () => {
     await adapter.updateSettings(targetPath, { PreToolUse: [] }, true);
     expect(await exists(path.join(targetPath, ".claude", "settings.local.json"))).toBe(false);
   });
+
+  it("preserves foreign hook entries matching preserve marker via `updateSettings`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    await writeFile(settingsFile, JSON.stringify({
+      hooks: {
+        Stop: [
+          { matcher: "*", hooks: [{ type: "command", command: "$HOME/.claude/hooks/old-omt.sh", timeout: 15 }] },
+          { hooks: [{ type: "command", command: '[ -n "$SUPERSET_HOME_DIR" ] && "$SUPERSET_HOME_DIR/hooks/notify.sh" || true' }] },
+        ],
+        PostToolUse: [
+          { hooks: [{ type: "command", command: 'SUPERSET_AGENT_ID=claude "$SUPERSET_HOME_DIR/hooks/notify.sh"' }] },
+        ],
+      },
+    }));
+
+    const newHooks = {
+      Stop: [{ matcher: "*", hooks: [{ type: "command", command: "$HOME/.claude/hooks/pin-up/index.ts", timeout: 15 }] }],
+    };
+
+    await adapter.updateSettings(targetPath, newHooks, false, { "command-contains": ["$SUPERSET_HOME_DIR"] });
+
+    const settings = await readJsonFile(settingsFile);
+    const hooks = settings["hooks"] as Record<string, Record<string, unknown>[]>;
+
+    // Stop: OMT entry replaced, then matching foreign entry carried over (OMT first, foreign appended)
+    expect(hooks["Stop"]).toHaveLength(2);
+    expect(((hooks["Stop"][0]["hooks"] as Record<string, unknown>[])[0]["command"])).toBe(
+      "$HOME/.claude/hooks/pin-up/index.ts",
+    );
+    expect(((hooks["Stop"][1]["hooks"] as Record<string, unknown>[])[0]["command"]) as string).toContain(
+      "$SUPERSET_HOME_DIR",
+    );
+
+    // PostToolUse: OMT defines none, foreign-only entry preserved
+    expect(hooks["PostToolUse"]).toHaveLength(1);
+    expect(((hooks["PostToolUse"][0]["hooks"] as Record<string, unknown>[])[0]["command"]) as string).toContain(
+      "$SUPERSET_HOME_DIR",
+    );
+  });
+
+  it("drops foreign hooks when no preserve marker is configured via `updateSettings`", async () => {
+    const settingsFile = path.join(targetPath, ".claude", "settings.local.json");
+    await writeFile(settingsFile, JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: "command", command: '"$SUPERSET_HOME_DIR/hooks/notify.sh"' }] }] },
+    }));
+
+    await adapter.updateSettings(targetPath, { PreToolUse: [] });
+
+    const settings = await readJsonFile(settingsFile);
+    expect(settings["hooks"]).toEqual({ PreToolUse: [] });
+  });
 });
 
 // ---------------------------------------------------------------------------

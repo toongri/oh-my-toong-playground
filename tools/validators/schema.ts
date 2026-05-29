@@ -352,6 +352,17 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
     result.errors.push(`${label}: hooks는 object 형식이어야 합니다`);
   } else if (isObject(data.hooks)) {
     for (const [event, value] of Object.entries(data.hooks)) {
+      if (event === "preserve") {
+        if (!isObject(value)) {
+          result.errors.push(`${label}: hooks.preserve는 object 형식이어야 합니다`);
+        } else {
+          const cc = (value as Record<string, unknown>)["command-contains"];
+          if (cc !== undefined && (!isArray(cc) || !(cc as unknown[]).every((x) => typeof x === "string"))) {
+            result.errors.push(`${label}: hooks.preserve.command-contains는 string 배열이어야 합니다`);
+          }
+        }
+        continue;
+      }
       if (!VALID_EVENTS.has(event)) {
         result.errors.push(`${label}: hooks에 잘못된 이벤트 이름 '${event}' (지원: ${[...VALID_EVENTS].join(", ")})`);
       }

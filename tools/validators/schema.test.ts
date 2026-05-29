@@ -471,6 +471,30 @@ hooks:
       const result = validatePlatformYaml(path, "claude");
       expect(result.errors).toHaveLength(0);
     });
+
+    it("accepts hooks.preserve with command-contains string array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  preserve:
+    command-contains:
+      - "$SUPERSET_HOME_DIR"
+  Stop:
+    - component: some-hook.sh
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("returns error when hooks.preserve.command-contains is not a string array via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.yaml", `
+hooks:
+  preserve:
+    command-contains: "not-an-array"
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors.some((e) => e.includes("preserve") && e.includes("command-contains"))).toBe(true);
+    });
   });
 
   // --- mcps structure validation ---
