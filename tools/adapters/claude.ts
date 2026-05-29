@@ -7,7 +7,7 @@ import { parseFrontmatter, serializeFrontmatter } from "../lib/frontmatter.ts";
 import { syncDirectory } from "../lib/sync-directory.ts";
 import { logInfo, logWarn, logDry } from "../lib/logger.ts";
 import { syncShellDependencies, syncShellDepsForDir } from "./hook-deps.ts";
-import { deepMerge } from "../lib/deep-merge.ts";
+import { deepMerge, isPlainObject } from "../lib/deep-merge.ts";
 import { readJsonFile, writeJsonFile } from "../lib/json.ts";
 import { isGlobalSync } from "../lib/path-utils.ts";
 
@@ -356,9 +356,13 @@ export class ClaudeAdapter implements PlatformAdapter {
     // --- hooks ---
     if (yaml.hooks != null) {
       const hooksMap = yaml.hooks;
+      const preserveConfig = (hooksMap as Record<string, unknown>)["preserve"] as
+        | { "command-contains"?: string[] }
+        | undefined;
       const accumulatedHooks: Record<string, unknown[]> = {};
 
       for (const [hookEvent, items] of Object.entries(hooksMap)) {
+        if (hookEvent === "preserve") continue;
         if (!Array.isArray(items)) continue;
 
         for (const item of items) {
@@ -465,7 +469,7 @@ export class ClaudeAdapter implements PlatformAdapter {
         }
       }
 
-      await this.updateSettings(targetPath, accumulatedHooks, dryRun);
+      await this.updateSettings(targetPath, accumulatedHooks, dryRun, preserveConfig);
       processedSections.push("hooks");
     }
 
@@ -539,14 +543,28 @@ export class ClaudeAdapter implements PlatformAdapter {
   // updateSettings
   // ---------------------------------------------------------------------------
 
+  /** True if any command in a hook block contains one of the preserve markers. */
+  private hookCommandMatches(block: unknown, markers: string[]): boolean {
+    if (!isPlainObject(block)) return false;
+    const hooks = (block as { hooks?: unknown }).hooks;
+    if (!Array.isArray(hooks)) return false;
+    return hooks.some((h) => {
+      const cmd = isPlainObject(h) ? (h as { command?: unknown }).command : undefined;
+      return typeof cmd === "string" && markers.some((m) => cmd.includes(m));
+    });
+  }
+
   /**
-   * Merge hooks entries into .claude/settings.local.json.
-   * Replaces the existing `hooks` key entirely with the new value.
+   * Replace the `hooks` key in settings with the synced entries. Foreign hook
+   * entries whose command matches a `preserve.command-contains` marker are
+   * carried over so this full replace does not silently drop them (e.g. hooks
+   * injected by another tool into the same settings file).
    */
   async updateSettings(
     targetPath: string,
     hooksEntries: Record<string, unknown>,
     dryRun = false,
+    preserve?: { "command-contains"?: string[] },
   ): Promise<void> {
     const settingsFilename = isGlobalSync(targetPath) ? "settings.json" : "settings.local.json";
     const settingsFile = path.join(targetPath, ".claude", settingsFilename);
@@ -558,9 +576,28 @@ export class ClaudeAdapter implements PlatformAdapter {
 
     await fs.mkdir(path.join(targetPath, ".claude"), { recursive: true });
     const current = await readJsonFile(settingsFile);
-    // Remove existing hooks key, add new one
+
+    // Start from the synced (OMT-authored) entries, then carry over foreign
+    // entries matching a preserve marker so the replace below keeps them.
+    const mergedHooks: Record<string, unknown[]> = {};
+    for (const [event, blocks] of Object.entries(hooksEntries)) {
+      mergedHooks[event] = Array.isArray(blocks) ? [...blocks] : (blocks as unknown[]);
+    }
+    const markers = preserve?.["command-contains"] ?? [];
+    const currentHooks = (current as { hooks?: unknown }).hooks;
+    if (markers.length > 0 && isPlainObject(currentHooks)) {
+      for (const [event, blocks] of Object.entries(currentHooks as Record<string, unknown>)) {
+        if (!Array.isArray(blocks)) continue;
+        for (const block of blocks) {
+          if (this.hookCommandMatches(block, markers)) {
+            (mergedHooks[event] ??= []).push(block);
+          }
+        }
+      }
+    }
+
     const { hooks: _removed, ...rest } = current as { hooks?: unknown; [k: string]: unknown };
-    const updated = { ...rest, hooks: hooksEntries };
+    const updated = { ...rest, hooks: mergedHooks };
     await writeJsonFile(settingsFile, updated);
     logInfo(`Updated ${settingsFilename}: ${settingsFile}`);
   }
