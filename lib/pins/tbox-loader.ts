@@ -64,8 +64,8 @@ export async function parseTboxYaml(filePath: string): Promise<Tbox> {
     id_pattern: raw.id_pattern,
     enums: raw.enums,
     body_sections: raw.body_sections,
-    entity_types: raw.entity_types,
-    relation_types: raw.relation_types,
+    entity_types: raw.entity_types as unknown as Record<string, EntityTypeDef>,
+    relation_types: raw.relation_types as unknown as Record<string, RelationTypeDef>,
   };
 }
 
