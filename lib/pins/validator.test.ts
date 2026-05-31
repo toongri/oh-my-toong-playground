@@ -77,6 +77,43 @@ describe("validate", () => {
     expect(result.valid).toBe(true);
   });
 
+  test("relation range violation — doc as target of 'documents' relation", async () => {
+    // 'documents' has range [code, concept, reference, person, decision] — excludes 'doc'
+    // A doc-typed entity emitting documents→doc must be rejected when a type resolver is provided
+    const targetTypeMap = new Map<string, string>([["doc-some-target", "doc"]]);
+    const entity = makeEntity({
+      type: "doc",
+      relations: [{ target: "doc-some-target", type: "documents" }],
+    });
+    const result = await validate(entity, targetTypeMap);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("relation_range_violation");
+      expect(result.reason).not.toBe("relation_domain_violation");
+    }
+  });
+
+  test("relation range — valid target passes", async () => {
+    // 'documents' allows code as target; doc→code must pass
+    const targetTypeMap = new Map<string, string>([["code-some-target", "code"]]);
+    const entity = makeEntity({
+      type: "doc",
+      relations: [{ target: "code-some-target", type: "documents" }],
+    });
+    const result = await validate(entity, targetTypeMap);
+    expect(result.valid).toBe(true);
+  });
+
+  test("relation range — no resolver skips range check (backward compatible)", async () => {
+    // Without resolver, range is not checked — same doc→doc edge must pass
+    const entity = makeEntity({
+      type: "doc",
+      relations: [{ target: "doc-some-target", type: "documents" }],
+    });
+    const result = await validate(entity);
+    expect(result.valid).toBe(true);
+  });
+
   test("legacy regression", async () => {
     // Fixture mimicking a real legacy pin AFTER compat translation.
     // Canonical shape: id, type, source, tier, created_at, relations[], authority, sensitivity, source_url, tags
