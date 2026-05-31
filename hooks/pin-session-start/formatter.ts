@@ -9,6 +9,7 @@
  */
 
 import type { PinsIndex } from '../../lib/pins/index.ts';
+import type { PinsManifest } from '../../lib/pins/manifest.ts';
 
 const MODEL2_LINES = [
   'Need context: invoke query to retrieve pins',
@@ -35,13 +36,17 @@ export function formatAbsentContext(): string {
 
 /**
  * Build additionalContext for the manifest-resolved case.
- * Includes a compact index summary (id, type, tags) capped at MAX_INLINE_ENTRIES.
+ * Includes manifest settings (scope + location) and a compact index summary
+ * (id, type, tags) capped at MAX_INLINE_ENTRIES.
  */
-export function formatIndexContext(index: PinsIndex): string {
+export function formatIndexContext(index: PinsIndex, settings: PinsManifest): string {
   const ids = Object.keys(index.entries);
   const total = ids.length;
 
-  const summaryLines: string[] = [`pins:${total}`];
+  const summaryLines: string[] = [
+    `pins:${total}`,
+    `scope:${settings.scope} location:${settings.location}`,
+  ];
 
   const shown = ids.slice(0, MAX_INLINE_ENTRIES);
   for (const id of shown) {
