@@ -13,8 +13,6 @@ hooks:
   Stop:
     - component: persistent-mode
       timeout: 15
-    - component: pin-up
-      timeout: 15
     - component: oh-my-toong:sync-component-validator.sh
       timeout: 30
   PostToolUse:
