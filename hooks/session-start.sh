@@ -125,13 +125,28 @@ if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
     if [ "$PROM_ACTIVE" = "true" ]; then
       PROM_PHASE=$(echo "$PROMETHEUS_STATE" | jq -r '.phase // ""' 2>/dev/null)
       PROM_PLAN_PATH=$(echo "$PROMETHEUS_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
+      PROM_RESUME=$(echo "$PROMETHEUS_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
 
-      PROM_PLAN_NOTE=""
-      if [ -n "$PROM_PLAN_PATH" ] && [ "$PROM_PLAN_PATH" != "null" ] && [ ! -f "$PROM_PLAN_PATH" ]; then
-        PROM_PLAN_NOTE="\nPlan file not found on disk: restart from resume_summary.\n"
+      # Determine whether the plan file is available on disk.
+      # Unavailable means: plan_path empty/null, OR plan_path set but file missing.
+      PROM_PLAN_AVAILABLE=false
+      if [ -n "$PROM_PLAN_PATH" ] && [ "$PROM_PLAN_PATH" != "null" ] && [ -f "$PROM_PLAN_PATH" ]; then
+        PROM_PLAN_AVAILABLE=true
       fi
 
-      MESSAGES="$MESSAGES<session-restore>\n\n[PROMETHEUS RESTORED]\n\nYou have an active prometheus session.\nPhase: $PROM_PHASE\nPlan path: $PROM_PLAN_PATH\n$PROM_PLAN_NOTE\nRe-read the current plan from disk and distrust stored verdicts -- re-run all gates on the current artifact.\n\n</session-restore>\n\n---\n\n"
+      PROM_PLAN_NOTE=""
+      PROM_INSTRUCTION=""
+      if [ "$PROM_PLAN_AVAILABLE" = "true" ]; then
+        PROM_INSTRUCTION="\nRe-read the current plan from disk and distrust stored verdicts -- re-run all gates on the current artifact.\n"
+      else
+        if [ -n "$PROM_RESUME" ] && [ "$PROM_RESUME" != "null" ]; then
+          PROM_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${PROM_RESUME}\n"
+        else
+          PROM_PLAN_NOTE="\nPlan file not available on disk yet.\n"
+        fi
+      fi
+
+      MESSAGES="$MESSAGES<session-restore>\n\n[PROMETHEUS RESTORED]\n\nYou have an active prometheus session.\nPhase: $PROM_PHASE\nPlan path: $PROM_PLAN_PATH\n$PROM_PLAN_NOTE$PROM_INSTRUCTION\n</session-restore>\n\n---\n\n"
     fi
   fi
 fi
