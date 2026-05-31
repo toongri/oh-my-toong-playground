@@ -913,7 +913,7 @@ S7 → S0 edge: "Revise plan" returns to Interview Mode — full pipeline re-run
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
 - **S0 entry**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase S0`.
-- **Per each S-transition**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase <S> [--plan-path <p>] [--resume-summary "<one line>"]` immediately after entering the new state. `--plan-path` is required from S2 onward (when the plan file exists); `--resume-summary` is a single-line description of current progress, helpful for restore.
+- **Per each S-transition**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the plan file is first written); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
 - **Teardown**: AFTER S8 dispatch is invoked, and on abort, run `bun skills/prometheus/scripts/prometheus-state.ts clear`.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable (the CLI falls back to `default` when `OMT_SESSION_ID` is unset).
 - **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory.
