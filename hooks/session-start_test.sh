@@ -335,6 +335,38 @@ test_session_start_uses_project_root_variable() {
 }
 
 # =============================================================================
+# Tests: Prometheus restore — resume_summary surfaced when plan file unavailable
+# =============================================================================
+
+test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable() {
+    local sid="test-prometheus-resume"
+
+    # Active prometheus state: resume_summary set, plan_path empty (never written)
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Working on feature X. Next: implement the validation logic in validator.ts."
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Stdout must be valid JSON
+    if ! echo "$output" | jq . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook stdout is not valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # additionalContext must contain the bookmark text
+    assert_output_contains "$output" "Working on feature X" "additionalContext should contain resume_summary text" || return 1
+    assert_output_contains "$output" "Resume from this bookmark" "additionalContext should contain bookmark label" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -363,6 +395,9 @@ main() {
     # Project root detection - session-start (from hooks/test/project_root_test.sh)
     run_test test_get_project_root_function_exists_in_session_start
     run_test test_session_start_uses_project_root_variable
+
+    # Prometheus restore: resume_summary surfaced when plan file unavailable
+    run_test test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
