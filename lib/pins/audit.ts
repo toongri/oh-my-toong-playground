@@ -194,14 +194,20 @@ function detectDuplicate(entities: Entity[]): DuplicateFinding[] {
 async function detectInvalid(entities: Entity[]): Promise<InvalidFinding[]> {
   const findings: InvalidFinding[] = [];
 
+  // Build id → type map from the in-scope corpus so validate() can enforce range constraints.
+  // Only in-scope targets are range-checked; missing targets are already handled by detectDangling.
+  const targetTypes = new Map<string, string>(
+    entities.map((e) => [e.frontmatter.id, e.frontmatter.type])
+  );
+
   for (const entity of entities) {
-    const result = await validate(entity);
+    const result = await validate(entity, targetTypes);
     if (!result.valid) {
       findings.push({
         type: "invalid",
         severity: "error",
         entityId: entity.frontmatter.id,
-        message: result.message,
+        message: `${result.reason}: ${result.message}`,
       });
     }
   }

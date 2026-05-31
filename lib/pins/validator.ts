@@ -8,6 +8,7 @@ export type ValidationReason =
   | "missing_field"
   | "forbidden_field"
   | "relation_domain_violation"
+  | "relation_range_violation"
   | "id_pattern_violation";
 
 // ── Result shape (mirrors legacy reason-union style) ──────────────────────────
@@ -32,9 +33,19 @@ export type ValidationResult =
  *   4. For each outgoing relation whose type has a domain constraint,
  *      the entity's own type must be in that domain.
  *      related_to is always exempt (carries no domain/range).
- *   5. (Optional) entity.id must match id_pattern if defined.
+ *   5. For each outgoing relation whose type has a range constraint,
+ *      the target entity's type must be in that range — checked only when
+ *      targetTypes is provided (backward compatible: omit to skip range checks).
+ *   6. (Optional) entity.id must match id_pattern if defined.
+ *
+ * @param entity       The canonical entity to validate.
+ * @param targetTypes  Optional map of target id → entity type, used to
+ *                     enforce range constraints. When absent, range is skipped.
  */
-export async function validate(entity: Entity): Promise<ValidationResult> {
+export async function validate(
+  entity: Entity,
+  targetTypes?: Map<string, string>,
+): Promise<ValidationResult> {
   const tbox = await loadTbox();
   const fm = entity.frontmatter;
 
@@ -90,9 +101,21 @@ export async function validate(entity: Entity): Promise<ValidationResult> {
         message: `entity type "${fm.type}" is not a valid domain source for relation "${relation.type}" (allowed: ${relDef.domain.join(", ")})`,
       };
     }
+
+    // Range check — only when caller supplies a target-type resolver
+    if (targetTypes && relDef.range && relDef.range.length > 0) {
+      const targetType = targetTypes.get(relation.target);
+      if (targetType !== undefined && !relDef.range.includes(targetType as any)) {
+        return {
+          valid: false,
+          reason: "relation_range_violation",
+          message: `target "${relation.target}" has type "${targetType}" which is not a valid range target for relation "${relation.type}" (allowed: ${relDef.range.join(", ")})`,
+        };
+      }
+    }
   }
 
-  // 5. id_pattern (optional — soft check)
+  // 6. id_pattern (optional — soft check)
   if (tbox.id_pattern && fm.id) {
     const pattern = new RegExp(tbox.id_pattern);
     if (!pattern.test(fm.id)) {

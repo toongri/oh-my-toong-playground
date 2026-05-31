@@ -398,3 +398,70 @@ describe("dense graph (dangling-dominant)", () => {
     expect(errors.length).toBeGreaterThan(warnings.length);
   });
 });
+
+// ---------------------------------------------------------------------------
+// relation range — in-scope targets are range-checked; missing targets stay dangling
+// ---------------------------------------------------------------------------
+
+describe("relation range", () => {
+  test("in-scope doc--documents-->doc edge is flagged invalid with reason relation_range_violation", async () => {
+    // `documents` range excludes `doc` — this is a range violation
+    const entities: Entity[] = [
+      makeEntity("doc-source-pin", {
+        type: "doc",
+        relations: [{ target: "doc-target-pin", type: "documents" }],
+      }),
+      makeEntity("doc-target-pin", { type: "doc" }),
+    ];
+
+    const report = await audit(entities);
+
+    const invalids = report.findings.filter((f) => f.type === "invalid");
+    expect(invalids.length).toBeGreaterThanOrEqual(1);
+    const hit = invalids.find((f) => f.entityId === "doc-source-pin");
+    expect(hit).toBeDefined();
+    expect(hit?.severity).toBe("error");
+    expect(hit?.message).toContain("relation_range_violation");
+  });
+
+  test("in-scope doc--documents-->concept edge is NOT flagged (concept is in range)", async () => {
+    // `documents` range includes `concept` — must NOT produce any range-related invalid
+    const entities: Entity[] = [
+      makeEntity("doc-valid-source", {
+        type: "doc",
+        relations: [{ target: "concept-valid-target", type: "documents" }],
+      }),
+      makeEntity("concept-valid-target", { type: "concept" }),
+    ];
+
+    const report = await audit(entities);
+
+    const invalids = report.findings.filter(
+      (f) => f.type === "invalid" && f.entityId === "doc-valid-source"
+    );
+    expect(invalids.length).toBe(0);
+  });
+
+  test("missing/out-of-scope target remains dangling (NOT double-reported as range-invalid)", async () => {
+    // Target is absent from corpus — dangling only, range cannot be checked
+    const entities: Entity[] = [
+      makeEntity("doc-dangling-source", {
+        type: "doc",
+        relations: [{ target: "doc-ghost-target", type: "documents" }],
+      }),
+    ];
+
+    const report = await audit(entities);
+
+    const dangling = report.findings.filter((f) => f.type === "dangling");
+    expect(dangling.length).toBeGreaterThanOrEqual(1);
+    const hit = dangling.find((f) => f.targetId === "doc-ghost-target");
+    expect(hit).toBeDefined();
+
+    // Must NOT also be flagged as invalid for range
+    const invalids = report.findings.filter(
+      (f) => f.type === "invalid" && f.entityId === "doc-dangling-source"
+    );
+    expect(invalids.length).toBe(0);
+  });
+});
