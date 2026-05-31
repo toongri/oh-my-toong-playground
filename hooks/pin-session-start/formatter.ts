@@ -11,8 +11,8 @@
 import type { PinsIndex } from '../../lib/pins/index.ts';
 
 const MODEL2_LINES = [
-  'Need context: invoke select-pin first',
-  'Acquired info worth finding again later? You MUST emit a <pin> immediately via write-pin',
+  'Need context: invoke query to retrieve pins',
+  'Acquired info worth pinning? Record it via record (or /wrap-up for whole-session review)',
 ];
 
 /** Cap for how many index entries to include inline. */
@@ -26,7 +26,7 @@ export function formatAbsentContext(): string {
   const lines = [
     '<pins>',
     'No pins.yaml manifest found — pins knowledge graph not configured.',
-    'To set up: create pins.yaml with location + scope fields.',
+    'To set up: invoke setup to initialize pins for this project.',
     ...MODEL2_LINES,
     '</pins>',
   ];

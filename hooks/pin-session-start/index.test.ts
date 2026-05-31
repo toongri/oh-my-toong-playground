@@ -11,7 +11,7 @@
 
 import { describe, it, expect, afterEach } from 'bun:test';
 import { spawnSync } from 'child_process';
-import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -120,8 +120,10 @@ describe('pin-session-start entrypoint', () => {
 
     const ctx: string = output.hookSpecificOutput.additionalContext;
     expect(ctx.length).toBeGreaterThan(0);
-    expect(ctx).toContain('select-pin');
-    expect(ctx).toContain('write-pin');
+    expect(ctx).toContain('query');
+    expect(ctx).toContain('record');
+    expect(ctx).not.toContain('select-pin');
+    expect(ctx).not.toContain('write-pin');
   });
 
   it('C3: pins/ 1개 .md → hookSpecificOutput SessionStart 생성 + token budget ≤80', () => {
@@ -169,7 +171,7 @@ describe('pin-session-start entrypoint', () => {
     // Must contain passive suggestion keywords (pins setup guidance)
     const ctxStr = ctx as string;
     expect(
-      ctxStr.includes('pins.yaml') || ctxStr.includes('write-pin') || ctxStr.includes('select-pin') || ctxStr.includes('pin'),
+      ctxStr.includes('pins.yaml') || ctxStr.includes('setup') || ctxStr.includes('pin'),
     ).toBe(true);
 
     // No file/dir must be created in omtDir beyond what was there before
@@ -212,8 +214,10 @@ describe('pin-session-start entrypoint', () => {
     const wordCount = ctx.split(/\s+/).filter(Boolean).length;
     expect(wordCount).toBeLessThan(200);
 
-    // Must still include guidance
-    expect(ctx).toContain('select-pin');
-    expect(ctx).toContain('write-pin');
+    // Must still include guidance (current skill vocabulary)
+    expect(ctx).toContain('query');
+    expect(ctx).toContain('record');
+    expect(ctx).not.toContain('select-pin');
+    expect(ctx).not.toContain('write-pin');
   });
 });
