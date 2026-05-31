@@ -138,5 +138,25 @@ describe('3-way coupling', () => {
     for (const status of tbox.enums.status) {
       expect(skillContent).toContain(status);
     }
+
+    // All type values (entity_types keys) must be mentioned in the SKILL.md
+    for (const type of Object.keys(tbox.entity_types)) {
+      expect(skillContent).toContain(type);
+    }
+
+    // All source enum values must be mentioned in the SKILL.md
+    for (const source of tbox.enums.source) {
+      expect(skillContent).toContain(source);
+    }
+
+    // All tier enum values must be mentioned in the SKILL.md
+    for (const tier of tbox.enums.tier) {
+      expect(skillContent).toContain(tier);
+    }
+
+    // All sensitivity enum values must be mentioned in the SKILL.md
+    for (const sensitivity of tbox.enums.sensitivity) {
+      expect(skillContent).toContain(sensitivity);
+    }
   });
 });
