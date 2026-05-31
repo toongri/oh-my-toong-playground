@@ -1,0 +1,108 @@
+import { loadTbox } from "./tbox-loader.ts";
+import type { Entity } from "./types.ts";
+
+// ── Reason codes ──────────────────────────────────────────────────────────────
+
+export type ValidationReason =
+  | "unknown_type"
+  | "missing_field"
+  | "forbidden_field"
+  | "relation_domain_violation"
+  | "id_pattern_violation";
+
+// ── Result shape (mirrors legacy reason-union style) ──────────────────────────
+
+export type ValidationResult =
+  | { valid: true }
+  | { valid: false; reason: ValidationReason; message: string };
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Validate a single CANONICAL (new-shape) entity against the T-Box schema.
+ *
+ * Precondition: the entity has already been translated from legacy shape by the
+ * compat module. This function never reads slug/kind as input — it only rejects
+ * entities that still CARRY slug/kind as forbidden fields.
+ *
+ * Checks (in order):
+ *   1. entity.type must be a known entity_types key.
+ *   2. forbidden_axiom fields (slug, kind) must be absent.
+ *   3. required_axiom fields must be present and non-empty.
+ *   4. For each outgoing relation whose type has a domain constraint,
+ *      the entity's own type must be in that domain.
+ *      related_to is always exempt (carries no domain/range).
+ *   5. (Optional) entity.id must match id_pattern if defined.
+ */
+export async function validate(entity: Entity): Promise<ValidationResult> {
+  const tbox = await loadTbox();
+  const fm = entity.frontmatter;
+
+  // 1. Unknown type
+  const typeDef = tbox.entity_types[fm.type as string];
+  if (!typeDef) {
+    return {
+      valid: false,
+      reason: "unknown_type",
+      message: `entity type "${fm.type}" is not defined in the schema`,
+    };
+  }
+
+  // 2. Forbidden fields must be absent
+  for (const field of typeDef.forbidden_axiom) {
+    if (field in (fm as unknown as Record<string, unknown>)) {
+      return {
+        valid: false,
+        reason: "forbidden_field",
+        message: `forbidden field "${field}" must not be present on a canonical entity`,
+      };
+    }
+  }
+
+  // 3. Required fields must be present and non-empty
+  for (const field of typeDef.required_axiom) {
+    const value = (fm as unknown as Record<string, unknown>)[field];
+    if (value === undefined || value === null || String(value).trim() === "") {
+      return {
+        valid: false,
+        reason: "missing_field",
+        message: `required field "${field}" is missing or empty`,
+      };
+    }
+  }
+
+  // 4. Relation domain constraints
+  for (const relation of fm.relations) {
+    // related_to is always exempt — no domain/range
+    if (relation.type === "related_to") continue;
+
+    const relDef = tbox.relation_types[relation.type];
+    // Unknown relation types are not rejected here (out of scope for this validator)
+    if (!relDef) continue;
+
+    // If no domain defined, relation is unconstrained
+    if (!relDef.domain || relDef.domain.length === 0) continue;
+
+    if (!relDef.domain.includes(fm.type as any)) {
+      return {
+        valid: false,
+        reason: "relation_domain_violation",
+        message: `entity type "${fm.type}" is not a valid domain source for relation "${relation.type}" (allowed: ${relDef.domain.join(", ")})`,
+      };
+    }
+  }
+
+  // 5. id_pattern (optional — soft check)
+  if (tbox.id_pattern && fm.id) {
+    const pattern = new RegExp(tbox.id_pattern);
+    if (!pattern.test(fm.id)) {
+      return {
+        valid: false,
+        reason: "id_pattern_violation",
+        message: `id "${fm.id}" does not match pattern ${tbox.id_pattern}`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
