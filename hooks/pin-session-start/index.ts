@@ -63,7 +63,7 @@ export async function main(): Promise<void> {
     } else {
       // Step 3b: build index from manifest.location and format summary
       const index = buildIndex(manifestResult.manifest.location);
-      additionalContext = formatIndexContext(index);
+      additionalContext = formatIndexContext(index, manifestResult.manifest);
     }
 
     // Step 4: emit hookSpecificOutput
