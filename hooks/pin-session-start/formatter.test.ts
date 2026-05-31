@@ -3,7 +3,7 @@
  *
  * AC-2 key requirements:
  * - Output contains <pins>...</pins> wrapper
- * - Model 2 guidance lines with keywords: select-pin, write-pin
+ * - Model 2 guidance lines with current skill keywords: query, record, setup
  * - Always non-empty
  * - Output bounded (token budget)
  *
@@ -59,10 +59,12 @@ describe('formatAbsentContext', () => {
     expect(result.includes('pins.yaml') || result.includes('not configured') || result.includes('set up')).toBe(true);
   });
 
-  it('contains Model 2 guidance keywords', () => {
+  it('contains Model 2 guidance keywords (current skills)', () => {
     const result = formatAbsentContext();
-    expect(result).toContain('select-pin');
-    expect(result).toContain('write-pin');
+    expect(result).toContain('query');
+    expect(result).toContain('record');
+    expect(result).not.toContain('select-pin');
+    expect(result).not.toContain('write-pin');
   });
 
   it('output is bounded (word count ≤80)', () => {
@@ -95,11 +97,13 @@ describe('formatIndexContext', () => {
     expect(result).toContain('code-auth-jwt');
   });
 
-  it('contains Model 2 guidance keywords', () => {
+  it('contains Model 2 guidance keywords (current skills)', () => {
     const index = makePinsIndex([{ id: 'code-auth-jwt' }]);
     const result = formatIndexContext(index);
-    expect(result).toContain('select-pin');
-    expect(result).toContain('write-pin');
+    expect(result).toContain('query');
+    expect(result).toContain('record');
+    expect(result).not.toContain('select-pin');
+    expect(result).not.toContain('write-pin');
   });
 
   it('caps output at MAX_INLINE_ENTRIES (10) entries and shows remainder count', () => {
