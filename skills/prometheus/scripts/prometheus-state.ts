@@ -115,7 +115,7 @@ export function readPrometheusState(sessionId: string): PrometheusState | null {
 
 export function setPrometheusState(
   sessionId: string,
-  opts: { phase: string; plan_path: string; resume_summary: string }
+  opts: { phase: string; plan_path?: string; resume_summary?: string }
 ): void {
   const path = resolveStatePath(sessionId);
   const existing = readFileOrNull(path);
@@ -175,8 +175,8 @@ function main(): void {
 
   if (subcommand === 'set') {
     const phase = String(args['phase'] ?? '');
-    const planPath = String(args['plan-path'] ?? '');
-    const resumeSummary = String(args['resume-summary'] ?? '');
+    const planPath = args['plan-path'] !== undefined ? String(args['plan-path']) : undefined;
+    const resumeSummary = args['resume-summary'] !== undefined ? String(args['resume-summary']) : undefined;
     setPrometheusState(sessionId, { phase, plan_path: planPath, resume_summary: resumeSummary });
   } else if (subcommand === 'clear') {
     clearPrometheusState(sessionId);
