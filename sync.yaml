@@ -2,7 +2,9 @@ path: "~"
 skills:
   items:
     - hud
-    - pins
-    - select-pin
-    - write-pin
+    - record
+    - query
+    - audit
+    - wrap-up
+    - setup
     - using-maestro
