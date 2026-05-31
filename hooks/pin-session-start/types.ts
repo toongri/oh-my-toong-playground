@@ -4,10 +4,6 @@ export interface HookInput {
   cwd?: string;
 }
 
-export interface ScanResult {
-  count: number;
-}
-
 export interface HookOutput {
   hookSpecificOutput?: {
     hookEventName: 'SessionStart';
