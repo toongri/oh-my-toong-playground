@@ -112,4 +112,28 @@ describe('prometheus state', () => {
     const path = resolveStatePath(sessionId);
     expect(path).toBe(`${tmpDir}/prometheus-state-default.json`);
   });
+
+  test('prometheus phase-only update preserves prior plan_path and resume_summary', () => {
+    process.env.OMT_SESSION_ID = 'test-session';
+
+    // First write: full fields
+    setPrometheusState('test-session', {
+      phase: 'S2',
+      plan_path: `${tmpDir}/plans/my-plan.md`,
+      resume_summary: 'paused at interview',
+    });
+    const first = readPrometheusState('test-session');
+    expect(first).not.toBeNull();
+    const firstStartedAt = first!.started_at;
+
+    // Second write: phase only, omitting plan_path and resume_summary
+    setPrometheusState('test-session', { phase: 'S4' });
+
+    const second = readPrometheusState('test-session');
+    expect(second).not.toBeNull();
+    expect(second!.phase).toBe('S4');
+    expect(second!.plan_path).toBe(`${tmpDir}/plans/my-plan.md`);
+    expect(second!.resume_summary).toBe('paused at interview');
+    expect(second!.started_at).toBe(firstStartedAt);
+  });
 });
