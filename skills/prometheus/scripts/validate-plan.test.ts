@@ -1,4 +1,6 @@
 import { describe, test, expect } from 'bun:test';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { REQUIRED_HEADINGS, validatePlan } from './validate-plan.ts';
 
 // ---------------------------------------------------------------------------
@@ -133,4 +135,41 @@ describe('validator policy', () => {
     const missing = validatePlan(plan);
     expect(missing).not.toContain('TODOs');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Drift-lock: canonical headings in SKILL.md must match REQUIRED_HEADINGS
+// ---------------------------------------------------------------------------
+
+test('validator headings match SKILL contract', () => {
+  // Resolve SKILL.md relative to this test file's directory
+  const skillPath = join(import.meta.dir, '..', 'SKILL.md');
+  const skillContent = readFileSync(skillPath, 'utf8');
+
+  // Find the anchor line, then extract the immediately following fenced block
+  const anchorLine = 'Canonical required section headings (validator single source):';
+  const anchorIdx = skillContent.indexOf(anchorLine);
+  if (anchorIdx === -1) throw new Error(`Anchor not found in SKILL.md: "${anchorLine}"`);
+
+  const afterAnchor = skillContent.slice(anchorIdx + anchorLine.length);
+
+  // Find the opening fence (```)
+  const fenceOpenMatch = afterAnchor.match(/^[ \t]*```[^\n]*\n/m);
+  if (!fenceOpenMatch) throw new Error('Opening fence not found after anchor in SKILL.md');
+  const fenceOpenEnd = fenceOpenMatch.index! + fenceOpenMatch[0].length;
+
+  // Find the closing fence
+  const afterFenceOpen = afterAnchor.slice(fenceOpenEnd);
+  const fenceCloseMatch = afterFenceOpen.match(/^[ \t]*```[ \t]*$/m);
+  if (!fenceCloseMatch) throw new Error('Closing fence not found after anchor in SKILL.md');
+
+  const fenceBody = afterFenceOpen.slice(0, fenceCloseMatch.index!);
+
+  // Extract lines that start with "## " — these are the canonical headings
+  const extracted = fenceBody
+    .split('\n')
+    .filter((line) => line.startsWith('## '))
+    .map((line) => line.slice('## '.length).trim());
+
+  expect(extracted).toEqual(REQUIRED_HEADINGS);
 });
