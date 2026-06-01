@@ -416,6 +416,77 @@ describe("dense graph (dangling-dominant)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// directory audit — buildIndex skipped entries surface as invalid findings
+// ---------------------------------------------------------------------------
+
+describe("directory audit surfaces parse-error skip", () => {
+  test("parse-error file in pinsDir yields an invalid finding naming the file", async () => {
+    const { mkdtempSync, writeFileSync } = await import("fs");
+    const { join } = await import("path");
+    const { tmpdir } = await import("os");
+
+    const dir = mkdtempSync(join(tmpdir(), "pins-audit-parse-"));
+    // File with no YAML frontmatter fences — triggers parse error in buildIndex
+    writeFileSync(join(dir, "bad-parse.md"), "this is not valid frontmatter\n");
+
+    const report = await audit(dir);
+
+    const invalids = report.findings.filter((f) => f.type === "invalid");
+    expect(invalids.length).toBeGreaterThanOrEqual(1);
+    const hit = invalids.find((f) => f.message.includes("bad-parse.md"));
+    expect(hit).toBeDefined();
+    expect(hit?.severity).toBe("error");
+    expect(hit?.message).toMatch(/[Pp]arse/);
+  });
+});
+
+describe("directory audit surfaces missing-id skip", () => {
+  test("missing-id file in pinsDir yields an invalid finding naming the file", async () => {
+    const { mkdtempSync, writeFileSync } = await import("fs");
+    const { join } = await import("path");
+    const { tmpdir } = await import("os");
+
+    const dir = mkdtempSync(join(tmpdir(), "pins-audit-noid-"));
+    // Valid frontmatter format but no `id` field — triggers missing-id skip
+    const content = `---\ntype: concept\nsource: notion\n---\n\nbody\n`;
+    writeFileSync(join(dir, "no-id.md"), content);
+
+    const report = await audit(dir);
+
+    const invalids = report.findings.filter((f) => f.type === "invalid");
+    expect(invalids.length).toBeGreaterThanOrEqual(1);
+    const hit = invalids.find((f) => f.message.includes("no-id.md"));
+    expect(hit).toBeDefined();
+    expect(hit?.severity).toBe("error");
+    expect(hit?.message).toMatch(/[Mm]issing/i);
+  });
+});
+
+describe("directory audit surfaces dup-id skip", () => {
+  test("duplicate-id file in pinsDir yields an invalid finding naming the file", async () => {
+    const { mkdtempSync, writeFileSync } = await import("fs");
+    const { join } = await import("path");
+    const { tmpdir } = await import("os");
+
+    const dir = mkdtempSync(join(tmpdir(), "pins-audit-dupid-"));
+    // Two files with same id — second one is skipped as Duplicate id
+    const validContent = (id: string) =>
+      `---\nid: ${id}\ntype: concept\nsource: notion\nauthority: test\nsource_url: https://notion.so/${id}\ntier: "2"\ntags: test\nsensitivity: shared\nstatus: active\nupdated_at: "2024-01-01T00:00:00Z"\nchecked_at: "2024-01-01T00:00:00Z"\ncreated_at: "2024-01-01T00:00:00Z"\nrelations: []\n---\n\nbody\n`;
+    writeFileSync(join(dir, "a-first.md"), validContent("concept-dup-shared"));
+    writeFileSync(join(dir, "b-second.md"), validContent("concept-dup-shared"));
+
+    const report = await audit(dir);
+
+    const invalids = report.findings.filter((f) => f.type === "invalid");
+    expect(invalids.length).toBeGreaterThanOrEqual(1);
+    const hit = invalids.find((f) => f.message.includes("b-second.md"));
+    expect(hit).toBeDefined();
+    expect(hit?.severity).toBe("error");
+    expect(hit?.message).toMatch(/[Dd]uplicate/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // relation range — in-scope targets are range-checked; missing targets stay dangling
 // ---------------------------------------------------------------------------
 
