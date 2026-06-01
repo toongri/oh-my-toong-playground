@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseYaml } from 'yaml';
-import { getOmtDir } from '../omt-dir.ts';
+import { resolveOmtDir } from '../omt-dir.ts';
 
 export interface PinsManifest {
   location: string;
@@ -37,7 +37,7 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
  *
  * Search order:
  *   1. {projectRoot}/pins.yaml  (defaults to cwd)
- *   2. {userRoot}/pins.yaml     (defaults to getOmtDir())
+ *   2. {userRoot}/pins.yaml     (defaults to resolveOmtDir())
  *
  * Returns { kind: "resolved", manifest } when found, { kind: "absent" } otherwise.
  * Never throws when neither manifest exists. Never creates a file.
@@ -46,7 +46,7 @@ export async function resolveManifest(
   options: ResolveOptions = {},
 ): Promise<ManifestResult> {
   const projectRoot = options.projectRoot ?? process.cwd();
-  const userRoot = options.userRoot ?? getOmtDir();
+  const userRoot = options.userRoot ?? resolveOmtDir();
 
   const fromProject = await readManifestAt(projectRoot);
   if (fromProject !== null) {

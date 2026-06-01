@@ -1,7 +1,7 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
 import { resolveManifest } from './manifest.ts';
 
 let dirsToClean: string[] = [];
@@ -78,5 +78,44 @@ describe('absent signal', () => {
     const { readdirSync } = await import('fs');
     expect(readdirSync(projectRoot)).toHaveLength(0);
     expect(readdirSync(userRoot)).toHaveLength(0);
+  });
+
+  test('absent resolution creates no dir', async () => {
+    // Simulate OMT_DIR unset: use a tmp dir as cwd base so the derived
+    // ~/.omt/<project> path is known and verifiably absent.
+    const savedOmtDir = process.env.OMT_DIR;
+    const savedCwd = process.cwd();
+
+    const tmpCwd = makeTmpDir();
+    // Derive what resolveOmtDir() would compute for this cwd (non-git dir):
+    // basename(tmpCwd) → ~/.omt/<basename>
+    const derivedDir = join(homedir(), '.omt', tmpCwd.split('/').pop()!);
+
+    try {
+      delete process.env.OMT_DIR;
+      process.chdir(tmpCwd);
+
+      // Pre-condition: derived dir must not exist before the call
+      const existedBefore = existsSync(derivedDir);
+
+      const result = await resolveManifest();
+
+      expect(result.kind).toBe('absent');
+      // If the dir didn't exist before, it must still not exist after
+      if (!existedBefore) {
+        expect(existsSync(derivedDir)).toBe(false);
+      }
+    } finally {
+      process.chdir(savedCwd);
+      if (savedOmtDir !== undefined) {
+        process.env.OMT_DIR = savedOmtDir;
+      } else {
+        delete process.env.OMT_DIR;
+      }
+      // Clean up derivedDir if it was unexpectedly created
+      if (!existsSync(derivedDir) === false) {
+        rmSync(derivedDir, { recursive: true, force: true });
+      }
+    }
   });
 });
