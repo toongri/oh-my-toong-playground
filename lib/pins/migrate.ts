@@ -13,7 +13,7 @@
  */
 
 import { readdirSync, copyFileSync, existsSync, readFileSync } from 'fs';
-import { join, extname } from 'path';
+import { join, extname, basename } from 'path';
 import { parse as parseYaml } from 'yaml';
 import { toCanonical } from './compat.ts';
 import { record } from './record.ts';
@@ -61,8 +61,19 @@ export async function migrate(options: MigrateOptions): Promise<void> {
       copyFileSync(filePath, bakPath);
     }
 
-    // 2. Convert legacy → canonical via compat reader.
+    // 2. Convert legacy → canonical via compat reader (sets id = slug).
     const compat = toCanonical(legacy);
+
+    // 2b. Collision id-derivation: when this file's stem carries the legacy
+    //     collision suffix (`{slug}-HHMMSS` or `{slug}-HHMMSS-N`, written by
+    //     pin-up's wx-flag counter retry), same-slug legacy files would all
+    //     collapse to id = slug and overwrite one another. Override the id with
+    //     the stem VERBATIM so each lands in its own canonical file.
+    const stem = basename(entry, '.md');
+    const collisionShape = new RegExp(`^${escapeRegExp(legacy.slug)}-\\d{6}(-\\d+)?$`);
+    if (collisionShape.test(stem)) {
+      compat.id = stem;
+    }
 
     // 3. Build the Entity: set checked_at = created_at (migration default).
     const frontmatter: Frontmatter = {
@@ -83,6 +94,14 @@ export async function migrate(options: MigrateOptions): Promise<void> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Escapes regex-significant characters so a slug can be interpolated literally
+ * into the collision-shape pattern.
+ */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * Extracts the raw YAML frontmatter object from a .md file.
