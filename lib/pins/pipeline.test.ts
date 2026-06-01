@@ -22,21 +22,20 @@ describe("validateLegacy pipeline", () => {
       expect(result.valid).toBe(true);
     });
 
-    test("canonical input has type set and no slug (compat ran before validate)", async () => {
-      // Intercept what validate receives by wrapping it
-      let capturedFrontmatter: Record<string, unknown> | null = null;
-      const originalValidate = validate;
+    test("raw legacy fails validate directly but passes through validateLegacy (compat ran first)", async () => {
+      // Build the raw entity that bypasses compat — same fixture, no transformation
+      const rawEntity = {
+        frontmatter: LEGACY_FIXTURE as unknown as import("./types.ts").Entity["frontmatter"],
+        body: "",
+      };
 
-      // Temporarily capture the entity passed to validate by running toCanonical
-      // and verifying the result has canonical shape
-      const { toCanonical } = await import("./compat.ts");
-      const canonical = toCanonical(LEGACY_FIXTURE);
+      // Raw legacy must fail schema validation (no `type` field → unknown_type, or forbidden `slug`)
+      const rawResult = await validate(rawEntity);
+      expect(rawResult.valid).toBe(false);
 
-      // The canonical object must have `type` and no `slug`
-      expect((canonical as unknown as Record<string, unknown>)["type"]).toBeDefined();
-      expect((canonical as unknown as Record<string, unknown>)["slug"]).toBeUndefined();
-      expect((canonical as unknown as Record<string, unknown>)["id"]).toBe("linear-eng-1234");
-      expect(canonical.relations).toEqual([{ target: "notion-auth-doc", type: "related_to" }]);
+      // The same fixture through validateLegacy (compat → validate) must pass
+      const pipelineResult = await validateLegacy(LEGACY_FIXTURE);
+      expect(pipelineResult.valid).toBe(true);
     });
   });
 
