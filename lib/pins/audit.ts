@@ -104,7 +104,7 @@ export async function audit(
   input: Entity[] | string,
   opts: AuditOptions = {}
 ): Promise<AuditReport> {
-  const entities: Entity[] = await resolveEntities(input);
+  const { entities, skippedFindings } = await resolveEntities(input);
 
   // Build the in-scope id set from the provided entities
   const scopeIds = new Set(entities.map((e) => e.frontmatter.id));
@@ -116,9 +116,11 @@ export async function audit(
   const orphan: OrphanFinding[] = detectOrphan(entities);
 
   // Ranked order: dangling > duplicate > invalid > stale > orphan
+  // Skipped-file findings are included in the invalid slot (same severity).
   const findings: AuditFinding[] = [
     ...dangling,
     ...duplicate,
+    ...skippedFindings,
     ...invalid,
     ...stale,
     ...orphan,
@@ -129,18 +131,34 @@ export async function audit(
 
 // ── Input resolution ──────────────────────────────────────────────────────────
 
-async function resolveEntities(input: Entity[] | string): Promise<Entity[]> {
-  if (typeof input !== "string") return input;
+async function resolveEntities(
+  input: Entity[] | string
+): Promise<{ entities: Entity[]; skippedFindings: InvalidFinding[] }> {
+  if (typeof input !== "string") {
+    return { entities: input, skippedFindings: [] };
+  }
 
   const { parse } = await import("./entity.ts");
   const { readFileSync } = await import("fs");
   const { join } = await import("path");
 
   const index = buildIndex(input);
-  return Object.values(index.entries).map((entry) => {
+
+  const entities = Object.values(index.entries).map((entry) => {
     const content = readFileSync(join(input, entry.file), "utf8");
     return parse(content);
   });
+
+  // Surface all skipped files as invalid findings — one uniform path covers
+  // Parse error, Missing id, Duplicate id, and Could not read file.
+  const skippedFindings: InvalidFinding[] = index.skipped.map((s) => ({
+    type: "invalid",
+    severity: "error",
+    entityId: s.file,
+    message: `${s.file}: ${s.reason}`,
+  }));
+
+  return { entities, skippedFindings };
 }
 
 // ── Detectors ─────────────────────────────────────────────────────────────────
