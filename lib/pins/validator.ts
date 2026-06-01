@@ -7,6 +7,7 @@ export type ValidationReason =
   | "unknown_type"
   | "missing_field"
   | "forbidden_field"
+  | "enum_violation"
   | "relation_domain_violation"
   | "relation_range_violation"
   | "id_pattern_violation";
@@ -82,7 +83,22 @@ export async function validate(
     }
   }
 
-  // 4. Relation domain constraints
+  // 4. Closure enum constraints
+  const enumFields = ["tier", "source", "sensitivity", "status"] as const;
+  for (const field of enumFields) {
+    const value = (fm as unknown as Record<string, unknown>)[field];
+    if (value === undefined || value === null) continue; // absent → missing_field already caught or optional
+    const allowed = tbox.enums[field];
+    if (!allowed.includes(String(value))) {
+      return {
+        valid: false,
+        reason: "enum_violation",
+        message: `field "${field}" value "${value}" is not in the allowed set: [${allowed.join(", ")}]`,
+      };
+    }
+  }
+
+  // 5. Relation domain constraints
   for (const relation of fm.relations) {
     // related_to is always exempt — no domain/range
     if (relation.type === "related_to") continue;
