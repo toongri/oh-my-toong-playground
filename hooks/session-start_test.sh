@@ -335,6 +335,82 @@ test_session_start_uses_project_root_variable() {
 }
 
 # =============================================================================
+# Tests: Prometheus restore — resume_summary surfaced when plan file unavailable
+# =============================================================================
+
+test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable() {
+    local sid="test-prometheus-resume"
+
+    # Active prometheus state: resume_summary set, plan_path empty (never written)
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "Working on feature X. Next: implement the validation logic in validator.ts."
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Stdout must be valid JSON
+    if ! echo "$output" | jq . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook stdout is not valid JSON"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # additionalContext must contain the bookmark text
+    assert_output_contains "$output" "Working on feature X" "additionalContext should contain resume_summary text" || return 1
+    assert_output_contains "$output" "Resume from this bookmark" "additionalContext should contain bookmark label" || return 1
+}
+
+test_session_start_prometheus_resume_summary_backslash_produces_valid_json() {
+    local sid="test-prometheus-backslash"
+
+    # Active prometheus state: resume_summary with literal backslashes (Windows path + regex)
+    cat > "$TEST_OMT_DIR/prometheus-state-${sid}.json" << 'EOF'
+{
+  "active": true,
+  "phase": "STAGE_B",
+  "plan_path": "",
+  "resume_summary": "editing C:\\tmp\\plan with regex \\d+"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # (a) stdout must be valid JSON
+    if ! echo "$output" | jq . > /dev/null 2>&1; then
+        echo "ASSERTION FAILED: hook stdout is not valid JSON when resume_summary contains backslashes"
+        echo "  Output: ${output:0:500}"
+        return 1
+    fi
+
+    # (b) the parsed additionalContext must contain backslashes intact
+    local ctx
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null || echo "")
+
+    if echo "$ctx" | grep -qF 'C:\tmp\plan'; then
+        : # good
+    else
+        echo "ASSERTION FAILED: additionalContext should preserve backslash path C:\\tmp\\plan"
+        echo "  additionalContext: ${ctx:0:500}"
+        return 1
+    fi
+
+    if echo "$ctx" | grep -qF '\d+'; then
+        : # good
+    else
+        echo "ASSERTION FAILED: additionalContext should preserve backslash regex \\d+"
+        echo "  additionalContext: ${ctx:0:500}"
+        return 1
+    fi
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -363,6 +439,12 @@ main() {
     # Project root detection - session-start (from hooks/test/project_root_test.sh)
     run_test test_get_project_root_function_exists_in_session_start
     run_test test_session_start_uses_project_root_variable
+
+    # Prometheus restore: resume_summary surfaced when plan file unavailable
+    run_test test_session_start_prometheus_surfaces_resume_summary_when_plan_unavailable
+
+    # Prometheus restore: backslashes in resume_summary produce valid JSON and are preserved
+    run_test test_session_start_prometheus_resume_summary_backslash_produces_valid_json
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
