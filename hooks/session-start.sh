@@ -126,6 +126,10 @@ if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
       PROM_PHASE=$(echo "$PROMETHEUS_STATE" | jq -r '.phase // ""' 2>/dev/null)
       PROM_PLAN_PATH=$(echo "$PROMETHEUS_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
       PROM_RESUME=$(echo "$PROMETHEUS_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
+      # Escape backslashes so the value is safe to embed in a hand-built JSON string.
+      # Must happen here (data field only) — not at the final sed — to avoid doubling
+      # the intentional \n newline markers already present in the MESSAGES template.
+      PROM_RESUME=$(printf '%s' "$PROM_RESUME" | sed 's/\\/\\\\/g')
 
       # Determine whether the plan file is available on disk.
       # Unavailable means: plan_path empty/null, OR plan_path set but file missing.
