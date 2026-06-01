@@ -50,7 +50,7 @@ export function serialize(entity: Entity): string {
 export function parse(md: string): Entity {
   // Split on the closing `---` fence.
   // Format is: `---\n<yaml>\n---\n\n<body>\n`
-  const match = md.match(/^---\n([\s\S]*?)\n---\n\n([\s\S]*)\n$/);
+  const match = md.match(/^---\n([\s\S]*?)\n---\n\n([\s\S]*?)\n?$/);
   if (!match) {
     throw new Error('Invalid entity .md format: missing YAML frontmatter fences');
   }

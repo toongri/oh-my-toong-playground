@@ -31,6 +31,12 @@ describe('entity', () => {
     expect(result).toEqual(FIXTURE);
   });
 
+  it('parse tolerates missing trailing newline', () => {
+    const trimmed = serialize(FIXTURE).trimEnd();
+    const result = parse(trimmed);
+    expect(result).toEqual(FIXTURE);
+  });
+
   it('Korean section headers and their content survive serialize→parse verbatim', () => {
     const md = serialize(FIXTURE);
     const result = parse(md);
