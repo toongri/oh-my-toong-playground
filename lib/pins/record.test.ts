@@ -122,4 +122,25 @@ describe('record', () => {
       expect(() => JSON.parse(line)).not.toThrow();
     }
   });
+
+  test('escape entry includes reason', async () => {
+    // Invalid: missing required field 'tier' → validator returns reason='missing_field'
+    const entity = makeEntity();
+    delete (entity.frontmatter as any).tier;
+
+    await record(entity, { location });
+
+    // No .md file written for the invalid entity
+    const filePath = join(location, `${entity.frontmatter.id}.md`);
+    expect(existsSync(filePath)).toBe(false);
+
+    // Escape log entry must include reason and non-empty message
+    const escapeLog = join(location, '.escape.jsonl');
+    const firstLine = readFileSync(escapeLog, 'utf8').trim().split('\n')[0];
+    const entry = JSON.parse(firstLine);
+
+    expect(entry.reason).toBe('missing_field');
+    expect(typeof entry.message).toBe('string');
+    expect(entry.message.length).toBeGreaterThan(0);
+  });
 });
