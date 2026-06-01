@@ -18,7 +18,7 @@ import { parse as parseYaml } from 'yaml';
 import { toCanonical } from './compat.ts';
 import { record } from './record.ts';
 import type { Entity, Frontmatter } from './types.ts';
-import type { FrontmatterSchema } from '../../hooks/pin-up/types';
+import type { FrontmatterSchema } from './legacy-types';
 
 export interface MigrateOptions {
   /** The pins directory to scan (manifest-resolved location). */
@@ -65,8 +65,8 @@ export async function migrate(options: MigrateOptions): Promise<void> {
     const compat = toCanonical(legacy);
 
     // 2b. Collision id-derivation: when this file's stem carries the legacy
-    //     collision suffix (`{slug}-HHMMSS` or `{slug}-HHMMSS-N`, written by
-    //     pin-up's wx-flag counter retry), same-slug legacy files would all
+    //     collision suffix (`{slug}-HHMMSS` or `{slug}-HHMMSS-N`, produced by
+    //     the write-time counter retry), same-slug legacy files would all
     //     collapse to id = slug and overwrite one another. Override the id with
     //     the stem VERBATIM so each lands in its own canonical file.
     const stem = basename(entry, '.md');
@@ -117,7 +117,7 @@ function parseFrontmatterRaw(content: string): Record<string, unknown> | null {
 
 /**
  * Extracts the body (everything after the frontmatter block).
- * Strips leading blank lines added by pin-up serialization.
+ * Strips any leading blank lines that may follow the closing --- fence.
  */
 function extractBody(content: string): string {
   const match = content.match(/^---\n[\s\S]*?\n---\n\n?([\s\S]*?)\n?$/);

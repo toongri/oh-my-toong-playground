@@ -9,8 +9,8 @@ import { validate } from './validator.ts';
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Writes a legacy-shaped .md file (slug-keyed frontmatter, no id/type).
- * Mirrors the format written by hooks/pin-up.
+ * Writes a legacy-shaped .md file: slug-keyed frontmatter, no id/type fields.
+ * Represents the flat-pin format consumed by the migration pipeline.
  */
 function writeLegacyPin(dir: string, filename: string, opts: {
   slug: string;

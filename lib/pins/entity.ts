@@ -5,9 +5,9 @@ import type { Entity, Frontmatter } from './types';
  * Serializes an Entity to a .md file body:
  * YAML frontmatter block (---...---) followed by the 4-section markdown body.
  *
- * Field ordering mirrors hooks/pin-up/index.ts:serializePin and extends it
- * with canonical fields (id, type, source, status, updated_at, checked_at,
- * created_at) plus typed relations[] array.
+ * Field ordering is deterministic: canonical fields (id, type, source, status,
+ * updated_at, checked_at, created_at) plus typed relations[] array extend the
+ * legacy flat-pin frontmatter shape.
  *
  * Frontmatter field order is deterministic and must not change — it is part
  * of the 3-way coupling: schema ↔ serializer ↔ record skill.
