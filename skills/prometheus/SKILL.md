@@ -650,6 +650,19 @@ This contract applies to EVERY plan. The contract lives here — not in a refere
 | **Success Criteria** | Binary pass/fail end state. Verification commands + final checklist |
 | **ADR** | Architecture Decision Record — MADR 7-field (Context / Decision Drivers / Considered Options / Decision / Rationale / Consequences / Follow-ups). Scoped+ default; Trivial exempt. |
 
+Canonical required section headings (validator single source):
+```
+## TL;DR
+## Context
+## Work Objectives
+## TODOs
+## Execution Strategy
+## Verification Strategy
+## Success Criteria
+```
+
+Each plan section is emitted as exactly its canonical heading above (plus `## ADR` when Scoped+).
+
 ### ADR
 
 Architecture Decision Record (Nygard 2011 / MADR) — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from ADR output.** Inline in the plan; no separate file needed.
@@ -895,6 +908,16 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 
 S7 → S0 edge: "Revise plan" returns to Interview Mode — full pipeline re-runs.
 
+### State Lifecycle Directives
+
+These directives govern how prometheus records its own pipeline state via the state CLI.
+
+- **S0 entry**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase S0`.
+- **Per each S-transition**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the plan file is first written); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
+- **Teardown**: AFTER S8 dispatch is invoked, and on abort, run `bun skills/prometheus/scripts/prometheus-state.ts clear`.
+- **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable (the CLI falls back to `default` when `OMT_SESSION_ID` is unset).
+- **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory.
+
 ### Loop Termination Rule
 
 Reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the current artifact version. REQUEST_CHANGES → Revise. Missing/ambiguous → treat as REQUEST_CHANGES.
@@ -909,6 +932,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
+| 5 | Section validator passes | Run `bun skills/prometheus/scripts/validate-plan.ts <plan_path>` (invoked ONLY here, post-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Daedalus. |
 
 Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
 

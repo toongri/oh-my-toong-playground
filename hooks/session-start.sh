@@ -63,6 +63,11 @@ if [ -n "$CLAUDE_ENV_FILE" ]; then
   echo "export OMT_DIR=\"$OMT_DIR\"" >> "$CLAUDE_ENV_FILE"
 fi
 
+# Export OMT_SESSION_ID via Claude env file
+if [ -n "$CLAUDE_ENV_FILE" ]; then
+  echo "export OMT_SESSION_ID=\"$SESSION_ID\"" >> "$CLAUDE_ENV_FILE"
+fi
+
 MESSAGES=""
 
 # Cleanup stale ralph-state files (older than 3 hours)
@@ -70,7 +75,7 @@ if command -v jq &> /dev/null; then
   STALE_THRESHOLD=10800  # 3 hours in seconds
   CURRENT_TIME=$(date +%s)
 
-  for state_file in "$OMT_DIR"/ralph-state-*.json; do
+  for state_file in "$OMT_DIR"/ralph-state-*.json "$OMT_DIR"/prometheus-state-*.json; do
     if [ -f "$state_file" ]; then
       STARTED_AT=$(jq -r '.started_at // ""' "$state_file" 2>/dev/null)
       if [ -n "$STARTED_AT" ] && [ "$STARTED_AT" != "null" ]; then
@@ -111,6 +116,44 @@ if [ -f "$OMT_DIR/ralph-state-${SESSION_ID}.json" ]; then
   fi
 fi
 
+# Check for active prometheus state (session-specific)
+if [ -f "$OMT_DIR/prometheus-state-${SESSION_ID}.json" ]; then
+  PROMETHEUS_STATE=$(cat "$OMT_DIR/prometheus-state-${SESSION_ID}.json" 2>/dev/null)
+
+  if command -v jq &> /dev/null; then
+    PROM_ACTIVE=$(echo "$PROMETHEUS_STATE" | jq -r '.active // false' 2>/dev/null)
+    if [ "$PROM_ACTIVE" = "true" ]; then
+      PROM_PHASE=$(echo "$PROMETHEUS_STATE" | jq -r '.phase // ""' 2>/dev/null)
+      PROM_PLAN_PATH=$(echo "$PROMETHEUS_STATE" | jq -r '.plan_path // ""' 2>/dev/null)
+      PROM_RESUME=$(echo "$PROMETHEUS_STATE" | jq -r '.resume_summary // ""' 2>/dev/null)
+      # Escape backslashes so the value is safe to embed in a hand-built JSON string.
+      # Must happen here (data field only) — not at the final sed — to avoid doubling
+      # the intentional \n newline markers already present in the MESSAGES template.
+      PROM_RESUME=$(printf '%s' "$PROM_RESUME" | sed 's/\\/\\\\/g')
+
+      # Determine whether the plan file is available on disk.
+      # Unavailable means: plan_path empty/null, OR plan_path set but file missing.
+      PROM_PLAN_AVAILABLE=false
+      if [ -n "$PROM_PLAN_PATH" ] && [ "$PROM_PLAN_PATH" != "null" ] && [ -f "$PROM_PLAN_PATH" ]; then
+        PROM_PLAN_AVAILABLE=true
+      fi
+
+      PROM_PLAN_NOTE=""
+      PROM_INSTRUCTION=""
+      if [ "$PROM_PLAN_AVAILABLE" = "true" ]; then
+        PROM_INSTRUCTION="\nRe-read the current plan from disk and distrust stored verdicts -- re-run all gates on the current artifact.\n"
+      else
+        if [ -n "$PROM_RESUME" ] && [ "$PROM_RESUME" != "null" ]; then
+          PROM_PLAN_NOTE="\nPlan file not available on disk. Resume from this bookmark: ${PROM_RESUME}\n"
+        else
+          PROM_PLAN_NOTE="\nPlan file not available on disk yet.\n"
+        fi
+      fi
+
+      MESSAGES="$MESSAGES<session-restore>\n\n[PROMETHEUS RESTORED]\n\nYou have an active prometheus session.\nPhase: $PROM_PHASE\nPlan path: $PROM_PLAN_PATH\n$PROM_PLAN_NOTE$PROM_INSTRUCTION\n</session-restore>\n\n---\n\n"
+    fi
+  fi
+fi
 
 # Check for incomplete todos in global directory
 INCOMPLETE_COUNT=0
