@@ -3,6 +3,7 @@ import { join, dirname } from 'path';
 import { validate } from './validator.ts';
 import { serialize, parse } from './entity.ts';
 import type { Entity } from './types.ts';
+import type { ValidationResult } from './validator.ts';
 
 export interface RecordTarget {
   location: string;
@@ -11,11 +12,13 @@ export interface RecordTarget {
 /**
  * Record a canonical entity to its manifest-resolved location.
  *
- * - Validates first. If INVALID → appends to <location>/.escape.jsonl, returns.
+ * - Validates first. If INVALID → appends to <location>/.escape.jsonl
+ *   (entry includes ts, id, raw, reason, message) and returns.
  * - If VALID:
  *   - Fresh write: sets status='active', updated_at=created_at (defaults).
- *   - Update (id already exists): preserves existing created_at, bumps updated_at.
- *   - Writes atomically to <location>/<id>.md with collision suffix -HHMMSS[-N].
+ *     Uses O_EXCL (wx) for atomicity on new files.
+ *   - Update (id already exists on EEXIST): preserves existing created_at,
+ *     bumps updated_at, then overwrites the file in place.
  *
  * Does NOT depend on index correctness.
  * Does NOT hard-code any path — uses manifest.location exclusively.
@@ -27,7 +30,7 @@ export async function record(
   const result = await validate(entity);
 
   if (!result.valid) {
-    appendEscapeEntry(target.location, entity);
+    appendEscapeEntry(target.location, entity, result);
     return;
   }
 
@@ -67,24 +70,18 @@ export async function record(
 // ── Atomic write ──────────────────────────────────────────────────────────────
 
 /**
- * Atomically create a pin file in `targetDir`.
+ * Write a pin file in `targetDir`.
  *
- * - 1st attempt: {id}.md
- * - EEXIST → overwrite (update path): just write with flag 'w'
- *   (we already read the existing content above for created_at preservation)
+ * - New file: uses O_EXCL (wx flag) for atomic create.
+ * - EEXIST (file already exists — update path): overwrites in place with 'w'.
+ *   The caller has already read and preserved created_at before this point.
  *
- * For NEW files (no existing id.md), uses O_EXCL for atomicity.
- * For existing files (update path), overwrites directly.
- *
- * Collision suffix -HHMMSS[-N] is used only when the base path EEXIST
- * indicates a collision from a DIFFERENT id (not expected in normal usage,
- * but retained for safety as per legacy pattern).
+ * Any other fs error is re-thrown.
  */
 function writePinAtomically(
   targetDir: string,
   id: string,
   content: string,
-  clock: () => Date = () => new Date(),
 ): void {
   mkdirSync(targetDir, { recursive: true });
   const basePath = join(targetDir, `${id}.md`);
@@ -114,7 +111,11 @@ function truncateRaw(raw: string): string {
   return buf.slice(0, keep).toString('utf-8') + suffix;
 }
 
-function appendEscapeEntry(location: string, entity: Entity): void {
+function appendEscapeEntry(
+  location: string,
+  entity: Entity,
+  result: Extract<ValidationResult, { valid: false }>,
+): void {
   try {
     const escapePath = join(location, ESCAPE_FILE);
     mkdirSync(dirname(escapePath), { recursive: true });
@@ -122,6 +123,8 @@ function appendEscapeEntry(location: string, entity: Entity): void {
     const entry = {
       ts: new Date().toISOString(),
       id: entity.frontmatter.id,
+      reason: result.reason,
+      message: result.message,
       raw: truncateRaw(JSON.stringify(entity.frontmatter)),
     };
     appendFileSync(escapePath, JSON.stringify(entry) + '\n', 'utf-8');
