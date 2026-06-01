@@ -114,6 +114,62 @@ describe("validate", () => {
     expect(result.valid).toBe(true);
   });
 
+  test("enum violation tier", async () => {
+    const entity = makeEntity({ tier: "9" as any });
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("enum_violation");
+      expect(result.message).toContain("tier");
+      expect(result.message).toContain("9");
+    }
+  });
+
+  test("enum violation source", async () => {
+    const entity = makeEntity({ source: "bogus" as any });
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("enum_violation");
+      expect(result.message).toContain("source");
+      expect(result.message).toContain("bogus");
+    }
+  });
+
+  test("enum violation sensitivity", async () => {
+    const entity = makeEntity({ sensitivity: "secret" as any });
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("enum_violation");
+      expect(result.message).toContain("sensitivity");
+      expect(result.message).toContain("secret");
+    }
+  });
+
+  test("enum violation status", async () => {
+    const entity = makeEntity({ status: "deleted" as any });
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("enum_violation");
+      expect(result.message).toContain("status");
+      expect(result.message).toContain("deleted");
+    }
+  });
+
+  test("enum precedence", async () => {
+    // missing required field (tier deleted) must report missing_field, not enum_violation
+    const entity = makeEntity();
+    delete (entity.frontmatter as any).tier;
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("missing_field");
+      expect(result.reason).not.toBe("enum_violation");
+    }
+  });
+
   test("legacy regression", async () => {
     // Fixture mimicking a real legacy pin AFTER compat translation.
     // Canonical shape: id, type, source, tier, created_at, relations[], authority, sensitivity, source_url, tags

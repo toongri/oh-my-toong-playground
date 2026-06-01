@@ -175,6 +175,22 @@ describe("invalid", () => {
     expect(hit?.severity).toBe("error");
   });
 
+  test("invalid enum detected", async () => {
+    // An entity with an out-of-enum tier value must surface as an invalid finding via audit
+    const entities: Entity[] = [
+      makeEntity("concept-bad-enum", { tier: "9" as any }),
+      makeEntity("concept-good-entity"),
+    ];
+
+    const report = await audit(entities);
+
+    const invalids = report.findings.filter((f) => f.type === "invalid");
+    const hit = invalids.find((f) => f.entityId === "concept-bad-enum");
+    expect(hit).toBeDefined();
+    expect(hit?.severity).toBe("error");
+    expect(hit?.message).toContain("enum_violation");
+  });
+
   test("valid entities produce no invalid findings", async () => {
     const entities: Entity[] = [
       makeEntity("concept-ok-one"),
