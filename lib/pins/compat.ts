@@ -7,7 +7,7 @@
  * they are the responsibility of the record/migrate modules.
  */
 
-import type { FrontmatterSchema } from '../../hooks/pin-up/types';
+import type { FrontmatterSchema } from './legacy-types';
 import type { EntityType, PinSource, Relation, Tier, Sensitivity } from './types';
 
 export interface CompatFrontmatter {

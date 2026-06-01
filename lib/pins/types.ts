@@ -1,5 +1,5 @@
 // Canonical TypeScript types for the pins knowledge graph.
-// Additive superset of the legacy FrontmatterSchema (hooks/pin-up/types.ts).
+// Additive superset of the legacy flat-pin frontmatter shape (slug-keyed, no id/type).
 
 export type Sensitivity = 'private' | 'shared';
 export type Tier = '1' | '2' | '3';

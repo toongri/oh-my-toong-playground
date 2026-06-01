@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { validateLegacy } from "./pipeline.ts";
 import { validate } from "./validator.ts";
-import type { FrontmatterSchema } from "../../hooks/pin-up/types";
+import type { FrontmatterSchema } from "./legacy-types";
 
 // Minimal valid legacy fixture — has `slug`, no `id`/`type` (raw legacy shape)
 const LEGACY_FIXTURE: FrontmatterSchema = {

@@ -1,7 +1,7 @@
 import { toCanonical } from "./compat.ts";
 import { validate } from "./validator.ts";
 import type { ValidationResult } from "./validator.ts";
-import type { FrontmatterSchema } from "../../hooks/pin-up/types";
+import type { FrontmatterSchema } from "./legacy-types";
 import type { Entity, Frontmatter } from "./types.ts";
 
 /**
