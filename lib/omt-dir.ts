@@ -32,6 +32,21 @@ export function getOmtDir(): string {
   return dir;
 }
 
+/**
+ * Returns the OMT working directory path for the current project.
+ * Mirrors getOmtDir's env→git→cwd derivation exactly but does NOT create
+ * the directory. Safe to call in read-only contexts (e.g. manifest resolution).
+ */
+export function resolveOmtDir(): string {
+  if (process.env.OMT_DIR) {
+    return process.env.OMT_DIR;
+  }
+
+  const cwd = process.cwd();
+  const projectName = deriveProjectName(cwd);
+  return `${homedir()}/.omt/${projectName}`;
+}
+
 function deriveProjectName(cwd: string): string {
   try {
     const gitCommonDir = execSync('git rev-parse --git-common-dir', {

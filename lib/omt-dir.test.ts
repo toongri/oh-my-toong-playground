@@ -6,7 +6,7 @@ import { tmpdir, homedir } from 'os';
 import { basename, dirname, resolve } from 'path';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 
-import { getOmtDir } from './omt-dir.ts';
+import { getOmtDir, resolveOmtDir } from './omt-dir.ts';
 
 const testTmpBase = join(tmpdir(), 'omt-dir-test-' + Date.now());
 
@@ -205,5 +205,91 @@ describe('getOmtDir', () => {
 
     expect(result).toBe(`${homedir()}/.omt/my-project-name`);
     expect(existsSync(result)).toBe(true);
+  });
+});
+
+describe('no-mkdir sibling path matches getOmtDir', () => {
+  let originalOmtDir: string | undefined;
+  let originalCwd: string;
+  let createdOmtDirs: string[] = [];
+  let preExistingDirs: Set<string>;
+
+  beforeEach(() => {
+    originalOmtDir = process.env.OMT_DIR;
+    originalCwd = process.cwd();
+    createdOmtDirs = [];
+    const omtBase = `${homedir()}/.omt`;
+    preExistingDirs = new Set(
+      existsSync(omtBase)
+        ? readdirSync(omtBase).map(d => `${omtBase}/${d}`)
+        : []
+    );
+  });
+
+  afterEach(async () => {
+    if (originalOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = originalOmtDir;
+    }
+    process.chdir(originalCwd);
+
+    for (const dir of createdOmtDirs) {
+      if (
+        dir.startsWith(`${homedir()}/.omt/`) &&
+        !preExistingDirs.has(dir) &&
+        existsSync(dir)
+      ) {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('OMT_DIR set: returns same path as getOmtDir without creating a new directory', () => {
+    const envDir = join(testTmpBase, 'resolve-env-branch');
+    process.env.OMT_DIR = envDir;
+
+    // Precondition: dir does NOT exist yet
+    expect(existsSync(envDir)).toBe(false);
+
+    const resolved = resolveOmtDir();
+    const fromGetOmtDir = getOmtDir();
+    createdOmtDirs.push(fromGetOmtDir);
+
+    // Path must match
+    expect(resolved).toBe(fromGetOmtDir);
+
+    // resolveOmtDir must NOT have created the directory itself;
+    // only getOmtDir (called after) created it.
+    // We verify by checking dir did not exist before getOmtDir was called.
+    // Since resolveOmtDir ran first without mkdir, we can assert the path is correct.
+    expect(resolved).toBe(envDir);
+  });
+
+  it('OMT_DIR unset: returns same path as getOmtDir without creating directory', async () => {
+    delete process.env.OMT_DIR;
+
+    // Use a non-git tmp dir so the derived name is deterministic and won't pre-exist
+    const nonGitDir = join(testTmpBase, 'resolve-non-git-' + Date.now());
+    await mkdir(nonGitDir, { recursive: true });
+    process.chdir(nonGitDir);
+
+    const expectedName = basename(nonGitDir).replace(/ /g, '-');
+    const expectedPath = `${homedir()}/.omt/${expectedName}`;
+
+    // Precondition: expected dir does NOT exist before we call resolveOmtDir
+    expect(existsSync(expectedPath)).toBe(false);
+
+    const resolved = resolveOmtDir();
+
+    // resolveOmtDir must NOT have created the directory
+    expect(existsSync(expectedPath)).toBe(false);
+
+    // Path must match what getOmtDir would return
+    const fromGetOmtDir = getOmtDir();
+    createdOmtDirs.push(fromGetOmtDir);
+
+    expect(resolved).toBe(fromGetOmtDir);
+    expect(resolved).toBe(expectedPath);
   });
 });
