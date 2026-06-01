@@ -245,6 +245,156 @@ describe('collision suffix yields valid id', () => {
   });
 });
 
+// ── Tests: collision id-derivation (same-slug legacy files → distinct ids) ────
+
+describe('collision id-derivation', () => {
+  test('collision pair distinct files', async () => {
+    // Two legacy files share the SAME slug; the second carries the legacy
+    // collision suffix in its filename stem. They must migrate to DISTINCT
+    // canonical files (no overwrite / data loss).
+    writeLegacyPin(pinsDir, 'notion-auth-foo.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-A\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-B\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+
+    await migrate({ location: pinsDir });
+
+    const pathA = join(pinsDir, 'notion-auth-foo.md');
+    const pathB = join(pinsDir, 'notion-auth-foo-143022.md');
+    expect(existsSync(pathA)).toBe(true);
+    expect(existsSync(pathB)).toBe(true);
+
+    const entityA = parse(readFileSync(pathA, 'utf8'));
+    const entityB = parse(readFileSync(pathB, 'utf8'));
+
+    // Distinct ids derived from the filename stem.
+    expect(entityA.frontmatter.id).toBe('notion-auth-foo');
+    expect(entityB.frontmatter.id).toBe('notion-auth-foo-143022');
+    expect(entityA.frontmatter.id).not.toBe(entityB.frontmatter.id);
+
+    // Both ids pass validation.
+    expect((await validate(entityA)).valid).toBe(true);
+    expect((await validate(entityB)).valid).toBe(true);
+
+    // Each body traces to its origin (no duplication/overwrite).
+    expect(entityA.body).toContain('BODY-A');
+    expect(entityA.body).not.toContain('BODY-B');
+    expect(entityB.body).toContain('BODY-B');
+    expect(entityB.body).not.toContain('BODY-A');
+  });
+
+  test('collision triple distinct ids', async () => {
+    // A 3-file same-slug set including a -HHMMSS-N counter form.
+    writeLegacyPin(pinsDir, 'notion-auth-foo.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-A\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-B\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022-1.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-C\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+
+    await migrate({ location: pinsDir });
+
+    const ids = ['notion-auth-foo', 'notion-auth-foo-143022', 'notion-auth-foo-143022-1'].map((stem) => {
+      const p = join(pinsDir, `${stem}.md`);
+      expect(existsSync(p)).toBe(true);
+      return parse(readFileSync(p, 'utf8')).frontmatter.id;
+    });
+
+    // 3 distinct canonical ids, each matching its stem.
+    expect(ids).toEqual(['notion-auth-foo', 'notion-auth-foo-143022', 'notion-auth-foo-143022-1']);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  test('collision pair idempotent rerun', async () => {
+    writeLegacyPin(pinsDir, 'notion-auth-foo.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-A\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022.md', {
+      slug: 'notion-auth-foo',
+      body: '## 한 줄 요지\n\nBODY-B\n\n## SSOT 위치\n\nhttps://example.com\n\n## 전후 컨텍스트\n\n컨텍스트\n\n## 관련 cross-link\n\n없음',
+    });
+
+    await migrate({ location: pinsDir });
+
+    const pathA = join(pinsDir, 'notion-auth-foo.md');
+    const pathB = join(pinsDir, 'notion-auth-foo-143022.md');
+    const canonicalA1 = readFileSync(pathA, 'utf8');
+    const canonicalB1 = readFileSync(pathB, 'utf8');
+    const bakA1 = readFileSync(join(pinsDir, 'notion-auth-foo.md.bak'), 'utf8');
+    const bakB1 = readFileSync(join(pinsDir, 'notion-auth-foo-143022.md.bak'), 'utf8');
+
+    // Second run: both files now have `type` → skipped (no re-convert, no content change).
+    await migrate({ location: pinsDir });
+
+    expect(readFileSync(pathA, 'utf8')).toBe(canonicalA1);
+    expect(readFileSync(pathB, 'utf8')).toBe(canonicalB1);
+    expect(readFileSync(join(pinsDir, 'notion-auth-foo.md.bak'), 'utf8')).toBe(bakA1);
+    expect(readFileSync(join(pinsDir, 'notion-auth-foo-143022.md.bak'), 'utf8')).toBe(bakB1);
+
+    // No second .bak generation (no .bak.bak).
+    expect(existsSync(join(pinsDir, 'notion-auth-foo.md.bak.bak'))).toBe(false);
+    expect(existsSync(join(pinsDir, 'notion-auth-foo-143022.md.bak.bak'))).toBe(false);
+  });
+
+  test('collision migrated created_at preserved', async () => {
+    const createdAt = '2025-04-20T09:30:00Z';
+    writeLegacyPin(pinsDir, 'notion-auth-foo.md', {
+      slug: 'notion-auth-foo',
+      created_at: '2025-01-01T00:00:00Z',
+    });
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022.md', {
+      slug: 'notion-auth-foo',
+      created_at: createdAt,
+    });
+
+    await migrate({ location: pinsDir });
+
+    const entityB = parse(readFileSync(join(pinsDir, 'notion-auth-foo-143022.md'), 'utf8'));
+    // The collision file's created_at equals its own legacy created_at.
+    expect(entityB.frontmatter.created_at).toBe(createdAt);
+  });
+
+  test('collision pair resumed partial run', async () => {
+    // Simulate a crashed run: file A is ALREADY canonical, file B is still legacy.
+    writeLegacyPin(pinsDir, 'notion-auth-foo.md', {
+      slug: 'notion-auth-foo',
+    });
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022.md', {
+      slug: 'notion-auth-foo',
+    });
+    // Pre-migrate only file A (canonicalize it in place).
+    await migrate({ location: pinsDir });
+    // Sanity: A is canonical now.
+    expect(parse(readFileSync(join(pinsDir, 'notion-auth-foo.md'), 'utf8')).frontmatter.type).toBeDefined();
+
+    // Now overwrite B back to legacy shape (simulating B never got migrated before the crash).
+    writeLegacyPin(pinsDir, 'notion-auth-foo-143022.md', {
+      slug: 'notion-auth-foo',
+    });
+
+    // Resume: A is skipped (has type), B migrates.
+    await migrate({ location: pinsDir });
+
+    const entityA = parse(readFileSync(join(pinsDir, 'notion-auth-foo.md'), 'utf8'));
+    const entityB = parse(readFileSync(join(pinsDir, 'notion-auth-foo-143022.md'), 'utf8'));
+
+    expect(entityA.frontmatter.id).toBe('notion-auth-foo');
+    expect(entityB.frontmatter.id).toBe('notion-auth-foo-143022');
+    expect(entityA.frontmatter.id).not.toBe(entityB.frontmatter.id);
+  });
+});
+
 // ── Tests: idempotent (re-run is a no-op) ────────────────────────────────────
 
 describe('idempotent re-run', () => {
