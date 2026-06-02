@@ -1,9 +1,9 @@
 /**
- * 3-way coupling test: schema (tbox.yaml) ↔ serializer (entity.ts) ↔ record SKILL.md
+ * 3-way coupling test: schema (tbox.yaml) ↔ serializer (entity.ts) ↔ pin-record SKILL.md
  *
  * Leg 1 (schema ↔ serializer): tbox body_sections match what entity.serialize() emits.
  * Leg 2 (schema ↔ serializer): tbox closure enums match Frontmatter type values.
- * Leg 3 (schema ↔ SKILL.md):   GUARDED — only asserted when skills/record/SKILL.md exists.
+ * Leg 3 (schema ↔ SKILL.md):   GUARDED — only asserted when skills/pin-record/SKILL.md exists.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -110,19 +110,19 @@ describe('3-way coupling', () => {
     expect(tbox.enums.source.length).toBe(knownSources.length);
   });
 
-  // ── Leg 3: tbox ↔ skills/record/SKILL.md (GUARDED) ──────────────────────────
+  // ── Leg 3: tbox ↔ skills/pin-record/SKILL.md (GUARDED) ──────────────────────────
   // This leg only asserts when the file exists.
   // It passes harmlessly until T14 lands and creates the SKILL.md.
 
   test('SKILL.md documents same body_section headers and enum values (guarded)', async () => {
     const skillPath = join(
       import.meta.dir,
-      '../../skills/record/SKILL.md',
+      '../../skills/pin-record/SKILL.md',
     );
 
     if (!existsSync(skillPath)) {
       // SKILL.md not yet authored — skip this leg.
-      console.log('[coupling] skills/record/SKILL.md not found — leg 3 skipped (T14 pending)');
+      console.log('[coupling] skills/pin-record/SKILL.md not found — leg 3 skipped');
       return;
     }
 

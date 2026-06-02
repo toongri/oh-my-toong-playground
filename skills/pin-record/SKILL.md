@@ -1,9 +1,9 @@
 ---
-name: record
+name: pin-record
 description: Use when you need to record a single pin entity to the knowledge graph. Invokes lib/pins record() to validate and write a canonical .md file. Triggers on "record pin", "pin this", "save this as a pin".
 ---
 
-# record
+# pin-record
 
 Record a single canonical entity to the pins knowledge graph via `lib/pins/record.ts`.
 
