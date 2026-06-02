@@ -134,4 +134,25 @@ describe('formatIndexContext', () => {
     expect(result).toContain('project');
     expect(result).toContain('/workspace/pins');
   });
+
+  it('includes git-managed reminder when git is true', () => {
+    const index = makePinsIndex([{ id: 'code-auth-jwt' }]);
+    const settings: PinsManifest = { scope: 'project', location: '/tmp/pins', git: true };
+    const result = formatIndexContext(index, settings);
+    expect(result).toContain('git-managed: commit pin file changes after recording');
+  });
+
+  it('omits git-managed reminder when git is false', () => {
+    const index = makePinsIndex([{ id: 'code-auth-jwt' }]);
+    const settings: PinsManifest = { scope: 'project', location: '/tmp/pins', git: false };
+    const result = formatIndexContext(index, settings);
+    expect(result).not.toContain('git-managed: commit pin file changes after recording');
+  });
+
+  it('omits git-managed reminder when git is omitted', () => {
+    const index = makePinsIndex([{ id: 'code-auth-jwt' }]);
+    const settings: PinsManifest = { scope: 'project', location: '/tmp/pins' };
+    const result = formatIndexContext(index, settings);
+    expect(result).not.toContain('git-managed: commit pin file changes after recording');
+  });
 });

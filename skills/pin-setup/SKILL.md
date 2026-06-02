@@ -13,15 +13,15 @@ First-run interview to create `pins.yaml`, the storage manifest for the pins kno
 
 ## Interview
 
-Walk the user through two decisions:
+Walk the user through three decisions:
 
 ### 1. Storage location
 
 Ask: "Where should pin files live?"
 
 Common choices:
-- `~/.omt/<project>/pins/` — user-local, not checked into the repo (default for private or personal knowledge)
-- `.pins/` inside the repo — team-shared, checked in (good for project-wide shared knowledge)
+- `~/.omt/<project>/pins/` — stored in the user's home directory, outside any repo
+- `.pins/` inside the repo — stored alongside the project source
 - A custom absolute path — for monorepos or multi-project setups
 
 Confirm whether the directory should be created if it does not exist (it will be, automatically, on the first `record()` call).
@@ -35,6 +35,14 @@ Ask: "What is the scope of this pins manifest — personal (private) or project-
 
 The scope sets the manifest-level default; individual pins can override `sensitivity` in their frontmatter.
 
+### 3. Git management
+
+Ask: "Is this pins corpus managed under git?"
+
+This is independent of storage location: a `~/.omt/...` directory can be a git repo; a `.pins/` directory inside a project repo can be gitignored. The answer reflects intent, not directory placement. When `git: true`, the SessionStart hook and the `pin-record`/`pin-wrap-up` skills will prompt the AI to commit pin file changes after recording.
+
+Record the answer as `git: true` or `git: false`.
+
 ## Output
 
 Once both questions are answered, write `pins.yaml` at the project root (or the location the user specifies):
@@ -43,6 +51,7 @@ Once both questions are answered, write `pins.yaml` at the project root (or the 
 # pins.yaml — knowledge graph storage manifest
 location: <resolved absolute path>
 scope: <private|shared>
+git: <true|false>
 ```
 
 Confirm the path is correct and the user understands that all pins API calls will resolve against this manifest.

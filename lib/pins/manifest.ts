@@ -6,6 +6,8 @@ import { resolveOmtDir } from '../omt-dir.ts';
 export interface PinsManifest {
   location: string;
   scope: string;
+  /** Whether this pins corpus is git-managed (default false; independent of location). */
+  git?: boolean;
 }
 
 export type ManifestResult =
@@ -29,7 +31,8 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
   if (parsed == null || typeof parsed !== 'object') return null;
   const obj = parsed as Record<string, unknown>;
   if (typeof obj.location !== 'string' || typeof obj.scope !== 'string') return null;
-  return { location: obj.location, scope: obj.scope };
+  const git = typeof obj.git === 'boolean' ? obj.git : false;
+  return { location: obj.location, scope: obj.scope, git };
 }
 
 /**
@@ -41,6 +44,9 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
  *
  * Returns { kind: "resolved", manifest } when found, { kind: "absent" } otherwise.
  * Never throws when neither manifest exists. Never creates a file.
+ *
+ * The optional `git` field records whether the pins corpus is git-managed
+ * (default false; independent of location).
  */
 export async function resolveManifest(
   options: ResolveOptions = {},

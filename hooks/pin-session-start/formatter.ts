@@ -43,8 +43,11 @@ export function formatIndexContext(index: PinsIndex, settings: PinsManifest): st
     '<pins>',
     `pins:${total} (scope:${settings.scope} location:${settings.location})`,
     ...MODEL2_LINES,
-    '</pins>',
   ];
+  if (settings.git) {
+    lines.push('git-managed: commit pin file changes after recording');
+  }
+  lines.push('</pins>');
 
   return lines.join('\n');
 }
