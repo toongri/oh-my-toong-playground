@@ -3,13 +3,13 @@
  *
  * AC-2 key requirements:
  * - Output contains <pins>...</pins> wrapper
- * - Model 2 guidance lines with current skill keywords: query, record, setup
+ * - Model 2 guidance lines with current skill keywords: pin-query, pin-record, pin-setup
  * - Always non-empty
  * - Output bounded (token budget)
  *
  * T16 requirements:
  * - absent: passive setup suggestion (no count, invites setup)
- * - present: compact index summary (id/type/tags) + guidance
+ * - present: count + scope/location line (no per-entry listing) + guidance
  */
 
 import { describe, it, expect } from 'bun:test';
@@ -64,8 +64,9 @@ describe('formatAbsentContext', () => {
 
   it('contains Model 2 guidance keywords (current skills)', () => {
     const result = formatAbsentContext();
-    expect(result).toContain('query');
-    expect(result).toContain('record');
+    expect(result).toContain('pin-query');
+    expect(result).toContain('pin-record');
+    expect(result).toContain('pin-setup');
     expect(result).not.toContain('select-pin');
     expect(result).not.toContain('write-pin');
   });
@@ -94,27 +95,29 @@ describe('formatIndexContext', () => {
     expect(result).toContain('pins:2');
   });
 
-  it('includes entry id in output', () => {
+  it('does not include per-entry id listing in output', () => {
     const index = makePinsIndex([{ id: 'code-auth-jwt', type: 'code', tags: 'auth' }]);
     const result = formatIndexContext(index, TEST_SETTINGS);
-    expect(result).toContain('code-auth-jwt');
+    // Count is still present, but per-entry id listing is gone
+    expect(result).toContain('pins:1');
+    expect(result).not.toMatch(/^\s+code-auth-jwt/m);
   });
 
   it('contains Model 2 guidance keywords (current skills)', () => {
     const index = makePinsIndex([{ id: 'code-auth-jwt' }]);
     const result = formatIndexContext(index, TEST_SETTINGS);
-    expect(result).toContain('query');
-    expect(result).toContain('record');
+    expect(result).toContain('pin-query');
+    expect(result).toContain('pin-record');
     expect(result).not.toContain('select-pin');
     expect(result).not.toContain('write-pin');
   });
 
-  it('caps output at MAX_INLINE_ENTRIES (10) entries and shows remainder count', () => {
+  it('still reports total count even for large index (no overflow line)', () => {
     const entries = Array.from({ length: 15 }, (_, i) => ({ id: `pin-${i}` }));
     const index = makePinsIndex(entries);
     const result = formatIndexContext(index, TEST_SETTINGS);
     expect(result).toContain('pins:15');
-    expect(result).toContain('5 more');
+    expect(result).not.toContain('more');
   });
 
   it('handles empty index without error', () => {

@@ -3,7 +3,7 @@
  *
  * Two modes:
  *   - absent: passive setup suggestion — no count, no index, just invites setup
- *   - present: compact index summary (id/type/tags, capped) + Model 2 guidance
+ *   - present: single count+location line + Model 2 guidance (no per-entry listing)
  *
  * Total output bounded to avoid unbounded context injection.
  */
@@ -12,12 +12,9 @@ import type { PinsIndex } from '../../lib/pins/index.ts';
 import type { PinsManifest } from '../../lib/pins/manifest.ts';
 
 const MODEL2_LINES = [
-  'Need context: invoke query to retrieve pins',
-  'Acquired info worth pinning? Record it via record (or /wrap-up for whole-session review)',
+  'Need context: invoke pin-query to retrieve pins',
+  'Acquired info worth pinning? Record it via pin-record (or /pin-wrap-up for whole-session review)',
 ];
-
-/** Cap for how many index entries to include inline. */
-const MAX_INLINE_ENTRIES = 10;
 
 /**
  * Build additionalContext for the absent-manifest case.
@@ -27,7 +24,7 @@ export function formatAbsentContext(): string {
   const lines = [
     '<pins>',
     'No pins.yaml manifest found — pins knowledge graph not configured.',
-    'To set up: invoke setup to initialize pins for this project.',
+    'To set up: invoke pin-setup to initialize pins for this project.',
     ...MODEL2_LINES,
     '</pins>',
   ];
@@ -36,33 +33,15 @@ export function formatAbsentContext(): string {
 
 /**
  * Build additionalContext for the manifest-resolved case.
- * Includes manifest settings (scope + location) and a compact index summary
- * (id, type, tags) capped at MAX_INLINE_ENTRIES.
+ * Includes pin count and manifest scope + location on a single line.
+ * No per-entry listing — Claude retrieves entries via pin-query when needed.
  */
 export function formatIndexContext(index: PinsIndex, settings: PinsManifest): string {
-  const ids = Object.keys(index.entries);
-  const total = ids.length;
-
-  const summaryLines: string[] = [
-    `pins:${total}`,
-    `scope:${settings.scope} location:${settings.location}`,
-  ];
-
-  const shown = ids.slice(0, MAX_INLINE_ENTRIES);
-  for (const id of shown) {
-    const entry = index.entries[id];
-    const fm = entry.frontmatter;
-    const tags = fm.tags ?? '';
-    summaryLines.push(`  ${id} [${fm.type}]${tags ? ` tags:${tags}` : ''}`);
-  }
-
-  if (total > MAX_INLINE_ENTRIES) {
-    summaryLines.push(`  … and ${total - MAX_INLINE_ENTRIES} more`);
-  }
+  const total = Object.keys(index.entries).length;
 
   const lines = [
     '<pins>',
-    ...summaryLines,
+    `pins:${total} (scope:${settings.scope} location:${settings.location})`,
     ...MODEL2_LINES,
     '</pins>',
   ];
