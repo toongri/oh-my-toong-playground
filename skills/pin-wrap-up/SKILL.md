@@ -50,6 +50,8 @@ After recording, state:
 - Their IDs and one-line summaries
 - Any that were skipped (escaped to `.escape.jsonl`) and why
 
+If the manifest is git-managed (`git: true`), commit the recorded pin file(s).
+
 ## What belongs in a session wrap-up
 
 | Worth pinning | Not worth pinning |

@@ -50,6 +50,47 @@ describe('precedence', () => {
   });
 });
 
+describe('git field', () => {
+  test('git: true in yaml → manifest.git === true', async () => {
+    const projectRoot = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(projectRoot, 'pins.yaml'), 'location: some-pins\nscope: some-scope\ngit: true\n');
+
+    const result = await resolveManifest({ projectRoot, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.git).toBe(true);
+  });
+
+  test('no git field in yaml → manifest.git === false', async () => {
+    const projectRoot = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(projectRoot, 'pins.yaml'), 'location: some-pins\nscope: some-scope\n');
+
+    const result = await resolveManifest({ projectRoot, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.git).toBe(false);
+  });
+
+  test('non-boolean git in yaml (e.g. "yes") → manifest.git === false', async () => {
+    const projectRoot = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    writeFileSync(join(projectRoot, 'pins.yaml'), 'location: some-pins\nscope: some-scope\ngit: "yes"\n');
+
+    const result = await resolveManifest({ projectRoot, userRoot });
+
+    expect(result.kind).toBe('resolved');
+    if (result.kind !== 'resolved') return;
+    expect(result.manifest.git).toBe(false);
+  });
+});
+
 describe('absent signal', () => {
   test('returns absent when neither project-root nor user-root has a pins.yaml', async () => {
     const projectRoot = makeTmpDir();

@@ -23,6 +23,8 @@ await record(entity, { location });
 - Update (id already exists on disk): preserves the original `created_at`, bumps `updated_at`.
 - Writes atomically to `<location>/<id>.md`.
 
+If the resolved manifest has `git: true`, stage and commit the new/updated `<location>/<id>.md` after recording, with a concise message.
+
 ## Recording rubric — what is worth pinning
 
 Apply the pins philosophy axioms before recording:
