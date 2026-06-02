@@ -1,9 +1,9 @@
 ---
-name: setup
+name: pin-setup
 description: Use when initializing the pins knowledge graph for the first time in a project. Guides the user through creating pins.yaml (the storage manifest). Triggers on "setup pins", "initialize pins", "create pins.yaml", "first-run pins".
 ---
 
-# setup
+# pin-setup
 
 First-run interview to create `pins.yaml`, the storage manifest for the pins knowledge graph.
 

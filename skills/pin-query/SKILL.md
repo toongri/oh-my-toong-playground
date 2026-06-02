@@ -1,9 +1,9 @@
 ---
-name: query
+name: pin-query
 description: Use when looking up pins by type, tags, or source. Drives lib/pins/query.ts to retrieve matching pin entries from the knowledge graph. Supersedes the manual ls+frontmatter procedure in select-pin.
 ---
 
-# query
+# pin-query
 
 Retrieve pins from the knowledge graph by calling `query(pinsDir, criteria)` from `lib/pins/query.ts`.
 

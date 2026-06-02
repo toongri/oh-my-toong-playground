@@ -1,9 +1,9 @@
 ---
-name: audit
+name: pin-audit
 description: Use when checking pin graph health. Runs lib/pins/audit to detect dangling relations, duplicates, invalid entities, stale entries, and orphans, then presents a ranked report.
 ---
 
-# audit
+# pin-audit
 
 Run a read-only health check over the pin knowledge graph by calling `audit(input, opts?)` from `lib/pins/audit.ts`.
 
