@@ -120,8 +120,8 @@ describe('pin-session-start entrypoint', () => {
 
     const ctx: string = output.hookSpecificOutput.additionalContext;
     expect(ctx.length).toBeGreaterThan(0);
-    expect(ctx).toContain('query');
-    expect(ctx).toContain('record');
+    expect(ctx).toContain('pin-query');
+    expect(ctx).toContain('pin-record');
     expect(ctx).not.toContain('select-pin');
     expect(ctx).not.toContain('write-pin');
   });
@@ -171,7 +171,7 @@ describe('pin-session-start entrypoint', () => {
     // Must contain passive suggestion keywords (pins setup guidance)
     const ctxStr = ctx as string;
     expect(
-      ctxStr.includes('pins.yaml') || ctxStr.includes('setup') || ctxStr.includes('pin'),
+      ctxStr.includes('pins.yaml') || ctxStr.includes('pin-setup') || ctxStr.includes('pin'),
     ).toBe(true);
 
     // No file/dir must be created in omtDir beyond what was there before
@@ -207,16 +207,17 @@ describe('pin-session-start entrypoint', () => {
     const ctx: string = output.hookSpecificOutput.additionalContext;
     expect(ctx.length).toBeGreaterThan(0);
 
-    // Index summary must reference the pin (id or type)
-    expect(ctx.includes('code-auth-jwt') || ctx.includes('code') || ctx.includes('auth')).toBe(true);
+    // Index summary must include count and location
+    expect(ctx).toContain('pins:1');
+    expect(ctx).toContain('scope:user');
 
     // Bounded — word count must be reasonable (< 200 words)
     const wordCount = ctx.split(/\s+/).filter(Boolean).length;
     expect(wordCount).toBeLessThan(200);
 
     // Must still include guidance (current skill vocabulary)
-    expect(ctx).toContain('query');
-    expect(ctx).toContain('record');
+    expect(ctx).toContain('pin-query');
+    expect(ctx).toContain('pin-record');
     expect(ctx).not.toContain('select-pin');
     expect(ctx).not.toContain('write-pin');
   });
