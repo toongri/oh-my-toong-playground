@@ -2,9 +2,11 @@ path: "~"
 skills:
   items:
     - hud
-    - pins
-    - select-pin
-    - write-pin
+    - pin-record
+    - pin-query
+    - pin-audit
+    - pin-wrap-up
+    - pin-setup
     - using-maestro
     - mock-interview
     - scan-pdf-to-notes

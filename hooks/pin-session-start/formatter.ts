@@ -1,35 +1,53 @@
 /**
- * Formatter for pin-session-start hook output (AC-2).
+ * Formatter for pin-session-start hook output (AC-2, T16).
  *
- * Output format (within <pins>...</pins> XML wrapper):
- *   <pins>
- *   pins:N
- *   Need context: invoke select-pin first
- *   Acquired info worth finding again later? You MUST emit a <pin> immediately via write-pin
- *   </pins>
+ * Two modes:
+ *   - absent: passive setup suggestion — no count, no index, just invites setup
+ *   - present: single count+location line + Model 2 guidance (no per-entry listing)
  *
- * All counts (0, 1..N) produce the same block. Total output ≤80 tokens (AC-2).
+ * Total output bounded to avoid unbounded context injection.
  */
 
-import type { ScanResult } from './types.ts';
+import type { PinsIndex } from '../../lib/pins/index.ts';
+import type { PinsManifest } from '../../lib/pins/manifest.ts';
 
 const MODEL2_LINES = [
-  'Need context: invoke select-pin first',
-  'Acquired info worth finding again later? You MUST emit a <pin> immediately via write-pin',
+  'Need context: invoke pin-query to retrieve pins',
+  'Acquired info worth pinning? Record it via pin-record (or /pin-wrap-up for whole-session review)',
 ];
 
 /**
- * Build the additionalContext string for hookSpecificOutput.
+ * Build additionalContext for the absent-manifest case.
+ * Passive — no file/dir creation, just a setup invitation.
  */
-export function formatPinsContext(result: ScanResult): string {
-  const indexLine = `pins:${result.count}`;
-
+export function formatAbsentContext(): string {
   const lines = [
     '<pins>',
-    indexLine,
+    'No pins.yaml manifest found — pins knowledge graph not configured.',
+    'To set up: invoke pin-setup to initialize pins for this project.',
     ...MODEL2_LINES,
     '</pins>',
   ];
+  return lines.join('\n');
+}
+
+/**
+ * Build additionalContext for the manifest-resolved case.
+ * Includes pin count and manifest scope + location on a single line.
+ * No per-entry listing — Claude retrieves entries via pin-query when needed.
+ */
+export function formatIndexContext(index: PinsIndex, settings: PinsManifest): string {
+  const total = Object.keys(index.entries).length;
+
+  const lines = [
+    '<pins>',
+    `pins:${total} (scope:${settings.scope} location:${settings.location})`,
+    ...MODEL2_LINES,
+  ];
+  if (settings.git) {
+    lines.push('git-managed: commit pin file changes after recording');
+  }
+  lines.push('</pins>');
 
   return lines.join('\n');
 }

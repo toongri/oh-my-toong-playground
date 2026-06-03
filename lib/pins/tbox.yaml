@@ -1,0 +1,97 @@
+# T-Box: Terminological Box for the pins knowledge graph.
+# Declarative schema data only — no code logic.
+
+# Widened id-pattern: extends legacy SLUG_REGEX to admit optional collision suffix -HHMMSS-N
+id_pattern: '^[a-z0-9]+(-[a-z0-9]+){2,}(-\d{6}(-\d+)?)?$'
+
+# Closure enums
+enums:
+  tier: ["1", "2", "3"]
+  source:
+    - jira
+    - linear
+    - slack
+    - github
+    - notion
+    - code
+    - person
+    - url
+  sensitivity:
+    - private
+    - shared
+  status:
+    - active
+    - superseded
+    - stale
+
+# Body section headers (verbatim from legacy BODY_SECTIONS, AC-18)
+body_sections:
+  - 한 줄 요지
+  - SSOT 위치
+  - 전후 컨텍스트
+  - 관련 cross-link
+
+# Entity type axioms.
+# required_axiom: fields every entity of this type must have (identity/provenance core).
+# forbidden_axiom: fields that must NOT appear (legacy raw fields — presence signals un-migrated record).
+#
+# Design rationale for required_axiom:
+#   The compat module produces: id, type, source, authority, source_url, tier, tags, sensitivity,
+#   created_at, relations[]. It does NOT produce status/updated_at/checked_at (populated later by
+#   record/migrate modules). Therefore status/updated_at/checked_at are excluded from required_axiom
+#   so a post-compat legacy entity passes validation.
+#
+# Design rationale for forbidden_axiom:
+#   Legacy raw records carry 'slug' (instead of 'id') and 'kind' (instead of 'type').
+#   A raw legacy record must FAIL validation — forbidden_axiom enforces this.
+entity_types:
+  code:
+    required_axiom: [id, type, source, tier, created_at]
+    forbidden_axiom: [slug, kind]
+
+  doc:
+    required_axiom: [id, type, source, tier, created_at]
+    forbidden_axiom: [slug, kind]
+
+  concept:
+    required_axiom: [id, type, source, tier, created_at]
+    forbidden_axiom: [slug, kind]
+
+  reference:
+    required_axiom: [id, type, source, tier, created_at]
+    forbidden_axiom: [slug, kind]
+
+  person:
+    required_axiom: [id, type, source, tier, created_at]
+    forbidden_axiom: [slug, kind]
+
+  decision:
+    required_axiom: [id, type, source, tier, created_at]
+    forbidden_axiom: [slug, kind]
+
+# Relation type axioms.
+# domain: which entity_types may be the source of this relation.
+# range: which entity_types may be the target of this relation.
+# related_to carries NO domain/range — it is unconstrained any→any.
+relation_types:
+  related_to: {}
+
+  supersedes:
+    domain: [code, doc, concept, reference, person, decision]
+    range: [code, doc, concept, reference, person, decision]
+
+  superseded_by:
+    domain: [code, doc, concept, reference, person, decision]
+    range: [code, doc, concept, reference, person, decision]
+
+  duplicates:
+    domain: [code, doc, concept, reference, person, decision]
+    range: [code, doc, concept, reference, person, decision]
+
+  derived_from:
+    domain: [code, doc, concept, reference, person, decision]
+    range: [code, doc, concept, reference, person, decision]
+
+  documents:
+    domain: [doc, decision]
+    range: [code, concept, reference, person, decision]
