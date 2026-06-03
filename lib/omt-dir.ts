@@ -19,15 +19,7 @@ import { basename, dirname, resolve } from 'path';
  * Creates the directory if it does not exist.
  */
 export function getOmtDir(): string {
-  if (process.env.OMT_DIR) {
-    const dir = process.env.OMT_DIR;
-    mkdirSync(dir, { recursive: true });
-    return dir;
-  }
-
-  const cwd = process.cwd();
-  const projectName = deriveProjectName(cwd);
-  const dir = `${homedir()}/.omt/${projectName}`;
+  const dir = resolveOmtDir();
   mkdirSync(dir, { recursive: true });
   return dir;
 }
