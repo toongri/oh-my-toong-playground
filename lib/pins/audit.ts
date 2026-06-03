@@ -240,8 +240,8 @@ function detectStale(entities: Entity[], now?: Date): StaleFinding[] {
     const fm = entity.frontmatter;
     const threshold = STALE_THRESHOLD_DAYS[fm.tier];
 
-    // Pick the relevant timestamp: reference type uses checked_at, others use created_at
-    const timestampStr = fm.type === "reference" ? fm.checked_at : fm.created_at;
+    // Pick the relevant timestamp: reference type uses checked_at (fallback to created_at), others use created_at
+    const timestampStr = fm.type === "reference" ? (fm.checked_at ?? fm.created_at) : fm.created_at;
     if (!timestampStr || !now) continue;
 
     const from = new Date(timestampStr);
