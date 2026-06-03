@@ -426,3 +426,59 @@ describe('idempotent re-run', () => {
     expect(existsSync(join(pinsDir, 'code-hello-world.md.bak.bak'))).toBe(false);
   });
 });
+
+// ── Tests: malformed YAML isolation ──────────────────────────────────────────
+
+describe('malformed YAML isolation', () => {
+  test('one malformed file does not abort migration of remaining valid files', async () => {
+    // Two valid legacy pins + one malformed YAML file.
+    writeLegacyPin(pinsDir, 'notion-good-alpha.md', { slug: 'notion-good-alpha' });
+    writeLegacyPin(pinsDir, 'notion-good-beta.md', { slug: 'notion-good-beta' });
+    // Malformed YAML: invalid structure that parseYaml throws on.
+    writeFileSync(
+      join(pinsDir, 'bad-yaml-broken.md'),
+      '---\nslug: bad-yaml-broken\nbroken: {unclosed: [bracket\n---\n\nbody text\n',
+      'utf8',
+    );
+
+    // Must NOT throw — migrate() survives the malformed file.
+    await expect(migrate({ location: pinsDir })).resolves.toBeUndefined();
+
+    // Both valid files were migrated successfully.
+    expect(parse(readFileSync(join(pinsDir, 'notion-good-alpha.md'), 'utf8')).frontmatter.type).toBeDefined();
+    expect(parse(readFileSync(join(pinsDir, 'notion-good-beta.md'), 'utf8')).frontmatter.type).toBeDefined();
+
+    // Malformed file was NOT written as canonical (no .bak created for it).
+    expect(existsSync(join(pinsDir, 'bad-yaml-broken.md.bak'))).toBe(false);
+  });
+});
+
+// ── Tests: dotfile exclusion ──────────────────────────────────────────────────
+
+describe('dotfile exclusion', () => {
+  test('.hidden.md legacy file is not migrated (no .bak, no canonical rewrite)', async () => {
+    // A dotfile legacy pin — should be invisible to migrate, matching index.ts policy.
+    const originalContent = [
+      '---',
+      'slug: hidden-pin',
+      'source_url: https://example.com',
+      'authority: someone',
+      'tier: "2"',
+      'tags: "test"',
+      'sensitivity: shared',
+      'created_at: 2025-01-15T10:00:00Z',
+      '---',
+      '',
+      'body',
+      '',
+    ].join('\n');
+    writeFileSync(join(pinsDir, '.hidden.md'), originalContent, 'utf8');
+
+    await migrate({ location: pinsDir });
+
+    // No .bak sibling created.
+    expect(existsSync(join(pinsDir, '.hidden.md.bak'))).toBe(false);
+    // File content untouched (still legacy shape).
+    expect(readFileSync(join(pinsDir, '.hidden.md'), 'utf8')).toBe(originalContent);
+  });
+});

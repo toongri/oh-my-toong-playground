@@ -40,11 +40,19 @@ export async function migrate(options: MigrateOptions): Promise<void> {
     // Only process .md files; skip .bak, .jsonl, etc.
     if (extname(entry) !== '.md') continue;
 
+    // Skip dotfiles — matches buildIndex's !f.startsWith('.') policy.
+    if (entry.startsWith('.')) continue;
+
     const filePath = join(location, entry);
     const content = readFileSync(filePath, 'utf8');
 
-    // Parse raw YAML frontmatter to check for `type` presence.
-    const raw = parseFrontmatterRaw(content);
+    // Isolate per-file parse errors so a malformed file cannot abort the run.
+    let raw: Record<string, unknown> | null;
+    try {
+      raw = parseFrontmatterRaw(content);
+    } catch {
+      continue;
+    }
     if (raw === null) continue;
 
     // If `type` is present, this is already canonical — skip.
