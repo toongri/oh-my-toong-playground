@@ -138,16 +138,15 @@ async function resolveEntities(
     return { entities: input, skippedFindings: [] };
   }
 
-  const { parse } = await import("./entity.ts");
-  const { readFileSync } = await import("fs");
-  const { join } = await import("path");
-
   const index = buildIndex(input);
 
-  const entities = Object.values(index.entries).map((entry) => {
-    const content = readFileSync(join(input, entry.file), "utf8");
-    return parse(content);
-  });
+  // Detectors and validate() read only frontmatter (never body), and buildIndex
+  // has already read+parsed every file — so build entities straight from the
+  // index instead of re-reading and re-parsing each file.
+  const entities: Entity[] = Object.values(index.entries).map((entry) => ({
+    frontmatter: entry.frontmatter,
+    body: "",
+  }));
 
   // Surface all skipped files as invalid findings — one uniform path covers
   // Parse error, Missing id, Duplicate id, and Could not read file.
