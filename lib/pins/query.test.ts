@@ -126,4 +126,21 @@ describe('query', () => {
     expect(existsSync(join(dir, 'index.json'))).toBe(false);
     expect(results.map((r) => r.frontmatter.id)).toEqual(['orphan']);
   });
+
+  test('dir-scan — tag query does not crash on tagless pin and excludes it', () => {
+    const dir = makeTmpDir();
+    // Pin with tags
+    writeFileSync(join(dir, 'tagged.md'), serialize(makeEntity('tagged', { tags: 'alpha' })));
+    // Pin without tags field — simulate pins that passed validator before tags was required
+    const tagless = makeEntity('tagless', {});
+    (tagless.frontmatter as unknown as Record<string, unknown>)['tags'] = undefined;
+    writeFileSync(join(dir, 'tagless.md'), serialize(tagless));
+    // No index.json — dir-scan only
+
+    let results: ReturnType<typeof query>;
+    expect(() => {
+      results = query(dir, { tags: ['alpha'] });
+    }).not.toThrow();
+    expect(results!.map((r) => r.frontmatter.id)).toEqual(['tagged']);
+  });
 });

@@ -36,7 +36,7 @@ function matches(fm: Frontmatter, criteria: QueryCriteria): boolean {
   if (criteria.type !== undefined && fm.type !== criteria.type) return false;
   if (criteria.source !== undefined && fm.source !== criteria.source) return false;
   if (criteria.tags !== undefined && criteria.tags.length > 0) {
-    const pinTags = fm.tags
+    const pinTags = (fm.tags ?? '')
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean);
