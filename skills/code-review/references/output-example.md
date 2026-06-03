@@ -116,6 +116,20 @@ sequenceDiagram
 
 **[PLAUSIBLE] Webhook marks order PAID without re-checking the charged amount**
 - **Location**: `OrderPaymentController.kt:88` — `handleWebhook()`
+- **Current Code**:
+  ```kotlin
+  @PostMapping("/webhook")
+  fun handleWebhook(@RequestBody payload: String, @RequestHeader("Stripe-Signature") sig: String): ResponseEntity<Unit> {
+      stripeGatewayAdapter.verifyWebhookSignature(payload, sig)
+      val event = objectMapper.readValue(payload, StripeEvent::class.java)
+      if (event.type == "payment_intent.succeeded") {
+          val order = orderRepository.findByPaymentIntentId(event.data.id)
+              ?: return ResponseEntity.ok().build()
+          order.transitionTo(OrderStatus.PAID)   // no amount comparison
+      }
+      return ResponseEntity.ok().build()
+  }
+  ```
 - **What's wrong**: The webhook transitions the order to PAID on `payment_intent.succeeded` but never compares the charged amount against the order total.
 - **Failure scenario**: If a PaymentIntent's amount can be influenced below the order total (client-tampered create path, or a partial-capture flow), the order is marked PAID for less than owed. Whether the create path is influenceable is not provable from this diff — realistic but unconfirmed, hence PLAUSIBLE. Confirm by checking that `PaymentIntentCreateParams.amount` is server-derived only.
 - **Fix**: In `handleWebhook()`, load the order and assert `event.amount == order.totalMinorUnits` before transitioning to PAID; reject and alert on mismatch.
@@ -126,6 +140,15 @@ sequenceDiagram
 
 **[CONFIRMED] `PaymentRecord.from()` re-implements the money-conversion helper**
 - **Location**: `PaymentRecord.kt:21`
+- **Current Code**:
+  ```kotlin
+  fun from(order: Order, result: PaymentResult): PaymentRecord =
+      PaymentRecord(
+          orderId = order.id,
+          amountMinor = result.amount.multiply(BigDecimal(100)).toLong(),  // re-implements MoneyUtils.toMinorUnits
+          currency = order.currency,
+      )
+  ```
 - **What's wrong**: Converts to minor units inline (`amount.multiply(BigDecimal(100)).toLong()`) when `MoneyUtils.toMinorUnits(amount, currency)` already exists and handles rounding and zero-decimal currencies (JPY).
 - **Failure scenario** (cost): The duplicated money logic drifts from the canonical helper, and the inline version silently mishandles zero-decimal currencies — a correctness-and-maintenance liability the next currency addition will trip on.
 - **Fix**: Replace the inline conversion with `MoneyUtils.toMinorUnits(amount, currency)`.
