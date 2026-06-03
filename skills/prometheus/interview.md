@@ -1,6 +1,6 @@
 # Interview Mode — Lookup
 
-**This file is lookup-only.** All mandatory interview rules (Tool Use vs User Questions, Sequential Interview Rule, Vague Answer Handling, User Deferral Handling, Persistence, Progress Reporting, Subagent Use, Anti-Patterns) are defined inline in `SKILL.md > ## Interview Mode (Mandatory Contract)`. The contract is authoritative.
+**This file is lookup-only.** The mandatory interview rules are defined inline in `SKILL.md > ## Interview Mode (Mandatory Contract)`. The contract is authoritative.
 
 Read this file when you want a concrete example of question categories, a quality standard reference, the Rich Context pattern for complex design decisions, or a subagent dispatch prompt template.
 

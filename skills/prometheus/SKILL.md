@@ -392,7 +392,7 @@ The Planning-time Task Discipline is complementary to the Pipeline State Machine
 
 Interview rules are inline (not deferred to `interview.md`) so they cannot be partial-read away. The reference file holds question categories, quality examples, and subagent dispatch prompt templates that the inline rules point to but do not duplicate.
 
-> **Trigger fires here**: Before your first interview question of the session, full-read [interview.md](interview.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
+> Full-read `interview.md` here — see `## Reference Full-Read Mandate`.
 
 ### Tool Use vs User Questions
 
@@ -515,7 +515,7 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file holds per-tool Verification examples (maestro/playwright/curl/grep/CLI/unit) + worked example + Handling User Response that the inline contract points to but does not duplicate.
 
-> **Trigger fires here**: Before proposing AC to the user (Clearance all-YES reached), full-read [acceptance-criteria.md](acceptance-criteria.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
+> Full-read `acceptance-criteria.md` here — see `## Reference Full-Read Mandate`.
 
 ### When to Draft
 
@@ -641,7 +641,7 @@ Run on every AC before proposing to user:
 
 This contract applies to EVERY plan. The contract lives here — not in a referenced file — so it cannot be missed via partial-read of a split reference. (Trivial intent is exempt ONLY from the Final Verification Wave — see that section.)
 
-> **Trigger fires here**: Before invoking `Write` on the plan file, full-read [plan-template.md](plan-template.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden. This is in addition to the `## Decomposition Self-Check Output` mandate.
+> Full-read `plan-template.md` here — see `## Reference Full-Read Mandate`.
 
 ### Plan Output Rules
 
@@ -839,7 +839,7 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 
 Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. Detailed material (invocation templates, Stage A rendering procedure, Stage B/C details) lives in `review-pipeline.md`.
 
-> **Trigger fires here**: Before the first reviewer Agent invocation (Metis) AND before each of Stage A/B/C execution, full-read [review-pipeline.md](review-pipeline.md) per `## Reference Full-Read Mandate` and emit the read evidence line. One full-read per session covers all subsequent reviewer/stage triggers. Partial-read forbidden.
+> Full-read `review-pipeline.md` here — see `## Reference Full-Read Mandate`.
 
 ### Three-Agent Pipeline
 
@@ -920,8 +920,6 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S8: Execution Dispatch** | Invoke skill per selection | (terminal) |
 
 S7 → S0 edge: "Revise plan" returns to Interview Mode — full pipeline re-runs.
-
-S7 decisions-needed gate: while any outstanding "Decisions Needed" item / `[DECISION NEEDED]` placeholder exists (surfaced per the Plan Presentation summary), S7 holds — wait for the user response before presenting the final choices. Resolve each via AskUserQuestion, update the plan to remove the placeholder and record the decision, then proceed to S8. No `[DECISION NEEDED]` may survive into S8.
 
 ### State Lifecycle Directives
 

@@ -1,6 +1,6 @@
 # Review Pipeline — Lookup
 
-**This file is lookup-only.** All workflow-wide rules (Common Gate Pattern, Verdict Handling, Revise definition, Verdict/Reviewer Freshness Rules, Pipeline State Machine, Loop Termination, Self-Review Checklist, Gap Classification, Plan Presentation mandate, Anti-Patterns) are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
+**This file is lookup-only.** The mandatory review-pipeline rules are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
 
 Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A HTML render, Stage B Decision Matrix computation, or Stage C option presentation. Read the corresponding section in full at that moment.
 
