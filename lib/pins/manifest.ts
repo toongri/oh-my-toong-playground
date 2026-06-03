@@ -24,8 +24,10 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
   let text: string;
   try {
     text = await fs.readFile(filePath, 'utf8');
-  } catch {
-    return null;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return null;
+    throw err;
   }
   const parsed = parseYaml(text);
   if (parsed == null || typeof parsed !== 'object') return null;
