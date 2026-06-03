@@ -11,15 +11,21 @@ Run a read-only health check over the pin knowledge graph by calling `audit(inpu
 
 ```ts
 import { audit } from "lib/pins/audit.ts";
+import { resolveManifest } from "lib/pins/manifest.ts";
+
+const result = await resolveManifest();
+if (result.kind !== "resolved") throw new Error("pins manifest absent");
 
 const report: AuditReport = await audit(
-  pinsDir,       // string path ($OMT_DIR/pins/) — or an Entity[] array for scoped checks
-  { now?: Date } // optional: inject a fixed timestamp to make staleness deterministic
+  result.manifest.location, // string path resolved from pins.yaml — or an Entity[] array for scoped checks
+  { now: new Date() }       // required for stale detection; omit to skip stale checks entirely
 );
 // report.findings: AuditFinding[]
 ```
 
 `audit` is read-only. It does not write, delete, or modify any file.
+
+**`now` omission disables stale detection.** When `opts.now` is absent, `detectStale` skips every entity — no `stale` findings will appear in the report. Always pass `{ now: new Date() }` unless you intentionally want to suppress staleness.
 
 ## Detector set and severity
 
@@ -30,7 +36,7 @@ Findings are ordered highest-signal first in `report.findings`:
 | 1 | `dangling` | error | A relation's `target` id is absent from the in-scope entity set. Primary signal — fix before anything else. |
 | 2 | `duplicate` | error | Two entities share the same `source_url`. |
 | 3 | `invalid` | error | Entity fails schema `validate()`. |
-| 4 | `stale` | error | Entity exceeds its tier threshold (tier1=180d, tier2=90d, tier3=30d). `reference` type uses `checked_at`; all other types use `created_at`. |
+| 4 | `stale` | error | Entity exceeds its tier threshold (tier1=180d, tier2=90d, tier3=30d). `reference` type uses `checked_at ?? created_at` (falls back to `created_at` when `checked_at` is absent); all other types use `created_at`. |
 | 5 | `orphan` | warning | Entity has no outgoing relations. Soft signal only — never a violation. |
 
 Dangling relations are the primary check: a broken link is a structural defect; an isolated node is merely informational.

@@ -19,9 +19,9 @@ await record(entity, { location });
 - `location` — the manifest-resolved pins directory (from `pins.yaml`)
 
 `record()` validates first. If invalid, the entity is appended to `<location>/.escape.jsonl` and no `.md` file is written. If valid:
-- Fresh write: sets `status='active'`, `updated_at=created_at` if not provided.
-- Update (id already exists on disk): preserves the original `created_at`, bumps `updated_at`.
-- Writes atomically to `<location>/<id>.md`.
+- Fresh write: sets `status='active'`; `updated_at` defaults to `created_at` if not provided. Uses `O_EXCL` (`wx` flag) for atomic create.
+- Update (id already exists on disk): preserves the original `created_at` from the file on disk; `updated_at` is set to `fm.updated_at ?? createdAt` — it is NOT automatically bumped; if the caller does not supply a new `updated_at`, it stays at `created_at`. Atomically replaces the file via a sibling temp file + `rename`.
+- Both paths write atomically — new files via `wx`, updates via temp+rename.
 
 If the resolved manifest has `git: true`, stage and commit the new/updated `<location>/<id>.md` after recording, with a concise message.
 
@@ -52,19 +52,24 @@ These headers are the canonical body structure defined in `tbox.yaml` (`body_sec
 
 ## Frontmatter fields
 
-Key fields (see `lib/pins/types.ts` for the full `Frontmatter` type):
+All fields (see `lib/pins/types.ts` for the canonical `Frontmatter` type):
 
 | Field | Required | Notes |
 |-------|----------|-------|
 | `id` | yes | `{type}-{topic}-{slug}` kebab pattern |
 | `type` | yes | entity type (`code`, `doc`, `concept`, `reference`, `person`, `decision`) |
 | `source` | yes | origin system (`jira`, `linear`, `slack`, `github`, `notion`, `code`, `person`, `url`) |
+| `authority` | yes | the person or system that is the ground-truth owner of this information |
+| `source_url` | yes | canonical URL or locator for the source |
 | `tier` | yes | importance: `1` (core), `2` (reference), `3` (transient) |
+| `tags` | yes | CSV scalar (e.g. `"a,b,c"`) |
 | `sensitivity` | yes | `private` or `shared` |
-| `status` | defaults to `active` | lifecycle state — see below |
+| `status` | yes (defaults to `active`) | lifecycle state — see below |
 | `created_at` | yes | ISO 8601 timestamp |
-| `updated_at` | defaults to `created_at` | ISO 8601 timestamp |
+| `updated_at` | yes (defaults to `created_at`) | ISO 8601 timestamp; NOT auto-bumped on update — caller must supply a new value or it remains `created_at` |
+| `checked_at` | yes | ISO 8601 timestamp; used by the `reference` type stale detector in audit |
 | `relations` | defaults to `[]` | array of `{target, type}` objects |
+| `discovery_context` | no | optional freeform note on how this entity was surfaced |
 
 ## Status lifecycle
 
