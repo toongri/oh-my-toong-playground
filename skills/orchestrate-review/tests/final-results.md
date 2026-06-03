@@ -22,7 +22,7 @@ Scenario specs for the reshaped skills:
 
 - `worker-prompt-scenarios.md` — each angle loads its lens by member name; finders emit candidates, never severity/verdict.
 - `application-scenarios.md` — conductor fan-out, merge, degradation, no-judgment.
-- `chairman-scenarios.md` — cross-angle corroboration/dedup, degradation (4/3/1/0 → in-session fallback), manifest workflow, Bash+Read allowlist.
+- `conductor-scenarios.md` — cross-angle corroboration/dedup, degradation (4/3/1/0 → in-session fallback), manifest workflow, Bash+Read allowlist.
 - `skills/code-review/evals/evals.json` — verify-step discipline: REFUTE false-positive races (Kafka/`fixedDelay`), surface the real HTTP-endpoint race as CONFIRMED.
 
 ## Executable contracts (green)
