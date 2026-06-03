@@ -6,7 +6,7 @@ import { tmpdir, homedir } from 'os';
 import { basename, dirname, resolve } from 'path';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
 
-import { getOmtDir, resolveOmtDir } from './omt-dir.ts';
+import { getOmtDir, resolveOmtDir, resolveProjectRoot } from './omt-dir.ts';
 
 const testTmpBase = join(tmpdir(), 'omt-dir-test-' + Date.now());
 
@@ -315,5 +315,25 @@ describe('no-mkdir sibling path matches getOmtDir', () => {
 
     // Must NOT create the directory
     expect(existsSync(expectedPath)).toBe(false);
+  });
+});
+
+describe('resolveProjectRoot', () => {
+  it('git repo subdirectory: returns the worktree top-level', () => {
+    const repoRoot = execSync('git rev-parse --show-toplevel', {
+      cwd: import.meta.dir,
+      encoding: 'utf-8',
+    }).trim();
+
+    // A nested subdirectory of this repo must still resolve to the repo root
+    const subDir = join(import.meta.dir, 'pins');
+    expect(resolveProjectRoot(subDir)).toBe(repoRoot);
+  });
+
+  it('non-git directory: falls back to the given cwd', async () => {
+    const nonGitDir = join(testTmpBase, 'resolve-project-root-non-git-' + Date.now());
+    await mkdir(nonGitDir, { recursive: true });
+
+    expect(resolveProjectRoot(nonGitDir)).toBe(nonGitDir);
   });
 });

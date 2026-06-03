@@ -15,7 +15,7 @@ import type { HookInput, HookOutput } from './types.ts';
 import { resolveManifest } from '../../lib/pins/manifest.ts';
 import { buildIndex } from '../../lib/pins/index.ts';
 import { formatAbsentContext, formatIndexContext } from './formatter.ts';
-import { resolveOmtDir } from '../../lib/omt-dir.ts';
+import { resolveOmtDir, resolveProjectRoot } from '../../lib/omt-dir.ts';
 
 // ─── stdin helpers ────────────────────────────────────────────────────────────
 
@@ -46,10 +46,11 @@ export async function main(): Promise<void> {
     const input = parseInput(rawInput);
 
     // Step 2: resolve manifest (project-root-first, user-root-fallback)
-    // projectRoot = cwd from hook input (the Claude session's working dir)
-    // userRoot = $OMT_DIR when set; otherwise derived from input.cwd so that
+    // projectRoot = git project root of the session's cwd, so a session
+    //            launched from a subdirectory still finds the root pins.yaml.
+    // userRoot = $OMT_DIR when set; otherwise derived from the session cwd so
     //            process.cwd() (hook process dir) does not shadow the session dir.
-    const projectRoot = input.cwd ?? process.cwd();
+    const projectRoot = resolveProjectRoot(input.cwd ?? process.cwd());
     const userRoot = process.env.OMT_DIR ?? resolveOmtDir(projectRoot);
 
     const manifestResult = await resolveManifest({ projectRoot, userRoot });

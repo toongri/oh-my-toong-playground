@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { parse as parseYaml } from 'yaml';
-import { resolveOmtDir } from '../omt-dir.ts';
+import { resolveOmtDir, resolveProjectRoot } from '../omt-dir.ts';
 
 export interface PinsManifest {
   location: string;
@@ -41,7 +41,7 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
  * Resolves pins.yaml with project-root-first, user-root-fallback precedence.
  *
  * Search order:
- *   1. {projectRoot}/pins.yaml  (defaults to cwd)
+ *   1. {projectRoot}/pins.yaml  (defaults to the git project root of cwd)
  *   2. {userRoot}/pins.yaml     (defaults to resolveOmtDir())
  *
  * Returns { kind: "resolved", manifest } when found, { kind: "absent" } otherwise.
@@ -53,7 +53,7 @@ async function readManifestAt(dir: string): Promise<PinsManifest | null> {
 export async function resolveManifest(
   options: ResolveOptions = {},
 ): Promise<ManifestResult> {
-  const projectRoot = options.projectRoot ?? process.cwd();
+  const projectRoot = options.projectRoot ?? resolveProjectRoot();
   const userRoot = options.userRoot ?? resolveOmtDir();
 
   const fromProject = await readManifestAt(projectRoot);
