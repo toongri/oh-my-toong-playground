@@ -57,6 +57,7 @@ A plan is **Decision Complete** when — and only when — all of the following 
 - **Ambiguity Score ≤ 0.2** (gate within Clearance item 6)
 - All remaining **Ambiguity** on any dimension is zero or explicitly deferred by autonomous decision
 - Every TODO carries verified, executable **acceptance criteria** (not prose summaries)
+- The plan leaves **zero decisions to the implementer** — if an engineer could ask "but which approach?", the plan is not done
 
 "Detailed enough" or "looks solid" are not Decision Complete. Decision Complete is a binary gate defined by the Clearance and Ambiguity gates above — not a subjective planner assessment.
 
@@ -415,7 +416,9 @@ NEVER burden user with questions the codebase can answer. When user has no prefe
 The table above encodes a named principle: every unknown in the interview falls into exactly one of two categories.
 
 - **Discoverable** — facts that exist in the codebase, external docs, or tool outputs. These are never asked to the user. Resolve via explore (codebase), oracle (architecture), or librarian (external docs). Asking the user a Discoverable question is a process violation.
-- **Preferences** — subjective choices, priorities, and constraints that only the user can supply (timeline, scope trade-offs, UX direction, business rules). These are the ONLY questions directed at the user.
+- **Preferences** — subjective choices, priorities, and constraints that only the user can supply (timeline, scope trade-offs, UX direction, business rules). These are the ONLY questions directed at the user. Ask preference/tradeoff forks **early**, framed as 2-4 concrete options with one marked the **recommended default**. On no-answer or explicit defer, the recommended default becomes the autonomous decision recorded as an **assumption** — handled per `### User Deferral Handling` below (do not block on a deferred preference).
+
+  **CRITICAL-fork precedence (overrides the defer-to-default rule):** if a fork is *material* AND hits a T1 Deliberate trigger — Security / Data destruction / External contract / Concurrency / Money (the no-safe-default domains, per `### Deliberate Mode Triggers`) — the recommended default is still SHOWN as a recommendation but is NEVER APPLIED on silence. Silence or defer on a CRITICAL fork does NOT fall through to the default; it becomes a `[DECISION NEEDED]` placeholder and blocks (mechanism wired downstream). Defer auto-resolves to the default only for non-CRITICAL forks.
 
 Before forming any interview question, classify it: Discoverable → dispatch a tool; Preferences → AskUserQuestion. A question that mixes both (e.g., "What's the current auth pattern and do you want to keep it?") must be split — the factual half goes to explore, the preference half goes to the user.
 
@@ -450,6 +453,16 @@ When user explicitly defers ("skip", "I don't know", "your call"):
 2. Select industry best practice or codebase-consistent approach
 3. Document: "Autonomous decision: [X] — user deferred, based on [rationale]"
 4. Continue without blocking
+
+### Test-Strategy Gate (Clearance item 5)
+
+This gate is how Clearance item 5 ("Test/verification strategy identified?") is satisfied — it is asked during the interview through the normal question channel, not surfaced as the internal Clearance Checklist. It splits along `### Two Kinds of Unknowns`: whether test infrastructure EXISTS is **Discoverable** — explore detects the framework, config, representative test files, and CI wiring; never ask the user this. What to DO about it is a **Preference** — ask the user to choose **TDD** (RED-GREEN-REFACTOR, test cases folded into acceptance criteria), **tests-after** (test tasks added after implementation tasks), or **none** (no unit/integration tests). Present the detected infrastructure as context, then ask only the preference.
+
+- **MANDATORY for non-Trivial intents** (Scoped / Complex / Architecture): the gate must be asked and answered before Clearance item 5 can be marked YES.
+- **EXEMPT for Trivial intents**: skip the gate; item 5 is satisfied by the agent-executed QA verification that every plan carries regardless.
+- **Re-ask on escalation**: if the intent class escalates after the interview already passed (Trivial → non-Trivial), re-open the gate and ask the test-strategy preference before re-clearing item 5.
+
+A deferred test-strategy preference resolves per `### User Deferral Handling` (recommended default recorded as an assumption); it is not a CRITICAL fork and does not block.
 
 ### Persistence Rule
 
@@ -903,10 +916,12 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 | **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
-| **S7: Execution Bridge** | Stage C options + user selection | → S8 on selection; → S0 on "Revise plan" |
+| **S7: Execution Bridge** | Stage C options + user selection. **GATE — MUST NOT present the 3 execution options while any "Decisions Needed" item / unresolved `[DECISION NEEDED]` placeholder remains in the plan.** Resolution path: AskUserQuestion → update the plan (remove the placeholder, record the decision) → only then present options. | → S8 on selection (decisions all resolved); → S0 on "Revise plan" |
 | **S8: Execution Dispatch** | Invoke skill per selection | (terminal) |
 
 S7 → S0 edge: "Revise plan" returns to Interview Mode — full pipeline re-runs.
+
+S7 decisions-needed gate: while any outstanding "Decisions Needed" item / `[DECISION NEEDED]` placeholder exists (surfaced per the Plan Presentation summary), S7 holds — wait for the user response before presenting the final choices. Resolve each via AskUserQuestion, update the plan to remove the placeholder and record the decision, then proceed to S8. No `[DECISION NEEDED]` may survive into S8.
 
 ### State Lifecycle Directives
 
@@ -933,6 +948,7 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
 | 5 | Section validator passes | Run `bun skills/prometheus/scripts/validate-plan.ts <plan_path>` (invoked ONLY here, post-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Daedalus. |
+| 6 | decision-surfacing completeness | Every CRITICAL design fork is either resolved with a recorded decision OR carries a `[DECISION NEEDED]` placeholder listed under "Decisions Needed"; no fork is silently absorbed. |
 
 Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
 
@@ -942,9 +958,11 @@ Failure action: loop back and fix before submitting to Daedalus.
 
 | Level | Definition | Handling |
 |---|---|---|
-| **CRITICAL** | Requires user input | Return to Interview Mode |
+| **CRITICAL** | Requires user input | Return to Interview Mode if interview-resolvable. A CRITICAL fork that survives to plan-generation (interview already closed) is embedded in the plan as a `[DECISION NEEDED: {desc}]` placeholder and surfaced under "Decisions Needed" (see Plan Presentation). |
 | **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
 | **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
+
+Reconciliation: the two CRITICAL handlings are complementary, not alternatives. An interview-resolvable CRITICAL routes back to Interview Mode (S0) to gather the missing input. A CRITICAL that survives to plan-generation — the interview is already closed, yet the fork remains unresolved — is recorded in-plan via the `[DECISION NEEDED]` placeholder rather than silently absorbed.
 
 ### Design Consensus (reconciling Daedalus advisory input)
 
@@ -952,11 +970,11 @@ Daedalus is advisory: it emits no gating signal and never bounces the plan back.
 
 Per design opinion:
 
-1. **Collect + dedup** — gather every Daedalus opinion, deduplicate against opinions already reflected in the plan.
-2. **Decide accept or reject** — prometheus judges each opinion on its merits (it is advice, not a directive).
+1. **Collect + dedup** — gather every Daedalus opinion, deduplicate against opinions already reflected in the plan. **Earliest-known-point de-dup:** each material fork (per step 3's definition) is surfaced at the EARLIEST point it becomes known — interview (E1) > plan-generation (E3) > Daedalus here (E6) — and never re-surfaced later. To give de-dup a stable identity key, every surfaced or resolved material fork leaves a trace in its ADR **Considered Options** (or an assumptions-ledger entry); this step's "already reflected in the plan" match runs against that ledger. So a fork already resolved at the interview, or already placeholdered at plan-generation, is recognized here and NOT raised a second time — no fork reaches the user twice.
+2. **Decide accept or reject (routine advice — fold silently)** — when an opinion is ROUTINE (not a material fork per step 3), prometheus judges it on its merits and folds it in without bothering the user (it is advice, not a directive). This silent path is for ROUTINE advice ONLY; material forks go to step 3.
    - **Accepted** → fold the opinion into the plan body (revise the affected TODOs / approach), AND record it in the relevant ADR entry's **Considered Options** (as an evaluated option), **Decision** (if it changed the chosen path), and **Consequences** (the tradeoff now accepted). No new ADR sub-field — the existing MADR 7-field ADR (`## Plan Structure > ADR`) is where consensus outcomes land.
    - **Rejected** → record the rejected opinion and the reason it was not adopted in that ADR entry's **Rationale** field (the Rationale already explains the chosen option over alternatives — a rejected Daedalus opinion is one such alternative).
-3. **Escalate genuine conflicts to the USER** — when an opinion exposes a genuine conflict or a material tradeoff that prometheus cannot resolve on the plan's own evidence (e.g. it pits two user-stated goals against each other, or it would change scope the user fixed), surface it to the user as a preference question. This is prometheus's own judgment of what counts as a genuine conflict — there is NO severity taxonomy; do not label opinions Critical/High/Medium. Routine advice prometheus can absorb is folded silently per step 2; only genuine conflicts / material tradeoffs reach the user.
+3. **Surface material forks to the USER** — when an opinion exposes a material design fork, surface it to the user through the existing preference-question channel (AskUserQuestion), EVEN WHEN prometheus already has a preferred answer. In that case prometheus does not silently absorb the fork: it offers its preferred answer as the recommended default option in the preference question and lets the user confirm or override. This is prometheus's own judgment of what counts as a material fork — there is NO severity taxonomy; do not label opinions Critical/High/Medium. The material/routine split is a FORK-EXISTENCE distinction, NOT a severity ranking: an opinion is a material fork when (a) two-or-more defensible approaches exist AND (b) the choice affects architecture or externally-observable behavior (pure style/naming is excluded). Example pair: "sync vs async webhook processing (changes observable latency / retry semantics) → SURFACE" vs "helper-function placement (no observable effect) → FOLD". Routine advice with no such fork is folded silently per step 2; every material fork reaches the user. Surfacing routes through the preference question only — Daedalus stays advisory and emits no gating verdict.
 4. **1-revision-round backstop** — reconcile in a single revision round. If, after that one round, a genuine conflict still remains unresolved, escalate the remaining conflict to the user rather than looping further. The backstop bounds reconciliation to one round; it is not a gate, since this advisory pass never blocks the pipeline.
 
 After reconciliation, proceed to S4 (Momus). Momus then verifies the reconciled plan for codebase feasibility + document quality and emits the gating verdict.
@@ -969,7 +987,9 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 |---|---|---|
 | **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + optional necessity-gated Mermaid diagram (re-visualizing flow/structure the plan already decided, never inventing edges) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + guardrails + presentation protocol in `diagram-guide.md` |
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
-| **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
+| **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. **S7 gate: the 3 options MUST NOT be presented while any "Decisions Needed" item / unresolved `[DECISION NEEDED]` placeholder remains** — wait for the user response, resolve via AskUserQuestion → update the plan (remove the placeholder, record the decision), then present options and proceed to S8. | Option formatting in `review-pipeline.md` |
+
+**Decisions Needed summary (if any) — conditional-emit:** Emit a "Decisions Needed" summary that lists every outstanding `[DECISION NEEDED]` placeholder embedded in the plan, each as a specific question with options for the user. This summary is rendered ONLY when at least one CRITICAL `[DECISION NEEDED]` placeholder exists in the plan; a decision-free plan does NOT render the section at all. When the section is present, resolve those decisions with the user before treating the plan as execution-ready (the S7 gate enforces this).
 
 **Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the HTML in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`); `plan.md` on disk is never rewritten. This is Stage A's silent-failure point — skip the active naming and the prose defaults to `plan.md`'s authoring language even when the session ran in another language. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
 

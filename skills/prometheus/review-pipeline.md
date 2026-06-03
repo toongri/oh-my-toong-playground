@@ -200,6 +200,8 @@ Before asking the user to choose execution mode, compute a recommendation:
 
 After the user reads Stage B's recommendation, present execution options via the platform's user-prompt primitive (structured choice):
 
+**Decisions-needed block (S7 gate):** Do NOT render the 3 execution options below while any "Decisions Needed" item / unresolved `[DECISION NEEDED]` placeholder remains in the plan. Wait for the user response first: resolve each outstanding decision via AskUserQuestion, update the plan to remove the placeholder and record the decision, and only then present the options. A decision-free plan renders the options immediately.
+
 **(1) Full orchestration**
 Multi-agent task orchestration with QA verification. 3+ TODOs or cross-module changes.
 
