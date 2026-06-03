@@ -1,6 +1,6 @@
 # Chunk Review Data
 
-> This template provides data for the chunk-review multi-model dispatch. Review instructions are in prompts/default.md.
+> This template provides the review data (scope, diff command, context) interpolated into each angle finder's prompt. The per-angle review instructions live in scripts/prompts/<angle>.md.
 
 ## Review Premises (non-negotiable)
 
@@ -30,7 +30,7 @@ Findings must be limited to files in the list above. Cross-references and explor
 
 {PROJECT_CONTEXT}
 
-This describes what kind of software is being reviewed. Reviewers must factor this into impact and probability assessments.
+This describes what kind of software is being reviewed. Finders must factor this into whether a candidate's failure scenario is actually reachable in this kind of system.
 
 ## Evidence Results
 
