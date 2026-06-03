@@ -1,4 +1,4 @@
-import { writeFileSync, appendFileSync, mkdirSync, readFileSync, existsSync } from 'fs';
+import { writeFileSync, appendFileSync, mkdirSync, readFileSync, existsSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { validate } from './validator.ts';
 import { serialize, parse } from './entity.ts';
@@ -18,7 +18,7 @@ export interface RecordTarget {
  *   - Fresh write: sets status='active', updated_at=created_at (defaults).
  *     Uses O_EXCL (wx) for atomicity on new files.
  *   - Update (id already exists on EEXIST): preserves existing created_at,
- *     bumps updated_at, then overwrites the file in place.
+ *     bumps updated_at, then atomically replaces the file via temp+rename.
  *
  * Does NOT depend on index correctness.
  * Does NOT hard-code any path — uses manifest.location exclusively.
@@ -44,8 +44,8 @@ export async function record(
     try {
       const existing = parse(readFileSync(existingPath, 'utf8'));
       createdAt = existing.frontmatter.created_at;
-    } catch {
-      // If we can't read/parse the existing file, fall through to fresh defaults
+    } catch (err) {
+      console.error('[pins] failed to parse existing pin file, using fresh defaults:', err);
     }
   }
 
@@ -73,7 +73,10 @@ export async function record(
  * Write a pin file in `targetDir`.
  *
  * - New file: uses O_EXCL (wx flag) for atomic create.
- * - EEXIST (file already exists — update path): overwrites in place with 'w'.
+ * - EEXIST (file already exists — update path): writes to a sibling temp file
+ *   (exclusive create) then atomically renames it over the target. If rename
+ *   fails the temp file is cleaned up and the error is re-thrown; the original
+ *   file is left intact.
  *   The caller has already read and preserved created_at before this point.
  *
  * Any other fs error is re-thrown.
@@ -86,7 +89,7 @@ function writePinAtomically(
   mkdirSync(targetDir, { recursive: true });
   const basePath = join(targetDir, `${id}.md`);
 
-  // Attempt atomic create; if the file already exists we overwrite (update path)
+  // Attempt atomic create; if the file already exists we take the update path
   try {
     writeFileSync(basePath, content, { flag: 'wx', encoding: 'utf-8' });
     return;
@@ -94,8 +97,23 @@ function writePinAtomically(
     if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
   }
 
-  // File exists: this is an update — overwrite in place
-  writeFileSync(basePath, content, { encoding: 'utf-8' });
+  // File exists: atomic update via temp file + rename
+  const tempPath = join(
+    targetDir,
+    `${id}.md.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`,
+  );
+  try {
+    writeFileSync(tempPath, content, { flag: 'wx', encoding: 'utf-8' });
+    renameSync(tempPath, basePath);
+  } catch (err) {
+    // Clean up temp file if it was created, then re-throw so caller sees the failure
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      // ignore — temp may not exist yet
+    }
+    throw err;
+  }
 }
 
 // ── Escape log ────────────────────────────────────────────────────────────────
@@ -128,7 +146,7 @@ function appendEscapeEntry(
       raw: truncateRaw(JSON.stringify(entity.frontmatter)),
     };
     appendFileSync(escapePath, JSON.stringify(entry) + '\n', 'utf-8');
-  } catch {
-    // Escape log is best-effort — silent fail
+  } catch (err) {
+    console.error('[pins] escape log write failed:', err);
   }
 }

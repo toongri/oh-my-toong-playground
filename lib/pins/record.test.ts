@@ -1,7 +1,8 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { mkdirSync, rmSync, readFileSync, existsSync } from 'fs';
+import { describe, test, expect, beforeEach, afterEach, spyOn } from 'bun:test';
+import { mkdirSync, rmSync, readFileSync, existsSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import * as fs from 'fs';
 import { parse } from './entity.ts';
 import { record } from './record.ts';
 import type { Entity } from './types.ts';
@@ -142,5 +143,85 @@ describe('record', () => {
     expect(entry.reason).toBe('missing_field');
     expect(typeof entry.message).toBe('string');
     expect(entry.message.length).toBeGreaterThan(0);
+  });
+
+  test('atomic update: original file preserved when renameSync fails mid-update', async () => {
+    // Write original pin
+    const entity = makeEntity({ created_at: '2026-01-01T00:00:00Z' });
+    await record(entity, { location });
+
+    const filePath = join(location, `${entity.frontmatter.id}.md`);
+    const originalContent = readFileSync(filePath, 'utf8');
+
+    // Inject renameSync failure during the update path
+    const renameStub = spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('SIMULATED rename failure');
+    });
+
+    try {
+      const updatedEntity = makeEntity({ updated_at: '2026-06-01T12:00:00Z' });
+      await expect(record(updatedEntity, { location })).rejects.toThrow('SIMULATED rename failure');
+    } finally {
+      renameStub.mockRestore();
+    }
+
+    // Original file must be intact (not truncated or corrupted)
+    const afterContent = readFileSync(filePath, 'utf8');
+    expect(afterContent).toBe(originalContent);
+
+    // No leftover temp file should remain
+    const files = readdirSync(location);
+    const tempFiles = files.filter(f => f.endsWith('.tmp'));
+    expect(tempFiles).toHaveLength(0);
+  });
+
+  test('escape log append failure surfaces to stderr (does not silently swallow)', async () => {
+    const entity = makeEntity();
+    delete (entity.frontmatter as any).tier;
+
+    const errors: unknown[] = [];
+    const stderrSpy = spyOn(console, 'error').mockImplementation((...args) => {
+      errors.push(args);
+    });
+
+    // Inject appendFileSync failure so escape log write fails
+    const appendStub = spyOn(fs, 'appendFileSync').mockImplementation(() => {
+      throw new Error('SIMULATED append failure');
+    });
+
+    try {
+      await record(entity, { location });
+    } finally {
+      appendStub.mockRestore();
+      stderrSpy.mockRestore();
+    }
+
+    // Must have logged at least one error to stderr
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  test('parse failure of existing file logs warning to stderr and proceeds with fresh write', async () => {
+    // Write a corrupted file at the expected pin path (unparseable)
+    const corruptPath = join(location, 'code-hello-world.md');
+    writeFileSync(corruptPath, 'NOT VALID FRONTMATTER AT ALL ::::', 'utf8');
+
+    const warnings: unknown[] = [];
+    const stderrSpy = spyOn(console, 'error').mockImplementation((...args) => {
+      warnings.push(args);
+    });
+
+    try {
+      await record(makeEntity(), { location });
+    } finally {
+      stderrSpy.mockRestore();
+    }
+
+    // stderr must have received at least one warning about parse failure
+    expect(warnings.length).toBeGreaterThan(0);
+
+    // Record must still have succeeded — the pin file is written
+    const written = readFileSync(corruptPath, 'utf8');
+    const parsed = parse(written);
+    expect(parsed.frontmatter.id).toBe('code-hello-world');
   });
 });
