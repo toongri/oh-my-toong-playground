@@ -1,5 +1,6 @@
 import { describe, test, expect, afterEach } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'fs';
+import { execSync } from 'child_process';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
 import { resolveManifest } from './manifest.ts';
@@ -170,6 +171,36 @@ describe('absent signal', () => {
       if (!existsSync(derivedDir) === false) {
         rmSync(derivedDir, { recursive: true, force: true });
       }
+    }
+  });
+});
+
+describe('project root resolution', () => {
+  test('resolveManifest() finds the git-root pins.yaml when cwd is a subdirectory', async () => {
+    const savedCwd = process.cwd();
+    const savedOmtDir = process.env.OMT_DIR;
+    const repo = makeTmpDir();
+
+    try {
+      execSync('git init -q', { cwd: repo });
+      writeFileSync(join(repo, 'pins.yaml'), 'location: repo-pins\nscope: shared\n');
+      const sub = join(repo, 'src', 'deep');
+      mkdirSync(sub, { recursive: true });
+
+      // Point the user-root fallback at a guaranteed-absent dir so success
+      // can only come from resolving the project (git) root.
+      process.env.OMT_DIR = join(repo, 'no-user-dir');
+      process.chdir(sub);
+
+      const result = await resolveManifest();
+
+      expect(result.kind).toBe('resolved');
+      if (result.kind !== 'resolved') return;
+      expect(result.manifest.location).toBe('repo-pins');
+    } finally {
+      process.chdir(savedCwd);
+      if (savedOmtDir !== undefined) process.env.OMT_DIR = savedOmtDir;
+      else delete process.env.OMT_DIR;
     }
   });
 });

@@ -43,6 +43,28 @@ export function resolveOmtDir(cwd: string = process.cwd()): string {
   return `${homedir()}/.omt/${projectName}`;
 }
 
+/**
+ * Returns the project root directory for the given cwd.
+ *
+ * Resolves to the git worktree top-level so a session launched from a
+ * subdirectory still resolves to the repo root (matching where pin-setup
+ * tells users to place pins.yaml). Falls back to cwd when not inside a git
+ * repository. Performs no filesystem writes.
+ *
+ * @param cwd - Directory to resolve from. Defaults to process.cwd().
+ */
+export function resolveProjectRoot(cwd: string = process.cwd()): string {
+  try {
+    return execSync('git rev-parse --show-toplevel', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return cwd;
+  }
+}
+
 function deriveProjectName(cwd: string): string {
   try {
     const gitCommonDir = execSync('git rev-parse --git-common-dir', {
