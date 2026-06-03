@@ -539,10 +539,13 @@ Per-finding format (enriched during Phase 2 verification):
 - **Blast Radius**: {grep/reference evidence — what else references this, or "This location only"}
 - **Found by**: {angle(s) — note when multiple angles corroborated the same finding}
 
-Fallback (verifier failed): If a verifier subagent errored or timed out for a candidate, label it PLAUSIBLE, prepend "(unverified)" to the title, and use the finder's text for What's wrong / Failure scenario / Fix; omit Current Code and Blast Radius.
+Fallback (verifier failed): If a verifier subagent errored or timed out for a candidate, do NOT assign a verdict — an unverified candidate is not a finding. List it under the `## Unverified (verifier unavailable)` section using the finder's text, and state how many candidates went unverified. These are coverage gaps the reader must check manually, not confirmed or plausible findings.
 
 ## Out of Scope (Pre-existing)
 [Findings on unchanged context lines, verdict-labeled. These do not gate anything — they are noted, not blocking.]
+
+## Unverified (verifier unavailable)
+[Only if one or more verifiers errored or timed out. Candidates listed with the finder's text and a count, explicitly NOT verdict-labeled — coverage gaps, not findings. Omit the section entirely when every candidate was verified.]
 
 ## Recommendations
 [Optional, non-finding suggestions for the author. Omit if none.]
