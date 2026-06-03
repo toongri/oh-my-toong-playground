@@ -93,6 +93,9 @@ export async function parseTboxYaml(filePath: string): Promise<Tbox> {
 
 const TBOX_PATH = join(import.meta.dir, "tbox.yaml");
 
+// tbox.yaml is immutable for the process lifetime; parse it once and reuse.
+let tboxPromise: Promise<Tbox> | undefined;
+
 export function loadTbox(): Promise<Tbox> {
-  return parseTboxYaml(TBOX_PATH);
+  return (tboxPromise ??= parseTboxYaml(TBOX_PATH));
 }
