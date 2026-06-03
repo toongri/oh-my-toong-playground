@@ -756,7 +756,7 @@ If the scan finds no T1 keywords and all categories were marked N, F1 proceeds n
 
 Each TODO is a checkbox line `- [ ] N. Title` with body containing:
 
-1. **What to do** — Content, Scope, Approach, Inputs, Decisions from interview. Executor has NO interview context — faithfully transfer conclusions.
+1. **What to do** — Content, Scope, Approach, Inputs, Decisions from interview. Executor has NO interview context — faithfully transfer conclusions. Format as a verb-led lead sentence followed by a bullet list of concrete deliverables/steps (one artifact or action per bullet); put any command in a fenced code block. Do NOT write a multi-sentence prose paragraph — bullets are scannable; prose buries the item count.
 2. **Must NOT do** — Explicit forbidden scope
    - Every task MUST declare an explicit Must NOT do; an empty forbidden-scope field is not permitted. Mirror the mandatory reference pattern from field #4: just as every implementation TODO requires ≥1 Pattern or API/Type reference, every TODO requires ≥1 forbidden-scope constraint.
 3. **Files** — What this TODO creates or modifies
