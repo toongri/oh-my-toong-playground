@@ -9,7 +9,9 @@ First-run interview to create `pins.yaml`, the storage manifest for the pins kno
 
 ## What is pins.yaml
 
-`pins.yaml` is the manifest that tells the pins API where to read and write pin files. It declares the storage location and scope for this project's knowledge graph. All lib/pins APIs (`record`, `migrate`, `query`, etc.) resolve their `location` parameter from this manifest.
+`pins.yaml` is the manifest that tells the pins API where to read and write pin files. It declares the storage location and scope for this project's knowledge graph.
+
+`resolveManifest()` (from `lib/pins/manifest.ts`) reads `pins.yaml` and returns the parsed manifest. Callers then extract `manifest.location` and pass it explicitly to each API (`record`, `query`, `audit`, etc.). The manifest itself is advisory metadata — individual API calls always receive `location` as an explicit argument, not by re-reading the file.
 
 ## Interview
 
@@ -45,7 +47,7 @@ Record the answer as `git: true` or `git: false`.
 
 ## Output
 
-Once both questions are answered, write `pins.yaml` at the project root (or the location the user specifies):
+Once all three questions are answered, write `pins.yaml` at the project root (or the location the user specifies):
 
 ```yaml
 # pins.yaml — knowledge graph storage manifest
