@@ -172,7 +172,7 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 ```
 ### Candidate Findings ({total surviving}/from N angles)
 
-[One entry per merged candidate, no ordering implied — the verifier ranks.]
+[One entry per merged candidate, no ordering implied — the orchestrator ranks downstream (Phase 3).]
 
 - **{file}:{line}** — {summary}
   - failure_scenario: {concrete inputs/state → wrong output or crash; for cleanup, the concrete cost}
