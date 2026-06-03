@@ -15,11 +15,7 @@ This is a deliberate, manual sweep. It is NOT automatic. You invoke it when a se
 
 Scan back over the full session — every discovery, decision, external reference, code location, person named, and architectural fact that surfaced. Ask: "Would a future me (or a colleague) benefit from being able to find this in 10 seconds?"
 
-Apply the recording rubric from the `pin-record` skill:
-- Does it have an external SSOT worth pointing at?
-- Is the location of ground truth now known?
-- Was a person named as an authority?
-- Was a decision made that will affect future work?
+Apply the recording rubric from the `pin-record` skill, using the worth/not-worth table below to decide what makes the cut.
 
 Discard noise: transient commands, intermediate debug outputs, things that are already obvious from the codebase.
 
@@ -48,7 +44,7 @@ if (!result.valid) {
 }
 ```
 
-Build the `entity` with the four required body sections (`한 줄 요지`, `SSOT 위치`, `전후 컨텍스트`, `관련 cross-link`) and complete frontmatter. See the `pin-record` skill for full field reference.
+Build the `entity` with the required body sections and complete frontmatter — see the `pin-record` skill for the body structure and full field reference.
 
 `record()` returns `Promise<void>` — there is no return value to inspect. If validation passed and no exception is thrown, the pin was written.
 
