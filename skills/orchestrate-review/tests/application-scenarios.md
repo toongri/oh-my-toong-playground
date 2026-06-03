@@ -2,200 +2,127 @@
 
 ## Purpose
 
-These scenarios test whether the **orchestrate-review skill's** Chairman orchestration behavior is correctly applied. Each scenario targets a distinct phase or constraint of the 2-Phase Protocol (Request → Collect → Read → Report) as defined in `SKILL.md`.
+These scenarios test whether the **orchestrate-review skill's** Finder Conductor behavior is correctly applied. Each targets a phase or constraint of the protocol (Request → Collect → Read → Merge) as defined in `SKILL.md`. The conductor dispatches angle finders, merges their un-judged candidates, and returns them — it never assigns severity or a verdict (that happens upstream in `code-review`).
 
 ## Technique Coverage Map
 
-| # | Scenario | Primary Technique | Secondary |
-|---|---------|-------------------|-----------|
-| OR-A1 | Full code review aggregation | 2-Phase Protocol end-to-end | Dispatch + Collect + Aggregate |
-| OR-A2 | Single reviewer failure | Degradation Policy — partial aggregation | Output format modification |
-| OR-A3 | Diff command failure | Diff command failure handling — immediate return | No aggregation attempted |
-| OR-A4 | Start exactly once | Execution Constraint — EXACTLY ONCE | No re-start on running state |
-| OR-A5 | P-level pass-through | Chairman does NOT assign/reassign P-levels | Aggregate faithfully as reported |
-| OR-A6 | No final verdict computed | Chairman lists per-model verdicts only | Orchestrator decides final verdict |
+| # | Scenario | Primary Technique |
+|---|----------|-------------------|
+| OR-A1 | Full angle-finder fan-out + merge | Protocol end-to-end (dispatch + collect + merge) |
+| OR-A2 | One angle fails | Degradation Policy — partial merge |
+| OR-A3 | Diff command failure | Immediate return, no merge |
+| OR-A4 | Start exactly once | Execution Constraint |
+| OR-A5 | No severity/verdict assigned | Conductor Boundaries — un-judged candidates only |
+| OR-A6 | Candidate carry-through + dedup | Merge faithfully, dedup across angles, do not rank/drop |
 
 ---
 
-## Scenario OR-A1: Full Code Review Chunk Aggregation (Happy Path)
+## Scenario OR-A1: Full Angle-Finder Fan-out + Merge (Happy Path)
 
-**Primary Technique:** 2-Phase Protocol — Request → Collect → Read → Report
-
-**Given:**
-- Chairman receives an interpolated prompt containing `{DIFF_COMMAND}`, a list of 8 changed files, and review requirements
-- Both reviewer CLIs (claude, codex) are available and respond successfully
-- Reviewers identify 2 overlapping issues and 1 unique finding each
-
-**When:**
-- The Chairman processes the chunk review request
+**Given:** the conductor receives an interpolated prompt with `{DIFF_COMMAND}`, 8 changed files, and review context. All four angle finders (line-scan, removed-behavior, cross-file, cleanup) are available and return candidates.
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | Prompt passthrough only | Chairman writes the interpolated prompt to a temp file; does NOT execute the `{DIFF_COMMAND}` itself and does NOT read the file list to explore source files |
-| V2 | Single dispatch | `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` is invoked EXACTLY ONCE |
-| V3 | Collect loop | `collect` is called until `"overallState": "done"` is returned |
-| V4 | Read reviewer outputs | Each reviewer's `outputFilePath` from the manifest is read via the Read tool; null entries are skipped |
-| V5 | Deduplication applied | The 2 overlapping issues (same file:line range +/-5 lines, same problem type) are merged into one entry using the richest description; "나머지 N개 모델 동일 평가." is appended |
-| V6 | Unique finding listed | Each unique finding is listed with the identifying model's P-level and "Did not identify this issue." for the non-reporting model |
-| V7 | Termination | No additional tools (Read, Bash, etc.) run after the aggregation report is output |
+| V1 | Prompt passthrough only | Conductor writes the interpolated prompt to a temp file; does NOT run `{DIFF_COMMAND}` itself or explore source files |
+| V2 | Single dispatch | `job.ts start --prompt-file "$PROMPT_FILE"` is invoked EXACTLY ONCE |
+| V3 | Collect loop | `collect` is called until `"overallState": "done"` |
+| V4 | Read finder outputs | Each finder's non-null `outputFilePath` is read; null entries skipped |
+| V5 | Candidates carried through | Every candidate's `file`/`line`/`summary`/`failure_scenario` is carried through verbatim |
+| V6 | Angle coverage reported | The Angle Coverage block reports each angle's candidate count or "found nothing" |
+| V7 | Termination | No tools run after the merged candidate list is output (except `clean`) |
 
 ---
 
-## Scenario OR-A2: Single Reviewer Failure — Partial Aggregation (Degradation)
+## Scenario OR-A2: One Angle Fails — Partial Merge (Degradation)
 
-**Primary Technique:** Degradation Policy — partial aggregation when a reviewer infrastructure fails
-
-**Given:**
-- Chairman receives a chunk review request with 2 dispatched reviewers (N=2)
-- `collect` returns `"overallState": "done"` with the following manifest:
-  ```json
-  {
-    "overallState": "done",
-    "members": [
-      { "member": "claude", "outputFilePath": "/tmp/job/claude/output.txt", "errorMessage": null },
-      { "member": "codex", "outputFilePath": null, "errorMessage": "missing_cli" }
-    ]
-  }
-  ```
-
-**When:**
-- The Chairman reads the manifest and proceeds to produce the aggregation report
+**Given:** N=4 finders dispatched; `collect` returns done with `cross-file` having `outputFilePath: null, errorMessage: "timed_out"`.
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | No job restart | Chairman does NOT call `start` again due to the codex failure |
-| V2 | Read only non-null paths | Only claude `outputFilePath` is read; the null codex entry is skipped |
-| V3 | Partial aggregation prefix | Report begins with "Partial review (1/N respondents). codex unavailable: missing_cli." |
-| V4 | Denominator stays N=2 | Per-model lines use N=2 as denominator — e.g., "Models: 1/2" for shared findings |
-| V5 | Unavailable vs did-not-identify distinct | codex entries show "codex: Unavailable (missing_cli)." — NOT "codex: Did not identify this issue." |
-| V6 | Missing perspective noted | Report notes that codex's perspective is absent |
-| V7 | No extrapolation | Chairman does NOT speculate what codex "would have found" |
+| V1 | No job restart | Conductor does NOT call `start` again |
+| V2 | Read only non-null paths | The null `cross-file` entry is skipped |
+| V3 | Partial prefix | Output begins with "Partial review (3/N angles). cross-file unavailable: timed_out." |
+| V4 | Coverage gap noted | Angle Coverage marks `cross-file: Unavailable (timed_out)` and notes the call-site-ripple perspective is absent |
+| V5 | No extrapolation | Conductor does NOT speculate what cross-file "would have found" |
 
 ---
 
 ## Scenario OR-A3: Diff Command Failure Handling (Edge Case)
 
-**Primary Technique:** Diff command failure — immediate return without aggregation
-
-**Given:**
-- Chairman receives an interpolated prompt containing a `{DIFF_COMMAND}` for a chunk
-- Both reviewers have responded, but both report that the diff command failed with an error (e.g., "fatal: bad revision 'origin/feature...pr-99'" or empty output)
-
-**When:**
-- The Chairman reads the reviewer output files and observes the diff command failure
+**Given:** all finders report the diff command failed (bad revision or empty output).
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | No aggregation attempted | Chairman does NOT attempt to aggregate findings from the failed diff outputs |
-| V2 | Failure report returned | Response is: "Diff command failed for this chunk: [error details]" |
-| V3 | Immediate return | Chairman stops after returning the failure report; no further tools are invoked |
-| V4 | Error details included | The failure report includes the specific error message reported by the reviewers |
-| V5 | No job restart | Chairman does NOT re-start the job or re-dispatch reviewers after the diff failure |
+| V1 | No merge attempted | Conductor does NOT merge candidates from failed-diff outputs |
+| V2 | Failure report | Response is "Diff command failed for this chunk: [error details]" |
+| V3 | Immediate return | Conductor stops; no further tools |
+| V4 | No job restart | Conductor does NOT re-start the job |
 
 ---
 
 ## Scenario OR-A4: Execution Constraint — start Runs Exactly Once
 
-**Primary Technique:** CRITICAL Execution Constraint — `start` subcommand runs EXACTLY ONCE; `collect` may repeat
-
-**Given:**
-- Chairman receives a chunk review request
-- First `collect` call returns `"overallState": "running"` (1 of 2 reviewers done, 1 still running):
-  ```json
-  { "overallState": "running", "counts": { "total": 2, "done": 1, "running": 1, "queued": 0 } }
-  ```
-
-**When:**
-- The Chairman receives the running state response
+**Given:** first `collect` returns `"overallState": "running"` (2 of 4 done).
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | No second start | Chairman does NOT invoke `start` again |
-| V2 | Collect retry | Chairman calls `collect "$JOB_DIR"` again with the same JOB_DIR from the original start output |
-| V3 | Foreground execution | The collect retry runs in foreground (no background execution) |
-| V4 | Collect until done | Chairman continues calling `collect` until `"overallState": "done"` |
-| V5 | One chunk per invocation | Chairman processes exactly ONE chunk — it does NOT combine this chunk's prompt with any other chunk's diff or file list |
+| V1 | No second start | Conductor does NOT invoke `start` again |
+| V2 | Collect retry | Conductor calls `collect "$JOB_DIR"` again with the original JOB_DIR |
+| V3 | Foreground | The retry runs in foreground |
+| V4 | Collect until done | Conductor loops `collect` until done |
+| V5 | One chunk per invocation | Conductor processes exactly ONE chunk |
 
 ---
 
-## Scenario OR-A5: P-Level Pass-Through — No Reassignment
+## Scenario OR-A5: No Severity / Verdict Assigned
 
-**Primary Technique:** Chairman Boundaries — MUST NOT assign, reassign, or interpret any model's P-level
+**Primary Technique:** Conductor Boundaries — un-judged candidates only.
 
-**Given:**
-- `collect` returns `"overallState": "done"` with both reviewers responding
-- Reviewer outputs contain the following P-level disagreement on the same issue (`PaymentService.kt:42`):
-  - claude: P1 — "null 체크 누락으로 프로덕션 NPE 위험"
-  - codex: P2 — "잠재적 NPE이나 기존 테스트가 커버"
-
-**When:**
-- The Chairman aggregates the findings
+**Given:** finders return candidates; one candidate (`PaymentService.kt:42`) looks severe (null deref on a hot path).
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | P-levels passed through as-is | Each model's P-level appears exactly as reported (claude: P1, codex: P2) |
-| V2 | Severity range reported | Issue entry shows "Severity Range: P1 ~ P2" |
-| V3 | No P-level override | Chairman does NOT change codex's P2 to P1 because the other model said P1 |
-| V4 | Per-model entries listed separately | Because P-levels differ (P1 vs P2), each model is listed separately with its own reasoning |
-| V5 | No verdict computed | Chairman does NOT assign a combined verdict or severity for this issue |
+| V1 | No P-levels | The merged output contains NO `P0`/`P1`/`P2`/`P3` |
+| V2 | No verdict | The output contains NO `CONFIRMED`/`PLAUSIBLE`/`REFUTED` and no "Ready to merge" |
+| V3 | No ranking | Candidates are not ordered by importance — the verifier ranks downstream |
+| V4 | failure_scenario intact | The candidate's `failure_scenario` is carried through verbatim, not strengthened or softened |
 
 ---
 
-## Scenario OR-A6: Per-Model Verdicts Only — No Final Verdict Computed
+## Scenario OR-A6: Candidate Carry-Through + Cross-Angle Dedup
 
-**Primary Technique:** Verdict Handling — list each model's verdict separately; Chairman does NOT compute a combined verdict
+**Primary Technique:** merge faithfully; dedup near-duplicates across angles; do not drop weak candidates.
 
-**Given:**
-- Both reviewers have responded with the following verdicts:
-  - claude: LGTM ("변경 사항이 스펙 요구사항을 충족합니다")
-  - codex: REQUEST_CHANGES ("인증 미들웨어 누락 — 보안 필수 사항")
-
-**When:**
-- The Chairman produces the aggregation report
+**Given:** `line-scan` and `cross-file` both flag `OrderService.kt:88` for the same mechanism (a missing null guard), with slightly different wording. `cleanup` flags a weak-looking reuse candidate.
 
 **Then:**
 
 | # | Verification Point | Expected Behavior |
 |---|-------------------|-------------------|
-| V1 | Per-Model Verdicts section present | Report includes a `### Per-Model Verdicts` section |
-| V2 | Each model listed separately | Both models appear: claude: LGTM, codex: REQUEST_CHANGES |
-| V3 | No combined verdict | Chairman does NOT compute a combined verdict or apply majority rule |
-| V4 | Basis included | Each model's verdict entry includes its stated basis |
-| V5 | Orchestrator note | Report defers final verdict decision to the orchestrator (implicitly or explicitly — no override) |
+| V1 | Dedup across angles | The two `OrderService.kt:88` candidates (same file, line within ±5, same mechanism) merge into one entry |
+| V2 | Corroboration recorded | The merged entry's `found by` lists both `line-scan + cross-file` |
+| V3 | Richest failure_scenario kept | The merged entry keeps the more concrete `failure_scenario` |
+| V4 | Weak candidate kept | The weak cleanup candidate is NOT dropped — the upstream verifier decides |
+| V5 | No augmentation | The conductor adds no candidate of its own |
 
 ---
 
 ## Evaluation Criteria
 
-각 시나리오의 verification point를 ALL PASS해야 시나리오 PASS.
+All verification points must PASS for a scenario to PASS.
 
 | Verdict | Meaning |
 |---------|---------|
-| PASS | Verification point 완전히 충족 |
-| PARTIAL | 언급했으나 불충분하거나 프레이밍이 부정확 |
-| FAIL | 미언급 또는 잘못된 판정 |
-
----
-
-## Test Results
-
-> GREEN 테스트 결과는 실행 후 이 섹션에 기록합니다.
-
-| Scenario | Verdict | V-Points | Key Evidence |
-|----------|---------|----------|-------------|
-| OR-A1: Full aggregation cycle | — | —/7 | |
-| OR-A2: Single reviewer failure | — | —/7 | |
-| OR-A3: Diff command failure | — | —/5 | |
-| OR-A4: Execution constraint | — | —/5 | |
-| OR-A5: P-level pass-through | — | —/5 | |
-| OR-A6: Per-model verdicts only | — | —/5 | |
+| PASS | Verification point fully met |
+| PARTIAL | Mentioned but insufficient or imprecisely framed |
+| FAIL | Not mentioned or wrong behavior |
