@@ -92,6 +92,109 @@ describe("loadTbox()", () => {
   });
 });
 
+// ── Malformed fixture tests: schema guard must throw descriptive errors ────────
+
+describe("parseTboxYaml() with malformed fixtures", () => {
+  let tmpDir: string;
+
+  beforeAll(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "tbox-loader-malformed-test-"));
+  });
+
+  afterAll(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  async function writeFixture(name: string, content: string): Promise<string> {
+    const p = join(tmpDir, name);
+    await writeFile(p, content, "utf8");
+    return p;
+  }
+
+  test("empty file throws schema validation error", async () => {
+    const p = await writeFixture("empty.yaml", "");
+    await expect(parseTboxYaml(p)).rejects.toThrow(
+      /tbox\.yaml schema validation failed/
+    );
+  });
+
+  test("scalar YAML throws schema validation error", async () => {
+    const p = await writeFixture("scalar.yaml", "just a string");
+    await expect(parseTboxYaml(p)).rejects.toThrow(
+      /tbox\.yaml schema validation failed/
+    );
+  });
+
+  test("missing enums throws schema validation error mentioning enums", async () => {
+    const p = await writeFixture("no-enums.yaml", `
+id_pattern: '^[a-z]+$'
+entity_types:
+  code:
+    required_axiom: [id]
+    forbidden_axiom: []
+relation_types:
+  related_to: {}
+`);
+    await expect(parseTboxYaml(p)).rejects.toThrow(
+      /tbox\.yaml schema validation failed.*enums/
+    );
+  });
+
+  test("missing entity_types throws schema validation error mentioning entity_types", async () => {
+    const p = await writeFixture("no-entity-types.yaml", `
+id_pattern: '^[a-z]+$'
+enums:
+  tier: ["1"]
+  source: [github]
+  sensitivity: [shared]
+  status: [active]
+relation_types:
+  related_to: {}
+`);
+    await expect(parseTboxYaml(p)).rejects.toThrow(
+      /tbox\.yaml schema validation failed.*entity_types/
+    );
+  });
+
+  test("missing relation_types throws schema validation error mentioning relation_types", async () => {
+    const p = await writeFixture("no-relation-types.yaml", `
+id_pattern: '^[a-z]+$'
+enums:
+  tier: ["1"]
+  source: [github]
+  sensitivity: [shared]
+  status: [active]
+entity_types:
+  code:
+    required_axiom: [id]
+    forbidden_axiom: []
+`);
+    await expect(parseTboxYaml(p)).rejects.toThrow(
+      /tbox\.yaml schema validation failed.*relation_types/
+    );
+  });
+
+  test("id_pattern as number throws schema validation error mentioning id_pattern", async () => {
+    const p = await writeFixture("numeric-id-pattern.yaml", `
+id_pattern: 42
+enums:
+  tier: ["1"]
+  source: [github]
+  sensitivity: [shared]
+  status: [active]
+entity_types:
+  code:
+    required_axiom: [id]
+    forbidden_axiom: []
+relation_types:
+  related_to: {}
+`);
+    await expect(parseTboxYaml(p)).rejects.toThrow(
+      /tbox\.yaml schema validation failed.*id_pattern/
+    );
+  });
+});
+
 // ── Dynamic test: parseTboxYaml with a custom fixture proves no hardcoding ───
 
 describe("parseTboxYaml() with a custom fixture", () => {
