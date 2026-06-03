@@ -8,21 +8,11 @@
  */
 
 import type { FrontmatterSchema } from './legacy-types';
-import type { EntityType, PinSource, Relation, Tier, Sensitivity } from './types';
+import type { EntityType, PinSource, Relation, Tier, Frontmatter } from './types';
 
-export interface CompatFrontmatter {
-  id: string;
-  type: EntityType;
-  source: PinSource;
-  authority: string;
-  source_url: string;
-  tier: Tier;
-  tags: string;
-  sensitivity: Sensitivity;
-  created_at: string;
-  discovery_context?: string;
-  relations: Relation[];
-}
+// Canonical frontmatter minus the lifecycle fields, which the record/migrate
+// modules set — not compat. Derived from Frontmatter so the two never drift.
+export type CompatFrontmatter = Omit<Frontmatter, 'status' | 'updated_at' | 'checked_at'>;
 
 // Total mapping from slug-prefix (kind) to canonical {type, source}.
 // Fallback for any unrecognized kind: {type:'reference', source:'url'}.
