@@ -31,24 +31,33 @@ List entities you propose to record. For each, briefly state:
 
 Show this list to the user before recording. Confirm or prune before writing anything.
 
-### 3. Record confirmed entities
+### 3. Validate, then record confirmed entities
 
-For each confirmed candidate, invoke `record()` from `lib/pins/record.ts`:
+For each confirmed candidate, call `validate()` from `lib/pins/validator.ts` before writing:
 
 ```ts
+import { validate } from 'lib/pins/validator.ts';
 import { record } from 'lib/pins/record.ts';
 
-await record(entity, { location });
+const result = await validate(entity);
+if (!result.valid) {
+  // Report failure to the user — do NOT call record()
+  // result.reason and result.message describe the problem
+} else {
+  await record(entity, { location });
+}
 ```
 
 Build the `entity` with the four required body sections (`한 줄 요지`, `SSOT 위치`, `전후 컨텍스트`, `관련 cross-link`) and complete frontmatter. See the `pin-record` skill for full field reference.
+
+`record()` returns `Promise<void>` — there is no return value to inspect. If validation passed and no exception is thrown, the pin was written.
 
 ### 4. Report
 
 After recording, state:
 - How many entities were recorded
 - Their IDs and one-line summaries
-- Any that were skipped (escaped to `.escape.jsonl`) and why
+- Any that failed pre-validation (`validate()` returned `valid: false`) with the reason, so the user can decide whether to fix and retry
 
 If the manifest is git-managed (`git: true`), commit the recorded pin file(s).
 

@@ -1,6 +1,6 @@
 ---
 name: pin-query
-description: Use when looking up pins by type, tags, or source. Drives lib/pins/query.ts to retrieve matching pin entries from the knowledge graph. Supersedes the manual ls+frontmatter procedure in select-pin.
+description: Use when looking up pins by type, tags, or source. Drives lib/pins/query.ts to retrieve matching pin entries from the knowledge graph. Supersedes the legacy manual ls+frontmatter procedure.
 ---
 
 # pin-query
@@ -9,27 +9,27 @@ Retrieve pins from the knowledge graph by calling `query(pinsDir, criteria)` fro
 
 ## Retrieval model
 
-`query` is index-first with a dir-scan fallback:
+`query` calls `buildIndex()` on every invocation, scanning `pinsDir` in-memory. There is no `index.json` cache; every call performs a full directory scan and produces results directly.
 
-1. **Index path**: reads `$OMT_DIR/pins/index.json` when present. Fast; no filesystem traversal.
-2. **Fallback path**: if `index.json` is absent or unreadable, calls `buildIndex()` in-memory over the raw pin files. Produces an identical result set.
-
-Both paths cover the full entity set, including pins with no outgoing relations. Orphan pins remain findable by `type`, `tags`, or `source` — relation traversal is not required.
+The full entity set is always covered, including pins with no outgoing relations. Orphan pins remain findable by `type`, `tags`, or `source` — relation traversal is not required.
 
 ## Invocation
 
+Resolve `pinsDir` from the manifest before calling `query`:
+
 ```ts
+import { resolveManifest } from "lib/pins/manifest.ts";
 import { query } from "lib/pins/query.ts";
 
-const results = query(pinsDir, {
-  type?: EntityType,      // exact match on frontmatter.type
-  tags?: string[],        // ALL listed tags must be present (intersection, not union)
-  source?: PinSource,     // exact match on frontmatter.source
-});
+const result = await resolveManifest();
+if (result.kind === 'absent') { /* handle missing manifest */ }
+const pinsDir = result.manifest.location;
+
+const results = query(pinsDir, { type: 'code', tags: ['auth'] });
 // returns QueryResult[]  — each: { id: string, frontmatter: Frontmatter }
 ```
 
-`pinsDir` is `$OMT_DIR/pins/`. Omit any criterion to leave that field unrestricted.
+`pinsDir` is `manifest.location` as resolved by `resolveManifest()` (from `lib/pins/manifest.ts`). Omit any criterion to leave that field unrestricted.
 
 ## Presenting results
 
