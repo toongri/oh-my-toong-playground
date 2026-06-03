@@ -91,6 +91,19 @@ describe('git field', () => {
   });
 });
 
+describe('read failure propagation', () => {
+  test('pins.yaml exists as a directory (EISDIR) → throws instead of returning absent', async () => {
+    const projectRoot = makeTmpDir();
+    const userRoot = makeTmpDir();
+
+    // Place a directory at the pins.yaml path to trigger EISDIR on readFile
+    const { mkdirSync } = await import('fs');
+    mkdirSync(join(projectRoot, 'pins.yaml'));
+
+    await expect(resolveManifest({ projectRoot, userRoot })).rejects.toThrow();
+  });
+});
+
 describe('absent signal', () => {
   test('returns absent when neither project-root nor user-root has a pins.yaml', async () => {
     const projectRoot = makeTmpDir();
