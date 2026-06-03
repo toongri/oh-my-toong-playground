@@ -36,13 +36,17 @@ export function getOmtDir(): string {
  * Returns the OMT working directory path for the current project.
  * Mirrors getOmtDir's env→git→cwd derivation exactly but does NOT create
  * the directory. Safe to call in read-only contexts (e.g. manifest resolution).
+ *
+ * @param cwd - Directory to derive project name from when OMT_DIR is unset.
+ *              Defaults to process.cwd(). Pass input.cwd from hook input to
+ *              correctly resolve the user manifest for the Claude session's
+ *              working directory rather than the hook process's own cwd.
  */
-export function resolveOmtDir(): string {
+export function resolveOmtDir(cwd: string = process.cwd()): string {
   if (process.env.OMT_DIR) {
     return process.env.OMT_DIR;
   }
 
-  const cwd = process.cwd();
   const projectName = deriveProjectName(cwd);
   return `${homedir()}/.omt/${projectName}`;
 }
