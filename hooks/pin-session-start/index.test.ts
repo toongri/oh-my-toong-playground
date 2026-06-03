@@ -185,6 +185,47 @@ describe('pin-session-start entrypoint', () => {
     expect(newFiles).toHaveLength(0);
   });
 
+  it('C4: OMT_DIR unset, input.cwd differs from process.cwd → uses input.cwd for user manifest lookup', () => {
+    // The bug: when OMT_DIR is unset, resolveManifest was called with userRoot derived from
+    // process.cwd() (hook's own cwd), not from input.cwd (the Claude session's cwd).
+    // Fix: hook must pass userRoot = resolveOmtDir(input.cwd).
+
+    const fakeHome = makeTmpDir();
+    // The "Claude session" cwd — this is what we want userRoot derived from
+    const sessionCwd = makeTmpDir();
+    spawnSync('git', ['init'], { cwd: sessionCwd });
+
+    // Create a pins.yaml in the OMT dir for sessionCwd.
+    // Since sessionCwd is not a standard git repo, resolveOmtDir(sessionCwd) falls
+    // back to basename(sessionCwd). Under fakeHome, that path is fakeHome/.omt/<name>.
+    const sessionCwdName = sessionCwd.split('/').pop()!;
+    const userOmtDir = join(fakeHome, '.omt', sessionCwdName);
+    mkdirSync(userOmtDir, { recursive: true });
+    const pinsDir = join(userOmtDir, 'pins');
+    mkdirSync(pinsDir, { recursive: true });
+    writeFileSync(join(userOmtDir, 'pins.yaml'), `location: ${pinsDir}\nscope: user\n`, 'utf-8');
+
+    // The hook process runs from a different cwd (a separate tmp dir that has no pins)
+    const hookProcessCwd = makeTmpDir();
+
+    const result = runHook(undefined, {
+      inputOverride: { cwd: sessionCwd },
+      homeOverride: fakeHome,
+      cwd: hookProcessCwd,
+    });
+
+    expect(result.status).toBe(0);
+
+    const output = JSON.parse(String(result.stdout).trim());
+    // Because the manifest was found via input.cwd-derived userRoot, we expect index output
+    expect(output.hookSpecificOutput).toBeDefined();
+    expect(output.hookSpecificOutput.hookEventName).toBe('SessionStart');
+
+    const ctx: string = output.hookSpecificOutput.additionalContext;
+    // Index was found → must contain scope:user (not passive suggestion)
+    expect(ctx).toContain('scope:user');
+  });
+
   it('T16-B: manifest present → index summary injected as additionalContext (valid JSON, bounded)', () => {
     const omtDir = makeTmpDir();
     const pinsDir = join(omtDir, 'pins');

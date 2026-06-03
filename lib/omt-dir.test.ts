@@ -253,16 +253,15 @@ describe('no-mkdir sibling path matches getOmtDir', () => {
     expect(existsSync(envDir)).toBe(false);
 
     const resolved = resolveOmtDir();
+
+    // resolveOmtDir must NOT have created the directory (no-mkdir contract)
+    expect(existsSync(envDir)).toBe(false);
+
     const fromGetOmtDir = getOmtDir();
     createdOmtDirs.push(fromGetOmtDir);
 
     // Path must match
     expect(resolved).toBe(fromGetOmtDir);
-
-    // resolveOmtDir must NOT have created the directory itself;
-    // only getOmtDir (called after) created it.
-    // We verify by checking dir did not exist before getOmtDir was called.
-    // Since resolveOmtDir ran first without mkdir, we can assert the path is correct.
     expect(resolved).toBe(envDir);
   });
 
@@ -282,7 +281,7 @@ describe('no-mkdir sibling path matches getOmtDir', () => {
 
     const resolved = resolveOmtDir();
 
-    // resolveOmtDir must NOT have created the directory
+    // resolveOmtDir must NOT have created the directory (no-mkdir contract)
     expect(existsSync(expectedPath)).toBe(false);
 
     // Path must match what getOmtDir would return
@@ -291,5 +290,30 @@ describe('no-mkdir sibling path matches getOmtDir', () => {
 
     expect(resolved).toBe(fromGetOmtDir);
     expect(resolved).toBe(expectedPath);
+  });
+
+  it('custom cwd: resolveOmtDir(customCwd) uses customCwd for derivation, not process.cwd()', async () => {
+    delete process.env.OMT_DIR;
+
+    // Create two distinct non-git tmp dirs
+    const customCwd = join(testTmpBase, 'custom-cwd-dir-' + Date.now());
+    const processCwdDir = join(testTmpBase, 'process-cwd-dir-' + Date.now());
+    await mkdir(customCwd, { recursive: true });
+    await mkdir(processCwdDir, { recursive: true });
+
+    // Set process.cwd() to processCwdDir — different from customCwd
+    process.chdir(processCwdDir);
+
+    const customName = basename(customCwd).replace(/ /g, '-');
+    const expectedPath = `${homedir()}/.omt/${customName}`;
+
+    const resolved = resolveOmtDir(customCwd);
+
+    // Must use customCwd, not process.cwd()
+    expect(resolved).toBe(expectedPath);
+    expect(resolved).not.toBe(`${homedir()}/.omt/${basename(processCwdDir).replace(/ /g, '-')}`);
+
+    // Must NOT create the directory
+    expect(existsSync(expectedPath)).toBe(false);
   });
 });

@@ -15,6 +15,7 @@ import type { HookInput, HookOutput } from './types.ts';
 import { resolveManifest } from '../../lib/pins/manifest.ts';
 import { buildIndex } from '../../lib/pins/index.ts';
 import { formatAbsentContext, formatIndexContext } from './formatter.ts';
+import { resolveOmtDir } from '../../lib/omt-dir.ts';
 
 // ─── stdin helpers ────────────────────────────────────────────────────────────
 
@@ -46,14 +47,12 @@ export async function main(): Promise<void> {
 
     // Step 2: resolve manifest (project-root-first, user-root-fallback)
     // projectRoot = cwd from hook input (the Claude session's working dir)
-    // userRoot = $OMT_DIR (the user-level OMT working dir)
+    // userRoot = $OMT_DIR when set; otherwise derived from input.cwd so that
+    //            process.cwd() (hook process dir) does not shadow the session dir.
     const projectRoot = input.cwd ?? process.cwd();
-    const userRoot = process.env.OMT_DIR;
+    const userRoot = process.env.OMT_DIR ?? resolveOmtDir(projectRoot);
 
-    const manifestResult = await resolveManifest({
-      projectRoot,
-      ...(userRoot ? { userRoot } : {}),
-    });
+    const manifestResult = await resolveManifest({ projectRoot, userRoot });
 
     let additionalContext: string;
 
