@@ -8,6 +8,7 @@ export type ValidationReason =
   | "missing_field"
   | "forbidden_field"
   | "enum_violation"
+  | "unknown_relation_type"
   | "relation_domain_violation"
   | "relation_range_violation"
   | "id_pattern_violation";
@@ -84,7 +85,7 @@ export async function validate(
   }
 
   // 4. Closure enum constraints
-  const enumFields = ["tier", "source", "sensitivity", "status"] as const;
+  const enumFields = Object.keys(tbox.enums) as (keyof typeof tbox.enums)[];
   for (const field of enumFields) {
     const value = (fm as unknown as Record<string, unknown>)[field];
     if (value === undefined || value === null) continue; // absent → missing_field already caught or optional
@@ -104,8 +105,13 @@ export async function validate(
     if (relation.type === "related_to") continue;
 
     const relDef = tbox.relation_types[relation.type];
-    // Unknown relation types are not rejected here (out of scope for this validator)
-    if (!relDef) continue;
+    if (!relDef) {
+      return {
+        valid: false,
+        reason: "unknown_relation_type",
+        message: `relation type "${relation.type}" is not defined in the schema`,
+      };
+    }
 
     // If no domain defined, relation is unconstrained
     if (!relDef.domain || relDef.domain.length === 0) continue;

@@ -170,6 +170,39 @@ describe("validate", () => {
     }
   });
 
+  test("unknown relation type is rejected", async () => {
+    // A typo relation type not in tbox.relation_types must fail with unknown_relation_type
+    const entity = makeEntity({
+      relations: [{ target: "code-some-target", type: "documnts" as any }],
+    });
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("unknown_relation_type");
+    }
+  });
+
+  test("related_to is still exempt from unknown relation type check", async () => {
+    // related_to has no domain/range and must continue to pass unconditionally
+    const entity = makeEntity({
+      relations: [{ target: "concept-some-target", type: "related_to" }],
+    });
+    const result = await validate(entity);
+    expect(result.valid).toBe(true);
+  });
+
+  test("enum check covers all tbox.enums keys dynamically", async () => {
+    // An invalid 'status' value must be caught — status is in tbox.enums
+    const entity = makeEntity({ status: "invalid-status" as any });
+    const result = await validate(entity);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reason).toBe("enum_violation");
+      expect(result.message).toContain("status");
+      expect(result.message).toContain("invalid-status");
+    }
+  });
+
   test("legacy regression", async () => {
     // Fixture mimicking a real legacy pin AFTER compat translation.
     // Canonical shape: id, type, source, tier, created_at, relations[], authority, sensitivity, source_url, tags
