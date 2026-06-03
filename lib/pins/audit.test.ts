@@ -291,6 +291,67 @@ describe("stale", () => {
     expect(stale.length).toBe(1);
   });
 
+  test("reference without checked_at uses created_at for staleness", async () => {
+    // created_at is 100d ago, checked_at absent; tier2 threshold is 90d → stale
+    const now = new Date(isoOffset(BASE, 100));
+    const entities: Entity[] = [
+      makeEntity("concept-ref-no-checked", {
+        type: "reference",
+        tier: "2",
+        created_at: BASE,
+        checked_at: undefined as any,
+      }),
+    ];
+
+    const report = await audit(entities, { now });
+
+    const stale = report.findings.filter(
+      (f) => f.type === "stale" && f.entityId === "concept-ref-no-checked"
+    );
+    expect(stale.length).toBe(1);
+    expect(stale[0].severity).toBe("error");
+  });
+
+  test("reference without checked_at and within threshold is NOT stale", async () => {
+    // created_at is 50d ago, no checked_at; tier2 threshold is 90d → NOT stale
+    const now = new Date(isoOffset(BASE, 50));
+    const entities: Entity[] = [
+      makeEntity("concept-ref-no-checked-fresh", {
+        type: "reference",
+        tier: "2",
+        created_at: BASE,
+        checked_at: undefined as any,
+      }),
+    ];
+
+    const report = await audit(entities, { now });
+
+    const stale = report.findings.filter(
+      (f) => f.type === "stale" && f.entityId === "concept-ref-no-checked-fresh"
+    );
+    expect(stale.length).toBe(0);
+  });
+
+  test("reference without checked_at and now absent is skipped (no stale finding)", async () => {
+    // No `now` injected → detectStale must skip; no stale findings emitted
+    const entities: Entity[] = [
+      makeEntity("concept-ref-no-now", {
+        type: "reference",
+        tier: "2",
+        created_at: BASE,
+        checked_at: undefined as any,
+      }),
+    ];
+
+    // audit called without opts.now
+    const report = await audit(entities);
+
+    const stale = report.findings.filter(
+      (f) => f.type === "stale" && f.entityId === "concept-ref-no-now"
+    );
+    expect(stale.length).toBe(0);
+  });
+
   test("tier3 threshold is 30d", async () => {
     const notStaleNow = new Date(isoOffset(BASE, 29));
     const staleNow = new Date(isoOffset(BASE, 31));
