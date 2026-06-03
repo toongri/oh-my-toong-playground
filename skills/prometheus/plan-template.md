@@ -10,11 +10,11 @@ Read this file when you want to consult a worked example. You do NOT need to rea
 
 ```
 - [ ] 3. Implement UserService
-  - What to do: UserService manages User lifecycle — create, read, update, delete.
-    Create validates email presence and uniqueness; duplicate returns domain error.
-    Read-by-ID returns null when not found (not exception). All operations delegate
-    to UserRepository. Error cases surface as typed result objects matching existing
-    service convention in product-service.ts (confirmed in interview).
+  - What to do: Implement UserService managing the User lifecycle, delegating all persistence to UserRepository.
+    - `create` — validate email presence + uniqueness; a duplicate returns a typed domain error (not a throw)
+    - `read` by ID — return null when not found, not an exception
+    - `update` / `delete` — standard lifecycle, same repository delegation
+    - Error cases surface as typed result objects, matching the `product-service.ts` convention (confirmed in interview)
   - Must NOT do: Add caching or event publishing
   - Files: src/service/user-service.ts, src/service/index.ts
   - References (CRITICAL):
