@@ -19,17 +19,50 @@ import { basename, dirname, resolve } from 'path';
  * Creates the directory if it does not exist.
  */
 export function getOmtDir(): string {
-  if (process.env.OMT_DIR) {
-    const dir = process.env.OMT_DIR;
-    mkdirSync(dir, { recursive: true });
-    return dir;
-  }
-
-  const cwd = process.cwd();
-  const projectName = deriveProjectName(cwd);
-  const dir = `${homedir()}/.omt/${projectName}`;
+  const dir = resolveOmtDir();
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/**
+ * Returns the OMT working directory path for the current project.
+ * Mirrors getOmtDir's env→git→cwd derivation exactly but does NOT create
+ * the directory. Safe to call in read-only contexts (e.g. manifest resolution).
+ *
+ * @param cwd - Directory to derive project name from when OMT_DIR is unset.
+ *              Defaults to process.cwd(). Pass input.cwd from hook input to
+ *              correctly resolve the user manifest for the Claude session's
+ *              working directory rather than the hook process's own cwd.
+ */
+export function resolveOmtDir(cwd: string = process.cwd()): string {
+  if (process.env.OMT_DIR) {
+    return process.env.OMT_DIR;
+  }
+
+  const projectName = deriveProjectName(cwd);
+  return `${homedir()}/.omt/${projectName}`;
+}
+
+/**
+ * Returns the project root directory for the given cwd.
+ *
+ * Resolves to the git worktree top-level so a session launched from a
+ * subdirectory still resolves to the repo root (matching where pin-setup
+ * tells users to place pins.yaml). Falls back to cwd when not inside a git
+ * repository. Performs no filesystem writes.
+ *
+ * @param cwd - Directory to resolve from. Defaults to process.cwd().
+ */
+export function resolveProjectRoot(cwd: string = process.cwd()): string {
+  try {
+    return execSync('git rev-parse --show-toplevel', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    return cwd;
+  }
 }
 
 function deriveProjectName(cwd: string): string {

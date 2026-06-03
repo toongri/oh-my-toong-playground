@@ -1,0 +1,50 @@
+---
+name: pin-audit
+description: Use when checking pin graph health. Runs lib/pins/audit to detect dangling relations, duplicates, invalid entities, stale entries, and orphans, then presents a ranked report.
+---
+
+# pin-audit
+
+Run a read-only health check over the pin knowledge graph by calling `audit(input, opts?)` from `lib/pins/audit.ts`.
+
+## Invocation
+
+```ts
+import { audit } from "lib/pins/audit.ts";
+import { resolveManifest } from "lib/pins/manifest.ts";
+
+const result = await resolveManifest();
+if (result.kind !== "resolved") throw new Error("pins manifest absent");
+
+const report: AuditReport = await audit(
+  result.manifest.location, // string path resolved from pins.yaml — or an Entity[] array for scoped checks
+  { now: new Date() }       // required for stale detection; omit to skip stale checks entirely
+);
+// report.findings: AuditFinding[]
+```
+
+`audit` is read-only. It does not write, delete, or modify any file.
+
+**`now` omission disables stale detection.** When `opts.now` is absent, `detectStale` skips every entity — no `stale` findings will appear in the report. Always pass `{ now: new Date() }` unless you intentionally want to suppress staleness.
+
+## Detector set and severity
+
+Findings are ordered highest-signal first in `report.findings`:
+
+| Rank | Type | Severity | What it means |
+|------|------|----------|---------------|
+| 1 | `dangling` | error | A relation's `target` id is absent from the in-scope entity set. Primary signal — fix before anything else. |
+| 2 | `duplicate` | error | Two entities share the same `source_url`. |
+| 3 | `invalid` | error | Entity fails schema `validate()`. |
+| 4 | `stale` | error | Entity exceeds its tier threshold (tier1=180d, tier2=90d, tier3=30d). `reference` type uses `checked_at ?? created_at` (falls back to `created_at` when `checked_at` is absent); all other types use `created_at`. |
+| 5 | `orphan` | warning | Entity has no outgoing relations. Soft signal only — never a violation. |
+
+Dangling relations are the primary check: a broken link is a structural defect; an isolated node is merely informational.
+
+## Presenting results
+
+1. Group findings by severity: errors first, then warnings.
+2. Within errors, preserve the ranked order above (dangling, duplicate, invalid, stale).
+3. For each finding, report: `type`, `entityId`, and `message`. For `dangling`, also include `targetId`. For `duplicate`, also include `conflictsWith`.
+4. Treat `orphan` findings as soft warnings at the end of the report, not violations requiring action.
+5. If `findings` is empty, report "audit clean — no issues found".
