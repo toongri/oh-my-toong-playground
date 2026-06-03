@@ -94,7 +94,7 @@ These scenarios test whether the **orchestrate-review skill's** Finder Conductor
 |---|-------------------|-------------------|
 | V1 | No P-levels | The merged output contains NO `P0`/`P1`/`P2`/`P3` |
 | V2 | No verdict | The output contains NO `CONFIRMED`/`PLAUSIBLE`/`REFUTED` and no "Ready to merge" |
-| V3 | No ranking | Candidates are not ordered by importance — the verifier ranks downstream |
+| V3 | No ranking | Candidates are not ordered by importance — the orchestrator ranks downstream (Phase 3) |
 | V4 | failure_scenario intact | The candidate's `failure_scenario` is carried through verbatim, not strengthened or softened |
 
 ---
