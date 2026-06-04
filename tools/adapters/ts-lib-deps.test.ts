@@ -6,6 +6,7 @@ import os from "os";
 import {
   resolveTsLibDependencies,
   collectRequiredLibModules,
+  findRelativeLibImports,
 } from "./ts-lib-deps.ts";
 
 // ---------------------------------------------------------------------------
@@ -319,5 +320,54 @@ describe("relative import tracking inside lib modules", () => {
     expect(result.has(bLib)).toBe(true);
     expect(result.has(cLib)).toBe(true);
     expect(result.size).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findRelativeLibImports (deployment-hazard detector)
+// ---------------------------------------------------------------------------
+
+describe("findRelativeLibImports", () => {
+  it("컴포넌트가 상대경로로 lib을 import하면 위반 specifier 반환", async () => {
+    const compFile = path.join(platformDir, "comp.ts");
+    await writeFile(compFile, "import { x } from '../lib/foo.ts';\n");
+
+    const offenders = await findRelativeLibImports(compFile, libDir);
+    expect(offenders).toEqual(["../lib/foo.ts"]);
+  });
+
+  it("@lib/ 별칭 import는 위반 아님", async () => {
+    const compFile = path.join(platformDir, "comp.ts");
+    await writeFile(compFile, 'import { x } from "@lib/foo";\n');
+
+    expect(await findRelativeLibImports(compFile, libDir)).toEqual([]);
+  });
+
+  it("컴포넌트 로컬 상대 import(./types)는 lib 밖이라 위반 아님", async () => {
+    const compFile = path.join(platformDir, "comp.ts");
+    await writeFile(compFile, "import { x } from './types.ts';\n");
+
+    expect(await findRelativeLibImports(compFile, libDir)).toEqual([]);
+  });
+
+  it("lib 내부 파일의 상대 import는 정상 스타일이므로 위반 아님", async () => {
+    const libFile = path.join(libDir, "a.ts");
+    await writeFile(libFile, "import { b } from './b.ts';\n");
+
+    expect(await findRelativeLibImports(libFile, libDir)).toEqual([]);
+  });
+
+  it("*.test.ts 파일은 배포 대상이 아니므로 검사 제외", async () => {
+    const testFile = path.join(platformDir, "comp.test.ts");
+    await writeFile(testFile, "import { x } from '../lib/foo.ts';\n");
+
+    expect(await findRelativeLibImports(testFile, libDir)).toEqual([]);
+  });
+
+  it("'lib' 부분문자열 형제 디렉토리(../calibration)는 오탐하지 않음", async () => {
+    const compFile = path.join(platformDir, "comp.ts");
+    await writeFile(compFile, "import { x } from '../calibration/helper.ts';\n");
+
+    expect(await findRelativeLibImports(compFile, libDir)).toEqual([]);
   });
 });
