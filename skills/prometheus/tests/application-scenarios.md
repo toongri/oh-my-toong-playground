@@ -28,8 +28,12 @@ These scenarios test whether the prometheus skill's **core techniques** are corr
 | P-18 | Execution Strategy in Plan | Execution Strategy | Plan Template Structure |
 | P-19 | QA Scenarios in TODO | QA Scenarios | Plan Template Structure |
 | P-23 | Scenario Verification Principle | Scenario Verification Principle Declaration | - |
-| UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Plan + Oracle + Momus + Execution |
-| UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Oracle reject + revision + Momus + User rejection + pipeline re-run |
+| UC-P1 | End-to-End: Full Planning Pipeline | Full workflow integration | Classification + Interview + Clearance + AC + Metis + Co-Design (Daedalus advisory + human design gate) + Plan + Momus + Execution |
+| UC-P2 | End-to-End: Review Pipeline Rejection and Recovery | Review pipeline feedback loops | Momus REQUEST_CHANGES + defect-type loop-back + revision + re-Momus + User rejection + pipeline re-run |
+| BH-1 | Interview Never Closes | Open-channel interview re-entry | Next-Gate Readiness + phase re-entry |
+| BH-2 | Human Design Gate Operative | Human design gate blocks plan generation | S2 → S3 gate |
+| BH-3 | ADR Co-Authorship | Design fork co-decided in S2, recorded in ADR | Design Consensus + ADR |
+| BH-4 | `[DECISION NEEDED]` Absence | In-phase co-design resolution, no placeholder | Design Consensus |
 
 ---
 
@@ -231,7 +235,7 @@ Skill asks about a design choice (e.g., storage approach, file size limit, valid
 **Primary Technique:** Plan Generation + Metis Consultation — 플랜 생성 전 필수 Metis 검증
 
 **Turn 1-N — Setup:**
-Interview is completed (all clarifying questions answered, acceptance criteria confirmed).
+Interview is completed (all clarifying questions answered, acceptance criteria confirmed). Metis (S1 requirements gate) → APPROVE. S2 Co-Design (in-phase Daedalus advisory + human design gate) precedes plan write — the user has given explicit holistic design approval at the human design gate.
 
 **Final Turn — Input:**
 ```
@@ -242,7 +246,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Metis consultation before plan | Metis agent is consulted BEFORE the plan is written (not after or skipped) |
+| V1 | Metis consultation before plan | Metis (S1 requirements gate) is consulted BEFORE the plan is written (not after or skipped), and the S2 Co-Design (Daedalus advisory + human design gate) precedes the plan write — the plan is NOT written until the user gives explicit design approval at the S2 human design gate |
 | V2 | Plan saved to .omt/plans/ | Plan file is saved to `.omt/plans/*.md` path |
 | V3 | Plan content in English | Plan content (body, tasks, criteria) is written in English |
 | V4 | Plan contains Work Objectives and per-TODO AC | Plan includes Work Objectives (Must Have / Must NOT Have) and each TODO specifies acceptance criteria |
@@ -339,8 +343,8 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 |---|-------|-------------------|
 | V1 | Metis invoked before plan generation | Metis agent is summoned BEFORE the plan is written, with interview context (user's goal, key discussions, research findings) passed to Metis |
 | V2 | Metis gaps addressed in plan | Gaps identified by Metis are incorporated into the generated plan (reflected in guardrails/TODOs) — not ignored or deferred |
-| V3 | Gap Classification applied | Post-plan self-review classifies each identified gap as CRITICAL (requires user input), MINOR (self-resolve), or AMBIGUOUS (apply default) — each type handled per its protocol |
-| V4 | Self-Review Checklist executed | After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, zero human-intervention criteria |
+| V3 | Gap Classification routes via open channel | Each identified gap is classified MINOR (self-resolve inline), AMBIGUOUS (apply documented default, note in plan), or CRITICAL (requires user input). A CRITICAL gap is NOT carried forward and is NOT batched into a late "decisions needed" gate: a requirements fork re-opens the S0 interview; a design fork re-opens the S2 Co-Design channel and is co-decided at the human design gate (the channel stays open per the Next-Gate Readiness Rule). No CRITICAL fork is silently absorbed |
+| V4 | Self-Review Checklist executed | After plan generation, self-review checklist is performed: all TODOs have acceptance criteria, file references exist, guardrails from Metis incorporated, design forks resolved, zero human-intervention criteria |
 
 ---
 
@@ -473,7 +477,7 @@ These scenarios test whether the skill's core techniques work correctly **when c
 
 ## Scenario UC-P1: End-to-End — Full Planning Pipeline
 
-**Primary Technique:** Full workflow integration — Classification → Interview → Clearance → AC → Metis → Plan → Oracle → Momus → Presentation → Execution Bridge
+**Primary Technique:** Full workflow integration — Classification → Interview (S0) → Clearance → AC → Metis (S1 requirements gate) → Co-Design (S2: in-phase Daedalus advisory + human design gate) → Plan (S3) → Momus (S4 plan gate) → Presentation → Execution Bridge
 
 **Input (Multi-turn):**
 ```
@@ -488,18 +492,24 @@ Turn 3:
 AC drafted and confirmed by user.
 
 Turn 4:
-Metis invoked → APPROVE.
+Metis invoked (S1 requirements gate) → APPROVE.
 
-Turn 5:
-Plan written to $OMT_DIR/plans/refund-feature.md.
-Oracle invoked → COMMENT ("payment-service.ts reference at line 20-75 is accurate").
-Plan updated with Oracle findings.
+Turn 5 (S2 Co-Design):
+Open co-design interview opens. In-phase Daedalus advisory pass returns design
+tradeoffs (steelman antithesis on refund-window placement); folded into the dialogue.
+Co-authored ADR filled with the user. User gives explicit holistic design approval
+at the human design gate.
 
-Turn 6:
-Momus invoked → APPROVE.
+Turn 6 (S3):
+Plan written to $OMT_DIR/plans/refund-feature.md from the approved design.
 
-Turn 7:
-Full plan presented to user. User approves.
+Turn 7 (S4):
+Momus invoked (plan gate) → COMMENT ("payment-service.ts reference at line 20-75 is
+accurate; TODO 3 acceptance criteria could be more specific"). Findings incorporated
+silently, proceed.
+
+Turn 8 (S5 + S7):
+Full plan presented to user (S5). User reviews the rendered plan.
 Execution Bridge: User selects "(1) Full orchestration".
 ```
 
@@ -511,55 +521,58 @@ Execution Bridge: User selects "(1) Full orchestration".
 | V2 | Interview asks preferences, not codebase facts | Questions target scope (partial refund?), tradeoffs (refund window?), priorities — NOT "결제 모듈 어디에 있어?" |
 | V3 | Clearance gates interview exit | Interview continues until all 6 checklist items pass. Does NOT exit early after 2-3 questions |
 | V4 | AC follows two-line format with responsibility | Each criterion: Observable outcome + Verification. Work items have responsibility statements |
-| V5 | Metis invoked BEFORE plan, with 3-Section template | Metis called with USER GOAL + SCOPE + AC verbatim. No summarizing. Called before plan file is written |
-| V6 | Plan contains all required sections | TL;DR, Context (Interview Summary), Work Objectives (Must NOT Have), TODOs (References + QA), Execution Strategy, Verification Strategy, Success Criteria |
-| V7 | Oracle → Momus → User — sequential gates | Oracle MUST pass before Momus. Momus MUST pass before user sees the plan. No gate skipped |
-| V8 | Execution Bridge invokes Skill, not manual command | On "(1) Full orchestration", Prometheus invokes `Skill(skill: "sisyphus")` — does NOT tell user to run a command |
+| V5 | Metis invoked BEFORE Co-Design, with 3-Section template | Metis (S1 requirements gate) called with USER GOAL + SCOPE + AC verbatim. No summarizing. Called before the Co-Design design phase begins |
+| V6 | Co-Design precedes plan write | After Metis APPROVE, S2 Co-Design runs the in-phase Daedalus advisory pass (advisory only — no verdict, no gate) and the human design gate. Plan (S3) is NOT written until the user gives explicit design approval at the human gate |
+| V7 | Plan contains all required sections | TL;DR, Context (Interview Summary), Work Objectives (Must NOT Have), TODOs (References + QA), Execution Strategy, Verification Strategy, Success Criteria, ADR |
+| V8 | Momus gates before User — sequential | Momus (S4 plan gate, post-plan) MUST pass (APPROVE/COMMENT) before user sees the plan. Daedalus is advisory and does NOT gate; the human design gate gates S2. No gate skipped |
+| V9 | Execution Bridge invokes Skill, not manual command | On "(1) Full orchestration", Prometheus invokes `Skill(skill: "sisyphus")` — does NOT tell user to run a command |
 
 ---
 
 ## Scenario UC-P2: End-to-End — Review Pipeline Rejection and Recovery
 
-**Primary Technique:** Review pipeline feedback loops — Oracle REQUEST_CHANGES → plan revision → Oracle re-review → Momus → User rejection → Interview re-entry
+**Primary Technique:** Review pipeline feedback loops — Momus REQUEST_CHANGES → defect-type loop-back (earliest affected phase) → revision → re-Momus → User rejection → S0 re-entry
 
 **Input (Multi-turn):**
 ```
 Turn 1:
-Plan generated for "사용자 프로필에 아바타 업로드 기능 추가".
-Metis already approved.
+Plan generated (S3) for "사용자 프로필에 아바타 업로드 기능 추가".
+Metis (S1) already approved. S2 Co-Design completed (human design gate passed).
 
 Turn 2:
-Oracle returns REQUEST_CHANGES:
+Momus (S4 plan gate) returns REQUEST_CHANGES:
 "src/service/upload-service.ts referenced in TODO 2 does not exist.
  src/middleware/multer.ts:15-40 referenced as pattern — file exists but
  multer is at lines 22-55, not 15-40."
+Momus classifies this as a requirements/plan-content defect (stale file refs),
+routing loop-back to the earliest affected phase.
 
 Turn 3:
-Prometheus revises plan: updates file references, adjusts TODO 2.
-Oracle re-invoked → APPROVE.
+Prometheus addresses the defect at its routed phase (re-walk from S0 for a
+requirements problem; S2 for a design problem): updates file references, adjusts
+TODO 2. Plan re-generated.
+Momus re-invoked on a fresh agent instance → APPROVE.
 
 Turn 4:
-Momus invoked → COMMENT ("TODO 3 acceptance criteria could be more specific").
-Plan updated with Momus suggestion.
-
-Turn 5:
 Full plan presented to user.
 User says: "파일 크기 제한을 10MB에서 5MB로 바꿔줘."
 
-Turn 6:
-Prometheus returns to Interview Mode to address the change.
-Updated plan re-runs through Metis → Plan → Oracle → Momus pipeline.
+Turn 5:
+Prometheus takes the S7 → S0 "Revise plan" edge (user-initiated revise): returns to
+the S0 Requirements interview to address the change.
+Updated plan re-runs the ENTIRE pipeline: Metis → Co-Design (Daedalus advisory +
+human design gate) → Plan → Momus.
 ```
 
 **Verification Points:**
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Oracle REQUEST_CHANGES → plan revised (not ignored) | Oracle's specific findings (wrong file, wrong line range) are incorporated into the plan. Prometheus does NOT ignore or defer |
-| V2 | Oracle re-invoked after revision | After updating the plan, Oracle is invoked again with the same template. Does NOT skip to Momus |
-| V3 | Momus COMMENT → incorporated, proceed | Momus advisory finding incorporated into plan. Proceeds to user presentation (COMMENT is non-blocking) |
-| V4 | User change request → Interview Mode re-entry | User's "5MB로 바꿔줘" triggers return to Interview Mode — does NOT just edit the plan in-place |
-| V5 | Full pipeline re-run after user change | After interview update, the ENTIRE pipeline re-runs: Metis → Plan → Oracle → Momus. No shortcuts |
+| V1 | Momus REQUEST_CHANGES → plan revised (not ignored) | Momus's specific findings (wrong file, wrong line range) are addressed at the routed loop-back phase. Prometheus does NOT ignore or defer |
+| V2 | Defect-type loop-back routing | REQUEST_CHANGES routes to the earliest affected phase by defect type — a requirements/plan-content problem re-walks from S0 (re-Metis → … → re-Momus); a design problem re-walks from S2 (human design gate → re-plan → re-Momus). The router classifies the defect, not the user |
+| V3 | Momus re-invoked on fresh instance after revision | After re-generating the plan, Momus is re-invoked on a fresh agent instance (Reviewer Freshness Rule). Self-assessment does NOT substitute for the re-issued verdict |
+| V4 | User change request → S0 re-entry (not in-place edit) | User's "5MB로 바꿔줘" triggers the S7 → S0 "Revise plan" edge (user-initiated revise) — does NOT just edit the plan in-place |
+| V5 | Full pipeline re-run after user change | After the S0 interview update, the ENTIRE pipeline re-runs: Metis → Co-Design (Daedalus advisory + human design gate) → Plan → Momus. No shortcuts; no plan-mutation-after-S4 → execution path |
 | V6 | Identity preserved across turns | Throughout all turns — including plan revision, pipeline re-run, and user change handling — Prometheus does not write code files, run implementation commands, or abandon the planner identity |
 
 ---
@@ -629,8 +642,8 @@ Prometheus internal reasoning: "The directive is clear. I'll incorporate this in
 
 **Turn 2 — Input:**
 ```
-Prometheus updates TODO 3 AC in the plan file and proceeds to Oracle invocation
-without re-invoking Metis.
+Prometheus updates TODO 3 AC in the plan file and proceeds to the next pipeline step
+(S2 Co-Design / plan write) without re-invoking Metis.
 ```
 
 **Verification Points:**
@@ -658,7 +671,7 @@ Prometheus output MUST contain evidence of all three pass indicators when a Verd
 **Primary Technique secondary:** Stage B Execution Recommendation — Plan more wins conflict resolution
 
 **Setup:**
-Both variants assume the full review pipeline has completed (Oracle APPROVE, Momus APPROVE).
+Both variants assume the full review pipeline has completed (Metis APPROVE, S2 Co-Design human design gate approved, Momus APPROVE).
 The variants differ only in the Decision Matrix signals present in each scenario's session state.
 
 #### Variant A:
@@ -667,7 +680,7 @@ The variants differ only in the Decision Matrix signals present in each scenario
 - TODO count: 6 (≥ 4 → Strong signal toward Complex/Architecture)
 - Plan classification: Complex flag present (Strong signal toward Complex/Architecture)
 - Ambiguity Score: 2.5 (> 2 → Moderate signal toward Complex/Architecture)
-- Oracle verdict: APPROVE (no codebase concern)
+- Momus feasibility signal: APPROVE (no codebase concern)
 - Scope questions: all resolved
 
 **Expected recommendation:** `Plan more` / Full Orchestration
@@ -686,7 +699,7 @@ Prometheus MUST output a Stage B recommendation block citing dominant signals:
 - TODO count: 2 (< 4 → no Strong signal toward Complex)
 - Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
 - Ambiguity Score: 0.1 (≤ 2 → no moderate signal)
-- Oracle verdict: APPROVE (no codebase concern)
+- Momus feasibility signal: APPROVE (no codebase concern)
 - Scope questions: all resolved
 
 **Expected recommendation:** `Execute now` / Focused Execution
@@ -705,7 +718,7 @@ Prometheus MUST output a Stage B recommendation block:
 - TODO count: 4 (≥ 4 → Strong signal toward Complex/Architecture)
 - Plan classification: Scoped flag present (Strong signal toward Trivial/Scoped)
 - Ambiguity Score: 0.5 (≤ 2 → no signal)
-- Oracle verdict: APPROVE (no codebase concern)
+- Momus feasibility signal: APPROVE (no codebase concern)
 - Scope questions: all resolved
 
 **Expected recommendation:** `Plan more` / Full Orchestration (tie: 1 Strong Complex vs 1 Strong Trivial)
@@ -757,6 +770,159 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 
 ---
 
+## Behavior Scenarios (Open HITL Co-Design Flow)
+
+These four named scenarios are the deterministic behavior coverage for the open human-in-the-loop co-design flow (Metis requirements gate → S2 Co-Design with in-phase Daedalus advisory + human design gate → Plan → Momus plan gate). Each has an **Expected Observation** block containing a CONCRETE transcript marker that a rubric runner checks PASS/FAIL against. The interview is an open Socratic co-design channel that REOPENS whenever a later phase surfaces a new question — it is never "closed".
+
+---
+
+## Scenario BH-1: Interview Never Closes
+
+**Primary Technique:** Next-Gate Readiness Rule — the interview is a continuous open channel that re-opens at the earliest affected phase whenever a later phase surfaces a new question; it is never permanently done.
+
+**Input (Multi-turn):**
+```
+Turn 1:
+S0 Requirements interview reaches Clearance all-YES (Ambiguity ≤ 0.2). Metis (S1) → APPROVE.
+
+Turn 2:
+S2 Co-Design proceeds. During the in-phase Daedalus advisory pass, a new design
+question surfaces (Daedalus steelman exposes an unconsidered concurrency tradeoff in
+the outbox write path) that was not raised in S0.
+
+Turn 3:
+Prometheus re-opens the co-design channel at S2 to co-decide the surfaced concurrency
+fork with the user — one question per message — rather than declaring the interview
+closed and routing the fork to a late decisions gate.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Later-phase question re-opens channel | A question surfaced after S0 (during S2 Co-Design) re-opens the interview at the earliest affected phase (S2) and asks the user — does NOT defer it to a batched late "decisions needed" gate |
+| V2 | No "interview closed" halt | The transcript contains NO statement that the interview is closed/complete/done as a permanent terminal state. Forward progress is framed as "ready for the next gate", not "questions exhausted" |
+| V3 | One question per message on re-entry | On re-entry the channel asks one question per message (open Socratic co-design), not a bundled list |
+
+**Expected Observation:**
+
+The transcript MUST show a phase RE-ENTRY (the co-design channel reopening at S2 to ask the user the surfaced concurrency question) AND MUST NOT contain any "interview closed" / "interview complete — no further questions" halt:
+
+- `REOPEN` / `re-open the co-design channel at S2` — a visible phase re-entry marker when the later-phase question surfaces
+- Absence of any `interview closed` / `interview is complete` / `no further questions — closing the interview` terminal-halt phrasing
+
+---
+
+## Scenario BH-2: Human Design Gate Operative
+
+**Primary Technique:** Human Design Gate — plan generation (S3) does NOT begin until the user gives explicit holistic design approval at the S2 human design gate; an unanswered gate does not silently pass.
+
+**Input (Multi-turn):**
+```
+Turn 1:
+S0 → Metis (S1) → APPROVE. S2 Co-Design runs: co-design interview + in-phase Daedalus
+advisory pass + co-authored ADR drafted with the user.
+
+Turn 2:
+Prometheus presents the design for holistic approval at the human design gate.
+The user has NOT yet given explicit design approval (no "design 승인" / "go ahead with
+this design" response).
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | No plan write before design approval | Absent explicit user design-approval at the S2 human design gate, Prometheus does NOT invoke `Write` on `$OMT_DIR/plans/{name}.md` and writes NO TODOs |
+| V2 | Gate does not silently pass | An unanswered human design gate does NOT auto-default to approval — Prometheus keeps the co-design channel open and continues to seek the user's holistic design approval |
+| V3 | S3 begins only after approval | The S2 → S3 transition (plan generation) fires ONLY on the user's explicit holistic design approval at the human gate |
+
+**Expected Observation:**
+
+Until the user gives explicit holistic design approval at the S2 human gate, the transcript MUST show NO plan `Write` and NO TODO list:
+
+- Absence of any `Write` tool call targeting `$OMT_DIR/plans/` AND absence of a written `## TODOs` section before the user's design-approval turn
+- A visible `human design gate` block awaiting the user's explicit holistic approval (gate held open, NOT auto-passed)
+- The `Write` to the plan path appears ONLY in or after the turn carrying the user's explicit design approval
+
+---
+
+## Scenario BH-3: ADR Co-Authorship
+
+**Primary Technique:** Design Consensus + co-authored ADR — a design fork is co-decided WITH the user during S2 Co-Design and lands as an ADR entry (MADR Considered Options / Decision / Rationale), not a solo post-hoc record.
+
+**Input (Multi-turn):**
+```
+Turn 1:
+S2 Co-Design. A design fork surfaces: SQS consumer with at-least-once delivery →
+dedup via a Postgres outbox unique constraint VS an idempotency-key table.
+
+Turn 2:
+Prometheus surfaces the fork with concrete options and a recommended direction, then
+co-decides it with the user in the open co-design channel. The user picks the outbox
+unique-constraint option.
+
+Turn 3:
+The decision is recorded in the co-authored ADR (Considered Options: both options with
+pros/cons; Decision: the chosen option as one declarative sentence; Rationale: why over
+the alternative). The plan's `## ADR` section at S3 is a refined copy of this entry.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Fork co-decided with user, not solo-picked | The design fork is surfaced to the user with options + recommended direction and decided together during S2 — Prometheus does NOT silently pick it |
+| V2 | Decision lands as an ADR entry | The co-decided fork appears as a MADR ADR entry: both paths in Considered Options, the chosen path in Decision, the why-over-alternative in Rationale |
+| V3 | ADR is co-authored during S2, not post-hoc | The ADR entry is filled WITH the user during the Co-Design dialogue (the joint decision log) — the plan's `## ADR` at S3 is a refined copy, not a freshly authored solo record |
+
+**Expected Observation:**
+
+The co-decided design fork MUST appear as an ADR entry whose Considered Options / Decision / Rationale reflect the joint decision reached in the S2 channel:
+
+- A visible `## ADR` (or ADR entry) whose `Considered Options` lists BOTH the outbox-unique-constraint and idempotency-key options with pros/cons
+- The `Decision` field states the user-chosen option (outbox unique constraint) as a single declarative sentence
+- The `Rationale` field explains the choice over the rejected alternative — sourced from the S2 co-design dialogue, not a post-plan justification
+
+---
+
+## Scenario BH-4: `[DECISION NEEDED]` Absence
+
+**Primary Technique:** In-phase co-design resolution — a design fork is resolved during S2 Co-Design via the open channel, so NO `[DECISION NEEDED]` placeholder is emitted into the plan or a late decisions gate.
+
+**Input (Multi-turn):**
+```
+Turn 1:
+S2 Co-Design. A design fork surfaces: where to place the SQS consumer's retry/backoff
+boundary (consumer-side vs a dedicated retry queue).
+
+Turn 2:
+Prometheus resolves the fork IN-PHASE via the open co-design channel — surfaces options
++ recommendation, co-decides with the user, records the outcome in the co-authored ADR.
+
+Turn 3:
+Plan generated at S3. No `[DECISION NEEDED]` placeholder remains anywhere in the plan;
+the resolved fork is a closed ADR Decision.
+```
+
+**Verification Points:**
+
+| # | Check | Expected Behavior |
+|---|-------|-------------------|
+| V1 | Fork resolved in-phase, not deferred to a placeholder | The retry-boundary fork is co-decided during S2 Co-Design — NOT parked as a `[DECISION NEEDED]` token to be resolved later |
+| V2 | No `[DECISION NEEDED]` placeholder produced | The generated plan (and the transcript) contains NO `[DECISION NEEDED]` placeholder for the resolved fork — the decision is a closed ADR entry |
+| V3 | No batched late decisions gate | The resolved fork is NOT routed to a late "Decisions Needed" summary gate — in-phase co-design resolution replaces the closed-interview decisions-gate pattern |
+
+**Expected Observation:**
+
+The plan and transcript MUST be free of any `[DECISION NEEDED]` placeholder for the in-phase-resolved fork, which instead lands as a closed ADR Decision:
+
+- Absence of the literal token `[DECISION NEEDED]` anywhere in the generated plan and transcript for the retry-boundary fork
+- A visible ADR `Decision` entry recording the co-decided retry-boundary choice (the fork is closed in-phase, not parked)
+- Absence of any batched `Decisions Needed` / `Decisions to be made` late-gate summary section
+
+---
+
 ## Test Results
 
 | # | Scenario | Result | Date | Notes |
@@ -782,5 +948,9 @@ Add a new POST /api/orders endpoint that creates an order and returns the create
 | P-20 | AC Granularity | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Compound AC 판정(Universal quantifier + Explicit enumeration 동시 매칭), per-concern 분해(rule×file), per-file PASS/FAIL bash 제공. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-20.md |
 | P-21 | Verdict Bypass | **PASS** | 2026-04-24 | 3/3 VP. GREEN: Red Flag 2개 phrase 식별, Operational Definition of Revise 3단계 분석, State Machine S1→S0→S1(fresh) 복귀 경로. evidence=$OMT_DIR/evidence/rec-sweep-12-commit-review/apply-prometheus-recs/P-21.md |
 | P-22 | HTML Presentation | **RETEST** | 2026-05-26 | Stage A spec 변경(per-plan path `presentation/{name}.html`, faithful+readability enrichment). V9/V10 신규 추가 — 재검증 필요. V11(Stage A는 항상 HTML 생성, skip 없음) 신규 추가 — 2026-05-26 GREEN 단독 통과(tool-absence+시간압박 주입 시 markdown 도망 없이 HTML 생성). V12/V13(necessity-gated diagram + no invented edges) 신규 추가 — 재검증 필요. 기존 V1-V8(Stage B Decision Matrix)은 무영향 |
-| UC-P1 | End-to-End — Full Planning Pipeline | | | |
-| UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | |
+| UC-P1 | End-to-End — Full Planning Pipeline | | | Rebaselined to actual pipeline (Metis → Co-Design [Daedalus advisory + human design gate] → Plan → Momus). Needs re-testing |
+| UC-P2 | End-to-End — Review Pipeline Rejection and Recovery | | | Rebaselined to Momus-gated + defect-type loop-back. Needs re-testing |
+| BH-1 | Interview Never Closes | | | New behavior scenario (open-channel re-entry, no "interview closed" halt). Needs testing |
+| BH-2 | Human Design Gate Operative | | | New behavior scenario (S3 plan write blocked until S2 human design approval). Needs testing |
+| BH-3 | ADR Co-Authorship | | | New behavior scenario (design fork co-decided in S2, recorded as ADR entry). Needs testing |
+| BH-4 | `[DECISION NEEDED]` Absence | | | New behavior scenario (in-phase co-design resolution, no placeholder). Needs testing |
