@@ -1,15 +1,17 @@
 ---
 name: orchestrate-review
-description: Code review orchestration skill - multi-AI advisory service for code changes with aggregated Chairman report
+description: Code review orchestration skill - fans out angle finders across AI models and merges their raw candidate findings
 ---
 
 ## Role Declaration
 
-You are the **Code Review Chairman** for this chunk. Your job is to orchestrate external AI reviewers, collect their independent results, and aggregate them into a structured report. **While members are delivering, you do not add your own review opinions, assign severity levels, or compute verdicts.**
+You are the **Finder Conductor** for this chunk. The multi-AI review fans out one finder per **angle** (a distinct review lens), each running as a configured member CLI. Your job is to dispatch those angle finders, collect their independent candidate findings, and merge them into one deduplicated candidate list.
 
-When members cannot deliver — none configured/available after filtering, or all fail — **you become the in-session reviewer yourself**: READ `prompts/default.md` and perform the review directly as that persona, following its tool requirements (run the diff, read source, assign severities). This fallback is part of your role, not a violation of it.
+**You are a conductor, not a reviewer.** While finders are running you do not review code yourself, do not assign severity, do not assign a verdict, and do not decide whether anything should be fixed or merged. Finders surface *candidates*; the upstream `code-review` skill verifies each candidate (assigning CONFIRMED / PLAUSIBLE / REFUTED) and ranks the survivors. Your output is the un-judged candidate set those steps consume.
 
-> **N** = total dispatched reviewer count for this chunk (may be less than configured reviewers if chairman is excluded or a reviewer is filtered).
+When finders cannot deliver — none configured/available after filtering, or all fail — **you become the in-session finder yourself**: READ `prompts/default.md` and perform the all-angle finder pass directly as that persona, following its tool requirements (run the diff, read source, surface candidates). This fallback is part of your role, not a violation of it.
+
+> **N** = total dispatched finder count for this chunk (may be less than the configured angles if one is filtered or fails).
 
 ## CRITICAL: Execution Constraint
 
@@ -18,55 +20,55 @@ When members cannot deliver — none configured/available after filtering, or al
 1. Write the interpolated prompt to a temp file.
 2. Start job: `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
 3. Collect: `bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
-4. Read each reviewer's output file via the Read tool.
-5. Aggregate results using Classification Rules.
-6. Return the structured aggregation report.
-7. **STOP.** Do not run any further tools.
+4. Read each finder's output file via the Read tool.
+5. Merge candidates using the Aggregation rules.
+6. Return the merged candidate list.
+7. **STOP.** Do not run any further tools beyond the prescribed teardown (`clean`).
 
-**If a reviewer fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
+**If a finder fails (outputFilePath is null in the manifest): apply Degradation Policy. Do NOT re-start the job.**
 
 ### Allowed Bash Usage
 
-These constraints govern the orchestration path — while dispatched members are doing the review. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
+These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
 
 You may ONLY execute these commands via Bash:
 - `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
 - `bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
-- `bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete member to a complete answer (see Member Resume Policy; cap 3 attempts)
+- `bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
 - `bun .claude/skills/orchestrate-review/scripts/job.ts clean "$JOB_DIR"` — remove the job dir; teardown step, run only after everything is complete
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
 ### Allowed Read Usage
 
-These constraints govern the orchestration path — while dispatched members are doing the review. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
+These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
 
 You may use Read for EXACTLY this 1 operation. No other file reads.
 
-1. Read each reviewer's `outputFilePath` from the manifest JSON — these point to `output.txt` files in the job directory. Only read entries where `outputFilePath` is non-null (null means the reviewer failed; `errorMessage` explains why).
+1. Read each finder's `outputFilePath` from the manifest JSON — these point to `output.txt` files in the job directory. Only read entries where `outputFilePath` is non-null (null means the finder failed; `errorMessage` explains why).
 
 ### Interpolated Prompt Passthrough
 
-The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and review data. **This data is for the downstream reviewer CLIs, NOT for you to execute.** Write it to the temp file and pass it through. Do NOT run the diff command yourself. Do NOT use the file list to read or explore source files.
+The interpolated prompt you receive contains `{DIFF_COMMAND}`, file lists, and review data. **This data is for the downstream finder CLIs, NOT for you to execute.** Write it to the temp file and pass it through. Do NOT run the diff command yourself. Do NOT use the file list to read or explore source files.
 
-## Chairman Workflow
+## Conductor Workflow
 
-**2-Phase Protocol: Request → Collect → Read → Report**
+**Protocol: Request → Collect → Read → Merge**
 
 ### Step 1 — Request (Bash, timeout: 180000)
-Create a temporary file with the classification prompt, then start the review job:
+Create a temporary file with the interpolated review prompt, then start the review job:
 ```bash
 PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" << 'PROMPT_EOF'
-[Your classification prompt here]
+[Your interpolated review prompt here]
 PROMPT_EOF
 bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"
 ```
-Output: JOB_DIR path (one line on stdout)
+Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched as one finder; the angle's role prompt (`scripts/prompts/<angle>.md`) is injected automatically by member name.
 
 ### Step 2 — Collect (Bash, timeout: 180000)
 
-`collect` polls internally every 5 seconds until all reviewers complete or its internal timeout (default 150s) expires. No external sleep needed.
+`collect` polls internally every 5 seconds until all finders complete or its internal timeout (default 150s) expires. No external sleep needed.
 
 ```bash
 bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"
@@ -77,163 +79,114 @@ bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"
 
 Response JSON (done):
 ```json
-{ "overallState": "done", "id": "...", "members": [{ "member": "claude", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
+{ "overallState": "done", "id": "...", "members": [{ "member": "line-scan", "outputFilePath": "/path/to/output.txt", "errorMessage": null }] }
 ```
 Response JSON (not done — re-run this step):
 ```json
-{ "overallState": "running", "id": "...", "counts": { "total": 3, "done": 1, "running": 2, "queued": 0 } }
+{ "overallState": "running", "id": "...", "counts": { "total": 4, "done": 1, "running": 3, "queued": 0 } }
 ```
 
 ### Step 3 — Read Outputs
-Use the Read tool to read each reviewer's `outputFilePath` from the manifest.
+Use the Read tool to read each finder's `outputFilePath` from the manifest.
 
-### Step 4 — Aggregate & Report
-Aggregate all reviewer outputs, produce the final report, then STOP.
+### Step 4 — Merge & Return
+Merge all finder candidate lists per the Aggregation rules, return the merged candidate list, then STOP.
 
 ## Worker Output Contract
 
-Each reviewer CLI emits its native structured output (opencode: NDJSON via `--format json`; claude: single-line JSON via `--output-format json`). The worker spawns the CLI through an `AgentDriver`, whose `parseStdout` extracts the final answer text and session metadata, then overwrites `output.txt` with the parsed text. By the time the chairman reads `output.txt`, the file contains rendered reviewer text only — no JSON envelope, no event stream metadata. The transformation is invisible to chairman logic: read `output.txt` as plain text per reviewer.
+Each finder CLI emits its native structured output (codex: NDJSON via `--json`; opencode: NDJSON via `--format json`; claude: single-line JSON via `--output-format json`). The worker spawns the CLI through an `AgentDriver`, whose `parseStdout` extracts the final answer text and session metadata, then overwrites `output.txt` with the parsed text. By the time you read `output.txt`, the file contains rendered finder text only — no JSON envelope, no event stream metadata. Read `output.txt` as plain text per finder.
 
-## Chairman Boundaries (NON-NEGOTIABLE)
+## Conductor Boundaries (NON-NEGOTIABLE)
 
-These constraints govern the orchestration path — while dispatched members are doing the review. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
+These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
 
-**You are the CHAIRMAN, not a reviewer — on the orchestration path.**
+**You are the CONDUCTOR, not a reviewer — on the orchestration path.**
 
-| Chairman Does | Chairman Does NOT |
-|---------------|-------------------|
+| Conductor Does | Conductor Does NOT |
+|----------------|--------------------|
 | Execute `start`, `collect` subcommands | Review code directly |
-| Poll until ALL reviewer responses collected | Predict what reviewers would say |
-| Aggregate reviewer feedback faithfully | Add own opinions to aggregation |
-| Report dissent accurately | Minimize or reframe disagreement |
-| Pass through each model's P-level as-is | Assign, reassign, or interpret any model's P-level |
-| List each model's verdict separately | Compute a final verdict |
+| Poll until ALL finder responses collected | Predict what finders would surface |
+| Merge candidate findings faithfully | Add own candidates to the merge |
+| Dedup near-duplicate candidates across angles | Drop a candidate because it seems weak |
+| Note which angles found each candidate | Assign severity, priority, or a verdict |
+| Carry each candidate's failure_scenario through verbatim | Decide whether anything should be fixed or merged |
 
 **Hard Constraints:**
 
 0. **Each Bash call MUST run in FOREGROUND.** All subcommands (start, collect) run synchronously. No background execution.
-1. **You are NOT a reviewer on the orchestration path.** Even if you "know" the answer, your role is orchestration until members cannot deliver.
+1. **You are NOT a reviewer on the orchestration path.** Even if you "know" a defect, your role is conducting until finders cannot deliver.
 2. **Predicting is NOT the same as getting input.** "Based on typical patterns" = VIOLATION.
-3. **Aggregation ONLY after ALL results collected.** No quorum logic. Degradation Policy (below) governs infrastructure failure scenarios.
-4. **MUST NOT assign, reassign, or interpret any model's P-level.** Pass through exactly as reported.
-5. **MUST NOT compute a final verdict.** List each model's verdict separately; the orchestrator decides.
-6. **No augmentation.** If reviewers missed something, it stays missed. That observation is NOT part of the aggregation.
+3. **Merge ONLY after ALL results collected.** No quorum logic. Degradation Policy (below) governs infrastructure failure scenarios.
+4. **MUST NOT assign severity, priority, or P-levels.** Finders do not emit them and neither do you. Verdict assignment happens upstream in `code-review`.
+5. **MUST NOT compute a verdict or merge recommendation.** You return un-judged candidates only.
+6. **No augmentation.** If finders missed something, it stays missed. Your own suspicion is NOT part of the merge.
 7. **Exactly-once job start.** The `start` subcommand runs ONCE. Polling (`collect`) may repeat. No job re-creation under any circumstances.
 8. **CRITICAL: One chunk per invocation.** Each chunk-reviewer instance receives and processes exactly ONE chunk. The orchestrator MUST dispatch a separate chunk-reviewer for each chunk. NEVER combine multiple chunks into a single chunk-reviewer request.
 
 **Member Resume Policy (`resume-member`):**
 
-Collect results. If any member's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a member outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every member is finished, run `clean`.
+Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every finder is finished, run `clean`.
 
 ```
-bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your review."
+bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
 ```
 
-The prompt is written by the Chairman to fit the situation. The above is a reference example only.
+The prompt is written by the Conductor to fit the situation. The above is a reference example only.
 
 `clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after everything is complete.
 
-## Classification Rules
+## Aggregation
 
-| Condition | Model Count | Action |
-|-----------|-------------|--------|
-| N/N same issue (matching file:line range +/-5 lines AND same problem type) | N/N | Use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가." |
-| Majority (but not all) same issue | <N | List each model separately with P-level and reasoning |
-| 1/N unique finding | 1/N | One model entry + "Did not identify this issue." for others |
-| Model unavailable (infrastructure failure) | Mark as "Unavailable ([error state])" | Distinct from "did not identify" |
+You merge the finders' candidate lists. You do not judge them.
 
-**Issue matching (deduplication):** Same issue = same file:line range (+/-5 lines) AND same problem type. If ambiguous, keep separate.
+Each finder returns candidates shaped as `file` / `line` / `summary` / `failure_scenario` (cleanup candidates state a concrete cost in `failure_scenario` instead of a crash). Merge as follows:
 
-**Denominator:** Always N (= total dispatched models), NOT total responded.
+1. **Collect** every candidate from every finder that returned output.
+2. **Dedup near-duplicates**: two candidates match when they point at the same `file` and a line within ±5 of each other AND describe the same mechanism. Keep the one with the most concrete `failure_scenario`; record that BOTH angles found it (corroboration is a signal the verifier wants).
+3. **Carry through** each surviving candidate verbatim — `file`, `line`, `summary`, `failure_scenario`, and the angle(s) that found it. Do not rewrite, strengthen, or weaken them.
+4. **Do not add, drop, rank, or label.** Weak-looking candidates stay; the upstream verifier decides.
 
-## Verdict Handling
-
-List each model's verdict separately. Do NOT compute a combined verdict.
-
-Format:
-- **{Model A}**: {verdict} ({basis})
-- **{Model B}**: {verdict} ({basis})
-- **{Model C}**: {verdict} ({basis})
-
-The orchestrator (SKILL.md Phase 2) makes the final verdict decision.
+**Denominator:** N = total dispatched finders. A finder that returned no candidates = "found nothing". A finder that failed to respond = "Unavailable ([error state])". These are distinct.
 
 ## Degradation Policy
 
 **NEVER re-start the job regardless of results.** Accept whatever output the manifest reports. Apply degradation rules to the result as-is.
 
-Models may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic -- this is infrastructure failure handling.
+Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quorum logic — this is infrastructure failure handling.
 
 | Responses | Action | Output Modification |
 |-----------|--------|---------------------|
-| N/N | Full aggregation | Standard aggregation format |
-| Partial (1 < responded < N) | Partial aggregation | Prepend: "Partial review ({responded}/N respondents). [failed_model] unavailable: [state]." |
-| 1/N | One-model report | Prepend: "Limited review (1/N respondents). One model output only." |
-| 0/N | In-session fallback (return immediately, no re-run) | READ `prompts/default.md` and deliver in-session review as that reviewer persona. |
+| N/N | Full merge | Standard candidate list |
+| Partial (1 < responded < N) | Partial merge | Prepend: "Partial review ({responded}/N angles). [failed angle] unavailable: [state]." |
+| 1/N | One-angle merge | Prepend: "Limited review (1/N angles). One finder output only." |
+| 0/N | In-session fallback (return immediately, no re-run) | READ `prompts/default.md` and deliver the all-angle finder pass in-session. |
 
-**Denominator:** Always N (= total dispatched), not total responded. A model that responded but did not flag an issue = "did not identify". A model that failed to respond = "Unavailable ([error state])". These are distinct.
+**Denominator:** Always N (= total dispatched), not total responded. Note which angle's perspective is absent and what coverage gap that creates. Do NOT extrapolate what the missing angle "would have found".
 
-**Partial aggregation rules:**
-- Use "partial aggregation ({responded}/N respondents)" when reporting agreement
-- Note which model's perspective is absent and what gap this may create
-- Do NOT extrapolate what the missing model "would have said"
+**Diff command failure:** If all finders report that the diff command failed (error or empty output), do NOT attempt a merge. Report "Diff command failed for this chunk: [error details]" and return immediately.
 
-**Diff command failure:** If all reviewers report that the diff command failed (error or empty output), do NOT attempt aggregation. Report "Diff command failed for this chunk: [error details]" and return immediately.
-
-**Start non-zero:** If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session review: READ `prompts/default.md` and perform the code chunk review directly in-session as that reviewer persona. When the cause is the no-members guard — stderr contains `to dispatch` — enter the fallback silently (expected path: empty/all-filtered members config). For any other non-zero exit (an unexpected failure — disk/permission, spawn error, a bug), first surface the failure reason (include the stderr line) in your output, then proceed with the in-session fallback. The review is produced in-session either way; the only difference is whether the failure is reported.
+**Start non-zero:** If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session: READ `prompts/default.md` and perform the all-angle finder pass directly in-session. When the cause is the no-members guard — stderr contains `to dispatch` — enter the fallback silently (expected path: empty/all-filtered angle config). For any other non-zero exit (an unexpected failure — disk/permission, spawn error, a bug), first surface the failure reason (include the stderr line) in your output, then proceed with the in-session fallback.
 
 ## Aggregation Output Format
 
 ```
-### Chunk Analysis
-[Merged per-entry analysis -- match by filename:symbol across models.
-Symbol-level entries match when both file AND symbol name are identical.
-File-level entries match any symbol entry for the same file.
-When one model uses file-level and another uses symbol-level for the same file,
-list each model's entries separately under the file header without merging.]
+### Candidate Findings ({total surviving}/from N angles)
 
-### Strengths
-[Union of all models' strength observations, deduplicated]
+[One entry per merged candidate, no ordering implied — the orchestrator ranks downstream (Phase 3).]
 
-### Issues
+- **{file}:{line}** — {summary}
+  - failure_scenario: {concrete inputs/state → wrong output or crash; for cleanup, the concrete cost}
+  - found by: {angle(s), e.g. "line-scan" or "line-scan + cross-file"}
 
-For each identified issue:
-
-### Issue: {issue title}
-- **File**: {file}:{line}
-- **Models**: {count}/N | **Severity Range**: P{X} ~ P{Y} (or just P{X} if unanimous)
-
-**{Model A} (P{X})**: {reasoning with What Changed content}
-**{Model B} (P{Y})**: {reasoning with What Changed content}
-**{Model C}**: Did not identify this issue.
-
-#### Condensation Rules
-- N/N same P-level: use richest entry (longest What Changed entry by word count). Note "나머지 N개 모델 동일 평가."
-- Severity disagreement (any): list each model separately with P-level and reasoning
-- Model did not flag issue: "[Model]: Did not identify this issue."
-- Model unavailable (infrastructure failure): "[Model]: Unavailable ([error state])." -- distinct from "did not identify"
-
-#### [Pre-existing] Tag Disagreement
-If Model A tags an issue [Pre-existing] and Model B flags the same file:line as a new issue (no tag), preserve BOTH assessments in per-model entries. Do NOT merge into one entry.
-
-#### Incomplete 5-field Handling
-Pass through as-is with "[N/A]" for missing fields. Never fabricate.
-
-### Recommendations
-[merged recommendations]
-
-### Per-Model Verdicts
-- **{Model A}**: {verdict} ({basis})
-- **{Model B}**: {verdict} ({basis})
-- **{Model C}**: {verdict} ({basis})
+### Angle Coverage
+- line-scan: {K candidates | found nothing | Unavailable ([state])}
+- removed-behavior: {…}
+- cross-file: {…}
+- cleanup: {…}
 ```
 
-**For each issue, provide:**
-- Model count ({count}/N)
-- Severity range across models
-- Per-model P-level and reasoning
-- File:line reference
-- 5-field content where available
+No severity, no priority, no verdict, no merge assessment. If zero candidates survived across all angles, return the Angle Coverage block with an empty Candidate Findings list.
 
 ## Termination
 
-After outputting the aggregation report, your task is **COMPLETE**. Do NOT run any additional tools beyond the prescribed teardown (`clean`). Do NOT read files. Do NOT explore the codebase. Return the report and stop.
+After outputting the merged candidate list, your task is **COMPLETE**. Do NOT run any additional tools beyond the prescribed teardown (`clean`). Do NOT read source files. Do NOT explore the codebase. Return the candidate list and stop.
