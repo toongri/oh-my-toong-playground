@@ -200,8 +200,6 @@ Before asking the user to choose execution mode, compute a recommendation:
 
 After the user reads Stage B's recommendation, present execution options via the platform's user-prompt primitive (structured choice):
 
-**S7 gate:** do NOT render the options below while any unresolved `[DECISION NEEDED]` placeholder remains — resolve each with the user first (full resolution path: SKILL.md Pipeline State Machine, S7 row). A decision-free plan renders the options immediately.
-
 **(1) Full orchestration**
 Multi-agent task orchestration with QA verification. 3+ TODOs or cross-module changes.
 
