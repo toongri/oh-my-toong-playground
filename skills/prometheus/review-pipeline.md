@@ -48,7 +48,7 @@ Design-advisory opinion only — no verdict, no gate, no file-existence checks, 
 
 ## Momus Invocation Template
 
-**When**: After Daedalus advisory review. MANDATORY before user presentation.
+**When**: Post-plan at the S4 gate — invoked AFTER the TODO plan is written at S3 (Plan Generation), MANDATORY before user presentation. The review object is the finished plan file. This is the post-plan plan-quality gate; design-time advisory (Daedalus at S2) has already concluded.
 
 Send the plan file path only:
 
