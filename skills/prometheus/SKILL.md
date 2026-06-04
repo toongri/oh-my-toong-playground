@@ -57,6 +57,7 @@ A plan is **Decision Complete** when — and only when — all of the following 
 - **Ambiguity Score ≤ 0.2** (gate within Clearance item 6)
 - All remaining **Ambiguity** on any dimension is zero or explicitly deferred by autonomous decision
 - Every TODO carries verified, executable **acceptance criteria** (not prose summaries)
+- The plan leaves **zero decisions to the implementer** — if an engineer could ask "but which approach?", the plan is not done
 
 "Detailed enough" or "looks solid" are not Decision Complete. Decision Complete is a binary gate defined by the Clearance and Ambiguity gates above — not a subjective planner assessment.
 
@@ -71,14 +72,15 @@ digraph prometheus_flow {
     "Interpret as planning request" [shape=box];
     "Context Loading" [shape=box];
     "Intent Classification" [shape=box];
-    "Interview Mode" [shape=box];
+    "Requirements Interview" [shape=box];
     "Research (explore/librarian)" [shape=box];
     "More questions needed?" [shape=diamond];
     "Clearance + AC complete?" [shape=diamond];
     "Metis consultation" [shape=box];
     "Metis verdict?" [shape=diamond];
+    "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [shape=box];
+    "Human design gate?" [shape=diamond];
     "Write plan to $OMT_DIR/plans/*.md" [shape=box];
-    "Daedalus review (advisory)" [shape=box];
     "Momus review" [shape=box];
     "Momus verdict?" [shape=diamond];
     "Stage A: HTML Render" [shape=box];
@@ -90,35 +92,42 @@ digraph prometheus_flow {
     "User Request" -> "Interpret as planning request";
     "Interpret as planning request" -> "Context Loading";
     "Context Loading" -> "Intent Classification";
-    "Intent Classification" -> "Interview Mode";
-    "Interview Mode" -> "Research (explore/librarian)";
+    "Intent Classification" -> "Requirements Interview";
+    "Requirements Interview" -> "Research (explore/librarian)";
     "Research (explore/librarian)" -> "More questions needed?";
-    "More questions needed?" -> "Interview Mode" [label="yes"];
+    "More questions needed?" -> "Requirements Interview" [label="yes"];
     "More questions needed?" -> "Clearance + AC complete?" [label="no"];
-    "Clearance + AC complete?" -> "Interview Mode" [label="no, keep interviewing"];
+    "Clearance + AC complete?" -> "Requirements Interview" [label="no, keep interviewing"];
     "Clearance + AC complete?" -> "Metis consultation" [label="yes"];
     "Metis consultation" -> "Metis verdict?";
-    "Metis verdict?" -> "Interview Mode" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
-    "Metis verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="APPROVE/COMMENT"];
-    "Write plan to $OMT_DIR/plans/*.md" -> "Daedalus review (advisory)";
-    "Daedalus review (advisory)" -> "Momus review" [label="advisory input folded into plan\n(no gate — see Design Consensus)"];
+    "Metis verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES\n(resolve gaps, re-review)"];
+    "Metis verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="APPROVE/COMMENT"];
+    "Co-Design Interview\n(in-phase Daedalus advisory folded in)" -> "Human design gate?";
+    "Human design gate?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="not yet — keep co-designing"];
+    "Human design gate?" -> "Write plan to $OMT_DIR/plans/*.md" [label="design approved by human"];
+    "Write plan to $OMT_DIR/plans/*.md" -> "Momus review";
     "Momus review" -> "Momus verdict?";
-    "Momus verdict?" -> "Write plan to $OMT_DIR/plans/*.md" [label="REQUEST_CHANGES\n(revise plan, re-review)"];
+    "Momus verdict?" -> "Requirements Interview" [label="REQUEST_CHANGES\n(requirements defect → earliest affected = requirements phase → re-Metis → … → re-Momus)"];
+    "Momus verdict?" -> "Co-Design Interview\n(in-phase Daedalus advisory folded in)" [label="REQUEST_CHANGES\n(design defect → earliest affected = design phase → human gate → re-plan → re-Momus)"];
     "Momus verdict?" -> "Stage A: HTML Render" [label="APPROVE/COMMENT"];
     "Stage A: HTML Render" -> "Stage B: Execution Recommendation";
     "Stage B: Execution Recommendation" -> "Stage C: Execution Bridge";
     "Stage C: Execution Bridge" -> "User's choice?";
-    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(1) Full orchestration"];
-    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(2) Focused execution"];
-    "User's choice?" -> "Interview Mode" [label="(3) Revise plan"];
+    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(1) Full orchestration\n(fresh S4 APPROVE/COMMENT)"];
+    "User's choice?" -> "S8: Execution Dispatch\n(invoke sisyphus OR sisyphus-junior per selection)" [label="(2) Focused execution\n(fresh S4 APPROVE/COMMENT)"];
+    "User's choice?" -> "Requirements Interview" [label="(3) Revise plan (user-initiated)"];
 }
 ```
 
-**Flowchart Enforcement Rule**: The verdict review loops (Metis and Momus bounce back to plan writing on REQUEST_CHANGES) are MANDATORY loops, not advisory paths.
+**Flowchart Enforcement Rule**: The verdict review loops (Metis and Momus bounce back to the earliest affected phase on REQUEST_CHANGES) are MANDATORY loops, not advisory paths.
 Proceeding past a Metis/Momus REQUEST_CHANGES without resolution violates the planning contract.
-Skipping any review stage — including the mandatory Daedalus advisory pass — is likewise a violation.
+Skipping any stage — including the in-phase Co-Design Daedalus advisory pass and the human design gate — is likewise a violation.
 
-The Daedalus stage is on the mandatory path but is purely advisory: it emits no gating signal and never bounces the plan back. Its design input is folded into the plan per `## Design Consensus` before Momus runs.
+**Two distinct loop-back triggers.** A *reviewer-triggered* REQUEST_CHANGES routes Momus's verdict back to the **earliest affected phase**: a requirements problem re-walks from the requirements phase (re-Metis → … → re-Momus); a design problem re-walks from the design phase (human gate → re-plan → re-Momus). This routing is forced by the reviewer, not chosen by the user. Separately, the *user-initiated* S7→S0 "Revise plan" edge lets the user re-open the requirements interview on their own initiative after the plan is presented — a complementary mechanism with a different trigger (user choice, not a reviewer verdict).
+
+The Co-Design Daedalus advisory pass is on the mandatory path but is purely advisory: it emits no gating signal and never bounces the plan back on its own. Its design input is folded into the design phase per `## Design Consensus` before the human design gate and the plan write.
+
+**S8 reachability invariant.** No transition reaches S8 except the user's S7 selection (option 1 or 2) taken against a **fresh S4 (Momus) APPROVE/COMMENT verdict** on the current artifact. There is NO plan-mutation-after-S4 path that reaches S8: any change after S4 is a defect that routes back to its earliest affected phase and forces a fresh Momus re-review before S7 can offer execution again.
 
 ## Subagent Selection Guide
 
@@ -126,11 +135,11 @@ The Daedalus stage is on the mandatory path but is purely advisory: it emits no 
 |------|-------|------|
 | Codebase exploration | explore | Find current implementation, similar features, existing patterns |
 | Architecture/design analysis | oracle | Architecture decisions, risk assessment, feasibility validation |
-| Codebase verification (pipeline) | momus | **MANDATORY** — auto-invoked after the advisory design pass; verifies codebase feasibility + document quality |
-| Design review with antithesis | daedalus | **MANDATORY (advisory)** — steelman + tradeoff tension on design soundness; advisory only, never gates |
+| Codebase verification (pipeline) | momus | **MANDATORY** — auto-invoked after the plan is written; verifies codebase feasibility + document quality |
+| Design review with antithesis | daedalus | **MANDATORY (advisory)** — invoked in-phase during the Co-Design state; steelman + tradeoff tension on design soundness; advisory only, never gates |
 | External documentation research | librarian | Official docs, library specs, API references, best practices |
 | Gap analysis | metis | **MANDATORY** — auto-invoked when Clearance + AC complete |
-| Plan review | momus | **MANDATORY** — after Daedalus advisory input |
+| Plan review | momus | **MANDATORY** — after the plan is written (post Co-Design design phase) |
 
 ### Do vs Delegate Decision Matrix
 
@@ -144,11 +153,11 @@ The Daedalus stage is on the mandatory path but is purely advisory: it emits no 
 | Architecture feasibility check | NEVER | oracle |
 | External tech research | NEVER | librarian |
 | Pre-plan gap analysis | NEVER | metis |
-| Post-plan design review (advisory) | NEVER | daedalus (MANDATORY — advisory only, never gates) |
+| In-phase design review (Co-Design, advisory) | NEVER | daedalus (MANDATORY — advisory only, never gates) |
 | Post-plan codebase verification | NEVER | momus (MANDATORY) |
 | Plan quality review | NEVER | momus (MANDATORY) |
 
-**RULE**: Planning, interviewing, checklist evaluation = Do directly. Research, analysis, gap detection = DELEGATE.
+**RULE**: Planning, interviewing, co-design facilitation, checklist evaluation = Do directly. Research, analysis, gap detection = DELEGATE.
 
 ## Context Loading
 
@@ -216,7 +225,8 @@ After loading context, classify the user's request. Classification determines in
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
 **All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
 After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
-After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below.
+After Metis APPROVE/COMMENT → S2 Co-Design (in-phase Daedalus advisory → human design gate) per `## Review Pipeline (Mandatory Contract)` below.
+After the human design gate → write plan per `## Plan Structure (Mandatory Contract)` below.
 
 This checklist is the planner's own gating decision — **never delegate it to the user** by asking confirmation questions like "Does this satisfy item N?" or by rendering it as a user-facing approval form. The agent must compute and own each YES/NO itself. Outputting the 6-item evaluation in the agent's visible reasoning is required (see Rationalization Table and Red Flags below) and does NOT violate this rule — the rule forbids *handing the checklist to the user as a decision*, not *exposing the agent's own evaluation trace*.
 
@@ -292,31 +302,35 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 
 **Trivial**
 - Phase 1: Clarify + scope
-- Phase 2: Write plan
+- Phase 2: Co-Design interview (in-phase Daedalus advisory) → human design gate
+- Phase 3: Write plan
 
 **Scoped**
-- Phase 1: Interview + Clearance
+- Phase 1: Requirements interview + Clearance
 - Phase 2: AC drafting + user confirmation
 - Phase 3: Metis consultation
-- Phase 4: Write plan → Daedalus review → Momus review
-- Phase 5: Present plan + user approval
+- Phase 4: Co-Design interview (in-phase Daedalus advisory) → human design gate
+- Phase 5: Write plan → Momus review
+- Phase 6: Present plan (S5) + S7 execution mode choice
 
 **Complex**
 - Phase 1: Context loading + explore delegation
-- Phase 2: Deep interview + Clearance
+- Phase 2: Deep requirements interview + Clearance
 - Phase 3: AC drafting + user confirmation
 - Phase 4: Metis consultation
-- Phase 5: Write plan → Daedalus review → Momus review
-- Phase 6: Present plan + user approval
+- Phase 5: Co-Design interview (in-phase Daedalus advisory) → human design gate
+- Phase 6: Write plan → Momus review
+- Phase 7: Present plan (S5) + S7 execution mode choice
 
 **Architecture**
 - Phase 1: Context loading + explore + librarian (parallel)
 - Phase 2: Oracle feasibility review (MANDATORY)
-- Phase 3: Deep interview + Clearance
+- Phase 3: Deep requirements interview + Clearance
 - Phase 4: AC drafting + user confirmation
 - Phase 5: Metis consultation
-- Phase 6: Write plan → Daedalus review → Momus review
-- Phase 7: Present plan + user approval
+- Phase 6: Co-Design interview (in-phase Daedalus advisory) → human design gate
+- Phase 7: Write plan → Momus review
+- Phase 8: Present plan (S5) + S7 execution mode choice
 
 ### Phase 1 Evidence Output (mandatory before Phase 2)
 
@@ -367,15 +381,15 @@ A phase task is complete only when its reviewer signal is received:
 
 | Reviewer | Completion Condition |
 |----------|---------------------|
-| Metis | Verdict = APPROVE or COMMENT (proceed to plan write) |
-| Daedalus | Advisory design input received and folded into the plan per `## Design Consensus` (advisory only — proceed to Momus) |
+| Metis | Verdict = APPROVE or COMMENT (proceed to Co-Design) |
+| Daedalus | Advisory design input received and folded into the design phase per `## Design Consensus` (advisory only — proceed to the human design gate, then plan write) |
 | Momus | Verdict = APPROVE or COMMENT (proceed to user presentation) |
 
-REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received.
+REQUEST_CHANGES from a verdict-emitting reviewer (Metis or Momus) means the current phase task remains in incomplete state. The downstream phase task is prohibited from starting until the REQUEST_CHANGES is resolved and a new APPROVE/COMMENT verdict is received. A Momus REQUEST_CHANGES routes back to the **earliest affected phase** (requirements problem → requirements phase → re-Metis; design problem → design phase → human gate → re-plan), and the full downstream walk including a fresh Momus re-review must complete again.
 
 Starting a downstream phase task while a prior verdict phase remains in REQUEST_CHANGES state is a planning contract violation.
 
-The Daedalus phase is advisory rather than gated: it completes once its design input is received and reconciled into the plan (genuine conflicts escalate per `## Design Consensus`), then Momus proceeds.
+The Daedalus phase is advisory rather than gated: it completes once its design input is received and reconciled into the design phase (genuine conflicts escalate per `## Design Consensus`). The Co-Design state's own gate is the **human design gate**, not Daedalus — the human approves the design before the plan is written.
 
 ### Relationship to Pipeline State Machine
 
@@ -391,33 +405,38 @@ The Planning-time Task Discipline is complementary to the Pipeline State Machine
 
 Interview rules are inline (not deferred to `interview.md`) so they cannot be partial-read away. The reference file holds question categories, quality examples, and subagent dispatch prompt templates that the inline rules point to but do not duplicate.
 
-> **Trigger fires here**: Before your first interview question of the session, full-read [interview.md](interview.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
+> Full-read `interview.md` here — see `## Reference Full-Read Mandate`.
 
 ### Tool Use vs User Questions
 
-**The ONLY questions for users are about PREFERENCES, not FACTS.**
+**Three kinds of decisions, three routes: FACTS → tools, PREFERENCES → user, DESIGN JUDGMENT → co-decide with the user.** Facts are never asked of the user (tools resolve them); preferences and design judgment both go to the user, but in different modes — a preference is a choice only the user can supply, while a design judgment is a call prometheus and the user reach together during S2 Co-Design.
 
-| Question Type | Ask User? | Action |
+| Question Type | Route | Action |
 |---|---|---|
-| "Which project contains X?" | NO | Use explore first |
-| "What patterns exist in the codebase?" | NO | Use explore first |
-| "Where is X implemented?" | NO | Use explore first |
-| "What's the current architecture?" | NO | Use oracle |
-| "What's the tech stack?" | NO | Use explore first |
-| "What's your timeline?" | YES | AskUserQuestion |
-| "Should we prioritize speed or quality?" | YES | AskUserQuestion |
-| "What's the scope boundary?" | YES | AskUserQuestion |
+| "Which project contains X?" | FACT | Use explore first |
+| "What patterns exist in the codebase?" | FACT | Use explore first |
+| "Where is X implemented?" | FACT | Use explore first |
+| "What's the current architecture?" | FACT | Use oracle |
+| "What's the tech stack?" | FACT | Use explore first |
+| "What's your timeline?" | PREFERENCE | AskUserQuestion |
+| "Should we prioritize speed or quality?" | PREFERENCE | AskUserQuestion |
+| "What's the scope boundary?" | PREFERENCE | AskUserQuestion |
+| "Which of these two architectures fits the constraints better?" | DESIGN JUDGMENT | Co-decide with user (S2 Co-Design) |
+| "Is this abstraction worth the coupling it introduces?" | DESIGN JUDGMENT | Co-decide with user (S2 Co-Design) |
 
-NEVER burden user with questions the codebase can answer. When user has no preference, select best practice autonomously.
+NEVER burden user with questions the codebase can answer. When the user has no preference, select best practice autonomously. Design judgment is neither a pure fact nor a pure preference — surface the tradeoff and co-decide; do not silently pick, and do not pretend a tool can settle it.
 
-### Two Kinds of Unknowns
+### Kinds of Unknowns
 
-The table above encodes a named principle: every unknown in the interview falls into exactly one of two categories.
+The table above encodes a named principle: every unknown in the interview falls into exactly one of three categories.
 
 - **Discoverable** — facts that exist in the codebase, external docs, or tool outputs. These are never asked to the user. Resolve via explore (codebase), oracle (architecture), or librarian (external docs). Asking the user a Discoverable question is a process violation.
-- **Preferences** — subjective choices, priorities, and constraints that only the user can supply (timeline, scope trade-offs, UX direction, business rules). These are the ONLY questions directed at the user.
+- **Preferences** — subjective choices, priorities, and constraints that only the user can supply (timeline, scope trade-offs, UX direction, business rules). These go to the user as preference questions. Ask preference/tradeoff forks **early**, framed as 2-4 concrete options with one marked the **recommended default**. On no-answer or explicit defer, the recommended default becomes the autonomous decision recorded as an **assumption** — handled per `### User Deferral Handling` below (do not block on a deferred preference).
+- **Design judgment** — calls that are neither discoverable facts nor pure user preferences: which architecture, whether an abstraction earns its coupling, how to trade one design quality against another. These cannot be settled by a tool, and prometheus must not silently pick them either — they are **co-decided with the user** during the S2 Co-Design phase. Surface the tradeoff with concrete options and a recommended direction, then decide together.
 
-Before forming any interview question, classify it: Discoverable → dispatch a tool; Preferences → AskUserQuestion. A question that mixes both (e.g., "What's the current auth pattern and do you want to keep it?") must be split — the factual half goes to explore, the preference half goes to the user.
+  **CRITICAL-fork exception (overrides the defer-to-default rule):** if a fork hits a T1 Deliberate trigger (Security / Data destruction / External contract / Concurrency / Money — the no-safe-default domains, per `### Deliberate Mode Triggers`), silence or defer does NOT fall through to the recommended default: the default is still shown as a recommendation, but the fork **reopens the S2 Co-Design interview** and must be co-decided with the user before the design phase can advance (per `### Next-Gate Readiness Rule`, the channel reopens at the earliest affected phase). The co-design loop stays open until the fork is resolved; it is never carried forward unresolved. Non-CRITICAL forks defer to the default as normal.
+
+Before forming any interview question, classify it: Discoverable → dispatch a tool; Preferences → AskUserQuestion; Design judgment → co-decide with the user. A question that mixes kinds (e.g., "What's the current auth pattern and do you want to keep it?") must be split — the factual half goes to explore, the preference or design-judgment half goes to the user.
 
 ### Question Type Selection
 
@@ -451,9 +470,27 @@ When user explicitly defers ("skip", "I don't know", "your call"):
 3. Document: "Autonomous decision: [X] — user deferred, based on [rationale]"
 4. Continue without blocking
 
-### Persistence Rule
+### Test-Strategy Gate (Clearance item 5)
 
-**Continue until YOU have no questions left.** Not after 2-3 questions. The Clearance Checklist (items 1-6) is the gate — keep interviewing until all items YES + Ambiguity ≤ 0.2.
+This gate is how Clearance item 5 ("Test/verification strategy identified?") is satisfied — asked during the interview through the normal question channel, not surfaced as the internal Clearance Checklist. Apply `### Kinds of Unknowns`: explore detects whether test infrastructure exists (Discoverable — framework, config, representative test files, CI wiring; never ask the user this), then ask the **Preference** — **TDD** (RED-GREEN-REFACTOR, test cases folded into acceptance criteria), **tests-after** (test tasks added after implementation tasks), or **none** (no unit/integration tests). Present the detected infrastructure as context, then ask only the preference.
+
+- **MANDATORY for non-Trivial intents** (Scoped / Complex / Architecture): the gate must be asked and answered before Clearance item 5 can be marked YES.
+- **EXEMPT for Trivial intents**: skip the gate; item 5 is satisfied by the agent-executed QA verification that every plan carries regardless.
+- **Re-ask on escalation**: if the intent class escalates after the interview already passed (Trivial → non-Trivial), re-open the gate and ask the test-strategy preference before re-clearing item 5.
+
+A deferred test-strategy preference resolves per `### User Deferral Handling` (recommended default recorded as an assumption); it is not a CRITICAL fork and does not block.
+
+### Next-Gate Readiness Rule
+
+**Each phase advances when its output is ready for its NEXT gate, NOT when YOU run out of questions.** The interview is an **open Socratic co-design dialogue** — one question per message, facts-first, surface-and-validate assumptions out loud, probe vague answers until concrete. It is a continuous channel, not a session you close once: forward progress = "ready for the next gate", not "questions exhausted".
+
+Each phase has its own next gate, and readiness is measured against that gate:
+
+- **S0 Requirements** is ready when the Clearance Checklist (items 1-6) is all YES + Ambiguity ≤ 0.2 — the readiness condition for the **Metis** gate.
+- **S2 Co-Design** is ready when the design is co-decided with the user — the readiness condition for the **human** design gate.
+- **S3 Plan Generation** is ready when the written plan passes self-review — the readiness condition for the **Momus** gate.
+
+The channel can **REOPEN** at any time: whenever a later phase surfaces a new question (Metis flags a gap, the human raises a design fork, Momus requests changes), the interview re-opens at the earliest affected phase and runs again. There is no point at which the dialogue is permanently done.
 
 ### Progress Reporting (after each answer)
 
@@ -502,7 +539,7 @@ Briefly announce "Consulting Oracle for [reason]" before invocation.
 
 AC contract is inline (not deferred to `acceptance-criteria.md`) because split-reference rules suffer partial-read. The reference file holds per-tool Verification examples (maestro/playwright/curl/grep/CLI/unit) + worked example + Handling User Response that the inline contract points to but does not duplicate.
 
-> **Trigger fires here**: Before proposing AC to the user (Clearance all-YES reached), full-read [acceptance-criteria.md](acceptance-criteria.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden.
+> Full-read `acceptance-criteria.md` here — see `## Reference Full-Read Mandate`.
 
 ### When to Draft
 
@@ -628,7 +665,7 @@ Run on every AC before proposing to user:
 
 This contract applies to EVERY plan. The contract lives here — not in a referenced file — so it cannot be missed via partial-read of a split reference. (Trivial intent is exempt ONLY from the Final Verification Wave — see that section.)
 
-> **Trigger fires here**: Before invoking `Write` on the plan file, full-read [plan-template.md](plan-template.md) per `## Reference Full-Read Mandate` and emit the read evidence line. Partial-read forbidden. This is in addition to the `## Decomposition Self-Check Output` mandate.
+> Full-read `plan-template.md` here — see `## Reference Full-Read Mandate`.
 
 ### Plan Output Rules
 
@@ -666,6 +703,10 @@ Each plan section is emitted as exactly its canonical heading above (plus `## AD
 ### ADR
 
 Architecture Decision Record (Nygard 2011 / MADR) — one entry per significant design choice in the plan. **Required for Scoped+ intent. Trivial intent is exempt from ADR output.** Inline in the plan; no separate file needed.
+
+**The ADR is a co-authored design artifact, not a solo post-hoc record.** It is filled WITH the user during the S2 Co-Design phase — the joint decision log of the co-design dialogue — and is the **review object** of both the human design gate and the in-phase Daedalus advisory pass. By the time the plan is written at S3, the plan's `## ADR` section is a **refined copy** of this co-authored artifact (the same MADR fields, cleaned up for the executor), not a freshly authored record. Authorship timing/ownership changed (solo post-hoc → co-authored during design); the MADR 7-field structure below is unchanged.
+
+**Gate-vs-sub-fork deferral boundary.** The human design gate (S2) blocks on the user's **explicit holistic approval** of the design — there is no auto-default for the gate itself; an unanswered gate does not silently pass. Individual sub-forks *within* the design are a separate matter: whenever a sub-fork is surfaced — including late, at the gate itself — it follows the existing `### User Deferral Handling` (defer → recommended default becomes the autonomous decision, recorded in the ADR's **Considered Options** / **Decision** with its deferral noted). A deferral that is later revised is not a free edit: a deferred-to-default decision that is subsequently changed is a **design defect** that re-enters the design phase and forces re-plan → re-Momus, per the Pipeline State Machine's deferred-then-revised loop-back rule (`## Review Pipeline > Pipeline State Machine`). So a deferral can never silently survive past a fresh plan gate — revising it re-walks design.
 
 Fields (all required per ADR entry):
 
@@ -743,7 +784,7 @@ If the scan finds no T1 keywords and all categories were marked N, F1 proceeds n
 
 Each TODO is a checkbox line `- [ ] N. Title` with body containing:
 
-1. **What to do** — Content, Scope, Approach, Inputs, Decisions from interview. Executor has NO interview context — faithfully transfer conclusions.
+1. **What to do** — Content, Scope, Approach, Inputs, Decisions from interview. Executor has NO interview context — faithfully transfer conclusions. Format as a verb-led lead sentence followed by a bullet list of concrete deliverables/steps (one artifact or action per bullet); put any command in a fenced code block. Do NOT write a multi-sentence prose paragraph — bullets are scannable; prose buries the item count.
 2. **Must NOT do** — Explicit forbidden scope
    - Every task MUST declare an explicit Must NOT do; an empty forbidden-scope field is not permitted. Mirror the mandatory reference pattern from field #4: just as every implementation TODO requires ≥1 Pattern or API/Type reference, every TODO requires ≥1 forbidden-scope constraint.
 3. **Files** — What this TODO creates or modifies
@@ -826,17 +867,17 @@ Wave field for F1-F4: `Wave: FINAL` (literal string). Numeric rule applies to im
 
 Three-agent pipeline + Plan Presentation. All mandatory contracts inline below. Detailed material (invocation templates, Stage A rendering procedure, Stage B/C details) lives in `review-pipeline.md`.
 
-> **Trigger fires here**: Before the first reviewer Agent invocation (Metis) AND before each of Stage A/B/C execution, full-read [review-pipeline.md](review-pipeline.md) per `## Reference Full-Read Mandate` and emit the read evidence line. One full-read per session covers all subsequent reviewer/stage triggers. Partial-read forbidden.
+> Full-read `review-pipeline.md` here — see `## Reference Full-Read Mandate`.
 
 ### Three-Agent Pipeline
 
 | | Metis | Daedalus | Momus |
 |---|---|---|---|
-| **Timing** | Pre-plan | Post-plan, pre-Momus | Post-Daedalus |
-| **Input** | User Goal + Scope + AC | Plan file + design context | Plan + Codebase |
+| **Timing** | Pre-plan (requirements gate) | In-phase during Co-Design (design phase, pre-plan-write) | Post-plan |
+| **Input** | User Goal + Scope + AC | Design-stage design-brief / ADR + design context | Plan + Codebase |
 | **Validates** | Requirements completeness | Design soundness | Document quality + Codebase feasibility |
 | **Reads code** | No | Yes (design context) | Yes |
-| **Role** | Gap gate (verdict) | Design advisor (advisory — no verdict, no gate) | Feasibility + quality gate (verdict) |
+| **Role** | Gap gate (verdict) | Design advisor (advisory — no verdict, no gate; the human design gate gates the Co-Design state) | Feasibility + quality gate (verdict) |
 
 ### Common Gate Pattern (verdict-emitting reviewers: Metis + Momus)
 
@@ -896,24 +937,30 @@ Each reviewer invocation MUST use a **fresh agent instance**. Do not reuse an ag
 
 | State | Description | Transitions |
 |-------|-------------|-------------|
-| **S0: Interview Mode** | Gathering requirements | → S1 on Metis-ready clearance |
-| **S1: Metis Invocation** | 3-Section prompt to Metis | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
-| **S2: Plan Generation** | Writing plan to `$OMT_DIR/plans/{name}.md` | → S3 on self-review pass |
-| **S3: Daedalus Invocation** | Plan path to Daedalus (advisory design review) | → S4 always (advisory only — no gating signal; design input folded in per `## Design Consensus` before S4) |
-| **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; → S2 on REQUEST_CHANGES |
+| **S0: Requirements** | Open requirements interview + AC co-decide | → S1 on Metis-ready clearance |
+| **S1: Metis Invocation** | 3-Section prompt to Metis (requirements gate) | → S2 on APPROVE/COMMENT; → S0 on REQUEST_CHANGES |
+| **S2: Co-Design** | Open co-design interview + in-phase Daedalus advisory + HUMAN design gate; produces the design-brief / ADR | → S3 on human design-gate approval; advisory Daedalus input folded in per `## Design Consensus` (no gating signal — the human gate gates this state) |
+| **S3: Plan Generation** | Writing the TODO plan to `$OMT_DIR/plans/{name}.md` from the approved design | → S4 on self-review pass |
+| **S4: Momus Invocation** | Plan path to Momus | → S5 on APPROVE/COMMENT; on REQUEST_CHANGES → earliest affected phase: → S0 on a requirements problem (re-Metis → … → re-Momus), → S2 on a design problem (human gate → re-plan → re-Momus) |
 | **S5: Plan Presentation** | Stage A render + present to user | → S6 on user views plan |
 | **S6: Execution Recommendation** | Compute Stage B recommendation | → S7 on user receives |
-| **S7: Execution Bridge** | Stage C options + user selection | → S8 on selection; → S0 on "Revise plan" |
+| **S7: Execution Bridge** | Stage C mode choice ONLY — present the 3 execution options (Full orchestration / Focused execution / Revise plan) and capture the user's selection | → S8 on execution selection (option 1 or 2), valid ONLY against the fresh S4 APPROVE/COMMENT on the current artifact; → S0 on "Revise plan" (user-initiated) |
 | **S8: Execution Dispatch** | Invoke skill per selection | (terminal) |
 
-S7 → S0 edge: "Revise plan" returns to Interview Mode — full pipeline re-runs.
+**S8 reachability invariant:** S8 is reachable ONLY from an S7 execution selection taken against a **fresh S4 (Momus) APPROVE/COMMENT** on the current artifact. There is no plan-mutation-after-S4 → S8 path: any artifact change after S4 is a defect that routes to its earliest affected phase (S0 for a requirements problem, S2 for a design problem) and forces a fresh S4 re-review before S7 can offer execution again.
+
+**Two loop-back triggers, distinguished:**
+- **Reviewer-triggered routing** — a Momus (S4) REQUEST_CHANGES is routed *by the reviewer's verdict* to the earliest affected phase. A **requirements problem** re-walks from S0 (re-Metis → … → re-Momus); a **design problem** re-walks from S2 (human design gate → re-plan → re-Momus). The router classifies the defect, not the user.
+- **User-initiated revise** — the S7 → S0 "Revise plan" edge is a complementary mechanism: after the plan is presented, the user may on their own initiative choose "Revise plan" to re-open the requirements interview, and the full pipeline re-runs. Same destination (S0), different trigger (user choice vs reviewer verdict).
+
+**Deferred-then-revised design decision:** a design decision that was previously deferred to its recommended default and is *later revised* is classified as a **design problem** (a design defect), NOT a routine edit. It therefore routes to S2 (the design phase) → human design gate → re-plan → fresh S4 Momus re-review. Re-review is forced by construction; it does not depend on the user choosing "Revise plan".
 
 ### State Lifecycle Directives
 
 These directives govern how prometheus records its own pipeline state via the state CLI.
 
 - **S0 entry**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase S0`.
-- **Per each S-transition**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the plan file is first written); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
+- **Per each S-transition**: run `bun skills/prometheus/scripts/prometheus-state.ts set --phase <S>` immediately after entering the new state. Pass `--plan-path <p>` once at S2 (when the design-brief / ADR is first written during the Co-Design state — this is the first durable plan artifact on disk; the TODO plan body is appended later at S3); later transitions may omit it and the stored value is preserved automatically — omitting does NOT clear it. Pass `--resume-summary "<one line>"` whenever you want to refresh the pause bookmark; omitting it likewise preserves the previous bookmark.
 - **Teardown**: AFTER S8 dispatch is invoked, and on abort, run `bun skills/prometheus/scripts/prometheus-state.ts clear`.
 - **Session key**: state is keyed by the exported `$OMT_SESSION_ID` environment variable (the CLI falls back to `default` when `OMT_SESSION_ID` is unset).
 - **Restore**: on restore, re-read the current plan file, restart from `resume_summary` if `plan_path` is missing, distrust any stored verdict, and re-run gates on the current artifact. A stored verdict is not a pass — re-verification is mandatory.
@@ -924,7 +971,7 @@ Reviewer loop terminates **iff** the reviewer issues APPROVE or COMMENT on the c
 
 Time pressure, user override ("just proceed"), self-assessment of fix correctness, parallel dispatch on a blocked artifact — none terminate the loop.
 
-### Self-Review Checklist (after plan generation, before Daedalus)
+### Self-Review Checklist (after plan generation at S3, before Momus)
 
 | # | Item | Check |
 |---|------|-------|
@@ -932,34 +979,30 @@ Time pressure, user override ("just proceed"), self-assessment of fix correctnes
 | 2 | File references exist | All file paths and line references resolve |
 | 3 | Guardrails from Metis incorporated | Every Metis-flagged constraint reflected |
 | 4 | Zero human-intervention criteria | No TODO requires manual mid-execution action |
-| 5 | Section validator passes | Run `bun skills/prometheus/scripts/validate-plan.ts <plan_path>` (invoked ONLY here, post-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Daedalus. |
+| 5 | Section validator passes | Run `bun skills/prometheus/scripts/validate-plan.ts <plan_path>` (invoked ONLY here, pre-S4, full plan). If it reports missing or empty sections, fix the plan and re-run before submitting to Momus. |
+| 6 | design forks resolved | Every CRITICAL design fork is resolved with a recorded decision carried through the S2 Co-Design human gate; an unresolved fork reopens the co-design interview (`### Next-Gate Readiness Rule`) rather than reaching the plan. No fork is silently absorbed. |
 
 Item 2 ("File references exist") is a lightweight pre-Momus self-filter — it catches obviously stale paths before the plan reaches the feasibility gate. It is complementary to, not a substitute for, Momus's authoritative codebase-feasibility verification: this self-check is a cheap first pass; Momus is the gate.
 
-Failure action: loop back and fix before submitting to Daedalus.
+Failure action: loop back and fix before submitting to Momus.
 
 ### Gap Classification (post-plan self-review)
 
 | Level | Definition | Handling |
 |---|---|---|
-| **CRITICAL** | Requires user input | Return to Interview Mode |
+| **CRITICAL** | Requires user input | A requirements fork returns to the S0 Requirements interview; a design fork is surfaced and resolved at the S2 Co-Design human design gate (the co-design loop stays open and the channel reopens for it per `### Next-Gate Readiness Rule`). A CRITICAL fork is never carried forward unresolved — the channel stays open until it is co-decided. A design decision deferred to its default and later revised is a **design problem** that re-walks from S2 → human gate → re-plan → re-Momus. |
 | **MINOR** | Self-resolvable from context | Resolve inline during plan revision |
 | **AMBIGUOUS** | Standard convention / safe default exists | Apply documented default, note in plan |
 
 ### Design Consensus (reconciling Daedalus advisory input)
 
-Daedalus is advisory: it emits no gating signal and never bounces the plan back. Instead it returns design opinions (steelman antithesis, tradeoff tensions, alternative options). Prometheus reconciles each opinion into the plan through this procedure, between the S3 Daedalus pass and the S4 Momus invocation. The Daedalus advisory pass is MANDATORY across ALL intents (Trivial / Scoped / Complex / Architecture) — no intent class skips it.
+Daedalus is advisory: it emits no gating signal and never bounces the plan back. Instead it returns design opinions (steelman antithesis, tradeoff tensions, alternative options). Prometheus reconciles those opinions in-phase during the S2 Co-Design state — between the in-phase Daedalus advisory pass and the human design gate / S3 plan write. The Daedalus advisory pass is MANDATORY across ALL intents (Trivial / Scoped / Complex / Architecture) — no intent class skips it.
 
-Per design opinion:
+Reconciliation is simple: **the Daedalus advisory is discussed with the user in the open co-design interview, and the decisions are recorded in the co-authored ADR.** Prometheus uses its own judgment on what is worth raising — there is no fork-detection binary and no severity taxonomy (do not classify opinions as material/routine or Critical/High/Medium). What prometheus judges worth discussing is folded into the open Socratic interview channel (`### Next-Gate Readiness Rule`); the rest it absorbs on the opinion's merits. Either way the outcome lands in the co-authored ADR's MADR 7-field structure (`## Plan Structure > ADR`): an adopted opinion in **Considered Options** / **Decision** / **Consequences**, a rejected one in **Rationale** — no new ADR sub-field. Because every surfaced or resolved design choice already leaves a trace in its ADR **Considered Options**, that trace is the identity key against which an opinion already reflected (resolved earlier in the interview) is recognized and not raised twice.
 
-1. **Collect + dedup** — gather every Daedalus opinion, deduplicate against opinions already reflected in the plan.
-2. **Decide accept or reject** — prometheus judges each opinion on its merits (it is advice, not a directive).
-   - **Accepted** → fold the opinion into the plan body (revise the affected TODOs / approach), AND record it in the relevant ADR entry's **Considered Options** (as an evaluated option), **Decision** (if it changed the chosen path), and **Consequences** (the tradeoff now accepted). No new ADR sub-field — the existing MADR 7-field ADR (`## Plan Structure > ADR`) is where consensus outcomes land.
-   - **Rejected** → record the rejected opinion and the reason it was not adopted in that ADR entry's **Rationale** field (the Rationale already explains the chosen option over alternatives — a rejected Daedalus opinion is one such alternative).
-3. **Escalate genuine conflicts to the USER** — when an opinion exposes a genuine conflict or a material tradeoff that prometheus cannot resolve on the plan's own evidence (e.g. it pits two user-stated goals against each other, or it would change scope the user fixed), surface it to the user as a preference question. This is prometheus's own judgment of what counts as a genuine conflict — there is NO severity taxonomy; do not label opinions Critical/High/Medium. Routine advice prometheus can absorb is folded silently per step 2; only genuine conflicts / material tradeoffs reach the user.
-4. **1-revision-round backstop** — reconcile in a single revision round. If, after that one round, a genuine conflict still remains unresolved, escalate the remaining conflict to the user rather than looping further. The backstop bounds reconciliation to one round; it is not a gate, since this advisory pass never blocks the pipeline.
+**1-revision-round backstop** — reconcile in a single revision round. If, after that one round, a genuine conflict still remains unresolved, escalate the remaining conflict to the user rather than looping further. The backstop bounds reconciliation to one round; it is not a gate, since this advisory pass never blocks the pipeline.
 
-After reconciliation, proceed to S4 (Momus). Momus then verifies the reconciled plan for codebase feasibility + document quality and emits the gating verdict.
+After reconciliation, the design passes through the human design gate, then S3 plan generation, then S4 (Momus). Momus then verifies the reconciled plan for codebase feasibility + document quality and emits the gating verdict.
 
 ### Plan Presentation (S5/S6/S7 — MANDATORY after Momus APPROVE)
 
@@ -969,11 +1012,11 @@ This step CANNOT be skipped. After Momus APPROVE/COMMENT, prometheus MUST execut
 |---|---|---|
 | **Stage A** | Render plan to a single-file, browser-openable HTML — one file per plan, so plans never overwrite each other. Faithful content (no omission/contradiction/invented facts) + readability rewrite in the communication language + context callouts + optional necessity-gated Mermaid diagram (re-visualizing flow/structure the plan already decided, never inventing edges) + session-derived boxes (Stage B recommendation, Pipeline State). Always produced via template substitution (no converter needed); when the plan is approved, the HTML gets made. | Exact output path, rendering invariants (6), translation invariants (3), readability enrichment, template reference in `review-pipeline.md`; diagram type-selection + guardrails + presentation protocol in `diagram-guide.md` |
 | **Stage B** | Compute execution recommendation using Decision Matrix (TODO count, Complex/Architecture flag, AC gap, Ambiguity Score, Momus feasibility signal). Output: Recommendation + Mode + Rationale + What-tips-the-balance. | Decision Matrix details in `review-pipeline.md` |
-| **Stage C** | Execution Bridge via platform's user-prompt primitive — 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. | Option formatting in `review-pipeline.md` |
+| **Stage C** | Execution Bridge (S7) via platform's user-prompt primitive — mode choice ONLY: 3 options (Full orchestration / Focused execution / Revise plan). `(Recommended)` label computed from Decision Matrix, NOT hardcoded. Execution selection is valid only against the fresh S4 verdict on the current artifact (see the S8 reachability invariant in the Pipeline State Machine). | Option formatting in `review-pipeline.md` |
 
 **Stage A language gate — execute BEFORE rendering any prose:** First state the session's conversation language out loud, then render every prose string in the HTML in that language — hero text, headings, body, callouts alike. Detection is render-time, never hard-coded. Only the preservation list stays verbatim (code blocks, file paths, CLI, `WI-N`, `AC#M`, `S0-S8`); `plan.md` on disk is never rewritten. This is Stage A's silent-failure point — skip the active naming and the prose defaults to `plan.md`'s authoring language even when the session ran in another language. This gate is binding on its own; the full Translation Rule (3 invariants) in `review-pipeline.md` adds detail but is not a precondition for honoring it.
 
-On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to Interview Mode.
+On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 → delegate to sisyphus-junior. Option 3 → return to the S0 Requirements interview (user-initiated revise).
 
 **IMPORTANT**: On execution selection, MUST invoke via `Skill()` or delegate. Do NOT tell user to run a command manually.
 
@@ -984,9 +1027,9 @@ On selection: Option 1 → `Skill(skill: "sisyphus")` with plan path. Option 2 �
 | Metis | Summarized AC | Verifiability uncheckable |
 | Metis | Abstract scope | Completeness uncheckable |
 | Metis | Missing user goal | Intent unclassifiable |
-| Daedalus | Restating plan content in prompt | Daedalus reads file — token waste |
-| Daedalus | Asking it to approve, gate, or block | Daedalus is advisory — it surfaces design tradeoffs only, it does not approve or block |
-| Daedalus | Skipping after Metis APPROVE | Daedalus advisory pass is mandatory across all intents — its design input must be sought and folded in before Momus |
+| Daedalus | Restating design-brief content in prompt | Daedalus reads the design-brief / ADR file — token waste |
+| Daedalus | Asking it to approve, gate, or block | Daedalus is advisory — it surfaces design tradeoffs only, it does not approve or block (the S2 Co-Design human design gate is what gates) |
+| Daedalus | Skipping the in-phase pass after Metis APPROVE | Daedalus advisory pass is mandatory across all intents — its design input must be sought in-phase during S2 Co-Design and folded in before the human gate and plan write |
 | Momus | Repeating plan content | Momus reads file — token waste |
 | Momus | Separate metis results in prompt | Already in Plan Context + anchoring risk |
 | Momus | Adding review instructions | Momus has own criteria |

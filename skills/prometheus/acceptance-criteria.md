@@ -1,6 +1,6 @@
 # Acceptance Criteria — Lookup
 
-**This file is lookup-only.** All mandatory AC rules (two-line format, Granularity, Consumer Boundary, Transparency, Setup/Cleanup, Required Chaining Template, Executor-Provided Variables, Reference Integration, Anti-Patterns, Self-Check) are defined inline in `SKILL.md > ## Acceptance Criteria (Mandatory Contract)`. The contract is authoritative; this file is per-tool examples + a worked example.
+**This file is lookup-only.** The mandatory AC rules are defined inline in `SKILL.md > ## Acceptance Criteria (Mandatory Contract)`. The contract is authoritative; this file is per-tool examples + a worked example.
 
 Read this file when you want a concrete example for a specific tool, or want to consult a worked AC proposal.
 

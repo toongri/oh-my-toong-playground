@@ -1,6 +1,6 @@
 # Review Pipeline — Lookup
 
-**This file is lookup-only.** All workflow-wide rules (Common Gate Pattern, Verdict Handling, Revise definition, Verdict/Reviewer Freshness Rules, Pipeline State Machine, Loop Termination, Self-Review Checklist, Gap Classification, Plan Presentation mandate, Anti-Patterns) are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
+**This file is lookup-only.** The mandatory review-pipeline rules are defined inline in `SKILL.md > ## Review Pipeline (Mandatory Contract)`. The contract is authoritative.
 
 Read this file when you are about to execute a SPECIFIC reviewer invocation, Stage A HTML render, Stage B Decision Matrix computation, or Stage C option presentation. Read the corresponding section in full at that moment.
 
@@ -29,26 +29,26 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 ## Daedalus Invocation Template
 
-**When**: After plan generated to `$OMT_DIR/plans/{name}.md`. MANDATORY before Momus.
+**When**: In-phase during the S2 Co-Design state, at design time — BEFORE the TODO plan is written. The review object is the **design-stage design-brief / ADR draft** (the co-authored design artifact written at S2), NOT a finished plan file. MANDATORY; advisory only.
 
 ```
-## Plan File
-$OMT_DIR/plans/{name}.md
+## Design Brief / ADR Draft
+$OMT_DIR/plans/{name}.md   (design-brief / ADR sections only — written at S2, before TODOs)
 
 ## Design Opinion Focus
-- **Steelman antithesis**: What is the strongest case against this plan? Surface it explicitly, even if you ultimately endorse the approach.
-- **Tradeoff tension**: Identify the key tradeoff tensions present (e.g., speed vs. safety, complexity vs. flexibility). Are they acknowledged and resolved in the plan?
-- **Synthesis**: Where competing forces exist, does the plan synthesize a defensible resolution, or does it silently pick one side?
-- **Evaluative trigger**: If the plan contains a major architectural or strategic decision, an explicit evaluative statement of the chosen approach's merits and risks is required — not just a description of what was chosen.
+- **Steelman antithesis**: What is the strongest case against this design? Surface it explicitly, even if you ultimately endorse the approach.
+- **Tradeoff tension**: Identify the key tradeoff tensions present (e.g., speed vs. safety, complexity vs. flexibility). Are they acknowledged and resolved in the design?
+- **Synthesis**: Where competing forces exist, does the design synthesize a defensible resolution, or does it silently pick one side?
+- **Evaluative trigger**: If the design contains a major architectural or strategic decision, an explicit evaluative statement of the chosen approach's merits and risks is required — not just a description of what was chosen.
 ```
 
-Design-advisory opinion only — no verdict, no file-existence checks. Feasibility verification is Momus's responsibility.
+Design-advisory opinion only — no verdict, no gate, no file-existence checks, no plan-feasibility checks. It reviews the design at design time; feasibility verification of the finished plan is Momus's responsibility.
 
 ---
 
 ## Momus Invocation Template
 
-**When**: After Daedalus advisory review. MANDATORY before user presentation.
+**When**: Post-plan at the S4 gate — invoked AFTER the TODO plan is written at S3 (Plan Generation), MANDATORY before user presentation. The review object is the finished plan file. This is the post-plan plan-quality gate; design-time advisory (Daedalus at S2) has already concluded.
 
 Send the plan file path only:
 
@@ -134,7 +134,7 @@ Translating any item is a rule violation.
 - Writing enrichment back to disk. Per Invariant 3 the callouts live only in the ephemeral HTML; `plan.md` stays the single source of truth and every re-render redraws from it.
 - Drawing a diagram edge, arrow, or relationship that `plan.md` did not already decide. A diagram cannot be vaguer than the plan it visualizes — if you cannot draw it without inventing a who-calls-whom or ownership decision the plan never made, that is a plan defect: fix the plan and re-run the pipeline, do not invent the edge at render time.
 
-Rationale: `plan.md` is the artifact Daedalus and Momus reviewed and the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
+Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed the finished plan at S4, and Daedalus reviewed its design-brief / ADR sections at S2 — and it is the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
 
 ### Rendering Methodology
 
