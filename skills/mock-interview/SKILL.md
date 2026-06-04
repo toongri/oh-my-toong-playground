@@ -7,9 +7,11 @@ description: Use when generating interviewer-side mock-interview questions from 
 
 ## Overview
 
-Generate **interviewer-side** mock-interview question sets from a candidate's resume, with drill-down chains that probe each main question to 2–3 deeper levels.
+Generate **interviewer-side** mock-interview question sets from a candidate's resume, with drill-down chains that probe each main question level by level down the same thread.
 
-**Core principle**: Each follow-up question must be a natural next question to the candidate's *previous answer*. Same thread, one level deeper — not a different branch.
+**This is the Socratic method applied to interviewing.** Each follow-up digs one level deeper into the candidate's *previous answer* — same thread, never a sibling branch — and the chain keeps going until the candidate either reaches solid ground (genuine first-hand depth) or their reasoning collapses and they hit the edge of what they actually understand. **That terminus — solid ground vs. collapse, and how deep it took to reach — is the signal the interview exists to produce.**
+
+**Core principle**: Each follow-up question must be a natural next question to the candidate's *previous answer*. Same thread, one level deeper — not a different branch. Stop only when the thread itself terminates (see Chain Depth Decision).
 
 **This is a collaborative co-design process with the interviewer, NOT a one-shot generator.** The two rules below are mandatory and define how this skill works.
 
@@ -23,7 +25,7 @@ Do not dump a finished set. Build it *with* the interviewer, question by questio
 
 - **Direction**: "이 질문 이런 방향(키워드 X)으로 가려는데 어때?"
 - **Follow-up candidates**: "이 답변 다음 꼬리질문 후보가 (A) …, (B) … 인데 뭐가 더 좋아?"
-- **Happy-case keywords + evidence**: "이 질문엔 이런 키워드로 답이 나와야 할 것 같고, 이력서 근거가 X라서 ✅(또는 ⚠️)로 봤는데 동의해?"
+- **Happy-case keywords + evidence**: "이 질문엔 이런 키워드로 답이 나와야 할 것 같고, 이력서 근거는 X야(또는 이력서엔 없고 후보 이해도를 떠보는 질문이야) — 동의해?"
 
 Incorporate the interviewer's answer, then move on. You may batch the stages of ONE chain (one area) into a single checkpoint message, but **never batch multiple areas or the full set, and never ask for a blanket rubber-stamp** — each stage's direction / keywords / evidence must be individually visible and individually confirmable, and you wait for per-stage feedback before the next area. **The process and its granularity ARE the product** — the interviewer's domain judgment is what makes the keywords and evidence correct.
 
@@ -50,7 +52,7 @@ Default LLM behavior is to produce a branching tree when asked for "3-level foll
 |------------------------|--------------------------|
 | Q → Q-A / Q-B / Q-C (3 keyword branches) → each branches again | Q → natural next question from Q's answer → natural next question from that answer → … |
 | Interviewer jumps onto a different path based on answer keyword | Interviewer goes one level deeper on the same thread |
-| Tree depth = 2–3, but each path is shallow | Chain depth = 2–3, each level deepens the same topic |
+| Spreads into sibling branches — each path stays shallow | One thread, each level deepening it to its natural terminus (see Chain Depth Decision) |
 
 **Test**: If Q3 would still make sense without hearing the Q2 answer, it is a sibling branch, not a depth chain.
 
@@ -88,7 +90,7 @@ Triggers that map to THIS skill:
 2. Extract project-by-project facts.
 3. Identify 5–10 candidate high-signal areas (trade-off decision, design rationale, or operational depth).
    → PING-PONG: present the area list, ask "이 영역들 어때? 더 팔 곳 / 뺄 곳?" Incorporate before continuing.
-4. For each agreed area, present the chain as ONE checkpoint (Rule 1a batching): show the Main question and each stage — direction / happy-case keywords / evidence / ✅⚠️ marker individually visible — and wait for the interviewer's per-stage feedback before moving to the next area. Apply the Chain Depth Decision flowchart per stage; stop the chain when it says stop (depth 2 with ⚠️ is normal). Never rubber-stamp a whole chain; never batch multiple areas into one checkpoint.
+4. For each agreed area, present the chain as ONE checkpoint (Rule 1a batching): show the Main question and each stage — direction / happy-case keywords / resume evidence individually visible — and wait for the interviewer's per-stage feedback before moving to the next area. Apply the Chain Depth Decision per stage; keep drilling the same thread until it terminates (the candidate reaches solid ground, or a natural next question no longer follows). Never rubber-stamp a whole chain; never batch multiple areas into one checkpoint.
 5. Assemble the agreed draft per Required Deliverable Structure (incl. [Interviewer Guide] blocks, 1-page summary).
 6. COUNCIL VALIDATION (default): load references/council-iteration.md via Read tool, run council on the 10 review axes, iterate to unanimous APPROVE, bring each round's conflicts back to the interviewer. (If the interviewer opted out: run exactly one silent council round — auto-apply verified factual-error fixes and consensus fixes, no user arbitration — then ship.)
 7. Ship after unanimous APPROVE (or the interviewer explicitly stops).
@@ -98,7 +100,7 @@ Triggers that map to THIS skill:
 
 ## Chain Depth Decision
 
-The most common per-chain failure is grinding to stage 3 when the resume cannot support it. Use this flowchart at each potential next stage.
+Drill the same thread until it terminates. There is exactly ONE reason to stop: no natural next question follows from the prior answer. Use this at each potential next stage.
 
 ```dot
 digraph chain_depth {
@@ -106,24 +108,25 @@ digraph chain_depth {
     node [shape=box, style=rounded];
 
     "Does a natural next question\nfollow from the prior answer?" [shape=diamond];
-    "Does the resume back an answer\nat this depth?" [shape=diamond];
 
     "Just heard the prior stage's answer" -> "Does a natural next question\nfollow from the prior answer?";
-    "Does a natural next question\nfollow from the prior answer?" -> "STOP — anything you add now\nis a sibling branch, not depth" [label="no"];
-    "Does a natural next question\nfollow from the prior answer?" -> "Does the resume back an answer\nat this depth?" [label="yes"];
-    "Does the resume back an answer\nat this depth?" -> "Mark ✅ — write the next stage.\nFailure to answer = scoring signal" [label="yes"];
-    "Does the resume back an answer\nat this depth?" -> "Mark ⚠️ — write it but tell the interviewer\nnot to force depth here" [label="no"];
+    "Does a natural next question\nfollow from the prior answer?" -> "STOP — the thread terminated:\nsolid ground reached, or the candidate\nhit the edge of their knowledge.\nThat terminus IS the signal." [label="no"];
+    "Does a natural next question\nfollow from the prior answer?" -> "Write the next stage and keep drilling —\neven past what the resume explicitly states." [label="yes"];
 }
 ```
 
-**Rule**: Going deeper than the resume supports is not "thoroughness" — it forces the candidate to invent answers under pressure, inflating false negatives.
+If the only way to "continue" is to jump to a different aspect, that is a sibling branch, not depth — stop this chain and open a new Main question (Rule 2).
+
+**Do NOT stop because the resume text "ran out."** The resume records what the candidate *claimed*, not the limit of what is worth probing — and real understanding usually lies *past* the literal resume text. A natural next question on the same thread is fair game no matter how deep it goes.
+
+**Fairness guard:** keep "I don't know" (모르겠습니다) cost-free. Deep drilling is fair *only* if admitting the edge of one's knowledge is cheap — then a collapse is honest signal, not a manufactured one. A candidate who invents an answer under pressure does so because the *interviewer punishes "I don't know,"* not because the question is deep — so fix the reaction, not the depth. The Interviewer Guide should say "if they reach their limit and say so, that is a clean terminus — note the depth and move on," never "they should have known this."
 
 ## Anatomy of a Good Stage
 
 Use numeric main-question IDs (`Q1`, `Q2`, …). Never use letter suffixes (`Q-A`, `Q-B`, `Q-C`) — those signal sibling branching, which Rule 2 forbids.
 
 ```markdown
-### Q{n} → stage-{N} drill-down (✅ or ⚠️)
+### Q{n} → stage-{N} drill-down
 
 > [Natural next question from the prior stage's expected answer]
 
@@ -134,21 +137,8 @@ Use numeric main-question IDs (`Q1`, `Q2`, …). Never use letter suffixes (`Q-A
 - [Operational signals — not buzzwords]
 - *(Bonus, if mentioned spontaneously)* [Vendor / framework nuance — extra credit only; absence is not a scoring penalty]
 
-**Resume evidence**: [Direct quote from resume OR explicit "depends on candidate's operational judgment" if ⚠️]
+**Resume evidence**: [Direct quote from resume that anchors this stage — OR, when the stage probes past the literal resume, say so plainly (e.g. "beyond the resume: does the GET_LOCK claim rest on real understanding of its lack of TTL?"). This line tells the interviewer how to read a failure here: a contradicted claim, or just the edge of the candidate's knowledge.]
 ```
-
-## Marker Convention (Mandatory)
-
-Every drill-down stage MUST carry exactly one marker:
-
-| Marker | Meaning | Interviewer Implication |
-|--------|---------|-------------------------|
-| **✅** | Directly stated in resume — candidate has evidence to answer | Failure to answer is a scoring signal |
-| **⚠️** | No direct resume backing — general operational knowledge area | Failure to answer is normal; do not force chain deeper |
-
-**Why this matters**: Without markers, the interviewer applies the same expectation to backed and unbacked stages — producing false negatives in ⚠️ areas.
-
-**Mixed-backing stage** (happy-case keywords mix resume-direct facts with operational-judgment items): set the marker to the **weakest backing level** (conservative), OR move operational items into a `*(Bonus, if mentioned spontaneously)*` sub-bullet so the stage body stays ✅. Both are legitimate. **Leaving the stage marked ✅ while mixing in unbacked keywords is unsafe** — the interviewer will hold the candidate to ✅-grade expectation on items the resume does not actually back.
 
 ## Happy-case Keyword Rules
 
@@ -237,7 +227,7 @@ Bad mapping is worse than no mapping. Example: mapping medical-reservation concu
 ## Required Deliverable Structure
 
 1. **Part 1 — Resume body extracted as markdown**: For PDF/image resumes, render the resume content at the top (personal info, experience, projects, activities). Interviewers cross-check facts without reopening the PDF.
-2. **Part 2 — Areas (5–10)**: Main → stage-1 → stage-2 → (stage-3 if backed). Every stage carries a marker.
+2. **Part 2 — Areas (5–10)**: Main → drill-down stages, each a natural next question down the same thread, continuing until the thread terminates (solid ground or the edge of the candidate's knowledge). Each stage's Resume-evidence line says whether it is anchored in the resume or probes past it.
 3. **Interviewer Usage Guide**: Progression principles, area priority, time allocation for 60/90-minute modes.
 4. **1-page Compressed Summary** (table): area name, main one-liner, drill-down stages, time — scannable at a glance.
 5. **Red / Green Flag Checklist**: signals for evaluating responses.
@@ -246,7 +236,7 @@ Bad mapping is worse than no mapping. Example: mapping medical-reservation concu
 
 **This is the corrected design.** Earlier versions made council an opt-in "quality gate" — that was wrong. Council is the DEFAULT final step.
 
-Send the interviewer-agreed draft through a multi-model council on the **10 review axes** (chain naturalness, resume-backing accuracy, happy-case senior discrimination, factual accuracy, depth appropriateness, utterance separation, difficulty calibration, question fairness, domain-mapping accuracy, area coverage — full definitions in `references/council-iteration.md`).
+Send the interviewer-agreed draft through a multi-model council on the **10 review axes** (chain naturalness, evidence-line honesty, happy-case senior discrimination, factual accuracy, depth appropriateness, utterance separation, difficulty calibration, question fairness, domain-mapping accuracy, area coverage — full definitions in `references/council-iteration.md`).
 
 **Do not expect one round.** Typically 3–7 rounds. "round-2-pass + minor polish" ≠ ship-ready.
 
@@ -265,7 +255,9 @@ Send the interviewer-agreed draft through a multi-model council on the **10 revi
 | "Company name appeared — auto-add domain mapping" | Domain mapping is opt-in. Auto-adding produces bad analogies and gets rejected. |
 | "This fact is common knowledge" | See the fact-check table. LLMs get these wrong often. |
 | "The interviewer will know to break it up" | A single visual block gets read aloud as one block. Use [Interviewer Guide] separators. |
-| "All stages must reach depth 3" | Depth 3 is a ceiling, not a floor. Stopping at depth 2 is normal — the ⚠️ marker signals it. |
+| "All stages must reach depth 3" | Depth is set by the thread, not a quota. A chain stops when no natural next question follows — that may be depth 2 or depth 5. Don't pad to a number. |
+| "The resume doesn't back this depth, so stop" | The resume is what they *claimed*, not the limit of what's worth probing. If a natural next question follows on the same thread, drill it — real understanding usually ends past the literal resume text. |
+| "They couldn't answer the deep one — mark them down" | Reaching the edge of one's knowledge is a clean terminus, not a deduction. Only a collapse on *claimed* territory (contradicting their own resume) is a negative signal. Keep "I don't know" cost-free. |
 
 ## Red Flags — Stop and Restart
 
@@ -275,12 +267,12 @@ If any of these appear, **stop and correct**:
 - Shipping without council validation — the default path requires council to unanimous APPROVE; opt-out fast mode requires exactly one silent round. Zero council rounds is ALWAYS a red flag.
 - Finalizing direction / keywords / evidence without asking the interviewer "이거 어때?"
 - Sibling-branch notation (`Q-A`, `Q-B`, `Q-C` used as follow-ups)
-- Any stage without a marker
 - Two or more questions packed into a single quote block
 - Domain-mapping area present when the user did not request one
 - Happy-case lists that are buzzword soup
-- All areas uniformly reach depth 3 regardless of resume backing strength
+- A chain stopped at the resume boundary while a natural next question on the same thread still existed (the collapse point was never reached)
+- All chains padded to the same depth regardless of where each thread naturally terminates
 
 ## Bottom Line
 
-This skill is a collaborative co-design loop, not a generator. Build the question set *with* the interviewer one question at a time (Rule 1a), keep every follow-up a true depth chain (Rule 2), then validate to unanimous council APPROVE (Rule 1b). The process and its granularity are the product — a finished artifact dumped in one shot, however polished, is the failure mode this skill exists to prevent.
+This skill is a collaborative co-design loop, not a generator. Build the question set *with* the interviewer one question at a time (Rule 1a), keep every follow-up a true depth chain drilled to where the candidate's understanding actually ends (Rule 2), then validate to unanimous council APPROVE (Rule 1b). The process and its granularity are the product — a finished artifact dumped in one shot, however polished, is the failure mode this skill exists to prevent.
