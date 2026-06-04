@@ -67,10 +67,10 @@ When validating an interview-question artifact, the council prompt MUST instruct
 | # | Axis | What the reviewer checks | Defect class it catches |
 |---|------|--------------------------|-------------------------|
 | 1 | **Chain naturalness** | Is each stage a natural next question to the prior answer, or a sibling branch? Would stage-N still make sense without hearing stage-(N-1)'s answer? | Fake chains (branching disguised as depth) |
-| 2 | **Resume-backing accuracy** | Does each ✅/⚠️ marker match the actual resume evidence? Any ✅ that the resume doesn't truly support? | Overclaimed backing → false negatives in interview |
+| 2 | **Evidence-line honesty** | Does each stage's Resume-evidence line honestly state whether it is anchored in the resume or probes past it? Any stage claiming a direct resume quote it does not actually have? | Mislabeled backing → interviewer misreads a failure |
 | 3 | **Happy-case senior discrimination** | Are keywords operational signals / dimensional reasoning / vendor nuance, or buzzword soup? | Keyword lists that any buzzword-dropper passes |
 | 4 | **Factual accuracy** | Any wrong technical fact in happy-case keywords? (Cross-check the Fact-Check High-Risk Areas table.) | Interviewer mis-scoring a correct candidate |
-| 5 | **Depth appropriateness** | Any stage forced to depth 3 without resume backing? Any ⚠️ stage mismarked ✅? | Grinding past what the resume supports |
+| 5 | **Depth appropriateness** | Does each chain drill to its natural terminus (solid ground or the edge of the candidate's knowledge), or stop short while a natural next question on the same thread still followed? Is any "deepening" actually a sibling branch? | Chains cut off before the Socratic collapse point |
 | 6 | **Utterance separation** | Are multi-question stages split into [Interviewer Guide] blocks, or packed into one quote block? | Interviewer reads 3 questions aloud at once |
 | 7 | **Difficulty calibration** | Is the difficulty right for the candidate's years of experience? Junior-too-shallow / staff-too-deep? | Wrong-level questions for the candidate |
 | 8 | **Question fairness** | Any no-win gotcha or hypothetical-escape framing? Any question with no winning answer? | Unfair questions that punish good candidates |
