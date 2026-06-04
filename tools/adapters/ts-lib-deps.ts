@@ -2,6 +2,12 @@ import fs from "fs/promises";
 import path from "path";
 import { logWarn } from "../lib/logger.ts";
 
+// Single source of truth for the relative-import matcher. Used as a pattern
+// only — callers build a fresh `new RegExp(RELATIVE_IMPORT_RE.source, "g")` per
+// scan so the stateful `lastIndex` is never shared across concurrent scans.
+// Matches: from './x', from '../x', import './x', import('../x'), side-effects.
+const RELATIVE_IMPORT_RE = /(?:from|import)\s*[\s(]["'](\.\.?\/[^"']+)["']/g;
+
 /**
  * Recursively resolve `@lib/` import dependencies for a .ts file.
  *
@@ -46,7 +52,7 @@ export async function resolveTsLibDependencies(
 
   // Match relative imports: from './x', from '../x', import './x', import '../x'
   // Also side-effect: import './x';  import '../x';
-  const REL_IMPORT_RE = /(?:from|import)\s*[\s(]["'](\.\.?\/[^"']+)["']/g;
+  const REL_IMPORT_RE = new RegExp(RELATIVE_IMPORT_RE.source, "g");
 
   const deps: string[] = [];
 
@@ -185,4 +191,54 @@ async function collectTsFiles(dir: string, root: string): Promise<string[]> {
     }
   }
   return results;
+}
+
+/**
+ * Find relative imports in a non-lib component file that resolve INTO
+ * libSourceDir. Such imports are a deployment hazard: the collector above only
+ * follows the `@lib/` alias when gathering a component's lib dependencies, so a
+ * relative import reaching into lib/ is silently dropped from the deployed
+ * bundle and the deployed file fails at runtime with "Cannot find module".
+ *
+ * Returns the offending import specifiers (raw text as written). Returns an
+ * empty array for files under libSourceDir (intra-lib relative imports are the
+ * supported style) and for *.test.ts files (never deployed).
+ */
+export async function findRelativeLibImports(
+  filePath: string,
+  libSourceDir: string,
+): Promise<string[]> {
+  if (filePath.startsWith(libSourceDir + path.sep) || filePath === libSourceDir) {
+    return [];
+  }
+  if (filePath.endsWith(".test.ts")) return [];
+
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const re = new RegExp(RELATIVE_IMPORT_RE.source, "g");
+  const offenders: string[] = [];
+
+  for (const line of content.split("\n")) {
+    if (line.trimStart().startsWith("//")) continue;
+
+    let match: RegExpExecArray | null;
+    re.lastIndex = 0;
+    while ((match = re.exec(line)) !== null) {
+      let specifier = match[1];
+      if (specifier.endsWith(".ts")) specifier = specifier.slice(0, -3);
+      const absPath = path.normalize(
+        path.join(path.dirname(filePath), `${specifier}.ts`),
+      );
+      if (absPath.startsWith(libSourceDir + path.sep) || absPath === libSourceDir) {
+        offenders.push(match[1]);
+      }
+    }
+  }
+
+  return offenders;
 }
