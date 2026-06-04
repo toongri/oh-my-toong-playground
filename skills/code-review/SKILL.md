@@ -382,8 +382,9 @@ The orchestrator constructs this command string but does NOT execute it. The com
 
 ### Result Scope Validation
 
-After all chunk-reviewers return, verify each response covers all files in its assigned FILE_LIST.
-If any chunk response clearly omits assigned files, re-dispatch a new chunk-reviewer with only the missing files.
+Each chunk-reviewer scans its whole assigned diff through every angle and reports coverage per *angle* (the Angle Coverage block), not per file. A file that produced no candidates is clean, not omitted — never treat an unmentioned file as a coverage gap.
+
+Re-dispatch a chunk-reviewer for its chunk only when its response signals an infrastructure failure: a "Partial review"/"Limited review" degradation notice, an Angle Coverage entry marked `Unavailable`, or a reported diff-command failure.
 Cap: maximum 1 re-dispatch per original chunk; if the re-dispatch also fails, accept partial coverage.
 After all re-dispatches complete, merge all chunk results (original + re-dispatched) before proceeding to Step 6.
 
