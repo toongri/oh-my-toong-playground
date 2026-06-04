@@ -508,8 +508,8 @@ Momus invoked (plan gate) → COMMENT ("payment-service.ts reference at line 20-
 accurate; TODO 3 acceptance criteria could be more specific"). Findings incorporated
 silently, proceed.
 
-Turn 8:
-Full plan presented to user. User approves.
+Turn 8 (S5 + S7):
+Full plan presented to user (S5). User reviews the rendered plan.
 Execution Bridge: User selects "(1) Full orchestration".
 ```
 
