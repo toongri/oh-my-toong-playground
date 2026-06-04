@@ -60,12 +60,12 @@ digraph council_decision {
 1. Encounter uncertain decision point
 2. Call council with rich context + specific question
 3. Council members provide independent opinions (raw outputs)
-4. **Collect**: `bun .claude/skills/agent-council/scripts/job.ts collect JOB_DIR` — polls internally; re-call if not `"done"`
+4. **Collect**: `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect JOB_DIR` — polls internally; re-call if not `"done"`
 5. **Read each member's output file** via the Read tool
 5a. **Completeness gate** (Chairman judgment): `done` does NOT mean semantically complete. A member can exit cleanly yet return a non-answer — a plan, framing, or "I'll answer once X arrives" response. Read each member's content and judge: did it actually answer the asked question? Also check: is any member in `awaiting_resume` state? For any member that is `awaiting_resume` OR whose content is a non-answer (narrative-only / incomplete / waiting pattern), call `resume-member` BEFORE proceeding. `clean` is destructive (it deletes the jobDir, and `resume-member <jobDir>` requires that jobDir) — so `clean` is ALWAYS the last step, only after completeness is confirmed.
 6. **Synthesize** (you as Chairman): raw outputs → Advisory Format below
 7. Make informed decision based on advisory
-8. **Cleanup**: `bun .claude/skills/agent-council/scripts/job.ts clean JOB_DIR`
+8. **Cleanup**: `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts clean JOB_DIR`
 
 ## Context Synchronization
 
@@ -80,7 +80,7 @@ Council members do not share the caller's session context. The caller must expli
 
 ## How to Call
 
-Execute `bun .claude/skills/agent-council/scripts/job.ts` from the project root:
+Execute `bun ${CLAUDE_SKILL_DIR}/scripts/job.ts` from the project root:
 
 > Note: Always write the council prompt in English for consistent cross-model communication.
 
@@ -111,7 +111,7 @@ cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 ## Question
 [Specific points needing judgment - in English]
 PROMPT_EOF
-JOB_DIR=$(bun .claude/skills/agent-council/scripts/job.ts start --stdin < "$PROMPT_FILE")
+JOB_DIR=$(bun ${CLAUDE_SKILL_DIR}/scripts/job.ts start --stdin < "$PROMPT_FILE")
 ```
 Output: JOB_DIR path (one line on stdout).
 
@@ -122,7 +122,7 @@ Output: JOB_DIR path (one line on stdout).
 `collect` polls internally every 5 seconds until all members complete or its internal timeout (default 150s) expires. No external sleep needed.
 
 ```bash
-bun .claude/skills/agent-council/scripts/job.ts collect "$JOB_DIR"
+bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
@@ -138,7 +138,7 @@ Only read entries where `outputFilePath` is non-null (null = infrastructure fail
 `done` does NOT mean semantically complete. Read each member's content. If any member is in `awaiting_resume` state OR returned a non-answer (narrative-only / incomplete / waiting pattern / "I'll answer once X arrives"), call `resume-member` before proceeding:
 
 ```bash
-bun .claude/skills/agent-council/scripts/job.ts resume-member "$JOB_DIR" <name> "Please answer the question directly."
+bun ${CLAUDE_SKILL_DIR}/scripts/job.ts resume-member "$JOB_DIR" <name> "Please answer the question directly."
 ```
 
 The prompt is written by the Chairman LLM for the specific situation. The example above is illustrative only.
@@ -153,7 +153,7 @@ You as the Chairman must synthesize raw outputs into the Advisory Format (see be
 
 **6. Cleanup (Bash, timeout: 180000)**
 ```bash
-bun .claude/skills/agent-council/scripts/job.ts clean "$JOB_DIR"
+bun ${CLAUDE_SKILL_DIR}/scripts/job.ts clean "$JOB_DIR"
 ```
 
 ### CLI Flags — Chairman Inclusion
