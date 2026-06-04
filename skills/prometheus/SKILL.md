@@ -311,7 +311,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 3: Metis consultation
 - Phase 4: Co-Design interview (in-phase Daedalus advisory) → human design gate
 - Phase 5: Write plan → Momus review
-- Phase 6: Present plan + user approval
+- Phase 6: Present plan (S5) + S7 execution mode choice
 
 **Complex**
 - Phase 1: Context loading + explore delegation
@@ -320,7 +320,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 4: Metis consultation
 - Phase 5: Co-Design interview (in-phase Daedalus advisory) → human design gate
 - Phase 6: Write plan → Momus review
-- Phase 7: Present plan + user approval
+- Phase 7: Present plan (S5) + S7 execution mode choice
 
 **Architecture**
 - Phase 1: Context loading + explore + librarian (parallel)
@@ -330,7 +330,7 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 - Phase 5: Metis consultation
 - Phase 6: Co-Design interview (in-phase Daedalus advisory) → human design gate
 - Phase 7: Write plan → Momus review
-- Phase 8: Present plan + user approval
+- Phase 8: Present plan (S5) + S7 execution mode choice
 
 ### Phase 1 Evidence Output (mandatory before Phase 2)
 
