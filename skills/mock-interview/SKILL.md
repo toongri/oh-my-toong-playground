@@ -52,7 +52,7 @@ Default LLM behavior is to produce a branching tree when asked for "3-level foll
 |------------------------|--------------------------|
 | Q → Q-A / Q-B / Q-C (3 keyword branches) → each branches again | Q → natural next question from Q's answer → natural next question from that answer → … |
 | Interviewer jumps onto a different path based on answer keyword | Interviewer goes one level deeper on the same thread |
-| Tree depth = 2–3, but each path is shallow | Chain depth = 2–3, each level deepens the same topic |
+| Spreads into sibling branches — each path stays shallow | One thread, each level deepening it to its natural terminus (see Chain Depth Decision) |
 
 **Test**: If Q3 would still make sense without hearing the Q2 answer, it is a sibling branch, not a depth chain.
 
