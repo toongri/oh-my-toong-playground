@@ -235,7 +235,7 @@ Skill asks about a design choice (e.g., storage approach, file size limit, valid
 **Primary Technique:** Plan Generation + Metis Consultation — 플랜 생성 전 필수 Metis 검증
 
 **Turn 1-N — Setup:**
-Interview is completed (all clarifying questions answered, acceptance criteria confirmed).
+Interview is completed (all clarifying questions answered, acceptance criteria confirmed). Metis (S1 requirements gate) → APPROVE. S2 Co-Design (in-phase Daedalus advisory + human design gate) precedes plan write — the user has given explicit holistic design approval at the human design gate.
 
 **Final Turn — Input:**
 ```
@@ -246,7 +246,7 @@ Interview is completed (all clarifying questions answered, acceptance criteria c
 
 | # | Check | Expected Behavior |
 |---|-------|-------------------|
-| V1 | Metis consultation before plan | Metis agent is consulted BEFORE the plan is written (not after or skipped) |
+| V1 | Metis consultation before plan | Metis (S1 requirements gate) is consulted BEFORE the plan is written (not after or skipped), and the S2 Co-Design (Daedalus advisory + human design gate) precedes the plan write — the plan is NOT written until the user gives explicit design approval at the S2 human design gate |
 | V2 | Plan saved to .omt/plans/ | Plan file is saved to `.omt/plans/*.md` path |
 | V3 | Plan content in English | Plan content (body, tasks, criteria) is written in English |
 | V4 | Plan contains Work Objectives and per-TODO AC | Plan includes Work Objectives (Must Have / Must NOT Have) and each TODO specifies acceptance criteria |
@@ -671,7 +671,7 @@ Prometheus output MUST contain evidence of all three pass indicators when a Verd
 **Primary Technique secondary:** Stage B Execution Recommendation — Plan more wins conflict resolution
 
 **Setup:**
-Both variants assume the full review pipeline has completed (Metis APPROVE, Momus APPROVE).
+Both variants assume the full review pipeline has completed (Metis APPROVE, S2 Co-Design human design gate approved, Momus APPROVE).
 The variants differ only in the Decision Matrix signals present in each scenario's session state.
 
 #### Variant A:
