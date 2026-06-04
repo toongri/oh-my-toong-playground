@@ -225,7 +225,8 @@ After loading context, classify the user's request. Classification determines in
 Before conducting interviews → follow `## Interview Mode (Mandatory Contract)` below.
 **All YES + Ambiguity ≤ 0.2** → Proceed to Acceptance Criteria Drafting per `## Acceptance Criteria (Mandatory Contract)` below.
 After AC is confirmed → Metis consultation automatically per `## Review Pipeline (Mandatory Contract)` below.
-After Metis APPROVE/COMMENT → write plan per `## Plan Structure (Mandatory Contract)` below.
+After Metis APPROVE/COMMENT → S2 Co-Design (in-phase Daedalus advisory → human design gate) per `## Review Pipeline (Mandatory Contract)` below.
+After the human design gate → write plan per `## Plan Structure (Mandatory Contract)` below.
 
 This checklist is the planner's own gating decision — **never delegate it to the user** by asking confirmation questions like "Does this satisfy item N?" or by rendering it as a user-facing approval form. The agent must compute and own each YES/NO itself. Outputting the 6-item evaluation in the agent's visible reasoning is required (see Rationalization Table and Red Flags below) and does NOT violate this rule — the rule forbids *handing the checklist to the user as a decision*, not *exposing the agent's own evaluation trace*.
 
@@ -301,7 +302,8 @@ Each intent class maps to a fixed set of phases. Create tasks for each phase at 
 
 **Trivial**
 - Phase 1: Clarify + scope
-- Phase 2: Write plan
+- Phase 2: Co-Design interview (in-phase Daedalus advisory) → human design gate
+- Phase 3: Write plan
 
 **Scoped**
 - Phase 1: Requirements interview + Clearance
