@@ -12,10 +12,10 @@
  */
 
 import type { HookInput, HookOutput } from './types.ts';
-import { resolveManifest } from '../../lib/pins/manifest.ts';
-import { buildIndex } from '../../lib/pins/index.ts';
+import { resolveManifest } from '@lib/pins/manifest';
+import { buildIndex } from '@lib/pins/index';
 import { formatAbsentContext, formatIndexContext } from './formatter.ts';
-import { resolveOmtDir, resolveProjectRoot } from '../../lib/omt-dir.ts';
+import { resolveOmtDir, resolveProjectRoot } from '@lib/omt-dir';
 
 // ─── stdin helpers ────────────────────────────────────────────────────────────
 

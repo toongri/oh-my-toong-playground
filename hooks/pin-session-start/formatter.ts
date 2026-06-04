@@ -8,8 +8,8 @@
  * Total output bounded to avoid unbounded context injection.
  */
 
-import type { PinsIndex } from '../../lib/pins/index.ts';
-import type { PinsManifest } from '../../lib/pins/manifest.ts';
+import type { PinsIndex } from '@lib/pins/index';
+import type { PinsManifest } from '@lib/pins/manifest';
 
 const MODEL2_LINES = [
   'Need context: invoke pin-query to retrieve pins',
