@@ -29,20 +29,20 @@ Read this file when you are about to execute a SPECIFIC reviewer invocation, Sta
 
 ## Daedalus Invocation Template
 
-**When**: After plan generated to `$OMT_DIR/plans/{name}.md`. MANDATORY before Momus.
+**When**: In-phase during the S2 Co-Design state, at design time — BEFORE the TODO plan is written. The review object is the **design-stage design-brief / ADR draft** (the co-authored design artifact written at S2), NOT a finished plan file. MANDATORY; advisory only.
 
 ```
-## Plan File
-$OMT_DIR/plans/{name}.md
+## Design Brief / ADR Draft
+$OMT_DIR/plans/{name}.md   (design-brief / ADR sections only — written at S2, before TODOs)
 
 ## Design Opinion Focus
-- **Steelman antithesis**: What is the strongest case against this plan? Surface it explicitly, even if you ultimately endorse the approach.
-- **Tradeoff tension**: Identify the key tradeoff tensions present (e.g., speed vs. safety, complexity vs. flexibility). Are they acknowledged and resolved in the plan?
-- **Synthesis**: Where competing forces exist, does the plan synthesize a defensible resolution, or does it silently pick one side?
-- **Evaluative trigger**: If the plan contains a major architectural or strategic decision, an explicit evaluative statement of the chosen approach's merits and risks is required — not just a description of what was chosen.
+- **Steelman antithesis**: What is the strongest case against this design? Surface it explicitly, even if you ultimately endorse the approach.
+- **Tradeoff tension**: Identify the key tradeoff tensions present (e.g., speed vs. safety, complexity vs. flexibility). Are they acknowledged and resolved in the design?
+- **Synthesis**: Where competing forces exist, does the design synthesize a defensible resolution, or does it silently pick one side?
+- **Evaluative trigger**: If the design contains a major architectural or strategic decision, an explicit evaluative statement of the chosen approach's merits and risks is required — not just a description of what was chosen.
 ```
 
-Design-advisory opinion only — no verdict, no file-existence checks. Feasibility verification is Momus's responsibility.
+Design-advisory opinion only — no verdict, no gate, no file-existence checks, no plan-feasibility checks. It reviews the design at design time; feasibility verification of the finished plan is Momus's responsibility.
 
 ---
 
