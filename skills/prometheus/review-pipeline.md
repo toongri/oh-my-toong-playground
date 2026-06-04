@@ -134,7 +134,7 @@ Translating any item is a rule violation.
 - Writing enrichment back to disk. Per Invariant 3 the callouts live only in the ephemeral HTML; `plan.md` stays the single source of truth and every re-render redraws from it.
 - Drawing a diagram edge, arrow, or relationship that `plan.md` did not already decide. A diagram cannot be vaguer than the plan it visualizes — if you cannot draw it without inventing a who-calls-whom or ownership decision the plan never made, that is a plan defect: fix the plan and re-run the pipeline, do not invent the edge at render time.
 
-Rationale: `plan.md` is the artifact Daedalus and Momus reviewed and the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
+Rationale: `plan.md` is the artifact the pipeline reviewed — Momus reviewed the finished plan at S4, and Daedalus reviewed its design-brief / ADR sections at S2 — and it is the artifact the executor runs from. Net-new content in the HTML would be unreviewed and would split the presentation from the execution source of truth. Re-surfacing context that already lives in the plan carries no such risk.
 
 ### Rendering Methodology
 
