@@ -13,10 +13,12 @@
  * never an inferred cwd path.
  */
 
-import { writeFileSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { stringify as stringifyYaml } from 'yaml';
 import { migrate } from '@lib/pins/migrate';
 import { failEngine } from '@lib/pin-cli/io';
+import { resolveProjectRoot } from '@lib/omt-dir';
 
 // ── Argv parsing ──────────────────────────────────────────────────────────────
 
@@ -54,17 +56,21 @@ function parseArgs(): { location: string; scope: string; git: boolean | null } {
 if (import.meta.main) {
   const { location, scope, git } = parseArgs();
 
-  // Write pins.yaml into cwd using the canonical template format.
-  const gitLine = git !== null ? `\ngit: ${git}` : '';
-  const manifest = `# pins.yaml — knowledge graph storage manifest\nlocation: ${location}\nscope: ${scope}${gitLine}\n`;
+  // Write pins.yaml into the project root (C7: aligns write with resolveManifest read path).
+  const manifestObj: Record<string, unknown> = { location, scope };
+  if (git !== null) manifestObj.git = git;
+  const manifest = `# pins.yaml — knowledge graph storage manifest\n${stringifyYaml(manifestObj)}`;
 
-  const manifestPath = join(process.cwd(), 'pins.yaml');
+  const manifestPath = join(resolveProjectRoot(), 'pins.yaml');
   writeFileSync(manifestPath, manifest, 'utf8');
   process.stdout.write(`[pin-setup] manifest created: ${manifestPath}\n`);
 
   // Migrate legacy pins at the just-written location (D8: exact same value).
+  // C6: skip migrate when location does not yet exist — first record() call creates it.
   try {
-    await migrate({ location });
+    if (existsSync(location)) {
+      await migrate({ location });
+    }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     failEngine(`migrate failed: ${detail}`);
