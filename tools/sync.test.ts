@@ -1624,6 +1624,37 @@ describe("syncLib", () => {
     expect(await exists(path.join(targetPath, ".claude", "lib", "helper.ts"))).toBe(false);
   });
 
+  it("deploys traced static data files (import.meta.dir) but not unreferenced ones via `syncLib`", async () => {
+    const libSrc = path.join(rootDir, "lib");
+    // A lib module that statically references a sibling data file via import.meta.dir.
+    await writeFile(
+      path.join(libSrc, "foo", "x.ts"),
+      'import { join } from "path";\nconst P = join(import.meta.dir, "data.yaml");\nexport const x = P;\n',
+    );
+    // The referenced data file (should deploy) and an unreferenced sibling (should not).
+    await writeFile(path.join(libSrc, "foo", "data.yaml"), "key: value\n");
+    await writeFile(path.join(libSrc, "foo", "other.yaml"), "key: other\n");
+
+    // A deployed component that imports the lib module, so it is collected for deployment.
+    const claudeDir = path.join(targetPath, ".claude");
+    await writeFile(
+      path.join(claudeDir, "agents", "oracle.ts"),
+      "import { x } from '@lib/foo/x';\n",
+    );
+
+    const context = makeContext();
+
+    await syncLib(context, targetPath, rootDir, ["claude"]);
+
+    const libDest = path.join(targetPath, ".claude", "lib");
+    // The .ts module deploys (existing behavior, structure preserved).
+    expect(await exists(path.join(libDest, "foo", "x.ts"))).toBe(true);
+    // The referenced data file deploys, preserving directory structure.
+    expect(await exists(path.join(libDest, "foo", "data.yaml"))).toBe(true);
+    // The unreferenced data file does NOT deploy (no directory sweep).
+    expect(await exists(path.join(libDest, "foo", "other.yaml"))).toBe(false);
+  });
+
   it("rewrites @lib/* import aliases to relative paths via `syncLib`", async () => {
     const libSrc = path.join(rootDir, "lib");
     await fs.mkdir(libSrc, { recursive: true });
