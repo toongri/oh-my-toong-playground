@@ -215,7 +215,7 @@ async function collectTsFiles(dir: string, root: string): Promise<string[]> {
  * Only literal filenames are followed; computed/template/variable args are out
  * of scope and ignored.
  */
-async function resolveTsDataReferences(filePath: string): Promise<string[]> {
+async function resolveTsDataReferences(filePath: string, libSourceDir: string): Promise<string[]> {
   if (filePath.endsWith(".test.ts")) return [];
 
   let content: string;
@@ -236,6 +236,10 @@ async function resolveTsDataReferences(filePath: string): Promise<string[]> {
     re.lastIndex = 0;
     while ((match = re.exec(line)) !== null) {
       const absPath = path.normalize(path.join(sourceDir, match[1]));
+      // Confine to libSourceDir — skip paths that escape it
+      if (!absPath.startsWith(libSourceDir + path.sep) && absPath !== libSourceDir) {
+        continue;
+      }
       try {
         await fs.stat(absPath);
       } catch {
@@ -265,7 +269,7 @@ export async function collectLibDataFiles(
   const result = new Set<string>();
   const tsFiles = await collectTsFiles(platformDir, platformDir);
   for (const filePath of tsFiles) {
-    for (const dataFile of await resolveTsDataReferences(filePath)) {
+    for (const dataFile of await resolveTsDataReferences(filePath, platformDir)) {
       result.add(dataFile);
     }
   }

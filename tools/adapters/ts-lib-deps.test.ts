@@ -367,6 +367,23 @@ describe("collectLibDataFiles", () => {
     const result = await collectLibDataFiles(libDir);
     expect(result.has(dataFile)).toBe(true);
   });
+
+  it("data-ref가 libSourceDir 밖을 가리키면 수집하지 않는다", async () => {
+    // Fixture: lib/loader.ts references ../outside.yaml which resolves outside libDir
+    const loaderFile = path.join(libDir, "loader.ts");
+    await writeFile(
+      loaderFile,
+      'import { join } from "path";\nconst P = join(import.meta.dir, "../outside.yaml");\n',
+    );
+
+    // Create the outside file so it would be picked up if the confinement guard were missing
+    const outsideFile = path.join(tmpDir, "outside.yaml");
+    await writeFile(outsideFile, "outside: true\n");
+
+    const result = await collectLibDataFiles(libDir);
+    // outsideFile must NOT be collected — it escapes libDir
+    expect(result.has(outsideFile)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
