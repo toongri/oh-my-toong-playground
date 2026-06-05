@@ -240,7 +240,7 @@ digraph task_loop {
 
 The catalog below — refreshed at skill-load time — enumerates which skills are available, organized by situation. Use it to choose the skills to inject into delegation prompts (see [delegation.md §MANDATORY SKILLS](delegation.md)).
 
-!`bun run ${CLAUDE_SKILL_DIR}/hooks/skill-catalog/index.ts`
+!`bun run "${CLAUDE_SKILL_DIR}/hooks/skill-catalog/index.ts"`
 
 ---
 
