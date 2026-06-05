@@ -118,6 +118,12 @@ export async function readEntityFromStdin(): Promise<Entity> {
     );
   }
 
+  // C11: normalize missing relations to [] so the engine's relation iteration
+  // never throws a TypeError. The disk-read path (entity.ts:parse) already
+  // applies `?? []`; stdin bypasses that, so we do it here instead.
+  const fm = parsed.frontmatter as unknown as Record<string, unknown>;
+  if (fm.relations === undefined) fm.relations = [];
+
   return parsed;
 }
 
