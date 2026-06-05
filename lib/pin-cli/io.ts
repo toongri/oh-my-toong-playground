@@ -10,14 +10,17 @@
  *   2. stdin read + JSON-parse with fail-loud on malformed input (D6).
  *   3. A small, explicit exit-code map.
  *
- * It imports the engine through the `@lib/pins/...` alias (never a relative
- * path) so `make sync`'s dependency collector deploys the engine alongside the
- * scripts that import this helper. It reimplements NO engine logic — validation,
- * recording, querying, and parsing all stay in lib/pins/.
+ * It imports the engine via relative paths (`../pins/...`) rather than the
+ * `@lib/` alias because this module lives under `lib/` and the sync
+ * alias-rewriter skips `lib/**` files — a deployed `@lib/` alias here would
+ * never be rewritten and would crash at import. Relative imports match the
+ * intra-`lib/` convention, and `make sync`'s dependency collector follows them
+ * to deploy the engine alongside this helper. It reimplements NO engine logic —
+ * validation, recording, querying, and parsing all stay in lib/pins/.
  */
 
-import { resolveManifest, type PinsManifest } from '@lib/pins/manifest';
-import type { Entity } from '@lib/pins/types';
+import { resolveManifest, type PinsManifest } from '../pins/manifest';
+import type { Entity } from '../pins/types';
 
 /**
  * Process exit codes for the pin scripts.
