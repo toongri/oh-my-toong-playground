@@ -9,14 +9,14 @@ Record a single canonical entity to the pins knowledge graph via `lib/pins/recor
 
 ## API
 
-```ts
-import { record } from 'lib/pins/record.ts';
-
-await record(entity, { location });
+```bash
+printf '%s' "$ENTITY_JSON" | bun "${CLAUDE_SKILL_DIR}/scripts/record.ts"
 ```
 
-- `entity` — an `Entity` object with `frontmatter` + `body` (see `lib/pins/types.ts`)
-- `location` — the manifest-resolved pins directory (from `pins.yaml`)
+Pipe the JSON-serialized `Entity` object (`{ frontmatter, body }`) to stdin. The script resolves the manifest, calls `record()`, and prints `{"id":"<id>","status":"recorded"|"escaped"}` to stdout.
+
+- `ENTITY_JSON` — a JSON-serialized `Entity` with `frontmatter` + `body` (see `lib/pins/types.ts`)
+- The manifest supplies `location` — the manifest-resolved pins directory (from `pins.yaml`)
 
 `record()` validates first. If invalid, the entity is appended to `<location>/.escape.jsonl` and no `.md` file is written. If valid:
 - Fresh write: sets `status='active'`; `updated_at` defaults to `created_at` if not provided. Uses `O_EXCL` (`wx` flag) for atomic create.
