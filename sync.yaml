@@ -2,11 +2,16 @@ path: "~"
 skills:
   items:
     - hud
-    - pin-record
-    - pin-query
-    - pin-audit
-    - pin-wrap-up
-    - pin-setup
+    - component: pin-record
+      platforms: [claude]
+    - component: pin-query
+      platforms: [claude]
+    - component: pin-audit
+      platforms: [claude]
+    - component: pin-wrap-up
+      platforms: [claude]
+    - component: pin-setup
+      platforms: [claude]
     - using-maestro
     - mock-interview
     - scan-pdf-to-notes
