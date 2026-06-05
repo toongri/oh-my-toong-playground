@@ -458,15 +458,18 @@ export async function syncLib(
 
     const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
 
-    if (requiredModules.size === 0) {
-      logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
-      continue;
-    }
-
     // Static data files a lib module references at runtime via import.meta.dir
     // (e.g. lib/pins/tbox.yaml). Traced from the lib source tree, never globbed.
     // Copied verbatim (no alias rewrite — rewriteLibAliases only touches .ts).
+    // Collected BEFORE the early-skip: it traces from SOURCE (independent of the
+    // deployed tree), so a data file can be present even when requiredModules is
+    // empty (notably in dry-run, where the stale prior deployment has no @lib/).
     const dataFiles = await collectLibDataFiles(libSrc);
+
+    if (requiredModules.size === 0 && dataFiles.size === 0) {
+      logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
+      continue;
+    }
 
     if (context.dryRun) {
       logDry(`Deploy lib modules to ${libDest}/:`);
