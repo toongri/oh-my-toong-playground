@@ -18,8 +18,8 @@ When finders cannot deliver — none configured/available after filtering, or al
 **The `start` subcommand runs EXACTLY ONCE. No exceptions.**
 
 1. Write the interpolated prompt to a temp file.
-2. Start job: `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
-3. Collect: `bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
+2. Start job: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — ONE invocation only.
+3. Collect: `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — repeat until `overallState` is `"done"`.
 4. Read each finder's output file via the Read tool.
 5. Merge candidates using the Aggregation rules.
 6. Return the merged candidate list.
@@ -32,10 +32,10 @@ When finders cannot deliver — none configured/available after filtering, or al
 These constraints govern the orchestration path — while dispatched finders are running. In the in-session fallback path they do not apply; follow `prompts/default.md`'s tool requirements instead.
 
 You may ONLY execute these commands via Bash:
-- `bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"` — start a review job
-- `bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
-- `bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
-- `bun .claude/skills/orchestrate-review/scripts/job.ts clean "$JOB_DIR"` — remove the job dir; teardown step, run only after everything is complete
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"` — start a review job
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"` — collect results (polls internally every 5s, 150s default timeout). No external sleep needed.
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "..."` — drive an incomplete finder to a complete answer (see Member Resume Policy; cap 3 attempts)
+- `bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean "$JOB_DIR"` — remove the job dir; teardown step, run only after everything is complete
 
 **CRITICAL**: Always set `timeout: 180000` on every Bash tool call.
 
@@ -62,7 +62,7 @@ PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 [Your interpolated review prompt here]
 PROMPT_EOF
-bun .claude/skills/orchestrate-review/scripts/job.ts start --prompt-file "$PROMPT_FILE"
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --prompt-file "$PROMPT_FILE"
 ```
 Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched as one finder; the angle's role prompt (`scripts/prompts/<angle>.md`) is injected automatically by member name.
 
@@ -71,7 +71,7 @@ Output: JOB_DIR path (one line on stdout). Each configured angle is dispatched a
 `collect` polls internally every 5 seconds until all finders complete or its internal timeout (default 150s) expires. No external sleep needed.
 
 ```bash
-bun .claude/skills/orchestrate-review/scripts/job.ts collect "$JOB_DIR"
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect "$JOB_DIR"
 ```
 
 - If response shows `"overallState": "done"` → proceed to Step 3.
@@ -128,7 +128,7 @@ These constraints govern the orchestration path — while dispatched finders are
 Collect results. If any finder's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If a finder outright fails (`missing_cli`/`error`/`timed_out`/`canceled`/`non_retryable`), fall back to in-session per the trigger logic below. Once every finder is finished, run `clean`.
 
 ```
-bun .claude/skills/orchestrate-review/scripts/job.ts resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" resume-member --job "$JOB_DIR" --member <member> --prompt "Please complete your candidate list."
 ```
 
 The prompt is written by the Conductor to fit the situation. The above is a reference example only.
