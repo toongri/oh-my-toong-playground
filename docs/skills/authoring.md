@@ -172,7 +172,6 @@ OCR 정밀값(해시, 포트, 버전 등)은 컨텍스트 추론 금지 — `get
 ## 참고 자료
 
 - [README](../../README.md) - 프로젝트 개요
-- [아키텍처](../architecture.md) - 전체 스킬 아키텍처
 - [오케스트레이션 가이드](../ORCHESTRATION.md) - 계획 + 실행 파이프라인
 - 관련 스킬 문서:
   - [핵심 파이프라인](./core-pipeline.md)

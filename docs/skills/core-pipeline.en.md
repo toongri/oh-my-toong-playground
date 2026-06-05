@@ -11,7 +11,7 @@ For skills in other areas, see the separate documents.
 - [Knowledge graph (pins)](./knowledge-graph-pins.md)
 - [Utilities and personal workflows](./utilities-personal.md)
 
-For the full picture, see the [README](../../README.md) and the [architecture document](../architecture.md).
+For the full picture, see the [README](../../README.md).
 
 ---
 
@@ -80,6 +80,8 @@ flowchart TB
 ```
 
 **Pipeline link**: The output spec is saved to `$OMT_DIR/deep-interview/{slug}.md` and becomes prometheus's input. It is built on the premise that specification quality is the primary bottleneck in AI-assisted development.
+
+> This skill was borrowed almost as-is from [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode) (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros)).
 
 ---
 
@@ -253,7 +255,6 @@ Ralph state is stored at `$OMT_DIR/ralph-state-*.json`, and `/cancel-ralph` also
 ## See Also
 
 - [README](../../README.en.md) — project overview and the central-management + per-project-differentiation story
-- [Architecture document](../architecture.en.md) — the sync system and overall structure
 - [Code/design review and quality](./review-quality.en.md)
 - [Docs, slides, and PR authoring](./authoring.en.md)
 - [Knowledge graph (pins)](./knowledge-graph-pins.en.md)

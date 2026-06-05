@@ -167,7 +167,6 @@ code-review를 실행하면:
 ## 참고 자료
 
 - [README](../../README.md) — 프로젝트 개요
-- [아키텍처](../architecture.md) — 스킬 시스템 전체 구조
 - [핵심 파이프라인 스킬](./core-pipeline.md) — prometheus, sisyphus, sisyphus-junior
 - [저작 스킬](./authoring.md) — 문서·슬라이드 생성
 - [지식 그래프 & Pins](./knowledge-graph-pins.md) — Graphiti, Pin 스킬
