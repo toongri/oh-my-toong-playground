@@ -167,7 +167,6 @@ When you run code-review:
 ## References
 
 - [README](../../README.en.md) — Project overview
-- [Architecture](../architecture.en.md) — Full skill system structure
 - [Core Pipeline Skills](./core-pipeline.en.md) — prometheus, sisyphus, sisyphus-junior
 - [Authoring Skills](./authoring.en.md) — Document and slide generation
 - [Knowledge Graph & Pins](./knowledge-graph-pins.en.md) — Graphiti, Pin skills

@@ -38,7 +38,6 @@ The skills below form the owner's job-search pipeline. Each entry is intentional
 ## See Also
 
 - [README](../../README.en.md) — Project overview
-- [Architecture](../architecture.en.md) — Component structure and sync system
 - [Core Pipeline Skills](./core-pipeline.en.md) — prometheus, sisyphus, argus
 - [Review Quality Skills](./review-quality.en.md) — code-review, orchestrate-review, qa
 - [Authoring Skills](./authoring.en.md) — Document and content authoring + shared utils
