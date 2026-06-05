@@ -20,12 +20,15 @@
 
 import { record } from '@lib/pins/record';
 import { requireManifest, readEntityFromStdin, failEngine } from '@lib/pin-cli/io';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import { join } from 'path';
 
 if (import.meta.main) {
   const entity = await readEntityFromStdin();
   const manifest = await requireManifest();
+
+  const escapePath = join(manifest.location, '.escape.jsonl');
+  const escapeSizeBefore = existsSync(escapePath) ? statSync(escapePath).size : 0;
 
   try {
     await record(entity, { location: manifest.location });
@@ -34,8 +37,8 @@ if (import.meta.main) {
   }
 
   const id = entity.frontmatter.id;
-  const pinPath = join(manifest.location, `${id}.md`);
-  const status = existsSync(pinPath) ? 'recorded' : 'escaped';
+  const escapeSizeAfter = existsSync(escapePath) ? statSync(escapePath).size : 0;
+  const status = escapeSizeAfter > escapeSizeBefore ? 'escaped' : 'recorded';
 
   process.stdout.write(JSON.stringify({ id, status }) + '\n');
 }
