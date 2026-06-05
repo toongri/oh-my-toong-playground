@@ -7,7 +7,7 @@ level: 3
 ---
 
 <Purpose>
-Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into a planning step: **deep-interview → prometheus (planning → execution)**, ensuring maximum clarity at every stage.
+Deep Interview implements Ouroboros-inspired Socratic questioning with mathematical ambiguity scoring. It replaces vague ideas with crystal-clear specifications by asking targeted questions that expose hidden assumptions, measuring clarity across weighted dimensions, and refusing to proceed until ambiguity drops below the resolved threshold for this run. The output feeds into an execution route chosen from the spec itself: **deep-interview → planning/execution (prometheus, sisyphus, or a directly matching skill)**, ensuring maximum clarity at every stage.
 </Purpose>
 
 <Use_When>
@@ -346,21 +346,25 @@ Spec structure:
 
 ## Phase 5: Execution Bridge
 
-After the spec is written, present execution options via `AskUserQuestion`:
+After the spec is written, choose the recommended execution route from the spec's own characteristics, then present options via `AskUserQuestion`.
+
+**Recommend the route by judging the spec you just wrote — its output shape and how much HOW-uncertainty the interview left open:**
+- If the spec's output maps cleanly to a single domain skill available in this session (e.g., documentation → `technical-writing`, slides → `create-slides`), recommend that skill directly. Read the live available-skills list to find the match — do NOT hardcode a skill catalog here, because the available skills change.
+- Else if scope is settled but the *approach, architecture, or risk* is still open and the work is code that benefits from AC-gated planning, recommend **prometheus**.
+- Else (scope and approach are both settled and the remaining work is multi-step execution/orchestration), recommend **sisyphus**.
+
+A clean interview often closes HOW as well as WHAT, which makes `sisyphus` the right default at least as often as `prometheus`. Do not reflexively recommend `prometheus` just because the interview produced a spec — its core value, requirements clarification, is exactly what this phase already delivered.
 
 **Question:** "Your spec is ready (ambiguity: {score}%). How would you like to proceed?"
 
-**Options:**
+**Build the options like this** (recommended route first, tagged "(Recommended)", with a one-sentence rationale tied to THIS spec):
+- The recommended route from the rule above.
+- Both `prometheus` and `sisyphus` are always present as options; whichever is not the recommended route is offered untagged so the user can override (this override is exactly what the default sometimes gets wrong). When a domain skill is the recommended route, offer both prometheus and sisyphus as the override options.
+- **Continue interviewing** — "Continue interviewing to improve clarity (current: {score}%)" → return to the Phase 2 loop.
 
-1. **Plan with prometheus (Recommended)**
-   - Description: "Generate a detailed work plan from this spec with TODO decomposition, wave parallelization, and QA scenarios. Best for complex specs."
-   - Action: Invoke `Skill(skill: "prometheus")` with the spec file path as context. Prometheus will handle the plan → execution pipeline from there.
+Each execution option's Action: invoke `Skill(skill: "{chosen}")` with the spec file path as context.
 
-2. **Continue interviewing**
-   - Description: "Continue interviewing to improve clarity (current: {score}%)"
-   - Action: Return to Phase 2 interview loop.
-
-**IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. If oversized initial context was summarized, pass the spec and prompt-safe summary forward, not the raw oversized source material.
+**IMPORTANT:** On execution selection, **MUST** invoke the chosen skill via `Skill()`. Do NOT implement directly. The deep-interview agent is a requirements agent, not an execution agent. Pass the spec file path forward (and the prompt-safe summary, if the initial context was summarized) — never the raw oversized source material.
 
 </Steps>
 
@@ -533,7 +537,7 @@ Prometheus: "Your request is quite open-ended. Would you like to run a deep inte
   [Yes, interview first] [No, expand directly]
 ```
 
-If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes and the user selects "Plan with prometheus", the spec becomes Phase 0 output and prometheus continues from planning.
+If the user chooses interview, prometheus invokes `/deep-interview`. When the interview completes and the user selects the prometheus route at the execution bridge, the spec becomes Phase 0 output and prometheus continues from planning.
 
 ## Brownfield vs Greenfield Weights
 
