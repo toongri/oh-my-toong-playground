@@ -15,21 +15,13 @@ The full entity set is always covered, including pins with no outgoing relations
 
 ## Invocation
 
-Resolve `pinsDir` from the manifest before calling `query`:
+Run the bundled script from the deployed skill directory:
 
-```ts
-import { resolveManifest } from "lib/pins/manifest.ts";
-import { query } from "lib/pins/query.ts";
-
-const result = await resolveManifest();
-if (result.kind === 'absent') { /* handle missing manifest */ }
-const pinsDir = result.manifest.location;
-
-const results = query(pinsDir, { type: 'code', tags: ['auth'] });
-// returns QueryResult[]  — each: { id: string, frontmatter: Frontmatter }
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/query.ts" [--type <type>] [--tags <tag1,tag2>] [--source <source>]
 ```
 
-`pinsDir` is `manifest.location` as resolved by `resolveManifest()` (from `lib/pins/manifest.ts`). Omit any criterion to leave that field unrestricted.
+`--tags` accepts a comma-separated list; all tags must match (AND semantics). Omit any flag to leave that field unrestricted. The script resolves the manifest automatically — if no manifest exists it prints the absent message and exits 0.
 
 ## Presenting results
 
