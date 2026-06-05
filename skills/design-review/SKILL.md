@@ -26,7 +26,7 @@ PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" <<'EOF'
 <your analysis request here>
 EOF
-JOB_DIR=$(bun ${CLAUDE_SKILL_DIR}/scripts/job.ts start --stdin < "$PROMPT_FILE")
+JOB_DIR=$(bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --stdin < "$PROMPT_FILE")
 rm -f "$PROMPT_FILE"
 ```
 
@@ -37,7 +37,7 @@ If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session analys
 ### Step 3: Collect results
 
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect $JOB_DIR
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect $JOB_DIR
 ```
 
 `collect` polls internally, but it returns after a fixed internal timeout that is deliberately shorter than the worker's full run budget. A non-`done` return (`running`, `queued`, or `awaiting_resume`) is therefore expected — it does NOT mean the job will finish on its own, and nothing will notify you when it does. Re-run `collect` in the foreground until it returns `done`, or go to Step 4 when the state is `awaiting_resume`. Do not end the turn while the overall state is non-terminal.
@@ -47,7 +47,7 @@ bun ${CLAUDE_SKILL_DIR}/scripts/job.ts collect $JOB_DIR
 After `collect` returns, check the member's terminal state via:
 
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/job.ts status $JOB_DIR
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" status $JOB_DIR
 ```
 
 Collect results. If the member's answer is incomplete (still running, or a non-answer: plan/framing/waiting/partial), use `resume-member` to drive it to a complete answer (cap: 3 attempts). If the member outright fails (`missing_cli`, `error`, `timed_out`, `canceled`, `non_retryable`) or the resume cap is exhausted without a complete answer, fall back to in-session analysis per the trigger logic above. Once everything is finished, run `clean`.
@@ -57,7 +57,7 @@ Collect results. If the member's answer is incomplete (still running, or a non-a
 ### Step 5: Cleanup
 
 ```bash
-bun ${CLAUDE_SKILL_DIR}/scripts/job.ts clean $JOB_DIR
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean $JOB_DIR
 ```
 
 `clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after everything is complete.
