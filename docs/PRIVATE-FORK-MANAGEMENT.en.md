@@ -1,3 +1,5 @@
+English | [한국어](PRIVATE-FORK-MANAGEMENT.md)
+
 # Private Fork Management Guide
 
 > Operational manual for setting up and maintaining a private GitHub repository that mirrors a public OSS upstream and continuously syncs upstream/main. The reader has already decided to private-fork. This covers how to do it, not whether to do it.
