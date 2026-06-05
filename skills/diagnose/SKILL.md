@@ -26,7 +26,7 @@ PROMPT_FILE=$(mktemp)
 cat > "$PROMPT_FILE" <<'EOF'
 <your analysis request here>
 EOF
-JOB_DIR=$(bun .claude/skills/diagnose/scripts/job.ts start --stdin < "$PROMPT_FILE")
+JOB_DIR=$(bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" start --stdin < "$PROMPT_FILE")
 rm -f "$PROMPT_FILE"
 ```
 
@@ -35,7 +35,7 @@ The command prints the `jobDir` path on stdout, captured into `$JOB_DIR` above.
 ### Step 3: Collect results
 
 ```bash
-bun .claude/skills/diagnose/scripts/job.ts collect $JOB_DIR
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" collect $JOB_DIR
 ```
 
 `collect` polls internally, but it returns after a fixed internal timeout that is deliberately shorter than the worker's full run budget. A non-`done` return (`running`, `queued`, or `awaiting_resume`) is therefore expected — it does NOT mean the job will finish on its own, and nothing will notify you when it does. Re-run `collect` in the foreground until it returns `done`, or go to Step 4 when the state is `awaiting_resume`. Do not end the turn while the overall state is non-terminal.
@@ -47,7 +47,7 @@ If `start` exits non-zero or `$JOB_DIR` is empty, fall back to in-session analys
 Determine the state by running:
 
 ```bash
-bun .claude/skills/diagnose/scripts/job.ts status $JOB_DIR
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" status $JOB_DIR
 ```
 
 Act on each concern independently, in order:
@@ -59,7 +59,7 @@ Collect results. If the member's answer is incomplete (still running, or a non-a
 ### Step 5: Cleanup
 
 ```bash
-bun .claude/skills/diagnose/scripts/job.ts clean $JOB_DIR
+bun "${CLAUDE_SKILL_DIR}/scripts/job.ts" clean $JOB_DIR
 ```
 
 `clean` deletes the job dir (needed by `resume-member`), so it is the last step — only after everything is complete.
