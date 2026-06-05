@@ -29,24 +29,17 @@ Show this list to the user before recording. Confirm or prune before writing any
 
 ### 3. Validate, then record confirmed entities
 
-For each confirmed candidate, call `validate()` from `lib/pins/validator.ts` before writing:
+For each confirmed candidate, pipe the JSON-serialized entity to the deployed script:
 
-```ts
-import { validate } from 'lib/pins/validator.ts';
-import { record } from 'lib/pins/record.ts';
-
-const result = await validate(entity);
-if (!result.valid) {
-  // Report failure to the user — do NOT call record()
-  // result.reason and result.message describe the problem
-} else {
-  await record(entity, { location });
-}
+```bash
+printf '%s' "$ENTITY_JSON" | bun "${CLAUDE_SKILL_DIR}/scripts/wrap-up.ts"
 ```
+
+The script validates first. On FAIL it prints `{"valid":false,"reason":"...","message":"..."}` and stops — record is never called. On PASS it records and prints `{"id":"...","status":"recorded"}`.
 
 Build the `entity` with the required body sections and complete frontmatter — see the `pin-record` skill for the body structure and full field reference.
 
-`record()` returns `Promise<void>` — there is no return value to inspect. If validation passed and no exception is thrown, the pin was written.
+If the script exits 0 and prints `"status":"recorded"`, the pin was written.
 
 ### 4. Report
 
