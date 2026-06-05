@@ -172,7 +172,6 @@ What do you need to produce?
 ## References
 
 - [README](../../README.en.md) - Project overview
-- [Architecture](../architecture.en.md) - Full skill architecture
 - [Orchestration Guide](../ORCHESTRATION.en.md) - Planning + execution pipeline
 - Related skill pages:
   - [Core Pipeline](./core-pipeline.en.md)

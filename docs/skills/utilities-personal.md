@@ -38,7 +38,6 @@ Maestro는 YAML 기반의 모바일 E2E 테스트 프레임워크로, React Nati
 ## 참고
 
 - [README](../../README.md) — 프로젝트 개요
-- [아키텍처](../architecture.md) — 컴포넌트 구조 및 동기화 시스템
 - [핵심 파이프라인 스킬](./core-pipeline.md) — prometheus, sisyphus, argus
 - [리뷰 품질 스킬](./review-quality.md) — code-review, orchestrate-review, qa
 - [저작 스킬](./authoring.md) — 문서·콘텐츠 저작 + 공용 유틸
