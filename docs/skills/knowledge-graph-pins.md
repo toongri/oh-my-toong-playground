@@ -226,7 +226,6 @@ Pins의 권장 운용 패턴은 세 단계로 나뉜다.
 ## 참고 자료
 
 - [README](../../README.md) — 프로젝트 전체 개요
-- [아키텍처](../architecture.md) — 컴포넌트 상세
 - [핵심 파이프라인 스킬](./core-pipeline.md) — prometheus / sisyphus / argus
 - [리뷰 품질 스킬](./review-quality.md) — code-review / design-review
 - [저작 스킬](./authoring.md) — technical-writing / humanizer
