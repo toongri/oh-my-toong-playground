@@ -8,6 +8,16 @@ import { logWarn } from "../lib/logger.ts";
 // Matches: from './x', from '../x', import './x', import('../x'), side-effects.
 const RELATIVE_IMPORT_RE = /(?:from|import)\s*[\s(]["'](\.\.?\/[^"']+)["']/g;
 
+// Single source of truth for the static data-file reference matcher. Sibling of
+// RELATIVE_IMPORT_RE; same fresh-RegExp-per-scan rule (build a new
+// `new RegExp(DATA_REF_RE.source, "g")` so `lastIndex` is never shared).
+// Matches a join/path call where `import.meta.dir` (or `import.meta.dirname`) is
+// immediately followed by a STRING LITERAL filename, e.g.
+//   join(import.meta.dir, "tbox.yaml")
+//   path.join(import.meta.dirname, 'x.yaml')
+// Captures the literal filename. Computed/template/variable args don't match.
+const DATA_REF_RE = /import\.meta\.dir(?:name)?\s*,\s*["']([^"']+)["']/g;
+
 /**
  * Recursively resolve `@lib/` import dependencies for a .ts file.
  *
@@ -191,6 +201,75 @@ async function collectTsFiles(dir: string, root: string): Promise<string[]> {
     }
   }
   return results;
+}
+
+/**
+ * Trace static data-file references in a single .ts file.
+ *
+ * Scans for `import.meta.dir`/`import.meta.dirname` immediately followed by a
+ * string-literal filename inside a join/path call (see DATA_REF_RE), e.g.
+ *   join(import.meta.dir, "tbox.yaml")
+ * Each captured literal is resolved against the .ts file's own source directory
+ * and returned as an absolute path (existence on disk is verified).
+ *
+ * Only literal filenames are followed; computed/template/variable args are out
+ * of scope and ignored.
+ */
+async function resolveTsDataReferences(filePath: string): Promise<string[]> {
+  if (filePath.endsWith(".test.ts")) return [];
+
+  let content: string;
+  try {
+    content = await fs.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const re = new RegExp(DATA_REF_RE.source, "g");
+  const sourceDir = path.dirname(filePath);
+  const dataFiles: string[] = [];
+
+  for (const line of content.split("\n")) {
+    if (line.trimStart().startsWith("//")) continue;
+
+    let match: RegExpExecArray | null;
+    re.lastIndex = 0;
+    while ((match = re.exec(line)) !== null) {
+      const absPath = path.normalize(path.join(sourceDir, match[1]));
+      try {
+        await fs.stat(absPath);
+      } catch {
+        continue;
+      }
+      dataFiles.push(absPath);
+    }
+  }
+
+  return dataFiles;
+}
+
+/**
+ * Scan all .ts files under platformDir and return the deduplicated set of
+ * absolute data-file paths each .ts statically references via
+ * `import.meta.dir`/`import.meta.dirname` + string literal.
+ *
+ * Contract for T2 (syncLib): this is a SEPARATE set from the `.ts` module set
+ * returned by collectRequiredLibModules — that module API is untouched. Each
+ * path is resolved against its referencing .ts file's own source dir.
+ *
+ * Excludes the lib/ subdirectory and *.test.ts files (same as collectTsFiles).
+ */
+export async function collectLibDataFiles(
+  platformDir: string,
+): Promise<Set<string>> {
+  const result = new Set<string>();
+  const tsFiles = await collectTsFiles(platformDir, platformDir);
+  for (const filePath of tsFiles) {
+    for (const dataFile of await resolveTsDataReferences(filePath)) {
+      result.add(dataFile);
+    }
+  }
+  return result;
 }
 
 /**

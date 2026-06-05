@@ -6,6 +6,7 @@ import os from "os";
 import {
   resolveTsLibDependencies,
   collectRequiredLibModules,
+  collectLibDataFiles,
   findRelativeLibImports,
 } from "./ts-lib-deps.ts";
 
@@ -320,6 +321,51 @@ describe("relative import tracking inside lib modules", () => {
     expect(result.has(bLib)).toBe(true);
     expect(result.has(cLib)).toBe(true);
     expect(result.size).toBe(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// collectLibDataFiles (static data-file reference trace)
+// ---------------------------------------------------------------------------
+
+describe("collectLibDataFiles", () => {
+  it('`join(import.meta.dir, "data.yaml")` 패턴 → data.yaml로 끝나는 데이터 파일 추적', async () => {
+    const dataFile = path.join(libDir, "data.yaml");
+    await writeFile(dataFile, "key: value\n");
+
+    const loaderFile = path.join(libDir, "loader.ts");
+    await writeFile(
+      loaderFile,
+      'import { join } from "path";\nconst P = join(import.meta.dir, "data.yaml");\n',
+    );
+
+    const result = await collectLibDataFiles(libDir);
+    const traced = [...result];
+    expect(traced.length).toBe(1);
+    expect(traced[0].endsWith("data.yaml")).toBe(true);
+    expect(result.has(dataFile)).toBe(true);
+  });
+
+  it("`import.meta.dir`/`import.meta.dirname` 패턴이 없는 .ts → 빈 Set", async () => {
+    const plainFile = path.join(libDir, "plain.ts");
+    await writeFile(plainFile, "export const foo = 42;\n");
+
+    const result = await collectLibDataFiles(libDir);
+    expect(result.size).toBe(0);
+  });
+
+  it("`path.join(import.meta.dirname, 'x.yaml')` (dirname + 싱글쿼트) 변형 매칭", async () => {
+    const dataFile = path.join(libDir, "x.yaml");
+    await writeFile(dataFile, "k: v\n");
+
+    const loaderFile = path.join(libDir, "loader.ts");
+    await writeFile(
+      loaderFile,
+      "import path from 'path';\nconst P = path.join(import.meta.dirname, 'x.yaml');\n",
+    );
+
+    const result = await collectLibDataFiles(libDir);
+    expect(result.has(dataFile)).toBe(true);
   });
 });
 
