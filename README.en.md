@@ -2,7 +2,7 @@
 
 **[한국어](README.md)** | English
 
-**My Claude Code Configuration Library - A collection of skills, agents, and hooks to copy and customize per project**
+**A version-controlled central library of skills/agents/hooks/rules — selectively synced into each project's `.claude/`, differentiated via upward-search override**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,318 +23,47 @@ I'm developing this while being inspired by, studying, and referencing the follo
 
 ## What is oh-my-toong?
 
-Claude Code's Skill tool only recognizes files inside a project's `.claude/` directory. This means every project must have its own skill files, yet skills with the same name (`testing`, `implementation`, etc.) may need different content depending on the project's language and conventions. oh-my-toong is a configuration library that solves this dilemma. It version-controls skills, agents, and hooks in this repository and selectively syncs them to each target project's `.claude/` via `sync.yaml`. Project-specific overrides (`projects/`) allow the same skill name to carry different conventions per project.
+oh-my-toong is an **agent central-management project**. It keeps skills, agents, hooks, and rules in a single version-controlled central library and **selectively** syncs them into each target project's `.claude/`. The same library can yield a different configuration per project — that's the job of **upward-search override**.
+
+Syncing to multiple platforms (Claude / Gemini / Codex / OpenCode) is a **secondary supporting feature**. It exists for platform independence — so a component managed in one place can run on any platform — not as the essence of this project.
 
 ## Features
 
-- **Skill-based workflows** - Task-specific methodologies loaded on demand via the Skill tool
-- **Specialized agents** - Subagents for delegation with clear role boundaries
-- **Session hooks** - Lifecycle scripts for persistent modes and keyword detection
-- **Project-specific skill differentiation** - Upward search logic overrides global skills with project-specific conventions
-- **Declarative sync** - Syncs skills/agents/hooks to target project's `.claude/` via `sync.yaml`
+- **Central library** — version-control skills, agents, hooks, and rules in one repository
+- **Declarative sync** — deploy only the components you need into a target project's `.claude/` via `sync.yaml`
+- **Per-project differentiation** — override global components with project-specific conventions via upward search
+- **Orphan cleanup** — components removed from the library disappear from targets on the next sync
+- **Multi-platform support (secondary)** — Claude / Gemini / Codex / OpenCode abstracted via adapters
 
-## Philosophy
+## Philosophy — Why This Design
 
-### Why This Design
+**Step 1 — Technical Constraint**: Claude Code's Skill tool only recognizes files inside a project's `.claude/` directory. There is no plugin system to load skills from external paths, so every project must carry its own skill files within `.claude/`.
 
-**Step 1 - Technical Constraint**: Claude Code's Skill tool only recognizes files inside a project's `.claude/` directory. There is no plugin system to load skills from external paths, so every project must have its own skill files within `.claude/`.
+**Step 2 — Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in a Kotlin/Spring project means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
 
-**Step 2 - Same Name, Different Content**: You could simply copy the same skills to every project, but there's a key dilemma. For example, `testing` in a Kotlin/Spring project means "Classical TDD, no verify(), BDD structure," while a different project may follow entirely different conventions. The same goes for `implementation`. **Skills with the same name must carry different content per project.**
+**Step 3 — Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms.
 
-**Step 3 - Central Management + Project Differentiation**: oh-my-toong solves this dilemma with two mechanisms:
-- **Global skills** (`skills/`): Skills that are common across projects (prometheus, sisyphus, diagnose, etc.) are version-controlled in one place
-- **Project overrides** (`projects/<name>/skills/`): Skills that must differ per project (testing, implementation) are differentiated by project
+- **Global components** (`skills/`, `agents/`, etc.): things common across projects, version-controlled in one place
+- **Project overrides** (`projects/<name>/skills/`): things that must differ per project, differentiated by project
 
-During sync, an **Upward Search** logic is applied: when a project's sync.yaml references `testing`, it first looks in the project's `projects/<name>/skills/testing/`, falling back to the global `skills/testing/` if not found.
+During sync, an **Upward Search** logic applies. When a project's `sync.yaml` references `testing`, it first looks in the project's `projects/<name>/skills/testing/`, falling back to the global `skills/testing/` if not found. How the sync engine works in detail is covered in the [architecture doc](docs/architecture.en.md).
 
-### Agentic Development
+## Documentation
 
-oh-my-toong embraces **Agentic Development** - a paradigm where AI agents collaborate through clearly defined roles rather than a single agent doing everything:
+The library's scale (33 skills, 11 agents, 2 commands) and the sync engine's details live under `docs/`.
 
-| Role | Agent | Responsibility |
-|------|-------|----------------|
-| Definition | deep-interview | Converges vague requirements into a clear spec by resolving ambiguity |
-| Planning | prometheus | Transforms requirements into executable work plans |
-| Execution | sisyphus | Orchestrates implementation via specialized agents |
-| Implementation | sisyphus-junior | Writes code (delegated by sisyphus) |
-| Quality Assurance | argus | Validates implementation quality, plan compliance, and instruction fulfillment |
+| Doc | Contents |
+|-----|----------|
+| [Architecture](docs/architecture.en.md) | Deep dive on the central-management sync engine — two passes, platform cascade, upward search, `syncLib`, adapters |
+| [Core Pipeline](docs/skills/core-pipeline.en.md) | Definition→Planning→Execution→Verification pipeline (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 11 delegation agents + Ralph Loop |
+| [Review/Quality](docs/skills/review-quality.en.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
+| [Authoring/Utilities](docs/skills/authoring.en.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
+| [Knowledge Graph (pins)](docs/skills/knowledge-graph-pins.en.md) | pins knowledge graph — pin-setup · record · query · audit · wrap-up |
+| [Utilities & Personal Workflows](docs/skills/utilities-personal.en.md) | hud · using-maestro + resume · jd · mock-interview, etc. |
+| [Private Fork Management](docs/PRIVATE-FORK-MANAGEMENT.en.md) | Operating a private fork — mirroring upstream and continuous sync |
+| [Orchestration Guide](docs/ORCHESTRATION.en.md) | prometheus → sisyphus workflow and usage |
 
-**The Core Principle**: Separation of concerns prevents premature implementation and ensures quality through mandatory verification.
-
-## Core Skills Architecture
-
-The three foundational skills form a **Definition -> Planning -> Execution** pipeline:
-
-```mermaid
-flowchart LR
-    subgraph Definition
-        deep["/deep-interview"]
-    end
-    subgraph Planning
-        prometheus["/prometheus"]
-    end
-    subgraph Execution
-        sisyphus["/sisyphus"]
-    end
-
-    deep -->|".omt/deep-interview/{slug}.md"| prometheus
-    prometheus -->|".omt/plans/*.md"| sisyphus
-    sisyphus -->|"verified code"| Done((Done))
-```
-
-### deep-interview - Socratic Deep Interview
-
-**Purpose**: Converge a vague idea into a clear specification before autonomous execution. Asks one targeted question at a time — aimed at the weakest clarity dimension — until the weighted ambiguity score drops below the threshold.
-
-**Core Constraint**: Does NOT proceed to execution while ambiguity exceeds the threshold. Never implements directly — crystallizes a spec and hands off to prometheus.
-
-```mermaid
-flowchart TB
-    Start([Vague idea]) --> Ask[One question<br/>target weakest dimension]
-    Ask --> Score[Score ambiguity]
-    Score --> Gate{Ambiguity <= threshold?}
-    Gate -->|No| Ask
-    Gate -->|Yes| Spec[Crystallize spec]
-    Spec --> Handoff([Hand off to prometheus])
-```
-
-### prometheus - Strategic Planning Consultant
-
-**Purpose**: Separate planning from execution. Create work plans before any code is written.
-
-**Core Constraint**: **NEVER writes code**. Interprets ALL requests as planning requests.
-
-```mermaid
-flowchart TB
-    Start([User Request]) --> Interpret[Interpret as<br/>'Create plan to X']
-    Interpret --> Interview[Interview Mode]
-    Interview --> Research[Research via<br/>explore/librarian]
-    Research --> More{More<br/>questions?}
-    More -->|Yes| Interview
-    More -->|No| Criteria{User provided<br/>acceptance criteria?}
-    Criteria -->|Yes| Metis[Consult metis]
-    Criteria -->|No| Draft[Draft criteria<br/>-> User confirms]
-    Draft --> Metis
-    Metis --> Write[Write plan to<br/>.omt/plans/*.md]
-    Write --> Handoff([Handoff to /sisyphus])
-```
-
-**Forbidden Actions**:
-- Writing code files (.ts, .js, .py, etc.)
-- Editing source code
-- Running implementation commands
-- ANY action that "does the work"
-
-### sisyphus - Task Orchestrator
-
-**Purpose**: Orchestrate complex tasks through delegation, never solo execution.
-
-**Core Constraint**: **ORCHESTRATE. DELEGATE. NEVER SOLO.** ALL code changes (even one line) = DELEGATE.
-
-```mermaid
-flowchart TB
-    Start([User Request]) --> Classify{Request Type?}
-    Classify -->|Trivial| Direct[Direct tools]
-    Classify -->|Explicit| Execute[Execute directly]
-    Classify -->|Exploratory| Explore[Fire explore agent]
-    Classify -->|Open-ended| Interview[In-Depth Interview]
-
-    Interview --> Tasks[Create Task List]
-    Explore --> Tasks
-
-    Tasks --> Loop{Unblocked<br/>tasks?}
-    Loop -->|No| Done([Done])
-    Loop -->|Yes| Delegate[Delegate to<br/>sisyphus-junior]
-    Delegate --> Ignore[IGNORE 'done' claim]
-    Ignore --> Review[Invoke argus]
-    Review --> Pass{Pass?}
-    Pass -->|Yes| Complete[Mark completed]
-    Pass -->|No| Fix[Create fix task]
-    Fix --> Delegate
-    Complete --> Loop
-```
-
-**Verification Protocol**:
-- **Zero Trust**: sisyphus-junior's "done" claims are ALWAYS ignored
-- **Mandatory Review**: argus invoked after EVERY implementation
-- **No Retry Limit**: Continue until argus passes
-- **Persistence**: User cannot stop the process prematurely
-
-> 📖 **Detailed Guide**: See the [Orchestration Guide](docs/ORCHESTRATION.en.md) for complete workflows and usage instructions.
-
-### Ralph Loop - Enforced Completion Verification
-
-**Purpose**: When `/ralph` keyword is activated, refuses session termination until Oracle verification passes.
-
-**Core Mechanism**: Stop hook intercepts session termination attempts, analyzes requirement completion, and rejects termination if incomplete.
-
-```mermaid
-flowchart TB
-    Start(["/ralph task"]) --> Work[Execute with sisyphus]
-    Work --> Stop{Session<br/>termination?}
-    Stop -->|No| Work
-    Stop -->|Yes| Hook[Stop Hook intercepts]
-    Hook --> Check{Oracle<br/>verified?}
-    Check -->|No| Block[Reject termination +<br/>inject feedback]
-    Block --> Work
-    Check -->|Yes| Done([Allow termination])
-```
-
-**Verification Conditions**:
-- `<oracle-approved>VERIFIED_COMPLETE</oracle-approved>` tag required
-- Rejects termination if incomplete tasks exist
-- Force allows termination after max 10 iterations
-
-## Directory Structure
-
-```
-oh-my-toong/
-├── skills/                    # Task-specific methodologies (SKILL.md files)
-│   ├── prometheus/            # Strategic planning consultant
-│   ├── sisyphus/              # Task orchestrator with subagent delegation
-│   ├── diagnose/              # Architecture and debugging advisor
-│   ├── explore/               # Codebase search and navigation
-│   ├── librarian/             # External documentation researcher
-│   ├── clarify/               # Requirements clarification gate
-│   ├── momus/                 # Work plan reviewer
-│   ├── git-master/            # Git conventions (commits + branch naming)
-│   ├── agent-council/         # Multi-AI advisory body
-│   ├── qa/                    # Quality Assurance guardian
-│   └── performance-optimizer/ # Performance analysis and optimization
-├── agents/                    # Subagent definitions for Task tool delegation
-│   ├── sisyphus-junior.md     # Focused executor (works alone)
-│   ├── oracle.md              # Architecture advisor
-│   ├── explore.md             # Codebase search
-│   ├── librarian.md           # External documentation
-│   ├── momus.md               # Plan reviewer
-│   ├── metis.md               # Pre-planning analysis
-│   └── argus.md               # The hundred-eyed guardian
-├── commands/                  # Slash command definitions
-│   ├── hud.md                 # Status bar HUD setup
-│   ├── ralph.md               # Ralph Loop orchestration
-│   └── cancel-ralph.md        # Cancel active Ralph Loop
-├── hooks/                     # Session lifecycle scripts
-│   ├── session-start.sh       # Restores persistent mode states
-│   ├── keyword-detector.sh    # Detects keywords and injects context
-│   ├── persistent-mode.js     # Prevents stopping when work incomplete
-│   └── pre-tool-enforcer.sh   # Pre-tool execution enforcement
-├── projects/                  # Project-specific skill overrides
-├── docs/                      # Detailed documentation
-│   ├── ORCHESTRATION.md       # Orchestration guide (Korean)
-│   └── ORCHESTRATION.en.md    # Orchestration guide (English)
-├── scripts/                   # Utility and sync scripts
-├── Makefile                   # Build automation
-├── sync.yaml                  # Sync configuration
-├── config.yaml                # Global settings
-└── CLAUDE.md                  # Claude Code instructions
-```
-
-## Core Skills
-
-| Skill | Purpose | Key Constraint |
-|-------|---------|----------------|
-| **deep-interview** | Socratic deep interview | Won't execute until ambiguity is below threshold — specs, then prometheus |
-| **prometheus** | Strategic planning consultant | Planner only - NEVER implements |
-| **sisyphus** | Task orchestrator | Delegates via subagents - orchestrates, doesn't solo |
-| **diagnose** | Architecture/debugging advisor | READ-ONLY consultant - diagnoses, never implements |
-| **clarify** | Requirements clarification | MANDATORY gate before implementation |
-| **momus** | Work plan reviewer | Ruthlessly critical - catches gaps before implementation |
-| **git-master** | Git conventions (commits + branch naming) | Korean messages, Subject 50-char/Body 72-char limit, atomic commits |
-| **agent-council** | Multi-AI advisory body | For trade-offs and subjective decisions |
-| **argus** | Quality Assurance guardian | Validates implementation quality, plan compliance, and instruction fulfillment |
-| **performance-optimizer** | Performance optimization | Systematic analysis with Before/After verification |
-
-## Other Skills
-
-Domain and utility skills. Loaded on demand via their triggers.
-
-| Skill | Category | Purpose |
-|-------|----------|---------|
-| **code-review** | Review/Quality | PR/diff correctness bug review |
-| **design-review** | Review/Quality | Plan/design review (steelman + tradeoff) |
-| **orchestrate-review** | Review/Quality | Code review orchestration (multi-AI synthesis) |
-| **slides-review** | Review/Quality | HTML slide design review (Gemini) |
-| **qa** | Review/Quality | Quality assurance guardian (implementation verification) |
-| **create-slides** | Docs/Content | HTML-based presentation generation |
-| **technical-writing** | Docs/Content | Korean technical documentation review/writing |
-| **technical-copywriting** | Docs/Content | Tech blog teaser/promo copy review |
-| **humanizer** | Docs/Content | Remove AI writing traces (KO/EN) |
-| **make-pr** | Docs/Content | PR description authoring |
-| **scan-pdf-to-notes** | Docs/Content | Scanned-PDF chapter extraction to notes |
-| **resume-apply** | Hiring/Resume | JD-based resume application workflow |
-| **resume-forge** | Hiring/Resume | Resume problem-solving material crafting |
-| **review-resume** | Hiring/Resume | Resume review/feedback |
-| **collect-jd** | Hiring/Resume | JD collection/curation |
-| **mock-interview** | Hiring/Resume | Resume-based interviewer-side mock questions |
-| **tech-claim-rubric** | Hiring/Resume | Technical-claim 5-axis evaluation framework |
-| **using-maestro** | Planning/Util | Maestro mobile E2E test authoring/debugging |
-| **hud** | Planning/Util | Status-line HUD setup |
-| **pins** (select-pin/write-pin) | Planning/Util | On-discovery knowledge pin system |
-
-## Agents
-
-Agents are specialized subagent definitions used with Claude Code's Task tool for delegation.
-
-| Agent | Role | Use When |
-|-------|------|----------|
-| **sisyphus-junior** | Focused task executor | Implementing individual tasks from a plan |
-| **oracle** | Architecture advisor | Analyzing architecture or debugging issues |
-| **explore** | Codebase navigator | Finding files, implementations, or code patterns |
-| **librarian** | Documentation researcher | Researching external APIs, libraries, best practices |
-| **momus** | Plan critic | Reviewing work plans before execution |
-| **metis** | Pre-planning analyst | Catching gaps before plan generation |
-| **argus** | Quality Assurance guardian | Quality assurance verification |
-| **daedalus** | Plan/design reviewer | Delegating design review (steelman + tradeoff) |
-| **chunk-reviewer** | Code chunk reviewer | Code review orchestration |
-| **tech-claim-examiner** | Technical-claim evaluator | Verifying technical claims in resume/content |
-| **mnemosyne** | Git commit specialist | Atomic commits in isolated context |
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `/prometheus <task>` | Create work plan |
-| `/sisyphus` | Execute plan via orchestration |
-| `/hud setup` | Configure the Oh-My-Toong HUD in Claude Code's status bar |
-| `/hud restore` | Restore previous statusLine configuration |
-| `/ralph <task>` | Start Ralph Loop for task completion with oracle verification |
-| `/cancel-ralph` | Cancel active Ralph Loop and clean up state |
-
-## Key Workflows
-
-### Planning to Execution Flow
-
-```
-1. /prometheus <task>     Create work plan in .omt/plans/*.md
-         ↓
-2. /sisyphus              Orchestrate plan execution via subagents
-         ↓
-3. sisyphus-junior        Execute individual tasks with strict discipline
-```
-
-### Ralph Loop
-
-Iterative completion enforcement with oracle verification. The loop continues until the oracle confirms the task is truly complete.
-
-- State file: `.omt/ralph-state.json`
-- Cancel with: `/cancel-ralph`
-
-### Ultrawork Mode
-
-Maximum precision mode activated via keywords (`ultrawork`, `ulw`, `uw`). Enables parallel agent utilization and enhanced verification.
-
-## Hooks
-
-| Hook | Event | Purpose |
-|------|-------|---------|
-| **session-start.sh** | SessionStart | Restores persistent mode states (ralph-loop, incomplete todos) |
-| **keyword-detector.sh** | UserPromptSubmit | Detects keywords and injects mode context |
-| **persistent-mode.js** | Stop | Prevents stopping when work remains incomplete |
-| **pre-tool-enforcer.sh** | PreToolUse | Tool execution gate (TaskOutput blocking) |
-| **sync-component-validator.sh** | Stop | Validates component existence at session end |
-| **sync-schema-validator.sh** | PostToolUse | Validates schema when sync.yaml is modified |
-
-## Installation
+## Quick Start
 
 ### Prerequisites
 
@@ -350,23 +79,24 @@ Maximum precision mode activated via keywords (`ultrawork`, `ulw`, `uw`). Enable
    cd oh-my-toong
    ```
 
-2. Configure sync.yaml with your target project path:
+2. Declare the target project path and the components to deploy in `sync.yaml`:
    ```yaml
    path: /path/to/your/project
 
    skills:
-     - component: prometheus
-     - component: sisyphus
-     # Add skills you want to use
+     items:
+       - prometheus
+       - sisyphus
 
    agents:
-     - component: oracle
-     - component: explore
-     # Add agents you want to use
+     items:
+       - oracle
+       - explore
 
    hooks:
-     - component: session-start.sh
-       event: SessionStart
+     items:
+       - component: session-start.sh
+         event: SessionStart
    ```
 
 3. Validate and sync:
@@ -376,9 +106,9 @@ Maximum precision mode activated via keywords (`ultrawork`, `ulw`, `uw`). Enable
    make sync        # Apply synchronization
    ```
 
-### Project-Specific Skills
+### Per-Project Skill Differentiation
 
-When skills with the same name need different conventions per project's language/framework, create project-specific overrides in the `projects/` directory:
+When skills with the same name need different conventions per project's language/framework, create project-specific overrides in the `projects/` directory.
 
 ```
 projects/
@@ -390,14 +120,14 @@ projects/
             └── SKILL.md    # Kotlin/Spring architecture patterns
 ```
 
-When a skill is referenced in sync.yaml, the sync process searches the project folder first and falls back to global:
+When a skill is referenced in `sync.yaml`, the sync process searches the project folder first and falls back to global.
 
 ```yaml
 # projects/loopers-kotlin-spring-template/sync.yaml
 skills:
   items:
     - testing          # → projects/loopers-.../skills/testing/ (project first)
-    - diagnose           # → skills/diagnose/ (global fallback)
+    - diagnose         # → skills/diagnose/ (global fallback)
 
 agents:
   items:
@@ -407,36 +137,13 @@ agents:
         - implementation   # Injects project-specific implementation skill into sisyphus-junior
 ```
 
-## HUD Display
+## Local Override
 
-After running `/hud setup`, the status bar shows a 2-line display:
+For when a machine needs a different configuration (work Mac vs personal Mac), every YAML input splits into git-tracked `*.yaml` and gitignored `*.local.yaml`. It mirrors Vite/Next.js's `.env` + `.env.local` pattern, and the two are deep-merged automatically on `make sync`. You can also scope a per-machine project whitelist via `enabled-projects` in `config.local.yaml`. Merge policy and whitelist rules are covered in the [architecture doc](docs/architecture.en.md).
 
-**Line 1: Session & Resources**
-```
-23m | 5h:45%(2h) wk:67%(3d) | ctx:42% | agents:explore+2 | thinking
-```
+## HUD
 
-**Line 2: Tasks & Progress**
-```
-tasks:3/5 | ralph:2/10 | Implementing user auth...
-```
-
-| Element | Description | Color Coding |
-|---------|-------------|--------------|
-| `23m` | Session duration | Bold |
-| `5h:45%(2h)` | 5-hour rate limit: 45% used, resets in 2h | Green <70%, Yellow 70-85%, Red >85% |
-| `wk:67%(3d)` | Weekly rate limit: 67% used, resets in 3d | Same as above |
-| `ctx:N%` | Context window usage | Dim <30%, Green 30-49%, Yellow 50-69%, Red 70%+ |
-| `agents:name+N` | Running agents (first agent name + count) | Green |
-| `thinking` | Extended thinking mode active | Cyan |
-| `tasks:X/Y` | Task progress (completed/total) | Green if >0, Dim if 0/0 |
-| `ralph:X/Y` | Ralph Loop iteration | Green <70%, Yellow >70%, Red at max |
-| Active task | Current task description (25 chars max) | Dim |
-
-**Graceful Degradation:**
-- Rate limits hidden when OAuth unavailable
-- Minimal display (`0m | ctx:0%`) when data unavailable
-- State files >2 hours old are ignored (stale session detection)
+Running `/hud setup` shows session, resource, and task-progress info as a 2-line display in Claude Code's status bar. For per-element color coding and options, see the [Utilities & Personal Workflows doc](docs/skills/utilities-personal.en.md).
 
 ## License
 
