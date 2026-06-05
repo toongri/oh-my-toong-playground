@@ -2,7 +2,7 @@
 
 한국어 | **[English](README.en.md)**
 
-**나의 Claude Code 설정 라이브러리 - 프로젝트별로 복사해서 커스터마이징하는 스킬, 에이전트, 훅 모음**
+**버전 관리되는 중앙 스킬/에이전트/훅/룰 라이브러리 — 프로젝트마다 `.claude/`로 선별 동기화하고, 상향 탐색 오버라이드로 분화한다**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -23,385 +23,47 @@
 
 ## oh-my-toong이란?
 
-Claude Code의 Skill 도구는 프로젝트의 `.claude/` 디렉토리 안에 있는 파일만 인식합니다. 이 때문에 모든 프로젝트가 각자 스킬 파일을 가져야 하지만, 같은 이름의 스킬(`testing`, `implementation` 등)이라도 프로젝트의 언어와 컨벤션에 따라 내용이 달라야 합니다. oh-my-toong은 이 딜레마를 해결하는 설정 라이브러리입니다. 스킬, 에이전트, 훅을 이 저장소에서 버전 관리하고, `sync.yaml`로 필요한 것만 선택적으로 대상 프로젝트의 `.claude/`에 동기화합니다. 프로젝트별 오버라이드(`projects/`)를 통해 같은 이름의 스킬이라도 프로젝트 특성에 맞게 분화할 수 있습니다.
+oh-my-toong은 **에이전트 중앙 관리 프로젝트**입니다. 스킬, 에이전트, 훅, 룰을 버전 관리되는 하나의 중앙 라이브러리에 모아 두고, 각 대상 프로젝트의 `.claude/`로 **선별적으로** 동기화합니다. 같은 라이브러리를 쓰더라도 프로젝트마다 다른 구성을 줄 수 있는데, 이를 **상향 탐색(upward-search) 오버라이드**가 담당합니다.
+
+여러 플랫폼(Claude / Gemini / Codex / OpenCode)으로의 동기화는 **부차적인 지원 기능**입니다. 한 곳에서 관리한 컴포넌트를 어느 플랫폼에서도 쓸 수 있게 만드는 플랫폼 독립성을 위한 것이지, 이 프로젝트의 본질은 아닙니다.
 
 ## 주요 기능
 
-- **스킬 기반 워크플로우** - Skill 도구를 통해 필요할 때 로드되는 작업별 방법론
-- **특화된 에이전트** - 명확한 역할 경계를 가진 위임용 서브에이전트
-- **세션 훅** - 지속 모드와 키워드 감지를 위한 라이프사이클 스크립트
-- **프로젝트별 스킬 분화** - 상위 검색 로직으로 글로벌 스킬 위에 프로젝트 고유 컨벤션 오버라이드
-- **선언적 동기화** - `sync.yaml`로 스킬/에이전트/훅을 대상 프로젝트의 `.claude/`에 동기화
+- **중앙 라이브러리** — 스킬, 에이전트, 훅, 룰을 한 저장소에서 버전 관리
+- **선언적 동기화** — `sync.yaml`로 필요한 컴포넌트만 대상 프로젝트의 `.claude/`로 배포
+- **프로젝트별 분화** — 상향 탐색으로 글로벌 컴포넌트 위에 프로젝트 고유 컨벤션 오버라이드
+- **고아 정리** — 라이브러리에서 제거한 컴포넌트는 다음 sync 때 대상에서도 사라짐
+- **멀티플랫폼 지원(부차)** — Claude / Gemini / Codex / OpenCode를 어댑터로 추상화
 
-## 철학
+## 철학 — 왜 이 설계인가
 
-### 왜 이 설계인가
+**1단계 — 기술적 제약**: Claude Code의 Skill 도구는 프로젝트의 `.claude/` 디렉토리에 있는 파일만 인식합니다. 외부 경로에서 스킬을 불러오는 플러그인 시스템이 없으므로, 모든 프로젝트가 자신의 `.claude/` 안에 스킬 파일을 직접 가져야 합니다.
 
-**1단계 - 기술적 제약**: Claude Code의 Skill 도구는 프로젝트의 `.claude/` 디렉토리에 있는 파일만 인식합니다. 외부 경로에서 스킬을 불러오는 플러그인 시스템이 없으므로, 모든 프로젝트가 자신의 `.claude/` 안에 스킬 파일을 직접 가져야 합니다.
+**2단계 — 같은 이름, 다른 내용**: 각 프로젝트에 동일한 스킬을 복사하면 되지만, 핵심 딜레마가 있습니다. 예를 들어 `testing`은 Kotlin/Spring 프로젝트에서 "Classical TDD, verify() 금지, BDD 구조"를 의미하지만, 다른 프로젝트에서는 완전히 다른 컨벤션을 가질 수 있습니다. `implementation`도 마찬가지입니다. **동일한 이름의 스킬이 프로젝트마다 다른 내용을 담아야 합니다.**
 
-**2단계 - 같은 이름, 다른 내용**: 각 프로젝트에 동일한 스킬을 복사하면 되지만, 핵심 딜레마가 있습니다. 예를 들어 `testing`은 Kotlin/Spring 프로젝트에서 "Classical TDD, verify() 금지, BDD 구조"를 의미하지만, 다른 프로젝트에서는 완전히 다른 컨벤션을 가질 수 있습니다. `implementation`도 마찬가지입니다. **동일한 이름의 스킬이 프로젝트마다 다른 내용을 담아야 합니다.**
+**3단계 — 중앙 관리 + 프로젝트 분화**: oh-my-toong은 이 딜레마를 두 가지 메커니즘으로 해결합니다.
 
-**3단계 - 중앙 관리 + 프로젝트 분화**: oh-my-toong은 이 딜레마를 두 가지 메커니즘으로 해결합니다:
-- **글로벌 스킬** (`skills/`): 프로젝트에 관계없이 공통인 스킬(prometheus, sisyphus, diagnose 등)을 한 곳에서 버전 관리
-- **프로젝트 오버라이드** (`projects/<name>/skills/`): 프로젝트마다 달라야 하는 스킬(testing, implementation)을 프로젝트별로 분화
+- **글로벌 컴포넌트** (`skills/`, `agents/` 등): 프로젝트에 관계없이 공통인 것을 한 곳에서 버전 관리
+- **프로젝트 오버라이드** (`projects/<name>/skills/`): 프로젝트마다 달라야 하는 것을 프로젝트별로 분화
 
-동기화 시 **상위 검색(Upward Search)** 로직이 동작합니다: 프로젝트의 sync.yaml에서 `testing`을 참조하면, 먼저 해당 프로젝트의 `projects/<name>/skills/testing/`을 찾고, 없으면 글로벌 `skills/testing/`으로 폴백합니다.
+동기화 시 **상향 탐색(Upward Search)** 로직이 동작합니다. 프로젝트의 `sync.yaml`에서 `testing`을 참조하면, 먼저 해당 프로젝트의 `projects/<name>/skills/testing/`을 찾고, 없으면 글로벌 `skills/testing/`으로 폴백합니다. sync 엔진의 동작 원리는 [아키텍처 문서](docs/architecture.md)에서 자세히 다룹니다.
 
-### 에이전틱 개발 (Agentic Development)
+## 문서
 
-oh-my-toong은 **에이전틱 개발**을 지향합니다. 하나의 AI가 모든 것을 처리하는 대신, 명확한 역할을 가진 에이전트들이 협업합니다:
+라이브러리 규모(스킬 33종, 에이전트 11종, 명령어 2종)와 sync 엔진의 상세는 `docs/`에 정리되어 있습니다.
 
-| 역할 | 에이전트 | 책임 |
-|------|----------|------|
-| 정의 | deep-interview | 모호성 해소로 요구사항을 명확한 명세로 수렴 |
-| 기획 | prometheus | 요구사항을 실행 가능한 작업 계획으로 변환 |
-| 실행 | sisyphus | 전문 에이전트를 통한 구현 조율 |
-| 구현 | sisyphus-junior | 코드 작성 (sisyphus가 위임) |
-| 품질 보증 | argus | 구현 품질, 계획 준수, 지시 이행 검증 |
+| 문서 | 내용 |
+|------|------|
+| [아키텍처](docs/architecture.md) | 중앙 관리 sync 엔진 심화 — 2패스, 플랫폼 캐스케이드, 상향 탐색, `syncLib`, 어댑터 |
+| [코어 파이프라인](docs/skills/core-pipeline.md) | 정의→기획→실행→검증 파이프라인 (deep-interview · prometheus · sisyphus · clarify · momus · diagnose · agent-council) + 위임 에이전트 11종 + Ralph Loop |
+| [리뷰/품질](docs/skills/review-quality.md) | code-review · orchestrate-review · design-review · slides-review · qa · performance-optimizer |
+| [문서/콘텐츠·유틸](docs/skills/authoring.md) | create-slides · technical-writing · technical-copywriting · humanizer · make-pr · scan-pdf-to-notes · git-master |
+| [지식 그래프(pins)](docs/skills/knowledge-graph-pins.md) | pins 지식 그래프 — pin-setup · record · query · audit · wrap-up |
+| [유틸·개인 워크플로우](docs/skills/utilities-personal.md) | hud · using-maestro + resume · jd · mock-interview 등 |
+| [프라이빗 포크 관리](docs/PRIVATE-FORK-MANAGEMENT.md) | 프라이빗 포크 운영 가이드 — 업스트림 미러링과 지속 동기화 |
+| [오케스트레이션 가이드](docs/ORCHESTRATION.md) | prometheus → sisyphus 워크플로우와 사용법 |
 
-**핵심 원칙**: 관심사 분리를 통해 성급한 구현을 방지하고, 필수 검증을 통해 품질을 보장합니다.
-
-## 핵심 스킬 아키텍처
-
-세 가지 기반 스킬이 **정의 -> 기획 -> 실행** 파이프라인을 형성합니다:
-
-```mermaid
-flowchart LR
-    subgraph 정의
-        deep["deep-interview"]
-    end
-    subgraph 기획
-        prometheus["prometheus"]
-    end
-    subgraph 실행
-        sisyphus["sisyphus"]
-    end
-
-    deep -->|"~/.omt/{OMT_PROJECT}/deep-interview/{slug}.md"| prometheus
-    prometheus -->|"~/.omt/{OMT_PROJECT}/plans/*.md"| sisyphus
-    sisyphus -->|"검증된 코드"| Done((완료))
-```
-
-### deep-interview - 소크라테스식 심층 인터뷰
-
-**목적**: 모호한 아이디어를 자율 실행 전에 명확한 명세로 수렴시킵니다. 가중치 기반 모호성 점수가 임계값 아래로 떨어질 때까지 한 번에 하나씩, 가장 약한 차원을 겨냥해 질문합니다.
-
-**핵심 제약**: 모호성이 임계값을 넘으면 실행으로 넘어가지 않습니다. 직접 구현하지 않고, 명세를 만들어 prometheus로 넘깁니다.
-
-```mermaid
-flowchart TB
-    Start([모호한 아이디어]) --> Ask[질문 1개<br/>최약 차원 타게팅]
-    Ask --> Score[모호성 점수 측정]
-    Score --> Gate{모호성 ≤ 임계값?}
-    Gate -->|아니오| Ask
-    Gate -->|예| Spec[명세 crystallize]
-    Spec --> Handoff([prometheus로 전달])
-```
-
-### prometheus - 전략적 기획 컨설턴트
-
-**목적**: 기획과 실행을 분리합니다. 코드 작성 전에 작업 계획을 수립합니다.
-
-**핵심 제약**: **절대 코드를 작성하지 않습니다**. 모든 요청을 기획 요청으로 해석합니다.
-
-```mermaid
-flowchart TB
-    Start([사용자 요청]) --> Interpret['X 계획 수립'으로<br/>해석]
-    Interpret --> Interview[인터뷰 모드]
-    Interview --> Research[explore/librarian으로<br/>조사]
-    Research --> More{추가<br/>질문?}
-    More -->|예| Interview
-    More -->|아니오| Criteria{사용자가 인수<br/>기준 제공?}
-    Criteria -->|예| Metis[metis 상담]
-    Criteria -->|아니오| Draft[기준 초안<br/>-> 사용자 확인]
-    Draft --> Metis
-    Metis --> Write[~/.omt/{OMT_PROJECT}/plans/*.md에<br/>계획 작성]
-    Write --> Handoff([/sisyphus로 전달])
-```
-
-**금지된 행위**:
-- 코드 파일 작성 (.ts, .js, .py 등)
-- 소스 코드 편집
-- 구현 명령 실행
-- "작업을 수행하는" 모든 행위
-
-### sisyphus - 태스크 오케스트레이터
-
-**목적**: 복잡한 작업을 위임을 통해 조율합니다. 단독 실행하지 않습니다.
-
-**핵심 제약**: **조율한다. 위임한다. 단독 작업 안 함.** 모든 코드 변경(한 줄도) = 위임.
-
-```mermaid
-flowchart TB
-    Start([사용자 요청]) --> Classify{요청 유형?}
-    Classify -->|단순| Direct[직접 도구 사용]
-    Classify -->|명시적| Execute[직접 실행]
-    Classify -->|탐색적| Explore[explore 에이전트 실행]
-    Classify -->|개방형| Interview[심층 인터뷰]
-
-    Interview --> Tasks[태스크 목록 생성]
-    Explore --> Tasks
-
-    Tasks --> Loop{대기 중인<br/>태스크?}
-    Loop -->|아니오| Done([완료])
-    Loop -->|예| Delegate[sisyphus-junior에<br/>위임]
-    Delegate --> Ignore['완료' 주장 무시]
-    Ignore --> Review[argus 호출]
-    Review --> Pass{통과?}
-    Pass -->|예| Complete[완료 처리]
-    Pass -->|아니오| Fix[수정 태스크 생성]
-    Fix --> Delegate
-    Complete --> Loop
-```
-
-**검증 프로토콜**:
-- **Zero Trust**: sisyphus-junior의 "완료" 주장은 항상 무시
-- **필수 리뷰**: 모든 구현 후 argus 호출
-- **Retry 제한 없음**: argus가 통과할 때까지 계속
-- **지속성**: 사용자가 프로세스를 중단할 수 없음
-
-> 📖 **상세 가이드**: [오케스트레이션 가이드](docs/ORCHESTRATION.md)에서 전체 워크플로우와 사용법을 확인하세요.
-
-### Ralph Loop - 완료 검증 강제 루프
-
-**목적**: `/ralph` 키워드 활성화 시, Oracle 검증을 통과할 때까지 세션 종료를 거부합니다.
-
-**핵심 메커니즘**: Stop hook이 세션 종료 시도를 가로채고, 요구사항 완료 여부를 분석하여 미완료 시 종료를 반려합니다.
-
-```mermaid
-flowchart TB
-    Start(["/ralph 태스크"]) --> Work[sisyphus로 작업 수행]
-    Work --> Stop{세션 종료<br/>시도?}
-    Stop -->|아니오| Work
-    Stop -->|예| Hook[Stop Hook 가로챔]
-    Hook --> Check{Oracle 검증<br/>통과?}
-    Check -->|아니오| Block[종료 반려 +<br/>피드백 주입]
-    Block --> Work
-    Check -->|예| Done([세션 종료 허용])
-```
-
-**검증 조건**:
-- `<oracle-approved>VERIFIED_COMPLETE</oracle-approved>` 태그 필수
-- 미완료 태스크가 있으면 종료 거부
-- 최대 10회 반복 후 강제 종료 허용
-
-## 디렉토리 구조
-
-```
-oh-my-toong/
-├── skills/                    # 작업별 방법론 (SKILL.md 파일)
-│   ├── prometheus/            # 전략적 계획 컨설턴트
-│   ├── sisyphus/              # 서브에이전트 위임을 통한 작업 오케스트레이터
-│   ├── diagnose/              # 아키텍처 및 디버깅 조언자
-│   ├── explore/               # 코드베이스 검색 및 탐색
-│   ├── librarian/             # 외부 문서 연구자
-│   ├── clarify/               # 요구사항 명확화 게이트
-│   ├── momus/                 # 작업 계획 검토자
-│   ├── git-master/            # Git 컨벤션 (커밋 + 브랜치 네이밍)
-│   ├── agent-council/         # 다중 AI 자문단
-│   ├── qa/                    # 품질 보증 가디언
-│   └── performance-optimizer/ # 성능 분석 및 최적화
-├── agents/                    # Agent 도구 위임용 서브에이전트 정의
-│   ├── sisyphus-junior.md     # 집중 실행자 (단독 작업)
-│   ├── oracle.md              # 아키텍처 조언자
-│   ├── explore.md             # 코드베이스 검색
-│   ├── librarian.md           # 외부 문서
-│   ├── momus.md               # 계획 검토자
-│   ├── metis.md               # 사전 계획 분석
-│   └── argus.md              # 백눈의 감시자
-├── commands/                  # 슬래시 명령어 정의
-│   ├── hud.md                 # 상태바 HUD 설정
-│   ├── ralph.md               # Ralph Loop 조율
-│   └── cancel-ralph.md        # 활성 Ralph Loop 취소
-├── hooks/                     # 세션 라이프사이클 스크립트
-│   ├── session-start.sh       # 지속 모드 상태 복원
-│   ├── keyword-detector.sh    # 키워드 감지 및 컨텍스트 주입
-│   ├── persistent-mode.js     # 작업 미완료 시 종료 방지
-│   └── pre-tool-enforcer.sh   # 도구 실행 전 강제
-├── projects/                  # 프로젝트별 스킬 오버라이드
-├── docs/                      # 상세 문서
-│   ├── ORCHESTRATION.md       # 오케스트레이션 가이드
-│   └── ORCHESTRATION.en.md    # Orchestration guide (English)
-├── scripts/                   # 유틸리티 및 동기화 스크립트
-├── Makefile                   # 빌드 자동화
-├── sync.yaml                  # 동기화 설정
-├── config.yaml                # 전역 설정
-└── CLAUDE.md                  # Claude Code 지침
-```
-
-## 핵심 스킬
-
-| 스킬 | 용도 | 핵심 제약 |
-|------|------|-----------|
-| **deep-interview** | 소크라테스식 심층 인터뷰 | 모호성 임계값 아래로 수렴해야 실행 — 명세 후 prometheus로 |
-| **prometheus** | 전략적 계획 컨설턴트 | 계획만 수행 - 절대 구현하지 않음 |
-| **sisyphus** | 작업 오케스트레이터 | 서브에이전트를 통해 위임 - 조율만, 단독 작업 안 함 |
-| **diagnose** | 아키텍처/디버깅 조언자 | READ-ONLY 컨설턴트 - 진단만, 구현 안 함 |
-| **clarify** | 요구사항 명확화 | 구현 전 필수 게이트 |
-| **momus** | 작업 계획 검토자 | 가차 없는 비평 - 구현 전 갭 포착 |
-| **git-master** | Git 컨벤션 (커밋 + 브랜치 네이밍) | 한국어 메시지, Subject 50자/Body 72자 제한, 원자적 커밋 |
-| **agent-council** | 다중 AI 자문단 | 트레이드오프 및 주관적 결정용 |
-| **argus** | 품질 보증 가디언 | 구현 품질, 계획 준수, 지시 이행 검증 |
-| **performance-optimizer** | 성능 최적화 | Before/After 검증을 통한 체계적 분석 |
-
-## 그 외 스킬
-
-도메인·유틸리티 스킬. 필요할 때 트리거로 로드됩니다.
-
-| 스킬 | 분류 | 용도 |
-|------|------|------|
-| **code-review** | 리뷰/품질 | PR·diff 정확성 버그 리뷰 |
-| **design-review** | 리뷰/품질 | 플랜·설계 리뷰 (steelman + 트레이드오프) |
-| **orchestrate-review** | 리뷰/품질 | 코드 리뷰 오케스트레이션 (다중 AI 종합) |
-| **slides-review** | 리뷰/품질 | HTML 슬라이드 디자인 리뷰 (Gemini) |
-| **qa** | 리뷰/품질 | 품질 보증 가디언 (구현 검증) |
-| **create-slides** | 문서/콘텐츠 | HTML 기반 발표자료 생성 |
-| **technical-writing** | 문서/콘텐츠 | 한국어 기술 문서 리뷰·작성 |
-| **technical-copywriting** | 문서/콘텐츠 | 기술 블로그 티저·홍보 문구 리뷰 |
-| **humanizer** | 문서/콘텐츠 | AI 글쓰기 흔적 제거 (한/영) |
-| **make-pr** | 문서/콘텐츠 | PR 설명 작성 |
-| **scan-pdf-to-notes** | 문서/콘텐츠 | 스캔 PDF 챕터 추출·정리 |
-| **resume-apply** | 채용/이력서 | JD 기반 이력서 지원 워크플로우 |
-| **resume-forge** | 채용/이력서 | 이력서 문제해결 소재 제작·정제 |
-| **review-resume** | 채용/이력서 | 이력서 리뷰·피드백 |
-| **collect-jd** | 채용/이력서 | JD 수집·큐레이션·정리 |
-| **mock-interview** | 채용/이력서 | 이력서 기반 모의면접 질문 생성 |
-| **tech-claim-rubric** | 채용/이력서 | 기술 주장 5축 평가 프레임워크 |
-| **using-maestro** | 기획/유틸 | Maestro 모바일 E2E 테스트 작성·디버깅 |
-| **hud** | 기획/유틸 | 상태바 HUD 설정 |
-| **pins** (`select-pin`·`write-pin`) | 기획/유틸 | on-discovery 지식 핀 시스템 |
-
-## 에이전트
-
-에이전트는 Claude Code의 Agent 도구와 함께 위임에 사용되는 특화된 서브에이전트 정의입니다.
-
-| 에이전트 | 역할 | 사용 시점 |
-|----------|------|-----------|
-| **sisyphus-junior** | 집중 작업 실행자 | 계획에서 개별 작업 구현 시 |
-| **oracle** | 아키텍처 조언자 | 아키텍처 분석 또는 디버깅 이슈 시 |
-| **explore** | 코드베이스 탐색자 | 파일, 구현체, 코드 패턴 검색 시 |
-| **librarian** | 문서 연구자 | 외부 API, 라이브러리, 모범 사례 조사 시 |
-| **momus** | 계획 비평가 | 실행 전 작업 계획 검토 시 |
-| **metis** | 사전 계획 분석가 | 계획 생성 전 갭 포착 시 |
-| **argus** | 품질 보증 가디언 | 품질 보증 검증 시 |
-| **daedalus** | 플랜·설계 리뷰어 | 설계 리뷰 위임 시 (steelman + 트레이드오프) |
-| **chunk-reviewer** | 코드 청크 리뷰어 | 코드 리뷰 오케스트레이션 시 |
-| **tech-claim-examiner** | 기술 주장 평가자 | 이력서·콘텐츠의 기술 주장 검증 시 |
-| **mnemosyne** | Git 커밋 전문가 | 격리된 컨텍스트에서 원자적 커밋 실행 시 |
-
-## 명령어
-
-| 명령어 | 설명 |
-|--------|------|
-| `/prometheus <작업>` | 작업 계획 생성 |
-| `/sisyphus` | 조율을 통한 계획 실행 |
-| `/hud setup` | Claude Code 상태바에 Oh-My-Toong HUD 구성 |
-| `/hud restore` | 이전 statusLine 설정 복원 |
-| `/ralph <task>` | oracle 검증과 함께 작업 완료를 위한 Ralph Loop 시작 |
-| `/cancel-ralph` | 활성 Ralph Loop 취소 및 상태 정리 |
-
-## 주요 워크플로우
-
-### 계획에서 실행까지
-
-```
-1. /prometheus <task>     ~/.omt/{OMT_PROJECT}/plans/*.md에 작업 계획 생성
-         ↓
-2. /sisyphus              서브에이전트를 통해 계획 실행 조율
-         ↓
-3. sisyphus-junior        엄격한 규율로 개별 작업 실행
-```
-
-### Ralph Loop
-
-oracle 검증을 통한 반복적 완료 강제. oracle이 작업이 정말로 완료되었음을 확인할 때까지 루프가 계속됩니다.
-
-- 상태 파일: `~/.omt/{OMT_PROJECT}/ralph-state.json` (`$OMT_DIR` 환경 변수로 접근)
-- 취소: `/cancel-ralph`
-
-### Ultrawork Mode
-
-키워드(`ultrawork`, `ulw`, `uw`)를 통해 활성화되는 최대 정밀 모드. 병렬 에이전트 활용과 향상된 검증을 가능하게 합니다.
-
-## 훅
-
-| 훅 | 이벤트 | 용도 |
-|----|--------|------|
-| **session-start.sh** | SessionStart | 지속 모드 상태 복원 (ralph-loop, 미완료 할 일) |
-| **keyword-detector.sh** | UserPromptSubmit | 키워드 감지 및 모드 컨텍스트 주입 |
-| **persistent-mode.js** | Stop | 작업 미완료 시 종료 방지 |
-| **pre-tool-enforcer.sh** | PreToolUse | 도구 실행 게이트 (TaskOutput 차단) |
-| **sync-component-validator.sh** | Stop | 세션 종료 시 컴포넌트 존재 검증 |
-| **sync-schema-validator.sh** | PostToolUse | sync.yaml 수정 시 스키마 검증 |
-
-## 로컬 오버라이드 (*.yaml + *.local.yaml)
-
-Vite/Next.js의 `.env` + `.env.local` 패턴과 동일하게 동작합니다. `base.yaml`은 git으로 관리되고, `*.local.yaml`은 기기별 오버라이드로 gitignore됩니다.
-
-### 지원 범위
-
-`sync.yaml`, `config.yaml`, `claude.yaml`, `gemini.yaml`, `codex.yaml`, `opencode.yaml`, `projects/*/sync.yaml`, `projects/*/{platform}.yaml` 각각에 `*.local.yaml` 파일을 놓으면 `make sync` 시 자동으로 병합됩니다.
-
-### 병합 정책 (type-aware)
-
-| 값 유형 | 병합 방식 |
-|---------|-----------|
-| Scalar (string, number, bool) | local이 base를 대체 |
-| Object | 재귀 deep merge |
-| Array | concat + dedup (base 순서 유지; 동일 identity key = local이 base 위치에서 대체) |
-
-`permissions.deny` 같은 안전 규칙 배열은 local에서 항목을 추가해도 base 항목이 보존됩니다.
-
-### 예시
-
-```yaml
-# claude.yaml (git 추적)
-config:
-  permissions:
-    deny: ["Bash(rm -rf *)"]
-
-# claude.local.yaml (gitignore — 이 기기 전용)
-config:
-  env:
-    MY_WORK_TOKEN: "abc123"
-  permissions:
-    deny: ["WebFetch(domain:internal.company.com)"]
-```
-
-결과 (병합 후): `permissions.deny`에 두 항목이 모두 포함됩니다.
-
-### Claude 설정 목적지
-
-Claude 어댑터만 `.claude/settings.local.json`에 기록합니다 (다른 플랫폼은 각자의 기본 경로 유지). Claude Code는 `settings.json`과 `settings.local.json`을 자동으로 병합하고, `settings.local.json`을 자동으로 gitignore합니다. 팀 관리 `settings.json`은 oh-my-toong이 수정하지 않습니다.
-
-### 기기별 프로젝트 화이트리스트 (`enabled-projects`)
-
-기기마다 활성화할 프로젝트를 제한하고 싶을 때 `config.local.yaml`의 `enabled-projects`를 사용합니다. 예를 들어 회사 Mac에는 업무 프로젝트만, 개인 Mac에는 사이드 프로젝트만 sync하도록 설정할 수 있습니다.
-
-```yaml
-# config.local.yaml (gitignore — 이 기기 전용)
-enabled-projects:
-  - my-work-project
-  - another-work-project
-```
-
-**우선순위**: CLI `--projects` > `config.local.yaml enabled-projects` > 전부 활성 (미선언 시 기존 동작 유지)
-
-**빈 배열 (`[]`)은 "전부 활성"으로 정규화됩니다.** 의도치 않게 모든 프로젝트를 막는 실수를 방지합니다.
-
-**루트 `sync.yaml`은 영향 받지 않습니다.** `enabled-projects`는 `projects/*/sync.yaml` 처리에만 적용되며, 루트 `sync.yaml`(글로벌 skills, agents 등)은 모든 기기에서 항상 실행됩니다. 이는 의도된 비대칭입니다.
-
-**선언되지 않은 프로젝트 이름은 warn + skip**됩니다 (디렉토리가 없는 경우).
-
-#### 기기 매트릭스 예시
-
-| 기기 | `config.local.yaml` | sync 대상 |
-|------|---------------------|-----------|
-| 회사 Mac | `enabled-projects: [work-api, work-frontend]` | work-api, work-frontend만 |
-| 개인 Mac | `enabled-projects: [side-project]` | side-project만 |
-| CI / 전체 sync | 미선언 (또는 파일 없음) | 모든 프로젝트 |
-
-## 설치
+## Quick Start
 
 ### 사전 요구사항
 
@@ -417,23 +79,24 @@ enabled-projects:
    cd oh-my-toong
    ```
 
-2. sync.yaml에 대상 프로젝트 경로 설정:
+2. `sync.yaml`에 대상 프로젝트 경로와 배포할 컴포넌트 선언:
    ```yaml
    path: /path/to/your/project
 
    skills:
-     - component: prometheus
-     - component: sisyphus
-     # 사용할 스킬 추가
+     items:
+       - prometheus
+       - sisyphus
 
    agents:
-     - component: oracle
-     - component: explore
-     # 사용할 에이전트 추가
+     items:
+       - oracle
+       - explore
 
    hooks:
-     - component: session-start.sh
-       event: SessionStart
+     items:
+       - component: session-start.sh
+         event: SessionStart
    ```
 
 3. 검증 및 동기화:
@@ -443,9 +106,9 @@ enabled-projects:
    make sync        # 동기화 적용
    ```
 
-### 프로젝트별 스킬
+### 프로젝트별 스킬 분화
 
-같은 이름의 스킬이라도 프로젝트의 언어/프레임워크에 따라 다른 컨벤션이 필요할 때, `projects/` 디렉토리에 프로젝트별 오버라이드를 생성합니다:
+같은 이름의 스킬이라도 프로젝트의 언어/프레임워크에 따라 다른 컨벤션이 필요할 때, `projects/` 디렉토리에 프로젝트별 오버라이드를 생성합니다.
 
 ```
 projects/
@@ -457,14 +120,14 @@ projects/
             └── SKILL.md    # Kotlin/Spring 아키텍처 패턴
 ```
 
-sync.yaml에서 스킬을 참조하면, 동기화 시 해당 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다:
+`sync.yaml`에서 스킬을 참조하면, 동기화 시 해당 프로젝트 폴더를 먼저 검색하고 없으면 글로벌로 폴백합니다.
 
 ```yaml
 # projects/loopers-kotlin-spring-template/sync.yaml
 skills:
   items:
     - testing          # → projects/loopers-.../skills/testing/ (프로젝트 우선)
-    - diagnose           # → skills/diagnose/ (글로벌 폴백)
+    - diagnose         # → skills/diagnose/ (글로벌 폴백)
 
 agents:
   items:
@@ -474,37 +137,14 @@ agents:
         - implementation   # sisyphus-junior에 프로젝트별 implementation 스킬 주입
 ```
 
-## HUD 디스플레이
+## 로컬 오버라이드
 
-`/hud setup` 실행 후 상태바에 2줄 디스플레이 표시:
+기기마다 다른 설정(회사 Mac vs 개인 Mac)이 필요할 때를 위해, 모든 YAML 입력은 git에서 추적되는 `*.yaml`과 gitignore되는 `*.local.yaml`로 나뉩니다. Vite/Next.js의 `.env` + `.env.local` 패턴과 같으며, `make sync` 시 둘이 자동으로 deep merge됩니다. `config.local.yaml`의 `enabled-projects`로 기기별 프로젝트 화이트리스트도 지정할 수 있습니다. 병합 정책과 화이트리스트 규칙은 [아키텍처 문서](docs/architecture.md)에서 다룹니다.
 
-**1줄: 세션 및 리소스**
-```
-23m | 5h:45%(2h) wk:67%(3d) | ctx:42% | agents:explore+2 | thinking
-```
+## HUD
 
-**2줄: 작업 및 진행 상황**
-```
-tasks:3/5 | ralph:2/10 | Implementing user auth...
-```
+`/hud setup`을 실행하면 Claude Code 상태바에 세션·리소스·작업 진행 상황을 2줄로 표시합니다. 요소별 색상 규칙과 옵션은 [유틸·개인 워크플로우 문서](docs/skills/utilities-personal.md)를 참고하세요.
 
-| 요소 | 설명 | 색상 규칙 |
-|------|------|-----------|
-| `23m` | 세션 지속 시간 | 굵게 |
-| `5h:45%(2h)` | 5시간 사용량 제한: 45% 사용, 2시간 후 리셋 | 초록 <70%, 노랑 70-85%, 빨강 >85% |
-| `wk:67%(3d)` | 주간 사용량 제한: 67% 사용, 3일 후 리셋 | 위와 동일 |
-| `ctx:N%` | 컨텍스트 윈도우 사용량 | 흐림 <30%, 초록 30-49%, 노랑 50-69%, 빨강 70%+ |
-| `agents:name+N` | 실행 중인 에이전트 (첫 에이전트명 + 개수) | 초록 |
-| `thinking` | 확장 사고 모드 활성화 | 청록 |
-| `tasks:X/Y` | 작업 진행 (완료/전체) | 진행 있으면 초록, 0/0이면 흐림 |
-| `ralph:X/Y` | Ralph Loop 반복 횟수 | 초록 <70%, 노랑 >70%, 최대치에서 빨강 |
-| Active task | 현재 작업 설명 (최대 25자) | 흐림 |
-
-**Graceful Degradation:**
-- OAuth 불가 시 사용량 제한 숨김
-- 데이터 불가 시 최소 디스플레이 (`0m | ctx:0%`)
-- 2시간 이상 된 상태 파일 무시 (오래된 세션 감지)
-
-## 라이선스
+## License
 
 MIT 라이선스 - 자세한 내용은 [LICENSE](LICENSE) 참조.
