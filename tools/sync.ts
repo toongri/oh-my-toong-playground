@@ -34,7 +34,7 @@ import {
 import { generateBackupSessionId, backupCategory, cleanupOldBackups } from "./lib/backup.ts";
 import { logInfo, logWarn, logError, logDry, logSuccess } from "./lib/logger.ts";
 import { syncDirectory } from "./lib/sync-directory.ts";
-import { collectRequiredLibModules } from "./adapters/ts-lib-deps.ts";
+import { collectRequiredLibModules, collectLibDataFiles } from "./adapters/ts-lib-deps.ts";
 import { ClaudeAdapter } from "./adapters/claude.ts";
 import { GeminiAdapter } from "./adapters/gemini.ts";
 import { CodexAdapter } from "./adapters/codex.ts";
@@ -439,6 +439,14 @@ export async function syncLib(
     return;
   }
 
+  // Static data files a lib module references at runtime via import.meta.dir
+  // (e.g. lib/pins/tbox.yaml). Traced from the lib source tree, never globbed.
+  // Copied verbatim (no alias rewrite — rewriteLibAliases only touches .ts).
+  // Collected BEFORE the early-skip: it traces from SOURCE (independent of the
+  // deployed tree), so a data file can be present even when requiredModules is
+  // empty (notably in dry-run, where the stale prior deployment has no @lib/).
+  const dataFiles = await collectLibDataFiles(libSrc);
+
   for (const platform of platforms) {
     const platformDir = path.join(targetPath, `.${platform}`);
     const libDest = path.join(platformDir, "lib");
@@ -458,7 +466,7 @@ export async function syncLib(
 
     const requiredModules = await collectRequiredLibModules(platformDir, libSrc);
 
-    if (requiredModules.size === 0) {
+    if (requiredModules.size === 0 && dataFiles.size === 0) {
       logInfo(`No @lib/ imports found in .${platform}/, skipping lib deployment`);
       continue;
     }
@@ -468,6 +476,9 @@ export async function syncLib(
       for (const dep of requiredModules) {
         logDry(`  ${path.relative(libSrc, dep)}`);
       }
+      for (const file of dataFiles) {
+        logDry(`  ${path.relative(libSrc, file)}`);
+      }
       logDry(`Rewrite @lib/* aliases in ${platformDir}/`);
     } else {
       await fs.mkdir(libDest, { recursive: true });
@@ -476,6 +487,12 @@ export async function syncLib(
         const destFile = path.join(libDest, relPath);
         await fs.mkdir(path.dirname(destFile), { recursive: true });
         await fs.copyFile(dep, destFile);
+      }
+      for (const file of dataFiles) {
+        const relPath = path.relative(libSrc, file);
+        const destFile = path.join(libDest, relPath);
+        await fs.mkdir(path.dirname(destFile), { recursive: true });
+        await fs.copyFile(file, destFile);
       }
       logInfo(`Deployed shared lib to .${platform}/lib/`);
       await rewriteLibAliases(platformDir);

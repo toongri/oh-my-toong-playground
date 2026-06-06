@@ -311,6 +311,26 @@ describe("CodexAdapter", () => {
       expect(content).toContain("other-server");
     });
 
+    it("skips a server whose overlay value is null via `syncPlatformYaml`", async () => {
+      const yaml = {
+        mcps: {
+          "keep-server": { command: "npx", args: ["-y", "keep"] },
+          "drop-server": null,
+        },
+      };
+      const result = await adapter.syncPlatformYaml(
+        tmpDir,
+        yaml as unknown as Parameters<typeof adapter.syncPlatformYaml>[1],
+        false,
+      );
+      expect(result.processedSections).toContain("mcps");
+
+      const configFile = path.join(tmpDir, ".codex", "config.toml");
+      const content = await fs.readFile(configFile, "utf-8");
+      expect(content).toContain("keep-server");
+      expect(content).not.toContain("drop-server");
+    });
+
     it("processes config, mcps, and model-map sections together via `syncPlatformYaml`", async () => {
       const yaml = {
         config: { model: "o4-mini" },
