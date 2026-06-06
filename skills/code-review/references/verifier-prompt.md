@@ -103,7 +103,8 @@ digraph verification_flow {
 
 ## Verdict ladder (recall-biased)
 
-- **CONFIRMED** — you can name the inputs/state that trigger it and the wrong output or crash.
+- **CONFIRMED** — you can name the inputs/state that trigger it and the wrong output, crash, or
+  lost required effect (e.g. an analytics/audit/log/notification side-effect that no longer fires).
   Quote the line.
 - **PLAUSIBLE** — the mechanism is real but the trigger is uncertain (timing, env, config) or rests
   on realistic-but-unconfirmed runtime state. State what would confirm it. **Default here** when
@@ -145,7 +146,7 @@ LOCATION: {CANDIDATE_FILE}:<line> — <section / function name>
 CURRENT CODE:
 <5-15 lines centered on the issue>
 WHAT'S WRONG: <the problem, grounded in the quoted line>
-FAILURE SCENARIO: <concrete inputs/state -> wrong output/crash; for a cleanup finding, the concrete cost — what is duplicated, wasted, or harder to maintain>
+FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost — what is duplicated, wasted, or harder to maintain>
 FIX: <concrete diff, or a design direction if the change is structural>
 BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
 FOUND BY: {CANDIDATE_FOUND_BY}

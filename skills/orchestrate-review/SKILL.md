@@ -175,7 +175,7 @@ Finders may fail due to CLI unavailability, timeout, or errors. This is NOT quor
 [One entry per merged candidate, no ordering implied — the orchestrator ranks downstream (Phase 3).]
 
 - **{file}:{line}** — {summary}
-  - failure_scenario: {concrete inputs/state → wrong output or crash; for cleanup, the concrete cost}
+  - failure_scenario: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost}
   - found by: {angle(s), e.g. "line-scan" or "line-scan + cross-file"}
 
 ### Angle Coverage
