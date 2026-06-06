@@ -9,6 +9,7 @@
 | Complexity | Approach | When to Use |
 |------------|----------|-------------|
 | **Simple** | Just prompt | Quick fixes, single-file changes |
+| **Fuzzy scope** | `/deep-interview` -> `/prometheus` -> `/sisyphus` | You have an idea but requirements are unclear |
 | **Complex** | `/prometheus` -> `/sisyphus` | Multi-step work requiring planning and orchestration |
 
 **Decision Flow:**
@@ -16,9 +17,11 @@
 ```
 Is it a quick fix or simple task?
   |-- YES -> Just prompt normally
-  |-- NO  -> Do you need multi-step execution?
-              |-- YES -> /prometheus for planning -> /sisyphus for execution
-              |-- NO  -> Just prompt with context
+  |-- NO  -> Are the requirements clear?
+              |-- NO  -> /deep-interview to crystallize a spec -> /prometheus -> /sisyphus
+              |-- YES -> Do you need multi-step execution?
+                          |-- YES -> /prometheus for planning -> /sisyphus for execution
+                          |-- NO  -> Just prompt with context
 ```
 
 ---
@@ -34,6 +37,7 @@ Oh-My-Toong solves this by clearly separating roles:
 
 | Role | Agent | Responsibility |
 |------|-------|----------------|
+| **Definition** | deep-interview | Resolves ambiguity into a spec, NEVER writes code |
 | **Planning** | prometheus | Strategic planning, NEVER writes code |
 | **Execution** | sisyphus | Orchestrates via delegation, NEVER works alone |
 | **Implementation** | sisyphus-junior | Writes code (delegated by sisyphus) |
@@ -48,10 +52,16 @@ flowchart TD
     User[User Request] --> Decision{Complexity?}
 
     Decision -->|Simple| Direct[Direct Prompting]
+    Decision -->|Fuzzy scope| DeepInterview["/deep-interview"]
     Decision -->|Complex multi-step| Prometheus
 
+    subgraph Definition Phase
+        DeepInterview --> SpecFile["$OMT_DIR/deep-interview/{slug}.md"]
+    end
+
     subgraph Planning Phase
-        Prometheus["/prometheus"] --> Metis[metis<br/>Gap Analysis]
+        SpecFile --> Prometheus["/prometheus"]
+        Prometheus --> Metis[metis<br/>Gap Analysis]
         Metis --> Prometheus
         Prometheus --> PlanFile["~/.omt/{OMT_PROJECT}/plans/*.md"]
     end
@@ -68,6 +78,14 @@ flowchart TD
 ---
 
 ## 3. Key Components
+
+### deep-interview (The Definer)
+
+- **Role**: Crystallizes a vague idea into a spec before autonomous execution
+- **Constraint**: Won't proceed to execution while the ambiguity score stays above threshold. Never implements directly.
+- **Output**: `$OMT_DIR/deep-interview/{slug}.md` (prometheus's input)
+- **Workflow**: One question at a time, targeting the weakest clarity dimension -> measure ambiguity -> finalize spec once below threshold
+- **Origin**: Borrowed almost as-is from oh-my-claudecode (omc), whose implementation was simply too good to reinvent (originally inspired by [Ouroboros](https://github.com/Q00/ouroboros))
 
 ### prometheus (The Planner)
 
@@ -99,6 +117,14 @@ flowchart TD
 
 ## 4. Workflow
 
+### Phase 0: Definition (when scope is fuzzy)
+
+When requirements are unclear, crystallize a spec with `/deep-interview` before planning:
+
+1. **One question at a time**: Targets the weakest clarity dimension
+2. **Ambiguity gating**: Repeats until the score drops below threshold
+3. **Spec finalized**: Saved to `$OMT_DIR/deep-interview/{slug}.md` -> prometheus input
+
 ### Phase 1: Planning
 
 When requirements are clear, use `/prometheus`:
@@ -123,6 +149,7 @@ With a plan ready, use `/sisyphus`:
 
 | Command | Purpose | Output |
 |---------|---------|--------|
+| `/deep-interview <idea>` | Crystallize a spec via ambiguity gating | `$OMT_DIR/deep-interview/{slug}.md` |
 | `/prometheus <task>` | Create work plan | `~/.omt/{OMT_PROJECT}/plans/*.md` |
 | `/sisyphus` | Execute plan via orchestration | Verified code changes |
 | `/ralph <task>` | Iterative completion with oracle verification | Task completion |
@@ -170,4 +197,4 @@ Contain all TODOs in one plan file. This prevents context fragmentation and make
 ## See Also
 
 - [README](../README.en.md) - Project overview
-- [Core Skills Architecture](../README.en.md#core-skills-architecture) - Skill details with diagrams
+- [Core Pipeline Skills](skills/core-pipeline.en.md) - deep-interview · prometheus · sisyphus · argus details

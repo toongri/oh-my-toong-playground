@@ -62,10 +62,8 @@ Confirm the path is correct and the user understands that all pins API calls wil
 
 If the project has legacy pin files (frontmatter with `slug` instead of `id`, no `type` field), run migration after setup:
 
-```ts
-import { migrate } from 'lib/pins/migrate.ts';
-
-await migrate({ location });
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/setup.ts" --location "$LOC" --scope "$SCOPE" [--git true|false]
 ```
 
-`migrate()` is idempotent — re-running it is safe. Each legacy file gets a `.bak` sibling before conversion.
+The script writes `pins.yaml` into the current working directory and then runs `migrate()` against the just-written location. `migrate()` is idempotent — re-running it is safe. Each legacy file gets a `.bak` sibling before conversion.

@@ -9,18 +9,8 @@ Run a read-only health check over the pin knowledge graph by calling `audit(inpu
 
 ## Invocation
 
-```ts
-import { audit } from "lib/pins/audit.ts";
-import { resolveManifest } from "lib/pins/manifest.ts";
-
-const result = await resolveManifest();
-if (result.kind !== "resolved") throw new Error("pins manifest absent");
-
-const report: AuditReport = await audit(
-  result.manifest.location, // string path resolved from pins.yaml — or an Entity[] array for scoped checks
-  { now: new Date() }       // required for stale detection; omit to skip stale checks entirely
-);
-// report.findings: AuditFinding[]
+```bash
+bun "${CLAUDE_SKILL_DIR}/scripts/audit.ts"
 ```
 
 `audit` is read-only. It does not write, delete, or modify any file.

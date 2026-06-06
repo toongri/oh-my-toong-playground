@@ -392,7 +392,14 @@ export class CodexAdapter implements PlatformAdapter {
 
     // --- mcps ---
     if (yaml.mcps != null) {
-      for (const [name, server] of Object.entries(yaml.mcps)) {
+      // After overlay merge a server value can be null: a local override file
+      // uses `<name>: null` as a deletion marker to drop a server inherited from
+      // the base config. Skip those so the managed block omits them entirely.
+      const entries = Object.entries(yaml.mcps) as Array<
+        [string, Record<string, unknown> | null]
+      >;
+      for (const [name, server] of entries) {
+        if (server == null) continue;
         this.accumulateMcp(name, server);
         if (!dryRun) {
           logInfo(`MCP accumulated: ${name}`);

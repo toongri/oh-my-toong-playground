@@ -51,3 +51,4 @@ rules:
     - work-principles
     - coding-discipline
     - private-component-management
+    - documentation-currency
