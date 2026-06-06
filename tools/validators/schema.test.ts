@@ -424,6 +424,26 @@ model-map:
       expect(result.warnings).toHaveLength(0);
     });
 
+    it("allows mcps.<name>: null as a codex deletion marker via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "codex.local.yaml", `
+mcps:
+  keep:
+    command: npx
+  notion: null
+`);
+      const result = validatePlatformYaml(path, "codex");
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("rejects mcps.<name>: null for non-codex platforms via `validatePlatformYaml`", () => {
+      const path = writeYaml(dir, "claude.local.yaml", `
+mcps:
+  notion: null
+`);
+      const result = validatePlatformYaml(path, "claude");
+      expect(result.errors.some((e) => e.includes("mcps.notion"))).toBe(true);
+    });
+
     it("produces no errors or warnings when opencode.yaml has only allowed sections", () => {
       const path = writeYaml(dir, "opencode.yaml", `
 config:
