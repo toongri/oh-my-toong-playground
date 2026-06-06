@@ -23,6 +23,7 @@
  *   set --phase <planning|pursuing> [--outcome ..] [--verification-surface ..]
  *       [--constraints ..] [--boundaries ..] [--max-iterations <n>]
  *       [--blocked-stop ..] [--plan-path ..] [--resume-summary ..]
+ *       [--completion-evidence p1,p2]
  *   set-budget-limited                       (system-only)
  *   set-blocked --reason <text>              (system-only)
  *   request-complete                         (gated: requires completion evidence)
@@ -310,6 +311,12 @@ function main(): void {
 
   if (subcommand === 'set') {
     const maxIter = args['max-iterations'] !== undefined ? Number(args['max-iterations']) : undefined;
+    // parseArgs collapses repeated --key to the LAST value, so evidence arrives
+    // as a single comma-separated value. Absent => undefined so the merge-write
+    // preserves prior evidence rather than clobbering it with [].
+    const evidence = str(args['completion-evidence']);
+    const completionEvidence =
+      evidence !== undefined ? evidence.split(',').map((s) => s.trim()).filter(Boolean) : undefined;
     setGoalState(sessionId, {
       phase: String(args['phase'] ?? '') as GoalPhase,
       outcome: str(args['outcome']),
@@ -320,6 +327,7 @@ function main(): void {
       blocked_stop: str(args['blocked-stop']),
       plan_path: str(args['plan-path']),
       resume_summary: str(args['resume-summary']),
+      completion_evidence_paths: completionEvidence,
     });
   } else if (subcommand === 'set-verdict') {
     setVerdict(sessionId, String(args['verdict'] ?? 'absent') as ObjectiveVerdict);
