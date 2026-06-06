@@ -49,6 +49,22 @@ export interface PrometheusState {
   active: boolean;
 }
 
+/**
+ * Minimal contract the persistent-mode hook reads from the goal-state file
+ * written by `skills/goal/scripts/goal-state.ts`. The on-disk file carries
+ * many additional SKILL-only fields (outcome, verification_surface, etc.);
+ * the hook only consults this subset. `active === false` means a terminal
+ * state (complete/blocked/budget_limited) — the hook must treat it as null
+ * so it never blocks on a finished goal.
+ */
+export interface GoalState {
+  active: boolean;
+  phase: string;
+  objective_verdict: string;
+  iteration: number;
+  max_iterations: number;
+}
+
 // Hook output format
 export interface HookOutput {
   decision?: 'block' | 'continue';

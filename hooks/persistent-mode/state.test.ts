@@ -7,6 +7,7 @@ import {
   cleanupDeepInterviewState,
   readPrometheusState,
   cleanupPrometheusState,
+  readGoalState,
   getBlockCount,
   incrementBlockCount,
   cleanupBlockCountFiles,
@@ -401,6 +402,78 @@ describe('Prometheus state management', () => {
 
       // Second call on nonexistent file must not throw
       expect(() => cleanupPrometheusState(sessionId)).not.toThrow();
+    });
+  });
+});
+
+describe('Goal state management', () => {
+  const testDir = join(tmpdir(), 'state-test-goal-' + Date.now());
+  const omtDir = join(testDir, 'omt');
+  const sessionId = 'test-session-goal';
+
+  const savedOmtDir = process.env.OMT_DIR;
+
+  beforeAll(async () => {
+    await mkdir(omtDir, { recursive: true });
+  });
+
+  afterAll(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    process.env.OMT_DIR = omtDir;
+    const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+    try { await rm(stateFile, { force: true }); } catch {}
+  });
+
+  afterEach(() => {
+    if (savedOmtDir === undefined) {
+      delete process.env.OMT_DIR;
+    } else {
+      process.env.OMT_DIR = savedOmtDir;
+    }
+  });
+
+  describe('readGoalState', () => {
+    it('readGoalState null on absent or malformed file', async () => {
+      // absent: file does not exist
+      expect(readGoalState('nonexistent-goal')).toBeNull();
+
+      // malformed: invalid JSON
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, 'not valid json {');
+      expect(readGoalState(sessionId)).toBeNull();
+
+      // active=false (terminal state): must read as null
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 3,
+        max_iterations: 10,
+      }));
+      expect(readGoalState(sessionId)).toBeNull();
+    });
+
+    it('goal: readGoalState returns state when active=true', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 2,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalState(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(true);
+      expect(result?.phase).toBe('pursuing');
+      expect(result?.iteration).toBe(2);
+      expect(result?.max_iterations).toBe(10);
+      expect(result?.objective_verdict).toBe('absent');
     });
   });
 });
