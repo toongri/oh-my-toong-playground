@@ -376,6 +376,9 @@ function validatePlatformYamlData(data: Record<string, unknown>, platformYamlPat
     result.errors.push(`${label}: mcps는 object 형식이어야 합니다`);
   } else if (isObject(data.mcps)) {
     for (const [name, value] of Object.entries(data.mcps)) {
+      // codex treats `<name>: null` as an overlay deletion marker that drops an
+      // inherited server; other platforms require a concrete server object.
+      if (value === null && platform === "codex") continue;
       if (!isObject(value)) {
         result.errors.push(`${label}: mcps.${name}의 값은 object이어야 합니다`);
       }
