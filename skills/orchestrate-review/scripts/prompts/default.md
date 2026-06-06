@@ -21,7 +21,7 @@ Locate `## Diff Command` in the REVIEW CONTENT and run it via Bash. If it fails 
 
 **Correctness (the change behaves wrong):**
 - **Line-by-line scan**: read each hunk and its enclosing function for inverted/wrong conditions, off-by-one, null/undefined deref, falsy-zero, missing `await`, wrong-variable copy-paste, swallowed errors, unescaped regex, language footguns.
-- **Removed behavior**: for every deleted/replaced line, name the invariant it enforced and find where it is re-established; if it is not, flag the removed guard / dropped error path / loosened validation / deleted test.
+- **Removed behavior**: for every deleted/replaced line, name the invariant it enforced and find where it is re-established; if it is not, flag the removed guard / dropped error path / loosened validation / deleted test / a side-effect the system performed that no longer happens (analytics/telemetry, audit/log, notification, cache invalidation, callback/hook) even when the visible output stays correct.
 - **Cross-file**: Grep callers of changed symbols and check for broken preconditions, changed return shapes, new exceptions, ordering/concurrency assumptions (verify the caller's real execution model first); check wrapper/proxy types route to the wrapped instance.
 
 **Cleanup (the change behaves correctly but is low quality):**

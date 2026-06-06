@@ -532,7 +532,7 @@ Per-finding format (enriched during Phase 2 verification):
   [5-15 lines centered on the issue]
   ```
 - **What's wrong**: {problem, grounded in the quoted line}
-- **Failure scenario**: {concrete inputs/state → wrong output/crash; for cleanup, the concrete cost — what is duplicated, wasted, or harder to maintain}
+- **Failure scenario**: {concrete inputs/state → wrong output, crash, or lost effect; for cleanup, the concrete cost — what is duplicated, wasted, or harder to maintain}
 - **Fix**:
   ```diff
   [concrete diff or, if structural, a design direction]
