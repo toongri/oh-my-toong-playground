@@ -146,7 +146,7 @@ LOCATION: {CANDIDATE_FILE}:<line> — <section / function name>
 CURRENT CODE:
 <5-15 lines centered on the issue>
 WHAT'S WRONG: <the problem, grounded in the quoted line>
-FAILURE SCENARIO: <concrete inputs/state -> wrong output/crash; for a cleanup finding, the concrete cost — what is duplicated, wasted, or harder to maintain>
+FAILURE SCENARIO: <concrete inputs/state -> wrong output, crash, or lost effect; for a cleanup finding, the concrete cost — what is duplicated, wasted, or harder to maintain>
 FIX: <concrete diff, or a design direction if the change is structural>
 BLAST RADIUS: <grep/reference evidence — what else references this, or "This location only">
 FOUND BY: {CANDIDATE_FOUND_BY}

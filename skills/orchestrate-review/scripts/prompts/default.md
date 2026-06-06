@@ -39,6 +39,6 @@ A list of candidate findings. For each:
 - **file**: `path/to/file.ext`
 - **line**: line number (omit if not line-specific)
 - **summary**: one sentence stating what is wrong (or, for cleanup, the better form)
-- **failure_scenario**: the concrete inputs/state → wrong output or crash; for cleanup, the concrete cost (what is duplicated, wasted, or harder to maintain) instead of a crash
+- **failure_scenario**: the concrete inputs/state → wrong output, a crash, or a lost effect (for a dropped side-effect, name the effect that no longer fires and what downstream depends on it — no crash or visible-output change required); for cleanup, the concrete cost (what is duplicated, wasted, or harder to maintain) instead of a crash
 
 No severity, no priority, no verdict, no merge recommendation. If nothing qualifies, say so explicitly rather than padding.
