@@ -76,14 +76,14 @@ function implResumeForm(jobTs: string): ArgForm | null {
 function docResumeForms(skillMd: string): ArgForm[] {
   return readFileSync(skillMd, "utf-8")
     .split("\n")
-    .filter((l) => /job\.ts resume-member\s/.test(l))
+    .filter((l) => /job\.ts"?\s+resume-member\s/.test(l))
     .map((l) => (/--(?:job|member|prompt)\b/.test(l) ? "flag" : "positional"));
 }
 
 /** Subcommands referenced anywhere in the SKILL.md body. */
 function bodySubcommands(skillMd: string): Set<string> {
   const subs = new Set<string>();
-  const re = new RegExp(`job\\.ts (${SUBCOMMAND})\\b`, "g");
+  const re = new RegExp(`job\\.ts"?\\s+(${SUBCOMMAND})\\b`, "g");
   for (const m of readFileSync(skillMd, "utf-8").matchAll(re)) subs.add(m[1]);
   return subs;
 }
@@ -97,7 +97,7 @@ function whitelistSubcommands(skillMd: string): Set<string> | null {
   const start = lines.findIndex((l) => /^#{1,6}\s+Allowed Bash Usage/.test(l));
   if (start === -1) return null;
   const subs = new Set<string>();
-  const re = new RegExp(`job\\.ts (${SUBCOMMAND})\\b`, "g");
+  const re = new RegExp(`job\\.ts"?\\s+(${SUBCOMMAND})\\b`, "g");
   for (let i = start + 1; i < lines.length; i++) {
     if (/^#{1,6}\s/.test(lines[i])) break; // next heading ends the section
     for (const m of lines[i].matchAll(re)) subs.add(m[1]);
