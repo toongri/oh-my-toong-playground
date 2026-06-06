@@ -116,12 +116,17 @@ After a sisyphus pass, completion is NOT self-declared. Invoke an objective-leve
 
 **Completion fires ONLY on argus APPROVE AND an objective-scope Evidence Audit pass.** A **COMMENT verdict is NOT sufficient** for completion — COMMENT means MEDIUM gaps remain. The Evidence Audit reuses the verify-the-verifier shape: confirm argus's verdict HOLDS UP by reading the evidence argus saved (does it demonstrate the verification surface was met?) — auditing, never re-running a command and never rendering your own verdict. If the evidence is missing or does not demonstrate the verification surface, it is an Evidence Gap → re-invoke argus, do not complete.
 
-On pass (APPROVE + Evidence Audit holds): write the verdict, then hand off to completion:
+On pass (APPROVE + Evidence Audit holds), run the completion sequence in this exact order — **record the Evidence Audit artifact paths FIRST, then flip the verdict, then request completion:**
 
 ```
+bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set --phase pursuing --completion-evidence <audit-artifact-paths>
 bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts set-verdict --verdict APPROVE
 bun ${CLAUDE_SKILL_DIR}/scripts/goal-state.ts request-complete
 ```
+
+`<audit-artifact-paths>` is a comma-separated list of the artifacts argus's Evidence Audit read (the evidence that demonstrates the verification surface was met). `set --phase pursuing --completion-evidence` keeps the phase `pursuing` and only records the evidence — it can never write `complete`.
+
+**Why evidence is recorded BEFORE the verdict flips:** so that whenever `objective_verdict=APPROVE` is observed, the completion evidence is already present. This keeps the completion path reachable for both the orchestrator's `request-complete` AND the hook-layer complete-wins — neither can observe APPROVE without evidence already in place, so the evidence gate can never strand a truly-achieved objective.
 
 APPROVE alone does NOT leave the goal pursuing/active — the `request-complete` handoff is what transitions to terminal `complete` (and it is structurally gated on completion-evidence, so a write that never reached the gate cannot false-complete).
 

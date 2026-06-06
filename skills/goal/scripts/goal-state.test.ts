@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -250,6 +251,28 @@ describe('goal state', () => {
     setBlocked(S, 'B1: no actionable story');
     expect(rawState().phase).toBe('blocked');
     expect(rawState().phase).not.toBe('complete');
+  });
+
+  // CLI completion path — exercises the actual script end-to-end, proving the
+  // `--completion-evidence` flag is wired so request-complete is reachable.
+  test('CLI set --completion-evidence populates evidence so request-complete succeeds', () => {
+    const script = join(import.meta.dir, 'goal-state.ts');
+    const p1 = `${tmpDir}/a.txt`;
+    const p2 = `${tmpDir}/b.txt`;
+    const run = (cmd: string) =>
+      execSync(`bun ${script} ${cmd}`, { encoding: 'utf8', env: process.env });
+
+    run(`set --phase pursuing --completion-evidence ${p1},${p2}`);
+    expect(rawState().phase).toBe('pursuing');
+    expect(rawState().completion_evidence_paths).toEqual([p1, p2]);
+
+    run('set-verdict --verdict APPROVE');
+
+    // request-complete must exit 0 (no throw) now that evidence is present
+    run('request-complete');
+    expect(rawState().phase).toBe('complete');
+    expect(rawState().active).toBe(false);
+    expect(rawState().completion_evidence_paths).toEqual([p1, p2]);
   });
 });
 
