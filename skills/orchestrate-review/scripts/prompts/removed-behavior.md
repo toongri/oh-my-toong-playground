@@ -28,6 +28,7 @@ For every line the diff DELETES or replaces, name the invariant or behavior it e
 - a regex/allowlist that lost an anchor
 - a deleted test that was covering a real case
 - setup/teardown or acquire/release symmetry broken by the change
+- a side-effect the system performed that no longer happens — an analytics/telemetry event, an audit/log write, a notification, a cache invalidation, a fired callback/hook — dropped by the change while the visible output stays correct
 
 ## Scope
 
@@ -40,6 +41,6 @@ A list of candidate findings. For each:
 - **file**: `path/to/file.ext`
 - **line**: line number (omit if the candidate is not line-specific)
 - **summary**: one sentence stating what was removed/weakened and why it matters
-- **failure_scenario**: the concrete inputs/state that the removed behavior used to protect → the wrong output or crash now
+- **failure_scenario**: the concrete inputs/state the removed behavior used to cover → the wrong output, a crash, OR a lost effect now (for a dropped side-effect, name the effect that no longer fires and what downstream depends on it — there need not be a crash or any visible-output change)
 
 No severity, no priority, no verdict, no merge recommendation. If nothing qualifies through this angle, say so explicitly rather than padding.

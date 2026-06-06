@@ -32,7 +32,7 @@ Diff-only review is insufficient. The working directory reflects the post-change
 **Correctness (the change behaves wrong):**
 
 - **Line-by-line scan** — for each hunk and its enclosing function: inverted/wrong conditions, off-by-one, null/undefined deref, falsy-zero treated as missing, missing `await`, wrong-variable copy-paste, error swallowed in a `catch`, unescaped regex metacharacters, language/framework footguns.
-- **Removed behavior** — for every deleted/replaced line, name the invariant it enforced and find where it is re-established; if it is not, flag the removed guard / dropped error path / loosened validation / lost anchor / deleted test.
+- **Removed behavior** — for every deleted/replaced line, name the invariant it enforced and find where it is re-established; if it is not, flag the removed guard / dropped error path / loosened validation / lost anchor / deleted test / a side-effect the system performed that no longer happens (analytics/telemetry, audit/log, notification, cache invalidation, callback/hook) even when the visible output stays correct.
 - **Cross-file** — Grep callers of changed symbols and check for broken preconditions, changed return shapes, new exceptions, ordering/concurrency assumptions; check wrapper/proxy types route to the wrapped instance, not back through a registry/global.
 
 **Cleanup (the change behaves correctly but is low quality):**
