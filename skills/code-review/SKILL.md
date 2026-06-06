@@ -456,7 +456,7 @@ Phase 1: Read the diff shape (stat/name-only/log) + the merged candidates
 
 ### Phase 2: Candidate Verification (MANDATORY)
 
-Finders surface candidates; they do not judge them — and **you do not judge them in your own context either**. You dispatch **one verifier subagent per candidate**. Each verifier reads the actual code in isolation and returns exactly one verdict. Per-candidate isolation is deliberate: it keeps each judgment free of the other candidates' framing (no anchoring) and gives each verifier a clean context to read deeply. This is the precision gate — finders ran wide for recall; verification narrows to what is real. There is no severity score and no P-level; a candidate is real or it is not, at a stated confidence.
+Finders surface candidates; they do not judge them — and **you do not judge them in your own context either**. You dispatch **one verifier subagent per candidate**. Each verifier reads the actual code in isolation and returns exactly one verdict. Per-candidate isolation is deliberate: it keeps each judgment free of the other candidates' framing (no anchoring) and gives each verifier a clean context to read deeply. This is the precision gate — finders ran wide for recall; verification narrows to what is real. A candidate is real or it is not, at a stated confidence.
 
 **Dispatch:**
 
@@ -481,7 +481,7 @@ This is a **report**. You surface verified findings, ranked by what matters most
 
 1. **Merge** verified findings that describe the same defect (same root cause, across chunks) — combine their evidence and note the corroborating angles. (Near-duplicates within a chunk were already deduped before verification.)
 2. **Class** each finding: **correctness** (the change behaves wrong) or **cleanup** (behaves correctly but is low quality), from the angle that found it.
-3. **Rank** most-significant first: **correctness before cleanup**; within a class, **CONFIRMED before PLAUSIBLE**. No severity score, no P-level.
+3. **Rank** most-significant first: **correctness before cleanup**; within a class, **CONFIRMED before PLAUSIBLE**.
 4. **Cap**: keep the most significant findings. If a review produced an unwieldy number, keep the top ~15 and state how many were dropped — never silently truncate.
 5. **Pre-existing**: a candidate on an unchanged context line is tagged `[Pre-existing]` and listed under Out of Scope — unless the change aggravates it (increases blast radius or frequency), in which case it stays in the main list.
 
