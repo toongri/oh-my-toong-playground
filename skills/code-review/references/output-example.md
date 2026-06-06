@@ -2,7 +2,7 @@
 
 Synthesized from 3 chunks: (A) Order API + domain, (B) Payment integration, (C) Inventory + messaging.
 
-This example demonstrates the complete report-only output format: the Walkthrough, then verdict-labeled findings split into Correctness and Cleanup. There is no severity grade and no merge verdict — the review reports, it does not gate.
+This example demonstrates the complete report-only output format: the Walkthrough, then verdict-labeled findings split into Correctness and Cleanup. There is no merge verdict — the review reports, it does not gate.
 
 ````
 ## Walkthrough
