@@ -28,6 +28,33 @@ EOF
     exit 0
 fi
 
+# Seed prometheus pipeline-state file when Skill(prometheus) is intercepted
+# Fail-open: any error is swallowed so the Skill call is never blocked
+if [[ "$toolName" == "Skill" ]]; then
+    skillName=$(extract_json_field "skill" "")
+    if [[ "$skillName" == "prometheus" ]]; then
+        (
+            sid="${OMT_SESSION_ID:-}"
+            omt_dir="${OMT_DIR:-}"
+            if [[ -n "$sid" && -n "$omt_dir" ]]; then
+                state_file="$omt_dir/prometheus-state-${sid}.json"
+                if [ ! -f "$state_file" ]; then
+                    started_at=$(date -Iseconds 2>/dev/null || date +"%Y-%m-%dT%H:%M:%S")
+                    cat > "$state_file" << PROMETHEUS_STATE_EOF
+{
+  "active": true,
+  "phase": "S0",
+  "plan_path": "",
+  "resume_summary": "",
+  "started_at": "${started_at}"
+}
+PROMETHEUS_STATE_EOF
+                fi
+            fi
+        ) 2>/dev/null || true
+    fi
+fi
+
 # Allow all other tools
 echo '{"continue": true}'
 exit 0
