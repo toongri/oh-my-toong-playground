@@ -8,6 +8,8 @@ import {
   readPrometheusState,
   cleanupPrometheusState,
   readGoalState,
+  readGoalStateRaw,
+  updateGoalState,
   getBlockCount,
   incrementBlockCount,
   cleanupBlockCountFiles,
@@ -474,6 +476,86 @@ describe('Goal state management', () => {
       expect(result?.iteration).toBe(2);
       expect(result?.max_iterations).toBe(10);
       expect(result?.objective_verdict).toBe('absent');
+    });
+  });
+
+  describe('readGoalStateRaw', () => {
+    it('readGoalStateRaw returns the object even when active=false (terminal state)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: false,
+        phase: 'complete',
+        objective_verdict: 'APPROVE',
+        iteration: 3,
+        max_iterations: 10,
+      }));
+
+      const result = readGoalStateRaw(sessionId);
+
+      expect(result).not.toBeNull();
+      expect(result?.active).toBe(false);
+      expect(result?.phase).toBe('complete');
+    });
+
+    it('readGoalStateRaw returns null on absent file', () => {
+      expect(readGoalStateRaw('nonexistent-goal-raw')).toBeNull();
+    });
+
+    it('readGoalStateRaw returns null on malformed file', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, 'not valid json {');
+
+      expect(readGoalStateRaw(sessionId)).toBeNull();
+    });
+  });
+
+  describe('updateGoalState', () => {
+    it('updateGoalState spread-overlay preserves SKILL-only fields', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, JSON.stringify({
+        active: true,
+        phase: 'pursuing',
+        objective_verdict: 'absent',
+        iteration: 1,
+        max_iterations: 10,
+        // SKILL-only fields the hook does not type:
+        outcome: 'Ship the feature',
+        started_at: '2026-06-06T12:00:00',
+        schema_version: 1,
+      }));
+
+      updateGoalState(sessionId, { iteration: 3 });
+
+      const content = await readFile(stateFile, 'utf8');
+      const parsed = JSON.parse(content);
+      // Overlaid key changed:
+      expect(parsed.iteration).toBe(3);
+      // SKILL-only fields survive unchanged:
+      expect(parsed.outcome).toBe('Ship the feature');
+      expect(parsed.started_at).toBe('2026-06-06T12:00:00');
+      expect(parsed.schema_version).toBe(1);
+      // Untouched typed fields survive:
+      expect(parsed.phase).toBe('pursuing');
+      expect(parsed.max_iterations).toBe(10);
+    });
+
+    it('updateGoalState is a no-op on absent file (creates no file)', () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      expect(existsSync(stateFile)).toBe(false);
+
+      updateGoalState(sessionId, { iteration: 3 });
+
+      expect(existsSync(stateFile)).toBe(false);
+    });
+
+    it('updateGoalState is a no-op on malformed file (does not overwrite)', async () => {
+      const stateFile = join(omtDir, `goal-state-${sessionId}.json`);
+      await writeFile(stateFile, 'not valid json {');
+
+      updateGoalState(sessionId, { iteration: 3 });
+
+      const content = await readFile(stateFile, 'utf8');
+      expect(content).toBe('not valid json {');
     });
   });
 });

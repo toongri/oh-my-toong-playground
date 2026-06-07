@@ -74,6 +74,43 @@ export function readGoalState(sessionId: string): GoalState | null {
   }
 }
 
+// Active-agnostic probe: returns the parsed goal-state even when active=false
+// (terminal phases complete/blocked/budget_limited), so the hook can suppress
+// the baseline-todo branch for ANY goal phase. Null on absent or malformed;
+// never throws. Distinct from readGoalState, which folds active:false -> null.
+export function readGoalStateRaw(sessionId: string): GoalState | null {
+  const path = join(getOmtDir(), `goal-state-${sessionId}.json`);
+  const content = readFileOrNull(path);
+  if (!content) return null;
+
+  try {
+    return JSON.parse(content) as GoalState;
+  } catch {
+    return null;
+  }
+}
+
+// Strict spread-overlay writer. Reads the RAW on-disk JSON untyped (preserving
+// every field, including SKILL-only ones written by goal-state.ts), overlays
+// ONLY the keys in `partial`, and writes back. If the raw read is absent or
+// malformed it does NOTHING — never seeds defaults, never reconstructs a fresh
+// object, never creates a file. Diverging from goal-state.ts's mergeWrite would
+// risk fabricating a goal-state, so a second writer must stay strictly additive.
+export function updateGoalState(sessionId: string, partial: Partial<GoalState>): void {
+  const path = join(getOmtDir(), `goal-state-${sessionId}.json`);
+  const content = readFileOrNull(path);
+  if (!content) return;
+
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+
+  writeFileSafe(path, JSON.stringify({ ...raw, ...partial }, null, 2));
+}
+
 // Block counting for stuck agent escape hatch
 export function getBlockCount(stateDir: string, attemptId: string): number {
   const content = readFileOrNull(`${stateDir}/block-count-${attemptId}`);
