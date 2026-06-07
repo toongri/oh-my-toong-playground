@@ -411,6 +411,118 @@ EOF
 }
 
 # =============================================================================
+# Tests: Goal state restore — planning-resume vs pursuing-resume
+# =============================================================================
+
+test_session_start_goal_state_restore_planning_vs_pursuing() {
+    local sid_plan="test-goal-planning"
+    local sid_pursue="test-goal-pursuing"
+    # Use a current timestamp so stale-cleanup does not delete the file before restore runs
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Active goal-state in planning phase
+    cat > "$TEST_OMT_DIR/goal-state-${sid_plan}.json" << EOF
+{
+  "active": true,
+  "phase": "planning",
+  "plan_path": "",
+  "resume_summary": "Defining the outcome and constraints for the goal.",
+  "outcome": "Build feature X",
+  "iteration": 0,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local out_plan
+    out_plan=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_plan"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Must contain GOAL RESTORED
+    assert_output_contains "$out_plan" "GOAL RESTORED" "planning: should inject GOAL RESTORED" || return 1
+    # Must distinguish planning
+    assert_output_contains "$out_plan" "planning" "planning: should include phase label" || return 1
+    # Must re-assert re-invocation refusal
+    assert_output_contains "$out_plan" "refused" "planning: should assert re-invocation refused" || return 1
+
+    # Active goal-state in pursuing phase
+    cat > "$TEST_OMT_DIR/goal-state-${sid_pursue}.json" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "plan_path": "",
+  "resume_summary": "Iterating toward the objective. Block 2 of 5.",
+  "outcome": "Build feature X",
+  "iteration": 2,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local out_pursue
+    out_pursue=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid_pursue"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Must contain GOAL RESTORED
+    assert_output_contains "$out_pursue" "GOAL RESTORED" "pursuing: should inject GOAL RESTORED" || return 1
+    # Must distinguish pursuing
+    assert_output_contains "$out_pursue" "pursuing" "pursuing: should include phase label" || return 1
+    # Must re-assert re-invocation refusal
+    assert_output_contains "$out_pursue" "refused" "pursuing: should assert re-invocation refused" || return 1
+}
+
+test_session_start_stale_goal_state_purged() {
+    # Create a goal-state file with started_at older than STALE_THRESHOLD (3 hours)
+    local stale_ts
+    stale_ts=$(date -j -v-4H "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || date -d "4 hours ago" "+%Y-%m-%dT%H:%M:%S" 2>/dev/null || echo "2000-01-01T00:00:00")
+
+    local stale_file="$TEST_OMT_DIR/goal-state-stale-session.json"
+    cat > "$stale_file" << EOF
+{
+  "active": true,
+  "phase": "pursuing",
+  "started_at": "${stale_ts}",
+  "outcome": "old goal",
+  "iteration": 1
+}
+EOF
+
+    # Run the hook (stale cleanup runs regardless of sessionId)
+    echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "fresh-session"}' | "$SCRIPT_DIR/session-start.sh" > /dev/null 2>&1 || true
+
+    # Stale goal-state file should be removed
+    if [ -f "$stale_file" ]; then
+        echo "ASSERTION FAILED: stale goal-state file should have been purged but still exists"
+        return 1
+    fi
+    return 0
+}
+
+test_session_start_terminal_goal_state_not_restored() {
+    local sid="test-goal-terminal"
+    # Use a current timestamp so stale-cleanup does not delete the file;
+    # we are testing that active=false suppresses restoration, not that the file is absent.
+    local now_ts
+    now_ts=$(date "+%Y-%m-%dT%H:%M:%S")
+
+    # Terminal goal-state: active=false, phase=complete
+    cat > "$TEST_OMT_DIR/goal-state-${sid}.json" << EOF
+{
+  "active": false,
+  "phase": "complete",
+  "plan_path": "",
+  "resume_summary": "Goal was completed.",
+  "outcome": "Build feature X",
+  "iteration": 3,
+  "started_at": "${now_ts}"
+}
+EOF
+
+    local output
+    output=$(echo '{"cwd": "'"$TEST_TMP_DIR"'", "sessionId": "'"$sid"'"}' | "$SCRIPT_DIR/session-start.sh" 2>&1) || true
+
+    # Must NOT inject a goal restore block
+    assert_output_not_contains "$output" "GOAL RESTORED" "terminal goal-state must NOT inject GOAL RESTORED" || return 1
+}
+
+# =============================================================================
 # Main Test Runner
 # =============================================================================
 
@@ -445,6 +557,11 @@ main() {
 
     # Prometheus restore: backslashes in resume_summary produce valid JSON and are preserved
     run_test test_session_start_prometheus_resume_summary_backslash_produces_valid_json
+
+    # Goal state restore
+    run_test test_session_start_goal_state_restore_planning_vs_pursuing
+    run_test test_session_start_stale_goal_state_purged
+    run_test test_session_start_terminal_goal_state_not_restored
 
     echo "=========================================="
     echo "Results: $TESTS_PASSED passed, $TESTS_FAILED failed"
