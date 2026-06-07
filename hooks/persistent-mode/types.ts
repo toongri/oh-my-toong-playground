@@ -59,10 +59,18 @@ export interface PrometheusState {
  */
 export interface GoalState {
   active: boolean;
-  phase: string;
+  phase: 'planning' | 'pursuing' | 'budget_limited' | 'blocked' | 'complete';
   objective_verdict: string;
   iteration: number;
   max_iterations: number;
+  /** Continuation-objective text (hook-consumed): the desired end state. */
+  outcome?: string;
+  /** Continuation-objective text (hook-consumed): how completion is verified. */
+  verification_surface?: string;
+  /** Evidence paths the hook's complete-gate reads. */
+  completion_evidence_paths?: string[];
+  /** Set by the hook when it emits the budget-limit notice (write-once guard). */
+  budget_limit_notified?: boolean;
 }
 
 // Hook output format
